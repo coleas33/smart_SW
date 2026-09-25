@@ -1,0 +1,261 @@
+{
+  "schema_version": "1.3.0",
+  "package_id": "11111111-2222-4333-8444-555555555555",
+  "created_at": "2026-09-12T12:00:00Z",
+  "reuse_key": null,
+  "reused_from": null,
+  "reused_at": null,
+  "extractor": {
+    "name": "SwReview.Extractor",
+    "version": "0.1.0",
+    "sw_version": null,
+    "machine": "test",
+    "profile": "model_check"
+  },
+  "manifest": {
+    "entries": [
+      {
+        "document_id": "doc:1",
+        "vault_path": "/Designs/remodel-refusal-derived-part.SLDPRT",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      }
+    ],
+    "discrepancies": []
+  },
+  "design": {
+    "design_id": "dsn:1",
+    "name": "remodel-refusal-derived-part",
+    "root_assembly_document_id": "doc:1",
+    "active_configuration": "Default",
+    "drawing_document_ids": []
+  },
+  "documents": [
+    {
+      "document_id": "doc:1",
+      "kind": "part",
+      "file_name": "remodel-refusal-derived-part.SLDPRT",
+      "path": "native/remodel-refusal-derived-part.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {},
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    }
+  ],
+  "components": [
+    {
+      "id": "cmp:0001",
+      "persist_ref": "Y21wOjAwMDE=",
+      "persist_ref_scope": "doc:1",
+      "name": "remodel-refusal-derived-part-1",
+      "document_id": "doc:1",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "remodel-refusal-derived-part-1",
+      "constrained_status_raw": null
+    }
+  ],
+  "mates": [],
+  "holes": [],
+  "threads": [],
+  "fasteners": [],
+  "faces": [],
+  "bodies": [],
+  "interferences": [],
+  "captures": [],
+  "drawings": [],
+  "features": [
+    {
+      "id": "feat:0001",
+      "persist_ref": "ZG9jOjEvRnJvbnQgUGxhbmU=",
+      "persist_ref_scope": "doc:1",
+      "document_id": "doc:1",
+      "configuration": "Default",
+      "name": "Front Plane",
+      "type_name": "RefPlane",
+      "description": "intent",
+      "index": 0,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0002",
+      "persist_ref": "ZG9jOjEvVG9wIFBsYW5l",
+      "persist_ref_scope": "doc:1",
+      "document_id": "doc:1",
+      "configuration": "Default",
+      "name": "Top Plane",
+      "type_name": "RefPlane",
+      "description": "intent",
+      "index": 1,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0003",
+      "persist_ref": "ZG9jOjEvUmlnaHQgUGxhbmU=",
+      "persist_ref_scope": "doc:1",
+      "document_id": "doc:1",
+      "configuration": "Default",
+      "name": "Right Plane",
+      "type_name": "RefPlane",
+      "description": "intent",
+      "index": 2,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0004",
+      "persist_ref": "ZG9jOjEvT3JpZ2lu",
+      "persist_ref_scope": "doc:1",
+      "document_id": "doc:1",
+      "configuration": "Default",
+      "name": "Origin",
+      "type_name": "OriginProfileFeature",
+      "description": "intent",
+      "index": 3,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0005",
+      "persist_ref": "ZG9jOjEvTWlycm9yLVBhcnQx",
+      "persist_ref_scope": "doc:1",
+      "document_id": "doc:1",
+      "configuration": "Default",
+      "name": "Mirror-Part1",
+      "type_name": "MirrorStock",
+      "description": "intent",
+      "index": 4,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0006",
+      "persist_ref": "ZG9jOjEvU29saWQgQm9kaWVz",
+      "persist_ref_scope": "doc:1",
+      "document_id": "doc:1",
+      "configuration": "Default",
+      "name": "Solid Bodies",
+      "type_name": "FeatSolidBodyFolder",
+      "description": "intent",
+      "index": 5,
+      "depth": 1,
+      "folder_id": "feat:0005",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0007",
+      "persist_ref": "ZG9jOjEvU3VyZmFjZSBCb2RpZXM=",
+      "persist_ref_scope": "doc:1",
+      "document_id": "doc:1",
+      "configuration": "Default",
+      "name": "Surface Bodies",
+      "type_name": "FeatSurfaceBodyFolder",
+      "description": "intent",
+      "index": 6,
+      "depth": 1,
+      "folder_id": "feat:0005",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0008",
+      "persist_ref": "ZG9jOjEvUGxhbmVz",
+      "persist_ref_scope": "doc:1",
+      "document_id": "doc:1",
+      "configuration": "Default",
+      "name": "Planes",
+      "type_name": "RefPlaneFtrFolder",
+      "description": "intent",
+      "index": 7,
+      "depth": 1,
+      "folder_id": "feat:0005",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    }
+  ],
+  "equations": [],
+  "rms_suppress_test": null,
+  "gaps": []
+}

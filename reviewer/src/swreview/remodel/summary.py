@@ -23,9 +23,10 @@ __all__ = ["plan_lines", "plan_refusals", "plan_summary_row"]
 def plan_refusals(plan: RemodelPlan) -> list[dict[str, str]]:
     """Every reason this part is refused, never only the first (`research.md` R4.1).
 
-    Three sources, one vocabulary: the scope gate's own codes, the folder plan's
-    `rms_named_folder_wrong_members`, and a dependency cycle, which has no legal order and
-    is therefore a refusal rather than a plan with nothing in it.
+    Four sources, one vocabulary: the scope gate's own codes, the folder plan's
+    `rms_named_folder_wrong_members`, a dependency cycle, which has no legal order and is
+    therefore a refusal rather than a plan with nothing in it, and the tree codes read off
+    the package (`derived_part`, decision 17A).
     """
     refusals = [
         {"code": refusal.code, "signal": refusal.signal, "message": refusal.message}
@@ -56,6 +57,10 @@ def plan_refusals(plan: RemodelPlan) -> list[dict[str, str]]:
                 ),
             }
         )
+    refusals += [
+        {"code": refusal.code, "signal": refusal.signal, "message": refusal.message}
+        for refusal in plan.tree_refusals
+    ]
     return refusals
 
 

@@ -403,6 +403,7 @@ result:
     state: resolved
     target_group: 2-Construction
     type_name: ProfileFeature
+  tree_refusals: []
   type_table_calibrated_version: 2026 SP1.1
   type_table_version: '1'
   updated_at: '2026-09-16T14:22:01Z'

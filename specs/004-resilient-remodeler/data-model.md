@@ -49,6 +49,7 @@ that `state` is always readable from disk.
 | `package_before` | str | Relative path, `package-before.json` |
 | `type_table_version`, `type_table_calibrated_version` | str | From `rms_types.yaml`, recorded so a re-grade on another machine is comparable |
 | `scope` | `ScopeReport` | Section 4 |
+| `tree_refusals` | list[`Refusal`] | The refusals decided from the package's feature rows rather than from the probe's signals: v1 has one, `derived_part` (section 4.2). Only tree codes; a non-empty list means `state: failed`. Added 2026-09-25 (decision 17A, T147) |
 | `targets` | list[`PlanTarget`] | One per feature in the tree, including the ones that are not content. One per **feature**, not per row: a row the dump lists a second time under the feature that consumes it is that feature (`contracts/run-artifacts.md`, "How the planner reads the tree"; decision 17A, 2026-09-25) |
 | `ranks` | list[`FeatureRank`] | One per content feature with a resolved target |
 | `order` | `OrderPlan` | |
@@ -440,7 +441,7 @@ stage is a no-op", "surface bodies present: gate coverage is partial").
 `Refusal`: `code`, `message`, `signal`. Closed set of codes: `not_a_part`, `source_dirty`,
 `external_refs`, `multibody`, `weldment`, `sheet_metal`, `mesh_or_graphics_body`,
 `three_d_interconnect`, `preexisting_rebuild_errors`, `rms_named_folder_wrong_members`,
-`signal_unresolved`. **Every failing signal is reported**, not just the first: a message that
+`signal_unresolved`, `derived_part`. **Every failing signal is reported**, not just the first: a message that
 names one of two reasons sends the engineer back twice.
 
 `Refusal.code` and the bridge's `result.error_code` for preflight conditions are **one
@@ -456,6 +457,15 @@ token that differs by an underscore is a refusal that maps to no Python class in
 never reaches those three verdicts from `ScopeSignals` alone even though
 `external_reference_count` is in the table; they enter `scope.refusals` only when the host records
 the bridge's refusal, which is precisely why the tokens have to be identical.
+
+*Added 2026-09-25 (decision 17A, T147).* `derived_part` is the one **tree** code: the part's
+tree carries the base feature of a derived or mirrored part (`rms_types.yaml`'s `derived_base`,
+`MirrorStock` on a real package), so its body is another part's geometry and the features the six
+groups organize do not build it. Neither the gate nor the bridge raises it: no `ScopeSignals` row
+carries the tree yet, so `plan_reorganize` decides it from the package - after the copy, as the
+cycle refusal is decided - and records it in `RemodelPlan.tree_refusals`, never in
+`scope.refusals`, whose verdict stays the probe's alone. `tasks.md` T161 adds the probe's reading
+that moves it before the copy.
 
 ---
 
@@ -586,6 +596,11 @@ The single normative RMS type table
 (`reviewer/src/swreview/checks/rms_types.yaml`, owned by feature 003) gains exactly one key,
 `default_group_by_class`, so that the checker and the planner cannot disagree about what "should"
 means. This is the only edit feature 004 makes to a feature 003 artifact.
+
+*Amended 2026-09-25 (owner, decision 17A).* A second key, from the real packages and
+test-first: `derived_base` (T147), the base feature types of a derived or mirrored part, which
+refuse the part (section 4.2). The loader requires it and refuses a table that also tolerates or
+classifies one of its types; the feature 003 checker does not read it.
 
 ```yaml
 # The planner's target group per feature class (feature 004). The checker grades what is;

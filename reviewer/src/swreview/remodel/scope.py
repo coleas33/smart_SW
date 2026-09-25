@@ -25,6 +25,11 @@ sheet-metal part costs the engineer their afternoon:
 | imported dumb solid | allow, and report the reorganize stage as a no-op |
 | surface bodies | allow, and report the surface coverage **uncovered**, never passed |
 | configurations | record the count; it drives `which_configs` on every equation add |
+| a derived or mirrored base feature | refuse (`derived_part`): the body is another part's |
+
+The last row is decided from the package's feature rows by `derived_part_refusals`, not by
+`ScopeGate.evaluate`: no signal carries the tree yet, so it lands after the copy, as the
+cycle refusal does, until the probe reads the base feature (tasks.md T161, decision 17A).
 
 **Absence is not emptiness.** A `null` signal is not a pass. An unreadable *refusing* signal
 is `signal_unresolved` naming the signal and the verdict is `unresolved`, because a pass
@@ -47,14 +52,15 @@ dry-run planner reports and the one FR-007's "naming the unexpected members" com
 folder not named for one of the six is a derived subfolder: preserved, never dissolved, and
 not a scope question at all.
 
-**The code set is closed and shared with the bridge** (`data-model.md` section 4.2). Eleven
+**The code set is closed and shared with the bridge** (`data-model.md` section 4.2). Twelve
 tokens, one vocabulary: a token that differed by an underscore would be a refusal that maps
 to no Python class in `bridge/remodel_client.py`. Four of them the bridge raises before any
 signal is returned (`not_a_part`, `source_dirty`, `external_refs`) or on the copy
 (`preexisting_rebuild_errors`), so this gate never emits them even though the rows they are
 decided from are in the table; they enter `ScopeReport.refusals` when the host records the
 bridge's refusal. `rms_named_folder_wrong_members` is the one token the bridge spells and
-this gate decides.
+this gate decides. `derived_part` is the one **tree** code: neither the gate nor the bridge
+raises it yet, and `plan_reorganize` records it in `RemodelPlan.tree_refusals`.
 """
 
 from __future__ import annotations
@@ -66,14 +72,17 @@ from typing import Literal, cast, get_args
 from pydantic import BaseModel, ConfigDict
 
 from swreview.checks.rms_types import RmsTypeTable, load_table
+from swreview.ir.models import Feature
 
 __all__ = [
     "BRIDGE_ONLY_CODES",
+    "DERIVED_PART",
     "GATE_CODES",
     "REFUSAL_CODES",
     "REFUSING_SIGNALS",
     "RMS_NAMED_FOLDER_WRONG_MEMBERS",
     "SIGNAL_UNRESOLVED",
+    "TREE_CODES",
     "WHICH_CONFIGS_ALL",
     "WHICH_CONFIGS_THIS",
     "Refusal",
@@ -84,6 +93,7 @@ __all__ = [
     "ScopeSignals",
     "SignalRule",
     "VaultLocation",
+    "derived_part_refusals",
 ]
 
 RefusalCode = Literal[
@@ -98,6 +108,7 @@ RefusalCode = Literal[
     "preexisting_rebuild_errors",
     "rms_named_folder_wrong_members",
     "signal_unresolved",
+    "derived_part",
 ]
 """The closed `Refusal` code set of `data-model.md` section 4.2, in the order it lists them."""
 
@@ -110,7 +121,16 @@ BRIDGE_ONLY_CODES: frozenset[str] = frozenset(
 first three before any signal is returned, the fourth on the copy after a rollback and a
 rebuild, which are writes and can therefore never touch the source (FR-004)."""
 
-GATE_CODES: frozenset[str] = REFUSAL_CODES - BRIDGE_ONLY_CODES
+DERIVED_PART = "derived_part"
+"""Named once, here: the part's body is another part's, brought in by a derived or mirrored
+base feature (decision 17A)."""
+
+TREE_CODES: frozenset[str] = frozenset({DERIVED_PART})
+"""The codes decided from the package's feature rows rather than from `ScopeSignals`: after
+the copy, the way the cycle refusal is, until the probe reads what they are decided from
+(tasks.md T161)."""
+
+GATE_CODES: frozenset[str] = REFUSAL_CODES - BRIDGE_ONLY_CODES - TREE_CODES
 
 RMS_NAMED_FOLDER_WRONG_MEMBERS = "rms_named_folder_wrong_members"
 """Named once, here, so `folders.py` and the host cite the token rather than spelling it."""
@@ -440,6 +460,32 @@ def _configurations(
         )
     count = len(configuration_names)
     return count, (WHICH_CONFIGS_THIS if count == 1 else WHICH_CONFIGS_ALL), None
+
+
+def derived_part_refusals(rows: Sequence[Feature], table: RmsTypeTable) -> tuple[Refusal, ...]:
+    """One `derived_part` refusal per derived or mirrored base feature in one part's tree.
+
+    Read off every row the dump listed, not only the planned ones, so a base feature the
+    walk found under another is still found. Every one is reported, as every failing signal
+    is (`research.md` R4.1). The reason is what is true of such a part: its body is another
+    part's geometry brought in by that feature, so the features the six groups organize do
+    not build it, and a re-model would have to start from the part it came from.
+    """
+    return tuple(
+        Refusal(
+            code=DERIVED_PART,
+            message=(
+                f"{row.id} is a {row.type_name}: this part's body is another part's geometry, "
+                "brought in whole by that feature from the part it was derived or mirrored "
+                "from, so the features the six groups organize do not build it and a "
+                "re-model would have to start from that part; a derived or mirrored part is "
+                "refused"
+            ),
+            signal="features[].type_name",
+        )
+        for row in rows
+        if table.is_derived_base(row)
+    )
 
 
 REFUSING_SIGNALS: tuple[str, ...] = ScopeGate.REFUSING_SIGNALS

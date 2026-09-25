@@ -160,6 +160,7 @@ that section defines it:
   "type_table_version": "1.0.0", "type_table_calibrated_version": "1.0.0",
   "scope": {"verdict": "ok", "signals": { }, "signals_probe": { },
             "refusals": [], "notes": []},
+  "tree_refusals": [],                           // decided from the tree; section 4.2
   "targets": [{"feature_id": "feat:0007", "name": "Cut-Extrude1", "type_name": "ICE",
                "feature_class": "cut", "current_group": null, "target_group": "4-Detail",
                "basis": "type_table", "decided_by": "planner", "state": "resolved",

@@ -63,6 +63,12 @@ TODAY: dict[str, tuple[str, str, int]] = {
         "a0d22cafe2b20e23",
         0,
     ),
+    # Feature 004, decision 17A (T147): new with that round, pinned from its own output.
+    "golden/fixtures/remodel-plan/remodel-refusal-derived-part": (
+        "7ebccbb3eda03d4b",
+        "5130cf677d8e9814",
+        0,
+    ),
     "golden/fixtures/remodel-plan/remodel-refusal-mesh-body": (
         "2e275cf9428c6317",
         "0b58b731215ddee9",
