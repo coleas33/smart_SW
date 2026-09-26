@@ -407,7 +407,7 @@ def digest(package: EvidencePackage, document_id: str) -> str:
                 DRAWING.sheets[0].views[0],
                 replace(
                     DRAWING.sheets[0].views[1],
-                    notes=(NoteSpec(text="EXPORT CONTROLLED"),),
+                    notes=(NoteSpec(text="FICTIONAL CONTROL MARK"),),
                 ),
             ),
         ),
