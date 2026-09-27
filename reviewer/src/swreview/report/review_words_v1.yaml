@@ -81,6 +81,10 @@ drawings:
   candidates_one: "Same-name drawing found but not open: {names}"
   candidates_many: "Same-name drawings found but not open: {names}"
   more: "{names} and {n} more"
+  # While the seat cannot open a closed drawing (feature 013): `{model}` is the reviewed
+  # document's file name, active when Review is pressed again, since Review refuses a drawing.
+  open_then_review_one: "Open {names} in SOLIDWORKS, then press Review again with {model} active"
+  open_then_review_many: "Open {names} in SOLIDWORKS, then press Review again with {model} active"
 
 contacts:
   one: "1 size-for-size contact"

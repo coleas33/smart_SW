@@ -38,7 +38,7 @@ imported here and exported from here as before.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -48,7 +48,7 @@ from pydantic import model_validator
 
 from swreview.drawings.evidence import file_key, file_name, id_order
 from swreview.findings import Finding, FindingStatus, ReviewModel, Severity
-from swreview.ir.models import EvidencePackage
+from swreview.ir.models import Document, EvidencePackage
 from swreview.report.attention import (
     SUPPRESSED_STATUS,
     Policy,
@@ -125,6 +125,15 @@ OWNER_GROUPS: tuple[GroupKind, ...] = ("decide", "fix", "verify")
 """Always listed, in this order, at zero too (the owner's decision of 2026-09-23)."""
 SHOWN_WHEN_HELD: tuple[GroupKind, ...] = ("decided", "within_scope")
 """Listed after the owner's three, and only when they hold a finding."""
+
+DrawingReadMode = Literal["none", "open_only", "opens_closed"]
+"""What the seat can do with a drawing (feature 013, its `contracts/drawing-capability.md`
+sections 1 and 2), as the bridge's ping reports it and the session records it: `bridge/client`'s
+`DrawingReadMode`, copied because the summary imports no bridge module."""
+
+INSTRUCTED_MODES: frozenset[str] = frozenset({"none", "open_only"})
+"""The modes in which the review cannot open a closed drawing, so the drawings line says how to
+include one rather than offering to read it."""
 
 DRAWINGS_NAMED = 10
 """How many file names each part of the drawings line names; the rest are counted. The
@@ -208,13 +217,16 @@ class BoughtPartsWords(ReviewModel):
 
 class DrawingsWords(ReviewModel):
     """The drawings line's words (decision 10A): a sentence for one name and for several, per
-    part, and the tail that counts the names past the bound."""
+    part, and the tail that counts the names past the bound; and, while the seat cannot open a
+    closed drawing (feature 013), the instruction that says how to include one."""
 
     read_one: str
     read_many: str
     candidates_one: str
     candidates_many: str
     more: str
+    open_then_review_one: str
+    open_then_review_many: str
 
     def named(self, names: Sequence[str]) -> str:
         """`names` as a sentence lists them; past `DRAWINGS_NAMED`, the first that many and how
@@ -225,16 +237,27 @@ class DrawingsWords(ReviewModel):
             names=", ".join(names[:DRAWINGS_NAMED]), n=len(names) - DRAWINGS_NAMED
         )
 
-    def of(self, read: Sequence[str], candidates: Sequence[str]) -> str:
-        """The line: the drawings read, then the candidates, each part only when it names one."""
-        parts = [
-            (one if len(names) == 1 else many).format(names=self.named(names))
-            for names, one, many in (
-                (read, self.read_one, self.read_many),
-                (candidates, self.candidates_one, self.candidates_many),
-            )
-            if names
-        ]
+    def of(
+        self, read: Sequence[str], candidates: Sequence[str], *, instruct_with: str | None = None
+    ) -> str:
+        """The line: the drawings read, then the candidates, each part only when it names one.
+
+        With `instruct_with` - the reviewed model's file name, given while the seat cannot open
+        a closed drawing (feature 013) - the candidates part is the instruction "Open {names} in
+        SOLIDWORKS, then press Review again with {model} active" in place of "found but not
+        open".
+        """
+        parts: list[str] = []
+        if read:
+            template = self.read_one if len(read) == 1 else self.read_many
+            parts.append(template.format(names=self.named(read)))
+        if candidates and instruct_with is not None:
+            one, many = self.open_then_review_one, self.open_then_review_many
+            template = one if len(candidates) == 1 else many
+            parts.append(template.format(names=self.named(candidates), model=instruct_with))
+        elif candidates:
+            template = self.candidates_one if len(candidates) == 1 else self.candidates_many
+            parts.append(template.format(names=self.named(candidates)))
         return SENTENCE_SEPARATOR.join(parts)
 
 
@@ -525,7 +548,13 @@ def review_summary(
         tally=_tally(summary_groups, words),
         questions=_questions(session.evidence_requests, words, names, package),
         not_loaded=_not_loaded(package, words),
-        drawings=drawings_of(package),
+        drawings=drawings_of(
+            package,
+            # `drawing_read` is feature 013's optional session field (its T007, recorded by T077):
+            # a session before it, or one whose review had no candidate to ask about, has none.
+            drawing_read=getattr(session, "drawing_read", None),
+            bought=_bought_documents(session),
+        ),
         bought_parts=bought_parts_of(session, package),
         not_reached=_not_reached(goal_lines(session, words), words),
         contacts=contacts_of(session, names),
@@ -679,9 +708,21 @@ def _blocks_title(blocks: str | None, goals: Sequence[Goal]) -> str | None:
     return None if goal is None else goal.title
 
 
-def drawings_of(package: EvidencePackage | None) -> DrawingsLine | None:
+def drawings_of(
+    package: EvidencePackage | None,
+    *,
+    drawing_read: DrawingReadMode | None = None,
+    bought: Collection[str] = (),
+) -> DrawingsLine | None:
     """The drawings line (contracts/review-summary.md section 4, decision 10A), or `None` when
     there is no package, or it holds no drawing read and no candidate.
+
+    *Feature 013* (its `contracts/drawing-capability.md` sections 3 and 4): the candidate rows
+    of `bought` documents are ignored - no drawing is expected of a bought part - and while the
+    seat cannot open a closed drawing (`drawing_read` `none` or `open_only`) the candidates part
+    says how to include one, naming the review's root document. With `drawing_read` `None` (a
+    session before feature 013, or a review that asked the seat nothing) or `opens_closed`, the
+    words are feature 011's.
 
     A drawing is **read** when the package holds its native record or a PDF-ingested sheet of
     it: named by its document's file name, its id where the package has no row for it, once, in
@@ -708,6 +749,8 @@ def drawings_of(package: EvidencePackage | None) -> DrawingsLine | None:
     for candidate in sorted(
         package.drawing_candidates, key=lambda item: id_order(item.document_id)
     ):
+        if candidate.document_id in bought:
+            continue
         key = file_key(candidate.path)
         if key not in files_named:
             files_named.add(key)
@@ -718,8 +761,29 @@ def drawings_of(package: EvidencePackage | None) -> DrawingsLine | None:
     ]
     if not read and not candidates:
         return None
+    instruct_with = (
+        _root_file_name(package, documents) if drawing_read in INSTRUCTED_MODES else None
+    )
     return DrawingsLine(
-        read=read, candidates=candidates, text=load_words().drawings.of(read, candidates)
+        read=read,
+        candidates=candidates,
+        text=load_words().drawings.of(read, candidates, instruct_with=instruct_with),
+    )
+
+
+def _root_file_name(package: EvidencePackage, documents: Mapping[str, Document]) -> str:
+    """The review's root document's file name, its id where the package has no row for it."""
+    root = package.design.root_assembly_document_id
+    return documents[root].file_name if root in documents else root
+
+
+def _bought_documents(session: ReviewSession) -> tuple[str, ...]:
+    """The documents the persisted bought-parts row names: the drawing line ignores their
+    candidate rows, as the drawing check does (013 `contracts/drawing-capability.md` 3)."""
+    return next(
+        (tuple(row.scope.document_ids) for row in bought_rows(session)
+         if row.check == BOUGHT_PARTS_CHECK),
+        (),
     )
 
 

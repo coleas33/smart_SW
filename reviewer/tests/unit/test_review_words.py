@@ -62,6 +62,8 @@ PLACEHOLDERS: dict[str, set[str]] = {
     "drawings.candidates_one": {"names"},
     "drawings.candidates_many": {"names"},
     "drawings.more": {"names", "n"},
+    "drawings.open_then_review_one": {"names", "model"},
+    "drawings.open_then_review_many": {"names", "model"},
     "contacts.one": set(),
     "contacts.many": {"n"},
     "resume.with_tokens": {"tokens"},
