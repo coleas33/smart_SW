@@ -1325,6 +1325,11 @@ body.view-transcript #results {
   overflow-wrap: anywhere;
 }
 
+/* The model's source word before its explanation (feature 013 T114). */
+.finding-explanation .source-chip {
+  margin-right: 6px;
+}
+
 /* ---- tool calls ------------------------------------------------------------------------------ */
 
 /* A tool call is one line: what it was, what came back, how long it took. */

@@ -1575,7 +1575,7 @@
         var entry = state.findings[String(members[memberIndex])];
         if (entry) {
           var fold = entry.card.querySelector('.details');
-          fold.insertBefore(render.findingExplanation(row.explanation), fold.firstChild);
+          fold.insertBefore(render.findingExplanation(row.explanation, state.labels), fold.firstChild);
         }
       }
     }

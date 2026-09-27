@@ -1,18 +1,16 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json;
-using System.Text.RegularExpressions;
-using System.Threading.Tasks;
-using Microsoft.Web.WebView2.Core;
+using System.Text.Json.Nodes;
 using Xunit;
 
 namespace SwReview.AddIn.Tests;
 
 /// <summary>
 /// Regression for the docked Task Pane geometry reported on 2026-09-20. This uses the browser's
-/// 300 by 600 device metrics, a complete Start-here ranking, a detailed finding, the long run
-/// folder line and the real not-examined warning. The assertion measures the clipped viewport,
-/// rather than checking the CSS declarations that happen to implement it.
+/// 300 by 600 device metrics, a complete ranking, a detailed finding, the long run folder line and
+/// the real not-examined warning. The assertion measures the clipped viewport, rather than
+/// checking the CSS declarations that happen to implement it.
 ///
 /// U10 changed the premise and not the floor. A Start-here click used to open the finding's
 /// fold, and this test measured the fold that click opened. The click now only scrolls the
@@ -26,15 +24,20 @@ namespace SwReview.AddIn.Tests;
 /// `#results`, the view that scrolls it. Feature 013 T053 replaced Start here with the grouped
 /// findings: the test opens the finding's grouped row - the press that shows its card - proves the
 /// card's own fold stayed shut, then presses Details and measures that. The floor is unchanged.
+/// Feature 013 T114 labels the explanation: the first line inside the fold is the source word
+/// ("AI guidance", `labels.source`), then the backend's text - so this run reads the labels, on the
+/// shared <see cref="ReviewPageDriver"/>, which routes them before `init`.
 /// </summary>
 public sealed class ReviewPageNarrowLayoutTests
 {
     private const string ChatId = "chat-narrow";
 
+    private static readonly Lazy<JsonElement> Measured = new Lazy<JsonElement>(Drive);
+
     [Fact]
     public void TheFirstFindingDetailsHaveAReadableViewportAtTheNarrowPaneSize()
     {
-        JsonElement geometry = Drive();
+        JsonElement geometry = Measured.Value;
 
         Assert.True(
             geometry.GetProperty("hiddenAfterRowClick").GetBoolean(),
@@ -58,136 +61,97 @@ public sealed class ReviewPageNarrowLayoutTests
             "The explanation must remain text, including hostile markup.");
     }
 
+    /// <summary>
+    /// Feature 013 T114 (contracts/sources.md section 4): the explanation is the model's, and says
+    /// so - its first part is `labels.source`'s word for the model, then the persisted text; and
+    /// the legacy "No model explanation" line is rendered nowhere.
+    /// </summary>
+    [Fact]
+    public void TheExplanationIsLabelledAsTheModelsGuidance()
+    {
+        JsonElement geometry = Measured.Value;
+
+        Assert.Equal(new[] { "chip source-chip source-model", "explanation-text" }, ReviewPageDriver.Strings(geometry, "explanationParts"));
+        Assert.Equal(LabelsSample.SourceModel, geometry.GetProperty("explanationLabel").GetString());
+        Assert.DoesNotContain("No model explanation", geometry.GetProperty("resultsText").GetString());
+    }
+
     private static JsonElement Drive()
     {
-        JsonElement? observed = null;
+        JsonElement observed = default;
 
-        OffscreenReviewPage.WithPage(
-            page =>
+        ReviewPageDriver.Run(
+            driver =>
             {
-                page.WebMessageReceived += (sender, args) =>
+                driver.InitialRoutes.Add(("GET", "/labels", 200, LabelsSample.Json()));
+                driver.ReviewStarted = press => new Dictionary<string, object?>
                 {
-                    JsonElement message = JsonDocument.Parse(args.WebMessageAsJson).RootElement;
-                    string type = message.GetProperty("type").GetString() ?? string.Empty;
-                    string id = message.TryGetProperty("id", out JsonElement messageId)
-                        && messageId.ValueKind == JsonValueKind.String
-                            ? messageId.GetString() ?? string.Empty
-                            : string.Empty;
-
-                    if (type == "ready")
+                    { "chat_id", ChatId },
+                    { "document", new { path = ReviewPageDriver.ReviewedPath, configuration = "Default" } },
+                    { "run_dir", @"C:\SwReviewRuns\20260920-184136-small-assembly-very-long-run-folder-name" },
                     {
-                        page.PostWebMessageAsJson(Reply("init", id, Init()));
-                    }
-                    else if (type == "models.list")
-                    {
-                        page.PostWebMessageAsJson(Reply(
-                            "models", id, new { provider = "openai", models = new object[0] }));
-                    }
-                    else if (type == "review.start")
-                    {
-                        page.PostWebMessageAsJson(Reply(
-                            "review.started",
-                            id,
-                            new Dictionary<string, object?>
+                        "not_examined", new
+                        {
+                            sentence = "Not examined: 2 of 4 component instances were not read: "
+                                + "DOWEL PIN cmp:0002 (lightweight), DOWEL PIN cmp:0004 "
+                                + "(lightweight). Interference, fit and the feature-tree "
+                                + "rules cannot see them.",
+                            instances = new[]
                             {
-                                { "chat_id", ChatId },
-                                { "document", new { path = @"C:\parts\bracket.sldasm", configuration = "Default" } },
-                                {
-                                    "run_dir",
-                                    @"C:\SwReviewRuns\20260920-184136-small-assembly-very-long-run-folder-name"
-                                },
-                                {
-                                    "not_examined", new
-                                    {
-                                        sentence = "Not examined: 2 of 4 component instances were not read: "
-                                            + "DOWEL PIN cmp:0002 (lightweight), DOWEL PIN cmp:0004 "
-                                            + "(lightweight). Interference, fit and the feature-tree "
-                                            + "rules cannot see them.",
-                                        instances = new[]
-                                        {
-                                            new { id = "cmp:0002", state = "lightweight" },
-                                            new { id = "cmp:0004", state = "lightweight" },
-                                        },
-                                    }
-                                },
-                            }));
-                    }
+                                new { id = "cmp:0002", state = "lightweight" },
+                                new { id = "cmp:0004", state = "lightweight" },
+                            },
+                        }
+                    },
                 };
             },
-            async page =>
+            async driver =>
             {
-                await OffscreenReviewPage.Settled(page);
-                await page.CallDevToolsProtocolMethodAsync(
-                    "Emulation.setDeviceMetricsOverride",
-                    JsonSerializer.Serialize(new
-                    {
-                        width = 300,
-                        height = 600,
-                        deviceScaleFactor = 1,
-                        mobile = false,
-                    }));
-                await page.ExecuteScriptAsync(
-                    "window.__narrow = {body:" + WithExplanation() + "};"
-                        + "window.fetch = function () { return Promise.resolve({ok:true,status:200,"
-                        + "text:function () { return Promise.resolve(JSON.stringify(window.__narrow.body)); }}); };0");
-                await page.ExecuteScriptAsync("document.getElementById('start-review').click()");
-                await OffscreenReviewPage.Settled(page);
-                await SseFrames.Push(
-                    page,
-                    ChatId,
-                    SseFrames.Frame(1, "finding", DetailedFinding));
-                await SseFrames.Push(
-                    page,
-                    ChatId,
-                    SseFrames.Frame(2, "session.ended", @"{""ended_at"":""2026-09-20T22:49:11Z""}"));
-                await OffscreenReviewPage.Settled(page);
-                observed = await Measure(page);
+                await ReviewPageSummaryAcceptanceTests.NarrowPane(driver);
+                await driver.RouteAttention(ChatId, WithExplanation());
+                await driver.StartReview();
+                await driver.Push(ChatId, 1, "finding", DetailedFinding);
+                await driver.Push(ChatId, 2, "session.ended", @"{""ended_at"":""2026-09-20T22:49:11Z""}");
+                await driver.Settle();
+                observed = await driver.Read(Measure);
             });
 
-        return observed ?? throw new InvalidOperationException("the narrow layout was not measured");
+        return observed;
     }
 
-    private static async Task<JsonElement> Measure(CoreWebView2 page)
-    {
-        string raw = await page.ExecuteScriptAsync(@"(function () {
-  var row = document.querySelector('#findings-by-type details.type-row[data-finding-id=""F-007""]');
-  if (!row) { return JSON.stringify({error:'no grouped row'}); }
-  var card = row.querySelector('.card.finding[data-finding-id=""F-007""]');
-  if (!card) { return JSON.stringify({error:'no finding card in its row'}); }
-  row.querySelector(':scope > summary').click();
-  var details = card.querySelector('.details');
-  var hiddenAfterRowClick = details.hidden;
-  card.querySelector('[data-action=""expand""]').click();
-  var results = document.getElementById('results').getBoundingClientRect();
-  var viewportHeight = window.innerHeight;
-  var rect = details.getBoundingClientRect();
-  var top = Math.max(rect.top, results.top, 0);
-  var bottom = Math.min(rect.bottom, results.bottom, viewportHeight);
-  var followup = document.getElementById('followup').getBoundingClientRect();
-  return JSON.stringify({
-    hiddenAfterRowClick: hiddenAfterRowClick,
-    explanationFirstInFold: !!details.firstElementChild
-      && details.firstElementChild.className === 'finding-explanation',
-    detailsVisibleHeight: Math.max(0, bottom - top),
-    followupInViewport: followup.top >= 0 && followup.bottom <= viewportHeight,
-    warningVisible: !document.getElementById('not-examined').hidden
-      && document.getElementById('not-examined').getBoundingClientRect().height > 0,
-    warningText: document.getElementById('not-examined').textContent,
-    explanationMatches: !!card.querySelector('.finding-explanation')
-      && card.querySelector('.finding-explanation .explanation-text').textContent === " + JsonSerializer.Serialize(Explanation) + @",
-    explanationMarkup: !!document.querySelector('.finding-explanation img'),
-    viewport: [window.innerWidth, viewportHeight]
-  });
-}())");
-        string json = JsonDocument.Parse(raw).RootElement.GetString()
-            ?? throw new InvalidOperationException("the page returned no geometry");
-        JsonElement result = JsonDocument.Parse(json).RootElement.Clone();
-        Assert.False(result.TryGetProperty("error", out JsonElement error), error.ToString());
-        return result;
-    }
-
-    private static string Reply(string type, string id, object payload) =>
-        JsonSerializer.Serialize(new { type, id, payload });
+    private static readonly string Measure = @"
+var row = document.querySelector('#findings-by-type details.type-row[data-finding-id=""F-007""]');
+if (!row) { return JSON.stringify({ ok: false, error: 'no grouped row' }); }
+var card = row.querySelector('.card.finding[data-finding-id=""F-007""]');
+if (!card) { return JSON.stringify({ ok: false, error: 'no finding card in its row' }); }
+row.querySelector(':scope > summary').click();
+var details = card.querySelector('.details');
+var hiddenAfterRowClick = details.hidden;
+card.querySelector('[data-action=""expand""]').click();
+var results = document.getElementById('results').getBoundingClientRect();
+var viewportHeight = window.innerHeight;
+var rect = details.getBoundingClientRect();
+var top = Math.max(rect.top, results.top, 0);
+var bottom = Math.min(rect.bottom, results.bottom, viewportHeight);
+var followup = document.getElementById('followup').getBoundingClientRect();
+var explanation = card.querySelector('.finding-explanation');
+return JSON.stringify({
+  ok: true,
+  hiddenAfterRowClick: hiddenAfterRowClick,
+  explanationFirstInFold: !!details.firstElementChild
+    && details.firstElementChild.className === 'finding-explanation',
+  detailsVisibleHeight: Math.max(0, bottom - top),
+  followupInViewport: followup.top >= 0 && followup.bottom <= viewportHeight,
+  warningVisible: !document.getElementById('not-examined').hidden
+    && document.getElementById('not-examined').getBoundingClientRect().height > 0,
+  warningText: document.getElementById('not-examined').textContent,
+  explanationMatches: !!explanation && h.text(explanation, '.explanation-text') === " + JsonSerializer.Serialize(Explanation) + @",
+  explanationMarkup: !!document.querySelector('.finding-explanation img'),
+  explanationParts: h.children(explanation),
+  explanationLabel: h.text(explanation, '.source-chip'),
+  resultsText: document.getElementById('results').textContent,
+  viewport: [window.innerWidth, viewportHeight]
+});";
 
     /// <summary>The persisted explanation, with markup in it: model text, which stays characters.</summary>
     private const string Explanation = "These faces locate the pin; editing them may break the mate. <img src=x onerror=alert(1)>";
@@ -195,32 +159,10 @@ public sealed class ReviewPageNarrowLayoutTests
     /// <summary>The sample's ranking with the explanation on F-007's grouped row, where the page reads it.</summary>
     private static string WithExplanation()
     {
-        System.Text.Json.Nodes.JsonObject ranking = SummarySample.Ranking();
+        JsonObject ranking = SummarySample.Ranking();
         ranking["groups"]!["groups"]![0]!["rows"]![1]!["explanation"] = Explanation;
         return ranking.ToJsonString();
     }
-
-    private static object Init() => new
-    {
-        backend = new { port = 51999, origin = "http://127.0.0.1:51999" },
-        token = "0FAKEtoken-for-the-page-tests",
-        settings = new
-        {
-            version = 1,
-            provider = "openai",
-            model = "gpt-5.6",
-            effort = "high",
-            base_url = (string?)null,
-            gemini_enterprise = (object?)null,
-            terminal_cli = "codex",
-            python = "uv",
-            run_root = @"C:\SwReviewRuns",
-        },
-        key_source = "settings",
-        run_root = @"C:\SwReviewRuns",
-        providers = new[] { "openai", "gemini" },
-        document = new { path = @"C:\parts\bracket.sldasm", configuration = "Default" },
-    };
 
     private static readonly string DetailedFinding = JsonSerializer.Serialize(new
     {
