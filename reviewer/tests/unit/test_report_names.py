@@ -21,7 +21,7 @@ import pytest
 
 from swreview.ir.loader import load_package
 from swreview.report.attention import rank
-from swreview.report.explanations import _prompt
+from swreview.report.explanations import REQUESTED_CHARS, _prompt
 from swreview.report.names import and_list, component_names, plural, with_component_names
 from swreview.report.session import load_session
 from tests.support.attention import REVIEW_FOLDER, attention_package
@@ -135,9 +135,15 @@ EXPLANATION_PROMPT_SHA256 = "8383a2da6dbe23979de9bec4a7d8904f5b44f81138d1a1434f0
 
 
 def test_the_explanation_request_is_byte_identical_after_the_refactor() -> None:
+    """Edited deliberately by feature 013 T111 (its `contracts/sources.md` section 4): the
+    request asks for 300 characters where it asked for 480. With that one sentence as it was,
+    the request is still the pinned bytes, so nothing else in it moved."""
     session = load_session(REVIEW_FOLDER / "session.json")
     package = load_package(REVIEW_FOLDER).package
 
     prompt = _prompt(rank(session).rows, session=session, package=package)
+    asked = f"Each explanation must be at most {REQUESTED_CHARS} characters."
+    before_013 = prompt.replace(asked, "Each explanation must be at most 480 characters.")
 
-    assert hashlib.sha256(prompt.encode("utf-8")).hexdigest() == EXPLANATION_PROMPT_SHA256
+    assert prompt.count(asked) == 1
+    assert hashlib.sha256(before_013.encode("utf-8")).hexdigest() == EXPLANATION_PROMPT_SHA256
