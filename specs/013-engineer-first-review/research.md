@@ -78,6 +78,19 @@ regular expressions for vendor names (a second matcher, and a syntax the owner d
 a separate `custom_name_patterns` list (not needed: the part-number pattern already says custom, and
 a second list could disagree with it).
 
+**Revised 2026-09-26, before any code** (the owner's guidance and the census, R2.4 "Revised"): the
+section names every signal the census found, not three bought rules - `bought_prefixes` and
+`bought_folder_names`; the make-or-buy `switch` (property, bought values, custom values);
+`vendor_properties`; `distributor_block` (properties and `min_valued`); `catalogue_numbers` (shapes
+and the properties whose values they are tested on); `custom_prefixes` and `bought_number_prefixes`;
+`detail_properties` (`contracts/part-roles-profile.md` section 1). `purchased_property`,
+`purchased_values` and `bought_name_patterns` are gone: the switch replaces the first two and reads
+both of its values, and the catalogue shapes replace the name patterns and are tested on tokens,
+configuration names and property values rather than on the whole file name. The one matcher and its
+vocabulary are unchanged. The owner's words ask for the custom prefix, so a `custom_prefixes` list is
+added after all; it narrows the part-number pattern rather than competing with it (a file name counts
+only when it follows the pattern).
+
 #### R2.2 The upgrade helper proposes, the owner confirms
 
 **Decision**: `swreview profile upgrade <in> --out <out>` writes a proposed version 4 profile from a
@@ -139,6 +152,49 @@ follows the part-number convention"), so a misfiled custom part is visible.
 **Alternatives**: the convention winning over a folder (a vendor file renamed to a company number
 would be graded); every conflict unclear (more questions for the common case of a library part
 carrying a company number, which the sitting's pin does).
+
+**Revised 2026-09-26, before any code: votes with strengths replace the first-match table.** From
+the owner's guidance of the same day - "The custom properties should also hint at whether the part is
+custom or COTS; the purchased vs built switch can be flipped by the user; also look for part numbers,
+vendors, etc. Custom parts usually have little detail: the custom-prefix file name or the
+custom-prefix part number." - and a census of every recorded package on the development machine
+(33 part and assembly documents after de-duplication by path, 14 carrying the custom prefix; the
+census and its values stay outside the repository, and only its generic findings are recorded here):
+
+- the make-or-buy switch's **bought** value is set on purpose, written at the document and the
+  configuration level: **strong** bought evidence. Its **custom** value behaves like the part
+  template's default, written at document level only, and was visibly wrong on 2 of 16 documents:
+  **weak** custom evidence. A skeptical re-count showed that counting it strong would have called 6
+  of 15 bought documents custom without asking once they were moved out of the library, which is why
+  it is weak;
+- part-number ranges outside the custom prefixes appear on bought documents: a profile list of
+  **bought number prefixes**, **medium** bought evidence;
+- vendor-type properties carrying a value, and a distributor-download block of properties, appear
+  only on bought documents: **strong** bought evidence;
+- catalogue-number shapes in file-name tokens, configuration names and property values: **medium**
+  bought evidence. The census found most of its shapes fitted to one document each, so the owner's
+  profile keeps only general shapes, and a shape made only of wildcards is refused;
+- the custom prefix in the file name or the part-number property: **medium** custom evidence (the
+  part-number pattern alone is not: bought documents carry the same shape in their part-number
+  property);
+- sparse properties (no vendor or catalogue detail) and a same-name drawing: **weak** custom
+  evidence; a missing drawing is no evidence;
+- a child of a bought assembly inherits bought unless its own evidence says custom;
+- property names must be compared ignoring case **and** spaces: real files spell the part-number
+  property both with and without its space, and the hygiene checks had missed it;
+- the decision: an answer decides; strong votes that all agree, with no medium vote against, win;
+  strong votes that conflict are unclear and asked; with no strong vote a role needs two agreeing
+  votes, at least one of them medium, and none against; with no votes the part is unclear;
+- a document that was never read (lightweight or suppressed) is decided only from its path, name,
+  configurations and Toolbox, and says so.
+
+The strengths are fixed in `contracts/part-roles.md` section 2.1, not in the profile: the owner names
+what each signal looks for, and the evidence's weight is this feature's decision, tested once. Every
+company value lives in the owner's `part_roles` section. The census's own tally under its first
+draft, where the custom value was strong, was 14 custom, 16 bought and 3 unclear; with the custom
+value weak, as decided here, its two switch conflicts (a vendor sub-assembly and a gearbox, both in a
+bought folder, both carrying the template's custom value) resolve to bought (T018's local validation
+records the tally). The version 1 to 3 rule (R2.5) and the no-profile rule (R2.6) are unchanged.
 
 #### R2.5 Version 1 to 3 profiles: the convention, Toolbox, then ask
 
@@ -762,7 +818,7 @@ Choices the defaults leave open, made here and changeable in review:
 | # | Choice | Reason |
 |---|---|---|
 | C1 | Module and field names: `checks/part_roles.py`, `checks/provenance.py`, `checks/feature_nodes.py`, `report/finding_groups.py`, `report/sources.py`; `source`, `allow_text`, `basis`, `drawing_read`, `drop_prior_reasoning` | One name per concept, matching the analysts' designs where they agreed |
-| C2 | The `part_roles` keys `bought_prefixes`, `purchased_property`, `purchased_values`, `bought_name_patterns` | The default's three signals, spelled as the profile spells its other lists |
+| C2 | The `part_roles` keys: `bought_prefixes`, `bought_folder_names`, `switch`, `vendor_properties`, `distributor_block`, `catalogue_numbers`, `custom_prefixes`, `bought_number_prefixes`, `detail_properties` (revised 2026-09-26 from `bought_prefixes`, `purchased_property`, `purchased_values`, `bought_name_patterns`) | One key per signal of `contracts/part-roles.md` section 2.1, spelled as the profile spells its other lists |
 | C3 | A purchased property with no values, or values with no property, is refused | "Every key required, every value may be empty" is about statements; a half-written signal is neither |
 | C4 | The part-number convention matching no document at all asks nothing and writes one unresolved line | Feature 006's zero-match precedent (`checks/standards/document.py:171`); a misconfigured profile (the fictional example on the seat until 2026-09-26) would otherwise ask about everything |
 | C5 | The page's text box has a placeholder from the words file, not a field on the request | The page prints words it is given; the request says only that text is allowed |

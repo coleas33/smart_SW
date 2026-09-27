@@ -7,7 +7,7 @@ contract carries a company value (FR-055).
 | Contract | What it fixes | Serves |
 |---|---|---|
 | [part-roles-profile.md](part-roles-profile.md) | Standards profile version 4: the `part_roles` section, its field rules, the name-pattern vocabulary, the upgrade helper | FR-001 to FR-004 |
-| [part-roles.md](part-roles.md) | The classifier: states, the decision table, reasons, the API, the consumers, the one question, answers and the regrade, the bought-parts line | FR-005 to FR-014 |
+| [part-roles.md](part-roles.md) | The classifier: states, the signals and their strengths, the decision, reasons, the API, the consumers, the one question, answers and the regrade, the bought-parts line | FR-005 to FR-014 |
 | [grouped-list.md](grouped-list.md) | The grouped findings view: the groups and their words, the partition and order rules, the summary block, the pane section, the report's index, and `top_n` | FR-015 to FR-023 |
 | [re-ask-guard.md](re-ask-guard.md) | Code-owned checklist items and `closed_by_code`; provenance closed at setup; the re-ask guard; the ids `request_evidence` accepts | FR-024 to FR-032, FR-045 (the mechanism) |
 | [drawing-capability.md](drawing-capability.md) | The ping capability, drawing states, the instruction line, one read per file, code-answered drawing requests, refusal outcomes | FR-033 to FR-040 |
