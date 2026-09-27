@@ -105,6 +105,9 @@
    *   - `onDocument(documentInfo, api)`: the open document, whenever it changes. One family can
    *     grade only a part and the button says so; the other grades three kinds and says what
    *     each of them would pull in. Called last, so the page decides after the chrome has.
+   *   - `onResult(result, api)`: every result rendered, a check's, a re-read's or an Accept's,
+   *     after the shared blocks. One family's body carries a fact the other's never does - the
+   *     Model check's bought-parts line (feature 013 T150) - and the family renders it.
    */
   function create(page) {
     var pending = Object.create(null);
@@ -472,6 +475,9 @@
       page.renderHeader(state.result, ui.header, api);
 
       renderNotExamined(state.result);
+      if (page.onResult) {
+        page.onResult(state.result, api);
+      }
       renderAttention(state.result);
 
       var rows = rowsOf(state.result);

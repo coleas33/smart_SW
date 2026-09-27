@@ -92,3 +92,16 @@
   color: var(--ink-2);
   font-weight: 600;
 }
+
+/* The bought-parts line (feature 013 T150): the backend's one sentence, read before the grade's
+   details. A note, not a warning - the part is graded - so the muted ink and the hairline. */
+.bought-parts {
+  margin: 0 12px 10px;
+  padding: 7px 10px;
+  border-left: 3px solid var(--hair-2);
+  border-radius: var(--radius);
+  color: var(--ink-2);
+  font-size: var(--text-small);
+  word-break: normal;
+  overflow-wrap: anywhere;
+}

@@ -76,6 +76,52 @@ public sealed class ModelCheckHostTests
         }
     }
 
+    /// <summary>
+    /// Feature 013 T149 (FR-008, US1 scenario 6): the path of the standards profile the Review
+    /// tab uses, so the page can relay it on `POST /checks/rms` and the body can say the open
+    /// part looks bought and why it is graded anyway. The path only - no profile value travels
+    /// on any message - and read fresh, because a settings save moves it.
+    /// </summary>
+    [Fact]
+    public void InitCarriesTheConfiguredStandardsProfilePathReadFresh()
+    {
+        using (var world = new CheckWorld())
+        {
+            world.ProfilePath = @"C:\profiles\standards.yaml";
+            world.Open();
+
+            world.Receive("ready", "r1", new { });
+            world.ProfilePath = @"C:\profiles\other.yaml";
+            world.Receive("ready", "r2", new { });
+
+            Assert.Equal(
+                @"C:\profiles\standards.yaml",
+                world.Reply("init", "r1").GetProperty("standards_profile").GetString());
+            Assert.Equal(
+                @"C:\profiles\other.yaml",
+                world.Reply("init", "r2").GetProperty("standards_profile").GetString());
+        }
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void InitCarriesANullStandardsProfileWhenNoneIsConfigured(string? configured)
+    {
+        using (var world = new CheckWorld())
+        {
+            world.ProfilePath = configured;
+            world.Open();
+
+            world.Receive("ready", "r1", new { });
+
+            Assert.Equal(
+                JsonValueKind.Null,
+                world.Reply("init", "r1").GetProperty("standards_profile").ValueKind);
+        }
+    }
+
     [Fact]
     public void InitCarriesNoDocumentAndNoBackendWhenThereIsNeither()
     {
@@ -520,6 +566,8 @@ public sealed class ModelCheckHostTests
 
         public PageDocument? Document { get; set; }
 
+        public string? ProfilePath { get; set; }
+
         public BackendEndpoint? Endpoint { get; set; } = new BackendEndpoint(51234, "0FAKEtoken");
 
         public FakeCheckDump Dump { get; } = new FakeCheckDump();
@@ -540,6 +588,7 @@ public sealed class ModelCheckHostTests
             {
                 Backend = () => Endpoint,
                 CurrentDocument = () => Document,
+                ProfilePath = () => ProfilePath,
                 Dump = UseDump ? Dump : null,
                 RegisterLatestRun = directory => Registered.Add(directory),
                 LogFolder = () => LogFolder,

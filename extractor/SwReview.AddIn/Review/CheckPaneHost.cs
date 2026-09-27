@@ -361,6 +361,15 @@ public sealed class CheckPaneHost : IDisposable
     }
 
     /// <summary>
+    /// A path setting as `init` carries it: the setting, or null when it is blank. Both check
+    /// tabs hand the page the standards profile's path this way (the Standards tab as
+    /// `profile_path`, the Model check tab as `standards_profile`, feature 013 T150), so "a blank
+    /// setting is no setting" is written once.
+    /// </summary>
+    public static string? Configured(string? setting) =>
+        string.IsNullOrWhiteSpace(setting) ? null : setting;
+
+    /// <summary>
     /// The document as `init` and `document.changed` both carry it, or null when there is none.
     /// One shape, so no page has two to read, and a kind the extension does not name stays null
     /// rather than becoming a guess.
