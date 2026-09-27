@@ -25,6 +25,7 @@ from swreview.checks.drawing_context import (
     CANDIDATE_CONFIRM,
     CANDIDATES_BLOCK,
     CLOSED_BY_CODE,
+    CONFIRMED_OPEN_CHECK,
     CONFORMANCE_CHECK,
     CONTEXT_CHECK,
     DRAWING_STATES,
@@ -251,6 +252,7 @@ def get_drawing_brief(document_id: str) -> ToolResult:
         document_id: A part or assembly document id.
     """
     context = current_context()
+    roles = _review_roles(context)
     try:
         brief = build_brief(
             context.ir,
@@ -258,6 +260,8 @@ def get_drawing_brief(document_id: str) -> ToolResult:
             review_profile(context),
             document_id,
             joint_map=joint_analysis(context).joint_map,
+            roles=roles,
+            mode=_read_mode(context, DrawingIndex.for_package(context.ir), roles),
         )
     except BriefRefused as refusal:
         return error_result(str(refusal))
@@ -265,10 +269,6 @@ def get_drawing_brief(document_id: str) -> ToolResult:
 
 
 # --- the confirmed read-only open (User Story 5 part B, `contracts/confirmed-open.md` 1) ---------
-
-CONFIRMED_OPEN_CHECK = "drawing.confirmed_open"
-"""The coverage `check` of one confirmed candidate's outcome: never a finding's, never a
-checklist item's id, so it closes nothing."""
 
 MAX_DRAWINGS = 10
 """The drawings one package holds at most (FR-013, FR-056): the confirmed reads stop there."""

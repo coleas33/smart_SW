@@ -21,6 +21,7 @@ from typing import Any
 
 import pytest
 
+from swreview.checks.drawing_context import CONFIRMED_OPEN_CHECK
 from swreview.checks.standards.profile import StandardsProfile, load_profile
 from swreview.drawings.brief import (
     BRIEF_MAX_BYTES,
@@ -30,10 +31,11 @@ from swreview.drawings.brief import (
 )
 from swreview.ir.loader import load_package
 from swreview.ir.models import EvidencePackage
-from swreview.report.session import ReviewSession
+from swreview.report.session import CoverageItem, CoverageScope, ReviewSession
 from swreview.tools.context import context_for, use_context
 from swreview.tools.session import request_evidence
 from tests.support.drawings import Attach, DrawingBuilder
+from tests.support.fake_part_roles import FakePartRoles
 from tests.support.mechanical import Face, Instance, PackageBuilder
 
 TESTS = Path(__file__).resolve().parents[1]
@@ -467,3 +469,137 @@ def test_the_same_pathological_package_gives_the_same_bytes(big_brief: Any) -> N
     package, brief = big_brief
 
     assert build_brief(package, None, None, "doc:0002").to_json() == brief.to_json()
+
+
+# --- 5. the drawing section's state, candidates and outcomes (013 T090) -------------------------
+#
+# 013 `contracts/drawing-capability.md` sections 3 and 6: the drawing section carries the
+# document's drawing state and its reason first, each candidate file once (a part and an assembly
+# of one stem share one), never a bought document's, and the outcome of a confirmed read-only open
+# of a candidate when there is one; the byte bound still holds.
+
+SUB = "FICT-TULMVEN-9001"
+"""A sub-assembly and its plate of one stem: one drawing file beside both."""
+
+
+def sub_assembly(children: int = 1, stem: str = SUB) -> EvidencePackage:
+    """The root assembly, a sub-assembly (doc:0002) and `children` plates under it, the first of
+    one stem with the sub-assembly; every document but the root has a candidate row."""
+    base = PackageBuilder(design_stem="FICT-OKTAVEN-9000", schema_version="1.6.0")
+    sub = base.document(stem, "assembly")
+    plates = [base.document(stem if number == 0 else f"{stem}-{number:02d}", "part")
+              for number in range(children)]
+    parent = base.component(sub)
+    for plate in plates:
+        base.component(plate, parent_id=parent)
+    builder = DrawingBuilder(base.build().package)
+    for document in (sub, *plates):
+        builder.candidate(document)
+    return builder.build()
+
+
+def confirmed_open_session(package: EvidencePackage, outcomes: dict[str, str]) -> ReviewSession:
+    """A session holding one `drawing.confirmed_open` item per document, unresolved, as a refused
+    read leaves them."""
+    context = context_for(package)
+    for document_id, reason in outcomes.items():
+        context.record_coverage("unresolved", CoverageItem(
+            check=CONFIRMED_OPEN_CHECK, scope=CoverageScope(document_ids=[document_id]),
+            reason=reason, error="BridgeRefusedError",
+        ))
+    return context.require_session()
+
+
+def test_the_drawing_section_leads_with_the_documents_state_and_reason(
+    plate: EvidencePackage,
+) -> None:
+    attached = brief_of(plate, "doc:0002")["drawing"]
+    candidate = brief_of(plate, "doc:0003")["drawing"]
+    absent = brief_of(plate, "doc:0004")["drawing"]
+
+    assert list(attached)[:3] == ["state", "reason", "attached"]
+    assert attached["state"] == "attached"
+    assert attached["reason"].startswith(
+        "read from FICT-TULMKALO-3001.SLDDRW and FICT-TULMKALO-3001-B.SLDDRW; 1 view usable; "
+    )
+    assert len(attached["reason"]) <= 200
+    assert list(candidate) == ["state", "reason", "attached", "why", "candidates"]
+    assert (candidate["state"], candidate["reason"]) == (
+        "candidate",
+        "Open FICT-TULMSORN-3002.SLDDRW in SOLIDWORKS, then press Review again with "
+        "FICT-TULMVEN-0000.SLDASM active",
+    )
+    assert (absent["state"], absent["reason"]) == (
+        "absent", "no drawing named FICT-PIN-3X12-3003.SLDDRW sits beside it"
+    )
+
+
+def test_when_the_host_opens_closed_drawings_a_candidate_says_it_sits_beside_it(
+    plate: EvidencePackage,
+) -> None:
+    drawing = json.loads(
+        build_brief(plate, None, None, "doc:0003", mode="opens_closed").to_json()
+    )["drawing"]
+
+    assert drawing["reason"] == "a drawing with its name sits beside it (candidate)"
+
+
+def test_a_file_beside_the_assembly_and_its_plate_is_named_once() -> None:
+    drawing = brief_of(sub_assembly(), "doc:0002")["drawing"]
+
+    assert drawing["candidates"] == [f"{SUB}.SLDDRW"]
+
+
+def test_a_bought_documents_brief_says_no_drawing_is_expected_and_names_none(
+    plate: EvidencePackage,
+) -> None:
+    roles = FakePartRoles(roles={"doc:0003": "bought"}, root="doc:0001")
+
+    drawing = json.loads(
+        build_brief(plate, None, None, "doc:0003", roles=roles).to_json()
+    )["drawing"]
+
+    assert (drawing["state"], drawing["reason"]) == (
+        "bought", "a bought part: no drawing is expected, and none is asked for"
+    )
+    assert drawing["candidates"] == [], "a bought document's candidate row is ignored"
+
+
+def test_a_confirmed_open_outcome_is_shown_beside_its_candidate(plate: EvidencePackage) -> None:
+    refusal = (
+        "the bridge returned status 'error': the read-only open of a confirmed drawing is not yet "
+        "validated on a seat (feature 011 probe D14)"
+    )
+    session = confirmed_open_session(plate, {"doc:0003": refusal})
+
+    with_outcome = brief_of(plate, "doc:0003", session=session)["drawing"]
+    without = brief_of(plate, "doc:0003")["drawing"]
+
+    assert with_outcome["confirmed_open"] == [["FICT-TULMSORN-3002.SLDDRW", refusal]]
+    assert list(with_outcome)[-1] == "confirmed_open"
+    assert "confirmed_open" not in without
+
+
+def test_one_outcome_per_file_however_many_documents_it_sits_beside() -> None:
+    package = sub_assembly()
+    session = confirmed_open_session(package, {"doc:0002": "refused", "doc:0003": "refused"})
+
+    drawing = brief_of(package, "doc:0002", session=session)["drawing"]
+
+    assert drawing["confirmed_open"] == [[f"{SUB}.SLDDRW", "refused"]]
+
+
+def test_the_byte_bound_holds_with_ten_long_outcomes() -> None:
+    package = sub_assembly(children=10, stem="FICT-TULMVEN-" + "SORN" * 12)
+    outcome = "the bridge returned status 'error': " + "a very long host sentence " * 20
+    candidates = [row.document_id for row in package.drawing_candidates]
+    session = confirmed_open_session(package, dict.fromkeys(candidates, outcome))
+
+    brief = build_brief(package, session, None, "doc:0002")
+    drawing = json.loads(brief.to_json())["drawing"]
+
+    assert len(brief.to_json().encode("utf-8")) <= BRIEF_MAX_BYTES
+    assert all(len(text) <= 200 for _, text in drawing["confirmed_open"])
+    assert len(drawing["confirmed_open"]) + json.loads(brief.to_json())["omitted"].get(
+        "drawing.confirmed_open", 0
+    ) == 10

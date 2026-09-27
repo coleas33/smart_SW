@@ -36,6 +36,19 @@ def build_brief(package: EvidencePackage, session: ReviewSession | None,
 Every list is in a fixed order (traversal, then id); the whole is deterministic for a package,
 session and profile, and shuffling any array of the package changes no byte.
 
+*Amended 2026-09-26 by feature 013 T091 (013 `contracts/drawing-capability.md` sections 3 and 6):*
+`build_brief(..., *, joint_map=None, roles=None, mode="none")` - the review's part roles and what the
+host's `drawing.read` can do, which the tool passes and the command leaves at their defaults. The
+`drawing` section begins with the document's drawing state and its reason, `"state"` (`attached`,
+`candidate`, `absent` or `bought`) and `"reason"` (at most 200 characters; a bought document's is "a
+bought part: no drawing is expected, and none is asked for"), then `attached`, `why` when nothing is
+attached, and `candidates`: each candidate file once (grouped by `drawings/evidence.file_key`, so a
+part and an assembly of one stem share one), never a bought document's. When the session holds a
+`drawing.confirmed_open` item about a listed candidate, `"confirmed_open": [[file name, outcome],
+...]` follows (the outcome at most 200 characters, a later item replacing an earlier one; bounded to
+10, cut and counted like every list, `omitted` key `drawing.confirmed_open`). The byte bound is
+unchanged.
+
 ## 3. The bound
 
 Compact JSON (`separators=(",", ":")`, UTF-8) of at most `BRIEF_MAX_BYTES`. Each list is first cut
