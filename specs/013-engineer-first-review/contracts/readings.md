@@ -81,6 +81,9 @@ public static RemodelProbeWatchdogOutcome RunWithTimeout(Func<bool> call, TimeSp
 - `RemodelProbeContext` gains an optional deadline factory, defaulting to
   `Task.Delay(WatchdogTimeout)`; probe 1 uses it.
 
+*Added 2026-09-26, after this package:* feature 004 records the same change as 004 T171 (004
+research R13.7); it is built once, with the signature above, under whichever list reaches it first.
+
 Probe 1 (`Rms/RemodelProbeExecutors.cs:344-372`) runs the **flag-set** attempt first, then the
 flag-clear attempt, so a message box left open by one cannot spoil the other's reading;
 `RemodelProbe1Logic.Decide` and the ledger's raw keys are unchanged. `RemodelProbeRunner` records the

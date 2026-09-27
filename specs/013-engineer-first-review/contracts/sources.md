@@ -10,7 +10,7 @@ feature 011's `contracts/questions.md` (drawing questions carry `source: code`).
 ## 1. The token
 
 `source: Literal["code", "model"]`, optional on three records, omitted from `session.json` at each
-kind's usual author so no byte the model reads moves:
+kind's usual author, and never echoed in a tool result, so no byte the model reads moves:
 
 | Record | Default (omitted) | Written as the other value by |
 |---|---|---|
@@ -24,10 +24,21 @@ shows no label rather than a false "Checked by code" (surfaces label coverage on
 load, a finding with no `source` whose check is `drawing.manufacturing_inputs` reads as `model` (the
 one pre-013 non-numeric writer).
 
+**Tool results echo a record without `source`.** Two tools return the whole record they wrote:
+`mark_coverage` returns `{coverage_item: as_json(item)}` (`tools/session.py:210`) and
+`record_drawing_finding` returns `{finding: as_json(finding)}` (`:288`). Both write `model`, the
+value the serializer keeps, so both echo the record through one helper, `as_json(record,
+exclude={"source"})` (`tools/query.py:69` gains the optional `exclude`), and their results stay
+byte-identical to today's; `session.json` still stores the field. Every other tool result that
+carries a record carries one written at its kind's default, so the field is already absent there.
+*Added on review, 2026-09-26.*
+
 Bodies sent to the pane always state the source explicitly: `pane_finding` (`report/titles.py`), the
 evidence and coverage event bodies (`tools/context.py:268-273`, `:355-358`), the snapshot
-(`report/snapshot.py:67-73`), `QuestionView.source`, `GroupRow.source`, `GoalLine.detail_source`, and
-`NotClosed.source` (omitted when `code`, so `attention.json` keeps its bytes).
+(`report/snapshot.py:67-73`), `QuestionView.source`, `GroupRow.source` (with its `chip`,
+`grouped-list.md` section 3), `GoalLine.detail_source`, and `NotClosed.source` (the last two omitted
+when `code`, so `attention.json` keeps its bytes and the page prints a coverage label only when the
+field is present, never comparing its value).
 
 ## 2. The words and where they show
 
@@ -35,10 +46,13 @@ evidence and coverage event bodies (`tools/context.py:268-273`, `:355-358`), the
 before `errors` (which stays last, `ErrorLabelsCoverTheHostTests`), served by `GET /labels`. The page
 prints `labelOf(labels, "source", token, "")` - a lookup, no comparison:
 
-- a chip on the finding card's line (`render.js:297-304`) and on model rows of the grouped list;
+- a chip on the finding card's line (`render.js:297-304`); on the grouped list's rows the page
+  prints `GroupRow.chip` verbatim, which the backend sets for model rows and leaves null for code
+  rows (`grouped-list.md` section 3);
 - the question pager line (`render.js:561-565`) and the evidence card head (`render.js:513-515`),
   replacing the one title "The review needs an input" for both kinds;
-- goal detail and coverage rows, only when the source is `model`;
+- goal detail and coverage rows, only when the body carries a source (`detail_source` and
+  `NotClosed.source` are sent only for `model`);
 - the pinned answer and the transcript's assistant block ("AI guidance", section 3).
 
 `report.md`: a model finding gets "- Source: AI guidance"; the evidence requests table gains a Source
@@ -102,7 +116,9 @@ guidance. No drawing was read in this review."
 ## 5. Tests
 
 `test_tools_session.py`: a drawing finding carries `model`; a `request_evidence` request is `model` and
-omitted from the dump; a `mark_coverage` row is `model`. Drawing check and part-roles tests: their
+omitted from the dump; a `mark_coverage` row is `model`; the results of `mark_coverage` and
+`record_drawing_finding` are byte-identical to today's (no `source` in the echoed record) while
+`session.json` stores `model`. Drawing check and part-roles tests: their
 requests carry `code`. `test_session.py`, `test_schema_sync.py`: old sessions keep their bytes on a
 round trip; an old drawing finding reads as `model`. `test_events_schema.py`: `basis` optional.
 `test_tool_payload.py`: code findings' bytes unchanged. `test_review_words.py` and a labels-route

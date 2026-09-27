@@ -40,6 +40,9 @@ the Start switch, planning again while a plan waits, `GetVault` answering null, 
 feature 004's. They are not recorded here, and `specs/004-resilient-remodeler/` is not touched. The
 probe 1 watchdog (U24) is in scope as test debt in its C# code only (R2.41); the 004 task text that
 mentions it (T033) is left for 004's own next edit, and nothing in this package contradicts it.
+*Added 2026-09-26, after this package:* that edit has been made: 004 T171 and the amended 004 T033
+carry the watchdog default (004 research R13.7), the same change as 013 T135 to T137, built once; no
+task of 013 edits a 004 document.
 
 ---
 
@@ -78,11 +81,16 @@ a second list could disagree with it).
 #### R2.2 The upgrade helper proposes, the owner confirms
 
 **Decision**: `swreview profile upgrade <in> --out <out>` writes a proposed version 4 profile from a
-version 1 to 3 file, never over its input: the new `part_roles` section with empty lists, and the
+version 3 file, never over its input: the new `part_roles` section with empty lists, and the
 library skip list's entries copied under `bought_prefixes` as **commented** lines, marked as a
-proposal to confirm. It validates what it writes. It prints no profile value to the console.
+proposal to confirm. It validates what it writes. It prints no profile value to the console. A
+version 1 or 2 file is refused naming the sections it lacks.
 
-**Default taken 2026-09-26, the owner may revise.**
+**Default taken 2026-09-26, the owner may revise.** Refusing a version 1 or 2 file is this plan's
+reading of the default (stated on review, 2026-09-26): version 4 is version 3 plus one section, so
+the helper would otherwise have to invent the drawing and general-tolerance values the owner has
+not written (`contracts/part-roles-profile.md` section 5). The owner's seat profile and the shipped
+example are version 3.
 
 **Why**: the owner already writes the profile by hand on the seat; a helper that writes the section
 saves typing without deciding anything. The skip list means "Standards skips this", not "bought"
@@ -136,7 +144,10 @@ carrying a company number, which the sitting's pin does).
 
 **Decision**: with a version 1 to 3 profile, a document that follows `part_number.pattern` is custom,
 a Toolbox document is bought, and every other one is unclear and asked about. `library.skip_prefixes`
-is never read as bought. An empty pattern makes the state `absent` (R2.6).
+is never read as bought. An empty pattern makes the state `absent` (R2.6). So the same-name drawing
+rule and the bought-assembly rule of R2.4 are not in force with a version 1 to 3 profile
+(`contracts/part-roles.md` section 1, state `convention_only`: rules A, B, G and J); stated on
+review, 2026-09-26, where the contract had run them too.
 
 **Default taken 2026-09-26, the owner may revise.**
 
@@ -177,7 +188,7 @@ documents graded" edge and any Model check change.
 **Decision**: RMS part and equation rules and the four hygiene property checks (part number matches
 file, duplicate description, duplicate part number, revision present) grade custom and unclear
 documents; duplicates compare graded documents with each other only. Bought documents are listed once
-as "not graded: bought part", in one summary line counted in no group, goal or headline, and in one
+as not graded because bought (the words: `contracts/part-roles.md` section 7), in one summary line counted in no group, goal or headline, and in one
 coverage row `coverage.prerun.bought_parts` built from the same sentence.
 `hygiene.component_not_resolved` keeps every document.
 
@@ -234,9 +245,10 @@ sitting would have asked once; a big assembly dozens of times).
 **Decision**: an answer regrades before the review resumes: the roles are reclassified with the
 answer and the pre-run's `check_rms_part`, `check_rms_equations`, `check_rms_assembly`,
 `check_hygiene` and `check_drawings` are restated through one general `_restate` (replacing
-`_restate_drawing_check`, `agent/runner.py:902`). A finding judged again keeps its id (the existing
-`_verdict_key` reconcile, `agent/runner.py:623`); one no longer produced is withdrawn by a new
-`ToolContext.withdraw_findings`, which emits `finding.withdrawn`. The answer lives in the session
+`_restate_drawing_check`, `agent/runner.py:902`), after any confirmed drawing read of the same batch
+(R3 C16). A finding judged again keeps its id (the existing `_verdict_key` reconcile,
+`agent/runner.py:623`, run by `_restate` over its own calls); one no longer produced is withdrawn by
+a new `ToolContext.withdraw_findings`, which emits `finding.withdrawn`. The answer lives in the session
 only. Unanswered, unclear documents are graded and each of their findings says it may be bought.
 
 **Default taken 2026-09-26, the owner may revise.**
@@ -273,7 +285,8 @@ Mass and material; "Other checks" last and only when it holds something. `standa
 under Drawings.
 
 **Default taken 2026-09-26, the owner may revise.** Mass and material is a seventh group by default;
-the owner may fold it into Hygiene by changing its goal's `group` in the words file.
+the owner may fold it into Hygiene by changing its goal's `group` in the words file (a group left
+with no goal and no row is not rendered, so that one edit is enough; stated on review, 2026-09-26).
 
 **Why**: the engineer's list named six groups; mass and material still apply to bought parts
 (R2.9), which argues they are not hygiene. `standards.drawing.*` speaks for drawings under feature
@@ -401,20 +414,35 @@ digest (carried findings do not carry for one run) and the pane's gap count.
 #### R2.22 The re-ask guard
 
 **Decision**: `request_evidence` answers `already_answered` - with the earlier request's id,
-question, answer and time - a question whose `blocks` equals an answered request's (null equals
-null) and whose entity ids are a non-empty subset of that request's, or empty against an empty set;
-the most recent answer wins. It includes follow-ups ("press fit" answered, numeric limits wanted):
+question, answer and time - a question whose `blocks` equals an answered model-written request's
+(null equals null) and whose entity ids are a non-empty subset of that request's, or empty against an
+empty set when both name a checklist item (the two exclusions revised below); the most recent answer
+wins. It includes follow-ups ("press fit" answered, numeric limits wanted):
 the answer stands, and at finalization the item, if still open, is unresolved quoting the answer. A
 repeat of a question still open is answered `already_asked`. Nothing is recorded, no id allocated, no
-event written. The drawing check's exact-match duplicate test (`tools/drawings.py:68-74`) is replaced
-by the same rule. (`contracts/re-ask-guard.md` section 3.)
+event written. (`contracts/re-ask-guard.md` section 3.)
 
 **Default taken 2026-09-26, the owner may revise.** The `already_asked` half is this plan's addition
 for an edge the defaults did not name.
 
+**Revised on review, 2026-09-26 (default taken 2026-09-26, the owner may revise; put to the owner as
+a revision of this U19 default):** the key as first written would misfire two ways. Two questions with no checklist item
+and no ids counted as the same question, so a general question about load after an answered one
+about temperature came back `already_answered`; and the code-written part-roles question, which has
+no checklist item and names the unclear parts, covered any later model question about one of those
+parts with no checklist item, answering it "All bought". So a question with no checklist item and
+no ids is never covered, and a code-written request covers only itself: the guard compares a model
+question with earlier model-written requests only, and a code question (the drawing check's, the
+part-roles question) is recorded unless an identical one is on the session - the drawing check's
+exact duplicate test (`tools/drawings.py:68-74`), kept exact and moved to `checks/questions.py`
+rather than widened to the subset rule. Left for the owner: a model question with no checklist item
+that names a subset of an answered model question's parts, also with no item, is still covered
+(pinned by a test); excluding every question with no checklist item would be the stricter choice.
+
 **Why**: three of the sitting's eight questions re-asked answered ones (the provenance, drawing and
 fit questions, each with the same ids); simulated on the three recorded replay fixtures the key
-catches nothing, so replays do not move. Ids are compared raw: turning an instance into its document
+catches nothing, so replays do not move (the revision only narrows the key, so it catches nothing
+there either). Ids are compared raw: turning an instance into its document
 would merge two instances of one screw.
 
 **Alternatives**: refuse only exact repeats (misses a re-ask over fewer parts); allow a follow-up
@@ -429,8 +457,8 @@ to documents (merges distinct instances).
 
 **Why**: the pane never passes the previous session to `start_review` (`chat/server.py:2092-2111`),
 and component and hole ids carry only when the models are unchanged; that needs its own design.
-"Press Review again" (R2.25) therefore asks again what was answered, which the owner accepted as a
-later item.
+"Press Review again" (R2.25) therefore asks again what was answered; carrying answers is a later,
+separate item (default taken 2026-09-26, the owner may revise).
 
 ### U20: drawings
 
@@ -537,8 +565,11 @@ read would be refused as already a document of the review (`ConfirmedDrawingRead
 **Decision**: optional `source: "code" | "model"` on `Finding`, `EvidenceRequest` and `CoverageItem`,
 omitted from `session.json` at each kind's usual author: findings and coverage default `code` (only
 `record_drawing_finding` and `mark_coverage` write `model`); evidence requests default `model` (the
-drawing check and the part-roles question write `code`). Bodies sent to the pane always state it.
-Words: `labels.source: {code: "Checked by code", model: "AI guidance"}`. (`contracts/sources.md`.)
+drawing check and the part-roles question write `code`). Bodies sent to the pane always state it;
+the two tool results that echo a model-written record (`mark_coverage`, `record_drawing_finding`)
+echo it without the field (this plan's reading, added on review 2026-09-26: they return the whole
+record, so the omit rule alone would move their bytes). Words: `labels.source: {code: "Checked by
+code", model: "AI guidance"}`. (`contracts/sources.md`.)
 
 **Default taken 2026-09-26, the owner may revise.**
 
@@ -705,8 +736,8 @@ session's joint map, `jnt:`), `feature` (`feat:`), and the drawing entities of t
 
 #### R2.41 Probe 1's watchdog is deterministic, and runs flag-set first
 
-**Decision**: `RemodelProbeWatchdog.Run(call, deadline)` starts the call on its own thread
-(`TaskCreationOptions.LongRunning`), waits for a "started" signal, then starts the deadline and waits
+**Decision**: `RemodelProbeWatchdog.Run(call, deadline, startBound)` starts the call on its own thread
+(`TaskCreationOptions.LongRunning`), waits at most `startBound` for a "started" signal, then starts the deadline and waits
 on whichever finishes first, rethrowing the host's own exception; `RunWithTimeout` stays as the
 production wrapper over `Task.Delay`. Probe 1 runs the flag-set attempt first, then the flag-clear
 attempt; `RemodelProbe1Logic.Decide` is unchanged. Tests control the deadline ("attempt k parked" or
@@ -741,9 +772,20 @@ Choices the defaults leave open, made here and changeable in review:
 | C9 | Question checks in `request_evidence`, in order: ids (refusal), short form (refusal), code-owned item (`closed_by_code`), drawing states (`closed_by_code`), covering request (`already_answered` / `already_asked`), record | Refusals first, as today; the non-error answers after the arguments are known to be valid |
 | C10 | `QuestionSpec` and the duplicate test move to `checks/questions.py` | The drawing and part-roles questions share one shape and one test |
 | C11 | `PrefixList` and `name_matches(pattern, name, *, wildcards)` come out of `checks/standards/library.py` and `traversal.py` | One prefix matcher and one pattern matcher; the data-card check keeps `wildcards=False` |
-| C12 | The replay gate is one task per story, run on `main` after that story's lane merges, in merge order; each regeneration is a commit of its own | Regenerations cannot run in parallel lanes |
+| C12 | The replay gate is one task per story, run on `main` after that story's lanes merge, in merge order; each regeneration is a commit of its own; from a story's last merge until its gate commit no other change that moves what the model reads merges (the freeze, added on review 2026-09-26) | Regenerations cannot run in parallel lanes; without the freeze, lane S's queue (US1, US3 to US6) could put two stories' moves on `main` before one gate, which could then not say which change moved a fixture |
 | C13 | Lever 14's replay pricing subtracts each earlier turn's recorded reasoning output tokens from every later-turn round | The usage events record reasoning tokens per round; the replay has no other trace of them |
 | C14 | No tool signature or docstring changes; every new behaviour reaches the model as a status or a field of a result | `test_docstring_split.py` and `test_tool_payload.py` pin both |
+
+Choices made on review of this package, 2026-09-26 (changeable in review like those above):
+
+| # | Choice | Reason |
+|---|---|---|
+| C15 | `mark_coverage` and `record_drawing_finding` echo their record without `source`, through `as_json(record, exclude={"source"})` (`contracts/sources.md` section 1) | They return the whole record, and both write `model`, the value the omit rule keeps; otherwise every recorded result would move and the US5 gate (T115) would blame T097 |
+| C16 | In `answer_evidence_batch`: the confirmed read first, then the roles, then one `_restate` of the union, which reconciles its own restated calls before the resumed turn's `before` index is taken (`contracts/part-roles.md` section 9) | A withdrawal taken after that index would shift restated findings into the list's earlier part as duplicates; roles changed before the read would make the rebuilt candidate question miss |
+| C17 | The part-roles model-facing sentences are constants of `checks/part_roles.py`; the words file carries only pane words (`contracts/part-roles.md` section 3) | Lanes P and S need them before lane R's words file lands, and the `Words` model refuses unknown keys; like every model-facing sentence, editing one needs the replay gate |
+| C18 | `bought_parts` is read from the persisted coverage rows, never classified again (`contracts/part-roles.md` section 7) | The disk route and the re-render have no profile and no roles |
+| C19 | `GroupRow` carries `tail_text`, `reach_text`, `hide_card_title` and `chip`; a type group with neither a row nor a goal is left out (`contracts/grouped-list.md` section 3) | The page may not count, pluralise or compare (FR-022), and folding a goal away stays one edit |
+| C20 | The generated goldens regenerate in the order T014, T060, T129 (with T127), T133; the pane drawing fixture is lane R's (T093) (`plan.md`) | Files generated whole cannot be regenerated in parallel lanes; the drawing fixture plays no recording |
 
 ## R4. Verified causes the tasks cite
 
@@ -788,7 +830,7 @@ rule.
 | US2 | The gate brief (lever 11) and `attention.json` for sessions with fewer than five undecided rows; the explanation pass's rows | Run; regenerate if a fixture moves |
 | US3 | The checklist's provenance item and its render; the brief; the system prompt; `request_evidence` and `mark_coverage` statuses; one new coverage row per session | Regenerate |
 | US4 | `check_drawings`' payload and wording; the checklist's drawing item; the system prompt; the resumed message after a confirmed read | Regenerate (the fixtures carry no drawing evidence, so the family stays unoffered; the checklist and prompt still move) |
-| US5 | Nothing the model reads (the fields are omitted at their defaults; `text.done` is not in the prompt) | Run, to prove nothing moved |
+| US5 | Nothing the model reads (the fields are omitted at their defaults; the results of `mark_coverage` and `record_drawing_finding` echo their record without `source`; `text.done` is not in the prompt) | Run, to prove nothing moved |
 | US6 | The checklist's close-out render; `mark_coverage` and `request_evidence` results; the request view under lever 14 | Regenerate; lever 14 priced off and on |
 | US7 | `check_rms_part` results and observed text (fewer rows, each sketch once) | Regenerate; carried-finding comparisons (008 T128, T129) re-read |
 
@@ -822,15 +864,18 @@ Recorded for the owner; nothing here is built by this feature.
 
 | Feature | What 013 changes in its contracts | Note line added |
 |---|---|---|
-| 001 | `review-session.schema.json` (`allow_text`, `source`, `drawing_read`); `agent-tools.md` (`request_evidence` and `mark_coverage` answers) | `contracts/README.md`, `agent-tools.md` |
-| 002 | `chat-events.schema.json` (`text.done.basis`, `finding.withdrawn`) | `contracts/README.md` |
-| 003 | `rules.md` (grading scope; the mates rule's custom side; content features read through the shared tree); `tools.md` (a bought id refused) | both |
+| 001 | `review-session.schema.json` (`allow_text`, `source`, `drawing_read`); `agent-tools.md` (`request_evidence` and `mark_coverage` answers); `cli.md` (`swreview attention` mirrors no report section) | `contracts/README.md`, `agent-tools.md`, `cli.md` (added on review) |
+| 002 | `chat-events.schema.json` (`text.done.basis`, `finding.withdrawn`); `chat-api.md` (`not_examined` above the grouped list) | `contracts/README.md`, `chat-api.md` (added on review) |
+| 003 | `rules.md` (grading scope; the mates rule's custom side; content features read through the shared tree); `tools.md` (a bought id refused); `model-check.md` (the report's "Findings by type") | all three (`model-check.md` added on review) |
 | 005 | `levers.md` (lever 14) | `levers.md` |
-| 006 | `profile.md` (version 4, `part_roles`, the name vocabulary); `rules.md` (`revision_matches`; the sketch check's tree); `ir-additions.md` (the sheet view) | all three |
-| 007 | `attention.md` (sections 3, 4 and 6: `top_n`, the Review tab's groups, the fallback) | `attention.md` |
+| 006 | `profile.md` (version 4, `part_roles`, the name vocabulary); `rules.md` (`revision_matches`; the sketch check's tree); `ir-additions.md` (the sheet view); `standards-check.md` (the report's "Findings by type"); spec FR-020 and FR-024 | all four (`standards-check.md` added on review); a pointer above the spec's requirements |
+| 007 | `attention.md` (sections 3, 4 and 6: `top_n`, the Review tab's groups, the fallback); `gate.md` section 3 (the brief's own Start here; the parity rule); `cli.md` (`report.md`'s "Findings by type"); spec FR-013, FR-023, FR-031, SC-004, SC-006, SC-009 | all three (`gate.md` and `cli.md` added on review); a pointer above the spec's requirements |
 | 008 | `checks-first.md` (roles attached before the pre-run; two digest lines; provenance at setup); `answer-batch.md` (the regrade step, the outcome lines, `finding.withdrawn`); `model-view.md` (lever 14 beside pruning); `replay.md` (section 9 rows per regeneration) | all four |
-| 009 | `questions.md` (sections 1 to 4: the new answers, `allow_text`, `source`); `review-summary.md` (groups, goals, lines); `views.md` (Results); `plain-words.md` (source labels, the one-line row) | all four |
+| 009 | `questions.md` (sections 1 to 4: the new answers, `allow_text`, `source`); `review-summary.md` (groups, goals, lines); `views.md` (Results); `plain-words.md` (source labels, the one-line row); spec FR-007, FR-009, FR-010, FR-019, SC-001 | all four; a pointer above the spec's requirements (added on review) |
 | 010 | `hygiene.md` (section 1: graded documents); `code-first.md` (hygiene reads the attached roles) | both |
-| 011 | `questions.md` (sections 3, 4, 5, 6); `confirmed-open.md` (sections 1, 2, 4); `brief.md` (section 2); `native-evidence.md` ("Tables": the sheet's own view) | all four |
+| 011 | `questions.md` (sections 3, 4, 5, 6); `confirmed-open.md` (sections 1, 2, 4); `brief.md` (section 2); `native-evidence.md` ("Tables": the sheet's own view); `profile.md` section 1 (the known versions) | all five (`profile.md` added on review) |
 
-Feature 012 stays reserved for drawing creation and is not touched. Feature 004 is not touched.
+Feature 012 stays reserved for drawing creation and is not touched. Feature 004 is not touched by
+this package. *Added 2026-09-26, after this package:* feature 004 records the probe 1 watchdog
+default itself, as 004 T171 and in its amended T033 (004 research R13.7); no task of 013 edits a 004
+document.

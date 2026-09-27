@@ -40,9 +40,11 @@ with `wildcards=False`.
 | `RolesQuestionSpec` | the `QuestionSpec` of `part-roles.md` section 8 (`checks/questions.py`) |
 
 State transitions of one document within a session: `unclear` → `custom` or `bought` by the answer
-(rule A); no other transition. The roles are recomputed from the package, the profile and the
-answered request whenever a session is loaded; nothing about them is stored except the request and
-its answer.
+(rule A); no other transition. In a live review the roles are computed at `start_review` from the
+package, the profile and any answered request, and again after an answer; nothing about them is
+stored except the question, its answer and the coverage rows of `contracts/part-roles.md` section 7,
+which every reader outside a live review (the disk route, the re-render) reads instead of
+classifying again.
 
 **Invariants**: the root's `graded` is true; `graded` is false exactly for bought documents other than
 the root; no reason contains a profile value (a test scans every reason against the profile's
@@ -59,10 +61,13 @@ distinctive values).
 | `ReviewSession` | `drawing_read` | `"none" \| "open_only" \| "opens_closed" \| None = None` | `None` |
 
 `review-session.schema.json` gains the four properties (optional, descriptions naming the omit rule
-and why the defaults differ) in the same change (`test_schema_sync.py`).
+and why the defaults differ) in the same change (`test_schema_sync.py`). A tool result that echoes a
+record (`mark_coverage`, `record_drawing_finding`) echoes it without `source`
+(`contracts/sources.md` section 1).
 
 **Functions**: `covering_requests(session, blocks, entity_ids) -> CoveringRequests {answered:
-EvidenceRequest | None, open: EvidenceRequest | None}` (`contracts/re-ask-guard.md` section 3).
+EvidenceRequest | None, open: EvidenceRequest | None}`, over model-written requests only, never for
+a question with no checklist item and no ids (`contracts/re-ask-guard.md` section 3).
 
 ## 4. The checklist
 
@@ -88,23 +93,27 @@ Contract: `contracts/grouped-list.md` section 3.
 
 | Entity | Fields |
 |---|---|
-| `FindingsByType` | `version: 1`, `groups: list[TypeGroup]`, `checked: CheckedFold \| None` |
+| `FindingsByType` | `version: 1`, `groups: list[TypeGroup]` (every group with a row or a goal, in order), `checked: CheckedFold \| None` |
 | `TypeGroup` | `id`, `title`, `open`, `findings`, `decided`, `text`, `rows: list[GroupRow]`, `goals: list[GoalLine]` |
-| `GroupRow` | `AttentionRow` + `source` |
+| `GroupRow` | `AttentionRow` + `source`, `tail_text: str \| None` ("×3"), `reach_text: str \| None` ("reaches 2 components"), `hide_card_title: bool`, `chip: str \| None` (the source word for model rows, null for code rows) - every word the page prints, built by the backend |
 | `CheckedFold` | `title`, `open`, `findings`, `text`, `rows` |
 | `ReviewRanking.groups` | `FindingsByType` |
 | `Goal.group` | a `finding_groups` id (words file) |
 
 `ReviewSummary` changes: `headline` counts passes as checked; `tally: {text}`; `not_reached: {titles,
 text} | None`; `bought_parts: {count, names, maybe_count, maybe_names, text} | None`; removed
-`SummaryGroup.by_goal`, `modelling_practice`, top-level `goals` (now in `groups`). `QuestionView`
+`SummaryGroup.by_goal`, `modelling_practice`, top-level `goals` (now in `groups`). `bought_parts`
+is read from the persisted `coverage.prerun.bought_parts` and `coverage.prerun.maybe_bought` rows,
+never classified again. `QuestionView`
 gains `allow_text` and `source`. `Ranking.top_n` = `min(TOP_N, rows not suppressed)`.
 
 ## 7. Words (`report/review_words_v1.yaml`)
 
-New blocks: `finding_groups`, `finding_group_other`, `finding_group_checked`, `finding_group_text`,
-`part_roles` (the rule reasons, the bought-parts and maybe-bought sentences, the question's words),
-`answer_basis`, `labels.source`, `questions.text_placeholder`, `not_reached`, `tally`,
+New blocks: `finding_groups`, `finding_group_other`, `finding_group_checked`, `finding_group_text`
+(with `fold_tail`, `reach_one` and `reach_many` for the rows' words),
+`bought_parts.heading` (the report's "Bought parts"; the part-roles reasons, sentences and question
+words reach the model and are constants of `checks/part_roles.py`, `contracts/part-roles.md` section
+3), `answer_basis`, `labels.source`, `questions.text_placeholder`, `not_reached`, `tally`,
 `drawings.open_then_review_one`, `drawings.open_then_review_many`. Changed: `within_scope.label`
 "Checked, no issue"; every goal gains `group`; the `standards` goal is new; `hygiene` loses
 `standards.release`, `coverage.prerun.standards` and `standards.`. The `Words` model refuses unknown

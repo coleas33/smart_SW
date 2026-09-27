@@ -27,7 +27,7 @@ and refused, so the no-profile line can say why.
 | State | When | Rules in force (section 2) |
 |---|---|---|
 | `configured` | a version 4 profile | all |
-| `convention_only` | a version 1 to 3 profile with a non-empty `part_number.pattern` | A, B, G, H, I, J (no rule reads `part_roles`) |
+| `convention_only` | a version 1 to 3 profile with a non-empty `part_number.pattern` | A, B, G, J only (research R2.5): every document the convention and Toolbox do not decide is `unclear` and listed in the question, even beside a same-name drawing or inside a vendor assembly |
 | `absent` | no profile, an unreadable or invalid one, or a version 1 to 3 profile with an empty pattern | A (never populated: no question is asked), B; every other document is `unclear` with the state's reason, graded, **with no note** and no question |
 
 ## 2. The decision table
@@ -55,7 +55,7 @@ stays bought for the bought-parts line's wording, `graded` is true, and its labe
 ({reason}); graded because it is the document under review".
 
 **The zero-match guard** (`convention_only` and `configured`). When `part_number.pattern` matches no
-document of the package, the root included, and rules B to F and I decide none, no question is asked
+document of the package, the root included, and rules B to F and I (those in force) decide none, no question is asked
 and one unresolved coverage row `coverage.prerun.part_roles` says "the part-number convention matched
 none of the {n} documents; check part_number.pattern" (feature 006's zero-match precedent,
 `checks/standards/document.py:171`). The documents stay graded as unclear with no note.
@@ -63,8 +63,15 @@ none of the {n} documents; check part_number.pattern" (feature 006's zero-match 
 ## 3. Reasons
 
 Reasons name the rule, never a profile value (FR-034 of feature 006): these words reach the model
-provider through the digest and the brief. The words live in the words file under `part_roles`; the
-table above gives them.
+provider through the digest and the brief. Every model-facing sentence of this contract - the rule
+reasons of section 2, the root label, `note_for`'s note, the section 7 sentences and the section 8
+question's words - is a constant of `checks/part_roles.py`, one table beside the classifier, pinned
+by `test_part_roles.py` and `test_prerun_digest.py`, so lanes P and S need no words-file change
+before they land. They reach the model, so editing one moves what the model reads and passes the
+replay gate (`tokens.md` section 5). The words file (lane R) carries only pane words: the text box's
+`questions.text_placeholder` and the report's "Bought parts" heading, `bought_parts.heading`.
+*Settled on review, 2026-09-26, where the words had been placed in the words file, which lanes P and
+S could not read before lane R's T034 landed.*
 
 ## 4. The API
 
@@ -109,7 +116,10 @@ standards refusal reasons stay byte-identical. `_attached_profile`
 (`tools/checks_mechanical.py:173`) becomes `review_profile(context)`, which returns the loaded
 profile even when the standards phases were not dumped (fixing the latent coupling the analysts
 found: a valid profile made hygiene say "no standards profile is attached" when the phases were not
-dumped). `ToolContext.reload_package` keeps the roles (document ids are stable).
+dumped). Its import and two calls in `tools/drawings.py` (`:37`, `:85`, `:179`) move with it, so the
+drawing check also receives that profile, and `drawing_profile.conformance` is compared on a review
+whose standards phases were not dumped. `ToolContext.reload_package` keeps the roles (document ids
+are stable).
 
 ## 6. The consumers
 
@@ -140,9 +150,15 @@ precedent, `agent/runner.py:1281-1282`):
 In the `absent` state the first row reads "Bought parts were not told apart: {state_reason}; Toolbox
 parts were not graded" (and names them). Neither row maps to a goal.
 
-`review_summary` gains `bought_parts: {count, names, maybe_count, maybe_names, text}`, worded in the
-words file, counted in no group, goal or headline, `None` when there is nothing to say; `report.md`
-renders it once as a "Bought parts" section.
+`review_summary` gains `bought_parts: {count, names, maybe_count, maybe_names, text}`, counted in no
+group, goal or headline, `None` when there is nothing to say; `report.md` renders it once as a
+"Bought parts" section under the words file's `bought_parts.heading`. It is **read from the persisted
+rows**, never classified again: `count` and `names` from `coverage.prerun.bought_parts`'
+`scope.document_ids` (their file names from the package), `maybe_count` and `maybe_names` from
+`coverage.prerun.maybe_bought`'s, and `text` the rows' sentences. The routes that build the summary
+call `review_ranking(session, package, usage)` with no profile and no roles (`chat/server.py:1291`,
+`report/snapshot.py:74`), so the live review, the disk route and the re-render all show the same
+line. *Settled on review, 2026-09-26.*
 
 ## 8. The question
 
@@ -178,17 +194,32 @@ an answered request only when it **is** the part-roles question (its `question`,
 | "None bought" | every listed document custom |
 | text | split on commas, semicolons and line breaks; each piece trimmed and matched, ignoring case, to a listed document's file name or stem; matched ones bought, every other listed one custom; a piece that matches none is quoted in one `coverage.prerun.part_roles` row ("'{piece}' names none of the listed parts") and changes nothing |
 
-When the roles changed: reclassify with the answers, then restate `check_rms_part`,
-`check_rms_equations`, `check_rms_assembly`, `check_hygiene` and `check_drawings` through one
-`ReviewRun._restate(tools)` (replacing `_restate_drawing_check`, `agent/runner.py:902`): each a
-recorded step through the registry's dispatch and `PrerunGuard.answer_repeats_with`, superseding the
-findings of the call it restates. A finding judged again keeps its id (the `_verdict_key` reconcile,
-`agent/runner.py:623`, which ignores coverage limits, so the note drops in place). A finding no longer
-produced is withdrawn by `ToolContext.withdraw_findings(ids, reason)`, the sibling of
-`withdraw_coverage` (`tools/context.py:275`), which removes it from the session and emits
-`finding.withdrawn {finding_id, reason}` with the reason "bought part (your answer to {ER id})". The
-bought-parts row is restated naming the withdrawn ids. `provider.start_steps_at` advances. The resumed
-message gains one line: "Checks first graded again after your answer: withdrew {ids} (bought parts)."
+**Order** (settled on review, 2026-09-26). In one batch: (1) the answers are marked; (2)
+`read_confirmed_candidates` runs first, with the roles as they were when its question was built, so
+the rebuilt candidate question still matches exactly and a confirmed read is never silently skipped;
+(3) then `answered_roles` reads the part-roles answer and, when the roles changed, reclassifies with
+the answers; (4) then one `ReviewRun._restate(tools)` (replacing `_restate_drawing_check`,
+`agent/runner.py:902`) restates the union of what changed, each tool once: `check_rms_part`,
+`check_rms_equations`, `check_rms_assembly`, `check_hygiene` and `check_drawings` when the roles
+changed, and `check_drawings` when a read reloaded the package. Each is a recorded step through the
+registry's dispatch and `PrerunGuard.answer_repeats_with`, superseding the findings of the call it
+restates.
+
+**`_restate` reconciles its own restated calls** before it returns. It takes its own mark (the
+findings' count before its first call), runs the calls, and folds each finding they added onto the
+earlier finding with the same verdict key, which keeps its id (the `_verdict_key` reconcile,
+`agent/runner.py:623`, which ignores coverage limits, so the note drops in place). An earlier finding
+of a restated tool is kept when a restated finding took its place or the restated call returned its
+id (a check that de-duplicates, as `check_drawings`' conformance findings do,
+`tools/drawings.py:120-143`); every other earlier finding of a restated tool is no longer produced
+and is withdrawn by `ToolContext.withdraw_findings(ids, reason)`, the sibling of `withdraw_coverage`
+(`tools/context.py:275`), which removes it from the session and emits `finding.withdrawn
+{finding_id, reason}` with the reason "bought part (your answer to {ER id})". Only then does the batch
+take the `before` index its resumed-turn reconcile uses (`_reconcile_reruns`, `agent/runner.py:647`),
+so a withdrawal can never shift a restated finding into the list's earlier part, where it would stay
+as a duplicate under a new id. The bought-parts row is restated naming the withdrawn ids.
+`provider.start_steps_at` advances. The resumed message gains one line: "Checks first graded again
+after your answer: withdrew {ids} (bought parts)."
 
 Unanswered: nothing changes; the question stays open and finalization reports it as today.
 
@@ -198,14 +229,19 @@ Unanswered: nothing changes; the question stays open and finalization reports it
 a vendor pin with two instances under a fictional bought folder, an unclear part, a vendor
 sub-assembly): one case per table row, the conflicts of rules C, D and E, the root rule, Toolbox with
 no profile, each state, no path, a properties gap, an unknown id graded, the zero-match guard, answers
-overriding every rule, rule H on and off, rule I with a convention-named child. `test_tools_rms_checks.py`:
+overriding every rule, rule H on and off, rule I with a convention-named child, and in the
+`convention_only` state a document with a same-name drawing and one inside a Toolbox assembly both
+`unclear` and listed (rules H and I not in force). `test_tools_rms_checks.py`:
 the bought part leaves the null selection; an explicit bought id refused; unclear results noted; the
 mates rule's custom side and the bought-bought mate. `test_hygiene.py`: no revision, part-number or
 duplicate finding on the bought pin; `component_not_resolved` still raised for a lightweight bought
 part; a custom and a bought part sharing a description raise no duplicate. `test_prerun_digest.py`:
 both lines equal their rows; no question when absent, when nothing is unclear, or when the guard
 fired; asked once across a Retry. `test_answer_batch_roles.py`: all, none, a text list, an unmatched
-piece; withdrawn ids and events; kept ids; the model's look-alike question does nothing; the drawing
-restate's existing tests pass. `test_attention_family_fold.py`: after classification the family's
+piece; withdrawn ids and events; kept ids; an "All bought" batch that withdraws at least one finding
+while another graded part's finding is restated leaves no two findings sharing a verdict key and
+every kept id unchanged; one batch that answers the part-roles question and confirms a candidate
+reads the candidate first and restates `check_drawings` once; the model's look-alike question does
+nothing; the drawing restate's existing tests pass. `test_attention_family_fold.py`: after classification the family's
 representative is the plate's finding. `test_review_summary.py`: the line in each state, counted
 nowhere.

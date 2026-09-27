@@ -42,6 +42,9 @@ finding_group_text:
   one: "1 finding"
   many: "{n} findings"
   decided: " · {d} decided"
+  fold_tail: "×{n}"
+  reach_one: "reaches 1 component"
+  reach_many: "reaches {n} components"
 ```
 
 Each goal gains `group:`; a new `standards` goal is split out of `hygiene`; ten goals:
@@ -61,7 +64,8 @@ Each goal gains `group:`; a new `standards` goal is split out of `hygiene`; ten 
 
 A finding's group is the group of `summary.goal_of(check, goals)` (the goal whose items name it, else
 the longest prefix). A check no goal names goes to `other`. Folding Mass and material into Hygiene is
-one edit: that goal's `group: hygiene`.
+one edit: that goal's `group: hygiene`; the `mass_material` group then has no goal and no row, and
+is left out (section 3), so six groups render.
 
 ## 3. The view
 
@@ -73,7 +77,7 @@ def findings_by_type(session: ReviewSession, package: EvidencePackage | None,
 
 Pure. Rows come from `ranked_rows(session.findings, policy, families=())`: the modelling-practice
 family is unfolded (the group is the fold now); the same-check fold of disjoint subjects is kept, shown
-"xN". Rows carry display titles (`with_display_titles`) and their `source` (`sources.md`); persisted
+by its `tail_text` ("×N"). Rows carry display titles (`with_display_titles`) and their `source` (`sources.md`); persisted
 explanations attach by `finding_id`.
 
 One pass over the ranked rows places each row in its survivor's group, so every group keeps the
@@ -82,18 +86,31 @@ order. A row whose status is `checked_within_scope` goes to `checked`, never to 
 with an `exception_id` in `checked` carries the exception tail.
 
 ```
-FindingsByType {version: 1, groups: [TypeGroup] (the seven always, in order; `other` last only
-               when it holds a row), checked: CheckedFold | None}
+FindingsByType {version: 1, groups: [TypeGroup] (in the fixed order, every group that has a row or
+               a goal: the seven while each has a goal; `other` last only when it holds a row),
+               checked: CheckedFold | None}
 TypeGroup {id, title, open, findings: int, decided: int, text: str,
            rows: [GroupRow], goals: [GoalLine]}
-GroupRow = AttentionRow + {source}
+GroupRow = AttentionRow + {source, tail_text: str | None, reach_text: str | None,
+                           hide_card_title: bool, chip: str | None}
 CheckedFold {title, open, findings: int, text, rows: [GroupRow]}
 ```
 
 `text` is `finding_group_text` ("{n} findings", plus " · {d} decided" when any are decided). A group
 with no row shows its goals' state instead: its `text` is the first goal line's state label and
 reason in 009's precedence (not reached, then checked, then not applicable). `goals` are the
-`GoalLine`s of the goals mapped to the group, in goal order.
+`GoalLine`s of the goals mapped to the group, in goal order. A group with neither a row nor a goal
+is left out, so folding a goal into another group (section 2) needs no second edit.
+
+Each row's words are the backend's, so the page counts and compares nothing (FR-022; added on
+review, 2026-09-26, where the page had counted them):
+
+| Field | Value |
+|---|---|
+| `tail_text` | `fold_tail` ("×3") when the row folds more than one member, else null |
+| `reach_text` | `reach_one` or `reach_many` ("reaches 2 components") when the row names components, else null |
+| `hide_card_title` | true for a single-member row, whose card would repeat the row's title |
+| `chip` | `labels.source`'s word for the row's source when it is `model` ("AI guidance"), null for `code` (lands with User Story 5, `sources.md` section 2) |
 
 **Partition** (asserted): every finding is a member of exactly one row of one group or of `checked`,
 and the union is `session.findings`.
@@ -116,14 +133,14 @@ independent of the type.
 
 ## 5. The pane
 
-`render.typeGroups(byType, labels, names)` builds `<section id="findings-by-type">` after the
-questions panel:
+`render.typeGroups(byType, labels, names)` builds `<section id="findings-by-type">` in place of
+`#attention-panel`, after the questions panel and the parts-not-loaded headline:
 
 - each group a `<details class="type-group" data-group="{id}">`, open as the backend's `open` says;
   its summary line the title and `text`;
 - each row a `<details class="type-row stripe-{…}" data-finding-id="{survivor}">` whose summary is one
-  line: the display title under a one-line clamp, "xN" for a folded row with its reach, and the source
-  chip on model rows; its body the finding cards of the row's members;
+  line: the display title under a one-line clamp, then `tail_text`, `reach_text` and `chip`, each
+  printed verbatim when it is not null; its body the finding cards of the row's members;
 - after the rows, the group's goal lines (the existing `goalLine`); the `checked` fold last,
   collapsed;
 - the stripe from `attention.stripeOf`, one shared copy.
@@ -132,14 +149,16 @@ questions panel:
 `applyRanking` returns every card to the holding list in arrival order, then moves each into its
 row's body in the row's `member_finding_ids` order (generalising and replacing
 `groupModellingPractice`, `app.js:1118-1147`). A card no row names stays in the holding list, never
-dropped. A single-member row hides the card's repeated title. `revealFinding` opens the group and the
+dropped. A row whose `hide_card_title` is true hides its card's repeated title. `revealFinding` opens the group and the
 row before scrolling. "Collapse all" closes rows and card folds, not groups. A `finding.withdrawn`
 event removes the card and reloads the summary. Removed: `attentionPanel`, `countLine`,
 `attentionIndex`, `attentionLine`, `findingCount`, `findingGroup`, `groupModellingPractice`,
 `ungroupFindings`, the Show-all styles and `#attention-panel`.
 
 The page never sorts, compares or counts: group order, row order and member order are the backend's
-lists; `PageRuleScanTests` passes with no new allowlist entry. All text goes through `dom.js`. SC-006
+lists, and every count, plural and chip is a backend word the page prints or a flag it honours;
+`PageRuleScanTests` passes with no new allowlist entry, and it catches ranking rules only, so the
+page tests assert these fields are printed verbatim (`tasks.md` T053). All text goes through `dom.js`. SC-006
 of feature 009 still holds: at most two clicks (a collapsed group, then the row).
 
 ## 6. The report
@@ -174,6 +193,8 @@ report's index, in the same order within its group.
 `test_finding_groups.py`: the partition; no pass in a type group; within each group the order of
 `ranked_rows`, also on shuffled copies of the session; decided rows last; every class key of
 `attention_policy_v1.yaml` maps to one of the seven groups and an unknown id lands in `other`, last;
+each row's `tail_text`, `reach_text` and `hide_card_title`; with Mass and material's goal moved to
+Hygiene, six groups and no empty one;
 the family unfolded and the same-check fold kept; explanations on the same finding id; display titles;
 an empty and an all-pass session; a sitting-shaped fixture (after part roles) with its expected rows.
 `test_attention.py`: three undecided rows and two passes give `top_n` 3 and `checked_within_scope` 3
@@ -182,7 +203,8 @@ not amplified; all passes still give the empty reason; `attention.json` otherwis
 `test_review_snapshot.py`, `test_chat_attention_route.py`, `test_report_start_here.py` (the golden
 rewritten), a new parity test, `test_finding_explanations.py` (a pass is never sent). Page tests in
 `SwReview.AddIn.Tests`: `ReviewPageAttentionPanelTests` becomes group tests (supplied order, open
-flags, a row opens its cards, a hostile title literal, an empty group prints its state, the checked
+flags, a row opens its cards, a hostile title literal, an empty group prints its state, a row's
+`tail_text`, `reach_text` and `chip` printed verbatim and `hide_card_title` honoured, the checked
 fold collapsed, a second ranking regroups without duplicating a card, a card with no row stays
 visible, `finding.withdrawn` drops the card); `ReviewPageInjectionTests`,
 `ReviewPageDefaultViewScanTests`, `ReviewPageViewsTests`, `ReviewPageScaleTests` (1,000 findings),

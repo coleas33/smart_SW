@@ -1,5 +1,7 @@
 # Command-Line Additions
 
+*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), pending implementation:* `report.md` gains `## Findings by type` above `## Findings`, in place of `## Start here`; `swreview attention` keeps printing the amplified rows (never a pass), the not-amplified line and the coverage block, which no longer mirror a report section; see 013 `contracts/grouped-list.md` sections 1 and 6 (lands with 013 T052).
+
 ## `swreview` (Python)
 
 | Command | Arguments | Effect |

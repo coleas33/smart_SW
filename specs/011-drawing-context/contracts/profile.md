@@ -1,5 +1,7 @@
 # Contract: Profile Version 3 and Conformance
 
+*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), pending implementation:* profile version 4 is version 3 plus the `part_roles` section, so section 1's `PROFILE_VERSION = 3` becomes 4 and `KNOWN_VERSIONS` becomes `(1, 2, 3, 4)`; version 4 still requires the `drawing` section and carries it unchanged; see 013 `contracts/part-roles-profile.md` (lands with 013 T014).
+
 Normative for FR-022, FR-044 to FR-047 and User Story 7. The section and its loader land with User
 Story 3, because the general tolerance's unit rule reads `drawing.dimension_unit`
 (`drawing-source.md` section 4); the comparison lands with User Story 7.

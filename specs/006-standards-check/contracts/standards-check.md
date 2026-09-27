@@ -1,5 +1,7 @@
 # Standards Tab: Routes, Messages, Run Folder, Accept
 
+*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), pending implementation:* a standards folder's `report.md` carries "Findings by type" as the section above Findings, in place of "Start here"; the Standards page's five-row preview is unchanged and never shows a pass; see 013 `contracts/grouped-list.md` sections 1 and 6 (lands with 013 T052).
+
 The contract for User Story 3 and User Story 4 (spec FR-034 to FR-043): the three backend
 routes the Standards page calls, the two message tables between that page and
 `StandardsHost`, the check run folder, and what the Accept control means. **Tab 6 is

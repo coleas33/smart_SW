@@ -37,8 +37,8 @@ Expected (once the example is itself version 4, T014, the example is refused as 
 run the helper on `tests/fixtures/standards/profile-a.yaml` from before T014, or on any version 3
 file): the output is written, the input untouched, the `part_roles` section present with every
 skip-list entry commented under the proposal comment; stdout carries only the path and its sha256
-(`contracts/part-roles-profile.md` section 5). Loading a version 3 file that carries `part_roles` is
-refused naming the section.
+(`contracts/part-roles-profile.md` section 5). A version 1 or 2 input is refused naming the sections
+it lacks. Loading a version 3 file that carries `part_roles` is refused naming the section.
 
 ## Scenario 2: Bought parts out of the grading (US1)
 
