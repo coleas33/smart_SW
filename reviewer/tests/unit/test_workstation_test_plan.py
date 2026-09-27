@@ -1584,8 +1584,9 @@ def test_the_time_estimate_is_the_sum_of_its_steps(plan: str) -> None:
     """The headline figure is the table's steps added up, to the nearest quarter hour, so a
     step that grows (decision 15A added about 25 minutes) moves the headline too. Decision 18A
     adds about 40: step 1 and step 5.1's row grow, and step 5.6 has a row of its own. Feature 013
-    (2026-09-27, edited deliberately) adds about 90 more: step 2's row by 15 minutes, step 4's by
-    50 and step 5.1 to 5.4's by `FEATURE_013_IN_STEP_5`, which the decision 18A range leaves out."""
+    (2026-09-27, edited deliberately) adds about 95 more: step 2's row by 20 minutes (013 T153's
+    live test at step 2.7 is 5 of them, edited deliberately with its follow-ups), step 4's by 50
+    and step 5.1 to 5.4's by `FEATURE_013_IN_STEP_5`, which the decision 18A range leaves out."""
     section = plan[plan.index("## How long it takes") : plan.index("## 0. Before the sitting")]
     rows = re.findall(r"^\| ([^|]+) \| [^|]+ \| ([^|]+) \|$", section, re.MULTILINE)[1:]
     [(hours, mins)] = re.findall(r"About \*\*(\d+) hours(?: (\d+) minutes)? at the seat", section)
@@ -1596,7 +1597,7 @@ def test_the_time_estimate_is_the_sum_of_its_steps(plan: str) -> None:
     assert estimates["5.6"] == 25 and estimates["1"] == 55 and estimates["5.1 to 5.4"] == 65
     decision_18a_in_step_5 = estimates["5.1 to 5.4"] - 35 - FEATURE_013_IN_STEP_5
     assert 30 <= estimates["5.6"] + (estimates["1"] - 50) + decision_18a_in_step_5 <= 45
-    assert (estimates["2"], estimates["4"]) == (35, 240)
+    assert (estimates["2"], estimates["4"]) == (40, 240)
 
 
 def powershell_parse_errors(sources: dict[str, str], folder: Path) -> str:

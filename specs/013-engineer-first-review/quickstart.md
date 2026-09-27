@@ -142,7 +142,7 @@ commands, then `uv run python tests/fixtures/pane/generate_pane_fixture.py --wri
 configuration of section 9's latest row, hold the absolute rule and the 3, 2 and 0 contacts, and
 record the re-measured row.
 
-## Scenario 9: At the next sitting (tasks T141 to T144)
+## Scenario 9: At the next sitting (tasks T141 to T144, T153)
 
 1. **Profile**: `swreview profile upgrade %LOCALAPPDATA%\SwReview\standards.yaml --out <new file>`;
    the owner confirms `part_roles`; validate; point the pane at it (T141).
@@ -154,6 +154,9 @@ record the re-measured row.
 4. **Standards on the plate's open drawing**: revision table and bill of materials read, no "no
    revision table" warning; the export-control check on a known carrier and a known non-carrier
    (T144).
+5. **Lever 14 against the real endpoint** (test-plan step 2.7): `tests/live/test_openai_live_prior_reasoning.py`
+   with the key the pane stores; `1 passed` means the endpoint accepts the request without the
+   fallback of T152 (T153).
 
 ## Results
 

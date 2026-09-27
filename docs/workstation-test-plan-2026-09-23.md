@@ -20,7 +20,7 @@ FeatureWorks record 004 T164 at step 1.7, the packages 004 T003 reads at step 5.
 version of the same sitting, with the reasons for its order, is
 `docs/workstation-handover-2026-09-23.md`; **where this plan and the handover differ, follow this
 plan.** Where this plan and a task text disagree, the task wins; write the difference down as a
-finding. Since 2026-09-27 the plan also holds feature 013's four seat tasks and a census
+finding. Since 2026-09-27 the plan also holds feature 013's five seat tasks and a census
 extraction the owner asked for (the next section).
 
 ## The next sitting: where 2026-09-26 stopped, and what feature 013 adds
@@ -41,6 +41,7 @@ What feature 013 (`specs/013-engineer-first-review/tasks.md`) adds, each in its 
 | Step | Task | What |
 |---|---|---|
 | 2.6 | 013 T141 | the seat's profile upgraded to version 4, its `part_roles` section filled in by the owner, validated, and read by the pane |
+| 2.7 | 013 T153 | lever 14's request sent to the real endpoint with the key the pane stores: whether the pane's fallback (013 T152) is needed |
 | 3.9 and 4.7 | 013 T142 | probe D14 decides the read-only open's switch (011 T077); until the development machine sets it, the host answers `open_only` and a review gives an instruction line in place of a drawing question |
 | 4.8 | 013 T143 | A reviewed again with the version 4 profile, A-plate's drawing closed and then open |
 | 5.2 | 013 T144 | Standards on A-plate's open drawing, and the export-control check on S-1 and S-2 |
@@ -67,9 +68,9 @@ each says what to record instead.
    standards profile is the owner's: the one line you may change is the vault location (step
    2.2).
 3. **Close SOLIDWORKS before building** (steps 1 and 5.5).
-4. **Keys go in two places only**: the OpenAI key in the pane's Settings (step 2.5), the Gemini key
-   at the prompt of step 5.4. Never in a file, on a command line, in a chat or in the findings
-   document.
+4. **Keys go in two places only**: the OpenAI key in the pane's Settings (step 2.5), which step 2.7
+   reads back for one command without showing it, and the Gemini key at the prompt of step 5.4.
+   Never in a file, on a command line, in a chat or in the findings document.
 5. **In the findings document, call documents by their letters** (section 0.2), not by their file
    names; the two recorded assemblies may also be called the small assembly (A) and the big
    assembly (B), never by their numbers (the owner's decision 11B: no committed file names them).
@@ -105,6 +106,7 @@ the running SOLIDWORKS directly and need neither the add-in nor the pane.
 | 2.3 (the profile is version 1 or 2) | Call the owner; the console steps and the Standards presses go on | 3.4 and step 4 (the paid reviews) until the owner rewrites it |
 | 2.4 (the profile is invalid) | Tell the owner the field it names | as 2.3, and also 3.2 item 2, 3.5 item 3's Standards press and 5.2 |
 | 2.6 (the owner cannot fill in `part_roles`, or the version 4 file is invalid) | Leave the version 3 file where the pane reads it (skip item 4) and go on: the reviews then decide bought parts by Toolbox and the part-number convention only | 013 T143 at step 4.8: `blocked by 2.6` |
+| 2.7 (the live test fails, or skips) | Record it and go on: the reviews run either way, the pane falling back when the endpoint refuses lever 14's request (013 T152) | nothing more |
 | A key refused, no quota, or no connection at the first paid review | Step 4's box, item 6 | every paid step: `blocked: provider` |
 | A lettered document cannot be found (section 0.2) | Mark its steps blocked, using the table's "Used by" column | those steps: `blocked: no document <letter>` |
 | A dump at 3.1 fails | Retry once as 3.1 says, then go on: 4.2 still runs, because the pane extracts for itself | 010 T103 to T106 for that assembly |
@@ -137,15 +139,15 @@ the running SOLIDWORKS directly and need neither the add-in nor the pane.
 
 ## How long it takes
 
-About **12 hours 45 minutes at the seat**, best planned as two days: day 1 steps 1 to 3, day 2
+About **12 hours 50 minutes at the seat**, best planned as two days: day 1 steps 1 to 3, day 2
 steps 4 to 6. The four earlier tasks the owner added (decision 15A) take about 25 minutes of it,
 inside steps 3.1, 4.1, 4.5, 5.1 and 5.2; feature 004's three items (decision 18A) about 40
 minutes more: the FeatureWorks record at step 1.7 (5 minutes), the owner's parts at step 5.1 (10
 minutes) and the re-modeler probes at step 5.6 (25 minutes), the last step of day 2 before the
-handoff; feature 013's seat tasks and the census about 1 hour 30 minutes more: the profile's
-version 4 at step 2.6 (15 minutes), A's two reviews of step 4.8 (40 minutes, 10 more with Q), the
+handoff; feature 013's seat tasks and the census about 1 hour 35 minutes more: the profile's
+version 4 at step 2.6 (15 minutes), lever 14's live test at step 2.7 (5 minutes), A's two reviews of step 4.8 (40 minutes, 10 more with Q), the
 census's four Model checks at step 5.1 (10 minutes) and 013 T144 at step 5.2 (10 minutes). The
-next sitting, which starts at step 2.4 after its update, needs about 12 hours 15 minutes. Keep
+next sitting, which starts at step 2.4 after its update, needs about 12 hours 20 minutes. Keep
 SOLIDWORKS open from step 4.1 to step 4.5 on day 2:
 the review chips of steps 4.4 and 4.5 live only as long as the SOLIDWORKS session. Before the
 sitting, allow **half a day** to find and note documents C to N, Q and S, and the components of
@@ -155,7 +157,7 @@ A and B step 3.1 asks about (section 0.2), while the owner names the parts P; a 
 | Step | What | Estimate |
 |---|---|---|
 | 1 | Update, gates, health checks (registration only on a new machine), the FeatureWorks record | 55 min |
-| 2 | Profile and key, and the profile's version 4 | 35 min |
+| 2 | Profile and key, the profile's version 4, and lever 14's live test | 40 min |
 | 3 | Dumps and the Standards probe of A and B, probes D1 to D14 and one pane review, with the fingerprints | 3 h 55 min |
 | 4 | The pane reviews, with the findings by type, the timing of A's review, and A again with the version 4 profile | 4 h |
 | 5.1 to 5.4 | Model check on J, on the owner's parts and on the census's parts, Standards (each with its Start here block) and on A-plate's drawing, Remodel, the Gemini test | 1 h 5 min |
@@ -822,6 +824,35 @@ Record: both exit codes, the first eight characters of the `sha256:` hash, and `
 value of the file. Whether any profile value reached a check record, a session, a report or a pane
 message is read on the development machine, which scans the returned run folders (006 T100's
 audit half, "Not in this sitting").
+
+### 2.7 Lever 14's request, against the real endpoint [013 T153]
+
+Lever 14, on in the pane since feature 013, leaves the earlier turns' reasoning out of each OpenAI
+request. The development machine proved the request's shape against a stand-in only; this step asks
+the real endpoint, with the model step 2.5 chose. Since 013 T152 a review never stops over it: when
+the endpoint refuses that request, the pane sends it again with the reasoning kept, turns the lever
+off for that review and writes one line in its log. This step says whether that fallback is needed.
+It reads the key step 2.5 stored, for this one command, and never shows it; it costs a few thousand
+tokens.
+
+```powershell
+Add-Type -AssemblyName System.Security
+$pane = Get-Content "$env:APPDATA\SwReview\settings.json" -Raw | ConvertFrom-Json
+if (-not $pane.api_key_protected) { 'no key is stored: do step 2.5 first' } else {
+  $env:OPENAI_API_KEY = [Text.Encoding]::UTF8.GetString([Security.Cryptography.ProtectedData]::Unprotect([Convert]::FromBase64String($pane.api_key_protected), [Text.Encoding]::UTF8.GetBytes('SwReview.Settings.v1'), 'CurrentUser'))
+  if ($pane.model) { $env:SWREVIEW_LIVE_MODEL = $pane.model }
+  cd "$R\reviewer"; uv run pytest tests/live/test_openai_live_prior_reasoning.py -m live -rs -p no:warnings; cd $R
+  Remove-Item Env:OPENAI_API_KEY, Env:SWREVIEW_LIVE_MODEL -ErrorAction SilentlyContinue
+}
+```
+
+Pass: `1 passed` and **no** `SKIPPED` line: the endpoint accepts lever 14's request. A skip proves
+nothing: record it as `blocked`, with the reason the `SKIPPED` line gives (a model that returned no
+reasoning item, the API unavailable or unreachable). A failure is the finding this step looks for:
+record `fail` and the failure's last lines, without any line that names a file of yours, and go on -
+the reviews still run, with the fallback. If you pressed Ctrl+C, or are not sure the last line ran,
+close this PowerShell window, open a new one and paste the setup block. Record: pass, fail or
+blocked, and the model (never the key).
 
 ## Step 3. The extractor: dumps and probes
 

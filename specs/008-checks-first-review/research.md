@@ -1500,6 +1500,53 @@ that need a profile).
 | A hand-kept list of the 20, 2 and 1 | The rule says which; a list beside it drifts, and the next table change needs another. |
 | Widen the 5% bar, or skip it for a result the code changed | The first hides a scramble that distorts by 10%; the second exempts exactly the results a regeneration rewrites. |
 
+### Amendment 2026-09-27 (feature 013 T134-Q1, default taken): a recorded RMS finding the tree reading narrowed
+
+#### R2.59 A finding that lost only what the tree reading folds is narrowed, not lost
+
+**Decision** (default taken 2026-09-27, the owner may revise; feature 013 tasks T134, T145-T146,
+013 research R2.42). R2.58's narrowed outcome is extended, for `rms.*` findings only, by feature
+013's one tree reading (`checks/feature_nodes.tree_nodes`, the planner's reading since decision 17A,
+which 013 T133 gives the RMS part rules). Over the recording's own package, one document at a time,
+under the table the current code ships:
+
+- a location is removed, every occurrence of it, when its `(scope, persist_ref)` names only rows the
+  reading carries as a sub-feature (the Hole Wizard's profile sketch, listed only under its hole),
+  merges as a second listing, or the table does not count as content - R2.58's "only" with the
+  reading's two shapes beside the table's;
+- a location naming a depth-0 row the reading keeps together with a second listing merged into it
+  loses its occurrences beyond the number of rows the reading keeps there, at most one per second
+  listing: the second listing's occurrence goes, the depth-0 row's stays.
+
+The narrowed key is then compared exactly as R2.58 compares it: one to one, in recorded order, onto
+a requested-pass finding nothing else matched, its remaining locations reference by reference
+(decision 25A). `folded_locations(package, table)` reads the reading's side beside
+`not_content_locations`; `narrowed_key` and `compare_finding_keys` apply both, and the generator
+reuses them unchanged. The summary line says "narrowed by the type table or the tree reading".
+
+**Why.** An absorbed sketch is listed in both of the extractor's walks with one persistent
+reference, so a finding recorded before T133 names it twice where the reading names it once; a
+carried sub-feature holds no position and is graded as its owner's. Measured on the three recordings
+with T133 applied (2026-09-27, scratch): the 25, 3 and 2 `rms.*` findings the strict comparison
+loses each come back as one added finding whose locations are a sub-multiset of the recorded ones,
+and every location dropped names only carried rows the table does not count, only carried content
+rows, or one depth-0 row and its one second listing - recorded twice, named once, never both
+occurrences dropped.
+
+**How it stays strict.** The de-duplication is counted from the package, never assumed: the depth-0
+row's occurrence is never removed, so a finding whose absorbed sketch is no longer named at all is
+lost; a reference a kept content row carries is never removed wholesale; the family stays `rms.*`;
+and a package with neither shape folds nothing, so every R2.58 case is unchanged.
+
+**Alternatives.**
+
+| Option | Why not |
+|---|---|
+| A new outcome beside `narrowed` | A second list meaning the same thing: the finding kept its part, configuration and remaining subjects, and lost only what a reading of the tree folds. |
+| Remove every occurrence of a merged pair's reference | It would also remove the depth-0 row, a real position, and let a finding that dropped it pass unseen. |
+| Narrow the standards sketch check's findings too | Beyond the question T134-Q1 put, which asked about `rms.*` findings; decision 23A never narrows another family. |
+| A hand-kept list of the 30 findings | The rule says which; a list drifts. |
+
 ## R3. Verified facts the plan relies on
 
 Re-opened on 2026-09-23 at `43e9b15` for this reconciliation (the rest are the design passes'):
