@@ -229,6 +229,11 @@ def test_the_rendered_prompt_block_names_every_item_once() -> None:
     assert rendered.startswith(f"Review checklist version {CHECKLIST.version}.")
     for item in CHECKLIST.items:
         assert rendered.count(f"- `{item.id}` - {item.title}") == 1
+        # Edited deliberately by feature 013 T059: a code-owned item renders the code line in
+        # place of its two closure lines (`contracts/re-ask-guard.md` section 1).
+        if item.owner == "code":
+            assert f'mark_coverage(check="{item.id}"' not in rendered
+            continue
         assert f"Closed by a finding whose check starts with `{item.check_prefix}`" in rendered
         assert f'or by `mark_coverage(check="{item.id}", ...)`.' in rendered
 
@@ -580,6 +585,34 @@ def test_the_loader_refuses_an_unknown_owner_by_item(tmp_path: Any) -> None:
 
     with pytest.raises(ValueError, match="'a'.*owner.*'engineer'"):
         load_checklist(path)
+
+
+PROVENANCE_DESCRIPTION = (
+    "Closed by code from the package before your first turn: each reviewed document's path, "
+    "configuration and revision. The open files are reviewed as the latest; never ask for a "
+    "vault version or whether a file is modified locally. A missing revision on a custom part "
+    "is a hygiene finding."
+)
+"""`contracts/re-ask-guard.md` section 2, pinned whole."""
+
+
+def test_the_provenance_item_is_code_owned_and_says_how_code_closed_it() -> None:
+    item = item_named(CHECKLIST, "provenance")
+    rendered = CHECKLIST.render()
+
+    assert item.owner == "code"
+    assert item.description == PROVENANCE_DESCRIPTION
+    assert f"- `provenance` - {item.title}\n  {CODE_OWNED_LINE}\n  {PROVENANCE_DESCRIPTION}" in (
+        rendered
+    )
+    assert item.check_prefix == "provenance."
+
+
+def test_every_other_item_stays_the_models() -> None:
+    owned = {item.id for item in CHECKLIST.items if item.owner == "code"}
+
+    assert owned <= {"provenance", "coverage.closeout"}
+    assert "provenance" in owned
 
 
 CUSTOM_PARTS_ONLY = "Custom parts only; bought parts are listed once, not graded."

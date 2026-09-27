@@ -17,6 +17,14 @@ review runs checks first; `start_review`, `swreview review` and `benchmark run` 
 before `POST /sessions` returns 201, through the same `ToolDispatch` the model uses: every call is
 a real `InvestigationStep` with `tool.started`/`tool.finished`, its findings and its coverage.
 
+*Amended by feature 013 (T060, T022, T032).* Before the pre-run, and whether or not checks first is
+on, `start_review` (a) closes provenance by code right after `record_partial_evidence`
+(`record_provenance`: one `checked` row, or one `provenance.<kind>` finding per manifest
+discrepancy; 013 `contracts/re-ask-guard.md` section 2), so every review writes it exactly once
+and none of the pre-run's calls does; (b) classifies the parts and attaches the roles before the
+carry-over; and (c) asks the one part-roles question after the dispatch is built, so its id is
+there for the notes the pre-run's findings carry (013 `contracts/part-roles.md` sections 5 and 8).
+
 ## 2. What it runs, in order
 
 | # | Call | When |

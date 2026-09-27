@@ -26,6 +26,13 @@ Checked in this order; each refusal is one `error_result` naming the argument an
 | 3 | `options`, when given: at most 5, each not blank, at most 60 characters, no two equal | names the index or the repeated option |
 | 4 | `blocks`, when given, is a checklist item id | names the id and lists the valid ones |
 
+*Amended by feature 013 (T062):* after the four refusals come non-error answers, each recording
+nothing - no request, no id, no event, no failed row (013 `contracts/re-ask-guard.md` section 3):
+
+| # | Check | Answer |
+|---|---|---|
+| 5 | `blocks` is a code-owned checklist item (`provenance`, `coverage.closeout`) | `{"status": "closed_by_code", "check", "reason"}` |
+
 The docstring's `Args` describe the three; its `Notes` add: ask one decision per request; offer
 `options` only when the answers are a closed set; never guess a fit class, a tolerance or a thread
 depth - ask for it. Every description stays under `MAX_DESCRIPTION_LENGTH` and

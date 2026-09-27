@@ -84,6 +84,7 @@ from swreview.agent.withheld_wording import (
 from swreview.bridge.client import DEFAULT_PIPE_NAME, BridgeClient
 from swreview.carry_over import carry_over_findings, stamp_carry_over_keys
 from swreview.checks import part_roles
+from swreview.checks.provenance import PROVENANCE_CHECK, close_provenance
 from swreview.checks.rms.registry import RMS_FAMILY
 from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore
 from swreview.findings import Finding
@@ -123,6 +124,7 @@ from swreview.tools.checks_mechanical import attach_part_roles, check_hygiene, r
 from swreview.tools.context import ToolContext, build_context
 from swreview.tools.drawings import DRAWINGS_TOOL, read_confirmed_candidates
 from swreview.tools.query import package_summary
+from swreview.tools.recording import record_result
 from swreview.tools.registry import (
     TOOL_RESULTS_DIR_NAME,
     RecordedTool,
@@ -383,6 +385,32 @@ def record_partial_evidence(session: ReviewSession, package: EvidencePackage) ->
             error=None,
         )
     )
+
+
+def record_provenance(context: ToolContext) -> None:
+    """Close the provenance item from the package, before the first turn (feature 013).
+
+    `checks/provenance.close_provenance` decides; this writes it through the context, so the
+    pane receives the events: the `checked` row, or one finding per manifest discrepancy
+    (`contracts/re-ask-guard.md` section 2). A discrepancy the session refuses as a finding -
+    none can be, since each is bound to a manifested document - is recorded as unresolved
+    provenance naming why, never dropped.
+    """
+    outcome = close_provenance(context.ir)
+    if outcome.coverage is not None:
+        context.record_coverage("checked", outcome.coverage)
+    for item in outcome.findings:
+        recorded = record_result(context, item.result, document_ids=item.document_ids)
+        if "error" in recorded:
+            context.record_coverage(
+                "unresolved",
+                CoverageItem(
+                    check=PROVENANCE_CHECK,
+                    scope=CoverageScope(document_ids=list(item.document_ids)),
+                    reason=f"{item.result.observed}; not recorded: {recorded['error']}",
+                    error=str(recorded["error"]),
+                ),
+            )
 
 
 def load_standards_profile(path: Path | str | None) -> Any:
@@ -1507,6 +1535,9 @@ def start_review(
             },
         )
         record_partial_evidence(session, loaded.package)
+        # Feature 013 (`contracts/re-ask-guard.md` section 2): provenance is closed by code
+        # here, the lever-independent setup write, so every review records it exactly once.
+        record_provenance(context)
         carry_over_findings(
             context,
             previous_session=previous_session,

@@ -56,7 +56,7 @@ def record_thread_depth_finding(status: str = "suspected") -> dict:
     )
 
 
-# --- request_evidence ------------------------------------------------------------
+# --- request_evidence --------------------------------------------------------------------------
 
 
 def test_request_evidence_opens_a_numbered_request(context: ToolContext) -> None:
@@ -84,7 +84,7 @@ def test_request_evidence_rejects_ids_that_are_not_in_the_package(
     assert context.session.evidence_requests == []
 
 
-# --- request_evidence's short form (feature 009 T035, contracts/questions.md 1) ------------
+# --- request_evidence's short form (feature 009 T035, contracts/questions.md 1) ----------------
 
 THREAD_DEPTH = {
     "what": "The usable thread depth of hole:1",
@@ -229,7 +229,7 @@ def test_the_description_and_arguments_stay_under_the_lever_caps() -> None:
     assert "never guess" not in notes.lower()
 
 
-# --- mark_coverage ---------------------------------------------------------------
+# --- mark_coverage -----------------------------------------------------------------------------
 
 
 def test_mark_coverage_declares_the_scope_it_accepts() -> None:
@@ -303,7 +303,7 @@ def test_mark_coverage_refuses_a_scope_it_cannot_read(context: ToolContext) -> N
     assert context.session.coverage.checked == []
 
 
-# --- record_drawing_finding ------------------------------------------------------
+# --- record_drawing_finding --------------------------------------------------------------------
 
 
 def test_record_drawing_finding_writes_a_suspected_finding(context: ToolContext) -> None:
@@ -404,7 +404,7 @@ def test_record_drawing_finding_rejects_a_source_ref_without_a_locator(
     assert result["error"].startswith("source_ref is not valid")
 
 
-# --- get_review_checklist --------------------------------------------------------
+# --- get_review_checklist ----------------------------------------------------------------------
 
 
 def test_get_review_checklist_starts_every_item_open(context: ToolContext) -> None:
@@ -460,7 +460,7 @@ def test_get_review_checklist_ignores_a_failed_coverage_item(context: ToolContex
     assert buckets["fasteners"] == "open"
 
 
-# --- request_capture -------------------------------------------------------------
+# --- request_capture ---------------------------------------------------------------------------
 
 
 def test_request_capture_is_unresolved_without_a_capture_or_a_bridge(
@@ -502,7 +502,7 @@ def test_request_capture_rejects_an_unknown_entity_and_view(context: ToolContext
     assert result["error"].startswith("view 'exploded' is not one of")
 
 
-# --- get_finding (feature 008 T062) ------------------------------------------------------
+# --- get_finding (feature 008 T062) ------------------------------------------------------------
 
 
 def slim_dispatch(tool_context: ToolContext) -> Any:
@@ -582,3 +582,116 @@ def test_get_finding_is_offered_only_with_payload_slimming(make_package: MakePac
         tool_context, model_view=MODEL_VIEW_OFF
     ).by_name
     assert "get_finding" in slim_dispatch(tool_context).by_name
+
+
+# --- feature 013 T061: code-owned items answer `closed_by_code` (re-ask-guard.md section 1) --
+
+
+def closed_scope() -> CoverageScope:
+    return CoverageScope(document_ids=["doc:1"])
+
+
+def held(tool_context: ToolContext) -> dict[str, int]:
+    """How many of each record the session holds: nothing may move on `closed_by_code`."""
+    held_session = tool_context.require_session()
+    return {
+        "requests": len(held_session.evidence_requests),
+        "findings": len(held_session.findings),
+        **{
+            bucket: len(getattr(held_session.coverage, bucket))
+            for bucket in ("checked", "skipped", "unresolved", "failed", "out_of_scope")
+        },
+    }
+
+
+def test_mark_coverage_on_provenance_is_closed_by_code_with_the_recorded_reason(
+    context: ToolContext, emitted: list[tuple[str, dict]]
+) -> None:
+    from swreview.agent.runner import record_provenance
+
+    record_provenance(context)
+    [row] = context.session.coverage.checked
+    emitted.clear()
+    before = held(context)
+
+    result = session.mark_coverage("provenance", "checked", closed_scope(), "vault checked")
+
+    assert result == {"status": "closed_by_code", "check": "provenance", "reason": row.reason}
+    assert held(context) == before
+    assert emitted == []
+
+
+def test_without_a_recorded_row_the_reason_is_the_items_own_description(
+    context: ToolContext,
+) -> None:
+    item = next(entry for entry in context.checklist.items if entry.id == "provenance")
+
+    result = session.mark_coverage("provenance", "unresolved", closed_scope(), "why not")
+
+    assert result == {"status": "closed_by_code", "check": "provenance", "reason": item.description}
+
+
+def test_a_code_owned_item_is_closed_by_code_whatever_bucket_is_asked(
+    context: ToolContext,
+) -> None:
+    result = session.mark_coverage("provenance", "failed", closed_scope(), "x")  # type: ignore[arg-type]
+
+    assert result["status"] == "closed_by_code"
+    assert "error" not in result
+
+
+def test_request_evidence_blocking_provenance_is_closed_by_code_and_takes_no_id(
+    context: ToolContext, emitted: list[tuple[str, dict]]
+) -> None:
+    before = held(context)
+
+    result = session.request_evidence(
+        what="The vault version of doc:1",
+        why="provenance",
+        entity_ids=["doc:1"],
+        question="Is this the latest vault version?",
+        blocks="provenance",
+    )
+
+    assert result["status"] == "closed_by_code"
+    assert result["check"] == "provenance"
+    assert held(context) == before
+    assert emitted == []
+    following = session.request_evidence(what="The bolt torque", why="preload", entity_ids=[])
+    assert following["evidence_request"]["id"] == "ER-001"
+
+
+def test_the_four_refusals_still_come_before_closed_by_code(context: ToolContext) -> None:
+    unknown = session.request_evidence(
+        what="w", why="y", entity_ids=["cmp:9999"], blocks="provenance"
+    )
+    too_long = session.request_evidence(
+        what="w", why="y", entity_ids=[], question="q" * 141, blocks="provenance"
+    )
+
+    assert "error" in unknown and "error" in too_long
+
+
+def test_through_the_registry_closed_by_code_writes_no_failed_row(
+    make_package: MakePackage,
+) -> None:
+    tool_context = context_for(make_package())
+    tools = ToolRegistry().dispatch(tool_context)
+
+    tools.call("mark_coverage", {
+        "check": "provenance", "bucket": "checked", "scope": {}, "reason": "r",
+    })
+    tools.call("request_evidence", {
+        "what": "w", "why": "y", "entity_ids": [], "blocks": "provenance",
+    })
+
+    recorded = tool_context.require_session()
+    assert recorded.coverage.failed == []
+    assert [step.status for step in recorded.steps] == ["ok", "ok"]
+    assert recorded.evidence_requests == []
+
+
+def test_a_model_owned_item_is_still_recorded(context: ToolContext) -> None:
+    result = session.mark_coverage("fasteners", "checked", closed_scope(), "all engage")
+
+    assert result["status"] == "recorded"
