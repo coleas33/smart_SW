@@ -839,15 +839,29 @@ public class SwReviewAddIn : ISwAddin
     /// attached tool service, as the bridge's run root for the next <c>remodel.open</c>, and
     /// answers whether it took it. <see cref="BackendRemodelPipeline"/> calls it before every open
     /// and refuses a false answer, or a throw, as <c>BridgeUnavailable</c> with nothing copied.
-    ///
-    /// The hand-over itself is feature 004 build-order lane D's <c>IToolService.BindRemodelRun</c>
-    /// (on the application thread, with a bounded wait), reached through the gate, and this body
-    /// becomes that call when lanes D and E are integrated. Until then this build has no way to
-    /// hand a run folder over - <c>remodel.open</c> would refuse for want of a run root anyway - so
-    /// it answers false, which is the truth; and it is unreachable while the add-in has no seat,
-    /// since a plan is refused <c>RemodelUnavailable</c> before any bridge call.
+    /// The gate is read through the field per call, like everything else the pipeline asks for.
     /// </summary>
-    private bool BindRemodelRun(string runDirectory) => false;
+    private bool BindRemodelRun(string runDirectory) => BindRemodelRun(_toolService, runDirectory);
+
+    /// <summary>
+    /// The bind, on <paramref name="gate"/> (lanes D and E integrated, 2026-09-27; default taken
+    /// 2026-09-27, the owner may revise): false with no gate yet, which is before the add-in has
+    /// one to bind on; otherwise the gate's <see cref="ToolServiceGate.BindRemodelRun"/>, on the
+    /// service listening now, on the application thread with the service's bounded wait. What it
+    /// throws - no service listening, a refused folder, an application thread that did not answer -
+    /// is thrown on, so the pipeline keeps it as the cause of its refusal, and true means the
+    /// service took the folder. Static so it can be tested without a SOLIDWORKS session.
+    /// </summary>
+    internal static bool BindRemodelRun(ToolServiceGate? gate, string runDirectory)
+    {
+        if (gate == null)
+        {
+            return false;
+        }
+
+        gate.BindRemodelRun(runDirectory);
+        return true;
+    }
 
     private void OnRemodelPageMessage(object sender, string json)
     {
@@ -941,6 +955,13 @@ public class SwReviewAddIn : ISwAddin
                 // own session records, never as a path. Read through the field per request, like
                 // `busy` below, so a host that has gone answers null - a refusal, not a crash.
                 ReviewRunDirectory = runId => _reviewHost?.ReviewRunDirectory(runId),
+
+                // 004 T167: every ending of a remodel session on this service - remodel.close's,
+                // and the teardown a re-attach or an unload runs - reaches the Remodel tab as the
+                // routine reported it, which posts one status error when something was left and
+                // nothing when nothing was. Read through the field per ending: the Remodel host
+                // is built after this gate, and on an unload it can be gone before the teardown.
+                RemodelSessionEnded = outcome => _remodelHost?.SessionEnded(outcome),
             }),
             service =>
             {

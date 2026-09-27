@@ -307,6 +307,12 @@ public sealed class RemodelHost : IDisposable
         { RemodelSystemToggles.WarnSaveUpdateErrors, "Warn before saving documents with update errors" },
     };
 
+    /// <summary>
+    /// A setting the routine reports that is none of <see cref="ToggleLabels"/>' toggles: no
+    /// <c>swUserPreferenceToggle_e</c> value is negative, so this can never be one of them.
+    /// </summary>
+    private const int UnlabelledSetting = int.MinValue;
+
     /// <summary>The only scope this feature reorganizes. Parts only, by owner decision.</summary>
     private const string PartKind = "part";
 
@@ -552,23 +558,40 @@ public sealed class RemodelHost : IDisposable
     /// all when everything was put back and the copy was closed, because then the plan is lost
     /// exactly as decision 24A already tells the page, and "Nothing was changed" is true.
     ///
-    /// The add-in calls it from `ToolServiceOptions.RemodelSessionEnded`, mapping the bridge
-    /// routine's outcome onto the three facts the words need, for a teardown that ended a session
-    /// (`contracts/pane-remodel-messages.md`, "When a re-attach or an unload ends the session").
-    /// It never throws: it is called from the tool service's teardown, and a page that cannot be
-    /// told is no reason for that to fail.
+    /// The add-in calls <see cref="SessionEnded(RemodelSessionEnd)"/> from
+    /// `ToolServiceOptions.RemodelSessionEnded`, which reads the bridge routine's outcome onto the
+    /// three facts the words need (`contracts/pane-remodel-messages.md`, "When a re-attach or an
+    /// unload ends the session"). It never throws: it is called from the tool service's teardown,
+    /// and a page that cannot be told is no reason for that to fail.
     /// </summary>
     /// <param name="togglesNotRestored">The <c>swUserPreferenceToggle_e</c> values the routine
     /// could not put back; null is none.</param>
     /// <param name="commandInProgressNotRestored">Whether <c>CommandInProgress</c> is still set.</param>
     /// <param name="copyClosed">Whether the routine closed the copy.</param>
     public void SessionEnded(
-        IEnumerable<int>? togglesNotRestored, bool commandInProgressNotRestored, bool copyClosed)
+        IEnumerable<int>? togglesNotRestored, bool commandInProgressNotRestored, bool copyClosed) =>
+        PostWhatWasLeft(() => SessionEndedMessage(togglesNotRestored, commandInProgressNotRestored, copyClosed));
+
+    /// <summary>
+    /// 004 T167, lanes D and E integrated: what the add-in hands on from
+    /// `ToolServiceOptions.RemodelSessionEnded`, which the tool service tells every ending of a
+    /// session - `remodel.close`'s (Discard, planning again) and the teardown a re-attach or an
+    /// unload runs - with the end-of-session routine's outcome as it reported it. The words are
+    /// <see cref="SessionEndedMessage(RemodelSessionEnd)"/>'s; null and an ending of no session
+    /// are nothing. Never throws, for the reason the three-fact seam gives.
+    /// </summary>
+    public void SessionEnded(RemodelSessionEnd? outcome) =>
+        PostWhatWasLeft(() => SessionEndedMessage(outcome));
+
+    /// <summary>
+    /// The one post both seams make: the status error when there are words, nothing when there
+    /// are none, and never a throw.
+    /// </summary>
+    private void PostWhatWasLeft(Func<string?> words)
     {
         try
         {
-            string? message = SessionEndedMessage(
-                togglesNotRestored, commandInProgressNotRestored, copyClosed);
+            string? message = words();
             if (message != null)
             {
                 PostStatus("error", message);
@@ -580,6 +603,59 @@ public sealed class RemodelHost : IDisposable
             // that called this has already done what it could, and the tool-service log and the
             // run's remodel.log carry its line either way.
         }
+    }
+
+    /// <summary>
+    /// The routine's outcome read onto the three facts the three-fact
+    /// <c>SessionEndedMessage</c> words (lanes D and E integrated; default taken 2026-09-27, the
+    /// owner may revise): each setting still holding the run's value, by the name
+    /// <see cref="RemodelSystemToggles.Outstanding"/> gives it - a toggle's
+    /// <see cref="RemodelSystemToggles.SettingName"/> read back to its value,
+    /// <c>CommandInProgress</c> apart, and a name none of the run's toggles has as a setting with
+    /// no label, still said - and whether the copy was closed. Null, and an ending of no session
+    /// (which set nothing and opened nothing), are null. A tag the routine could not remove is not
+    /// worded: the close is unsaved, so a closed copy took its tag with it, and a copy left open is
+    /// already said.
+    /// </summary>
+    public static string? SessionEndedMessage(RemodelSessionEnd? outcome)
+    {
+        if (outcome == null || !outcome.HadSession)
+        {
+            return null;
+        }
+
+        var toggles = new List<int>();
+        bool commandInProgress = false;
+        foreach (string setting in outcome.SettingsOutstanding)
+        {
+            if (string.Equals(setting, RemodelSystemToggles.CommandInProgressSetting, StringComparison.Ordinal))
+            {
+                commandInProgress = true;
+            }
+            else
+            {
+                toggles.Add(ToggleNamed(setting));
+            }
+        }
+
+        return SessionEndedMessage(toggles, commandInProgress, outcome.CopyClosed);
+    }
+
+    /// <summary>
+    /// The toggle whose <see cref="RemodelSystemToggles.SettingName"/> is <paramref name="setting"/>,
+    /// or <see cref="UnlabelledSetting"/> for a name none of the run's toggles has.
+    /// </summary>
+    private static int ToggleNamed(string setting)
+    {
+        foreach (int toggle in RemodelSystemToggles.SuppressedToggles)
+        {
+            if (string.Equals(RemodelSystemToggles.SettingName(toggle), setting, StringComparison.Ordinal))
+            {
+                return toggle;
+            }
+        }
+
+        return UnlabelledSetting;
     }
 
     /// <summary>
