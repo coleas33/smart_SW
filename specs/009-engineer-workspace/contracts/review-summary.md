@@ -65,6 +65,16 @@ check failed`), `out of scope` for `not_applicable`, `no check ran` when nothing
 the first matching rule row in that order. `detail`: that row's `reason`, verbatim, or `None` - for
 `not_applicable`, the first out-of-scope row's `reason`.
 
+*Amended 2026-09-26 (feature 013 T046, its `contracts/grouped-list.md` section 2):* ten goals.
+A `standards` goal (`items: [standards.release, coverage.prerun.standards]`, `prefixes:
+[standards.]`) is split out of `hygiene`, which keeps `items: [provenance, hygiene]` and
+`prefixes: [provenance., hygiene.]`; it sits after `hygiene` in the table. Every goal gains
+`group`, the id of the finding group (013 `finding_groups` in the words file) its findings are
+listed under - one taxonomy for goals and groups. The words file refuses a goal naming a group it
+does not list. `standards.drawing.*` stays drawings and `standards.part.material_assigned` mass and
+material, each by its longer prefix. The goals, `goal_of` and the goal lines are computed in
+`report/finding_groups.py` (`goal_lines(session, words)`), which the summary imports.
+
 *Note (2026-09-23, feature 010 T108 as amended):* the mass and hygiene families' summary rows,
 `mass.material` and `hygiene`, are `items` rows of their goals, so their bucket decides between
 rows 2 and 3. Each is `checked` only when its call wrote a `checked` per-check row or recorded a

@@ -65,7 +65,8 @@ def state_of(one: GoalLine) -> tuple[str, str, str | None, str | None]:
         ("fastener.bottoming", "fasteners"),
         ("standards.drawing.revision_matches", "drawings"),
         ("standards.part.material_assigned", "mass_and_material"),
-        ("standards.assembly.one_fixed", "hygiene"),
+        ("standards.assembly.one_fixed", "standards"),
+        ("standards.part.sketches_fully_defined", "standards"),
         ("rms.drawing.model_items_preferred", "drawings"),
         ("rms.sketches.fully_defined", "modelling_practice"),
         ("interference.static", "interference"),
@@ -92,8 +93,8 @@ def test_a_check_belongs_to_the_goal_of_its_longest_prefix(check: str, goal: str
         ("interfaces.fit", "fits_and_stacks"),
         ("interfaces.stack", "fits_and_stacks"),
         ("provenance", "hygiene"),
-        ("standards.release", "hygiene"),
-        ("coverage.prerun.standards", "hygiene"),
+        ("standards.release", "standards"),
+        ("coverage.prerun.standards", "standards"),
         ("modeling.resilience", "modelling_practice"),
     ],
 )
@@ -177,7 +178,7 @@ def test_a_checked_row_gives_checked() -> None:
 
 
 def test_a_checked_rule_row_gives_checked() -> None:
-    found = goal_line("checked-rule", "hygiene", checked=[row("standards.assembly.one_fixed")])
+    found = goal_line("checked-rule", "standards", checked=[row("standards.assembly.one_fixed")])
 
     assert state_of(found) == ("checked", "checked, no issue", None, None)
 
@@ -283,7 +284,7 @@ def test_an_unresolved_rule_row_beside_an_out_of_scope_one_is_not_reached() -> N
 
 def test_only_a_skipped_rule_row_is_not_reached_skipped() -> None:
     found = goal_line(
-        "rule-skipped", "hygiene", skipped=[row("standards.assembly.one_fixed", "no assembly.")]
+        "rule-skipped", "standards", skipped=[row("standards.assembly.one_fixed", "no assembly.")]
     )
 
     assert state_of(found) == ("not_reached", "not reached", "skipped", "no assembly.")
@@ -293,7 +294,7 @@ def test_only_a_skipped_rule_row_is_not_reached_skipped() -> None:
 
 
 def test_a_coverage_row_counts_for_its_one_goal_only() -> None:
-    """`standards.drawing.*` is drawings; it does not also speak for hygiene."""
+    """`standards.drawing.*` is drawings; it does not also speak for standards or hygiene."""
     session = session_of(
         "one-goal",
         [],
@@ -302,6 +303,31 @@ def test_a_coverage_row_counts_for_its_one_goal_only() -> None:
     summary = summary_of(session)
 
     assert line(summary, "drawings").state == "not_applicable"
+    for goal in ("standards", "hygiene"):
+        assert state_of(line(summary, goal)) == (
+            "not_reached",
+            "not reached",
+            "no check ran",
+            None,
+        )
+
+
+def test_standards_findings_and_the_release_row_speak_for_standards_not_hygiene() -> None:
+    """Feature 013 split Standards out of Hygiene (its research R2.14): a standards finding
+    and the `standards.release` close-out row are the Standards goal's, and Hygiene reads only
+    `provenance`, `hygiene` and their checks."""
+    specs = [spec("standards.part.cut_list_excluded")]
+    session = session_of(
+        "standards-split",
+        specs,
+        CoverageSpec(unresolved=[row("standards.release", "no standards profile is attached.")]),
+    )
+    summary = summary_of(session)
+
+    assert (line(summary, "standards").state, line(summary, "standards").findings) == (
+        "issues",
+        1,
+    )
     assert state_of(line(summary, "hygiene")) == (
         "not_reached",
         "not reached",

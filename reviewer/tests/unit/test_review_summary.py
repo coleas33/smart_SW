@@ -238,7 +238,7 @@ def test_a_group_sentence_is_one_at_one_and_many_otherwise(count: int, text: str
 def test_by_goal_lists_the_goals_with_a_count_in_goal_order() -> None:
     specs = [
         spec("rms.folders.present"),  # modelling practice
-        spec("standards.part.cut_list_excluded"),  # hygiene
+        spec("standards.part.cut_list_excluded"),  # standards (split from hygiene by 013)
         spec("rms.grouping.all_features_in_a_group"),  # modelling practice
         spec("stack.gap"),  # fits and stacks (`fit.` would be a judgement: Decide)
     ]
@@ -247,7 +247,7 @@ def test_by_goal_lists_the_goals_with_a_count_in_goal_order() -> None:
     assert fix.kind == "fix"
     assert [(g.goal, g.title, g.count) for g in fix.by_goal] == [
         ("fits_and_stacks", "Fits and stacks", 1),
-        ("hygiene", "Hygiene", 1),
+        ("standards", "Standards", 1),
         ("modelling_practice", "Modelling practice", 2),
     ]
 

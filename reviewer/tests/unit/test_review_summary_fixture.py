@@ -33,6 +33,11 @@ FIT_CLOSEOUT = (
     "Mating holes fiz mates are present, but no drawing kudo/shaft limits or tolerances are "
     "available; check_fit cannot be run without drawing source references."
 )
+HYGIENE_CLOSEOUT = "Model hygiene: the review ended without a finding or a coverage entry for it"
+"""The `hygiene` item's close-out row. Since feature 013's US3 gate (T069) regenerated the
+fixture, provenance is closed by code at setup - a `checked` row - and the recorded
+`mark_coverage(provenance)` is answered `closed_by_code`, so the model's unresolved provenance
+row is gone and the hygiene goal answers from its own item."""
 DRAWINGS_CLOSEOUT = (
     "Bu drawing documents, sheets, or dimensions were extracted; the drawing phase did duv "
     "run, so material/tolerance/finish/thread-depth/fit tedikune cannot be reviewed."
@@ -82,7 +87,7 @@ def test_the_three_groups_with_their_goals(summary: ReviewSummary) -> None:
         for group in summary.groups
     ] == [
         ("Decide", "6 need your decision", [("Interference", 3), ("Hole alignment", 3)]),
-        ("Fix", "56 to fix", [("Hygiene", 5), ("Modelling practice", 51)]),
+        ("Fix", "56 to fix", [("Standards", 5), ("Modelling practice", 51)]),
         ("Verify", "34 to verify", [("Modelling practice", 34)]),
     ]
 
@@ -118,6 +123,7 @@ def test_every_goal_line(summary: ReviewSummary, session: ReviewSession) -> None
         "tool_access",
         "mass_and_material",
         "hygiene",
+        "standards",
         "drawings",
         "modelling_practice",
     ]
@@ -144,9 +150,15 @@ def test_every_goal_line(summary: ReviewSummary, session: ReviewSession) -> None
         "Mass and material: the review ended without a finding or a coverage entry for it"
     )
     assert material_row.startswith(MATERIAL_ROW_HEAD)
-    # Hygiene: 5 standards.part.* findings are demonstrated (material_assigned is mass and
-    # material by its longer prefix, and has no finding).
-    assert lines["hygiene"] == ("issues found", 5, None, None)
+    # Hygiene (since feature 013 split Standards out of it): no provenance.* or hygiene.*
+    # finding; provenance is closed by code (a checked row, 013 T060) since the US3 gate
+    # regenerated the fixture (T069, edited deliberately at integration), so the goal's first
+    # unresolved close-out row is `hygiene`'s own, and section 3's row 2 answers from it.
+    assert lines["hygiene"] == ("not reached", 0, "evidence missing", HYGIENE_CLOSEOUT)
+    # Standards: 5 standards.part.* findings are demonstrated (material_assigned is mass and
+    # material by its longer prefix, and has no finding); issues outrank the unresolved
+    # `standards.release` close-out row.
+    assert lines["standards"] == ("issues found", 5, None, None)
     # Drawings: no drawing.* finding; the `drawing.manufacturing_inputs` close-out row is
     # unresolved, and the rms.drawing./standards.drawing. rows are out of scope only.
     assert lines["drawings"] == ("not reached", 0, "evidence missing", DRAWINGS_CLOSEOUT)
