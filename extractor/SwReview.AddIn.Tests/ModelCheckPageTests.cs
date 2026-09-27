@@ -356,6 +356,25 @@ public sealed class ModelCheckPageTests
     }
 
     /// <summary>
+    /// Feature 013 T055 (contracts/grouped-list.md section 1, research R2.17): the preview holds no
+    /// pass. Once `rank()` sets `top_n` to at most the unsuppressed rows (013 T044), a ranking of
+    /// three undecided findings and two passes has `top_n` 3, and the tab renders `rows[0..top_n)`
+    /// - the three, in the order supplied - and neither pass, with no page change.
+    /// </summary>
+    [Fact]
+    public void ThePreviewHoldsNoPass()
+    {
+        JsonElement rendered = RenderMutated(
+            "result.attention = " + AttentionSample.WithPassesJson() + ";",
+            "return JSON.stringify({ok: true, "
+            + "rows: attrs('#attention .attention-row', 'data-finding-id'), "
+            + "text: document.getElementById('attention').textContent});");
+
+        Assert.Equal(AttentionSample.UndecidedFindingIds, Strings(rendered, "rows"));
+        Assert.All(AttentionSample.PassFindingIds, pass => Assert.DoesNotContain(pass, rendered.GetProperty("text").GetString()!));
+    }
+
+    /// <summary>
     /// A run that produced nothing to amplify says so in words rather than showing an empty
     /// list, and the sentence is the backend's - the page neither composes it nor decides when
     /// it applies (FR-024).
