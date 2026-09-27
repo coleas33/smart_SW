@@ -118,6 +118,26 @@ asks the host for its mode only when a custom or unclear document has a candidat
 `findings` counts `drawing_profile.conformance` from US7 (`profile.md`). The digest renders
 `PrerunCall.line()` unchanged: `check_drawings() -> ok, 2 drawings, 3 candidates, 2 questions`.
 
+*Amended 2026-09-26 by feature 013 T085 (013 `contracts/drawing-capability.md` sections 5 and 7):*
+
+```json
+{"status": "recorded", "drawings": 0, "candidates": 1, "questions": 0, "findings": 0,
+ "finding_ids": [], "states": {"attached": 0, "candidate": 2, "absent": 1, "bought": 1},
+ "coverage": {"checked": 0, "skipped": 0, "unresolved": 4}}
+```
+
+`candidates` counts candidate files, not rows; `states` counts each reviewed document's drawing
+state (section 3's amendment). While no attached drawing shows a custom or unclear document
+(`checks/drawing_context.item_closed_by_code(index, roles)`, the one predicate `mark_coverage` also
+asks), the check closes the checklist's `drawing.manufacturing_inputs` item by code with one row,
+counted in `coverage`: `unresolved`, "No attached drawing shows a custom part or assembly - " then
+each candidate or absent document with its reason (documents sharing a reason named together), or
+`skipped`, "... - every reviewed part and assembly is bought, so no drawing is expected" (only a
+drawing root can leave every subject bought; the review's root is always graded) or "... - no part
+or assembly is reviewed, so no drawing is expected". A repeat restates the row. In that state the
+item's rows are withdrawn before the row is recorded; once a drawing is attached the model owns the
+item, and the check withdraws only its own closing row (by its words), never a row the model wrote.
+
 ## 6. Answers
 
 Answers change nothing already recorded; they are read by the brief (`brief.md` section 2,

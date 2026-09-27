@@ -22,12 +22,17 @@ import pytest
 from swreview.agent.providers.fake import FakeProvider, ScriptedTurn
 from swreview.agent.runner import start_review
 from swreview.agent.settings import EfficiencySettings
-from swreview.checks.drawing_context import CANDIDATE_CONFIRM
+from swreview.checks.drawing_context import (
+    CANDIDATE_CONFIRM,
+    CLOSED_BY_CODE,
+    item_closed_by_code,
+)
 from swreview.checks.drawing_context import CONFORMANCE_CHECK as CONFORMANCE
 from swreview.checks.standards.profile import load_profile
 from swreview.checks.standards.registry import CHECK_TOOL
 from swreview.checks.standards.traversal import graded_documents
-from swreview.ir.loader import load_package
+from swreview.drawings.evidence import DrawingIndex
+from swreview.ir.loader import LoadedPackage, load_package
 from swreview.ir.models import EvidencePackage
 from swreview.mcp.server import MCP_BRIDGE_TOOL_FUNCTIONS, MCP_TOOL_FUNCTIONS
 from swreview.prerun import (
@@ -37,6 +42,7 @@ from swreview.prerun import (
     planned_calls,
     repeat_key,
 )
+from swreview.report.session import CoverageItem, CoverageScope
 from swreview.report.summary import review_ranking
 from swreview.tools import checks_mechanical, registry
 from swreview.tools.context import ToolContext, context_for, use_context
@@ -56,6 +62,15 @@ from swreview.tools.registry import (
 from swreview.tools.standards_checks import StandardsRun, attach_standards_run
 from tests.support.fake_part_roles import FakePartRoles
 from tests.support.prerun import ON, STANDARDS_PROFILE, prerun_package
+from tests.unit.test_drawing_context import (
+    INSTRUCTION,
+    LOOSE,
+    SITTING,
+    assembly,
+    drawn,
+    sitting,
+    sitting_roles,
+)
 from tests.unit.test_mcp_server import contract_enabled_tools
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "drawings"
@@ -140,8 +155,9 @@ def test_check_drawings_returns_the_counts() -> None:
         "questions": 0,
         "findings": 0,
         "finding_ids": [],
+        "states": {"attached": 1, "candidate": 1, "absent": 3, "bought": 0},
         "coverage": {"checked": 1, "skipped": 0, "unresolved": 4},
-    }
+    }, "013 T085 adds the states; the plate's attached drawing keeps the item the model's"
     assert offered == {**result, "questions": 1}
 
 
@@ -492,3 +508,175 @@ def test_the_drawing_check_asks_the_context_for_the_mode_once_it_can_say(
     _, result = recorded(fixture("plate-drawing"))
 
     assert result["questions"] == 1
+
+
+# --- 6. the drawing item closed by code, and the payload (013 T084) -----------------------------
+#
+# 013 `contracts/drawing-capability.md` sections 5 and 7. While no attached drawing shows a custom
+# or unclear document, `check_drawings` closes the checklist's `drawing.manufacturing_inputs` item
+# with one row - unresolved naming each candidate or missing drawing, skipped when every subject is
+# bought - and the model owns the item again once a drawing is attached. The payload counts
+# candidate files and each drawing state.
+
+MANUFACTURING_INPUTS = "drawing.manufacturing_inputs"
+
+
+def item_rows(context: ToolContext) -> list[tuple[str, list[str], str]]:
+    """`(bucket, document ids, reason)` of each `drawing.manufacturing_inputs` row, bucket order."""
+    return [
+        (bucket, list(item.scope.document_ids), item.reason)
+        for bucket in ("checked", "skipped", "unresolved")
+        for item in getattr(context.require_session().coverage, bucket)
+        if item.check == MANUFACTURING_INPUTS
+    ]
+
+
+def test_the_payload_counts_candidate_files_and_carries_every_state() -> None:
+    _, result = recorded(sitting(), host=ModeHost("open_only"), roles=sitting_roles())
+
+    assert result == {
+        "status": "recorded",
+        "drawings": 0,
+        "candidates": 1,
+        "questions": 0,
+        "findings": 0,
+        "finding_ids": [],
+        "states": {"attached": 0, "candidate": 2, "absent": 1, "bought": 1},
+        "coverage": {"checked": 0, "skipped": 0, "unresolved": 4},
+    }, "one file beside two documents; three drawing.context rows and the closing row"
+    assert list(result) == [
+        "status", "drawings", "candidates", "questions", "findings", "finding_ids", "states",
+        "coverage",
+    ]
+
+
+def test_with_nothing_attached_the_item_is_closed_by_code_naming_each_missing_drawing() -> None:
+    context, _ = recorded(sitting(), host=ModeHost("open_only"), roles=sitting_roles())
+
+    assert item_rows(context) == [(
+        "unresolved",
+        ["doc:0001", "doc:0002", "doc:0004"],
+        f"No attached drawing shows a custom part or assembly - {SITTING}.SLDASM and "
+        f"{SITTING}.SLDPRT: {INSTRUCTION}; {LOOSE}.SLDPRT: no drawing named {LOOSE}.SLDDRW sits "
+        "beside it (may be a bought part)",
+    )]
+    assert CLOSED_BY_CODE == "No attached drawing shows a custom part or assembly"
+
+
+def test_when_every_subject_is_bought_the_item_is_skipped() -> None:
+    """Only a drawing root leaves every subject bought: any other root is graded (the root rule),
+    and bought comes before attached, so the root drawing's views do not make them attached."""
+    root = fixture("drawing-root")
+    roles = FakePartRoles(roles=dict.fromkeys(("doc:2", "doc:3", "doc:4"), "bought"), root="doc:1")
+
+    context, result = recorded(root, roles=roles)
+
+    assert item_rows(context) == [(
+        "skipped",
+        ["doc:2", "doc:3", "doc:4"],
+        "No attached drawing shows a custom part or assembly - every reviewed part and assembly "
+        "is bought, so no drawing is expected",
+    )]
+    assert result["states"] == {"attached": 0, "candidate": 0, "absent": 0, "bought": 3}
+    assert result["coverage"] == {"checked": 0, "skipped": 1, "unresolved": 0}
+
+
+def test_with_no_part_or_assembly_reviewed_the_item_is_skipped_saying_so() -> None:
+    root = fixture("drawing-root")
+    drawings_only = root.model_copy(
+        update={"documents": [row for row in root.documents if row.kind == "drawing"]}
+    )
+
+    context, _ = recorded(drawings_only)
+
+    assert item_rows(context) == [(
+        "skipped", [],
+        "No attached drawing shows a custom part or assembly - no part or assembly is reviewed, "
+        "so no drawing is expected",
+    )]
+
+
+def test_with_a_drawing_attached_the_model_owns_the_item() -> None:
+    plate = fixture("plate-drawing")
+
+    context, result = recorded(plate)
+
+    assert item_rows(context) == []
+    assert result["states"] == {"attached": 1, "candidate": 1, "absent": 3, "bought": 0}
+    assert item_closed_by_code(DrawingIndex.for_package(plate), None) is False
+
+
+def test_the_one_predicate_decides_the_item() -> None:
+    """`item_closed_by_code` is what `mark_coverage` asks (013 T087) and what the closing row
+    follows: nothing attached; a drawing showing only bought documents shows no custom one."""
+    plate = fixture("plate-drawing")  # the plate, doc:0002, is the one document shown
+    index = DrawingIndex.for_package(plate)
+
+    assert item_closed_by_code(DrawingIndex.for_package(sitting()), sitting_roles()) is True
+    assert item_closed_by_code(index, FakePartRoles(roles={"doc:0002": "custom"})) is False
+    assert item_closed_by_code(
+        index, FakePartRoles(roles={"doc:0002": "bought"}, root="doc:0001")
+    ) is True
+    assert item_closed_by_code(index, FakePartRoles(roles={"doc:0002": "unclear"})) is False
+
+
+def test_calling_it_again_adds_no_second_closing_row() -> None:
+    context, first = recorded(sitting(), host=ModeHost("open_only"), roles=sitting_roles())
+    rows = item_rows(context)
+    with use_context(context):
+        second = check_drawings()
+
+    assert second == first
+    assert item_rows(context) == rows and len(rows) == 1
+
+
+def test_the_closing_row_goes_once_a_confirmed_read_attaches_a_drawing() -> None:
+    """The state leaves "closed by code" only when a read attaches a drawing, before the model has
+    had a turn to write a row of its own: the restated check withdraws its closing row."""
+    base, (part,) = assembly(1)
+    bare = base.build().package
+    context, _ = recorded(bare)
+    assert len(item_rows(context)) == 1
+
+    context.reload_package(LoadedPackage(package=drawn(base, {"FICT-KALO-7001": [part]}),
+                                         base_dir=Path(".")))
+    with use_context(context):
+        check_drawings()
+
+    assert item_rows(context) == []
+
+
+def test_the_models_own_rows_are_never_withdrawn_while_a_drawing_is_attached() -> None:
+    context = context_for(fixture("plate-drawing"))
+    own = CoverageItem(
+        check=MANUFACTURING_INPUTS, scope=CoverageScope(document_ids=["doc:0002"]),
+        reason="the plate's drawing gives its fits", error=None,
+    )
+    context.record_coverage("checked", own)
+
+    with use_context(context):
+        check_drawings()
+        check_drawings()
+
+    assert item_rows(context) == [("checked", ["doc:0002"], "the plate's drawing gives its fits")]
+
+
+def test_while_closed_the_closing_row_supersedes_the_items_other_rows() -> None:
+    """A row of the item that predates the change that closed it (a regrade made the only
+    attached document bought) is withdrawn: in this state code owns the item, and the model is
+    answered `closed_by_code` (013 T087)."""
+    plate = fixture("plate-drawing")
+    context = context_for(plate)
+    context.record_coverage("checked", CoverageItem(
+        check=MANUFACTURING_INPUTS, scope=CoverageScope(document_ids=["doc:0002"]),
+        reason="the plate's drawing gives its fits", error=None,
+    ))
+    setattr(context, PART_ROLES_ATTRIBUTE, FakePartRoles(roles={"doc:0002": "bought"},
+                                                         root="doc:0001"))
+
+    with use_context(context):
+        check_drawings()
+
+    [(bucket, _, reason)] = item_rows(context)
+    assert bucket == "unresolved"
+    assert reason.startswith(CLOSED_BY_CODE)

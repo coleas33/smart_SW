@@ -78,11 +78,14 @@ if TYPE_CHECKING:  # the standards package reaches the runner; only the types ar
 
 __all__ = [
     "ABSENT_REASON",
+    "ALL_BOUGHT",
     "BOUGHT_REASON",
+    "CANDIDATES_BLOCK",
     "CANDIDATES_WHY",
     "CANDIDATE_CONFIRM",
     "CANDIDATE_OPTIONS",
     "CANDIDATE_REASON",
+    "CLOSED_BY_CODE",
     "COMPARED_SETTINGS",
     "CONFORMANCE_CHECK",
     "CONTEXT_CHECK",
@@ -91,6 +94,7 @@ __all__ = [
     "GOVERNING_WHY",
     "MAYBE_BOUGHT",
     "NO_DRAWING_SECTION",
+    "NO_SUBJECT",
     "OPEN_THEN_REVIEW",
     "SAME_NAME_READ_REASON",
     "CandidateFile",
@@ -106,6 +110,7 @@ __all__ = [
     "candidate_question",
     "compare_with_profile",
     "drawing_states",
+    "item_closed_by_code",
     "run_drawing_context",
 ]
 
@@ -161,6 +166,13 @@ SAME_NAME_READ_REASON = "its same-name drawing {drawing} was read, and no view o
 absent reason would say no drawing of its name sits beside it, which is not so."""
 MAYBE_BOUGHT = "(may be a bought part)"
 """Ends an unclear document's reason while the part-roles question is open."""
+
+CLOSED_BY_CODE = "No attached drawing shows a custom part or assembly"
+"""How the drawing check's own `drawing.manufacturing_inputs` row begins (013 section 5): the item
+closed by code while no attached drawing shows a custom or unclear document. The check restates
+its own row by these words, never the model's rows of the item."""
+ALL_BOUGHT = "every reviewed part and assembly is bought, so no drawing is expected"
+NO_SUBJECT = "no part or assembly is reviewed, so no drawing is expected"
 
 
 @dataclass(frozen=True)
@@ -250,6 +262,10 @@ class DrawingContextResult:
     """The drawing standard's comparison (User Story 7)."""
     states: Mapping[str, DocumentDrawingState] = field(default_factory=dict)
     """Each reviewed document's drawing state, in traversal order (013 section 3)."""
+    closing: tuple[CoverageBucket, CoverageItem] | None = None
+    """The `drawing.manufacturing_inputs` row that closes the item by code, when no attached
+    drawing shows a custom or unclear document (013 section 5); `None` when one does, and the
+    model owns the item."""
 
 
 def _is_bought(roles: PartRoles | None, document_id: str) -> bool:
@@ -369,6 +385,49 @@ def drawing_states(
         document.document_id: _state(index, roles, mode, files.get(document.document_id), document)
         for document in index.subjects()
     }
+
+
+def _nothing_attached(states: Mapping[str, DocumentDrawingState]) -> bool:
+    """The one rule behind `item_closed_by_code` and the closing row: no attached drawing shows a
+    custom or unclear document (a bought document is never `attached`: its role comes first)."""
+    return not any(state.state == "attached" for state in states.values())
+
+
+def item_closed_by_code(index: DrawingIndex, roles: PartRoles | None) -> bool:
+    """Whether code owns the checklist's `drawing.manufacturing_inputs` item (013 section 5):
+    true while no attached drawing shows a custom or unclear document. Then `check_drawings`
+    writes the item's row and `mark_coverage` on it answers `closed_by_code`; when a drawing is
+    attached the model owns the item. One predicate decides both (013 T085, T087)."""
+    return _nothing_attached(drawing_states(index, roles, "none"))
+
+
+def _closing_row(
+    index: DrawingIndex, states: Mapping[str, DocumentDrawingState]
+) -> tuple[CoverageBucket, CoverageItem] | None:
+    """The row that closes `drawing.manufacturing_inputs` by code, or `None` while a drawing is
+    attached: `unresolved` naming each candidate or absent document with its reason - documents
+    that share a reason named together, so a file beside two is one line - and `skipped` when
+    every subject is bought, or when there is none."""
+    if not _nothing_attached(states):
+        return None
+    missing = [state for state in states.values() if state.state in ("candidate", "absent")]
+    if missing:
+        named: dict[str, list[str]] = {}
+        for state in missing:
+            named.setdefault(state.reason, []).append(index.file_name_of(state.document_id))
+        details = "; ".join(f"{and_list(names)}: {reason}" for reason, names in named.items())
+        bucket: CoverageBucket = "unresolved"
+        subjects = [state.document_id for state in missing]
+    else:
+        details = ALL_BOUGHT if states else NO_SUBJECT
+        bucket = "skipped"
+        subjects = list(states)
+    return bucket, CoverageItem(
+        check=CANDIDATES_BLOCK,
+        scope=CoverageScope(document_ids=subjects),
+        reason=f"{CLOSED_BY_CODE} - {details}",
+        error=None,
+    )
 
 
 def _coverage(index: DrawingIndex, state: DocumentDrawingState) -> DocumentDrawingCoverage:
@@ -756,4 +815,5 @@ def run_drawing_context(
         questions=tuple(questions),
         conformance=compare_with_profile(package, profile),
         states=states,
+        closing=_closing_row(index, states),
     )

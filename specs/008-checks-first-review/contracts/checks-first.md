@@ -35,6 +35,15 @@ there for the notes the pre-run's findings carry (013 `contracts/part-roles.md` 
 | 3b | `check_drawings()` (feature 011, *amended 2026-09-23*), after every `CODE_FIRST_CHECKS` name | when the package carries drawing evidence - a drawing record or a drawing candidate (`tools/drawings.drawing_evidence`, the condition `ToolRegistry._offered` offers it on; 011 `contracts/questions.md` section 2) |
 | 4 | `check_standards()` | when a standards run is attached (a profile named and usable) |
 
+*Amended 2026-09-26 by feature 013 T085 (013 `contracts/drawing-capability.md` sections 5 and 7):*
+call 3b's payload counts candidate **files** (`candidates`: a part and an assembly of one stem share
+one) and adds `states` (`attached`, `candidate`, `absent`, `bought`); its digest line renders
+`PrerunCall.line()` unchanged, so "{n} candidates" counts files. Its questions count only the
+candidate question the host can honour (asked on `opens_closed`) and the governing ones. While no
+attached drawing shows a custom or unclear document, the call also closes the checklist's
+`drawing.manufacturing_inputs` item by code with one coverage row, counted in the payload's
+`coverage`.
+
 `PRERUN_INTERFERENCE_SETTINGS`:
 
 ```json
