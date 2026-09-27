@@ -123,6 +123,15 @@ The per-view walk means a table anchored on the sheet format view is found; a ta
 return is recorded once (deduplicated by persistent reference, else by the COM identity of the
 annotation within the view walk).
 
+*Amended 2026-09-26 by feature 013 (T127; 013 `contracts/readings.md` section 1):* "the sheet
+format view" is the sheet's own (type 1) view, which `ISheet.GetViews` leaves out: the views of
+each sheet are now taken from its array in `IDrawingDoc.GetViews`, whose first element is that
+view, so a table anchored on it - a bill of materials or a revision table - is found and recorded
+under it. Revision tables join the de-duplication above (by persistent reference, else by
+identity, under the first view that returned them), since the sheet's own view and a drawing view
+may return one table. A sheet whose array cannot be matched to it keeps the `ISheet.GetViews`
+reading beside a `drawing_sheet_view` gap (006 `contracts/ir-additions.md` section 3.2).
+
 ## 4. The C# tests
 
 `DrawingDumperTests` (fakes) for every row of section 3, each read answering, throwing and answering

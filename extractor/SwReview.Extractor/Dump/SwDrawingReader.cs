@@ -102,6 +102,26 @@ public sealed class SwDrawingReader : IDrawingReader, IDrawingReferenceSource
 
     public IReadOnlyList<object> Views(object sheet) => Items(AsSheet(sheet).GetViews());
 
+    public IReadOnlyList<IReadOnlyList<object>> SheetViews(object drawing) => PerSheetViews(Doc(drawing).GetViews());
+
+    /// <summary>
+    /// <c>IDrawingDoc.GetViews()</c>'s answer as one list per sheet, in sheet order, each list the
+    /// sheet's views in the order interop gave them - the sheet's own (type 1) view first. The one
+    /// reading of that answer: <see cref="SwOpenDrawingReader"/>'s discovery reads it here too
+    /// (feature 013, contracts/readings.md section 1). A null answer, or a sheet's null array, is
+    /// empty; an item that is not a view is left out.
+    /// </summary>
+    internal static IReadOnlyList<IReadOnlyList<IView>> PerSheetViews(object? answer)
+    {
+        var sheets = new List<IReadOnlyList<IView>>();
+        foreach (object sheet in Items(answer))
+        {
+            sheets.Add(Items(sheet).OfType<IView>().ToList());
+        }
+
+        return sheets;
+    }
+
     public object? SheetRevisionTable(object sheet) => AsSheet(sheet).RevisionTable;
 
     public string? ViewName(object view) => AsView(view).GetName2();

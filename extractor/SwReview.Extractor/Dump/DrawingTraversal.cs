@@ -13,8 +13,9 @@ namespace SwReview.Extractor.Dump;
 /// The phase itself reads a live <c>IDrawingDoc</c> that a machine with no SOLIDWORKS seat
 /// cannot produce, so the rules a reader of a package actually depends on - sheet order,
 /// id order, owner wiring - would otherwise be testable only on the pilot workstation.
-/// <see cref="DrawingDumper"/> drives this class in <c>GetSheetNames()</c> and
-/// <c>ISheet.GetViews()</c> order and fills in the values it read.
+/// <see cref="DrawingDumper"/> drives this class in <c>GetSheetNames()</c> order and, per sheet,
+/// in the order of that sheet's array from <c>IDrawingDoc.GetViews()</c> - its own view first -
+/// or of <c>ISheet.GetViews()</c> on the fallback, and fills in the values it read.
 ///
 /// Two decisions are policy and live here rather than in the dumper:
 ///
@@ -110,7 +111,7 @@ public sealed class DrawingTraversal
         return sheet;
     }
 
-    /// <summary>One view of <paramref name="sheet"/>, in <c>ISheet.GetViews()</c> order.</summary>
+    /// <summary>One view of <paramref name="sheet"/>, in the order the dumper read its views.</summary>
     public DrawingView AddView(DrawingSheetRecord sheet)
     {
         if (sheet == null)

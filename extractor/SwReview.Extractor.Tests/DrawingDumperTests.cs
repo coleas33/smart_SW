@@ -127,8 +127,9 @@ public class DrawingDumperTests
         Assert.Equal(
             new[] { _scope.DocumentId(DrawingPath), _scope.DocumentId(SecondDrawingPath) },
             records.Select(record => record.DocumentId));
-        Assert.Equal(new[] { "dsh:0001", "dvw:0001", "ddm:0001", "dan:0001", "dnt:0001", "drv:0001" }, IdsOf(records[0]));
-        Assert.Equal(new[] { "dsh:0002", "dvw:0002", "ddm:0002", "dan:0002", "dnt:0002", "drv:0002" }, IdsOf(records[1]));
+        // Each sheet's own view takes the first view id of its sheet (dvw:0001, dvw:0003).
+        Assert.Equal(new[] { "dsh:0001", "dvw:0002", "ddm:0001", "dan:0001", "dnt:0001", "drv:0001" }, IdsOf(records[0]));
+        Assert.Equal(new[] { "dsh:0002", "dvw:0004", "ddm:0002", "dan:0002", "dnt:0002", "drv:0002" }, IdsOf(records[1]));
     }
 
     [Fact]
@@ -213,8 +214,9 @@ public class DrawingDumperTests
         Assert.Equal(record.Id, gap.EntityId);
         Assert.Equal("references '" + OutsidePath + "', which is not part of this review", gap.Reason);
 
-        // The outside model is not read: its document is not asked for.
-        Assert.DoesNotContain("ReferencedDocument", _observer.Members, StringComparer.Ordinal);
+        // The outside model is not read: its document is not asked for. (The sheet's own view,
+        // which references nothing, is asked, and answers nothing.)
+        Assert.Equal(0, view.ReferencedDocumentAsked);
     }
 
     [Fact]
@@ -229,7 +231,7 @@ public class DrawingDumperTests
         DrawingRecord record = Assert.Single(DumpAttached());
 
         Gap gap = Assert.Single(_scope.Gaps.Gaps);
-        Assert.Equal(record.Sheets[0].Views[0].Id, gap.EntityId);
+        Assert.Equal(DrawingViews(record.Sheets[0])[0].Id, gap.EntityId);
         Assert.All(record.Sheets[0].Views, view => Assert.Null(view.ReferencedDocumentId));
     }
 
@@ -312,7 +314,7 @@ public class DrawingDumperTests
     private static IReadOnlyList<string> IdsOf(DrawingRecord record)
     {
         DrawingSheetRecord sheet = Assert.Single(record.Sheets);
-        DrawingView view = Assert.Single(sheet.Views);
+        DrawingView view = Assert.Single(DrawingViews(sheet));
         return new[]
         {
             sheet.Id,
@@ -399,7 +401,8 @@ public class DrawingDumperTests
     {
         // PROBE-7: whether a non-active sheet's views come back populated is exactly what is
         // unsettled, and the answer this dump gives when they do not is an unresolved row -
-        // never an activation, and never "the sheet has no views" (FR-024, FR-044).
+        // never an activation, and never "the sheet has no views" (FR-024, FR-044). Its own
+        // view in the document's array is not a drawing view, so it does not settle the question.
         _reader.ActiveSheetName = "Sheet1";
         _reader.AddSheet("Sheet1").AddView("Drawing View1");
         _reader.AddSheet("Sheet2");
@@ -429,6 +432,8 @@ public class DrawingDumperTests
     [Fact]
     public void Dump_SheetWhoseViewEnumerationThrew_IsAGapNamingTheSheet()
     {
+        // Both enumerations: the document's per-sheet arrays, and the sheet's own on the fallback.
+        _reader.Root.SheetViewsFailure = new InvalidOperationException("IDrawingDoc.GetViews failed");
         FakeSheet sheet = _reader.AddSheet("Sheet1");
         sheet.ViewsFailure = new InvalidOperationException("GetViews failed");
 
@@ -445,18 +450,17 @@ public class DrawingDumperTests
     [Fact]
     public void Dump_RecordsEveryViewWithItsNameAndItsTypeVerbatim()
     {
+        // The sheet's own (type 1) view is carried like any other view, first: it is the only
+        // place the export-control statement is ever found, so a phase that skipped it would
+        // make "the phrase appears nowhere" a silent pass. It comes from the document's
+        // per-sheet array, not from ISheet.GetViews, which leaves it out.
         FakeSheet sheet = _reader.AddSheet("Sheet1");
-
-        // The sheet-format pseudo-view is carried like any other view: it is the only place
-        // the export-control statement is ever found, so a phase that skipped it would make
-        // "the phrase appears nowhere" a silent pass.
-        sheet.AddView("Sheet Format1").Type = 1;
         sheet.AddView("Drawing View1").Type = 4;
 
         DrawingSheetRecord record = Assert.Single(Assert.Single(Dump()).Sheets);
 
         Assert.Equal(
-            new string?[] { "Sheet Format1", "Drawing View1" },
+            new string?[] { "Sheet1", "Drawing View1" },
             record.Views.Select(view => view.Name));
         Assert.Equal(new int?[] { 1, 4 }, record.Views.Select(view => view.ViewTypeRaw));
         Assert.Equal(new[] { "dvw:0001", "dvw:0002" }, record.Views.Select(view => view.Id));
@@ -468,7 +472,7 @@ public class DrawingDumperTests
     {
         FakeView view = _reader.AddSheet("Sheet1").AddView(null);
 
-        DrawingView record = Assert.Single(Assert.Single(Assert.Single(Dump()).Sheets).Views);
+        DrawingView record = Single(Dump());
 
         Assert.Null(record.Name);
         Gap gap = Assert.Single(_scope.Gaps.Gaps, g => g.EntityKind == "drawing_view");
@@ -483,7 +487,7 @@ public class DrawingDumperTests
         view.ReferencedModelPath = HousingPath;
         view.ReferencedDocument = new FakeModel(HousingPath);
 
-        DrawingView record = Assert.Single(Assert.Single(Assert.Single(Dump()).Sheets).Views);
+        DrawingView record = Single(Dump());
 
         Assert.Equal(_scope.DocumentId(HousingPath), record.ReferencedDocumentId);
         Assert.Equal(HousingPath, record.ReferencedModelPath);
@@ -501,7 +505,7 @@ public class DrawingDumperTests
         view.ReferencedModelPath = HousingPath;
         view.ReferencedDocument = null;
 
-        DrawingView record = Assert.Single(Assert.Single(Assert.Single(Dump()).Sheets).Views);
+        DrawingView record = Single(Dump());
 
         Assert.Null(record.ReferencedDocumentId);
         Assert.Equal(HousingPath, record.ReferencedModelPath);
@@ -515,11 +519,13 @@ public class DrawingDumperTests
     [Fact]
     public void Dump_ViewThatReferencesNothing_IsNoGap()
     {
-        // A detail or sheet-format view references no model and names none. That is not a
-        // missing document.
-        _reader.AddSheet("Sheet1").AddView("Sheet Format1").Type = 1;
+        // A detail view or the sheet's own view references no model and names none. That is not
+        // a missing document. The sheet's own view is the one here, on the active sheet (a
+        // non-active sheet with no drawing view is PROBE-7's gap instead).
+        _reader.ActiveSheetName = "Sheet1";
+        _reader.AddSheet("Sheet1");
 
-        Dump();
+        Assert.Equal((int?)1, Assert.Single(Assert.Single(Assert.Single(Dump()).Sheets).Views).ViewTypeRaw);
 
         Assert.DoesNotContain(
             _scope.Gaps.Gaps, gap => gap.EntityKind == "drawing_referenced_document");
@@ -722,10 +728,9 @@ public class DrawingDumperTests
     [Fact]
     public void Dump_SheetFormatAnnotation_IsOwnedByTheTypeOneView()
     {
+        _reader.ActiveSheetName = "Sheet1";
         FakeSheet sheet = _reader.AddSheet("Sheet1");
-        FakeView format = sheet.AddView("Sheet Format1");
-        format.Type = 1;
-        format.AddAnnotation("Note1", type: 6, dangling: false);
+        sheet.OwnView!.AddAnnotation("Note1", type: 6, dangling: false);
 
         DrawingView record = Assert.Single(Assert.Single(Dump()).Sheets[0].Views);
 
@@ -738,12 +743,12 @@ public class DrawingDumperTests
     [Fact]
     public void Dump_RecordsEveryNoteWithItsTextAndItsView()
     {
-        FakeView view = _reader.AddSheet("Sheet1").AddView("Sheet Format1");
-        view.Type = 1;
+        _reader.ActiveSheetName = "Sheet1";
+        FakeView view = _reader.AddSheet("Sheet1").OwnView!;
         view.AddNote("UNLESS OTHERWISE SPECIFIED");
         view.AddNote("BREAK ALL SHARP EDGES");
 
-        DrawingView record = Single(Dump());
+        DrawingView record = Assert.Single(Assert.Single(Assert.Single(Dump()).Sheets).Views);
 
         Assert.Equal(
             new string?[] { "UNLESS OTHERWISE SPECIFIED", "BREAK ALL SHARP EDGES" },
@@ -922,7 +927,7 @@ public class DrawingDumperTests
 
         Assert.Equal("U2hlZXQx", record.PersistRef);
         Assert.Equal(_scope.DocumentId(DrawingPath), record.PersistRefScope);
-        Assert.Equal("Vmlldw==", record.Views[0].PersistRef);
+        Assert.Equal("Vmlldw==", DrawingViews(record)[0].PersistRef);
     }
 
     [Fact]
@@ -937,7 +942,7 @@ public class DrawingDumperTests
 
         Assert.Null(record.PersistRef);
         Assert.Null(record.PersistRefScope);
-        Assert.Null(record.Views[0].PersistRef);
+        Assert.Null(DrawingViews(record)[0].PersistRef);
         Assert.Empty(_scope.Gaps.Gaps);
     }
 
@@ -946,9 +951,9 @@ public class DrawingDumperTests
     [Fact]
     public void Dump_AsksTheGateAboutEveryReadAndAboutNothingThatWrites()
     {
+        _reader.ActiveSheetName = "Sheet1";
         FakeSheet sheet = _reader.AddSheet("Sheet1");
-        FakeView view = sheet.AddView("Sheet Format1");
-        view.Type = 1;
+        FakeView view = sheet.OwnView!;
         view.AddDimension("D1@Sketch1").Type2 = 2;
         view.AddAnnotation("RC1", type: 6, dangling: false);
         view.AddNote("UNLESS OTHERWISE SPECIFIED");
@@ -961,6 +966,13 @@ public class DrawingDumperTests
         Assert.All(
             _observer.Members,
             member => ReadOnlyGuard.Assert(member));
+
+        // The sheet's own view was read, the reads confirming it among them, so the log above
+        // holds every member this test scripts a read for.
+        foreach (string member in new[] { "GetViews", "Type", "GetName2", "GetDisplayDimensions", "GetNotes", "CurrentRevision" })
+        {
+            Assert.Contains(member, _observer.Members, StringComparer.Ordinal);
+        }
 
         // Named rather than derived: these two are the release-checklist macro's one side
         // effect, and the drawing phase is written not to need them (research R2.7, R8).
@@ -2065,7 +2077,7 @@ public class DrawingDumperTests
         DrawingTable record = Assert.Single(sheet.Tables!);
         Assert.Equal("dtb:0001", record.Id);
         Assert.Equal(sheet.Id, record.SheetId);
-        Assert.Equal(sheet.Views[0].Id, record.OwnerViewId);
+        Assert.Equal(DrawingViews(sheet)[0].Id, record.OwnerViewId);
         Assert.Equal(type, record.TableTypeRaw);
         Assert.Equal("FICTIONAL TABLE", record.Title);
         Assert.Equal(2, record.RowCount);
@@ -2215,7 +2227,243 @@ public class DrawingDumperTests
         DrawingSheetRecord record = Assert.Single(Dump()).Sheets[0];
 
         DrawingTable table = Assert.Single(record.Tables!);
-        Assert.Equal(record.Views[0].Id, table.OwnerViewId);
+        Assert.Equal(DrawingViews(record)[0].Id, table.OwnerViewId);
+    }
+
+    // ---- the sheet's own view (feature 013, contracts/readings.md section 1) ---------
+    //
+    // ISheet.GetViews leaves the sheet's own (type 1) view out - on the seat, none of a plate
+    // drawing's 14 views was it, so its revision table went unread. The document's
+    // IDrawingDoc.GetViews gives one array per sheet with that view first; the dump takes array i
+    // for sheet i once element 0 is confirmed as type 1 with the sheet's name, and otherwise says
+    // what differed and keeps ISheet.GetViews' reading for that sheet.
+
+    [Fact]
+    public void Dump_ReadsTheSheetsOwnViewFromTheDocumentsArray_WithItsRevisionTableAndItsBillOfMaterials()
+    {
+        FakeSheet sheet = _reader.AddSheet("Sheet1");
+        sheet.OwnView!.AddTable(type: 3, currentRevision: "B").Rows = new[] { new string?[] { "B" } };
+        sheet.OwnView.AddTable(type: 2, currentRevision: null).Rows = new[] { new string?[] { "1" } };
+        sheet.RevisionTableProperty = new FakeTable();
+        sheet.AddView("Drawing View1");
+
+        DrawingSheetRecord record = Assert.Single(Assert.Single(Dump()).Sheets);
+
+        DrawingView own = record.Views[0];
+        Assert.Equal((int?)1, own.ViewTypeRaw);
+        Assert.Equal(new string?[] { "Sheet1", "Drawing View1" }, record.Views.Select(view => view.Name));
+        Assert.Equal("drv:0001", Assert.Single(record.RevisionTables).Id);
+        DrawingTable bom = Assert.Single(record.Tables!);
+        Assert.Equal(2, bom.TableTypeRaw);
+        Assert.Equal(own.Id, bom.OwnerViewId);
+
+        // No cross-check gap: the table the sheet reports is the one read. No fallback either.
+        Assert.Empty(_scope.Gaps.Gaps);
+        Assert.Equal(0, sheet.ViewsAsked);
+    }
+
+    [Fact]
+    public void Dump_ASheetWhoseArrayStartsWithAViewOfAnotherName_RecordsTheGapAndFallsBack()
+    {
+        FakeSheet sheet = _reader.AddSheet("Sheet1");
+        sheet.OwnView!.Name = "Sheet9";
+        sheet.OwnView.AddTable(type: 3, currentRevision: "B").Rows = new[] { new string?[] { "B" } };
+        sheet.RevisionTableProperty = new FakeTable();
+        sheet.AddView("Drawing View1");
+
+        DrawingSheetRecord record = Assert.Single(Assert.Single(Dump()).Sheets);
+
+        AssertFellBack(sheet, record, "'Sheet9'");
+
+        // What the fallback cannot see stays visible: the table on the unread view is the
+        // cross-check's disagreement, so the revision check is unresolved rather than absent.
+        Assert.Empty(record.RevisionTables);
+        Assert.Contains(
+            _scope.Gaps.Gaps, gap => gap.EntityKind == "revision_table_read" && gap.EntityId == record.Id);
+    }
+
+    [Fact]
+    public void Dump_ASheetWhoseArrayStartsWithAViewThatIsNotType1_RecordsTheGapAndFallsBack()
+    {
+        FakeSheet sheet = _reader.AddSheet("Sheet1");
+        sheet.OwnView!.Type = 4;
+        sheet.AddView("Drawing View1");
+
+        DrawingSheetRecord record = Assert.Single(Assert.Single(Dump()).Sheets);
+
+        AssertFellBack(sheet, record, "type 4");
+    }
+
+    [Fact]
+    public void Dump_ASheetWhoseArrayStartsWithAnUnnamedView_RecordsTheGapAndFallsBack()
+    {
+        // A name that could not be read cannot confirm the sheet: unconfirmed is a mismatch.
+        FakeSheet sheet = _reader.AddSheet("Sheet1");
+        sheet.OwnView!.Name = null;
+        sheet.AddView("Drawing View1");
+
+        DrawingSheetRecord record = Assert.Single(Assert.Single(Dump()).Sheets);
+
+        AssertFellBack(sheet, record, "no name");
+    }
+
+    [Fact]
+    public void Dump_ASheetWhoseArrayIsEmpty_RecordsTheGapAndFallsBack()
+    {
+        _reader.ActiveSheetName = "Sheet1";
+        FakeSheet sheet = _reader.AddSheet("Sheet1");
+        sheet.OwnView = null;
+
+        DrawingSheetRecord record = Assert.Single(Assert.Single(Dump()).Sheets);
+
+        Assert.Empty(record.Views);
+        Assert.Equal(1, sheet.ViewsAsked);
+        Gap gap = Assert.Single(_scope.Gaps.Gaps);
+        Assert.Equal("drawing_sheet_view", gap.EntityKind);
+        Assert.Equal(record.Id, gap.EntityId);
+        Assert.Contains("empty", gap.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Dump_ArraysThatDoNotNumberTheSheets_RecordTheGapOnEverySheetAndFallBack()
+    {
+        // Matched by position, so a count that disagrees matches no sheet at all.
+        FakeSheet first = _reader.AddSheet("Sheet1");
+        first.AddView("Drawing View1");
+        FakeSheet second = _reader.AddSheet("Sheet2");
+        second.AddView("Drawing View2");
+        _reader.Root.SheetViewArrays = new List<List<FakeView>> { new List<FakeView> { first.OwnView!, first.Views[0] } };
+        _reader.ActiveSheetName = "Sheet1";
+
+        DrawingRecord record = Assert.Single(Dump());
+
+        Assert.Equal(new[] { 1, 1 }, new[] { first.ViewsAsked, second.ViewsAsked });
+        Assert.Equal(new string?[] { "Drawing View1" }, record.Sheets[0].Views.Select(view => view.Name));
+        Assert.Equal(new string?[] { "Drawing View2" }, record.Sheets[1].Views.Select(view => view.Name));
+        Gap[] gaps = _scope.Gaps.Gaps.Where(gap => gap.EntityKind == "drawing_sheet_view").ToArray();
+        Assert.Equal(record.Sheets.Select(sheet => sheet.Id), gaps.Select(gap => gap.EntityId));
+        Assert.All(gaps, gap => Assert.Contains("1 view list(s) for the 2 sheets", gap.Reason, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Dump_ADocumentWhoseGetViewsThrows_IsOneGapOnTheDrawingAndEverySheetFallsBack()
+    {
+        _reader.Root.SheetViewsFailure = new InvalidOperationException("IDrawingDoc.GetViews failed");
+        _reader.ActiveSheetName = "Sheet1";
+        FakeSheet first = _reader.AddSheet("Sheet1");
+        first.AddView("Drawing View1");
+        FakeSheet second = _reader.AddSheet("Sheet2");
+        second.AddView("Drawing View2");
+
+        DrawingRecord record = Assert.Single(Dump());
+
+        Gap gap = Assert.Single(_scope.Gaps.Gaps);
+        Assert.Equal("drawing_sheet_view", gap.EntityKind);
+        Assert.Equal(GapKind.ToolError, gap.Kind);
+        Assert.Equal(_scope.DocumentId(DrawingPath), gap.EntityId);
+        Assert.Equal(new[] { 1, 1 }, new[] { first.ViewsAsked, second.ViewsAsked });
+        Assert.Equal(new string?[] { "Drawing View2" }, record.Sheets[1].Views.Select(view => view.Name));
+    }
+
+    [Fact]
+    public void Dump_AMultiSheetDrawing_TakesEachSheetsOwnArray_AndActivatesNothing()
+    {
+        _reader.ActiveSheetName = "Sheet1";
+        FakeSheet first = _reader.AddSheet("Sheet1");
+        first.AddView("Drawing View1");
+        FakeSheet second = _reader.AddSheet("Sheet2");
+        second.AddView("Drawing View2");
+
+        DrawingRecord record = Assert.Single(Dump());
+
+        Assert.Equal(new string?[] { "Sheet1", "Drawing View1" }, record.Sheets[0].Views.Select(view => view.Name));
+        Assert.Equal(new string?[] { "Sheet2", "Drawing View2" }, record.Sheets[1].Views.Select(view => view.Name));
+        Assert.All(record.Sheets, sheet => Assert.All(sheet.Views, view => Assert.Equal(sheet.Id, view.SheetId)));
+        Assert.Empty(_scope.Gaps.Gaps);
+
+        // One document-level enumeration for every sheet; no sheet's own enumeration, no activation.
+        Assert.Equal(new[] { 0, 0 }, new[] { first.ViewsAsked, second.ViewsAsked });
+        Assert.Single(_observer.Members, member => member == "GetViews");
+        Assert.DoesNotContain("ActivateSheet", _observer.Members, StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain("ActivateView", _observer.Members, StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Dump_ASheetTheIndexerDoesNotAnswer_LeavesTheSheetsAfterItOnTheirOwnArrays()
+    {
+        _reader.ActiveSheetName = "Sheet1";
+        _reader.AddSheet("Sheet1");
+        _reader.AddSheet("Sheet2").NotFoundByName = true;
+        FakeSheet third = _reader.AddSheet("Sheet3");
+        third.AddView("Drawing View3");
+
+        DrawingRecord record = Assert.Single(Dump());
+
+        Assert.Equal(new[] { 0, 2 }, record.Sheets.Select(sheet => sheet.Index));
+        Assert.Equal(new string?[] { "Sheet3", "Drawing View3" }, record.Sheets[1].Views.Select(view => view.Name));
+        Assert.DoesNotContain(_scope.Gaps.Gaps, gap => gap.EntityKind == "drawing_sheet_view");
+    }
+
+    [Fact]
+    public void Dump_ARevisionTableTheSheetsOwnViewAndADrawingViewBothReturn_IsRecordedOnce()
+    {
+        FakeSheet sheet = _reader.AddSheet("Sheet1");
+        FakeTable shared = sheet.OwnView!.AddTable(type: 3, currentRevision: "B");
+        shared.Rows = new[] { new string?[] { "B" } };
+        sheet.AddView("Drawing View1").Tables.Add(shared);
+
+        DrawingSheetRecord record = Assert.Single(Assert.Single(Dump()).Sheets);
+
+        Assert.Equal("drv:0001", Assert.Single(record.RevisionTables).Id);
+    }
+
+    [Fact]
+    public void Dump_TwoWrappersOfOneRevisionTable_AreRecordedOnceByTheirPersistentReference()
+    {
+        // Two interop wrappers of one table need not be the same object; the reference is the table.
+        FakeSheet sheet = _reader.AddSheet("Sheet1");
+        FakeTable first = sheet.OwnView!.AddTable(type: 3, currentRevision: "B");
+        first.PersistRef = "UmV2MQ==";
+        first.Rows = new[] { new string?[] { "B" } };
+        FakeTable second = sheet.AddView("Drawing View1").AddTable(type: 3, currentRevision: "B");
+        second.PersistRef = "UmV2MQ==";
+        second.Rows = new[] { new string?[] { "B" } };
+
+        RevisionTable table = Assert.Single(Assert.Single(Assert.Single(Dump()).Sheets).RevisionTables);
+
+        Assert.Equal("UmV2MQ==", table.PersistRef);
+    }
+
+    [Fact]
+    public void Dump_TwoRevisionTablesWithTheirOwnReferences_AreBothRecorded()
+    {
+        FakeSheet sheet = _reader.AddSheet("Sheet1");
+        FakeTable first = sheet.OwnView!.AddTable(type: 3, currentRevision: "B");
+        first.PersistRef = "UmV2MQ==";
+        FakeTable second = sheet.AddView("Drawing View1").AddTable(type: 3, currentRevision: "C");
+        second.PersistRef = "UmV2Mg==";
+
+        DrawingSheetRecord record = Assert.Single(Assert.Single(Dump()).Sheets);
+
+        Assert.Equal(new[] { "drv:0001", "drv:0002" }, record.RevisionTables.Select(table => table.Id));
+    }
+
+    /// <summary>
+    /// The fallback's signature: the sheet was read through <c>ISheet.GetViews</c> - its drawing
+    /// views and no view of type 1 - and one <c>drawing_sheet_view</c> gap on the sheet names it
+    /// and what differed.
+    /// </summary>
+    private void AssertFellBack(FakeSheet sheet, DrawingSheetRecord record, string whatDiffered)
+    {
+        Assert.Equal(1, sheet.ViewsAsked);
+        Assert.Equal(sheet.Views.Select(view => view.Name), record.Views.Select(view => view.Name));
+        Assert.DoesNotContain(record.Views, view => view.ViewTypeRaw == 1);
+
+        Gap gap = Assert.Single(_scope.Gaps.Gaps, g => g.EntityKind == "drawing_sheet_view");
+        Assert.Equal(GapKind.NotExtracted, gap.Kind);
+        Assert.Equal(record.Id, gap.EntityId);
+        Assert.Contains($"'{sheet.Name}'", gap.Reason, StringComparison.Ordinal);
+        Assert.Contains(whatDiffered, gap.Reason, StringComparison.Ordinal);
     }
 
     // ---- helpers -------------------------------------------------------------------
@@ -2232,9 +2480,19 @@ public class DrawingDumperTests
         return new DrawingDumper(_gate, _reader).Dump(_scope);
     }
 
-    /// <summary>The one view of a single-sheet, single-view fake.</summary>
+    /// <summary>The one drawing view of a single-sheet, single-view fake: the view after the sheet's own.</summary>
     private static DrawingView Single(IReadOnlyList<DrawingRecord> records) =>
-        Assert.Single(Assert.Single(Assert.Single(records).Sheets).Views);
+        Assert.Single(DrawingViews(Assert.Single(Assert.Single(records).Sheets)));
+
+    /// <summary>
+    /// A sheet's drawing views: every view after its own (type 1) view, which the document's
+    /// per-sheet array gives first (013 contracts/readings.md section 1).
+    /// </summary>
+    private static IReadOnlyList<DrawingView> DrawingViews(DrawingSheetRecord sheet)
+    {
+        Assert.Equal((int?)1, sheet.Views[0].ViewTypeRaw);
+        return sheet.Views.Skip(1).ToList();
+    }
 
     private static DumpScope NewScope()
     {
@@ -2289,6 +2547,9 @@ public class DrawingDumperTests
         public Exception? CurrentRevisionFailure { get; set; }
 
         public string?[][] Rows { get; set; } = new string?[0][];
+
+        /// <summary>The persistent reference SOLIDWORKS gives the table; two wrappers of one table share it.</summary>
+        public string? PersistRef { get; set; }
 
         /// <summary>The runtime COM cast to ITableAnnotation failing (PROBE-4).</summary>
         public Exception? ShapeFailure { get; set; }
@@ -2468,6 +2729,9 @@ public class DrawingDumperTests
 
         public FakeModel? ReferencedDocument { get; set; }
 
+        /// <summary>How many times <c>IView.ReferencedDocument</c> was asked of this view.</summary>
+        public int ReferencedDocumentAsked { get; set; }
+
         public string? PersistRef { get; set; }
 
         public List<FakeDimension> Dimensions { get; } = new List<FakeDimension>();
@@ -2537,9 +2801,23 @@ public class DrawingDumperTests
 
         public Exception? ViewsFailure { get; set; }
 
+        /// <summary>How many times <c>ISheet.GetViews</c> was asked: only a sheet read on the fallback asks it.</summary>
+        public int ViewsAsked { get; set; }
+
         public FakeTable? RevisionTableProperty { get; set; }
 
+        /// <summary>
+        /// What <c>ISheet.GetViews</c> answers: the sheet's drawing views, <b>without</b> its own
+        /// view, as the seat showed (013 contracts/readings.md section 1).
+        /// </summary>
         public List<FakeView> Views { get; } = new List<FakeView>();
+
+        /// <summary>
+        /// The sheet's own (type 1) view, which <c>IDrawingDoc.GetViews</c> gives first in the sheet's
+        /// array, named after the sheet as SOLIDWORKS names it; <see cref="FakeDrawingReader.AddSheet(FakeDrawing, string)"/>
+        /// makes one for every sheet. Null leaves it out of the array too.
+        /// </summary>
+        public FakeView? OwnView { get; set; }
 
         // Feature 011 (native-evidence.md section 3).
         public string? TemplateName { get; set; } = @"C:\Fictional\Formats\FICTIONAL-FORMAT-A.slddrt";
@@ -2583,6 +2861,15 @@ public class DrawingDumperTests
         public Exception? ActiveSheetFailure { get; set; }
 
         public Exception? SheetNamesFailure { get; set; }
+
+        /// <summary>What <c>IDrawingDoc.GetViews</c> throws, or null.</summary>
+        public Exception? SheetViewsFailure { get; set; }
+
+        /// <summary>
+        /// <c>IDrawingDoc.GetViews</c>' per-sheet arrays verbatim, for a test that scripts them
+        /// disagreeing with the sheets; null derives them from the sheets, each sheet's own view first.
+        /// </summary>
+        public List<List<FakeView>>? SheetViewArrays { get; set; }
 
         // Feature 011 (native-evidence.md section 3).
         public bool IsDetailingMode { get; set; }
@@ -2677,9 +2964,22 @@ public class DrawingDumperTests
 
         public static FakeSheet AddSheet(FakeDrawing drawing, string name)
         {
-            var sheet = new FakeSheet { Name = name };
+            var sheet = new FakeSheet { Name = name, OwnView = new FakeView { Name = name, Type = 1 } };
             drawing.Sheets.Add(sheet);
             return sheet;
+        }
+
+        /// <summary>One sheet's array in <c>IDrawingDoc.GetViews</c>: its own view, then its drawing views.</summary>
+        private static List<FakeView> ArrayOf(FakeSheet sheet)
+        {
+            var views = new List<FakeView>();
+            if (sheet.OwnView != null)
+            {
+                views.Add(sheet.OwnView);
+            }
+
+            views.AddRange(sheet.Views);
+            return views;
         }
 
         object? IDrawingReader.Drawing(object document)
@@ -2712,9 +3012,23 @@ public class DrawingDumperTests
         IReadOnlyList<object> IDrawingReader.Views(object sheet)
         {
             FakeSheet found = Sheet(sheet);
+            found.ViewsAsked++;
             return found.ViewsFailure != null
                 ? throw found.ViewsFailure
                 : found.Views.Cast<object>().ToList();
+        }
+
+        IReadOnlyList<IReadOnlyList<object>> IDrawingReader.SheetViews(object drawing)
+        {
+            FakeDrawing found = Of(drawing);
+            if (found.SheetViewsFailure != null)
+            {
+                throw found.SheetViewsFailure;
+            }
+
+            return (found.SheetViewArrays ?? found.Sheets.Select(ArrayOf).ToList())
+                .Select(views => (IReadOnlyList<object>)views.Cast<object>().ToList())
+                .ToList();
         }
 
         object? IDrawingReader.SheetRevisionTable(object sheet) => Sheet(sheet).RevisionTableProperty;
@@ -2725,7 +3039,12 @@ public class DrawingDumperTests
 
         string? IDrawingReader.ReferencedModelPath(object view) => View(view).ReferencedModelPath;
 
-        object? IDrawingReader.ReferencedDocument(object view) => View(view).ReferencedDocument;
+        object? IDrawingReader.ReferencedDocument(object view)
+        {
+            FakeView found = View(view);
+            found.ReferencedDocumentAsked++;
+            return found.ReferencedDocument;
+        }
 
         string? IDrawingReader.DocumentPath(object document) => ((FakeModel)document).Path;
 
@@ -2808,9 +3127,13 @@ public class DrawingDumperTests
                     : new ScopedPersistRef(face.PersistRef, DocumentIds.For(modelPath), modelPath);
             }
 
-            string? reference = entity is FakeSheet sheet
-                ? sheet.PersistRef
-                : entity is FakeView view ? view.PersistRef : null;
+            string? reference = entity switch
+            {
+                FakeSheet sheet => sheet.PersistRef,
+                FakeView view => view.PersistRef,
+                FakeTable table => table.PersistRef,
+                _ => null,
+            };
 
             // Scoped to the document it was asked of, exactly as PersistRefService scopes a
             // reference to the extension that produced it.

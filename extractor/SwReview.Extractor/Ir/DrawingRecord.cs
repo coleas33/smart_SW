@@ -134,8 +134,10 @@ public sealed class DrawingSheetRecord
     public bool WasActive { get; set; }
 
     /// <summary>
-    /// ISheet.GetViews() order. Empty plus a drawing_sheet_views gap when the enumeration
-    /// failed or came back empty on a non-active sheet.
+    /// The sheet's array from IDrawingDoc.GetViews(), its own (type 1) view first, or
+    /// ISheet.GetViews() order beside a drawing_sheet_view gap when that array could not be
+    /// matched to the sheet (feature 013). Empty plus a drawing_sheet_views gap when the
+    /// enumeration failed or listed no drawing view on a non-active sheet.
     /// </summary>
     [JsonPropertyName("views")]
     public List<DrawingView> Views { get; set; } = new List<DrawingView>();
