@@ -500,7 +500,7 @@ def check_hygiene() -> ToolResult:
     return _record_family(
         context,
         HYGIENE_SUMMARY,
-        run_hygiene_checks(context.ir, profile),
+        run_hygiene_checks(context.ir, profile, review_roles(context)),
         {"profile": "absent" if profile is None else "attached"},
     )
 

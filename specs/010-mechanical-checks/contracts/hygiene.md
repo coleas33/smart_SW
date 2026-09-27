@@ -1,6 +1,6 @@
 # Contract: Hygiene
 
-*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), pending implementation:* the four property checks grade custom and unclear documents only, and `hygiene.component_not_resolved` still covers every document; see 013 `contracts/part-roles.md` section 6.
+*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed with 013 T028:* `run_hygiene_checks(package, profile, roles)` - when the review carries part roles, the four property checks grade the graded documents only (custom, unclear, and the root), duplicates are compared among them alone, and a bought part's unread properties are not named in `hygiene.coverage`; `hygiene.component_not_resolved` still covers every document, bought ones included; each finding on an unclear document carries "may be a bought part: {reason}; asked in {ER id}" while the part-roles question is open. Property names are compared ignoring case **and every space** (`property_key`): real files spell the part-number property both with and without its space, and the check had reported it missing. With no roles attached every document is graded, as before. See 013 `contracts/part-roles.md` section 6.
 
 Normative for FR-019, FR-020 and User Story 7. `checks/hygiene.py`; the data-card change in
 `checks/standards/document.py`.

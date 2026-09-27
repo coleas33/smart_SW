@@ -402,3 +402,147 @@ def test_the_big_fixture_with_a_version_1_profile(profile) -> None:
     assert findings_of(checks, CHECK_PART_NUMBER) == []
     assert CHECK_PART_NUMBER in skipped_reasons(checks)
     assert len(findings_of(checks, CHECK_COMPONENT_NOT_RESOLVED)) == 3
+
+
+# --- feature 013 T027: graded documents only, and property names ignoring spaces ---------------
+
+SITTING = REVIEWER / "tests" / "fixtures" / "sitting" / "small-assembly"
+PROPERTY_CHECKS = (
+    CHECK_PART_NUMBER,
+    CHECK_DUPLICATE_DESCRIPTION,
+    CHECK_DUPLICATE_PART_NUMBER,
+    CHECK_REVISION,
+)
+BOUGHT = {"doc:3", "doc:5", "doc:6"}
+"""The sitting fixture's bought documents under profile A: the pin, the vendor sub-assembly
+and its child."""
+
+
+def sitting() -> EvidencePackage:
+    return load_package(SITTING).package
+
+
+def version_3(profile: StandardsProfile) -> StandardsProfile:
+    return profile.model_copy(update={"version": 3, "part_roles": None})
+
+
+def roles_of(package: EvidencePackage, profile: StandardsProfile, *, asked: bool = False):
+    from swreview.checks.part_roles import classify_parts
+
+    roles = classify_parts(package, profile)
+    return roles.asking("ER-001") if asked else roles
+
+
+def documents_with(checks: HygieneChecks, *names: str) -> set[str]:
+    return {
+        document
+        for item in checks.findings
+        if item.result.check in names
+        for document in item.documents
+    }
+
+
+def test_no_property_finding_on_a_bought_part(profile) -> None:
+    package = sitting()
+
+    checks = run_hygiene_checks(package, profile, roles_of(package, profile))
+
+    assert documents_with(checks, *PROPERTY_CHECKS) & BOUGHT == set()
+
+
+def test_without_roles_the_bought_pin_is_graded_as_before(profile) -> None:
+    checks = run_hygiene_checks(sitting(), profile)
+
+    assert "doc:3" in documents_with(checks, CHECK_PART_NUMBER)
+
+
+def test_a_part_number_property_spelled_without_its_space_is_read(profile) -> None:
+    """The pin carries the property as `MeridianPartRef`: read, not reported missing."""
+    checks = run_hygiene_checks(sitting(), profile)
+
+    [pin] = [
+        item for item in findings_of(checks, CHECK_PART_NUMBER) if item.documents == ("doc:3",)
+    ]
+    assert pin.result.observed == (
+        f"MX204-18P.SLDPRT has {PART_NUMBER} 'MR-80311', which is not its file name 'MX204-18P'"
+    )
+
+
+@pytest.mark.parametrize("spelling", ["meridianpartref", "MERIDIAN PART REF", "Meridian  Part Ref"])
+def test_the_part_number_is_read_whatever_its_case_and_spaces(profile, spelling: str) -> None:
+    package = package_of(("FICT-KALO-0001", {spelling: "FICT-KALO-0001"}))
+
+    checks = run_hygiene_checks(package, profile)
+
+    assert findings_of(checks, CHECK_PART_NUMBER) == []
+
+
+def test_a_custom_and_a_bought_part_sharing_a_description_raise_no_duplicate(profile) -> None:
+    supplier = profile.part_roles.vendor_properties[0]  # type: ignore[union-attr]
+    package = package_of(
+        ("MR-10001", props("MR-10001", "KALO PLATE")),
+        ("FICT-VEN-0001", {**props("FICT-VEN-0001", "KALO PLATE"), supplier: "fict works"}),
+    )
+    roles = roles_of(package, profile)
+    assert [role.role for role in roles.by_document.values()][1:] == ["custom", "bought"]
+
+    with_roles = run_hygiene_checks(package, profile, roles)
+    without = run_hygiene_checks(package, profile)
+
+    assert findings_of(with_roles, CHECK_DUPLICATE_DESCRIPTION) == []
+    assert len(findings_of(without, CHECK_DUPLICATE_DESCRIPTION)) == 1
+
+
+def test_two_bought_parts_sharing_a_part_number_raise_no_duplicate(profile) -> None:
+    supplier = profile.part_roles.vendor_properties[0]  # type: ignore[union-attr]
+    bought = {supplier: "fict works"}
+    package = package_of(
+        ("FICT-VEN-0001", {**props("FICT-VEN-0001", "ONE", part_number="FICT-9"), **bought}),
+        ("FICT-VEN-0002", {**props("FICT-VEN-0002", "TWO", part_number="FICT-9"), **bought}),
+    )
+
+    checks = run_hygiene_checks(package, profile, roles_of(package, profile))
+
+    assert findings_of(checks, CHECK_DUPLICATE_PART_NUMBER) == []
+
+
+def test_a_lightweight_bought_part_still_raises_component_not_resolved(profile) -> None:
+    package = sitting()
+
+    checks = run_hygiene_checks(package, profile, roles_of(package, profile))
+
+    assert "doc:6" in documents_with(checks, CHECK_COMPONENT_NOT_RESOLVED)
+
+
+def test_an_unclear_documents_findings_carry_the_note_while_asked(profile) -> None:
+    package = sitting()
+
+    checks = run_hygiene_checks(package, profile, roles_of(package, profile, asked=True))
+
+    spacer = [item for item in checks.findings if item.documents == ("doc:4",)]
+    plate = [item for item in checks.findings if "doc:2" in item.documents]
+    note = (
+        "may be a bought part: too little evidence: only marked made here by its make-or-buy "
+        "property; asked in ER-001"
+    )
+    assert spacer and all(note in item.result.coverage_limits for item in spacer)
+    assert not any(note in item.result.coverage_limits for item in plate)
+
+
+def test_a_library_part_is_graded_noted_under_version_3_and_not_graded_under_version_4(
+    profile,
+) -> None:
+    """The analysts' case: under the real version 3 profile the pin's company number is not
+    its file name, so `hygiene.part_number_matches_file` fired on it; once it is bought
+    (version 4) nothing fires, and while it is unclear (version 3) it fires with the note."""
+    package = sitting()
+    older = version_3(profile)
+
+    under_3 = run_hygiene_checks(package, older, roles_of(package, older, asked=True))
+    under_4 = run_hygiene_checks(package, profile, roles_of(package, profile, asked=True))
+
+    [pin] = [
+        item for item in findings_of(under_3, CHECK_PART_NUMBER) if item.documents == ("doc:3",)
+    ]
+    assert pin.result.coverage_limits[-1].startswith("may be a bought part: ")
+    assert "doc:3" not in documents_with(under_4, CHECK_PART_NUMBER)
