@@ -164,14 +164,6 @@ def test_every_recorded_contact_is_replayed_with_the_recorded_settings(
     assert contact_groups(passes.first.session) == contact_groups(passes.recording.session)
 
 
-@pytest.mark.xfail(
-    reason=(
-        "013 T062 (lane S): the recording's mark_coverage(provenance) calls now answer "
-        "closed_by_code, so rounds after the live call differ; the US3 replay gate (T069, "
-        "lane G) regenerates and re-measures"
-    ),
-    strict=True,
-)
 def test_the_big_assembly_has_one_estimated_round_the_live_call() -> None:
     """The live call alone, as before feature 010. From 010 until the fixtures followed the
     code, the three touching groups judged after it were estimated too: their recorded results
@@ -197,7 +189,7 @@ def test_the_big_assembly_carries_one_presentation_round() -> None:
     assert [r.kind for r in report.rounds].count("presentation") == 1
 
 
-BIG_RECORDED_TOTAL = 11_733_321
+BIG_RECORDED_TOTAL = 11_733_699
 """The big fixture's recorded input. The recording's bill is 12.4M, and the fixture was within 1%
 of it until feature 003's decision 20A (2026-09-25): the fixtures follow the code (decision 3A),
 and the part check the recorded review made no longer names the 106 system rows the eleven
@@ -209,6 +201,12 @@ two `get_review_checklist` answers is 26 tokens larger (the modelling and hygien
 "Custom parts only; bought parts are listed once, not graded."), carried by every later round,
 and the one `check_standards` result is 10 tokens smaller (the version 4 example profile's
 sha256, which each of its five findings carries, tokenizes 2 tokens shorter).
+
+Feature 013's User Story 3 gate (T069, 2026-09-27) moves it by +378 to 11,733,699: the first
+`get_review_checklist` answer is 24 tokens larger and the second 23 (the provenance item, now
+code-owned, says it is closed by code before the first turn), and the recorded
+`mark_coverage(provenance)` call is now answered `closed_by_code`, a result 58 tokens smaller
+than the recorded one, each carried by every later round.
 
 Pinned exactly, not within 1% (the review of decision 23A, 008 T127): the figure is the sum of
 the fixture's recorded usage, so nothing but a regeneration moves it, and `contracts/replay.md`
@@ -472,11 +470,12 @@ REGROUPED_TARGET = 300_000
 """SC-003 as amended (research R2.43, R4): each small fixture's regrouped estimate."""
 FOLLOW_UP_TARGET = 30_000
 """SC-004: the big fixture's follow-up question, against 405k recorded."""
-BIG_FOLLOW_UP_RECORDED = 383_434
+BIG_FOLLOW_UP_RECORDED = 383_423
 """The big fixture's follow-up round's recorded input. The recording's follow-up carried 405k
 (405,320 on the fixtures before decision 20A); since 003 T092 the part check it carries is 21,928
-tokens smaller (383,392), and since 013 T042 it is 42 larger: it carries both checklist
-answers, 26 tokens larger each, and the standards result, 10 smaller. Pinned exactly, as
+tokens smaller (383,392); 013 T042 made it 42 larger (383,434: both checklist answers 26 tokens
+larger each, the standards result 10 smaller) and 013 T069 11 smaller (both checklist answers
+24 and 23 tokens larger, the provenance mark 58 smaller). Pinned exactly, as
 `BIG_RECORDED_TOTAL` is and for the same reason (008 T127): it was held above a floor of
 400,000, then 380,000, which a regeneration could cross or not unseen."""
 
