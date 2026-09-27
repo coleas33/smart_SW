@@ -59,6 +59,46 @@ internal sealed class FakeAppThread : IAppThreadInvoker, IDisposable
 
     bool IAppThreadInvoker.CanInvoke => CanInvokeValue;
 
+    /// <summary>True on this fake's own thread and nowhere else, as the pane control answers.</summary>
+    public bool IsApplicationThread => Thread.CurrentThread.ManagedThreadId == ThreadId;
+
+    /// <summary>
+    /// Runs <paramref name="work"/> on the application thread and waits for it, so a test can
+    /// call what the add-in calls from there (<c>DisconnectFromSW</c>). Rethrows what it threw.
+    /// </summary>
+    public void RunOnApplicationThread(Action work)
+    {
+        Exception? failure = null;
+        using (var done = new ManualResetEventSlim(false))
+        {
+            ((IAppThreadInvoker)this).Post(() =>
+            {
+                try
+                {
+                    work();
+                }
+                catch (Exception error)
+                {
+                    failure = error;
+                }
+                finally
+                {
+                    done.Set();
+                }
+            });
+
+            if (!done.Wait(TimeSpan.FromSeconds(30)))
+            {
+                throw new TimeoutException("the fake application thread did not run the work within 30 seconds.");
+            }
+        }
+
+        if (failure != null)
+        {
+            throw new InvalidOperationException("the work failed on the application thread: " + failure.Message, failure);
+        }
+    }
+
     void IAppThreadInvoker.Post(Action work)
     {
         lock (_postThreads)

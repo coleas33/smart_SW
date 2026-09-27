@@ -57,6 +57,21 @@ internal sealed class FakeToolService : IToolService
 
     public void WriteLog(string line) => LogLines.Add(line);
 
+    /// <summary>Every folder <see cref="BindRemodelRun"/> was handed, in order (004 T158).</summary>
+    public List<string> Bound { get; } = new List<string>();
+
+    /// <summary>What <see cref="BindRemodelRun"/> throws, if anything: a refused folder, an application thread that did not answer.</summary>
+    public Exception? BindFailure { get; set; }
+
+    public void BindRemodelRun(string runDirectory)
+    {
+        Bound.Add(runDirectory);
+        if (BindFailure != null)
+        {
+            throw BindFailure;
+        }
+    }
+
     public void Dispose()
     {
         DisposedThreadId = Thread.CurrentThread.ManagedThreadId;

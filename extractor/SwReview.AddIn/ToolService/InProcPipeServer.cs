@@ -33,6 +33,15 @@ public interface IAppThreadInvoker
     bool CanInvoke { get; }
 
     /// <summary>
+    /// 004 T167: whether the calling thread <b>is</b> the application thread. The tool service's
+    /// teardown ends a remodel session there before its pipe closes: inline when this is true
+    /// (an unload, from <c>DisconnectFromSW</c>, which is already on that thread - posting and
+    /// waiting would wait on itself), and posted with a bounded wait otherwise (a re-attach,
+    /// from the thread pool). Never true for a thread that merely could post.
+    /// </summary>
+    bool IsApplicationThread { get; }
+
+    /// <summary>
     /// Queues <paramref name="work"/> onto the application thread and returns immediately.
     /// Throws if the handle went away between the <see cref="CanInvoke"/> check and here;
     /// the caller turns that into a response rather than letting it reach a reader thread.
@@ -63,6 +72,29 @@ public sealed class ControlAppThreadInvoker : IAppThreadInvoker
                 // anyway, but reading IsDisposed first says what is actually true when the
                 // add-in is unloading.
                 return !_control.IsDisposed && _control.IsHandleCreated;
+            }
+            catch (ObjectDisposedException)
+            {
+                return false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// True only on the thread that created the control's window handle (lane D's default of
+    /// 2026-09-27, the owner may revise). <c>InvokeRequired</c> alone answers false on
+    /// <b>any</b> thread once the handle is gone, so a control with no handle - not created yet,
+    /// or destroyed while the add-in unloads - is never taken for the application thread: the
+    /// teardown then posts, and a post that cannot be made is written down rather than run on
+    /// the wrong thread.
+    /// </summary>
+    public bool IsApplicationThread
+    {
+        get
+        {
+            try
+            {
+                return !_control.IsDisposed && _control.IsHandleCreated && !_control.InvokeRequired;
             }
             catch (ObjectDisposedException)
             {
