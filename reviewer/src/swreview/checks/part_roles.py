@@ -71,7 +71,13 @@ def _standards() -> _Standards:
 
 
 __all__ = [
+    "BOUGHT_PARTS_CHECK",
+    "BOUGHT_PARTS_LABEL",
+    "MAYBE_BOUGHT_CHECK",
+    "MAYBE_BOUGHT_LABEL",
     "PART_ROLES_ATTRIBUTE",
+    "PART_ROLES_CHECK",
+    "PART_ROLES_LABEL",
     "Decision",
     "PartRole",
     "PartRoles",
@@ -182,6 +188,18 @@ GUARD_CONFIGURED = (
 GUARD_CONVENTION = (
     "the part-number convention matched none of the {count} documents; check part_number.pattern"
 )
+
+BOUGHT_PARTS_CHECK = "coverage.prerun.bought_parts"
+MAYBE_BOUGHT_CHECK = "coverage.prerun.maybe_bought"
+PART_ROLES_CHECK = "coverage.prerun.part_roles"
+"""The coverage rows of section 7 and the zero-match guard: the pre-run's prefix
+(`prerun.PRERUN_CHECK_PREFIX`) and a family, spelled out here because this module does not
+import the pre-run. The summary reads the first two back (`scope.document_ids`)."""
+
+BOUGHT_PARTS_LABEL = "bought parts"
+MAYBE_BOUGHT_LABEL = "parts that may be bought"
+PART_ROLES_LABEL = "part roles"
+"""What the pre-run digest calls each row (`NotEvaluated.label`)."""
 
 BOUGHT_LINE = "{parts} not graded for modelling practice or hygiene (bought): {names}"
 MAYBE_LINE = (

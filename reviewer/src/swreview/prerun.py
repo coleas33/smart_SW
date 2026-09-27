@@ -59,6 +59,18 @@ from swreview.agent.settings import EfficiencySettings, checks_first
 from swreview.checks.fastener_identity import joint_map_with_fasteners
 from swreview.checks.interference import STATIC_SCOPE_LIMIT
 from swreview.checks.joints import JointMap
+from swreview.checks.part_roles import (
+    BOUGHT_PARTS_CHECK,
+    BOUGHT_PARTS_LABEL,
+    MAYBE_BOUGHT_CHECK,
+    MAYBE_BOUGHT_LABEL,
+    PART_ROLES_CHECK,
+    PART_ROLES_LABEL,
+    PartRoles,
+    bought_parts_sentence,
+    guard_sentence,
+    maybe_bought_sentence,
+)
 from swreview.checks.rms.registry import RMS_FAMILY
 from swreview.findings import Finding
 from swreview.ir.loader import append_interference_run
@@ -369,9 +381,18 @@ class NotEvaluated:
     for work that ran and left something undecided - detected rows dropped for colliding
     ids, or rows that could not be written (feature 008)."""
 
+    document_ids: tuple[str, ...] = ()
+    """The documents the line is about, carried in the coverage item's scope: the
+    bought-parts rows' (feature 013 `contracts/part-roles.md` section 7), which the summary
+    reads back rather than classifying again. Empty for every other family, whose item is
+    then the one it always was."""
+
     def coverage_item(self) -> CoverageItem:
         return CoverageItem(
-            check=self.check, scope=CoverageScope(), reason=self.reason, error=None
+            check=self.check,
+            scope=CoverageScope(document_ids=list(self.document_ids)),
+            reason=self.reason,
+            error=None,
         )
 
     def line(self) -> str:
@@ -807,12 +828,61 @@ def _standards_gap(reason: str) -> NotEvaluated:
     )
 
 
+def part_role_families(
+    package: EvidencePackage, roles: PartRoles | None
+) -> tuple[NotEvaluated, ...]:
+    """The bought-parts lines and the zero-match guard's row (feature 013
+    `contracts/part-roles.md` sections 2 and 7), each coverage row and its digest line from
+    one sentence; nothing when the review carries no part roles.
+
+    `coverage.prerun.bought_parts` (skipped) names the documents not graded because bought,
+    or, in the absent state, says bought parts were not told apart and why;
+    `coverage.prerun.maybe_bought` (unresolved) names the unclear documents while the
+    part-roles question is open; `coverage.prerun.part_roles` (unresolved) is the guard's.
+    `start_review` records the same rows directly when there is no pre-run (the
+    `standards_gap` precedent).
+    """
+    if roles is None:
+        return ()
+    families: list[NotEvaluated] = []
+    bought = bought_parts_sentence(roles, package)
+    if bought is not None:
+        families.append(
+            NotEvaluated(
+                check=BOUGHT_PARTS_CHECK,
+                label=BOUGHT_PARTS_LABEL,
+                reason=bought,
+                document_ids=tuple(role.document_id for role in roles.bought()),
+            )
+        )
+    maybe = maybe_bought_sentence(roles, package)
+    if maybe is not None:
+        families.append(
+            NotEvaluated(
+                check=MAYBE_BOUGHT_CHECK,
+                label=MAYBE_BOUGHT_LABEL,
+                reason=maybe,
+                bucket="unresolved",
+                document_ids=tuple(role.document_id for role in roles.unclear()),
+            )
+        )
+    guard = guard_sentence(roles)
+    if guard is not None:
+        families.append(
+            NotEvaluated(
+                check=PART_ROLES_CHECK, label=PART_ROLES_LABEL, reason=guard, bucket="unresolved"
+            )
+        )
+    return tuple(families)
+
+
 def not_evaluated_families(
     package: EvidencePackage,
     withheld: Sequence[tuple[str, str]],
     standards: NotEvaluated | None = None,
     *,
     live: LiveOutcome | None = None,
+    roles: PartRoles | None = None,
 ) -> tuple[NotEvaluated, ...]:
     """Every line of the "NOT evaluated" block, counted against `package`.
 
@@ -833,6 +903,8 @@ def not_evaluated_families(
         live: What checks first's live detection did, or why it did not run (feature 008);
             `None` states nothing about detection and keeps the pre-008 rule - "no group
             was checked" when the package reports no interference.
+        roles: The review's part roles (feature 013); their lines come last
+            (`part_role_families`), and `None` adds none.
     """
     families = [
         NotEvaluated(check=f"{PRERUN_CHECK_PREFIX}{name}", label=name, reason=reason)
@@ -890,6 +962,7 @@ def not_evaluated_families(
     )
     if standards is not None:
         families.append(standards)
+    families.extend(part_role_families(package, roles))
     return tuple(families)
 
 
@@ -1029,7 +1102,13 @@ def prerun_checks(
     withheld_prerun_tools = [
         (tool.name, tool.reason) for tool in tools.withheld if tool.name in prerun_tools()
     ]
-    families = not_evaluated_families(context.ir, withheld_prerun_tools, standards, live=live)
+    families = not_evaluated_families(
+        context.ir,
+        withheld_prerun_tools,
+        standards,
+        live=live,
+        roles=checks_mechanical.review_roles(context),
+    )
     for family in families:
         context.record_coverage(family.bucket, family.coverage_item())
     return PrerunResult(
