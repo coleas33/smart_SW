@@ -209,6 +209,29 @@ def test_six_rows_are_capped_at_five_and_the_sixth_is_counted() -> None:
     )
 
 
+def test_a_pass_never_reaches_the_briefs_start_here() -> None:
+    """Feature 013 T043: with fewer than five undecided rows the brief amplifies those rows
+    only, and counts every pass as checked within scope (013 `contracts/grouped-list.md` 1)."""
+    session = session_of(
+        "brief-passes",
+        [
+            spec(JUDGEMENT_CHECK),
+            spec(RULE_CHECK),
+            spec("rms.folders.present", status="checked_within_scope"),
+        ],
+    )
+    ranking = rank(session)
+
+    part = part_of(gate_brief(empty_prerun(), ranking), GATE_START_HERE_HEADER)
+
+    assert ranking.top_n == 2
+    assert [line[:11] for line in numbered(part)] == ["1. **F-001*", "2. **F-002*"]
+    assert part[-1] == (
+        "Not amplified: 1 finding (1 checked within scope, 0 already decided, "
+        "0 informational, 0 beyond the top five)."
+    )
+
+
 # --- 3. Needs your judgement ---------------------------------------------------------------
 
 

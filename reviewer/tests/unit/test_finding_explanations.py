@@ -401,6 +401,47 @@ def test_stop_after_the_final_provider_event_does_not_persist_generated_prose(
         run.close()
 
 
+# --- feature 013 T043: a pass is never sent to the explanation pass ---------------------------
+
+
+def test_a_pass_is_never_sent_to_the_presentation_pass(
+    tmp_package_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The runner explains `ranking.rows[:top_n]`, and `top_n` never counts a suppressed row
+    (013 `contracts/grouped-list.md` section 1), so the sitting's two explained passes cannot
+    recur: one undecided row and one pass send one row."""
+    received: list[list[Any]] = []
+
+    def spy(provider: Any, rows: Sequence[Any], **kwargs: Any) -> dict[str, str]:
+        received.append(list(rows))
+        return {}
+
+    monkeypatch.setattr(runner, "generate_explanations", spy)
+    run = runner.start_review(
+        tmp_package_dir,
+        tmp_path / "run",
+        provider=ScriptedPresentationProvider(script=[ScriptedTurn(text="done")]),
+        explain_findings=True,
+    )
+    [undecided] = _session().findings
+    passed = undecided.model_copy(
+        update={
+            "id": "F-002",
+            "check": "rms.folders.present",
+            "status": "checked_within_scope",
+            "component_ids": ["cmp:0004"],
+        }
+    )
+    run.session.findings.extend([undecided, passed])
+    try:
+        run.start()
+    finally:
+        run.close()
+
+    assert [[row.finding_id for row in rows] for rows in received] == [["F-001"]]
+    assert all(row.status != "checked_within_scope" for rows in received for row in rows)
+
+
 # --- feature 008 T045: the folded family is never explained ---------------------------------
 
 

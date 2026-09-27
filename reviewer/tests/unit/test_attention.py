@@ -50,10 +50,12 @@ from swreview.report.attention import (
     STATUS_ORDER,
     TOP_N,
     AttentionKey,
+    NotAmplified,
     Ranking,
     coverage_line,
     load_policy,
     rank,
+    ranked_rows,
     start_here_lines,
 )
 from swreview.report.session import ReviewSession, load_session
@@ -854,6 +856,161 @@ def test_the_top_five_are_the_first_five_rows_and_the_rest_still_rank() -> None:
     assert ranking.top_n == TOP_N
     assert len(start_here_lines(ranking)) == TOP_N + 2, "five rows, a blank, the summary line"
     assert len(ranking.rows) == 8, "amplify, never filter"
+
+
+# --- 5b. no surface amplifies a pass (feature 013 T043, its contracts/grouped-list.md 1) -------
+
+THREE_UNDECIDED_TWO_PASSES: list[FindingSpec] = [
+    spec("rms.sketches.fully_defined"),  # F-001: undecided
+    spec("rms.grouping.all_features_in_a_group"),  # F-002: undecided
+    spec("rms.folders.present", status="suspected"),  # F-003: undecided
+    spec("rms.detail.holes_last", status="checked_within_scope", component_ids=(PIN_ONE,)),
+    spec("rms.detail.holes_last", status="checked_within_scope", component_ids=(PIN_TWO,)),
+    spec("rms.core.shell_last", status="checked_within_scope"),  # F-006: a second pass row
+]
+"""Three undecided rows and two pass rows: F-004 and F-005 fold (one check, disjoint
+subjects), so the two pass rows hold three findings."""
+
+
+def test_three_undecided_rows_and_two_passes_amplify_three_and_count_three_as_checked() -> None:
+    """The sitting's `attention.json` said `not_amplified.total` 0 with three passes shown
+    (013 research R2.16): `top_n` is now at most the rows that are not suppressed."""
+    ranking = rank(session_of("passes-not-amplified", THREE_UNDECIDED_TWO_PASSES))
+
+    assert len(ranking.rows) == 5, "amplify, never filter: the pass rows are still ranked"
+    assert ranking.top_n == 3
+    assert [row.key.suppressed for row in ranking.rows[: ranking.top_n]] == [0, 0, 0]
+    assert ranking.not_amplified == NotAmplified(
+        total=3, checked_within_scope=3, dispositioned=0, info=0, beyond_top_n=0
+    )
+    lines = start_here_lines(ranking)
+    assert [line[:11] for line in lines if line[:1].isdigit()] == [
+        "1. **F-001*",
+        "2. **F-002*",
+        "3. **F-003*",
+    ]
+    assert lines[-1] == (
+        "Not amplified: 3 findings (3 checked within scope, 0 already decided, "
+        "0 informational, 0 beyond the top five)."
+    )
+
+
+def test_a_decided_row_is_not_amplified_either() -> None:
+    session = session_of(
+        "decided-not-amplified",
+        [
+            spec("rms.sketches.fully_defined"),
+            spec("rms.folders.present", disposition=disposition("accepted")),
+            spec("rms.core.shell_last", disposition=disposition("rejected")),
+        ],
+    )
+
+    ranking = rank(session)
+
+    assert ranking.top_n == 1
+    assert ranking.not_amplified.dispositioned == 2
+    assert ranking.not_amplified.beyond_top_n == 0
+
+
+def test_every_row_passing_gives_top_n_zero_and_the_empty_reason() -> None:
+    session = session_of(
+        "all-passes",
+        [
+            spec("rms.detail.holes_last", status="checked_within_scope"),
+            spec("rms.core.shell_last", status="checked_within_scope"),
+        ],
+    )
+
+    ranking = rank(session)
+
+    assert (ranking.top_n, ranking.empty_reason) == (0, EMPTY_ALL_DECIDED)
+    assert start_here_lines(ranking)[0] == (
+        "Nothing to start with: every finding is informational or already decided."
+    )
+    assert ranking.not_amplified.checked_within_scope == 2
+
+
+def test_no_findings_gives_top_n_zero() -> None:
+    ranking = rank(session_of("top-n-no-findings", []))
+
+    assert (ranking.top_n, ranking.empty_reason) == (0, EMPTY_NO_FINDINGS)
+
+
+def test_an_informational_row_is_not_suppressed_and_still_counts_toward_top_n() -> None:
+    """Key 1 reads the status and the decision, never the severity (research R2.1)."""
+    session = session_of(
+        "info-counts",
+        [
+            spec("rms.sketches.fully_defined"),
+            spec("rms.folders.present", severity="info"),
+            spec("rms.core.shell_last", status="checked_within_scope"),
+        ],
+    )
+
+    ranking = rank(session)
+
+    assert ranking.top_n == 2
+    assert [row.check for row in ranking.rows[: ranking.top_n]] == [
+        "rms.sketches.fully_defined",
+        "rms.folders.present",
+    ]
+
+
+@pytest.mark.parametrize("path", [REVIEW_SESSION_FILE, CHECK_SESSION_FILE], ids=["review", "check"])
+def test_top_n_stays_five_where_five_rows_are_not_suppressed(path: Any) -> None:
+    """Where `top_n` does not move, nothing in the ranking moves: the pane fixture's ranking
+    (`test_pane_fixture.py`) keeps its bytes for the same reason."""
+    ranking = rank(load_session(path))
+    unsuppressed = sum(1 for row in ranking.rows if not row.key.suppressed)
+
+    assert ranking.top_n == min(TOP_N, unsuppressed)
+
+
+def test_a_pass_row_outside_top_n_takes_no_persisted_explanation() -> None:
+    """Explanations attach to the amplified rows only, so a persisted one against a pass - a
+    run folder written before feature 013 - reaches no row."""
+    session = session_of("explained-pass", THREE_UNDECIDED_TWO_PASSES)
+    session.finding_explanations = {"F-001": "why the sketch matters", "F-006": "a pass"}
+
+    ranking = rank(session)
+
+    explained = {row.finding_id: row.explanation for row in ranking.rows if row.explanation}
+    assert explained == {"F-001": "why the sketch matters"}
+
+
+FOLDED_FAMILY_SESSION: list[FindingSpec] = [
+    spec("interference.static"),
+    spec("rms.sketches.fully_defined"),
+    spec("rms.folders.present", status="checked_within_scope", component_ids=(PIN_ONE,)),
+    spec("rms.folders.present", status="suspected"),
+    spec("stack.gap"),
+]
+
+
+@pytest.mark.parametrize("families", [(), ("rms",)], ids=["unfolded", "rms-folded"])
+def test_ranked_rows_are_the_rows_rank_carries(families: tuple[str, ...]) -> None:
+    """`rank()`'s fold, row and sort steps are `ranked_rows`, one function both call."""
+    session = session_of("ranked-rows", FOLDED_FAMILY_SESSION).model_copy(
+        update={"folded_families": list(families)}
+    )
+
+    assert ranked_rows(session.findings, load_policy(), families) == rank(session).rows
+
+
+@pytest.mark.parametrize("path", [REVIEW_SESSION_FILE, CHECK_SESSION_FILE], ids=["review", "check"])
+def test_ranked_rows_reproduce_the_committed_sessions_rows(path: Any) -> None:
+    session = load_session(path)
+
+    assert ranked_rows(session.findings, load_policy(), ()) == rank(session).rows
+
+
+def test_ranked_rows_write_nothing_to_the_findings() -> None:
+    session = session_of("ranked-rows-pure", FOLDED_FAMILY_SESSION)
+    before = [finding.model_dump_json() for finding in session.findings]
+
+    ranked_rows(session.findings, load_policy(), ("rms",))
+
+    assert [finding.model_dump_json() for finding in session.findings] == before
 
 
 # --- 6. the rules about the words themselves --------------------------------------------------

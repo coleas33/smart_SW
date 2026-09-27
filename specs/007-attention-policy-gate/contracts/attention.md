@@ -149,6 +149,15 @@ Points the section exists to enforce:
 - **A folded family takes one slot** (feature 008). Its line carries the title after the reason,
   as a needs-judgement row does: `3. **F-004** \`rms\` - rebuild breaker, demonstrated, 2
   components (Modelling practice: 6 findings across 6 rules)`.
+- **No pass is amplified** (*amended 2026-09-26, feature 013 T044*, 013
+  `contracts/grouped-list.md` section 1). The section names `rows[0..top_n)`, and `top_n` is
+  `min(TOP_N, rows whose key.suppressed == 0)`: suppressed rows sort last, so a pass or a
+  decided row is never among the amplified rows on any surface that slices them - this section,
+  the gate brief, `swreview attention`, the two check tabs and the explanation pass. `TOP_N` stays
+  5 and the not-amplified line keeps its words: every pass is counted "checked within scope" and
+  every decided row "already decided", and "beyond the top five" counts only the undecided rows
+  past the fifth. The fold, row and sort steps are one public function,
+  `ranked_rows(findings, policy, families)`, which `rank()` calls.
 
 ## 4. `attention.json`
 
@@ -191,6 +200,11 @@ Points the record exists to enforce:
 - **Reproducible from the session alone.** `rank(load_session(...), policy)` reproduces the
   record exactly; a record whose `session_id` is not the session beside it is stale, the same
   rule `check.json` already follows.
+- **`top_n` is not the constant 5** (*amended 2026-09-26, feature 013 T044*): it is
+  `min(5, rows not suppressed)`, so a session with fewer than five undecided rows records fewer
+  (the sitting's record said `top_n` 5 over three passes, and `not_amplified.total` 0). A
+  session with five or more rows not suppressed keeps its bytes; `not_amplified` counts every
+  finding outside the amplified rows by its reason, as before.
 - **Two optional row fields** (feature 008). A folded family's row adds `"family": "rms"` and
   `"rule_count": <M>`; both are omitted when absent, so an unfolded session's record keeps its
   bytes.
