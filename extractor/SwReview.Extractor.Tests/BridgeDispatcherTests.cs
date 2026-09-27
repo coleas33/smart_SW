@@ -101,12 +101,68 @@ public class BridgeDispatcherTests : IDisposable
         // apart. 1.2 adds `tessellate` (T096); the `remodel.*` family of 1.1 is unchanged,
         // so remodel_client.py's REMODEL_PROTOCOL_VERSION is the version that family needs
         // rather than the version a host must report. Edited deliberately by feature 011 T071:
-        // 1.3 adds `drawing.read`, additively.
-        Assert.Equal("1.3", result.Protocol);
+        // 1.3 adds `drawing.read`, additively. Edited deliberately by feature 013 T072: 1.4 adds
+        // `drawing_read` to this answer, additively.
+        Assert.Equal("1.4", result.Protocol);
         Assert.Equal(SwBridgeDispatcher.ProtocolVersion, result.Protocol);
         Assert.Equal(@"C:\work\bracket-assy.SLDASM", result.Document);
         Assert.Equal("Default", result.Configuration);
         Assert.Equal(3, result.ComponentCount);
+    }
+
+    // ---- ping's drawing capability (feature 013 T072, contracts/drawing-capability.md section 1) --
+    //
+    // The backend offers the candidate question only when the host can open a closed drawing, so
+    // the host says on ping what `drawing.read` can do, read from the object that answers it: no
+    // source at all (the console host, an add-in with no review records) is `none`; a source whose
+    // seam's switch is off is `open_only` (an open drawing is still read); on, `opens_closed`.
+
+    [Fact]
+    public void Ping_WithNoConfirmedDrawingSource_TheConsoleHost_ReportsNone()
+    {
+        var result = Assert.IsType<PingResult>(DispatchWith(source: null, Request("1", BridgeCommands.Ping)).Result);
+
+        Assert.Equal("none", result.DrawingRead);
+        Assert.Equal(DrawingReadModes.None, result.DrawingRead);
+    }
+
+    [Theory]
+    [InlineData(false, "open_only")]
+    [InlineData(true, "opens_closed")]
+    public void Ping_ReportsTheSwitchOfTheSourceThatAnswersDrawingRead(bool opensClosed, string expected)
+    {
+        var source = new FakeConfirmedDrawings { OpensClosedDrawings = opensClosed };
+
+        var result = Assert.IsType<PingResult>(DispatchWith(source, Request("1", BridgeCommands.Ping)).Result);
+
+        Assert.Equal(expected, result.DrawingRead);
+        Assert.Empty(source.Calls);
+    }
+
+    [Fact]
+    public void Ping_TheThreeModesAreTheContractsWords()
+    {
+        Assert.Equal(new[] { "none", "open_only", "opens_closed" }, DrawingReadModes.All);
+        Assert.Equal(DrawingReadModes.None, DrawingReadModes.Of(null));
+        Assert.Equal(DrawingReadModes.OpenOnly, DrawingReadModes.Of(new FakeConfirmedDrawings { OpensClosedDrawings = false }));
+        Assert.Equal(DrawingReadModes.OpensClosed, DrawingReadModes.Of(new FakeConfirmedDrawings { OpensClosedDrawings = true }));
+    }
+
+    [Fact]
+    public void Ping_TheCapabilityIsTheLastMemberOfItsAnswerOnTheWire()
+    {
+        var result = Assert.IsType<PingResult>(DispatchWith(source: null, Request("1", BridgeCommands.Ping)).Result);
+
+        Assert.Equal(
+            new[] { "pong", "protocol", "sw_version", "document", "configuration", "component_count", "drawing_read" },
+            Keys(result));
+    }
+
+    [Fact]
+    public void Ping_AResultBuiltWithoutTheCapabilitySaysNoneRatherThanNothing()
+    {
+        // Absent means unable (research R2.24): a PingResult nobody filled in never claims more.
+        Assert.Equal(DrawingReadModes.None, new PingResult().DrawingRead);
     }
 
     // ---- capture -----------------------------------------------------------------
@@ -819,7 +875,12 @@ public class BridgeDispatcherTests : IDisposable
         Assert.False(RemodelCommands.IsRemodelCommand(BridgeCommands.DrawingRead));
     }
 
-    private BridgeResponse DispatchDrawingRead(string parameters, IConfirmedDrawingSource? source)
+    private BridgeResponse DispatchDrawingRead(string parameters, IConfirmedDrawingSource? source) =>
+        DispatchWith(source, Request("1", BridgeCommands.DrawingRead, parameters));
+
+    /// <summary>One request to a dispatcher whose services hold <paramref name="source"/> as the
+    /// confirmed-drawing source (null: the console host, which holds none).</summary>
+    private BridgeResponse DispatchWith(IConfirmedDrawingSource? source, BridgeRequest request)
     {
         var services = new BridgeServices(
             _captureView,
@@ -832,8 +893,7 @@ public class BridgeDispatcherTests : IDisposable
             ConfirmedDrawings = source,
         };
 
-        return new SwBridgeDispatcher(services, NoSecretPolicy.Instance)
-            .Dispatch(Request("1", BridgeCommands.DrawingRead, parameters));
+        return new SwBridgeDispatcher(services, NoSecretPolicy.Instance).Dispatch(request);
     }
 
     /// <summary>The host's source, recording what it was asked; it answers or refuses.</summary>
@@ -842,6 +902,9 @@ public class BridgeDispatcherTests : IDisposable
         public List<(string RunId, string DocumentId)> Calls { get; } = new List<(string, string)>();
 
         public string? Refusal { get; set; }
+
+        /// <summary>The switch of the seam this source opens through (feature 013 T072).</summary>
+        public bool OpensClosedDrawings { get; set; }
 
         public ConfirmedDrawingResult Read(string runId, string documentId)
         {

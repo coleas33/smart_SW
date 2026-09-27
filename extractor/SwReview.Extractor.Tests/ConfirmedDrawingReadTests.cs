@@ -358,9 +358,29 @@ public class ConfirmedDrawingReadTests : IDisposable
         AssertRefusedOpeningNothing(() => Read(RunId, HousingId), "no candidate drawing");
     }
 
+    // ---- the switch ping reports (feature 013 T072, contracts/drawing-capability.md section 1) --
+
+    /// <summary>
+    /// The source reports the switch of the very seam it opens through, so what ping says and what
+    /// <c>drawing.read</c> does cannot disagree (research R2.24); asking opens and reads nothing.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void OpensClosedDrawingsIsTheSwitchOfTheSeamItOpensThrough(bool seatValidated)
+    {
+        _seatValidated = seatValidated;
+
+        Assert.Equal(seatValidated, Source().OpensClosedDrawings);
+        Assert.Empty(_host.Calls);
+        Assert.Empty(_phase.Seen);
+    }
+
     // ---- helpers ------------------------------------------------------------------------------
 
-    private ConfirmedDrawingResult Read(string runId, string documentId) =>
+    private ConfirmedDrawingResult Read(string runId, string documentId) => Source().Read(runId, documentId);
+
+    private ConfirmedDrawingRead Source() =>
         new ConfirmedDrawingRead(
             id => string.Equals(id, RunId, StringComparison.Ordinal) ? _runFolder : null,
             _attachedDocument,
@@ -368,7 +388,7 @@ public class ConfirmedDrawingReadTests : IDisposable
             new DrawingOpenScope(_host, null, _seatValidated),
             _phase,
             _documents,
-            _documents).Read(runId, documentId);
+            _documents);
 
     private EvidencePackage Reloaded() => PackageAppender.Load(_runFolder);
 

@@ -3,7 +3,7 @@
 One JSON request per line over a Windows named pipe to
 `SwReview.Extractor.Console.exe serve`, which owns the single STA thread that holds the
 `SldWorks.Application` reference. **The wire format is
-`extractor/SwReview.Extractor.Console/Serve/PROTOCOL.md`** (protocol version 1.3); the
+`extractor/SwReview.Extractor.Console/Serve/PROTOCOL.md`** (protocol version 1.4); the
 `PROTOCOL.md` beside this file records only what is true of the Python end. What this
 module adds around the wire format is the three guarantees the tool layer depends on:
 
@@ -66,13 +66,14 @@ __all__ = [
 
 DEFAULT_PIPE_NAME = "swreview"
 DEFAULT_TIMEOUT_S = 60.0
-PROTOCOL_VERSION = "1.3"
+PROTOCOL_VERSION = "1.4"
 """The version of the host contract this client is written against; `ping` reports the
 host's, and a mismatch is worth an engineer's attention before anything is trusted.
 
-1.1 added the `remodel.*` family (feature 004), 1.2 `tessellate` (feature 005) and 1.3
-`drawing.read` (feature 011); each is additive, so this client works against any of the four,
-and only `drawing.read` needs a 1.3 host. `tests/unit/test_bridge_client.py`
+1.1 added the `remodel.*` family (feature 004), 1.2 `tessellate` (feature 005), 1.3
+`drawing.read` (feature 011) and 1.4 the `ping` answer's `drawing_read` (feature 013); each is
+additive, so this client works against any of the five, only `drawing.read` needs a 1.3 host,
+and only a 1.4 host says what it can read. `tests/unit/test_bridge_client.py`
 reads the host's `PROTOCOL.md` and `SwBridgeDispatcher.ProtocolVersion` and asserts all
 three agree, because the way two ends come apart is a constant bumped on one side only."""
 

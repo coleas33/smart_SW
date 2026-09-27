@@ -71,6 +71,10 @@ public sealed class ConfirmedDrawingRead : IConfirmedDrawingSource
     }
 
     /// <inheritdoc />
+    /// <remarks>The switch of the one seam every read here opens through (feature 013).</remarks>
+    public bool OpensClosedDrawings => _open.OpensClosedDrawings;
+
+    /// <inheritdoc />
     public ConfirmedDrawingResult Read(string runId, string documentId)
     {
         if (string.IsNullOrWhiteSpace(runId))

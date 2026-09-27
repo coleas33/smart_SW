@@ -121,6 +121,17 @@ reworded gap keeps its kind, so every gap count the backend shows is unchanged.
  "sheets": 2, "gaps": 1}
 ```
 
+*Amended 2026-09-26 by feature 013 T073 (013 `contracts/drawing-capability.md` section 1):* the host
+also says on `ping` what this command can do, so the backend never offers a question the host cannot
+honour. `IConfirmedDrawingSource` gains `bool OpensClosedDrawings`, which `ConfirmedDrawingRead`
+answers with its `DrawingOpenScope`'s switch (`DrawingOpenScope.OpensClosedDrawings`, the value the
+scope was built with); `PingResult` gains `drawing_read`, filled by `ping` through
+`DrawingReadModes.Of(BridgeServices.ConfirmedDrawings)`: `none` with no source (the console host;
+an add-in with no review records), `open_only` when the switch is off, `opens_closed` when it is
+on. Read from the object that answers `drawing.read`, ping and the read cannot disagree. Protocol
+1.4, additive: the host's `PROTOCOL.md`, `SwBridgeDispatcher.ProtocolVersion`, the reviewer's
+`bridge/PROTOCOL.md` and `bridge/client.PROTOCOL_VERSION` moved together.
+
 ## 3. The guarded seam
 
 `Guard/DrawingOpenGuard.cs`, an `ICallGuard` in the shape of feature 004's `RemodelGuard`: an
@@ -168,6 +179,14 @@ or leaves it false and records why in research R4. *Amended 2026-09-23 (T094)*: 
 the development machine makes that commit (`SeatValidated => false` to `=> true`), whose only other
 edit is `DrawingOpenScopeTests.TheSeamShipsOffUntilTheSeatConfirmsIt`, the one test that reads the
 shipped value; a pane review that opens a confirmed candidate end to end is then T095.
+
+*Amended 2026-09-26 by feature 013 T073:* the switch is reported by `ping` as `drawing_read`
+(section 2's amendment): `open_only` while it is false, `opens_closed` once T077 sets it. T077 needs
+no backend edit - the backend offers the candidate question only on `opens_closed` and shows the
+instruction line otherwise (013 `contracts/drawing-capability.md` section 4) - and its commit's only
+other edit is still `TheSeamShipsOffUntilTheSeatConfirmsIt`: every 013 test that involves the shipped
+switch reads it relatively (`TheScopeExposesTheSwitchItWasBuiltWith`,
+`ToolServiceWiringTests.TheShippedSwitchIsReportedAsWhatItMeansOpenOnlyUntilProbeD14Passes`).
 
 ## 5. What does not move
 

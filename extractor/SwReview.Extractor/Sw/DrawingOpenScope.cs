@@ -129,6 +129,14 @@ public sealed class DrawingOpenScope
     /// </summary>
     public static bool SeatValidated => false;
 
+    /// <summary>
+    /// The switch this scope was built with: <see cref="SeatValidated"/> through the shipped
+    /// constructor, or the one given. Feature 013 (contracts/drawing-capability.md section 1): the
+    /// confirmed-drawing source reports it, and <c>ping</c> with it, so what the host says it can do
+    /// is what this scope does. Reading it calls nothing.
+    /// </summary>
+    public bool OpensClosedDrawings => _seatValidated;
+
     /// <summary>The sentence a closed drawing is refused with while <see cref="SeatValidated"/> is false.</summary>
     public const string NotValidatedSentence =
         "the read-only open of a confirmed drawing is not yet validated on a seat (feature 011 probe D14)";
