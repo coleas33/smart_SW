@@ -210,7 +210,49 @@ def test_brief_includes_bounded_extracted_mate_connections() -> None:
     assert len(brief.encode("utf-8")) <= MAX_BRIEF_BYTES
 
 
-# --- feature 013 T031: each document's part role -------------------------------------------------
+# --- feature 013 T067: provenance printed only when known --------------------------------------
+
+
+def test_vault_version_and_local_modification_are_printed_only_when_known() -> None:
+    lines = document_lines(package_brief(build_package()))
+
+    assert " revision=B vault_version=7 local_modified=no export=native" in lines["doc:1"]
+    assert " vault_version=3 export=native" in lines["doc:2"]
+    assert "local_modified=" not in lines["doc:2"]
+
+
+def test_a_document_with_no_manifest_entry_prints_neither() -> None:
+    package = build_package()
+    package = package.model_copy(
+        update={
+            "manifest": package.manifest.model_copy(
+                update={"entries": package.manifest.entries[:1]}
+            )
+        }
+    )
+
+    line = document_lines(package_brief(package))["doc:2"]
+
+    assert "vault_version=" not in line and "local_modified=" not in line
+    assert " revision=? " in line
+
+
+def test_a_package_whose_manifest_says_nothing_of_either_prints_neither() -> None:
+    package = build_package()
+    entries = [
+        entry.model_copy(update={"vault_version": None, "local_modified": None})
+        for entry in package.manifest.entries
+    ]
+    package = package.model_copy(
+        update={"manifest": package.manifest.model_copy(update={"entries": entries})}
+    )
+
+    brief = package_brief(package)
+
+    assert "vault_version=" not in brief and "local_modified=" not in brief
+
+
+# --- feature 013 T031: each document's part role -----------------------------------------------
 
 
 def document_lines(brief: str) -> dict[str, str]:

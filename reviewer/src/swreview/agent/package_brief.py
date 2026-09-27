@@ -85,13 +85,21 @@ def _document_line(
     configs = ",".join(_value(item, limit=24) for item in document.configurations[:4])
     if len(document.configurations) > 4:
         configs += f" (+{len(document.configurations) - 4})"
+    # Feature 013 (`contracts/re-ask-guard.md` section 2): the vault version and the local
+    # modification are printed only when the manifest knows them - a `?` invited the model to
+    # ask, and code has closed provenance.
+    known = "".join(
+        [
+            f" vault_version={_value(vault_version)}" if vault_version is not None else "",
+            f" local_modified={_flag(local_modified)}" if local_modified is not None else "",
+        ]
+    )
     return (
         f"- {_value(document.document_id, limit=40)} {_file_name(document.file_name)}"
         f" kind={_value(document.kind, limit=24)}{_role_of(roles, document.document_id)} "
         f"active_cfg={_value(document.active_configuration)}"
         f" configs={configs or '?'} material={_value(document.material)}"
-        f" revision={_value(revision)} vault_version={_value(vault_version)}"
-        f" local_modified={_flag(local_modified)} export={_value(export_method)}"
+        f" revision={_value(revision)}{known} export={_value(export_method)}"
     )
 
 
