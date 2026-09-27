@@ -10,9 +10,10 @@ result:
     title: Provenance and manifest discrepancies
   - bucket: finding
     check_prefix: drawing.
-    description: 'For each part drawing: material, general tolerance note, surface
-      finish where functional, thread callouts with depth, critical fits with explicit
-      tolerances. Missing text layers or unreadable sheets are unresolved, not passed.'
+    description: 'For each custom part or assembly: its drawing is the same-name .SLDDRW
+      in its folder; bought parts have none. check_drawings decides which drawings
+      exist and tells the engineer how to include one; never request a drawing or
+      a drawing''s version.'
     id: drawing.manufacturing_inputs
     title: Drawing manufacturing inputs
   - bucket: open
