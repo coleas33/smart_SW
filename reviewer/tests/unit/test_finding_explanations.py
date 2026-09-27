@@ -411,7 +411,10 @@ def test_stop_at_the_presentation_boundary_makes_finalization_local(
         assert provider.presentation_calls == 0
         assert run.session.usage is not None
         assert run.session.usage.turns == 1
-        assert load_session(run.session_path).finding_explanations
+        # Feature 013 T113 (its `contracts/sources.md` section 4), edited deliberately: the local
+        # finalization explained nothing, and nothing stands in for a missing explanation - no
+        # fallback sentence is persisted, where before this test read one.
+        assert load_session(run.session_path).finding_explanations == {}
     finally:
         run.close()
 
@@ -694,18 +697,12 @@ def test_a_family_row_in_the_top_five_is_never_sent_to_the_presentation_pass(
     assert family.finding_id not in session.finding_explanations
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "013 T113 (lane S): the runner still calls fill_fallbacks; once it calls keep_explained "
-        "no fallback is persisted - remove this mark then, and fill_fallbacks with it"
-    ),
-)
 def test_no_fallback_is_persisted_for_a_row_the_pass_did_not_explain(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Feature 013 T111 (its `contracts/sources.md` section 4): nothing stands in for a missing
-    explanation - the pass that explains nothing leaves the map empty (T113 wires it)."""
+    explanation - the pass that explains nothing leaves the map empty (T113 wires it: the runner
+    calls `keep_explained`)."""
     from swreview.ir.loader import save_package
     from tests.support.prerun import CHECKS_FIRST, prerun_package
 

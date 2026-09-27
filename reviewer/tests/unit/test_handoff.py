@@ -18,7 +18,9 @@ SECRET = "session-secret-123"
 SHAPED_KEY = "sk-" + "a" * 24
 
 
-def write_run(run_dir: Path, *, complete: bool = True) -> None:
+def write_run(
+    run_dir: Path, *, complete: bool = True, explanations: dict[str, str] | None = None
+) -> None:
     run_dir.mkdir()
     (run_dir / "package.json").write_text(
         json.dumps({"design_id": "design-1", "source": r"C:\Designs\assembly.SLDASM"}),
@@ -41,7 +43,9 @@ def write_run(run_dir: Path, *, complete: bool = True) -> None:
                 "efficiency": {"prompt_cache_key": False, "coverage_stop": True},
                 "explanations_enabled": True,
                 "finding_explanation_fingerprint": "a" * 64,
-                "finding_explanations": {"F-001": "text"},
+                "finding_explanations": explanations if explanations is not None else {
+                    "F-001": "text"
+                },
                 "coverage": {"checked": [{"check": "x"}], "unresolved": []},
                 "evidence_requests": [{"status": "open"}],
                 "usage": {"rounds": 2, "turns": 1},
@@ -229,3 +233,18 @@ def test_failed_publication_cleans_the_temporary_archive(
         export_handoff(run_dir, tmp_path / "failed.zip", exported_at=STAMP)
     assert not (tmp_path / "failed.zip").exists()
     assert not list(tmp_path.glob(".*.tmp"))
+
+
+def test_a_legacy_fallback_sentence_is_not_counted_as_an_explanation(tmp_path: Path) -> None:
+    """Feature 013 (its `contracts/sources.md` section 4, FR-043): a run folder written before
+    013 may hold the explanation pass's fallback sentence for a row it did not explain; the
+    summary counts the explanations the model wrote, not the sentence that stood in for one."""
+    from swreview.report.attention import EXPLANATION_UNAVAILABLE
+
+    run_dir = tmp_path / "run"
+    write_run(run_dir, explanations={"F-001": "text", "F-002": EXPLANATION_UNAVAILABLE})
+
+    archive = export_handoff(run_dir, tmp_path / "handoff.zip", exported_at=STAMP)
+
+    manifest = json.loads(read_zip(archive)["handoff-manifest.json"])
+    assert manifest["session_summary"]["explanations"]["count"] == 1
