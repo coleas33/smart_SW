@@ -468,8 +468,8 @@ would lose the evidence Principle VI asks for and "what did it propose" must sta
 the engineer says no. The system toggles are restored in the `finally` that wraps the run,
 including on recovery from a previous run that died.
 
-*Amended 2026-09-26 (default taken 2026-09-26, the owner may revise; `tasks.md` T167, not yet
-built):* `remodel.close` runs through the one end-of-session routine below ("Ending a session"),
+*Amended 2026-09-26 (default taken 2026-09-26, the owner may revise; `tasks.md` T167, landed
+2026-09-27):* `remodel.close` runs through the one end-of-session routine below ("Ending a session"),
 so a verification that fails, an untag or a close that throws, or an open circuit no longer leaves
 the settings flipped and the session stuck - today the three calls run outside any `try`, and one
 throw made every later `remodel.open` on that attachment answer `run_in_progress`. What the
@@ -501,8 +501,8 @@ revise; research R13.1):* the teardown ends it ("Ending a session", next).
 
 ### Ending a session
 
-*Added 2026-09-26 (default taken 2026-09-26, the owner may revise; `tasks.md` T167, not yet
-built).* A session ends in one routine, `SwBridgeDispatcher.EndRemodelSession(reason)`, whatever
+*Added 2026-09-26 (default taken 2026-09-26, the owner may revise; `tasks.md` T167; the routine and
+its hosting landed 2026-09-27, lane D).* A session ends in one routine, `SwBridgeDispatcher.EndRemodelSession(reason)`, whatever
 ends it: `remodel.close`, a tool-service re-attach, or an add-in unload.
 
 1. `VerifyTarget` (`guard-allowlist.md`).
@@ -542,8 +542,8 @@ set drained from the observer, and the outcome - goes to the tool-service log an
 reaches the add-in through `ToolServiceOptions.RemodelSessionEnded`, and a failure becomes the
 Remodel page's one status error (`pane-remodel-messages.md`).
 
-**The run root is used up at open** (`tasks.md` T158, a design choice of 2026-09-26, not yet
-built): the host binds the run's folder before `remodel.open`, `remodel.open` reads it and clears
+**The run root is used up at open** (`tasks.md` T158, a design choice of 2026-09-26; the bridge half and
+the bind landed 2026-09-27, lane D): the host binds the run's folder before `remodel.open`, `remodel.open` reads it and clears
 it, and so every run needs a fresh bind and a second run can never inherit the first one's folder.
 *Amended 2026-09-27 (defaults taken 2026-09-27, the owner may revise):* `remodel.open` takes the
 root as it starts, so an open refused or failed at any step uses it up too (a missing root is
@@ -553,8 +553,8 @@ all leave nothing bound.
 
 ### The Start switch
 
-*Added 2026-09-26 (default taken 2026-09-26, the owner may revise; `tasks.md` T172, not yet
-built).* `RemodelStart.SeatValidated` is false as shipped, like `DrawingOpenScope.SeatValidated`,
+*Added 2026-09-26 (default taken 2026-09-26, the owner may revise; `tasks.md` T172, landed
+2026-09-27).* `RemodelStart.SeatValidated` is false as shipped, like `DrawingOpenScope.SeatValidated`,
 and is set true in a commit of its own once PROBE-1, 2, 3, 4 and 12 have verdicts from a seat.
 While it is false the six change commands - `remodel.rename`, `remodel.reorder`, `remodel.folder`,
 `remodel.describe`, `remodel.equation` and `remodel.save` - answer `start_not_validated` before
@@ -600,7 +600,7 @@ stays unknown and is never guessed into the nearest class.
 | `gate_not_passed` | `remodel.save` called before a `pass` verdict | `RemodelContractError` | Nothing is saved |
 | `save_failed` | `Save3` returned a non-zero error | `RemodelSaveError` | Failed run |
 | `not_in_v1` | A reserved stage-2 operation was requested | `RemodelNotInV1Error` | Refused |
-| `start_not_validated` | A change command while `RemodelStart.SeatValidated` is false ("The Start switch"; T172, added 2026-09-26, not yet built) | `RemodelContractError` | Refused before any write; the pane refuses Start first, so this is a bug in the caller |
+| `start_not_validated` | A change command while `RemodelStart.SeatValidated` is false ("The Start switch"; T172, added 2026-09-26, landed 2026-09-27) | `RemodelContractError` | Refused before any write; the pane refuses Start first, so this is a bug in the caller |
 | `close_incomplete` | `remodel.close`'s verification passed, but the untag, the close or a setting's restore did not ("Ending a session"; T167, added 2026-09-27 as a default the owner may revise) | `RemodelTargetError` | The session is over either way; `detail` names what was left: whether the copy was closed and which settings still hold the run's value |
 | `run_in_progress` | A second run was started on the same host | `RemodelRunInProgress` | Refused |
 | `bad_request` | The request cannot be honoured as sent: a missing or empty parameter, `folder` `rename` aimed at a feature that is not an `FtrFolder`, a `describe` whose previous text will not read and therefore has no inverse, or a command in the table with no handler in this build | `RemodelContractError` | Refused; the change never lands. A bug in the caller, not a condition of the part, which is why it is a contract error and not a change error |

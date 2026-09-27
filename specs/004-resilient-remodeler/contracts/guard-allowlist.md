@@ -463,7 +463,7 @@ and `ListExternalFileReferencesCount2` - and that no stage-1 allowlist key appea
 the machine-checkable form of "the source is only ever read".
 
 **Ending a session adds nothing to this list either.** *Added 2026-09-26 (default taken
-2026-09-26, the owner may revise; `tasks.md` T167, not yet built).* The one end-of-session routine
+2026-09-26, the owner may revise; `tasks.md` T167, landed 2026-09-27).* The one end-of-session routine
 (`bridge-remodel.md`, "Ending a session") calls three members this list already carries for that
 job - `ICustomPropertyManager.Delete2` for the tag, `ISldWorks.CloseDoc` for the copy, and the two
 toggle keys for the restore - and runs `VerifyTarget` before the first of them. Its writes are

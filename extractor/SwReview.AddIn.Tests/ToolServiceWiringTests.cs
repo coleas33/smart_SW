@@ -1669,6 +1669,87 @@ public sealed class ToolServiceWiringTests
         return count;
     }
 
+    // ---- the seat is in-process only (004 T157) --------------------------------------------------
+
+    /// <summary>
+    /// The add-in's in-process host hands its bridge the production seat (build order lane B's
+    /// <see cref="Remodel.Seat.SwRemodelBridgeSeat"/>) over the add-in's own <c>ISldWorks</c>, so
+    /// <see cref="ToolServiceHost.RemodelSeatAvailable"/> is true there. <c>Attach</c> needs a live
+    /// SOLIDWORKS, so its one line is read from the source - once, and nowhere else in the add-in -
+    /// and what that line builds is asserted directly.
+    /// </summary>
+    [Fact]
+    public void TheInProcessHostHandsItsBridgeTheProductionSeatOverTheAddInsOwnApplication()
+    {
+        var app = new InteropRecorder<ISldWorks>();
+
+        Extractor.Rms.IRemodelSeat seat = ToolServiceHost.RemodelSeatFor(app.Instance);
+
+        Assert.IsType<Remodel.Seat.SwRemodelBridgeSeat>(seat);
+        Assert.Empty(app.Calls);
+
+        string addIn = Path.Combine(ErrorLabelsCoverTheHostTests.RepositoryRoot(), "extractor", "SwReview.AddIn");
+        var assignment = new Regex(@"\bRemodelSeat\s*=", RegexOptions.CultureInvariant);
+        var sites = Directory.EnumerateFiles(addIn, "*.cs", SearchOption.AllDirectories)
+            .Where(file => !file.Split(Path.DirectorySeparatorChar).Any(part => part == "obj" || part == "bin"))
+            .SelectMany(file => assignment.Matches(File.ReadAllText(file)).Cast<Match>().Select(_ => Path.GetFileName(file)))
+            .ToList();
+        Assert.Equal(new[] { "ToolServiceHost.cs" }, sites);
+
+        string source = Regex.Replace(
+            File.ReadAllText(Path.Combine(addIn, "ToolService", "ToolServiceHost.cs")), @"\s+", " ");
+        int start = source.IndexOf("private static Attached Attach(", StringComparison.Ordinal);
+        int end = start < 0 ? -1 : source.IndexOf("recorder.Drain();", start, StringComparison.Ordinal);
+        Assert.True(end > start, "ToolServiceHost.Attach was not found, or no longer drains the recorder.");
+        Assert.Contains("RemodelSeat = RemodelSeatFor(options.SwApp),", source.Substring(start, end - start), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The console host (<c>swreview-extract serve</c>) runs <c>NoSecretPolicy</c>, which authorizes
+    /// every command, so there the null seat is the only thing that keeps <c>remodel.*</c> off: no
+    /// source file of the console names the seat or the run root at all.
+    /// </summary>
+    [Fact]
+    public void TheConsoleHostBuildsItsBridgeWithNoSeat()
+    {
+        string console = Path.Combine(ErrorLabelsCoverTheHostTests.RepositoryRoot(), "extractor", "SwReview.Extractor.Console");
+        string[] sources = Directory.EnumerateFiles(console, "*.cs", SearchOption.AllDirectories)
+            .Where(file => !file.Split(Path.DirectorySeparatorChar).Any(part => part == "obj" || part == "bin"))
+            .ToArray();
+
+        Assert.Contains(sources, file => File.ReadAllText(file).Contains("new BridgeServices("));
+        Assert.Contains(sources, file => File.ReadAllText(file).Contains("NoSecretPolicy.Instance"));
+        foreach (string file in sources)
+        {
+            string text = File.ReadAllText(file);
+            Assert.DoesNotContain("RemodelSeat", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("RemodelRunRoot", text, StringComparison.Ordinal);
+        }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AHostSaysWhetherItsBridgeCarriesASeatAndTheGateReadsIt(bool seated)
+    {
+        using (var world = new SeatedHostWorld(seated: seated))
+        {
+            Assert.Equal(seated, world.Host.RemodelSeatAvailable);
+
+            var gate = new ToolServiceGate(
+                () => new PageDocument(world.SourcePath, "Default"),
+                () => world.Host,
+                _ => { },
+                (what, failure) => { },
+                schedule: work => work());
+            gate.EnsureStarted();
+
+            Assert.Equal(
+                seated ? Remodel.RemodelAvailability.Available : Remodel.RemodelAvailability.Unavailable,
+                gate.RemodelCapability);
+        }
+    }
+
     // ---- a session does not outlive its pipe (004 T167's hosting) -----------------------------
     //
     // `ToolServiceHost.Dispose` ends the remodel session its bridge holds on the application
