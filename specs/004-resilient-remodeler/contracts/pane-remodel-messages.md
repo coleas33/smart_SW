@@ -227,6 +227,18 @@ closed without saving. A value that is not one of the three toggles is worded as
 so nothing that was left goes unsaid. A null list reads as none, and the method never throws: it
 is called from the tool service's teardown.
 
+*Recorded 2026-09-27 for lanes D and E integrated (defaults taken 2026-09-27, the owner may
+revise).* The add-in sets `ToolServiceOptions.RemodelSessionEnded = outcome => _remodelHost?.SessionEnded(outcome)`,
+read through the field per ending, and `RemodelHost.SessionEnded(RemodelSessionEnd)` reads the
+routine's outcome onto the three facts above: each name in `SettingsOutstanding` that is a toggle's
+`RemodelSystemToggles.SettingName` becomes that toggle, `CommandInProgress` is read apart, and a
+name none of the three toggles has is worded as another setting; whether the copy was closed is
+`CopyClosed`. The routine tells every ending of a session that existed - `remodel.close`'s
+(Discard, planning again) as well as a re-attach's or an unload's - so the same words follow a
+Discard or a planning again whose close left something. A null outcome, and an ending of no
+session, post nothing. A session tag the routine could not remove is not worded: the close is
+unsaved, so a closed copy took its tag with it, and a copy left open is already said.
+
 ### Start is switched off until the blocking probes pass (T172)
 
 *Added 2026-09-26 (default taken 2026-09-26, the owner may revise; 004 T172, landed 2026-09-27).*
