@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -14,12 +15,16 @@ from swreview.agent import runner
 from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
 from swreview.chat.server import TurnStopped
 from swreview.ir.loader import load_package
-from swreview.report.attention import rank
+from swreview.report.attention import load_policy, rank
 from swreview.report.explanations import (
+    EXPLANATION_UNAVAILABLE,
     MAX_EXPLANATION_CHARS,
+    MAX_EXPLANATION_OUTPUT_CHARS,
     MAX_EXPLANATION_PROMPT_BYTES,
     MAX_EXPLANATIONS,
     _prompt,
+    generate_explanations,
+    keep_explained,
     parse_explanations,
 )
 from swreview.report.rerender import rerender_run_folder
@@ -75,30 +80,98 @@ def test_parse_explanations_accepts_fenced_json_and_normalizes_whitespace() -> N
         allowed_ids=("F-001",),
     )
 
-    assert parsed == {"F-001": "one two"}
+    assert (parsed.accepted, parsed.rejected) == ({"F-001": "one two"}, [])
 
 
 @pytest.mark.parametrize(
-    ("body", "allowed", "match"),
+    ("body", "rule", "kept"),
     [
-        (_batch(("F-999", EXPLANATION)), ("F-001",), "unknown"),
-        (_batch(("F-001", EXPLANATION), ("F-001", "again")), ("F-001",), "repeats"),
-        (_batch(("F-001", "")), ("F-001",), "blank"),
-        (_batch(("F-001", "x" * (MAX_EXPLANATION_CHARS + 1))), ("F-001",), "exceeds"),
+        (_batch(("F-999", EXPLANATION)), "unknown_id", {}),
+        (_batch(("F-001", EXPLANATION), ("F-001", "again")), "repeated_id", {"F-001": EXPLANATION}),
+        (_batch(("F-001", "")), "blank", {}),
+        (_batch(("F-001", "x" * (MAX_EXPLANATION_CHARS + 1))), "too_long", {}),
     ],
 )
-def test_parse_explanations_rejects_unsafe_rows(
-    body: str, allowed: tuple[str, ...], match: str
+def test_parse_explanations_refuses_an_unsafe_item_and_keeps_the_rest(
+    body: str, rule: str, kept: dict[str, str]
 ) -> None:
-    with pytest.raises(ValueError, match=match):
-        parse_explanations(body, allowed_ids=allowed)
+    """Feature 013 T111 (its research R2.39): one bad item no longer rejects the batch."""
+    parsed = parse_explanations(body, allowed_ids=("F-001",))
+
+    assert parsed.accepted == kept
+    assert [one.rule for one in parsed.rejected] == [rule]
 
 
-def test_parse_explanations_rejects_more_than_the_amplified_cap() -> None:
+def test_items_past_the_amplified_rows_are_unknown_ids() -> None:
+    allowed = tuple(f"F-{index:03d}" for index in range(1, MAX_EXPLANATIONS + 1))
     body = _batch(*[(f"F-{index:03d}", EXPLANATION) for index in range(1, MAX_EXPLANATIONS + 2)])
 
-    with pytest.raises(ValueError, match="more than"):
-        parse_explanations(body, allowed_ids=tuple(f"F-{index:03d}" for index in range(1, 8)))
+    parsed = parse_explanations(body, allowed_ids=allowed)
+
+    assert list(parsed.accepted) == list(allowed)
+    assert [(one.finding_id, one.position, one.rule) for one in parsed.rejected] == [
+        (f"F-{MAX_EXPLANATIONS + 1:03d}", MAX_EXPLANATIONS, "unknown_id")
+    ]
+
+
+def test_partial_acceptance_keeps_every_valid_item_and_names_each_refusal() -> None:
+    body = json.dumps(
+        {
+            "explanations": [
+                {"finding_id": "F-001", "explanation": EXPLANATION},
+                {"finding_id": "F-999", "explanation": "an id nobody sent"},
+                {"finding_id": "F-001", "explanation": "the same id again"},
+                {"finding_id": "F-002", "explanation": "x" * (MAX_EXPLANATION_CHARS + 1)},
+                {"finding_id": "F-003", "explanation": "   "},
+                {"id": "F-003", "text": "not the pair asked for"},
+                {"finding_id": "F-003", "explanation": "the third row's own words"},
+            ]
+        }
+    )
+
+    parsed = parse_explanations(body, allowed_ids=("F-001", "F-002", "F-003"))
+
+    assert parsed.accepted == {"F-001": EXPLANATION, "F-003": "the third row's own words"}
+    assert [(one.finding_id, one.position, one.rule) for one in parsed.rejected] == [
+        ("F-999", 1, "unknown_id"),
+        ("F-001", 2, "repeated_id"),
+        ("F-002", 3, "too_long"),
+        ("F-003", 4, "blank"),
+        (None, 5, "not_a_pair"),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("text", "rule"),
+    [
+        ("not json at all", "not_json"),
+        ('{"explanations": "one string"}', "not_a_list"),
+        ('[{"finding_id": "F-001", "explanation": "a bare list"}]', "not_a_list"),
+        ("x" * (MAX_EXPLANATION_OUTPUT_CHARS + 1), "too_long"),
+    ],
+    ids=["not-json", "not-a-list", "a-bare-list", "past-the-output-cap"],
+)
+def test_a_response_that_is_not_the_batch_keeps_nothing_and_is_one_refusal(
+    text: str, rule: str
+) -> None:
+    parsed = parse_explanations(text, allowed_ids=("F-001",))
+
+    assert parsed.accepted == {}
+    assert [(one.finding_id, one.position, one.rule) for one in parsed.rejected] == [
+        (None, None, rule)
+    ]
+
+
+def test_the_request_asks_for_three_hundred_characters_so_the_cap_has_margin() -> None:
+    """013 `contracts/sources.md` section 4: the request asks for 300 characters or fewer, and
+    `MAX_EXPLANATION_CHARS` (480) is unchanged, so an explanation a little long is still kept."""
+    session = _session()
+
+    prompt = _prompt(rank(session).rows, session=session, package=attention_package())
+
+    assert "at most 300 characters" in prompt
+    assert "480" not in prompt
+    assert MAX_EXPLANATION_CHARS == 480
 
 
 def test_prompt_contains_bounded_member_evidence_and_component_names() -> None:
@@ -442,6 +515,145 @@ def test_a_pass_is_never_sent_to_the_presentation_pass(
     assert all(row.status != "checked_within_scope" for rows in received for row in rows)
 
 
+# --- feature 013 T111: rejections logged, no fallback, the legacy line filtered ---------------
+
+SECRET_PROSE = "PROSE-THE-LOG-MUST-NEVER-HOLD"
+"""A distinctive string in the model's text, looked for in every log record."""
+
+
+def presentation(text: str) -> FakeProvider:
+    return FakeProvider(script=[], model=MODEL, explanation_script=[ScriptedTurn(text=text)])
+
+
+def test_each_rejection_is_logged_with_its_id_or_position_and_rule_and_no_model_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    session = _session()
+    rows = rank(session).rows
+    text = json.dumps(
+        {
+            "explanations": [
+                {"finding_id": "F-001", "explanation": EXPLANATION},
+                {"finding_id": "F-999", "explanation": SECRET_PROSE},
+                {"text": SECRET_PROSE},
+            ]
+        }
+    )
+
+    with caplog.at_level(logging.WARNING, logger="swreview.explanations"):
+        kept = generate_explanations(presentation(text), rows, session=session)
+
+    assert kept == {"F-001": EXPLANATION}
+    records = [record for record in caplog.records if record.name == "swreview.explanations"]
+    assert len(records) == 2
+    messages = [record.getMessage() for record in records]
+    assert "unknown_id" in messages[0] and "F-999" in messages[0]
+    assert "not_a_pair" in messages[1] and "position 2" in messages[1]
+    assert all(SECRET_PROSE not in message for message in caplog.messages)
+
+
+def test_invalid_json_stores_nothing_and_is_logged(caplog: pytest.LogCaptureFixture) -> None:
+    session = _session()
+
+    with caplog.at_level(logging.WARNING, logger="swreview.explanations"):
+        kept = generate_explanations(
+            presentation(f"here you go: {SECRET_PROSE}"), rank(session).rows, session=session
+        )
+
+    assert kept == {}
+    assert any("not_json" in message for message in caplog.messages)
+    assert all(SECRET_PROSE not in message for message in caplog.messages)
+
+
+def test_a_provider_error_stores_nothing_and_logs_its_class_not_its_message(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    class Failing(FakeProvider):
+        def for_presentation(self, *, max_output_tokens: int) -> FakeProvider:
+            raise RuntimeError(f"the provider echoed {SECRET_PROSE}")
+
+    session = _session()
+
+    with caplog.at_level(logging.WARNING, logger="swreview.explanations"):
+        kept = generate_explanations(
+            Failing(script=[], model=MODEL), rank(session).rows, session=session
+        )
+
+    assert kept == {}
+    assert any("RuntimeError" in message for message in caplog.messages)
+    assert all(SECRET_PROSE not in message for message in caplog.messages)
+
+
+def test_keep_explained_prunes_to_the_explained_rows_and_adds_nothing() -> None:
+    session = _session()
+    rows = rank(session).rows
+    session.finding_explanations = {"F-001": EXPLANATION, "F-042": "a row no longer amplified"}
+
+    keep_explained(session, rows)
+
+    assert session.finding_explanations == {"F-001": EXPLANATION}
+
+    session.finding_explanations = {}
+    keep_explained(session, rows)
+    assert session.finding_explanations == {}, "a missing explanation stays missing"
+
+
+def test_keep_explained_drops_a_legacy_fallback() -> None:
+    session = _session()
+    session.finding_explanations = {"F-001": EXPLANATION_UNAVAILABLE}
+
+    keep_explained(session, rank(session).rows)
+
+    assert session.finding_explanations == {}
+
+
+def test_a_legacy_fallback_reaches_no_row_no_record_and_no_report() -> None:
+    """Run folders written before feature 013, and the replay fixtures, persisted the fallback
+    sentence as if it were an explanation (research R2.31): it is filtered wherever rows are
+    ranked, and the fixtures stay unedited as evidence of it."""
+    from swreview.report.attention_record import AttentionRecord
+    from swreview.report.finding_groups import findings_by_type
+    from swreview.report.markdown import render_report
+    from swreview.report.summary import load_words
+
+    session = _session()
+    session.finding_explanations = {"F-001": EXPLANATION_UNAVAILABLE}
+    ranking = rank(session)
+
+    assert all(row.explanation is None for row in ranking.rows)
+    view = findings_by_type(session, attention_package(), load_words(), load_policy())
+    assert all(row.explanation is None for group in view.groups for row in group.rows)
+    record = AttentionRecord.of(ranking, session.session_id).model_dump_json()
+    assert EXPLANATION_UNAVAILABLE not in record
+    report = render_report(session, attention_package(), ranking=ranking)
+    assert EXPLANATION_UNAVAILABLE not in report
+
+
+def test_the_replay_fixtures_still_hold_the_legacy_line_as_evidence() -> None:
+    fixtures = Path(__file__).resolve().parents[1] / "fixtures" / "replay"
+
+    holding = [
+        path.parent.name
+        for path in sorted(fixtures.glob("*/session.json"))
+        if EXPLANATION_UNAVAILABLE in path.read_text(encoding="utf-8")
+    ]
+
+    assert holding, "the fixtures are the evidence the legacy filter exists for"
+
+
+def test_the_report_labels_real_explanations_as_ai_guidance() -> None:
+    from swreview.report.markdown import render_report
+
+    session = _session()
+    session.finding_explanations = {"F-001": EXPLANATION}
+
+    report = render_report(session, attention_package(), ranking=rank(session))
+
+    assert f"   - AI guidance: {EXPLANATION}" in report.splitlines()
+    assert f"- AI guidance: {EXPLANATION}" in report.splitlines()
+    assert "Explanation:" not in report
+
+
 # --- feature 008 T045: the folded family is never explained ---------------------------------
 
 
@@ -480,4 +692,38 @@ def test_a_family_row_in_the_top_five_is_never_sent_to_the_presentation_pass(
     assert received, "the presentation pass ran for the other rows"
     assert all(row.family is None for rows in received for row in rows)
     assert family.finding_id not in session.finding_explanations
-    assert session.finding_explanations, "the non-family rows still get their fallback"
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "013 T113 (lane S): the runner still calls fill_fallbacks; once it calls keep_explained "
+        "no fallback is persisted - remove this mark then, and fill_fallbacks with it"
+    ),
+)
+def test_no_fallback_is_persisted_for_a_row_the_pass_did_not_explain(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Feature 013 T111 (its `contracts/sources.md` section 4): nothing stands in for a missing
+    explanation - the pass that explains nothing leaves the map empty (T113 wires it)."""
+    from swreview.ir.loader import save_package
+    from tests.support.prerun import CHECKS_FIRST, prerun_package
+
+    folder = tmp_path / "run"
+    save_package(prerun_package(), folder)
+    monkeypatch.setattr(runner, "generate_explanations", lambda *args, **kwargs: {})
+    run = runner.start_review(
+        folder,
+        folder,
+        provider=ScriptedPresentationProvider(script=[ScriptedTurn(text="done")]),
+        efficiency=CHECKS_FIRST,
+        explain_findings=True,
+    )
+    try:
+        session = run.start()
+    finally:
+        run.close()
+
+    assert rank(session).top_n > 0, "rows were amplified, so the pass ran"
+    assert session.finding_explanations == {}
+    assert EXPLANATION_UNAVAILABLE not in load_session(run.session_path).model_dump_json()

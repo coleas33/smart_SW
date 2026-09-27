@@ -317,7 +317,8 @@ def _group_lines(title: str, text: str, rows: list[GroupRow], words: Words) -> l
         if len(row.member_finding_ids) > 1:
             lines.append(f"   - Members: {', '.join(row.member_finding_ids)}")
         if row.explanation is not None:
-            lines.append(f"   - Explanation: {markdown_text(row.explanation)}")
+            label = words.labels.source["model"]
+            lines.append(f"   - {label}: {markdown_text(row.explanation)}")
     return lines
 
 
@@ -460,7 +461,8 @@ def _render_finding(
     lines = [heading, ""]
     explanation = (explanations or {}).get(finding.id)
     if explanation is not None:
-        lines.append(f"- Explanation: {markdown_text(explanation)}")
+        # Model-written text, labelled as the pane labels it (feature 013).
+        lines.append(f"- {load_words().labels.source['model']}: {markdown_text(explanation)}")
     lines.append(f"- Check: {finding.check}")
     if finding_source(finding) == "model":
         lines.append(f"- Source: {load_words().labels.source['model']}")

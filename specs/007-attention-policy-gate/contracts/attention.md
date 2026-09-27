@@ -270,6 +270,18 @@ during streaming. The request's reported usage belongs to the engineering turn a
 elapsed time is included in session timing. Missing or invalid model text uses an explicit
 "No model explanation was generated" fallback rather than an invented paraphrase.
 
+*Amended 2026-09-26 (feature 013 T112, its `contracts/sources.md` section 4):* the fallback is
+dropped. Each valid item of a response is kept and each invalid one refused - by rule
+`unknown_id`, `repeated_id`, `too_long`, `blank` or `not_a_pair` for an item, `not_json`,
+`not_a_list` or `too_long` for the whole response - and every refusal, a turn that did not end and
+a provider failure are logged to `swreview.explanations` by finding id or position and rule, or by
+the error's class, never with the model's text. `keep_explained(session, rows)` prunes the persisted
+map to the explained rows and adds nothing (the runner calls it from 013 T113). The fallback
+sentence is a legacy constant, `attention.EXPLANATION_UNAVAILABLE`: `persisted_explanation`
+filters it, so no row, record or report of an older run folder shows it. The request asks for 300
+characters or fewer; the 480-character cap is unchanged. Real text is labelled "AI guidance" -
+`report.md` writes `- AI guidance: …` under a finding and `   - AI guidance: …` under an index row.
+
 `AttentionRow.explanation` is optional. Ranking keys and row order are unchanged. The
 Review pane renders the same persisted text under Start here and as the first line inside
 the fold of the corresponding finding cards (including members of a folded row; since U10,

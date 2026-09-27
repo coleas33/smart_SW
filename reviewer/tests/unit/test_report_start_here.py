@@ -300,7 +300,7 @@ def test_a_persisted_explanation_is_printed_under_its_row() -> None:
     lines = index_of(session, None)
 
     row = next(index for index, line in enumerate(lines) if ROW.match(line))
-    assert lines[row + 1] == "   - Explanation: why the overlap matters"
+    assert lines[row + 1] == "   - AI guidance: why the overlap matters"
 
 
 def test_the_footer_names_the_policy_the_ranking_carries(

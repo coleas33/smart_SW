@@ -187,6 +187,15 @@ first five rows and never looked at the id would pass by luck.
 EVIDENCE_REQUEST_CHECK = "coverage.evidence_request"
 """The check an open evidence request is recorded under; counted, never listed."""
 
+EXPLANATION_UNAVAILABLE = (
+    "No model explanation was generated; read the finding evidence and status."
+)
+"""The fallback sentence the explanation pass persisted for a row it did not explain, before
+feature 013 dropped it (its `contracts/sources.md` section 4). A legacy constant: older run
+folders and the replay fixtures still hold it, and `persisted_explanation` filters it, so no row,
+record or report shows it as if it were an explanation. Defined here, where it is read, rather
+than in `report/explanations.py`, which reaches the provider port this module must not load."""
+
 EMPTY_NO_FINDINGS = "no findings were recorded"
 EMPTY_ALL_DECIDED = "every finding is informational or already decided"
 """The two things the section says when it has nothing to amplify (contract section 3)."""
@@ -551,10 +560,13 @@ def persisted_explanation(session: ReviewSession, finding_id: str) -> str | None
 
     The one reader of `ReviewSession.finding_explanations`: the ranking attaches it to the
     amplified rows and the grouped view (feature 013) to the row of the same finding id. Read
-    with `getattr`, so a session-shaped object that predates the field has none.
+    with `getattr`, so a session-shaped object that predates the field has none. The legacy
+    fallback sentence is not an explanation and is never returned (feature 013).
     """
     text = getattr(session, "finding_explanations", {}).get(finding_id)
-    return text if isinstance(text, str) and text else None
+    if not isinstance(text, str) or not text or text == EXPLANATION_UNAVAILABLE:
+        return None
+    return text
 
 
 def _row(
