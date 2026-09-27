@@ -33,7 +33,11 @@ promises is held in its text:
   004 T033 to T039 are step 5.6, the last before the handoff, in three runs into three folders -
   every probe whose body never reorders first, PROBE-1 alone last - that cover the probe
   catalog once; `Show-RemodelLedger` reads a ledger in `RemodelProbeLedger.Render`'s shape; a
-  message box waits out PROBE-1's watchdog; and the lines step 5.6 reads are the console's.
+  message box waits out PROBE-1's watchdog; and the lines step 5.6 reads are the console's;
+- and since feature 004's seat adapter is in the build (2026-09-27), step 5.3 plans on a copy with
+  Start refused by the switch, checks the settings after Plan (004 T176) and times it (004 T182),
+  and the plan, the development machine's table and the handover say what the Start switch waits
+  on: step 5.6's blocking probes, then a Plan on one real part's copy, and 004 T180.
 """
 
 from __future__ import annotations
@@ -175,10 +179,14 @@ QUOTED: tuple[tuple[str, str], ...] = (
      "extractor/SwReview.AddIn/Review/ReviewPage/render.js"),
     ("The review stopped", "extractor/SwReview.AddIn/Review/ReviewPage/render.js"),
     ("uncached + ", "extractor/SwReview.AddIn/Review/ReviewPage/render.js"),
-    # Step 5.3, since 004 T157 seats the add-in and T172 keeps Start switched off.
+    # Step 5.3, since 004 T157 seats the add-in and T172 keeps Start switched off; and, since
+    # 004 T176 ends a plan's session as it is made, the first words of T167's failure status,
+    # which the step calls a fail.
     ("Planned. Press Start to apply the plan to the copy.",
      "extractor/SwReview.AddIn/Remodel/RemodelHost.cs"),
     ("Start is not switched on in this build yet, so this plan cannot be applied to the copy.",
+     "extractor/SwReview.AddIn/Remodel/RemodelHost.cs"),
+    ("Not everything the plan changed in SOLIDWORKS could be put back",
      "extractor/SwReview.AddIn/Remodel/RemodelHost.cs"),
     # The handoff's two commands.
     ("Missing artifacts: ", "reviewer/src/swreview/cli.py"),
@@ -1331,8 +1339,10 @@ def test_the_seat_plan_names_decision_17as_tasks_where_they_meet_the_sitting(pla
     four places, where the plan and the handover name them by id. FeatureWorks ships with every
     seat tier (004 T149), so step 1.7 records whether the add-in is there, not which tier has it;
     the planner refuses a derived or mirrored part (004 T147), so row P asks for neither; T003's
-    packages replace 004 T148's provisional counts; and the stage-1 runs also wait on 004 T152 to
-    T160, the production seat adapter, which is not built."""
+    packages replace 004 T148's provisional counts; and the stage-1 runs name 004 T152 to T160, the
+    production seat adapter. *Amended 2026-09-27:* the adapter is in this build (step 5.3 plans
+    through it), so the stage-1 runs' row names it as built and says they wait on the Start switch
+    (004 T172)."""
     record = re.sub(r"\s+", " ", step(plan, "1.7"))
     row_p = next(line for line in plan.splitlines() if line.startswith("| P |"))
     later = plan[plan.index("## Not in this sitting") : plan.index("Open seat or key tasks")]
@@ -1347,6 +1357,96 @@ def test_the_seat_plan_names_decision_17as_tasks_where_they_meet_the_sitting(pla
     assert ("004", "T148") in qualified_tasks(later)
     assert adapter <= earlier_tasks_not_asked(plan)
     assert {("004", "T148"), *adapter} <= qualified_tasks(handover)
+    [stage_1] = [
+        line for line in plan.splitlines() if line.startswith("| 004 | 004 T135 to T141 |")
+    ]
+    assert ("004", "T172") in qualified_tasks(stage_1)
+    assert "not built" not in stage_1 and "are in this build" in stage_1
+
+
+SWITCH_PROBES = "PROBE-1, 2, 3, 4 and 12"
+"""The probes 004 T172's switch waits on, as `RemodelStart.cs` and T172 name them."""
+
+
+def probe_tasks(plan: str) -> dict[str, tuple[str, str]]:
+    """Each probe's task, from step 5.6's table (`| PROBE-3 | 004 T034 | ...`)."""
+    return {
+        probe: (package, task)
+        for probe, package, task in re.findall(
+            r"^\s*\| (PROBE-\d+) \| (\d{3}) (T\d{3}) \|", step(plan, "5.6"), re.MULTILINE
+        )
+    }
+
+
+def test_step_5_3_plans_on_a_copy_and_start_is_refused_by_the_switch(plan: str) -> None:
+    """004 T157 seats the Remodel tab and T172 keeps Start switched off, so step 5.3's pass line is
+    a plan made on a copy - one `-RMS` copy in the newest remodel folder, part J only read - and a
+    Start refused by the switch. Since 004 T176 a plan made while Start is off lets go of its copy
+    at once, so the three settings are checked after Plan and before Start, the Window menu shows
+    no copy, and Discard leaves none; the step records how long Plan took, for 004 T182. The copy
+    check's two suffixes are the product's."""
+    task = re.sub(r"\s+", " ", step(plan, "5.3"))
+    copy_suffix = re.search(
+        r'CopySuffix = "([^"]+)"', (RMS / "RemodelCopy.cs").read_text(encoding="utf-8")
+    ).group(1)
+    run_suffix = re.search(
+        r'RemodelSuffix = "([^"]+)"',
+        (REPO / "extractor" / "SwReview.AddIn" / "Review" / "RunFolders.cs").read_text(
+            encoding="utf-8"
+        ),
+    ).group(1)
+
+    for phrase in (
+        "**Remodel a copy plans on a copy**",
+        "**Start is switched off**",
+        "`copies in it: 1`",
+        "`copies in it: 0`",
+        "no document whose name ends in `-RMS`",
+        "Open the three settings again, before Start",
+        "how long the plan took, in seconds",
+        "the hash, size and time are unchanged",
+    ):
+        assert phrase in task, phrase
+    assert f"'*{run_suffix}'" in task and f"'*{copy_suffix}.SLDPRT'" in task
+    assert task.index("before Start") < task.index("Press **Start**")
+    assert task.index("Press **Start**") < task.index("press **Discard copy**")
+    assert {("004", "T172"), ("004", "T176"), ("004", "T182")} <= qualified_tasks(task)
+
+
+def test_the_start_switch_waits_on_the_blocking_probes_then_a_real_plan(plan: str) -> None:
+    """What the next sitting must prove before the development machine sets
+    `RemodelStart.SeatValidated`, in this order: step 5.6's blocking probes, the ones 004 T172 and
+    `RemodelStart.cs` name, each `verified` - their tasks read off step 5.6's own table - then step
+    5.3's Plan on one real part's copy with that part's hash unchanged; and 004 T180 is decided
+    first. The development machine's table and the handover say the same."""
+    waits = re.sub(r"\s+", " ", step(plan, "5.3"))
+    waits = waits[waits.index("**What the Start switch waits on.**") :]
+    tasks = (FEATURE_004 / "tasks.md").read_text(encoding="utf-8")
+    start = (RMS / "RemodelStart.cs").read_text(encoding="utf-8")
+    probes = probe_tasks(plan)
+    blocking = {probes[f"PROBE-{number}"] for number in (1, 2, 3, 4, 12)}
+    [row] = [
+        line for line in plan[plan.index("## Not in this sitting") :].splitlines()
+        if "`RemodelStart.SeatValidated`" in line
+    ]
+    handover = re.sub(r"\s+", " ", HANDOVER.read_text(encoding="utf-8"))
+
+    assert SWITCH_PROBES in start and SWITCH_PROBES in tasks
+    assert SWITCH_PROBES in waits
+    assert blocking == {("004", "T033"), ("004", "T034"), ("004", "T035"), ("004", "T037")}
+    assert blocking | {("004", "T180")} <= qualified_tasks(waits)
+    assert "`RemodelStart.SeatValidated`" in waits
+    assert waits.index("step 5.6's blocking probes") < waits.index(
+        "this step's Plan on one real part's copy"
+    )
+    assert "hash, size and time unchanged" in waits
+    assert blocking | {("004", "T172"), ("004", "T180"), ("004", "T182")} <= qualified_tasks(row)
+    assert "step 5.3" in row and "hash" in row
+    assert blocking | {("004", "T172"), ("004", "T180")} <= qualified_tasks(handover)
+    assert handover.index("first step 21's blocking probes") < handover.index(
+        "then step 5.3's Plan on one real part's copy"
+    )
+    assert "- [ ] T180 " in tasks and "**Blocks setting T172's switch**" in tasks
 
 
 def test_the_owners_parts_give_004_t003_its_packages_and_no_name(plan: str) -> None:

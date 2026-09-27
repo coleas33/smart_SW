@@ -1924,6 +1924,13 @@ else of a title block.
 
 ### 5.3 Remodel
 
+This build gives the Remodel tab its seat (feature 004's seat adapter, 004 T152 to T160, and its
+teardown, 004 T167): **Remodel a copy plans on a copy** the tab makes in its own run folder, never
+on part J, and J is only read. **Start is switched off** in this build (004 T172) until the probes of
+step 5.6 have their verdicts, so Start is refused by name and changes nothing. Because Start is
+off, a plan lets go of its copy as soon as it is made (004 T176): SOLIDWORKS closes the copy
+without saving and puts the three settings below back before the tab says it planned.
+
 With part J open:
 
 ```powershell
@@ -1931,17 +1938,44 @@ $f = "<full path of part J>"
 Get-SeatHash $f; Get-Item -LiteralPath $f | Select-Object Length, LastWriteTime
 ```
 
-Open Tools > Options > System Options, General page, note in `notes\documents.txt` whether
-**Input dimension value**, **Show errors every rebuild** and **Warn before saving documents with
-update errors** are ticked (`not found` for one you cannot find), and press **Cancel**. Then open
-the **Remodel** tab and press **Remodel a copy**. Pass: it ends with
-`Planned. Press Start to apply the plan to the copy.`, or with a refusal that says why this part is
-not reorganized (write the refusal down; it is not a fail). If it planned, press **Start**. Pass: it
-says `Start is not switched on in this build yet, so this plan cannot be applied to the copy.` and
-starts nothing. Then press **Discard copy**. Pass: no error line appears on the tab. Open the three
-settings again and press **Cancel**. Pass: each is as you noted it. Go back to the Review tab and
-run the second line again. Pass: the hash, size and time are unchanged. Record: pass or fail, and
-the refusal if Remodel a copy was refused.
+1. Open Tools > Options > System Options, General page, note in `notes\documents.txt` whether
+   **Input dimension value**, **Show errors every rebuild** and **Warn before saving documents
+   with update errors** are ticked (`not found` for one you cannot find), and press **Cancel**.
+2. Open the **Remodel** tab and press **Remodel a copy**, and time it from the press to the last
+   line on the tab (a watch is enough). Pass: it ends with
+   `Planned. Press Start to apply the plan to the copy.`, or with a refusal that says why this part
+   is not reorganized (write the refusal down; it is not a fail, and items 3 to 5 are then skipped).
+   A line beginning `Not everything the plan changed in SOLIDWORKS could be put back` is a fail:
+   write it down whole (it names no path) and still do item 6.
+3. If it planned, check that it planned on a copy:
+
+   ```powershell
+   $run = Get-ChildItem $runs -Directory | Where-Object { $_.Name -like '*-remodel' } | Sort-Object CreationTime | Select-Object -Last 1
+   if (-not $run) { 'no remodel folder' } else { "remodel folder $($run.Name.Substring(0, 15)) | copies in it: $(@(Get-ChildItem -LiteralPath (Join-Path $run.FullName 'copy') -Filter '*-RMS.SLDPRT' -ErrorAction SilentlyContinue).Count)" }
+   ```
+
+   Pass: `copies in it: 1`, and SOLIDWORKS's Window menu lists part J and no document whose name
+   ends in `-RMS`: the copy was made in the run folder and let go.
+4. Open the three settings again, before Start, and press **Cancel**. Pass: each is as you noted
+   it.
+5. Press **Start**. Pass: it says
+   `Start is not switched on in this build yet, so this plan cannot be applied to the copy.` and
+   starts nothing. Then press **Discard copy**. Pass: no error line appears on the tab, and the
+   block of item 3 pasted again prints `copies in it: 0`.
+6. Open the three settings again and press **Cancel**. Pass: each is as you noted it. Then, in
+   PowerShell, run the second line of the first block again. Pass: the hash, size and time are
+   unchanged.
+
+Record: pass or fail; the refusal if Remodel a copy was refused; how long the plan took, in seconds
+(004 T182 sets the add-in's wait on the copy's open from it); and any line saying not everything
+could be put back. No part name, run folder name or path goes in the findings document.
+
+**What the Start switch waits on.** The development machine sets it (`RemodelStart.SeatValidated`,
+in a commit of its own) only once a sitting has proved, in this order: first step 5.6's blocking
+probes - PROBE-1, 2, 3, 4 and 12 (004 T033 to T035 and 004 T037) - each `verified`; then this step's
+Plan on one real part's copy - part J - with that part's hash, size and time unchanged. 004 T180,
+what a plan holds while Start is on, is decided on the development machine before it too. The
+stage-1 runs (004 T135 to T141) are for the sitting after that.
 
 ### 5.4 The live Gemini test [008 T106]
 
@@ -2296,6 +2330,7 @@ For the development machine, once the folder comes back:
 | 010, 011 | setting either switch; 010 T104's and T106's counts | the development machine, as sections 3.10, 3.1 and 4.2 say |
 | 006 | PROBE-1 to PROBE-3 into research R4; `TRANSPARENCY_POLARITY`'s flip | the development machine, from step 3.1's two Standards probe reports |
 | 013 | 013 T142's second half; the census's counts | the sitting after the development machine sets `DrawingOpenScope.SeatValidated`: the host answers `opens_closed` and a review offers the read-only open once per drawing file; and the development machine reruns the part-role census over step 5.1's N folders, counts only |
+| 004 | setting `RemodelStart.SeatValidated` (004 T172's switch); 004 T180; 004 T182's wait | the development machine, in a commit of its own for the switch, and only once a sitting has proved step 5.3's "What the Start switch waits on": step 5.6's blocking probes (004 T033 to T035 and 004 T037) each `verified`, then step 5.3's Plan on part J's copy with J's hash, size and time unchanged; 004 T180, what a plan holds while Start is on, is decided first; 004 T182 sets the add-in's wait on the copy's open from step 5.3's time |
 | 004 | 004 T003's dry run itself; the re-modeler probes' verdicts into the record | the development machine: `swreview remodel plan` over each `package.json` of step 5.1's P folders, counts only, each part by its letter and never its file name, into T003's table (`specs/004-resilient-remodeler/phase0-decision.md` section 4), where they replace 004 T148's provisional counts (its section 4.1, taken from other parts the development machine already held); the verdicts and raw readings of step 5.6's three answers files, as quickstart Scenario 4 says |
 
 Open seat or key tasks of earlier features, not asked this time:
@@ -2309,7 +2344,7 @@ Open seat or key tasks of earlier features, not asked this time:
 | 002 | 002 T055a, 002 T063 | the Ask tab's terminal (Codex, Gemini CLI): the Ask tab is hidden in this build |
 | 002 | 002 T067 | every quickstart scenario of feature 002 end to end: a sweep of its own |
 | 003 | 003 T062, 003 T088, 003 T089 | the RMS fixture parts and their probes; step 5.1 touches Model check on J and the owner's parts only |
-| 004 | 004 T135 to T141 | the re-modeler's stage-1 runs: Start is switched off in this build until step 5.6's blocking probes have verdicts (004 T172; step 5.3 checks Plan, that refusal and Discard), and they wait on 004 T152 to T160 and 004 T167, the production seat adapter, its wiring and its teardown (decision 17A), whose last pieces are not built yet |
+| 004 | 004 T135 to T141 | the re-modeler's stage-1 runs: Start is switched off in this build (004 T172) until the development machine sets it, as the table above says; the production seat adapter, its wiring and its teardown (004 T152 to T160 and 004 T167, decision 17A) are in this build, and step 5.3 plans on a copy through them |
 | 005 | 005 T025 to T030 | the live usage probes: their test files are not written yet |
 | 005 | 005 T034, 005 T036 | building `rms-part` and the benchmark baseline: benchmark work |
 | 005 | 005 T085a | the workstation A/B harness: not built |

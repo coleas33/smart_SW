@@ -87,6 +87,20 @@ where they meet it, each at the test plan's step named:
   the pane's fallback (013 T152) is needed, which sends the refused request again with the reasoning
   kept and turns the lever off for that review - the reviews go on either way.
 
+**The re-modeler has its seat in this build** (feature 004's seat adapter, 004 T152 to T160,
+and its teardown, 004 T167; with the review of 2026-09-27, 004 T175 to T178), and the test
+plan's step 5.3 changes with it. Its pass line is now: Remodel a copy plans on a copy the tab
+makes in its run folder - one `-RMS` copy there, never part J itself - and, since a plan made
+while Start is switched off lets go of its copy at once (004 T176), SOLIDWORKS's three settings
+are back before Start is pressed; Start is refused by the switch (004 T172); Discard leaves no
+copy; and part J's hash, size and time are unchanged. The step also records how long Plan took,
+which sets the add-in's wait on the copy's open (004 T182). What the next sitting must prove
+before the development machine sets the Start switch (`RemodelStart.SeatValidated`, in a commit
+of its own), in this order: first step 21's blocking probes - PROBE-1, 2, 3, 4 and 12 (004 T033
+to T035 and 004 T037) - each `verified`; then step 5.3's Plan on one real part's copy, part J, with
+that part's hash unchanged. 004 T180, what a plan holds while Start is on, is decided on the
+development machine before the switch too.
+
 Two more the owner asked for on 2026-09-27, with step 20:
 
 - **The census's extraction** (the test plan's step 5.1): four part files, each opened on its own
@@ -420,6 +434,9 @@ feature 004: `swreview remodel plan` runs over each P folder's `package.json` fo
 only and each part by its letter, into `specs/004-resilient-remodeler/phase0-decision.md`
 section 4, replacing 004 T148's provisional counts; the three answers files of step 21 give T033
 to T039 their verdicts, recorded as quickstart Scenario 4 says; step 19's record ticks T164. A
-refuted blocking probe goes to the owner. The stage-1 runs, 004 T135 to T141, also wait on
-004 T152 to T160, the production seat adapter and its wiring (decision 17A), before a later
-sitting can run them.
+refuted blocking probe goes to the owner. The stage-1 runs, 004 T135 to T141, wait on the Start
+switch: the production seat adapter and its wiring, 004 T152 to T160 (decision 17A), and its
+teardown, 004 T167, are in this build, and the development machine sets
+`RemodelStart.SeatValidated` (004 T172) in a commit of its own only once step 21's blocking
+probes are `verified`, the test plan's step 5.3 has planned on part J's copy with J's hash
+unchanged, and 004 T180 is decided; a later sitting runs them.
