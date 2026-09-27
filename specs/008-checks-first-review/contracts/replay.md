@@ -1,6 +1,6 @@
 # Contract: The Replay
 
-*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed for User Stories 1 to 6 (013 T042, T058, T069, T095, T115, T124; section 9's rows "Feature 013 US1" to "Feature 013 US2"), User Story 7's gate pending (013 T134; its question T134-Q1 answered by a default taken 2026-09-27, section 5's tree-reading clause, built by 013 T145-T146):* every change of feature 013 that moves what the model reads passes the replay gate and records a re-measured section 9 row; see 013 `contracts/tokens.md` section 5.
+*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed for User Stories 1 to 6 (013 T042, T058, T069, T095, T115, T124; section 9's rows "Feature 013 US1" to "Feature 013 US2"), User Story 7's gate pending (013 T134; its question T134-Q1 answered by a default taken 2026-09-27, section 5's tree-reading clause, built by 013 T145-T146; stopped again on the owner's question T134-Q2, the Standards sketch check's findings):* every change of feature 013 that moves what the model reads passes the replay gate and records a re-measured section 9 row; see 013 `contracts/tokens.md` section 5.
 
 Normative for `swreview benchmark replay`, `benchmark/recording.py`, `benchmark/replay.py`, the
 `ReplayReport` model and the committed replay fixtures (FR-001 to FR-007, SC-001 to SC-005).

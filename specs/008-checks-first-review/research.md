@@ -1539,6 +1539,13 @@ rows, or one depth-0 row and its one second listing - recorded twice, named once
 occurrences dropped. With the rule the three replay none lost and none added: 26, 3 and 2 findings
 narrowed, 283, 29 and 21 locations removed, a zero residual on every round.
 
+**Measured on the fixture generator, and why T134 stops again.** The generator compares every
+recorded finding, standards included, and on the three recordings with T133 applied it also loses
+3, 1 and 1 `standards.part.sketches_fully_defined` findings, each exactly one occurrence of a merged
+pair (the Standards sketch check reads the same tree since T133). They are not `rms.*`, so the rule
+does not narrow them and the generator refuses: T134 stops before regenerating (013 T134, owner
+question T134-Q2, R5).
+
 **How it stays strict.** The de-duplication is counted from the package, never assumed: the depth-0
 row's occurrence is never removed, so a finding whose absorbed sketch is no longer named at all is
 lost; a reference a kept content row carries is never removed wholesale; the family stays `rms.*`;
@@ -1642,4 +1649,5 @@ Re-opened on 2026-09-23 at `43e9b15` for this reconciliation (the rest are the d
 | Settled 2026-09-25 (owner decision 25A): a narrowed finding's remaining locations must carry the persistent references of the current finding it takes, and the exact comparison compares references too (T128, R2.8) | owner | nothing: every narrowed finding on the three recordings has a current finding with the same references |
 | Should narrowing demand more of a location it removes (T129)? It removes any location naming only rows that are not content, in any document's scope, and compares it with nothing. On the three recordings every removable location names only rows of `tolerated_loose` types (108, 10 and 5) and lies in the scope of a location that remains; they belong to the 20, 2 and 1 narrowed `rms.grouping.all_features_in_a_group` findings and, on the big recording, to two `rms.sketches.one_sketch_per_feature` findings that match exactly because today's code still names those rows - so a change to a rule other than the grouping rule could narrow too. Options: narrow only `rms.grouping.all_features_in_a_group`; remove only a `tolerated_loose` type's row; remove only a location in a remaining location's scope; keep the rule | owner | nothing: no figure depends on the answer |
 | The replay plays no previous session, so a recorded finding lever 11a carried is lost unless the requested pass computes it again (checks first); existing before decision 25A (T129) | backlog | nothing: `carry_over_rms` is a workstation lever, off by default, and no recording holds a carried finding |
+| T134-Q2 (013 T134, 2026-09-27): should R2.59's tree-reading clause - not the type table's - also narrow a recorded `standards.part.sketches_fully_defined` finding, the one check outside `rms.*` that reads the shared tree since 013 T133? With T133 the generator loses 3, 1 and 1 of them, each exactly one occurrence of a merged pair; the real recordings' replay cannot see them (no standards profile) | owner | 013 T132-T134: the generator refuses the three fixtures until it is answered |
 | A printed subject names every location's base64 reference (decision 25A, section 7): the review measured the big recording's 20 narrowed subjects at 49,774 characters, none holding a denylist token; a shorter printed form, such as a digest, would change what 25A decided is printed (T129) | owner | nothing |

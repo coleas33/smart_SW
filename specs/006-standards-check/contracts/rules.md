@@ -1,6 +1,6 @@
 # Standards Check Catalogue
 
-*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), the `revision_matches` half landed with 013 T129 (section below); the `sketches_fully_defined` half pending 013 T133, backed out of main until the owner answers 013 T134-Q1:* `revision_matches` never reports a revision table absent on a sheet with a revision-table read gap or no sheet view, and `standards.part.sketches_fully_defined` reads the shared feature-tree reading; see 013 `contracts/readings.md` sections 2 and 3.
+*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), the `revision_matches` half landed with 013 T129 (section below); the `sketches_fully_defined` half pending 013 T133, backed out of main until the owner answers 013 T134-Q2 (T134-Q1 is answered by a default, 013 T145-T146):* `revision_matches` never reports a revision table absent on a sheet with a revision-table read gap or no sheet view, and `standards.part.sketches_fully_defined` reads the shared feature-tree reading; see 013 `contracts/readings.md` sections 2 and 3.
 
 Check ids are stable and appear verbatim in findings (`check`), coverage, exceptions, waiver
 files and the report. Sixteen ids: seven assembly-scope, four part-scope, four drawing-scope,

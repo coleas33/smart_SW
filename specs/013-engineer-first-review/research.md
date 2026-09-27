@@ -865,6 +865,12 @@ once is kept, so a finding whose depth-0 row is no longer named at all is lost, 
 dropped must be; a reference any kept content row carries is never removed wholesale; a tree with
 neither shape folds nothing, so every decision 23A case reads as before.
 
+**Where it stops (2026-09-27)**: the fixture generator compares every recorded finding, standards
+included, and with T133 it also loses 3, 1 and 1 `standards.part.sketches_fully_defined` findings -
+the Standards sketch check reads the same tree since T133 - each exactly one occurrence of a merged
+pair. They are not `rms.*`, so the default does not narrow them, the generator refuses, and T134
+stops before regenerating, with the owner question T134-Q2 (tasks.md T134; 008 research R5).
+
 **Alternatives**: a new outcome beside `narrowed` (a second list with the same meaning); removing
 every occurrence of a merged pair's reference (it would hide the depth-0 row dropped); a hand list of
 the 30 findings (it drifts); regenerating the fixtures with T133 and accepting the recordings' loss
