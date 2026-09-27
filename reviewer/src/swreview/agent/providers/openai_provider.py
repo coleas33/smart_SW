@@ -692,8 +692,10 @@ def _encode_history(
 
     `drop_prior_reasoning` is lever 14 (feature 013, `contracts/tokens.md` section 4): the
     `reasoning` items of every assistant message before the last user message - the turns
-    before the current one - are left out, and every other item is sent byte for byte. Off,
-    the list is exactly what it was before the lever existed.
+    before the current one - are left out. The other items of a message that lost one are sent
+    without their item ids (`_unlinked`), because the Responses API refuses a stored item sent
+    back without the reasoning item that preceded it; every other item is sent byte for byte.
+    Off, the list is exactly what it was before the lever existed.
     """
     current = _current_turn_start(messages) if drop_prior_reasoning else 0
     items: list[dict[str, Any]] = []
@@ -704,7 +706,8 @@ def _encode_history(
         elif role == "assistant":
             encoded = _encode_assistant(message)
             if index < current:
-                encoded = [item for item in encoded if item.get("type") != "reasoning"]
+                kept = [item for item in encoded if item.get("type") != "reasoning"]
+                encoded = kept if len(kept) == len(encoded) else [_unlinked(i) for i in kept]
             items.extend(encoded)
         elif role == "tool":
             items.append(
@@ -717,6 +720,28 @@ def _encode_history(
         else:
             raise ValueError(f"history message with unknown role {role!r}")
     return items
+
+
+def _unlinked(item: dict[str, Any]) -> dict[str, Any]:
+    """`item`, an output item whose reasoning item lever 14 left out, with nothing pointing at it.
+
+    A stored `function_call` or `message` item sent back with its id is tied to the reasoning
+    item that preceded it in its response, and the Responses API refuses it alone ("... was
+    provided without its required 'reasoning' item"; the adapter leaves `store` at its default).
+    So a call is sent without its item id - `call_id`, which its output answers, is kept - and an
+    answer in the easy form, `{"role": "assistant", "content": text}`, the form `_encode_assistant`
+    already sends for an assistant turn this adapter did not produce (the output message form
+    requires an id). Any other item is sent without its id. (013 review of 2026-09-27; lever 14,
+    005 `contracts/levers.md`.)
+    """
+    if item.get("type") == "message" and item.get("role") == "assistant":
+        text = "".join(
+            part.get("text", "")
+            for part in item.get("content", ())
+            if part.get("type") == "output_text"
+        )
+        return {"role": "assistant", "content": text}
+    return {key: value for key, value in item.items() if key != "id"}
 
 
 def _current_turn_start(messages: Sequence[Mapping[str, Any]]) -> int:

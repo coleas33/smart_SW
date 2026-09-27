@@ -535,6 +535,20 @@ OpenAI request view, adopted by the replay rule of 013 `contracts/tokens.md` sec
 quality regression measurable offline (the findings are the code's, and the replay keeps every
 recorded one); the next workstation sitting's paid figures go beside it (013 T143).
 
+**Amended 2026-09-27 (feature 013's review of that day): no earlier item points at a reasoning item
+left out.** The adoption rested on the replay (which has no reasoning items) and on a fake
+transport; the request shape had never met the real Responses API, which refuses a stored
+`function_call` or `message` item sent back with its id without the reasoning item that preceded it
+in its response (the adapter leaves `store` at its default). So the other items of an earlier
+message that lost a reasoning item are sent without their item ids (`_unlinked`): a call keeps its
+`call_id` and drops `id`; an answer is sent in the easy form, `{"role": "assistant", "content":
+text}`, the form the adapter already sends for an assistant turn it did not produce. An earlier
+message that had no reasoning item, and every item of the current turn, is still sent byte for
+byte; the replay's estimate is unchanged (it prices reasoning output only). The real endpoint's
+acceptance is proved by `tests/live/test_openai_live_prior_reasoning.py` (key-gated, two turns on
+a reasoning model with the lever on), to run where an OpenAI key is set - the development machine
+has none in its environment, so it is a seat step (013 T143, test-plan step 2.5).
+
 ### The array ceiling: what it is asserted on (owner decision 9A, 2026-09-23)
 
 FR-016's whole-array ceiling, `ARRAY_CEILING` in `tests/unit/test_tool_payload.py` (38,000 bytes,
