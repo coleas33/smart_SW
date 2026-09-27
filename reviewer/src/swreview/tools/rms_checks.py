@@ -182,7 +182,7 @@ def run_assembly_checks(context: ToolContext) -> ToolResult:
         results = assembly_rules_unresolved(document_id, reason)
         documents: list[str] = []
     else:
-        results = evaluate_assembly(context.ir, load_table())
+        results = evaluate_assembly(context.ir, load_table(), review_roles(context))
         documents = [document_id]
 
     return _reported(context, results, documents)

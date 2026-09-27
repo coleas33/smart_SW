@@ -39,6 +39,7 @@ from collections import deque
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
+from swreview.checks.part_roles import PartRoles
 from swreview.checks.rms.registry import RULES, bind, evaluable
 from swreview.checks.rms.results import (
     RuleResult,
@@ -50,7 +51,7 @@ from swreview.checks.rms.results import (
     verdict,
 )
 from swreview.checks.rms_types import ConstrainedStatus, RmsTypeTable
-from swreview.ir.models import ComponentInstance, EvidencePackage, Mate
+from swreview.ir.models import ComponentInstance, EvidencePackage, Mate, MateEntity
 
 __all__ = [
     "Assembly",
@@ -73,6 +74,9 @@ MATE_CHAIN_DEPTH = "rms.assembly.mate_chain_depth"
 TOOLBOX_PARTS_NOT_CONFIGURATIONS = "rms.assembly.toolbox_parts_not_configurations"
 
 NO_MATES = "the root assembly has no mates"
+BOUGHT_ONLY_MATES = "mates between bought parts are not graded"
+"""The skipped subject line of `rms.assembly.mates_to_reference_geometry` for mates whose every
+side is a bought part (feature 013 `contracts/part-roles.md` section 6)."""
 NO_CHILDREN = "the root assembly has no child components"
 NO_FIXED_CHILD = "no fixed child of the root assembly"
 
@@ -279,6 +283,9 @@ class Assembly:
     by_id: Mapping[str, ComponentInstance]
     mates: tuple[Mate, ...]
     graph: MateGraph
+    roles: PartRoles | None = None
+    """The review's part roles (feature 013), or `None` when none are attached: then every
+    side of every mate is graded, as before."""
 
     def mate(self, row: Mate) -> Subject:
         return _mate_subject(row, self.configuration)
@@ -286,24 +293,52 @@ class Assembly:
     def component(self, row: ComponentInstance) -> Subject:
         return _component_subject(row, self.configuration)
 
-    def joined_by(self, row: Mate) -> list[ComponentInstance]:
-        """The instances a mate's entities name, each once, in entity order."""
+    def components_of(self, entities: Sequence[MateEntity]) -> list[ComponentInstance]:
+        """The instances `entities` name, each once, in entity order."""
         joined: list[ComponentInstance] = []
         seen: set[str] = set()
-        for entity in row.entities:
+        for entity in entities:
             component = self.by_id.get(entity.component_id)
             if component is not None and component.id not in seen:
                 seen.add(component.id)
                 joined.append(component)
         return joined
 
-    def mate_subjects(self, row: Mate) -> list[Subject]:
-        """The contract's "mate and its components", in that order."""
-        return [self.mate(row), *(self.component(item) for item in self.joined_by(row))]
+    def joined_by(self, row: Mate) -> list[ComponentInstance]:
+        """The instances a mate's entities name, each once, in entity order."""
+        return self.components_of(row.entities)
+
+    def mate_subjects(
+        self, row: Mate, entities: Sequence[MateEntity] | None = None
+    ) -> list[Subject]:
+        """The contract's "mate and its components", in that order; with `entities`, only
+        the components those entities name (the graded sides, feature 013)."""
+        components = self.components_of(row.entities if entities is None else entities)
+        return [self.mate(row), *(self.component(item) for item in components)]
+
+    def graded(self, entity: MateEntity) -> bool:
+        """Whether this side of a mate is graded: its component's document is custom or
+        unclear, or no roles are attached. A side whose component is not a child instance -
+        the root assembly's own geometry - is graded, as is an unknown one."""
+        component = self.by_id.get(entity.component_id)
+        return self.roles is None or component is None or self.roles.graded(component.document_id)
+
+    def notes(self, entities: Sequence[MateEntity]) -> list[str]:
+        """The may-be-bought notes of the unclear documents `entities` sit on, each once."""
+        if self.roles is None:
+            return []
+        found: dict[str, None] = {}
+        for component in self.components_of(entities):
+            note = self.roles.note_for(component.document_id)
+            if note is not None:
+                found.setdefault(note, None)
+        return list(found)
 
 
-def assembly_tree(package: EvidencePackage, table: RmsTypeTable) -> Assembly:
-    """Index one package's root assembly for the rules."""
+def assembly_tree(
+    package: EvidencePackage, table: RmsTypeTable, roles: PartRoles | None = None
+) -> Assembly:
+    """Index one package's root assembly for the rules, with the review's part roles."""
     root = _root_instance(package)
     instances = tuple(row for row in package.components if root is None or row.id != root.id)
     return Assembly(
@@ -319,6 +354,7 @@ def assembly_tree(package: EvidencePackage, table: RmsTypeTable) -> Assembly:
         by_id={row.id: row for row in instances},
         mates=tuple(package.mates),
         graph=MateGraph.of(package),
+        roles=roles,
     )
 
 
@@ -357,6 +393,12 @@ def mates_to_reference_geometry(tree: Assembly) -> list[RuleResult]:
     kind *and* every entity was read - the table's two lists are not exhaustive, so an
     unlisted kind is a question, and an entity the dumper dropped
     (`MATE_ENTITY_GAP_PREFIX`) may have been the face that violates the rule.
+
+    **Only the custom side is graded** (feature 013 `contracts/part-roles.md` section 6,
+    research R2.9): mating to a bought part's faces is the only way to mate to it, so an
+    entity on a bought component is exempt, a failing mate names only its graded side, a
+    mate every side of which is bought is not graded (one skipped subject line), and a fail
+    on an unclear part carries the note that it may be bought while the question is open.
     """
     rule = RULES[MATES_TO_REFERENCE_GEOMETRY]
     if not tree.mates:
@@ -368,19 +410,26 @@ def mates_to_reference_geometry(tree: Assembly) -> list[RuleResult]:
 
     offenders: list[Subject] = []
     observed: list[str] = []
+    notes: dict[str, None] = {}
     passing: list[Subject] = []
     unknown: list[tuple[Subject, str]] = []
+    bought_only: list[Subject] = []
     for mate in tree.mates:
-        on_geometry = [entity for entity in mate.entities if entity.entity_kind in geometry]
+        graded = [entity for entity in mate.entities if tree.graded(entity)]
+        if not graded:
+            bought_only.append(tree.mate(mate))
+            continue
+        on_geometry = [entity for entity in graded if entity.entity_kind in geometry]
         unlisted = sorted(
             {
                 entity.entity_kind
-                for entity in mate.entities
+                for entity in graded
                 if entity.entity_kind not in geometry and entity.entity_kind not in reference
             }
         )
         if on_geometry:
-            offenders.extend(tree.mate_subjects(mate))
+            offenders.extend(tree.mate_subjects(mate, graded))
+            notes.update(dict.fromkeys(tree.notes(on_geometry)))
             named = ", ".join(
                 f"{entity.entity_kind} on "
                 f"{tree.by_id[entity.component_id].full_path}"
@@ -400,7 +449,7 @@ def mates_to_reference_geometry(tree: Assembly) -> list[RuleResult]:
                 f"nor the geometry list"
             )
         if reasons:
-            subjects = tree.mate_subjects(mate)
+            subjects = tree.mate_subjects(mate, graded)
             unknown.append((subjects[0], "; ".join(reasons)))
             unknown.extend((subject, "on that mate") for subject in subjects[1:])
         else:
@@ -417,8 +466,16 @@ def mates_to_reference_geometry(tree: Assembly) -> list[RuleResult]:
                 "Re-mate to reference planes, axes, points or coordinate systems so the "
                 "mates survive a change to the faces and edges they sit on."
             ),
+            coverage_limits=list(notes),
         )
-    return verdict(rule, tree.document_id, violation=violation, passing=passing, unknown=unknown)
+    results: list[RuleResult] = []
+    if offenders or passing or unknown:
+        results = verdict(
+            rule, tree.document_id, violation=violation, passing=passing, unknown=unknown
+        )
+    if bought_only:
+        results.append(skipped(rule, tree.document_id, BOUGHT_ONLY_MATES, bought_only))
+    return results
 
 
 # --- rms.assembly.first_component_fixed -------------------------------------------
@@ -637,9 +694,14 @@ def _toolbox_unreadable(tree: Assembly) -> list[ComponentInstance]:
 # --- the evaluator ----------------------------------------------------------------
 
 
-def evaluate_assembly(package: EvidencePackage, table: RmsTypeTable) -> list[RuleResult]:
-    """Every evaluable assembly rule over the root assembly document, in contract order."""
-    tree = assembly_tree(package, table)
+def evaluate_assembly(
+    package: EvidencePackage, table: RmsTypeTable, roles: PartRoles | None = None
+) -> list[RuleResult]:
+    """Every evaluable assembly rule over the root assembly document, in contract order.
+
+    `roles` are the review's part roles (feature 013): only the mates rule reads them, to
+    grade the custom side of a mate; every other assembly rule keeps bought parts in."""
+    tree = assembly_tree(package, table, roles)
     results: list[RuleResult] = []
     for rule in evaluable():
         if rule.scope != SCOPE:

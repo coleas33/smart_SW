@@ -1182,3 +1182,25 @@ def test_a_root_part_that_looks_bought_is_still_graded() -> None:
     attach_part_roles(context, roles)
 
     assert run_tool(context, "check_rms_part")["documents"] == ["doc:1"]
+
+
+def test_the_assembly_tool_grades_the_custom_side_of_each_mate() -> None:
+    """The sitting's shape: the plate's plane mated to the pin's face passes once the pin is
+    bought, and the plate's face mated to the spacer's face still fails, naming both."""
+    with_roles = sitting_context()
+    without = sitting_context(roles=False)
+
+    run_tool(with_roles, "check_rms_assembly")
+    run_tool(without, "check_rms_assembly")
+
+    def mate_findings(context: ToolContext) -> list[str]:
+        return [
+            finding.observed
+            for finding in session_of(context).findings
+            if finding.check == "rms.assembly.mates_to_reference_geometry"
+        ]
+
+    assert mate_findings(with_roles) == [
+        "mate:0002 (COINCIDENT) references swSelFACES on plate-1, swSelFACES on spacer-1"
+    ]
+    assert "mate:0001" in mate_findings(without)[0]
