@@ -108,7 +108,14 @@ from swreview.checks.rms_types import load_table, unknown_types
 from swreview.checks.rules.family import WAIVABLE_STATUS, CheckFamily, waiver_invalidity
 from swreview.checks.rules.registry import Rule
 from swreview.checks.rules.run import CHECK_FILE_NAME, check_record
-from swreview.checks.standards.profile import DEFAULT_PATH, SETTING_NAME, ProfileError
+from swreview.checks.standards.profile import (
+    DEFAULT_PATH,
+    SETTING_NAME,
+    ProfileError,
+    ProfileUpgradeRefused,
+    load_profile,
+    propose_version_4,
+)
 from swreview.checks.standards.registry import RULES as STANDARDS_RULES
 from swreview.checks.standards.registry import STANDARDS_FAMILY
 from swreview.checks.standards.report import document_of, verdict_json
@@ -189,6 +196,10 @@ drawing_app = typer.Typer(
     no_args_is_help=True,
     help="Drawing context read from a package: the bounded per-part brief (feature 011).",
 )
+profile_app = typer.Typer(
+    no_args_is_help=True,
+    help="The standards profile: propose the next version from the one you have (feature 013).",
+)
 
 
 def utf8_streams() -> None:
@@ -222,6 +233,7 @@ app.add_typer(rms_app, name="rms")
 app.add_typer(remodel_app, name="remodel")
 app.add_typer(tokenizer_app, name="tokenizer")
 app.add_typer(drawing_app, name="drawing")
+app.add_typer(profile_app, name="profile")
 
 FAKE_REVIEW_SCRIPT: tuple[ScriptedTurn, ...] = (
     ScriptedTurn(
@@ -2824,6 +2836,34 @@ def tokenizer_fetch(
         target, written = fetch_vocabulary(source)
     state = "written" if written else "already in place"
     typer.echo(f"o200k_base vocabulary {state}: {target}")
+
+
+@profile_app.command("upgrade")
+def profile_upgrade(
+    source: Annotated[Path, typer.Argument(help="The version 3 standards profile to read.")],
+    out: Annotated[
+        Path, typer.Option("--out", help="Where the proposed version 4 profile is written.")
+    ],
+    force: Annotated[bool, typer.Option("--force", help="Overwrite an existing --out.")] = False,
+) -> None:
+    """Write a proposed version 4 standards profile from a version 3 one, deciding nothing.
+
+    The input is never written: `--out` gets its text with `version: 4` and a `part_roles`
+    section in which every signal is unused, the library's skip and sketch-exempt entries
+    offered only as commented lines (feature 013 `contracts/part-roles-profile.md` section 5).
+    What was written is validated, and only its path and sha256 are printed - no profile
+    value reaches the console.
+    """
+    with _errors_as_exit_1(ProfileError):
+        if out.resolve() == source.resolve():
+            raise ProfileUpgradeRefused("--out names the input; the upgrade never writes its input")
+        if out.exists() and not force:
+            raise ProfileUpgradeRefused(f"{out} exists; pass --force to overwrite it")
+        profile = load_profile(source)
+        proposed = propose_version_4(source.read_bytes().decode("utf-8"), profile)
+        out.write_bytes(proposed.encode("utf-8"))
+        written = load_profile(out)
+    typer.echo(f"{out} sha256:{written.identity.sha256}")
 
 
 if __name__ == "__main__":  # pragma: no cover

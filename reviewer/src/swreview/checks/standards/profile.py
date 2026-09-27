@@ -26,6 +26,7 @@ no second copy of it exists in either tree.
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -73,6 +74,7 @@ __all__ = [
     "ProfileIdentity",
     "ProfileInvalid",
     "ProfileUnreadable",
+    "ProfileUpgradeRefused",
     "ReviewProfile",
     "RevisionCell",
     "RevisionSection",
@@ -82,6 +84,7 @@ __all__ = [
     "load_review_profile",
     "name_matches",
     "property_key",
+    "propose_version_4",
 ]
 
 PROFILE_VERSION = 4
@@ -631,6 +634,104 @@ def load_review_profile(path: Path | str | None) -> ReviewProfile:
         return ReviewProfile(path=str(path), profile=load_profile(path), refusal=None)
     except ProfileError as error:
         return ReviewProfile(path=str(path), profile=None, refusal=error)
+
+
+class ProfileUpgradeRefused(ProfileError):
+    """`swreview profile upgrade` will not write a proposal from this input."""
+
+    error_class = "ProfileUpgradeRefused"
+
+
+_VERSION_3_LINE = re.compile(r"(?m)^version:[ \t]*3(?=[ \t]*(?:#[^\r\n]*)?\r?$)")
+"""The top-level `version: 3` line, a trailing comment allowed, in either line ending."""
+
+_PROPOSALS: tuple[tuple[str, str], ...] = (
+    ("skip_prefixes", "'Standards skips this'"),
+    ("sketch_exempt_prefixes", "'no sketch check here'"),
+)
+"""The library lists the upgrade proposes as bought prefixes, and what each one means instead
+(feature 013 `contracts/part-roles-profile.md` section 5)."""
+
+
+def propose_version_4(text: str, profile: StandardsProfile) -> str:
+    """The version 3 profile `text` as a proposed version 4 profile, deciding nothing.
+
+    The input's own text is kept - its comments and its layout - with the `version: 3` line
+    raised to 4 and a `part_roles` section appended in which every signal is unused. The
+    library's skip and sketch-exempt entries are offered under `bought_prefixes` as commented
+    lines only: neither list means "bought", so nothing is treated as bought until the owner
+    uncomments it (feature 013 `contracts/part-roles-profile.md` section 5, research R2.2).
+
+    Raises `ProfileUpgradeRefused` for a version 1 or 2 profile, naming the sections it lacks
+    (version 4 is version 3 plus one section; the helper does not invent values the owner has
+    not written), for a version 4 profile, and for a text whose version line it cannot find.
+    """
+    if profile.version == 4:
+        raise ProfileUpgradeRefused("the profile is already version 4")
+    if profile.version != 3:
+        has = SECTIONS_BY_VERSION[profile.version]
+        lacking = [name for name in SECTIONS_BY_VERSION[3] if name not in has]
+        named = lacking[0] if len(lacking) == 1 else f"{', '.join(lacking[:-1])} and {lacking[-1]}"
+        raise ProfileUpgradeRefused(
+            f"a version {profile.version} profile lacks {named}; version 4 adds part_roles to "
+            "a version 3 profile, and the upgrade does not write sections you have not written"
+        )
+    raised, found = _VERSION_3_LINE.subn("version: 4", text)
+    if found != 1:
+        raise ProfileUpgradeRefused(
+            "the profile's version is not written on one top-level line as 'version: 3'"
+        )
+    newline = "\r\n" if "\r\n" in text else "\n"
+    kept = raised.rstrip("\r\n")
+    section = newline.join(_proposal(profile))
+    proposed = f"{kept}{newline}{newline}{section}{newline}"
+    StandardsProfile.model_validate(yaml.safe_load(proposed))
+    return proposed
+
+
+def _proposal(profile: StandardsProfile) -> list[str]:
+    """The appended `part_roles` section, one line per list item, every signal unused."""
+    lines = [
+        "part_roles:",
+        "  # Written by `swreview profile upgrade` (feature 013). Every signal below is unused",
+        "  # until you fill it in; config/standards.example.yaml shows what each one looks for.",
+        "  bought_prefixes: []",
+    ]
+    proposals = [
+        (name, meaning, getattr(profile.library, name))
+        for name, meaning in _PROPOSALS
+        if getattr(profile.library, name)
+    ]
+    if proposals:
+        lines.append(
+            "    # To use a proposal, uncomment it and write 'bought_prefixes:' without the []."
+        )
+    for name, meaning, entries in proposals:
+        lines.append(
+            f"    # Proposed from library.{name}, which means {meaning}, not 'bought'. "
+            "Uncomment what is bought."
+        )
+        lines.extend(f"    # - {json.dumps(entry)}" for entry in entries)
+    lines.extend(
+        [
+            "  bought_folder_names: []",
+            "  switch:",
+            '    property: ""',
+            "    bought_values: []",
+            "    custom_values: []",
+            "  vendor_properties: []",
+            "  distributor_block:",
+            "    properties: []",
+            "    min_valued: 0",
+            "  catalogue_numbers:",
+            "    shapes: []",
+            "    properties: []",
+            "  custom_prefixes: []",
+            "  bought_number_prefixes: []",
+            "  detail_properties: []",
+        ]
+    )
+    return lines
 
 
 def _read(path: Path) -> bytes:
