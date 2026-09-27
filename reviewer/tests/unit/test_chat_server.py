@@ -565,7 +565,8 @@ def test_a_pane_review_records_the_pane_defaults_model_view(
     written = json.loads((run_dir / "session.json").read_text(encoding="utf-8"))
     pane = pane_defaults(ProviderName.FAKE)
     assert written["model_view"] == pane.model_view.model_dump() == MODEL_VIEW_PANE.model_dump()
-    assert written["efficiency"] == pane.efficiency.model_dump()
+    # Edited deliberately by feature 013 T121: lever 14, off in the pane, is not written.
+    assert written["efficiency"] == pane.efficiency.model_dump(exclude={"drop_prior_reasoning"})
 
 
 @dataclass

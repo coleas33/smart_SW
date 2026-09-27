@@ -68,11 +68,13 @@ EXPECTED_LEVERS: tuple[str, ...] = (
     "procedural_gate",
     "compact_queries",
     "withhold_prerun_tools",
+    "drop_prior_reasoning",
 )
-"""The thirteen levers of data-model.md section 7, written out once so the model cannot lose
+"""The fourteen levers of data-model.md section 7, written out once so the model cannot lose
 one without this module noticing. Every other test here takes the names from the model.
 Lever 13, `withhold_prerun_tools`, is the owner's of 2026-09-23 (feature 008 research R2.53),
-appended last like lever 11.
+appended last like lever 11; lever 14, `drop_prior_reasoning`, is feature 013's (T121,
+`contracts/tokens.md` section 4), appended last again.
 
 Lever 11 is **appended**, never inserted: `LEVER_NAMES` is this tuple, and a name inserted
 in the middle would reorder every refusal message and every `--help` listing that iterates
@@ -98,7 +100,7 @@ def test_every_lever_is_a_field_and_every_field_defaults_to_off() -> None:
     settings = EfficiencySettings()
 
     assert tuple(EfficiencySettings.model_fields) == EXPECTED_LEVERS
-    assert [getattr(settings, name) for name in EXPECTED_LEVERS] == [False] * 13
+    assert [getattr(settings, name) for name in EXPECTED_LEVERS] == [False] * 14
 
 
 def test_lever_names_come_from_the_model() -> None:
@@ -140,13 +142,13 @@ def test_no_levers_resolve_to_every_flag_off() -> None:
     assert efficiency_from_levers(()) == EfficiencySettings()
 
 
-def test_an_unknown_lever_name_names_the_thirteen_valid_ones() -> None:
+def test_an_unknown_lever_name_names_the_fourteen_valid_ones() -> None:
     with pytest.raises(ValueError) as caught:
         efficiency_from_levers(["turbo_mode"])
 
     message = str(caught.value)
     assert "turbo_mode" in message
-    assert "the thirteen levers" in message
+    assert "the fourteen levers" in message
     for name in LEVER_NAMES:
         assert name in message
 
@@ -246,11 +248,11 @@ def test_study_none_refuses_an_off_or_on_arm(arm: str) -> None:
         check_study_arm(study="none", arm=arm, efficiency=EfficiencySettings())
 
 
-def test_an_unknown_study_name_names_the_thirteen_levers() -> None:
+def test_an_unknown_study_name_names_the_fourteen_levers() -> None:
     with pytest.raises(ValueError) as caught:
         check_study_arm(study="turbo_mode", arm="on", efficiency=EfficiencySettings())
 
-    assert "the thirteen levers" in str(caught.value)
+    assert "the fourteen levers" in str(caught.value)
     for name in LEVER_NAMES:
         assert name in str(caught.value)
 
@@ -798,3 +800,63 @@ def test_review_accepts_lever_13_with_checks_first_and_records_both(
     assert load_session(out / "session.json").efficiency == EfficiencySettings(
         prerun_checks=True, withhold_prerun_tools=True
     )
+
+
+# --- lever 14, drop_prior_reasoning (feature 013 T120, contracts/tokens.md section 4) ----------
+
+
+def test_lever_14_is_off_by_default_and_off_in_the_pane() -> None:
+    from swreview.agent.providers import ProviderName
+    from swreview.agent.settings import pane_efficiency
+
+    assert EfficiencySettings().drop_prior_reasoning is False
+    for provider in ProviderName:
+        assert pane_efficiency(provider).drop_prior_reasoning is False
+
+
+def test_lever_14_resolves_alone_from_the_command_line() -> None:
+    assert efficiency_from_levers(["drop_prior_reasoning"]) == EfficiencySettings(
+        drop_prior_reasoning=True
+    )
+
+
+def test_lever_14_is_gated_alone_with_nothing() -> None:
+    from swreview.agent.settings import GATED_ALONE
+
+    assert all(
+        "drop_prior_reasoning" not in (first, second) for first, _, second, _ in GATED_ALONE
+    )
+    assert efficiency_from_levers(["drop_prior_reasoning", "prerun_checks"]) == (
+        EfficiencySettings(drop_prior_reasoning=True, prerun_checks=True)
+    )
+
+
+def test_a_session_omits_lever_14_while_it_is_off_and_keeps_its_bytes() -> None:
+    fixture = Path(__file__).resolve().parents[1] / "fixtures" / "replay" / "small-assembly-a"
+    session = load_session(fixture / "session.json")
+
+    dumped = session.model_dump(mode="json")
+    assert dumped["efficiency"] is not None
+    assert "drop_prior_reasoning" not in dumped["efficiency"]
+
+
+def test_a_session_writes_lever_14_when_it_is_on_and_validates(tmp_path: Path) -> None:
+    from tests.unit.test_session import build_session, session_validator
+
+    session = build_session(efficiency=EfficiencySettings(drop_prior_reasoning=True))
+    dumped = session.model_dump(mode="json")
+
+    assert dumped["efficiency"]["drop_prior_reasoning"] is True
+    session_validator().validate(dumped)
+    target = tmp_path / "session.json"
+    target.write_text(session.model_dump_json(indent=2), encoding="utf-8")
+    assert load_session(target).efficiency == EfficiencySettings(drop_prior_reasoning=True)
+
+
+def test_the_session_contract_names_lever_14_as_optional() -> None:
+    from tests.support.contracts import load_contract
+
+    definition = load_contract("review-session.schema.json")["$defs"]["EfficiencySettings"]
+
+    assert definition["properties"]["drop_prior_reasoning"]["type"] == "boolean"
+    assert "drop_prior_reasoning" not in definition.get("required", [])

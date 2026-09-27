@@ -71,9 +71,9 @@ def test_the_pane_defaults_are_one_function_of_the_provider(provider: ProviderNa
 
 
 def test_the_view_settings_are_not_levers() -> None:
-    """Thirteen levers since the owner's lever 13 of 2026-09-23 (research R2.53); the view
-    settings are still none of them."""
-    assert len(LEVER_NAMES) == 13
+    """Thirteen levers since the owner's lever 13 of 2026-09-23 (research R2.53), fourteen
+    since feature 013's lever 14 (T121); the view settings are still none of them."""
+    assert len(LEVER_NAMES) == 14
     assert not {"payload_slimming", "history_pruning", "prune_after_rounds"} & set(LEVER_NAMES)
 
 

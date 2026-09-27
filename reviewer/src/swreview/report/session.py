@@ -591,10 +591,12 @@ class ReviewSession(ReviewModel):
         if self.drawing_read is None:
             data.pop("drawing_read", None)
         efficiency = data.get("efficiency")
-        if isinstance(efficiency, dict) and not efficiency.get("withhold_prerun_tools"):
-            # Lever 13 (feature 008 amendment, 2026-09-23) is written only when on, so a
-            # session written before it existed - twelve booleans - keeps its bytes.
-            efficiency.pop("withhold_prerun_tools", None)
+        if isinstance(efficiency, dict):
+            # Lever 13 (feature 008 amendment, 2026-09-23) and lever 14 (feature 013) are
+            # written only when on, so a session written before each existed keeps its bytes.
+            for lever in ("withhold_prerun_tools", "drop_prior_reasoning"):
+                if not efficiency.get(lever):
+                    efficiency.pop(lever, None)
         return data
 
 

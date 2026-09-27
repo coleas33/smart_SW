@@ -2606,9 +2606,11 @@ def test_review_records_every_change_off_by_default(tmp_package_dir: Path, tmp_p
     recorded = reviewed_settings(tmp_package_dir, tmp_path / "run")
 
     # Lever 13 is written only when on (feature 008 amendment), so an all-off session carries
-    # the twelve booleans it carried before the lever existed.
+    # the twelve booleans it carried before the lever existed; lever 14 likewise (feature 013
+    # T121, edited deliberately).
     all_off = EfficiencySettings().model_dump()
     del all_off["withhold_prerun_tools"]
+    del all_off["drop_prior_reasoning"]
     assert recorded["efficiency"] == all_off
     assert recorded["model_view"] == MODEL_VIEW_OFF.model_dump()
     assert (tmp_path / "run" / "tool-results").is_dir(), "every result is kept either way"
@@ -2618,7 +2620,8 @@ def test_pane_defaults_records_the_panes_settings(tmp_package_dir: Path, tmp_pat
     recorded = reviewed_settings(tmp_package_dir, tmp_path / "run", "--pane-defaults")
 
     pane = pane_defaults(ProviderName.FAKE)
-    assert recorded["efficiency"] == pane.efficiency.model_dump()
+    # Edited deliberately by feature 013 T121: lever 14, off in the pane, is not written.
+    assert recorded["efficiency"] == pane.efficiency.model_dump(exclude={"drop_prior_reasoning"})
     assert recorded["model_view"] == pane.model_view.model_dump()
 
 

@@ -408,7 +408,7 @@ def _enterprise_switch(env: Mapping[str, str]) -> str | None:
 class EfficiencySettings(BaseModel):
     """Which efficiency levers this run has on. Every field defaults to off.
 
-    One object for all thirteen flags rather than one plumbed argument per lever (OQ-1):
+    One object for all fourteen flags rather than one plumbed argument per lever (OQ-1):
     threaded as one keyword argument through `start_review`, `ReviewRun`, `run_benchmark`
     and `cli._review_fn` exactly as `effort` and `max_steps` already are, and recorded
     whole on `session.efficiency`. Without that record no results row can be attributed to
@@ -478,6 +478,14 @@ class EfficiencySettings(BaseModel):
     `contracts/checks-first.md` section 7). Inert without a pre-run, which is why
     `efficiency_from_levers` refuses it without lever 5 or lever 11. Appended last, for the
     reason lever 11 was."""
+
+    drop_prior_reasoning: bool = False
+    """Lever 14 (feature 013, `contracts/tokens.md` section 4): at a turn boundary, the OpenAI
+    request view leaves out the reasoning items of earlier turns and keeps the current turn's;
+    the stored history is unchanged. Inert on Gemini, which sends none. Off until the replay
+    shows no recorded finding lost and a fall in requested input, and then adopted only by a
+    commit of its own into `pane_efficiency`. Appended last, and written into `session.json`
+    only when on, as lever 13 is."""
 
 
 def checks_first(efficiency: EfficiencySettings | None) -> bool:
@@ -608,7 +616,7 @@ class ExtractionSettings(BaseModel):
 
 
 LEVER_NAMES: tuple[str, ...] = tuple(EfficiencySettings.model_fields)
-"""The thirteen lever names, taken from the model so nothing has to retype them.
+"""The fourteen lever names, taken from the model so nothing has to retype them.
 
 Every refusal message below, the `--lever` option and the pane guard iterate this, so a
 lever added to the model is covered by all of them without a second edit anywhere.
@@ -630,7 +638,7 @@ NO_STUDY = "none"
 
 
 def _levers_sentence() -> str:
-    return "the thirteen levers are " + ", ".join(LEVER_NAMES)
+    return "the fourteen levers are " + ", ".join(LEVER_NAMES)
 
 
 GATED_ALONE: tuple[tuple[str, int, str, int], ...] = (
