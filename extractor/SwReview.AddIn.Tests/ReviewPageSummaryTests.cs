@@ -27,6 +27,9 @@ public sealed class ReviewPageSummaryTests
     /// <summary>A drawing line that carries markup: the backend's text travels verbatim, so this is characters.</summary>
     private const string HostileDrawings = "<img src=x onerror=alert(3)><script>alert(4)</script> 2 drawings read";
 
+    /// <summary>A bought-parts line that carries markup, for the same reason.</summary>
+    private const string HostileBoughtParts = "<img src=x onerror=alert(6)></p><script>alert(7)</script> 1 part not graded";
+
     private static readonly Lazy<Run> Scripted = new Lazy<Run>(Drive);
 
     [Fact]
@@ -52,7 +55,7 @@ public sealed class ReviewPageSummaryTests
         JsonElement first = Scripted.Value.First;
 
         Assert.Equal(
-            new[] { "summary-headline", "summary-groups", "summary-questions", "summary-not-loaded", "summary-drawings", "summary-goals" },
+            new[] { "summary-headline", "summary-groups", "summary-questions", "summary-not-loaded", "summary-drawings", "summary-bought-parts", "summary-goals" },
             ReviewPageDriver.Strings(first, "children"));
         Assert.Equal(SummarySample.Headline, first.GetProperty("headline").GetString());
         Assert.Equal(SummarySample.QuestionsText, first.GetProperty("questions").GetString());
@@ -115,9 +118,39 @@ public sealed class ReviewPageSummaryTests
         Assert.Equal(0, Scripted.Value.Second.GetProperty("drawingLines").GetInt32());
         Assert.Equal(0, older.GetProperty("drawingLines").GetInt32());
         Assert.Equal(
-            new[] { "summary-headline", "summary-groups", "summary-questions", "summary-not-loaded", "summary-goals" },
+            new[] { "summary-headline", "summary-groups", "summary-questions", "summary-not-loaded", "summary-bought-parts", "summary-goals" },
             ReviewPageDriver.Strings(older, "children"));
         Assert.Equal(SummarySample.Headline, older.GetProperty("headline").GetString());
+    }
+
+    /// <summary>
+    /// Feature 013 (contracts/part-roles.md section 7): the bought parts are named once, in the
+    /// backend's one line, printed as sent after the drawings line - the page counts no part and
+    /// composes no word of it, and the line is characters, never an element or a handler.
+    /// </summary>
+    [Fact]
+    public void TheBoughtPartsLineIsTheBackendsTextPrintedVerbatimOnce()
+    {
+        JsonElement first = Scripted.Value.First;
+        JsonElement hostile = Scripted.Value.HostileBoughtParts;
+
+        Assert.Equal(SummarySample.BoughtPartsText, first.GetProperty("boughtParts").GetString());
+        Assert.Equal(1, first.GetProperty("boughtPartsLines").GetInt32());
+        Assert.Equal(HostileBoughtParts, hostile.GetProperty("boughtParts").GetString());
+        Assert.Equal(0, hostile.GetProperty("injected").GetInt32());
+        Assert.Equal(0, hostile.GetProperty("handlers").GetInt32());
+    }
+
+    /// <summary>
+    /// No bought-parts line where the backend sent none: `bought_parts` null - nothing to say, as
+    /// the zero-findings summary sends it - and a summary from a backend older than the line.
+    /// </summary>
+    [Fact]
+    public void ANullOrAbsentBoughtPartsLineRendersNothing()
+    {
+        Assert.Equal(0, Scripted.Value.Second.GetProperty("boughtPartsLines").GetInt32());
+        Assert.Equal(0, Scripted.Value.NoBoughtParts.GetProperty("boughtPartsLines").GetInt32());
+        Assert.Equal(SummarySample.Headline, Scripted.Value.NoBoughtParts.GetProperty("headline").GetString());
     }
 
     [Fact]
@@ -247,6 +280,16 @@ public sealed class ReviewPageSummaryTests
                 await driver.EndSession("chat-1");
                 run.HostileDrawings = await driver.Read(ReadSummary);
 
+                // Feature 013: a backend older than the bought-parts line, then a hostile one.
+                await driver.RouteAttention("chat-1", SummarySample.Json(summary => summary.Remove("bought_parts")));
+                await driver.EndSession("chat-1");
+                run.NoBoughtParts = await driver.Read(ReadSummary);
+
+                await driver.RouteAttention(
+                    "chat-1", SummarySample.Json(summary => summary["bought_parts"] = new JsonObject { ["text"] = HostileBoughtParts }));
+                await driver.EndSession("chat-1");
+                run.HostileBoughtParts = await driver.Read(ReadSummary);
+
                 await driver.StartReview();
                 await driver.RouteAttention("chat-2", AttentionSample.Json());
                 await driver.EndSession("chat-2");
@@ -297,6 +340,8 @@ return JSON.stringify({
   notLoaded: h.text(section, '.summary-not-loaded'),
   drawings: h.text(section, '.summary-drawings'),
   drawingLines: section.querySelectorAll('.summary-drawings').length,
+  boughtParts: h.text(section, '.summary-bought-parts'),
+  boughtPartsLines: section.querySelectorAll('.summary-bought-parts').length,
   goalClasses: Array.prototype.map.call(goals, function (g) { return g.className; }),
   goalTitles: h.texts(section, '.summary-goal .goal-title'),
   goalStates: h.texts(section, '.summary-goal .goal-state'),
@@ -322,6 +367,10 @@ return JSON.stringify({
         public JsonElement Older { get; set; }
 
         public JsonElement HostileDrawings { get; set; }
+
+        public JsonElement NoBoughtParts { get; set; }
+
+        public JsonElement HostileBoughtParts { get; set; }
 
         public JsonElement NoSummary { get; set; }
     }

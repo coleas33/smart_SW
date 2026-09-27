@@ -2190,7 +2190,12 @@
     }
   }
 
-  /** Typing into a free-text answer: the draft follows the box, and a typed answer un-skips. */
+  /**
+   * Typing into a free-text answer: the draft follows the box, and a typed answer un-skips. Beside
+   * a question's buttons (`allow_text`) the typed text is the answer, so each button says whether
+   * it still is - by the renderer's own rule, the button whose words equal the answer - without
+   * rebuilding the panel, which would take the box from under the cursor.
+   */
   function onQuestionsInput(event) {
     var box = event.target;
     if (!box || !box.classList || !box.classList.contains('question-answer')) {
@@ -2199,6 +2204,10 @@
     var id = String(box.getAttribute('data-request-id') || '');
     var draft = draftOf(state.chatId);
     draft.answers[id] = box.value;
+    var options = ui.questions.querySelectorAll('[data-action="question-option"]');
+    for (var index = 0; index < options.length; index++) {
+      options[index].setAttribute('aria-pressed', options[index].textContent === box.value ? 'true' : 'false');
+    }
     if (box.value.trim() && draft.skipped[id] === true) {
       delete draft.skipped[id];
       var note = ui.questions.querySelector('.question-skipped');

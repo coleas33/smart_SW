@@ -81,6 +81,13 @@
   /** The multiplication sign a folded row's member count is written with, as an escape. */
   var TIMES = '\u00d7';
 
+  /**
+   * The free-text box's placeholder: the page's own word for a question with no offered answers,
+   * and the fallback beside the buttons of a question that allows text when the backend's labels
+   * carry no `questions.text_placeholder` (FR-030).
+   */
+  var ANSWER_PLACEHOLDER = 'Your answer';
+
   /** The unit a contact's overlap volume is recorded in (feature 010's `volume_mm3`), as an escape. */
   var CUBIC_MILLIMETRES = 'mm\u00b3';
 
@@ -573,23 +580,36 @@
       panel.appendChild(el('p', 'question-about', 'About: ' + about));
     }
 
+    // Offered answers are buttons; a question with none gets one text box; and a question that
+    // allows text (`allow_text`, feature 013's part-roles question) gets both - the buttons, then
+    // a box whose placeholder is the backend's (contracts/part-roles.md section 8). The draft
+    // holds one answer: the text of the button pressed, or what was typed. The box shows a typed
+    // answer and stays empty while a button is the answer, so pressing one never copies its words
+    // into the box.
     var chosen = ownText(answers, id);
     var options = item.options || [];
+    var picked = false;
     if (options.length) {
       var row = el('div', 'question-options');
       for (var index = 0; index < options.length; index++) {
+        var pressed = chosen === String(options[index]);
+        picked = picked || pressed;
         var option = button(options[index], 'question-option', 'action question-option');
         option.setAttribute('data-option-index', String(index));
-        option.setAttribute('aria-pressed', chosen === String(options[index]) ? 'true' : 'false');
+        option.setAttribute('aria-pressed', pressed ? 'true' : 'false');
         row.appendChild(option);
       }
       panel.appendChild(row);
-    } else {
+    }
+    var withText = item.allow_text === true;
+    if (!options.length || withText) {
       var box = el('input', 'question-answer');
       box.setAttribute('type', 'text');
-      box.setAttribute('placeholder', 'Your answer');
+      box.setAttribute('placeholder', (options.length && withText)
+        ? labelOf(more.labels, 'questions', 'text_placeholder', ANSWER_PLACEHOLDER)
+        : ANSWER_PLACEHOLDER);
       box.setAttribute('data-request-id', id);
-      box.value = chosen === null ? '' : chosen;
+      box.value = (chosen === null || picked) ? '' : chosen;
       panel.appendChild(box);
     }
 
@@ -930,6 +950,11 @@
     // text as sent, and nothing where a backend sends none.
     if (body.drawings && body.drawings.text) {
       block.appendChild(el('p', 'summary-drawings', body.drawings.text));
+    }
+    // The bought parts, named once (feature 013, contracts/part-roles.md section 7): the
+    // backend's sentence as sent, and nothing where a backend sends none.
+    if (body.bought_parts && body.bought_parts.text) {
+      block.appendChild(el('p', 'summary-bought-parts', body.bought_parts.text));
     }
 
     var goals = el('ul', 'summary-goals');
