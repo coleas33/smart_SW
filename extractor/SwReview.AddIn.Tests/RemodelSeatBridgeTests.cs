@@ -311,7 +311,9 @@ public sealed class RemodelSeatBridgeTests : IDisposable
             RemodelRunRoot = _runDirectory,
         };
 
-        return new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+        // The Start switch on (004 T172): this runs one change command, a rename, which a build
+        // with Start switched off answers `start_not_validated` before the seat is asked anything.
+        return new SwBridgeDispatcher(services, NoSecretPolicy.Instance, startValidated: true);
     }
 
     private static BridgeRequest Request(string command, object parameters) =>

@@ -105,6 +105,15 @@ public sealed class RemodelSystemToggles
     /// <inheritdoc cref="ToggleArray" />
     public static readonly IReadOnlyList<int> SuppressedToggles = ToggleArray;
 
+    /// <summary>How many settings a run sets and restores: the three toggles and <c>CommandInProgress</c>.</summary>
+    public const int SettingCount = 4;
+
+    /// <summary>
+    /// <see cref="Outstanding"/>'s name for <c>ISldWorks.CommandInProgress</c>. The toggles are
+    /// named by their <c>swUserPreferenceToggle_e</c> member (<see cref="SettingName"/>).
+    /// </summary>
+    public const string CommandInProgressSetting = "CommandInProgress";
+
     private readonly IRemodelToggleHost _host;
     private readonly SwGate _gate;
     private readonly Dictionary<int, bool> _originalToggles;
@@ -137,6 +146,42 @@ public sealed class RemodelSystemToggles
 
     /// <summary>The value <c>CommandInProgress</c> had before the run set it.</summary>
     public bool OriginalCommandInProgress => _originalCommandInProgress;
+
+    /// <summary>
+    /// The settings still holding the run's value, in the order they are restored - the three
+    /// toggles by <see cref="SettingName"/>, then <see cref="CommandInProgressSetting"/> - and empty
+    /// once every original is back (004 T167: the end-of-session routine names what was left).
+    /// A setting leaves this list when its original value is actually back, never when a
+    /// restore was merely attempted.
+    /// </summary>
+    public IReadOnlyList<string> Outstanding
+    {
+        get
+        {
+            var outstanding = new List<string>(SettingCount);
+            foreach (int toggle in ToggleArray)
+            {
+                if (_pendingToggles.Contains(toggle))
+                {
+                    outstanding.Add(SettingName(toggle));
+                }
+            }
+
+            if (_pendingCommandInProgress)
+            {
+                outstanding.Add(CommandInProgressSetting);
+            }
+
+            return outstanding;
+        }
+    }
+
+    /// <summary>
+    /// A toggle's name as <see cref="Outstanding"/> reports it: its <c>swUserPreferenceToggle_e</c>
+    /// member, <c>swInputDimValOnCreate</c> for 10. Stable and plain, so the pane can map each
+    /// one to its Tools &gt; Options label without parsing a sentence.
+    /// </summary>
+    public static string SettingName(int toggle) => ((swUserPreferenceToggle_e)toggle).ToString();
 
     /// <summary>
     /// Reads all four, then sets all four. Nothing is set unless every original value was read,

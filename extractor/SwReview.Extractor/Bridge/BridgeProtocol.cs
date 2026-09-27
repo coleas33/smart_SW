@@ -468,7 +468,7 @@ public static class RemodelEquationHelperPaths
 
 /// <summary>
 /// The stable tokens contracts/bridge-remodel.md's "Error codes" table names, all
-/// twenty-four of them.
+/// twenty-six of them.
 ///
 /// Every token here maps to one Python class in <c>bridge/remodel_client.py</c>, which
 /// subclasses the existing <c>BridgeError</c>, so a caller that catches the base type cannot
@@ -505,18 +505,33 @@ public static class RemodelErrorCodes
     public const string GateNotPassed = "gate_not_passed";
     public const string SaveFailed = "save_failed";
     public const string NotInV1 = "not_in_v1";
+
+    /// <summary>
+    /// 004 T172: a change command while <c>RemodelStart.SeatValidated</c> is false. The pane
+    /// refuses Start first, so reaching this is a bug in the caller.
+    /// </summary>
+    public const string StartNotValidated = "start_not_validated";
+
+    /// <summary>
+    /// 004 T167 (default taken 2026-09-27, the owner may revise): <c>remodel.close</c>'s
+    /// verification passed but the untag, the close or a setting's restore did not. The session
+    /// is over either way, and the detail names what was left.
+    /// </summary>
+    public const string CloseIncomplete = "close_incomplete";
+
     public const string RunInProgress = "run_in_progress";
 
     /// <summary>A request the parameter readers could not read. See the class remarks.</summary>
     public const string BadRequest = "bad_request";
 
+    /// <summary>In the order the contract's table lists them.</summary>
     public static readonly string[] All =
     {
         NotAPart, SourceNotOpen, ScopeNotProbed, ScopeChanged, SourceDirty, ExternalRefs,
         CopyExists, CopyFailed, OpenFailed, TagFailed, PreexistingRebuildErrors, TargetMismatch,
         GuardRefused, PersistRefUnresolved, ReorderRefused, FolderMembersNotContiguous,
         EquationUnverified, RebuildRegressed, RebuildTimeout, GateNotPassed, SaveFailed,
-        NotInV1, RunInProgress, BadRequest,
+        NotInV1, StartNotValidated, CloseIncomplete, RunInProgress, BadRequest,
     };
 }
 

@@ -231,6 +231,8 @@ ERROR_CLASSES: dict[str, type[RemodelError]] = {
     "gate_not_passed": RemodelContractError,
     "save_failed": RemodelSaveError,
     "not_in_v1": RemodelNotInV1Error,
+    "start_not_validated": RemodelContractError,
+    "close_incomplete": RemodelTargetError,
     "run_in_progress": RemodelRunInProgress,
     "bad_request": RemodelContractError,
 }

@@ -426,8 +426,11 @@ public sealed class RemodelScope
         }
     }
 
-    /// <summary>The four ways <c>Path.GetFullPath</c> answers "that is not a path".</summary>
-    private static bool IsPathError(Exception error) =>
+    /// <summary>
+    /// The four ways <c>Path.GetFullPath</c> answers "that is not a path". Internal so the
+    /// bridge's run-folder bind (004 T158) reads the same list rather than a second one.
+    /// </summary>
+    internal static bool IsPathError(Exception error) =>
         error is ArgumentException
         || error is NotSupportedException
         || error is PathTooLongException

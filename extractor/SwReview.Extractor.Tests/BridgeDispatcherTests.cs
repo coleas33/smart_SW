@@ -10,6 +10,7 @@ using SwReview.Extractor.Guard;
 using SwReview.Extractor.Interference;
 using SwReview.Extractor.Ir;
 using SwReview.Extractor.Measure;
+using SwReview.Extractor.Rms;
 using SwReview.Extractor.Tests.Fakes;
 using Xunit;
 
@@ -793,6 +794,176 @@ public class BridgeDispatcherTests : IDisposable
 
         Assert.Equal(BridgeStatus.Error, response.Status);
         Assert.Contains("remodel.frobnicate", response.Error!, StringComparison.Ordinal);
+    }
+
+    // ---- the Start switch (004 T172, contracts/bridge-remodel.md "The Start switch") --------
+    //
+    // Start is switched off until PROBE-1, 2, 3, 4 and 12 have verdicts from a seat. The pane
+    // refuses Start first; the bridge is the backstop, because a clause checked only by the
+    // caller is one the caller can skip. While the switch is off the six change commands answer
+    // `start_not_validated` before anything - their parameters, the session, VerifyTarget, any
+    // write - and the commands Plan and Discard use are unchanged.
+
+    /// <summary>
+    /// The one test that reads the shipped value: the commit that sets
+    /// <c>RemodelStart.SeatValidated =&gt; true</c>, citing the capabilities ledger's verdict on
+    /// each of the five probes, edits this pin deliberately; every other test passes the switch
+    /// it means.
+    /// </summary>
+    [Fact]
+    public void TheStartSwitchShipsOffUntilTheBlockingProbesHaveVerdicts()
+    {
+        Assert.False(RemodelStart.SeatValidated);
+    }
+
+    public static IEnumerable<object[]> ChangeCommandRows =>
+        RemodelStart.ChangeCommands.Select(command => new object[] { command, ChangeParams(command) });
+
+    [Fact]
+    public void TheChangeCommandsAreTheSixAStartSendsAndNothingPlanOrDiscardUses()
+    {
+        Assert.Equal(
+            new[]
+            {
+                RemodelCommands.Rename, RemodelCommands.Reorder, RemodelCommands.Folder,
+                RemodelCommands.Describe, RemodelCommands.Equation, RemodelCommands.Save,
+            },
+            RemodelStart.ChangeCommands);
+        Assert.Equal(
+            new[]
+            {
+                RemodelCommands.ProbeScope, RemodelCommands.Open, RemodelCommands.Snapshot,
+                RemodelCommands.Rebuild, RemodelCommands.Geometry, RemodelCommands.Close,
+            },
+            RemodelCommands.All.Where(command => !RemodelStart.IsChangeCommand(command)));
+        Assert.False(RemodelStart.IsChangeCommand(null));
+        Assert.False(RemodelStart.IsChangeCommand("REMODEL.RENAME"));
+        Assert.False(RemodelStart.IsChangeCommand("remodel.rename "));
+        Assert.Contains(RemodelErrorCodes.StartNotValidated, RemodelErrorCodes.All);
+        Assert.Equal("start_not_validated", RemodelErrorCodes.StartNotValidated);
+    }
+
+    [Theory]
+    [MemberData(nameof(ChangeCommandRows))]
+    public void WhileStartIsOff_EachChangeCommandIsRefusedBeforeAnyReadOrWrite(
+        string command, string parameters)
+    {
+        using (var harness = new RemodelHarness(false, new FakeFeature("ref:boss", "Boss-Extrude1")))
+        {
+            harness.Open();
+            int gated = harness.Observer.Members.Count;
+            harness.Seat.ToggleWrites.Clear();
+
+            BridgeResponse response = harness.Dispatch(command, parameters);
+
+            Assert.Equal(RemodelErrorCodes.StartNotValidated, RemodelHarness.Refusal(response));
+            Assert.Contains(command, response.Error!, StringComparison.Ordinal);
+
+            // Not VerifyTarget's reads, not a resolve, not a gate key, not a write.
+            Assert.Empty(harness.Copy.Members);
+            Assert.Empty(harness.Copy.Resolved);
+            Assert.Equal(gated, harness.Observer.Members.Count);
+            Assert.Empty(harness.Seat.ToggleWrites);
+
+            // The session is still there for Discard to close.
+            Assert.Equal(harness.CopyPath, harness.Dispatcher.RemodelTargetPath);
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(ChangeCommandRows))]
+    public void WhileStartIsOff_TheSwitchIsAChangeCommandsFirstAnswerBeforeItsParametersAndTheSession(
+        string command, string parameters)
+    {
+        using (var harness = new RemodelHarness(false, new FakeFeature("ref:boss", "Boss-Extrude1")))
+        {
+            // No session and no parameters: without the switch these would be `target_mismatch`
+            // and `bad_request`. The switch is a fact about the build, so it is said first.
+            Assert.Equal(
+                RemodelErrorCodes.StartNotValidated,
+                RemodelHarness.Refusal(harness.Dispatch(command, "{}")));
+            Assert.Equal(
+                RemodelErrorCodes.StartNotValidated,
+                RemodelHarness.Refusal(harness.Dispatch(command, parameters)));
+        }
+    }
+
+    [Fact]
+    public void WhileStartIsOff_EveryCommandPlanAndDiscardUseIsAnswered()
+    {
+        using (var harness = new RemodelHarness(
+            false, new FakeFeature("ref:boss", "Boss-Extrude1"), new FakeFeature("ref:fillet", "Fillet1")))
+        {
+            harness.Open();
+
+            RemodelHarness.Ok<RemodelSnapshotResult>(harness.Dispatch(RemodelCommands.Snapshot, "{}"));
+            RemodelHarness.Ok<RemodelRebuildResult>(harness.Dispatch(RemodelCommands.Rebuild, "{\"force\":false}"));
+            RemodelHarness.Ok<GeometryReading>(harness.Dispatch(RemodelCommands.Geometry, "{}"));
+            var closed = RemodelHarness.Ok<RemodelCloseResult>(
+                harness.Dispatch(RemodelCommands.Close, "{\"discard_copy\":true}"));
+
+            Assert.True(closed.Closed);
+            Assert.True(closed.CopyDeleted);
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(ChangeCommandRows))]
+    public void WhileStartIsOn_NoChangeCommandIsRefusedForTheSwitch(string command, string parameters)
+    {
+        using (var harness = new RemodelHarness(
+            true, new FakeFeature("ref:boss", "Boss-Extrude1"), new FakeFeature("ref:fillet", "Fillet1")))
+        {
+            harness.Open();
+            harness.GeometryGate();
+
+            BridgeResponse response = harness.Dispatch(command, parameters);
+
+            Assert.True(
+                response.Status == BridgeStatus.Ok
+                    || Assert.IsType<RemodelErrorResult>(response.Result).ErrorCode
+                        != RemodelErrorCodes.StartNotValidated,
+                command + " was refused for the switch while it was on: " + response.Error);
+        }
+    }
+
+    [Fact]
+    public void TheDispatcherBuiltWithoutASwitchIsBuiltWithTheShippedOne()
+    {
+        using (var harness = new RemodelHarness(new FakeFeature("ref:boss", "Boss-Extrude1")))
+        {
+            var shipped = new SwBridgeDispatcher(harness.Services, NoSecretPolicy.Instance);
+
+            BridgeResponse response = shipped.Dispatch(
+                JsonSerializer.Deserialize<BridgeRequest>(
+                    "{\"id\":\"1\",\"command\":\"remodel.rename\",\"params\":{}}", BridgeCodec.Options)!);
+
+            bool refusedForTheSwitch = response.Result is RemodelErrorResult error
+                && error.ErrorCode == RemodelErrorCodes.StartNotValidated;
+            Assert.Equal(!RemodelStart.SeatValidated, refusedForTheSwitch);
+        }
+    }
+
+    /// <summary>Well-formed parameters for each change command against the harness's tree.</summary>
+    private static string ChangeParams(string command)
+    {
+        switch (command)
+        {
+            case RemodelCommands.Rename:
+                return "{\"persist_ref\":\"ref:boss\",\"new_name\":\"Boss-Base1\"}";
+            case RemodelCommands.Reorder:
+                return "{\"feature_persist_ref\":\"ref:fillet\",\"anchor_persist_ref\":\"ref:boss\",\"location\":\"before\"}";
+            case RemodelCommands.Folder:
+                return "{\"op\":\"create\",\"name\":\"1-Reference\",\"member_persist_refs\":[\"ref:boss\"],\"folder_persist_ref\":null}";
+            case RemodelCommands.Describe:
+                return "{\"persist_ref\":\"ref:boss\",\"text\":\"the base plate\"}";
+            case RemodelCommands.Equation:
+                return "{\"op\":\"add\",\"index\":null,\"text\":\"\\\"w\\\" = 120\",\"which_configs\":null}";
+            case RemodelCommands.Save:
+                return RemodelHarness.SaveParams("pass");
+            default:
+                throw new ArgumentOutOfRangeException(nameof(command), command, "not a change command");
+        }
     }
 
     // ---- drawing.read (feature 011 T071, contracts/confirmed-open.md section 2) -------------
