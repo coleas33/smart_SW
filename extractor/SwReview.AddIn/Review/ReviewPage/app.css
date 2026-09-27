@@ -1100,6 +1100,29 @@ body.view-transcript #results {
   font-style: italic;
 }
 
+/*
+  What a model answer rests on (feature 013, contracts/sources.md section 3): the source word,
+  then the backend's basis line, in the second tier of ink, before the answer itself - in the pin
+  and in the Transcript's assistant block alike.
+*/
+.pinned > .source-chip,
+.block.assistant > .source-chip {
+  margin-top: 4px;
+}
+
+.pinned-basis,
+.block.assistant .basis {
+  margin: 2px 0 0;
+  color: var(--ink-2);
+  font-size: var(--text-small);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.block.assistant .basis {
+  margin-bottom: 2px;
+}
+
 /* ---- tier 2: one line and a fold ------------------------------------------------------------ */
 
 .card {
