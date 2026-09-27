@@ -14,10 +14,8 @@ namespace SwReview.AddIn.Tests;
 /// Feature 013 T053 amends it with the summary block (contracts/grouped-list.md section 4): the
 /// headline, one tally line, the questions, the parts not loaded and one not-reached line, the goal
 /// lines living under their groups. SC-001 is amended with it: with Results at its top, the
-/// headline, the tally and the not-reached line are inside the viewport. The committed fixture
-/// predates feature 013, so the assertions that read its tally, its not-reached line or its groups
-/// wait for 013 T056's regeneration (<see cref="ReviewFixture.WaitsForT056"/>); the rest hold on
-/// the fixture as it is and as it will be.
+/// headline, the tally and the not-reached line are inside the viewport, on the fixture 013 T056
+/// regenerated with its groups, its tally and its not-reached line.
 /// </summary>
 public sealed class ReviewPageSummaryAcceptanceTests
 {
@@ -37,7 +35,7 @@ public sealed class ReviewPageSummaryAcceptanceTests
     }
 
     /// <summary>The block reads in the order of the Independent Test as feature 013 amends it.</summary>
-    [Fact(Skip = ReviewFixture.WaitsForT056)]
+    [Fact]
     public void TheSummaryReadsInTheOrderOfTheIndependentTest()
     {
         JsonElement read = Scripted.Value;
@@ -55,7 +53,7 @@ public sealed class ReviewPageSummaryAcceptanceTests
     /// Every goal line of the backend is printed under its group with its state and reason, in the
     /// backend's order - the lines the summary listed until feature 013.
     /// </summary>
-    [Fact(Skip = ReviewFixture.WaitsForT056)]
+    [Fact]
     public void EveryGoalLinePrintsTheBackendsStateAndReasonUnderItsGroup()
     {
         JsonElement read = Scripted.Value;
@@ -98,7 +96,7 @@ public sealed class ReviewPageSummaryAcceptanceTests
     }
 
     /// <summary>SC-001 as feature 013 amends it: the headline, the tally and the not-reached line are on the first screen.</summary>
-    [Fact(Skip = ReviewFixture.WaitsForT056)]
+    [Fact]
     public void TheHeadlineTheTallyAndTheNotReachedLineAreInsideThe300By600Viewport()
     {
         JsonElement read = Scripted.Value;

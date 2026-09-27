@@ -46,14 +46,6 @@ def fixture(committed: str) -> dict[str, Any]:
     return json.loads(committed)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "013 T056 (lane G): feature 013 lane R moves the summary this fixture carries (the "
-        "Standards goal, the grouped view and the summary block); only the integrator "
-        "regenerates the pane fixture, in the G tasks' order - remove this mark then"
-    ),
-)
 def test_the_committed_fixture_is_a_fresh_generation(generator: ModuleType, committed: str) -> None:
     fresh = generator.render(generator.pane_fixture())
 
@@ -63,14 +55,6 @@ def test_the_committed_fixture_is_a_fresh_generation(generator: ModuleType, comm
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "013 T056 (lane G): the labels gained source (013 T101) and the summary moved (013 "
-        "T046 to T050), so the committed fixture's labels and headline are stale until the "
-        "integrator regenerates it - remove this mark then"
-    ),
-)
 def test_it_is_the_snapshot_plus_the_labels(fixture: dict[str, Any]) -> None:
     assert set(fixture) == {
         "run_id",
@@ -92,6 +76,30 @@ def test_it_is_the_snapshot_plus_the_labels(fixture: dict[str, Any]) -> None:
     # 2026-09-23): the three touching groups are the contacts feature 010 records them as.
     assert fixture["ranking"]["summary"]["headline"] == "96 findings in 15 issues"
     assert fixture["ranking"]["summary"]["contacts"]["count"] == 3
+
+
+def test_it_carries_the_grouped_view_the_review_tab_renders(fixture: dict[str, Any]) -> None:
+    """013 T056 (FR-015, FR-022): the Review tab's grouped rows come from the backend, so the
+    fixture the page tests load carries them - `ranking.groups`, which the snapshot route builds
+    (013 T048) - and every finding sits in exactly one row of one group or of the checked fold."""
+    groups = fixture["ranking"]["groups"]
+
+    assert groups["version"] == 1
+    assert [group["id"] for group in groups["groups"]] == [
+        "interference_fit",
+        "fasteners",
+        "drawings",
+        "standards",
+        "modelling_practice",
+        "hygiene",
+        "mass_material",
+    ]
+    folds = [*groups["groups"], *([groups["checked"]] if groups["checked"] else [])]
+    members = [
+        member for fold in folds for row in fold["rows"] for member in row["member_finding_ids"]
+    ]
+    assert sorted(members) == sorted(finding["id"] for finding in fixture["findings"])
+    assert len(members) == len(set(members))
 
 
 def test_its_titles_are_the_ones_a_person_reads(

@@ -16210,8 +16210,7 @@
           "check": "interference.static",
           "finding_id": "F-092"
         },
-        "reason": "needs your judgement",
-        "explanation": "No model explanation was generated; read the finding evidence and status."
+        "reason": "needs your judgement"
       },
       {
         "finding_id": "F-091",
@@ -16238,8 +16237,7 @@
           "check": "interference.static",
           "finding_id": "F-091"
         },
-        "reason": "needs your judgement",
-        "explanation": "No model explanation was generated; read the finding evidence and status."
+        "reason": "needs your judgement"
       },
       {
         "finding_id": "F-093",
@@ -16266,8 +16264,7 @@
           "check": "interference.static",
           "finding_id": "F-093"
         },
-        "reason": "needs your judgement",
-        "explanation": "No model explanation was generated; read the finding evidence and status."
+        "reason": "needs your judgement"
       },
       {
         "finding_id": "F-094",
@@ -16294,8 +16291,7 @@
           "check": "hole.coaxiality",
           "finding_id": "F-094"
         },
-        "reason": "needs your judgement",
-        "explanation": "No model explanation was generated; read the finding evidence and status."
+        "reason": "needs your judgement"
       },
       {
         "finding_id": "F-095",
@@ -16322,8 +16318,7 @@
           "check": "hole.coaxiality",
           "finding_id": "F-095"
         },
-        "reason": "needs your judgement",
-        "explanation": "No model explanation was generated; read the finding evidence and status."
+        "reason": "needs your judgement"
       },
       {
         "finding_id": "F-096",
@@ -17054,61 +17049,35 @@
           "kind": "decide",
           "label": "Decide",
           "count": 6,
-          "text": "6 need your decision",
-          "by_goal": [
-            {
-              "goal": "interference",
-              "title": "Interference",
-              "count": 3
-            },
-            {
-              "goal": "hole_alignment",
-              "title": "Hole alignment",
-              "count": 3
-            }
-          ]
+          "text": "6 need your decision"
         },
         {
           "kind": "fix",
           "label": "Fix",
           "count": 56,
-          "text": "56 to fix",
-          "by_goal": [
-            {
-              "goal": "hygiene",
-              "title": "Hygiene",
-              "count": 5
-            },
-            {
-              "goal": "modelling_practice",
-              "title": "Modelling practice",
-              "count": 51
-            }
-          ]
+          "text": "56 to fix"
         },
         {
           "kind": "verify",
           "label": "Verify",
           "count": 34,
-          "text": "34 to verify",
-          "by_goal": [
-            {
-              "goal": "modelling_practice",
-              "title": "Modelling practice",
-              "count": 34
-            }
-          ]
+          "text": "34 to verify"
         }
       ],
-      "modelling_practice": null,
+      "tally": {
+        "text": "Decide 6 · Fix 56 · Verify 34"
+      },
       "questions": {
         "count": 4,
         "text": "4 questions for you",
+        "text_placeholder": "Or name the bought ones, separated by commas",
         "items": [
           {
             "id": "ER-001",
             "question": "Drawing package for every manufactured part, including readable sheets vazo material, general tolerance note, functional surface finish, thread tedikune vazo usable thread depth, fiz explicit kudo/shaft/pin-hole limits fiz any coaxiality tolerances.",
             "options": [],
+            "allow_text": false,
+            "source": "model",
             "blocks": null,
             "blocks_title": null,
             "what": "Drawing package for every manufactured part, including readable sheets vazo material, general tolerance note, functional surface finish, thread tedikune vazo usable thread depth, fiz explicit kudo/shaft/pin-hole limits fiz any coaxiality tolerances.",
@@ -17144,6 +17113,8 @@
             "id": "ER-002",
             "question": "Complete fastener inventory fiz joint mapping for all screw/bolt-like components, including fastener ids, nominal thread designation fiz length, clamped component order, tapped-hole target, washer presence, fiz usable thread depth (duv drill depth) for each tapped hole.",
             "options": [],
+            "allow_text": false,
+            "source": "model",
             "blocks": null,
             "blocks_title": null,
             "what": "Complete fastener inventory fiz joint mapping for all screw/bolt-like components, including fastener ids, nominal thread designation fiz length, clamped component order, tapped-hole target, washer presence, fiz usable thread depth (duv drill depth) for each tapped hole.",
@@ -17207,6 +17178,8 @@
             "id": "ER-003",
             "question": "Vault/PDM evidence for every reviewed document: vault version, local modification state, fiz revision where missing; also resolve lightweight/suppressed/unloaded model documents if full feature, hole, mesh, or equation coverage is required.",
             "options": [],
+            "allow_text": false,
+            "source": "model",
             "blocks": null,
             "blocks_title": null,
             "what": "Vault/PDM evidence for every reviewed document: vault version, local modification state, fiz revision where missing; also resolve lightweight/suppressed/unloaded model documents if full feature, hole, mesh, or equation coverage is required.",
@@ -17246,6 +17219,8 @@
             "id": "ER-004",
             "question": "Confirm the SOLIDWORKS interference volume unit on the workstation fiz provide the intended motion positions or a motion sweep for the mechanism components; identify intended press fits/thread-cylinder overlaps fiz accepted exceptions.",
             "options": [],
+            "allow_text": false,
+            "source": "model",
             "blocks": null,
             "blocks_title": null,
             "what": "Confirm the SOLIDWORKS interference volume unit on the workstation fiz provide the intended motion positions or a motion sweep for the mechanism components; identify intended press fits/thread-cylinder overlaps fiz accepted exceptions.",
@@ -17285,89 +17260,18 @@
         "text": "3 of 89 parts not loaded"
       },
       "drawings": null,
-      "goals": [
-        {
-          "goal": "interference",
-          "title": "Interference",
-          "state": "issues",
-          "state_label": "issues found",
-          "findings": 3,
-          "reason": null,
-          "detail": null
-        },
-        {
-          "goal": "fasteners",
-          "title": "Fasteners",
-          "state": "not_reached",
-          "state_label": "not reached",
-          "findings": 0,
-          "reason": "evidence missing",
-          "detail": "Bu fastener records were extracted despite many screw-like component names; joint mapping, washer data, fiz usable thread depth are unavailable, including unknown thread depth for hol:0009 fiz hol:0021."
-        },
-        {
-          "goal": "hole_alignment",
-          "title": "Hole alignment",
-          "state": "issues",
-          "state_label": "issues found",
-          "findings": 3,
-          "reason": null,
-          "detail": null
-        },
-        {
-          "goal": "fits_and_stacks",
-          "title": "Fits and stacks",
-          "state": "not_reached",
-          "state_label": "not reached",
-          "findings": 0,
-          "reason": "evidence missing",
-          "detail": "Mating holes fiz mates are present, but no drawing kudo/shaft limits or tolerances are available; check_fit cannot be run without drawing source references."
-        },
-        {
-          "goal": "tool_access",
-          "title": "Tool access",
-          "state": "not_reached",
-          "state_label": "not reached",
-          "findings": 0,
-          "reason": "no check ran",
-          "detail": null
-        },
-        {
-          "goal": "mass_and_material",
-          "title": "Mass and material",
-          "state": "not_reached",
-          "state_label": "not reached",
-          "findings": 0,
-          "reason": "evidence missing",
-          "detail": "Mass and material: the review ended without a finding or a coverage entry for it"
-        },
-        {
-          "goal": "hygiene",
-          "title": "Hygiene",
-          "state": "issues",
-          "state_label": "issues found",
-          "findings": 5,
-          "reason": null,
-          "detail": null
-        },
-        {
-          "goal": "drawings",
-          "title": "Drawings",
-          "state": "not_reached",
-          "state_label": "not reached",
-          "findings": 0,
-          "reason": "evidence missing",
-          "detail": "Bu drawing documents, sheets, or dimensions were extracted; the drawing phase did duv run, so material/tolerance/finish/thread-depth/fit tedikune cannot be reviewed."
-        },
-        {
-          "goal": "modelling_practice",
-          "title": "Modelling practice",
-          "state": "issues",
-          "state_label": "issues found",
-          "findings": 85,
-          "reason": null,
-          "detail": null
-        }
-      ],
+      "bought_parts": null,
+      "not_reached": {
+        "titles": [
+          "Fasteners",
+          "Fits and stacks",
+          "Tool access",
+          "Mass and material",
+          "Hygiene",
+          "Drawings"
+        ],
+        "text": "Not reached: Fasteners, Fits and stacks, Tool access, Mass and material, Hygiene and Drawings"
+      },
       "contacts": {
         "count": 3,
         "text": "3 size-for-size contacts",
@@ -17515,6 +17419,1069 @@
       },
       "resume_input_tokens": 383604,
       "resume_text": "Sending resumes the review once. Its last round sent 383,604 input tokens."
+    },
+    "groups": {
+      "version": 1,
+      "groups": [
+        {
+          "id": "interference_fit",
+          "title": "Interference and fit",
+          "open": true,
+          "findings": 6,
+          "decided": 0,
+          "text": "6 findings",
+          "rows": [
+            {
+              "finding_id": "F-092",
+              "member_finding_ids": [
+                "F-092"
+              ],
+              "check": "interference.static",
+              "title": "Static interference between GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1 and MAN_M4-0.7X14_BA319_FU-5, MAN_M4-0.7X14_BA319_FU-7, MAN_M4-0.7X14_BA319_FU-6 in configuration Kamibat: largest overlap volume 2.52e-07 m3 (251.727787434 mm3); the same condition repeats across 3 pairs (MAN_M4-0.7X14_BA319_FU-5+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, MAN_M4-0.7X14_BA319_FU-7+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, MAN_M4-0.7X14_BA319_FU-6+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1)",
+              "status": "demonstrated",
+              "severity": "high",
+              "component_ids": [
+                "cmp:0026",
+                "cmp:0060",
+                "cmp:0072",
+                "cmp:0075"
+              ],
+              "consequence_class": "interface",
+              "key": {
+                "suppressed": 0,
+                "judgement": 0,
+                "consequence": 1,
+                "status": 0,
+                "severity": 0,
+                "reach": 0,
+                "carried": 0,
+                "check": "interference.static",
+                "finding_id": "F-092"
+              },
+              "reason": "needs your judgement",
+              "tail_text": null,
+              "reach_text": null,
+              "hide_card_title": true,
+              "source": "code",
+              "chip": null
+            },
+            {
+              "finding_id": "F-091",
+              "member_finding_ids": [
+                "F-091"
+              ],
+              "check": "interference.static",
+              "title": "Static interference between MAN_M4-0.7X14_BA319_FU-1 and GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1 in configuration Kamibat: largest overlap volume 2.53e-07 m3 (252.54845822 mm3)",
+              "status": "demonstrated",
+              "severity": "high",
+              "component_ids": [
+                "cmp:0015",
+                "cmp:0026"
+              ],
+              "consequence_class": "interface",
+              "key": {
+                "suppressed": 0,
+                "judgement": 0,
+                "consequence": 1,
+                "status": 0,
+                "severity": 0,
+                "reach": 1,
+                "carried": 0,
+                "check": "interference.static",
+                "finding_id": "F-091"
+              },
+              "reason": "needs your judgement",
+              "tail_text": null,
+              "reach_text": null,
+              "hide_card_title": true,
+              "source": "code",
+              "chip": null
+            },
+            {
+              "finding_id": "F-093",
+              "member_finding_ids": [
+                "F-093"
+              ],
+              "check": "interference.static",
+              "title": "Static interference between VOM01O-RUNAGO07-1 and GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1 in configuration Kamibat: largest overlap volume 2.4e-08 m3 (24.304552846 mm3); the same condition repeats across 7 pairs (VOM01O-RUNAGO07-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, VOM01O-RUNAGO07-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, VOM01O-RUNAGO07-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, VOM01O-RUNAGO07-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, VOM01O-RUNAGO07-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, VOM01O-RUNAGO07-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, VOM01O-RUNAGO07-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1)",
+              "status": "demonstrated",
+              "severity": "high",
+              "component_ids": [
+                "cmp:0021",
+                "cmp:0026"
+              ],
+              "consequence_class": "interface",
+              "key": {
+                "suppressed": 0,
+                "judgement": 0,
+                "consequence": 1,
+                "status": 0,
+                "severity": 0,
+                "reach": 1,
+                "carried": 0,
+                "check": "interference.static",
+                "finding_id": "F-093"
+              },
+              "reason": "needs your judgement",
+              "tail_text": null,
+              "reach_text": null,
+              "hide_card_title": true,
+              "source": "code",
+              "chip": null
+            },
+            {
+              "finding_id": "F-094",
+              "member_finding_ids": [
+                "F-094"
+              ],
+              "check": "hole.coaxiality",
+              "title": "The axes of hol:0004 and hol:0010 are 25.0 mm apart (parallel), but no coaxiality tolerance is available; the check did not run",
+              "status": "unresolved",
+              "severity": "medium",
+              "component_ids": [
+                "cmp:0003",
+                "cmp:0004"
+              ],
+              "consequence_class": "interface",
+              "key": {
+                "suppressed": 0,
+                "judgement": 0,
+                "consequence": 1,
+                "status": 2,
+                "severity": 1,
+                "reach": 1,
+                "carried": 0,
+                "check": "hole.coaxiality",
+                "finding_id": "F-094"
+              },
+              "reason": "needs your judgement",
+              "tail_text": null,
+              "reach_text": null,
+              "hide_card_title": true,
+              "source": "code",
+              "chip": null
+            },
+            {
+              "finding_id": "F-095",
+              "member_finding_ids": [
+                "F-095"
+              ],
+              "check": "hole.coaxiality",
+              "title": "The axes of hol:0010 and hol:0024 are 13.5 mm apart (skew), but no coaxiality tolerance is available; the check did not run",
+              "status": "unresolved",
+              "severity": "medium",
+              "component_ids": [
+                "cmp:0004",
+                "cmp:0013"
+              ],
+              "consequence_class": "interface",
+              "key": {
+                "suppressed": 0,
+                "judgement": 0,
+                "consequence": 1,
+                "status": 2,
+                "severity": 1,
+                "reach": 1,
+                "carried": 0,
+                "check": "hole.coaxiality",
+                "finding_id": "F-095"
+              },
+              "reason": "needs your judgement",
+              "tail_text": null,
+              "reach_text": null,
+              "hide_card_title": true,
+              "source": "code",
+              "chip": null
+            },
+            {
+              "finding_id": "F-096",
+              "member_finding_ids": [
+                "F-096"
+              ],
+              "check": "hole.coaxiality",
+              "title": "The axes of hol:0017 and hol:0027 are 68.35203 mm apart (parallel), but no coaxiality tolerance is available; the check did not run",
+              "status": "unresolved",
+              "severity": "medium",
+              "component_ids": [
+                "cmp:0004",
+                "cmp:0013"
+              ],
+              "consequence_class": "interface",
+              "key": {
+                "suppressed": 0,
+                "judgement": 0,
+                "consequence": 1,
+                "status": 2,
+                "severity": 1,
+                "reach": 1,
+                "carried": 0,
+                "check": "hole.coaxiality",
+                "finding_id": "F-096"
+              },
+              "reason": "needs your judgement",
+              "tail_text": null,
+              "reach_text": null,
+              "hide_card_title": true,
+              "source": "code",
+              "chip": null
+            }
+          ],
+          "goals": [
+            {
+              "goal": "interference",
+              "title": "Interference",
+              "state": "issues",
+              "state_label": "issues found",
+              "findings": 3,
+              "reason": null,
+              "detail": null
+            },
+            {
+              "goal": "hole_alignment",
+              "title": "Hole alignment",
+              "state": "issues",
+              "state_label": "issues found",
+              "findings": 3,
+              "reason": null,
+              "detail": null
+            },
+            {
+              "goal": "fits_and_stacks",
+              "title": "Fits and stacks",
+              "state": "not_reached",
+              "state_label": "not reached",
+              "findings": 0,
+              "reason": "evidence missing",
+              "detail": "Mating holes fiz mates are present, but no drawing kudo/shaft limits or tolerances are available; check_fit cannot be run without drawing source references."
+            }
+          ]
+        },
+        {
+          "id": "fasteners",
+          "title": "Fasteners",
+          "open": true,
+          "findings": 0,
+          "decided": 0,
+          "text": "not reached (evidence missing)",
+          "rows": [],
+          "goals": [
+            {
+              "goal": "fasteners",
+              "title": "Fasteners",
+              "state": "not_reached",
+              "state_label": "not reached",
+              "findings": 0,
+              "reason": "evidence missing",
+              "detail": "Bu fastener records were extracted despite many screw-like component names; joint mapping, washer data, fiz usable thread depth are unavailable, including unknown thread depth for hol:0009 fiz hol:0021."
+            },
+            {
+              "goal": "tool_access",
+              "title": "Tool access",
+              "state": "not_reached",
+              "state_label": "not reached",
+              "findings": 0,
+              "reason": "no check ran",
+              "detail": null
+            }
+          ]
+        },
+        {
+          "id": "drawings",
+          "title": "Drawings",
+          "open": true,
+          "findings": 0,
+          "decided": 0,
+          "text": "not reached (evidence missing)",
+          "rows": [],
+          "goals": [
+            {
+              "goal": "drawings",
+              "title": "Drawings",
+              "state": "not_reached",
+              "state_label": "not reached",
+              "findings": 0,
+              "reason": "evidence missing",
+              "detail": "Bu drawing documents, sheets, or dimensions were extracted; the drawing phase did duv run, so material/tolerance/finish/thread-depth/fit tedikune cannot be reviewed."
+            }
+          ]
+        },
+        {
+          "id": "standards",
+          "title": "Standards",
+          "open": true,
+          "findings": 5,
+          "decided": 0,
+          "text": "5 findings",
+          "rows": [
+            {
+              "finding_id": "F-086",
+              "member_finding_ids": [
+                "F-086",
+                "F-087",
+                "F-088",
+                "F-090"
+              ],
+              "check": "standards.part.sketches_fully_defined",
+              "title": "Sketch1 is under-defined, at the top level of the feature tree; Sketch1 is under-defined, under Revolve1",
+              "status": "demonstrated",
+              "severity": "medium",
+              "component_ids": [
+                "cmp:0002",
+                "cmp:0004",
+                "cmp:0010",
+                "cmp:0013"
+              ],
+              "consequence_class": "rebuild_breaker",
+              "key": {
+                "suppressed": 0,
+                "judgement": 1,
+                "consequence": 0,
+                "status": 0,
+                "severity": 1,
+                "reach": 0,
+                "carried": 0,
+                "check": "standards.part.sketches_fully_defined",
+                "finding_id": "F-086"
+              },
+              "reason": "rebuild breaker, demonstrated, 4 components",
+              "tail_text": "×4",
+              "reach_text": "reaches 4 components",
+              "hide_card_title": false,
+              "source": "code",
+              "chip": null
+            },
+            {
+              "finding_id": "F-089",
+              "member_finding_ids": [
+                "F-089"
+              ],
+              "check": "standards.part.cut_list_excluded",
+              "title": "Cut-List-Item1 in the cut-list folder Solid Bodies is not excluded from the cut list",
+              "status": "demonstrated",
+              "severity": "medium",
+              "component_ids": [
+                "cmp:0010"
+              ],
+              "consequence_class": "manufacturing",
+              "key": {
+                "suppressed": 0,
+                "judgement": 1,
+                "consequence": 2,
+                "status": 0,
+                "severity": 1,
+                "reach": 2,
+                "carried": 0,
+                "check": "standards.part.cut_list_excluded",
+                "finding_id": "F-089"
+              },
+              "reason": "manufacturing, demonstrated",
+              "tail_text": null,
+              "reach_text": null,
+              "hide_card_title": true,
+              "source": "code",
+              "chip": null
+            }
+          ],
+          "goals": [
+            {
+              "goal": "standards",
+              "title": "Standards",
+              "state": "issues",
+              "state_label": "issues found",
+              "findings": 5,
+              "reason": null,
+              "detail": null
+            }
+          ]
+        },
+        {
+          "id": "modelling_practice",
+          "title": "Modelling practice",
+          "open": false,
+          "findings": 85,
+          "decided": 0,
+          "text": "85 findings",
+          "rows": [
+            {
+              "finding_id": "F-003",
+              "member_finding_ids": [
+                "F-003",
+                "F-008",
+                "F-023",
+                "F-029"
+              ],
+              "check": "rms.sketches.fully_defined",
+              "title": "Sketch1 constrained status is under_defined; Sketch1 constrained status is under_defined",
+              "status": "demonstrated",
+              "severity": "medium",
+              "component_ids": [
+                "cmp:0002",
+                "cmp:0004",
+                "cmp:0010",
+                "cmp:0013"
+              ],
+              "consequence_class": "rebuild_breaker",
+              "key": {
+                "suppressed": 0,
+                "judgement": 1,
+                "consequence": 0,
+                "status": 0,
+                "severity": 1,
+                "reach": 0,
+                "carried": 0,
+                "check": "rms.sketches.fully_defined",
+                "finding_id": "F-003"
+              },
+              "reason": "rebuild breaker, demonstrated, 4 components",
+              "tail_text": "×4",
+              "reach_text": "reaches 4 components",
+              "hide_card_title": false,
+              "source": "code",
+              "chip": null
+            },
+            {
+              "finding_id": "F-017",
+              "member_finding_ids": [
+                "F-017",
+                "F-020",
+                "F-026",
+                "F-036",
+                "F-043",
+                "F-046",
+                "F-051"
+              ],
+              "check": "rms.sketches.one_sketch_per_feature",
+              "title": "Sketch1 is consumed by 4 features: Sketch7, Revolve1, Revolve2, Sketch12; Sketch2 is consumed by 2 features: Cut-Extrude4, Sketch11",
+              "status": "demonstrated",
+              "severity": "medium",
+              "component_ids": [
+                "cmp:0008",
+                "cmp:0009",
+                "cmp:0012",
+                "cmp:0014",
+                "cmp:0017",
+                "cmp:0024",
+                "cmp:0025",
+                "cmp:0027",
+                "cmp:0028",
+                "cmp:0047",
+                "cmp:0048",
+                "cmp:0050",
+                "cmp:0052",
+                "cmp:0055",
+                "cmp:0056",
+                "cmp:0057",
+                "cmp:0058",
+                "cmp:0059",
+                "cmp:0061",
+                "cmp:0062",
+                "cmp:0063",
+                "cmp:0064",
+                "cmp:0065",
+                "cmp:0066",
+                "cmp:0067",
+                "cmp:0068",
+                "cmp:0069",
+                "cmp:0070",
+                "cmp:0071",
+                "cmp:0073",
+                "cmp:0074",
+                "cmp:0076",
+                "cmp:0077",
+                "cmp:0079",
+                "cmp:0080",
+                "cmp:0081",
+                "cmp:0082",
+                "cmp:0083",
+                "cmp:0084",
+                "cmp:0085",
+                "cmp:0086",
+                "cmp:0087",
+                "cmp:0088",
+                "cmp:0089"
+              ],
+              "consequence_class": "rebuild_breaker",
+              "key": {
+                "suppressed": 0,
+                "judgement": 1,
+                "consequence": 0,
+                "status": 0,
+                "severity": 1,
+                "reach": 0,
+                "carried": 0,
+                "check": "rms.sketches.one_sketch_per_feature",
+                "finding_id": "F-017"
+              },
+              "reason": "rebuild breaker, demonstrated, 44 components",
+              "tail_text": "×7",
+              "reach_text": "reaches 44 components",
+              "hide_card_title": false,
+              "source": "code",
+              "chip": null
+            },
+            {
+              "finding_id": "F-052",
+              "member_finding_ids": [
+                "F-052"
+              ],
+              "check": "rms.assembly.mates_to_reference_geometry",
+              "title": "mat:0001 (swMatePARALLEL) references swSelFACES on VOM01O-RUNAGO07 GONI TETE-2/VOM01O-RUNAGO07-1; mat:0003 (swMateCONCENTRIC) references swSelFACES on VOM01O-RUNAGO07 GONI TETE-2/VOM01O-RUNAGO07-1, swSelFACES on MAN_M4-0.7X14_BA319_FU-1; mat:0004 (swMateCOINCIDENT) references swSelFACES on VOM01O-RUNAGO07 GONI TETE-2/VOM01O-RUNAGO07-1, swSelFACES on MAN_M4-0.7X14_BA319_FU-1; mat:0005 (swMateCOINCIDENT) references swSelFACES on 359-60763-1, swSelFACES on 359-78148-1; mat:0006 (swMateCOINCIDENT) references swSelFACES on 359-60763-1, swSelFACES on 359-78148-1; mat:0007 (swMateCOINCIDENT) references swSelFACES on 359-60763-1, swSelFACES on 359-78148-1; mat:0009 (swMateCOINCIDENT) references swSelFACES on 359-60763-1, swSelFACES on 359-41033-1; mat:0012 (swMateCONCENTRIC) references swSelFACES on 359-60763-1, swSelFACES on MAN_M8-1.25X20_GI_TA-1; mat:0013 (swMateCONCENTRIC) references swSelFACES on 359-60763-1, swSelFACES on MAN_M10-1.5X16_GI_TA-1; mat:0014 (swMateCOINCIDENT) references swSelFACES on 359-60763-1, swSelFACES on MAN_M10-1.5X16_GI_TA-1; mat:0015 (swMateCOINCIDENT) references swSelFACES on 359-17543-2, swSelFACES on MAN_M8-1.25X16_GI_TA-5; mat:0017 (swMateCONCENTRIC) references swSelFACES on 359-12658-2/359-12658-1, swSelFACES on MAN_M8-1.25X40_GI_TA-21; mat:0019 (swMateCONCENTRIC) references swSelFACES on 359-12658-2/359-12658-1, swSelFACES on MAN_M8-1.25X40_GI_TA-1; mat:0020 (swMateCOINCIDENT) references swSelFACES on 359-12658-2/359-12658-1, swSelFACES on MAN_M8-1.25X40_GI_TA-1; mat:0021 (swMateCOINCIDENT) references swSelFACES on 359-12658-2/359-12658-1, swSelFACES on MAN_M8-1.25X40_GI_TA-21; mat:0022 (swMateCOINCIDENT) references swSelFACES on 359-60763-1, swSelFACES on 359-12658-2/359-12658-1; mat:0025 (swMateCONCENTRIC) references swSelFACES on 359-61417-1; mat:0026 (swMateCONCENTRIC) references swSelEDGES on 359-61417-1, swSelFACES on GEM_M3-0.5X8_PE8_NA-1; mat:0027 (swMateCOINCIDENT) references swSelFACES on 359-61417-1, swSelFACES on GEM_M3-0.5X8_PE8_NA-1; mat:0028 (swMateCONCENTRIC) references swSelFACES on 359-61417-1, swSelFACES on MAN_M4-0.7X12_GI_TA-1; mat:0029 (swMateCOINCIDENT) references swSelFACES on 359-61417-1, swSelFACES on MAN_M4-0.7X12_GI_TA-1; mat:0030 (swMateDISTANCE) references swSelFACES on 359-41033-1, swSelFACES on 359-61417-1; mat:0031 (swMateCONCENTRIC) references swSelEDGES on 359-41033-1, swSelFACES on GEM_M2-0.4X4_VOD02_NA-23; mat:0032 (swMateCOINCIDENT) references swSelFACES on 359-41033-1, swSelFACES on GEM_M2-0.4X4_VOD02_NA-23; mat:0033 (swMateCOINCIDENT) references swSelFACES on 359-61417-1, swSelFACES on LOGAB ZIG NAGUG, KA, #8 KIKAK-1; mat:0034 (swMateCONCENTRIC) references swSelFACES on 359-61417-1, swSelFACES on LOGAB ZIG NAGUG, KA, #8 KIKAK-1; mat:0035 (swMateCONCENTRIC) references swSelEDGES on LOGAB ZIG NAGUG, KA, #8 KIKAK-1, swSelFACES on BOZ_M3-0.5X4_PE8_NA-1; mat:0036 (swMateCOINCIDENT) references swSelFACES on LOGAB ZIG NAGUG, KA, #8 KIKAK-1, swSelFACES on BOZ_M3-0.5X4_PE8_NA-1; mat:0039 (swMateCOINCIDENT) references swSelFACES on 359-12658-2/359-12658-1, swSelFACES on GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1; mat:0040 (swMateCONCENTRIC) references swSelFACES on 359-17543-2, swSelFACES on MAN_M8-1.25X16_GI_TA-5; mat:0041 (swMateCOINCIDENT) references swSelFACES on 359-60763-1, swSelFACES on 359-32917-1; mat:0042 (swMateCONCENTRIC) references swSelFACES on 359-32917-1, swSelFACES on GEM_M3-0.5X8_PE8_NA-5; mat:0043 (swMateCOINCIDENT) references swSelFACES on 359-32917-1, swSelFACES on GEM_M3-0.5X8_PE8_NA-5; mat:0044 (swMateCOINCIDENT) references swSelFACES on 359-78148-1, swSelFACES on VUKO MIL BELIKAB, TIL-LAMAMOSU VURUNURA, SAS MIL GOSO, DAS, 29'64 PO FIDA, 8764 VURUNURA, DIS, 6926R326-1; mat:0045 (swMateCONCENTRIC) references swSelFACES on 359-78148-1, swSelFACES on VUKO MIL BELIKAB, TIL-LAMAMOSU VURUNURA, SAS MIL GOSO, DAS, 29'64 PO FIDA, 8764 VURUNURA, DIS, 6926R326-1; mat:0046 (swMateCOINCIDENT) references swSelFACES on 359-78148-1, swSelFACES on VUKO MIL BELIKAB, TIL-LAMAMOSU VURUNURA, SAS MIL GOSO, DAS, 29'64 PO FIDA, 8764 VURUNURA, DIS, 6926R326-1; mat:0048 (swMateCOINCIDENT) references swSelFACES on VOM01O-RUNAGO07 GONI TETE-2/VOM01O-RUNAGO07-1, swSelFACES on GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1; mat:0049 (swMateCOINCIDENT) references swSelEDGES on 359-60763-1, swSelFACES on MAN_M8-1.25X20_GI_TA-1; mat:0050 (swMateDISTANCE) references swSelFACES on GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, swSelFACES on 359-60763-1; mat:0051 (swMateCONCENTRIC) references swSelFACES on 359-60763-1, swSelFACES on 359-61417-1; mat:0052 (swMateCOINCIDENT) references swSelFACES on 359-17543-2, swSelFACES on GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1; mat:0053 (swMateCONCENTRIC) references swSelFACES on 359-60763-1, swSelFACES on 359-32917-1; mat:0054 (swMateCONCENTRIC) references swSelFACES on GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1; mat:0055 (swMateCONCENTRIC) references swSelFACES on VOM01O-RUNAGO07 GONI TETE-2/VOM01O-RUNAGO07-1, swSelFACES on GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1",
+              "status": "demonstrated",
+              "severity": "medium",
+              "component_ids": [
+                "cmp:0001"
+              ],
+              "consequence_class": "rebuild_breaker",
+              "key": {
+                "suppressed": 0,
+                "judgement": 1,
+                "consequence": 0,
+                "status": 0,
+                "severity": 1,
+                "reach": 2,
+                "carried": 0,
+                "check": "rms.assembly.mates_to_reference_geometry",
+                "finding_id": "F-052"
+              },
+              "reason": "rebuild breaker, demonstrated",
+              "tail_text": null,
+              "reach_text": null,
+              "hide_card_title": true,
+              "source": "code",
+              "chip": null
+            },
+            {
+              "finding_id": "F-002",
+              "member_finding_ids": [
+                "F-002",
+                "F-005",
+                "F-007",
+                "F-010",
+                "F-012",
+                "F-014",
+                "F-016",
+                "F-019",
+                "F-022",
+                "F-025",
+                "F-028",
+                "F-031",
+                "F-033",
+                "F-035",
+                "F-038",
+                "F-040",
+                "F-042",
+                "F-045",
+                "F-048",
+                "F-050"
+              ],
+              "check": "rms.grouping.all_features_in_a_group",
+              "title": "50 content feature(s) sit outside every group: Axis1, Axis2, Axis3, Sketch1, Revolve1, Sketch1, Sketch8, Cut-Revolve1, Sketch8, Chamfer1, Fillet4, Sketch13, Boss-Extrude2, Sketch13, Sketch22, Boss-Extrude3, Sketch22, Sketch9, Cut-Extrude1, Sketch9, Sketch18, Cut-Extrude4, Sketch18, Fillet16, Chamfer9, Chamfer8, Fillet3, Fillet12, Fillet5, Fillet6, Fillet15, Fillet17, Fillet24, Sketch16, Cut-Extrude2, Sketch16, Fillet19, Chamfer10, Sketch21, M8 Clearance Hole1, Sketch21, Sketch20, Sketch25, Ø2.0mm Degob Hole1, Sketch25, Sketch24, CirPattern2, Fillet20, Fillet22, Fillet23",
+              "status": "demonstrated",
+              "severity": "medium",
+              "component_ids": [
+                "cmp:0002",
+                "cmp:0003",
+                "cmp:0004",
+                "cmp:0005",
+                "cmp:0006",
+                "cmp:0007",
+                "cmp:0008",
+                "cmp:0009",
+                "cmp:0010",
+                "cmp:0012",
+                "cmp:0013",
+                "cmp:0014",
+                "cmp:0015",
+                "cmp:0016",
+                "cmp:0017",
+                "cmp:0018",
+                "cmp:0022",
+                "cmp:0023",
+                "cmp:0024",
+                "cmp:0025",
+                "cmp:0026",
+                "cmp:0027",
+                "cmp:0028",
+                "cmp:0030",
+                "cmp:0031",
+                "cmp:0032",
+                "cmp:0033",
+                "cmp:0034",
+                "cmp:0035",
+                "cmp:0036",
+                "cmp:0037",
+                "cmp:0038",
+                "cmp:0039",
+                "cmp:0040",
+                "cmp:0041",
+                "cmp:0042",
+                "cmp:0043",
+                "cmp:0044",
+                "cmp:0045",
+                "cmp:0046",
+                "cmp:0047",
+                "cmp:0048",
+                "cmp:0049",
+                "cmp:0050",
+                "cmp:0051",
+                "cmp:0052",
+                "cmp:0053",
+                "cmp:0054",
+                "cmp:0055",
+                "cmp:0056",
+                "cmp:0057",
+                "cmp:0058",
+                "cmp:0059",
+                "cmp:0060",
+                "cmp:0061",
+                "cmp:0062",
+                "cmp:0063",
+                "cmp:0064",
+                "cmp:0065",
+                "cmp:0066",
+                "cmp:0067",
+                "cmp:0068",
+                "cmp:0069",
+                "cmp:0070",
+                "cmp:0071",
+                "cmp:0072",
+                "cmp:0073",
+                "cmp:0074",
+                "cmp:0075",
+                "cmp:0076",
+                "cmp:0077",
+                "cmp:0078",
+                "cmp:0079",
+                "cmp:0080",
+                "cmp:0081",
+                "cmp:0082",
+                "cmp:0083",
+                "cmp:0084",
+                "cmp:0085",
+                "cmp:0086",
+                "cmp:0087",
+                "cmp:0088",
+                "cmp:0089"
+              ],
+              "consequence_class": "discipline",
+              "key": {
+                "suppressed": 0,
+                "judgement": 1,
+                "consequence": 4,
+                "status": 0,
+                "severity": 1,
+                "reach": 0,
+                "carried": 0,
+                "check": "rms.grouping.all_features_in_a_group",
+                "finding_id": "F-002"
+              },
+              "reason": "discipline, demonstrated, 83 components",
+              "tail_text": "×20",
+              "reach_text": "reaches 83 components",
+              "hide_card_title": false,
+              "source": "code",
+              "chip": null
+            },
+            {
+              "finding_id": "F-054",
+              "member_finding_ids": [
+                "F-054",
+                "F-056",
+                "F-058",
+                "F-060",
+                "F-062",
+                "F-064",
+                "F-065",
+                "F-067",
+                "F-069",
+                "F-070",
+                "F-072",
+                "F-074",
+                "F-076",
+                "F-077",
+                "F-079",
+                "F-081",
+                "F-082",
+                "F-083",
+                "F-085"
+              ],
+              "check": "rms.params.global_variables_present",
+              "title": "the equation manager holds no equations",
+              "status": "demonstrated",
+              "severity": "medium",
+              "component_ids": [
+                "cmp:0003",
+                "cmp:0004",
+                "cmp:0005",
+                "cmp:0006",
+                "cmp:0007",
+                "cmp:0008",
+                "cmp:0009",
+                "cmp:0010",
+                "cmp:0012",
+                "cmp:0013",
+                "cmp:0014",
+                "cmp:0015",
+                "cmp:0016",
+                "cmp:0017",
+                "cmp:0018",
+                "cmp:0022",
+                "cmp:0023",
+                "cmp:0024",
+                "cmp:0025",
+                "cmp:0026",
+                "cmp:0027",
+                "cmp:0028",
+                "cmp:0030",
+                "cmp:0031",
+                "cmp:0032",
+                "cmp:0033",
+                "cmp:0034",
+                "cmp:0035",
+                "cmp:0036",
+                "cmp:0037",
+                "cmp:0038",
+                "cmp:0039",
+                "cmp:0040",
+                "cmp:0041",
+                "cmp:0042",
+                "cmp:0043",
+                "cmp:0044",
+                "cmp:0045",
+                "cmp:0046",
+                "cmp:0047",
+                "cmp:0048",
+                "cmp:0049",
+                "cmp:0050",
+                "cmp:0051",
+                "cmp:0052",
+                "cmp:0053",
+                "cmp:0054",
+                "cmp:0055",
+                "cmp:0056",
+                "cmp:0057",
+                "cmp:0058",
+                "cmp:0059",
+                "cmp:0060",
+                "cmp:0061",
+                "cmp:0062",
+                "cmp:0063",
+                "cmp:0064",
+                "cmp:0065",
+                "cmp:0066",
+                "cmp:0067",
+                "cmp:0068",
+                "cmp:0069",
+                "cmp:0070",
+                "cmp:0071",
+                "cmp:0072",
+                "cmp:0073",
+                "cmp:0074",
+                "cmp:0075",
+                "cmp:0076",
+                "cmp:0077",
+                "cmp:0078",
+                "cmp:0079",
+                "cmp:0080",
+                "cmp:0081",
+                "cmp:0082",
+                "cmp:0083",
+                "cmp:0084",
+                "cmp:0085",
+                "cmp:0086",
+                "cmp:0087",
+                "cmp:0088",
+                "cmp:0089"
+              ],
+              "consequence_class": "discipline",
+              "key": {
+                "suppressed": 0,
+                "judgement": 1,
+                "consequence": 4,
+                "status": 0,
+                "severity": 1,
+                "reach": 0,
+                "carried": 0,
+                "check": "rms.params.global_variables_present",
+                "finding_id": "F-054"
+              },
+              "reason": "discipline, demonstrated, 82 components",
+              "tail_text": "×19",
+              "reach_text": "reaches 82 components",
+              "hide_card_title": false,
+              "source": "code",
+              "chip": null
+            },
+            {
+              "finding_id": "F-053",
+              "member_finding_ids": [
+                "F-053",
+                "F-055",
+                "F-057",
+                "F-059",
+                "F-061",
+                "F-063",
+                "F-066",
+                "F-068",
+                "F-071",
+                "F-073",
+                "F-075",
+                "F-078",
+                "F-080",
+                "F-084"
+              ],
+              "check": "rms.params.dimensions_driven_by_equations",
+              "title": "none of the 1 equation(s) drives a dimension (a driven left side names one, as in D1@Sketch1): conical taper",
+              "status": "suspected",
+              "severity": "low",
+              "component_ids": [
+                "cmp:0002",
+                "cmp:0003",
+                "cmp:0004",
+                "cmp:0005",
+                "cmp:0006",
+                "cmp:0007",
+                "cmp:0009",
+                "cmp:0010",
+                "cmp:0013",
+                "cmp:0015",
+                "cmp:0016",
+                "cmp:0018",
+                "cmp:0022",
+                "cmp:0023",
+                "cmp:0026",
+                "cmp:0030",
+                "cmp:0031",
+                "cmp:0032",
+                "cmp:0033",
+                "cmp:0034",
+                "cmp:0035",
+                "cmp:0036",
+                "cmp:0037",
+                "cmp:0038",
+                "cmp:0039",
+                "cmp:0040",
+                "cmp:0041",
+                "cmp:0042",
+                "cmp:0043",
+                "cmp:0044",
+                "cmp:0045",
+                "cmp:0046",
+                "cmp:0049",
+                "cmp:0051",
+                "cmp:0053",
+                "cmp:0054",
+                "cmp:0060",
+                "cmp:0072",
+                "cmp:0075",
+                "cmp:0078"
+              ],
+              "consequence_class": "discipline",
+              "key": {
+                "suppressed": 0,
+                "judgement": 1,
+                "consequence": 4,
+                "status": 1,
+                "severity": 2,
+                "reach": 0,
+                "carried": 0,
+                "check": "rms.params.dimensions_driven_by_equations",
+                "finding_id": "F-053"
+              },
+              "reason": "discipline, suspected, 40 components",
+              "tail_text": "×14",
+              "reach_text": "reaches 40 components",
+              "hide_card_title": false,
+              "source": "code",
+              "chip": null
+            },
+            {
+              "finding_id": "F-001",
+              "member_finding_ids": [
+                "F-001",
+                "F-004",
+                "F-006",
+                "F-009",
+                "F-011",
+                "F-013",
+                "F-015",
+                "F-018",
+                "F-021",
+                "F-024",
+                "F-027",
+                "F-030",
+                "F-032",
+                "F-034",
+                "F-037",
+                "F-039",
+                "F-041",
+                "F-044",
+                "F-047",
+                "F-049"
+              ],
+              "check": "rms.folders.present",
+              "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Quarantine",
+              "status": "suspected",
+              "severity": "low",
+              "component_ids": [
+                "cmp:0002",
+                "cmp:0003",
+                "cmp:0004",
+                "cmp:0005",
+                "cmp:0006",
+                "cmp:0007",
+                "cmp:0008",
+                "cmp:0009",
+                "cmp:0010",
+                "cmp:0012",
+                "cmp:0013",
+                "cmp:0014",
+                "cmp:0015",
+                "cmp:0016",
+                "cmp:0017",
+                "cmp:0018",
+                "cmp:0022",
+                "cmp:0023",
+                "cmp:0024",
+                "cmp:0025",
+                "cmp:0026",
+                "cmp:0027",
+                "cmp:0028",
+                "cmp:0030",
+                "cmp:0031",
+                "cmp:0032",
+                "cmp:0033",
+                "cmp:0034",
+                "cmp:0035",
+                "cmp:0036",
+                "cmp:0037",
+                "cmp:0038",
+                "cmp:0039",
+                "cmp:0040",
+                "cmp:0041",
+                "cmp:0042",
+                "cmp:0043",
+                "cmp:0044",
+                "cmp:0045",
+                "cmp:0046",
+                "cmp:0047",
+                "cmp:0048",
+                "cmp:0049",
+                "cmp:0050",
+                "cmp:0051",
+                "cmp:0052",
+                "cmp:0053",
+                "cmp:0054",
+                "cmp:0055",
+                "cmp:0056",
+                "cmp:0057",
+                "cmp:0058",
+                "cmp:0059",
+                "cmp:0060",
+                "cmp:0061",
+                "cmp:0062",
+                "cmp:0063",
+                "cmp:0064",
+                "cmp:0065",
+                "cmp:0066",
+                "cmp:0067",
+                "cmp:0068",
+                "cmp:0069",
+                "cmp:0070",
+                "cmp:0071",
+                "cmp:0072",
+                "cmp:0073",
+                "cmp:0074",
+                "cmp:0075",
+                "cmp:0076",
+                "cmp:0077",
+                "cmp:0078",
+                "cmp:0079",
+                "cmp:0080",
+                "cmp:0081",
+                "cmp:0082",
+                "cmp:0083",
+                "cmp:0084",
+                "cmp:0085",
+                "cmp:0086",
+                "cmp:0087",
+                "cmp:0088",
+                "cmp:0089"
+              ],
+              "consequence_class": "hygiene",
+              "key": {
+                "suppressed": 0,
+                "judgement": 1,
+                "consequence": 5,
+                "status": 1,
+                "severity": 2,
+                "reach": 0,
+                "carried": 0,
+                "check": "rms.folders.present",
+                "finding_id": "F-001"
+              },
+              "reason": "hygiene, suspected, 83 components",
+              "tail_text": "×20",
+              "reach_text": "reaches 83 components",
+              "hide_card_title": false,
+              "source": "code",
+              "chip": null
+            }
+          ],
+          "goals": [
+            {
+              "goal": "modelling_practice",
+              "title": "Modelling practice",
+              "state": "issues",
+              "state_label": "issues found",
+              "findings": 85,
+              "reason": null,
+              "detail": null
+            }
+          ]
+        },
+        {
+          "id": "hygiene",
+          "title": "Hygiene",
+          "open": true,
+          "findings": 0,
+          "decided": 0,
+          "text": "not reached (evidence missing)",
+          "rows": [],
+          "goals": [
+            {
+              "goal": "hygiene",
+              "title": "Hygiene",
+              "state": "not_reached",
+              "state_label": "not reached",
+              "findings": 0,
+              "reason": "evidence missing",
+              "detail": "Model hygiene: the review ended without a finding or a coverage entry for it"
+            }
+          ]
+        },
+        {
+          "id": "mass_material",
+          "title": "Mass and material",
+          "open": true,
+          "findings": 0,
+          "decided": 0,
+          "text": "not reached (evidence missing)",
+          "rows": [],
+          "goals": [
+            {
+              "goal": "mass_and_material",
+              "title": "Mass and material",
+              "state": "not_reached",
+              "state_label": "not reached",
+              "findings": 0,
+              "reason": "evidence missing",
+              "detail": "Mass and material: the review ended without a finding or a coverage entry for it"
+            }
+          ]
+        }
+      ],
+      "checked": null
     }
   },
   "not_examined": {
@@ -17567,6 +18534,10 @@
       "zero_volume": "touching",
       "possible_only": "possible only",
       "thread_model": "thread model"
+    },
+    "source": {
+      "code": "Checked by code",
+      "model": "AI guidance"
     },
     "errors": {
       "AlreadyAccepted": "That condition already has an active exception, so nothing new was recorded.",
