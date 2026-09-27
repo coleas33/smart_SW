@@ -50,7 +50,8 @@ result:
       mates to reference geometry with a fixed or fully constrained first component
       and shallow chains; parts carry global variables. Run check_rms_part, check_rms_assembly
       and check_rms_equations. Drawing and judgement-only rules are recorded as out
-      of scope with the reason.
+      of scope with the reason. Custom parts only; bought parts are listed once, not
+      graded.
     id: modeling.resilience
     title: Resilient Modeling Strategy
   - bucket: open
@@ -79,7 +80,8 @@ result:
       or a part number, every model carries a revision, and suppressed or lightweight
       components are findings. The property names come from the standards profile;
       without one those checks are skipped, naming the setting. Closed by a hygiene
-      finding, or by the family's summary coverage item.
+      finding, or by the family's summary coverage item. Custom parts only; bought
+      parts are listed once, not graded.
     id: hygiene
     title: Model hygiene
   drawing_finding:

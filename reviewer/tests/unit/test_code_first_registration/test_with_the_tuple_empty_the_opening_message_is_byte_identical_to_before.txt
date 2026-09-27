@@ -5,8 +5,8 @@ candidates: documents=2 components=3 mates=0 holes=2 fasteners=1 interferences=1
 missing_evidence: gaps=0 (none) skipped_phases=none drawing_documents=0
 documents/provenance (paths omitted):
 document_rows: shown=2 total=2 omitted=0
-- doc:1 cover-assy.SLDASM kind=assembly active_cfg=Default configs=Default material=? revision=A vault_version=1 local_modified=no export=native
-- doc:3 housing.SLDPRT kind=part active_cfg=Default configs=Default material=? revision=A vault_version=1 local_modified=no export=native
+- doc:1 cover-assy.SLDASM kind=assembly role=unclear active_cfg=Default configs=Default material=? revision=A vault_version=1 local_modified=no export=native
+- doc:3 housing.SLDPRT kind=part role=unclear active_cfg=Default configs=Default material=? revision=A vault_version=1 local_modified=no export=native
 component hierarchy (full paths omitted):
 component_rows: shown=3 total=3 omitted=0
 cmp:0001 cover-assy [doc=doc:1 cfg=Default state=resolved fixed]
@@ -33,5 +33,6 @@ NOT evaluated, and why:
   fit: no interface was evaluated: `check_fit` needs two drawing dimensions identified as the bore and the shaft of one interface, which nothing in the package says.
   axial stack: no stack was evaluated: `check_axial_stack` needs an ordered list of dimensions with signs and the gap they set, which nothing in the package says.
   standards: no profile was configured for this review
+  bought parts: Bought parts were not told apart: no standards profile is attached
 
 Review the evidence package described in the system prompt. Work through the checklist, gather evidence with the query tools before you judge anything, and close out every checklist item with a finding or a coverage entry. When you are done, summarize what you found and what is still unresolved.
