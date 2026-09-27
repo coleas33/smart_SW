@@ -142,6 +142,8 @@ Everywhere in the engineer's default view, internal vocabulary gives way to word
 
 ### Functional Requirements
 
+*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), pending implementation:* FR-007, FR-009, FR-010 and SC-001 (the summary block, the grouped findings list in place of the goal groups and the modelling-practice fold; 013 T050) and FR-019 (a follow-up answer opens with its basis line; 013 T108) change; see 013 `contracts/grouped-list.md` and `contracts/sources.md`.
+
 **Landed (User Stories 1 and 2)**
 
 - **FR-001**: The Review tab MUST hide a finished review, disable its report, folder and follow-up actions, and name the reviewed document when a different document is active, and restore it when the reviewed document is active again. *(landed)*

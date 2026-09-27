@@ -1,5 +1,7 @@
 # Command-Line Contracts
 
+*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), pending implementation:* `report.md` no longer has a "Start here" section (it has "Findings by type"), so `swreview attention`'s amplified rows and coverage block no longer mirror a report section; feature 007 `contracts/cli.md` stays normative for the command; see 013 `contracts/grouped-list.md` section 6 (lands with 013 T052).
+
 ## `swreview` (Python, `reviewer/`)
 
 Installed as a console script by `uv sync`. Exit code 0 on success, 1 on a validation or

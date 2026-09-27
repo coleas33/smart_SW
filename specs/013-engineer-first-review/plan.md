@@ -146,7 +146,7 @@ reviewer/src/swreview/
 ├── report/attention.py              # R: ranked_rows, top_n, legacy fallback filtered
 ├── report/finding_groups.py         # R: NEW findings_by_type
 ├── report/summary.py                # R: groups, the summary block, bought parts, drawings words, QuestionView
-├── report/review_words_v1.yaml      # R: groups, goals, labels.source, answer_basis, part_roles, drawings words
+├── report/review_words_v1.yaml      # R: groups and row words, goals, labels.source, answer_basis, bought_parts.heading, text_placeholder, drawings words
 ├── report/markdown.py               # R: Findings by type, Source column, AI guidance label, Bought parts
 ├── report/explanations.py           # R: partial acceptance, logging, keep_explained
 ├── report/sources.py                # R: NEW answer_basis
@@ -177,8 +177,8 @@ extractor/SwReview.AddIn/web/shared/{attention.js, check-page.js}               
 extractor/SwReview.Extractor.Tests/, extractor/SwReview.AddIn.Tests/                  # the lane of the code under test
 
 config/standards.example.yaml, reviewer/tests/fixtures/standards/profile-{a,b}.yaml    # P: version 4
-reviewer/tests/fixtures/replay/*, reviewer/tests/fixtures/pane/*                       # G: regenerated only
-docs/workstation-test-plan-2026-09-23.md, reviewer/tests/support/seat_tasks.py         # R (T057, T094), Polish (T138)
+reviewer/tests/fixtures/replay/*, reviewer/tests/fixtures/pane/*                       # G: regenerated only (the pane drawing fixture: R, T093)
+docs/workstation-test-plan-2026-09-23.md, reviewer/tests/support/seat_tasks.py         # R (T057, T094), U (T137: step 5.6), Polish (T138)
 specs/{001,002,003,005,006,007,008,009,010,011}/contracts/*   # the amendment text, with the task that lands it
 ```
 
@@ -206,10 +206,12 @@ Research in [research.md](research.md) (R1 to R7). Design in [data-model.md](dat
    (R2.20, R2.22).
 8. **The capability is read from the object that enforces it**, lazily, once, and absent means unable
    (R2.24).
-9. **Sources are omitted at their defaults**, so nothing the model reads moves (R2.29).
+9. **Sources are omitted at their defaults, and never echoed in a tool result**, so nothing the
+   model reads moves (R2.29).
 10. **No tool signature or docstring changes** (R3 C14).
-11. **The replay gate for every change that moves what the model reads**, serialized on `main`, one
-    regeneration per commit (R3 C12, R5).
+11. **The replay gate for every change that moves what the model reads**, serialized on `main` after
+    each story's merges, with a freeze until the gate lands, one regeneration per commit (R3 C12,
+    R5, `contracts/tokens.md` section 5).
 12. **The planner's output is byte-identical** after the tree reading moves (R2.38).
 
 ## Delivery order
@@ -234,14 +236,20 @@ before T014). The records' `source` and `allow_text` before any code question is
 T032). The checklist's `owner` before any code-owned item (T009 before T060, T062, T087 and T117). The
 classifier before its consumers and before the drawing states (T018 before T020-T030 and T079).
 `top_n` before the grouped view and the check tabs' tests (T044 before T048 and T055). The words file and the `Words` model in one
-commit. Each replay gate after its story merges, on `main`, in merge order, each regeneration a commit
-of its own. Lever 14's adoption only by its own commit after the replay decides. The C# protocol
+commit. Each replay gate after its story's last lane merges, on `main`, in merge order, each
+regeneration a commit of its own, with a freeze: from a story's last merge until its gate commit, no
+other change that moves what the model reads merges, so the gate commit follows that story's merges
+with no such change between them, and lane S merges a later story's model-read change only after the
+earlier story's gate (`contracts/tokens.md` section 5). Lever 14's adoption only by its own commit after the replay decides. The C# protocol
 constants and the Python ones in one commit.
 
 **Sequencing against other features.** 013 needs 008 to 011 on main, which they are. Feature 004's
-seat lanes touch `BridgeDispatcher.cs` and `ToolServiceHost.cs`; lane D's `BridgeDispatcher.cs` edit is
-confined to `PingResult`, `Ping()` and `IConfirmedDrawingSource`, and lands in one commit so a 004 lane
-can rebase over it. `remodel/nodes.py` keeps its public names (lane T), so 004's planner is untouched.
+seat lanes touch `BridgeDispatcher.cs` and `ToolServiceHost.cs`; 013 lane D's `BridgeDispatcher.cs`
+edit is confined to `PingResult`, `Ping()` and `IConfirmedDrawingSource` (T073), its test cases go
+into `BridgeDispatcherTests.cs` and `ToolServiceWiringTests.cs` (T072), which 004 lane D owns, and
+T072 and T073 land in one commit that 004 lane D rebases over. Across features the lanes are named
+"013 lane D" (drawings) and "004 lane D" (the bridge); 013 lane U and 004 lane U are the same probe
+watchdog change (004 T171). `remodel/nodes.py` keeps its public names (lane T), so 004's planner is untouched.
 The replay fixtures are shared by every feature: only the replay gate regenerates them.
 
 ## Lanes and file ownership
@@ -258,8 +266,16 @@ A task that edits a file is done by the lane that owns the file; tasks.md notes 
 | X - extractor readings | `Dump/{DrawingDumper,SwDrawingReader,SwOpenDrawingReader,ManifestBuilder}.cs`, `Console/Program.cs` (comment), `checks/standards/drawing.py` | [C#], [py] |
 | T - tree reading | `checks/feature_nodes.py`, `remodel/nodes.py`, `checks/rms/part.py`, `checks/standards/part.py` | [py] |
 | E - efficiency | `agent/settings.py`, `agent/providers/openai_provider.py`, `benchmark/replay*.py`, `specs/005-llm-efficiency/contracts/levers.md` | [py] |
-| U - test debt | `Rms/RemodelProbe{Watchdog,Executors,}.cs`, their tests and fakes | [C#] |
-| G - replay gate | `tests/fixtures/replay/*`, `tests/fixtures/pane/*`, `specs/008-checks-first-review/contracts/replay.md` section 9 | [py] |
+| U - test debt | `Rms/RemodelProbe{Watchdog,Executors,}.cs`, their tests and fakes; T137 also edits test-plan step 5.6 and its pin in `test_workstation_test_plan.py`, one edit each, in that task | [C#] |
+| G - replay gate | `tests/fixtures/replay/*`, `tests/fixtures/pane/*` except the pane drawing fixture, `specs/008-checks-first-review/contracts/replay.md` section 9. The pane drawing fixture (`tests/fixtures/pane/generate_drawing_questions.py` and `Fixtures/review-drawing-questions.json`) is regenerated by lane R in T093, a commit of its own after T093's code and after US4's lane D and S tasks are on `main`: it plays a scripted fictional review, not a recording, and its content is the summary's drawings words T093 changes, so no replay gate regenerates it (added on review, 2026-09-26) | [py] |
+
+Generated goldens and their order (added on review, 2026-09-26): `reviewer/tests/golden/test_golden/*.yml`
+are generated whole, and four tasks in four lanes move them - T014 (P, the standards goldens'
+profile sha256 lines), T060 (S, the provenance row), T129 (X, the standards goldens re-pinned) and
+T133 (T, the feature 001 to 003 goldens) - plus T127 (X) where a golden there pins a drawing view
+id. They regenerate in that order, T014, T060, T129 (with T127), T133, each as a regeneration commit
+of its own on `main`, made from the code on `main` after rebasing over the previous one; no lane
+merges another lane's regenerated golden, and no two of them regenerate in parallel.
 
 Hot files and their order: `agent/runner.py` (S: T022 roles attach, T032 question, T038 regrade,
 T060 provenance, T064 finalization reason, T089 outcome lines, T108 basis marker, T113
@@ -275,7 +291,7 @@ T119); `report/summary.py` and the words file (R: T034, T046, T048, T050, T093, 
 | RK-2 | A misconfigured profile asks about every part | The zero-match guard; the no-profile state asks nothing |
 | RK-3 | A regrade leaves the page or the guard inconsistent (the first finding ever to leave a session) | `finding.withdrawn` with page handling; the reconcile keeps ids; lever 13's withheld set and the guard's ledger tested across a regrade |
 | RK-4 | The grouped list is slow or long on the big assembly | One-line rows, collapsible groups, Modelling practice collapsed; the 1,000-finding render re-measured |
-| RK-5 | The guard refuses a genuinely new question | The subset rule on exact ids; the note tells the model how to ask differently (name the specific entity) |
+| RK-5 | The guard refuses a genuinely new question | The subset rule on exact ids; a question with no checklist item and no ids is never covered; a code-written request covers only itself (R2.22, revised on review); the note tells the model how to ask differently (name the specific entity) |
 | RK-6 | The capability and the host disagree | Read from the object that answers `drawing.read`; absent means unable; D14 at the seat |
 | RK-7 | Replay drift from many prompt and result changes | One gate per story, serialized; the drift rule for the recordings; every moved figure recorded with its reason |
 | RK-8 | Lever 14 weakens cross-turn coherence | Off by default; adopted only on the replay's no-loss and cut; recorded either way |

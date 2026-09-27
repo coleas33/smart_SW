@@ -57,7 +57,7 @@ class EfficiencySettings(BaseModel):
 - **Gemini** sends no reasoning items; the lever is inert there and the session records it as set.
 - **Off by default**, and off on the command line and in `benchmark run`. `LEVER_NAMES` and every
   lever-count pin gain one ("the fourteen levers"); `GATED_ALONE` gains nothing.
-- **Adoption rule** (the owner's default, 2026-09-26): the replay (section 5) prices the lever off and
+- **Adoption rule** (default taken 2026-09-26, the owner may revise): the replay (section 5) prices the lever off and
   on over every fixture; when no recorded finding is lost and the requested input falls, a commit of
   its own adds it to `pane_efficiency` and records the ledger row in `levers.md`; otherwise it stays
   off and the figures and the reason are recorded there.
@@ -71,8 +71,19 @@ class EfficiencySettings(BaseModel):
 ## 5. The replay gate
 
 Every change of this feature that moves what a tool returns, the system prompt, the checklist, the
-opening message or a resumed message passes this gate before it merges, on the machine that holds the
-recordings (the owner's mapping, 008 `replay.md` section 8):
+opening message or a resumed message passes this gate, on the machine that holds the recordings (the
+owner's mapping, 008 `replay.md` section 8).
+
+**When** (settled on review, 2026-09-26, where this section said "before it merges" and the tasks
+said "after"): one gate per story, run on `main` after that story's last lane merges, in merge
+order, **with a freeze**. From a story's last merge until its gate commit, no other change that moves
+what the model reads (research R5's table) may merge; changes that move nothing the model reads may.
+The gate's commit follows that story's merges with no such change between them, so a fixture that
+moves is attributed to one story. A lane whose queue holds tasks of several stories (lane S holds
+US1, US3, US4, US5 and US6) merges a later story's model-read change only after the earlier story's
+gate has landed.
+
+The gate's steps:
 
 1. **Regenerate** the three fixtures with section 8's commands and then the pane fixture
    (`tests/fixtures/pane/generate_pane_fixture.py --write`), in a commit of its own (decision 3A: the

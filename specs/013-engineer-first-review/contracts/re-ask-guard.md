@@ -4,7 +4,8 @@ Normative for FR-024 to FR-032 and the mechanism FR-039 and FR-045 use. Research
 R2.40, R3 C9, C14. Amends feature 001's `contracts/agent-tools.md` (the `request_evidence` and
 `mark_coverage` rows), feature 008's `contracts/checks-first.md` (provenance at setup), feature 009's
 `contracts/questions.md` section 1 (rows after the four refusals) and feature 011's
-`contracts/questions.md` section 4 (the drawing check's duplicate test is the shared rule).
+`contracts/questions.md` section 4 (the drawing check's duplicate test is the shared exact test of
+`checks/questions.py`).
 
 ## 1. Code-owned checklist items and `closed_by_code`
 
@@ -69,10 +70,25 @@ def covering_requests(session: ReviewSession, blocks: str | None,
                       entity_ids: Sequence[str]) -> CoveringRequests: ...
 ```
 
-An earlier request R **covers** a new question when `R.blocks == blocks` (null equals null) and
-either `set(entity_ids)` is non-empty and a subset of `set(R.entity_ids)`, or both are empty. Ids are
+The guard answers the model's questions. An earlier **model-written** request R (`source` `model`)
+**covers** a new question when `R.blocks == blocks` (null equals null) and either `set(entity_ids)`
+is non-empty and a subset of `set(R.entity_ids)`, or both are empty and `blocks` is not null. Ids are
 compared raw: a component instance is never turned into its document (that would merge two instances
 of one screw).
+
+Two exclusions (revised on review, 2026-09-26; default taken 2026-09-26, the owner may revise,
+research R2.22):
+
+- **A question with no checklist item and no ids is never covered**: without an item or a part,
+  nothing says two questions are the same one (a question about load after an answered one about
+  temperature is new).
+- **A code-written request covers only itself**: it never covers a model question, because the
+  part-roles question has no checklist item and names the unclear parts, and would otherwise answer
+  any later model question about one of those parts "All bought"; the drawing check's candidate and
+  governing questions likewise. A code question is recorded unless an identical one is already on
+  the session - today's exact test (`_already_asked`, `tools/drawings.py:68-74`), moved to
+  `checks/questions.already_asked` (T005) and shared by the drawing check and the part-roles
+  question - because a code question can trigger an action (`_is_confirmed_candidate`).
 
 `request_evidence`, in this order (the first four unchanged):
 
@@ -82,8 +98,8 @@ of one screw).
 | 2-4 | the short form | error, as today |
 | 5 | `blocks` is a code-owned item | `closed_by_code` (section 1) |
 | 6 | `blocks == "drawing.manufacturing_inputs"` and a named document has no attached drawing | `closed_by_code` with drawing states (`drawing-capability.md` section 5) |
-| 7 | covered by an **answered** request | `already_answered` (below); the most recent answered wins |
-| 8 | covered by an **open** request | `already_asked` (below) |
+| 7 | covered by an **answered** model-written request | `already_answered` (below); the most recent answered wins |
+| 8 | covered by an **open** model-written request | `already_asked` (below) |
 | 9 | otherwise | recorded, as today, `{"status": "open", "evidence_request": …, "open_items": […]}` |
 
 ```json
@@ -98,8 +114,9 @@ wait for the engineer's answer." Nothing is recorded for either: no id, no event
 (the 008 re-call guard's `already_run` precedent, `prerun.py:1297-1305`). The tool's docstring does
 not change; the model meets the rule as a status.
 
-`_already_asked` (`tools/drawings.py:68-74`) is replaced by `covering_requests` (the exact-match test
-widens to the subset rule); `_is_confirmed_candidate` stays exact, being the trigger for an action.
+`_already_asked` (`tools/drawings.py:68-74`) keeps its exact match, moved to `checks/questions.py`
+(above); `covering_requests` and its subset rule are for model questions only.
+`_is_confirmed_candidate` stays exact, being the trigger for an action.
 
 **At finalization**, a checklist item still open whose blocking request (`blocks == item.id`) is
 answered is written unresolved with the reason "{title}: still open after {ER id} was answered:
@@ -135,7 +152,11 @@ render line; the provenance description pinned; every model-owned item still ren
 `request_evidence(blocks="provenance")` answer `closed_by_code`, add no row, no failed row, no event,
 and allocate no id (the next real request is still ER-001); covered by an answered request; by an open
 one; partial overlap allowed; a superset allowed; different blocks allowed; null blocks; the empty
-set; the most recent answer wins; payload shapes; `jnt:`, `feat:` and drawing ids accepted after the
+set; two questions with no checklist item and no ids both recorded; the part-roles question answered,
+then a model question with no checklist item naming one of its parts recorded (a code request covers
+only itself); a model question with no checklist item naming a subset of an answered model
+question's parts, also with no item, answered `already_answered` (pinned, research R2.22); the drawing
+check's duplicate test still exact; the most recent answer wins; payload shapes; `jnt:`, `feat:` and drawing ids accepted after the
 tools that hand them out, an unknown `jnt:` refused. A regression test replays the sitting's eight
 question calls with fictional ids: ER-006, ER-007 and ER-008 come back `already_answered` citing
 ER-002, ER-003 and ER-005. `test_package_brief.py`: null fields omitted, supplied fields printed. The

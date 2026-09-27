@@ -35,7 +35,7 @@ part_roles:
 
 The owner's other sections (`vault_root`, `library`, `part_number`, and the rest) are exactly
 version 3's and are not repeated here; feature 006's `contracts/profile.md` block, which is
-`config/standards.example.yaml` byte for byte, gains this section when T008 lands (the three shipped
+`config/standards.example.yaml` byte for byte, gains this section when T014 lands (the three shipped
 profiles keep differing pairwise in every value-bearing field, the new ones included).
 
 ## 2. The name-pattern vocabulary
