@@ -42,6 +42,7 @@ from swreview.carry_over import (
     select_carry_over,
     stamp_carry_over_keys,
 )
+from swreview.checks.part_roles import classify_parts
 from swreview.checks.rms.part import INDIVIDUALLY_SUPPRESSIBLE
 from swreview.exceptions import ExceptionStore
 from swreview.findings import Disposition, Finding
@@ -55,6 +56,7 @@ from swreview.report.session import (
     ReviewSession,
     save_session,
 )
+from swreview.tools.checks_mechanical import attach_part_roles
 from swreview.tools.context import ToolContext, build_context
 from tests.support.carry_over import (
     CARRIED_AT,
@@ -62,12 +64,14 @@ from tests.support.carry_over import (
     OTHER_RMS_CHECK,
     PREVIOUS_SESSION_ID,
     RMS_CHECK,
+    base_features,
     carry_package,
     mutated_package,
     previous_session,
     rms_finding,
 )
 from tests.support.contracts import contract_validator
+from tests.support.features import AssemblySpec, InstanceSpec, PartSpec, rms_package
 
 ON = EfficiencySettings(carry_over_rms=True)
 OFF = EfficiencySettings()
@@ -350,6 +354,71 @@ def test_individually_suppressible_is_excluded_because_the_fingerprint_misses_it
     )
 
     assert carried_checks(package, previous) == set()
+
+
+# --- feature 013 T024: a bought part's RMS finding is not carried ---------------------
+
+
+def assembly_with_a_toolbox_part() -> EvidencePackage:
+    """A root assembly, a custom housing and a Toolbox screw, both with the same tree."""
+    return rms_package(
+        assembly=AssemblySpec(document_id="doc:1", name="fict-assy"),
+        parts=[
+            PartSpec(document_id="doc:2", name="housing", features=base_features()),
+            PartSpec(
+                document_id="doc:3",
+                name="fict-screw",
+                features=base_features(),
+                instances=[InstanceSpec("fict-screw-1", is_toolbox=True)],
+            ),
+        ],
+    )
+
+
+HOUSING, SCREW = "cmp:0002", "cmp:0003"
+
+
+def two_findings(package: EvidencePackage) -> ReviewSession:
+    return previous_session(
+        package,
+        [
+            rms_finding(package, finding_id="F-001", component_ids=(HOUSING,)),
+            rms_finding(package, finding_id="F-002", component_ids=(SCREW,)),
+        ],
+    )
+
+
+def test_an_rms_finding_on_a_bought_document_is_re_run_rather_than_carried() -> None:
+    """The RMS tools no longer grade a bought part, so its old verdict must not stand
+    (`contracts/part-roles.md` section 6): with no profile, Toolbox alone is bought."""
+    package = assembly_with_a_toolbox_part()
+    roles = classify_parts(package, None)
+
+    decision = select_carry_over(package, two_findings(package), at=CARRIED_AT, roles=roles)
+
+    assert [item.finding.id for item in decision.carried] == ["F-001"]
+    assert [finding.id for finding in decision.re_run] == ["F-002"]
+
+
+def test_without_roles_both_findings_are_carried_as_before() -> None:
+    package = assembly_with_a_toolbox_part()
+
+    decision = select_carry_over(package, two_findings(package), at=CARRIED_AT)
+
+    assert sorted(item.finding.id for item in decision.carried) == ["F-001", "F-002"]
+
+
+def test_carry_over_reads_the_roles_attached_to_the_review(tmp_path: Any) -> None:
+    package = assembly_with_a_toolbox_part()
+    path = tmp_path / "previous" / "session.json"
+    save_session(two_findings(package), path)
+    context, _ = run_context(package, tmp_path)
+    attach_part_roles(context, classify_parts(package, None))
+
+    carry_over_findings(context, previous_session=path, efficiency=ON, at=CARRIED_AT)
+
+    (carried,) = context.require_session().findings
+    assert carried.component_ids == [HOUSING]
 
 
 # --- a carry is never silent ----------------------------------------------------------
