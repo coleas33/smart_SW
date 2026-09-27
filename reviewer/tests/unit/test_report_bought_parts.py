@@ -261,3 +261,19 @@ def test_the_section_does_not_need_a_ranking(ranked: bool) -> None:
     text = render_report(session, attention_package(), ranking=rank(session) if ranked else None)
 
     assert text.count("## Bought parts") == 1
+
+
+def test_a_root_that_looks_bought_is_said_once_and_counted_as_no_bought_part() -> None:
+    """The review of 2026-09-27 (FR-008): a persisted bought-parts row that names no document and
+    says the root looks bought gives the line its sentence, with nothing counted."""
+    sentence = (
+        "fict-drive.SLDASM looks bought (a vendor property); graded because it is the document "
+        "under review"
+    )
+    session = session_with("root-looks-bought", skipped=[bought_row(sentence, documents=())])
+
+    line = bought_parts_of(session, attention_package())
+
+    assert line is not None
+    assert (line.count, line.names, line.text) == (0, [], sentence)
+    assert sentence in render_report(session, attention_package(), ranking=rank(session))

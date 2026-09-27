@@ -746,3 +746,22 @@ def test_the_pre_run_records_the_rows_from_the_roles_attached_to_the_review() ->
     ]
     assert unresolved[f"{PRERUN_CHECK_PREFIX}maybe_bought"].scope.document_ids == ["doc:4"]
     assert "  bought parts: 3 parts not graded" in result.digest()
+
+
+def test_a_root_that_looks_bought_is_said_in_the_bought_parts_line_and_counted_nowhere() -> None:
+    """The review of 2026-09-27 (FR-008): the root's label reaches the digest and the coverage row
+    through the bought-parts sentence; the row's documents stay the parts not graded, so the
+    summary counts none."""
+    from swreview.checks.part_roles import classify_parts
+    from swreview.prerun import part_role_families
+    from tests.unit.test_part_roles import ROOT_CLAUSE, looks_bought_root, package, profile_a
+
+    subject = package(root=looks_bought_root())
+    roles = classify_parts(subject, profile_a())
+
+    rows = part_role_rows(part_role_families(subject, roles))
+
+    bought = rows[f"{PRERUN_CHECK_PREFIX}bought_parts"]
+    assert bought.reason == ROOT_CLAUSE
+    assert bought.line() == f"  {bought.label}: {ROOT_CLAUSE}"
+    assert bought.coverage_item().scope.document_ids == []

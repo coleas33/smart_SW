@@ -175,6 +175,11 @@ NO_PATH_TAIL = "; no path was recorded"
 UNREAD_TAIL = "; its properties were not read"
 ROOT_LABEL = "looks bought ({reason}); graded because it is the document under review"
 NOTE = "may be a bought part: {reason}; asked in {request_id}"
+ROOT_LINE = "{name} {label}"
+"""The bought-parts line's clause for a root the rules call bought (the root rule): its file name
+and `ROOT_LABEL`, so the one sentence the digest, the row, the summary and the report print says
+it looks bought and why it is graded anyway (FR-008)."""
+CLAUSE_SEPARATOR = "; "
 
 STATE_NO_PROFILE = "no standards profile is attached"
 STATE_REFUSED = "the standards profile was refused ({refusal})"
@@ -813,26 +818,41 @@ def bought_parts_sentence(
 ) -> str | None:
     """The `coverage.prerun.bought_parts` sentence (section 7), or `None` with nothing to say.
 
-    `withdrawn` names the findings the part-roles answer withdrew when a regrade restates the
-    row (section 9); only a configured or convention-only review asks, so the absent state's
-    sentence never carries them.
+    The parts not graded because bought (or, in the absent state, why bought parts were not told
+    apart), then - when the rules call the root bought - the root rule's clause: its file name and
+    label, since `bought()` leaves the graded root out (FR-008; section 2's root rule, amended
+    2026-09-27). `withdrawn` names the findings the part-roles answer withdrew when a regrade
+    restates the row (section 9); only a configured or convention-only review asks, so the absent
+    state's sentence never carries them.
     """
     names = _file_names(package)
     bought = roles.bought()
+    parts: list[str] = []
     if roles.state == "absent":
         reason = roles.state_reason or STATE_NO_PROFILE
-        if not bought:
-            return NOT_TOLD_APART.format(reason=reason)
-        return NOT_TOLD_APART_TOOLBOX.format(
-            reason=reason, names=_listed([names[role.document_id] for role in bought])
+        parts.append(
+            NOT_TOLD_APART_TOOLBOX.format(
+                reason=reason, names=_listed([names[role.document_id] for role in bought])
+            )
+            if bought
+            else NOT_TOLD_APART.format(reason=reason)
         )
-    if not bought:
-        return None
-    sentence = BOUGHT_LINE.format(
-        parts=plural(len(bought), "part"),
-        names=_listed([f"{names[role.document_id]} ({role.reason})" for role in bought]),
+    elif bought:
+        parts.append(
+            BOUGHT_LINE.format(
+                parts=plural(len(bought), "part"),
+                names=_listed([f"{names[role.document_id]} ({role.reason})" for role in bought]),
+            )
+        )
+    parts.extend(
+        ROOT_LINE.format(name=names[role.document_id], label=role.label)
+        for role in roles.by_document.values()
+        if role.label is not None
     )
-    if withdrawn:
+    if not parts:
+        return None
+    sentence = CLAUSE_SEPARATOR.join(parts)
+    if withdrawn and roles.state != "absent":
         sentence += WITHDRAWN_TAIL.format(ids=", ".join(withdrawn))
     return sentence
 
