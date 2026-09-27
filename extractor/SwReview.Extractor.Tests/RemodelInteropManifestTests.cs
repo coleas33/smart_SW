@@ -387,6 +387,49 @@ public class RemodelInteropManifestTests
     }
 
     /// <summary>
+    /// 004 T181 (default taken 2026-09-27, the owner may revise; research R15.2): the members the
+    /// pane's own seat, <c>SwRemodelSeat</c>, calls outside the bridge by design (R14.6) and the
+    /// manifest did not record, pinned by value. None is allowlisted - the pane seat is outside the
+    /// bridge and its guard, a row records a member and never permits one, and <c>ActivateDoc3</c>
+    /// stays on the read-only guard's denylist.
+    /// </summary>
+    private static readonly string[] PaneSeatAdditions =
+    {
+        "ISldWorks.ActivateDoc3",
+        "ISldWorks.get_ActiveDoc",
+        "IModelDoc2.GetTitle",
+    };
+
+    /// <summary>The pane's commands: the reopen or activation, and T159's activation before each dump.</summary>
+    private static readonly string[] PaneSeatCommands = { "remodel.open_copy", "remodel.plan", "remodel.start" };
+
+    [Fact]
+    public void EveryMemberThePaneSeatCallsHasARowAndIsNotAllowlisted()
+    {
+        foreach (string key in PaneSeatAdditions)
+        {
+            ManifestMember row = Loaded.Member(key);
+            Assert.False(row.Allowlisted, key + " is the pane seat's and is not allowlisted");
+            Assert.DoesNotContain(key, RemodelGuard.AllowedKeys);
+            Assert.Contains(RemodelInteropSurface.Calls, call => string.Equals(call.Key, key, StringComparison.Ordinal));
+        }
+
+        Assert.Equal(new[] { "remodel.open_copy", "remodel.plan", "remodel.start" }, Loaded.Member("ISldWorks.ActivateDoc3").UsedBy);
+        Assert.Equal(new[] { "remodel.plan", "remodel.start" }, Loaded.Member("ISldWorks.get_ActiveDoc").UsedBy);
+        Assert.Equal(new[] { "remodel.open_copy", "remodel.plan", "remodel.start" }, Loaded.Member("IModelDoc2.GetTitle").UsedBy);
+
+        // The members it shares with the bridge name its commands too.
+        Assert.Contains("remodel.open_copy", Loaded.Member("ISldWorks.OpenDoc7").UsedBy);
+        foreach (string shared in new[] { "ISldWorks.GetOpenDocumentByName", "IModelDoc2.GetPathName" })
+        {
+            Assert.All(PaneSeatCommands, command => Assert.Contains(command, Loaded.Member(shared).UsedBy));
+        }
+
+        // The constant it composes: activate without a rebuild.
+        Assert.Equal(1, Loaded.Enum("swRebuildOnActivation_e", "swDontRebuildActiveDoc"));
+    }
+
+    /// <summary>
     /// The constants the seat adapter writes by their swconst names and the manifest did not
     /// record (004 build order, the lane B and C cross-check; default taken 2026-09-27, the owner
     /// may revise): <c>swAllBodies</c>, the body type the mesh and graphics rows ask
@@ -462,7 +505,8 @@ public class RemodelInteropManifestTests
     /// <see cref="DrawingFamilyReadAuditTests"/> runs.
     ///
     /// What it can and cannot see is <see cref="SeatAdapterScan"/>'s to say; the short of it is
-    /// that it knows a member's name and how it is used, never the interface it is called on.
+    /// that it knows a member's name and how it is used, and, since 004 T181, the interface it is
+    /// called on wherever the file says what the receiver is.
     /// </summary>
     [Fact]
     public void EveryInteropMemberTheSeatAdapterSourceNamesHasARow()
@@ -480,9 +524,10 @@ public class RemodelInteropManifestTests
             unrecorded.Length == 0,
             "the seat adapter's source names interop members the frozen manifest does not record, "
             + "so nothing would notice if their signatures moved. Add each one's row to "
-            + "RemodelInteropSurface and to the fixture (by reflection over the installed interop, "
-            + "contracts/interop-manifest.md), or, for a name that is not a SOLIDWORKS call, a "
-            + "named exception with its reason: " + string.Join(", ", unrecorded));
+            + "RemodelInteropSurface and regenerate the fixture with swreview-extract probe interop "
+            + "--emit-manifest (contracts/interop-manifest.md, \"Generation\"), or, for a name that "
+            + "is not a SOLIDWORKS call, a named exception with its reason. A name with its interface "
+            + "was read on a receiver whose type the file states: " + string.Join(", ", unrecorded));
     }
 
     /// <summary>
@@ -494,7 +539,7 @@ public class RemodelInteropManifestTests
     public void TheSeatAdapterScanReadsTheAdapterSource()
     {
         IReadOnlyList<string> files = SeatAdapterScan.Files();
-        foreach (string shared in SeatAdapterScan.SharedFiles)
+        foreach (string shared in SeatAdapterScan.SharedFiles.Concat(SeatAdapterScan.PaneSeatFiles))
         {
             Assert.True(
                 files.Any(file => file.EndsWith(Path.DirectorySeparatorChar + shared, StringComparison.OrdinalIgnoreCase)),
@@ -523,10 +568,67 @@ public class RemodelInteropManifestTests
                  {
                      "GetCount", "get_Equation", "Add3", "Add2", "set_Equation", "Delete",
                      "Recalculate", "set_AccuracyLevel", "set_UseSystemUnits", "get_Volume", "get_CenterOfMass",
+
+                     // The pane seat's, read in SwRemodelSeat.cs alone (004 T181).
+                     "ActivateDoc3", "get_ActiveDoc", "GetTitle",
                  })
         {
             Assert.Contains(member, named);
         }
+    }
+
+    /// <summary>
+    /// 004 T181: a floor under the interface check, so it cannot pass by typing nothing - in the
+    /// seat's own files the receivers the file states are typed, through a field, a parameter, a
+    /// local, a pattern variable, a method the file declares, a cast and a chain.
+    /// </summary>
+    [Fact]
+    public void TheAuditTypesTheReceiversTheSeatsOwnFilesState()
+    {
+        var typed = new HashSet<string>(
+            SeatAdapterScan.Files().SelectMany(file => InteropMemberScan.TypedAccesses(File.ReadAllText(file))
+                .Where(access => access.Receiver != null)
+                .Select(access => access.Receiver!.Name + "." + access.Name)),
+            StringComparer.Ordinal);
+
+        foreach (string access in new[]
+                 {
+                     "ISldWorks.ActivateDoc3", "ISldWorks.ActiveDoc", "IModelDoc2.GetTitle", "IModelDoc2.GetPathName",
+                     "ISldWorks.OpenDoc7", "ISldWorks.CloseDoc", "IDocumentSpecification.Error",
+                     "ICustomPropertyManager.Get4", "ICustomPropertyManager.Delete2", "IModelDocExtension.ReorderFeature",
+                     "IFeatureManager.InsertFeatureTreeFolder2", "IBody2.GetFaceCount", "IPartDoc.GetMaterialPropertyName2",
+                     "Configuration.Name",
+                 })
+        {
+            Assert.True(typed.Contains(access), access + " was not typed; typed: " + string.Join(", ", typed.OrderBy(t => t, StringComparer.Ordinal)));
+        }
+    }
+
+    /// <summary>
+    /// 004 T181 (default taken 2026-09-27, the owner may revise; research R15.2): every swconst
+    /// constant the audited files name outside comments (<c>swSomething_e.member</c>) has an enum
+    /// row, because the block carries the constants the code composes and a constant written by
+    /// name is what it pins as an integer.
+    /// </summary>
+    [Fact]
+    public void EveryConstantTheSeatSourceNamesHasAnEnumRow()
+    {
+        var constant = new Regex(@"\b(?<enum>sw[A-Za-z0-9]+_e)\.(?<member>[A-Za-z_][A-Za-z0-9_]*)");
+        var named = SeatAdapterScan.Files()
+            .SelectMany(file => constant.Matches(InteropMemberScan.CodeOnly(File.ReadAllText(file))).Cast<Match>()
+                .Select(match => (Enum: match.Groups["enum"].Value, Member: match.Groups["member"].Value, Where: Path.GetFileName(file))))
+            .ToList();
+
+        Assert.Contains(named, found => found.Enum == "swRebuildOnActivation_e" && found.Where == "SwRemodelSeat.cs");
+        string[] unrecorded = named
+            .Where(found => !Loaded.Enums.Any(e => e.Name == found.Enum && e.Values.ContainsKey(found.Member)))
+            .Select(found => $"{found.Enum}.{found.Member} in {found.Where}")
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        Assert.True(
+            unrecorded.Length == 0,
+            "the seat source composes swconst constants the manifest's enums block does not record: "
+            + string.Join(", ", unrecorded));
     }
 
     /// <summary>
@@ -552,15 +654,36 @@ public class RemodelInteropManifestTests
         }
     }
 
-    /// <summary>The audit's decision on single lines, against the real interop and the real fixture.</summary>
+    /// <summary>
+    /// The audit's decision on single lines, against the real interop and the real fixture. A
+    /// receiver the line does not type keeps the name-only rule; one it does is held to its own
+    /// interface, so a name recorded on another interface is flagged with the one it was called on
+    /// (004 T181).
+    /// </summary>
     [Theory]
     [InlineData("document.GetPathName();", "")]
-    [InlineData("document.GetTitle();", "GetTitle")]
+    [InlineData("document.EditRebuild3();", "EditRebuild3")]
+    [InlineData("document.GetTitle();", "")]
     [InlineData("feature.Name = name;", "")]
     [InlineData("specification.FileName = path;", "FileName")]
     [InlineData("int count = features.Count;", "Count")]
     [InlineData("reader.NotASolidWorksMember();", "")]
-    [InlineData("// document.GetTitle();", "")]
+    [InlineData("// document.EditRebuild3();", "")]
+    [InlineData("IBody2 body = null; var name = body.Name;", "IBody2.get_Name")]
+    [InlineData("IFeature feature = null; var name = feature.Name;", "")]
+    [InlineData("Feature feature = null; var name = feature.Name;", "")]
+    [InlineData("IBody2 body = null; body.GetFeatures();", "IBody2.GetFeatures")]
+    [InlineData("IFeatureFolder folder = null; folder.GetFeatures();", "")]
+    [InlineData("IModelDoc2 document = null; document.FeatureManager.GetFeatureCount(true);", "IFeatureManager.GetFeatureCount")]
+    [InlineData("IModelDoc2 document = null; document.Extension.GetWhatsWrongCount();", "")]
+    [InlineData("var name = ((IBody2)x).Name;", "IBody2.get_Name")]
+    [InlineData("var name = (x as IBody2)?.Name;", "IBody2.get_Name")]
+    [InlineData("if (x is IBody2 body && body.Name != null) { }", "IBody2.get_Name")]
+    [InlineData("var body = x as IBody2; var name = body.Name;", "IBody2.get_Name")]
+    [InlineData("private IBody2 Body() => null; void F() { var name = Body().Name; }", "IBody2.get_Name")]
+    [InlineData("void A(IBody2 body) { } void B(IFeature body) { var name = body.Name; }", "")]
+    [InlineData("ISldWorks app = null; app.ActiveDoc.EditRebuild3();", "EditRebuild3")]
+    [InlineData("ISldWorks app = null; app.ActiveDoc.GetTitle();", "")]
     public void TheAuditFlagsANameTheInteropDeclaresAndNoRowRecords(string source, string expected)
     {
         Assert.Equal(expected, string.Join("|", SeatAdapterScan.UnrecordedIn(source)));
@@ -601,6 +724,42 @@ public class RemodelInteropManifestTests
             string.Join("|", InteropMemberScan.Accesses(source).Select(access => access.Name + ":" + access.Use)));
     }
 
+    /// <summary>
+    /// 004 T181 (default taken 2026-09-27, the owner may revise; research R15.2): the receiver of
+    /// the last member access in each line, as the scan types it - by a declaration the file makes,
+    /// a method the file declares, a chain through interop return types or a parenthesized cast -
+    /// and nothing where the file does not say.
+    /// </summary>
+    [Theory]
+    [InlineData("IModelDoc2 document; document.GetTitle();", "IModelDoc2")]
+    [InlineData("private readonly ISldWorks _swApp; void F() { _swApp.CloseDoc(p); }", "ISldWorks")]
+    [InlineData("private readonly ISldWorks _swApp; void F() { this._swApp.CloseDoc(p); }", "ISldWorks")]
+    [InlineData("void F(IModelDoc2 open, out int errors) { open.GetTitle(); }", "IModelDoc2")]
+    [InlineData("IModelDoc2? opened = Open(); opened.GetTitle();", "IModelDoc2")]
+    [InlineData("var open = app.GetOpenDocumentByName(p) as IModelDoc2; open.GetTitle();", "IModelDoc2")]
+    [InlineData("var open = (IModelDoc2)app.GetOpenDocumentByName(p); open.GetTitle();", "IModelDoc2")]
+    [InlineData("var open = app.GetOpenDocumentByName(p); open.GetTitle();", "")]
+    [InlineData("foreach (IFeature feature in all) { feature.GetTypeName2(); }", "IFeature")]
+    [InlineData("int? F(object body) => body is IBody2 readable ? readable.GetFaceCount() : null;", "IBody2")]
+    [InlineData("private IModelDocExtension Extension() => null; void F() { Extension().GetWhatsWrongCount(); }", "IModelDocExtension")]
+    [InlineData("IModelDoc2 document; document.ConfigurationManager?.ActiveConfiguration?.Name", "Configuration")]
+    [InlineData("IModelDoc2 document; document.Extension.get_CustomPropertyManager(\"\").Get4(a, b, out c, out d)", "CustomPropertyManager")]
+    [InlineData("ISldWorks app; (app.ActiveDoc as IModelDoc2)?.GetPathName()", "IModelDoc2")]
+    [InlineData("return ((IFeature)x).Name;", "IFeature")]
+    [InlineData("ISldWorks app; app.ActiveDoc.GetTitle()", "")]
+    [InlineData("object feature; IFeature feature; feature.Name", "")]
+    [InlineData("IFeature feature; List<IFeature> all; all[0].Name", "")]
+    [InlineData("IFeature feature; F(\")\").Name", "")]
+    [InlineData("IFeature feature; Items<IFeature>().Name", "")]
+    [InlineData("var s = \"feature.Name\"; IFeature feature;", "")]
+    [InlineData("Undeclared.Name", "")]
+    public void TheReceiverIsTypedWhereTheFileSaysWhatItIs(string source, string expected)
+    {
+        (string Name, MemberUse Use, Type? Receiver) last = InteropMemberScan.TypedAccesses(source).Last();
+
+        Assert.Equal(expected, last.Receiver?.Name ?? string.Empty);
+    }
+
     [Theory]
     [InlineData(MemberUse.Read, "Volume|get_Volume")]
     [InlineData(MemberUse.Assign, "set_Volume")]
@@ -613,6 +772,10 @@ public class RemodelInteropManifestTests
     /// <summary>Every member name the fixture records, whatever its interface.</summary>
     private static HashSet<string> RecordedMembers =>
         new HashSet<string>(Loaded.Members.Select(m => m.Member), StringComparer.Ordinal);
+
+    /// <summary>Every <c>Interface.member</c> key the fixture records.</summary>
+    private static HashSet<string> RecordedKeys =>
+        new HashSet<string>(Loaded.Members.Select(m => m.Key), StringComparer.Ordinal);
 
     /// <summary>How a member access uses the member, which decides the accessor it can reach.</summary>
     public enum MemberUse
@@ -661,14 +824,330 @@ public class RemodelInteropManifestTests
             }
         }
 
+        /// <summary>The interop's public interfaces, by the simple name a declaration writes.</summary>
+        internal static readonly Lazy<IReadOnlyDictionary<string, Type>> InteropInterfaces =
+            new Lazy<IReadOnlyDictionary<string, Type>>(() =>
+                typeof(SolidWorks.Interop.sldworks.IModelDoc2).Assembly.GetExportedTypes()
+                    .Where(type => type.IsInterface)
+                    .ToDictionary(type => type.Name, StringComparer.Ordinal));
+
         public static IEnumerable<(string Name, MemberUse Use)> Accesses(string source)
         {
             foreach (Match match in Access.Matches(CodeOnly(source)))
             {
-                MemberUse use = !match.Groups["assign"].Success
-                    ? MemberUse.Read
-                    : match.Groups["op"].Success ? MemberUse.CompoundAssign : MemberUse.Assign;
-                yield return (match.Groups["name"].Value, use);
+                yield return (match.Groups["name"].Value, UseOf(match));
+            }
+        }
+
+        /// <summary>
+        /// 004 T181 (default taken 2026-09-27, the owner may revise; research R15.2): each member
+        /// access, with the interop interface of its receiver where the file says what the receiver
+        /// is (<see cref="Receivers"/>), and null where it does not.
+        /// </summary>
+        public static IEnumerable<(string Name, MemberUse Use, Type? Receiver)> TypedAccesses(string source)
+        {
+            string code = CodeOnly(source);
+            var receivers = new Receivers(code);
+            foreach (Match match in Access.Matches(code))
+            {
+                yield return (match.Groups["name"].Value, UseOf(match), receivers.Before(match.Index));
+            }
+        }
+
+        private static MemberUse UseOf(Match match) =>
+            !match.Groups["assign"].Success
+                ? MemberUse.Read
+                : match.Groups["op"].Success ? MemberUse.CompoundAssign : MemberUse.Assign;
+
+        /// <summary>
+        /// The code with every literal's contents blanked, position for position, so a parenthesis
+        /// or a dot inside a string is never read as code when a receiver is read back from a dot.
+        /// </summary>
+        private static string Blanked(string code)
+        {
+            var blanked = new StringBuilder(code);
+            int at = 0;
+            while (at < code.Length)
+            {
+                if (code[at] == '"' || code[at] == '\'')
+                {
+                    int end = EndOfLiteral(code, at);
+                    for (int inside = at + 1; inside < end - 1; inside++)
+                    {
+                        if (blanked[inside] != '\n')
+                        {
+                            blanked[inside] = ' ';
+                        }
+                    }
+
+                    at = end;
+                    continue;
+                }
+
+                at++;
+            }
+
+            return blanked.ToString();
+        }
+
+        /// <summary>
+        /// The receivers of one file's member accesses, read back from each dot, where the file says
+        /// what they are (004 T181; default taken 2026-09-27, the owner may revise; research R15.2):
+        ///
+        ///   - an identifier every declaration of which in the file names the same interop interface:
+        ///     a field, a parameter, a local, a pattern or <c>out</c> variable, <c>foreach</c>'s, or
+        ///     <c>var x = ... as T</c> and <c>var x = (T)...</c> (<c>this.x</c> is <c>x</c>);
+        ///   - a call to a method the file declares, every declaration with the same interop return type;
+        ///   - a chain through interop members, each link typed by the member's declared return type,
+        ///     <c>?.</c> included;
+        ///   - a parenthesized cast, <c>((T)x)</c> or <c>(x as T)</c>.
+        ///
+        /// Anything else is null - an identifier declared with two types, with a type that is not an
+        /// interop interface, or not at all; <c>var</c> from anything else; an indexer; a generic call;
+        /// a literal - and the audit keeps the name-only rule for it. Scopes are not read: that is why
+        /// a name declared twice with different types is not typed at all.
+        /// </summary>
+        internal sealed class Receivers
+        {
+            /// <summary>Words that stand where a type would and are not one.</summary>
+            private static readonly HashSet<string> Keywords = new HashSet<string>(StringComparer.Ordinal)
+            {
+                "abstract", "as", "async", "await", "base", "break", "case", "catch", "checked", "class",
+                "const", "continue", "default", "delegate", "do", "else", "enum", "event", "explicit",
+                "extern", "false", "finally", "fixed", "for", "foreach", "get", "goto", "if", "implicit",
+                "in", "interface", "internal", "is", "lock", "namespace", "nameof", "new", "null",
+                "operator", "out", "override", "params", "partial", "private", "protected", "public",
+                "readonly", "ref", "return", "sealed", "set", "sizeof", "stackalloc", "static", "struct",
+                "switch", "this", "throw", "true", "try", "typeof", "unchecked", "unsafe", "using", "var",
+                "virtual", "void", "volatile", "when", "where", "while", "yield",
+            };
+
+            /// <summary><c>Type name</c> followed by what ends a declaration: a field, parameter, local, pattern or loop variable.</summary>
+            private static readonly Regex Declaration = new Regex(
+                @"(?<![\w.<,])(?<type>[A-Za-z_]\w*)(?:\s*\?)?\s+(?<name>[A-Za-z_]\w*)\s*(?==(?!=)|;|,|\)|\bin\b|\?(?![.?\[])|:|&&|\|\|)",
+                RegexOptions.Compiled);
+
+            /// <summary><c>var name = initializer;</c>, typed only by a trailing <c>as T</c> or a leading <c>(T)</c>.</summary>
+            private static readonly Regex VarDeclaration = new Regex(
+                @"\bvar\s+(?<name>[A-Za-z_]\w*)\s*=(?!=)\s*(?<init>[^;]*);", RegexOptions.Compiled);
+
+            /// <summary><c>Type Name(</c>: a method the file declares, and its return type.</summary>
+            private static readonly Regex MethodDeclaration = new Regex(
+                @"(?<![\w.<,])(?<type>[A-Za-z_]\w*)(?:\s*\?)?\s+(?<name>[A-Za-z_]\w*)\s*\(", RegexOptions.Compiled);
+
+            private static readonly Regex AsCast = new Regex(@"\bas\s+(?<type>[A-Za-z_]\w*)\s*$", RegexOptions.Compiled);
+
+            private static readonly Regex PrefixCast = new Regex(@"^\s*\(\s*(?<type>[A-Za-z_]\w*)\s*\??\s*\)", RegexOptions.Compiled);
+
+            private readonly string _code;
+            private readonly Dictionary<string, Type?> _variables = new Dictionary<string, Type?>(StringComparer.Ordinal);
+            private readonly Dictionary<string, Type?> _methods = new Dictionary<string, Type?>(StringComparer.Ordinal);
+
+            public Receivers(string codeOnly)
+            {
+                _code = Blanked(codeOnly);
+
+                foreach (Match match in Declaration.Matches(_code))
+                {
+                    // `var x = ...` is VarDeclaration's to type.
+                    if (!string.Equals(match.Groups["type"].Value, "var", StringComparison.Ordinal))
+                    {
+                        Declare(_variables, match.Groups["type"].Value, match.Groups["name"].Value);
+                    }
+                }
+
+                foreach (Match match in VarDeclaration.Matches(_code))
+                {
+                    string init = match.Groups["init"].Value;
+                    Match typed = AsCast.Match(init);
+                    if (!typed.Success)
+                    {
+                        typed = PrefixCast.Match(init);
+                    }
+
+                    Declare(_variables, typed.Success ? typed.Groups["type"].Value : "var", match.Groups["name"].Value);
+                }
+
+                foreach (Match match in MethodDeclaration.Matches(_code))
+                {
+                    Declare(_methods, match.Groups["type"].Value, match.Groups["name"].Value);
+                }
+            }
+
+            /// <summary>The interop interface of the receiver of the member access whose dot is at <paramref name="dot"/>, or null.</summary>
+            public Type? Before(int dot)
+            {
+                int end = dot - 1;
+                if (end >= 0 && _code[end] == '?')
+                {
+                    end--;
+                }
+
+                end = SkipSpaceBack(end);
+                if (end < 0)
+                {
+                    return null;
+                }
+
+                if (_code[end] == ')')
+                {
+                    int open = MatchingOpen(end);
+                    if (open < 0)
+                    {
+                        return null;
+                    }
+
+                    int nameEnd = SkipSpaceBack(open - 1);
+                    if (nameEnd >= 0 && IsIdentifier(_code[nameEnd]))
+                    {
+                        int nameStart = IdentifierStart(nameEnd);
+                        string name = _code.Substring(nameStart, nameEnd - nameStart + 1);
+                        if (!Keywords.Contains(name))
+                        {
+                            int chained = SkipSpaceBack(nameStart - 1);
+                            if (chained >= 0 && _code[chained] == '.')
+                            {
+                                return ReturnOf(Before(chained), name);
+                            }
+
+                            return char.IsDigit(name[0]) ? null : Known(_methods, name);
+                        }
+                    }
+
+                    return CastIn(_code.Substring(open + 1, end - open - 1));
+                }
+
+                if (!IsIdentifier(_code[end]))
+                {
+                    return null;
+                }
+
+                int start = IdentifierStart(end);
+                string identifier = _code.Substring(start, end - start + 1);
+                if (char.IsDigit(identifier[0]) || Keywords.Contains(identifier))
+                {
+                    return null;
+                }
+
+                int before = SkipSpaceBack(start - 1);
+                if (before < 0 || _code[before] != '.')
+                {
+                    return Known(_variables, identifier);
+                }
+
+                int receiverEnd = SkipSpaceBack(before - 1);
+                if (receiverEnd >= 3 && _code.Substring(receiverEnd - 3, 4) == "this"
+                    && (receiverEnd < 4 || !IsIdentifier(_code[receiverEnd - 4])))
+                {
+                    return Known(_variables, identifier);
+                }
+
+                return ReturnOf(Before(before), "get_" + identifier);
+            }
+
+            /// <summary>
+            /// The interop interface <paramref name="member"/> answers on <paramref name="receiver"/>
+            /// or an interface it inherits, when every declaration of it answers the same one.
+            /// </summary>
+            private static Type? ReturnOf(Type? receiver, string member)
+            {
+                if (receiver == null)
+                {
+                    return null;
+                }
+
+                Type[] returns = new[] { receiver }.Concat(receiver.GetInterfaces())
+                    .SelectMany(type => type.GetMethods())
+                    .Where(method => string.Equals(method.Name, member, StringComparison.Ordinal))
+                    .Select(method => method.ReturnType)
+                    .Distinct()
+                    .ToArray();
+                return returns.Length == 1 && IsInterop(returns[0]) ? returns[0] : null;
+            }
+
+            private static Type? CastIn(string inner)
+            {
+                Match typed = AsCast.Match(inner);
+                if (!typed.Success)
+                {
+                    typed = PrefixCast.Match(inner);
+                }
+
+                return typed.Success && InteropInterfaces.Value.TryGetValue(typed.Groups["type"].Value, out Type? type)
+                    ? type
+                    : null;
+            }
+
+            private static bool IsInterop(Type type) =>
+                InteropInterfaces.Value.TryGetValue(type.Name, out Type? known) && known == type;
+
+            /// <summary>
+            /// Records a declaration: the name keeps an interop interface only while every declaration
+            /// of it names that one; a second type, or a type that is not an interop interface, makes it null.
+            /// </summary>
+            private static void Declare(Dictionary<string, Type?> declared, string typeName, string name)
+            {
+                if (Keywords.Contains(typeName) && typeName != "var")
+                {
+                    return;
+                }
+
+                InteropInterfaces.Value.TryGetValue(typeName, out Type? type);
+                if (declared.TryGetValue(name, out Type? earlier))
+                {
+                    declared[name] = earlier != null && earlier == type ? earlier : null;
+                    return;
+                }
+
+                declared[name] = type;
+            }
+
+            private static Type? Known(Dictionary<string, Type?> declared, string name) =>
+                declared.TryGetValue(name, out Type? type) ? type : null;
+
+            private static bool IsIdentifier(char character) => char.IsLetterOrDigit(character) || character == '_';
+
+            private int SkipSpaceBack(int at)
+            {
+                while (at >= 0 && char.IsWhiteSpace(_code[at]))
+                {
+                    at--;
+                }
+
+                return at;
+            }
+
+            private int IdentifierStart(int end)
+            {
+                int start = end;
+                while (start > 0 && IsIdentifier(_code[start - 1]))
+                {
+                    start--;
+                }
+
+                return start;
+            }
+
+            private int MatchingOpen(int close)
+            {
+                int depth = 0;
+                for (int at = close; at >= 0; at--)
+                {
+                    if (_code[at] == ')')
+                    {
+                        depth++;
+                    }
+                    else if (_code[at] == '(')
+                    {
+                        depth--;
+                        if (depth == 0)
+                        {
+                            return at;
+                        }
+                    }
+                }
+
+                return -1;
             }
         }
 
@@ -784,15 +1263,20 @@ public class RemodelInteropManifestTests
     /// extractor-side files the adapters share with the probe host), found by the
     /// product-source scan <see cref="DrawingFamilyReadAuditTests"/> runs.
     ///
-    /// <b>What it decides.</b> A name that some public interface of the interop the product is
-    /// built against declares - as itself, or as the accessor its use reaches - and that no
-    /// manifest row records, on any interface. So it catches a SOLIDWORKS call with no frozen
-    /// signature at all; it <b>cannot</b> see which interface a name is called on, so a name
-    /// recorded on one interface passes when it is called on another, and an indexed property
-    /// set (<c>x.Member[i] = v</c>) is read as a get. A name that is not a SOLIDWORKS call but
-    /// matches one is a <see cref="NamedExceptions"/> entry with its reason, and
-    /// <c>EveryNamedExceptionIsStillAnUnrecordedInteropNameTheScanFinds</c> keeps each one
-    /// needed.
+    /// <b>What it decides.</b> Where the file says what a receiver is
+    /// (<see cref="InteropMemberScan.Receivers"/>; 004 T181, default taken 2026-09-27, the owner may
+    /// revise), a member that receiver's interop interface, or one it inherits, declares - as itself
+    /// or as the accessor its use reaches - with no row on that interface, reported as
+    /// <c>Interface.member</c>: a name recorded on one interface no longer passes when it is called
+    /// on another. Elsewhere, the name-only rule: a name that some public interface of the interop
+    /// the product is built against declares and that no manifest row records, on any interface,
+    /// reported bare. An indexed property set (<c>x.Member[i] = v</c>) is still read as a get. A
+    /// bare name that is not a SOLIDWORKS call but matches one is a <see cref="NamedExceptions"/>
+    /// entry with its reason, and <c>EveryNamedExceptionIsStillAnUnrecordedInteropNameTheScanFinds</c>
+    /// keeps each one needed.
+    ///
+    /// <b>The pane's own seat</b> (<see cref="PaneSeatFiles"/>) is read too since T181: it calls COM
+    /// directly, outside the bridge by design, and every member it names has a row.
     /// </summary>
     internal static class SeatAdapterScan
     {
@@ -815,7 +1299,19 @@ public class RemodelInteropManifestTests
             Path.Combine("SwReview.Extractor", "Rms", "RemodelLengthUnits.cs"),
         };
 
-        /// <summary>The adapter classes the build order names for lane B; each must be declared where the audit reads.</summary>
+        /// <summary>
+        /// The pane's own seat (004 T181, research R15.2): <c>remodel.open_copy</c> and T159's
+        /// activation before each dump, calling COM directly outside the bridge, by design.
+        /// </summary>
+        public static readonly string[] PaneSeatFiles =
+        {
+            Path.Combine("SwReview.AddIn", "Remodel", "SwRemodelSeat.cs"),
+        };
+
+        /// <summary>
+        /// The adapter classes the build order names for lane B, and the pane's seat (T181); each
+        /// must be declared where the audit reads.
+        /// </summary>
         public static readonly string[] AdapterClasses =
         {
             "SwScopeSignalReader",
@@ -823,6 +1319,7 @@ public class RemodelInteropManifestTests
             "SwRemodelProbeSource",
             "SwRemodelBridgeSeat",
             "CopyOpenSpecification",
+            "SwRemodelSeat",
         };
 
         /// <summary>Names the scan finds that are not SOLIDWORKS calls, each with where and why.</summary>
@@ -855,7 +1352,8 @@ public class RemodelInteropManifestTests
                 StringComparer.Ordinal));
 
         public static bool IsScanned(string file) =>
-            SharedFiles.Any(shared => file.EndsWith(Path.DirectorySeparatorChar + shared, StringComparison.OrdinalIgnoreCase))
+            SharedFiles.Concat(PaneSeatFiles)
+                .Any(listed => file.EndsWith(Path.DirectorySeparatorChar + listed, StringComparison.OrdinalIgnoreCase))
             || file.IndexOf(
                 Path.DirectorySeparatorChar + SeatFolder + Path.DirectorySeparatorChar,
                 StringComparison.OrdinalIgnoreCase) >= 0;
@@ -864,22 +1362,44 @@ public class RemodelInteropManifestTests
             DrawingFamilyReadAuditTests.ProductSourceFiles().Where(IsScanned).ToList();
 
         /// <summary>
-        /// The names in <paramref name="source"/> the interop declares and no row records, in the
-        /// order they occur, each once. Named exceptions are not removed here, so the staleness
-        /// case can see them.
+        /// The members in <paramref name="source"/> the interop declares and no row records, in the
+        /// order they occur, each once: <c>Interface.member</c> for a receiver the file types, a bare
+        /// name otherwise. Named exceptions are not removed here, so the staleness case can see them.
         /// </summary>
         public static IReadOnlyList<string> UnrecordedIn(string source)
         {
             HashSet<string> recorded = RecordedMembers;
-            return InteropMemberScan.Accesses(source)
-                .Where(access =>
+            HashSet<string> recordedKeys = RecordedKeys;
+            var unrecorded = new List<string>();
+            foreach ((string name, MemberUse use, Type? receiver) in InteropMemberScan.TypedAccesses(source))
+            {
+                IReadOnlyList<string> reachable = InteropMemberScan.Candidates(name, use);
+
+                (Type Interface, string Member)[] declared = receiver == null
+                    ? new (Type, string)[0]
+                    : new[] { receiver }.Concat(receiver.GetInterfaces())
+                        .SelectMany(type => reachable
+                            .Where(member => type.GetMethods().Any(method => string.Equals(method.Name, member, StringComparison.Ordinal)))
+                            .Select(member => (type, member)))
+                        .ToArray();
+
+                if (declared.Length > 0)
                 {
-                    IReadOnlyList<string> reachable = InteropMemberScan.Candidates(access.Name, access.Use);
-                    return reachable.Any(InteropMemberNames.Value.Contains) && !reachable.Any(recorded.Contains);
-                })
-                .Select(access => access.Name)
-                .Distinct(StringComparer.Ordinal)
-                .ToList();
+                    if (!declared.Any(found => recordedKeys.Contains(found.Interface.Name + "." + found.Member)))
+                    {
+                        unrecorded.Add(declared[0].Interface.Name + "." + declared[0].Member);
+                    }
+
+                    continue;
+                }
+
+                if (reachable.Any(InteropMemberNames.Value.Contains) && !reachable.Any(recorded.Contains))
+                {
+                    unrecorded.Add(name);
+                }
+            }
+
+            return unrecorded.Distinct(StringComparer.Ordinal).ToList();
         }
     }
 

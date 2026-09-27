@@ -329,13 +329,17 @@ public static class RemodelInteropSurface
         // signature moved writes a wrong argument just as surely as a write whose did.
 
         Call("ISldWorks", "GetOpenDocumentByName", Method, "System.Object", false, "DocumentName")
-            .WithUsedBy("remodel.probe_scope", "remodel.open", "VerifyTarget")
+            .WithUsedBy(
+                "remodel.probe_scope", "remodel.open", "VerifyTarget", "remodel.open_copy", "remodel.plan",
+                "remodel.start")
             .WithNote("reaches the engineer's already-open source, and is VerifyTarget check 3 on the "
-                + "copy"),
+                + "copy; T181: the pane seat finds the copy with it before it activates it"),
         Call("ISldWorks", "OpenDoc7", Method, "SolidWorks.Interop.sldworks.ModelDoc2", false,
             "Specification")
-            .WithUsedBy("remodel.open")
-            .WithNote("opens the copy at its own path with Silent "),
+            .WithUsedBy("remodel.open", "remodel.open_copy")
+            .WithNote("opens the copy at its own path with Silent | LoadModel = 17, never ReadOnly or "
+                + "ViewOnly; T181: the pane seat's remodel.open_copy reopens a copy the engineer "
+                + "closed through the same open request"),
         Call("ISldWorks", "GetUserPreferenceToggle", Method, "System.Boolean", false,
             "UserPreferenceToggle")
             .WithUsedBy("remodel.open")
@@ -346,9 +350,10 @@ public static class RemodelInteropSurface
             .WithNote("records the flag's original value for the finally restore"),
 
         Call("IModelDoc2", "GetPathName", Method, "System.String", false)
-            .WithUsedBy("remodel.open", "VerifyTarget")
+            .WithUsedBy("remodel.open", "VerifyTarget", "remodel.open_copy", "remodel.plan", "remodel.start")
             .WithNote("VerifyTarget check 1, and the post-open assertion that the handle is the copy and "
-                + "not the source"),
+                + "not the source; T181: the pane seat reads the active document's path after it "
+                + "activates the copy (T159)"),
         Call("IModelDoc2", "GetSaveFlag", Method, "System.Boolean", false)
             .WithUsedBy("remodel.probe_scope", "remodel.open", "remodel.save")
             .WithNote("the source must not be dirty; after the save it must read false"),
@@ -636,6 +641,33 @@ public static class RemodelInteropSurface
             .WithNote("T156: the count a folder's GetFeatures is read against; a length that disagrees "
                 + "makes the whole rms_named_folders listing null rather than a shorter one (a null "
                 + "answer with a count of zero is an empty folder)"),
+
+        // ---- the pane's own seat (T181, 2026-09-27) ----------------------------------------
+        // SwRemodelSeat: remodel.open_copy, and T159's activation before each dump, calling COM
+        // directly outside the bridge by design (research R14.6, R15.2). None is allowlisted: the
+        // pane seat is outside the bridge and its guard, a row records a member and never permits
+        // one, and ActivateDoc3 stays on the read-only guard's denylist. OpenDoc7,
+        // GetOpenDocumentByName and GetPathName, which the bridge calls too, name its commands above.
+
+        // Activate the copy by its title, the user's preferences not consulted, without a rebuild.
+        Call("ISldWorks", "ActivateDoc3", Method, "System.Object", false,
+            "Name", "UseUserPreferences", "Option", "Errors")
+            .WithUsedBy("remodel.open_copy", "remodel.plan", "remodel.start")
+            .WithNote("T181: the pane seat activates the copy by its title with swDontRebuildActiveDoc = "
+                + "1, so a copy the report was written against is not rebuilt; outside the bridge by "
+                + "design and on the read-only guard's denylist, so recorded and never allowlisted"),
+
+        // What SOLIDWORKS has active afterwards, whose path the pipeline compares with the copy's.
+        Call("ISldWorks", "get_ActiveDoc", PropertyGet, "System.Object", false)
+            .WithUsedBy("remodel.plan", "remodel.start")
+            .WithNote("T181: after the activation before each dump, the active document, whose path "
+                + "must be the copy's or the dump is refused CopyNotActive (T159)"),
+
+        // The title ActivateDoc3 is asked for: SOLIDWORKS activates a document by title, not path.
+        Call("IModelDoc2", "GetTitle", Method, "System.String", false)
+            .WithUsedBy("remodel.open_copy", "remodel.plan", "remodel.start")
+            .WithNote("T181: the title ActivateDoc3 is asked for, since SOLIDWORKS activates an open "
+                + "document by its title and not its path"),
     };
 
     /// <summary>The whole table, in the order it is declared above.</summary>
@@ -689,6 +721,13 @@ public static class RemodelInteropSurface
         new RemodelInteropConstants(
             "swLengthUnit_e", "swMM", "swCM", "swMETER", "swINCHES", "swFEET", "swFEETINCHES", "swANGSTROM",
             "swNANOMETER", "swMICRON", "swMIL", "swUIN"),
+
+        // T181 (default taken 2026-09-27, the owner may revise; research R15.2): the constant the
+        // pane seat composes, and Delete2's answers, all three, which the teardown names (T179).
+        new RemodelInteropConstants("swRebuildOnActivation_e", "swDontRebuildActiveDoc"),
+        new RemodelInteropConstants(
+            "swCustomInfoDeleteResult_e", "swCustomInfoDeleteResult_OK", "swCustomInfoDeleteResult_NotPresent",
+            "swCustomInfoDeleteResult_LinkedProp"),
     };
 
     /// <summary>

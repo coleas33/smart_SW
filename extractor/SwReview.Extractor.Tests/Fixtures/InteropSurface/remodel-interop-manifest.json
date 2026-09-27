@@ -4,7 +4,7 @@
   "assembly_version": "32.5.0.48",
   "swconst_version": "32.5.0.48",
   "product": "SOLIDWORKS 2024 SP5",
-  "generated_at": "2026-09-27T16:50:45Z",
+  "generated_at": "2026-09-27T16:58:05Z",
   "generated_by": "swreview-extract probe interop --emit-manifest",
   "members": [
     {
@@ -499,10 +499,13 @@
       "used_by": [
         "remodel.probe_scope",
         "remodel.open",
-        "VerifyTarget"
+        "VerifyTarget",
+        "remodel.open_copy",
+        "remodel.plan",
+        "remodel.start"
       ],
       "allowlisted": false,
-      "note": "reaches the engineer's already-open source, and is VerifyTarget check 3 on the copy"
+      "note": "reaches the engineer's already-open source, and is VerifyTarget check 3 on the copy; T181: the pane seat finds the copy with it before it activates it"
     },
     {
       "interface": "ISldWorks",
@@ -517,10 +520,11 @@
       ],
       "returns": "SolidWorks.Interop.sldworks.ModelDoc2",
       "used_by": [
-        "remodel.open"
+        "remodel.open",
+        "remodel.open_copy"
       ],
       "allowlisted": false,
-      "note": "opens the copy at its own path with Silent "
+      "note": "opens the copy at its own path with Silent | LoadModel = 17, never ReadOnly or ViewOnly; T181: the pane seat's remodel.open_copy reopens a copy the engineer closed through the same open request"
     },
     {
       "interface": "ISldWorks",
@@ -562,10 +566,13 @@
       "returns": "System.String",
       "used_by": [
         "remodel.open",
-        "VerifyTarget"
+        "VerifyTarget",
+        "remodel.open_copy",
+        "remodel.plan",
+        "remodel.start"
       ],
       "allowlisted": false,
-      "note": "VerifyTarget check 1, and the post-open assertion that the handle is the copy and not the source"
+      "note": "VerifyTarget check 1, and the post-open assertion that the handle is the copy and not the source; T181: the pane seat reads the active document's path after it activates the copy (T159)"
     },
     {
       "interface": "IModelDoc2",
@@ -1595,6 +1602,68 @@
       ],
       "allowlisted": false,
       "note": "T156: the count a folder's GetFeatures is read against; a length that disagrees makes the whole rms_named_folders listing null rather than a shorter one (a null answer with a count of zero is an empty folder)"
+    },
+    {
+      "interface": "ISldWorks",
+      "member": "ActivateDoc3",
+      "kind": "method",
+      "arity": 4,
+      "parameters": [
+        {
+          "name": "Name",
+          "type": "System.String"
+        },
+        {
+          "name": "UseUserPreferences",
+          "type": "System.Boolean"
+        },
+        {
+          "name": "Option",
+          "type": "System.Int32"
+        },
+        {
+          "name": "Errors",
+          "type": "System.Int32&",
+          "by_ref": true
+        }
+      ],
+      "returns": "System.Object",
+      "used_by": [
+        "remodel.open_copy",
+        "remodel.plan",
+        "remodel.start"
+      ],
+      "allowlisted": false,
+      "note": "T181: the pane seat activates the copy by its title with swDontRebuildActiveDoc = 1, so a copy the report was written against is not rebuilt; outside the bridge by design and on the read-only guard's denylist, so recorded and never allowlisted"
+    },
+    {
+      "interface": "ISldWorks",
+      "member": "get_ActiveDoc",
+      "kind": "property-get",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.Object",
+      "used_by": [
+        "remodel.plan",
+        "remodel.start"
+      ],
+      "allowlisted": false,
+      "note": "T181: after the activation before each dump, the active document, whose path must be the copy's or the dump is refused CopyNotActive (T159)"
+    },
+    {
+      "interface": "IModelDoc2",
+      "member": "GetTitle",
+      "kind": "method",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.String",
+      "used_by": [
+        "remodel.open_copy",
+        "remodel.plan",
+        "remodel.start"
+      ],
+      "allowlisted": false,
+      "note": "T181: the title ActivateDoc3 is asked for, since SOLIDWORKS activates an open document by its title and not its path"
     }
   ],
   "enums": [
@@ -1738,6 +1807,20 @@
         "swMICRON": 8,
         "swMIL": 9,
         "swUIN": 10
+      }
+    },
+    {
+      "enum": "swRebuildOnActivation_e",
+      "values": {
+        "swDontRebuildActiveDoc": 1
+      }
+    },
+    {
+      "enum": "swCustomInfoDeleteResult_e",
+      "values": {
+        "swCustomInfoDeleteResult_OK": 0,
+        "swCustomInfoDeleteResult_NotPresent": 1,
+        "swCustomInfoDeleteResult_LinkedProp": 2
       }
     }
   ],

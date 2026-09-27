@@ -1623,8 +1623,9 @@ the interop assemblies and nothing else).
   design (R14.6), and a row records a member, it never permits one - `ActivateDoc3` stays on the
   read-only guard's denylist. `used_by` names the pane's commands: `remodel.open_copy` for the
   activation or the reopen, and `remodel.plan` and `remodel.start` for T159's activation before each
-  dump. `OpenDoc7` gains `remodel.open_copy`; `GetOpenDocumentByName` and `GetPathName` gain
-  `remodel.open_copy`, `remodel.plan` and `remodel.start`.
+  dump. `OpenDoc7` gains `remodel.open_copy`, and its note, cut short at a `|` when it was first
+  typed, is completed; `GetOpenDocumentByName` and `GetPathName` gain `remodel.open_copy`,
+  `remodel.plan` and `remodel.start`.
 - **Constants.** `swCustomInfoDeleteResult_e`, all three (`OK = 0`, `NotPresent = 1`,
   `LinkedProp = 2`), because the teardown names each answer (R15.3); and
   `swRebuildOnActivation_e.swDontRebuildActiveDoc = 1`, the constant the pane seat composes, since
