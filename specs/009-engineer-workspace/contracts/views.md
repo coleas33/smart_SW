@@ -68,6 +68,13 @@ not change. Pins are kept per chat id in page memory and rendered again when tha
 (`sessions.md` section 5). A turn that ends without `text.done` (stopped, failed) writes "No answer:
 the turn ended ({reason})." into the block.
 
+*Amended 2026-09-26 by feature 013 T110* (013 `contracts/sources.md` section 3): when `text.done`
+carries `basis`, the pinned block reads the source word ("AI guidance", `labels.source`), then the
+basis as its first line, then the answer; the Transcript's assistant block carries the source word
+from its first delta and the basis above the text at `text.done`. The basis is the backend's
+sentence, printed as sent. A `text.done` without `basis` (an older backend) renders as before, and
+a turn that ends without `text.done` keeps its "No answer" sentence with no source word.
+
 ## 5. Streaming into two containers
 
 A `finding` event renders its card into `#findings` (replacing an existing card of the same id in

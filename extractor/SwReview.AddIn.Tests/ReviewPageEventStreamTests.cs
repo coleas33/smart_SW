@@ -425,6 +425,144 @@ return JSON.stringify({
         public JsonElement Hostile { get; set; }
     }
 
+    // ---- the answer's basis (feature 013 T109, contracts/sources.md section 3) ------------------
+
+    private static readonly Lazy<Answers> Answered = new Lazy<Answers>(DriveAnswers);
+
+    /// <summary>
+    /// A model answer says what it rests on before it says anything else: the pinned answer is
+    /// the source word ("AI guidance", `labels.source`), then the backend's `basis` as its first
+    /// line, then the answer; the Transcript's assistant block carries the word from its first
+    /// delta and the basis above the text at `text.done`. The page counts no step: the basis is
+    /// the backend's sentence, printed as sent.
+    /// </summary>
+    [Fact]
+    public void ThePinnedAnswerReadsTheSourceWordThenTheBasisThenTheAnswer()
+    {
+        JsonElement pin = Answered.Value.WithBasis;
+
+        Assert.Equal(new[] { "pinned-question", "chip source-chip source-model", "pinned-basis", "pinned-answer" }, ReviewPageDriver.Strings(pin, "pinParts"));
+        Assert.Equal(LabelsSample.SourceModel, pin.GetProperty("pinChip").GetString());
+        Assert.Equal(Basis, pin.GetProperty("pinBasis").GetString());
+        Assert.Equal("Because the pin overlaps the bore.", pin.GetProperty("pinAnswer").GetString());
+        Assert.Equal(new[] { "chip source-chip source-model", "basis", "text" }, ReviewPageDriver.Strings(pin, "blockParts"));
+        Assert.Equal(Basis, pin.GetProperty("blockBasis").GetString());
+    }
+
+    /// <summary>
+    /// A `text.done` from a backend older than the basis renders as before - the answer alone,
+    /// no source word and no basis in the pin, and no basis in the Transcript's block.
+    /// </summary>
+    [Fact]
+    public void AnOlderTextDoneWithoutABasisRendersAsBefore()
+    {
+        JsonElement pin = Answered.Value.WithoutBasis;
+
+        Assert.Equal(new[] { "pinned-question", "pinned-answer" }, ReviewPageDriver.Strings(pin, "pinParts"));
+        Assert.DoesNotContain("basis", ReviewPageDriver.Strings(pin, "blockParts"));
+    }
+
+    /// <summary>A turn that ends without `text.done` keeps its "No answer" sentence, with no source word and no basis.</summary>
+    [Fact]
+    public void ATurnEndedWithoutTextDoneHasNoSourceWord()
+    {
+        JsonElement pin = Answered.Value.Stopped;
+
+        Assert.Equal(new[] { "pinned-question", "pinned-answer" }, ReviewPageDriver.Strings(pin, "pinParts"));
+        Assert.Equal("No answer: the turn ended (stopped).", pin.GetProperty("pinAnswer").GetString());
+    }
+
+    /// <summary>The basis is backend text: one that carries markup is characters, in the pin and in the Transcript (FR-029).</summary>
+    [Fact]
+    public void AHostileBasisIsLiteralText()
+    {
+        JsonElement pin = Answered.Value.Hostile;
+
+        Assert.Equal(HostileBasis, pin.GetProperty("pinBasis").GetString());
+        Assert.Equal(HostileBasis, pin.GetProperty("blockBasis").GetString());
+        Assert.Equal(0, pin.GetProperty("injected").GetInt32());
+    }
+
+    private const string Basis = "Based on 2 results read for this answer. No drawing was read in this review.";
+
+    private const string HostileBasis = "<img src=x onerror=alert(17)></p><script>alert(18)</script>Based on 1 result read for this answer.";
+
+    private static Answers DriveAnswers()
+    {
+        var run = new Answers();
+
+        ReviewPageDriver.Run(
+            driver => driver.InitialRoutes.Add(("GET", "/labels", 200, LabelsSample.Json())),
+            async driver =>
+            {
+                await driver.RouteAttention(ChatId, SummarySample.Json());
+                await driver.Route("POST", "/sessions/" + ChatId + "/messages", 200, "{}");
+                await driver.StartReview();
+                await driver.EndSession(ChatId);
+
+                int seq = 100;
+                run.WithBasis = await FollowUp(driver, "Why F-007?", ++seq, @"{""text"":""Because""}",
+                    "text.done", JsonSerializer.Serialize(new { text = "Because the pin overlaps the bore.", basis = Basis }));
+                run.WithoutBasis = await FollowUp(driver, "And F-008?", seq += 10, @"{""text"":""Also""}",
+                    "text.done", @"{""text"":""Also an overlap.""}");
+                run.Stopped = await FollowUp(driver, "And F-003?", seq += 10, null, "turn.ended", @"{""reason"":""stopped""}");
+                run.Hostile = await FollowUp(driver, "And F-002?", seq += 10, @"{""text"":""Maybe""}",
+                    "text.done", JsonSerializer.Serialize(new { text = "Maybe.", basis = HostileBasis }));
+            });
+
+        return run;
+    }
+
+    /// <summary>Sends a follow-up, plays its turn - an optional delta, then its closing event - and reads the last pin and assistant block.</summary>
+    private static async Task<JsonElement> FollowUp(ReviewPageDriver driver, string question, int seq, string? delta, string closing, string closingBody)
+    {
+        await driver.Read(
+            "var input = document.getElementById('followup-text'); input.value = " + JsonSerializer.Serialize(question) + ";"
+            + "document.getElementById('followup').dispatchEvent(new Event('submit', {cancelable: true}));"
+            + "return JSON.stringify({ok: true});");
+        await driver.Settle();
+        if (delta != null)
+        {
+            await driver.Push(ChatId, seq, "text.delta", delta);
+        }
+
+        await driver.Push(ChatId, seq + 1, closing, closingBody);
+        if (closing == "text.done")
+        {
+            await driver.Push(ChatId, seq + 2, "turn.ended", @"{""reason"":""end""}");
+        }
+
+        await driver.Settle();
+        return await driver.Read(ReadAnswer);
+    }
+
+    private const string ReadAnswer = @"
+var pins = document.querySelectorAll('#answers .pinned');
+var pin = pins[pins.length - 1];
+var blocks = document.querySelectorAll('#transcript .block.assistant');
+var block = blocks.length ? blocks[blocks.length - 1] : null;
+return JSON.stringify({
+  ok: true,
+  pinParts: h.children(pin),
+  pinChip: h.text(pin, '.source-chip'),
+  pinBasis: h.text(pin, '.pinned-basis'),
+  pinAnswer: h.text(pin, '.pinned-answer'),
+  blockParts: h.children(block),
+  blockBasis: h.text(block, '.basis'),
+  injected: h.injected(document.getElementById('answers')) + h.injected(document.getElementById('transcript'))
+});";
+
+    private sealed class Answers
+    {
+        public JsonElement WithBasis { get; set; }
+
+        public JsonElement WithoutBasis { get; set; }
+
+        public JsonElement Stopped { get; set; }
+
+        public JsonElement Hostile { get; set; }
+    }
+
     /// <summary>
     /// Loads the page, answers `ready`, `models.list` and `review.start` the way the add-in
     /// does, presses Review, and then plays the host's side of the stream at the page.

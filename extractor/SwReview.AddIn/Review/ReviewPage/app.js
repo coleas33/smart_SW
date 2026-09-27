@@ -506,7 +506,7 @@
         writeDelta(body.text);
         return;
       case 'text.done':
-        finishDelta(body.text);
+        finishDelta(body.text, body.basis);
         return;
       case 'tool.started':
         startTool(body);
@@ -693,10 +693,13 @@
     errorInto(status, error, legacy);
   }
 
-  /** The assistant's text, streamed. One block per turn, filled in delta by delta. */
+  /**
+   * The assistant's text, streamed. One block per turn, filled in delta by delta; the block opens
+   * with the source word of the model's text (feature 013, contracts/sources.md section 3).
+   */
   function writeDelta(text) {
     if (!state.textBlock) {
-      var block = render.textBlock('assistant', '');
+      var block = render.assistantBlock(state.labels);
       appendCard(block);
       state.textBlock = block.querySelector('.text');
     }
@@ -707,19 +710,24 @@
   /**
    * `text.done` carries everything the turn said, so the streamed block is replaced by it
    * rather than appended to: after a reconnect the deltas may be partial and the done body
-   * never is.
+   * never is. Its `basis` - the backend's line saying what the answer rests on (feature 013,
+   * contracts/sources.md section 3) - goes above the text, as sent; a body with none, from an
+   * older backend, adds nothing.
    */
-  function finishDelta(text) {
+  function finishDelta(text, basis) {
     if (!state.textBlock) {
       writeDelta('');
     }
     var completed = state.textBlock;
     render.clear(completed);
     render.write(completed, text || '');
+    if (typeof basis === 'string') {
+      completed.parentNode.insertBefore(render.el('p', 'basis', basis), completed);
+    }
     state.textBlock = null;
     scrollToEnd();
     if (state.followUpPending) {
-      answerFollowUp(text || '');
+      answerFollowUp(text || '', basis);
     }
   }
 
@@ -742,22 +750,23 @@
     render.clear(ui.answers);
     var pins = state.chatId ? pinsOf(state.chatId) : [];
     for (var index = 0; index < pins.length; index++) {
-      ui.answers.appendChild(render.pinnedAnswer(pins[index]));
+      ui.answers.appendChild(render.pinnedAnswer(pins[index], state.labels));
     }
   }
 
   /**
-   * The answer to the follow-up that is waiting: into its pin, which is then brought into view
-   * inside Results. The view is not changed - the answer comes to the engineer, not the other
-   * way round.
+   * The answer to the follow-up that is waiting: into its pin, with the backend's basis line when
+   * `text.done` carried one, and the pin is then brought into view inside Results. The view is not
+   * changed - the answer comes to the engineer, not the other way round.
    */
-  function answerFollowUp(text) {
+  function answerFollowUp(text, basis) {
     state.followUpPending = false;
     var pins = pinsOf(state.chatId);
     if (!pins.length) {
       return;
     }
     pins[pins.length - 1].answer = text;
+    pins[pins.length - 1].basis = basis;
     renderAnswers();
     var last = ui.answers.lastChild;
     if (last) {

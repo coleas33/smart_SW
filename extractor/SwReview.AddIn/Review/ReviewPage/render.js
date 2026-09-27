@@ -79,6 +79,13 @@
   }
 
   /**
+   * The source token of the reviewer's own prose - a follow-up's answer, the Transcript's
+   * assistant blocks and a finding's explanation, which only the model writes (sources.md
+   * sections 3 and 4). A lookup key for `sourceChip`, never compared with anything.
+   */
+  var MODEL = 'model';
+
+  /**
    * What the coverage fold is called. Not "Coverage": the fold is closed until an engineer asks
    * for it, and the question it answers when they do is what the review did not reach.
    */
@@ -240,13 +247,32 @@
    * then, that it is on its way. `answer` is the text itself, or the page's sentence for a turn
    * that ended without one.
    */
-  function pinnedAnswer(pin) {
+  function pinnedAnswer(pin, labels) {
     var body = pin || {};
     var answered = typeof body.answer === 'string';
     var block = el('div', 'pinned');
     block.appendChild(el('p', 'pinned-question', body.question));
+    // A model answer says what it rests on first (feature 013, contracts/sources.md section 3):
+    // the source word, then the backend's basis line, as sent. An answer whose `text.done`
+    // carried no basis - an older backend - and a turn that ended without one read as before.
+    if (answered && typeof body.basis === 'string') {
+      append(block, [sourceChip(labels, MODEL)]);
+      block.appendChild(el('p', 'pinned-basis', body.basis));
+    }
     block.appendChild(el(
       'p', answered ? 'pinned-answer' : 'pinned-answer waiting', answered ? body.answer : 'Waiting for the answer.'));
+    return block;
+  }
+
+  /**
+   * The Transcript's block for the reviewer's prose, as its first delta opens it: the source word
+   * of the model's text (feature 013, contracts/sources.md section 3), then the text, which the
+   * deltas fill. `app.js` puts the basis above the text when `text.done` brings one.
+   */
+  function assistantBlock(labels) {
+    var block = el('div', 'block assistant');
+    append(block, [sourceChip(labels, MODEL)]);
+    block.appendChild(el('p', 'text', ''));
     return block;
   }
 
@@ -1200,6 +1226,7 @@
     findingMarker: findingMarker,
     withdrawalMarker: withdrawalMarker,
     pinnedAnswer: pinnedAnswer,
+    assistantBlock: assistantBlock,
     toolCard: toolCard,
     findingCard: findingCard,
     dispositionText: dispositionText,
