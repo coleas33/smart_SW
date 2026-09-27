@@ -1044,6 +1044,42 @@ def test_all_bought_and_none_bought() -> None:
     assert answered_roles(request, spec, subject).answers == {"doc:4": "custom"}
 
 
+@pytest.mark.parametrize(
+    ("typed", "role"),
+    [
+        ("all bought", "bought"),
+        ("ALL BOUGHT", "bought"),
+        ("All bought.", "bought"),
+        ("  All   bought!  ", "bought"),
+        ("none bought", "custom"),
+        ("None Bought.", "custom"),
+    ],
+)
+def test_an_option_typed_in_the_text_box_reads_as_the_option(typed: str, role: str) -> None:
+    """The review of 2026-09-27: "all bought" typed into the text box read as a part name that
+    matched nothing, so every listed part was graded as custom - the opposite of what the
+    engineer meant, on a question that cannot be answered twice. An option typed in another case,
+    with other spacing or a closing full stop or exclamation mark, is that option."""
+    request, spec, subject = answered(typed)
+
+    result = answered_roles(request, spec, subject)
+
+    assert result is not None
+    assert result.answers == {"doc:4": role}
+    assert result.unmatched == ()
+
+
+def test_an_option_inside_a_longer_answer_is_not_the_option() -> None:
+    """Only the whole answer is read as an option: a sentence that contains the words is a list
+    of names, and names none here."""
+    request, spec, subject = answered("all bought except the spacer")
+
+    result = answered_roles(request, spec, subject)
+
+    assert result.answers == {"doc:4": "custom"}
+    assert result.unmatched == ("all bought except the spacer",)
+
+
 def test_a_typed_list_names_the_bought_ones_by_file_name_or_stem() -> None:
     subject, spec = two_unclear()
 

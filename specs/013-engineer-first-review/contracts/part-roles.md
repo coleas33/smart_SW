@@ -323,6 +323,12 @@ an answered request only when it **is** the part-roles question (its `question`,
 | "None bought" | every listed document custom |
 | text | split on commas, semicolons and line breaks; each piece trimmed and matched, ignoring case, to a listed document's file name or stem; matched ones bought, every other listed one custom; a piece that matches none is quoted in one `coverage.prerun.part_roles` row ("'{piece}' names none of the listed parts") and changes nothing |
 
+*Amended 2026-09-27 (the review of that day):* an answer is either option when the **whole**
+answer equals it ignoring case, runs of spaces and a closing full stop or exclamation mark, so
+"all bought." typed into the text box is the "All bought" button; before, it was read as a name
+that matched nothing and graded every listed part custom, on a question that cannot be answered
+twice. A longer answer that contains the words is a list of names, as the table's last row reads it.
+
 **Order** (settled on review, 2026-09-26). In one batch: (1) the answers are marked; (2)
 `read_confirmed_candidates` runs first, with the roles as they were when its question was built, so
 the rebuilt candidate question still matches exactly and a confirmed read is never silently skipped;

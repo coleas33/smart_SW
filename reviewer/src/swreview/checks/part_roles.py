@@ -894,9 +894,9 @@ def answered_roles(
         return None
     listed = list(spec.entity_ids)
     answer = request.answer.strip()
-    if answer == OPTION_ALL:
+    if _option_key(answer) == _option_key(OPTION_ALL):
         return RolesAnswer(answers=dict.fromkeys(listed, "bought"))
-    if answer == OPTION_NONE:
+    if _option_key(answer) == _option_key(OPTION_NONE):
         return RolesAnswer(answers=dict.fromkeys(listed, "custom"))
     names = _file_names(package)
     spellings = {
@@ -918,6 +918,13 @@ def answered_roles(
         answers={key: "bought" if key in named else "custom" for key in listed},
         unmatched=tuple(unmatched),
     )
+
+
+def _option_key(text: str) -> str:
+    """How a whole answer is compared with an option (section 9): case, runs of spaces and a
+    closing full stop or exclamation mark ignored, so "all bought." typed into the text box is
+    the "All bought" button - read as a name, it would grade every listed part custom."""
+    return " ".join(text.split()).rstrip(".!").strip().casefold()
 
 
 def unmatched_sentence(pieces: Sequence[str]) -> str | None:
