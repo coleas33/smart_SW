@@ -151,7 +151,8 @@ public sealed class StandardsHost : IDisposable
             // The PATH only: no profile value travels on any message (FR-034).
             ExtraInitFields = () => new[]
             {
-                new KeyValuePair<string, object?>("profile_path", Configured(options.ProfilePath())),
+                new KeyValuePair<string, object?>(
+                    "profile_path", CheckPaneHost.Configured(options.ProfilePath())),
             },
             RegisterLatestRun = directory => options.RegisterLatestRun(directory),
             EntityResolver = () => options.EntityResolver(),
@@ -347,7 +348,7 @@ public sealed class StandardsHost : IDisposable
     /// </summary>
     private string? ProfileFailure()
     {
-        string? path = Configured(_options.ProfilePath());
+        string? path = CheckPaneHost.Configured(_options.ProfilePath());
         if (path == null)
         {
             return $"no standards profile is configured: set `{ProfileSetting}` to the profile "
@@ -367,8 +368,4 @@ public sealed class StandardsHost : IDisposable
                 + $"Check `{ProfileSetting}`.";
         }
     }
-
-    /// <summary>The configured path, or null when the setting is blank.</summary>
-    private static string? Configured(string? path) =>
-        string.IsNullOrWhiteSpace(path) ? null : path;
 }

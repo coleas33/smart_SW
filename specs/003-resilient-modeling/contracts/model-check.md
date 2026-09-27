@@ -162,7 +162,7 @@ Six points the shape exists to enforce:
 
 | type | payload | host action |
 |------|---------|-------------|
-| `ready` | `{}` | Reply `init` `{backend: {port, origin}, token, run_root, document: {path, configuration, kind} \| null, latest_check: {run_dir, at} \| null}`. |
+| `ready` | `{}` | Reply `init` `{backend: {port, origin}, token, run_root, standards_profile: str \| null, document: {path, configuration, kind} \| null, latest_check: {run_dir, at} \| null}`. `standards_profile` (feature 013 T150) is the configured `StandardsProfilePath` - the Review tab's own setting, read fresh - or null when it is blank: a path, never a value; the page relays it on `POST /checks/rms` (section 1) and prints the body's `bought_parts` verbatim above the ranked rows. |
 | `check.start` | `{scope: "part"}` | Refuse with `error {error_class: "NoDocument"}`, `"NotAttached"`, or `"NotAPart"` as applicable. Otherwise create the check run folder, run the `ModelCheck` profile dump in process, register the folder as the pane's latest run, and reply `check.extracted {run_dir, document, configuration, counts: {documents, features, equations}, gaps}`. Progress via `status`. The host stops here: the page calls `POST /checks/rms` itself. |
 | `entity.show` | `{persist_ref, persist_ref_scope, component_id}` | **Identical to the Review page's row**, delegated to `PaneActions`; reply `entity.shown {ok, state_code, message, full_path \| null}`. |
 | `report.open` | `{run_id}` | Delegated to `PaneActions`; the path comes from the host's own record, never from the page. |

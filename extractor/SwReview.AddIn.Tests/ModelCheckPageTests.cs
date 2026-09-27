@@ -941,6 +941,105 @@ public sealed class ModelCheckPageTests
         Assert.DoesNotContain("<img", rendered.GetProperty("html").GetString()!);
     }
 
+    // ---- the bought-parts line (feature 013 T149, FR-008, US1 scenario 6) ------------------------
+
+    /// <summary>
+    /// `bought_parts` is the backend's sentence - the root rule's clause when the open part looks
+    /// bought - printed verbatim above the ranked rows and the rules, so it is read before the
+    /// grade's details. The page composes nothing: `checks/part_roles.py` wrote the words.
+    /// </summary>
+    [Fact]
+    public void ABoughtPartsLineIsPrintedVerbatimUnhiddenAboveTheRankedRowsAndTheRules()
+    {
+        JsonElement rendered = RenderMutated(
+            "result.bought_parts = " + JsonSerializer.Serialize(CheckResultSample.BoughtPartsLine) + ";",
+            "var node = document.getElementById('bought-parts');"
+            + "var attention = document.getElementById('attention');"
+            + "var rules = document.getElementById('rules');"
+            + "return JSON.stringify({ok: true, "
+            + "text: node.textContent, "
+            + "hidden: !!node.hidden, "
+            + "beforeAttention: !!(node.compareDocumentPosition(attention) "
+            + "& Node.DOCUMENT_POSITION_FOLLOWING), "
+            + "beforeRules: !!(node.compareDocumentPosition(rules) "
+            + "& Node.DOCUMENT_POSITION_FOLLOWING)});");
+
+        Assert.Equal(CheckResultSample.BoughtPartsLine, rendered.GetProperty("text").GetString());
+        Assert.False(rendered.GetProperty("hidden").GetBoolean(), "#bought-parts stayed hidden.");
+        Assert.True(rendered.GetProperty("beforeAttention").GetBoolean());
+        Assert.True(rendered.GetProperty("beforeRules").GetBoolean());
+    }
+
+    /// <summary>
+    /// Null is "nothing to say", and a body from a check run without a profile - every body
+    /// before feature 013 T148 - carries no key: both leave the block hidden and empty.
+    /// </summary>
+    [Theory]
+    [InlineData("result.bought_parts = null;")]
+    [InlineData("result.bought_parts = '';")]
+    [InlineData("delete result.bought_parts;")]
+    public void ANullEmptyOrAbsentBoughtPartsLineLeavesTheBlockHiddenAndEmpty(string mutate)
+    {
+        JsonElement rendered = RenderMutated(
+            mutate,
+            "var node = document.getElementById('bought-parts');"
+            + "return JSON.stringify({ok: true, text: node.textContent, hidden: !!node.hidden});");
+
+        Assert.Equal(string.Empty, rendered.GetProperty("text").GetString());
+        Assert.True(rendered.GetProperty("hidden").GetBoolean());
+    }
+
+    /// <summary>A second result without the line clears the first one's: no line outlives its check.</summary>
+    [Fact]
+    public void ASecondResultWithoutTheLineClearsTheFirstOnes()
+    {
+        JsonElement rendered = OffscreenModelCheckPage.Evaluate(
+            "var first = " + CheckResultSample.Json() + ";"
+            + "first.bought_parts = " + JsonSerializer.Serialize(CheckResultSample.BoughtPartsLine) + ";"
+            + "check(first);"
+            + "check(" + CheckResultSample.Json() + ");"
+            + "var node = document.getElementById('bought-parts');"
+            + "return JSON.stringify({ok: true, text: node.textContent, hidden: !!node.hidden});");
+
+        Assert.Equal(string.Empty, rendered.GetProperty("text").GetString());
+        Assert.True(rendered.GetProperty("hidden").GetBoolean());
+    }
+
+    /// <summary>
+    /// The page relays the `standards_profile` the host gave it in `init` - the Review tab's own
+    /// setting, a path and never a value - on its `POST /checks/rms`, beside the fields it always
+    /// sent (contracts/model-check.md sections 1 and 2).
+    /// </summary>
+    [Fact]
+    public void ThePageRelaysTheStandardsProfileFromInitOnItsCheckRequest()
+    {
+        JsonElement state = DriveCheck(@"C:\profiles\standards.yaml");
+
+        Assert.Equal(
+            new[] { "POST /checks/rms" },
+            state.GetProperty("calls").EnumerateArray().Select(value => value.GetString()).ToArray());
+        JsonElement body = state.GetProperty("body");
+        Assert.Equal(@"C:\profiles\standards.yaml", body.GetProperty("standards_profile").GetString());
+        Assert.Equal(@"C:\SwReviewRuns\20260927-101532-bracket-check", body.GetProperty("run_dir").GetString());
+        Assert.Equal("part", body.GetProperty("scope").GetString());
+        Assert.Equal(JsonValueKind.Null, body.GetProperty("document_id").ValueKind);
+    }
+
+    /// <summary>With no profile in `init` the request is the one the page always sent: no key at all.</summary>
+    [Fact]
+    public void WithNoStandardsProfileInInitTheCheckRequestIsTodays()
+    {
+        JsonElement state = DriveCheck(null);
+
+        JsonElement body = state.GetProperty("body");
+        Assert.False(
+            body.TryGetProperty("standards_profile", out JsonElement _),
+            "The page sent a standards_profile it was never given.");
+        Assert.Equal(
+            new[] { "document_id", "run_dir", "scope" },
+            body.EnumerateObject().Select(property => property.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray());
+    }
+
     // ---- what happens when the engineer accepts a rule -----------------------------------------
 
     /// <summary>
@@ -1086,6 +1185,55 @@ public sealed class ModelCheckPageTests
     }
 
     /// <summary>
+    /// Loads the page with a host whose `init` carries <paramref name="standardsProfile"/> and
+    /// which answers `check.start`, presses Model check against a stubbed `window.fetch`, and
+    /// reports the calls the page made and the body of its `POST` (feature 013 T149).
+    /// </summary>
+    private static JsonElement DriveCheck(string? standardsProfile)
+    {
+        string? raw = null;
+
+        OffscreenReviewPage.WithPage(
+            ModelCheckPageFiles.PageUrl,
+            page => { _ = new HostStub(page, backendAtFirstReady: true, standardsProfile); },
+            async page =>
+            {
+                await OffscreenReviewPage.Settled(page);
+                await page.ExecuteScriptAsync(CheckStub);
+                await OffscreenReviewPage.Settled(page);
+                await page.ExecuteScriptAsync("document.getElementById('run-check').click();");
+                await OffscreenReviewPage.Settled(page);
+                raw = await page.ExecuteScriptAsync(
+                    "JSON.stringify({ok: true, calls: window.__calls, body: JSON.parse(window.__body)})");
+            });
+
+        Assert.False(
+            string.IsNullOrEmpty(raw) || raw == "null",
+            "The page script threw before it could report: " + (raw ?? "<nothing>"));
+
+        string json = JsonDocument.Parse(raw!).RootElement.GetString()
+            ?? throw new InvalidOperationException("the page reported nothing: " + raw);
+        return JsonDocument.Parse(json).RootElement.Clone();
+    }
+
+    /// <summary>`POST /checks/rms` answered with the sample result; the body it was sent kept.</summary>
+    private static readonly string CheckStub = @"
+(function () {
+  window.__calls = [];
+  window.__body = null;
+  window.fetch = function (url, request) {
+    window.__calls.push(request.method + ' ' + String(url).replace('https://swreview.invalid/__backend', ''));
+    window.__body = request.body;
+    return Promise.resolve({
+      ok: true,
+      status: 201,
+      text: function () { return Promise.resolve(JSON.stringify(" + CheckResultSample.Json() + @")); }
+    });
+  };
+}());
+";
+
+    /// <summary>
     /// Stubs the backend and renders the sample.
     ///
     /// `accepted` is what `GET /checks/{check_id}` answers once the exception is written: the
@@ -1168,11 +1316,13 @@ public sealed class ModelCheckPageTests
     {
         private readonly CoreWebView2 _page;
         private readonly bool _backendAtFirstReady;
+        private readonly string? _standardsProfile;
 
-        public HostStub(CoreWebView2 page, bool backendAtFirstReady)
+        public HostStub(CoreWebView2 page, bool backendAtFirstReady, string? standardsProfile = null)
         {
             _page = page;
             _backendAtFirstReady = backendAtFirstReady;
+            _standardsProfile = standardsProfile;
             page.WebMessageReceived += OnMessage;
         }
 
@@ -1186,7 +1336,27 @@ public sealed class ModelCheckPageTests
         private void OnMessage(object? sender, CoreWebView2WebMessageReceivedEventArgs args)
         {
             JsonElement message = JsonDocument.Parse(args.WebMessageAsJson).RootElement;
-            if (message.GetProperty("type").GetString() != "ready")
+            string? type = message.GetProperty("type").GetString();
+            if (type == "check.start")
+            {
+                // Where ModelCheckHost stops: the folder extracted, and the page grades it.
+                _page.PostWebMessageAsJson(JsonSerializer.Serialize(new
+                {
+                    type = "check.extracted",
+                    id = message.GetProperty("id").GetString(),
+                    payload = new
+                    {
+                        run_dir = @"C:\SwReviewRuns\20260927-101532-bracket-check",
+                        document = @"C:\vault\bracket.sldprt",
+                        configuration = "Default",
+                        counts = new { documents = 1, features = 12, equations = 0 },
+                        gaps = new object[0],
+                    },
+                }));
+                return;
+            }
+
+            if (type != "ready")
             {
                 return;
             }
@@ -1204,6 +1374,7 @@ public sealed class ModelCheckPageTests
                         : null,
                     token = withBackend ? "0FAKEtoken" : null,
                     run_root = @"C:\SwReviewRuns",
+                    standards_profile = _standardsProfile,
                     document = new
                     {
                         path = @"C:\vault\bracket.sldprt",
@@ -1391,6 +1562,17 @@ internal static class CheckResultSample
 
     /// <summary>A `not_examined.sentence`, hostile the same way a feature name can be.</summary>
     public const string HostileNotExaminedSentence = "<img src=x onerror=alert(1)>";
+
+    /// <summary>
+    /// A `bought_parts` line as the backend writes it for an open part the rules call bought
+    /// (feature 013 T148): the root rule's clause, fictional file name.
+    /// </summary>
+    public const string BoughtPartsLine =
+        "bracket.SLDPRT looks bought (a vendor property); graded because it is the document under review";
+
+    /// <summary>A file name is whatever an engineer called the file: the line is untrusted text.</summary>
+    public const string HostileBoughtPartsLine =
+        "<img src=x onerror=alert(1)>.SLDPRT looks bought (a vendor property); graded because it is the document under review";
 
     /// <summary>The two unresolved rules' statements, from `rule_statements` (feature 009 FR-028).</summary>
     public const string RefsDirectionStatement = "Reference geometry follows the method's axes and planes.";

@@ -14,7 +14,9 @@
      them by their statements (feature 009 FR-028). The Standards page renders a verdict into the
      same slot.
   2. The start verb: one press of Model check, against this family's scope and this family's
-     evaluation route.
+     evaluation route, relaying the standards profile path `init` carried (feature 013 T150).
+  3. The bought-parts line: the backend's sentence, printed verbatim, which says the open part
+     looks bought and why it is graded anyway when the rules call it bought (FR-008).
 
   Both halves obey the same rules. Markup is never assigned and no handler is inline: every node
   is built through `shared/dom.js` (T080), which is the single place the "insert every untrusted
@@ -42,6 +44,12 @@
   /** This family's evaluation route. */
   var CHECK_ROUTE = '/checks/rms'; // called through the shared call wrapper, which puts the token in the Authorization header as 'Bearer ' + token and never in a URL (chat-api.md)
 
+  /**
+   * The standards profile path `init` carried - the Review tab's own setting - or null. The page
+   * relays it on its request and that is all: no value out of the file reaches this process.
+   */
+  var standardsProfile = null;
+
   var page = shared.create({
     /** The slot the header renders into; a verdict goes in the same place on the other tab. */
     headerId: 'grade',
@@ -53,7 +61,9 @@
     // the Standards tab grades parts, assemblies and drawings and says "document"
     // (contracts/model-check.md section 5).
     acceptLabel: 'Accept this rule for this part',
-    acceptNoteHint: 'Why this is acceptable on this part (required)'
+    acceptNoteHint: 'Why this is acceptable on this part (required)',
+    onInit: applyProfile,
+    onResult: renderBoughtParts
   });
 
   // ---- the start verb ----------------------------------------------------------------------
@@ -79,11 +89,15 @@
       .then(function (extracted) {
         api.setRunDirectory(extracted.run_dir);
         api.setCheckState('Checking the model...');
-        return api.call(CHECK_ROUTE, 'POST', {
+        var body = {
           run_dir: extracted.run_dir,
           scope: SCOPE,
           document_id: null
-        });
+        };
+        if (standardsProfile) {
+          body.standards_profile = standardsProfile;
+        }
+        return api.call(CHECK_ROUTE, 'POST', body);
       })
       .then(function (result) {
         api.renderResult(result);
@@ -198,6 +212,32 @@
       ? 'Grade: ' + shared.fileName(document_.path)
         + (document_.configuration ? ' [' + document_.configuration + ']' : '')
       : 'Grade';
+  }
+
+  // ---- the bought-parts line (feature 013 T150) ----------------------------------------------
+
+  /** The profile path from `init`; with none, the request is the one the page always sent. */
+  function applyProfile(payload) {
+    standardsProfile = (payload && payload.standards_profile) || null;
+  }
+
+  /**
+   * The backend's `bought_parts` sentence, verbatim, above the ranked rows (contracts/model-check.md
+   * section 1). Null says there is nothing to say and a body from a check run without a profile
+   * carries no key: both leave the line hidden and empty. The page composes nothing - the words
+   * are `checks/part_roles.py`'s, the ones the review's summary and report print - and a file
+   * name is whatever an engineer called the file, so it goes in as text.
+   */
+  function renderBoughtParts(result) {
+    var node = document.getElementById('bought-parts');
+    dom.clear(node);
+    var line = result && result.bought_parts;
+    if (!line) {
+      node.hidden = true;
+      return;
+    }
+    dom.write(node, line);
+    node.hidden = false;
   }
 
   window.SwReviewCheck = {

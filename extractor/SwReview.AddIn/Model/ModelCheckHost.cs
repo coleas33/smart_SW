@@ -30,6 +30,15 @@ public sealed class ModelCheckHostOptions
     public Func<PageDocument?> CurrentDocument { get; set; } = () => null;
 
     /// <summary>
+    /// The configured standards profile path (`UserSettings.StandardsProfilePath`, the setting the
+    /// Review tab sends with a review), or null when none is configured. Read fresh, because a
+    /// settings save moves it, and handed to the page as a <b>path</b> in `init`: the page relays it
+    /// on `POST /checks/rms`, so the body can say the open part looks bought and why it is graded
+    /// anyway (feature 013 T150, FR-008). This host never opens the file.
+    /// </summary>
+    public Func<string?> ProfilePath { get; set; } = () => null;
+
+    /// <summary>
     /// The in-process extractor - the same <see cref="IReviewDump"/> the Review tab runs, asked
     /// for the <see cref="DumpProfile.ModelCheck"/> profile. Null until the add-in is attached
     /// to a SOLIDWORKS session, which is a state the pane really has.
@@ -126,6 +135,14 @@ public sealed class ModelCheckHost : IDisposable
             // answered with here and this tab's are never answered with there
             // (`contracts/standards-check.md` section 4).
             LatestCheckSuffix = RunFolders.CheckSuffix,
+
+            // The path only, as the Standards tab's `profile_path`: no profile value travels on any
+            // message (feature 013 T150; contracts/model-check.md section 2).
+            ExtraInitFields = () => new[]
+            {
+                new KeyValuePair<string, object?>(
+                    "standards_profile", CheckPaneHost.Configured(options.ProfilePath())),
+            },
             RegisterLatestRun = directory => options.RegisterLatestRun(directory),
             EntityResolver = () => options.EntityResolver(),
             Opener = () => options.Opener(),

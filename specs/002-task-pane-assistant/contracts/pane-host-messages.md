@@ -167,7 +167,7 @@ with no provider, no key and no network call beyond the loopback backend.
 
 | type | payload | host action |
 |------|---------|-------------|
-| `ready` | `{}` | Reply `init` with `{backend: {port, origin}, token, run_root, document: {path, configuration, kind} \| null, latest_check: {run_dir, at} \| null}`. |
+| `ready` | `{}` | Reply `init` with `{backend: {port, origin}, token, run_root, standards_profile: str \| null, document: {path, configuration, kind} \| null, latest_check: {run_dir, at} \| null}`. `standards_profile` (feature 013 T150) is the configured path, or null when the setting is blank; the page relays it on `POST /checks/rms` (feature 003 `contracts/model-check.md`). |
 | `check.start` | `{scope: "part"}` | Refuse with `error {error_class: "NoDocument"}`, `"NotAttached"` or `"NotAPart"` as applicable. Otherwise create the check run folder, run the `ModelCheck` profile dump in process, register that folder as the pane's latest run, and reply `check.extracted {run_dir, document, configuration, counts, gaps}`. Progress via `status`. The host stops there: the page calls `POST /checks/rms` itself, with the token and origin from `init`. |
 | `entity.show` | `{persist_ref, persist_ref_scope, component_id}` | **The Review page's row, unchanged**: both hosts delegate it to the one `PaneActions`; reply `entity.shown {ok, state_code, message, full_path \| null}`. |
 | `report.open` | `{run_id}` | Delegated to `PaneActions`; the path comes from the host's own record, never from the page. |

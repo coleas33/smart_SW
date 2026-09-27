@@ -28,6 +28,26 @@ public sealed class ModelCheckPageInjectionTests
 {
     // ---- the rendered DOM -------------------------------------------------------------------
 
+    /// <summary>
+    /// The bought-parts line names a file, and a file is whatever an engineer called it (feature
+    /// 013 T149): it reaches the screen as characters, never as markup.
+    /// </summary>
+    [Fact]
+    public void AHostileBoughtPartsLineRendersAsLiteralTextWithNothingInjected()
+    {
+        JsonElement rendered = OffscreenModelCheckPage.Evaluate(
+            "var result = " + CheckResultSample.Json() + ";"
+            + "result.bought_parts = " + JsonSerializer.Serialize(CheckResultSample.HostileBoughtPartsLine) + ";"
+            + "check(result);"
+            + "return JSON.stringify(describe(document.getElementById('bought-parts')));");
+
+        Assert.True(rendered.GetProperty("ok").GetBoolean(), "the page did not render");
+        Assert.Contains(CheckResultSample.HostileBoughtPartsLine, rendered.GetProperty("text").GetString()!);
+        Assert.Equal(0, rendered.GetProperty("injected").GetInt32());
+        Assert.Equal(0, rendered.GetProperty("handlers").GetInt32());
+        Assert.DoesNotContain("<img", rendered.GetProperty("html").GetString()!);
+    }
+
     [Fact]
     public void AFeatureNameAndAnObservedStringRenderAsLiteralText()
     {

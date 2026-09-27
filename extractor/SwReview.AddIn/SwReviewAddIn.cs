@@ -552,6 +552,10 @@ public class SwReviewAddIn : ISwAddin
         {
             Backend = () => _backend?.Endpoint,
             CurrentDocument = CurrentDocument,
+
+            // The Review tab's own setting, read fresh: the page relays it so the check can say
+            // its part looks bought (feature 013 T150).
+            ProfilePath = () => (_reviewHost?.Settings ?? UserSettings.Defaults()).StandardsProfilePath,
             Dump = reviewOptions.Dump,
             EntityResolver = () => reviewOptions.EntityResolver,
 
