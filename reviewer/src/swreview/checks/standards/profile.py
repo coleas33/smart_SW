@@ -151,9 +151,21 @@ are free to disagree."""
 
 
 class ProfileError(Exception):
-    """A refusal to grade anything. `error_class` is what the page switches on."""
+    """A refusal to grade anything. `error_class` is what the page switches on.
+
+    `str()` is the whole message, which names the profile's path where the loader wrote one:
+    what the Standards tab and the standards line show the engineer, who has to change that
+    file. `reason` is the same refusal without the path (feature 013 T155, research R2.45): what
+    the part-roles state quotes, because that sentence rides the bought-parts line into the
+    digest, the coverage row, the summary and the report, and a path is a local user folder.
+    A refusal raised without one names no path already, so its reason is its message.
+    """
 
     error_class: ClassVar[str]
+
+    def __init__(self, message: str, *, reason: str | None = None) -> None:
+        super().__init__(message)
+        self.reason = message if reason is None else reason
 
 
 class ProfileUnreadable(ProfileError):
@@ -619,7 +631,8 @@ def load_profile(path: Path | str) -> StandardsProfile:
         profile = StandardsProfile.model_validate(data)
     except ValidationError as error:
         raise ProfileInvalid(
-            f"{path} is not a valid standards profile: {_fields(error)}"
+            f"{path} is not a valid standards profile: {_fields(error)}",
+            reason=f"the file is not a valid standards profile: {_fields(error)}",
         ) from error
 
     profile._identity = identity
@@ -759,12 +772,15 @@ def _read(path: Path) -> bytes:
         return path.read_bytes()
     except FileNotFoundError as error:
         raise ProfileUnreadable(
-            f"no standards profile at {path}; the setting is {SETTING_NAME}"
+            f"no standards profile at {path}; the setting is {SETTING_NAME}",
+            reason=f"no file at the configured path; the setting is {SETTING_NAME}",
         ) from error
     except OSError as error:
-        raise ProfileUnreadable(f"the standards profile at {path} cannot be read: {error}") from (
-            error
-        )
+        # `str(error)` quotes the file name, so the reason keeps the operating system's words only.
+        raise ProfileUnreadable(
+            f"the standards profile at {path} cannot be read: {error}",
+            reason=f"the file cannot be read: {error.strerror or type(error).__name__}",
+        ) from error
 
 
 def _parse(path: Path, content: bytes) -> dict[str, Any]:
@@ -772,20 +788,23 @@ def _parse(path: Path, content: bytes) -> dict[str, Any]:
         text = content.decode("utf-8")
     except UnicodeDecodeError as error:
         raise ProfileUnreadable(
-            f"the standards profile at {path} is not UTF-8 text: {error}"
+            f"the standards profile at {path} is not UTF-8 text: {error}",
+            reason=f"the file is not UTF-8 text: {error}",
         ) from error
 
     try:
         data = yaml.safe_load(text)
     except yaml.YAMLError as error:
-        raise ProfileInvalid(f"{path} is not valid YAML{_where(error)}: {_problem(error)}") from (
-            error
-        )
+        raise ProfileInvalid(
+            f"{path} is not valid YAML{_where(error)}: {_problem(error)}",
+            reason=f"the file is not valid YAML{_where(error)}: {_problem(error)}",
+        ) from error
 
     if not isinstance(data, dict):
+        parsed = f"a profile is a YAML mapping, and this file parsed as {type(data).__name__}"
         raise ProfileInvalid(
-            f"{path} is not a standards profile: a profile is a YAML mapping, and this file "
-            f"parsed as {type(data).__name__}"
+            f"{path} is not a standards profile: {parsed}",
+            reason=f"the file is not a standards profile: {parsed}",
         )
     return data
 
@@ -801,10 +820,8 @@ def _check_version(path: Path, data: dict[str, Any]) -> None:
     if isinstance(version, bool) or not isinstance(version, int) or version not in KNOWN_VERSIONS:
         numbers = [str(item) for item in KNOWN_VERSIONS]
         known = f"{', '.join(numbers[:-1])} and {numbers[-1]}"
-        raise ProfileInvalid(
-            f"{path} is a version {version!r} standards profile; this build knows versions "
-            f"{known}"
-        )
+        refused = f"a version {version!r} standards profile; this build knows versions {known}"
+        raise ProfileInvalid(f"{path} is {refused}", reason=f"the file is {refused}")
 
 
 def _where(error: yaml.YAMLError) -> str:

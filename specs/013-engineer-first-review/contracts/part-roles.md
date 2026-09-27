@@ -29,7 +29,14 @@ def classify_parts(
 
 Pure: it reads its arguments only. It covers every part and assembly document of the package;
 drawings are never classified. `profile_refusal` is the loader's reason when a profile was configured
-and refused, so the no-profile line can say why.
+and refused, so the no-profile line can say why. *Amended 2026-09-27 (T154-T155, research R2.45;
+default taken 2026-09-27, the owner may revise):* that reason names no path - not the profile's,
+not its folder, not its file name - because the line rides the bought-parts row into the digest,
+the summary and the report. It is `ProfileError.reason` (`checks/standards/profile.py`), the
+refusal's kind and cause ("no file at the configured path; the setting is StandardsProfilePath",
+"the file is a version 99 standards profile; this build knows versions 1, 2, 3 and 4", ...), read by
+`runner.profile_refusal_of`; the loader's whole message, which names the file, is still what the
+Standards tab and the standards family's line show the engineer.
 
 | State | When | What decides (section 2) |
 |---|---|---|
