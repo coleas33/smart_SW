@@ -1,7 +1,8 @@
 """The open seat tasks of features 008 to 011 and 013, and the task ids a document names (011 T099,
 T100; 013 T138).
 
-`docs/workstation-handover-2026-09-23.md` (T099) and `docs/workstation-test-plan-2026-09-23.md`
+`docs/test-plan-2026-09-27/workstation-handover.md` (T099) and
+`docs/test-plan-2026-09-27/workstation-test-plan.md`
 (T100) each name every open `[W]` task of the five packages, so a seat result maps back to its row
 of a `tasks.md`; feature 013 joined them on 2026-09-27 (013 T138), with its four seat tasks, 013
 T141 to T144, and a fifth, 013 T153, with its follow-ups the same day. One reader of the task

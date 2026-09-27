@@ -297,7 +297,7 @@ public sealed class RemodelHost : IDisposable
     /// <summary>
     /// The Tools > Options > System Options > General label of each toggle the run changes
     /// (<see cref="RemodelSystemToggles.SuppressedToggles"/>), as
-    /// `docs/workstation-test-plan-2026-09-23.md` step 1 already asks the engineer to read them.
+    /// `docs/test-plan-2026-09-27/workstation-test-plan.md` step 1 already asks the engineer to read them.
     /// Whether 2024 spells them so is a seat item (research R13.8, D8).
     /// </summary>
     private static readonly Dictionary<int, string> ToggleLabels = new Dictionary<int, string>

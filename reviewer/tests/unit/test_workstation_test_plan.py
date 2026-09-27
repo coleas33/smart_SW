@@ -1,9 +1,9 @@
 """The engineer's plan for the next seat sitting holds to the tasks and to the product (011 T100).
 
-`docs/workstation-test-plan-2026-09-23.md` is the sitting of
-`docs/workstation-handover-2026-09-23.md` in plain, numbered steps for the engineer who runs it,
-who is not a developer. It cannot be run here (every step needs the licensed seat), so what it
-promises is held in its text:
+`docs/test-plan-2026-09-27/workstation-test-plan.md` is the sitting of
+`docs/test-plan-2026-09-27/workstation-handover.md` in plain, numbered steps for the engineer who
+runs it, who is not a developer. It cannot be run here (every step needs the licensed seat), so
+what it promises is held in its text:
 
 - every open `[W]` task of features 008 to 011 is named with its package (`011 T062`), so each
   result maps back to its row of a `tasks.md` - ids repeat across packages, so a bare id is not
@@ -17,10 +17,10 @@ promises is held in its text:
   prints the lines the plan tells the engineer to read;
 - every product sentence the plan quotes, for the engineer to compare with the screen, is still
   the product's;
-- the results sheet (`docs/workstation-results-2026-09-23.md`), which the plan copies into the
-  handover folder as the findings document, has a row for every step and task id a step heading
-  names, every row names a step the plan has, every open seat task the plan does not set aside
-  under "Not in this sitting" has a row, and it ships blank;
+- the results sheet (`docs/test-plan-2026-09-27/workstation-results.md`), which the plan copies
+  into the handover folder as the findings document, has a row for every step and task id a
+  step heading names, every row names a step the plan has, every open seat task the plan does
+  not set aside under "Not in this sitting" has a row, and it ships blank;
 - the four earlier seat tasks the owner added (decision 15A: 006 T101 and T102, 007 T059 and
   T060) each have a step where their documents are already open and a row, and are gone from
   the table of earlier tasks not asked; `Show-FindingsByType` prints a committed report's
@@ -68,8 +68,8 @@ from tests.support.seat_tasks import (
     qualified_tasks,
 )
 
-PLAN = REPO / "docs" / "workstation-test-plan-2026-09-23.md"
-RESULTS = REPO / "docs" / "workstation-results-2026-09-23.md"
+PLAN = REPO / "docs" / "test-plan-2026-09-27" / "workstation-test-plan.md"
+RESULTS = REPO / "docs" / "test-plan-2026-09-27" / "workstation-results.md"
 REVIEWER = REPO / "reviewer"
 FIXTURES = REVIEWER / "tests" / "fixtures"
 REVIEW_RUN = FIXTURES / "replay" / "big-assembly"
@@ -338,10 +338,12 @@ def line_starting(lines: list[str], label: str) -> str:
 
 
 def test_the_runbook_and_the_readme_link_the_plan() -> None:
-    link = "docs/workstation-test-plan-2026-09-23.md"
+    link = "docs/test-plan-2026-09-27/workstation-test-plan.md"
     runbook = (REPO / "docs" / "workstation-runbook.md").read_text(encoding="utf-8")
     readme = (REPO / "README.md").read_text(encoding="utf-8")
-    handover = (REPO / "docs" / "workstation-handover-2026-09-23.md").read_text(encoding="utf-8")
+    handover = (REPO / "docs" / "test-plan-2026-09-27" / "workstation-handover.md").read_text(
+        encoding="utf-8"
+    )
 
     assert f"`{link}`" in runbook
     assert f"({link})" in readme
@@ -379,17 +381,16 @@ def test_the_plan_starts_the_findings_document_once_the_update_has_brought_the_s
     until step 1.3's pull brings it, so the copy is made at step 1.4, after the check that the
     checkout holds the sheet itself - the plan came first, so a checkout can hold the plan and
     not the sheet; until then step 1 records in `notes\\update.txt`."""
-    copy = r'Copy-Item "$R\docs\workstation-results-2026-09-23.md" $findings'
+    copy = r'Copy-Item "$R\docs\test-plan-2026-09-27\workstation-results.md" $findings'
     step_1_4 = step(plan, "1.4")
     step_1 = plan[plan.index("## Step 1.") : plan.index("### 1.1 ")]
 
     assert '$findings = "$H\\pane-findings-$(Split-Path $H -Leaf).md"' in plan
     assert plan.count(copy) == 1
     assert copy in step_1_4
-    assert step_1_4.index(r"Test-Path docs\workstation-results-2026-09-23.md") < step_1_4.index(
-        copy
-    )
-    assert r"Test-Path docs\workstation-test-plan-2026-09-23.md" not in plan
+    sheet_check = r"Test-Path docs\test-plan-2026-09-27\workstation-results.md"
+    assert step_1_4.index(sheet_check) < step_1_4.index(copy)
+    assert r"Test-Path docs\test-plan-2026-09-27\workstation-test-plan.md" not in plan
     assert plan.index("git pull --ff-only origin main") < plan.index(copy)
     assert plan.index("notepad $findings") > plan.index("### 1.4 ")
     assert r"notes\update.txt" in step_1
@@ -512,6 +513,7 @@ def test_step_1_4_checks_for_the_first_build_whose_probe_names_each_dimension(
         pytest.fail(f"step 1.4 names {commit}, which this checkout does not hold")
 
     assert git("merge-base", "--is-ancestor", commit, "HEAD").returncode == 0
+    # The results sheet as that commit held it, before the 2026-09-27 move into the dated folder.
     assert git("cat-file", "-e", f"{commit}:docs/workstation-results-2026-09-23.md").returncode == 0
     assert named_dimension_line(git("show", f"{commit}:{PROBE_TESTS}").stdout) != []
     assert named_dimension_line(git("show", f"{commit}^:{PROBE_TESTS}").stdout) == []
@@ -598,7 +600,7 @@ def test_the_update_script_fetches_before_it_decides_not_to_pull() -> None:
     assert fetch < not_main < refusal < builds
 
 
-HANDOVER = REPO / "docs" / "workstation-handover-2026-09-23.md"
+HANDOVER = REPO / "docs" / "test-plan-2026-09-27" / "workstation-handover.md"
 FENCED = re.compile(r"^\s*```[a-z]*\n(.*?)^\s*```", re.MULTILINE | re.DOTALL)
 INLINE_CODE = re.compile(r"`([^`]+)`")
 COMMAND = re.compile(

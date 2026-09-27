@@ -3625,7 +3625,7 @@ public sealed class RemodelHostTests
         // Read with every run of white space as one space: a label can wrap across the plan's lines.
         string plan = Regex.Replace(
             File.ReadAllText(Path.Combine(
-                ErrorLabelsCoverTheHostTests.RepositoryRoot(), "docs", "workstation-test-plan-2026-09-23.md")),
+                ErrorLabelsCoverTheHostTests.RepositoryRoot(), "docs", "test-plan-2026-09-27", "workstation-test-plan.md")),
             @"\s+",
             " ");
         string message = RemodelHost.SessionEndedMessage(RemodelSystemToggles.SuppressedToggles, false, true)!;

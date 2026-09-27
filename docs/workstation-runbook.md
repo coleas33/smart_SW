@@ -18,10 +18,10 @@ that say so. Read it whole once, then use the Quick reference at the end.
 
 ---
 
-**The current work for this machine** is in a dated handover beside this file; the latest is
-`docs/workstation-handover-2026-09-23.md`: the sitting for features 008 to 011, every seat task
+**The current work for this machine** is in the newest dated folder `docs/test-plan-<date>/`
+(start with its `README.md`); the latest handover is `docs/test-plan-2026-09-27/workstation-handover.md`: the sitting for features 008 to 011, every seat task
 in one ordered list with its command, what decides it and where its record goes. The engineer
-who runs the sitting follows `docs/workstation-test-plan-2026-09-23.md`: the same sitting in
+who runs the sitting follows `docs/test-plan-2026-09-27/workstation-test-plan.md`: the same sitting in
 plain, numbered steps, each with its exact command and what counts as pass or fail. The earlier
 rounds (`docs/workstation-handover-2026-09-20.md`, `-2026-09-19.md`) are history. This runbook
 does not change per handover; the handover says what to do with a given build. *2026-09-27:* the

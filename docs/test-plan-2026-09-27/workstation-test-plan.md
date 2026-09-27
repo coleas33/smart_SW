@@ -4,7 +4,7 @@ Written 2026-09-23 for the engineer who runs the next sitting on a licensed SOLI
 not need to be a developer to follow it. Every step says what to do, gives the exact command to
 paste, says what to look at, and says what counts as a pass and what counts as a fail. Write each
 result in the **Results table** of the findings document as soon as the step ends: you start that
-document once, on day 1, at step 1.4, from `docs/workstation-results-2026-09-23.md`, the results
+document once, on day 1, at step 1.4, from `docs/test-plan-2026-09-27/workstation-results.md`, the results
 sheet, which step 1.3's update brings to a checkout that does not have it yet. Each row is one
 step and one task id, and takes `pass`, `fail` or `blocked`, the value you observed, and notes.
 Step 6 collects it.
@@ -18,7 +18,7 @@ three items of feature 004, the re-modeler, the owner added (decision 18A, 2026-
 FeatureWorks record 004 T164 at step 1.7, the packages 004 T003 reads at step 5.1, the probes
 004 T033 to T039 at step 5.6), and `docs/workstation-runbook.md`. The assistant's
 version of the same sitting, with the reasons for its order, is
-`docs/workstation-handover-2026-09-23.md`; **where this plan and the handover differ, follow this
+`docs/test-plan-2026-09-27/workstation-handover.md`; **where this plan and the handover differ, follow this
 plan.** Where this plan and a task text disagree, the task wins; write the difference down as a
 finding. Since 2026-09-27 the plan also holds feature 013's five seat tasks and a census
 extraction the owner asked for (the next section).
@@ -561,7 +561,7 @@ and the line `-NoPull: building what is checked out`; then each `== <step>` head
 ### 1.4 Which build this is, and the findings document
 
 ```powershell
-git log --oneline -1; Test-Path docs\workstation-results-2026-09-23.md
+git log --oneline -1; Test-Path docs\test-plan-2026-09-27\workstation-results.md
 git merge-base --is-ancestor 8d308be HEAD; "holds 8d308be: $($LASTEXITCODE -eq 0)"
 git --version; dotnet --version; uv --version
 foreach ($k in 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', 'HKCU:\Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}') { if (Test-Path $k) { 'WebView2 ' + (Get-ItemProperty $k -Name pv).pv } }
@@ -577,7 +577,7 @@ starting `fatal:` before the third: the update did not bring the build this plan
 Then start the findings document, once:
 
 ```powershell
-if (-not (Test-Path $findings)) { Copy-Item "$R\docs\workstation-results-2026-09-23.md" $findings }
+if (-not (Test-Path $findings)) { Copy-Item "$R\docs\test-plan-2026-09-27\workstation-results.md" $findings }
 notepad $findings
 ```
 
@@ -585,7 +585,7 @@ This copies the results sheet the update brought into the handover folder as
 `pane-findings-<date>.md`, where the date is the handover folder's own date, the first day of the
 sitting, and opens it; run again, on day 2 or later, it only opens the document you are filling in.
 Pass: Notepad shows a document headed `# Workstation findings <date>`. A red `Cannot find path`
-naming `workstation-results-2026-09-23.md` means the checkout does not hold the results sheet:
+naming `workstation-results.md` means the checkout does not hold the results sheet:
 the second line of the block above printed `False`.
 
 Write 1.3's result in its row, then the commit and versions above at the top of the document

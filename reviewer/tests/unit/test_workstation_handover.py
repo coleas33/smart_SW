@@ -2,9 +2,10 @@
 
 The seat-readiness review of 2026-09-23 found the runbook sending the operator to the 2026-09-20
 round while the seat tasks of features 008 to 011 sat in four `tasks.md` files with no ordered
-script. `docs/workstation-handover-2026-09-23.md` is that script; these hold the runbook to the
-newest handover in `docs/`, and that handover to every open `[W]` task of the four packages, so a
-seat task added later fails here until the handover says where it goes in the sitting.
+script. `docs/test-plan-2026-09-27/workstation-handover.md` is that script; these hold the
+runbook to the newest handover in `docs/`, and that handover to every open `[W]` task of
+the four packages, so a seat task added later fails here until the handover says where it goes
+in the sitting.
 """
 
 from __future__ import annotations
@@ -17,7 +18,12 @@ DOCS = REPO / "docs"
 
 
 def newest_handover() -> Path:
-    return max(DOCS.glob("workstation-handover-*.md"), key=lambda path: path.name)
+    """The handover of the newest dated test-plan folder (`docs/test-plan-<date>/`).
+
+    Since 2026-09-27 each sitting's plan, results sheet and handover live together in one folder
+    named by its date, so the testing machine finds the current one by the folder alone.
+    """
+    return max(DOCS.glob("test-plan-*/workstation-handover.md"), key=lambda path: path.parent.name)
 
 
 def test_the_runbook_points_at_the_newest_handover() -> None:
@@ -25,8 +31,9 @@ def test_the_runbook_points_at_the_newest_handover() -> None:
     pointer = runbook[runbook.index("**The current work for this machine**") :]
     pointer = pointer[: pointer.index("\n\n")]
 
-    assert f"`docs/{newest_handover().name}`" in pointer
-    assert newest_handover().name == "workstation-handover-2026-09-23.md"
+    relative = newest_handover().relative_to(REPO).as_posix()
+    assert f"`{relative}`" in pointer
+    assert relative == "docs/test-plan-2026-09-27/workstation-handover.md"
 
 
 def test_the_handover_names_every_open_seat_task_of_features_008_to_011() -> None:
