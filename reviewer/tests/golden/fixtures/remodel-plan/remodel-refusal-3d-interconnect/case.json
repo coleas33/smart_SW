@@ -15,6 +15,11 @@
         "Default"
       ],
       "rms_named_folders": [],
+      "feature_type_names": [
+        "ProfileFeature",
+        "Extrusion",
+        "Cut"
+      ],
       "external_reference_count": 0,
       "save_flag_dirty": false,
       "read_only": false,

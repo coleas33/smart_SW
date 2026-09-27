@@ -20,6 +20,14 @@
           "member_persist_refs": []
         }
       ],
+      "feature_type_names": [
+        "ProfileFeature",
+        "FtrFolder",
+        "Extrusion",
+        "Cut",
+        "HoleWzd",
+        "Fillet"
+      ],
       "external_reference_count": 0,
       "save_flag_dirty": false,
       "read_only": false,

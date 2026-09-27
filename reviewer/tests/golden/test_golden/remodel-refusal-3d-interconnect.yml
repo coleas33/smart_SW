@@ -125,6 +125,10 @@ result:
       - Default
       document_type: 1
       external_reference_count: 0
+      feature_type_names:
+      - ProfileFeature
+      - Extrusion
+      - Cut
       graphics_body_present: false
       imported_file_names: []
       is_3d_interconnect: true

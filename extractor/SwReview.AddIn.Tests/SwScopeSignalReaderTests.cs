@@ -143,6 +143,7 @@ public class SwScopeSignalReaderTests
         Assert.Null(reader.Is3DInterconnect());
         Assert.Null(reader.GetImportedFileNames());
         Assert.Null(reader.GetFolders());
+        Assert.Null(reader.GetFeatureTypeNames());
     }
 
     // ---- mesh and graphics bodies: every body (default 1) ---------------------------------------------
@@ -256,6 +257,7 @@ public class SwScopeSignalReaderTests
         Assert.Null(reader.Is3DInterconnect());
         Assert.Null(reader.GetImportedFileNames());
         Assert.Null(reader.GetFolders());
+        Assert.Null(reader.GetFeatureTypeNames());
     }
 
     [Fact]
@@ -268,6 +270,7 @@ public class SwScopeSignalReaderTests
         Assert.Null(reader.Is3DInterconnect());
         Assert.Null(reader.GetImportedFileNames());
         Assert.Null(reader.GetFolders());
+        Assert.Null(reader.GetFeatureTypeNames());
     }
 
     // ---- imported file names and configurations (default 4) ---------------------------------------------
@@ -453,6 +456,88 @@ public class SwScopeSignalReaderTests
         string? copyRef = new SwRemodelCopyDocument(new InteropRecorder<ISldWorks>().Instance, part.Instance).GetPersistReference(boss.Instance);
 
         Assert.Equal(copyRef, Assert.Single(read.MemberPersistRefs));
+    }
+
+    // ---- feature type names (T161; lane F's defaults 1 and 2) ----------------------------------------
+
+    /// <summary>
+    /// Every feature's <c>GetTypeName2()</c>, verbatim, one entry per feature with duplicates kept, in
+    /// the walk's order - the nested walk, <c>GetFeatures(false)</c>, like every other tree row.
+    /// </summary>
+    [Fact]
+    public void TheFeatureTypeNamesAreEveryFeaturesTypeInWalkOrderNestedOnesIncluded()
+    {
+        InteropRecorder<Feature> plane = StandInDocument.Feature("Front Plane", "RefPlane");
+        InteropRecorder<Feature> otherPlane = StandInDocument.Feature("Top Plane", "RefPlane");
+        InteropRecorder<Feature> sketch = StandInDocument.Feature("Sketch1", "ProfileFeature");
+        InteropRecorder<Feature> boss = StandInDocument.Feature("Boss-Extrude1");
+        var part = new StandInDocument().WithFeatures(
+            topLevel: StandInDocument.Features(plane, otherPlane, boss),
+            all: StandInDocument.Features(plane, otherPlane, sketch, boss));
+
+        Assert.Equal(
+            new[] { "RefPlane", "RefPlane", "ProfileFeature", "Extrusion" },
+            new SwScopeSignalReader(part.Instance).GetFeatureTypeNames());
+        Assert.Equal(new object?[] { false }, Assert.Single(part.Manager.Calls, call => call.Member == "GetFeatures").Arguments);
+    }
+
+    /// <summary>
+    /// The reader measures and decides nothing: a derived or mirrored part's base feature is read
+    /// like any other feature, and the spelling SOLIDWORKS answers is kept exactly, case included.
+    /// </summary>
+    [Fact]
+    public void ADerivedBaseFeatureIsReadLikeAnyOtherAndItsSpellingIsKept()
+    {
+        var part = new StandInDocument().WithFeatures(
+            StandInDocument.Feature("Origin", "OriginProfileFeature"),
+            StandInDocument.Feature("Mirror-Part1", "MirrorStock"),
+            StandInDocument.Feature("Solid Bodies", "FeatSolidBodyFolder"),
+            StandInDocument.Feature("Odd1", "mirrorstock"));
+
+        Assert.Equal(
+            new[] { "OriginProfileFeature", "MirrorStock", "FeatSolidBodyFolder", "mirrorstock" },
+            new SwScopeSignalReader(part.Instance).GetFeatureTypeNames());
+    }
+
+    [Fact]
+    public void AnEmptyWalkIsAnEmptyListNotAnUnknownOne()
+    {
+        var part = new StandInDocument().WithFeatures(new object[0], new object[0]);
+
+        Assert.Equal(new string[0], new SwScopeSignalReader(part.Instance).GetFeatureTypeNames());
+    }
+
+    /// <summary>
+    /// A feature whose type could not be read could be the base feature, so the whole listing is
+    /// unknown - never a shorter list, which would pass the derived-part question it cannot answer.
+    /// </summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void AFeatureWhoseTypeIsBlankMakesTheWholeListingUnknown(string? typeName)
+    {
+        var part = new StandInDocument().WithFeatures(
+            StandInDocument.Feature("Boss-Extrude1"),
+            new InteropRecorder<Feature>().Answer("get_Name", "Unknown1").Answer("GetTypeName2", typeName),
+            StandInDocument.Feature("Fillet1", "Fillet"));
+
+        Assert.Null(new SwScopeSignalReader(part.Instance).GetFeatureTypeNames());
+    }
+
+    /// <summary>The row asks each feature its type and nothing else: no name, no definition, no write.</summary>
+    [Fact]
+    public void TheFeatureTypeNamesAskEachFeatureOnlyItsType()
+    {
+        InteropRecorder<Feature> boss = StandInDocument.Feature("Boss-Extrude1");
+        InteropRecorder<Feature> folder = StandInDocument.Feature("Ribs", "FtrFolder");
+        var part = new StandInDocument().WithFeatures(boss, folder);
+
+        new SwScopeSignalReader(part.Instance).GetFeatureTypeNames();
+
+        Assert.Equal(new[] { "GetTypeName2" }, boss.Members);
+        Assert.Equal(new[] { "GetTypeName2" }, folder.Members);
+        Assert.Equal(new[] { "IModelDoc2.get_FeatureManager", "IFeatureManager.GetFeatures" }, part.AllMembers());
     }
 
     // ---- what the reader asks, across a whole reading ---------------------------------------------------

@@ -95,6 +95,7 @@ public sealed class RemodelSeatBridgeTests : IDisposable
         Assert.False(probe.ScopeSignals.MeshBodyPresent);
         Assert.Equal(new[] { "Default" }, probe.ScopeSignals.ConfigurationNames);
         Assert.Empty(probe.ScopeSignals.RmsNamedFolders!);
+        Assert.Equal(new[] { "Extrusion", "Extrusion" }, probe.ScopeSignals.FeatureTypeNames);
         Assert.Null(probe.ScopeSignals.Vault);
 
         var open = Ok<RemodelOpenResult>(dispatcher.Dispatch(Request(
@@ -104,6 +105,7 @@ public sealed class RemodelSeatBridgeTests : IDisposable
         Assert.Equal(RunId, open.Tag);
         Assert.Equal(2, open.FeatureCount);
         Assert.Equal("mm", open.DocumentLengthUnit);
+        Assert.Equal(probe.ScopeSignals.FeatureTypeNames, open.ScopeSignals!.FeatureTypeNames);
         Assert.Null(open.SourceAttestation!.VaultPath);
         Assert.True(File.Exists(_copyPath));
         Assert.Equal(RunId, _tag);

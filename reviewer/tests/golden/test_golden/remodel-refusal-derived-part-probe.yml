@@ -7,18 +7,12 @@ result:
   coverage:
   - feature_ids: []
     item: scope
-    reason: solid_body_count could not be read, so the multibody question is unresolved;
-      an unread signal is never a pass; is_weldment could not be read, so the weldment
-      question is unresolved; an unread signal is never a pass; sheet_metal_folder_present
-      could not be read, so the sheet_metal question is unresolved; an unread signal
-      is never a pass; mesh_body_present could not be read, so the mesh_or_graphics_body
-      question is unresolved; an unread signal is never a pass; graphics_body_present
-      could not be read, so the mesh_or_graphics_body question is unresolved; an unread
-      signal is never a pass; is_3d_interconnect could not be read, so the three_d_interconnect
-      question is unresolved; an unread signal is never a pass; rms_named_folders
-      could not be read, so the rms_named_folder_wrong_members question is unresolved;
-      an unread signal is never a pass; feature_type_names could not be read, so the
-      derived_part question is unresolved; an unread signal is never a pass
+    reason: 'feature_type_names carries MirrorStock, the base feature type of a derived
+      or mirrored part: this part''s body is another part''s geometry, brought in
+      whole by that feature from the part it was derived or mirrored from, so the
+      features the six groups organize do not build it and a re-model would have to
+      start from that part; a derived or mirrored part is refused before anything
+      is copied'
   - feature_ids: []
     item: second listings
     reason: no row of the dump is a second listing of a top-level feature, so every
@@ -59,11 +53,12 @@ result:
     reason: 0 folder(s) to create, 0 already correct, 0 refused
   - feature_ids: []
     item: changes
-    reason: 'no change is planned: this part is derived or mirrored from another part
-      (feat:0005 is a MirrorStock: this part''s body is another part''s geometry,
-      brought in whole by that feature from the part it was derived or mirrored from,
-      so the features the six groups organize do not build it and a re-model would
-      have to start from that part; a derived or mirrored part is refused)'
+    reason: 'no change is planned: the scope gate refused this part (feature_type_names
+      carries MirrorStock, the base feature type of a derived or mirrored part: this
+      part''s body is another part''s geometry, brought in whole by that feature from
+      the part it was derived or mirrored from, so the features the six groups organize
+      do not build it and a re-model would have to start from that part; a derived
+      or mirrored part is refused before anything is copied)'
   created_at: '2026-09-16T14:22:01Z'
   descriptions: []
   deviations: []
@@ -100,67 +95,46 @@ result:
   renames: []
   run_id: null
   scope:
-    notes:
-    - sheet_body_count could not be read, so whether this part carries surface bodies
-      the mass-property gate cannot see is unresolved, not covered
-    - imported_file_names could not be read, so whether the reorganize stage is a
-      no-op over an imported dumb solid is unresolved
-    - the configuration names could not be read, so which_configs is unknown and no
-      equation may be added until it is
-    probe_id: null
+    notes: []
+    probe_id: probe:remodel-refusal-derived-part-probe
     refusals:
-    - code: signal_unresolved
-      message: solid_body_count could not be read, so the multibody question is unresolved;
-        an unread signal is never a pass
-      signal: solid_body_count
-    - code: signal_unresolved
-      message: is_weldment could not be read, so the weldment question is unresolved;
-        an unread signal is never a pass
-      signal: is_weldment
-    - code: signal_unresolved
-      message: sheet_metal_folder_present could not be read, so the sheet_metal question
-        is unresolved; an unread signal is never a pass
-      signal: sheet_metal_folder_present
-    - code: signal_unresolved
-      message: mesh_body_present could not be read, so the mesh_or_graphics_body question
-        is unresolved; an unread signal is never a pass
-      signal: mesh_body_present
-    - code: signal_unresolved
-      message: graphics_body_present could not be read, so the mesh_or_graphics_body
-        question is unresolved; an unread signal is never a pass
-      signal: graphics_body_present
-    - code: signal_unresolved
-      message: is_3d_interconnect could not be read, so the three_d_interconnect question
-        is unresolved; an unread signal is never a pass
-      signal: is_3d_interconnect
-    - code: signal_unresolved
-      message: rms_named_folders could not be read, so the rms_named_folder_wrong_members
-        question is unresolved; an unread signal is never a pass
-      signal: rms_named_folders
-    - code: signal_unresolved
-      message: feature_type_names could not be read, so the derived_part question
-        is unresolved; an unread signal is never a pass
+    - code: derived_part
+      message: 'feature_type_names carries MirrorStock, the base feature type of a
+        derived or mirrored part: this part''s body is another part''s geometry, brought
+        in whole by that feature from the part it was derived or mirrored from, so
+        the features the six groups organize do not build it and a re-model would
+        have to start from that part; a derived or mirrored part is refused before
+        anything is copied'
       signal: feature_type_names
     signals: null
     signals_probe:
-      configuration_names: null
-      document_type: null
-      external_reference_count: null
-      feature_type_names: null
-      graphics_body_present: null
-      imported_file_names: null
-      is_3d_interconnect: null
-      is_weldment: null
-      mesh_body_present: null
-      read_only: null
-      rebuild_error_count: null
-      rms_named_folders: null
-      save_flag_dirty: null
-      sheet_body_count: null
-      sheet_metal_folder_present: null
-      solid_body_count: null
+      configuration_names:
+      - Default
+      document_type: 1
+      external_reference_count: 0
+      feature_type_names:
+      - RefPlane
+      - RefPlane
+      - RefPlane
+      - OriginProfileFeature
+      - MirrorStock
+      - FeatSolidBodyFolder
+      - FeatSurfaceBodyFolder
+      - RefPlaneFtrFolder
+      graphics_body_present: false
+      imported_file_names: []
+      is_3d_interconnect: false
+      is_weldment: false
+      mesh_body_present: false
+      read_only: false
+      rebuild_error_count: 0
+      rms_named_folders: []
+      save_flag_dirty: false
+      sheet_body_count: 0
+      sheet_metal_folder_present: false
+      solid_body_count: 1
       vault: null
-    verdict: unresolved
+    verdict: refused
   source: null
   state: failed
   targets:

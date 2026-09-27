@@ -78,6 +78,7 @@ SCOPE_SIGNAL_FIELDS: tuple[str, ...] = (
     "imported_file_names",
     "configuration_names",
     "rms_named_folders",
+    "feature_type_names",
     "external_reference_count",
     "save_flag_dirty",
     "read_only",
@@ -582,8 +583,10 @@ def scope_signals(**overrides: Any) -> dict[str, Any]:
     (T023); the gate's own tests construct it from this.
 
     Every default is a readable, in-scope value - one solid body, no weldment, no
-    sheet-metal folder, no mesh or graphics body, no 3D Interconnect, one configuration -
-    so a signal that is `None` in a test is one the test asked to be unreadable. `vault`
+    sheet-metal folder, no mesh or graphics body, no 3D Interconnect, one configuration, a
+    walk of a small part with no derived base feature in it (T161: three planes, the
+    origin, a sketch and a boss) - so a signal that is `None` in a test is one the test
+    asked to be unreadable. `vault`
     is the single exception: `None` is a vault this build did not read - never "not in a
     vault" (004 T155's amendment, research R13.5) - and it is recorded, never refused.
 
@@ -608,6 +611,14 @@ def scope_signals(**overrides: Any) -> dict[str, Any]:
         "imported_file_names": [],
         "configuration_names": ["Default"],
         "rms_named_folders": [],
+        "feature_type_names": [
+            "RefPlane",
+            "RefPlane",
+            "RefPlane",
+            "OriginProfileFeature",
+            "ProfileFeature",
+            "Extrusion",
+        ],
         "external_reference_count": 0,
         "save_flag_dirty": False,
         "read_only": False,
@@ -616,6 +627,17 @@ def scope_signals(**overrides: Any) -> dict[str, Any]:
     }
     signals.update(overrides)
     return signals
+
+
+def probe_type_names(features: Sequence[FeatureSpec]) -> list[str]:
+    """What the probe's `feature_type_names` walk reads of a builder tree (T161).
+
+    The type names of the rows `remodel_package` lists for `features`, in dump order,
+    nested rows and repeats included - the nearest a fixture comes to the scope reader's
+    `GetFeatures(false)` walk - so a case whose signals are built from its own tree says of
+    that tree what the probe would (tasks.md, lane F's default 8).
+    """
+    return [row.type_name for row in remodel_package(features).features]
 
 
 # --- 5. The stage-1 source scan ---------------------------------------------------

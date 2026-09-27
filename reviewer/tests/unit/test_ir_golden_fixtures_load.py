@@ -224,6 +224,43 @@ DECISION_17A_NEW_PATHS: frozenset[str] = frozenset(
     + [f"test_golden/{case}.yml" for case in DECISION_17A_NEW_CASES]
 )
 
+T161_SIGNAL_CASES: tuple[str, ...] = (
+    "remodel-refusal-3d-interconnect",
+    "remodel-refusal-mesh-body",
+    "remodel-refusal-multibody",
+    "remodel-refusal-rms-folder",
+    "remodel-refusal-sheet-metal",
+    "remodel-refusal-two-signals",
+    "remodel-refusal-weldment",
+)
+"""The seven remodel-plan goldens whose `case.json` carries the probe's signals, named one
+by one: feature 004's T161 adds the `feature_type_names` row, which every signals payload
+must carry (tasks.md, build order lane F's default 8)."""
+
+T161_NEW_CASES: tuple[str, ...] = ("remodel-refusal-derived-part-probe",)
+"""The remodel-plan golden T161 adds: the probe half of the derived-part refusal. Held to
+`??` exactly as the new goldens above are, until committed."""
+
+REWRITTEN_BY_T161: frozenset[str] = frozenset(
+    {"fixtures/remodel-plan/generate_packages.py"}
+    | {f"fixtures/remodel-plan/{case}/case.json" for case in T161_SIGNAL_CASES}
+    | {f"test_golden/{case}.yml" for case in REMODEL_PLAN_CASES}
+    | {f"test_golden/{case}.yml" for case in DECISION_17A_NEW_CASES}
+)
+"""The committed remodel-plan goldens T161 rewrites, named one by one.
+
+The seven signal cases' `case.json` gain the row through the generator's `--case-only`, so
+their static packages do not move; every baseline gains the row in its `signals_probe`, and
+the dry-run baselines also gain the `signal_unresolved` refusal that names it. The same
+allowance `REWRITTEN_BY_DECISION_17A` is, for the next round of the same feature: it names
+nothing outside `remodel-plan`, and it expires the moment the round is committed.
+"""
+
+T161_NEW_PATHS: frozenset[str] = frozenset(
+    [f"fixtures/remodel-plan/{case}/" for case in T161_NEW_CASES]
+    + [f"test_golden/{case}.yml" for case in T161_NEW_CASES]
+)
+
 GOLDEN_HARNESS: frozenset[str] = frozenset({"test_golden.py", "test_standards_goldens.py"})
 """The two modules in that tree that are code rather than artefact, named so that they are
 accounted for rather than dropped by a directory filter.
@@ -423,8 +460,8 @@ def test_the_golden_tree_holds_only_this_feature_s_new_goldens() -> None:
     """
     changed = golden_tree_status()
 
-    new = NEW_GOLDEN_PATHS | DECISION_17A_NEW_PATHS
-    rewritten = REWRITTEN_BY_THE_DRAWING_CHECKS | REWRITTEN_BY_DECISION_17A
+    new = NEW_GOLDEN_PATHS | DECISION_17A_NEW_PATHS | T161_NEW_PATHS
+    rewritten = REWRITTEN_BY_THE_DRAWING_CHECKS | REWRITTEN_BY_DECISION_17A | REWRITTEN_BY_T161
     allowed = new | GOLDEN_HARNESS | rewritten
     stray = [f"{status} {path}" for status, path in changed if path not in allowed]
     drifted = [

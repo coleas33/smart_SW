@@ -142,8 +142,107 @@ public class RemodelOpenHandlerTests : IDisposable
                 nameof(FakeProbeSource.GetImportedFileNames),
                 nameof(FakeProbeSource.GetConfigurationNames),
                 nameof(FakeProbeSource.GetFolders),
+                nameof(FakeProbeSource.GetFeatureTypeNames),
             },
             seat.Probe.Members);
+    }
+
+    /// <summary>
+    /// Every signal row is gated under the production member that reads it, in the table's
+    /// order, repeats included. T161's <c>feature_type_names</c> is read with
+    /// <c>GetTypeName2</c> over the same walk as the folder row, so it is gated under that key
+    /// and the probe's surface keeps its thirteen members (lane F's default 1).
+    /// </summary>
+    [Fact]
+    public void ReadSignals_GatesEachRowUnderItsMember_TheFeatureTypeNamesUnderGetTypeName2()
+    {
+        var log = new GateCallLog();
+        var gate = new SwGate(new CircuitBreaker(), new RemodelGuard()) { Observer = log };
+
+        RemodelScopeProbe.ReadSignals(gate, new FakeProbeSource());
+
+        Assert.Equal(
+            new[]
+            {
+                "GetType",
+                "GetBodies2",
+                "GetBodies2",
+                "IsWeldment",
+                "GetSheetMetalFolder",
+                "IsMeshBody",
+                "IsGraphicsBody",
+                "Is3DInterconnectFeature",
+                "GetImportedFileName",
+                "GetConfigurationNames",
+                "GetTypeName2",
+                "GetTypeName2",
+            },
+            log.Keys);
+        Assert.Empty(log.Refusals);
+        Assert.Equal(13, RemodelScopeProbe.ProbeSurface.Count);
+    }
+
+    /// <summary>
+    /// The row is a measurement: the bridge returns every type name as the walk read it and
+    /// decides nothing from them. A <c>MirrorStock</c> is <c>scope.py</c>'s to refuse, from the
+    /// type table's <c>derived_base</c>, never the bridge's.
+    /// </summary>
+    [Fact]
+    public void ProbeScope_ReturnsTheFeatureTypeNamesAsRead_AndRefusesNothingForThem()
+    {
+        FakeRemodelSeat seat = Seat();
+        seat.Probe.Signals.FeatureTypeNames = new[] { "RefPlane", "RefPlane", "MirrorStock", "FeatSolidBodyFolder" };
+
+        var result = Ok<RemodelProbeScopeResult>(Dispatcher(seat).Dispatch(ProbeRequest()));
+
+        Assert.Equal(
+            new[] { "RefPlane", "RefPlane", "MirrorStock", "FeatSolidBodyFolder" },
+            result.ScopeSignals!.FeatureTypeNames);
+    }
+
+    /// <summary>Unknown stays unknown: an unreadable listing is null, never an empty one.</summary>
+    [Fact]
+    public void ProbeScope_AnUnreadableFeatureTypeListing_StaysNull()
+    {
+        FakeRemodelSeat seat = Seat();
+        seat.Probe.Signals.FeatureTypeNames = null;
+
+        var result = Ok<RemodelProbeScopeResult>(Dispatcher(seat).Dispatch(ProbeRequest()));
+
+        Assert.Null(result.ScopeSignals!.FeatureTypeNames);
+    }
+
+    /// <summary>
+    /// Both serializers refuse an unknown member and require every row, so the row is on the
+    /// wire under the spelling <c>scope.py</c> reads, and a null is written as null rather than
+    /// left out.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ProbeScope_TheFeatureTypeNamesAreOnTheWireUnderTheirPythonSpelling(bool unread)
+    {
+        FakeRemodelSeat seat = Seat();
+        seat.Probe.Signals.FeatureTypeNames = unread ? null : new[] { "ProfileFeature", "Extrusion" };
+
+        var result = Ok<RemodelProbeScopeResult>(Dispatcher(seat).Dispatch(ProbeRequest()));
+        using JsonDocument wire = JsonDocument.Parse(
+            JsonSerializer.Serialize(result.ScopeSignals, BridgeCodec.Options));
+
+        JsonElement row = wire.RootElement.GetProperty("feature_type_names");
+        if (unread)
+        {
+            Assert.Equal(JsonValueKind.Null, row.ValueKind);
+        }
+        else
+        {
+            Assert.Equal(
+                new[] { "ProfileFeature", "Extrusion" },
+                row.EnumerateArray().Select(name => name.GetString()));
+        }
+
+        ScopeSignals? read = JsonSerializer.Deserialize<ScopeSignals>(wire.RootElement.GetRawText(), BridgeCodec.Options);
+        Assert.Equal(result.ScopeSignals!.FeatureTypeNames, read!.FeatureTypeNames);
     }
 
     [Fact]
@@ -361,6 +460,165 @@ public class RemodelOpenHandlerTests : IDisposable
         Assert.Equal(RemodelErrorCodes.ScopeChanged, Refusal(response));
         Assert.Contains("solid_body_count", response.Error!, StringComparison.Ordinal);
         Assert.False(File.Exists(_copyPath));
+    }
+
+    public static IEnumerable<object?[]> ChangedFeatureTypeNames() => new[]
+    {
+        new object?[] { "a type the probe did not read", new[] { "ProfileFeature", "MirrorStock" } },
+        new object?[] { "the same types in another order", new[] { "Extrusion", "ProfileFeature" } },
+        new object?[] { "one feature more", new[] { "ProfileFeature", "Extrusion", "Fillet" } },
+        new object?[] { "one feature fewer", new[] { "ProfileFeature" } },
+        new object?[] { "a spelling that differs in case", new[] { "ProfileFeature", "extrusion" } },
+        new object?[] { "an unreadable listing", null },
+    };
+
+    /// <summary>
+    /// T161's row, compared as an ordered list, ordinal (lane F's default 6): the copy is the
+    /// source's bytes, so a tree that reads differently is not the tree the verdict was
+    /// reached on.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(ChangedFeatureTypeNames))]
+    public void Open_CopyFeatureTypeNamesDifferingFromTheProbes_IsScopeChanged(string how, string[]? copyNames)
+    {
+        Assert.NotNull(how);
+        FakeRemodelSeat seat = Seat();
+        seat.Probe.Signals.FeatureTypeNames = new[] { "ProfileFeature", "Extrusion" };
+        seat.Copy!.Signals.FeatureTypeNames = copyNames;
+        SwBridgeDispatcher dispatcher = Dispatcher(seat);
+
+        BridgeResponse response = dispatcher.Dispatch(OpenRequest(Probe(dispatcher)));
+
+        Assert.Equal(RemodelErrorCodes.ScopeChanged, Refusal(response));
+        Assert.Contains("feature_type_names", response.Error!, StringComparison.Ordinal);
+        Assert.False(File.Exists(_copyPath));
+    }
+
+    [Fact]
+    public void Open_CopyFeatureTypeNamesEqualToTheProbes_AreTheCopysReading()
+    {
+        FakeRemodelSeat seat = Seat();
+        seat.Probe.Signals.FeatureTypeNames = new[] { "ProfileFeature", "Extrusion", "Fillet" };
+        seat.Copy!.Signals.FeatureTypeNames = new[] { "ProfileFeature", "Extrusion", "Fillet" };
+        SwBridgeDispatcher dispatcher = Dispatcher(seat);
+
+        var result = Ok<RemodelOpenResult>(dispatcher.Dispatch(OpenRequest(Probe(dispatcher))));
+
+        Assert.Equal(new[] { "ProfileFeature", "Extrusion", "Fillet" }, result.ScopeSignals!.FeatureTypeNames);
+    }
+
+    // ---- T174: step 12 compares a folder's name and member count ----------------------
+
+    /// <summary>
+    /// Feature 001's research R12: the persist-ref bytes for one entity may differ between the
+    /// source and its copy, so comparing the member strings could refuse a part with a plain
+    /// folder as <c>scope_changed</c>. The name and the member count are compared instead, and
+    /// the copy's refs are what the run records.
+    /// </summary>
+    [Fact]
+    public void Open_FolderMemberRefsThatDifferWhileTheNamesAndCountsMatch_IsNotScopeChanged()
+    {
+        FakeRemodelSeat seat = Seat();
+        seat.Probe.Signals.Folders = new[]
+        {
+            Folder("Ribs", "source:rib1", "source:rib2"),
+            Folder("Slots"),
+        };
+        seat.Copy!.Signals.Folders = new[]
+        {
+            Folder("Ribs", "copy:rib1", "copy:rib2"),
+            Folder("Slots"),
+        };
+        SwBridgeDispatcher dispatcher = Dispatcher(seat);
+
+        var result = Ok<RemodelOpenResult>(dispatcher.Dispatch(OpenRequest(Probe(dispatcher))));
+
+        RmsNamedFolder ribs = result.ScopeSignals!.RmsNamedFolders![0];
+        Assert.Equal(new[] { "copy:rib1", "copy:rib2" }, ribs.MemberPersistRefs);
+        Assert.True(File.Exists(_copyPath));
+    }
+
+    public static IEnumerable<object[]> ChangedFolders() => new[]
+    {
+        new object[] { "a member more", new[] { Folder("Ribs", "copy:rib1", "copy:rib2", "copy:rib3") } },
+        new object[] { "a member fewer", new[] { Folder("Ribs", "copy:rib1") } },
+        new object[] { "another name", new[] { Folder("Webs", "copy:rib1", "copy:rib2") } },
+        new object[] { "a name that differs in case", new[] { Folder("ribs", "copy:rib1", "copy:rib2") } },
+        new object[] { "a folder more", new[] { Folder("Ribs", "copy:rib1", "copy:rib2"), Folder("Slots") } },
+        new object[] { "no folder", new RmsNamedFolder[0] },
+    };
+
+    /// <summary>A changed member count or a changed name is still <c>scope_changed</c>, and so is a changed number of folders.</summary>
+    [Theory]
+    [MemberData(nameof(ChangedFolders))]
+    public void Open_AFolderWhoseCountOrNameChanged_IsScopeChanged(string how, RmsNamedFolder[] copyFolders)
+    {
+        Assert.NotNull(how);
+        FakeRemodelSeat seat = Seat();
+        seat.Probe.Signals.Folders = new[] { Folder("Ribs", "source:rib1", "source:rib2") };
+        seat.Copy!.Signals.Folders = copyFolders;
+        SwBridgeDispatcher dispatcher = Dispatcher(seat);
+
+        BridgeResponse response = dispatcher.Dispatch(OpenRequest(Probe(dispatcher)));
+
+        Assert.Equal(RemodelErrorCodes.ScopeChanged, Refusal(response));
+        Assert.Contains("rms_named_folders", response.Error!, StringComparison.Ordinal);
+        Assert.False(File.Exists(_copyPath));
+    }
+
+    public static IEnumerable<object?[]> FolderComparisons() => new[]
+    {
+        new object?[] { "both unread", null, null, false },
+        new object?[] { "both empty", new RmsNamedFolder[0], new RmsNamedFolder[0], false },
+        new object?[] { "an unread listing against a read one", null, new RmsNamedFolder[0], true },
+        new object?[] { "a read listing against an unread one", new RmsNamedFolder[0], null, true },
+        new object?[] { "the same names and counts, other refs", new[] { Folder("Ribs", "a", "b"), Folder("Slots", "c") }, new[] { Folder("Ribs", "x", "y"), Folder("Slots", "z") }, false },
+        new object?[] { "the same names and counts, the same refs", new[] { Folder("Ribs", "a") }, new[] { Folder("Ribs", "a") }, false },
+        new object?[] { "the same folders in another order", new[] { Folder("Ribs", "a"), Folder("Slots", "b") }, new[] { Folder("Slots", "b"), Folder("Ribs", "a") }, true },
+        new object?[] { "an empty folder against one with a member", new[] { Folder("Ribs") }, new[] { Folder("Ribs", "a") }, true },
+        new object?[] { "the same members under another name", new[] { Folder("Ribs", "a") }, new[] { Folder("Rib", "a") }, true },
+    };
+
+    /// <summary>
+    /// T174's comparison over every shape of the folder row, position by position: the folders'
+    /// number, order and names, and each one's member count, and never its members' strings.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(FolderComparisons))]
+    public void ModelSignalDifferences_ComparesEachFoldersNameAndMemberCountOnly(
+        string how, RmsNamedFolder[]? probe, RmsNamedFolder[]? copy, bool differs)
+    {
+        Assert.NotNull(how);
+        IReadOnlyList<string> differences = RemodelScopeProbe.ModelSignalDifferences(
+            new ScopeSignals { RmsNamedFolders = probe },
+            new ScopeSignals { RmsNamedFolders = copy });
+
+        if (differs)
+        {
+            Assert.Equal(new[] { "rms_named_folders" }, differences);
+        }
+        else
+        {
+            Assert.Empty(differences);
+        }
+    }
+
+    /// <summary>A null member list is a folder nobody read; it is never taken to have no members.</summary>
+    [Fact]
+    public void ModelSignalDifferences_AFolderWithNoMemberListIsCountedAsUnknown()
+    {
+        var unread = new RmsNamedFolder { Name = "Ribs", MemberPersistRefs = null! };
+
+        Assert.Equal(
+            new[] { "rms_named_folders" },
+            RemodelScopeProbe.ModelSignalDifferences(
+                new ScopeSignals { RmsNamedFolders = new[] { unread } },
+                new ScopeSignals { RmsNamedFolders = new[] { Folder("Ribs") } }));
+        Assert.Equal(
+            new[] { "rms_named_folders" },
+            RemodelScopeProbe.ModelSignalDifferences(
+                new ScopeSignals { RmsNamedFolders = new[] { Folder("Ribs") } },
+                new ScopeSignals { RmsNamedFolders = new[] { unread } }));
     }
 
     [Fact]
@@ -698,6 +956,9 @@ public class RemodelOpenHandlerTests : IDisposable
 
         return new FakeRemodelSeat(new FakeProbeSource(), copy);
     }
+
+    private static RmsNamedFolder Folder(string name, params string[] memberPersistRefs) =>
+        new RmsNamedFolder { Name = name, MemberPersistRefs = memberPersistRefs };
 
     private SwBridgeDispatcher Dispatcher(FakeRemodelSeat seat) => Dispatcher(seat, _runDirectory);
 

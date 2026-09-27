@@ -110,6 +110,17 @@ public sealed class ScopeSignals
     [JsonPropertyName("rms_named_folders")]
     public IReadOnlyList<RmsNamedFolder>? RmsNamedFolders { get; set; }
 
+    /// <summary>
+    /// T161: every feature's <c>IFeature.GetTypeName2()</c>, verbatim, one entry per feature
+    /// in the scope reader's walk order. A measurement and not a decision: which of these is
+    /// the base feature of a derived or mirrored part is <c>rms_types.yaml</c>'s
+    /// <c>derived_base</c> to say, in <c>scope.py</c>, which refuses such a part with
+    /// <c>derived_part</c> before the copy. Null when the walk or any feature's type could not
+    /// be read, never a shorter list (tasks.md, build order lane F's defaults 1 and 2).
+    /// </summary>
+    [JsonPropertyName("feature_type_names")]
+    public IReadOnlyList<string>? FeatureTypeNames { get; set; }
+
     /// <summary><c>ListExternalFileReferencesCount2()</c>.</summary>
     [JsonPropertyName("external_reference_count")]
     public int? ExternalReferenceCount { get; set; }
@@ -135,7 +146,7 @@ public sealed class ScopeSignals
 }
 
 /// <summary>
-/// The scope-signal reads, and nothing else, so the same nine rows can be read on the
+/// The scope-signal reads, and nothing else, so the same ten rows can be read on the
 /// engineer's open source at <c>remodel.probe_scope</c> and again on the copy at
 /// <c>remodel.open</c> step 12 without two readers that could drift apart.
 ///
@@ -174,6 +185,12 @@ public interface IScopeSignalSource
 
     /// <summary>Every <c>GetTypeName2() == "FtrFolder"</c> feature, with its members.</summary>
     IReadOnlyList<RmsNamedFolder>? GetFolders();
+
+    /// <summary>
+    /// T161: <c>IFeature.GetTypeName2()</c> of every feature, in walk order; null when any
+    /// could not be read.
+    /// </summary>
+    IReadOnlyList<string>? GetFeatureTypeNames();
 }
 
 /// <summary>
@@ -410,9 +427,12 @@ public sealed class RemodelScopeProbe
     }
 
     /// <summary>
-    /// The nine signal rows, one VERIFIED call each, in the order contracts/bridge-remodel.md
+    /// The ten signal rows, one VERIFIED call each, in the order contracts/bridge-remodel.md
     /// tabulates them. Used on the source at the probe and on the copy at
     /// <c>remodel.open</c> step 12, so the two readings are comparable by construction.
+    /// T161's <c>feature_type_names</c> is read with <c>GetTypeName2</c> over the same walk as
+    /// the folder row, so it is gated under that key too and <see cref="ProbeSurface"/> is
+    /// unchanged (tasks.md, build order lane F's default 1).
     /// </summary>
     public static ScopeSignals ReadSignals(SwGate gate, IScopeSignalSource source)
     {
@@ -439,12 +459,15 @@ public sealed class RemodelScopeProbe
             ImportedFileNames = gate.Call(GetImportedFileName, source.GetImportedFileNames),
             ConfigurationNames = gate.Call(GetConfigurationNames, source.GetConfigurationNames),
             RmsNamedFolders = gate.Call(GetTypeName2, source.GetFolders),
+            FeatureTypeNames = gate.Call(GetTypeName2, source.GetFeatureTypeNames),
         };
     }
 
     /// <summary>
     /// <c>remodel.open</c> step 12's comparison: the rows that describe the <b>model</b>,
-    /// field for field, naming every one that differs.
+    /// field for field, naming every one that differs. Lists compare as ordered lists,
+    /// ordinal (T161's <c>feature_type_names</c> among them), except the folder row, which
+    /// compares each folder's name and member count and not its members' persist refs (T174).
     ///
     /// The four file-scoped rows are deliberately not compared, because they describe the file
     /// rather than the part and differ between a source and its copy by design:
@@ -487,6 +510,8 @@ public sealed class RemodelScopeProbe
         CompareList(
             differences, "configuration_names", probe.ConfigurationNames, copy.ConfigurationNames);
         CompareFolders(differences, probe.RmsNamedFolders, copy.RmsNamedFolders);
+        CompareList(
+            differences, "feature_type_names", probe.FeatureTypeNames, copy.FeatureTypeNames);
         return differences;
     }
 
@@ -531,6 +556,14 @@ public sealed class RemodelScopeProbe
         }
     }
 
+    /// <summary>
+    /// The folder row, position by position: the folders' number and order, each one's name
+    /// (ordinal) and its member count. <b>Not</b> its members' persist-ref strings (T174):
+    /// feature 001's research R12 records that the bytes for one entity may differ, so string
+    /// equality could refuse a part with a plain folder as <c>scope_changed</c> once the reader
+    /// returns real refs. The refs are still read and recorded; only this comparison leaves
+    /// them out. A member list nobody read (null) counts as unknown, never as empty.
+    /// </summary>
     private static void CompareFolders(
         List<string> differences,
         IReadOnlyList<RmsNamedFolder>? left,
@@ -556,21 +589,18 @@ public sealed class RemodelScopeProbe
 
         for (int i = 0; i < left.Count; i++)
         {
-            if (!string.Equals(left[i].Name, right[i].Name, StringComparison.Ordinal))
-            {
-                differences.Add(Field);
-                return;
-            }
-
-            var members = new List<string>();
-            CompareList(members, Field, left[i].MemberPersistRefs, right[i].MemberPersistRefs);
-            if (members.Count > 0)
+            if (!string.Equals(left[i].Name, right[i].Name, StringComparison.Ordinal)
+                || !Nullable.Equals(MemberCount(left[i]), MemberCount(right[i])))
             {
                 differences.Add(Field);
                 return;
             }
         }
     }
+
+    /// <summary>A folder's member count, or null when its member list was not read.</summary>
+    private static int? MemberCount(RmsNamedFolder folder) =>
+        folder.MemberPersistRefs == null ? (int?)null : folder.MemberPersistRefs.Count;
 
     /// <summary>
     /// The read-only attribute of the file, read from the filesystem rather than from the seat:

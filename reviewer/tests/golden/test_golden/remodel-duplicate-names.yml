@@ -69,7 +69,8 @@ result:
       signal is never a pass; is_3d_interconnect could not be read, so the three_d_interconnect
       question is unresolved; an unread signal is never a pass; rms_named_folders
       could not be read, so the rms_named_folder_wrong_members question is unresolved;
-      an unread signal is never a pass
+      an unread signal is never a pass; feature_type_names could not be read, so the
+      derived_part question is unresolved; an unread signal is never a pass
   - feature_ids: []
     item: second listings
     reason: no row of the dump is a second listing of a top-level feature, so every
@@ -247,11 +248,16 @@ result:
       message: rms_named_folders could not be read, so the rms_named_folder_wrong_members
         question is unresolved; an unread signal is never a pass
       signal: rms_named_folders
+    - code: signal_unresolved
+      message: feature_type_names could not be read, so the derived_part question
+        is unresolved; an unread signal is never a pass
+      signal: feature_type_names
     signals: null
     signals_probe:
       configuration_names: null
       document_type: null
       external_reference_count: null
+      feature_type_names: null
       graphics_body_present: null
       imported_file_names: null
       is_3d_interconnect: null

@@ -3,7 +3,7 @@
   "kwargs": {
     "signals": {
       "document_type": 1,
-      "solid_body_count": 2,
+      "solid_body_count": 1,
       "sheet_body_count": 0,
       "is_weldment": false,
       "sheet_metal_folder_present": false,
@@ -16,9 +16,14 @@
       ],
       "rms_named_folders": [],
       "feature_type_names": [
-        "ProfileFeature",
-        "Extrusion",
-        "Cut"
+        "RefPlane",
+        "RefPlane",
+        "RefPlane",
+        "OriginProfileFeature",
+        "MirrorStock",
+        "FeatSolidBodyFolder",
+        "FeatSurfaceBodyFolder",
+        "RefPlaneFtrFolder"
       ],
       "external_reference_count": 0,
       "save_flag_dirty": false,
@@ -26,6 +31,6 @@
       "rebuild_error_count": 0,
       "vault": null
     },
-    "probe_id": "probe:remodel-refusal-multibody"
+    "probe_id": "probe:remodel-refusal-derived-part-probe"
   }
 }

@@ -28,6 +28,8 @@ namespace SwReview.AddIn.Remodel.Seat;
 /// read every body (<c>swAllBodies = -1</c>); the feature walks read every feature, nested ones
 /// included (<c>GetFeatures(false)</c>); and a folder row is an <c>FtrFolder</c> that is not its
 /// own end-tag marker, whose members are read only when their count agrees with the folder's.
+/// Lane F's (T161, default taken 2026-09-27): <c>feature_type_names</c> is every feature's
+/// <c>GetTypeName2()</c> over that walk, and one unreadable type makes the listing null.
 /// </summary>
 public sealed class SwScopeSignalReader : IScopeSignalSource
 {
@@ -199,6 +201,38 @@ public sealed class SwScopeSignalReader : IScopeSignalSource
         }
 
         return folders;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// T161's row (tasks.md, build order lane F's defaults 1 and 2): every feature's
+    /// <c>GetTypeName2()</c>, verbatim and case included, one entry per feature with repeats kept,
+    /// over the same nested walk as the other tree rows. A measurement only: which type is a
+    /// derived or mirrored base is the type table's to say, in <c>scope.py</c>. A feature whose
+    /// type answers null or blank could be that base feature, so the whole listing is null -
+    /// never a shorter list, which would pass a question nobody answered.
+    /// </remarks>
+    public IReadOnlyList<string>? GetFeatureTypeNames()
+    {
+        IReadOnlyList<IFeature>? features = SwRemodelReads.Features(_document, topLevelOnly: false);
+        if (features == null)
+        {
+            return null;
+        }
+
+        var typeNames = new List<string>();
+        foreach (IFeature feature in features)
+        {
+            string? typeName = feature.GetTypeName2();
+            if (string.IsNullOrWhiteSpace(typeName))
+            {
+                return null;
+            }
+
+            typeNames.Add(typeName!);
+        }
+
+        return typeNames;
     }
 
     /// <summary>

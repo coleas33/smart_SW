@@ -57,9 +57,28 @@ ever asserted in a unit test is a reason no artifact has ever been read for:
 | | `MirrorStock`, refused with the tree code `derived_part` and |
 | | its reason, and no change planned (T147) |
 
+**Added 2026-09-27 (T161, tasks.md lane F's default 8)**, the probe half of that refusal:
+
+| Fixture | What the plan must show |
+|---|---|
+| `remodel-refusal-derived-part-probe` | the same mirrored part with its own walk as the |
+| | signals' `feature_type_names`: refused by the scope gate |
+| | with `derived_part` before any copy, and by the planner's |
+| | reading of the package, both named under their own signals |
+
+Every case with signals reads `feature_type_names` off its own tree (`probe_type_names`),
+so a baseline's signals describe the part its package holds.
+
 Only the cases named on the command line are written, all of them when none is named:
 
     uv run python tests/golden/fixtures/remodel-plan/generate_packages.py remodel-absorbed-sketches
+
+`--case-only` rewrites the named cases' `case.json` and leaves their `package.json` as it
+is, which is how a new scope signal reaches the original thirteen without restamping their
+static packages:
+
+    uv run python tests/golden/fixtures/remodel-plan/generate_packages.py \
+        --case-only remodel-refusal-weldment
 
 The original thirteen were written at IR 1.2.0 and are static inputs now: the golden gate
 (`tests/unit/test_ir_golden_fixtures_load.py`) holds every golden to a schema before 1.4.0,
@@ -98,6 +117,7 @@ from tests.support.remodel import (  # noqa: E402
     carried_under,
     derived_part_features,
     linked,
+    probe_type_names,
     remodel_package,
     scope_signals,
 )
@@ -107,6 +127,7 @@ from swreview.ir.loader import save_package  # noqa: E402
 from swreview.ir.models import EvidencePackage  # noqa: E402
 
 CALLABLE = "swreview.checks.golden_remodel:plan_case"
+CASE_ONLY = "--case-only"
 WRITTEN_AT = "1.3.0"
 TABLE = load_table()
 REF, CONSTRUCTION, CORE, DETAIL, MODIFY, QUARANTINE = TABLE.groups
@@ -316,34 +337,45 @@ def named_folder_signal(name: str) -> list[dict[str, Any]]:
     return [{"name": name, "member_persist_refs": []}]
 
 
+def probed(features: Sequence[FeatureSpec], **overrides: Any) -> dict[str, Any]:
+    """The signals the probe would read of `features`: its own walk as
+    `feature_type_names` (T161), every other row in scope unless `overrides` says not."""
+    return scope_signals(feature_type_names=probe_type_names(features), **overrides)
+
+
 CASES: tuple[tuple[str, list[FeatureSpec], dict[str, Any] | None], ...] = (
     ("remodel-ordered", ordered(), None),
     ("remodel-reversed", reversed_tree(), None),
     ("remodel-pinned", pinned(), None),
     ("remodel-duplicate-names", duplicate_names(), None),
-    ("remodel-refusal-multibody", plain(), scope_signals(solid_body_count=2)),
-    ("remodel-refusal-weldment", plain(), scope_signals(is_weldment=True)),
+    ("remodel-refusal-multibody", plain(), probed(plain(), solid_body_count=2)),
+    ("remodel-refusal-weldment", plain(), probed(plain(), is_weldment=True)),
     (
         "remodel-refusal-sheet-metal",
         plain(),
-        scope_signals(sheet_metal_folder_present=True),
+        probed(plain(), sheet_metal_folder_present=True),
     ),
-    ("remodel-refusal-mesh-body", plain(), scope_signals(mesh_body_present=True)),
-    ("remodel-refusal-3d-interconnect", plain(), scope_signals(is_3d_interconnect=True)),
+    ("remodel-refusal-mesh-body", plain(), probed(plain(), mesh_body_present=True)),
+    ("remodel-refusal-3d-interconnect", plain(), probed(plain(), is_3d_interconnect=True)),
     (
         "remodel-refusal-rms-folder",
         mis_membered(),
-        scope_signals(rms_named_folders=named_folder_signal(CORE)),
+        probed(mis_membered(), rms_named_folders=named_folder_signal(CORE)),
     ),
     (
         "remodel-refusal-two-signals",
         plain(),
-        scope_signals(solid_body_count=3, is_weldment=True),
+        probed(plain(), solid_body_count=3, is_weldment=True),
     ),
     ("remodel-cycle", cycle(), None),
     ("remodel-unplaceable", unplaceable(), None),
     ("remodel-absorbed-sketches", absorbed_sketch_features(), None),
     ("remodel-refusal-derived-part", derived_part_features(), None),
+    (
+        "remodel-refusal-derived-part-probe",
+        derived_part_features(),
+        probed(derived_part_features()),
+    ),
 )
 """Every fixture: its directory name, its tree, and the scope signals the probe would have
 read. `None` signals is the dry run's own answer - nothing was read, and the gate says so
@@ -359,11 +391,24 @@ the second listing of every absorbed sketch and the hole's own profile sketch, l
 under the hole (decision 17A)."""
 
 
-def write(name: str, features: Sequence[FeatureSpec], signals: dict[str, Any] | None) -> None:
+def write(
+    name: str,
+    features: Sequence[FeatureSpec],
+    signals: dict[str, Any] | None,
+    *,
+    case_only: bool = False,
+) -> None:
     directory = FIXTURE_DIR / name
-    package = remodel_package(list(features), name=name)
-    package = LAYOUTS.get(name, lambda built: built)(package)
-    save_package(package.model_copy(update={"schema_version": WRITTEN_AT}), directory)
+    if case_only:
+        if not (directory / "package.json").is_file():
+            raise SystemExit(
+                f"{CASE_ONLY} rewrites the case file beside an existing package, and {name} "
+                "has none; write the case whole instead"
+            )
+    else:
+        package = remodel_package(list(features), name=name)
+        package = LAYOUTS.get(name, lambda built: built)(package)
+        save_package(package.model_copy(update={"schema_version": WRITTEN_AT}), directory)
     case: dict[str, Any] = {"callable": CALLABLE}
     if signals is not None:
         case["kwargs"] = {"signals": signals, "probe_id": f"probe:{name}"}
@@ -373,14 +418,16 @@ def write(name: str, features: Sequence[FeatureSpec], signals: dict[str, Any] | 
     print(f"wrote {directory}")
 
 
-def main(names: Sequence[str]) -> None:
+def main(arguments: Sequence[str]) -> None:
+    case_only = CASE_ONLY in arguments
+    names = [argument for argument in arguments if argument != CASE_ONLY]
     known = {name for name, _, _ in CASES}
     unknown = sorted(set(names) - known)
     if unknown:
         raise SystemExit(f"no such case {unknown}; the cases are {sorted(known)}")
     for name, features, signals in CASES:
         if not names or name in names:
-            write(name, features, signals)
+            write(name, features, signals, case_only=case_only)
 
 
 if __name__ == "__main__":

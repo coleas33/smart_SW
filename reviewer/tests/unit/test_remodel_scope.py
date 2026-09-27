@@ -24,8 +24,10 @@ specification, and it is five claims:
   signal is returned, so the pure gate never emits them; `rms_named_folder_wrong_members`
   is the one the gate decides and the bridge spells, and it is a **scope** refusal, never a
   ninth entry in the rebuild taxonomy of FR-014. The twelfth, `derived_part` (T146,
-  decision 17A), is a **tree** code: decided from the package's feature rows by
-  `derived_part_refusals`, never by the gate, until the probe reads it (T161).
+  decision 17A), is decided twice: by the gate from the probe's `feature_type_names`
+  (T161, before the copy) and by `derived_part_refusals` from the package's feature rows
+  (the dry run's reading, and a backstop after the copy), so it is a gate code and still
+  the one tree code (tasks.md, lane F's defaults 3 and 4).
 """
 
 from __future__ import annotations
@@ -129,6 +131,11 @@ def test_a_plain_single_body_part_passes_with_nothing_unresolved() -> None:
             RMS_NAMED_FOLDER_WRONG_MEMBERS,
             "rms_named_folders",
         ),
+        (
+            {"feature_type_names": ["RefPlane", "OriginProfileFeature", "MirrorStock"]},
+            DERIVED_PART,
+            "feature_type_names",
+        ),
     ],
 )
 def test_each_signal_refuses_with_its_own_code_and_names_its_signal(
@@ -144,7 +151,8 @@ def test_each_signal_refuses_with_its_own_code_and_names_its_signal(
 
 def test_the_refusing_signals_are_exactly_the_rows_the_data_model_names() -> None:
     """data-model.md section 4.1: a run may not proceed on an unresolved multibody,
-    weldment, sheet-metal, mesh, 3D Interconnect **or `rms_named_folders`** signal."""
+    weldment, sheet-metal, mesh, 3D Interconnect, `rms_named_folders` **or
+    `feature_type_names`** signal (T161)."""
     assert REFUSING_SIGNALS == (
         "solid_body_count",
         "is_weldment",
@@ -153,6 +161,7 @@ def test_the_refusing_signals_are_exactly_the_rows_the_data_model_names() -> Non
         "graphics_body_present",
         "is_3d_interconnect",
         "rms_named_folders",
+        "feature_type_names",
     )
 
 
@@ -301,10 +310,14 @@ def test_the_refusal_code_set_is_exactly_data_model_section_4_2() -> None:
     assert len(REFUSAL_CODES) == 12
 
 
-def test_the_gate_the_bridge_only_and_the_tree_codes_partition_the_set() -> None:
-    assert GATE_CODES | BRIDGE_ONLY_CODES | TREE_CODES == REFUSAL_CODES
+def test_the_gate_and_the_bridge_only_codes_partition_the_set_and_the_tree_code_is_a_gate_code(
+) -> None:
+    """Lane F's default 4: `derived_part` is decided by the gate from the probe (T161) and
+    still by the planner from the package, so the tree codes are a subset of the gate's
+    rather than a third disjoint part."""
+    assert GATE_CODES | BRIDGE_ONLY_CODES == REFUSAL_CODES
     assert GATE_CODES & BRIDGE_ONLY_CODES == frozenset()
-    assert GATE_CODES & TREE_CODES == frozenset()
+    assert TREE_CODES <= GATE_CODES
     assert BRIDGE_ONLY_CODES & TREE_CODES == frozenset()
     assert BRIDGE_ONLY_CODES == frozenset(
         {"not_a_part", "source_dirty", "external_refs", "preexisting_rebuild_errors"}
@@ -391,10 +404,111 @@ def test_a_part_with_no_derived_base_is_not_refused_for_one() -> None:
     assert derived_part_refusals(rows, load_table()) == ()
 
 
-def test_the_gate_never_emits_the_tree_code() -> None:
-    """The gate decides from `ScopeSignals` alone, and no signal carries the feature rows;
-    until the probe reads the base feature (T161) the refusal is the planner's."""
+# --- the probe half: `feature_type_names` (T161; lane F's defaults 1 to 3) ------------------
+
+
+def test_the_gate_refuses_a_derived_or_mirrored_part_from_the_probes_type_names() -> None:
+    """The refusal is the probe's, so it is reached before anything is copied (FR-001), and
+    it says what is true: the body is another part's geometry."""
+    result = evaluate(
+        feature_type_names=["RefPlane", "RefPlane", "OriginProfileFeature", "MirrorStock"]
+    )
+
+    assert result.verdict == "refused"
+    (refusal,) = result.refusals
+    assert refusal.code == DERIVED_PART
+    assert refusal.signal == "feature_type_names"
+    assert "MirrorStock" in refusal.message
+    assert "another part" in refusal.message
+    assert "six groups" in refusal.message
+    assert "before anything is copied" in refusal.message
+    assert "refused" in refusal.message
+
+
+@pytest.mark.parametrize("type_name", sorted(load_table().derived_base))
+def test_every_derived_base_type_of_the_type_table_refuses(type_name: str) -> None:
+    """The gate reads `rms_types.yaml`'s `derived_base`, the one list the planner reads too,
+    and names no type of its own."""
+    result = evaluate(feature_type_names=["ProfileFeature", type_name, "Extrusion"])
+
+    assert [refusal.code for refusal in result.refusals] == [DERIVED_PART]
+    assert type_name in result.refusals[0].message
+
+
+def test_one_refusal_names_each_derived_base_type_once_in_first_seen_order() -> None:
+    """One refusal per row, as every other row gives, naming every type that trips it."""
+    result = evaluate(
+        feature_type_names=["Stock", "RefPlane", "MirrorStock", "Stock", "MirrorStock"]
+    )
+
+    (refusal,) = result.refusals
+    assert "Stock, MirrorStock" in refusal.message
+    assert refusal.message.count("MirrorStock") == 1
+
+
+@pytest.mark.parametrize(
+    "type_name",
+    ["mirrorstock", "MIRRORSTOCK", "MirrorStock ", " Stock", "MirrorStockFolder", "Stock2", ""],
+)
+def test_a_near_miss_of_a_derived_base_type_is_not_one(type_name: str) -> None:
+    """Exact and case-sensitive, like every `GetTypeName2` match in the type table: a
+    near-miss is a name the table was never calibrated against, not a derived part."""
+    result = evaluate(feature_type_names=["ProfileFeature", type_name])
+
+    assert result.verdict == "ok"
+    assert result.refusals == ()
+
+
+@pytest.mark.parametrize(
+    "names",
+    [
+        [],
+        ["ProfileFeature", "Extrusion"],
+        ["RefPlane", "FeatSolidBodyFolder", "RefPlaneFtrFolder", "FtrFolder", "Fillet"],
+    ],
+)
+def test_a_walk_with_no_derived_base_type_passes(names: list[str]) -> None:
+    result = evaluate(feature_type_names=names)
+
+    assert result.verdict == "ok"
+    assert result.refusals == ()
+
+
+def test_an_unreadable_type_listing_leaves_the_derived_part_question_unresolved() -> None:
+    result = evaluate(feature_type_names=None)
+
+    assert result.verdict == "unresolved"
+    (refusal,) = result.refusals
+    assert refusal.code == "signal_unresolved"
+    assert refusal.signal == "feature_type_names"
+    assert DERIVED_PART in refusal.message
+
+
+def test_a_derived_part_and_another_signal_are_both_refused_and_named() -> None:
+    result = evaluate(solid_body_count=2, feature_type_names=["MirrorStock"])
+
+    assert [refusal.code for refusal in result.refusals] == ["multibody", DERIVED_PART]
+    assert "solid_body_count" in result.message
+    assert "feature_type_names" in result.message
+
+
+def test_the_gate_emits_the_tree_code_from_the_probe() -> None:
+    """The code the planner decides from the package is the one the gate decides from the
+    probe: one vocabulary, two readings, each naming its own signal."""
     reached = {rule.code for rule in ScopeGate.RULES}
 
-    assert DERIVED_PART not in reached
-    assert DERIVED_PART not in GATE_CODES
+    assert DERIVED_PART in reached
+    assert DERIVED_PART in GATE_CODES
+    assert DERIVED_PART in TREE_CODES
+
+
+def test_the_type_names_row_is_a_list_of_strings_and_nothing_else() -> None:
+    """A measurement: the row carries the walk's type names and no verdict of its own."""
+    with pytest.raises(ValueError):
+        ScopeSignals(**scope_signals(feature_type_names=[{"type": "MirrorStock"}]))
+    with pytest.raises(ValueError):
+        ScopeSignals(**scope_signals(feature_type_names="MirrorStock"))
+
+    assert ScopeSignals(**scope_signals(feature_type_names=["MirrorStock"])).feature_type_names == (
+        "MirrorStock",
+    )

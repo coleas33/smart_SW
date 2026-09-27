@@ -27,9 +27,13 @@ sheet-metal part costs the engineer their afternoon:
 | configurations | record the count; it drives `which_configs` on every equation add |
 | a derived or mirrored base feature | refuse (`derived_part`): the body is another part's |
 
-The last row is decided from the package's feature rows by `derived_part_refusals`, not by
-`ScopeGate.evaluate`: no signal carries the tree yet, so it lands after the copy, as the
-cycle refusal does, until the probe reads the base feature (tasks.md T161, decision 17A).
+The last row is read twice (tasks.md T161, lane F's defaults 1 to 5). The probe measures
+every feature's `GetTypeName2` into `feature_type_names`, and the gate refuses on it against
+`rms_types.yaml`'s `derived_base` - before the copy, like every other row. The planner still
+decides the same code from the package's feature rows with `derived_part_refusals`: a dry
+run has no probe, and after the copy that reading is a backstop should the dump's walk and
+the probe's disagree. The row is a measurement, not a verdict: the C# side names no derived
+base, and the type table stays the one list both readings consult.
 
 **Absence is not emptiness.** A `null` signal is not a pass. An unreadable *refusing* signal
 is `signal_unresolved` naming the signal and the verdict is `unresolved`, because a pass
@@ -59,8 +63,10 @@ signal is returned (`not_a_part`, `source_dirty`, `external_refs`) or on the cop
 (`preexisting_rebuild_errors`), so this gate never emits them even though the rows they are
 decided from are in the table; they enter `ScopeReport.refusals` when the host records the
 bridge's refusal. `rms_named_folder_wrong_members` is the one token the bridge spells and
-this gate decides. `derived_part` is the one **tree** code: neither the gate nor the bridge
-raises it yet, and `plan_reorganize` records it in `RemodelPlan.tree_refusals`.
+this gate decides. `derived_part` is a gate code and still the one **tree** code: this gate
+decides it from `feature_type_names`, and `plan_reorganize` decides it again from the
+package and records that reading in `RemodelPlan.tree_refusals`; the bridge never raises
+it.
 """
 
 from __future__ import annotations
@@ -125,12 +131,23 @@ DERIVED_PART = "derived_part"
 """Named once, here: the part's body is another part's, brought in by a derived or mirrored
 base feature (decision 17A)."""
 
-TREE_CODES: frozenset[str] = frozenset({DERIVED_PART})
-"""The codes decided from the package's feature rows rather than from `ScopeSignals`: after
-the copy, the way the cycle refusal is, until the probe reads what they are decided from
-(tasks.md T161)."""
+_DERIVED_PART_REASON = (
+    "this part's body is another part's geometry, brought in whole by that feature from the "
+    "part it was derived or mirrored from, so the features the six groups organize do not "
+    "build it and a re-model would have to start from that part"
+)
+"""What is true of a derived or mirrored part, said once for both readings of it: the
+gate's from the probe's walk and the planner's from the package's rows."""
 
-GATE_CODES: frozenset[str] = REFUSAL_CODES - BRIDGE_ONLY_CODES - TREE_CODES
+TREE_CODES: frozenset[str] = frozenset({DERIVED_PART})
+"""The codes the planner decides from the package's feature rows, the way it decides the
+cycle refusal. Since T161 the gate decides each of them from `ScopeSignals` too, before the
+copy, so they are a subset of `GATE_CODES` rather than a part of their own (tasks.md, lane
+F's default 4): the planner's reading is the dry run's, and a backstop after the copy."""
+
+GATE_CODES: frozenset[str] = REFUSAL_CODES - BRIDGE_ONLY_CODES
+"""Every code this gate can reach from `ScopeSignals` alone; with `BRIDGE_ONLY_CODES` it
+partitions the closed set."""
 
 RMS_NAMED_FOLDER_WRONG_MEMBERS = "rms_named_folder_wrong_members"
 """Named once, here, so `folders.py` and the host cite the token rather than spelling it."""
@@ -189,6 +206,9 @@ class ScopeSignals(BaseModel):
     imported_file_names: tuple[str, ...] | None
     configuration_names: tuple[str, ...] | None
     rms_named_folders: tuple[RmsNamedFolder, ...] | None
+    feature_type_names: tuple[str, ...] | None
+    """Every feature's `GetTypeName2`, verbatim, in the probe's walk order (T161). A
+    measurement: which of them is a derived base is the type table's to say."""
     external_reference_count: int | None
     save_flag_dirty: bool | None
     read_only: bool | None
@@ -267,6 +287,16 @@ def _rms_named_group_folders(
     return tuple(folder for folder in folders if folder.name in groups)
 
 
+def _derived_base_types(type_names: Sequence[str], table: RmsTypeTable) -> tuple[str, ...]:
+    """The walk's derived or mirrored base types, each once, in first-seen order.
+
+    Matched exactly and case-sensitively against `derived_base`, as `RmsTypeTable` matches
+    every `GetTypeName2` string: a near-miss is a name the table was never calibrated
+    against, not a derived part.
+    """
+    return tuple(dict.fromkeys(name for name in type_names if name in table.derived_base))
+
+
 class ScopeGate:
     """The pure verdict. `evaluate` is the whole surface; `RULES` is the table it reads."""
 
@@ -323,6 +353,15 @@ class ScopeGate:
                 "can neither verify nor repair their membership before the copy exists, and "
                 "it has no dissolve path, so the part is refused: fix the folders by hand, "
                 "or wait for the rebuild stage"
+            ),
+        ),
+        SignalRule(
+            signal="feature_type_names",
+            code=DERIVED_PART,
+            describe=(
+                "feature_type_names carries {value}, the base feature type of a derived or "
+                f"mirrored part: {_DERIVED_PART_REASON}; a derived or mirrored part is "
+                "refused before anything is copied"
             ),
         ),
     )
@@ -384,7 +423,7 @@ class ScopeGate:
     def _failing_value(rule: SignalRule, value: object, table: RmsTypeTable) -> str | None:
         """What this rule refuses about `value`, or `None` when it does not refuse it.
 
-        `value` is the row `ScopeSignals` validated, so the two rules that read something
+        `value` is the row `ScopeSignals` validated, so the three rules that read something
         other than a boolean flag narrow it rather than re-checking its type.
         """
         if rule.signal == "solid_body_count":
@@ -393,6 +432,9 @@ class ScopeGate:
         if rule.signal == "rms_named_folders":
             named = _rms_named_group_folders(cast("Sequence[RmsNamedFolder]", value), table)
             return ", ".join(folder.name for folder in named) if named else None
+        if rule.signal == "feature_type_names":
+            bases = _derived_base_types(cast("Sequence[str]", value), table)
+            return ", ".join(bases) if bases else None
         return "" if value is True else None
 
 
@@ -475,11 +517,8 @@ def derived_part_refusals(rows: Sequence[Feature], table: RmsTypeTable) -> tuple
         Refusal(
             code=DERIVED_PART,
             message=(
-                f"{row.id} is a {row.type_name}: this part's body is another part's geometry, "
-                "brought in whole by that feature from the part it was derived or mirrored "
-                "from, so the features the six groups organize do not build it and a "
-                "re-model would have to start from that part; a derived or mirrored part is "
-                "refused"
+                f"{row.id} is a {row.type_name}: {_DERIVED_PART_REASON}; a derived or "
+                "mirrored part is refused"
             ),
             signal="features[].type_name",
         )

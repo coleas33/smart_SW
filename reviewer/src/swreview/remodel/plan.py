@@ -174,6 +174,7 @@ UNREAD_SIGNALS = ScopeSignals(
     imported_file_names=None,
     configuration_names=None,
     rms_named_folders=None,
+    feature_type_names=None,
     external_reference_count=None,
     save_flag_dirty=None,
     read_only=None,
@@ -183,10 +184,13 @@ UNREAD_SIGNALS = ScopeSignals(
 """Every scope signal unread, which is what a **dry run** holds: the signals are COM
 readings taken by `remodel.probe_scope` from the engineer's open document, and a package
 carries none of them. The gate answers `unresolved` over this, naming each signal, which
-is the honest answer - "nobody looked" is not "nothing was there" (Principle I). The one
-signal a package could be made to yield, the folder listing, is deliberately not
-synthesised: the gate refuses on the **presence** of a group-named folder, so deriving it
-from a dump would refuse every part the method has already been applied to."""
+is the honest answer - "nobody looked" is not "nothing was there" (Principle I). The two
+signals a package could be made to yield are deliberately not synthesised. The folder
+listing: the gate refuses on the **presence** of a group-named folder, so deriving it from
+a dump would refuse every part the method has already been applied to. The feature type
+names (T161): the dump is not the probe's walk, and the planner already reads the base
+feature from the package itself (`derived_part_refusals`), so a synthesised row would only
+report one reading twice under two names (tasks.md, lane F's default 5)."""
 
 
 def scope_report(

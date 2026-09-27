@@ -370,6 +370,12 @@ public sealed class FakeProbeSource : IRemodelProbeSource
         Members.Add(nameof(GetFolders));
         return Signals.Folders;
     }
+
+    public IReadOnlyList<string>? GetFeatureTypeNames()
+    {
+        Members.Add(nameof(GetFeatureTypeNames));
+        return Signals.FeatureTypeNames;
+    }
 }
 
 /// <summary>
@@ -397,6 +403,12 @@ public sealed class ScopeSignalValues
     public IReadOnlyList<string>? ConfigurationNames { get; set; } = new[] { "Default" };
 
     public IReadOnlyList<RmsNamedFolder>? Folders { get; set; } = new RmsNamedFolder[0];
+
+    /// <summary>
+    /// T161's <c>feature_type_names</c>: a small part's walk, the same on the probe and the copy
+    /// by default, so step 12 compares equal unless a test changes one of them.
+    /// </summary>
+    public IReadOnlyList<string>? FeatureTypeNames { get; set; } = new[] { "ProfileFeature", "Extrusion" };
 
     public int? BodyCount(int bodyType) => bodyType == 0 ? SolidBodyCount : SheetBodyCount;
 }
@@ -613,6 +625,12 @@ public sealed class FakeRemodelDocument : IRemodelDocument
     {
         Members.Add(nameof(GetFolders));
         return Signals.Folders;
+    }
+
+    public IReadOnlyList<string>? GetFeatureTypeNames()
+    {
+        Members.Add(nameof(GetFeatureTypeNames));
+        return Signals.FeatureTypeNames;
     }
 
     // ---- the tree --------------------------------------------------------------------

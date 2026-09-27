@@ -50,6 +50,7 @@ from tests.support.remodel import (
     duplicate_name_features,
     linked,
     mis_membered_group_folder_features,
+    probe_type_names,
     remodel_package,
     scope_signals,
     shared_sketch_features,
@@ -374,6 +375,7 @@ def test_the_scope_signal_fields_are_the_rows_of_the_data_model() -> None:
         "imported_file_names",
         "configuration_names",
         "rms_named_folders",
+        "feature_type_names",
         "external_reference_count",
         "save_flag_dirty",
         "read_only",
@@ -397,6 +399,15 @@ def test_the_default_signals_are_a_part_the_gate_admits() -> None:
     assert signals["imported_file_names"] == []
     assert signals["configuration_names"] == ["Default"]
     assert signals["rms_named_folders"] == []
+    assert signals["feature_type_names"] == [
+        "RefPlane",
+        "RefPlane",
+        "RefPlane",
+        "OriginProfileFeature",
+        "ProfileFeature",
+        "Extrusion",
+    ]
+    assert not set(signals["feature_type_names"]) & set(TYPE_TABLE["derived_base"])
     assert signals["external_reference_count"] == 0
     assert signals["rebuild_error_count"] == 0
     assert signals["vault"] is None
@@ -454,9 +465,11 @@ def test_each_call_gets_its_own_lists() -> None:
 
     first["configuration_names"].append("Machined")
     first["imported_file_names"].append("bracket.step")
+    first["feature_type_names"].append("MirrorStock")
 
     assert second["configuration_names"] == ["Default"]
     assert second["imported_file_names"] == []
+    assert "MirrorStock" not in second["feature_type_names"]
 
 
 def test_the_configuration_count_is_the_length_of_the_names() -> None:
@@ -478,6 +491,40 @@ def test_the_rms_named_folder_rows_carry_a_name_and_its_members() -> None:
         {"name": "3-Core", "member_persist_refs": members}
     ]
     assert len(members) == 3
+
+
+def test_the_probes_type_names_are_the_packages_rows_in_dump_order() -> None:
+    """`probe_type_names` names what the probe's walk reads of a builder tree - every row
+    the dump lists, nested ones included, in its order - so a fixture's signals describe
+    its own tree (tasks.md, lane F's default 8)."""
+    tree = derived_part_features()
+
+    names = probe_type_names(tree)
+
+    assert names == [row.type_name for row in remodel_package(tree).features]
+    assert names == [
+        "RefPlane",
+        "RefPlane",
+        "RefPlane",
+        "OriginProfileFeature",
+        "MirrorStock",
+        "FeatSolidBodyFolder",
+        "FeatSurfaceBodyFolder",
+        "RefPlaneFtrFolder",
+    ]
+
+
+def test_the_probes_type_names_keep_every_repeat_and_a_folder_row() -> None:
+    names = probe_type_names(mis_membered_group_folder_features())
+
+    assert names.count(FOLDER_TYPE) >= 1
+    assert len(names) == len(remodel_package(mis_membered_group_folder_features()).features)
+
+
+def test_the_probes_type_names_are_a_readable_signal() -> None:
+    signals = scope_signals(feature_type_names=probe_type_names(dependency_chain_features()))
+
+    assert all(isinstance(name, str) and name for name in signals["feature_type_names"])
 
 
 def test_a_fillet_spec_still_builds_outside_a_tree_builder() -> None:
