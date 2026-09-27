@@ -25,10 +25,12 @@ from swreview.drawings.brief import build_brief
 from swreview.ir.loader import load_package
 from swreview.report.session import load_session, save_session
 from swreview.tools.context import ToolContext, context_for, use_context
-from swreview.tools.drawings import get_drawing_brief
+from swreview.tools.drawings import PART_ROLES_ATTRIBUTE, get_drawing_brief
 from swreview.tools.registry import ToolRegistry, drawing_tools
 from swreview.tools.session import request_evidence
 from swreview.tools.standards_checks import StandardsRun, attach_standards_run
+from tests.support.fake_part_roles import FakePartRoles
+from tests.unit.test_tools_check_drawings import ModeHost
 
 TESTS = Path(__file__).resolve().parents[1]
 PLATE_DRAWING = TESTS / "fixtures" / "drawings" / "plate-drawing"
@@ -85,6 +87,31 @@ def test_without_a_standards_run_the_brief_has_no_profile() -> None:
 
     assert result.payload["conformance"]["profile"] is None
     assert result.payload["document"]["description"] is None
+
+
+def test_the_tool_briefs_with_the_reviews_roles_and_the_hosts_mode() -> None:
+    """013 T091: the drawing state follows the part roles `start_review` attached and what the
+    host's `drawing.read` can do - asked only because a custom document has a candidate."""
+    bought = reviewed(with_profile=False)
+    setattr(bought, PART_ROLES_ATTRIBUTE, FakePartRoles(roles={"doc:0003": "bought"},
+                                                        root="doc:0001"))
+    offered = reviewed(with_profile=False)
+    host = ModeHost("opens_closed")
+    offered.bridge = host
+
+    as_bought = ToolRegistry().dispatch(bought).call(
+        "get_drawing_brief", {"document_id": "doc:0003"}
+    )
+    as_offered = ToolRegistry().dispatch(offered).call(
+        "get_drawing_brief", {"document_id": "doc:0003"}
+    )
+
+    assert as_bought.payload["drawing"]["state"] == "bought"
+    assert as_bought.payload["drawing"]["candidates"] == []
+    assert as_offered.payload["drawing"]["reason"] == (
+        "a drawing with its name sits beside it (candidate)"
+    )
+    assert host.asked == 1
 
 
 @pytest.mark.parametrize(

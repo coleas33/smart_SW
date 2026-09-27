@@ -11,8 +11,9 @@ package, compact JSON in a fixed key order:
 - `interfaces` - every tolerance subject feature 010's stack-up asks about on the document,
   what it resolves to (with 011's drawing source), the drawing record bound or why none, and
   feature 010's position budget callout for its joint;
-- `drawing` - per drawing showing the document, what its views and sheets say, and the
-  same-name candidate files;
+- `drawing` - the document's drawing state and its reason (013: attached, candidate, absent or
+  bought), per drawing showing the document what its views and sheets say, and the same-name
+  candidate files, each once, with the outcome of a confirmed read-only open when there is one;
 - `answers` - the engineer's answered questions about the document or its components;
 - `conformance` - the profile by identity and each drawing's comparison (User Story 7);
 - `omitted` - per list, how many items were left out.
@@ -32,9 +33,16 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from swreview.checks.drawing_context import compare_with_profile
+from swreview.checks.drawing_context import (
+    CONFIRMED_OPEN_CHECK,
+    CandidateFile,
+    DocumentDrawingState,
+    candidate_files,
+    compare_with_profile,
+    drawing_states,
+)
 from swreview.checks.fastener_identity import joint_map_with_fasteners
 from swreview.checks.joint_alignment import check_nominal_alignment, tolerance_subjects
 from swreview.checks.joints import Joint, JointMap
@@ -46,9 +54,13 @@ from swreview.checks.tolerances import (
     drawing_record_states_limits,
     profile_sha256,
 )
-from swreview.drawings.evidence import DrawingIndex, ViewEvidence, file_name, id_order
+from swreview.drawings.evidence import DrawingIndex, ViewEvidence, id_order
 from swreview.drawings.native import table_kind
 from swreview.ir.models import Document, EvidencePackage
+
+if TYPE_CHECKING:
+    from swreview.bridge.client import DrawingReadMode
+    from swreview.checks.part_roles import PartRoles  # 013 T018, lane P
 
 __all__ = [
     "BOUNDS",
@@ -76,6 +88,7 @@ BOUNDS: dict[str, int] = {
     "drawing.tables": 5,
     "drawing.table_rows": 10,
     "drawing.candidates": 10,
+    "drawing.confirmed_open": 10,
     "answers": 10,
 }
 """Each list's bound before the byte bound (`contracts/brief.md` section 2); a list a drawing
@@ -332,9 +345,42 @@ def _subtree_documents(package: EvidencePackage, components: set[str]) -> list[s
     return found
 
 
+def _confirmed_open(session: Any, files: list[CandidateFile]) -> list[list[Any]]:
+    """`[[file name, outcome], ...]`, in the files' order, for each candidate file the session
+    holds a `drawing.confirmed_open` item about (013 section 6): the host's words, its refusal,
+    the bridge error, the bound or no connection. Every document of a file carries the one
+    outcome of its one read; an item recorded later replaces an earlier one."""
+    if session is None:
+        return []
+    file_of = {document: file.file_name for file in files for document in file.document_ids}
+    outcomes: dict[str, str] = {}
+    for bucket in ("checked", "unresolved"):
+        for item in getattr(session.coverage, bucket):
+            if item.check != CONFIRMED_OPEN_CHECK:
+                continue
+            for document in item.scope.document_ids:
+                if document in file_of:
+                    outcomes[file_of[document]] = item.reason
+    return [
+        [file.file_name, _short(outcomes[file.file_name])]
+        for file in files
+        if file.file_name in outcomes
+    ]
+
+
 def _drawing_section(
-    package: EvidencePackage, index: DrawingIndex, document_id: str, components: set[str]
+    package: EvidencePackage,
+    index: DrawingIndex,
+    session: Any,
+    roles: PartRoles | None,
+    state: DocumentDrawingState,
+    components: set[str],
 ) -> dict[str, Any]:
+    """The drawing section (`contracts/brief.md` section 2, as 013 amends it): the document's
+    drawing state and reason first, then what each attached drawing says, then the candidate
+    files beside it or any document of its tree - each file once, a bought document's never - and
+    the outcome of any confirmed read of one of them."""
+    document_id = state.document_id
     views = index.views_of(document_id)
     attached = [
         _drawing_entry(
@@ -342,15 +388,19 @@ def _drawing_section(
         )
         for drawing in index.drawings_of(document_id)
     ]
-    covered = sorted({document_id, *_subtree_documents(package, components)}, key=id_order)
-    candidates = [
-        file_name(candidate.path)
-        for covered_id in covered
-        if (candidate := index.candidate_of(covered_id)) is not None
+    covered = {document_id, *_subtree_documents(package, components)}
+    files = [
+        file for file in candidate_files(index, roles) if covered.intersection(file.document_ids)
     ]
-    section: dict[str, Any] = {"attached": attached, "candidates": candidates}
+    section: dict[str, Any] = {
+        "state": state.state, "reason": _short(state.reason), "attached": attached
+    }
     if not attached:
-        section = {"attached": [], "why": NO_DRAWING, "candidates": candidates}
+        section["why"] = NO_DRAWING
+    section["candidates"] = [file.file_name for file in files]
+    outcomes = _confirmed_open(session, files)
+    if outcomes:
+        section["confirmed_open"] = outcomes
     return section
 
 
@@ -410,6 +460,8 @@ def _lists(content: dict[str, Any]) -> list[tuple[str, list[Any]]]:
         found.extend(("drawing.table_rows", table["rows"]) for table in drawing["tables"])
     found.append(("drawing.attached", content["drawing"]["attached"]))
     found.append(("drawing.candidates", content["drawing"]["candidates"]))
+    if "confirmed_open" in content["drawing"]:
+        found.append(("drawing.confirmed_open", content["drawing"]["confirmed_open"]))
     found.append(("answers", content["answers"]))
     found.append(("conformance.drawings", content["conformance"]["drawings"]))
     return found
@@ -450,14 +502,18 @@ def build_brief(
     document_id: str,
     *,
     joint_map: JointMap | None = None,
+    roles: PartRoles | None = None,
+    mode: DrawingReadMode = "none",
 ) -> DrawingBrief:
     """The brief of one part or assembly document (`contracts/brief.md`).
 
-    `session` supplies the answers, contacts and interference findings, `profile` the
-    description property's name, the general tolerance and the drawing standard; either may be
-    `None`, and the sections that need them say so rather than guess. `joint_map` is the
-    context's cached map when a tool asks, built here otherwise. Raises `BriefRefused` for an
-    id that is not a document of the package, or that is a drawing.
+    `session` supplies the answers, contacts, interference findings and confirmed-open outcomes,
+    `profile` the description property's name, the general tolerance and the drawing standard;
+    either may be `None`, and the sections that need them say so rather than guess. `joint_map`
+    is the context's cached map when a tool asks, built here otherwise. `roles` and `mode` (013)
+    give the drawing state: the review's part roles, `None` where nothing classified, and what
+    the host's `drawing.read` can do, `none` unless the caller asked it. Raises `BriefRefused`
+    for an id that is not a document of the package, or that is a drawing.
     """
     lookup = ResolverLookup(package, profile)
     index = lookup.index
@@ -475,7 +531,14 @@ def build_brief(
         "document": _document_section(package, document, components, profile),
         "assembly": _assembly_section(package, session, joint_map, joints, component_set),
         "interfaces": _interfaces_section(package, lookup, joints, document_id),
-        "drawing": _drawing_section(package, index, document_id, component_set),
+        "drawing": _drawing_section(
+            package,
+            index,
+            session,
+            roles,
+            drawing_states(index, roles, mode)[document_id],
+            component_set,
+        ),
         "answers": _answers_section(session, {document_id, *component_set}),
         "conformance": {
             "profile": _profile_identity(profile),

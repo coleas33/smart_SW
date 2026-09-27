@@ -87,6 +87,7 @@ __all__ = [
     "CANDIDATE_REASON",
     "CLOSED_BY_CODE",
     "COMPARED_SETTINGS",
+    "CONFIRMED_OPEN_CHECK",
     "CONFORMANCE_CHECK",
     "CONTEXT_CHECK",
     "DRAWING_STATES",
@@ -129,6 +130,12 @@ CANDIDATE_OPTIONS: tuple[str, ...] = (
 
 CANDIDATES_BLOCK = "drawing.manufacturing_inputs"
 """The checklist item the candidate question blocks."""
+
+CONFIRMED_OPEN_CHECK = "drawing.confirmed_open"
+"""The coverage `check` of one confirmed candidate's outcome: never a finding's, never a
+checklist item's id, so it closes nothing. Written by `tools/drawings.read_confirmed_candidates`;
+named here, beside the question it answers, so the brief reads the outcomes without reaching the
+tool layer (013 section 6)."""
 
 CANDIDATES_WHY = (
     "Fits, stacks and callouts stay unresolved without a drawing. The review opens a file only "
