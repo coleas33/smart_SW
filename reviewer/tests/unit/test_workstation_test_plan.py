@@ -175,7 +175,10 @@ QUOTED: tuple[tuple[str, str], ...] = (
      "extractor/SwReview.AddIn/Review/ReviewPage/render.js"),
     ("The review stopped", "extractor/SwReview.AddIn/Review/ReviewPage/render.js"),
     ("uncached + ", "extractor/SwReview.AddIn/Review/ReviewPage/render.js"),
-    ("Remodel is not in this build yet. This tab will not change the open part.",
+    # Step 5.3, since 004 T157 seats the add-in and T172 keeps Start switched off.
+    ("Planned. Press Start to apply the plan to the copy.",
+     "extractor/SwReview.AddIn/Remodel/RemodelHost.cs"),
+    ("Start is not switched on in this build yet, so this plan cannot be applied to the copy.",
      "extractor/SwReview.AddIn/Remodel/RemodelHost.cs"),
     # The handoff's two commands.
     ("Missing artifacts: ", "reviewer/src/swreview/cli.py"),
@@ -198,6 +201,8 @@ QUOTED: tuple[tuple[str, str], ...] = (
     ("Open check folder", "extractor/SwReview.AddIn/Model/ModelCheckPage/index.html"),
     ("Standards check", "extractor/SwReview.AddIn/Standards/StandardsPage/index.html"),
     ("Clear review", "extractor/SwReview.AddIn/Review/ReviewPage/index.html"),
+    ("Remodel a copy", "extractor/SwReview.AddIn/Remodel/RemodelPage/index.html"),
+    ("Discard copy", "extractor/SwReview.AddIn/Remodel/RemodelPage/index.html"),
     ("Before this review", "extractor/SwReview.AddIn/Review/ReviewPage/index.html"),
     ("Review available evidence", "extractor/SwReview.AddIn/Review/ReviewPage/index.html"),
     ("component instances are not resolved.",

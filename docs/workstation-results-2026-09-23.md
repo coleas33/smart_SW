@@ -113,7 +113,7 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 | 5.2 | 007 T059: Start here above the chips on Standards, against `report.md`'s | | | |
 | 5.2 | 013 T144: A-plate's drawing, the revision table and the bill of materials read, no "no revision table" (SC-009) | | | |
 | 5.2 | 013 T144: the export-control check on S-1 and S-2 | | | |
-| 5.3 | Remodel leaves J unchanged | | | |
+| 5.3 | Remodel: Plan, Start refused, Discard; J and the three settings unchanged | | | |
 | 5.4 | 008 T106: the live Gemini test | | | |
 | 5.5 | 009 T082: Show before and after the fix | | | |
 | 5.6 | 004 T033: PROBE-1, the "Cannot reorder" box with the flag clear and set | | | |

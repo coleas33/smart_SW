@@ -1931,10 +1931,17 @@ $f = "<full path of part J>"
 Get-SeatHash $f; Get-Item -LiteralPath $f | Select-Object Length, LastWriteTime
 ```
 
-Open the **Remodel** tab. Pass: it says
-`Remodel is not in this build yet. This tab will not change the open part.` and offers nothing to
-run. Go back to the Review tab and run the second line again. Pass: the hash, size and time are
-unchanged. Record: pass or fail.
+Open Tools > Options > System Options, General page, note in `notes\documents.txt` whether
+**Input dimension value**, **Show errors every rebuild** and **Warn before saving documents with
+update errors** are ticked (`not found` for one you cannot find), and press **Cancel**. Then open
+the **Remodel** tab and press **Remodel a copy**. Pass: it ends with
+`Planned. Press Start to apply the plan to the copy.`, or with a refusal that says why this part is
+not reorganized (write the refusal down; it is not a fail). If it planned, press **Start**. Pass: it
+says `Start is not switched on in this build yet, so this plan cannot be applied to the copy.` and
+starts nothing. Then press **Discard copy**. Pass: no error line appears on the tab. Open the three
+settings again and press **Cancel**. Pass: each is as you noted it. Go back to the Review tab and
+run the second line again. Pass: the hash, size and time are unchanged. Record: pass or fail, and
+the refusal if Remodel a copy was refused.
 
 ### 5.4 The live Gemini test [008 T106]
 
@@ -2302,7 +2309,7 @@ Open seat or key tasks of earlier features, not asked this time:
 | 002 | 002 T055a, 002 T063 | the Ask tab's terminal (Codex, Gemini CLI): the Ask tab is hidden in this build |
 | 002 | 002 T067 | every quickstart scenario of feature 002 end to end: a sweep of its own |
 | 003 | 003 T062, 003 T088, 003 T089 | the RMS fixture parts and their probes; step 5.1 touches Model check on J and the owner's parts only |
-| 004 | 004 T135 to T141 | the re-modeler's stage-1 runs: the Remodel tab is off in this build (step 5.3 checks exactly that), and they wait on 004 T152 to T160, the production seat adapter and its wiring (decision 17A), which is not built yet |
+| 004 | 004 T135 to T141 | the re-modeler's stage-1 runs: Start is switched off in this build until step 5.6's blocking probes have verdicts (004 T172; step 5.3 checks Plan, that refusal and Discard), and they wait on 004 T152 to T160 and 004 T167, the production seat adapter, its wiring and its teardown (decision 17A), whose last pieces are not built yet |
 | 005 | 005 T025 to T030 | the live usage probes: their test files are not written yet |
 | 005 | 005 T034, 005 T036 | building `rms-part` and the benchmark baseline: benchmark work |
 | 005 | 005 T085a | the workstation A/B harness: not built |

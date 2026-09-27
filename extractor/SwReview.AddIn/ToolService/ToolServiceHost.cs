@@ -6,6 +6,7 @@ using System.Runtime.ExceptionServices;
 using System.Security.Cryptography;
 using System.Text;
 using SolidWorks.Interop.sldworks;
+using SwReview.AddIn.Remodel.Seat;
 using SwReview.AddIn.Review;
 using SwReview.Extractor.Bridge;
 using SwReview.Extractor.Dump;
@@ -642,6 +643,13 @@ public sealed class ToolServiceOptions
 ///   * <b>The confirmed drawing's gate is observed by the plain recorder</b> (feature 011,
 ///     <see cref="ConfirmedDrawingSource"/>): its three keys join the request's own
 ///     <c>gated=</c> line, and no <c>target=</c> is written for a read that writes nothing.
+///   * <b>The remodel seat is in-process only</b> (004 T157): <see cref="Attach"/> hands the
+///     bridge the production seat over this add-in's <c>ISldWorks</c>, so
+///     <see cref="RemodelSeatAvailable"/> is true here; the console host
+///     (<c>swreview-extract serve</c>) builds its own services and keeps a null seat, which is
+///     the only thing that keeps <c>remodel.*</c> off a host whose secret policy authorizes
+///     every command. On this host the review and general-chat secrets are kept off it by
+///     <see cref="ScopedSecretPolicy"/> before the dispatcher runs.
 ///   * <b>A session does not outlive its pipe</b> (004 T167): <see cref="Dispose"/> ends a remodel
 ///     session on the application thread before the pipe server is disposed, through the one
 ///     routine <c>remodel.close</c> runs too, and writes one teardown line.
@@ -1161,6 +1169,14 @@ public sealed class ToolServiceHost : IToolService
     internal delegate Attached AttachWork(
         ToolServiceOptions options, SwGateRecorder recorder, string captureDirectory, SwGate remodelGate);
 
+    /// <summary>
+    /// 004 T157: the remodel seat this in-process host hands its bridge - the production seat
+    /// (<see cref="SwRemodelBridgeSeat"/>, build order lane B) over the add-in's own
+    /// <c>ISldWorks</c>. Named so <see cref="Attach"/> sets it in one visible line and a test can
+    /// pin what it builds; building it calls nothing. The console host never calls it.
+    /// </summary>
+    internal static Extractor.Rms.IRemodelSeat RemodelSeatFor(ISldWorks swApp) => new SwRemodelBridgeSeat(swApp);
+
     /// <summary>Runs ON the application thread. Every COM pointer below is created there.</summary>
     private static Attached Attach(
         ToolServiceOptions options,
@@ -1189,11 +1205,12 @@ public sealed class ToolServiceHost : IToolService
             // fetch writes a file and can take seconds, so it is not general chat's to call.
             TessellateSource = scope.TessellateSource(),
 
-            // The gate the remodel.* commands call through. The seat itself is not wired here:
-            // this host attaches to the document the engineer has open, and the re-modeler
-            // reaches SOLIDWORKS through its own seat, so until one is handed over every
-            // remodel command answers "this bridge was not built with a remodel seat".
+            // The gate the remodel.* commands call through, and - 004 T157 - the production seat
+            // they reach SOLIDWORKS by, in-process only. The review and general-chat secrets are
+            // kept off every remodel.* command by ScopedSecretPolicy before the dispatcher runs;
+            // the console host builds its own services and keeps a null seat.
             RemodelGate = remodelGate,
+            RemodelSeat = RemodelSeatFor(options.SwApp),
 
             // Feature 011 T074, review scope only (ScopedSecretPolicy): a confirmed candidate,
             // read into the review's package through the review host's own records, over the
