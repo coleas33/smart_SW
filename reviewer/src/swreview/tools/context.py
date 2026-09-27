@@ -178,6 +178,8 @@ class ToolContext:
     per context by `tools/checks_mechanical.joint_analysis` and read by `check_joints` and
     the interference tool's thread-model rule. Typed loosely, like `bridge`, so the tool
     context does not import the checks that fill it."""
+    _drawing_read: str | None = field(default=None, init=False, repr=False)
+    """What `drawing_read_mode` answered, once asked (feature 013)."""
 
     def __post_init__(self) -> None:
         self._index_package()
@@ -393,6 +395,24 @@ class ToolContext:
         if not self.exceptions:
             return ExceptionStore()
         return ExceptionStore.from_records([dict(record) for record in self.exceptions])
+
+    def drawing_read_mode(self) -> str:
+        """What the host can do with a closed drawing: `none`, `open_only` or `opens_closed`.
+
+        Feature 013 (`contracts/drawing-capability.md` section 2). Asked of the bridge at most
+        once per context - lane D's `BridgeClient.drawing_read_mode()` pings once and answers
+        `none` on any failure, never raising - and `none` with no bridge. Lazy, so a caller
+        asks only when a custom or unclear document has a drawing candidate, and a package
+        without candidates never pings. The value is recorded as `ReviewSession.drawing_read`,
+        so a summary re-rendered later says the same.
+        """
+        if self._drawing_read is None:
+            self._drawing_read = (
+                "none" if self.bridge is None else str(self.bridge.drawing_read_mode())
+            )
+            if self.session is not None:
+                self.session.drawing_read = self._drawing_read  # type: ignore[assignment]
+        return self._drawing_read
 
     def component(self, component_id: str) -> ComponentInstance | None:
         return self._components.get(component_id)

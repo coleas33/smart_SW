@@ -169,7 +169,11 @@ request already asks - the same `blocks`, and ids a non-empty subset of its ids 
 with a checklist item - answers `already_answered` (citing the most recent answer) or
 `already_asked` (citing the open request), with a note, and records nothing; at finalization an
 item still open after its blocking request was answered is unresolved quoting the answer
-(section 3).
+(section 3). *And by T087:* a request blocking `drawing.manufacturing_inputs` that names a
+document with no attached drawing answers `closed_by_code` with each such document's drawing
+state and reason, and `mark_coverage` on that item answers `closed_by_code` while code has closed
+it; both only on a package that carries drawing evidence (013 `contracts/drawing-capability.md`
+section 5).
 
 ### Reading one finding in full: `get_finding` (feature 008, conditional)
 

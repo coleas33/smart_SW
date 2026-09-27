@@ -123,7 +123,7 @@ from swreview.report.session import (
 )
 from swreview.tools.checks_mechanical import attach_part_roles, check_hygiene, review_roles
 from swreview.tools.context import ToolContext, build_context
-from swreview.tools.drawings import DRAWINGS_TOOL, read_confirmed_candidates
+from swreview.tools.drawings import DRAWINGS_TOOL, ConfirmedRead, read_confirmed_candidates
 from swreview.tools.query import package_summary
 from swreview.tools.recording import record_result
 from swreview.tools.registry import (
@@ -873,6 +873,20 @@ REGRADED_LINE = "Checks first graded again after your answer: withdrew {ids} (bo
 withdrew nothing sends `answers_message` byte for byte, as the replays rebuild it."""
 
 
+DRAWING_OUTCOME_LINE = "Drawing {file}: {outcome}"
+"""One line of the resumed message per drawing file a confirmed read asked for (feature 013,
+`contracts/drawing-capability.md` section 6): the `drawing.confirmed_open` reason, a refusal
+included, so the model never re-reads unchanged evidence to learn what happened."""
+
+
+def drawing_outcome_lines(read: Sequence[ConfirmedRead]) -> list[str]:
+    """`DRAWING_OUTCOME_LINE` for each drawing file a confirmed read asked for, in the
+    question's order: `read_confirmed_candidates` answers one `ConfirmedRead` per distinct
+    candidate file (lane D, T081), so two documents of one file are one line, a refusal
+    included. Empty when nothing was read."""
+    return [DRAWING_OUTCOME_LINE.format(file=item.file_name, outcome=item.outcome) for item in read]
+
+
 @dataclass(frozen=True)
 class RolesRegrade:
     """What answering the part-roles question did: which request it was, and the coverage
@@ -1089,7 +1103,10 @@ class ReviewRun:
         # parts again. (3) Then one `_restate` restates the union of what changed, each tool
         # once, and reconciles its own calls. Every other answer does nothing here.
         package = self.context.package
-        read_confirmed_candidates(self.context, requests, self.out_dir)
+        read = read_confirmed_candidates(self.context, requests, self.out_dir)
+        # Feature 013 (`contracts/drawing-capability.md` section 6): each file's outcome,
+        # refusals included, reaches the model - one line per file the read asked for.
+        outcomes = drawing_outcome_lines(read)
         reasons: dict[str, str] = {}
         if self.context.package is not package:
             reasons[DRAWINGS_TOOL] = DRAWING_WITHDRAWAL
@@ -1107,6 +1124,8 @@ class ReviewRun:
                 self.context.record_coverage(bucket, item)
             if by_answer:
                 message += "\n" + REGRADED_LINE.format(ids=", ".join(by_answer))
+        if outcomes:
+            message = "\n".join(outcomes) + "\n\n" + message
         # Taken only after `_restate` returns, so a withdrawal can never shift a restated
         # finding into the earlier part, where it would stay as a duplicate under a new id.
         before = len(self.session.findings)

@@ -18,7 +18,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from swreview.bridge.client import BridgeError, DrawingReadMode
 from swreview.checks.drawing_context import (
@@ -61,6 +61,7 @@ __all__ = [
     "drawing_evidence",
     "get_drawing_brief",
     "read_confirmed_candidates",
+    "read_mode_for",
 ]
 
 DRAWINGS_TOOL = "check_drawings"
@@ -75,24 +76,18 @@ def drawing_evidence(package: EvidencePackage) -> bool:
     return bool(package.drawing_records or package.drawing_candidates)
 
 
-def _read_mode(
+def read_mode_for(
     context: ToolContext, index: DrawingIndex, roles: PartRoles | None
 ) -> DrawingReadMode:
-    """What the host's `drawing.read` can do (013 `contracts/drawing-capability.md` section 2).
-
-    Asked only when a custom or unclear document has a candidate, so a package without one - the
-    replay fixtures, a review with no drawing beside a custom part - never pings; `none` with no
-    bridge. The bridge pings once and caches (`BridgeClient.drawing_read_mode`).
-
-    **A stand-in, for the integrator.** 013 T077 (lane S) gives `ToolContext.drawing_read_mode()`,
-    lazy, cached and recorded on the session as `drawing_read`; this then becomes
-    `context.drawing_read_mode()` behind the same candidate test. `test_tools_check_drawings.py`
-    fails once T077 lands and this still asks the bridge itself.
-    """
-    if not candidate_files(index, roles) or context.bridge is None:
+    """What the host's `drawing.read` can do (013 `contracts/drawing-capability.md` section 2),
+    asked of the context only when a custom or unclear document has a candidate, so a package
+    without one - the replay fixtures, a review with no drawing beside a custom part - never
+    pings. `ToolContext.drawing_read_mode()` (013 T077) asks the bridge at most once, answers
+    `none` with no bridge, and records the answer on the session as `drawing_read`. The one
+    guard the drawing check and `request_evidence`'s row 6 both read."""
+    if not candidate_files(index, roles):
         return "none"
-    mode: DrawingReadMode = context.bridge.drawing_read_mode()
-    return mode
+    return cast(DrawingReadMode, context.drawing_read_mode())
 
 
 def _closing_rows_only(context: ToolContext) -> bool:
@@ -131,7 +126,7 @@ def _record(context: ToolContext) -> dict[str, Any]:
         profile=review_profile(context),
         index=index,
         roles=roles,
-        mode=_read_mode(context, index, roles),
+        mode=read_mode_for(context, index, roles),
     )
     restated = [CONTEXT_CHECK, CONFORMANCE_CHECK]
     if result.closing is not None or _closing_rows_only(context):
@@ -231,7 +226,7 @@ def get_drawing_brief(document_id: str) -> ToolResult:
             document_id,
             joint_map=joint_analysis(context).joint_map,
             roles=roles,
-            mode=_read_mode(context, DrawingIndex.for_package(context.ir), roles),
+            mode=read_mode_for(context, DrawingIndex.for_package(context.ir), roles),
         )
     except BriefRefused as refusal:
         return error_result(str(refusal))
@@ -326,7 +321,7 @@ def read_confirmed_candidates(
     """
     index = DrawingIndex.for_package(context.ir)
     roles = review_roles(context)
-    spec = candidate_question(index, roles, _read_mode(context, index, roles))
+    spec = candidate_question(index, roles, read_mode_for(context, index, roles))
     if not any(_is_confirmed_candidate(request, spec) for request in answered):
         return []
     held = len(context.ir.drawing_records)

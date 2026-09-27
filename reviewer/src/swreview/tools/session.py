@@ -18,6 +18,7 @@ the model must not be able to talk its way around:
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from decimal import Decimal
 from typing import Any, Literal, get_args
 
@@ -25,6 +26,7 @@ from pydantic import ValidationError
 
 from swreview.agent.checklist import COVERAGE_BUCKETS
 from swreview.checks.questions import QuestionSpec, already_asked
+from swreview.drawings.evidence import DrawingIndex
 from swreview.findings import Source, build_finding
 from swreview.ir.models import DrawingSheet, SourceRef
 from swreview.report.attention import CHECKLIST_ITEM_IDS
@@ -104,6 +106,10 @@ def request_evidence(
     closed = closed_by_code(context, blocks)
     if closed is not None:
         return closed
+    if blocks == DRAWING_FINDING_CHECK:
+        drawings = drawing_request_closed(context, entity_ids)
+        if drawings is not None:
+            return drawings
     covering = covering_requests(context.require_session(), blocks, entity_ids)
     if covering.answered is not None:
         return _repeat(ALREADY_ANSWERED, covering.answered, ALREADY_ANSWERED_NOTE)
@@ -197,12 +203,14 @@ def closed_by_code(context: ToolContext, check: str | None) -> dict[str, str] | 
     row closes the item already; before it does (the close-out, which finalization writes),
     it is the item's own description, which says how code closes it.
     """
-    item = next(
-        (entry for entry in context.checklist.items if entry.id == check and entry.owner == "code"),
-        None,
-    )
-    if item is None:
-        return None
+    owned = any(entry.id == check and entry.owner == "code" for entry in context.checklist.items)
+    return _closure(context, check) if owned and check is not None else None
+
+
+def _closure(context: ToolContext, check: str) -> dict[str, str]:
+    """`{"status": "closed_by_code", "check", "reason"}` for the checklist item `check`: the
+    reason code recorded under the item's id, else the item's own description."""
+    item = next(entry for entry in context.checklist.items if entry.id == check)
     coverage = context.require_session().coverage
     recorded = next(
         (
@@ -217,6 +225,101 @@ def closed_by_code(context: ToolContext, check: str | None) -> dict[str, str] | 
         "status": CLOSED_BY_CODE,
         "check": item.id,
         "reason": recorded if recorded is not None else item.description,
+    }
+
+
+def _review_roles(context: ToolContext) -> Any:
+    """The part roles the review attached, or `None` on a context no review built, where every
+    part and assembly is a drawing subject - the one reader every consumer uses
+    (`checks_mechanical.review_roles`), so row 6 and the drawing check read the same roles."""
+    # Deferred, like this module's other check imports.
+    from swreview.tools.checks_mechanical import review_roles
+
+    return review_roles(context)
+
+
+def _offers_drawings(context: ToolContext) -> bool:
+    """Whether the package carries drawing evidence: the one condition the drawing family is
+    offered on (`tools/drawings.drawing_evidence`), and so the one on which code may say what
+    sits beside a document - with none, no drawing phase said anything of it."""
+    # Deferred: `tools/drawings.py` imports this module's writer.
+    from swreview.tools.drawings import drawing_evidence
+
+    return drawing_evidence(context.ir)
+
+
+def drawing_item_closed(context: ToolContext) -> bool:
+    """Whether code has closed the drawing item (`contracts/drawing-capability.md` section 5):
+    no attached drawing shows any custom or unclear document, on a package the drawing family
+    is offered on - the one predicate `check_drawings` closes the item by."""
+    # Deferred, like every drawing-check import here.
+    from swreview.checks.drawing_context import item_closed_by_code
+
+    if not _offers_drawings(context):
+        return False
+    return bool(item_closed_by_code(DrawingIndex.for_package(context.ir), _review_roles(context)))
+
+
+def _documents_named(context: ToolContext, entity_ids: Sequence[str]) -> list[str]:
+    """The documents `entity_ids` name, first-named first: a document is itself, a component its
+    document, a hole or a fastener its component's document; any other id names none."""
+    documents: list[str] = []
+    for entity_id in entity_ids:
+        if context.document(entity_id) is not None:
+            document_id: str | None = entity_id
+        else:
+            hole, fastener = context.hole(entity_id), context.fastener(entity_id)
+            component_id = (
+                hole.component_id if hole is not None
+                else fastener.component_id if fastener is not None
+                else entity_id
+            )
+            component = context.component(component_id)
+            document_id = None if component is None else component.document_id
+        if document_id is not None and document_id not in documents:
+            documents.append(document_id)
+    return documents
+
+
+def drawing_request_closed(
+    context: ToolContext, entity_ids: Sequence[str]
+) -> dict[str, Any] | None:
+    """Row 6 of `request_evidence`: code answers a drawing request (013, drawing-capability 5).
+
+    Each id names its document; when any named document has no attached drawing, the answer is
+    `closed_by_code` with each such document's state and reason, as lane D's `drawing_states`
+    gives them - a bought part expects none, a candidate says how to include it, an absent one
+    says none sits beside it - and `attached` names the documents that do have a drawing, whose
+    content the model may still ask about. Nothing is recorded. `None` - the request is recorded
+    as before - when every named document's drawing is attached, when no id names a document,
+    and on a package the drawing family is not offered on. The host is asked what it can do
+    only when a custom or unclear document has a candidate.
+    """
+    # Deferred: lane D's drawing states, like every drawing-check import here; `tools/drawings`
+    # imports this module's writer.
+    from swreview.checks.drawing_context import drawing_states
+    from swreview.tools.drawings import read_mode_for
+
+    if not _offers_drawings(context):
+        return None
+    documents = _documents_named(context, entity_ids)
+    if not documents:
+        return None
+    index = DrawingIndex.for_package(context.ir)
+    roles = _review_roles(context)
+    states = drawing_states(index, roles, read_mode_for(context, index, roles))
+    named = [states[document_id] for document_id in documents if document_id in states]
+    unattached = [state for state in named if state.state != "attached"]
+    if not unattached:
+        return None
+    return {
+        "status": CLOSED_BY_CODE,
+        "check": DRAWING_FINDING_CHECK,
+        "drawings": [
+            {"document_id": state.document_id, "state": state.state, "reason": state.reason}
+            for state in unattached
+        ],
+        "attached": [state.document_id for state in named if state.state == "attached"],
     }
 
 
@@ -303,9 +406,12 @@ def mark_coverage(
         a tool fails.
     """
     context = current_context()
-    # First: a code-owned item is not the model's to mark, whatever bucket it asks for
-    # (feature 013, `contracts/re-ask-guard.md` section 1).
+    # First: a code-owned item is not the model's to mark, whatever bucket it asks for, and
+    # neither is the drawing item while code has closed it (feature 013,
+    # `contracts/re-ask-guard.md` section 1, `contracts/drawing-capability.md` section 5).
     closed = closed_by_code(context, check)
+    if closed is None and check == DRAWING_FINDING_CHECK and drawing_item_closed(context):
+        closed = _closure(context, check)
     if closed is not None:
         return closed
     if bucket not in MODEL_COVERAGE_BUCKETS:

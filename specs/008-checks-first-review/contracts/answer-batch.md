@@ -62,6 +62,13 @@ graded again after your answer: withdrew F-003, F-004 (bought parts)." - and is
 `answers_message(answers)` byte for byte otherwise. A check the session never ran is not
 restated: restating supersedes the call it restates.
 
+*Amended by feature 013 (T089, `contracts/drawing-capability.md` section 6).* After a confirmed
+read, the resumed message opens with one line per drawing file the read asked for - "Drawing
+{file}: {outcome}", the `drawing.confirmed_open` reason, refusals included (the host's refusal,
+the bridge error, the ten-drawing bound, no connection) - then a blank line and the answers'
+message. Two documents of one file are one line. A batch with no confirmed read sends today's
+message byte for byte.
+
 ## 2. The route
 
 | Method | Path | Body | Answer |

@@ -30,7 +30,7 @@ from swreview.tools.context import ToolContext, context_for, use_context
 from swreview.tools.model_view import model_view
 from swreview.tools.query import as_json
 from swreview.tools.registry import ToolRegistry
-from tests.support.packages import persist_ref
+from tests.support.packages import build_package, persist_ref
 from tests.support.prerun import prerun_package
 
 MakePackage = Callable[..., EvidencePackage]
@@ -902,42 +902,294 @@ def test_through_the_registry_a_covered_question_writes_no_failed_row(
     assert len(tool_context.require_session().evidence_requests) == 1
 
 
-def test_the_sittings_eight_question_calls_come_back_with_three_already_answered(
+def sitting_package() -> EvidencePackage:
+    """The sitting's shape, fictional: an assembly (doc:0001), a plate with a same-name drawing
+    beside it (doc:0002, cmp:0001) and a pin (doc:0003, cmp:0002 and cmp:0003)."""
+    from tests.support.drawings import DrawingBuilder
+    from tests.support.mechanical import PackageBuilder
+
+    builder = PackageBuilder(design_stem="FICT-7000", schema_version="1.6.0")
+    plate = builder.document("FICT-7001", "part")
+    builder.component(plate)
+    pin = builder.document("FICT-KALO-PIN", "part")
+    builder.component(pin)
+    builder.component(pin)
+    drawings = DrawingBuilder(builder.build().package)
+    drawings.candidate(plate)
+    return drawings.build()
+
+
+def test_the_sittings_eight_question_calls_come_back_answered_from_the_record() -> None:
+    """The 2026-09-26 sitting's shape, with fictional ids: questions asked and answered, then
+    three re-asks - provenance in other words, the vendor pin's drawing, and the fit follow-up.
+
+    Edited deliberately by T086: row 6 answers the model's drawing requests - the sitting's
+    ER-003 and its re-ask ER-007 - `closed_by_code` before the guard is reached, so neither is
+    recorded; the provenance and fit re-asks (the sitting's ER-006 and ER-008) still come back
+    `already_answered`, citing the requests they repeat."""
+    tool_context = context_for(sitting_package())
+    with use_context(tool_context):
+        asked = [
+            ask(question="Is there a drawing for the plate?", entity_ids=["doc:0002"]),
+            ask(question="Are these the latest released files?",
+                entity_ids=["doc:0001", "doc:0002"]),
+            ask(question="Can you provide the pin's drawing?", entity_ids=["doc:0003"],
+                blocks="drawing.manufacturing_inputs"),
+            ask(question="Is the interference intended?", entity_ids=["cmp:0001", "cmp:0002"],
+                blocks="interference"),
+            ask(question="What fit class is the pin in the plate?",
+                entity_ids=["cmp:0001", "cmp:0002"], blocks="interfaces.fit"),
+        ]
+        assert [result["status"] for result in asked] == [
+            "open", "open", "closed_by_code", "open", "open",
+        ]
+        for minute, request in enumerate(tool_context.require_session().evidence_requests):
+            answer(tool_context, request.id, f"answer {request.id}", minute=minute)
+
+        re_asked = [
+            ask(question="Please confirm the vault versions of these files",
+                entity_ids=["doc:0002", "doc:0001"]),
+            ask(question="Please attach the pin drawing", entity_ids=["doc:0003"],
+                blocks="drawing.manufacturing_inputs"),
+            ask(question="Give the numeric limits of the press fit", entity_ids=["cmp:0002"],
+                blocks="interfaces.fit"),
+        ]
+
+    assert [result["status"] for result in re_asked] == [
+        "already_answered", "closed_by_code", "already_answered",
+    ]
+    assert re_asked[0]["evidence_request"]["id"] == "ER-002"
+    assert re_asked[2]["evidence_request"]["id"] == "ER-004"
+    assert len(tool_context.require_session().evidence_requests) == 4
+
+
+# --- feature 013 T086: code answers drawing requests (drawing-capability.md section 5) ---------
+
+DRAWING_ITEM = "drawing.manufacturing_inputs"
+
+
+def drawings_context(*, attach_plate: bool = False, toolbox_pin: bool = True) -> ToolContext:
+    """A review context: the plate (doc:0002) has a candidate, or an attached drawing; the pin
+    (doc:0003) is a Toolbox part, so bought, unless told otherwise; roles attached from a
+    version 3 profile whose convention the assembly and the plate follow."""
+    from swreview.checks import part_roles
+    from swreview.checks.standards.profile import load_profile
+    from swreview.tools.registry import PART_ROLES_ATTRIBUTE
+    from tests.support.drawings import DrawingBuilder
+    from tests.support.mechanical import PackageBuilder
+    from tests.support.roles_review import write_profile
+
+    builder = PackageBuilder(design_stem="FICT-7000", schema_version="1.6.0")
+    plate = builder.document("FICT-7001", "part")
+    builder.component(plate)
+    pin = builder.document("FICT-KALO-PIN", "part")
+    builder.component(pin)
+    drawings = DrawingBuilder(builder.build().package)
+    if attach_plate:
+        record = drawings.drawing(drawings.drawing_document("FICT-7001"))
+        drawings.view(drawings.sheet(record, "Sheet1"), "Drawing View1", references=plate)
+    else:
+        drawings.candidate(plate)
+    package = drawings.build()
+    if toolbox_pin:
+        package = package.model_copy(
+            update={
+                "components": [
+                    item.model_copy(update={"is_toolbox": item.document_id == pin})
+                    for item in package.components
+                ]
+            }
+        )
+    tool_context = context_for(package)
+    import tempfile
+
+    folder = Path(tempfile.mkdtemp())
+    roles = part_roles.classify_parts(package, load_profile(write_profile(folder)))
+    setattr(tool_context, PART_ROLES_ATTRIBUTE, roles)
+    return tool_context
+
+
+def expected_states(tool_context: ToolContext, document_ids: list[str]) -> list[dict[str, str]]:
+    """What lane D's `drawing_states` says of each document: row 6 passes it through."""
+    from swreview.checks.drawing_context import drawing_states
+    from swreview.drawings.evidence import DrawingIndex
+    from swreview.tools.registry import PART_ROLES_ATTRIBUTE
+
+    states = drawing_states(
+        DrawingIndex.for_package(tool_context.ir),
+        getattr(tool_context, PART_ROLES_ATTRIBUTE),
+        tool_context.drawing_read_mode(),
+    )
+    return [
+        {"document_id": item, "state": states[item].state, "reason": states[item].reason}
+        for item in document_ids
+    ]
+
+
+def test_a_drawing_request_on_documents_with_no_attached_drawing_is_closed_by_code() -> None:
+    tool_context = drawings_context()
+    with use_context(tool_context):
+        before = held(tool_context)
+        result = session.request_evidence(
+            what="The drawings", why="drawing inputs", entity_ids=["doc:0002", "doc:0003"],
+            blocks=DRAWING_ITEM,
+        )
+
+    assert result == {
+        "status": "closed_by_code",
+        "check": DRAWING_ITEM,
+        "drawings": expected_states(tool_context, ["doc:0002", "doc:0003"]),
+        "attached": [],
+    }
+    assert [item["state"] for item in result["drawings"]] == ["candidate", "bought"]
+    assert held(tool_context) == before
+
+
+def test_a_component_a_hole_or_a_fastener_names_its_document() -> None:
+    tool_context = drawings_context()
+    plate_instance = next(
+        item.id for item in tool_context.ir.components if item.document_id == "doc:0002"
+    )
+    with use_context(tool_context):
+        result = session.request_evidence(
+            what="w", why="y", entity_ids=[plate_instance, "doc:0002"], blocks=DRAWING_ITEM
+        )
+
+    assert [item["document_id"] for item in result["drawings"]] == ["doc:0002"]
+
+
+def test_a_hole_and_a_fastener_name_their_components_document() -> None:
+    """The minimal package with a candidate beside its part: `hole:1` sits on `cmp:0001` and
+    `fst:1` on `cmp:0002`, both instances of `doc:2`; with no review, the roles are the
+    no-profile ones, so the part is graded and its candidate is named."""
+    from swreview.ir.models import DrawingCandidate
+
+    package = build_package(
+        drawing_candidates=[
+            DrawingCandidate(
+                document_id="doc:2", path="C:\\Fictional\\housing.SLDDRW",
+                reason="same_name_beside_model",
+            )
+        ]
+    )
+    tool_context = context_for(package)
+    with use_context(tool_context):
+        by_hole = session.request_evidence(what="w", why="y", entity_ids=["hole:1"],
+                                           blocks=DRAWING_ITEM)
+        by_fastener = session.request_evidence(what="w", why="y", entity_ids=["fst:1"],
+                                               blocks=DRAWING_ITEM)
+
+    for result in (by_hole, by_fastener):
+        assert result["status"] == "closed_by_code"
+        assert [item["document_id"] for item in result["drawings"]] == ["doc:2"]
+        assert result["drawings"][0]["state"] == "candidate"
+
+
+def test_an_id_that_names_no_document_is_recorded_as_before() -> None:
+    tool_context = drawings_context()
+    with use_context(tool_context):
+        result = session.request_evidence(what="w", why="y", entity_ids=[], blocks=DRAWING_ITEM)
+
+    assert result["status"] == "open"
+
+
+def test_a_mix_names_both_groups() -> None:
+    tool_context = drawings_context(attach_plate=True)
+    with use_context(tool_context):
+        result = session.request_evidence(
+            what="w", why="y", entity_ids=["doc:0002", "doc:0003"], blocks=DRAWING_ITEM
+        )
+
+    assert result["status"] == "closed_by_code"
+    assert [item["document_id"] for item in result["drawings"]] == ["doc:0003"]
+    assert result["attached"] == ["doc:0002"]
+
+
+def test_a_request_about_a_document_whose_drawing_is_attached_is_recorded() -> None:
+    tool_context = drawings_context(attach_plate=True)
+    with use_context(tool_context):
+        result = session.request_evidence(
+            what="The thread callout", why="y", entity_ids=["doc:0002"], blocks=DRAWING_ITEM
+        )
+
+    assert result["status"] == "open"
+
+
+def test_without_drawing_evidence_a_drawing_request_is_recorded(context: ToolContext) -> None:
+    """The family is offered only on drawing evidence, and so is the closure: without it no
+    drawing phase said what sits beside a document, and nothing may be claimed of it."""
+    result = session.request_evidence(
+        what="The drawing", why="y", entity_ids=["doc:2"], blocks=DRAWING_ITEM
+    )
+
+    assert result["status"] == "open"
+
+
+def test_mark_coverage_on_the_drawing_item_is_closed_by_code_only_in_the_predicates_state(
+) -> None:
+    closed = drawings_context()
+    owned = drawings_context(attach_plate=True)
+
+    plate = CoverageScope(document_ids=["doc:0002"])
+    with use_context(closed):
+        closed_result = session.mark_coverage(DRAWING_ITEM, "unresolved", plate, "r")
+    with use_context(owned):
+        owned_result = session.mark_coverage(DRAWING_ITEM, "checked", plate, "r")
+
+    assert closed_result["status"] == "closed_by_code"
+    assert closed_result["check"] == DRAWING_ITEM
+    assert closed.require_session().coverage.checked == []
+    assert closed.require_session().coverage.unresolved == []
+    assert owned_result["status"] == "recorded"
+
+
+def test_mark_coverage_on_the_drawing_item_without_drawing_evidence_is_recorded(
     context: ToolContext,
 ) -> None:
-    """The 2026-09-26 sitting's shape, with fictional ids: five questions asked and answered,
-    then three re-asks - provenance in other words, the vendor pin's drawing, and the fit
-    follow-up - each answered from the request it repeats, and nothing new recorded."""
-    first_five: list[dict[str, Any]] = [
-        {"question": "Is there a drawing for the plate?", "entity_ids": ["doc:1"]},
-        {"question": "Are these the latest released files?", "entity_ids": ["doc:1", "doc:2"]},
-        {"question": "Can you provide the pin's drawing?", "entity_ids": ["doc:2"],
-         "blocks": "drawing.manufacturing_inputs"},
-        {"question": "Is the interference intended?", "entity_ids": ["cmp:0001", "cmp:0002"],
-         "blocks": "interference"},
-        {"question": "What fit class is the pin in the plate?",
-         "entity_ids": ["cmp:0001", "cmp:0002"], "blocks": "interfaces.fit"},
-    ]
-    for index, fields in enumerate(first_five, start=1):
-        assert ask(**fields)["evidence_request"]["id"] == f"ER-{index:03d}"
-        answer(context, f"ER-{index:03d}", f"answer {index}", minute=index)
-    re_asks: list[dict[str, Any]] = [
-        {"question": "Please confirm the vault versions of these files",
-         "entity_ids": ["doc:2", "doc:1"]},
-        {"question": "Please attach the pin drawing", "entity_ids": ["doc:2"],
-         "blocks": "drawing.manufacturing_inputs"},
-        {"question": "Give the numeric limits of the press fit", "entity_ids": ["cmp:0002"],
-         "blocks": "interfaces.fit"},
-    ]
+    result = session.mark_coverage(DRAWING_ITEM, "out_of_scope", closed_scope(), "no drawings")
 
-    results = [ask(**fields) for fields in re_asks]
+    assert result["status"] == "recorded"
 
-    assert [(result["status"], result["evidence_request"]["id"]) for result in results] == [
-        ("already_answered", "ER-002"),
-        ("already_answered", "ER-003"),
-        ("already_answered", "ER-005"),
-    ]
-    assert len(context.session.evidence_requests) == 5
+
+def test_the_mode_is_asked_only_when_a_custom_document_has_a_candidate() -> None:
+    from tests.unit.test_context_drawing_read import PingingBridge
+
+    with_candidate = drawings_context()
+    attached = drawings_context(attach_plate=True)
+    for tool_context in (with_candidate, attached):
+        tool_context.bridge = PingingBridge("open_only")
+        with use_context(tool_context):
+            session.request_evidence(
+                what="w", why="y", entity_ids=["doc:0003"], blocks=DRAWING_ITEM
+            )
+
+    assert with_candidate.bridge.pings == 1
+    assert attached.bridge.pings == 0
+
+
+DRAWING_DESCRIPTION = (
+    "For each custom part or assembly: its drawing is the same-name .SLDDRW in its folder; bought "
+    "parts have none. check_drawings decides which drawings exist and tells the engineer how to "
+    "include one; never request a drawing or a drawing's version."
+)
+
+
+def test_the_drawing_items_description_is_the_contracts() -> None:
+    from swreview.agent.checklist import load_checklist
+
+    item = next(entry for entry in load_checklist().items if entry.id == DRAWING_ITEM)
+
+    assert item.description == DRAWING_DESCRIPTION
+    assert item.owner == "model"
+
+
+def test_system_prompt_step_6_says_never_to_request_a_drawing() -> None:
+    from tests.unit.test_system_prompt_013 import steps
+
+    assert steps()["6"].endswith(
+        "check_drawings decides which drawings exist and tells the engineer how to include "
+        "one; never request a drawing or a drawing's version."
+    )
 
 
 # --- feature 013 T065: the ids the tools hand out are accepted (re-ask-guard.md section 4) -----
