@@ -30,8 +30,12 @@ as it always did, and the version stays 1: it is in the carry-over key.
 """
 OWNERS: tuple[str, ...] = get_args(Owner)
 
-CODE_OWNED_LINE = "Closed by code before your first turn; never ask about it or mark it."
-"""What a code-owned item renders in place of the two lines that name its closures."""
+CODE_OWNED_LINE = "Closed by code; never ask about it or mark it."
+"""What a code-owned item renders in place of the two lines that name its closures.
+
+True of every code-owned item (feature 013 T157, research R2.46): `provenance` is closed at setup
+and `coverage.closeout` when the review ends, and each item's own description says when - where
+this line once said "before your first turn" of both."""
 
 COVERAGE_BUCKETS: tuple[str, ...] = ("checked", "skipped", "unresolved", "out_of_scope")
 """Coverage buckets an item may be closed out in, in the order they are searched.

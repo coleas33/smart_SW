@@ -58,8 +58,8 @@ result:
     title: Resilient Modeling Strategy
   - bucket: open
     check_prefix: coverage.
-    description: Every gap in the package and every open evidence request is reflected
-      in coverage.
+    description: 'Closed by code when the review ends: every gap in the package and
+      every open evidence request is reflected in coverage.'
     id: coverage.closeout
     title: Coverage close-out
   - bucket: open
