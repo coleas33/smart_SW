@@ -1,6 +1,6 @@
 # Model Check Tab: Routes, Messages, Run Folder, Accept
 
-*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), pending implementation:* a Model check folder's `report.md` is opened by "Findings by type", in place of "Start here"; the Model check page's five-row preview is unchanged and never shows a pass; see 013 `contracts/grouped-list.md` sections 1 and 6 (lands with 013 T052).
+*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed by 2026-09-27 (013 T052):* a Model check folder's `report.md` is opened by "Findings by type", in place of "Start here"; the Model check page's five-row preview is unchanged and never shows a pass; see 013 `contracts/grouped-list.md` sections 1 and 6 (lands with 013 T052).
 
 The contract for User Story 6 (spec FR-022 to FR-033): the three backend routes the Model
 check page calls, the two message tables between that page and `ModelCheckHost`, the check run

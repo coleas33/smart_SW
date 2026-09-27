@@ -1,6 +1,6 @@
 # Contract: Native Drawing Evidence at IR 1.6.0
 
-*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), pending implementation:* "Tables": each sheet's own view is read from `IDrawingDoc.GetViews`, so sheet-level tables are recorded; see 013 `contracts/readings.md` section 1.
+*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed by 2026-09-27 (013 T127):* "Tables": each sheet's own view is read from `IDrawingDoc.GetViews`, so sheet-level tables are recorded; see 013 `contracts/readings.md` section 1.
 
 Normative for FR-016 to FR-019, FR-026 to FR-031 and SC-005. The fields are `data-model.md`
 sections 1 and 2; this contract is what each is read from and what a failed read writes.

@@ -1,6 +1,6 @@
 # IR 1.4.0 Additions
 
-*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), pending implementation:* a sheet's views include its own (type 1) view, read from `IDrawingDoc.GetViews`, and revision tables are de-duplicated with the other tables; see 013 `contracts/readings.md` section 1.
+*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed by 2026-09-27 (013 T127):* a sheet's views include its own (type 1) view, read from `IDrawingDoc.GetViews`, and revision tables are de-duplicated with the other tables; see 013 `contracts/readings.md` section 1.
 
 Every field and every model this feature adds, the interop member it comes from, the dump
 phase it is written in, and its null rule. Normative alongside feature 001's generated

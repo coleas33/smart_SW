@@ -1,6 +1,6 @@
 # Reviewer Backend API
 
-*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), pending implementation:* the Review tab's Start here is replaced by the grouped findings list (`<section id="findings-by-type">`), so `not_examined`'s headline sits above that list; see 013 `contracts/grouped-list.md` section 5 (lands with 013 T054).
+*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed by 2026-09-27 (013 T054):* the Review tab's Start here is replaced by the grouped findings list (`<section id="findings-by-type">`), so `not_examined`'s headline sits above that list; see 013 `contracts/grouped-list.md` section 5 (lands with 013 T054).
 
 One loopback service, not one per tab: `swreview chat serve` is the **reviewer backend**,
 and it serves **checks as well as chats**. The `/sessions/*` routes run a review turn

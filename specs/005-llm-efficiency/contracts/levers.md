@@ -1,6 +1,6 @@
 # Contract: the lever flags
 
-*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), pending implementation:* lever 14, `drop_prior_reasoning` (earlier turns' reasoning items out of the request view), off until the replay decides; see 013 `contracts/tokens.md` section 4.
+*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed by 2026-09-27 (013 T121, T123; adopted as a pane default by T125, the lever's own section below):* lever 14, `drop_prior_reasoning` (earlier turns' reasoning items out of the request view), off until the replay decided; see 013 `contracts/tokens.md` section 4.
 
 Every efficiency lever this feature designs, with its flag, its default, its scope, what reads it
 and when, how it is measured, and the rule under which it may be adopted.
@@ -547,7 +547,9 @@ message that had no reasoning item, and every item of the current turn, is still
 byte; the replay's estimate is unchanged (it prices reasoning output only). The real endpoint's
 acceptance is proved by `tests/live/test_openai_live_prior_reasoning.py` (key-gated, two turns on
 a reasoning model with the lever on), to run where an OpenAI key is set - the development machine
-has none in its environment, so it is a seat step (013 T143, test-plan step 2.5).
+has none in its environment - and, in use, by the follow-up turn of the next sitting's second
+review of the small assembly (013 T143, test-plan step 4.8), whose answer arrives only if the
+provider accepts the request.
 
 ### The array ceiling: what it is asserted on (owner decision 9A, 2026-09-23)
 
