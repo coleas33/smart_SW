@@ -797,6 +797,7 @@ public class SwReviewAddIn : ISwAddin
             Pipeline = new BackendRemodelPipeline(
                 endpoint,
                 () => _toolService?.RemodelBridge,
+                BindRemodelRun,
                 CurrentDocument,
                 dump,
                 new SwRemodelSeat(_swApp, _applicationThread),
@@ -832,6 +833,21 @@ public class SwReviewAddIn : ISwAddin
         StartRemodelPump();
         _pane.RemodelPageMessageReceived += OnRemodelPageMessage;
     }
+
+    /// <summary>
+    /// Feature 004 T158's add-in half: hands the run folder the Remodel host just made to the
+    /// attached tool service, as the bridge's run root for the next <c>remodel.open</c>, and
+    /// answers whether it took it. <see cref="BackendRemodelPipeline"/> calls it before every open
+    /// and refuses a false answer, or a throw, as <c>BridgeUnavailable</c> with nothing copied.
+    ///
+    /// The hand-over itself is feature 004 build-order lane D's <c>IToolService.BindRemodelRun</c>
+    /// (on the application thread, with a bounded wait), reached through the gate, and this body
+    /// becomes that call when lanes D and E are integrated. Until then this build has no way to
+    /// hand a run folder over - <c>remodel.open</c> would refuse for want of a run root anyway - so
+    /// it answers false, which is the truth; and it is unreachable while the add-in has no seat,
+    /// since a plan is refused <c>RemodelUnavailable</c> before any bridge call.
+    /// </summary>
+    private bool BindRemodelRun(string runDirectory) => false;
 
     private void OnRemodelPageMessage(object sender, string json)
     {

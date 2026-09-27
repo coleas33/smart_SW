@@ -226,6 +226,87 @@ public sealed class RemodelHost : IDisposable
     /// <summary>The refusal class of a bridge that did not answer, as the pipeline names it.</summary>
     private const string BridgeUnavailableClass = "BridgeUnavailable";
 
+    /// <summary>
+    /// What the words of feature 004's seat adapter say where the copy may have been changed, or
+    /// never existed, and so cannot be vouched for with <see cref="NothingWasChanged"/>: the
+    /// engineer's own part, which nothing here ever writes, was not.
+    /// </summary>
+    private const string PartNotChanged = "Your part was not changed.";
+
+    /// <summary>
+    /// What `BackendRemodelPipeline.OpenCopy` refuses a plan with, as `BridgeUnavailable`, when the
+    /// run folder this host just made could not be handed to the tool service before
+    /// `remodel.open` (004 T158's host half): the hand-over answered false or threw, so nothing
+    /// was copied and no open was sent.
+    ///
+    /// In the engineer's words, like <see cref="SessionLostMessage"/>: no command, no path, none
+    /// of the build's plumbing, and the button that is the way back by its label. The Remodel page
+    /// reads no words file, so this constant is its words source, printed verbatim.
+    /// </summary>
+    public const string RunNotBoundMessage =
+        "The add-in could not reach SOLIDWORKS to get the copy ready, so nothing was copied. "
+        + PartNotChanged + " Wait a moment and press Remodel a copy again.";
+
+    /// <summary>
+    /// The reason both of 004 T159's refusals give: the copy could not be made the active document
+    /// before a dump - SOLIDWORKS does not have it open, would not activate it, had another
+    /// document active afterwards, or no copy was left to activate - so it was not read, since a
+    /// dump reads whatever is active.
+    /// </summary>
+    private const string CopyNotRead =
+        "SOLIDWORKS could not make the copy the active document - it may have been closed - so the "
+        + "copy was not read";
+
+    /// <summary>
+    /// `CopyNotActive` before the plan (004 T159): the dump `package-before.json` comes from was
+    /// not taken, so there is no plan. The copy on disk is still the byte copy the open made, so
+    /// <see cref="NothingWasChanged"/> holds, and Remodel a copy plans again with a new copy.
+    /// </summary>
+    public const string CopyNotActiveBeforePlanMessage =
+        CopyNotRead + " and there is no plan. " + NothingWasChanged
+        + " Press Remodel a copy to plan again.";
+
+    /// <summary>
+    /// `CopyNotActive` after the changes (004 T159): `package-after.json` was not taken, so the
+    /// run cannot be checked and the copy is never saved. The changes were made to the copy, so
+    /// this says the engineer's part was not changed, and no more.
+    /// </summary>
+    public const string CopyNotActiveAfterChangesMessage =
+        CopyNotRead + " after the changes. The run cannot be checked, and the copy was not saved. "
+        + PartNotChanged;
+
+    /// <summary>The first two sentences of every teardown failure (004 T167).</summary>
+    private const string NotEverythingPutBack =
+        "Not everything the plan changed in SOLIDWORKS could be put back. " + PartNotChanged;
+
+    /// <summary>Where the three toggles the run changes live in SOLIDWORKS' own dialog.</summary>
+    private const string GeneralOptions = "Tools > Options > System Options > General";
+
+    /// <summary>
+    /// `CommandInProgress`, which has no Tools > Options label, by what it does and how it clears
+    /// (INFERRED: it is per session, so a restart clears it; a seat item).
+    /// </summary>
+    private const string MessagesMayStayHidden =
+        "SOLIDWORKS may keep some of its messages hidden until you restart it.";
+
+    /// <summary>A copy the teardown did not close, by its suffix and never by its path.</summary>
+    private const string CopyMayStillBeOpen =
+        "The copy may still be open in SOLIDWORKS (its name ends in " + RemodelCopy.CopySuffix
+        + "): close it without saving.";
+
+    /// <summary>
+    /// The Tools > Options > System Options > General label of each toggle the run changes
+    /// (<see cref="RemodelSystemToggles.SuppressedToggles"/>), as
+    /// `docs/workstation-test-plan-2026-09-23.md` step 1 already asks the engineer to read them.
+    /// Whether 2024 spells them so is a seat item (research R13.8, D8).
+    /// </summary>
+    private static readonly Dictionary<int, string> ToggleLabels = new Dictionary<int, string>
+    {
+        { RemodelSystemToggles.InputDimValOnCreate, "Input dimension value" },
+        { RemodelSystemToggles.ShowErrorsEveryRebuild, "Show errors every rebuild" },
+        { RemodelSystemToggles.WarnSaveUpdateErrors, "Warn before saving documents with update errors" },
+    };
+
     /// <summary>The only scope this feature reorganizes. Parts only, by owner decision.</summary>
     private const string PartKind = "part";
 
@@ -463,6 +544,99 @@ public sealed class RemodelHost : IDisposable
     {
         Post("document.changed", DocumentPayloadWithCapability(_options.CurrentDocument()));
         AnnounceLostPlan();
+    }
+
+    /// <summary>
+    /// What a teardown that ended a remodel session left behind, told to the page (004 T167):
+    /// one `status {stage: "error"}` carrying <see cref="SessionEndedMessage"/>, and nothing at
+    /// all when everything was put back and the copy was closed, because then the plan is lost
+    /// exactly as decision 24A already tells the page, and "Nothing was changed" is true.
+    ///
+    /// The add-in calls it from `ToolServiceOptions.RemodelSessionEnded`, mapping the bridge
+    /// routine's outcome onto the three facts the words need, for a teardown that ended a session
+    /// (`contracts/pane-remodel-messages.md`, "When a re-attach or an unload ends the session").
+    /// It never throws: it is called from the tool service's teardown, and a page that cannot be
+    /// told is no reason for that to fail.
+    /// </summary>
+    /// <param name="togglesNotRestored">The <c>swUserPreferenceToggle_e</c> values the routine
+    /// could not put back; null is none.</param>
+    /// <param name="commandInProgressNotRestored">Whether <c>CommandInProgress</c> is still set.</param>
+    /// <param name="copyClosed">Whether the routine closed the copy.</param>
+    public void SessionEnded(
+        IEnumerable<int>? togglesNotRestored, bool commandInProgressNotRestored, bool copyClosed)
+    {
+        try
+        {
+            string? message = SessionEndedMessage(
+                togglesNotRestored, commandInProgressNotRestored, copyClosed);
+            if (message != null)
+            {
+                PostStatus("error", message);
+            }
+        }
+        catch (Exception)
+        {
+            // The page is gone or going (an unload), or the channel refused the post. The teardown
+            // that called this has already done what it could, and the tool-service log and the
+            // run's remodel.log carry its line either way.
+        }
+    }
+
+    /// <summary>
+    /// The words of a teardown that left something (004 T167, research R13.8 D8), or null when it
+    /// left nothing: that not everything the plan changed in SOLIDWORKS could be put back and that
+    /// the engineer's part was not changed; then each toggle left, by its Tools > Options label,
+    /// quoted, once, in the order the run sets them, with how to put it right; a value with no
+    /// label as another setting, so nothing left goes unsaid; <c>CommandInProgress</c> by what it
+    /// does; and a copy that was not closed by its suffix, never its path. Every word of it is
+    /// written here, in the page's one words source, so the page prints exactly what the tests pin.
+    /// </summary>
+    public static string? SessionEndedMessage(
+        IEnumerable<int>? togglesNotRestored, bool commandInProgressNotRestored, bool copyClosed)
+    {
+        var left = new HashSet<int>(togglesNotRestored ?? Enumerable.Empty<int>());
+        List<string> named = RemodelSystemToggles.SuppressedToggles
+            .Where(left.Contains)
+            .Select(toggle => "\"" + ToggleLabels[toggle] + "\"")
+            .ToList();
+        bool unnamed = left.Any(toggle => !ToggleLabels.ContainsKey(toggle));
+
+        if (named.Count == 0 && !unnamed && !commandInProgressNotRestored && copyClosed)
+        {
+            return null;
+        }
+
+        var words = new List<string> { NotEverythingPutBack };
+        if (named.Count == 1)
+        {
+            words.Add("The setting " + named[0] + " in " + GeneralOptions
+                + " may still be as the plan left it: set it back the way you had it.");
+        }
+        else if (named.Count > 1)
+        {
+            words.Add("These settings in " + GeneralOptions + " may still be as the plan left them: "
+                + string.Join(", ", named.Take(named.Count - 1)) + " and " + named[named.Count - 1]
+                + ". Set them back the way you had them.");
+        }
+
+        if (unnamed)
+        {
+            words.Add(named.Count > 0
+                ? "Another setting the plan changed may also not be as you had it."
+                : "A setting the plan changed may not be as you had it.");
+        }
+
+        if (commandInProgressNotRestored)
+        {
+            words.Add(MessagesMayStayHidden);
+        }
+
+        if (!copyClosed)
+        {
+            words.Add(CopyMayStillBeOpen);
+        }
+
+        return string.Join(" ", words);
     }
 
     public void Dispose()

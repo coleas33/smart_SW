@@ -192,6 +192,140 @@ public sealed class BackendRemodelPipelineTests : IDisposable
         Assert.True(present.CopyPresent);
     }
 
+    // ---- the run folder, bound before the open (T158's host half) ----------------------------
+
+    /// <summary>
+    /// T158: the bridge's run root is the folder the host made, handed over for this run and
+    /// used up by the open. So the pipeline binds exactly the request's own folder - never one
+    /// read from anywhere else - once, and before anything is said about copying or sent to the
+    /// backend: a copy that could not happen is not announced.
+    /// </summary>
+    [Fact]
+    public void OpenCopyBindsTheRequestsOwnRunFolderOnceAndBeforeTheOpen()
+    {
+        var world = new World(this);
+        string runDirectory = world.RunFolder();
+
+        world.Pipeline.OpenCopy(
+            new RemodelCopyRequest(runDirectory, SourcePath, "Default"), world.Reporter);
+
+        Assert.Equal(new[] { runDirectory }, world.Bound);
+        Assert.Equal(new[] { "bind", "status:copying", "backend:open" }, world.Log.ToArray());
+        Assert.Equal(
+            runDirectory,
+            Assert.IsType<RemodelOpenRequest>(world.Backend.Calls.Single().Request).RunDirectory);
+    }
+
+    /// <summary>The run root is used up at open, so a second open binds again - its own folder.</summary>
+    [Fact]
+    public void EveryOpenBindsItsOwnRunFolder()
+    {
+        var world = new World(this);
+        string first = world.RunFolder();
+        string second = world.RunFolder();
+
+        world.Pipeline.OpenCopy(new RemodelCopyRequest(first, SourcePath, null), world.Reporter);
+        world.Pipeline.OpenCopy(new RemodelCopyRequest(second, SourcePath, null), world.Reporter);
+
+        Assert.Equal(new[] { first, second }, world.Bound);
+        Assert.Equal(
+            new[] { "bind", "status:copying", "backend:open", "bind", "status:copying", "backend:open" },
+            world.Log.ToArray());
+    }
+
+    /// <summary>
+    /// A bind that fails - answered false, or thrown, which is kept as the cause - is
+    /// `BridgeUnavailable` in the host's own words, which is the words source the page prints
+    /// verbatim: nothing was copied, no open was sent, and pressing the button again can work.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ABindThatFailsIsRefusedAsBridgeUnavailableInTheHostsWordsAndNothingIsOpened(bool throws)
+    {
+        var world = new World(this);
+        var failure = new TimeoutException("the application thread did not answer within 5 s");
+        if (throws)
+        {
+            world.BindFailure = failure;
+        }
+        else
+        {
+            world.BindAnswer = false;
+        }
+
+        RemodelRefusal refusal = Assert.Throws<RemodelRefusal>(() => world.Pipeline.OpenCopy(
+            new RemodelCopyRequest(world.RunFolder(), SourcePath, "Default"), world.Reporter));
+
+        Assert.Equal("BridgeUnavailable", refusal.ErrorClass);
+        Assert.Equal(RemodelHost.RunNotBoundMessage, refusal.Message);
+        Assert.True(refusal.Retryable);
+        Assert.Same(throws ? failure : null, refusal.InnerException);
+        Assert.Empty(world.Backend.Calls);
+        Assert.Empty(world.Reporter.Statuses);
+        Assert.Equal(new[] { "bind" }, world.Log.ToArray());
+    }
+
+    /// <summary>
+    /// With no backend or no tool service listening there is nothing to bind to and nothing the
+    /// bind could be for: those refusals come first, in their own words, and nothing is bound.
+    /// </summary>
+    [Fact]
+    public void NothingIsBoundWithoutABackendOrAToolService()
+    {
+        var noBackend = new World(this) { Endpoint = null };
+        RemodelRefusal backendRefusal = Assert.Throws<RemodelRefusal>(() => noBackend.Pipeline.OpenCopy(
+            new RemodelCopyRequest(noBackend.RunFolder(), SourcePath, null), noBackend.Reporter));
+
+        var noBridge = new World(this) { Bridge = null };
+        RemodelRefusal bridgeRefusal = Assert.Throws<RemodelRefusal>(() => noBridge.Pipeline.OpenCopy(
+            new RemodelCopyRequest(noBridge.RunFolder(), SourcePath, null), noBridge.Reporter));
+
+        Assert.Equal("BackendUnavailable", backendRefusal.ErrorClass);
+        Assert.Equal("BridgeUnavailable", bridgeRefusal.ErrorClass);
+        Assert.NotEqual(RemodelHost.RunNotBoundMessage, bridgeRefusal.Message);
+        Assert.Empty(noBackend.Bound);
+        Assert.Empty(noBridge.Bound);
+    }
+
+    /// <summary>
+    /// Only the open binds. The probe reads the source before any run folder exists, and the
+    /// plan, the run, Open copy and the close all address a run whose root the open used up.
+    /// </summary>
+    [Fact]
+    public void OnlyTheOpenBinds()
+    {
+        var world = new World(this);
+        string runDirectory = world.RunFolder();
+        world.Backend.StatusAt = poll => poll == 0 ? Awaiting("verifying", 1, 1) : Finished("saved", 1);
+
+        world.Pipeline.ProbeScope();
+        Assert.Empty(world.Bound);
+
+        world.Pipeline.OpenCopy(new RemodelCopyRequest(runDirectory, SourcePath, null), world.Reporter);
+        world.Pipeline.Plan(runDirectory, world.Reporter);
+        world.Pipeline.Run(runDirectory, world.Reporter);
+        world.Pipeline.ActivateCopy(runDirectory);
+        world.Pipeline.CloseCopy(runDirectory);
+
+        Assert.Equal(new[] { runDirectory }, world.Bound);
+    }
+
+    [Fact]
+    public void ThePipelineIsNeverBuiltWithoutABind()
+    {
+        var world = new World(this);
+
+        Assert.Throws<ArgumentNullException>(() => new BackendRemodelPipeline(
+            () => world.Endpoint,
+            () => world.Bridge,
+            null!,
+            () => world.Document,
+            world.Dump,
+            world.Seat,
+            world.Backend));
+    }
+
     // ---- plan ------------------------------------------------------------------------------
 
     [Fact]
@@ -295,6 +429,203 @@ public sealed class BackendRemodelPipelineTests : IDisposable
 
         Assert.Equal("BackendUnavailable", refusal.ErrorClass);
         Assert.Empty(world.Dump.Folders);
+        Assert.Empty(world.Seat.ActivatedOpen);
+    }
+
+    // ---- the copy, made the active document before each dump (T159) -------------------------
+
+    /// <summary>
+    /// T159: the dump reads whatever document SOLIDWORKS has active, and after the open the
+    /// engineer's own part can still be the one in front. So the copy - the one part in the run
+    /// folder's `copy/` - is made the active document first, and only activated: a dump that
+    /// could open a document would be a second way to open one (research R13.8, D6), so
+    /// `ActivateOrOpen`, `remodel.open_copy`'s call, is never made here.
+    /// </summary>
+    [Fact]
+    public void ThePlanMakesTheCopyTheActiveDocumentBeforeItDumpsAndOnlyActivatesIt()
+    {
+        var world = new World(this);
+        string runDirectory = world.RunFolder();
+
+        world.Pipeline.Plan(runDirectory, world.Reporter);
+
+        Assert.Equal(new[] { World.CopyOf(runDirectory) }, world.Seat.ActivatedOpen);
+        Assert.Empty(world.Seat.Activated);
+        Assert.Equal(
+            new[] { "activate", "dump", "backend:plan" },
+            world.Log.Where(entry => !entry.StartsWith("status:", StringComparison.Ordinal)).ToArray());
+        Assert.True(File.Exists(Path.Combine(runDirectory, "package-before.json")));
+    }
+
+    /// <summary>
+    /// The after-dump comes minutes later, and the engineer has been free to click back to their
+    /// own part the whole time: the same activation, in the same place, before that dump too.
+    /// </summary>
+    [Fact]
+    public void TheAfterDumpMakesTheCopyTheActiveDocumentFirstAndOnlyActivatesIt()
+    {
+        var world = new World(this);
+        string runDirectory = world.RunFolder();
+        world.Backend.StatusAt = poll => poll == 0 ? Awaiting("verifying", 3, 3) : Finished("saved", 3);
+
+        world.Pipeline.Run(runDirectory, world.Reporter);
+
+        Assert.Equal(new[] { World.CopyOf(runDirectory) }, world.Seat.ActivatedOpen);
+        Assert.Empty(world.Seat.Activated);
+        string[] order = world.Log
+            .Where(entry => entry == "activate" || entry == "dump" || entry == "backend:package-after")
+            .ToArray();
+        Assert.Equal(new[] { "activate", "dump", "backend:package-after" }, order);
+        Assert.True(File.Exists(Path.Combine(runDirectory, "package-after.json")));
+    }
+
+    /// <summary>
+    /// Every way the copy fails to become the active document before the plan: SOLIDWORKS does
+    /// not have it open (it is not opened here - refused instead), something else is active
+    /// afterwards - the engineer's part, another run's copy, or an answer that names no path -
+    /// or the seat's call throws, which is kept as the cause. Each is `CopyNotActive` in the
+    /// host's words for this moment, retryable because planning again makes a new copy, and
+    /// nothing is dumped, renamed or planned.
+    /// </summary>
+    [Theory]
+    [InlineData("not open")]
+    [InlineData("the source active")]
+    [InlineData("another run's copy active")]
+    [InlineData("a name, not a path")]
+    [InlineData("throws")]
+    public void APlanWhoseCopyCannotBeMadeTheActiveDocumentIsRefusedAndNothingIsDumped(string how)
+    {
+        var world = new World(this);
+        string runDirectory = world.RunFolder();
+        Exception? cause = world.Seat.Fail(how, runDirectory);
+
+        RemodelRefusal refusal = Assert.Throws<RemodelRefusal>(
+            () => world.Pipeline.Plan(runDirectory, world.Reporter));
+
+        Assert.Equal("CopyNotActive", refusal.ErrorClass);
+        Assert.Equal(RemodelHost.CopyNotActiveBeforePlanMessage, refusal.Message);
+        Assert.True(refusal.Retryable);
+        Assert.Same(cause, refusal.InnerException);
+        Assert.Empty(world.Seat.Activated);
+        Assert.Empty(world.Dump.Folders);
+        Assert.False(File.Exists(Path.Combine(runDirectory, "package-before.json")));
+        Assert.False(File.Exists(Path.Combine(runDirectory, "package.json")));
+        Assert.Empty(world.Backend.Calls);
+    }
+
+    /// <summary>
+    /// The same failures after the changes: `CopyNotActive` in the host's words for that moment,
+    /// not retryable - the run cannot be checked and the copy is not saved - and nothing is
+    /// dumped and nothing is handed to the backend as the after reading.
+    /// </summary>
+    [Theory]
+    [InlineData("not open")]
+    [InlineData("the source active")]
+    [InlineData("another run's copy active")]
+    [InlineData("a name, not a path")]
+    [InlineData("throws")]
+    public void AnAfterDumpWhoseCopyCannotBeMadeTheActiveDocumentIsRefusedAndNothingIsPosted(string how)
+    {
+        var world = new World(this);
+        string runDirectory = world.RunFolder();
+        Exception? cause = world.Seat.Fail(how, runDirectory);
+        world.Backend.StatusAt = poll => poll == 0 ? Awaiting("verifying", 3, 3) : Finished("saved", 3);
+
+        RemodelRefusal refusal = Assert.Throws<RemodelRefusal>(
+            () => world.Pipeline.Run(runDirectory, world.Reporter));
+
+        Assert.Equal("CopyNotActive", refusal.ErrorClass);
+        Assert.Equal(RemodelHost.CopyNotActiveAfterChangesMessage, refusal.Message);
+        Assert.False(refusal.Retryable);
+        Assert.Same(cause, refusal.InnerException);
+        Assert.Empty(world.Seat.Activated);
+        Assert.Empty(world.Dump.Folders);
+        Assert.False(File.Exists(Path.Combine(runDirectory, "package-after.json")));
+        Assert.Empty(world.Backend.PackageAfterPaths);
+        Assert.DoesNotContain(world.Backend.Calls, call => call.Route == "package-after");
+    }
+
+    /// <summary>
+    /// The seat's answer is compared as a path, not as text: the copy spelt in another case, or
+    /// through a `..`, is the copy, and the dump goes ahead.
+    /// </summary>
+    [Theory]
+    [InlineData("upper case")]
+    [InlineData("through a dot-dot")]
+    public void TheActiveDocumentIsComparedWithTheCopyAsAPath(string spelling)
+    {
+        var world = new World(this);
+        string runDirectory = world.RunFolder();
+        world.Seat.ActiveAfter = copy => spelling == "upper case"
+            ? copy.ToUpperInvariant()
+            : Path.Combine(runDirectory, "copy", "..", "copy", Path.GetFileName(copy));
+
+        world.Pipeline.Plan(runDirectory, world.Reporter);
+
+        Assert.Single(world.Dump.Folders);
+        Assert.True(File.Exists(Path.Combine(runDirectory, "package-before.json")));
+    }
+
+    /// <summary>
+    /// A run folder with no copy in it has nothing to activate, and nothing is activated,
+    /// opened or dumped: it is `CopyNotActive` in the words for the dump that was stopped, with
+    /// the lookup's own refusal kept as the cause, since `remodel.open_copy`'s words for a missing
+    /// copy speak of a plan and a report that a plan-time dump does not have yet.
+    /// </summary>
+    [Fact]
+    public void APlanWithNoCopyInTheRunFolderActivatesNothingAndDumpsNothing()
+    {
+        var world = new World(this);
+        string runDirectory = world.RunFolder(withCopy: false);
+
+        RemodelRefusal refusal = Assert.Throws<RemodelRefusal>(
+            () => world.Pipeline.Plan(runDirectory, world.Reporter));
+
+        Assert.Equal("CopyNotActive", refusal.ErrorClass);
+        Assert.Equal(RemodelHost.CopyNotActiveBeforePlanMessage, refusal.Message);
+        Assert.Equal("CopyDiscarded", Assert.IsType<RemodelRefusal>(refusal.InnerException).ErrorClass);
+        Assert.Empty(world.Seat.ActivatedOpen);
+        Assert.Empty(world.Seat.Activated);
+        Assert.Empty(world.Dump.Folders);
+        Assert.Empty(world.Backend.Calls);
+    }
+
+    /// <summary>The same at the after-dump: no copy left to activate is `CopyNotActive` in that dump's words.</summary>
+    [Fact]
+    public void AnAfterDumpWithNoCopyInTheRunFolderActivatesNothingAndPostsNothing()
+    {
+        var world = new World(this);
+        string runDirectory = world.RunFolder(withCopy: false);
+        world.Backend.StatusAt = poll => poll == 0 ? Awaiting("verifying", 3, 3) : Finished("saved", 3);
+
+        RemodelRefusal refusal = Assert.Throws<RemodelRefusal>(
+            () => world.Pipeline.Run(runDirectory, world.Reporter));
+
+        Assert.Equal("CopyNotActive", refusal.ErrorClass);
+        Assert.Equal(RemodelHost.CopyNotActiveAfterChangesMessage, refusal.Message);
+        Assert.False(refusal.Retryable);
+        Assert.Empty(world.Seat.ActivatedOpen);
+        Assert.Empty(world.Dump.Folders);
+        Assert.DoesNotContain(world.Backend.Calls, call => call.Route == "package-after");
+    }
+
+    /// <summary>
+    /// The activation does not replace the post-check: a copy that was the active document when
+    /// asked, and a dump that then read another document (the engineer clicked away in between),
+    /// is still refused by the check of what the written package read.
+    /// </summary>
+    [Fact]
+    public void ThePostCheckStillRefusesADumpThatReadAnotherDocumentAfterASuccessfulActivation()
+    {
+        var world = new World(this);
+        string runDirectory = world.RunFolder();
+        world.Dump.DocumentPath = SourcePath;
+
+        Assert.ThrowsAny<Exception>(() => world.Pipeline.Plan(runDirectory, world.Reporter));
+
+        Assert.Equal(new[] { World.CopyOf(runDirectory) }, world.Seat.ActivatedOpen);
+        Assert.False(File.Exists(Path.Combine(runDirectory, "package-before.json")));
+        Assert.Empty(world.Backend.Calls);
     }
 
     // ---- run -------------------------------------------------------------------------------
@@ -670,6 +1001,11 @@ public sealed class BackendRemodelPipelineTests : IDisposable
         }
 
         Assert.DoesNotContain(SourcePath, world.Seat.Activated.Single(), StringComparison.OrdinalIgnoreCase);
+
+        // Both dumps made the copy the active document, and only ever the copy.
+        Assert.Equal(
+            new[] { World.CopyOf(runDirectory), World.CopyOf(runDirectory) },
+            world.Seat.ActivatedOpen);
     }
 
     [Fact]
@@ -709,7 +1045,7 @@ public sealed class BackendRemodelPipelineTests : IDisposable
     public void ActivateCopyOnADiscardedCopyRefusesByNameRatherThanOpeningSomethingElse()
     {
         var world = new World(this);
-        string runDirectory = world.RunFolder();
+        string runDirectory = world.RunFolder(withCopy: false);
 
         RemodelRefusal refusal = Assert.Throws<RemodelRefusal>(
             () => world.Pipeline.ActivateCopy(runDirectory));
@@ -827,7 +1163,12 @@ public sealed class BackendRemodelPipelineTests : IDisposable
 
     private sealed class FakeBackend : IRemodelBackend
     {
+        private readonly List<string> _log;
         private int _polls;
+
+        /// <param name="log">The world's one ordered log, which every fake writes to, so a test
+        /// can pin the order of a bind, an activation, a dump and a route across all of them.</param>
+        public FakeBackend(List<string> log) => _log = log;
 
         public List<RecordedCall> Calls { get; } = new List<RecordedCall>();
 
@@ -860,13 +1201,13 @@ public sealed class BackendRemodelPipelineTests : IDisposable
 
         RemodelProbeReply IRemodelBackend.Probe(RemodelProbeRequest request)
         {
-            Calls.Add(new RecordedCall("probe", request));
+            Record(new RecordedCall("probe", request));
             return Probe;
         }
 
         RemodelOpenReply IRemodelBackend.Open(RemodelOpenRequest request)
         {
-            Calls.Add(new RecordedCall("open", request));
+            Record(new RecordedCall("open", request));
             if (OpenFailure != null)
             {
                 throw OpenFailure;
@@ -877,13 +1218,13 @@ public sealed class BackendRemodelPipelineTests : IDisposable
 
         string IRemodelBackend.Plan(string runDirectory)
         {
-            Calls.Add(new RecordedCall("plan", runDirectory));
+            Record(new RecordedCall("plan", runDirectory));
             return PlanSummary;
         }
 
         string IRemodelBackend.StartRun(RemodelRunRequest request)
         {
-            Calls.Add(new RecordedCall("runs", request));
+            Record(new RecordedCall("runs", request));
             if (StartFailure != null)
             {
                 throw StartFailure;
@@ -894,19 +1235,19 @@ public sealed class BackendRemodelPipelineTests : IDisposable
 
         RemodelRunStatus IRemodelBackend.Status(string jobId)
         {
-            Calls.Add(new RecordedCall("status", jobId));
+            Record(new RecordedCall("status", jobId));
             return StatusAt(_polls++);
         }
 
         RemodelEventPage IRemodelBackend.Events(string jobId, int after)
         {
-            Calls.Add(new RecordedCall("events", jobId));
+            Record(new RecordedCall("events", jobId));
             return new RemodelEventPage(new string[0], after);
         }
 
         void IRemodelBackend.PackageAfter(string jobId, string packagePath)
         {
-            Calls.Add(new RecordedCall("package-after", packagePath));
+            Record(new RecordedCall("package-after", packagePath));
             if (PackageAfterFailure != null)
             {
                 throw PackageAfterFailure;
@@ -917,7 +1258,7 @@ public sealed class BackendRemodelPipelineTests : IDisposable
 
         void IRemodelBackend.Stop(string jobId)
         {
-            Calls.Add(new RecordedCall("stop", jobId));
+            Record(new RecordedCall("stop", jobId));
             if (StopFailures > 0)
             {
                 StopFailures--;
@@ -928,7 +1269,13 @@ public sealed class BackendRemodelPipelineTests : IDisposable
 
         void IRemodelBackend.Close(RemodelCloseRequest request)
         {
-            Calls.Add(new RecordedCall("close", request));
+            Record(new RecordedCall("close", request));
+        }
+
+        private void Record(RecordedCall call)
+        {
+            Calls.Add(call);
+            _log.Add("backend:" + call.Route);
         }
     }
 
@@ -939,6 +1286,10 @@ public sealed class BackendRemodelPipelineTests : IDisposable
     /// </summary>
     private sealed class FakeDump : IReviewDump
     {
+        private readonly List<string> _log;
+
+        public FakeDump(List<string> log) => _log = log;
+
         public List<string> Folders { get; } = new List<string>();
 
         public List<DumpProfile> Profiles { get; } = new List<DumpProfile>();
@@ -962,6 +1313,7 @@ public sealed class BackendRemodelPipelineTests : IDisposable
         {
             Folders.Add(outputDirectory);
             Profiles.Add(profile);
+            _log.Add("dump");
             progress("Extracting bracket.SLDPRT [Default]...");
 
             Directory.CreateDirectory(outputDirectory);
@@ -985,13 +1337,77 @@ public sealed class BackendRemodelPipelineTests : IDisposable
 
     private sealed class FakeSeat : IRemodelSeat
     {
+        private readonly List<string> _log;
+
+        public FakeSeat(List<string> log) => _log = log;
+
+        /// <summary>Every copy `remodel.open_copy` asked to be activated or opened.</summary>
         public List<string> Activated { get; } = new List<string>();
 
+        /// <summary>Every copy a dump asked to be made the active document, activate only (T159).</summary>
+        public List<string> ActivatedOpen { get; } = new List<string>();
+
+        /// <summary>
+        /// What SOLIDWORKS has active once <see cref="ActivateOpenCopy"/> has run: by default the
+        /// copy it was asked about, which is a seat that has the copy open and activates it.
+        /// </summary>
+        public Func<string, string?> ActiveAfter { get; set; } = copyPath => copyPath;
+
+        /// <summary>What <see cref="ActivateOpenCopy"/> throws, or null.</summary>
+        public Exception? ActivateFailure { get; set; }
+
         public void ActivateOrOpen(string copyPath) => Activated.Add(copyPath);
+
+        public string? ActivateOpenCopy(string copyPath)
+        {
+            ActivatedOpen.Add(copyPath);
+            _log.Add("activate");
+            if (ActivateFailure != null)
+            {
+                throw ActivateFailure;
+            }
+
+            return ActiveAfter(copyPath);
+        }
+
+        /// <summary>
+        /// Makes every activation fail <paramref name="how"/>, and answers what a refusal should
+        /// carry as its cause: the exception for a seat that throws, null for every answer.
+        /// </summary>
+        public Exception? Fail(string how, string runDirectory)
+        {
+            switch (how)
+            {
+                case "not open":
+                    // SOLIDWORKS does not have the copy open, so nothing was activated or opened.
+                    ActiveAfter = _ => null;
+                    return null;
+                case "the source active":
+                    ActiveAfter = _ => SourcePath;
+                    return null;
+                case "another run's copy active":
+                    ActiveAfter = _ => World.CopyOf(
+                        Path.Combine(Path.GetDirectoryName(runDirectory)!, "an-earlier-run"));
+                    return null;
+                case "a name, not a path":
+                    ActiveAfter = _ => "bracket-RMS.SLDPRT";
+                    return null;
+                case "throws":
+                    ActivateFailure = new InvalidOperationException(
+                        "the SwReview Task Pane is closed, so SOLIDWORKS cannot be called.");
+                    return ActivateFailure;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(how), how, "no such failure");
+            }
+        }
     }
 
     private sealed class RecordingReporter : IRemodelRunReporter
     {
+        private readonly List<string> _log;
+
+        public RecordingReporter(List<string> log) => _log = log;
+
         public bool StopRequested { get; set; }
 
         public List<KeyValuePair<string, string>> Statuses { get; } =
@@ -1001,8 +1417,11 @@ public sealed class BackendRemodelPipelineTests : IDisposable
 
         public List<string> Changes { get; } = new List<string>();
 
-        void IRemodelRunReporter.Status(string stage, string message) =>
+        void IRemodelRunReporter.Status(string stage, string message)
+        {
             Statuses.Add(new KeyValuePair<string, string>(stage, message));
+            _log.Add("status:" + stage);
+        }
 
         void IRemodelRunReporter.Progress(
             int applied, int total, int seq, string kind, string? subjectName) =>
@@ -1020,9 +1439,14 @@ public sealed class BackendRemodelPipelineTests : IDisposable
         public World(BackendRemodelPipelineTests test)
         {
             _test = test;
+            Backend = new FakeBackend(Log);
+            Dump = new FakeDump(Log);
+            Seat = new FakeSeat(Log);
+            Reporter = new RecordingReporter(Log);
             Pipeline = new BackendRemodelPipeline(
                 () => Endpoint,
                 () => Bridge,
+                Bind,
                 () => Document,
                 Dump,
                 Seat,
@@ -1036,32 +1460,72 @@ public sealed class BackendRemodelPipelineTests : IDisposable
 
         public PageDocument? Document { get; set; } = new PageDocument(SourcePath, "Default");
 
-        public FakeBackend Backend { get; } = new FakeBackend();
+        /// <summary>
+        /// Everything every fake was asked, in the one order it was asked: `bind`, `activate`,
+        /// `dump`, `status:&lt;stage&gt;` and `backend:&lt;route&gt;`.
+        /// </summary>
+        public List<string> Log { get; } = new List<string>();
 
-        public FakeDump Dump { get; } = new FakeDump();
+        /// <summary>Every run folder the pipeline handed to the tool service (T158).</summary>
+        public List<string> Bound { get; } = new List<string>();
 
-        public FakeSeat Seat { get; } = new FakeSeat();
+        /// <summary>What the bind answers: true is a tool service that took the folder.</summary>
+        public bool BindAnswer { get; set; } = true;
 
-        public RecordingReporter Reporter { get; } = new RecordingReporter();
+        /// <summary>What the bind throws, or null.</summary>
+        public Exception? BindFailure { get; set; }
+
+        public FakeBackend Backend { get; }
+
+        public FakeDump Dump { get; }
+
+        public FakeSeat Seat { get; }
+
+        public RecordingReporter Reporter { get; }
 
         public BackendRemodelPipeline Pipeline { get; }
 
-        /// <summary>A run folder, created the way the host creates it before the copy.</summary>
-        public string RunFolder()
+        /// <summary>Where <see cref="WriteCopy"/> puts the copy of <paramref name="runDirectory"/>.</summary>
+        public static string CopyOf(string runDirectory) =>
+            Path.Combine(runDirectory, "copy", "bracket-RMS.SLDPRT");
+
+        /// <summary>
+        /// A run folder, created the way the host creates it before the copy - and, unless
+        /// <paramref name="withCopy"/> is false, holding the copy, as it does once `remodel.open`
+        /// has answered: the state every dump, and so every plan and every after-dump, is taken in.
+        /// </summary>
+        public string RunFolder(bool withCopy = true)
         {
             string folder = Path.Combine(_test._root, "run-" + (++_folders));
             Directory.CreateDirectory(folder);
+            if (withCopy)
+            {
+                WriteCopy(folder);
+            }
+
             return folder;
         }
 
         /// <summary>The copy, where `remodel.open` would have put it.</summary>
         public string WriteCopy(string runDirectory)
         {
-            string folder = Path.Combine(runDirectory, "copy");
-            Directory.CreateDirectory(folder);
-            string copy = Path.Combine(folder, "bracket-RMS.SLDPRT");
+            string copy = CopyOf(runDirectory);
+            Directory.CreateDirectory(Path.GetDirectoryName(copy)!);
             File.WriteAllText(copy, "the copy");
             return copy;
+        }
+
+        /// <summary>The bind the pipeline is built with: records, logs, then answers or throws.</summary>
+        private bool Bind(string runDirectory)
+        {
+            Bound.Add(runDirectory);
+            Log.Add("bind");
+            if (BindFailure != null)
+            {
+                throw BindFailure;
+            }
+
+            return BindAnswer;
         }
     }
 }

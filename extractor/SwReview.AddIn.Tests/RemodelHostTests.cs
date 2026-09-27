@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using SwReview.AddIn.Remodel;
 using SwReview.AddIn.Review;
 using SwReview.AddIn.ToolService;
@@ -1178,14 +1179,7 @@ public sealed class RemodelHostTests
             + "again.",
             RemodelHost.SessionLostMessage);
 
-        foreach (string word in new[]
-                 {
-                     "swreview-extract", "--", "tool service", "bridge", "pipe", "attach", "session",
-                     "dispatcher", "remodel.", "\\", ".SLDPRT",
-                 })
-        {
-            Assert.DoesNotContain(word, RemodelHost.SessionLostMessage, StringComparison.OrdinalIgnoreCase);
-        }
+        AssertPlainWords(RemodelHost.SessionLostMessage);
     }
 
     /// <summary>
@@ -1651,14 +1645,7 @@ public sealed class RemodelHostTests
         Assert.Contains(nothingWasChanged, RemodelHost.PlanLostMessage, StringComparison.Ordinal);
         Assert.Contains(nothingWasChanged, RemodelHost.SessionLostMessage, StringComparison.Ordinal);
 
-        foreach (string word in new[]
-                 {
-                     "swreview-extract", "--", "tool service", "bridge", "pipe", "attach", "session",
-                     "dispatcher", "remodel.", "\\", ".SLDPRT",
-                 })
-        {
-            Assert.DoesNotContain(word, RemodelHost.PlanLostMessage, StringComparison.OrdinalIgnoreCase);
-        }
+        AssertPlainWords(RemodelHost.PlanLostMessage);
     }
 
     /// <summary>
@@ -2724,22 +2711,145 @@ public sealed class RemodelHostTests
         Assert.False(RemodelHost.IsStatusStage("extracting"));
     }
 
-    // ---- the world -----------------------------------------------------------------------
+    // ---- the refusals the run folder's bind and the copy's activation raise (T158, T159) --
 
-    // ---- 004 T172: Start is switched off until the blocking probes pass ---------------------
-
+    /// <summary>
+    /// T158's host half, as the host passes it on: a run folder that could not be handed to the
+    /// tool service is refused `BridgeUnavailable` in the host's own words, verbatim, before
+    /// anything was copied. The folder the host made is kept, as every refused plan's is, and no
+    /// run is tracked or registered.
+    /// </summary>
     [Fact]
-    public void WhileStartIsSwitchedOffStartIsRefusedInPlainWordsBeforeAnyCallAndWithNothingWritten()
+    public void APlanWhoseRunFolderCouldNotBeHandedOverIsRefusedInTheHostsWords()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Pipeline.CopyFailure = new RemodelRefusal(
+                "BridgeUnavailable", RemodelHost.RunNotBoundMessage, retryable: true);
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            JsonElement error = world.Reply("error", "p1");
+            Assert.Equal("BridgeUnavailable", error.GetProperty("error_class").GetString());
+            Assert.Equal(RemodelHost.RunNotBoundMessage, error.GetProperty("message").GetString());
+            Assert.True(error.GetProperty("retryable").GetBoolean());
+            Assert.Equal(RemodelHost.RunNotBoundMessage, world.LastPosted("status").GetProperty("message").GetString());
+            Assert.True(Directory.Exists(world.ExpectedRunDirectory));
+            Assert.False(Directory.Exists(Path.Combine(world.ExpectedRunDirectory, "copy")));
+            Assert.Null(world.Host.LatestRun);
+            Assert.Empty(world.Registered);
+        }
+    }
+
+    /// <summary>
+    /// T159 before the plan: a copy SOLIDWORKS could not make the active document is refused
+    /// `CopyNotActive` in the host's words, verbatim, retryable, with no run tracked; unlike
+    /// `PreexistingRebuildErrors` it deletes nothing, so the run folder and the copy stay as the
+    /// evidence.
+    /// </summary>
+    [Fact]
+    public void APlanWhoseCopyCouldNotBeMadeTheActiveDocumentIsRefusedInTheHostsWordsAndKeepsTheCopy()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Pipeline.PlanFailure = new RemodelRefusal(
+                "CopyNotActive", RemodelHost.CopyNotActiveBeforePlanMessage, retryable: true);
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            JsonElement error = world.Reply("error", "p1");
+            Assert.Equal("CopyNotActive", error.GetProperty("error_class").GetString());
+            Assert.Equal(RemodelHost.CopyNotActiveBeforePlanMessage, error.GetProperty("message").GetString());
+            Assert.True(error.GetProperty("retryable").GetBoolean());
+            Assert.True(File.Exists(world.ExpectedCopyPath), "CopyNotActive deletes nothing");
+            Assert.Null(world.Host.LatestRun);
+            Assert.False(world.Host.RunInProgress);
+        }
+    }
+
+    /// <summary>T159 after the changes: the executor's refusal reaches the page with its class and its words.</summary>
+    [Fact]
+    public void AnAfterReadingOfACopyThatCouldNotBeMadeTheActiveDocumentEndsTheRunInTheHostsWords()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Pipeline.RunFailure = new RemodelRefusal(
+                "CopyNotActive", RemodelHost.CopyNotActiveAfterChangesMessage, retryable: false);
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            JsonElement error = Assert.Single(world.AllPosted("error"));
+            Assert.Equal("CopyNotActive", error.GetProperty("error_class").GetString());
+            Assert.Equal(RemodelHost.CopyNotActiveAfterChangesMessage, error.GetProperty("message").GetString());
+            Assert.False(error.GetProperty("retryable").GetBoolean());
+            Assert.Contains(
+                world.AllPosted("status"),
+                status => status.GetProperty("stage").GetString() == "error"
+                    && status.GetProperty("message").GetString() == RemodelHost.CopyNotActiveAfterChangesMessage);
+            Assert.False(world.Host.RunInProgress);
+        }
+    }
+
+    /// <summary>
+    /// The words of this landing, pinned whole: each says what happened, that the engineer's part
+    /// was not changed, and - where there is one - what to press, by the label the page gives the
+    /// button; none names a command, a path or the build's plumbing.
+    /// </summary>
+    [Fact]
+    public void TheBindAndActivationRefusalsArePlainWords()
+    {
+        Assert.Equal(
+            "The add-in could not reach SOLIDWORKS to get the copy ready, so nothing was copied. "
+            + "Your part was not changed. Wait a moment and press Remodel a copy again.",
+            RemodelHost.RunNotBoundMessage);
+        Assert.Equal(
+            "SOLIDWORKS could not make the copy the active document - it may have been closed - so "
+            + "the copy was not read and there is no plan. Nothing was changed: not your part and "
+            + "not the copy. Press Remodel a copy to plan again.",
+            RemodelHost.CopyNotActiveBeforePlanMessage);
+        Assert.Equal(
+            "SOLIDWORKS could not make the copy the active document - it may have been closed - so "
+            + "the copy was not read after the changes. The run cannot be checked, and the copy was "
+            + "not saved. Your part was not changed.",
+            RemodelHost.CopyNotActiveAfterChangesMessage);
+
+        foreach (string message in new[]
+                 {
+                     RemodelHost.RunNotBoundMessage,
+                     RemodelHost.CopyNotActiveBeforePlanMessage,
+                     RemodelHost.CopyNotActiveAfterChangesMessage,
+                 })
+        {
+            AssertPlainWords(message);
+        }
+    }
+
+    // ---- the Start switch (T172's host refusal) --------------------------------------------
+
+    /// <summary>
+    /// While Start is switched off it is refused by name, in the host's words, before anything
+    /// that could change anything: no `remodel.started`, no pipeline call - so no backend job and
+    /// no bridge command - no status, and not one byte written in the run folder or the
+    /// engineer's file. The plan stays planned, on screen and startable later; it is not lost.
+    /// </summary>
+    [Fact]
+    public void WhileStartIsSwitchedOffStartIsRefusedInTheHostsWordsAndNothingIsCalledOrWritten()
     {
         using (var world = new RemodelWorld { StartValidated = false })
         {
-            world.CreateSourceFile();
+            string source = world.CreateSourceFile();
             world.Open();
             world.Receive("remodel.plan", "p1", new { });
             world.Reply("remodel.planned", "p1");
-            string[] runBefore = RemodelWorld.Snapshot(world.ExpectedRunDirectory);
-            int calls = world.Pipeline.Calls.Count;
-            int posted = world.Posted.Count;
+
+            string[] callsBefore = world.Pipeline.Calls.ToArray();
+            int postedBefore = world.Posted.Count;
+            string[] runFolderBefore = RemodelWorld.Snapshot(world.ExpectedRunDirectory);
+            string[] sourceBefore = RemodelWorld.Snapshot(Path.GetDirectoryName(source)!);
 
             world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
 
@@ -2748,21 +2858,484 @@ public sealed class RemodelHostTests
             Assert.Equal(RemodelHost.StartNotValidatedMessage, error.GetProperty("message").GetString());
             Assert.False(error.GetProperty("retryable").GetBoolean());
 
-            // Nothing called, nothing started, nothing written, and the message is the only one.
-            Assert.Equal(calls, world.Pipeline.Calls.Count);
-            Assert.Equal(new[] { "error" }, world.TypesPostedSince(posted));
-            Assert.Equal(runBefore, RemodelWorld.Snapshot(world.ExpectedRunDirectory));
+            Assert.Equal(postedBefore + 1, world.Posted.Count);
+            Assert.Empty(world.AllPosted("remodel.started"));
+            Assert.Equal(callsBefore, world.Pipeline.Calls.ToArray());
+            Assert.Equal(runFolderBefore, RemodelWorld.Snapshot(world.ExpectedRunDirectory));
+            Assert.Equal(sourceBefore, RemodelWorld.Snapshot(Path.GetDirectoryName(source)!));
+            Assert.Equal(RemodelRunPhase.Planned, world.Host.LatestRun!.Phase);
             Assert.False(world.Host.RunInProgress);
 
-            // Plan still runs, and so does Discard.
+            world.Receive("ready", "r1", new { });
+            JsonElement latest = world.Reply("init", "r1").GetProperty("latest_run");
+            Assert.Equal("planned", latest.GetProperty("state").GetString());
+            Assert.Equal(JsonValueKind.Null, latest.GetProperty("plan_lost").ValueKind);
+            Assert.Empty(world.AllPosted("remodel.plan_lost"));
+        }
+    }
+
+    /// <summary>Pressed again, it is refused again, the same way, and the host stays free.</summary>
+    [Fact]
+    public void StartPressedTwiceWhileSwitchedOffIsRefusedTwiceTheSameWay()
+    {
+        using (var world = new RemodelWorld { StartValidated = false })
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+            world.Receive("remodel.start", "s2", new { run_dir = world.ExpectedRunDirectory });
+
+            Assert.Equal(world.Reply("error", "s1").ToString(), world.Reply("error", "s2").ToString());
+            Assert.Equal("StartNotValidated", world.ErrorClass("s2"));
+            Assert.Equal(0, world.Pipeline.Count("run"));
+            Assert.False(world.Host.RunInProgress);
+        }
+    }
+
+    /// <summary>
+    /// Plan runs as it does while Start is off - on the seat it exercises the adapter and the
+    /// teardown - and so do Open copy, the result and Discard.
+    /// </summary>
+    [Fact]
+    public void PlanOpenCopyTheResultAndDiscardWorkWhileStartIsSwitchedOff()
+    {
+        using (var world = new RemodelWorld { StartValidated = false })
+        {
+            world.Open();
+
+            world.Receive("remodel.plan", "p1", new { });
+            world.Reply("remodel.planned", "p1");
+
+            world.Receive("remodel.open_copy", "o1", new { run_dir = world.ExpectedRunDirectory });
+            world.Reply("ok", "o1");
+
+            world.Receive("remodel.result", "r1", new { run_dir = world.ExpectedRunDirectory });
+            Assert.Equal("planned", world.Reply("remodel.result", "r1").GetProperty("state").GetString());
+
             world.Receive("remodel.discard_copy", "d1", new { run_dir = world.ExpectedRunDirectory });
             world.Reply("ok", "d1");
+            Assert.False(File.Exists(world.ExpectedCopyPath));
+        }
+    }
+
+    /// <summary>
+    /// Where `StartNotValidated` sits in Start's order: after the refusals that say this run can
+    /// never go again whatever the build - a folder this host did not plan, a run in flight, a
+    /// discarded copy, a state that is not `planned` - so each keeps its own answer.
+    /// </summary>
+    [Fact]
+    public void RunNotFoundComesBeforeStartNotValidated()
+    {
+        using (var world = new RemodelWorld { StartValidated = false })
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+
+            world.Receive("remodel.start", "s1", new { run_dir = Path.Combine(world.RunRoot, "elsewhere") });
+
+            Assert.Equal("RunNotFound", world.ErrorClass("s1"));
+        }
+    }
+
+    /// <summary>
+    /// The switch is the host's constructor argument, so the only work in flight on a host built
+    /// with it off is a plan: a Start naming the earlier plan while the next one is being planned
+    /// is `RunInProgress`, not `StartNotValidated`.
+    /// </summary>
+    [Fact]
+    public void RunInProgressComesBeforeStartNotValidated()
+    {
+        using (var world = new RemodelWorld { StartValidated = false })
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            string earlier = world.ExpectedRunDirectory;
+            world.Pipeline.DuringProbe = () =>
+                world.Receive("remodel.start", "s1", new { run_dir = earlier });
+
+            world.Receive("remodel.plan", "p2", new { });
+
+            Assert.Equal("RunInProgress", world.ErrorClass("s1"));
+            Assert.Equal(0, world.Pipeline.Count("run"));
         }
     }
 
     [Fact]
+    public void ADiscardedCopyComesBeforeStartNotValidated()
+    {
+        using (var world = new RemodelWorld { StartValidated = false })
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Receive("remodel.discard_copy", "d1", new { run_dir = world.ExpectedRunDirectory });
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            Assert.Equal("CopyDiscarded", world.ErrorClass("s1"));
+        }
+    }
+
+    [Theory]
+    [InlineData("applying")]
+    [InlineData("saved")]
+    [InlineData("failed")]
+    public void AResumeRefusalComesBeforeStartNotValidated(string state)
+    {
+        using (var world = new RemodelWorld { StartValidated = false })
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.WritePlanState(state);
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            Assert.Equal("ResumeRefused", world.ErrorClass("s1"));
+        }
+    }
+
+    /// <summary>
+    /// And before everything about the plan's session and the seat (research R13.8, D2): a Start
+    /// this build can never honour says so first, so a plan the tool service re-attached under is
+    /// not sent back to be planned again only to meet this answer next.
+    /// </summary>
+    [Fact]
+    public void StartNotValidatedComesBeforeSessionLost()
+    {
+        using (var world = new RemodelWorld { StartValidated = false })
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Attachment = SecondAttachment;
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            Assert.Equal("StartNotValidated", world.ErrorClass("s1"));
+        }
+    }
+
+    [Theory]
+    [InlineData(RemodelAvailability.Unavailable)]
+    [InlineData(RemodelAvailability.Unknown)]
+    public void StartNotValidatedComesBeforeTheSeatCheck(RemodelAvailability availability)
+    {
+        using (var world = new RemodelWorld { StartValidated = false })
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.RemodelCapability = availability;
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            Assert.Equal("StartNotValidated", world.ErrorClass("s1"));
+        }
+    }
+
+    [Fact]
+    public void StartNotValidatedComesBeforeNotAttached()
+    {
+        using (var world = new RemodelWorld { StartValidated = false })
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Options.Pipeline = null;
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            Assert.Equal("StartNotValidated", world.ErrorClass("s1"));
+        }
+    }
+
+    /// <summary>
+    /// T172's words: Start is not switched on in this build yet, Plan and Discard work - named
+    /// by their buttons' labels, which the page tests read off the page - and nothing was
+    /// changed. No command, no path, no probe number and none of the build's plumbing.
+    /// </summary>
+    [Fact]
+    public void TheStartNotValidatedMessageIsPlainWordsAndNamesNoProbe()
+    {
+        Assert.Equal(
+            "Start is not switched on in this build yet, so this plan cannot be applied to the copy. "
+            + "Remodel a copy and Discard copy still work, and the plan stays in its run folder. "
+            + "Nothing was changed: not your part and not the copy.",
+            RemodelHost.StartNotValidatedMessage);
+
+        AssertPlainWords(RemodelHost.StartNotValidatedMessage);
+        Assert.DoesNotContain("probe", RemodelHost.StartNotValidatedMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.False(
+            RemodelHost.StartNotValidatedMessage.Any(char.IsDigit),
+            "the sentence names no probe number, nor any other number");
+    }
+
+    // ---- when a re-attach or an unload ends the session (T167's words) --------------------
+
+    private const string NothingPutBack =
+        "Not everything the plan changed in SOLIDWORKS could be put back. Your part was not changed.";
+
+    /// <summary>
+    /// Success is quiet: a teardown that put every setting back and closed the copy tells the
+    /// page nothing, and neither does one handed no list at all.
+    /// </summary>
+    [Fact]
+    public void ASessionThatEndedWithNothingLeftTellsThePageNothing()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            int before = world.Posted.Count;
+
+            world.Host.SessionEnded(new int[0], commandInProgressNotRestored: false, copyClosed: true);
+            world.Host.SessionEnded(null, commandInProgressNotRestored: false, copyClosed: true);
+
+            Assert.Equal(before, world.Posted.Count);
+            Assert.Null(RemodelHost.SessionEndedMessage(new int[0], false, true));
+            Assert.Null(RemodelHost.SessionEndedMessage(null, false, true));
+        }
+    }
+
+    /// <summary>
+    /// A teardown that left something posts exactly one `status {stage: "error"}`, in the host's
+    /// words, and nothing else.
+    /// </summary>
+    [Fact]
+    public void ASessionThatLeftSomethingPostsOneErrorStatusInTheHostsWords()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            int before = world.Posted.Count;
+            int[] left = { RemodelSystemToggles.ShowErrorsEveryRebuild };
+
+            world.Host.SessionEnded(left, commandInProgressNotRestored: true, copyClosed: false);
+
+            Assert.Equal(new[] { "status" }, world.TypesPostedSince(before));
+            JsonElement status = world.LastPosted("status");
+            Assert.Equal("error", status.GetProperty("stage").GetString());
+            Assert.Equal(
+                RemodelHost.SessionEndedMessage(left, true, false),
+                status.GetProperty("message").GetString());
+        }
+    }
+
+    [Fact]
+    public void OneSettingLeftIsNamedByItsToolsOptionsLabel()
+    {
+        Assert.Equal(
+            NothingPutBack + " The setting \"Show errors every rebuild\" in Tools > Options > System "
+            + "Options > General may still be as the plan left it: set it back the way you had it.",
+            RemodelHost.SessionEndedMessage(new[] { RemodelSystemToggles.ShowErrorsEveryRebuild }, false, true));
+    }
+
+    [Fact]
+    public void TwoSettingsLeftAreNamedTogether()
+    {
+        Assert.Equal(
+            NothingPutBack + " These settings in Tools > Options > System Options > General may still "
+            + "be as the plan left them: \"Input dimension value\" and \"Warn before saving documents "
+            + "with update errors\". Set them back the way you had them.",
+            RemodelHost.SessionEndedMessage(
+                new[] { RemodelSystemToggles.WarnSaveUpdateErrors, RemodelSystemToggles.InputDimValOnCreate },
+                false,
+                true));
+    }
+
+    /// <summary>
+    /// All three, named once each and in the order the run sets them, however they were handed
+    /// over - out of order, and one of them twice.
+    /// </summary>
+    [Fact]
+    public void EverySettingLeftIsNamedOnceInTheOrderTheRunSetsThem()
+    {
+        Assert.Equal(
+            NothingPutBack + " These settings in Tools > Options > System Options > General may still "
+            + "be as the plan left them: \"Input dimension value\", \"Show errors every rebuild\" and "
+            + "\"Warn before saving documents with update errors\". Set them back the way you had them.",
+            RemodelHost.SessionEndedMessage(
+                new[]
+                {
+                    RemodelSystemToggles.WarnSaveUpdateErrors,
+                    RemodelSystemToggles.ShowErrorsEveryRebuild,
+                    RemodelSystemToggles.InputDimValOnCreate,
+                    RemodelSystemToggles.ShowErrorsEveryRebuild,
+                },
+                false,
+                true));
+    }
+
+    /// <summary>`CommandInProgress` has no Tools > Options label; its words say what it does and how it clears.</summary>
+    [Fact]
+    public void TheCommandInProgressFlagLeftIsWordedByWhatItDoes()
+    {
+        Assert.Equal(
+            NothingPutBack + " SOLIDWORKS may keep some of its messages hidden until you restart it.",
+            RemodelHost.SessionEndedMessage(new int[0], true, true));
+    }
+
+    /// <summary>A copy the routine did not close may still be open: named by its suffix, never by its path.</summary>
+    [Fact]
+    public void ACopyThatWasNotClosedIsNamedBySuffixAndNeverByPath()
+    {
+        Assert.Equal(
+            NothingPutBack + " The copy may still be open in SOLIDWORKS (its name ends in -RMS): close "
+            + "it without saving.",
+            RemodelHost.SessionEndedMessage(new int[0], false, false));
+        Assert.Contains(RemodelCopy.CopySuffix, RemodelHost.SessionEndedMessage(new int[0], false, false));
+    }
+
+    /// <summary>
+    /// A value that is not one of the three toggles is still something left: it is worded as
+    /// another setting rather than dropped, alone or beside the ones that have labels.
+    /// </summary>
+    [Fact]
+    public void ASettingWithNoLabelIsStillSaidRatherThanDropped()
+    {
+        Assert.Equal(
+            NothingPutBack + " A setting the plan changed may not be as you had it.",
+            RemodelHost.SessionEndedMessage(new[] { 999 }, false, true));
+        Assert.Equal(
+            NothingPutBack + " The setting \"Input dimension value\" in Tools > Options > System Options "
+            + "> General may still be as the plan left it: set it back the way you had it. Another "
+            + "setting the plan changed may also not be as you had it.",
+            RemodelHost.SessionEndedMessage(new[] { 999, RemodelSystemToggles.InputDimValOnCreate, -1 }, false, true));
+    }
+
+    [Fact]
+    public void EverythingLeftAtOnceIsSaidInOneStatusInAFixedOrder()
+    {
+        Assert.Equal(
+            NothingPutBack + " These settings in Tools > Options > System Options > General may still "
+            + "be as the plan left them: \"Input dimension value\", \"Show errors every rebuild\" and "
+            + "\"Warn before saving documents with update errors\". Set them back the way you had them. "
+            + "Another setting the plan changed may also not be as you had it. SOLIDWORKS may keep "
+            + "some of its messages hidden until you restart it. The copy may still be open in "
+            + "SOLIDWORKS (its name ends in -RMS): close it without saving.",
+            RemodelHost.SessionEndedMessage(
+                RemodelSystemToggles.SuppressedToggles.Concat(new[] { 42 }), true, false));
+    }
+
+    /// <summary>
+    /// Every toggle the run changes has a label, so a fourth added to
+    /// <see cref="RemodelSystemToggles.SuppressedToggles"/> without one fails here rather than
+    /// being worded as "a setting".
+    /// </summary>
+    [Fact]
+    public void EveryToggleTheRunChangesHasALabel()
+    {
+        foreach (int toggle in RemodelSystemToggles.SuppressedToggles)
+        {
+            string message = RemodelHost.SessionEndedMessage(new[] { toggle }, false, true)!;
+            Assert.StartsWith(NothingPutBack + " The setting \"", message, StringComparison.Ordinal);
+            Assert.DoesNotContain("setting the plan changed", message, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// The labels are the ones the workstation test plan already asks the engineer to read on the
+    /// General page, so the two cannot name different settings. Whether 2024 SP5 spells them so is
+    /// a seat item (research R13.8, D8).
+    /// </summary>
+    [Fact]
+    public void TheLabelsAreTheOnesTheWorkstationTestPlanReads()
+    {
+        // Read with every run of white space as one space: a label can wrap across the plan's lines.
+        string plan = Regex.Replace(
+            File.ReadAllText(Path.Combine(
+                ErrorLabelsCoverTheHostTests.RepositoryRoot(), "docs", "workstation-test-plan-2026-09-23.md")),
+            @"\s+",
+            " ");
+        string message = RemodelHost.SessionEndedMessage(RemodelSystemToggles.SuppressedToggles, false, true)!;
+
+        foreach (string label in new[]
+                 {
+                     "Input dimension value", "Show errors every rebuild", "Warn before saving documents with update errors",
+                 })
+        {
+            Assert.Contains("\"" + label + "\"", message, StringComparison.Ordinal);
+            Assert.Contains("**" + label + "**", plan, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("Tools > Options > System Options", plan, StringComparison.Ordinal);
+    }
+
+    /// <summary>Every combination is plain words: no command, no path and none of the build's plumbing.</summary>
+    [Fact]
+    public void TheTeardownWordsArePlainWordsInEveryCombination()
+    {
+        int[][] toggleSets =
+        {
+            new int[0],
+            new[] { RemodelSystemToggles.InputDimValOnCreate },
+            RemodelSystemToggles.SuppressedToggles.ToArray(),
+            new[] { 7 },
+        };
+
+        int said = 0;
+        foreach (int[] toggles in toggleSets)
+        {
+            foreach (bool commandInProgress in new[] { false, true })
+            {
+                foreach (bool copyClosed in new[] { false, true })
+                {
+                    string? message = RemodelHost.SessionEndedMessage(toggles, commandInProgress, copyClosed);
+                    if (message == null)
+                    {
+                        Assert.True(toggles.Length == 0 && !commandInProgress && copyClosed);
+                        continue;
+                    }
+
+                    said++;
+                    Assert.StartsWith(NothingPutBack, message, StringComparison.Ordinal);
+                    AssertPlainWords(message);
+                }
+            }
+        }
+
+        Assert.Equal(15, said);
+    }
+
+    /// <summary>
+    /// Called from the tool service's teardown, so it never throws - not even when the page
+    /// cannot be told.
+    /// </summary>
+    [Fact]
+    public void SessionEndedNeverThrowsEvenWhenThePageCannotBeTold()
+    {
+        var host = new RemodelHost(new RemodelHostOptions(new ThrowingChannel(), () => "C:\\runs"));
+
+        host.SessionEnded(RemodelSystemToggles.SuppressedToggles, true, false);
+    }
+
+    // ---- the words rule ----------------------------------------------------------------------
+
+    /// <summary>The build's plumbing, which no sentence this tab shows the engineer may name (U13).</summary>
+    private static readonly string[] Plumbing =
+    {
+        "swreview-extract", "--", "tool service", "bridge", "pipe", "attach", "session",
+        "dispatcher", "remodel.", "\\", ".SLDPRT",
+    };
+
+    private static void AssertPlainWords(string message)
+    {
+        foreach (string word in Plumbing)
+        {
+            Assert.DoesNotContain(word, message, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    // ---- the world -----------------------------------------------------------------------
+
+    // ---- 004 T172: Start is switched off until the blocking probes pass ---------------------
+
+    /// <summary>
+    /// The pin: Start ships switched off, and the host as shipped is built with the one switch,
+    /// so the commit that sets it true - citing the capabilities ledger's verdicts for PROBE-1,
+    /// 2, 3, 4 and 12 - edits this case and `BridgeDispatcherTests`' in the same commit.
+    /// </summary>
+    [Fact]
     public void TheShippedHostIsBuiltWithTheShippedSwitch()
     {
+        Assert.False(RemodelStart.SeatValidated);
+
         var channel = new CollectingChannel(new List<string>());
         var shipped = new RemodelHost(new RemodelHostOptions(channel, () => Path.GetTempPath()));
         var off = new RemodelHost(new RemodelHostOptions(channel, () => Path.GetTempPath()), startValidated: false);
@@ -2771,64 +3344,6 @@ public sealed class RemodelHostTests
         Assert.Equal(RemodelStart.SeatValidated, shipped.StartValidated);
         Assert.False(off.StartValidated);
         Assert.True(on.StartValidated);
-    }
-
-    [Fact]
-    public void TheStartNotValidatedSentenceKeepsSessionLostsRules()
-    {
-        string sentence = RemodelHost.StartNotValidatedMessage;
-
-        Assert.Contains("Nothing was changed", sentence, StringComparison.Ordinal);
-        Assert.Contains("not switched on in this build", sentence, StringComparison.Ordinal);
-        Assert.DoesNotContain("remodel.", sentence, StringComparison.Ordinal);
-        Assert.DoesNotContain("PROBE", sentence, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotMatch(@"\d", sentence);
-        Assert.DoesNotContain("\\", sentence, StringComparison.Ordinal);
-        Assert.DoesNotContain("SeatValidated", sentence, StringComparison.Ordinal);
-    }
-
-    /// <summary>
-    /// In Start's order after `ResumeRefused` and before `SessionLost`: a run that can never be
-    /// resumed says so first, and a Start this build would refuse anyway is refused before the
-    /// engineer is sent to plan again for a lost session.
-    /// </summary>
-    [Fact]
-    public void TheSwitchIsRefusedAfterResumeRefusedAndBeforeSessionLost()
-    {
-        using (var world = new RemodelWorld { StartValidated = false })
-        {
-            world.Open();
-            world.Receive("remodel.plan", "p1", new { });
-
-            world.WritePlanState("applying");
-            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
-            Assert.Equal("ResumeRefused", world.ErrorClass("s1"));
-
-            world.WritePlanState("planned");
-            world.Attachment = SecondAttachment;
-            world.Receive("remodel.start", "s2", new { run_dir = world.ExpectedRunDirectory });
-            Assert.Equal("StartNotValidated", world.ErrorClass("s2"));
-
-            world.RemodelCapability = RemodelAvailability.Unavailable;
-            world.Receive("remodel.start", "s3", new { run_dir = world.ExpectedRunDirectory });
-            Assert.Equal("StartNotValidated", world.ErrorClass("s3"));
-        }
-    }
-
-    [Fact]
-    public void TheSwitchComesAfterRunNotFoundAndCopyDiscarded()
-    {
-        using (var world = new RemodelWorld { StartValidated = false })
-        {
-            world.Open();
-            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
-            Assert.Equal("RunNotFound", world.ErrorClass("s1"));
-
-            world.Receive("remodel.plan", "p1", new { });
-            world.Receive("remodel.discard_copy", "d1", new { run_dir = world.ExpectedRunDirectory });
-            world.Receive("remodel.start", "s2", new { run_dir = world.ExpectedRunDirectory });
-            Assert.Equal("CopyDiscarded", world.ErrorClass("s2"));
-        }
     }
 
     /// <summary>
@@ -3296,6 +3811,7 @@ public sealed class RemodelHostTests
     {
         private readonly string _root;
         private RemodelHost? _host;
+        private RemodelHostOptions? _options;
         private ToolServiceGate? _gate;
         private int _services;
 
@@ -3330,6 +3846,10 @@ public sealed class RemodelHostTests
         /// their host with it off, or with the shipped <see cref="RemodelStart.SeatValidated"/>.
         /// </summary>
         public bool StartValidated { get; set; } = true;
+
+        /// <summary>The options the host was built with, read by the host per message.</summary>
+        public RemodelHostOptions Options =>
+            _options ?? throw new InvalidOperationException("call Open() first");
 
         /// <summary>
         /// The tool-service attachment listening now, as `ToolServiceGate.Attachment` answers
@@ -3367,8 +3887,7 @@ public sealed class RemodelHostTests
 
         public void Open()
         {
-            _host = new RemodelHost(new RemodelHostOptions(
-                new CollectingChannel(Posted), () => RunRoot)
+            _options = new RemodelHostOptions(new CollectingChannel(Posted), () => RunRoot)
             {
                 Backend = () => Endpoint,
                 CurrentDocument = () => Document,
@@ -3390,8 +3909,8 @@ public sealed class RemodelHostTests
                 // nothing has to be waited for. The add-in's own scheduler runs the same body on
                 // a worker, which is what lets `remodel.stop` be delivered at all.
                 Schedule = work => work(),
-            },
-            StartValidated);
+            };
+            _host = new RemodelHost(_options, StartValidated);
         }
 
         public void Receive(string type, string id, object payload) =>
@@ -3599,6 +4118,13 @@ public sealed class RemodelHostTests
         }
     }
 
+    /// <summary>A page that is gone: every post throws.</summary>
+    private sealed class ThrowingChannel : IPageChannel
+    {
+        public void PostMessage(string json) =>
+            throw new InvalidOperationException("the Remodel page is gone");
+    }
+
     private sealed class CollectingChannel : IPageChannel
     {
         private static readonly IReadOnlyCollection<string> Stages =
@@ -3668,6 +4194,9 @@ public sealed class RemodelHostTests
         public Exception? ProbeFailure { get; set; }
 
         public Exception? CopyFailure { get; set; }
+
+        /// <summary>What <see cref="Plan"/> throws after the copy exists - the dump's, or the planner's.</summary>
+        public Exception? PlanFailure { get; set; }
 
         public Exception? RunFailure { get; set; }
 
@@ -3755,6 +4284,11 @@ public sealed class RemodelHostTests
         {
             Calls.Add("plan");
             DuringPlan?.Invoke();
+            if (PlanFailure != null)
+            {
+                throw PlanFailure;
+            }
+
             reporter.Status("dumping", "Reading the copy's feature tree...");
             File.WriteAllText(
                 Path.Combine(runDirectory, "plan.json"),

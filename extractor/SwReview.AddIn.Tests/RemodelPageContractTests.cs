@@ -9,6 +9,7 @@ using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 using SwReview.AddIn.Remodel;
+using SwReview.Extractor.Rms;
 using Xunit;
 
 namespace SwReview.AddIn.Tests;
@@ -701,17 +702,54 @@ public sealed class RemodelPageContractTests
         Assert.Contains("press " + label + " to plan again", RemodelHost.SessionLostMessage, StringComparison.Ordinal);
     }
 
+    // ---- the seat adapter's sentences, over the real transport (004 lane E) -------------------
+
+    /// <summary>The two refusals a plan meets once the seat adapter is in: T158's and T159's.</summary>
+    public static IEnumerable<object[]> PlanRefusalsOfTheSeatAdapter() => new[]
+    {
+        new object[] { "BridgeUnavailable", RemodelHost.RunNotBoundMessage },
+        new object[] { "CopyNotActive", RemodelHost.CopyNotActiveBeforePlanMessage },
+    };
+
     /// <summary>
-    /// 004 T172 over the real transport: a Start refused because Start is switched off in this
-    /// build prints the host's sentence verbatim in the banner - the page has no words file - and
-    /// leaves Remodel a copy pressable, since Plan still runs.
+    /// A refused plan prints the host's sentence verbatim in the banner - the page has no words
+    /// file and invents none - and leaves Remodel a copy pressable, the way back each names.
     /// </summary>
-    [Fact]
-    public void AStartRefusedBecauseStartIsSwitchedOffPrintsTheHostsSentenceVerbatim()
+    [Theory]
+    [MemberData(nameof(PlanRefusalsOfTheSeatAdapter))]
+    public void APlanRefusalOfTheSeatAdapterPrintsTheHostsSentenceVerbatim(string errorClass, string message)
     {
         HostStub? stub = null;
         string? banner = null;
         bool planDisabled = true;
+
+        OffscreenReviewPage.WithPage(
+            RemodelPageFiles.PageUrl,
+            page => { stub = new HostStub(page) { PlanRefusal = (errorClass, message) }; },
+            async page =>
+            {
+                await Settled(page);
+                await Click(page, "plan-run");
+                banner = await Banner(page);
+                planDisabled = await Disabled(page, "plan-run");
+            });
+
+        Assert.Equal(message, banner);
+        Assert.False(planDisabled);
+        Assert.Equal(1, stub!.Plans);
+    }
+
+    /// <summary>
+    /// T172 over the real transport: a Start this build has switched off prints the host's
+    /// sentence verbatim, no run begins, and the two buttons the sentence says still work -
+    /// Remodel a copy and Discard copy - are pressable.
+    /// </summary>
+    [Fact]
+    public void AStartTheBuildHasSwitchedOffPrintsTheHostsSentenceVerbatimAndLeavesPlanAndDiscardOpen()
+    {
+        HostStub? stub = null;
+        string? banner = null;
+        var disabled = new Dictionary<string, bool>(StringComparer.Ordinal);
 
         OffscreenReviewPage.WithPage(
             RemodelPageFiles.PageUrl,
@@ -725,30 +763,75 @@ public sealed class RemodelPageContractTests
                 await Settled(page);
                 await Click(page, "plan-run");
                 await Click(page, "start-run");
-
                 banner = await Banner(page);
-                planDisabled = await Disabled(page, "plan-run");
+                foreach (string id in new[] { "plan-run", "start-run", "stop-run", "discard-copy" })
+                {
+                    disabled[id] = await Disabled(page, id);
+                }
             });
 
         Assert.Equal(RemodelHost.StartNotValidatedMessage, banner);
-        Assert.False(planDisabled);
+        Assert.False(disabled["plan-run"]);
+        Assert.False(disabled["discard-copy"]);
+        Assert.True(disabled["stop-run"]);
+        Assert.False(disabled["start-run"]);
         Assert.Equal(1, stub!.Starts);
     }
 
     /// <summary>
-    /// The switch's sentence names the two buttons that still work by the labels the page gives
-    /// them, read from the page rather than restated, so the two cannot drift.
+    /// The two error statuses of this landing: T167's teardown failure, and T159's refusal after
+    /// the changes. Each is printed verbatim in the banner.
+    /// </summary>
+    public static IEnumerable<object[]> ErrorStatusesOfTheSeatAdapter() => new[]
+    {
+        new object[] { RemodelHost.SessionEndedMessage(RemodelSystemToggles.SuppressedToggles, true, false)! },
+        new object[] { RemodelHost.CopyNotActiveAfterChangesMessage },
+    };
+
+    [Theory]
+    [MemberData(nameof(ErrorStatusesOfTheSeatAdapter))]
+    public void AnErrorStatusOfTheSeatAdapterPrintsTheHostsSentenceVerbatim(string message)
+    {
+        HostStub? stub = null;
+        string? banner = null;
+
+        OffscreenReviewPage.WithPage(
+            RemodelPageFiles.PageUrl,
+            page => { stub = new HostStub(page); },
+            async page =>
+            {
+                await Settled(page);
+                stub!.Post("status", new { stage = "error", message });
+                await Settled(page);
+                banner = await Banner(page);
+            });
+
+        Assert.Equal(message, banner);
+    }
+
+    /// <summary>
+    /// Each sentence that names a button names it by the label the page gives it, read from the
+    /// page itself rather than restated, so the two cannot drift.
     /// </summary>
     [Fact]
-    public void TheStartNotValidatedMessageNamesTheButtonsThatStillWorkByTheirLabels()
+    public void TheSeatAdapterSentencesNameTheButtonsByTheirLabels()
     {
-        string html = RemodelPageFiles.Read("index.html");
-        foreach (string id in new[] { "plan-run", "discard-copy" })
-        {
-            Match button = Regex.Match(html, @"<button[^>]*\bid=""" + id + @"""[^>]*>([^<]+)</button>");
-            Assert.True(button.Success, "index.html has no " + id + " button");
-            Assert.Contains(button.Groups[1].Value.Trim(), RemodelHost.StartNotValidatedMessage, StringComparison.Ordinal);
-        }
+        string plan = ButtonLabel("plan-run");
+        string discard = ButtonLabel("discard-copy");
+
+        Assert.Contains(plan + " and " + discard + " still work", RemodelHost.StartNotValidatedMessage, StringComparison.Ordinal);
+        Assert.Contains("press " + plan + " again.", RemodelHost.RunNotBoundMessage, StringComparison.Ordinal);
+        Assert.Contains("Press " + plan + " to plan again.", RemodelHost.CopyNotActiveBeforePlanMessage, StringComparison.Ordinal);
+    }
+
+    /// <summary>The text of the button <paramref name="id"/> names in `index.html`.</summary>
+    private static string ButtonLabel(string id)
+    {
+        Match button = Regex.Match(
+            RemodelPageFiles.Read("index.html"),
+            @"<button[^>]*\bid=""" + Regex.Escape(id) + @"""[^>]*>([^<]+)</button>");
+        Assert.True(button.Success, "index.html has no " + id + " button");
+        return button.Groups[1].Value.Trim();
     }
 
     /// <summary>
@@ -758,12 +841,8 @@ public sealed class RemodelPageContractTests
     [Fact]
     public void ThePlanClosedAndCopyRefusalSentencesNameTheirButtonsByTheirLabels()
     {
-        string html = RemodelPageFiles.Read("index.html");
-        string Label(string id) =>
-            Regex.Match(html, @"<button[^>]*\bid=""" + id + @"""[^>]*>([^<]+)</button>").Groups[1].Value.Trim();
-
-        Assert.Contains("press " + Label("plan-again"), RemodelHost.PlanClosedMessage, StringComparison.Ordinal);
-        Assert.Contains("press " + Label("plan-run"), RemodelHost.SourceIsRemodelCopyMessage, StringComparison.Ordinal);
+        Assert.Contains("press " + ButtonLabel("plan-again"), RemodelHost.PlanClosedMessage, StringComparison.Ordinal);
+        Assert.Contains("press " + ButtonLabel("plan-run"), RemodelHost.SourceIsRemodelCopyMessage, StringComparison.Ordinal);
     }
 
     /// <summary>
