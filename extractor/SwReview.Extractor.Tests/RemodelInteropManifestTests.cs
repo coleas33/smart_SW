@@ -376,12 +376,33 @@ public class RemodelInteropManifestTests
     /// interop assemblies is not a redist folder, so the test is skipped with its reason rather
     /// than passing on a machine that checked nothing. Exercised here because the machine this
     /// runs on has a seat, so the skip path is never taken by the test itself.
+    ///
+    /// The folders are the test's own. The test host's folder used to stand in for "neither", but
+    /// it holds a copy of both interops since the test project references them with
+    /// <c>Private=true</c> (004 build order, lane A), so it is now a redist folder by this rule.
     /// </summary>
     [Fact]
     public void TheInteropLocatorAnswersNothingWhenNoCandidateHoldsBothAssemblies()
     {
         Assert.Null(InstalledInterop.RedistDirectoryIn(new string?[] { null, string.Empty }));
-        Assert.Null(InstalledInterop.RedistDirectoryIn(new[] { AppContext.BaseDirectory }));
+
+        string neither = Path.Combine(Path.GetTempPath(), "swreview-locator-neither-" + Guid.NewGuid().ToString("N"));
+        string onlyOne = Path.Combine(Path.GetTempPath(), "swreview-locator-one-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(neither);
+        Directory.CreateDirectory(onlyOne);
+        try
+        {
+            File.WriteAllText(Path.Combine(onlyOne, "SolidWorks.Interop.sldworks.dll"), string.Empty);
+
+            Assert.Null(InstalledInterop.RedistDirectoryIn(new[] { neither }));
+            Assert.Null(InstalledInterop.RedistDirectoryIn(new[] { onlyOne }));
+            Assert.Null(InstalledInterop.RedistDirectoryIn(new[] { neither, onlyOne }));
+        }
+        finally
+        {
+            Directory.Delete(neither, recursive: true);
+            Directory.Delete(onlyOne, recursive: true);
+        }
     }
 
     // =====================================================================================

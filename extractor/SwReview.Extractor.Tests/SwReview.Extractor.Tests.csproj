@@ -29,6 +29,29 @@
   </ItemGroup>
 
   <!--
+    004 build order, lane A (default taken 2026-09-27, the owner may revise): the shared
+    SwEquationManager and SwMassProperty take an IEquationMgr and an IMassProperty2, so the test
+    that checks each of their members calls exactly its one interop member has to name those
+    types, and the one that reads their shape has to load them. The same arrangement, and the
+    same reason for Private=true where SwReview.Extractor.csproj sets it false, as
+    SwReview.AddIn.Tests.csproj: the product must not ship a copy of the seat's interops, but
+    the test host has to be able to load them. No new build requirement: SwReview.Extractor
+    cannot compile without them either. Nothing here starts SOLIDWORKS.
+  -->
+  <ItemGroup>
+    <Reference Include="SolidWorks.Interop.sldworks">
+      <HintPath>$(SwRedist)\SolidWorks.Interop.sldworks.dll</HintPath>
+      <EmbedInteropTypes>false</EmbedInteropTypes>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="SolidWorks.Interop.swconst">
+      <HintPath>$(SwRedist)\SolidWorks.Interop.swconst.dll</HintPath>
+      <EmbedInteropTypes>false</EmbedInteropTypes>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!--
     The IR contract is the single source of truth (specs/.../contracts/ir.schema.json).
     It is copied, not duplicated, so a schema change breaks this test immediately (T105).
   -->

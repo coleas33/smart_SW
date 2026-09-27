@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using SolidWorks.Interop.sldworks;
 using SolidWorks.Interop.swconst;
 using SwReview.Extractor.Sw;
@@ -318,7 +317,7 @@ public sealed class SwRemodelProbeHost : IRemodelProbeHost, IRemodelToggleHost
             throw new InvalidOperationException("GetEquationMgr returned nothing for the throwaway part.");
         }
 
-        return new SwEquationTarget(_gate, manager);
+        return GatedEquations(manager);
     }
 
     /// <inheritdoc />
@@ -457,7 +456,7 @@ public sealed class SwRemodelProbeHost : IRemodelProbeHost, IRemodelToggleHost
             throw new InvalidOperationException("GetEquationMgr returned nothing for PROBE-21's blank part.");
         }
 
-        return _gate.Call(Member.EquationGetCount, () => manager.GetCount());
+        return GatedEquations(manager).GetCount();
     }
 
     /// <inheritdoc />
@@ -561,7 +560,7 @@ public sealed class SwRemodelProbeHost : IRemodelProbeHost, IRemodelToggleHost
             return null;
         }
 
-        var reading = new SwMassPropertyReading(_gate, massProperty);
+        var reading = new GatedMassPropertyReading(_gate, new SwMassProperty(massProperty));
         reading.SetSelectedItems(new object[] { body });
         return reading;
     }
@@ -740,14 +739,24 @@ public sealed class SwRemodelProbeHost : IRemodelProbeHost, IRemodelToggleHost
                 "GetEquationMgr returned nothing; the recipe's equation step could not run.");
         }
 
-        _gate.Call(Member.AddEquation, () => manager.Add3(
-            -1, step.EquationText, true, (int)swInConfigurationOpts_e.swAllConfiguration, null));
+        // RemodelProbeFeatureStep refuses an equation step with no text, so it is never null here.
+        GatedEquations(manager).Add3(
+            -1, step.EquationText!, true, (int)swInConfigurationOpts_e.swAllConfiguration, null);
 
         // Equations are not IFeature: nothing is added to the feature tree, so the recipe's
         // per-step rename and rebuild both no-op harmlessly for this step (RemodelProbeFeatureStep
         // still names it "w" for the ledger and for a probe body that reads the equation back).
         return manager;
     }
+
+    /// <summary>
+    /// <paramref name="manager"/> as the probe addresses it: the shared, ungated
+    /// <see cref="SwEquationManager"/> inside this host's gate, each call gated once under its bare
+    /// key (<see cref="GatedEquationTarget"/>; feature 004, T153's amendment). The interop mapping
+    /// is written once, there, so no equation member is gated here directly.
+    /// </summary>
+    private IEquationTarget GatedEquations(IEquationMgr manager) =>
+        new GatedEquationTarget(_gate, new SwEquationManager(manager));
 
     /// <summary>The most recently added feature: <c>FirstFeature</c> walked to its end.</summary>
     private object LastFeature(IModelDoc2 document)
@@ -954,120 +963,5 @@ public sealed class SwRemodelProbeHost : IRemodelProbeHost, IRemodelToggleHost
         }
 
         return "unknown:" + (first?.GetType().Name ?? "null");
-    }
-}
-
-/// <summary>
-/// <see cref="IEquationTarget"/> over a real <c>IEquationMgr</c> (PROBE-2, 6, 7 and 21). Every
-/// member routes through the same gate every other interop call on this host does.
-/// </summary>
-internal sealed class SwEquationTarget : IEquationTarget
-{
-    private readonly SwGate _gate;
-    private readonly IEquationMgr _manager;
-
-    public SwEquationTarget(SwGate gate, IEquationMgr manager)
-    {
-        _gate = gate ?? throw new ArgumentNullException(nameof(gate));
-        _manager = manager ?? throw new ArgumentNullException(nameof(manager));
-    }
-
-    public int GetCount() => _gate.Call(SwRemodelProbeHost.Member.EquationGetCount, () => _manager.GetCount());
-
-    public string? GetEquation(int index) =>
-        _gate.Call(SwRemodelProbeHost.Member.EquationGetEquationText, () => _manager.get_Equation(index));
-
-    public int Add3(int index, string equation, bool solve, int whichConfigurations, string[]? configNames) =>
-        _gate.Call(
-            SwRemodelProbeHost.Member.AddEquation,
-            () => _manager.Add3(index, equation, solve, whichConfigurations, configNames));
-
-    public int Add2(int index, string equation, bool solve) =>
-        _gate.Call(SwRemodelProbeHost.Member.EquationAdd2, () => _manager.Add2(index, equation, solve));
-
-    public void SetEquation(int index, string equation) =>
-        _gate.Call(SwRemodelProbeHost.Member.EquationSetEquation, () => _manager.set_Equation(index, equation));
-
-    public int SetEquationAndConfigurationOption(
-        int index, string equation, int whichConfigurations, string[]? configNames) =>
-        _gate.Call(
-            SwRemodelProbeHost.Member.EquationSetEquationAndConfigurationOption,
-            () => _manager.SetEquationAndConfigurationOption(index, equation, whichConfigurations, configNames));
-
-    public int Delete(int index) =>
-        _gate.Call(SwRemodelProbeHost.Member.EquationDelete, () => _manager.Delete(index));
-}
-
-/// <summary>
-/// <see cref="IMassPropertyReading"/> over a real <c>IMassProperty2</c> (PROBE-8). The same
-/// typed interface <c>RemodelGeometry.Read</c> addresses the stage-1 gate's mass property
-/// through - PROBE-8 measures with the identical member sequence, not a probe-only shortcut.
-/// </summary>
-internal sealed class SwMassPropertyReading : IMassPropertyReading
-{
-    private readonly SwGate _gate;
-    private readonly IMassProperty2 _massProperty;
-
-    public SwMassPropertyReading(SwGate gate, IMassProperty2 massProperty)
-    {
-        _gate = gate ?? throw new ArgumentNullException(nameof(gate));
-        _massProperty = massProperty ?? throw new ArgumentNullException(nameof(massProperty));
-    }
-
-    public void SetAccuracyLevel(int accuracyLevel) =>
-        _gate.Call(SwRemodelProbeHost.Member.MassPropertySetAccuracyLevel, () => _massProperty.AccuracyLevel = accuracyLevel);
-
-    public void SetSelectedItems(IReadOnlyList<object> bodies) =>
-        _gate.Call(
-            SwRemodelProbeHost.Member.MassPropertySetSelectedItems,
-            () => _massProperty.SelectedItems = bodies.ToArray());
-
-    public void SetUseSystemUnits(bool useSystemUnits) =>
-        _gate.Call(SwRemodelProbeHost.Member.MassPropertySetUseSystemUnits, () => _massProperty.UseSystemUnits = useSystemUnits);
-
-    public bool Recalculate() =>
-        _gate.Call(SwRemodelProbeHost.Member.MassPropertyRecalculate, () => _massProperty.Recalculate());
-
-    public double GetVolume() => _gate.Call(SwRemodelProbeHost.Member.MassPropertyGetVolume, () => _massProperty.Volume);
-
-    public double GetSurfaceArea() =>
-        _gate.Call(SwRemodelProbeHost.Member.MassPropertyGetSurfaceArea, () => _massProperty.SurfaceArea);
-
-    public IReadOnlyList<double>? GetCenterOfMass() =>
-        ToDoubleArray(_gate.Call(SwRemodelProbeHost.Member.MassPropertyGetCenterOfMass, () => _massProperty.CenterOfMass));
-
-    public IReadOnlyList<double>? GetPrincipalMomentsOfInertia() =>
-        ToDoubleArray(_gate.Call(
-            SwRemodelProbeHost.Member.MassPropertyGetPrincipalMoments, () => _massProperty.PrincipalMomentsOfInertia));
-
-    public double GetMass() => _gate.Call(SwRemodelProbeHost.Member.MassPropertyGetMass, () => _massProperty.Mass);
-
-    public double GetDensity() => _gate.Call(SwRemodelProbeHost.Member.MassPropertyGetDensity, () => _massProperty.Density);
-
-    /// <summary>
-    /// The raw <c>object</c> a mass property getter answers with, marshalled as a SAFEARRAY of
-    /// doubles - or, depending on the interop build, a plain <c>double[]</c> already. Anything
-    /// else, or the wrong length, is unreadable rather than guessed (the same reasoning
-    /// <c>SwRemodelProbeHost.FirstElement</c> already applies to <c>GetWhatsWrong</c>'s arrays).
-    /// </summary>
-    private static IReadOnlyList<double>? ToDoubleArray(object? value)
-    {
-        if (value is double[] doubles)
-        {
-            return doubles;
-        }
-
-        if (value is Array array)
-        {
-            var converted = new double[array.Length];
-            for (int i = 0; i < array.Length; i++)
-            {
-                converted[i] = Convert.ToDouble(array.GetValue(i));
-            }
-
-            return converted;
-        }
-
-        return null;
     }
 }
