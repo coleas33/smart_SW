@@ -23,8 +23,8 @@ namespace SwReview.AddIn.Tests;
 ///
 /// Feature 013 T053 moved the findings into groups (contracts/grouped-list.md section 5): the scan
 /// no longer looks for Start here, a card's title is checked wherever the card stands, and the
-/// group headings and the rows' titles are checked against the fixture's own groups once 013 T056
-/// has regenerated it with them (<see cref="ReviewFixture.WaitsForT056"/>).
+/// group headings and the rows' titles are checked against the fixture's own groups, which 013 T056
+/// regenerated it with.
 /// </summary>
 public sealed class ReviewPageDefaultViewScanTests
 {
@@ -120,7 +120,7 @@ public sealed class ReviewPageDefaultViewScanTests
     /// Every grouped row holds the fixture's row title verbatim, in the fixture's order, and every
     /// group heading is the fixture's title and words (contracts/grouped-list.md section 3).
     /// </summary>
-    [Fact(Skip = ReviewFixture.WaitsForT056)]
+    [Fact]
     public void EveryRowTitleAndGroupHeadingIsTheBackendsStringVerbatim()
     {
         JsonElement read = Titles.Value;
@@ -141,7 +141,7 @@ public sealed class ReviewPageDefaultViewScanTests
     /// The default view shows the group headings and the one-line rows of every open group -
     /// words, with no check id and no raw token among them (the scans above read the same text).
     /// </summary>
-    [Fact(Skip = ReviewFixture.WaitsForT056)]
+    [Fact]
     public void TheDefaultViewShowsTheGroupHeadingsAndTheRowsOfEveryOpenGroup()
     {
         string text = Visible.Value;
