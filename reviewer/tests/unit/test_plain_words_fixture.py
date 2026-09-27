@@ -25,12 +25,13 @@ import pytest
 from swreview.findings import FindingStatus
 from swreview.ir.loader import load_package
 from swreview.ir.models import EvidencePackage
-from swreview.report.attention import rank
+from swreview.report.attention import load_policy, rank
+from swreview.report.finding_groups import FindingsByType, findings_by_type
 from swreview.report.markdown import render_report
 from swreview.report.names import COMPONENT_ID, component_names
 from swreview.report.session import CoverageBucket, ReviewSession, load_session
 from swreview.report.snapshot import review_snapshot
-from swreview.report.summary import ReviewSummary, review_summary
+from swreview.report.summary import ReviewSummary, load_words, review_summary
 from swreview.report.titles import TITLE_LENGTH, title_from
 from swreview.report.unexamined import not_examined
 from tests.unit.test_review_summary import BIG_ASSEMBLY
@@ -51,20 +52,37 @@ def package() -> EvidencePackage:
 
 
 @pytest.fixture(scope="module")
-def summary(session: ReviewSession, package: EvidencePackage) -> ReviewSummary:
-    return review_summary(rank(session), session, package)
+def groups(session: ReviewSession, package: EvidencePackage) -> FindingsByType:
+    return findings_by_type(session, package, load_words(), load_policy())
+
+
+@pytest.fixture(scope="module")
+def summary(
+    session: ReviewSession, package: EvidencePackage, groups: FindingsByType
+) -> ReviewSummary:
+    return review_summary(groups, session, package)
 
 
 def test_the_raw_tokens_scanned_for_are_the_underscore_joined_ones() -> None:
     assert RAW_TOKENS == ("checked_within_scope", "out_of_scope")
 
 
-def summary_lines(summary: ReviewSummary, headline: str | None) -> list[str]:
-    lines = [summary.headline]
+def summary_lines(
+    summary: ReviewSummary, groups: FindingsByType, headline: str | None
+) -> list[str]:
+    """Every line the Review tab prints first: the summary block, then the grouped list's
+    headings, count lines, row words and goal lines (feature 013)."""
+    lines = [summary.headline, summary.tally.text]
     for group in summary.groups:
-        lines += [group.label, group.text, *(goal.title for goal in group.by_goal)]
-    for goal in summary.goals:
-        lines += [goal.title, goal.state_label, *([goal.reason] if goal.reason else [])]
+        lines += [group.label, group.text]
+    if summary.not_reached is not None:
+        lines.append(summary.not_reached.text)
+    for type_group in groups.groups:
+        lines += [type_group.title, type_group.text]
+        for row in type_group.rows:
+            lines += [text for text in (row.tail_text, row.reach_text) if text]
+        for goal in type_group.goals:
+            lines += [goal.title, goal.state_label, *([goal.reason] if goal.reason else [])]
     lines += [text for text in (summary.questions.text, headline) if text]
     if summary.not_loaded is not None:
         lines.append(summary.not_loaded.text)
@@ -72,7 +90,10 @@ def summary_lines(summary: ReviewSummary, headline: str | None) -> list[str]:
 
 
 def test_no_summary_line_holds_a_check_id_or_a_raw_token(
-    session: ReviewSession, package: EvidencePackage, summary: ReviewSummary
+    session: ReviewSession,
+    package: EvidencePackage,
+    summary: ReviewSummary,
+    groups: FindingsByType,
 ) -> None:
     block = not_examined(package)
     assert block is not None
@@ -81,7 +102,7 @@ def test_no_summary_line_holds_a_check_id_or_a_raw_token(
         for bucket in get_args(CoverageBucket)
         for item in getattr(session.coverage, bucket)
     }
-    lines = summary_lines(summary, block.headline)
+    lines = summary_lines(summary, groups, block.headline)
 
     offending = [
         (line, token)
@@ -126,6 +147,11 @@ def test_no_title_the_engineer_reads_names_a_named_part_by_its_id_or_is_cut(
     titles = [
         *(finding["title"] for finding in snapshot["findings"]),
         *(row["title"] for row in snapshot["ranking"]["rows"] if "family" not in row),
+        *(
+            row["title"]
+            for group in snapshot["ranking"]["groups"]["groups"]
+            for row in group["rows"]
+        ),
         *headings,
     ]
 

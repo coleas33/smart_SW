@@ -90,19 +90,20 @@ __all__ = [
     "DrawingsLine",
     "EntityName",
     "Goal",
-    "GoalCount",
     "GoalLine",
     "Labels",
-    "ModellingPractice",
     "NotLoaded",
+    "NotReached",
     "QuestionList",
     "QuestionView",
     "ReviewRanking",
     "ReviewSummary",
     "SummaryGroup",
+    "Tally",
     "Words",
     "contacts_of",
     "drawings_of",
+    "goal_lines",
     "goal_of",
     "load_words",
     "review_ranking",
@@ -140,13 +141,20 @@ class HeadlineWords(ReviewModel):
     findings_many: str
     issues_one: str
     issues_many: str
+    checked: str
 
-    def of(self, findings: int, issues: int) -> str:
-        if findings == 0:
-            return self.none
-        head = self.findings_one if findings == 1 else self.findings_many.format(n=findings)
-        tail = self.issues_one if issues == 1 else self.issues_many.format(n=issues)
-        return f"{head} {tail}"
+    def of(self, findings: int, issues: int, checked: int, separator: str) -> str:
+        """"{n} findings in {m} issues · {k} checked, no issue" (feature 013): `findings` the
+        ones in issues, `checked` the passes; each part only when it counts something, and
+        the `none` sentence when neither does."""
+        parts: list[str] = []
+        if findings:
+            head = self.findings_one if findings == 1 else self.findings_many.format(n=findings)
+            tail = self.issues_one if issues == 1 else self.issues_many.format(n=issues)
+            parts.append(f"{head} {tail}")
+        if checked:
+            parts.append(self.checked.format(n=checked))
+        return separator.join(parts) if parts else self.none
 
 
 class CountWords(ReviewModel):
@@ -199,6 +207,12 @@ class DrawingsWords(ReviewModel):
         return DRAWINGS_SEPARATOR.join(parts)
 
 
+class TallyWords(ReviewModel):
+    """The tally's one line (feature 013): each owner group's label and count, then Decided."""
+
+    item: str
+
+
 class ResumeWords(ReviewModel):
     with_tokens: str
     without: str
@@ -233,6 +247,8 @@ class Words(ReviewModel):
     headline: HeadlineWords
     separator: str
     groups: dict[GroupKind, GroupWords]
+    tally: TallyWords
+    not_reached: str
     questions: CountWords
     not_loaded: NotLoadedWords
     drawings: DrawingsWords
@@ -275,18 +291,24 @@ def load_words() -> Words:
 # --- the summary's shapes (data-model section 2) ----------------------------------------------
 
 
-class GoalCount(ReviewModel):
-    goal: str
-    title: str
-    count: int
-
-
 class SummaryGroup(ReviewModel):
     kind: GroupKind
     label: str
     count: int
     text: str
-    by_goal: list[GoalCount]
+
+
+class Tally(ReviewModel):
+    """"Decide {a} · Fix {b} · Verify {c}", then " · Decided {d}" when any (feature 013)."""
+
+    text: str
+
+
+class NotReached(ReviewModel):
+    """The goals not reached, by title in goal order, and the one line that names them."""
+
+    titles: list[str]
+    text: str
 
 
 class EntityName(ReviewModel):
@@ -328,13 +350,6 @@ class DrawingsLine(ReviewModel):
     text: str
 
 
-class ModellingPractice(ReviewModel):
-    title: str
-    findings: int
-    rules: int
-    finding_ids: list[str]
-
-
 class ContactView(ReviewModel):
     id: str
     component_ids: list[str]
@@ -358,11 +373,11 @@ class ReviewSummary(ReviewModel):
     findings: int
     issues: int
     groups: list[SummaryGroup]
-    modelling_practice: ModellingPractice | None
+    tally: Tally
     questions: QuestionList
     not_loaded: NotLoaded | None
     drawings: DrawingsLine | None
-    goals: list[GoalLine]
+    not_reached: NotReached | None
     contacts: ContactList | None
     component_names: dict[str, str]
     resume_input_tokens: int | None
@@ -410,44 +425,44 @@ def review_ranking(
     policy = load_policy()
     ranking = with_display_titles(rank(session, policy), session.findings, names)
     groups = findings_by_type(session, package, load_words(), policy)
-    return ReviewRanking.of(
-        ranking, review_summary(ranking, session, package, usage=usage), groups
-    )
+    return ReviewRanking.of(ranking, review_summary(groups, session, package, usage=usage), groups)
 
 
 def review_summary(
-    ranking: Ranking,
+    groups: FindingsByType,
     session: ReviewSession,
     package: EvidencePackage | None,
     *,
     usage: UsageLedger | None = None,
 ) -> ReviewSummary:
-    """The summary of one review (contracts/review-summary.md sections 2 to 4).
+    """The summary of one review (contracts/review-summary.md sections 2 to 4, as feature 013
+    amended them).
 
-    `package` is `None` when there is none to read; the names, the parts not loaded, the
-    drawings line and the "about" names are then empty. `usage` is the live run's ledger, and
-    the resume cost is unknown without one (the disk route passes none).
+    `groups` is the session's findings by type (`report/finding_groups.findings_by_type`), whose
+    rows are the issues the headline counts and whose fold holds the passes it counts as
+    checked. `package` is `None` when there is none to read; the names, the parts not loaded,
+    the drawings line and the "about" names are then empty. `usage` is the live run's ledger,
+    and the resume cost is unknown without one (the disk route passes none).
     """
     words = load_words()
     names = _non_blank(all_component_names(package)) if package is not None else {}
     tokens = usage.last_conversation_input() if usage is not None else None
-    practice = _modelling_practice(ranking)
-    folded = set() if practice is None else set(practice.finding_ids)
+    checked = groups.checked.findings if groups.checked is not None else 0
+    issues = sum(len(group.rows) for group in groups.groups)
+    summary_groups = _groups(session.findings, words, load_policy())
     return ReviewSummary(
         version=words.version,
-        headline=words.headline.of(len(session.findings), len(ranking.rows)),
-        findings=len(session.findings),
-        issues=len(ranking.rows),
-        groups=_groups(
-            (finding for finding in session.findings if finding.id not in folded),
-            words,
-            load_policy(),
+        headline=words.headline.of(
+            len(session.findings) - checked, issues, checked, words.separator
         ),
-        modelling_practice=practice,
+        findings=len(session.findings),
+        issues=issues,
+        groups=summary_groups,
+        tally=_tally(summary_groups, words),
         questions=_questions(session.evidence_requests, words, names, package),
         not_loaded=_not_loaded(package, words),
         drawings=drawings_of(package),
-        goals=goal_lines(session, words),
+        not_reached=_not_reached(goal_lines(session, words), words),
         contacts=contacts_of(session, names),
         component_names=names,
         resume_input_tokens=tokens,
@@ -487,28 +502,7 @@ def _non_blank(names: Mapping[str, str]) -> dict[str, str]:
     return {component: name for component, name in names.items() if name.strip()}
 
 
-# --- the folded family and the groups ---------------------------------------------------------
-
-
-def _modelling_practice(ranking: Ranking) -> ModellingPractice | None:
-    """The folded family's one line, from its ranking row (feature 008), or `None`.
-
-    The row is the first whose `family` is set, in rank order. The contract names one such
-    row - the review folds `rms` alone - and a second family, which no build writes, is
-    left to the groups rather than refused: its findings are counted there as if unfolded,
-    so the partition holds and no finding leaves the summary.
-    """
-    row = next((row for row in ranking.rows if row.family is not None), None)
-    if row is None:
-        return None
-    return ModellingPractice(
-        title=row.title,
-        findings=len(row.member_finding_ids),
-        # `attention._family_row` sets it on every family row; `rules` is an `int`, so a row
-        # without one is refused by the model rather than given a guessed count.
-        rules=row.rule_count,  # type: ignore[arg-type]
-        finding_ids=list(row.member_finding_ids),
-    )
+# --- the groups, the tally and the goals not reached --------------------------------------------
 
 
 def _group_of(finding: Finding, policy: Policy) -> GroupKind:
@@ -537,24 +531,35 @@ def _groups(findings: Iterable[Finding], words: Words, policy: Policy) -> list[S
             label=words.groups[kind].label,
             count=len(members[kind]),
             text=words.groups[kind].of(len(members[kind])),
-            by_goal=_by_goal(members[kind], words.goals),
         )
         for kind in kinds
     ]
 
 
-def _by_goal(findings: Sequence[Finding], goals: Sequence[Goal]) -> list[GoalCount]:
-    """The goals with a non-zero count among `findings`, in goal-table order."""
-    counts = {goal.id: 0 for goal in goals}
-    for finding in findings:
-        goal = goal_of(finding.check, goals)
-        if goal is not None:
-            counts[goal.id] += 1
-    return [
-        GoalCount(goal=goal.id, title=goal.title, count=counts[goal.id])
-        for goal in goals
-        if counts[goal.id]
-    ]
+TALLIED: tuple[GroupKind, ...] = (*OWNER_GROUPS, "decided")
+"""The groups the tally names: the owner's three always, Decided only when it holds a finding.
+The passes are the headline's "checked, no issue", not a tally entry."""
+
+
+def _tally(groups: Sequence[SummaryGroup], words: Words) -> Tally:
+    """"Decide {a} · Fix {b} · Verify {c}", then " · Decided {d}" (feature 013)."""
+    return Tally(
+        text=words.separator.join(
+            words.tally.item.format(label=group.label, n=group.count)
+            for group in groups
+            if group.kind in TALLIED
+        )
+    )
+
+
+def _not_reached(lines: Sequence[GoalLine], words: Words) -> NotReached | None:
+    """The goals whose line reads not reached, in goal order, or `None` when every goal was
+    reached: the first screen still names the coverage gaps once the goal lines live under
+    their groups (feature 013)."""
+    titles = [line.title for line in lines if line.state == "not_reached"]
+    if not titles:
+        return None
+    return NotReached(titles=titles, text=words.not_reached.format(titles=and_list(titles)))
 
 
 # --- questions and parts not loaded -----------------------------------------------------------

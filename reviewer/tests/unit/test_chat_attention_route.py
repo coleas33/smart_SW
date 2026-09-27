@@ -326,16 +326,17 @@ def test_the_body_is_the_live_ranking_plus_the_live_summary(
     groups = body.pop("groups")
 
     assert body == to_jsonable_python(rank(run.session))
+    expected = findings_by_type(run.session, run.context.ir, load_words(), load_policy())
     assert summary == to_jsonable_python(
-        review_summary(rank(run.session), run.session, run.context.ir, usage=run.usage_ledger)
+        review_summary(expected, run.session, run.context.ir, usage=run.usage_ledger)
     )
-    assert groups == to_jsonable_python(
-        findings_by_type(run.session, run.context.ir, load_words(), load_policy())
-    )
-    # Feature 008 T047, edited deliberately: the pane runs checks first, so the fixture
-    # package's three modelling-practice findings are recorded before the model's drawing
-    # finding, and fold into one issue (FR-014): four findings, two issues.
-    assert summary["headline"] == "4 findings in 2 issues"
+    assert groups == to_jsonable_python(expected)
+    # Feature 008 T047, edited deliberately and again by feature 013 (its grouped-list.md
+    # section 4): the pane runs checks first, so the fixture package's three
+    # modelling-practice findings are recorded before the model's drawing finding; the ranking
+    # folds them into one family row, but the summary counts the grouped view's rows, the
+    # family unfolded, and the three are three checks: four findings, four issues.
+    assert summary["headline"] == "4 findings in 4 issues"
 
 
 def test_the_summary_carries_the_live_ledgers_resume_figure(
@@ -365,7 +366,12 @@ def test_a_review_that_found_nothing_answers_the_words_three_groups_and_every_go
         ("fix", 0),
         ("verify", 0),
     ]
-    assert [line["goal"] for line in summary["goals"]] == [goal.id for goal in load_words().goals]
+    groups = get(client, empty_chat).json()["groups"]["groups"]
+    states = {line["goal"]: line["state"] for group in groups for line in group["goals"]}
+    assert set(states) == {goal.id for goal in load_words().goals}, "every goal, under its group"
+    assert summary["not_reached"]["titles"] == [
+        goal.title for goal in load_words().goals if states[goal.id] == "not_reached"
+    ], "the not-reached line names the goal lines the groups carry, in goal order"
 
 
 def test_the_summary_follows_a_disposition_like_the_ranking(

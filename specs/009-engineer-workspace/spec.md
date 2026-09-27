@@ -155,10 +155,10 @@ Everywhere in the engineer's default view, internal vocabulary gives way to word
 
 **The summary (User Story 3)**
 
-- **FR-007**: The backend MUST compute a review summary: finding and issue counts; counts of findings needing the engineer's decision, to fix, to verify, and already decided, by the ranking's own keys; open questions; parts not loaded; and one state per check goal (checked, issues found, not reached, not applicable) with a short reason.
+- **FR-007**: The backend MUST compute a review summary: finding and issue counts; counts of findings needing the engineer's decision, to fix, to verify, and already decided, by the ranking's own keys; open questions; parts not loaded; and one state per check goal (checked, issues found, not reached, not applicable) with a short reason. *Amended 2026-09-26 (feature 013 T050):* the headline counts passes as checked, not as issues; the decide, fix, verify and decided counts are one tally line; the goal states are listed under their finding groups, and the summary names the goals not reached in one line.
 - **FR-008**: The summary's group labels MUST be supplied by the backend, reading "Decide", "Fix" and "Verify" (owner decision 2026-09-23).
-- **FR-009**: The page MUST render the summary first in Results and compute no count, group or order itself.
-- **FR-010**: Modelling-practice findings MUST render as one collapsed group with the counts of findings and rules, listing every finding when opened.
+- **FR-009**: The page MUST render the summary first in Results and compute no count, group or order itself. *Amended 2026-09-26 (feature 013 T050):* the summary is the headline, the tally, the questions, the parts not loaded, the drawings and bought-parts lines and the not-reached line; the grouped findings list follows it.
+- **FR-010**: Modelling-practice findings MUST render as one collapsed group with the counts of findings and rules, listing every finding when opened. *Amended 2026-09-26 (feature 013 T050):* the Modelling practice group of the grouped findings list, collapsed on arrival, is that group; its rows fold same-check findings, and its count line counts findings.
 - **FR-011**: Size-for-size contacts MUST render as one folded list separate from the findings, each naming both parts (owner decision 2026-09-23).
 - **FR-012**: Wherever a component has a name, the default view MUST show the name rather than the component id.
 
@@ -206,7 +206,7 @@ Everywhere in the engineer's default view, internal vocabulary gives way to word
 
 ### Measurable Outcomes
 
-- **SC-001**: On the fixture shaped like the big assembly's review, the summary, the three decision groups and the not-reached goals are readable without scrolling in a 300 by 600 pane.
+- **SC-001**: On the fixture shaped like the big assembly's review, the summary, the three decision groups and the not-reached goals are readable without scrolling in a 300 by 600 pane. *Amended 2026-09-26 (feature 013 T050):* the headline, the tally line and the not-reached line.
 - **SC-002**: A non-developer engineer shown that review can say, within ten seconds, how many decisions are theirs and which check goals were not reached.
 - **SC-003**: The default Results view of that review contains no component id where a name exists, no raw status token, no check id outside a fold, and no error class name.
 - **SC-004**: Answering three questions costs one resumed review turn.

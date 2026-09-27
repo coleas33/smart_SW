@@ -18,9 +18,10 @@ headline:
   findings_many: "{n} findings"
   issues_one: "in 1 issue"
   issues_many: "in {n} issues"
+  checked: "{n} checked, no issue"
 
-# What joins two parts of one line: a row's fold count, reach and tail, and a group's count
-# and decided count (feature 013).
+# What joins two parts of one line: the headline's issues and passes, the tally's entries,
+# a row's fold count and tail, and a group's count and decided count (feature 013).
 separator: " · "
 
 # The three owner groups first (the owner's labels, 2026-09-23), then the two shown only
@@ -43,9 +44,18 @@ groups:
     one: "{n} decided"
     many: "{n} decided"
   within_scope:
-    label: "Within limits"
-    one: "{n} within limits"
-    many: "{n} within limits"
+    label: "Checked, no issue"
+    one: "{n} checked, no issue"
+    many: "{n} checked, no issue"
+
+# The summary's one tally line (feature 013): each owner group's label and count, then
+# Decided when it holds a finding, joined by `separator` - "Decide 2 · Fix 5 · Verify 1".
+tally:
+  item: "{label} {n}"
+
+# The goals not reached, named in goal order as a sentence names them (feature 013): the goal
+# lines live under their groups, so this line keeps the coverage gaps on the first screen.
+not_reached: "Not reached: {titles}"
 
 questions:
   one: "1 question for you"

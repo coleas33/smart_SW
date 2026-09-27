@@ -32,15 +32,14 @@ from typing import Any, get_args
 from uuid import UUID, uuid5
 
 import pytest
-from pydantic import ValidationError
 from pydantic_core import to_jsonable_python
 
 from swreview.checks.drawing_context import CANDIDATE_CONFIRM, CANDIDATES_NAMED
 from swreview.ir.loader import load_package
 from swreview.ir.models import DrawingCandidate, EvidencePackage
-from swreview.report.attention import AttentionRow, load_policy, rank
+from swreview.report.attention import load_policy, rank
 from swreview.report.attention_record import AttentionRecord
-from swreview.report.finding_groups import findings_by_type
+from swreview.report.finding_groups import FindingsByType, findings_by_type
 from swreview.report.session import (
     Contact,
     Coverage,
@@ -53,11 +52,12 @@ from swreview.report.summary import (
     COVERAGE_BUCKETS,
     DRAWINGS_NAMED,
     DrawingsLine,
-    ModellingPractice,
     ReviewRanking,
     ReviewSummary,
+    SummaryGroup,
     contacts_of,
     drawings_of,
+    goal_lines,
     load_words,
     review_ranking,
     review_summary,
@@ -69,6 +69,7 @@ from tests.support.attention import (
     PIN_TWO,
     REVIEW_FOLDER,
     ROOT_COMPONENT,
+    CoverageRow,
     CoverageSpec,
     FindingSpec,
     attention_package,
@@ -89,6 +90,12 @@ NAMESPACE = UUID("7a1e6d64-1f2b-4c3a-9d5e-000000000009")
 
 BIG_ASSEMBLY = Path(__file__).resolve().parents[1] / "fixtures" / "replay" / "big-assembly"
 """Feature 008's committed, fictional replay fixture of a big assembly review (its T018)."""
+
+BIG_ASSEMBLY_HEADLINE = "96 findings in 15 issues"
+"""The big assembly's headline. Its session names no folded family, so feature 013's grouped
+view - the family unfolded - holds the fifteen rows its ranking held; no finding is a pass, so
+there is no "checked, no issue" part. The rows are broken down in
+`test_review_summary_fixture.py`."""
 
 DRAWING_FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "drawings"
 """Feature 011's three synthetic drawing packages (its T012)."""
@@ -113,10 +120,14 @@ def session_of(
     )
 
 
+def by_type(session: ReviewSession, package: EvidencePackage | None = None) -> FindingsByType:
+    return findings_by_type(session, package, load_words(), load_policy())
+
+
 def summary_of(
     session: ReviewSession, package: EvidencePackage | None = None, **kwargs: object
 ) -> ReviewSummary:
-    return review_summary(rank(session), session, package, **kwargs)  # type: ignore[arg-type]
+    return review_summary(by_type(session, package), session, package, **kwargs)  # type: ignore[arg-type]
 
 
 def request(
@@ -200,7 +211,6 @@ def test_the_three_owner_groups_are_present_at_zero_in_their_order() -> None:
         ("fix", "Fix", 0, "0 to fix"),
         ("verify", "Verify", 0, "0 to verify"),
     ]
-    assert all(group.by_goal == [] for group in summary.groups)
 
 
 def test_decided_and_within_limits_follow_only_when_they_hold_a_finding() -> None:
@@ -219,7 +229,7 @@ def test_decided_and_within_limits_follow_only_when_they_hold_a_finding() -> Non
     ]
     assert [(g.label, g.text) for g in summary.groups[3:]] == [
         ("Decided", "1 decided"),
-        ("Within limits", "1 within limits"),
+        ("Checked, no issue", "1 checked, no issue"),
     ]
 
 
@@ -237,27 +247,10 @@ def test_a_group_sentence_is_one_at_one_and_many_otherwise(count: int, text: str
     assert (decide.kind, decide.count, decide.text) == ("decide", count, text)
 
 
-def test_by_goal_lists_the_goals_with_a_count_in_goal_order() -> None:
-    specs = [
-        spec("rms.folders.present"),  # modelling practice
-        spec("standards.part.cut_list_excluded"),  # standards (split from hygiene by 013)
-        spec("rms.grouping.all_features_in_a_group"),  # modelling practice
-        spec("stack.gap"),  # fits and stacks (`fit.` would be a judgement: Decide)
-    ]
-    fix = summary_of(session_of("by-goal", specs)).groups[1]
-
-    assert fix.kind == "fix"
-    assert [(g.goal, g.title, g.count) for g in fix.by_goal] == [
-        ("fits_and_stacks", "Fits and stacks", 1),
-        ("standards", "Standards", 1),
-        ("modelling_practice", "Modelling practice", 2),
-    ]
-
-
-def test_a_finding_whose_check_has_no_goal_counts_in_its_group_and_in_no_goal() -> None:
+def test_a_finding_whose_check_has_no_goal_counts_in_its_group() -> None:
     fix = summary_of(session_of("no-goal", [spec("tool.something_new")])).groups[1]
 
-    assert (fix.count, fix.by_goal) == (1, [])
+    assert fix.count == 1
 
 
 def test_the_groups_partition_the_findings() -> None:
@@ -293,17 +286,131 @@ def test_the_groups_partition_the_findings() -> None:
         ((PART_COMPONENT, PART_COMPONENT, PIN_ONE), "3 findings in 2 issues", 2),
     ],
 )
-def test_the_headline_counts_findings_and_the_rankings_rows(
+def test_the_headline_counts_findings_and_the_rows_of_the_type_groups(
     components: tuple[str, ...], headline: str, issues: int
 ) -> None:
     specs = [spec("rms.folders.present", component_ids=(one,)) for one in components]
     session = session_of(f"headline-{len(components)}-{issues}", specs)
-    ranking = rank(session)
-    summary = review_summary(ranking, session, None)
+    groups = by_type(session)
+    summary = review_summary(groups, session, None)
 
     assert summary.headline == headline
-    assert summary.issues == len(ranking.rows) == issues
+    assert summary.issues == sum(len(group.rows) for group in groups.groups) == issues
     assert summary.findings == len(components)
+
+
+def test_passes_are_counted_as_checked_not_as_issues() -> None:
+    """013 `contracts/grouped-list.md` section 4: "{n} findings in {m} issues · {k} checked,
+    no issue" - the passes are the fold's, in no issue."""
+    specs = [
+        spec("interference.static"),
+        spec("rms.sketches.fully_defined"),
+        spec("rms.folders.present", status="checked_within_scope", component_ids=(PIN_ONE,)),
+        spec("rms.folders.present", status="checked_within_scope", component_ids=(PIN_TWO,)),
+    ]
+    summary = summary_of(session_of("headline-passes", specs))
+
+    assert summary.headline == "2 findings in 2 issues · 2 checked, no issue"
+    assert (summary.findings, summary.issues) == (4, 2)
+
+
+def test_a_review_of_passes_only_is_said_as_checked() -> None:
+    specs = [spec("rms.folders.present", status="checked_within_scope")]
+
+    assert summary_of(session_of("headline-only-passes", specs)).headline == ("1 checked, no issue")
+
+
+def test_a_decided_finding_is_still_an_issue_in_the_headline() -> None:
+    specs = [spec("rms.folders.present", disposition=disposition("accepted"))]
+
+    assert summary_of(session_of("headline-decided", specs)).headline == "1 finding in 1 issue"
+
+
+# --- 3b. the tally and the not-reached line (feature 013) --------------------------------------
+
+
+def test_the_tally_is_one_line_of_decide_fix_and_verify() -> None:
+    specs = [
+        spec("interference.static"),
+        spec("rms.folders.present"),
+        spec("rms.sketches.fully_defined", status="suspected"),
+        spec("stack.gap"),
+    ]
+    tally = summary_of(session_of("tally", specs)).tally
+
+    assert tally.text == "Decide 1 · Fix 2 · Verify 1"
+
+
+def test_the_tally_names_decided_findings_only_when_there_are_some() -> None:
+    specs = [
+        spec("rms.folders.present"),
+        spec("rms.core.shell_last", disposition=disposition("rejected")),
+        spec("rms.detail.holes_last", status="checked_within_scope"),
+    ]
+    summary = summary_of(session_of("tally-decided", specs))
+
+    assert summary.tally.text == "Decide 0 · Fix 1 · Verify 0 · Decided 1"
+    assert summary_of(session_of("tally-empty", [])).tally.text == ("Decide 0 · Fix 0 · Verify 0")
+
+
+def test_the_tally_and_the_checked_count_partition_the_findings() -> None:
+    session = session_of("tally-partition", FAMILY_MIX)
+    summary = summary_of(session)
+
+    assert sum(group_counts(summary).values()) == len(session.findings) == summary.findings
+    checked = group_counts(summary).get("within_scope", 0)
+    assert summary.headline.endswith(f"{checked} checked, no issue")
+
+
+def every_goal_checked() -> CoverageSpec:
+    """One checked row per goal: an item where the goal has one, a prefix where it has none."""
+    return CoverageSpec(
+        checked=[
+            CoverageRow(check=check, reason=f"{check} was checked.")
+            for check in (
+                "interference",
+                "fasteners",
+                "holes.alignment",
+                "interfaces.fit",
+                "fastener.head_clearance",
+                "mass.material",
+                "hygiene",
+                "standards.release",
+                "drawing.manufacturing_inputs",
+                "modeling.resilience",
+            )
+        ]
+    )
+
+
+def test_every_goal_reached_gives_no_not_reached_line() -> None:
+    assert summary_of(session_of("all-reached", [], every_goal_checked())).not_reached is None
+
+
+def test_the_goals_not_reached_are_named_in_goal_order() -> None:
+    coverage = every_goal_checked()
+    coverage = CoverageSpec(
+        checked=[
+            row
+            for row in coverage.checked  # type: ignore[union-attr]
+            if row.check not in ("drawing.manufacturing_inputs", "fastener.head_clearance")
+        ]
+    )
+
+    not_reached = summary_of(session_of("two-not-reached", [], coverage)).not_reached
+
+    assert not_reached is not None
+    assert not_reached.titles == ["Tool access", "Drawings"]
+    assert not_reached.text == "Not reached: Tool access and Drawings"
+
+
+def test_a_review_that_reached_nothing_names_every_goal() -> None:
+    not_reached = summary_of(session_of("none-reached", [])).not_reached
+
+    assert not_reached is not None
+    assert not_reached.titles == [goal.title for goal in load_words().goals]
+    assert not_reached.text.startswith("Not reached: Interference, Fasteners, ")
+    assert not_reached.text.endswith(" and Modelling practice")
 
 
 def test_no_findings_is_said_in_words() -> None:
@@ -314,11 +421,12 @@ def test_no_findings_is_said_in_words() -> None:
 
 
 def test_the_big_assembly_headline() -> None:
-    """96 and 15, not 99 and 18, since the replay fixtures follow the code (008 decision 3A,
-    2026-09-23): the recording's three touching groups are contacts, in no count here."""
+    """96 findings, the recording's three touching groups being contacts in no count here (008
+    decision 3A, 2026-09-23); since feature 013 the issues are the grouped view's rows, with the
+    modelling-practice family unfolded (`test_review_summary_fixture.py` breaks them down)."""
     session = load_session(BIG_ASSEMBLY / "session.json")
 
-    assert summary_of(session).headline == "96 findings in 15 issues"
+    assert summary_of(session).headline == BIG_ASSEMBLY_HEADLINE
 
 
 # --- 4. the questions ----------------------------------------------------------------------
@@ -439,136 +547,35 @@ def test_component_names_hold_the_non_blank_names_only() -> None:
     assert summary_of(session_of("names", []), None).component_names == {}
 
 
-# --- 6. the folded family (T016, feature 008's `folded_families` and its family row) ---------
+# --- 6. a folded family is listed like every other finding (feature 013) ----------------------
 
 FAMILY_MIX: list[FindingSpec] = [
     spec("interference.static"),  # F-001: decide
-    spec("rms.folders.present"),  # F-002: family (fix, were it not folded)
-    spec("rms.sketches.fully_defined", status="suspected"),  # F-003: family (verify)
+    spec("rms.folders.present"),  # F-002: fix
+    spec("rms.sketches.fully_defined", status="suspected"),  # F-003: verify
     spec("rms.grouping.all_features_in_a_group", disposition=disposition("rejected")),  # F-004
     spec("rms.folders.present", status="checked_within_scope", component_ids=(PIN_ONE,)),  # F-005
-    spec("rms.params.global_variables_present", status="unresolved"),  # F-006: family (verify)
+    spec("rms.params.global_variables_present", status="unresolved"),  # F-006: verify
     spec("stack.gap"),  # F-007: fix
     spec("hole.coaxiality", status="suspected", component_ids=(PIN_TWO,)),  # F-008: decide
 ]
 """Five `rms.*` findings of four rules - demonstrated, suspected, decided, within scope and
-unresolved, so unfolded they would reach every group - beside three findings of other goals."""
-
-FAMILY_IDS = ["F-002", "F-003", "F-004", "F-005", "F-006"]
+unresolved, so they reach every group - beside three findings of other goals."""
 
 
 def folded(session: ReviewSession, *families: str) -> ReviewSession:
     return session.model_copy(update={"folded_families": list(families)})
 
 
-def family_row_of(session: ReviewSession) -> AttentionRow:
-    [row] = [row for row in rank(session).rows if row.family is not None]
-    return row
+def test_a_folded_familys_findings_are_counted_in_the_groups_like_any_other() -> None:
+    """Feature 013 retired the modelling-practice line (its `contracts/grouped-list.md` 4): the
+    grouped view unfolds the family, so the summary of a folded session is the summary of the
+    same session unfolded."""
+    plain = session_of("family-groups", FAMILY_MIX)
 
-
-def test_a_folded_familys_findings_are_in_no_group() -> None:
-    summary = summary_of(folded(session_of("family-groups", FAMILY_MIX), "rms"))
-
-    assert group_counts(summary) == {"decide": 2, "fix": 1, "verify": 0}
-    assert [goal.goal for group in summary.groups for goal in group.by_goal] == [
-        "interference",
-        "hole_alignment",
-        "fits_and_stacks",
-    ]
-
-
-def test_the_modelling_practice_line_is_the_family_row() -> None:
-    session = folded(session_of("family-line", FAMILY_MIX), "rms")
-    row = family_row_of(session)
-
-    practice = summary_of(session).modelling_practice
-
-    assert practice == ModellingPractice(
-        title=row.title,
-        findings=len(row.member_finding_ids),
-        rules=row.rule_count,  # type: ignore[arg-type]
-        finding_ids=row.member_finding_ids,
-    )
-    assert practice.model_dump() == {
-        "title": "Modelling practice: 5 findings across 4 rules",
-        "findings": 5,
-        "rules": 4,
-        "finding_ids": FAMILY_IDS,
-    }
-
-
-def test_the_partition_holds_with_the_family() -> None:
-    session = folded(session_of("family-partition", FAMILY_MIX), "rms")
-    summary = summary_of(session)
-
-    assert summary.modelling_practice is not None
-    assert sum(group_counts(summary).values()) + summary.modelling_practice.findings == len(
-        session.findings
-    )
-    assert summary.findings == len(session.findings) == 8
-
-
-def test_the_family_is_one_issue_and_every_finding_in_the_headline() -> None:
-    summary = summary_of(folded(session_of("family-headline", FAMILY_MIX), "rms"))
-
-    assert (summary.headline, summary.issues) == ("8 findings in 4 issues", 4)
-
-
-def test_the_modelling_practice_goal_still_counts_the_familys_open_findings() -> None:
-    """The goal says whether the family was reached, the groups say what to do (data-model
-    section 2): folding moves nothing on a goal line. T016 says "hygiene"; since 2026-09-23
-    `rms.` is the modelling-practice goal's own prefix (research R2.4)."""
-    plain = session_of("family-goals", FAMILY_MIX)
-
-    unfolded = summary_of(plain)
     summary = summary_of(folded(plain, "rms"))
 
-    lines = {line.goal: line for line in summary.goals}
-    assert (lines["modelling_practice"].state, lines["modelling_practice"].findings) == (
-        "issues",
-        4,
-    ), "every family finding but the within-scope one"
-    assert lines["hygiene"].findings == 0
-    assert summary.goals == unfolded.goals
-
-
-def test_a_family_of_within_scope_findings_is_still_the_line_and_its_goal_reads_checked() -> None:
-    specs = [
-        spec("interference.static"),
-        spec("rms.folders.present", status="checked_within_scope"),
-        spec("rms.sketches.fully_defined", status="checked_within_scope"),
-    ]
-    summary = summary_of(folded(session_of("family-within-scope", specs), "rms"))
-
-    assert summary.modelling_practice is not None
-    assert (summary.modelling_practice.findings, summary.modelling_practice.rules) == (2, 2)
-    assert group_counts(summary) == {"decide": 1, "fix": 0, "verify": 0}
-    lines = {line.goal: line for line in summary.goals}
-    assert (lines["modelling_practice"].state, lines["modelling_practice"].findings) == (
-        "checked",
-        0,
-    )
-
-
-def test_a_family_row_without_its_rule_count_is_refused_not_guessed() -> None:
-    session = folded(session_of("family-no-rules", FAMILY_MIX), "rms")
-    ranking = rank(session)
-    rows = [
-        row.model_copy(update={"rule_count": None}) if row.family is not None else row
-        for row in ranking.rows
-    ]
-
-    with pytest.raises(ValidationError, match="rules"):
-        review_summary(ranking.model_copy(update={"rows": rows}), session, None)
-
-
-def test_without_the_field_the_same_session_gives_todays_groups_and_no_line() -> None:
-    session = session_of("family-unfolded", FAMILY_MIX)
-
-    summary = summary_of(session, attention_package())
-
-    assert session.folded_families == []
-    assert summary.modelling_practice is None
+    assert summary == summary_of(plain)
     assert group_counts(summary) == {
         "decide": 2,
         "fix": 2,
@@ -578,36 +585,34 @@ def test_without_the_field_the_same_session_gives_todays_groups_and_no_line() ->
     }
 
 
-def test_a_folded_family_with_no_finding_has_no_line_and_moves_nothing() -> None:
-    specs = [spec("interference.static"), spec("stack.gap")]
-    plain = session_of("family-empty", specs)
+def test_the_family_is_its_rows_in_the_headline() -> None:
+    """Eight findings: seven outside the fold in seven rows (no two fold: F-002 and F-005 share
+    a check but not a status), and one pass."""
+    summary = summary_of(folded(session_of("family-headline", FAMILY_MIX), "rms"))
 
-    summary = summary_of(folded(plain, "rms"))
+    assert (summary.headline, summary.issues) == (
+        "7 findings in 7 issues · 1 checked, no issue",
+        7,
+    )
 
-    assert summary.modelling_practice is None
-    assert summary.groups == summary_of(plain).groups
+
+def test_folding_a_family_moves_nothing_on_a_goal_line() -> None:
+    plain = session_of("family-goals", FAMILY_MIX)
+
+    lines = {line.goal: line for line in goal_lines(folded(plain, "rms"), load_words())}
+
+    assert (lines["modelling_practice"].state, lines["modelling_practice"].findings) == (
+        "issues",
+        4,
+    ), "every family finding but the within-scope one"
+    assert lines["hygiene"].findings == 0
+    assert goal_lines(folded(plain, "rms"), load_words()) == goal_lines(plain, load_words())
 
 
-def test_a_second_folded_family_stays_in_the_groups() -> None:
-    """The line is the first family row in rank order (contract section 2 names one row);
-    a second family's findings are counted in the groups as unfolded, so the partition
-    still holds and nothing is lost from the summary."""
-    specs = [
-        spec("rms.folders.present", status="demonstrated", severity="high"),  # F-001
-        spec("rms.sketches.fully_defined"),  # F-002
-        spec("standards.part.cut_list_excluded"),  # F-003: fix, hygiene
-        spec("standards.part.material_assigned", status="suspected"),  # F-004: verify
-    ]
-    session = folded(session_of("family-two", specs), "rms", "standards")
-    rows = [row for row in rank(session).rows if row.family is not None]
-
-    summary = summary_of(session)
-
-    assert [row.family for row in rows] == ["rms", "standards"]
-    assert summary.modelling_practice is not None
-    assert summary.modelling_practice.finding_ids == ["F-001", "F-002"]
-    assert group_counts(summary) == {"decide": 0, "fix": 1, "verify": 1}
-    assert sum(group_counts(summary).values()) + summary.modelling_practice.findings == 4
+def test_the_summary_carries_no_modelling_practice_line_and_no_goal_list() -> None:
+    assert "modelling_practice" not in ReviewSummary.model_fields
+    assert "goals" not in ReviewSummary.model_fields
+    assert "by_goal" not in SummaryGroup.model_fields
 
 
 # --- 7. the size-for-size contacts (T018, feature 010's `ReviewSession.contacts`) ----------
@@ -735,8 +740,9 @@ def test_a_contact_is_counted_in_no_group_and_no_goal() -> None:
     with_list = summary_of(touching, attention_package())
 
     assert with_list.groups == without.groups
-    assert with_list.goals == without.goals
+    assert (with_list.tally, with_list.not_reached) == (without.tally, without.not_reached)
     assert (with_list.headline, with_list.findings) == (without.headline, without.findings)
+    assert goal_lines(touching, load_words()) == goal_lines(plain, load_words())
 
 
 def test_without_a_ledger_the_resume_cost_is_unknown() -> None:
@@ -763,7 +769,7 @@ def test_the_review_ranking_is_the_ranking_byte_for_byte_plus_its_summary() -> N
     groups = body.pop("groups")
 
     assert json.dumps(body) == json.dumps(to_jsonable_python(rank(session)))
-    assert summary == to_jsonable_python(review_summary(rank(session), session, package))
+    assert summary == to_jsonable_python(summary_of(session, package))
     assert groups == to_jsonable_python(
         findings_by_type(session, package, load_words(), load_policy())
     )
@@ -772,8 +778,8 @@ def test_the_review_ranking_is_the_ranking_byte_for_byte_plus_its_summary() -> N
 def test_review_ranking_of_copies_every_ranking_field() -> None:
     session = session_of("of", [spec("rms.folders.present")])
     ranking = rank(session)
-    summary = review_summary(ranking, session, None)
-    groups = findings_by_type(session, None, load_words(), load_policy())
+    groups = by_type(session)
+    summary = review_summary(groups, session, None)
 
     wrapped = ReviewRanking.of(ranking, summary, groups)
 
@@ -1100,7 +1106,7 @@ def test_a_confirmed_read_is_said_the_same_whether_the_stale_gap_is_reworded_sta
     assert context.reason.startswith("read from FICT-KALO-8001.SLDDRW")
     reasons = [
         text
-        for line in summary.goals
+        for line in goal_lines(run.session, load_words())
         for text in (line.reason, line.detail)
         if text is not None
     ]

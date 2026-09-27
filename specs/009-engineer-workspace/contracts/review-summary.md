@@ -8,7 +8,10 @@ Normative for FR-007 to FR-012, SC-001 and SC-002's backend half.
 
 `report/summary.review_summary(ranking, session, package, *, usage=None)` is pure: it reads its
 arguments and `report/review_words_v1.yaml`, imports no provider and no settings, and writes
-nothing. Three routes answer a `ReviewRanking` (the `Ranking` of feature 007's
+nothing. *Amended 2026-09-26 (feature 013 T050):* its first argument is the session's findings by
+type (`report/finding_groups.findings_by_type`, 013 `contracts/grouped-list.md` section 3) in place
+of the ranking - `review_summary(groups, session, package, *, usage=None)` - whose rows are the
+issues and whose fold the passes; `ReviewRanking` carries the same `groups`. Three routes answer a `ReviewRanking` (the `Ranking` of feature 007's
 `contracts/attention.md` section 4, minus `session_id`, plus `summary`):
 
 | Route | Session and package | Ledger |
@@ -33,6 +36,14 @@ Every finding outside a folded family is in exactly one group, first match winni
 
 `groups` lists `decide`, `fix`, `verify` always, in that order, with their labels "Decide", "Fix",
 "Verify"; then `decided` and `within_scope` when their count is non-zero. Severity is never read.
+
+*Amended 2026-09-26 (feature 013 T050, its `contracts/grouped-list.md` section 4):* the groups keep
+their tests and order, `within_scope`'s label becomes "Checked, no issue" ("{n} checked, no issue"),
+and `by_goal` and the `modelling_practice` line are removed - every finding, a folded family's
+included, is in exactly one group, and the goal lines live under their finding groups. The one
+`tally` line `{text}` reads "Decide {a} · Fix {b} · Verify {c}", then " · Decided {d}" when that
+group holds a finding (words: `tally.item` "{label} {n}", joined by `separator`). The rest of this
+section, from "Each group's `by_goal`", describes the summary before feature 013.
 Each group's `by_goal` lists the goals (section 3) with a non-zero count in that group, in goal
 order. A folded family (`session.folded_families`, feature 008) is the `modelling_practice` line,
 built from the ranking row whose `family` is set: `{title, findings: len(member_finding_ids), rules:
@@ -86,7 +97,9 @@ nothing (no standards profile, every part lightweight) reads `not_reached` by ro
 
 | Key | Rule |
 |---|---|
-| `headline` | "{n} findings in {m} issues" from `findings_*` and `issues_*`; "No findings were recorded" at zero |
+| `headline` | "{n} findings in {m} issues" from `findings_*` and `issues_*`; "No findings were recorded" at zero. *Amended 2026-09-26 (feature 013 T050):* "{n} findings in {m} issues · {k} checked, no issue" - `n` the findings outside the checked fold, `m` the rows of the type groups (the grouped view's rows, a folded family unfolded), `k` the passes (`headline.checked`, joined by `separator`); each part only when it counts something, so a review of passes only reads "{k} checked, no issue"; "No findings were recorded" at zero. `findings` stays every finding and `issues` is `m` |
+| `tally` | *Added 2026-09-26 (feature 013 T050):* section 2's one line |
+| `not_reached` | *Added 2026-09-26 (feature 013 T050):* `{titles, text}` - the titles of the goals whose line reads `not_reached`, in goal order, and "Not reached: {titles}" naming them as a sentence does; `None` when every goal was reached. It replaces the top-level goal list on the first screen: the goal lines themselves are under their finding groups (`ReviewRanking.groups`) |
 | `questions` | open evidence requests in session order (`questions.md` section 3); `text` `None` at zero |
 | `not_loaded` | `not_examined(package)`: `{count, total, text}`; `None` when every instance was read or no package |
 | `drawings` | *Added 2026-09-23 (owner decision 10A; feature 011 T086, T087).* `drawings_of(package)`: one line naming the drawings the review read and the same-name drawings it found but did not open, `{read, candidates, text}`; `None` when neither exists, or no package. `read`: the file name (`documents[].file_name`, the document id where the package has no row) of every drawing document with a native record (`drawing_records[]`) or a PDF-ingested sheet (`drawings[]`), once each, in document-id order - a drawing root's own drawing included. `candidates`: the file name of every `drawing_candidates[]` path, in its reviewed document's id order, once per file (a part and an assembly of one stem share one), and never a file the review read: a candidate the engineer confirmed and the product opened and read (feature 011 `contracts/confirmed-open.md`) is read, not a candidate, whether or not the package still holds its candidate row (paths compared ignoring case and the separator). `text`: "Drawing read: {names}" or "Drawings read: {names}", then ". ", then "Same-name drawing found but not open: {names}" or "Same-name drawings found but not open: {names}", each part only when its list is non-empty; `{names}` joins the file names with commas and a final "and", and past ten names the first ten with commas and "and {n} more" (the candidate question's bound). The words are `drawings` in the words file. Counted in no group, goal or headline |
@@ -95,6 +108,13 @@ nothing (no standards profile, every part lightweight) reads `not_reached` by ro
 | `resume_input_tokens`, `resume_text` | `questions.md` section 5 |
 
 ## 5. What the page does with it
+
+*Amended 2026-09-26 (feature 013 T050; the page's half is 013 T054):* the summary block prints the
+headline, the tally line, the questions, the parts not loaded, the drawings line, the bought-parts
+line and the not-reached line, each verbatim; no group line carries goal counts and no goal line is
+printed here - they are under their groups in `<section id="findings-by-type">` (013
+`contracts/grouped-list.md` section 5) - and the modelling-practice group below is retired with its
+line. The text that follows describes the page before feature 013.
 
 `render.summaryBlock(summary)` builds `<section id="summary">` at the top of Results: the headline;
 one line per group (`label` in the lead face, `text`, then each `by_goal` as "title count"); the
@@ -123,6 +143,10 @@ print `component_names[id]` where present and the id where not; the id itself is
 
 ## 6. An older backend, and no findings
 
+*Amended 2026-09-26 (feature 013 T050):* a summary with zero findings shows "No findings were
+recorded", the tally at zero and the not-reached line naming every goal; every route builds its
+ranking with `groups`, so the page keeps no branch for a ranking without it.
+
 A ranking with no `summary` renders exactly as before this feature: no summary block, no empty
 section, the Start-here panel where it was. A summary with no `drawings` key (a backend before
 decision 10A), or with `drawings: null`, has no drawings line and renders every other line as
@@ -130,6 +154,9 @@ before it. A summary with zero findings shows the headline "No
 findings were recorded", the three groups at zero, and every goal line.
 
 ## 7. SC-001
+
+*Amended 2026-09-26 (feature 013 T050):* the headline, the tally line and the not-reached line are
+inside the viewport, in place of the three groups and every not-reached goal line.
 
 On the big-assembly pane fixture in a 300 by 600 pane, the summary's headline, its three groups and
 every goal line whose state is `not_reached` are inside the viewport with Results scrolled to the
