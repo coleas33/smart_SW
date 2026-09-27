@@ -11,6 +11,7 @@ using SwReview.Extractor.Bridge;
 using SwReview.Extractor.Dump;
 using SwReview.Extractor.Guard;
 using SwReview.Extractor.PersistRefs;
+using SwReview.Extractor.Rms;
 using SwReview.Extractor.Sw;
 
 namespace SwReview.AddIn.ToolService;
@@ -596,6 +597,23 @@ public sealed class ToolServiceOptions
     /// <summary>How long <see cref="ToolServiceHost.Start"/> waits for the attach to run.</summary>
     public TimeSpan AttachTimeout { get; set; } = TimeSpan.FromSeconds(60);
 
+    /// <summary>
+    /// 004 T167: how long <see cref="ToolServiceHost.Dispose"/> waits for the remodel teardown it
+    /// posts to the application thread when it is disposed from another thread (a re-attach).
+    /// 30 seconds (default taken 2026-09-27, the owner may revise): a teardown that has not
+    /// answered by then is left to run when SOLIDWORKS is free, and the pipe closes anyway.
+    /// </summary>
+    public TimeSpan TeardownTimeout { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// 004 T167: told every ending of a remodel session on this service - <c>remodel.close</c>,
+    /// and the teardown a re-attach or an unload runs - with what the end-of-session routine did,
+    /// on the application thread. The add-in hands it to the Remodel tab, which posts one status
+    /// error when something was left and stays quiet when nothing was. Null listens to none. A
+    /// callback that throws is written to the tool-service log and goes no further.
+    /// </summary>
+    public Action<RemodelSessionEnd>? RemodelSessionEnded { get; set; }
+
     public Func<DateTime> Now { get; set; } = () => DateTime.Now;
 }
 
@@ -624,6 +642,9 @@ public sealed class ToolServiceOptions
 ///   * <b>The confirmed drawing's gate is observed by the plain recorder</b> (feature 011,
 ///     <see cref="ConfirmedDrawingSource"/>): its three keys join the request's own
 ///     <c>gated=</c> line, and no <c>target=</c> is written for a read that writes nothing.
+///   * <b>A session does not outlive its pipe</b> (004 T167): <see cref="Dispose"/> ends a remodel
+///     session on the application thread before the pipe server is disposed, through the one
+///     routine <c>remodel.close</c> runs too, and writes one teardown line.
 /// </summary>
 public sealed class ToolServiceHost : IToolService
 {
@@ -632,11 +653,20 @@ public sealed class ToolServiceHost : IToolService
 
     private readonly InProcPipeServer _server;
     private readonly ToolServiceLog _log;
+    private readonly IAppThreadInvoker _invoker;
+    private readonly SwBridgeDispatcher _dispatcher;
+    private readonly SwGateRecorder _recorder;
+    private readonly TimeSpan _invokeTimeout;
+    private readonly TimeSpan _teardownTimeout;
+    private readonly Func<DateTime> _now;
     private bool _disposed;
 
     private ToolServiceHost(
         InProcPipeServer server,
         ToolServiceLog log,
+        ToolServiceOptions options,
+        SwBridgeDispatcher dispatcher,
+        SwGateRecorder recorder,
         string reviewSecret,
         string generalChatSecret,
         string remodelSecret,
@@ -647,6 +677,12 @@ public sealed class ToolServiceHost : IToolService
     {
         _server = server;
         _log = log;
+        _invoker = options.Invoker;
+        _dispatcher = dispatcher;
+        _recorder = recorder;
+        _invokeTimeout = options.InvokeTimeout;
+        _teardownTimeout = options.TeardownTimeout;
+        _now = options.Now;
         ReviewSecret = reviewSecret;
         GeneralChatSecret = generalChatSecret;
         RemodelSecret = remodelSecret;
@@ -715,11 +751,25 @@ public sealed class ToolServiceHost : IToolService
     /// Attaches to SOLIDWORKS on the application thread, then starts listening. Throws if the
     /// attach fails or the application thread does not answer, so the add-in can report it.
     /// </summary>
-    public static ToolServiceHost Start(ToolServiceOptions options)
+    public static ToolServiceHost Start(ToolServiceOptions options) => Start(options, Attach);
+
+    /// <summary>
+    /// <see cref="Start(ToolServiceOptions)"/> with the attach given: the add-in passes
+    /// <see cref="Attach"/>, and the wiring tests pass one that builds fake services on the fake
+    /// application thread, so everything after the COM walk - the dispatcher, the secrets, the
+    /// remodel gate's observer, the teardown hook, the pipe - is this method's own code under
+    /// test rather than a copy of it.
+    /// </summary>
+    internal static ToolServiceHost Start(ToolServiceOptions options, AttachWork attach)
     {
         if (options == null)
         {
             throw new ArgumentNullException(nameof(options));
+        }
+
+        if (attach == null)
+        {
+            throw new ArgumentNullException(nameof(attach));
         }
 
         string pipeName = PipeNames.NewToolServiceName();
@@ -741,7 +791,7 @@ public sealed class ToolServiceHost : IToolService
         // On the application thread, because every pointer this produces belongs to it.
         Attached attached = OnApplicationThread(
             options.Invoker,
-            () => Attach(options, recorder, captureDirectory, remodelGate),
+            () => attach(options, recorder, captureDirectory, remodelGate),
             options.AttachTimeout);
 
         var dispatcher = new SwBridgeDispatcher(
@@ -749,6 +799,11 @@ public sealed class ToolServiceHost : IToolService
             new ScopedSecretPolicy(reviewSecret, generalChatSecret, remodelSecret));
 
         remodelGate.Observer = new RemodelGateRecorder(recorder, () => dispatcher.RemodelTargetPath);
+
+        // 004 T167: every ending of a remodel session on this service reaches the add-in, from the
+        // application thread the routine runs on; a listener that throws is written down here and
+        // goes no further (lane D's defaults, 2026-09-27).
+        attached.Services.RemodelSessionEnded = outcome => TellSessionEnded(options, log, outcome);
 
         IBridgeDispatcher chain = RequestChain(
             dispatcher, attached.DocumentIsOpen, attached.DocumentPath, recorder, log.Write);
@@ -777,6 +832,9 @@ public sealed class ToolServiceHost : IToolService
         return new ToolServiceHost(
             server,
             log,
+            options,
+            dispatcher,
+            recorder,
             reviewSecret,
             generalChatSecret,
             remodelSecret,
@@ -786,6 +844,19 @@ public sealed class ToolServiceHost : IToolService
             captureDirectory);
     }
 
+    /// <summary>
+    /// Stops the service. 004 T167 (default taken 2026-09-26, the owner may revise; research
+    /// R13.1): <b>before</b> the pipe server is disposed, the remodel session this service's
+    /// bridge holds - a plan waiting for Start, or a run in progress - is ended on the
+    /// application thread, through the routine <c>remodel.close</c> runs too
+    /// (<see cref="SwBridgeDispatcher.EndRemodelSession"/>): the copy closed unsaved and the four
+    /// settings put back. Inline when this is already the application thread (an unload, from
+    /// <c>DisconnectFromSW</c>), posted with a bounded wait otherwise (a re-attach, from the
+    /// thread pool). One teardown line goes to this service's log and to the run's
+    /// <c>remodel.log</c>; the add-in hears the outcome through
+    /// <see cref="ToolServiceOptions.RemodelSessionEnded"/>. The pipe server is disposed in a
+    /// <c>finally</c> whatever the teardown did. Safe to call twice.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)
@@ -794,7 +865,203 @@ public sealed class ToolServiceHost : IToolService
         }
 
         _disposed = true;
-        _server.Dispose();
+        try
+        {
+            EndRemodelSessionOnApplicationThread();
+        }
+        catch (Exception failure)
+        {
+            _log.WriteLine(
+                "remodel teardown failed before the pipe closed: " + failure.GetType().Name + ": "
+                + failure.Message);
+        }
+        finally
+        {
+            _server.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// 004 T158: binds <paramref name="runDirectory"/> - the folder the host made for this run with
+    /// <c>RunFolders.CreateForRemodel</c> - on this service's bridge for the next
+    /// <c>remodel.open</c> to take (<see cref="SwBridgeDispatcher.BindRemodelRun"/>). On the
+    /// application thread, where the dispatcher lives: inline when called from it, otherwise
+    /// posted and waited for within <see cref="ToolServiceOptions.InvokeTimeout"/>, the bound
+    /// every request gets. Throws when the folder is refused, when the application thread cannot
+    /// be reached or does not answer, and after <see cref="Dispose"/>; the Remodel tab refuses the
+    /// open as <c>BridgeUnavailable</c> on any of them.
+    /// </summary>
+    public void BindRemodelRun(string runDirectory)
+    {
+        if (_disposed)
+        {
+            throw new ObjectDisposedException(
+                nameof(ToolServiceHost), "this tool service has stopped, so it has no bridge to bind a run folder on.");
+        }
+
+        if (_invoker.IsApplicationThread)
+        {
+            _dispatcher.BindRemodelRun(runDirectory);
+            return;
+        }
+
+        OnApplicationThread(
+            _invoker,
+            () =>
+            {
+                _dispatcher.BindRemodelRun(runDirectory);
+                return true;
+            },
+            _invokeTimeout);
+    }
+
+    /// <summary>
+    /// The teardown's reach to the application thread. A teardown that cannot be posted, or that
+    /// does not answer within <see cref="ToolServiceOptions.TeardownTimeout"/>, is written down;
+    /// an abandoned one still runs when the application thread is free, and writes its own line
+    /// then (<see cref="AppThreadCall{T}"/> runs a late delegate and only discards its result).
+    /// </summary>
+    private void EndRemodelSessionOnApplicationThread()
+    {
+        if (_invoker.IsApplicationThread)
+        {
+            EndRemodelSession(inline: true);
+            return;
+        }
+
+        if (!_invoker.CanInvoke)
+        {
+            _log.WriteLine(
+                "remodel teardown not run: the application thread cannot be reached, so a remodel "
+                + "session this service held may have left the copy open and the settings changed.");
+            return;
+        }
+
+        AppThreadCall<bool> call = AppThreadCall<bool>.Post(_invoker, () =>
+        {
+            EndRemodelSession(inline: false);
+            return true;
+        });
+
+        if (!call.Wait(_teardownTimeout))
+        {
+            call.Abandon();
+            _log.WriteLine(
+                "remodel teardown did not answer within "
+                + _teardownTimeout.TotalSeconds.ToString("0.###", CultureInfo.InvariantCulture)
+                + " s; it runs when SOLIDWORKS is free, and the pipe closes now.");
+            return;
+        }
+
+        if (call.Failure != null)
+        {
+            ExceptionDispatchInfo.Capture(call.Failure).Throw();
+        }
+    }
+
+    /// <summary>
+    /// On the application thread: end the session, then write the one teardown line - to this
+    /// service's log always, and to the run's <c>remodel.log</c> when there was a run. The gated
+    /// set is the teardown's own: whatever the gate saw since the last request belongs to no
+    /// request and is dropped first, as <see cref="ToolServiceRequestLogger"/> drops it.
+    /// </summary>
+    private void EndRemodelSession(bool inline)
+    {
+        _recorder.Drain();
+        RemodelSessionEnd outcome = _dispatcher.EndRemodelSession(RemodelSessionEnd.ReasonToolServiceStopped);
+        SwGateActivity activity = _recorder.Drain();
+
+        string line = TeardownLine(
+            new DateTimeOffset(_now()), outcome, activity, inline ? "inline" : "posted")
+            + System.Environment.NewLine;
+        _log.Write(line);
+
+        if (outcome.RunDirectory != null)
+        {
+            new RemodelRunLog(() => outcome.RunDirectory).Write(line);
+        }
+    }
+
+    /// <summary>
+    /// The teardown line, without its trailing newline: what ended, on which path, the gated set
+    /// and target of the clean-up's writes, and the outcome's fields and failures. Public so the
+    /// format has one owner; the outcome's fields are the ones <c>remodel.close</c>'s answer
+    /// carries (<see cref="RemodelSessionEnd.Fields"/>), so the two cannot name a fact
+    /// differently. Like every line here it carries no secret: nothing it is built from has one.
+    /// </summary>
+    public static string TeardownLine(
+        DateTimeOffset at, RemodelSessionEnd outcome, SwGateActivity activity, string thread)
+    {
+        if (outcome == null)
+        {
+            throw new ArgumentNullException(nameof(outcome));
+        }
+
+        if (activity == null)
+        {
+            throw new ArgumentNullException(nameof(activity));
+        }
+
+        var line = new StringBuilder(200);
+        line.Append('[').Append(at.ToString("O", CultureInfo.InvariantCulture)).Append("] ");
+        line.Append("remodel teardown thread=").Append(thread);
+
+        if (!outcome.HadSession)
+        {
+            line.Append(" reason=").Append(outcome.Reason).Append(" session=none");
+            return line.ToString();
+        }
+
+        foreach (KeyValuePair<string, string> field in outcome.Fields())
+        {
+            line.Append(' ').Append(field.Key).Append('=').Append(field.Value);
+        }
+
+        line.Append(" gated=").Append(string.Join(",", activity.GatedMembers));
+        if (activity.TargetPaths.Count > 0)
+        {
+            line.Append(" target=").Append(string.Join(",", activity.TargetPaths));
+        }
+
+        if (activity.RefusedMembers.Count > 0)
+        {
+            line.Append(" refused=").Append(string.Join(",", activity.RefusedMembers));
+        }
+
+        if (outcome.Failures.Count > 0)
+        {
+            line.Append(" failures=\"")
+                .Append(string.Join("; ", outcome.Failures).Replace("\r", " ").Replace("\n", " ").Replace("\"", "'"))
+                .Append('"');
+        }
+
+        return line.ToString();
+    }
+
+    /// <summary>
+    /// The add-in's listener, told every ending of a remodel session on this service. A listener
+    /// that throws is written to this service's log and goes no further: the session is over
+    /// either way, and a failure to hear it must not become a failure of the request or of the
+    /// teardown that ended it.
+    /// </summary>
+    private static void TellSessionEnded(ToolServiceOptions options, ToolServiceLog log, RemodelSessionEnd outcome)
+    {
+        Action<RemodelSessionEnd>? told = options.RemodelSessionEnded;
+        if (told == null)
+        {
+            return;
+        }
+
+        try
+        {
+            told(outcome);
+        }
+        catch (Exception failure)
+        {
+            log.WriteLine(
+                "the Remodel tab could not be told a remodel session ended (" + outcome.Reason + "): "
+                + failure.GetType().Name + ": " + failure.Message);
+        }
     }
 
     /// <summary>
@@ -887,6 +1154,13 @@ public sealed class ToolServiceHost : IToolService
             .TrimEnd('=');
     }
 
+    /// <summary>
+    /// What <see cref="Start(ToolServiceOptions, AttachWork)"/> runs on the application thread:
+    /// <see cref="Attach"/> in the add-in, a fake in the wiring tests.
+    /// </summary>
+    internal delegate Attached AttachWork(
+        ToolServiceOptions options, SwGateRecorder recorder, string captureDirectory, SwGate remodelGate);
+
     /// <summary>Runs ON the application thread. Every COM pointer below is created there.</summary>
     private static Attached Attach(
         ToolServiceOptions options,
@@ -976,7 +1250,7 @@ public sealed class ToolServiceHost : IToolService
     }
 
     /// <summary>What the attach produced, all of it bound to the application thread.</summary>
-    private sealed class Attached
+    internal sealed class Attached
     {
         public Attached(
             BridgeServices services,

@@ -18,8 +18,11 @@ using SwReview.Extractor.Ids;
 using SwReview.Extractor.Interference;
 using SwReview.Extractor.Ir;
 using SwReview.Extractor.Measure;
+using SwReview.Extractor.Rms;
 using SwReview.Extractor.Sw;
+using SwReview.Extractor.Tests;
 using Xunit;
+using RemodelFakes = SwReview.Extractor.Tests.Fakes;
 
 namespace SwReview.AddIn.Tests;
 
@@ -1664,6 +1667,612 @@ public sealed class ToolServiceWiringTests
         }
 
         return count;
+    }
+
+    // ---- a session does not outlive its pipe (004 T167's hosting) -----------------------------
+    //
+    // `ToolServiceHost.Dispose` ends the remodel session its bridge holds on the application
+    // thread before the pipe server is disposed: inline when it is already that thread (an
+    // unload, from DisconnectFromSW), posted with a bounded wait otherwise (a re-attach, from the
+    // thread pool); the pipe server is disposed whatever the teardown did; one teardown line goes
+    // to the tool-service log and to the run's remodel.log; the add-in hears every ending through
+    // `ToolServiceOptions.RemodelSessionEnded`. Over the real host, the real dispatcher behind
+    // the real pipe server, the bridge's fake seat and copy, and a fake application thread.
+
+    [Fact]
+    public void DisposedOnTheApplicationThreadTheTeardownRunsInlineThereBeforeThePipeCloses()
+    {
+        using (var world = new SeatedHostWorld())
+        {
+            world.PlanOnTheSeat();
+
+            world.App.RunOnApplicationThread(world.Host.Dispose);
+
+            SeatedHostWorld.Ending ending = Assert.Single(world.Told);
+            Assert.Equal(RemodelSessionEnd.ReasonToolServiceStopped, ending.Outcome.Reason);
+            Assert.True(ending.Outcome.Succeeded);
+            Assert.Equal(world.App.ThreadId, ending.ThreadId);
+            Assert.False(ending.PipeHadStopped, "the teardown ran after the pipe server was disposed");
+
+            // The copy closed unsaved, the four settings back, CommandInProgress last.
+            Assert.Equal(world.CopyPath, Assert.Single(world.Seat.Closed));
+            Assert.DoesNotContain(nameof(RemodelFakes.FakeRemodelDocument.Save), world.Copy.Members);
+            Assert.Equal("CommandInProgress=False", world.Seat.ToggleWrites.Last());
+            Assert.True(File.Exists(world.CopyPath));
+
+            string teardown = Assert.Single(world.LogLines, line => line.Contains("remodel teardown"));
+            Assert.Contains("thread=inline", teardown, StringComparison.Ordinal);
+            Assert.True(
+                Array.IndexOf(world.LogLines, teardown) < Array.FindIndex(world.LogLines, line => line.EndsWith("stopped", StringComparison.Ordinal)),
+                "the pipe server stopped before the teardown line was written");
+        }
+    }
+
+    [Fact]
+    public void DisposedFromAnotherThreadTheTeardownIsPostedToTheApplicationThreadAndWaitedFor()
+    {
+        using (var world = new SeatedHostWorld())
+        {
+            world.PlanOnTheSeat();
+
+            world.Host.Dispose();
+
+            SeatedHostWorld.Ending ending = Assert.Single(world.Told);
+            Assert.Equal(world.App.ThreadId, ending.ThreadId);
+            Assert.NotEqual(Thread.CurrentThread.ManagedThreadId, ending.ThreadId);
+            Assert.False(ending.PipeHadStopped, "the teardown ran after the pipe server was disposed");
+            Assert.Equal(world.CopyPath, Assert.Single(world.Seat.Closed));
+            Assert.Contains("thread=posted", Assert.Single(world.LogLines, line => line.Contains("remodel teardown")), StringComparison.Ordinal);
+            Assert.Contains(world.PostThreads(), thread => thread == Thread.CurrentThread.ManagedThreadId);
+        }
+    }
+
+    [Fact]
+    public void TheTeardownLineCarriesTheOutcomeAndTheCleanUpsGatedSetAndGoesToTheRunsRemodelLogToo()
+    {
+        using (var world = new SeatedHostWorld())
+        {
+            world.PlanOnTheSeat();
+
+            world.Host.Dispose();
+
+            string teardown = Assert.Single(world.LogLines, line => line.Contains("remodel teardown"));
+            Assert.Contains(" reason=tool_service_stopped verified=true tag_removed=true copy_closed=true settings_restored=4 settings_outstanding= ", teardown, StringComparison.Ordinal);
+            Assert.Contains(
+                " gated=ICustomPropertyManager.Delete2,ISldWorks.CloseDoc,ISldWorks.SetUserPreferenceToggle,ISldWorks.set_CommandInProgress",
+                teardown,
+                StringComparison.Ordinal);
+            Assert.Contains(" target=" + world.CopyPath, teardown, StringComparison.Ordinal);
+            Assert.DoesNotContain("failures=", teardown, StringComparison.Ordinal);
+            Assert.DoesNotContain(world.Host.RemodelSecret, File.ReadAllText(world.Host.LogPath), StringComparison.Ordinal);
+
+            // One line, the same one, in the run folder beside the plan it ended.
+            string remodelLog = File.ReadAllText(Path.Combine(world.RunDirectory, RemodelRunLog.FileName));
+            Assert.Contains(teardown, remodelLog, StringComparison.Ordinal);
+            Assert.Equal(1, Occurrences(remodelLog, "remodel teardown"));
+        }
+    }
+
+    [Fact]
+    public void ATeardownThatLeftSomethingSaysWhatInItsLineAndTellsTheHost()
+    {
+        using (var world = new SeatedHostWorld())
+        {
+            world.PlanOnTheSeat();
+            world.Seat.CloseFailure = new System.Runtime.InteropServices.COMException("CloseDoc refused");
+            world.Seat.FailingWrites.Add("CommandInProgress=False");
+
+            world.Host.Dispose();
+
+            RemodelSessionEnd outcome = Assert.Single(world.Told).Outcome;
+            Assert.False(outcome.Succeeded);
+            Assert.False(outcome.CopyClosed);
+            Assert.Equal(new[] { RemodelSystemToggles.CommandInProgressSetting }, outcome.SettingsOutstanding);
+
+            string teardown = Assert.Single(world.LogLines, line => line.Contains("remodel teardown"));
+            Assert.Contains(" copy_closed=false ", teardown, StringComparison.Ordinal);
+            Assert.Contains(" settings_restored=3 settings_outstanding=CommandInProgress ", teardown, StringComparison.Ordinal);
+            Assert.Contains("failures=\"close: COMException: CloseDoc refused", teardown, StringComparison.Ordinal);
+            Assert.True(world.PipeStopped, "the pipe server was not disposed");
+        }
+    }
+
+    [Fact]
+    public void ATeardownWithNoSessionWritesOneLineAndTellsNobody()
+    {
+        using (var world = new SeatedHostWorld())
+        {
+            world.Host.Dispose();
+
+            Assert.Empty(world.Told);
+            Assert.Empty(world.Seat.Closed);
+            Assert.Empty(world.Seat.ToggleWrites);
+            string teardown = Assert.Single(world.LogLines, line => line.Contains("remodel teardown"));
+            Assert.EndsWith("remodel teardown thread=posted reason=tool_service_stopped session=none", teardown, StringComparison.Ordinal);
+            Assert.False(File.Exists(Path.Combine(world.RunDirectory, RemodelRunLog.FileName)));
+        }
+    }
+
+    [Fact]
+    public void ATeardownThatThrowsIsWrittenDownAndThePipeServerIsStillDisposed()
+    {
+        using (var world = new SeatedHostWorld())
+        {
+            world.PlanOnTheSeat();
+            world.ClockFails = true;
+
+            world.Host.Dispose();
+
+            Assert.True(world.PipeStopped, "the pipe server was not disposed");
+            Assert.Contains(world.LogLines, line => line.Contains("remodel teardown failed before the pipe closed: InvalidOperationException: the clock stopped"));
+
+            // The routine itself ran - the session ended - before the line could be stamped.
+            Assert.Equal(world.CopyPath, Assert.Single(world.Seat.Closed));
+        }
+    }
+
+    [Fact]
+    public void AnApplicationThreadThatCannotBeReachedIsWrittenDownAndThePipeServerIsStillDisposed()
+    {
+        using (var world = new SeatedHostWorld())
+        {
+            world.PlanOnTheSeat();
+            world.App.CanInvokeValue = false;
+
+            world.Host.Dispose();
+
+            Assert.True(world.PipeStopped, "the pipe server was not disposed");
+            Assert.Contains(world.LogLines, line => line.Contains("remodel teardown not run: the application thread cannot be reached"));
+            Assert.Empty(world.Told);
+            Assert.Empty(world.Seat.Closed);
+        }
+    }
+
+    /// <summary>
+    /// A busy application thread: the waiter gives up at the bounded wait and the pipe closes
+    /// anyway, and the teardown - abandoned by the waiter, not cancelled - still runs when the
+    /// thread is free, ending the session, writing its line and telling the host then.
+    /// </summary>
+    [Fact]
+    public void ATeardownThatDoesNotAnswerInTimeIsLeftToRunLaterAndThePipeClosesNow()
+    {
+        using (var world = new SeatedHostWorld(TimeSpan.FromMilliseconds(300)))
+        using (var release = new ManualResetEventSlim(false))
+        using (var ran = new ManualResetEventSlim(false))
+        {
+            world.PlanOnTheSeat();
+            world.SessionEnded = ran.Set;
+            ((IAppThreadInvoker)world.App).Post(() => release.Wait(TimeSpan.FromSeconds(30)));
+
+            world.Host.Dispose();
+
+            Assert.True(world.PipeStopped, "the pipe server was not disposed");
+            Assert.Contains(world.LogLines, line => line.Contains("remodel teardown did not answer within 0.3 s"));
+            Assert.Empty(world.Told);
+            Assert.Empty(world.Seat.Closed);
+
+            release.Set();
+            Assert.True(ran.Wait(TimeSpan.FromSeconds(30)), "the abandoned teardown never ran");
+
+            // The host is told from inside the routine; the line is written when it returns.
+            Assert.True(
+                SpinWait.SpinUntil(
+                    () => world.LogLines.Any(line => line.Contains("remodel teardown thread=posted")),
+                    TimeSpan.FromSeconds(30)),
+                "the abandoned teardown wrote no line");
+            Assert.Equal(world.App.ThreadId, Assert.Single(world.Told).ThreadId);
+            Assert.Equal(world.CopyPath, Assert.Single(world.Seat.Closed));
+        }
+    }
+
+    [Fact]
+    public void DisposeTwiceTearsDownOnce()
+    {
+        using (var world = new SeatedHostWorld())
+        {
+            world.PlanOnTheSeat();
+
+            world.Host.Dispose();
+            world.Host.Dispose();
+
+            Assert.Single(world.Told);
+            Assert.Single(world.LogLines, line => line.Contains("remodel teardown"));
+        }
+    }
+
+    [Fact]
+    public void AListenerThatThrowsIsWrittenDownAndTheTeardownGoesOn()
+    {
+        using (var world = new SeatedHostWorld())
+        {
+            world.PlanOnTheSeat();
+            world.SessionEnded = () => throw new InvalidOperationException("the Remodel page is gone");
+
+            world.Host.Dispose();
+
+            Assert.Contains(world.LogLines, line => line.Contains("the Remodel tab could not be told a remodel session ended (tool_service_stopped): InvalidOperationException: the Remodel page is gone"));
+            Assert.Equal(world.CopyPath, Assert.Single(world.Seat.Closed));
+            Assert.True(world.PipeStopped, "the pipe server was not disposed");
+        }
+    }
+
+    [Fact]
+    public void RemodelCloseOverThePipeTellsTheHostOnTheApplicationThread()
+    {
+        using (var world = new SeatedHostWorld())
+        {
+            world.PlanOnTheSeat();
+
+            SeatedHostWorld.PipeReply closed = world.Remodel(RemodelCommands.Close, new { discard_copy = false });
+
+            Assert.Equal(BridgeStatus.Ok, closed.Status);
+            SeatedHostWorld.Ending ending = Assert.Single(world.Told);
+            Assert.Equal(RemodelSessionEnd.ReasonClose, ending.Outcome.Reason);
+            Assert.Equal(world.App.ThreadId, ending.ThreadId);
+
+            // And the teardown that follows has nothing left to end.
+            world.Host.Dispose();
+            Assert.Single(world.Told);
+            Assert.Contains(world.LogLines, line => line.EndsWith("session=none", StringComparison.Ordinal));
+        }
+    }
+
+    // ---- the run folder is bound per run (004 T158's bind) --------------------------------------
+
+    [Fact]
+    public void TheBindIsPostedToTheApplicationThreadAndTheOpenTakesIt()
+    {
+        using (var world = new SeatedHostWorld())
+        {
+            int postsBefore = world.App.Posted;
+
+            world.Host.BindRemodelRun(world.RunDirectory);
+
+            Assert.Equal(postsBefore + 1, world.App.Posted);
+            string probeId = world.Probe();
+            Assert.Equal(BridgeStatus.Ok, world.Open(probeId).Status);
+        }
+    }
+
+    [Fact]
+    public void WithoutABindTheOpenIsRefusedAndASecondOpenNeedsASecondBind()
+    {
+        using (var world = new SeatedHostWorld())
+        {
+            string probeId = world.Probe();
+            SeatedHostWorld.PipeReply unbound = world.Open(probeId);
+            Assert.Equal(RemodelErrorCodes.TargetMismatch, unbound.ErrorCode);
+
+            world.Host.BindRemodelRun(world.RunDirectory);
+            Assert.Equal(BridgeStatus.Ok, world.Open(probeId).Status);
+            Assert.Equal(BridgeStatus.Ok, world.Remodel(RemodelCommands.Close, new { discard_copy = true }).Status);
+
+            // The run root went with the first open: the next run is refused until it is bound.
+            SeatedHostWorld.PipeReply again = world.Open(world.Probe());
+            Assert.Equal(RemodelErrorCodes.TargetMismatch, again.ErrorCode);
+        }
+    }
+
+    [Fact]
+    public void CalledOnTheApplicationThreadTheBindRunsInlineRatherThanWaitingOnItself()
+    {
+        using (var world = new SeatedHostWorld())
+        {
+            int postsBefore = world.App.Posted;
+
+            world.App.RunOnApplicationThread(() => world.Host.BindRemodelRun(world.RunDirectory));
+
+            // One post: the test's own hop onto the thread, none from the bind.
+            Assert.Equal(postsBefore + 1, world.App.Posted);
+            Assert.Equal(BridgeStatus.Ok, world.Open(world.Probe()).Status);
+        }
+    }
+
+    [Fact]
+    public void ARefusedFolderIsThrownBackToTheCaller()
+    {
+        using (var world = new SeatedHostWorld())
+        {
+            Assert.Throws<ArgumentException>(
+                () => world.Host.BindRemodelRun(Path.Combine(world.RunDirectory, "not-made-yet")));
+            Assert.Throws<ArgumentException>(() => world.Host.BindRemodelRun("relative\\folder"));
+        }
+    }
+
+    [Fact]
+    public void ABindThatCannotReachTheApplicationThreadOrComesAfterDisposeThrows()
+    {
+        using (var world = new SeatedHostWorld())
+        {
+            world.App.CanInvokeValue = false;
+            Assert.Throws<InvalidOperationException>(() => world.Host.BindRemodelRun(world.RunDirectory));
+
+            world.App.CanInvokeValue = true;
+            world.Host.Dispose();
+            Assert.Throws<ObjectDisposedException>(() => world.Host.BindRemodelRun(world.RunDirectory));
+        }
+    }
+
+    [Fact]
+    public void TheGateBindsOnTheServiceListeningNowAndRefusesWhenNoneIs()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\bracket.sldprt" };
+        ToolServiceGate gate = world.Gate();
+
+        Assert.Throws<InvalidOperationException>(() => gate.BindRemodelRun(@"C:\runs\20260927-100000-bracket-remodel"));
+
+        gate.EnsureStarted();
+        gate.BindRemodelRun(@"C:\runs\20260927-100000-bracket-remodel");
+        FakeToolService service = world.Services.Single();
+        Assert.Equal(new[] { @"C:\runs\20260927-100000-bracket-remodel" }, service.Bound);
+
+        // What the service throws reaches the caller unchanged, so the tab can refuse the open.
+        service.BindFailure = new TimeoutException("the application thread did not answer");
+        Assert.Throws<TimeoutException>(() => gate.BindRemodelRun(@"C:\runs\20260927-100100-bracket-remodel"));
+
+        gate.Dispose();
+        Assert.Throws<InvalidOperationException>(() => gate.BindRemodelRun(@"C:\runs\20260927-100200-bracket-remodel"));
+        Assert.Equal(2, service.Bound.Count);
+    }
+
+    // ---- the application thread, as the pane control reports it ----------------------------------
+
+    [Fact]
+    public void TheControlInvokerIsTheApplicationThreadOnlyOnTheThreadThatMadeItsHandle()
+    {
+        bool beforeTheHandle = true;
+        bool onItsThread = false;
+        bool onAnotherThread = true;
+        bool afterDispose = true;
+
+        StaHost.Run(async form =>
+        {
+            var control = new System.Windows.Forms.Control();
+            var invoker = new ControlAppThreadInvoker(control);
+
+            // No handle yet: InvokeRequired alone would answer false here on any thread.
+            beforeTheHandle = invoker.IsApplicationThread;
+
+            IntPtr handle = control.Handle;
+            onItsThread = handle != IntPtr.Zero && invoker.IsApplicationThread;
+            onAnotherThread = await System.Threading.Tasks.Task.Run(() => invoker.IsApplicationThread);
+
+            control.Dispose();
+            afterDispose = invoker.IsApplicationThread;
+        });
+
+        Assert.False(beforeTheHandle, "a control with no handle was taken for the application thread");
+        Assert.True(onItsThread);
+        Assert.False(onAnotherThread, "another thread was taken for the application thread");
+        Assert.False(afterDispose, "a disposed control was taken for the application thread");
+    }
+
+    [Fact]
+    public void TheFakeApplicationThreadIsItselfAndNoOtherThread()
+    {
+        using (var app = new FakeAppThread())
+        {
+            bool inside = false;
+            app.RunOnApplicationThread(() => inside = app.IsApplicationThread);
+
+            Assert.True(inside);
+            Assert.False(app.IsApplicationThread);
+        }
+    }
+
+    /// <summary>
+    /// The real <see cref="ToolServiceHost"/>, started through its own
+    /// <see cref="ToolServiceHost.Start(ToolServiceOptions, ToolServiceHost.AttachWork)"/> with an
+    /// attach that builds the bridge's fake seat and copy instead of walking SOLIDWORKS: the real
+    /// dispatcher, secret policy, remodel gate and observer, request chain and pipe server, on a
+    /// fake application thread. The engineer's part is a file in a temporary folder.
+    /// </summary>
+    private sealed class SeatedHostWorld : IDisposable
+    {
+        private static readonly DateTime Clock = new DateTime(2026, 9, 27, 10, 0, 0, DateTimeKind.Local);
+
+        private readonly string _root;
+        private readonly List<Ending> _told = new List<Ending>();
+        private readonly object _toldLock = new object();
+
+        public SeatedHostWorld(TimeSpan? teardownTimeout = null, bool seated = true)
+        {
+            _root = Path.Combine(Path.GetTempPath(), "swreview-teardown", Guid.NewGuid().ToString("N"));
+            RunDirectory = Path.Combine(_root, "runs", "20260927-100000-bracket-remodel");
+            SourcePath = Path.Combine(_root, "work", "bracket.SLDPRT");
+            Directory.CreateDirectory(RunDirectory);
+            Directory.CreateDirectory(Path.GetDirectoryName(SourcePath)!);
+            File.WriteAllText(SourcePath, "the engineer's part");
+            CopyPath = Path.GetFullPath(Extractor.Rms.RemodelCopy.CopyPathFor(RunDirectory, SourcePath));
+
+            Copy = new RemodelFakes.FakeRemodelDocument(CopyPath, new RemodelFakes.FakeFeature("ref:boss", "Boss-Extrude1"));
+            Seat = new RemodelFakes.FakeRemodelSeat(new RemodelFakes.FakeProbeSource(), Copy);
+
+            var options = new ToolServiceOptions(new InteropRecorder<ISldWorks>().Instance, App)
+            {
+                LogFolder = Path.Combine(_root, "logs"),
+                CaptureDirectory = Path.Combine(_root, "captures"),
+                InvokeTimeout = TimeSpan.FromSeconds(30),
+                TeardownTimeout = teardownTimeout ?? TimeSpan.FromSeconds(30),
+                Now = () => ClockFails ? throw new InvalidOperationException("the clock stopped") : Clock,
+                RemodelSessionEnded = outcome =>
+                {
+                    lock (_toldLock)
+                    {
+                        _told.Add(new Ending(outcome, Thread.CurrentThread.ManagedThreadId, PipeStopped));
+                    }
+
+                    SessionEnded?.Invoke();
+                },
+            };
+
+            Host = ToolServiceHost.Start(
+                options,
+                (attachOptions, recorder, captureDirectory, remodelGate) =>
+                {
+                    var views = new InteropRecorder<ICaptureView>(typeof(IMeasureSource), typeof(IInterferenceSource));
+                    var services = new BridgeServices(
+                        views.Instance,
+                        views.As<IMeasureSource>(),
+                        views.As<IInterferenceSource>(),
+                        new ComponentIndex(new ComponentTreeResult()),
+                        captureDirectory)
+                    {
+                        DocumentPath = SourcePath,
+                        Configuration = "Default",
+                        RemodelGate = remodelGate,
+                        RemodelSeat = seated ? Seat : null,
+                    };
+
+                    return new ToolServiceHost.Attached(
+                        services, new InteropRecorder<ISwSession>().Instance, SourcePath, "Default", 0, () => true);
+                });
+        }
+
+        public FakeAppThread App { get; } = new FakeAppThread();
+
+        public ToolServiceHost Host { get; }
+
+        public string RunDirectory { get; }
+
+        public string SourcePath { get; }
+
+        public string CopyPath { get; }
+
+        public RemodelFakes.FakeRemodelDocument Copy { get; }
+
+        public RemodelFakes.FakeRemodelSeat Seat { get; }
+
+        /// <summary>Makes the clock throw from here on, so the teardown throws after the routine.</summary>
+        public bool ClockFails { get; set; }
+
+        /// <summary>Runs after each ending is recorded, on the thread it was told on.</summary>
+        public Action? SessionEnded { get; set; }
+
+        public IReadOnlyList<Ending> Told
+        {
+            get
+            {
+                lock (_toldLock)
+                {
+                    return _told.ToArray();
+                }
+            }
+        }
+
+        public string[] LogLines => File.Exists(Host.LogPath)
+            ? File.ReadAllLines(Host.LogPath)
+            : new string[0];
+
+        /// <summary>Whether the pipe server has logged its last line, which it writes at the end of its disposal.</summary>
+        public bool PipeStopped => LogLines.Any(line => line.EndsWith("stopped", StringComparison.Ordinal));
+
+        public IReadOnlyList<int> PostThreads() => App.PostThreads;
+
+        /// <summary>What the Remodel tab does before a plan's open: bind, probe, open. Asserts each answered.</summary>
+        public void PlanOnTheSeat()
+        {
+            Host.BindRemodelRun(RunDirectory);
+            PipeReply opened = Open(Probe());
+            Assert.True(opened.Status == BridgeStatus.Ok, "remodel.open answered: " + opened.Error);
+            Seat.ToggleWrites.Clear();
+            Copy.Members.Clear();
+        }
+
+        public string Probe()
+        {
+            PipeReply probe = Remodel(RemodelCommands.ProbeScope, new { source_path = SourcePath });
+            Assert.True(probe.Status == BridgeStatus.Ok, "remodel.probe_scope answered: " + probe.Error);
+            return probe.Result.GetProperty("probe_id").GetString()!;
+        }
+
+        public PipeReply Open(string probeId) => Remodel(
+            RemodelCommands.Open,
+            new { source_path = SourcePath, copy_path = CopyPath, run_id = Path.GetFileName(RunDirectory), probe_id = probeId });
+
+        /// <summary>
+        /// One <c>remodel.*</c> line with the remodel secret, written to the host's own pipe and
+        /// answered on it, exactly as the backend's client would send it.
+        /// </summary>
+        public PipeReply Remodel(string command, object parameters)
+        {
+            string line = JsonSerializer.Serialize(new Dictionary<string, object>
+            {
+                { "id", "1" },
+                { "command", command },
+                { "secret", Host.RemodelSecret },
+                { "params", parameters },
+            });
+
+            using (var client = new System.IO.Pipes.NamedPipeClientStream(".", Host.PipeName, System.IO.Pipes.PipeDirection.InOut))
+            {
+                client.Connect(10000);
+                var writer = new StreamWriter(client, new System.Text.UTF8Encoding(false)) { AutoFlush = true };
+                var reader = new StreamReader(client, new System.Text.UTF8Encoding(false));
+                writer.WriteLine(line);
+                return new PipeReply(reader.ReadLine()!);
+            }
+        }
+
+        public void Dispose()
+        {
+            Host.Dispose();
+            App.Dispose();
+            try
+            {
+                Directory.Delete(_root, recursive: true);
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+        }
+
+        /// <summary>One response line as it came off the pipe.</summary>
+        public sealed class PipeReply
+        {
+            public PipeReply(string line)
+            {
+                JsonElement root = JsonDocument.Parse(line).RootElement.Clone();
+                Status = root.GetProperty("status").GetString()!;
+                Error = root.TryGetProperty("error", out JsonElement error) && error.ValueKind == JsonValueKind.String
+                    ? error.GetString()
+                    : null;
+                Result = root.TryGetProperty("result", out JsonElement result) ? result : default;
+                ErrorCode = Result.ValueKind == JsonValueKind.Object
+                    && Result.TryGetProperty("error_code", out JsonElement code)
+                    && code.ValueKind == JsonValueKind.String
+                        ? code.GetString()
+                        : null;
+            }
+
+            public string Status { get; }
+
+            public string? Error { get; }
+
+            public string? ErrorCode { get; }
+
+            public JsonElement Result { get; }
+        }
+
+        /// <summary>One ending the host was told of: what, on which thread, and whether the pipe had already stopped.</summary>
+        public sealed class Ending
+        {
+            public Ending(RemodelSessionEnd outcome, int threadId, bool pipeHadStopped)
+            {
+                Outcome = outcome;
+                ThreadId = threadId;
+                PipeHadStopped = pipeHadStopped;
+            }
+
+            public RemodelSessionEnd Outcome { get; }
+
+            public int ThreadId { get; }
+
+            public bool PipeHadStopped { get; }
+        }
     }
 
     /// <summary>A run folder on disk, the way the host has one once `remodel.open` has returned.</summary>

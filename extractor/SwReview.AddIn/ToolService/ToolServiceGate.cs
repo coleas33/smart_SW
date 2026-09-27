@@ -40,6 +40,15 @@ public interface IToolService : IDisposable
     /// <summary>Whether this service attached a bridge-side SOLIDWORKS remodel seat.</summary>
     bool RemodelSeatAvailable { get; }
 
+    /// <summary>
+    /// 004 T158 (a design choice of 2026-09-26, research R13.8 D5): binds the run folder the host
+    /// made with <c>RunFolders.CreateForRemodel</c> on this service's bridge, on the application
+    /// thread with a bounded wait, for the next <c>remodel.open</c> to take and use up - never a
+    /// folder taken from a request. The Remodel tab binds before every open; a bind that throws
+    /// is refused as <c>BridgeUnavailable</c> and no open is sent.
+    /// </summary>
+    void BindRemodelRun(string runDirectory);
+
     /// <summary>The attached scope, so <c>entity.show</c> resolves against the same one.</summary>
     ISwSession Session { get; }
 
@@ -233,6 +242,21 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
     /// where the resolver falls back to its own attach.
     /// </summary>
     public ISwSession? Session => Service?.Session;
+
+    /// <summary>
+    /// 004 T158: binds <paramref name="runDirectory"/> on the service listening now
+    /// (<see cref="IToolService.BindRemodelRun"/>), read fresh like everything else here, because
+    /// the service restarts with the document. With none listening - before the first start,
+    /// mid-restart, after a failed start or <see cref="Dispose"/> - it throws, so the Remodel tab
+    /// refuses the open rather than sending one no bridge can take (lane D's default,
+    /// 2026-09-27). Whatever the service throws passes through unchanged.
+    /// </summary>
+    public void BindRemodelRun(string runDirectory)
+    {
+        IToolService service = Service ?? throw new InvalidOperationException(
+            "no SwReview tool service is listening, so there is no bridge to bind the run folder on.");
+        service.BindRemodelRun(runDirectory);
+    }
 
     /// <summary>
     /// Starts the tool service if a document is open and one is not running already. Returns

@@ -19,6 +19,7 @@ using SwReview.Extractor.Interference;
 using SwReview.Extractor.Measure;
 using SwReview.Extractor.Sw;
 using Xunit;
+using RemodelFakes = SwReview.Extractor.Tests.Fakes;
 
 namespace SwReview.AddIn.Tests;
 
@@ -345,6 +346,74 @@ public sealed class InProcPipeServerTests
             }
 
             Assert.DoesNotContain(RemodelSecret, log.ToString());
+        }
+    }
+
+    // ---- the same scope on a host whose services carry a seat (004 T157) ------------------------
+    //
+    // The add-in starts one tool service, whose one BridgeServices answers the review, general-
+    // chat and remodel secrets alike, so the seat T157 hands it is on the services every review
+    // request reaches. What keeps the review and general-chat secrets off `remodel.*` there is
+    // ScopedSecretPolicy, before the dispatcher runs: the seated counterparts of the two refusals
+    // above, and the remodel secret reaching the handler rather than being told there is no seat.
+
+    [Theory]
+    [MemberData(nameof(RemodelCommandRows))]
+    public void OnASeatedHostTheReviewAndGeneralChatSecretsAreRefusedEveryRemodelCommand(string command)
+    {
+        var log = new StringWriter();
+        var seat = new RemodelFakes.FakeRemodelSeat();
+        using (var world = new ScopedWorld(log, seat))
+        {
+            foreach (string refused in new[] { ReviewSecret, ChatSecret })
+            {
+                BridgeResponse response = world.Server.Answer(
+                    Line("1", command, refused, "{\"source_path\":\"C:\\\\work\\\\bracket.SLDPRT\"}"));
+
+                Assert.Equal(SwBridgeDispatcher.UnauthorizedError, response.Error);
+                Assert.Null(response.Result);
+            }
+
+            // Nothing reached the seat: not a probe, not a setting, not an open.
+            Assert.Empty(seat.Probe.Members);
+            Assert.Empty(seat.ToggleWrites);
+            Assert.Empty(seat.Opened);
+            Assert.Empty(seat.Closed);
+        }
+    }
+
+    [Fact]
+    public void OnASeatedHostTheRemodelSecretReachesTheHandlerAndIsNotToldThereIsNoSeat()
+    {
+        var log = new StringWriter();
+        var seat = new RemodelFakes.FakeRemodelSeat();
+        using (var world = new ScopedWorld(log, seat))
+        {
+            // No session yet, so the answer is the handler's own: there is no copy to act on.
+            BridgeResponse snapshot = world.Server.Answer(Line("1", RemodelCommands.Snapshot, RemodelSecret, "{}"));
+            Assert.Equal(RemodelErrorCodes.TargetMismatch, Assert.IsType<RemodelErrorResult>(snapshot.Result).ErrorCode);
+            Assert.DoesNotContain("seat", snapshot.Error, StringComparison.OrdinalIgnoreCase);
+
+            // And the probe reads the seat's view of the open source.
+            string source = world.WriteSource();
+            BridgeResponse probe = world.Server.Answer(Line(
+                "2", RemodelCommands.ProbeScope, RemodelSecret, "{\"source_path\":" + System.Text.Json.JsonSerializer.Serialize(source) + "}"));
+            Assert.True(probe.Status == BridgeStatus.Ok, "remodel.probe_scope answered: " + probe.Error);
+            Assert.Contains(nameof(RemodelFakes.FakeProbeSource.IsOpen), seat.Probe.Members);
+            Assert.DoesNotContain(RemodelSecret, log.ToString());
+        }
+    }
+
+    [Fact]
+    public void OnAnUnseatedHostTheRemodelSecretIsToldThereIsNoSeat()
+    {
+        var log = new StringWriter();
+        using (var world = new ScopedWorld(log))
+        {
+            BridgeResponse snapshot = world.Server.Answer(Line("1", RemodelCommands.ProbeScope, RemodelSecret, "{\"source_path\":\"C:\\\\work\\\\bracket.SLDPRT\"}"));
+
+            Assert.Equal(RemodelErrorCodes.TargetMismatch, Assert.IsType<RemodelErrorResult>(snapshot.Result).ErrorCode);
+            Assert.Contains("not built with a remodel seat", snapshot.Error, StringComparison.Ordinal);
         }
     }
 
@@ -1041,6 +1110,9 @@ public sealed class InProcPipeServerTests
 
         public bool CanInvoke => true;
 
+        /// <summary>No test thread is this invoker's application thread: it only ever posts.</summary>
+        public bool IsApplicationThread => false;
+
         /// <summary>Set once a call has reached <see cref="Post"/>.</summary>
         public ManualResetEventSlim Entered => _entered;
 
@@ -1168,6 +1240,14 @@ public sealed class InProcPipeServerTests
         private readonly string _captureDirectory;
 
         public ScopedWorld(TextWriter log)
+            : this(log, null)
+        {
+        }
+
+        /// <param name="log">Where the request log goes.</param>
+        /// <param name="remodelSeat">The seat the services carry, as the add-in's do since 004
+        /// T157; null for a host with none.</param>
+        public ScopedWorld(TextWriter log, Extractor.Rms.IRemodelSeat? remodelSeat)
         {
             _captureDirectory = Path.Combine(
                 Path.GetTempPath(), "swreview-toolservice-tests", Guid.NewGuid().ToString("N"));
@@ -1186,6 +1266,7 @@ public sealed class InProcPipeServerTests
                 SwVersion = "32.5.0",
                 DocumentPath = @"C:\work\bracket-assy.SLDASM",
                 Configuration = "Default",
+                RemodelSeat = remodelSeat,
             };
 
             Recorder = new SwGateRecorder();
@@ -1209,6 +1290,14 @@ public sealed class InProcPipeServerTests
         public FakeInterferenceSource Interference { get; }
 
         public SwGateRecorder Recorder { get; }
+
+        /// <summary>A part file on disk for a probe to name, as the engineer's open source would be.</summary>
+        public string WriteSource()
+        {
+            string path = Path.Combine(_captureDirectory, "bracket.SLDPRT");
+            File.WriteAllText(path, "the engineer's part");
+            return path;
+        }
 
         public void Dispose()
         {
