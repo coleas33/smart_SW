@@ -36,7 +36,9 @@ from swreview.checks.drawing_context import (
     CANDIDATE_OPTIONS,
     CONFORMANCE_CHECK,
     CONTEXT_CHECK,
+    candidate_question,
 )
+from swreview.drawings.evidence import DrawingIndex, file_key
 from swreview.ir.loader import load_package, save_package
 from swreview.ir.models import EvidencePackage, Gap
 from swreview.report.session import EvidenceRequest
@@ -45,10 +47,13 @@ from swreview.tools.drawings import (
     DRAWINGS_TOOL,
     MAX_DRAWINGS,
     NO_CONNECTION,
+    PART_ROLES_ATTRIBUTE,
     TEN_DRAWINGS,
+    ConfirmedRead,
     read_confirmed_candidates,
 )
 from tests.support.drawings import DrawingBuilder
+from tests.support.fake_part_roles import FakePartRoles
 from tests.support.mechanical import PackageBuilder
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "drawings"
@@ -161,8 +166,9 @@ def host_gaps(package: EvidencePackage, stale_gap: StaleGap) -> list[Gap]:
 def merged(
     folder: Path, document_id: str, *, stale_gap: StaleGap = "reworded"
 ) -> Callable[[], dict[str, Any]]:
-    """What the host does on a read: append the drawing, drop the candidate row and treat the
-    standing drawing gap as `stale_gap` says (the host as built rewords it), then say so."""
+    """What the host does on a read: append the drawing, drop every candidate row of the path it
+    read (013 T083: a part and an assembly of one stem share it) and treat the standing drawing
+    gap as `stale_gap` says (the host as built rewords it), then say so."""
 
     def read() -> dict[str, Any]:
         package = load_package(folder).package
@@ -181,7 +187,8 @@ def merged(
                     after.drawing_records[-1].model_copy(update={"opened_by_review": True}),
                 ],
                 "drawing_candidates": [
-                    item for item in package.drawing_candidates if item.document_id != document_id
+                    item for item in package.drawing_candidates
+                    if file_key(item.path) != file_key(candidate.path)
                 ],
             }
         )
@@ -216,14 +223,18 @@ def reviewed(
     answers: Callable[[Path], dict[str, Answer]] | None,
     *,
     bridge: bool = True,
+    mode: DrawingReadMode = "opens_closed",
+    roles: FakePartRoles | None = None,
 ) -> tuple[ReviewRun, FakeHost | None, list[tuple[str, dict[str, Any]]]]:
-    """A review whose first turn calls `check_drawings`, so the candidate question is asked."""
+    """A review whose first turn calls `check_drawings`, so the candidate question is asked when
+    the host says `mode` is `opens_closed`; `roles` are attached where `start_review` attaches
+    the review's part roles (013 `contracts/part-roles.md` section 5)."""
     folder = tmp_path / "run-0001"
     if package is None:
         shutil.copytree(FIXTURES / "plate-drawing", folder)
     else:
         save_package(package, folder)
-    host = FakeHost(folder, answers(folder)) if answers is not None else None
+    host = FakeHost(folder, answers(folder), mode) if answers is not None else None
     events: list[tuple[str, dict[str, Any]]] = []
     options: dict[str, Any] = {}
     if bridge and host is not None:
@@ -243,6 +254,8 @@ def reviewed(
     )
     if host is not None:
         host.run = run
+    if roles is not None:
+        setattr(run.context, PART_ROLES_ATTRIBUTE, roles)
     run.start()
     return run, host, events
 
@@ -823,3 +836,176 @@ def test_a_package_with_no_stale_gap_gains_none(tmp_path: Path) -> None:
 
     assert run.context.ir.gaps == gaps_before
     assert not any(is_drawing_phase_gap(gap) for gap in run.context.ir.gaps)
+
+
+# --- 5. one read per candidate file, only when the host opens closed drawings (013 T080) ---------
+#
+# 013 `contracts/drawing-capability.md` section 4 (research R2.28). A part and an assembly of one
+# stem share their same-name drawing: the question names the file once and keeps both documents,
+# the host is asked once for the file with its first document, each document gets its item from
+# that one outcome, and the host's merge removes every row of the path, so nothing asks again. The
+# question is rebuilt with the roles and the mode it was asked with, and nothing happens unless
+# the host opens closed drawings.
+
+SHARED = "FICT-OKTAVEN-8000"
+"""The assembly's stem, shared by its plate: one drawing file beside two reviewed documents."""
+BOTH_FILES = ("doc:0001", "doc:0003")
+"""The first document of each file of `shared_stem_package(block=True)`: the ones the host is
+asked with."""
+
+
+def shared_stem_package(*, block: bool = False) -> EvidencePackage:
+    """The assembly (doc:0001) and its plate (doc:0002) of one stem, each with a candidate row for
+    the one file; with `block`, a part (doc:0003) with a same-name file of its own."""
+    base = PackageBuilder(design_stem=SHARED, schema_version="1.6.0")
+    documents = [base.document(SHARED, "part")]
+    if block:
+        documents.append(base.document("FICT-SORN-8003", "part"))
+    for document in documents:
+        base.component(document)
+    builder = DrawingBuilder(base.build().package)
+    builder.candidate(base.root_id)
+    for document in documents:
+        builder.candidate(document)
+    return builder.build()
+
+
+def answered_candidate_question(run: ReviewRun) -> EvidenceRequest:
+    """The candidate question the review asked, marked answered with the one answer that acts."""
+    [request] = [item for item in run.session.evidence_requests if item.options]
+    request.status = "answered"
+    request.answer = CANDIDATE_CONFIRM
+    return request
+
+
+def test_a_file_beside_two_documents_is_read_once_with_its_first_document(tmp_path: Path) -> None:
+    run, host, _ = reviewed(
+        tmp_path, shared_stem_package(), lambda folder: {"doc:0001": merged(folder, "doc:0001")}
+    )
+    assert host is not None
+    [question] = [item for item in run.session.evidence_requests if item.options]
+    assert question.entity_ids == ["doc:0001", "doc:0002"]
+    assert "sits beside 1 reviewed file(s)" in (question.question or "")
+
+    run.answer_evidence_batch([(question.id, CANDIDATE_CONFIRM)])
+
+    assert host.calls == [("run-0001", "doc:0001")]
+    assert confirmed(run) == {
+        "doc:0001": ("checked", "opened read-only, read and closed (1 sheet)"),
+        "doc:0002": ("checked", "opened read-only, read and closed (1 sheet)"),
+    }
+    assert run.context.ir.drawing_candidates == [], "the host's merge removed both rows"
+
+
+def test_a_refused_read_gives_each_document_of_the_file_the_same_unresolved_reason(
+    tmp_path: Path,
+) -> None:
+    refusal = BridgeError(f"the bridge returned status 'error': {NOT_VALIDATED_BY_THE_HOST}")
+    run, host, _ = reviewed(tmp_path, shared_stem_package(), lambda folder: {"doc:0001": refusal})
+    assert host is not None
+
+    run.answer_evidence_batch([(question_id(run), CANDIDATE_CONFIRM)])
+
+    assert host.calls == [("run-0001", "doc:0001")]
+    assert confirmed(run) == {
+        "doc:0001": ("unresolved", str(refusal)),
+        "doc:0002": ("unresolved", str(refusal)),
+    }
+
+
+def test_two_files_are_still_two_reads(tmp_path: Path) -> None:
+    run, host, _ = reviewed(
+        tmp_path,
+        shared_stem_package(block=True),
+        lambda folder: {part: merged(folder, part) for part in BOTH_FILES},
+    )
+    assert host is not None
+
+    run.answer_evidence_batch([(question_id(run), CANDIDATE_CONFIRM)])
+
+    assert host.calls == [("run-0001", "doc:0001"), ("run-0001", "doc:0003")]
+    assert sorted(confirmed(run)) == ["doc:0001", "doc:0002", "doc:0003"]
+    assert {bucket for bucket, _ in confirmed(run).values()} == {"checked"}
+
+
+def test_the_function_answers_one_read_per_file_with_its_documents_and_outcome(
+    tmp_path: Path,
+) -> None:
+    refusal = BridgeError("the bridge returned status 'error': the drawing file is not there")
+    run, _, _ = reviewed(
+        tmp_path,
+        shared_stem_package(block=True),
+        lambda folder: {"doc:0001": merged(folder, "doc:0001"), "doc:0003": refusal},
+    )
+
+    reads = read_confirmed_candidates(run.context, [answered_candidate_question(run)], run.out_dir)
+
+    assert reads == [
+        ConfirmedRead(
+            file_name=f"{SHARED}.SLDDRW",
+            document_ids=("doc:0001", "doc:0002"),
+            outcome="opened read-only, read and closed (1 sheet)",
+            read=True,
+        ),
+        ConfirmedRead(
+            file_name="FICT-SORN-8003.SLDDRW",
+            document_ids=("doc:0003",),
+            outcome=str(refusal),
+            read=False,
+        ),
+    ]
+
+
+@pytest.mark.parametrize("mode", ["none", "open_only"])
+def test_nothing_happens_unless_the_host_opens_closed_drawings(
+    tmp_path: Path, mode: DrawingReadMode
+) -> None:
+    """No question is asked, and a request with the words the question would have had, answered
+    with the one answer that acts, still opens nothing."""
+    package = shared_stem_package()
+    run, host, _ = reviewed(
+        tmp_path, package, lambda folder: {"doc:0001": merged(folder, "doc:0001")}, mode=mode
+    )
+    assert host is not None
+    assert [item for item in run.session.evidence_requests if item.options] == []
+    spec = candidate_question(DrawingIndex.for_package(package), None, "opens_closed")
+    assert spec is not None
+    look_alike = EvidenceRequest(
+        id="ER-090", what=spec.what, why=spec.why, entity_ids=list(spec.entity_ids),
+        status="answered", answer=CANDIDATE_CONFIRM, answered_at=None, question=spec.question,
+        options=list(spec.options), blocks=spec.blocks,
+    )
+
+    assert read_confirmed_candidates(run.context, [look_alike], run.out_dir) == []
+    assert host.calls == []
+    assert confirmed(run) == {}
+
+
+def test_the_question_is_rebuilt_with_the_roles_it_was_asked_with(tmp_path: Path) -> None:
+    """Roles that changed before the read - a regrade run first, which 013 `part-roles.md`
+    section 9 orders after it - rebuild another question, which nothing answered: the read is
+    skipped. With the roles the question was asked with, both files are read."""
+    unclear = FakePartRoles(roles={"doc:0003": "unclear"}, root="doc:0001")
+    regraded = FakePartRoles(roles={"doc:0003": "bought"}, root="doc:0001")
+    outcomes: dict[str, list[tuple[str, str]]] = {}
+    for label, roles_at_read in (("asked", unclear), ("regraded first", regraded)):
+        folder = tmp_path / label
+        folder.mkdir()
+        run, host, _ = reviewed(
+            folder,
+            shared_stem_package(block=True),
+            lambda run_folder: {part: merged(run_folder, part) for part in BOTH_FILES},
+            roles=unclear,
+        )
+        assert host is not None
+        request = answered_candidate_question(run)
+        assert request.entity_ids == ["doc:0001", "doc:0002", "doc:0003"]
+        setattr(run.context, PART_ROLES_ATTRIBUTE, roles_at_read)
+
+        read_confirmed_candidates(run.context, [request], run.out_dir)
+
+        outcomes[label] = host.calls
+    assert outcomes == {
+        "asked": [("run-0001", "doc:0001"), ("run-0001", "doc:0003")],
+        "regraded first": [],
+    }
