@@ -48,7 +48,9 @@ __all__ = [
     "ReachedBy",
     "UngradableRootError",
     "graded_documents",
+    "name_matches",
     "part_number_matches",
+    "property_key",
 ]
 
 DocumentKind = Literal["part", "assembly", "drawing"]
@@ -170,13 +172,45 @@ def part_number_matches(pattern: str, file_name: str) -> bool:
     nothing: there is no convention to follow, which is why the data-card check reports the
     empty setting as skipped coverage rather than grading anything against it.
     """
-    if not pattern or not file_name:
+    return name_matches(pattern, file_name, wildcards=False)
+
+
+_CONVENTION_CLASSES: dict[str, str] = {"#": "[0-9]", "?": "."}
+"""The part-number convention's vocabulary (feature 006 `contracts/rules.md`)."""
+
+_WILDCARD_CLASSES: dict[str, str] = {**_CONVENTION_CLASSES, "@": "[^\\W\\d_]", "*": ".*"}
+"""Profile version 4's catalogue-number shapes add one letter and any run (feature 013
+`contracts/part-roles-profile.md` section 2). `[^\\W\\d_]` is a word character that is
+neither a digit nor an underscore: a letter, in any script a file name can carry."""
+
+
+def name_matches(pattern: str, text: str, *, wildcards: bool = False) -> bool:
+    """Whether the whole of `text` is spelled by `pattern`, ignoring case.
+
+    The one matcher of the names the owner writes. `#` is one digit and `?` any one
+    character; with `wildcards`, `@` is one letter and `*` any run, the empty run included;
+    every other character is itself. `part_number.pattern` is matched with `wildcards`
+    false, so the convention keeps the vocabulary the macro had and `@` or `*` in it is a
+    literal character. An empty pattern or an empty text matches nothing. The owner writes
+    no regular expression: the pattern is translated into one here, every other character
+    escaped.
+    """
+    if not pattern or not text:
         return False
-    expression = "".join(
-        "[0-9]" if character == "#" else "." if character == "?" else re.escape(character)
-        for character in pattern
-    )
-    return re.fullmatch(expression, file_name, flags=re.IGNORECASE) is not None
+    classes = _WILDCARD_CLASSES if wildcards else _CONVENTION_CLASSES
+    expression = "".join(classes.get(character, re.escape(character)) for character in pattern)
+    return re.fullmatch(expression, text, flags=re.IGNORECASE) is not None
+
+
+def property_key(name: str) -> str:
+    """How a custom property's name is compared: folded, with every space removed.
+
+    Real files spell one property both with and without a space, and SOLIDWORKS reads a
+    name without regard to case; feature 013 `contracts/part-roles-profile.md` section 2.
+    Every reader of a named property - the part-role signals, the hygiene checks - compares
+    through this, so the two spellings are one property everywhere.
+    """
+    return "".join(name.split()).casefold()
 
 
 # --- the reached set ------------------------------------------------------------------------

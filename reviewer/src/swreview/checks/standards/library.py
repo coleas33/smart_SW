@@ -25,12 +25,20 @@ visible one.
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
 
 from swreview.checks.standards.profile import StandardsProfile
 
-__all__ = ["LIST_NAMES", "LibraryPrefix", "MateRequirement", "PrefixMatch", "PrefixMatcher"]
+__all__ = [
+    "LIST_NAMES",
+    "LibraryPrefix",
+    "MateRequirement",
+    "PrefixList",
+    "PrefixMatch",
+    "PrefixMatcher",
+]
 
 LIST_NAMES: tuple[str, ...] = (
     "skip_prefixes",
@@ -72,35 +80,64 @@ class PrefixMatch:
 
 
 @dataclass(frozen=True, slots=True)
-class PrefixMatcher:
-    """The profile's four lists, normalized once, ready to match paths against."""
+class PrefixList:
+    """One list of prefixes, normalized once: rules 1 to 5 of "Prefix semantics" for any caller.
 
-    skip: tuple[LibraryPrefix, ...]
-    sketch_exempt: tuple[LibraryPrefix, ...]
-    one_mate: tuple[LibraryPrefix, ...]
-    two_mate: tuple[LibraryPrefix, ...]
+    The four library lists are four of these (`PrefixMatcher`), and profile version 4's
+    `part_roles.bought_prefixes` is a fifth (feature 013 `contracts/part-roles-profile.md`
+    section 1): one rule for every list the owner writes, so a bought folder and a skipped
+    folder cannot come to be matched differently.
+    """
+
+    entries: tuple[LibraryPrefix, ...]
     root: str
     """The profile's `vault_root`, normalized once; relative entries resolve against it."""
 
     @classmethod
+    def from_entries(cls, entries: Sequence[str], root: str) -> PrefixList:
+        """`entries` as the owner wrote them; `root` the profile's `vault_root` as written."""
+        normalized_root = normalize(root)
+        return cls(entries=_prepare(entries, normalized_root), root=normalized_root)
+
+    def matching(self, path: str) -> list[LibraryPrefix]:
+        """Every entry `path` is under, in list order."""
+        return _matching(self.entries, _resolve(path, self.root))
+
+    def matches(self, path: str) -> list[str]:
+        """Every entry `path` is under, as written, in list order (rule 5 names them all)."""
+        return [prefix.written for prefix in self.matching(path)]
+
+    def longest(self, path: str) -> str | None:
+        """The longest entry `path` is under, as written, or `None` (rule 5)."""
+        return _longest(self.matching(path))
+
+
+@dataclass(frozen=True, slots=True)
+class PrefixMatcher:
+    """The profile's four lists, normalized once, ready to match paths against."""
+
+    skip: PrefixList
+    sketch_exempt: PrefixList
+    one_mate: PrefixList
+    two_mate: PrefixList
+
+    @classmethod
     def from_profile(cls, profile: StandardsProfile) -> PrefixMatcher:
-        root = normalize(profile.vault_root)
+        root = profile.vault_root
         return cls(
-            skip=_prepare(profile.library.skip_prefixes, root),
-            sketch_exempt=_prepare(profile.library.sketch_exempt_prefixes, root),
-            one_mate=_prepare(profile.library.one_mate_prefixes, root),
-            two_mate=_prepare(profile.library.two_mate_prefixes, root),
-            root=root,
+            skip=PrefixList.from_entries(profile.library.skip_prefixes, root),
+            sketch_exempt=PrefixList.from_entries(profile.library.sketch_exempt_prefixes, root),
+            one_mate=PrefixList.from_entries(profile.library.one_mate_prefixes, root),
+            two_mate=PrefixList.from_entries(profile.library.two_mate_prefixes, root),
         )
 
     def match(self, path: str) -> PrefixMatch:
         """Answer all four questions about `path`, independently of one another."""
-        subject = _resolve(path, self.root)
         matches = {
-            "skip_prefixes": _matching(self.skip, subject),
-            "sketch_exempt_prefixes": _matching(self.sketch_exempt, subject),
-            "one_mate_prefixes": _matching(self.one_mate, subject),
-            "two_mate_prefixes": _matching(self.two_mate, subject),
+            "skip_prefixes": self.skip.matching(path),
+            "sketch_exempt_prefixes": self.sketch_exempt.matching(path),
+            "one_mate_prefixes": self.one_mate.matching(path),
+            "two_mate_prefixes": self.two_mate.matching(path),
         }
         requirement, mate_prefix = _mate_requirement(
             matches["one_mate_prefixes"], matches["two_mate_prefixes"]
@@ -134,7 +171,7 @@ def normalize(path: str) -> str:
     return collapsed.casefold()
 
 
-def _prepare(entries: list[str], root: str) -> tuple[LibraryPrefix, ...]:
+def _prepare(entries: Sequence[str], root: str) -> tuple[LibraryPrefix, ...]:
     """One list, normalized once. A blank entry is dropped: it is not "every path"."""
     return tuple(
         LibraryPrefix(written=entry, normalized=_resolve(entry, root))
