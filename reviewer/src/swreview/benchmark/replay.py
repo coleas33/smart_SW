@@ -75,6 +75,7 @@ from swreview.benchmark.recording import (
 from swreview.checks.feature_nodes import tree_nodes
 from swreview.checks.interference import CHECK as INTERFERENCE_CHECK
 from swreview.checks.rms_types import RmsTypeTable, load_table
+from swreview.checks.standards.part import SKETCHES_FULLY_DEFINED as STANDARDS_SKETCHES
 from swreview.exceptions import RMS_CHECK_PREFIX
 from swreview.findings import Finding, SubjectKey, finding_subject_key, subject_locations
 from swreview.ir.loader import PACKAGE_FILE_NAME
@@ -674,8 +675,9 @@ class ReclassifiedFinding(ReplayFinding):
 
 
 class NarrowedFinding(ReplayFinding):
-    """A recorded `rms.*` finding the current type table or the shared tree reading narrowed
-    (owner decision 23A; feature 013 T134-Q1)."""
+    """A recorded `rms.*` finding the current type table or the shared tree reading narrowed, or
+    a recorded Standards sketch finding the tree reading narrowed (owner decision 23A; feature
+    013 T134-Q1 and T134-Q2)."""
 
     step: int | None
     removed_locations: int
@@ -695,10 +697,11 @@ class ReplayFindings(ReplayModel):
     contact the requested pass recorded: touching groups, contacts by design since feature
     010 (its `contracts/contacts.md` section 6). Neither lost nor not replayable."""
     narrowed: list[NarrowedFinding] = Field(default_factory=list)
-    """Recorded `rms.*` findings whose key, less the drawing locations that name only rows the
-    current type table does not count as content, equals a requested-pass finding nothing else
-    matched, one to one (`compare_finding_keys`; `contracts/replay.md` section 5, owner
-    decision 23A). Neither lost nor added."""
+    """Recorded findings of a check that reads the shared tree reading (`narrowable`) whose key,
+    less drawing locations the current type table does not count as content (`rms.*` only) or the
+    tree reading folds, is a requested-pass finding nothing else matched, one to one
+    (`compare_finding_keys`; `contracts/replay.md` section 5, owner decision 23A, feature 013
+    T134-Q1 and T134-Q2). Neither lost nor added."""
 
 
 RegroupRule = Literal["R", "M"]
@@ -1759,6 +1762,19 @@ def folded_locations(
     }
 
 
+TREE_READING_STANDARDS_CHECKS: frozenset[str] = frozenset({STANDARDS_SKETCHES})
+"""The checks outside `rms.*` that read the shared tree reading, named: since feature 013 T133 the
+Standards sketch check alone. Narrowing reads their findings by the tree-reading clause alone,
+never the type table's (T134-Q2, default taken 2026-09-27; `contracts/replay.md` section 5)."""
+
+
+def narrowable(check: str) -> bool:
+    """Whether narrowing reads a finding of `check`: every check that reads the shared tree
+    reading - the `rms.*` rules, by both clauses, and `TREE_READING_STANDARDS_CHECKS`, by the
+    tree-reading clause alone. Every other finding is compared exactly and never narrowed."""
+    return check.startswith(RMS_CHECK_PREFIX) or check in TREE_READING_STANDARDS_CHECKS
+
+
 @dataclass(frozen=True)
 class NarrowedKey:
     """A recorded finding's key less the locations the current code no longer names."""
@@ -1788,20 +1804,25 @@ def narrowed_key(
       listing merged into it, the occurrences beyond the rows it keeps there, at most one per
       second listing - the second listing's occurrence goes, the depth-0 row's stays.
 
-    Of a location's occurrences the first are kept and the later removed. `None` for a finding
-    of another family than `rms.*` - the type table and the reading decide the RMS rules'
-    subjects only - and for one that loses no location. A location with no persistent reference
-    is never removed.
+    Of a location's occurrences the first are kept and the later removed. The family is every
+    check that reads the shared tree reading (`narrowable`): an `rms.*` finding by both clauses;
+    a finding of `TREE_READING_STANDARDS_CHECKS` by the tree-reading clause alone, because the
+    type table decides the RMS rules' subjects, not what a Standards check names (T134-Q2).
+    `None` for a finding of any other check and for one that loses no location. A location with
+    no persistent reference is never removed.
     """
-    if not finding.check.startswith(RMS_CHECK_PREFIX):
+    if not narrowable(finding.check):
         return None
+    type_table_clause: Collection[PersistLocation] = (
+        not_content if finding.check.startswith(RMS_CHECK_PREFIX) else frozenset()
+    )
     named = Counter(
         (location.document_id, location.persist_ref)
         for location in finding.drawing_locations
         if location.persist_ref is not None
     )
     keep = {
-        location: count - _removable(location, count, not_content, folded)
+        location: count - _removable(location, count, type_table_clause, folded)
         for location, count in named.items()
     }
     kept = []
@@ -1918,9 +1939,11 @@ def compare_finding_keys(
 
     `contracts/replay.md` section 5. Each recorded finding, in order, takes one current finding
     of its key while any remains, so of several with one key the later ones are unmatched.
-    Then each unmatched `rms.*` finding is narrowed over the recorded package at
-    `package_path`, under the type table the current code ships and the shared tree reading
-    (`narrowed_key`, `folded_locations`), and takes one current finding **nothing else matched** -
+    Then each unmatched finding of a check that reads the shared tree reading (`narrowable`: the
+    `rms.*` rules, and the Standards sketch check by the tree-reading clause alone) is narrowed
+    over the recorded package at `package_path`, under the type table the current code ships and
+    the shared tree reading (`narrowed_key`, `folded_locations`), and takes one current finding
+    **nothing else matched** -
     no recorded key, compared or `uncompared` - whose key is its own less some of the locations
     narrowing may remove (`_narrowed_onto`), one to one in recorded order. What is still
     unmatched is lost.
@@ -1939,7 +1962,8 @@ def compare_finding_keys(
     compares as recorded, the fixture generator carries it into the fixture's. `uncompared`
     holds the keys of recorded findings that are never lost but that a current finding may
     still equal - the replay's not-replayable and reclassified ones - so neither is added.
-    The package is read only when an `rms.*` finding is unmatched: nothing else can narrow.
+    The package is read only when a finding narrowing reads is unmatched: nothing else can
+    narrow.
     """
     keys = [named(finding_subject_key(finding)) for finding in findings]
     current_keys = Counter(current)
@@ -1953,7 +1977,7 @@ def compare_finding_keys(
     added = current_keys - (Counter(keys) + Counter(named(key) for key in uncompared))
     not_content: frozenset[PersistLocation] = frozenset()
     folded: Mapping[PersistLocation, FoldedLocation] = NO_FOLDED_LOCATIONS
-    if any(findings[position].check.startswith(RMS_CHECK_PREFIX) for position in unmatched):
+    if any(narrowable(findings[position].check) for position in unmatched):
         package = EvidencePackage.model_validate_json(package_path.read_bytes())
         table = load_table()
         not_content = not_content_locations(package, table)
