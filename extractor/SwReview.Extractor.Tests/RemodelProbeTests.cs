@@ -250,6 +250,51 @@ public class RemodelProbeTests
     }
 
     [Fact]
+    public void Run_ABodyWhoseCallCameBackWrappedInATask_RecordsTheHostsOwnMessage()
+    {
+        // A call made through a task arrives as an AggregateException whose own message, "One or
+        // more errors occurred.", says nothing; the ledger keeps the host's own words (013 T137,
+        // 004 T171).
+        var executors = new Dictionary<string, RemodelProbeExecutor>
+        {
+            ["PROBE-1"] = _ => throw new AggregateException(new InvalidOperationException("the host's own words")),
+        };
+
+        RemodelProbeRecord record = RemodelProbeRunner.Run("PROBE-1", Context(), executors);
+
+        Assert.Equal(RemodelProbeVerdict.Unresolved, record.Verdict);
+        Assert.Equal("the host's own words", record.RawResult[RemodelProbeRunner.ErrorKey]);
+    }
+
+    [Fact]
+    public void Run_ABodyWhoseWrappedCallsBothThrew_RecordsEveryHostMessageInOrder()
+    {
+        var executors = new Dictionary<string, RemodelProbeExecutor>
+        {
+            ["PROBE-1"] = _ => throw new AggregateException(
+                new InvalidOperationException("first"),
+                new AggregateException(new InvalidOperationException("second"))),
+        };
+
+        RemodelProbeRecord record = RemodelProbeRunner.Run("PROBE-1", Context(), executors);
+
+        Assert.Equal("first; second", record.RawResult[RemodelProbeRunner.ErrorKey]);
+    }
+
+    [Fact]
+    public void Run_AnAggregateWithNoInnerException_KeepsItsOwnMessage()
+    {
+        // Nothing inside to prefer: its own message is the only words there are, never an empty string.
+        var error = new AggregateException("the wrapper's only words", Array.Empty<Exception>());
+        var executors = new Dictionary<string, RemodelProbeExecutor> { ["PROBE-1"] = _ => throw error };
+
+        RemodelProbeRecord record = RemodelProbeRunner.Run("PROBE-1", Context(), executors);
+
+        Assert.Equal(error.Message, record.RawResult[RemodelProbeRunner.ErrorKey]);
+        Assert.False(string.IsNullOrEmpty(record.RawResult[RemodelProbeRunner.ErrorKey]));
+    }
+
+    [Fact]
     public void Run_ABodyThatAnswersVerified_RecordsVerifiedWithItsRawResultAndInteropMembers()
     {
         var executors = new Dictionary<string, RemodelProbeExecutor>

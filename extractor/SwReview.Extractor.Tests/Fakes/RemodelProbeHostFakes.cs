@@ -1,8 +1,104 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using SwReview.Extractor.Rms;
 
 namespace SwReview.Extractor.Tests.Fakes;
+
+/// <summary>What one scripted PROBE-1 reorder attempt does (<see cref="ParkingReorder"/>).</summary>
+public enum ReorderAttempt
+{
+    /// <summary>Returns true, as a reorder SOLIDWORKS refused without a box would.</summary>
+    Returns,
+
+    /// <summary>Throws, with <see cref="ParkingReorder.HostMessage"/> as the host's own words.</summary>
+    Throws,
+
+    /// <summary>Never returns until the fake is disposed: a "Cannot reorder" box nobody answers.</summary>
+    Parks,
+}
+
+/// <summary>
+/// PROBE-1's <c>ReorderFeature</c>, scripted by the <c>CommandInProgress</c> flag each attempt sees,
+/// with a block the test controls rather than a clock (013 contracts/readings.md section 4, 004 T171).
+/// An attempt that parks records "attempt k parked" - a per-attempt task that completes the moment
+/// it parks - and then waits on an event only <see cref="Dispose"/> sets. The test's watchdog
+/// deadline for attempt k is that task (<see cref="Deadlines"/>): it fires exactly when attempt k
+/// has parked, and never for an attempt that returns or throws, so no verdict waits on a timer and
+/// none can be decided by the machine's load.
+/// </summary>
+public sealed class ParkingReorder : IDisposable
+{
+    /// <summary>The message an attempt that throws carries: the host's own words, which the ledger must keep.</summary>
+    public const string HostMessage = "the host's own words: the reorder failed";
+
+    private readonly FakeRemodelProbeHost _host;
+    private readonly Func<bool, ReorderAttempt> _byFlag;
+    private readonly ManualResetEventSlim _release = new ManualResetEventSlim(false);
+    private readonly ConcurrentDictionary<int, TaskCompletionSource<bool>> _parked =
+        new ConcurrentDictionary<int, TaskCompletionSource<bool>>();
+
+    private int _attempts;
+    private int _parkedNow;
+
+    /// <summary>Scripts <paramref name="host"/>'s <c>ReorderFeature</c>: <paramref name="byFlag"/> is given the flag each attempt sees.</summary>
+    public ParkingReorder(FakeRemodelProbeHost host, Func<bool, ReorderAttempt> byFlag)
+    {
+        _host = host ?? throw new ArgumentNullException(nameof(host));
+        _byFlag = byFlag ?? throw new ArgumentNullException(nameof(byFlag));
+        host.ReorderFeatureImpl = Reorder;
+    }
+
+    /// <summary>The <c>CommandInProgress</c> value each attempt saw, in the order the attempts ran.</summary>
+    public ConcurrentQueue<bool> FlagSeenByAttempt { get; } = new ConcurrentQueue<bool>();
+
+    /// <summary>How many attempts are parked at this moment.</summary>
+    public int ParkedNow => Volatile.Read(ref _parkedNow);
+
+    /// <summary>"Attempt <paramref name="attempt"/> parked" (0-based): completes once that attempt has parked, never otherwise.</summary>
+    public Task Parked(int attempt) => Slot(attempt).Task;
+
+    /// <summary>
+    /// The watchdog deadline factory for a run whose attempts all go through this fake: the k-th
+    /// deadline the watchdog asks for is <see cref="Parked"/>(k). The watchdog asks for one per
+    /// attempt, in order, only once that attempt has begun.
+    /// </summary>
+    public Func<CancellationToken, Task> Deadlines()
+    {
+        int next = -1;
+        return _ => Parked(Interlocked.Increment(ref next));
+    }
+
+    /// <summary>Releases every parked attempt, so no test leaves a thread behind it.</summary>
+    public void Dispose() => _release.Set();
+
+    private bool Reorder(RemodelProbePart part, string featureToMove, string targetFeature, int location)
+    {
+        int attempt = Interlocked.Increment(ref _attempts) - 1;
+        bool flag = _host.CommandInProgress;
+        FlagSeenByAttempt.Enqueue(flag);
+
+        switch (_byFlag(flag))
+        {
+            case ReorderAttempt.Throws:
+                throw new InvalidOperationException(HostMessage);
+            case ReorderAttempt.Parks:
+                Interlocked.Increment(ref _parkedNow);
+                Slot(attempt).TrySetResult(true);
+                _release.Wait();
+                Interlocked.Decrement(ref _parkedNow);
+                return true;
+            default:
+                return true;
+        }
+    }
+
+    // Completed inline on the parked thread, so the watchdog waiting on it never waits for a pool thread.
+    private TaskCompletionSource<bool> Slot(int attempt) =>
+        _parked.GetOrAdd(attempt, _ => new TaskCompletionSource<bool>());
+}
 
 /// <summary>
 /// A minimal, always-successful <see cref="IMassPropertyReading"/>. PROBE-8's tests use

@@ -1823,9 +1823,9 @@ SOLIDWORKS until someone answers it, and PROBE-1 asks for one on purpose.
    Show-RemodelLedger "$H\probes\remodel-reorder"
    ```
 
-   The third is PROBE-1 alone: an illegal reorder with SOLIDWORKS's CommandInProgress flag
-   clear, which should raise a "Cannot reorder" box, then again with the flag set, which should
-   not. Expect at least one box:
+   The third is PROBE-1 alone: an illegal reorder with SOLIDWORKS's CommandInProgress flag set
+   first, which should raise no box, then the same reorder with the flag clear, which should
+   raise a "Cannot reorder" box. Expect at least one box:
 
    ```powershell
    swreview-extract probe remodel --probe PROBE-1 --out "$H\probes\remodel-probe-1" --acknowledge-throwaway-part; "exit code: $LASTEXITCODE"
@@ -1835,7 +1835,9 @@ SOLIDWORKS until someone answers it, and PROBE-1 asks for one on purpose.
 3. **While a run runs, touch nothing but a SOLIDWORKS message box** (rule 6's one exception). If
    nothing has printed for a minute, press Alt+Tab to look for one. When one is there, wait until
    **30 seconds** have passed since it appeared: PROBE-1 times each of its two tries for 5
-   seconds, and a box answered sooner looks like no box at all. Then write down its title, its
+   seconds, counted from the moment that try begins, and a box answered sooner looks like no box
+   at all; a box the first try (flag set) raised also holds the second (flag clear), whose own 5
+   seconds start only once it has begun. Then write down its title, its
    first sentence (no path) and the run it came in, and press **OK** (if it has none, **Cancel**
    or **No**; never a Save). The same for every box.
 4. **After each run, look at:**
@@ -1862,7 +1864,7 @@ SOLIDWORKS until someone answers it, and PROBE-1 asks for one on purpose.
 
    | Probe | Task | Run | What it asks | `verified` means |
    |---|---|---|---|---|
-   | PROBE-1 | 004 T033 | third | does setting CommandInProgress stop the "Cannot reorder" box? | the illegal reorder blocked with the flag clear and returned with it set |
+   | PROBE-1 | 004 T033 | third | does setting CommandInProgress stop the "Cannot reorder" box? | the illegal reorder returned with the flag set and blocked with it clear |
    | PROBE-2 | 004 T035 | first | is `"w" = 120` in a millimetre part 120 mm, and in which unit does the equation manager answer? | it answered 120, the part's own unit, not 0.12 metres |
    | PROBE-3 | 004 T034 | second | does a reorder move a feature, and refuse past a dependency without harm? | the harmless reorder answered true, the illegal one false, and the tree did not change |
    | PROBE-4 | 004 T034 | first | must a folder's members be contiguous? | contiguous members made a folder and non-contiguous ones did not |

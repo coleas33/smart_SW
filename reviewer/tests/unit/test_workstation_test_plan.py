@@ -1062,16 +1062,30 @@ def test_the_handover_runs_the_same_three_probe_runs() -> None:
 def test_a_message_box_is_answered_only_after_probe_1s_watchdog_has_timed_both_tries(
     plan: str,
 ) -> None:
-    """PROBE-1 decides "blocked" from a watchdog that waits `DefaultTimeout` for each of its two
-    illegal reorders; a box answered before both have timed out lets the call return inside the
-    timeout and reads as no box. So the wait step 5.6 asks for is longer than both tries, and
-    the plan states the watchdog's own figure."""
+    """PROBE-1 runs its flag-set try first and its flag-clear try second, and decides "blocked"
+    from a watchdog that gives each try `DefaultTimeout`, counted from the moment that try begins
+    (013 T137, 004 T171); a box answered before both tries have timed out lets a call return
+    inside its deadline and reads as no box, and a box the first try raised holds the second. So
+    the wait step 5.6 asks for is longer than both tries, the plan states the watchdog's own
+    figure and when it starts, and it names the tries in the order the probe runs them."""
     watchdog = (RMS / "RemodelProbeWatchdog.cs").read_text(encoding="utf-8")
     [timeout] = re.findall(r"DefaultTimeout = TimeSpan\.FromSeconds\((\d+)\)", watchdog)
+    probe_1 = probe_bodies()["PROBE-1"]
     probes = re.sub(r"\s+", " ", step(plan, "5.6"))
     [wait] = re.findall(r"wait until \*\*(\d+) seconds\*\* have passed since it appeared", probes)
 
-    assert f"times each of its two tries for {timeout} seconds" in probes
+    assert probe_1.index("Attempt(commandInProgress: true)") < probe_1.index(
+        "Attempt(commandInProgress: false)"
+    )
+    assert (
+        "flag set first, which should raise no box, then the same reorder with the flag clear, "
+        'which should raise a "Cannot reorder" box'
+    ) in probes
+    assert (
+        f"times each of its two tries for {timeout} seconds, counted from the moment that try "
+        "begins"
+    ) in probes
+    assert f"whose own {timeout} seconds start only once it has begun" in probes
     assert int(wait) > 2 * int(timeout)
     assert "rule 6's one exception" in probes
     assert "step 5.6" in re.sub(r"\s+", " ", plan[plan.index("6. **Do not click") :][:400])

@@ -5,6 +5,8 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using SwReview.Extractor.Sw;
 
 namespace SwReview.Extractor.Rms;
@@ -713,7 +715,8 @@ public sealed class RemodelProbeContext
         string swVersion,
         IRemodelProbeHost host,
         string outputDirectory = "",
-        TimeSpan? watchdogTimeout = null)
+        TimeSpan? watchdogTimeout = null,
+        Func<CancellationToken, Task>? watchdogDeadline = null)
     {
         Part = part ?? throw new ArgumentNullException(nameof(part));
         Gate = gate ?? throw new ArgumentNullException(nameof(gate));
@@ -721,6 +724,7 @@ public sealed class RemodelProbeContext
         Host = host ?? throw new ArgumentNullException(nameof(host));
         OutputDirectory = outputDirectory ?? string.Empty;
         WatchdogTimeout = watchdogTimeout ?? RemodelProbeWatchdog.DefaultTimeout;
+        WatchdogDeadline = watchdogDeadline ?? RemodelProbeWatchdog.Deadline(WatchdogTimeout);
     }
 
     /// <summary>The throwaway part every probe in this run measures.</summary>
@@ -746,12 +750,20 @@ public sealed class RemodelProbeContext
     public string OutputDirectory { get; }
 
     /// <summary>
-    /// PROBE-1's watchdog bound (<see cref="RemodelProbeWatchdog"/>): how long its two reorder
-    /// attempts each wait before reporting "blocked" rather than the call's own answer.
-    /// Defaults to <see cref="RemodelProbeWatchdog.DefaultTimeout"/>; a test shortens it so a
-    /// host whose <c>ReorderFeature</c> never returns does not make the test slow.
+    /// PROBE-1's watchdog bound (<see cref="RemodelProbeWatchdog"/>): how long each of its two
+    /// reorder attempts may run, counted from the moment it has begun, before it is reported
+    /// "blocked" rather than answered. Defaults to <see cref="RemodelProbeWatchdog.DefaultTimeout"/>.
     /// </summary>
     public TimeSpan WatchdogTimeout { get; }
+
+    /// <summary>
+    /// The deadline PROBE-1's watchdog starts for each attempt once that attempt has begun (013
+    /// contracts/readings.md section 4, 004 T171). Defaults to
+    /// <see cref="RemodelProbeWatchdog.Deadline"/>(<see cref="WatchdogTimeout"/>), a timer; a test
+    /// passes a deadline it controls - "the attempt has parked", or "never" - so no verdict it
+    /// checks depends on the machine's load.
+    /// </summary>
+    public Func<CancellationToken, Task> WatchdogDeadline { get; }
 }
 
 /// <summary>
@@ -834,7 +846,7 @@ public static class RemodelProbeRunner
             {
                 reading = new RemodelProbeReading(
                     RemodelProbeVerdict.Unresolved,
-                    new Dictionary<string, string>(StringComparer.Ordinal) { [ErrorKey] = error.Message });
+                    new Dictionary<string, string>(StringComparer.Ordinal) { [ErrorKey] = HostMessage(error) });
             }
         }
 
@@ -852,6 +864,23 @@ public static class RemodelProbeRunner
             context.SwVersion,
             durationMs,
             reading.InteropMembers);
+    }
+
+    /// <summary>
+    /// What the ledger records for a body that threw: the host's own words (013 T137, 004 T171).
+    /// A call made through a task arrives as an <see cref="AggregateException"/> whose own message
+    /// ("One or more errors occurred.") says nothing, so the messages of what it wraps are recorded,
+    /// in order; one that wraps nothing keeps its own message, the only words there are.
+    /// </summary>
+    private static string HostMessage(Exception error)
+    {
+        if (!(error is AggregateException aggregate))
+        {
+            return error.Message;
+        }
+
+        IReadOnlyCollection<Exception> inner = aggregate.Flatten().InnerExceptions;
+        return inner.Count == 0 ? error.Message : string.Join("; ", inner.Select(exception => exception.Message));
     }
 
     /// <summary>Runs every id in <paramref name="probeIds"/>, in order.</summary>

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using SwReview.Extractor.Rms;
 using SwReview.Extractor.Sw;
 using SwReview.Extractor.Tests.Fakes;
@@ -18,11 +19,17 @@ namespace SwReview.Extractor.Tests;
 public class RemodelProbeExecutorsTests
 {
     private static RemodelProbeContext Context(
-        FakeRemodelProbeHost host, string outputDirectory = @"C:\out", TimeSpan? watchdogTimeout = null)
+        FakeRemodelProbeHost host,
+        string outputDirectory = @"C:\out",
+        Func<CancellationToken, Task>? watchdogDeadline = null)
     {
         var part = new RemodelProbePart(new object(), @"C:\out\probe-part\remodel-probe.SLDPRT", Array.Empty<object>());
-        return new RemodelProbeContext(part, new SwGate(), "32.5.0.48", host, outputDirectory, watchdogTimeout);
+        return new RemodelProbeContext(
+            part, new SwGate(), "32.5.0.48", host, outputDirectory, watchdogDeadline: watchdogDeadline);
     }
+
+    /// <summary>A watchdog deadline that never fires: for a run whose reorders all return or throw.</summary>
+    private static Task NeverFires(CancellationToken _) => new TaskCompletionSource<bool>().Task;
 
     private static RemodelProbeRecord Run(string probeId, RemodelProbeContext context) =>
         RemodelProbeRunner.Run(probeId, context, RemodelProbeExecutors.ByProbeId);
@@ -37,62 +44,97 @@ public class RemodelProbeExecutorsTests
             RemodelProbeExecutors.ByProbeId.Keys.OrderBy(id => id, StringComparer.Ordinal));
     }
 
-    // ---- PROBE-1: covered in depth in RemodelProbeWatchdogTests; here, the wiring ------
+    // ---- PROBE-1: the watchdog itself is RemodelProbeWatchdogTests'; here, the wiring ----
+    //
+    // Every attempt is scripted by the flag it sees and watched by "attempt k parked", never by a
+    // clock (013 T136, 004 T171): an attempt that parks is blocked the moment it parks, and one
+    // that returns or throws has a deadline that never fires.
+
+    private static RemodelProbeRecord RunProbe1(FakeRemodelProbeHost host, ParkingReorder reorder) =>
+        Run("PROBE-1", Context(host, watchdogDeadline: reorder.Deadlines()));
 
     [Fact]
-    public void Probe1_TogglesCommandInProgressFalseThenTrueAroundTheTwoAttempts()
-    {
-        var host = new FakeRemodelProbeHost { ReorderFeatureImpl = (_, _, _, _) => true };
-        RemodelProbeRecord record = Run("PROBE-1", Context(host, watchdogTimeout: TimeSpan.FromMilliseconds(500)));
-
-        Assert.Equal(new[] { false, true }, host.CommandInProgressHistory);
-        Assert.Equal(RemodelProbeVerdict.Unresolved, record.Verdict); // neither attempt blocked
-    }
-
-    [Fact]
-    public void Probe1_BlocksOnlyWithFlagClear_RecordsVerified()
+    public void Probe1_NeitherTryBlocks_SetsTheFlagThenClearsIt_AndRecordsUnresolved()
     {
         var host = new FakeRemodelProbeHost();
-        host.ReorderFeatureImpl = (part, move, target, location) =>
-        {
-            if (!host.CommandInProgress)
-            {
-                Thread.Sleep(Timeout.Infinite);
-            }
+        using var reorder = new ParkingReorder(host, _ => ReorderAttempt.Returns);
 
-            return true;
-        };
+        RemodelProbeRecord record = RunProbe1(host, reorder);
 
-        RemodelProbeRecord record = Run("PROBE-1", Context(host, watchdogTimeout: TimeSpan.FromMilliseconds(500)));
-        Assert.Equal(RemodelProbeVerdict.Verified, record.Verdict);
-    }
-
-    [Fact]
-    public void Probe1_BothAttemptsBlock_RecordsRefuted()
-    {
-        var host = new FakeRemodelProbeHost
-        {
-            ReorderFeatureImpl = (part, move, target, location) =>
-            {
-                Thread.Sleep(Timeout.Infinite);
-                return true;
-            },
-        };
-
-        RemodelProbeRecord record = Run("PROBE-1", Context(host, watchdogTimeout: TimeSpan.FromMilliseconds(500)));
-        Assert.Equal(RemodelProbeVerdict.Refuted, record.Verdict);
-    }
-
-    [Fact]
-    public void Probe1_HostThrows_RecordsUnresolved()
-    {
-        var host = new FakeRemodelProbeHost
-        {
-            ReorderFeatureImpl = (_, _, _, _) => throw new InvalidOperationException("boom"),
-        };
-
-        RemodelProbeRecord record = Run("PROBE-1", Context(host, watchdogTimeout: TimeSpan.FromMilliseconds(500)));
+        Assert.Equal(new[] { true, false }, host.CommandInProgressHistory);
         Assert.Equal(RemodelProbeVerdict.Unresolved, record.Verdict);
+    }
+
+    [Fact]
+    public void Probe1_TheFlagSetTryRunsFirst_SoABoxTheFlagClearTryLeavesCannotSpoilIt()
+    {
+        var host = new FakeRemodelProbeHost();
+        using var reorder = new ParkingReorder(host, _ => ReorderAttempt.Returns);
+
+        RunProbe1(host, reorder);
+
+        Assert.Equal(new[] { true, false }, reorder.FlagSeenByAttempt);
+    }
+
+    [Fact]
+    public void Probe1_HostThrows_RecordsUnresolvedWithTheHostsOwnMessage()
+    {
+        var host = new FakeRemodelProbeHost();
+        using var reorder = new ParkingReorder(host, _ => ReorderAttempt.Throws);
+
+        RemodelProbeRecord record = RunProbe1(host, reorder);
+
+        Assert.Equal(RemodelProbeVerdict.Unresolved, record.Verdict);
+        Assert.Equal(ParkingReorder.HostMessage, record.RawResult[RemodelProbeRunner.ErrorKey]);
+    }
+
+    [Fact]
+    public void Probe1_BlocksOnlyWithTheFlagClear_RecordsVerified_UnderTheLedgersOwnKeys()
+    {
+        var host = new FakeRemodelProbeHost();
+        using var reorder = new ParkingReorder(host, flag => flag ? ReorderAttempt.Returns : ReorderAttempt.Parks);
+
+        RemodelProbeRecord record = RunProbe1(host, reorder);
+
+        Assert.Equal(RemodelProbeVerdict.Verified, record.Verdict);
+        Assert.Equal("True", record.RawResult["blocked_with_flag_clear"]);
+        Assert.Equal("False", record.RawResult["blocked_with_flag_set"]);
+        Assert.Equal("n/a (blocked)", record.RawResult["returned_with_flag_clear"]);
+        Assert.Equal("True", record.RawResult["returned_with_flag_set"]);
+    }
+
+    [Fact]
+    public void Probe1_BothTriesBlock_RecordsRefuted()
+    {
+        var host = new FakeRemodelProbeHost();
+        using var reorder = new ParkingReorder(host, _ => ReorderAttempt.Parks);
+
+        Assert.Equal(RemodelProbeVerdict.Refuted, RunProbe1(host, reorder).Verdict);
+    }
+
+    [Fact]
+    public void Probe1_BlocksOnlyWithTheFlagSet_RecordsUnresolved()
+    {
+        var host = new FakeRemodelProbeHost();
+        using var reorder = new ParkingReorder(host, flag => flag ? ReorderAttempt.Parks : ReorderAttempt.Returns);
+
+        Assert.Equal(RemodelProbeVerdict.Unresolved, RunProbe1(host, reorder).Verdict);
+    }
+
+    [Fact]
+    public void Probe1_AfterTheFakeIsDisposed_NoThreadIsLeftParked()
+    {
+        var host = new FakeRemodelProbeHost();
+        var reorder = new ParkingReorder(host, _ => ReorderAttempt.Parks);
+
+        RunProbe1(host, reorder);
+        Assert.Equal(2, reorder.ParkedNow);
+
+        reorder.Dispose();
+
+        Assert.True(
+            SpinWait.SpinUntil(() => reorder.ParkedNow == 0, TimeSpan.FromSeconds(30)),
+            $"{reorder.ParkedNow} attempt(s) still parked after Dispose released them.");
     }
 
     // ---- PROBE-2: equation units --------------------------------------------------------
@@ -750,7 +792,7 @@ public class RemodelProbeExecutorsTests
     public void FullRun_AllFifteenProbes_EveryOneAnswersAndTheLedgerRoundTrips()
     {
         var host = new FakeRemodelProbeHost();
-        RemodelProbeContext context = Context(host, watchdogTimeout: TimeSpan.FromMilliseconds(500));
+        RemodelProbeContext context = Context(host, watchdogDeadline: NeverFires);
 
         IReadOnlyList<RemodelProbeRecord> records = RemodelProbeRunner.RunAll(
             RemodelProbeCatalog.AllIds, context, RemodelProbeExecutors.ByProbeId);
@@ -784,4 +826,53 @@ public class RemodelProbeExecutorsTests
         Assert.Contains(host.Calls, c => c == "SetFeatureSuppression");
         Assert.DoesNotContain(host.Calls, c => c == "TryInsertFeatureTreeFolder");
     }
+}
+
+/// <summary>
+/// U24's reproduction (013 T135, 004 T171), in a collection of its own that runs alone, because
+/// it starves the thread pool on purpose: PROBE-1 over a host whose <c>ReorderFeature</c> throws on
+/// its first line, through the production watchdog's timer, must read <c>unresolved</c> - a throw
+/// is an answer, not a block - however loaded the machine is. A watchdog that queued its call on
+/// the pool and started its clock at once would count the queueing as blocking, time out both
+/// tries while they were still waiting for a thread, and record <c>refuted</c>.
+/// </summary>
+[Collection(SaturatedPoolCollection.Name)]
+public sealed class RemodelProbeWatchdogSaturatedPoolTests
+{
+    [Fact]
+    public void Probe1_WithThePoolSaturated_AHostThatThrowsIsUnresolvedAndNeverRefuted()
+    {
+        using var release = new ManualResetEventSlim(false);
+        int held = Environment.ProcessorCount * 2;
+        try
+        {
+            for (int i = 0; i < held; i++)
+            {
+                ThreadPool.QueueUserWorkItem(_ => release.Wait());
+            }
+
+            var host = new FakeRemodelProbeHost
+            {
+                ReorderFeatureImpl = (_, _, _, _) => throw new InvalidOperationException("the host's own words"),
+            };
+            var part = new RemodelProbePart(new object(), @"C:\out\probe-part\remodel-probe.SLDPRT", Array.Empty<object>());
+            var context = new RemodelProbeContext(
+                part, new SwGate(), "32.5.0.48", host, @"C:\out", TimeSpan.FromMilliseconds(500));
+
+            RemodelProbeRecord record = RemodelProbeRunner.Run("PROBE-1", context, RemodelProbeExecutors.ByProbeId);
+
+            Assert.Equal(RemodelProbeVerdict.Unresolved, record.Verdict);
+        }
+        finally
+        {
+            release.Set();
+        }
+    }
+}
+
+/// <summary>The tests that starve the thread pool on purpose, run alone so no other test shares the starvation.</summary>
+[CollectionDefinition(Name, DisableParallelization = true)]
+public sealed class SaturatedPoolCollection
+{
+    public const string Name = "the thread pool saturated on purpose";
 }
