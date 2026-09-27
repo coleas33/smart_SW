@@ -27,7 +27,7 @@ byte-identical CSP meta tag, the `textContent`-only rule for every untrusted str
 | type | payload | host action |
 |------|---------|-------------|
 | `ready` | `{}` | Reply `init` with `{backend: {port, origin}, token, run_root, document: {path, configuration, kind} \| null, limits: {max_changes, max_minutes, max_rebuild_seconds}, remodel: {available: true \| false \| null, message: string \| null}, latest_run: {run_dir, at, state, plan_lost: string \| null} \| null}`. `available: null` means the tool service is still attaching; the page keeps Remodel actions disabled until it receives a capability answer. `plan_lost` is `RemodelHost.PlanLostMessage` when the latest run is a plan that can no longer be started, by `remodel.plan_lost`'s own rule, and null otherwise (decision 24A, amended on review, below). |
-| `remodel.plan` | `{}` | Refuse with `RemodelUnavailable` before any bridge call when `remodel.available` is false or still unknown. Refuse with `SourceIsRemodelCopy` before any bridge call when the active document is one of the re-modeler's own copies, and when an earlier plan waits for Start, end that plan's session and mark it lost before the probe (T173, below; added 2026-09-26, landed 2026-09-27). Otherwise read the scope signals off the active document with `remodel.probe_scope` and refuse with `error {error_class}` when there is no document, the document is not a part, it is dirty (`GetSaveFlag()`), it is read-only, it has external references, or it fails the scope gate, **all before anything is copied**. Otherwise create the run folder, hand exactly that folder to the tool service (T158; a hand-over that fails is `BridgeUnavailable`, and nothing is copied and no open is sent), copy the source, open and tag the copy, and roll and rebuild it; a non-zero rebuild-error count refuses with `PreexistingRebuildErrors` and deletes the copy, which is the one refusal that deletes a copy, because the reading needs a rollback and a rebuild and neither may touch the source. Then make the copy the active document - activate only, never an open (T159; `CopyNotActive` otherwise, with nothing dumped) - dump it, carry forward `exceptions.json`, and run the pure planner. Reply `remodel.planned {run_dir, plan_summary}`. Progress via `status` |
+| `remodel.plan` | `{}` | Refuse with `RemodelUnavailable` before any bridge call when `remodel.available` is false or still unknown. Refuse with `SourceIsRemodelCopy` before any bridge call when the active document is one of the re-modeler's own copies, and when an earlier plan waits for Start, end that plan's session and mark it lost before the probe (T173, below; added 2026-09-26, landed 2026-09-27). Otherwise read the scope signals off the active document with `remodel.probe_scope` and refuse with `error {error_class}` when there is no document, the document is not a part, it is dirty (`GetSaveFlag()`), it is read-only, it has external references, or it fails the scope gate, **all before anything is copied**. Otherwise create the run folder, hand exactly that folder to the tool service (T158; a hand-over that fails is `BridgeUnavailable`, and nothing is copied and no open is sent), copy the source, open and tag the copy, and roll and rebuild it; a non-zero rebuild-error count refuses with `PreexistingRebuildErrors` and deletes the copy, which is the one refusal that deletes a copy, because the reading needs a rollback and a rebuild and neither may touch the source. Then make the copy the active document - activate only, never an open (T159; `CopyNotActive` otherwise, with nothing dumped) - dump it, carry forward `exceptions.json`, and run the pure planner. Reply `remodel.planned {run_dir, plan_summary}`. Progress via `status`. *Amended 2026-09-27 (T175, T176; below):* once the open was asked for, a plan that fails ends the session before it answers, and a plan made while Start is switched off ends its session before `remodel.planned` |
 | `remodel.start` | `{run_dir}` | Refuse with `StartNotValidated` before any bridge call while Start is switched off in this build (T172, below; added 2026-09-26, landed 2026-09-27). Refuse with `SessionLost` before any bridge call when the tool service has re-attached since the plan was made (decision 22A, below). Refuse with `RemodelUnavailable` before any bridge call when the seat is false or still unknown. Otherwise run phases B (judge), C (apply) and D (verify) **to completion**; there is no approve-each-change mode. Progress via `status` and `remodel.progress`; each change is pushed as `remodel.change` as it is written. Reply `remodel.started {chat_id}` |
 | `remodel.stop` | `{}` | Set the stop flag. The executor finishes the change in flight, inverts it if it failed, finalizes the artifacts, and reports the run as `truncated`. Reply `remodel.stopped {changes_applied}` |
 | `remodel.result` | `{run_dir}` | Reply `{changes[], grade_before, grade_after, geometry, rebuild_list[], attestation, state}`, read from the run folder rather than from memory, so the tab answers after a restart |
@@ -236,7 +236,9 @@ name none of the three toggles has is worded as another setting; whether the cop
 `CopyClosed`. The routine tells every ending of a session that existed - `remodel.close`'s
 (Discard, planning again) as well as a re-attach's or an unload's - so the same words follow a
 Discard or a planning again whose close left something. A null outcome, and an ending of no
-session, post nothing. A session tag the routine could not remove is not worded: the close is
+session, post nothing. *Amended 2026-09-27 (004 T177):* a `remodel.open` that fails after it
+changed the settings is an ending too, with the reason `remodel.open`, and is worded the same way:
+the reason decides no word. A session tag the routine could not remove is not worded: the close is
 unsaved, so a closed copy took its tag with it, and a copy left open is already said.
 
 ### Start is switched off until the blocking probes pass (T172)
@@ -305,6 +307,34 @@ unload ends the session", because `ToolServiceOptions.RemodelSessionEnded` is to
 `SourceIsRemodelCopy` is the copy rule `remodel.open` reads (a file in a `copy` folder, the run
 folder above it) on the canonical path, plus "that run folder is a direct child of `run_root`",
 compared case-insensitively.
+
+### A plan leaves no session behind (T175, T176)
+
+*Added 2026-09-27 (defaults taken 2026-09-27, the owner may revise; 004 T175 and T176, research
+R14.1 and R14.2).* Once `remodel.plan` has asked the pipeline for the open, the bridge may hold a
+session: the copy open and tagged, and the engineer's four application-wide settings changed.
+
+1. **A plan that fails from there closes it** (T175): the open refused or failed, or the plan step
+   after it failed (`CopyNotActive`, the dump, `POST /remodel/plan`). The host closes through the
+   pipeline's close (`backend-remodel.md`, `POST /remodel/close` with `discard_copy: false`: the
+   routine, unsaved, deleting nothing), before the page is answered, and the page gets the plan's
+   own refusal unchanged; a close that fails is swallowed, and the copy and the run folder stay as
+   the evidence. `PreexistingRebuildErrors` keeps its own close-and-delete, once. So a Remodel a
+   copy pressed again is not refused `RunInProgress` by a bridge still holding the failed plan's
+   session.
+2. **While Start is switched off, a plan made closes it before `remodel.planned`** (T176), since no
+   Start can use it: after the run is recorded and before the `ready` status, the same close, the
+   copy left in `copy/` and `plan.json` `planned`. The plan is on screen and not lost; Start is
+   `StartNotValidated` as before; Discard deletes `copy/` and sends no close, and planning again
+   sends none for it (`RemodelHost.HoldsItsSession` reads `RemodelRun.SessionClosedAtPlan`). A close
+   the bridge could not answer - `BridgeUnavailable`, or no named refusal - leaves the plan holding
+   its session, so Discard, planning again, a re-attach or an unload still end it; one it answered
+   ends it, and what it left is the one status error of "When a re-attach or an unload ends the
+   session", posted before `remodel.planned`. With Start switched on the plan keeps its session
+   for Start (T180 decides what it holds meanwhile, before the switch is set).
+
+So in this build a re-attach or an unload while a plan waits finds no session, and the page hears
+only decision 24A's notice. Nothing new is added to the message tables.
 
 ## Host to page (unsolicited)
 
@@ -433,4 +463,16 @@ Two buttons and what they must say. **Open copy** activates the copy in SOLIDWOR
   refused `StartNotValidated` in the host's words with no backend run, a change command refused
   `start_not_validated` at the bridge, and Discard ending the session with nothing posted; and a
   tool service stopped while a plan waits telling the page the plan is lost, then, in one status
-  error, the settings its teardown could not put back.
+  error, the settings its teardown could not put back. *Amended 2026-09-27 (T176):* reworked on
+  purpose - the Plan ends with the routine's close, the copy closed unsaved and the settings back
+  before `remodel.planned`, and Discard sends no second close; a closing that cannot put the
+  settings back posts its one status error before `remodel.planned`; and a tool service stopped
+  while a plan waits finds no session, so the page hears only that the plan is lost.
+- *Added 2026-09-27 (on review: T175, T176, T177).* `RemodelHostTests`, over a fake pipeline that
+  keeps the bridge's one session when asked, so a refused retry fails the case: each failing plan
+  step and a failed open closing once before the page is answered, with the plan's own refusal and
+  the next plan going ahead; each kind of failed close replacing nothing; no close before the open;
+  `PreexistingRebuildErrors` closing once; with Start switched on a plan holding its session until
+  Discard; with it off the close before `remodel.planned`, the plan not lost, Discard and planning
+  again sending no close for it, an unanswered close leaving the session held and an answered one
+  ending it; and a failed open's ending worded as every other.

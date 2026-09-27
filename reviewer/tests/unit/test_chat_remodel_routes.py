@@ -822,6 +822,151 @@ class TestOpen:
         assert response.json()["error_class"] == "InvalidRunDir"
 
 
+# --- 004 T175: a failure after the bridge opened the copy ends that session ----------------
+
+
+def _break_after_the_open(bridge: ProbingBridge, how: str) -> str:
+    """Make one step after `remodel.open` answered fail, and name the class the route answers."""
+    if how == "attestation":
+        bridge.attestation = lambda copy_path: {"path": copy_path}  # type: ignore[method-assign]
+        return "RunFolderFailed"
+    if how == "geometry_refused":
+
+        def refuse() -> Any:
+            bridge.calls.append(("remodel.geometry", {}))
+            raise RemodelError("the copy is not this run's", "target_mismatch")
+
+        bridge.geometry = refuse  # type: ignore[method-assign]
+        return "RunFolderFailed"
+    if how == "geometry_circuit_open":
+
+        def circuit() -> Any:
+            bridge.calls.append(("remodel.geometry", {}))
+            return CircuitOpen(command="remodel.geometry", last_error=None)
+
+        bridge.geometry = circuit  # type: ignore[method-assign]
+        return "BridgeUnavailable"
+    assert how == "geometry_unreadable"
+
+    def unreadable() -> Any:
+        bridge.calls.append(("remodel.geometry", {}))
+        return {"volume_m3": "not a number"}
+
+    bridge.geometry = unreadable  # type: ignore[method-assign]
+    return "RunFolderFailed"
+
+
+class TestAFailureAfterTheOpen:
+    """004 T175, the backend's half (default taken 2026-09-27, the owner may revise; research
+    R14.1): once the bridge's `remodel.open` has answered, the bridge holds a session - the copy
+    open and tagged, the four settings changed - and a route that then fails leaves no session
+    behind: it sends `remodel.close` with `discard_copy: false` (the bridge's end-of-session
+    routine, unsaved, deleting nothing) before its own error goes back, unchanged."""
+
+    @pytest.mark.parametrize(
+        "how",
+        ["attestation", "geometry_refused", "geometry_circuit_open", "geometry_unreadable"],
+    )
+    def test_the_session_is_closed_once_unsaved_and_the_routes_own_error_goes_back(
+        self, client: TestClient, run_dir: Path, source: Path, bridge: ProbingBridge, how: str
+    ) -> None:
+        expected = _break_after_the_open(bridge, how)
+
+        response = open_copy(client, run_dir, source)
+
+        assert response.json()["error_class"] == expected, response.text
+        assert bridge.commands[0] == "remodel.open"
+        assert bridge.commands[-1] == "remodel.close"
+        assert bridge.commands.count("remodel.close") == 1
+        assert ("remodel.close", {"discard_copy": False}) in bridge.calls
+        assert bridge.discards == 0
+        assert not (run_dir / OPEN_FILE_NAME).exists()
+
+    def test_a_failure_the_route_does_not_name_closes_the_session_too(
+        self,
+        client: TestClient,
+        run_dir: Path,
+        source: Path,
+        bridge: ProbingBridge,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Any failure, not only the refusals the route names: the attestation that cannot be
+        written is a disk's failure, and the session it leaves is the same."""
+
+        def full_disk(*_args: Any, **_kwargs: Any) -> None:
+            raise OSError("the disk is full")
+
+        monkeypatch.setattr(remodel_routes, "write_attestation", full_disk)
+
+        with pytest.raises(OSError, match="the disk is full"):
+            open_copy(client, run_dir, source)
+
+        assert bridge.commands == ("remodel.open", "remodel.close")
+
+    def test_a_close_that_fails_never_replaces_the_routes_own_error(
+        self,
+        client: TestClient,
+        run_dir: Path,
+        source: Path,
+        bridge: ProbingBridge,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        expected = _break_after_the_open(bridge, "geometry_unreadable")
+
+        def broken(discard_copy: bool) -> Any:
+            bridge.calls.append(("remodel.close", {"discard_copy": discard_copy}))
+            raise RemodelError(
+                "the session is over, but its clean-up did not all land",
+                "close_incomplete",
+            )
+
+        bridge.close_document = broken  # type: ignore[method-assign]
+
+        with caplog.at_level("WARNING", logger="swreview.chat.remodel"):
+            response = open_copy(client, run_dir, source)
+
+        assert response.json()["error_class"] == expected
+        assert "reading this build cannot read" in response.json()["message"]
+        assert bridge.commands.count("remodel.close") == 1
+        [line] = [
+            record.getMessage()
+            for record in caplog.records
+            if "remodel.close" in record.getMessage()
+        ]
+        assert "clean-up did not all land" in line
+
+    def test_an_open_the_bridge_refused_sends_no_close(
+        self, client: TestClient, run_dir: Path, source: Path, bridge: ProbingBridge
+    ) -> None:
+        """A refused open restored everything on the bridge's own failure path, so there is no
+        session to end."""
+        bridge.open_raises = RemodelError("the scope changed", "scope_changed")
+
+        response = open_copy(client, run_dir, source)
+
+        assert response.json()["error_class"] == "ScopeRefused"
+        assert bridge.commands == ("remodel.open",)
+
+    def test_preexisting_rebuild_errors_sends_no_close(
+        self, client: TestClient, run_dir: Path, source: Path, bridge: ProbingBridge
+    ) -> None:
+        """The bridge deleted the copy and closed the document before it refused."""
+        bridge.open_raises = RemodelPreflightError(
+            "the part already has 3 rebuild errors",
+            "preexisting_rebuild_errors",
+            {"rebuild_error_count": 3},
+        )
+
+        assert open_copy(client, run_dir, source).json()["copy_present"] is False
+        assert bridge.commands == ("remodel.open",)
+
+    def test_an_open_that_succeeds_sends_no_close(
+        self, client: TestClient, run_dir: Path, source: Path, bridge: ProbingBridge
+    ) -> None:
+        assert open_copy(client, run_dir, source).status_code == 200
+        assert "remodel.close" not in bridge.commands
+
+
 # --- 5. POST /remodel/plan --------------------------------------------------------------
 
 

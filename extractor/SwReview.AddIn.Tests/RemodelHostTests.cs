@@ -2828,6 +2828,391 @@ public sealed class RemodelHostTests
         }
     }
 
+    // ---- 004 T175: a plan that fails after the open was asked for ends its session -----------
+
+    public static IEnumerable<object[]> PlanStepFailures => new[]
+    {
+        new object[] { "CopyNotActive" },
+        new object[] { "PackageMissing" },
+        new object[] { "HostError" },
+    };
+
+    private static Exception PlanStepFailure(string kind)
+    {
+        switch (kind)
+        {
+            case "CopyNotActive":
+                return new RemodelRefusal(
+                    "CopyNotActive", RemodelHost.CopyNotActiveBeforePlanMessage, retryable: true);
+            case "PackageMissing":
+                return new RemodelRefusal(
+                    "PackageMissing", "package-before.json is not in the run folder.", retryable: false);
+            default:
+                // The profile check and the post-check of the dump throw no named refusal.
+                return new InvalidOperationException("the dump written for 'package-before.json' names no document.");
+        }
+    }
+
+    /// <summary>
+    /// 004 T175 (default taken 2026-09-27, the owner may revise; research R14.1): the plan step
+    /// fails after the copy exists and the bridge holds its session - the activation's
+    /// `CopyNotActive`, `POST /remodel/plan`'s refusal, a dump that names no document. The host
+    /// closes that session once, after the failure and before it answers, through the pipeline's
+    /// close (unsaved: the copy and the folder stay as the evidence); the page gets the plan's own
+    /// refusal unchanged; no run is tracked; and the next plan is not refused `RunInProgress` by a
+    /// bridge still holding the failed one's session.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(PlanStepFailures))]
+    public void APlanWhoseStepFailsAfterTheCopyExistsClosesItsSessionOnceAndAnswersItsOwnRefusal(string kind)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Pipeline.HoldsTheBridgeSession = true;
+            Exception failure = PlanStepFailure(kind);
+            world.Pipeline.PlanFailure = failure;
+            int postedAtClose = -1;
+            world.Pipeline.DuringClose = () => postedAtClose = world.Posted.Count;
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            Assert.Equal(new[] { "probe", "copy", "plan", "close" }, world.Pipeline.Calls);
+            Assert.Equal(new[] { world.ExpectedRunDirectory }, world.Pipeline.Closed);
+            Assert.False(world.Pipeline.SessionOpen);
+            Assert.True(postedAtClose >= 0 && postedAtClose <= world.IndexOf("error"), "the page was answered before the session was closed");
+
+            JsonElement error = world.Reply("error", "p1");
+            Assert.Equal(kind, error.GetProperty("error_class").GetString());
+            Assert.Equal(failure.Message, error.GetProperty("message").GetString());
+            Assert.True(File.Exists(world.ExpectedCopyPath), "a failed plan's close deletes nothing");
+            Assert.True(Directory.Exists(world.ExpectedRunDirectory));
+            Assert.Null(world.Host.LatestRun);
+            Assert.False(world.Host.RunInProgress);
+
+            world.Pipeline.PlanFailure = null;
+            world.Receive("remodel.plan", "p2", new { });
+            world.Reply("remodel.planned", "p2");
+        }
+    }
+
+    /// <summary>
+    /// 004 T175, widened: the open itself fails after the bridge's open answered - the backend's
+    /// own steps after it (the attestation, the geometry baseline) or a reply lost on the way - so
+    /// the bridge holds a session the host was never told of. Once the open was asked for, a plan
+    /// that records no run closes it, and the next plan goes ahead.
+    /// </summary>
+    [Fact]
+    public void APlanWhoseOpenFailsClosesTheSessionTheOpenMayHaveLeftAndTheNextPlanGoesAhead()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Pipeline.HoldsTheBridgeSession = true;
+            world.Pipeline.CopyFailureLeavesTheSessionOpen = true;
+            world.Pipeline.CopyFailure = new RemodelRefusal(
+                "RunFolderFailed",
+                "remodel.geometry answered a reading this build cannot read, so the run has no baseline to compare against.",
+                retryable: false);
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            Assert.Equal(new[] { "probe", "copy", "close" }, world.Pipeline.Calls);
+            Assert.False(world.Pipeline.SessionOpen);
+            Assert.Equal("RunFolderFailed", world.ErrorClass("p1"));
+            Assert.True(Directory.Exists(world.ExpectedRunDirectory), "the run folder is the evidence and is kept");
+            Assert.Null(world.Host.LatestRun);
+
+            world.Pipeline.CopyFailure = null;
+            world.Receive("remodel.plan", "p2", new { });
+            world.Reply("remodel.planned", "p2");
+        }
+    }
+
+    /// <summary>
+    /// And an open the bridge refused, which restored everything itself, is closed too: the host
+    /// cannot tell the two apart, the only session the bridge can hold then is this plan's, and a
+    /// close with none is answered with no SOLIDWORKS call. It changes nothing the page is told.
+    /// </summary>
+    [Fact]
+    public void AnOpenTheBridgeRefusedIsClosedTooAndThePageGetsTheRefusalAsItWas()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Pipeline.CopyFailure = new RemodelRefusal(
+                "ScopeChanged", "the copy's scope signals differ from the probe's.", retryable: true);
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            Assert.Equal(new[] { "probe", "copy", "close" }, world.Pipeline.Calls);
+            JsonElement error = world.Reply("error", "p1");
+            Assert.Equal("ScopeChanged", error.GetProperty("error_class").GetString());
+            Assert.Equal("the copy's scope signals differ from the probe's.", error.GetProperty("message").GetString());
+            Assert.True(error.GetProperty("retryable").GetBoolean());
+        }
+    }
+
+    public static IEnumerable<object[]> CloseFailures => new[]
+    {
+        new object[] { new RemodelRefusal("BridgeUnavailable", "the SOLIDWORKS bridge did not answer remodel.close.", retryable: true) },
+        new object[] { new RemodelRefusal("RunFolderFailed", "the session is over, but its clean-up did not all land.", retryable: false) },
+        new object[] { new IOException("the backend did not answer") },
+    };
+
+    /// <summary>
+    /// A close that fails - not answered, answered with what it left, or failed with no named
+    /// refusal - never replaces the plan's own refusal, and the host is free again.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(CloseFailures))]
+    public void ACloseThatFailsNeverReplacesTheFailedPlansOwnRefusal(Exception closeFailure)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Pipeline.PlanFailure = PlanStepFailure("CopyNotActive");
+            world.Pipeline.CloseFailure = closeFailure;
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            JsonElement error = world.Reply("error", "p1");
+            Assert.Equal("CopyNotActive", error.GetProperty("error_class").GetString());
+            Assert.Equal(RemodelHost.CopyNotActiveBeforePlanMessage, error.GetProperty("message").GetString());
+            Assert.Equal(1, world.Pipeline.Count("close"));
+            Assert.False(world.Host.RunInProgress);
+            Assert.Null(world.Host.LatestRun);
+        }
+    }
+
+    public static IEnumerable<object[]> RefusalsBeforeTheOpen => new[]
+    {
+        new object[] { "ScopeRefused" },
+        new object[] { "DocumentDirty" },
+        new object[] { "ProbeFailed" },
+    };
+
+    /// <summary>A plan refused before the open was asked for opened nothing, so it closes nothing.</summary>
+    [Theory]
+    [MemberData(nameof(RefusalsBeforeTheOpen))]
+    public void APlanRefusedBeforeTheOpenSendsNoClose(string refusal)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            switch (refusal)
+            {
+                case "ScopeRefused":
+                    world.Pipeline.Refusals = new[] { "the part is a weldment." };
+                    break;
+                case "DocumentDirty":
+                    world.Pipeline.Signals.SaveFlagDirty = true;
+                    break;
+                default:
+                    world.Pipeline.ProbeFailure = new RemodelRefusal(
+                        "BridgeUnavailable", "the SOLIDWORKS bridge did not answer.", retryable: true);
+                    break;
+            }
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            Assert.NotEmpty(world.AllPosted("error"));
+            Assert.Equal(0, world.Pipeline.Count("copy"));
+            Assert.Equal(0, world.Pipeline.Count("close"));
+        }
+    }
+
+    /// <summary>
+    /// `PreexistingRebuildErrors` keeps its own close-and-delete, once: it is the one refusal
+    /// whose handler deletes a copy, and T175 adds no second close to it.
+    /// </summary>
+    [Fact]
+    public void PreexistingRebuildErrorsStillClosesOnceAndDeletesTheCopy()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Pipeline.RebuildErrorCount = 2;
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            Assert.Equal("PreexistingRebuildErrors", world.ErrorClass("p1"));
+            Assert.Equal(1, world.Pipeline.Count("close"));
+            Assert.False(Directory.Exists(Path.Combine(world.ExpectedRunDirectory, "copy")));
+        }
+    }
+
+    /// <summary>
+    /// With Start switched on, a plan that succeeds keeps its session for Start: nothing is closed
+    /// until Discard, planning again, a re-attach or an unload ends it.
+    /// </summary>
+    [Fact]
+    public void WithStartSwitchedOnAPlanThatSucceedsHoldsItsSessionUntilDiscard()
+    {
+        using (var world = new RemodelWorld { StartValidated = true })
+        {
+            world.Open();
+            world.Pipeline.HoldsTheBridgeSession = true;
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            world.Reply("remodel.planned", "p1");
+            Assert.Equal(0, world.Pipeline.Count("close"));
+            Assert.True(world.Pipeline.SessionOpen);
+            Assert.False(world.Host.LatestRun!.SessionClosedAtPlan);
+
+            world.Receive("remodel.discard_copy", "d1", new { run_dir = world.ExpectedRunDirectory });
+            world.Reply("ok", "d1");
+            Assert.Equal(1, world.Pipeline.Count("close"));
+            Assert.False(world.Pipeline.SessionOpen);
+        }
+    }
+
+    // ---- 004 T176: while Start is switched off, a plan holds no session ---------------------
+
+    /// <summary>
+    /// 004 T176 (default taken 2026-09-27, the owner may revise; research R14.2): no Start can use
+    /// a plan's session while Start is switched off, and holding it keeps the engineer's four
+    /// application-wide settings changed for as long as the plan waits. So the host ends it as soon
+    /// as the plan is made: once, after the plan step and before the `ready` status and the
+    /// `remodel.planned` reply, through the pipeline's close (unsaved: the copy stays in
+    /// <c>copy/</c> and <c>plan.json</c> stays <c>planned</c>). The plan is on screen and not lost.
+    /// </summary>
+    [Fact]
+    public void WhileStartIsSwitchedOffAPlanEndsItsSessionBeforeItAnswersPlanned()
+    {
+        using (var world = new RemodelWorld { StartValidated = false })
+        {
+            world.Open();
+            world.Pipeline.HoldsTheBridgeSession = true;
+            int postedAtClose = -1;
+            world.Pipeline.DuringClose = () => postedAtClose = world.Posted.Count;
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            Assert.Equal(new[] { "probe", "copy", "plan", "close" }, world.Pipeline.Calls);
+            Assert.Equal(new[] { world.ExpectedRunDirectory }, world.Pipeline.Closed);
+            Assert.False(world.Pipeline.SessionOpen);
+            int planned = world.IndexOf("remodel.planned");
+            int ready = world.Posted.FindIndex(message => message.Contains("\"stage\":\"ready\""));
+            Assert.True(postedAtClose >= 0 && postedAtClose <= ready && ready < planned, "the session was closed after the page was told the plan was made");
+
+            Assert.True(File.Exists(world.ExpectedCopyPath), "the close is unsaved and deletes nothing");
+            Assert.Contains("\"state\":\"planned\"", File.ReadAllText(Path.Combine(world.ExpectedRunDirectory, "plan.json")), StringComparison.Ordinal);
+            RemodelRun run = world.Host.LatestRun!;
+            Assert.True(run.SessionClosedAtPlan);
+            Assert.Equal(RemodelRunPhase.Planned, run.Phase);
+
+            // Not lost: nothing the plan needs went away, and Start still answers the switch.
+            Assert.Empty(world.AllPosted("remodel.plan_lost"));
+            world.Receive("ready", "r1", new { });
+            Assert.Equal(JsonValueKind.Null, world.Reply("init", "r1").GetProperty("latest_run").GetProperty("plan_lost").ValueKind);
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+            Assert.Equal("StartNotValidated", world.ErrorClass("s1"));
+        }
+    }
+
+    /// <summary>Then Discard deletes <c>copy/</c> and sends no second close for a session that is over.</summary>
+    [Fact]
+    public void WhileStartIsSwitchedOffDiscardSendsNoSecondCloseAndDeletesTheCopy()
+    {
+        using (var world = new RemodelWorld { StartValidated = false })
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+
+            world.Receive("remodel.discard_copy", "d1", new { run_dir = world.ExpectedRunDirectory });
+
+            world.Reply("ok", "d1");
+            Assert.Equal(1, world.Pipeline.Count("close"));
+            Assert.False(Directory.Exists(Path.Combine(world.ExpectedRunDirectory, "copy")));
+        }
+    }
+
+    /// <summary>
+    /// Then planning again sends no close for the earlier plan, still marks it lost and tells the
+    /// page once in <see cref="RemodelHost.PlanClosedMessage"/>'s words (T173), and plans - ending
+    /// the new plan's session in its turn.
+    /// </summary>
+    [Fact]
+    public void WhileStartIsSwitchedOffPlanningAgainSendsNoCloseForTheEarlierPlanAndStillMarksItLost()
+    {
+        using (var world = new RemodelWorld { StartValidated = false })
+        {
+            world.Open();
+            world.Pipeline.HoldsTheBridgeSession = true;
+            world.Receive("remodel.plan", "p1", new { });
+            string first = world.ExpectedRunDirectory;
+
+            world.Receive("remodel.plan", "p2", new { });
+
+            string second = world.Reply("remodel.planned", "p2").GetProperty("run_dir").GetString()!;
+            Assert.Equal(new[] { first, second }, world.Pipeline.Closed);
+            JsonElement lost = Assert.Single(world.AllPosted("remodel.plan_lost"));
+            Assert.Equal(first, lost.GetProperty("run_dir").GetString());
+            Assert.Equal(RemodelHost.PlanClosedMessage, lost.GetProperty("message").GetString());
+            Assert.True(world.Host.FindRun(first)!.ClosedByPlanAgain);
+        }
+    }
+
+    public static IEnumerable<object[]> UnansweredCloses => new[]
+    {
+        new object[] { new RemodelRefusal("BridgeUnavailable", "the SOLIDWORKS bridge did not answer remodel.close.", retryable: true) },
+        new object[] { new IOException("the backend did not answer") },
+    };
+
+    /// <summary>
+    /// A close the bridge could not answer may have left the session held, so the plan keeps it:
+    /// it is still planned and answered, and a later Discard sends the close again.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(UnansweredCloses))]
+    public void WhileStartIsSwitchedOffACloseTheBridgeCouldNotAnswerLeavesThePlanHoldingItsSession(Exception closeFailure)
+    {
+        using (var world = new RemodelWorld { StartValidated = false })
+        {
+            world.Open();
+            world.Pipeline.CloseFailure = closeFailure;
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            world.Reply("remodel.planned", "p1");
+            Assert.False(world.Host.LatestRun!.SessionClosedAtPlan);
+            Assert.False(world.Host.RunInProgress);
+
+            world.Pipeline.CloseFailure = null;
+            world.Receive("remodel.discard_copy", "d1", new { run_dir = world.ExpectedRunDirectory });
+            world.Reply("ok", "d1");
+            Assert.Equal(2, world.Pipeline.Count("close"));
+        }
+    }
+
+    /// <summary>
+    /// A close the bridge answered with what it left ended the session all the same - the routine
+    /// clears it whatever it left, and what it left reaches the page as T167's one status error by
+    /// the add-in's wiring - so no close is sent for it again.
+    /// </summary>
+    [Fact]
+    public void WhileStartIsSwitchedOffACloseAnsweredWithWhatItLeftEndsTheSession()
+    {
+        using (var world = new RemodelWorld { StartValidated = false })
+        {
+            world.Open();
+            world.Pipeline.CloseFailure = new RemodelRefusal(
+                "RunFolderFailed", "the session is over, but its clean-up did not all land.", retryable: false);
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            world.Reply("remodel.planned", "p1");
+            Assert.True(world.Host.LatestRun!.SessionClosedAtPlan);
+
+            world.Pipeline.CloseFailure = null;
+            world.Receive("remodel.discard_copy", "d1", new { run_dir = world.ExpectedRunDirectory });
+            world.Reply("ok", "d1");
+            Assert.Equal(1, world.Pipeline.Count("close"));
+        }
+    }
+
     // ---- the Start switch (T172's host refusal) --------------------------------------------
 
     /// <summary>
@@ -3380,6 +3765,33 @@ public sealed class RemodelHostTests
     }
 
     /// <summary>
+    /// 004 T177: a failed <c>remodel.open</c>'s ending is worded as every other ending is - the
+    /// reason decides nothing - so an unwind that could not close the copy or put a setting back
+    /// posts the same one status error, and no verification or tag is worded.
+    /// </summary>
+    [Fact]
+    public void AFailedOpensEndingIsWordedAsEveryOtherEnding()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            int before = world.Posted.Count;
+
+            world.Host.SessionEnded(Ended(
+                new[] { RemodelSystemToggles.CommandInProgressSetting },
+                copyClosed: false,
+                verified: false,
+                tagRemoved: false,
+                reason: RemodelSessionEnd.ReasonOpenFailed));
+
+            Assert.Equal(new[] { "status" }, world.TypesPostedSince(before));
+            Assert.Equal(
+                RemodelHost.SessionEndedMessage(new int[0], true, false),
+                world.LastPosted("status").GetProperty("message").GetString());
+        }
+    }
+
+    /// <summary>
     /// Every one of the three toggles the routine can report is read back to its value, so each
     /// is named by its label; the routine's order does not matter.
     /// </summary>
@@ -3401,6 +3813,7 @@ public sealed class RemodelHostTests
     [Theory]
     [InlineData(RemodelSessionEnd.ReasonClose)]
     [InlineData(RemodelSessionEnd.ReasonToolServiceStopped)]
+    [InlineData(RemodelSessionEnd.ReasonOpenFailed)]
     public void ACleanEndingOrNoSessionTellsThePageNothing(string reason)
     {
         using (var world = new RemodelWorld())
@@ -3516,6 +3929,9 @@ public sealed class RemodelHostTests
     /// makes is the plan one with it on makes, message for message and file for file, so once
     /// the switch is set the same plan starts. (The switch is the host's constructor argument, so
     /// one host cannot flip it; two hosts over two run roots show the plans are the same.)
+    /// *Amended 2026-09-27 (004 T176):* the one difference is the close that ends the plan's
+    /// session at the end of a plan made while the switch is off, which changes no message and no
+    /// file.
     /// </summary>
     [Fact]
     public void APlanMadeWhileTheSwitchIsOffIsThePlanThatStartsOnceItIsOn()
@@ -3529,7 +3945,7 @@ public sealed class RemodelHostTests
             on.Receive("remodel.plan", "p1", new { });
 
             Assert.Equal(StripRunRoot(off, off.Posted), StripRunRoot(on, on.Posted));
-            Assert.Equal(off.Pipeline.Calls, on.Pipeline.Calls);
+            Assert.Equal(on.Pipeline.Calls.Concat(new[] { "close" }), off.Pipeline.Calls);
             Assert.Equal(
                 File.ReadAllText(Path.Combine(off.ExpectedRunDirectory, "plan.json")),
                 File.ReadAllText(Path.Combine(on.ExpectedRunDirectory, "plan.json")));
@@ -4394,14 +4810,46 @@ public sealed class RemodelHostTests
             return new RemodelScopeReading(Signals, Refusals);
         }
 
+        /// <summary>
+        /// 004 T175: when true, this fake keeps the one remodel session a bridge dispatcher holds,
+        /// as <c>remodel.open</c> and <c>remodel.close</c> keep it: an open that answered opens it,
+        /// a close the bridge answered ends it, and an open while it is open is refused
+        /// <c>RunInProgress</c> as the bridge's <c>run_in_progress</c> is. Off by default, because
+        /// most cases here re-attach by changing the attachment, which in the product throws the
+        /// session away with the old dispatcher and which this fake does not follow.
+        /// </summary>
+        public bool HoldsTheBridgeSession { get; set; }
+
+        /// <summary>Whether the bridge this fake plays holds a session now (<see cref="HoldsTheBridgeSession"/>).</summary>
+        public bool SessionOpen { get; private set; }
+
+        /// <summary>
+        /// 004 T175: whether <see cref="CopyFailure"/> is thrown after the bridge's open answered -
+        /// the backend's own steps after it failed, or its reply was lost - so the session is open
+        /// although the open failed.
+        /// </summary>
+        public bool CopyFailureLeavesTheSessionOpen { get; set; }
+
         public RemodelCopyReading OpenCopy(RemodelCopyRequest request, IRemodelRunReporter reporter)
         {
             Calls.Add("copy");
             SourcePathsSeen.Add(request.SourcePath);
+            if (HoldsTheBridgeSession && SessionOpen)
+            {
+                throw new RemodelRefusal(
+                    "RunInProgress",
+                    "this bridge session already has a remodel run open.",
+                    retryable: true);
+            }
+
             if (CopyFailure != null)
             {
+                SessionOpen = HoldsTheBridgeSession && CopyFailureLeavesTheSessionOpen;
                 throw CopyFailure;
             }
+
+            // The bridge closed the document itself on `preexisting_rebuild_errors`.
+            SessionOpen = HoldsTheBridgeSession && CopyPresent;
 
             string folder = Path.Combine(request.RunDirectory, "copy");
             CopyPath = Path.Combine(
@@ -4439,6 +4887,17 @@ public sealed class RemodelHostTests
             Calls.Add("close");
             Closed.Add(runDirectory);
             DuringClose?.Invoke();
+
+            // A close the bridge answered ends the session whatever it left - `close_incomplete`
+            // included - and one it could not answer (`BridgeUnavailable`, or no named refusal)
+            // leaves it as it was.
+            bool answered = CloseFailure == null
+                || (CloseFailure is RemodelRefusal refusal && refusal.ErrorClass != "BridgeUnavailable");
+            if (answered)
+            {
+                SessionOpen = false;
+            }
+
             if (CloseFailure != null)
             {
                 throw CloseFailure;

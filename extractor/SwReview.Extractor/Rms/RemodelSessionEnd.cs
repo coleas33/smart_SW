@@ -8,7 +8,9 @@ namespace SwReview.Extractor.Rms;
 /// 004 T167 (default taken 2026-09-26, the owner may revise; research R13.1): what the one
 /// end-of-session routine, <c>SwBridgeDispatcher.EndRemodelSession</c>, did - whatever ended the
 /// session: <c>remodel.close</c>, a tool-service re-attach or an add-in unload
-/// (contracts/bridge-remodel.md, "Ending a session").
+/// (contracts/bridge-remodel.md, "Ending a session"); and, since 004 T177, what a
+/// <c>remodel.open</c> that failed after it changed the settings did on its way out, by the same
+/// clean-up rules (<see cref="ReasonOpenFailed"/>).
 ///
 /// It is a record of facts about the seat, never a guess: whether the target verified (and which
 /// check failed when it did not), whether the tag came off, whether the copy was closed, which of
@@ -32,6 +34,16 @@ public sealed class RemodelSessionEnd
     /// about the add-in, not the bridge, and the teardown line records the thread it ran on.
     /// </summary>
     public const string ReasonToolServiceStopped = "tool_service_stopped";
+
+    /// <summary>
+    /// 004 T177 (default taken 2026-09-27, the owner may revise; research R14.3): the reason a
+    /// <c>remodel.open</c> that failed after it changed the settings ends the session it was making,
+    /// by the routine's clean-up rules - no verification (there may be no scope yet), the copy
+    /// closed unsaved and deleted, the settings put back. <see cref="Verified"/> and
+    /// <see cref="TagRemoved"/> are false for it; <see cref="CopyClosed"/> is true when no document
+    /// was opened.
+    /// </summary>
+    public const string ReasonOpenFailed = "remodel.open";
 
     private static readonly string[] Nothing = new string[0];
 
@@ -66,7 +78,10 @@ public sealed class RemodelSessionEnd
         Failures = Nothing;
     }
 
-    /// <summary>What ended the session: <see cref="ReasonClose"/> or <see cref="ReasonToolServiceStopped"/>.</summary>
+    /// <summary>
+    /// What ended the session: <see cref="ReasonClose"/>, <see cref="ReasonToolServiceStopped"/> or
+    /// <see cref="ReasonOpenFailed"/>.
+    /// </summary>
     public string Reason { get; }
 
     /// <summary>
