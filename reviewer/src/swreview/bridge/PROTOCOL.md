@@ -77,6 +77,19 @@ let four refused candidates close the bridge for the rest of the review (found o
 2026-09-23). A `drawing.read` the host never answered - a dead pipe, a timeout, a line out of
 step - is still counted like any other.
 
+## The drawing capability (1.4)
+
+`BridgeClient.drawing_read_mode()` answers what the host's `drawing.read` can do - `none`,
+`open_only` or `opens_closed` (`DrawingReadMode`), from the `ping` answer's `drawing_read`
+(feature 013, `specs/013-engineer-first-review/contracts/drawing-capability.md` section 2). It pings
+once and caches the answer, whatever it was. Only a host whose `protocol` is 1.4 or later, spelling
+one of the three values exactly, is taken at its word; an absent member, an unknown value, an older
+or unreadable protocol, and any `BridgeError` (a failed ping, a dead pipe, an open circuit, a refused
+secret) read as `none`, and the method never raises. A failed ping is an ordinary failure for the
+breaker below - it counts once - and is not asked again. The backend offers the candidate question
+only on `opens_closed`, and asks for the mode only when a custom or unclear document has a
+candidate, so a review without one never pings.
+
 ## Circuit breaker
 
 `status: "circuit_open"` from the host, or `CIRCUIT_LIMIT` (3) consecutive failures of any

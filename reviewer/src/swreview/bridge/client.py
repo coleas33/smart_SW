@@ -41,7 +41,7 @@ touching this class - `pywin32` is deliberately not a dependency (see PROTOCOL.m
 from __future__ import annotations
 
 import json
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 __all__ = [
     "BRIDGE_VIEWS",
@@ -50,6 +50,8 @@ __all__ = [
     "DEFAULT_PIPE_NAME",
     "DEFAULT_TIMEOUT_S",
     "DOCUMENT_CLOSED_MARKER",
+    "DRAWING_READ_MODES",
+    "DRAWING_READ_SINCE",
     "PROTOCOL_VERSION",
     "REFUSING_COMMANDS",
     "UNAUTHORIZED_MARKER",
@@ -59,6 +61,7 @@ __all__ = [
     "BridgeOpenError",
     "BridgeRefusedError",
     "BridgeUnauthorizedError",
+    "DrawingReadMode",
     "NamedPipeTransport",
     "Transport",
     "pipe_path",
@@ -118,6 +121,23 @@ DOCUMENT_CLOSED_MARKER = "no longer open"
 Matched as a substring of the host's `error` text, case-insensitively, so both the
 contract's "document no longer open" and a fuller sentence around it are recognised."""
 
+DrawingReadMode = Literal["none", "open_only", "opens_closed"]
+"""What `drawing.read` can do on the host, as `ping` reports it (protocol 1.4, feature 013
+`contracts/drawing-capability.md` sections 1 and 2): `none` - no confirmed-drawing source (the
+console host, an add-in with no review records); `open_only` - an open drawing is read, a closed
+one refused (the seat switch off, as shipped until feature 011's probe D14); `opens_closed` - a
+closed drawing is opened read-only and read. The backend offers the candidate question only on
+`opens_closed`."""
+
+DRAWING_READ_MODES: tuple[DrawingReadMode, ...] = ("none", "open_only", "opens_closed")
+"""Every mode, in the contract's order; anything else a host sends reads as `none`."""
+
+DRAWING_READ_SINCE: tuple[int, int] = (1, 4)
+"""The first protocol whose `ping` answer carries `drawing_read`: an older host's answer, or one
+that states no readable version, is `none` whatever else it carries."""
+
+_KNOWN_MODES: dict[str, DrawingReadMode] = {mode: mode for mode in DRAWING_READ_MODES}
+
 _ENCODING = "utf-8"
 
 
@@ -170,6 +190,37 @@ class BridgeRefusedError(BridgeError):
 def pipe_path(pipe_name: str) -> str:
     """`swreview` as the Windows named-pipe path the console host listens on."""
     return rf"\\.\pipe\{pipe_name}"
+
+
+def _protocol_version(stated: Any) -> tuple[int, ...] | None:
+    """`"1.4"` as `(1, 4)`: a string of two or more dot-separated whole numbers, compared as
+    numbers so 1.10 is past 1.4. Anything else - no version, one number, words, a float - is
+    `None`, which reads as a host that cannot say."""
+    if not isinstance(stated, str):
+        return None
+    parts = stated.split(".")
+    if len(parts) < 2 or not all(part.isdigit() for part in parts):
+        return None
+    return tuple(int(part) for part in parts)
+
+
+def _drawing_read_mode_of(answer: Any) -> DrawingReadMode:
+    """The mode a `ping` answer states (`contracts/drawing-capability.md` section 2).
+
+    Only a 1.4 or later host's `drawing_read`, spelled exactly as one of `DRAWING_READ_MODES`, is
+    taken at its word. An answer that is not an object, states no readable protocol or an older
+    one, lacks the member, or carries anything else is `none`: absent means unable, so the review
+    never offers what the host may not do (research R2.24).
+    """
+    if not isinstance(answer, dict):
+        return "none"
+    version = _protocol_version(answer.get("protocol"))
+    if version is None or version < DRAWING_READ_SINCE:
+        return "none"
+    mode = answer.get("drawing_read")
+    if not isinstance(mode, str):
+        return "none"
+    return _KNOWN_MODES.get(mode, "none")
 
 
 class Transport(Protocol):
@@ -258,6 +309,8 @@ class BridgeClient:
         self._next_id = 1
         self._consecutive_failures = 0
         self._last_error: str | None = None
+        self._drawing_read_mode: DrawingReadMode | None = None
+        """`drawing_read_mode`'s one answer, once it has pinged."""
         self.commands: tuple[str, ...] = COMMANDS
         """The vocabulary this client may write, checked in `call` before the line goes
         out. It is an instance attribute rather than the module constant directly so a
@@ -398,6 +451,25 @@ class BridgeClient:
     def ping(self) -> Any:
         """Check the host is alive, and which document and configuration it is attached to."""
         return self.call("ping", {})
+
+    def drawing_read_mode(self) -> DrawingReadMode:
+        """What `drawing.read` can do on the host: one `ping`, asked once and cached.
+
+        Protocol 1.4, feature 013 (`contracts/drawing-capability.md` section 2). The answer is
+        `_drawing_read_mode_of(ping())`, so an absent field, an unknown value or an older protocol
+        is `none`, and so is any `BridgeError` - a failed ping, a dead pipe, an open circuit, a
+        refused secret: this never raises. A failed ping counts once toward the circuit limit,
+        like any failure, and is not asked again, so a review pings at most one time for it; the
+        caller (`ToolContext`) asks only when a custom or unclear document has a candidate, so a
+        review without one never pings at all.
+        """
+        if self._drawing_read_mode is None:
+            try:
+                answer = self.ping()
+            except BridgeError:
+                answer = None
+            self._drawing_read_mode = _drawing_read_mode_of(answer)
+        return self._drawing_read_mode
 
     def capture(
         self,
