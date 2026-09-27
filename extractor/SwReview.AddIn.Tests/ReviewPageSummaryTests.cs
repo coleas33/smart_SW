@@ -38,6 +38,17 @@ public sealed class ReviewPageSummaryTests
 
     private const string HostileNotReached = "<script>alert(14)</script>Not reached: Fasteners";
 
+    /// <summary>The drawings line while the seat opens no closed drawing, for one file (drawing-capability.md section 4).</summary>
+    private const string InstructionOne = "Open FICT-0002.SLDDRW in SOLIDWORKS, then press Review again with FICT-0001.SLDASM active";
+
+    /// <summary>The same for several files, named as a sentence names them.</summary>
+    private const string InstructionMany =
+        "Open FICT-0002.SLDDRW and FICT-0003.SLDDRW in SOLIDWORKS, then press Review again with FICT-0001.SLDASM active";
+
+    /// <summary>An instruction whose drawing's file name carries markup.</summary>
+    private const string HostileInstruction =
+        "Open <img src=x onerror=alert(15)>.SLDDRW in SOLIDWORKS, then press Review again with FICT-0001.SLDASM active";
+
     private static readonly Lazy<Run> Scripted = new Lazy<Run>(Drive);
 
     [Fact]
@@ -169,6 +180,42 @@ public sealed class ReviewPageSummaryTests
             new[] { "summary-headline", "summary-tally", "summary-questions", "summary-not-loaded", "summary-bought-parts", "summary-not-reached" },
             ReviewPageDriver.Strings(older, "children"));
         Assert.Equal(SummarySample.Headline, older.GetProperty("headline").GetString());
+    }
+
+    /// <summary>
+    /// Feature 013 (contracts/drawing-capability.md section 4): while the seat cannot open a closed
+    /// drawing (`drawing_read` `open_only` or `none`), the backend asks no drawing question and its
+    /// drawings line is the instruction instead - "Open {drawing} in SOLIDWORKS, then press Review
+    /// again with {model} active", one file or several (`open_then_review_one`, `_many`). The page
+    /// prints it verbatim as the one drawings line, and composes no word of it.
+    /// </summary>
+    [Fact]
+    public void TheDrawingInstructionLineIsTheBackendsTextPrintedVerbatim()
+    {
+        JsonElement one = Scripted.Value.InstructionOne;
+        JsonElement many = Scripted.Value.InstructionMany;
+
+        Assert.Equal(InstructionOne, one.GetProperty("drawings").GetString());
+        Assert.Equal(1, one.GetProperty("drawingLines").GetInt32());
+        Assert.True(one.GetProperty("questionsHidden").GetBoolean(), "a questions panel was shown beside the instruction.");
+        Assert.Equal(InstructionMany, many.GetProperty("drawings").GetString());
+        Assert.Equal(1, many.GetProperty("drawingLines").GetInt32());
+    }
+
+    /// <summary>
+    /// The instruction names files read from the reviewed folder, so it is backend text like any
+    /// other: a file name that carries markup is characters (FR-029). The same words reach the
+    /// coverage fold as the candidate row's reason, printed as sent.
+    /// </summary>
+    [Fact]
+    public void AHostileInstructionIsLiteralTextAndTheCoverageReasonIsPrintedAsSent()
+    {
+        JsonElement hostile = Scripted.Value.InstructionHostile;
+
+        Assert.Equal(HostileInstruction, hostile.GetProperty("drawings").GetString());
+        Assert.Equal(0, hostile.GetProperty("injected").GetInt32());
+        Assert.Equal(0, hostile.GetProperty("handlers").GetInt32());
+        Assert.Contains("drawing.context - " + InstructionOne, ReviewPageDriver.Strings(hostile, "coverageLines"));
     }
 
     /// <summary>
@@ -305,9 +352,44 @@ public sealed class ReviewPageSummaryTests
                 await driver.RouteAttention("chat-2", AttentionSample.Json());
                 await driver.EndSession("chat-2");
                 run.NoSummary = await driver.Read(ReadSummary);
+
+                // Feature 013: the seat opens no closed drawing, so the drawings line is the
+                // instruction and no drawing question is asked; its candidate row says the same.
+                await driver.StartReview();
+                await driver.RouteAttention("chat-3", SummarySample.Json(summary => Instruct(summary, InstructionOne)));
+                await driver.Push("chat-3", 1, "coverage", JsonSerializer.Serialize(new
+                {
+                    bucket = "unresolved",
+                    item = new { check = "drawing.context", reason = InstructionOne },
+                }));
+                await driver.EndSession("chat-3");
+                run.InstructionOne = await driver.Read(ReadSummary);
+
+                await driver.RouteAttention("chat-3", SummarySample.Json(summary => Instruct(summary, InstructionMany)));
+                await driver.EndSession("chat-3");
+                run.InstructionMany = await driver.Read(ReadSummary);
+
+                await driver.RouteAttention("chat-3", SummarySample.Json(summary => Instruct(summary, HostileInstruction)));
+                await driver.EndSession("chat-3");
+                run.InstructionHostile = await driver.Read(ReadSummary);
             });
 
         return run;
+    }
+
+    /// <summary>
+    /// The summary of a review whose seat opens no closed drawing: its drawings line is the
+    /// instruction (`{read, candidates, text}` as `drawings_of` returns it) and it asks nothing.
+    /// </summary>
+    private static void Instruct(JsonObject summary, string instruction)
+    {
+        summary["drawings"] = JsonNode.Parse(JsonSerializer.Serialize(new
+        {
+            read = new string[0],
+            candidates = new[] { "FICT-0002.SLDDRW" },
+            text = instruction,
+        }));
+        summary["questions"] = JsonNode.Parse(@"{""count"":0,""text"":null,""items"":[]}");
     }
 
     private const string ReadSummary = @"
@@ -338,6 +420,8 @@ return JSON.stringify({
   notReached: h.text(section, '.summary-not-reached'),
   notReachedLines: section.querySelectorAll('.summary-not-reached').length,
   goalLines: section.querySelectorAll('.summary-goal').length,
+  questionsHidden: !!document.getElementById('questions').hidden,
+  coverageLines: h.texts(document.getElementById('coverage-panel'), '.bucket-item'),
   text: section.textContent,
   injected: h.injected(section),
   handlers: handlers,
@@ -367,5 +451,11 @@ return JSON.stringify({
         public JsonElement HostileLines { get; set; }
 
         public JsonElement NoSummary { get; set; }
+
+        public JsonElement InstructionOne { get; set; }
+
+        public JsonElement InstructionMany { get; set; }
+
+        public JsonElement InstructionHostile { get; set; }
     }
 }
