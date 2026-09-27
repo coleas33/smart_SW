@@ -66,6 +66,7 @@ public sealed class RemodelRun
     private int _stop;
     private int _planLostNotice;
     private bool _closedByPlanAgain;
+    private bool _sessionClosedAtPlan;
 
     internal RemodelRun(
         string runDirectory, string copyPath, DateTime at, string? toolServiceAttachment)
@@ -113,6 +114,18 @@ public sealed class RemodelRun
     public bool ClosedByPlanAgain => Volatile.Read(ref _closedByPlanAgain);
 
     internal void MarkClosedByPlanAgain() => Volatile.Write(ref _closedByPlanAgain, true);
+
+    /// <summary>
+    /// 004 T176 (default taken 2026-09-27, the owner may revise; research R14.2): whether the host
+    /// ended this plan's bridge session as soon as the plan was made, because Start is switched off
+    /// in this build and no Start could use it, and the bridge answered that close. A plan marked
+    /// so holds no session: no close is sent for it again - not by Discard, not by planning again -
+    /// and it is <b>not</b> lost, since nothing it needs went away. Set once, by the host that
+    /// planned it, and never cleared. Volatile for the reason <see cref="ClosedByPlanAgain"/> is.
+    /// </summary>
+    public bool SessionClosedAtPlan => Volatile.Read(ref _sessionClosedAtPlan);
+
+    internal void MarkSessionClosedAtPlan() => Volatile.Write(ref _sessionClosedAtPlan, true);
 
     /// <summary>
     /// Whether a stop has been asked for, by `remodel.stop` or by the copy going away

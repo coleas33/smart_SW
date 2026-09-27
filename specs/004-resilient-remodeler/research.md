@@ -19,7 +19,8 @@ numbered probe in R10 and is not trusted until that probe runs.
 everywhere in this document, not only in R12, and its consequences are named where they fall.
 *Added 2026-09-26:* the defaults taken on 2026-09-26, when the owner asked to proceed without
 questions unless blocked, are recorded in R13. They are not owner decisions: each is a default
-the owner may revise, and none is written as the owner's words.
+the owner may revise, and none is written as the owner's words. *Added 2026-09-27:* so are the
+defaults the review of the seat adapter's integration took, in R14.
 
 ---
 
@@ -1416,3 +1417,144 @@ closing a dirty copy with no prompt and releasing the file; the teardown on a re
 unload from Tools > Add-ins and a SOLIDWORKS exit; whether unrestored toggles persist across
 sessions; activating the copy before a dump; the vault read (T139, PROBE-13); the Tools > Options
 labels; and what happens when the engineer saves or closes the copy by hand while a plan waits.
+
+## R14. Defaults taken 2026-09-27: the review of the seat adapter's integration
+
+**Sources.** The review of 2026-09-27 of lanes D, E and F integrated (`tasks.md`, "Build order",
+the commits up to the one that closed T152), by a safety lens and an invariants lens: eleven
+findings, nine of them this feature's. The owner asked on 2026-09-26 to proceed without questions
+unless blocked, so each item below is settled by a default. **Each is a default taken 2026-09-27,
+the owner may revise; none is the owner's own words, and none is an R12 decision.** SOLIDWORKS was
+not started: what each item says a seat does is read from the code and stays a seat item until a
+sitting checks it. The two findings that are not this feature's - feature 013's T150 count and its
+lever 14 fallback - are answered in that package.
+
+### R14.1 A plan that fails after the open was asked for ends the session it may have left (T175, widened)
+
+**Decision**: *the host* - once `RemodelHost.Plan` has asked the pipeline for the open, a plan that
+ends without recording a run (the open refused or failed, or the plan step after it failed: T159's
+`CopyNotActive`, the dump's profile check or post-check, `POST /remodel/plan`) closes through the
+pipeline's close before the page is answered: `POST /remodel/close` with `discard_copy: false`, so
+R13.1's routine, unsaved, deleting nothing - the copy and the run folder stay as the evidence. The
+page gets the plan's own refusal unchanged, and a close that fails is swallowed. The
+`PreexistingRebuildErrors` paths keep their own close-and-delete, once. *The backend* - `POST
+/remodel/open` closes the session the bridge's open made (`remodel.close`, `discard_copy: false`)
+when anything after that open answered fails - the source attestation, its write, `remodel.geometry`
+or its reading, the open record - before its own error goes back; the close's failure is logged,
+the key redacted, and never replaces it.
+
+**Why**: the review found that a Plan failing after the bridge's open left the session running:
+the copy open and tagged, all four settings changed, no run for Discard to reach, and every later
+`remodel.open` on that attachment refused `run_in_progress`, while the page said to press Remodel a
+copy again. Once the open was asked for, the host cannot tell a refused open from one whose backend
+steps failed after it or whose reply was lost to the client's 30-second timeout (R14.5, T182); any
+session the bridge holds then is one nothing else the host sends will end - planning again closed the
+waiting plan's first (R13.4), and in this build no run has started; and a close with no session is
+answered `target_mismatch` with no SOLIDWORKS call.
+So the host closes on every such failure, and a bridge left holding a session by an earlier failure
+is healed the same way. The backend's half keeps its own route whole for any caller: it knows the
+bridge's open succeeded.
+
+**Alternatives weighed**: close only after the plan step (T175 as first proposed; not taken: the
+backend's own failures after the open and a timed-out open leave the same stuck bridge); delete the
+copy, as `PreexistingRebuildErrors` does (not taken: `CopyNotActive`'s words say the copy was not
+changed and the run folder is the evidence; a refused plan keeps its folder).
+
+### R14.2 While Start is switched off, a plan holds no session (T176)
+
+**Decision**: while `RemodelStart.SeatValidated` is false, the host ends a plan's session as soon
+as the plan is recorded - after the plan step and before the `ready` status and the
+`remodel.planned` reply - through the same close: the copy closed unsaved and left in `copy/`,
+`plan.json` still `planned`, the folder whole. The plan stays on screen, readable and not lost;
+Start is refused `StartNotValidated` as before; Discard deletes `copy/` and sends no close; planning
+again sends none for it; and a re-attach or an unload finds no session. A close the bridge answered,
+with or without something left, marks the plan so (`RemodelRun.SessionClosedAtPlan`), and what it
+left is T167's one status error, through `ToolServiceOptions.RemodelSessionEnded`; a close it could
+not answer (`BridgeUnavailable`, or no named refusal) leaves the plan holding its session, so
+Discard, planning again, a re-attach or an unload still end it. With Start switched on, a plan keeps
+its session for Start, as today.
+
+**Why**: every successful plan left the engineer's four application-wide settings changed for as
+long as the plan waited - `CommandInProgress` set, which suppresses SOLIDWORKS' modal boxes, and
+"Warn before saving documents with update errors" off, so the engineer could save their own part
+with rebuild errors and no warning - while they worked on their own part, since a switch back to
+the source re-attaches nothing. No Start can use the session in this build, so holding it bought
+nothing. It also takes the copy out of SOLIDWORKS as soon as the plan is made, so the review's two
+other findings about a waiting plan cannot happen in this build: the copy becoming the active
+document (Open copy, or the copy's window T159 left in front) re-attaches the tool service and
+closes the copy under the engineer; and decision 24A's "Nothing was changed" notice posted before a
+teardown's failure words.
+
+**Alternatives weighed**: put the settings back at the end of the open and set them again for
+Start (not taken now: a contract change for a Start the switch keeps off; it is T180's question);
+leave it until the switch is set (not taken: the next sitting runs Plan on real parts with the
+switch off, and step 5.3 checks the settings right after it).
+
+**What it leaves open**: with Start switched on a plan must hold its session for Start, and the
+three findings return. T180 decides them before T172's switch is set.
+
+### R14.3 A failed open cleans up by the routine's rules and tells the ending (T177)
+
+**Decision**: `remodel.open`'s failure path, once the settings were changed at step 6: the copy
+closed unsaved by the routine's clean-up write (the guard asked and the observer told, not counted
+by the breaker, so a circuit the failing open opened cannot stop it), the copy deleted whatever the
+close did, and all four settings put back - each step attempted whatever the others did, and none of
+their failures replaces the refusal the open answers. Then the ending is told to
+`BridgeServices.RemodelSessionEnded`, with a new reason, `remodel.open`
+(`RemodelSessionEnd.ReasonOpenFailed`), so an unwind that left the copy open or a setting changed
+reaches the pane as T167's one status error, and a clean one keeps the pane quiet. `CopyClosed` is
+true when no document was opened; `Verified` and `TagRemoved` are false. The routine and the unwind
+share one close helper and one put-back helper.
+
+**Why**: the review found the unwind was its own code: a `CloseDoc` that threw skipped the copy's
+delete and replaced the refusal, a restore that threw replaced it, `gate.Call` counted the close
+against the breaker (and an open circuit refused it outright), and nothing told the pane, so a copy
+could be left open and tagged with no session left to close it.
+
+**Alternatives weighed**: run the unwind through `EndRemodelSession` itself (not taken: its
+verification needs a scope, which may not exist yet, and the routine never deletes, where a failed
+open deletes its copy).
+
+### R14.4 The bridge gates the equation manager (T178)
+
+**Decision**: `remodel.snapshot` and `remodel.equation` reach `IRemodelDocument.Equations` through
+the remodel gate under `GetEquationMgr`, the bare key the manifest row names for those two commands
+and the probe host gates it under. It is a read, so `RemodelGuard` delegates it; it now appears on
+the request's `gated=` line and counts toward the breaker, and `SwRemodelCopyDocument`'s remark that
+`VerifyTarget`'s reads are the one ungated path is true.
+
+### R14.5 Recorded and deferred
+
+- **T179 - the teardown reads the seat's own answers.** `tag_removed` is true when `Delete2`
+  returned, whatever it answered, and `copy_closed` when `CloseDoc` returned (it returns nothing),
+  with no read that the copy is gone. Judging `Delete2`'s answer needs the
+  `swCustomInfoDeleteResult_e` values in the manifest's enums, which are regenerated, never typed
+  (T181), and confirming the close needs a seat member that asks whether the copy is still open.
+  Until then `CopyClosed` means "`CloseDoc` returned", as its own remark says, and the sitting checks
+  that `CloseDoc` closes a dirty copy (R13.8).
+- **T180 - the held session once Start is switched on**: the settings held while a plan waits, the
+  copy becoming the active document tearing the plan down, and 24A's notice posted before the
+  teardown's words; and, found while writing T175, a run that saved keeps its session, so the next
+  plan's open is refused `run_in_progress` until R14.1's close ends it. Decided before T172's switch
+  is set; it blocks that commit.
+- **T181 - the manifest's regeneration command and the pane seat's members.** The contract's
+  `swreview-extract probe interop --emit-manifest` was never built: the rows are checked field for
+  field against the installed assembly by `InstalledAssemblyMatchesManifest`, and `used_by` and
+  `note` are written by hand. The pane's own seat (`SwRemodelSeat`: `remodel.open_copy` and T159's
+  activation) calls `GetOpenDocumentByName`, `ActivateDoc3`, `get_ActiveDoc`, `GetTitle`,
+  `GetPathName` and `OpenDoc7` directly, outside the bridge, by design (`IRemodelSeat`'s remarks: a
+  UI action of the add-in, which the bridge's vocabulary deliberately lacks, and which the read-only
+  guard would refuse, since `ActivateDoc3` is on its denylist); its members join the manifest, and
+  `SwRemodelSeat` the audit, when the command exists. Before T140.
+- **T182 - the open route's client timeout.** The add-in's backend client waits 30 seconds on every
+  route, `POST /remodel/open` included, while the backend's bridge client waits 60 and the pipe's
+  application-thread call 120; a real part's copy, open, rollback, rebuild and signal re-read may
+  take longer than 30 seconds. A timed-out open is a failed plan, so R14.1's close follows it, but
+  the close waits behind the open on the application thread. The sitting records how long Plan
+  takes on a real part (the test plan's step 5.3); the timeout is set from that.
+
+### R14.6 Refuted
+
+- **The pane seat's direct COM calls are not a defect** (the review said so itself): the pane's UI
+  actions are the add-in's and have no bridge command by design; what is owed is their record in the
+  manifest and the audit, T181.

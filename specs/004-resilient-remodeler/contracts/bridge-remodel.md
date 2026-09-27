@@ -211,6 +211,15 @@ Sequence, in order, with the call that performs each step:
     differ, and the copy's refs are still what the plan records. `feature_type_names[]` (T161)
     compares as an ordered list, ordinal, as every other list row does.
 
+*Amended 2026-09-27 (default taken 2026-09-27, the owner may revise; `tasks.md` T177, research
+R14.3):* a failure after step 6 unwinds by the rules of "Ending a session": the copy closed
+unsaved by the routine's clean-up write (`ISldWorks.CloseDoc`, judged by the guard and logged, not
+counted against the circuit breaker, so a circuit the failing open opened cannot stop it), the
+copy deleted whatever the close did, and all four settings restored - each step attempted whatever
+the others did, and none of their failures replaces the error the open answers. The ending is then
+told to `BridgeServices.RemodelSessionEnded` with the reason `remodel.open`, `copy_closed` true when
+no document was opened, and `verified` and `tag_removed` false.
+
 The returned `scope_signals` are the copy's, measured at step 12, and are what the plan records:
 the plan should describe the document the run actually changed. The probe's signals are what the
 verdict was made from, and `plan.scope.signals_probe` keeps them so a reader can see both.
@@ -234,6 +243,11 @@ and `""` would be a default written over engineering data, so a manager position
 back null carries **no** `equations[]` row and its index is named here instead. The surviving rows
 keep the indexes the manager addresses them by, so `equations[]` is shorter than `GetCount()` on
 exactly these positions and never quietly.
+
+*Amended 2026-09-27 (`tasks.md` T178, research R14.4):* the equation manager
+(`IModelDoc2.GetEquationMgr`) is reached through the remodel gate under its bare key,
+`GetEquationMgr`, here and in `remodel.equation`, as its manifest row's `used_by` says; it is a read,
+and it is on the request's `gated=` line.
 
 ### `remodel.rename`
 
@@ -542,7 +556,8 @@ when the verification passed and the rest did not; `detail` carries `reason`, `v
 `failed_check`, `tag_removed`, `copy_closed`, `settings_restored` (of four), `settings_outstanding`
 and `copy_deleted`. Every ending of a session that existed - `remodel.close`'s included - is told
 to `BridgeServices.RemodelSessionEnded`, on the application thread, so the pane's one failure
-status has one source. It **never saves** - `remodel.save` stays the one save - and a
+status has one source. *Amended 2026-09-27 (T177):* so is a failed `remodel.open`'s unwind, with
+the reason `remodel.open` (`remodel.open`, above), which shares the routine's close and restore. It **never saves** - `remodel.save` stays the one save - and a
 re-attach or an unload **never deletes**: the copy stays in `copy/` as the byte copy it was, the run
 folder stays whole, and `plan.json` is untouched (still `planned`; the pane already treats the plan
 as lost, decision 24A). A run in progress when the add-in unloads ends the same way: its changes go

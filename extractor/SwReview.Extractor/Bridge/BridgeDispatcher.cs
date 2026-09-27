@@ -784,6 +784,13 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     private const string EquationTextMember = "get_Equation";
     private const string LengthUnitMember = "GetUnits";
 
+    /// <summary>
+    /// <c>IModelDoc2.GetEquationMgr</c>, as the gate is told about it (004 T178): the bare key the
+    /// manifest row's <c>used_by</c> (<c>remodel.snapshot</c>, <c>remodel.equation</c>) and the probe
+    /// host gate it under. A read, so it takes <see cref="RemodelGuard"/>'s delegation branch.
+    /// </summary>
+    private const string EquationManagerMember = "GetEquationMgr";
+
     /// <summary><c>IFeatureManager.EditRollback(swMoveRollbackBarToEnd = 1, "")</c> (VERIFIED value).</summary>
     private const string RollbackKey = "IFeatureManager.EditRollback";
 
@@ -879,7 +886,11 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     ///
     /// Everything from the copy onwards is wrapped: a failure after the copy exists closes the
     /// document, deletes the copy and restores the system toggles, because the copy is the run
-    /// and a run that did not start leaves nothing behind.
+    /// and a run that did not start leaves nothing behind. *Amended 2026-09-27 (004 T177):* by
+    /// the end-of-session routine's rules - each step attempted whatever the others did, the
+    /// close not counted by the breaker, the open's own refusal the answer - and the ending told
+    /// to <see cref="BridgeServices.RemodelSessionEnded"/> with the reason
+    /// <see cref="RemodelSessionEnd.ReasonOpenFailed"/>.
     /// </summary>
     private RemodelOpenResult Open(BridgeRequest request)
     {
@@ -1033,31 +1044,38 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
         }
         catch (Exception)
         {
-            // The restore is in a finally, not after the rollback: CloseDocument is a COM call
-            // and DeleteCopy a filesystem call, both on a path that is already failing, and a
-            // throw from either would otherwise leave the engineer's four settings flipped
-            // with nothing reporting it. Restore is idempotent, so the one in Close() stays
-            // correct.
-            try
-            {
-                if (document != null)
-                {
-                    // The same allowlisted write remodel.close makes, gated under the same key:
-                    // this path runs after preexisting_rebuild_errors, scope_changed and the
-                    // still-rolled-back refusal, which is where the audit record matters most.
-                    // Call rather than Write, because the scope may not exist yet.
-                    _remodelGate.Call(CloseKey, () => seat.CloseDocument(copy));
-                }
+            // 004 T177 (default taken 2026-09-27, the owner may revise; research R14.3): the
+            // unwind follows the end-of-session routine's rules. The close is the same allowlisted
+            // write remodel.close makes, under the same key - this path runs after
+            // preexisting_rebuild_errors, scope_changed and the still-rolled-back refusal, where
+            // the audit record matters most - judged by the guard and recorded by the observer
+            // but not counted by the breaker, so a circuit this failing open opened cannot stop
+            // it (CleanUpWrite). The close, the delete and the put-back are each attempted
+            // whatever the others did, and none of their failures replaces the reason the open
+            // stopped, which is what is thrown below.
+            var failures = new List<string>();
+            bool copyClosed = document == null || CloseCopyUnsaved(_remodelGate, seat, copy, failures);
 
-                if (copyCreated)
-                {
-                    DeleteCopy(copy);
-                }
-            }
-            finally
+            if (copyCreated)
             {
-                toggles.Restore();
+                DeleteCopy(copy);
             }
+
+            PutBackSettings(toggles, failures);
+
+            // The settings were changed and a copy may have been opened, so this is an ending of a
+            // session in the making: told as every other ending is, so what it left reaches the
+            // pane as T167's one status error, and a clean one keeps the pane quiet.
+            Tell(new RemodelSessionEnd(
+                RemodelSessionEnd.ReasonOpenFailed,
+                runDirectory,
+                copy,
+                verified: false,
+                failedCheck: null,
+                tagRemoved: false,
+                copyClosed,
+                toggles.Outstanding,
+                failures));
 
             throw;
         }
@@ -1132,7 +1150,7 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
         }
 
         string documentId = DocumentIds.DesignId(session.Scope.CopyPath);
-        IEquationTarget equations = document.Equations;
+        IEquationTarget equations = gate.Call(EquationManagerMember, () => document.Equations);
         int count = gate.Call(EquationCountMember, equations.GetCount);
         var rows = new List<Equation>(Math.Max(count, 0));
 
@@ -1541,7 +1559,7 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     {
         RemodelEquationParams parameters = RemodelEquationParams.Read(request);
         RemodelSession session = Session();
-        IEquationTarget equations = session.Document.Equations;
+        IEquationTarget equations = session.Gate.Call(EquationManagerMember, () => session.Document.Equations);
 
         switch (parameters.Op)
         {
@@ -2030,23 +2048,12 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
                 {
                     tagRemoved = CleanUpWrite(
                         session.Gate, UntagKey, () => RemodelCopy.Untag(session.Document), "untag", failures);
-
-                    IRemodelSeat? seat = _services.RemodelSeat;
-                    copyClosed = seat == null
-                        ? Failed(failures, "close: this bridge has no remodel seat to close the copy through")
-                        : CleanUpWrite(session.Gate, CloseKey, () => seat.CloseDocument(copy), "close", failures);
+                    copyClosed = CloseCopyUnsaved(session.Gate, _services.RemodelSeat, copy, failures);
                 }
             }
             finally
             {
-                try
-                {
-                    session.Toggles.Restore();
-                }
-                catch (Exception error)
-                {
-                    failures.Add("the settings were not all put back: " + error.Message);
-                }
+                PutBackSettings(session.Toggles, failures);
             }
         }
         finally
@@ -2151,6 +2158,35 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     {
         failures.Add(failure);
         return false;
+    }
+
+    /// <summary>
+    /// The copy closed unsaved (<c>ISldWorks.CloseDoc</c>) as a clean-up write: the one close both
+    /// the end-of-session routine and a failed open's unwind make (004 T167, T177). True when it
+    /// returned; with no seat, or when it threw, false and a sentence in <paramref name="failures"/>.
+    /// </summary>
+    private static bool CloseCopyUnsaved(SwGate gate, IRemodelSeat? seat, string copy, List<string> failures) =>
+        seat == null
+            ? Failed(failures, "close: this bridge has no remodel seat to close the copy through")
+            : CleanUpWrite(gate, CloseKey, () => seat.CloseDocument(copy), "close", failures);
+
+    /// <summary>
+    /// All four settings put back, <c>CommandInProgress</c> last, by
+    /// <see cref="RemodelSystemToggles.Restore"/>, which is safe to run twice; what it could not put
+    /// back is a sentence in <paramref name="failures"/> and stays in
+    /// <see cref="RemodelSystemToggles.Outstanding"/>. Shared by the routine and a failed open's
+    /// unwind (004 T167, T177); it never throws.
+    /// </summary>
+    private static void PutBackSettings(RemodelSystemToggles toggles, List<string> failures)
+    {
+        try
+        {
+            toggles.Restore();
+        }
+        catch (Exception error)
+        {
+            failures.Add("the settings were not all put back: " + error.Message);
+        }
     }
 
     /// <summary>The host is told; nothing it does in return reaches the routine or the request.</summary>

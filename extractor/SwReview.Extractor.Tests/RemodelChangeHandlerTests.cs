@@ -367,6 +367,31 @@ public class RemodelChangeHandlerTests : IDisposable
         Assert.Equal(new[] { "\"w\" = 120" }, _harness.Copy.EquationManager.Equations);
     }
 
+    /// <summary>
+    /// 004 T178 (research R14.4): each op reaches the equation manager through the remodel gate
+    /// under <c>GetEquationMgr</c>, the key its manifest row names, before the manager is asked
+    /// anything.
+    /// </summary>
+    [Theory]
+    [InlineData("{\"op\":\"add\",\"text\":\"\\\"w\\\" = 120\",\"which_configs\":2}", false)]
+    [InlineData("{\"op\":\"set\",\"index\":0,\"text\":\"\\\"w\\\" = 120\",\"which_configs\":2}", true)]
+    [InlineData("{\"op\":\"delete\",\"index\":0}", true)]
+    public void Equation_EveryOpGatesTheEquationManagerBeforeUsingIt(string parameters, bool oneRow)
+    {
+        if (oneRow)
+        {
+            _harness.Copy.EquationManager.Equations.Add("\"w\" = 100");
+        }
+
+        Assert.DoesNotContain("GetEquationMgr", _harness.Observer.Members);
+
+        RemodelHarness.Ok<RemodelEquationResult>(_harness.Dispatch(RemodelCommands.Equation, parameters));
+
+        List<string> members = _harness.Observer.Members.ToList();
+        Assert.Contains("GetEquationMgr", members);
+        Assert.True(members.IndexOf("GetEquationMgr") < members.IndexOf("GetCount"), "the manager was used before it was gated");
+    }
+
     [Fact]
     public void Equation_Set_EditsInPlaceAndIsTheFr029Repair()
     {

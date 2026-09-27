@@ -61,6 +61,16 @@ it and the count is what the engineer needs to read:
 | `preexisting_rebuild_errors` | `200 {copy_path, rebuild_error_count: <from the refusal's detail, null when it carries none>, copy_present: false}` - the bridge has already deleted the copy and closed the document |
 | any other `error_code` | the error body of the class named in the table below |
 
+*Amended 2026-09-27 (default taken 2026-09-27, the owner may revise; `tasks.md` T175, research
+R14.1):* once the bridge's `remodel.open` has answered ok, the bridge holds a session - the copy
+open and tagged, the four settings changed. When anything after that fails - reading or writing
+the source attestation, `remodel.geometry` or its reading, writing `open.json` - the route sends
+`remodel.close` with `discard_copy: false` (the bridge's end-of-session routine: unsaved, deleting
+nothing) before its own error goes back, unchanged. A close that fails, or is not sent because the
+circuit is open, is logged with the key redacted and never replaces that error. A refused open and
+`preexisting_rebuild_errors` send no close: the bridge put everything back on its own failure
+path.
+
 On the ok path the route writes two files before it answers, so that `POST /remodel/plan` and
 `POST /remodel/runs` can rebuild the runner's inputs **from the folder alone** - which is what
 lets the pane answer after a restart and what keeps the pipeline stateless:
@@ -157,3 +167,8 @@ from an error body. `InvalidRunDir` is `chat-api.md`'s and is unchanged here.
   either side alone are all failures.
 - No provider is constructed on any route but `POST /remodel/runs`, and there only through
   `remodel/runner.py`; the source path is named in no bridge call after `remodel.open`.
+- *Added 2026-09-27 (T175):* `TestAFailureAfterTheOpen`: each failure after the bridge's open
+  answered - the attestation, the geometry refused, on an open circuit or unreadable, a failure
+  the route does not name - sends one `remodel.close` with `discard_copy: false` after it, and the
+  route's own error goes back; a close that fails is logged and replaces nothing; a refused open,
+  `preexisting_rebuild_errors` and an open that succeeds send none.

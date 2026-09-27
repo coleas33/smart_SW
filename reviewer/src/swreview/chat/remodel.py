@@ -728,6 +728,30 @@ class RemodelServer:
         except BridgeError as exc:
             raise _unavailable("remodel.open", str(exc)) from exc
 
+        try:
+            return self._record_open(
+                client, run_dir, copy_path, reply, probe_id, configuration
+            )
+        except Exception:
+            # 004 T175 (default taken 2026-09-27, the owner may revise; research R14.1): the
+            # bridge's open answered, so it holds a session - the copy open and tagged, the four
+            # settings changed - that this route's failure would otherwise leave behind, and
+            # every later open on that bridge would be refused `run_in_progress`.
+            self._close_after_failed_open(client)
+            raise
+
+    def _record_open(
+        self,
+        client: Any,
+        run_dir: Path,
+        copy_path: Path,
+        reply: Any,
+        probe_id: str,
+        configuration: str | None,
+    ) -> dict[str, Any]:
+        """What `POST /remodel/open` does once the bridge's open answered: the attestation, the
+        geometry baseline and the open record, and the reply. Any failure here is `_open`'s to
+        answer, after it has ended the session the open left."""
         signals = _signals(_field(reply, "scope_signals"))
         try:
             attestation = attestation_from_open(_field(reply, "source_attestation") or {})
@@ -766,6 +790,31 @@ class RemodelServer:
             "rebuild_error_count": 0,
             "copy_present": True,
         }
+
+    def _close_after_failed_open(self, client: Any) -> None:
+        """End the session a failed `POST /remodel/open` left: `remodel.close` with
+        `discard_copy: false`, the bridge's end-of-session routine, unsaved and deleting nothing
+        (004 T175). It never raises: the route's own error is the answer, and a close that fails
+        is logged, the key redacted, and goes no further."""
+        try:
+            reply = client.close_document(False)
+        except Exception as exc:
+            logger.warning(
+                "%s",
+                self.redact(
+                    "remodel.open failed after the bridge opened the copy, and remodel.close "
+                    f"could not end that session: {type(exc).__name__}: {exc}"
+                ),
+            )
+            return
+        if isinstance(reply, CircuitOpen):
+            logger.warning(
+                "%s",
+                self.redact(
+                    "remodel.open failed after the bridge opened the copy, and remodel.close "
+                    f"was not sent, because the circuit is open: {reply.last_error}"
+                ),
+            )
 
     def _plan(self, run_dir: Path) -> dict[str, Any]:
         package = _package(run_dir / PACKAGE_BEFORE, PackageMissing, NotModelCheck)

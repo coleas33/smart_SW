@@ -688,9 +688,11 @@ public class RemodelOpenHandlerTests : IDisposable
         seat.CloseFailure = new InvalidOperationException("the seat could not close the copy");
         SwBridgeDispatcher dispatcher = Dispatcher(seat);
 
-        // The refusal itself is the close failure, not preexisting_rebuild_errors: the run is
-        // unwinding and this is what went wrong last. What matters is what is left behind.
-        Assert.Equal(BridgeStatus.Error, dispatcher.Dispatch(OpenRequest(Probe(dispatcher))).Status);
+        // *Amended 2026-09-27 (004 T177):* the refusal is the open's own, not the close's: a
+        // clean-up step that fails never replaces the reason the run stopped.
+        Assert.Equal(
+            RemodelErrorCodes.PreexistingRebuildErrors,
+            Refusal(dispatcher.Dispatch(OpenRequest(Probe(dispatcher)))));
 
         Assert.Equal(
             new[]
@@ -699,6 +701,156 @@ public class RemodelOpenHandlerTests : IDisposable
                 "10=False", "77=False", "329=False", "CommandInProgress=False",
             },
             seat.ToggleWrites);
+    }
+
+    // ---- 004 T177: a failed open cleans up by the routine's rules and tells the ending -------
+
+    /// <summary>
+    /// 004 T177 (default taken 2026-09-27, the owner may revise; research R14.3): the unwind's close
+    /// throws. The copy is still deleted - the close and the delete are each attempted whatever the
+    /// other did - the settings are still put back, and the open answers its own refusal.
+    /// </summary>
+    [Fact]
+    public void Open_WhoseUnwindCloseThrows_StillDeletesTheCopyAndAnswersItsOwnRefusal()
+    {
+        FakeRemodelSeat seat = Seat();
+        seat.Copy!.WhatsWrongCount = 2;
+        seat.CloseFailure = new InvalidOperationException("the seat could not close the copy");
+        SwBridgeDispatcher dispatcher = Dispatcher(seat);
+
+        BridgeResponse response = dispatcher.Dispatch(OpenRequest(Probe(dispatcher)));
+
+        Assert.Equal(RemodelErrorCodes.PreexistingRebuildErrors, Refusal(response));
+        Assert.DoesNotContain("could not close", response.Error, StringComparison.Ordinal);
+        Assert.Equal(Path.GetFullPath(_copyPath), Assert.Single(seat.Closed));
+        Assert.False(File.Exists(_copyPath), "the delete ran although the close threw");
+        Assert.Equal("CommandInProgress=False", seat.ToggleWrites.Last());
+    }
+
+    /// <summary>A restore that fails on the way out never replaces the open's own refusal either.</summary>
+    [Fact]
+    public void Open_WhoseRestoreFailsOnTheWayOut_AnswersItsOwnRefusal()
+    {
+        FakeRemodelSeat seat = Seat();
+        seat.Copy!.WhatsWrongCount = 2;
+        seat.FailingWrites.Add("CommandInProgress=False");
+        SwBridgeDispatcher dispatcher = Dispatcher(seat);
+
+        BridgeResponse response = dispatcher.Dispatch(OpenRequest(Probe(dispatcher)));
+
+        Assert.Equal(RemodelErrorCodes.PreexistingRebuildErrors, Refusal(response));
+        Assert.False(File.Exists(_copyPath));
+        Assert.Equal(
+            new[] { "10=False", "77=False", "329=False" },
+            seat.ToggleWrites.Skip(4).Take(3));
+    }
+
+    /// <summary>
+    /// The unwind's close is judged by the guard and recorded by the observer, as the routine's
+    /// clean-up writes are, but not counted by the breaker (<see cref="SwGate.Assert"/>), so a
+    /// close that fails on a path that is already failing cannot help open the circuit, and a
+    /// circuit the failing open opened could not stop it.
+    /// </summary>
+    [Fact]
+    public void Open_TheUnwindsCloseIsGuardedButNotCountedByTheBreaker()
+    {
+        FakeRemodelSeat seat = Seat();
+        seat.Copy!.WhatsWrongCount = 2;
+        seat.CloseFailure = new InvalidOperationException("the seat could not close the copy");
+        var breaker = new CircuitBreaker();
+        BridgeServices services = Services(seat, _runDirectory);
+        services.RemodelGate = new SwGate(breaker, new RemodelGuard()) { Observer = _observer };
+        var dispatcher = new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+
+        BridgeResponse response = dispatcher.Dispatch(OpenRequest(Probe(dispatcher)));
+
+        Assert.Equal(RemodelErrorCodes.PreexistingRebuildErrors, Refusal(response));
+        Assert.Contains("ISldWorks.CloseDoc", _observer.Members);
+        Assert.Equal(0, breaker.ConsecutiveFailures);
+        Assert.False(File.Exists(_copyPath));
+    }
+
+    /// <summary>
+    /// The ending is told once to <see cref="BridgeServices.RemodelSessionEnded"/>, with the reason
+    /// <c>remodel.open</c> and what was left: here the close threw, so the copy may still be open,
+    /// and the pane's words will say so.
+    /// </summary>
+    [Fact]
+    public void Open_ThatFailsAfterTheSettingsChanged_TellsTheEndingOnceWithWhatWasLeft()
+    {
+        FakeRemodelSeat seat = Seat();
+        seat.Copy!.WhatsWrongCount = 2;
+        seat.CloseFailure = new InvalidOperationException("the seat could not close the copy");
+        seat.FailingWrites.Add("CommandInProgress=False");
+        var told = new List<RemodelSessionEnd>();
+        BridgeServices services = Services(seat, _runDirectory);
+        services.RemodelSessionEnded = told.Add;
+        var dispatcher = new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+
+        dispatcher.Dispatch(OpenRequest(Probe(dispatcher)));
+
+        RemodelSessionEnd outcome = Assert.Single(told);
+        Assert.Equal(RemodelSessionEnd.ReasonOpenFailed, outcome.Reason);
+        Assert.True(outcome.HadSession);
+        Assert.Equal(Path.GetFullPath(_runDirectory), outcome.RunDirectory);
+        Assert.Equal(Path.GetFullPath(_copyPath), outcome.CopyPath);
+        Assert.False(outcome.CopyClosed);
+        Assert.Equal(new[] { RemodelSystemToggles.CommandInProgressSetting }, outcome.SettingsOutstanding);
+        Assert.Equal(2, outcome.Failures.Count);
+        Assert.Null(dispatcher.RemodelTargetPath);
+    }
+
+    /// <summary>
+    /// A failed open that put everything back is told too, as a clean ending the pane stays quiet
+    /// about; and one that failed before any document was opened closed nothing and says the copy
+    /// is not open.
+    /// </summary>
+    [Theory]
+    [InlineData("preexisting")]
+    [InlineData("copy_exists")]
+    public void Open_ThatFailsAndLeavesNothing_TellsACleanEnding(string how)
+    {
+        FakeRemodelSeat seat = Seat();
+        if (how == "preexisting")
+        {
+            seat.Copy!.WhatsWrongCount = 2;
+        }
+        else
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(_copyPath)!);
+            File.WriteAllText(_copyPath, "a file already at the copy's path");
+        }
+
+        var told = new List<RemodelSessionEnd>();
+        BridgeServices services = Services(seat, _runDirectory);
+        services.RemodelSessionEnded = told.Add;
+        var dispatcher = new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+
+        dispatcher.Dispatch(OpenRequest(Probe(dispatcher)));
+
+        RemodelSessionEnd outcome = Assert.Single(told);
+        Assert.Equal(RemodelSessionEnd.ReasonOpenFailed, outcome.Reason);
+        Assert.True(outcome.Succeeded);
+        Assert.True(outcome.CopyClosed);
+        Assert.Empty(outcome.SettingsOutstanding);
+        Assert.Equal(how == "preexisting" ? 1 : 0, seat.Closed.Count);
+    }
+
+    /// <summary>An open refused before the settings were changed ended no session, and tells nothing.</summary>
+    [Fact]
+    public void Open_RefusedBeforeTheSettingsChanged_TellsNothing()
+    {
+        FakeRemodelSeat seat = Seat();
+        var told = new List<RemodelSessionEnd>();
+        BridgeServices services = Services(seat, _runDirectory);
+        services.RemodelSessionEnded = told.Add;
+        var dispatcher = new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+        string probeId = Probe(dispatcher);
+        seat.Probe.SaveFlag = true;
+
+        Assert.Equal(RemodelErrorCodes.SourceDirty, Refusal(dispatcher.Dispatch(OpenRequest(probeId))));
+        Assert.Empty(told);
+        Assert.Empty(seat.ToggleWrites);
     }
 
     [Fact]
@@ -774,6 +926,25 @@ public class RemodelOpenHandlerTests : IDisposable
         Assert.Equal("\"w\" = 120", equation.Text);
         Assert.Equal("w", equation.Lhs);
         Assert.Equal(0, equation.Index);
+    }
+
+    /// <summary>
+    /// 004 T178 (research R14.4): the equation manager is reached through the remodel gate under
+    /// <c>GetEquationMgr</c>, the key its manifest row names, before its rows are counted - so
+    /// <c>VerifyTarget</c>'s reads stay the one ungated path.
+    /// </summary>
+    [Fact]
+    public void Snapshot_GatesTheEquationManagerBeforeItCountsItsRows()
+    {
+        FakeRemodelSeat seat = Seat();
+        SwBridgeDispatcher dispatcher = Opened(seat);
+        Assert.DoesNotContain("GetEquationMgr", _observer.Members);
+
+        Ok<RemodelSnapshotResult>(dispatcher.Dispatch(Request("9", RemodelCommands.Snapshot, "{}")));
+
+        List<string> members = _observer.Members.ToList();
+        Assert.Contains("GetEquationMgr", members);
+        Assert.True(members.IndexOf("GetEquationMgr") < members.IndexOf("GetCount"), "the rows were counted before the manager was gated");
     }
 
     [Fact]

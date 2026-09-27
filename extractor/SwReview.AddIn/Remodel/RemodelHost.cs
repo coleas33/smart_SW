@@ -880,6 +880,11 @@ public sealed class RemodelHost : IDisposable
     /// copy exists; the exception is `PreexistingRebuildErrors`, whose reading needs a rollback
     /// and a rebuild and so can only be taken on the copy - and whose handler is therefore the
     /// one that deletes a copy.
+    ///
+    /// Once the open was asked for, the bridge may hold a session - the copy open, the four
+    /// settings changed - and a plan never leaves one behind that nothing will end: a plan that
+    /// fails from there closes it before it answers (004 T175), and a plan made while Start is
+    /// switched off closes it before it answers too, since no Start can use it (004 T176).
     /// </summary>
     private void Plan(string? id)
     {
@@ -1010,6 +1015,7 @@ public sealed class RemodelHost : IDisposable
                 // The run folder is left behind on purpose: whatever it holds is the evidence
                 // for why the run stopped (constitution Principle I).
                 PostStatus("error", failure.Message);
+                EndTheSessionOfAFailedPlan(pipeline, runDirectory);
                 throw;
             }
 
@@ -1080,10 +1086,12 @@ public sealed class RemodelHost : IDisposable
             catch (Exception failure)
             {
                 PostStatus("error", failure.Message);
+                EndTheSessionOfAFailedPlan(pipeline, runDirectory);
                 throw;
             }
 
             RemodelRun run = Track(runDirectory, copy.CopyPath, attachment);
+            EndTheSessionNoStartCanUse(pipeline, run);
             PostStatus("ready", "Planned. Press Start to apply the plan to the copy.");
 
             using (JsonDocument summary = JsonDocument.Parse(planSummary))
@@ -1137,37 +1145,118 @@ public sealed class RemodelHost : IDisposable
             return true;
         }
 
-        if (HoldsItsSession(waiting, attachment))
+        if (HoldsItsSession(waiting, attachment)
+            && CloseSession(pipeline, waiting.RunDirectory, out Exception? notAnswered) == CloseAnswer.NotAnswered)
         {
-            try
+            if (notAnswered is RemodelRefusal refusal)
             {
-                pipeline.CloseCopy(waiting.RunDirectory);
+                SendRefusal(id, refusal);
             }
-            catch (RemodelRefusal refusal)
-            {
-                if (string.Equals(refusal.ErrorClass, BridgeUnavailableClass, StringComparison.Ordinal))
-                {
-                    SendRefusal(id, refusal);
-                    return false;
-                }
-
-                // Answered, with what it left: see the remarks.
-            }
-            catch (Exception failure)
+            else
             {
                 _actions.SendError(
                     id,
                     BridgeUnavailableClass,
                     "the SOLIDWORKS bridge did not answer the close of the earlier plan, so that plan "
-                    + "is left as it was and no new plan was made: " + failure.Message,
+                    + "is left as it was and no new plan was made: " + notAnswered!.Message,
                     retryable: true);
-                return false;
             }
+
+            return false;
         }
 
+        // Closed, or answered with what it left (see the remarks), or nothing to close.
         waiting.MarkClosedByPlanAgain();
         TellPlanLost(waiting);
         return true;
+    }
+
+    /// <summary>What the bridge made of one close of a plan's session (004 T173's reading, shared).</summary>
+    private enum CloseAnswer
+    {
+        /// <summary>The close returned: the session is over, and everything was put back.</summary>
+        Closed,
+
+        /// <summary>
+        /// A named refusal other than <c>BridgeUnavailable</c>: the bridge ran its end-of-session
+        /// routine, which clears the session whatever it left, and what it left reaches the page as
+        /// T167's one status error through <c>ToolServiceOptions.RemodelSessionEnded</c>.
+        /// </summary>
+        AnsweredWithWhatItLeft,
+
+        /// <summary>
+        /// <c>BridgeUnavailable</c>, or a failure with no named refusal at all: the bridge may still
+        /// hold the session.
+        /// </summary>
+        NotAnswered,
+    }
+
+    /// <summary>
+    /// One close of the session the bridge holds for <paramref name="runDirectory"/>'s plan, through
+    /// the pipeline's close (<c>POST /remodel/close</c>, <c>discard_copy: false</c>, so the bridge's
+    /// end-of-session routine: unsaved, deleting nothing), read the way planning again reads it
+    /// (004 T173). It never throws; <paramref name="notAnswered"/> is the failure when the bridge
+    /// could not answer.
+    /// </summary>
+    private static CloseAnswer CloseSession(
+        IRemodelPipeline pipeline, string runDirectory, out Exception? notAnswered)
+    {
+        notAnswered = null;
+        try
+        {
+            pipeline.CloseCopy(runDirectory);
+            return CloseAnswer.Closed;
+        }
+        catch (RemodelRefusal refusal)
+            when (!string.Equals(refusal.ErrorClass, BridgeUnavailableClass, StringComparison.Ordinal))
+        {
+            return CloseAnswer.AnsweredWithWhatItLeft;
+        }
+        catch (Exception failure)
+        {
+            notAnswered = failure;
+            return CloseAnswer.NotAnswered;
+        }
+    }
+
+    /// <summary>
+    /// 004 T175 (default taken 2026-09-27, the owner may revise; research R14.1): a plan that asked
+    /// the pipeline for the open and ends without recording a run - the open refused or failed, or
+    /// the plan step after it failed - ends the session that open may have left, before the page is
+    /// answered, through <see cref="CloseSession"/>: unsaved, the copy and the run folder kept as
+    /// the evidence. Once the open was asked for, the host cannot tell a refused open from one whose
+    /// reply was lost or whose backend steps after it failed; any session the bridge holds then is
+    /// one nothing else this host sends will end - planning again closed the waiting plan's first
+    /// (004 T173), and in this build no run has started - and a close with no session is answered
+    /// with no SOLIDWORKS call. Whatever the close does, the page is told the
+    /// plan's own failure: a close that fails is not this plan's answer.
+    /// </summary>
+    private static void EndTheSessionOfAFailedPlan(IRemodelPipeline pipeline, string runDirectory) =>
+        CloseSession(pipeline, runDirectory, out _);
+
+    /// <summary>
+    /// 004 T176 (default taken 2026-09-27, the owner may revise; research R14.2): while Start is
+    /// switched off, no Start can use a plan's session, and holding it would keep the engineer's
+    /// four application-wide settings changed for as long as the plan waits - <c>CommandInProgress</c>
+    /// set and the save-with-errors warning off, over the engineer's own part. So the session is
+    /// ended as soon as the plan is recorded, before the page is told the plan was made, through
+    /// <see cref="CloseSession"/>: the copy stays in <c>copy/</c> and <c>plan.json</c> stays
+    /// <c>planned</c>. A close the bridge answered, with or without something left, marks the plan
+    /// <see cref="RemodelRun.SessionClosedAtPlan"/>, so no close is sent for it again; one it could
+    /// not answer leaves the plan holding its session, so Discard, planning again, a re-attach or an
+    /// unload still end it. With Start switched on the plan keeps its session for Start.
+    /// </summary>
+    private void EndTheSessionNoStartCanUse(IRemodelPipeline pipeline, RemodelRun run)
+    {
+        if (StartValidated)
+        {
+            return;
+        }
+
+        if (CloseSession(pipeline, run.RunDirectory, out _) != CloseAnswer.NotAnswered)
+        {
+            run.MarkSessionClosedAtPlan();
+        }
     }
 
     /// <summary>
@@ -1468,11 +1557,14 @@ public sealed class RemodelHost : IDisposable
     /// Whether <paramref name="run"/>'s bridge session can still be on the bridge listening now,
     /// so that a `remodel.close` - which names no run and closes whatever session the bridge holds
     /// - would reach its session and nobody else's: made on the attachment listening now
-    /// (<see cref="SameAttachment"/>, T168) and not closed by planning again (004 T173). One
-    /// predicate for Discard's close and planning again's.
+    /// (<see cref="SameAttachment"/>, T168), not closed by planning again (004 T173) and not closed
+    /// by the host at the plan while Start is switched off (004 T176). One predicate for Discard's
+    /// close and planning again's.
     /// </summary>
     private static bool HoldsItsSession(RemodelRun run, string? attachmentNow) =>
-        !run.ClosedByPlanAgain && SameAttachment(run.ToolServiceAttachment, attachmentNow);
+        !run.ClosedByPlanAgain
+        && !run.SessionClosedAtPlan
+        && SameAttachment(run.ToolServiceAttachment, attachmentNow);
 
     /// <summary>
     /// Whether <paramref name="run"/> is a plan that can no longer be started (decision 24A):
@@ -1696,8 +1788,9 @@ public sealed class RemodelHost : IDisposable
         // T168 (decision 22A): `remodel.close` names no run - the bridge closes whatever session
         // its dispatcher holds - so the copy is closed only while the run still holds its session
         // on the attachment listening now (HoldsItsSession). When that attachment is gone, or
-        // planning again already closed the session (004 T173), a close sent now would close the
-        // copy of whichever plan holds the bridge. The folder is deleted either way.
+        // planning again already closed the session (004 T173), or the host closed it at the plan
+        // because Start is switched off (004 T176), a close sent now would close the copy of
+        // whichever plan holds the bridge. The folder is deleted either way.
         IRemodelPipeline? pipeline = HoldsItsSession(run, _options.ToolServiceAttachment())
             ? _options.Pipeline
             : null;

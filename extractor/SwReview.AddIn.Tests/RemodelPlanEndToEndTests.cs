@@ -24,7 +24,10 @@ namespace SwReview.AddIn.Tests;
 /// <summary>
 /// Feature 004's build order, lanes D, E and F integrated: a Remodel <b>Plan</b> driven end to end
 /// over the fakes, through every piece the seat adapter added, and a <b>Start</b> refused by the
-/// switch. SOLIDWORKS is never started; what a real seat answers is the sitting's.
+/// switch. SOLIDWORKS is never started; what a real seat answers is the sitting's. *Amended
+/// 2026-09-27 (004 T176):* while Start is switched off a plan ends its session as it is made, so
+/// the cases read the teardown's work off the Plan, and a tool service that stops while a plan waits
+/// finds no session.
 ///
 /// Everything on the add-in's side is the product's own code, wired the way <c>SwReviewAddIn</c>
 /// wires it: the Remodel host built with its shipped constructor, so with the shipped Start switch
@@ -49,14 +52,17 @@ public sealed class RemodelPlanEndToEndTests
     /// <summary>
     /// Plan: probe, bind, open, geometry, activation, dump and plan, in that order, each through the
     /// piece built for it; the engineer's part only ever read; the copy opened once at its own path,
-    /// tagged and holding the four settings. Start: refused by the switch in the host's words with
-    /// nothing called - no backend run - and, as the backstop, a change command sent straight to the
-    /// bridge refused before anything is written. Discard: the session ends through the routine
-    /// (copy closed unsaved, tag off, settings back), the page is told nothing because nothing was
-    /// left, and <c>copy/</c> is deleted.
+    /// tagged and holding the four settings while it is read. Then, since Start is switched off in
+    /// this build (T172) and no Start could use it, the plan's session ends before the page hears the
+    /// plan was made (004 T176): the routine closes the copy unsaved, takes the tag off and puts the
+    /// four settings back, the copy stays in <c>copy/</c>, and the page is told nothing more because
+    /// nothing was left. Start: refused by the switch in the host's words with nothing called - no
+    /// backend run - and, as the backstop, a change command sent straight to the bridge refused before
+    /// anything is written. Discard: no second close, since the session is over, and <c>copy/</c> is
+    /// deleted.
     /// </summary>
     [Fact]
-    public void APlanRunsThroughTheSeatAdapterStartIsRefusedByTheSwitchAndDiscardEndsTheSession()
+    public void APlanRunsThroughTheSeatAdapterAndEndsItsSessionStartIsRefusedByTheSwitchAndDiscardDeletesTheCopy()
     {
         using (var world = new PlanWorld())
         {
@@ -72,9 +78,10 @@ public sealed class RemodelPlanEndToEndTests
             string runDirectory = planned.GetProperty("run_dir").GetString()!;
             string copyPath = Path.GetFullPath(RemodelCopy.CopyPathFor(runDirectory, world.SourcePath));
 
-            // The order a Plan takes, across the backend, the bind, the pane's seat and the dump.
+            // The order a Plan takes, across the backend, the bind, the pane's seat and the dump, and
+            // (004 T176) the close that ends the session no Start can use.
             Assert.Equal(
-                new[] { "backend:probe", "bind", "backend:open", "backend:geometry", "seat", "dump", "backend:plan" },
+                new[] { "backend:probe", "bind", "backend:open", "backend:geometry", "seat", "dump", "backend:plan", "backend:close" },
                 world.Log);
 
             // T154: the probe read the engineer's part, and only read it.
@@ -87,15 +94,10 @@ public sealed class RemodelPlanEndToEndTests
             // T161, through the probe: the feature types as read, one per feature.
             Assert.Equal(new[] { "Extrusion", "Extrusion" }, world.Backend.ProbedSignals!.FeatureTypeNames);
 
-            // T158 and T155: the bound folder's copy, opened once at its own path, tagged with the run.
+            // T158 and T155: the bound folder's copy, opened once at its own path.
             Assert.Equal(copyPath, world.Solidworks.CopyPath);
-            Assert.True(File.Exists(copyPath));
             Assert.Equal(new object?[] { copyPath }, Assert.Single(world.Solidworks.Application.Calls, call => call.Member == "GetOpenDocSpec").Arguments);
             Assert.Single(world.Solidworks.Application.Calls, call => call.Member == "OpenDoc7");
-            Assert.Equal(Path.GetFileName(runDirectory), world.Solidworks.Tag);
-            Assert.Equal(
-                new[] { new object?[] { true } },
-                world.Solidworks.Application.Calls.Where(call => call.Member == "set_CommandInProgress").Select(call => call.Arguments));
 
             // T153: the geometry baseline was read off the copy's own mass property.
             Assert.Contains("get_Volume", world.Solidworks.MassProperty.Members);
@@ -106,6 +108,19 @@ public sealed class RemodelPlanEndToEndTests
                 Path.GetFileName(copyPath),
                 Assert.Single(world.Solidworks.Application.Calls, call => call.Member == "ActivateDoc3").Arguments[0]);
             Assert.True(File.Exists(Path.Combine(runDirectory, "package-before.json")));
+
+            // 004 T176: the session is over before the page hears the plan was made - the copy closed
+            // unsaved and still in copy/, the tag off, CommandInProgress set for the open and back,
+            // last - and nothing was left, so no status error was posted.
+            Assert.False(world.Solidworks.CopyOpen);
+            Assert.True(File.Exists(copyPath));
+            Assert.Null(world.Solidworks.Tag);
+            Assert.DoesNotContain("Save3", world.Solidworks.Copy.Document.Members);
+            Assert.Equal(
+                new[] { new object?[] { true }, new object?[] { false } },
+                world.Solidworks.Application.Calls.Where(call => call.Member == "set_CommandInProgress").Select(call => call.Arguments));
+            Assert.Empty(world.StatusErrors(0));
+            Assert.True(world.Host!.LatestRun!.SessionClosedAtPlan);
 
             // Start: the switch refuses it in the host's words, and nothing reaches the backend.
             world.Receive("remodel.start", "s1", new { run_dir = runDirectory });
@@ -124,41 +139,30 @@ public sealed class RemodelPlanEndToEndTests
             Assert.Equal(RemodelErrorCodes.StartNotValidated, rename.ErrorCode);
             Assert.DoesNotContain("set_Name", world.Solidworks.Cut.Members);
 
-            // Discard: remodel.close runs the end-of-session routine, which leaves nothing, so the
-            // page hears no error; the copy is closed unsaved and its folder deleted.
+            // Discard: no second close for a session that is over; the copy's folder is deleted.
             int postedBeforeDiscard = world.PostedCount;
             world.Receive("remodel.discard_copy", "d1", new { run_dir = runDirectory });
 
             world.Reply("ok", "d1");
-            Assert.False(world.Solidworks.CopyOpen);
-            Assert.Null(world.Solidworks.Tag);
-            Assert.DoesNotContain("Save3", world.Solidworks.Copy.Document.Members);
-            Assert.Equal(
-                new[] { new object?[] { true }, new object?[] { false } },
-                world.Solidworks.Application.Calls.Where(call => call.Member == "set_CommandInProgress").Select(call => call.Arguments));
+            Assert.Single(world.Log, entry => entry == "backend:close");
             Assert.False(Directory.Exists(Path.Combine(runDirectory, "copy")));
-            Assert.DoesNotContain(
-                world.PostedSince(postedBeforeDiscard),
-                message => message.GetProperty("type").GetString() == "status"
-                    && message.GetProperty("payload").GetProperty("stage").GetString() == "error");
+            Assert.Empty(world.StatusErrors(postedBeforeDiscard));
         }
     }
 
     /// <summary>
-    /// T167 end to end: the tool service stops while a plan waits - a re-attach or an unload - and
-    /// the teardown runs the routine on the application thread before the pipe closes. Here the
-    /// three toggles cannot be put back, so the page is told the plan is lost (decision 24A) and
-    /// then, in one status error, which settings were left, by their Tools &gt; Options labels.
+    /// T167's words through 004 T176's close: the plan's session ends as the plan is made, and here
+    /// the three toggles cannot be put back, so the page is told, in one status error before it hears
+    /// the plan was made, which settings were left, by their Tools &gt; Options labels. The plan is
+    /// made all the same, and its session is over - the routine clears it whatever it left - so no
+    /// close is sent for it again.
     /// </summary>
     [Fact]
-    public void AToolServiceThatStopsWhileAPlanWaitsTellsThePageWhatItsTeardownLeft()
+    public void APlanWhoseClosingLeavesSettingsChangedTellsThePageBeforeItIsAnswered()
     {
         using (var world = new PlanWorld())
         {
-            world.Receive("remodel.plan", "p1");
-            world.Reply("remodel.planned", "p1");
-
-            // Putting a toggle back (its original value, true) fails from here on.
+            // Putting a toggle back (its original value, true) fails.
             world.Solidworks.Application.Handle("SetUserPreferenceToggle", arguments =>
             {
                 if ((bool)arguments[1]!)
@@ -168,6 +172,41 @@ public sealed class RemodelPlanEndToEndTests
 
                 return null;
             });
+
+            world.Receive("remodel.plan", "p1");
+
+            JsonElement status = Assert.Single(world.StatusErrors(0));
+            Assert.Equal(
+                RemodelHost.SessionEndedMessage(RemodelSystemToggles.SuppressedToggles, false, true),
+                status.GetProperty("payload").GetProperty("message").GetString());
+            List<string> types = world.PostedSince(0).Select(message => message.GetProperty("type").GetString()!).ToList();
+            int statusAt = world.PostedSince(0).FindIndex(message => message.ToString() == status.ToString());
+            Assert.True(types.IndexOf("remodel.planned") > statusAt, "the page heard the plan was made before what its closing left");
+            world.Reply("remodel.planned", "p1");
+
+            // The routine closed the copy unsaved and put CommandInProgress back, last.
+            Assert.False(world.Solidworks.CopyOpen);
+            Assert.Equal(
+                new object?[] { false },
+                world.Solidworks.Application.Calls.Last(call => call.Member == "set_CommandInProgress").Arguments);
+            Assert.True(world.Host!.LatestRun!.SessionClosedAtPlan);
+        }
+    }
+
+    /// <summary>
+    /// T167 and decision 24A in this build (004 T176): a plan waiting for Start holds no session, so
+    /// when the tool service stops - a re-attach or an unload - its teardown finds nothing to end and
+    /// makes no SOLIDWORKS call, and the page hears only that the plan is lost, never a teardown's
+    /// failure after it.
+    /// </summary>
+    [Fact]
+    public void AToolServiceThatStopsWhileAPlanWaitsFindsNoSessionAndThePageHearsOnlyThatThePlanIsLost()
+    {
+        using (var world = new PlanWorld())
+        {
+            world.Receive("remodel.plan", "p1");
+            world.Reply("remodel.planned", "p1");
+            int calls = world.Solidworks.Application.Calls.Count;
             int before = world.PostedCount;
 
             world.Gate.Dispose();
@@ -175,21 +214,9 @@ public sealed class RemodelPlanEndToEndTests
             List<JsonElement> told = world.PostedSince(before);
             JsonElement lost = Assert.Single(told, message => message.GetProperty("type").GetString() == "remodel.plan_lost");
             Assert.Equal(RemodelHost.PlanLostMessage, lost.GetProperty("payload").GetProperty("message").GetString());
-
-            JsonElement status = Assert.Single(
-                told,
-                message => message.GetProperty("type").GetString() == "status"
-                    && message.GetProperty("payload").GetProperty("stage").GetString() == "error");
-            Assert.Equal(
-                RemodelHost.SessionEndedMessage(RemodelSystemToggles.SuppressedToggles, false, true),
-                status.GetProperty("payload").GetProperty("message").GetString());
-            Assert.True(told.IndexOf(lost) < told.IndexOf(status), "the plan is told lost before what its teardown left");
-
-            // The routine closed the copy unsaved and put CommandInProgress back, last.
+            Assert.Empty(world.StatusErrors(before));
+            Assert.Equal(calls, world.Solidworks.Application.Calls.Count);
             Assert.False(world.Solidworks.CopyOpen);
-            Assert.Equal(
-                new object?[] { false },
-                world.Solidworks.Application.Calls.Last(call => call.Member == "set_CommandInProgress").Arguments);
         }
     }
 
@@ -323,6 +350,13 @@ public sealed class RemodelPlanEndToEndTests
                 return _posted.Skip(index).Select(json => JsonDocument.Parse(json).RootElement.Clone()).ToList();
             }
         }
+
+        /// <summary>Every `status {stage: "error"}` posted from <paramref name="index"/> on.</summary>
+        public List<JsonElement> StatusErrors(int index) =>
+            PostedSince(index)
+                .Where(message => message.GetProperty("type").GetString() == "status"
+                    && message.GetProperty("payload").GetProperty("stage").GetString() == "error")
+                .ToList();
 
         /// <summary>A <c>remodel.*</c> command straight to the bridge, with the remodel secret.</summary>
         public PipeReply Remodel(string command, object parameters)
