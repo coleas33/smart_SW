@@ -14,6 +14,12 @@ probe report, a component's id only (`cmp:` and four digits), never its name, an
 configuration's or view's name. From a re-modeler probe run, no line that holds a path (the
 command line, the `Wrote` line, the answers file's path) and no error's text.
 
+The sitting of 2026-09-26 answered the rows of steps 1.3, 1.6, 1.7, 2.2 and 2.3 (each `pass`, in
+its own `pane-findings-2026-09-26.md`), and the next sitting starts at step 2.4 (the plan's section
+"The next sitting"): leave those five rows blank here unless its update or a health check fails,
+and write the update itself in the header and in step 1's notes below. Documents N, Q and S are
+lettered like the rest (section 0.2); A-pin is written by its letter in the bought-parts line.
+
 | | |
 |---|---|
 | Days of the sitting | |
@@ -43,6 +49,8 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 | 2.3 | 008 T101: the profile is version 3 | | | |
 | 2.4 | 006 T100: the backend validates the profile (health check 4) | | | |
 | 2.5 | the OpenAI key saved, the model and effort chosen | | | |
+| 2.6 | 013 T141: the proposal written, no profile value printed | | | |
+| 2.6 | 013 T141: `part_roles` filled in by the owner, the file valid, `version: 4` where the pane reads it | | | |
 | 3.1 | 010 T103: mass overrides read on A and B | | | |
 | 3.1 | 010 T104: Hole Wizard holes (provisional) | | | |
 | 3.1 | 010 T105: model dimensions and annotations | | | |
@@ -67,6 +75,7 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 | 3.7 | 011 T065: D1, D6, D7, D9 and D10 on G, counts against yours | | | |
 | 3.8 | 011 T066: every named callout tied to its hole, unit and decimals | | | |
 | 3.9 | 011 T077: D14 with J's drawing closed, then open | | | |
+| 3.9 | 013 T142: both D14 reports against section 3.10's five conditions | | | |
 | 4.1 | 008 T103: the small assembly's input tokens | | | |
 | 4.1 | 009 T079: the small assembly's summary, the engineer's words | | | |
 | 4.1 | 007 T059: the Start here panel against `report.md`'s | | | |
@@ -86,11 +95,23 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 | 4.6 | 011 T077: the pane half, switch off | | | |
 | 4.6 | 011 T101: parts 1 and 3, a candidate left closed | | | |
 | 4.7 | 011 T101: parts 2, 3 and 4, a candidate opened first | | | |
+| 4.7 | 013 T142: the host answers `open_only`; the instruction line, no drawing question | | | |
+| 4.8 | 013 T143: A-plate's drawing closed, the instruction once and no drawing question (SC-005) | | | |
+| 4.8 | 013 T143: no modelling or hygiene row on A-pin, one bought-parts line (SC-001) | | | |
+| 4.8 | 013 T143: no vault or local-modification question, no re-ask (SC-004) | | | |
+| 4.8 | 013 T143: every finding grouped, no pass in a type group (SC-003) | | | |
+| 4.8 | 013 T143: who wrote each record, and the follow-up's basis line (SC-006) | | | |
+| 4.8 | 013 T143: the whole review's input tokens, at most 400,000, and the answers' turn's calls (SC-008) | | | |
+| 4.8 | 013 T143: lever 14 on, and the follow-up answered | | | |
+| 4.8 | Q, optional: the bought-parts counts on a design with bought parts outside the library | | | |
 | 5.1 | Model check on J | | | |
 | 5.1 | 007 T059: Start here above the chips on Model check, against `report.md`'s | | | |
 | 5.1 | 004 T003: Model check packages of the owner's parts P-1 to P-5 | | | |
+| 5.1 | the census: Model check packages of N-1 to N-4, each opened on its own, nothing changed | | | |
 | 5.2 | Standards on J and on A | | | |
 | 5.2 | 007 T059: Start here above the chips on Standards, against `report.md`'s | | | |
+| 5.2 | 013 T144: A-plate's drawing, the revision table and the bill of materials read, no "no revision table" (SC-009) | | | |
+| 5.2 | 013 T144: the export-control check on S-1 and S-2 | | | |
 | 5.3 | Remodel leaves J unchanged | | | |
 | 5.4 | 008 T106: the live Gemini test | | | |
 | 5.5 | 009 T082: Show before and after the fix | | | |
@@ -115,6 +136,8 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 
 ### 2. Profile and key
 
+### 2.6 The profile's version 4
+
 ### 3.1 Dumps and the Standards probe
 
 ### 3.2 A multi-sheet drawing
@@ -130,6 +153,8 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 ### 4.3 to 4.5 Retry, configurations, chips, the timing of A's review
 
 ### 4.6 and 4.7 Drawing questions and the confirmed candidate
+
+### 4.8 A again, with the version 4 profile, and Q
 
 ### 5. The other tabs, the Gemini test, the older build
 

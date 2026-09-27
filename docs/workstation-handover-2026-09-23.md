@@ -33,10 +33,71 @@ each in a commit of its own. What can only be seen with a switch on is 011 T095,
 after that. Two tasks are the development machine's once the folders come back: 008 T105 (replay
 the sitting's runs) and 009 T085 (restore them offline).
 
+## Where the 2026-09-26 sitting stopped, and what the next sitting adds
+
+*Added 2026-09-27.* The sitting of 2026-09-26 ran the build of that day and stopped early in this
+list. In this list's order, what it reached, each `pass` in its findings document
+(`pane-findings-2026-09-26.md`, in that sitting's handover folder):
+
+- **Section 1, install or update, then check**: done - the test plan's steps 1.3 (the update, the
+  build and the gates) and 1.6 (health checks 1, 2, 3, 6 and 7).
+- **Step 1, 008 T101 and 006 T100, the real profile**: half done - the owner's version 3 file is
+  placed (the test plan's step 2.2) and reads `version: 3` (step 2.3). Its validation (step 2.4)
+  and the review half, `check_standards` in the pre-run (step 3.4), remain.
+- **Step 19, 004 T164, FeatureWorks**: done (the test plan's step 1.7): the registry line was
+  recorded, and the engineer activated the add-in during the sitting, where the step asks only to
+  note it; the product was not noted.
+
+**The next sitting starts at the test plan's step 2.4.** It still pastes the setup block and updates
+first (section 1 below), because it must run the build that carries feature 013; the update goes in
+its update notes, and the rows of the steps above keep 2026-09-26's results unless the update or a
+health check fails.
+
+Feature 013's four seat tasks (`specs/013-engineer-first-review/tasks.md`, phase W) join this list
+where they meet it, each at the test plan's step named:
+
+- **013 T141, the profile's version 4** (step 2.6), after step 1's validation: `swreview profile
+  upgrade` writes a proposal beside the version 3 file, deciding nothing; the owner fills in its
+  `part_roles` section from the draft of 2026-09-26 kept beside the handover (never in the
+  repository); it validates (`exit code: 0`) and goes where the pane reads it (`version: 4`). The
+  development machine scans the returned run folders for its values, as for step 1's.
+- **013 T142, D14 and the switch** (steps 3.9 and 4.7), with step 8: D14's two reports decide
+  whether the development machine sets `DrawingOpenScope.SeatValidated` (011 T077) after the
+  sitting, in a commit of its own; while it is off, the host answers `open_only` and a review gives
+  the instruction line, `Open <drawing> in SOLIDWORKS, then press Review again with <model>
+  active`, in place of a drawing question. Since feature 013, step 8's pane review and the test
+  plan's steps 4.6 and 4.7 ask no same-name question while the switch is off, and the rows that need
+  one are `blocked: switch off (013 T142)`. That the host answers `opens_closed` once the switch is
+  set is the sitting after this one's.
+- **013 T143, the small assembly again** (step 4.8), after step 13 and 013 T141: A reviewed twice
+  with the version 4 profile, A-plate's drawing closed (the instruction once, no drawing question)
+  and then open (the drawing read), the questions answered as on 2026-09-26 and one follow-up
+  asked; the records are SC-001 (no modelling or hygiene finding on A-pin, one bought-parts line),
+  SC-004, SC-003, SC-006 (every source label and the follow-up's basis line), SC-008 (at most
+  400,000 input tokens in all) and lever 14's state, on in the pane - the follow-up's answer is
+  the proof that the provider accepts lever 14's request.
+- **013 T144, Standards on A-plate's drawing** (step 5.2), with step 13's Standards half: the
+  revision table and the bill of materials read from each sheet's own view and no "no revision
+  table" claim (SC-009); then the export-control check on two drawings whose title blocks the
+  engineer knows, S-1 with the statement and S-2 without, before its result on real title blocks
+  is trusted.
+
+Two more the owner asked for on 2026-09-27, with step 20:
+
+- **The census's extraction** (the test plan's step 5.1): four part files, each opened on its own
+  and Model checked, read only - never unsuppressed or resolved in place: the two motor parts of
+  the big assembly's motor sub-assembly (N-1, N-2), a library dowel pin (N-3) and the big
+  assembly's concept-layout part (N-4), named by role and lettered in the test plan's section 0.2.
+  The development machine reruns feature 013's part-role census (its research R2.4) over their
+  packages, counts only.
+- **Optionally, one design from another job with bought parts outside the library** (Q, the test
+  plan's step 4.8), reviewed once with the version 4 profile; counts only.
+
 ## 0. Before the sitting: what the owner brings
 
-1. **The real standards profile at version 3.** The owner's file on the development machine says
-   `version: 1`: it loads, but feature 010's hygiene and general-tolerance checks and feature
+1. **The real standards profile at version 3** (placed on 2026-09-26; for the next sitting, also
+   the part-roles draft of 2026-09-26, for 013 T141). The owner's file on the development machine
+   said `version: 1`: it loads, but feature 010's hygiene and general-tolerance checks and feature
    011's drawing comparison would come back skipped on every paid review, and 011 T068 cannot
    run. The owner rewrites it at version 3 - `general_tolerance`, `hygiene` and `drawing` added -
    from `config\standards.example.yaml`'s layout, with the company's values, and carries it by
@@ -345,7 +406,11 @@ from the dump folder and the big assembly's run folder. 008 T105 replays each ru
 009 T085 restores each through `GET /reviews/{run_id}`; the answers move into 011 research R4,
 010 `research.md`, 008 research R5 and `docs/llm-efficiency-options.md`, 006 research R4 and 009
 research R5. If T066 and T077 passed, the development machine sets each switch in a commit of its
-own, editing the one pin test the task names, and 011 T095 goes into the next handover. For
+own, editing the one pin test the task names, and 011 T095 goes into the next handover, with 013
+T142's second half (the host answers `opens_closed`, and the review offers the read-only open once
+per drawing file). Feature 013's census reruns over the N folders' packages, counts only; 013 T141
+to T144's results are ticked from the findings document, and the version 4 profile, like the
+version 3 one, never enters the repository. For
 feature 004: `swreview remodel plan` runs over each P folder's `package.json` for T003, counts
 only and each part by its letter, into `specs/004-resilient-remodeler/phase0-decision.md`
 section 4, replacing 004 T148's provisional counts; the three answers files of step 21 give T033

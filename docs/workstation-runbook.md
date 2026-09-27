@@ -24,7 +24,10 @@ in one ordered list with its command, what decides it and where its record goes.
 who runs the sitting follows `docs/workstation-test-plan-2026-09-23.md`: the same sitting in
 plain, numbered steps, each with its exact command and what counts as pass or fail. The earlier
 rounds (`docs/workstation-handover-2026-09-20.md`, `-2026-09-19.md`) are history. This runbook
-does not change per handover; the handover says what to do with a given build.
+does not change per handover; the handover says what to do with a given build. *2026-09-27:* the
+sitting of 2026-09-26 stopped after the test plan's step 2.3, so the next sitting updates as
+section 4 says and then starts at step 2.4; the handover and the plan now also hold feature 013's
+four seat tasks (013 T141 to T144) and the owner's census extraction.
 
 ## 1. Where everything is
 
@@ -169,7 +172,7 @@ machines that run checks and is delivered out of band, never through the reposit
 | Where it comes from | the owner's handover folder (`%LOCALAPPDATA%\SwReview\handover\standards.yaml` on the development machine); ask the owner if you do not have it |
 | What a wrong file looks like | `config\standards.example.yaml` copied into place: every value in it is fictional placeholder data, and the tab then grades against a standard nobody uses without any error |
 | The one field that may need this machine's value | `vault_root`, the vault's local mount path; every library prefix is written relative to it, so only that line changes between machines |
-| Its version | `Select-String -Path $env:LOCALAPPDATA\SwReview\standards.yaml -Pattern '^version:'` prints `version: 3`. A version 1 or 2 file still loads, and the sections it lacks - `general_tolerance` and `hygiene` (version 2), `drawing` (version 3) - are simply absent, so feature 010's hygiene and general-tolerance checks and feature 011's drawing comparison come back skipped without an error. A lower version is the owner's to rewrite, from `config\standards.example.yaml`'s version 3 layout; do not edit it here |
+| Its version | `Select-String -Path $env:LOCALAPPDATA\SwReview\standards.yaml -Pattern '^version:'` prints `version: 3`, or `version: 4` once feature 013's upgrade has run (below). A version 1 or 2 file still loads, and the sections it lacks - `general_tolerance` and `hygiene` (version 2), `drawing` (version 3) - are simply absent, so feature 010's hygiene and general-tolerance checks and feature 011's drawing comparison come back skipped without an error. A lower version is the owner's to rewrite, from `config\standards.example.yaml`'s version 3 layout; do not edit it here |
 
 Validate it once after placing it, from `<repo>\reviewer`, against any package a Standards
 press already dumped (a folder under the run root ending in `-standards`):
@@ -182,6 +185,14 @@ A schema error is reported field by field and nothing is graded until it is fixe
 naming missing phases means the package was not dumped by the Standards tab; press Standards
 once and use that folder. Never paste the file's contents into a document, a commit or a chat
 transcript that leaves this machine.
+
+**Version 4 (feature 013).** A version 4 file adds the `part_roles` section, which tells the review
+a bought part from a custom one; versions 1 to 3 still load. `swreview profile upgrade` writes a
+proposed version 4 file from a version 3 one, never over its input, and prints only the new file's
+path and sha256; the proposal decides nothing - every signal empty, the library's lists offered as
+commented lines - and a file left like that is read exactly as the version 3 file it came from. The
+owner fills in `part_roles`; validate the result as above before it takes the file's place. The test
+plan's step 2.6 (013 T141) is the sitting's procedure.
 
 ## 6. Health checks after every install or update
 
@@ -289,7 +300,7 @@ Set-Alias swreview-extract '<repo>\extractor\SwReview.Extractor.Console\bin\x64\
 # first install only, elevated, SOLIDWORKS closed
 .\extractor\tools\register-addin.ps1
 
-# profile: present, and version 3
+# profile: present, and version 3 (4 once feature 013's upgrade has run, section 5)
 Test-Path $env:LOCALAPPDATA\SwReview\standards.yaml
 Select-String -Path $env:LOCALAPPDATA\SwReview\standards.yaml -Pattern '^version:'
 cd reviewer; uv run swreview check standards --package '<-standards folder>' --out "$env:TEMP\swreview-profile-check" --profile "$env:LOCALAPPDATA\SwReview\standards.yaml"
