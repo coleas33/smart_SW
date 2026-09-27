@@ -193,8 +193,13 @@ what each signal looks for, and the evidence's weight is this feature's decision
 company value lives in the owner's `part_roles` section. The census's own tally under its first
 draft, where the custom value was strong, was 14 custom, 16 bought and 3 unclear; with the custom
 value weak, as decided here, its two switch conflicts (a vendor sub-assembly and a gearbox, both in a
-bought folder, both carrying the template's custom value) resolve to bought (T018's local validation
-records the tally). The version 1 to 3 rule (R2.5) and the no-profile rule (R2.6) are unchanged.
+bought folder, both carrying the template's custom value) resolve to bought. T018's local validation
+(uncommitted; the owner's draft merged into a copy of the real profile, the 27 recorded packages,
+documents de-duplicated by path, a read occurrence preferred) gives **14 custom, 18 bought, 1
+unclear** - the unclear one is the part that was never read and carries no signal; the same run with
+the custom value strong reproduces the census's 14, 16 and 3, and without the bought folder name its
+14, 14 and 5. One custom-prefixed part is read in some packages and not in others: read, it is
+custom; unread, its file name is one medium vote and it is asked. The version 1 to 3 rule (R2.5) and the no-profile rule (R2.6) are unchanged.
 
 #### R2.5 Version 1 to 3 profiles: the convention, Toolbox, then ask
 

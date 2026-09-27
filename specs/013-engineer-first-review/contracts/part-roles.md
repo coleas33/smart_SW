@@ -56,7 +56,7 @@ turns the signal off.
 | `catalogue_number` | bought | medium | a `catalogue_numbers.shapes` entry matches a whole token of its file name, one of its configuration names, or the whole value of one of `catalogue_numbers.properties` | "a catalogue number" |
 | `bought_number` | bought | medium | one of its numbers starts with a `bought_number_prefixes` entry | "a bought part-number range" |
 | `custom_prefix` | custom | medium | one of its numbers starts with a `custom_prefixes` entry | "the company's part-number prefix" |
-| `sparse` | custom | weak | its properties were read, and none of `vendor_properties`, `distributor_block.properties` or `detail_properties` is present, valued or not | "few properties" |
+| `sparse` | custom | weak | its properties were read, and none of `vendor_properties`, `distributor_block.properties` or `detail_properties` is present, valued or not (off when all three lists are empty: with nothing to be missing, every part would be sparse) | "few properties" |
 | `same_name_drawing` | custom | weak | a `drawing_candidates` row names it, or a drawing document of the package has its folder and stem (compared ignoring case and separators: an open same-name drawing is recorded as attached, not as a candidate) | "a drawing of the same name beside it" |
 
 **What the signals read.**
@@ -298,7 +298,7 @@ whether or not checks first is on, when the state is not `absent`, the guard did
 
 | Field | Value |
 |---|---|
-| `question` | "Are these bought parts? Until you answer, they are graded for modelling practice and hygiene." (95 characters) |
+| `question` | "Are these bought parts? Until you answer, they are graded for modelling practice and hygiene." (93 characters) |
 | `options` | "All bought", "None bought" |
 | `allow_text` | true |
 | `what` | "Parts no rule tells apart: {file names}" - the first ten, then "and {n} more" |

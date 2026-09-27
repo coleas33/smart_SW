@@ -46,6 +46,7 @@ from swreview.checks.joints import (
 )
 from swreview.checks.mass import SUMMARY_CHECK as MASS_SUMMARY
 from swreview.checks.mass import run_mass_checks
+from swreview.checks.part_roles import PART_ROLES_ATTRIBUTE, PartRoles
 from swreview.checks.result import CheckResult, DocumentResult
 from swreview.checks.tolerances import ResolverLookup
 from swreview.checks.tool_access import recess_group, run_head_fit, sweep_head
@@ -64,10 +65,12 @@ if TYPE_CHECKING:  # the standards package reaches the runner; only the type is 
 __all__ = [
     "CODE_FIRST_CHECKS",
     "JOINT_MAP_CHECK",
+    "attach_part_roles",
     "check_hygiene",
     "check_joints",
     "check_mass_material",
     "record_joint_map",
+    "review_roles",
 ]
 
 CODE_FIRST_CHECKS: tuple[str, ...] = ("check_joints", "check_mass_material", "check_hygiene")
@@ -168,6 +171,22 @@ def record_joint_map(context: ToolContext, joint_map: JointMap) -> Counter[Cover
     for fastener in joint_map.unplaced:
         record("skipped", _unplaced_item(fastener))
     return written
+
+
+def attach_part_roles(context: ToolContext, roles: PartRoles) -> None:
+    """Carry the review's part roles on `context` (feature 013 `contracts/part-roles.md`
+    section 5): `start_review` classifies once and attaches them here, and every consumer
+    reads them back through `review_roles`. An attribute rather than a `ToolContext` field,
+    as `attach_standards_run` does and for its reason: the tool layer need not know the
+    family that fills the hook, and the name is the one `checks/part_roles.py` defines."""
+    setattr(context, PART_ROLES_ATTRIBUTE, roles)
+
+
+def review_roles(context: ToolContext) -> PartRoles | None:
+    """The part roles attached to the review, or `None` when none are: a check run, a
+    session made before feature 013, or a review whose runner attaches none. Every
+    consumer then grades every document, exactly as before part roles existed."""
+    return getattr(context, PART_ROLES_ATTRIBUTE, None)
 
 
 def _attached_profile(context: ToolContext) -> StandardsProfile | None:
