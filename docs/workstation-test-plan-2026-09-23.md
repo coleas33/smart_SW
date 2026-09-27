@@ -20,7 +20,35 @@ FeatureWorks record 004 T164 at step 1.7, the packages 004 T003 reads at step 5.
 version of the same sitting, with the reasons for its order, is
 `docs/workstation-handover-2026-09-23.md`; **where this plan and the handover differ, follow this
 plan.** Where this plan and a task text disagree, the task wins; write the difference down as a
-finding.
+finding. Since 2026-09-27 the plan also holds feature 013's four seat tasks and a census
+extraction the owner asked for (the next section).
+
+## The next sitting: where 2026-09-26 stopped, and what feature 013 adds
+
+The sitting of 2026-09-26 ran the build of that day (features 008 to 011) and reached five steps,
+each `pass` in its findings document (`pane-findings-2026-09-26.md`, in that sitting's handover
+folder): **1.3** the update, build and gates; **1.6** health checks 1, 2, 3, 6 and 7; **1.7** the
+FeatureWorks record (004 T164); **2.2** the profile placed (006 T100's entry); and **2.3** the
+profile at version 3 (008 T101's first half). Those rows keep that sitting's results. **The next
+sitting starts at step 2.4**, in the handover's order, with a handover folder of its own date. It
+still pastes the setup block and updates first - steps 1.2 to 1.4's commands, then step 1.6's
+checks - because it must run the build that carries feature 013; it writes that update in its
+update notes and the findings document's header, and a result in the 1.3 and 1.6 rows only if the
+update or a check fails.
+
+What feature 013 (`specs/013-engineer-first-review/tasks.md`) adds, each in its place:
+
+| Step | Task | What |
+|---|---|---|
+| 2.6 | 013 T141 | the seat's profile upgraded to version 4, its `part_roles` section filled in by the owner, validated, and read by the pane |
+| 3.9 and 4.7 | 013 T142 | probe D14 decides the read-only open's switch (011 T077); until the development machine sets it, the host answers `open_only` and a review gives an instruction line in place of a drawing question |
+| 4.8 | 013 T143 | A reviewed again with the version 4 profile, A-plate's drawing closed and then open |
+| 5.2 | 013 T144 | Standards on A-plate's open drawing, and the export-control check on S-1 and S-2 |
+| 5.1 | the census | Model check on N-1 to N-4, each opened on its own, for feature 013's part-role census |
+| 4.8 | optional | Q, a design from another job whose bought parts sit outside the library |
+
+Since feature 013, steps 4.6 and 4.7 ask no same-name drawing question while that switch is off:
+each says what to record instead.
 
 ## The rules for the whole sitting
 
@@ -76,6 +104,7 @@ the running SOLIDWORKS directly and need neither the add-in nor the pane.
 | 1.6 check 2 (the badge never reads `Backend ready`) | Runbook section 7: check `uv --version` in a fresh window, then sign out of Windows and back in once | the Review tab's steps; Model check, Standards and the console steps go on |
 | 2.3 (the profile is version 1 or 2) | Call the owner; the console steps and the Standards presses go on | 3.4 and step 4 (the paid reviews) until the owner rewrites it |
 | 2.4 (the profile is invalid) | Tell the owner the field it names | as 2.3, and also 3.2 item 2, 3.5 item 3's Standards press and 5.2 |
+| 2.6 (the owner cannot fill in `part_roles`, or the version 4 file is invalid) | Leave the version 3 file where the pane reads it (skip item 4) and go on: the reviews then decide bought parts by Toolbox and the part-number convention only | 013 T143 at step 4.8: `blocked by 2.6` |
 | A key refused, no quota, or no connection at the first paid review | Step 4's box, item 6 | every paid step: `blocked: provider` |
 | A lettered document cannot be found (section 0.2) | Mark its steps blocked, using the table's "Used by" column | those steps: `blocked: no document <letter>` |
 | A dump at 3.1 fails | Retry once as 3.1 says, then go on: 4.2 still runs, because the pane extracts for itself | 010 T103 to T106 for that assembly |
@@ -108,24 +137,28 @@ the running SOLIDWORKS directly and need neither the add-in nor the pane.
 
 ## How long it takes
 
-About **11 hours 15 minutes at the seat**, best planned as two days: day 1 steps 1 to 3, day 2
+About **12 hours 45 minutes at the seat**, best planned as two days: day 1 steps 1 to 3, day 2
 steps 4 to 6. The four earlier tasks the owner added (decision 15A) take about 25 minutes of it,
 inside steps 3.1, 4.1, 4.5, 5.1 and 5.2; feature 004's three items (decision 18A) about 40
 minutes more: the FeatureWorks record at step 1.7 (5 minutes), the owner's parts at step 5.1 (10
 minutes) and the re-modeler probes at step 5.6 (25 minutes), the last step of day 2 before the
-handoff. Keep SOLIDWORKS open from step 4.1 to step 4.5 on day 2:
+handoff; feature 013's seat tasks and the census about 1 hour 30 minutes more: the profile's
+version 4 at step 2.6 (15 minutes), A's two reviews of step 4.8 (40 minutes, 10 more with Q), the
+census's four Model checks at step 5.1 (10 minutes) and 013 T144 at step 5.2 (10 minutes). The
+next sitting, which starts at step 2.4 after its update, needs about 12 hours 15 minutes. Keep
+SOLIDWORKS open from step 4.1 to step 4.5 on day 2:
 the review chips of steps 4.4 and 4.5 live only as long as the SOLIDWORKS session. Before the
-sitting, allow **half a day** to find and note documents C to M, and the components of A and B
-step 3.1 asks about (section 0.2), while the owner names the parts P; a new machine (section
-0.3) adds about an hour.
+sitting, allow **half a day** to find and note documents C to N, Q and S, and the components of
+A and B step 3.1 asks about (section 0.2), while the owner names the parts P; a new machine
+(section 0.3) adds about an hour.
 
 | Step | What | Estimate |
 |---|---|---|
 | 1 | Update, gates, health checks (registration only on a new machine), the FeatureWorks record | 55 min |
-| 2 | Profile and key | 20 min |
+| 2 | Profile and key, and the profile's version 4 | 35 min |
 | 3 | Dumps and the Standards probe of A and B, probes D1 to D14 and one pane review, with the fingerprints | 3 h 55 min |
-| 4 | The pane reviews, with the findings by type and the timing of A's review | 3 h 10 min |
-| 5.1 to 5.4 | Model check on J and on the owner's parts, Standards (each with its Start here block), Remodel, the Gemini test | 45 min |
+| 4 | The pane reviews, with the findings by type, the timing of A's review, and A again with the version 4 profile | 4 h |
+| 5.1 to 5.4 | Model check on J, on the owner's parts and on the census's parts, Standards (each with its Start here block) and on A-plate's drawing, Remodel, the Gemini test | 1 h 5 min |
 | 5.5 | The older build and back: two builds, two SOLIDWORKS restarts, two reviews of A | 1 h |
 | 5.6 | The re-modeler probes: three runs with no document open, and the three options checked | 25 min |
 | 6 | Handoff | 45 min |
@@ -145,7 +178,11 @@ estimate from the replay's figures, not a measurement.
    results sheet step 1.4 copies is older still. The commit that added this plan is not enough:
    it came before both. Step 1.4 checks the build.
 2. **The real standards profile at version 3**, carried by hand (step 2 says what it must hold). It
-   never goes into the repository or into the findings document.
+   never goes into the repository or into the findings document. *Placed on 2026-09-26 (steps 2.2
+   and 2.3).* For 013 T141 (step 2.6) the owner also brings **the part-roles draft of
+   2026-09-26**, kept beside the handover, never in the repository or the findings document, and
+   fills in the version 4 profile's `part_roles` section from it at the seat, in person or by
+   phone.
 3. **The o200k_base vocabulary file** `fb374d419588a4632f3f557e76b4b70aebbca790`, from the
    development machine's `%LOCALAPPDATA%\SwReview\tokenizer\`, in case the seat's web filter blocks
    its download (step 1.3).
@@ -173,7 +210,7 @@ handover folder and travel by hand; they are never pushed.
 
 | Letter | What it must be | Used by |
 |---|---|---|
-| A | the small assembly of the last sittings (a machined plate and two dowel pins), and its pin and plate parts (A-pin, A-plate); its number is not in this plan, the owner writes it in `notes\documents.txt` | steps 3.1, 4.1, 4.4, 4.5, 5.2, 5.5 |
+| A | the small assembly of the last sittings (a machined plate and two dowel pins), and its pin and plate parts (A-pin, A-plate), and A-plate's same-name drawing, beside it in its folder (013 T143 and T144); its number is not in this plan, the owner writes it in `notes\documents.txt` | steps 3.1, 4.1, 4.4, 4.5, 4.8, 5.2, 5.5 |
 | B | the big assembly reviewed at the last sitting; its number is not in this plan, the owner writes it in `notes\documents.txt` | steps 3.1, 4.2, 4.3 |
 | C | a drawing of six sheets with a revision table on a sheet other than the first; write down, per sheet tab, how many views you see | steps 3.2, 3.5 |
 | D | an assembly, with D-1 and D-2 the drawings of two of its parts and D-X the drawing of a part that is not in it. At least one joint of D carries a model dimension with a tolerance or fit class, or a Hole Wizard hole with an ISO 286 fit class, so a stack-up runs. D-1 was last saved in SOLIDWORKS 2020 or later with Tools > Options > Performance > **Include detailing mode data when saving** turned on | steps 3.3, 3.4, 3.5 |
@@ -185,7 +222,10 @@ handover folder and travel by hand; they are never pushed.
 | K | an assembly in which one part's same-name drawing sits closed beside it (K-1), and two other parts (K-2, K-3) are each shown by two drawings you will open | step 4.6 |
 | L | a weldment or sheet-metal part, if one exists (006 T105's cut-list item) | step 3.2 |
 | M | a part and an assembly that each have at least two configurations (A-pin and A will do if they have) | step 4.4 |
+| N | the census's four parts, each a part file opened on its own: N-1 and N-2, the two motor parts of B's motor sub-assembly; N-3, a dowel pin from the library; N-4, B's concept-layout part. Read only: never unsuppress, resolve or change one in place (feature 013's part-role census) | step 5.1 |
 | P | three to five real parts **the owner names** for 004 T003's dry run (P-1 to P-5), each a part file on its own, not an assembly: ordinary single-body parts built in SOLIDWORKS (an import has no tree to reorganize, and stage 1 refuses multibody, weldment, sheet-metal, derived and mirrored parts, the planner refusing the last two by their base feature (004 T147), so they would count for little). At least one has a long feature tree (the longest the owner knows, 150 features or more if there is one; write which letter), and, as `specs/004-resilient-remodeler/phase0-decision.md` section 4 asks, they are not all tidy: one the owner thinks badly organized, and one already sorted by hand into group folders if there is one. Their paths go in `notes\paths.txt` like every letter's, so the fingerprints cover them | step 5.1 |
+| Q | optional: one design from another job whose bought parts sit outside the library (its purchased parts in the job's own folders, not under the library's), if the owner names one | step 4.8 |
+| S | two drawings whose title blocks you know: S-1 carries the export-control statement, S-2 does not (013 T144) | step 5.2 |
 
 For step 3.1's Standards probe (006 T101 and T102), also write in `notes\documents.txt`, under A
 and under B, what SOLIDWORKS shows in them as they stand:
@@ -271,6 +311,14 @@ function Show-Documents {
     $run = $run.TrimEnd('\')
     Push-Location "$R\reviewer"
     try { uv run python -c "import sys; from swreview.ir.loader import load_package; p = load_package(sys.argv[1]).package; [print(d.document_id, d.kind, d.file_name) for d in p.documents]" $run }
+    finally { Pop-Location }
+}
+
+function Show-DrawingTables {
+    param([string] $run)
+    $run = $run.TrimEnd('\')
+    Push-Location "$R\reviewer"
+    try { uv run python -c "import sys; from swreview.ir.loader import load_package; p = load_package(sys.argv[1]).package; [print(r.document_id, 'sheet', s.index + 1, '| revision tables', len(s.revision_tables), '| other tables', len(s.tables), '| bills of materials', sum(1 for x in s.tables if x.bom_rows)) for r in p.drawing_records for s in r.sheets]" $run }
     finally { Pop-Location }
 }
 
@@ -729,6 +777,52 @@ does not test the key: the first paid review, step 3.4, does.
 The second half of 008 T101, that a review runs `check_standards` before the model's first round,
 is read at the first review, step 3.4.
 
+### 2.6 Version 4: the part roles [013 T141]
+
+Feature 013 grades a bought part neither for modelling practice nor for hygiene, and the
+profile's version 4 `part_roles` section says how a review tells a bought part from a custom one
+(`specs/013-engineer-first-review/contracts/part-roles-profile.md`). Until the section is filled
+in, the review decides only by Toolbox and the part-number convention, as with the version 3 file.
+
+1. Write the proposal beside the version 3 file, never over it:
+
+   ```powershell
+   cd "$R\reviewer"; uv run swreview profile upgrade "$env:LOCALAPPDATA\SwReview\standards.yaml" --out "$H\notes\standards-v4.yaml"; "exit code: $LASTEXITCODE"; cd $R
+   ```
+
+   Pass: `exit code: 0`, and one line before it: the new file's path and `sha256:` with its hash.
+   No profile value is printed. The proposal decides nothing: every signal is empty, and the
+   library's lists appear only as commented lines. If it says the file exists (a second try), add
+   `--force`.
+2. The owner fills in the `part_roles` section of `$H\notes\standards-v4.yaml` from the draft of
+   2026-09-26 (section 0.1): the library root and the bought-parts folder names, the make-or-buy
+   property and its values, the vendor properties and the distributor block, the general
+   catalogue shapes, the custom and bought part-number prefixes, and the detail properties. Only
+   the owner writes company values; the file travels by hand in the handover folder and is never
+   pasted anywhere.
+3. Validate it against step 2.4's `-standards` package (`$package`):
+
+   ```powershell
+   cd "$R\reviewer"; uv run swreview check standards --package $package --out "$H\notes\profile-check-v4" --profile "$H\notes\standards-v4.yaml"; "exit code: $LASTEXITCODE"; cd $R
+   ```
+
+   Pass: `exit code: 0`. Fail: `exit code: 1` with a message naming a field, or an entry by its
+   position: tell the owner what it names.
+4. Keep the version 3 file, and put the version 4 file where the pane reads it:
+
+   ```powershell
+   Copy-Item "$env:LOCALAPPDATA\SwReview\standards.yaml" "$H\notes\standards-v3.yaml"
+   Copy-Item "$H\notes\standards-v4.yaml" "$env:LOCALAPPDATA\SwReview\standards.yaml"
+   Select-String -Path "$env:LOCALAPPDATA\SwReview\standards.yaml" -Pattern '^version:'
+   ```
+
+   Pass: `version: 4`. The pane reads it at its next review; step 2.2's setting is unchanged.
+
+Record: both exit codes, the first eight characters of the `sha256:` hash, and `version: 4`; never a
+value of the file. Whether any profile value reached a check record, a session, a report or a pane
+message is read on the development machine, which scans the returned run folders (006 T100's
+audit half, "Not in this sitting").
+
 ## Step 3. The extractor: dumps and probes
 
 **How to read every probe run in this step.** Each `swreview-extract probe drawings` run prints
@@ -1154,7 +1248,7 @@ T066 is D8's `value`: the extraction's own reading of the dimension (`GetSystemV
 nominal the product's drawing binding uses. **Change nothing**: the switch this decides is set on
 the development machine (section 3.10).
 
-### 3.9 The read-only open, probed [011 T077]
+### 3.9 The read-only open, probed [011 T077; 013 T142]
 
 1. Close J's drawing if it is open. Open part J and click its window, so J is the active
    document. Click into PowerShell, paste the line, press Enter, and then **touch nothing** until
@@ -1214,6 +1308,14 @@ The last line of each D14 section is the probe's own reading; any `not as requir
 a fail and names what failed. Record: both report file names, both last lines, the `open
 documents` and `left loaded afterwards` lines (recorded, never a fail), and every line that
 differs from the blocks above. Change nothing: section 3.10 says who sets the switch.
+
+**013 T142.** These two reports decide whether the development machine sets
+`DrawingOpenScope.SeatValidated` after the sitting (section 3.10); this sitting runs with it off.
+With it off, the host tells a review that it opens no closed drawing (`open_only`), and the review
+gives an instruction line in place of a drawing question: step 4.7 records that half. Once the
+switch is set, the sitting after this one confirms that the host answers `opens_closed` and that a
+review offers the read-only open once per drawing file ("Not in this sitting"). Record in the 013
+T142 row of this step: whether both reports allow the switch, by section 3.10's five conditions.
 
 ### 3.10 The two switches: what allows them, and how
 
@@ -1541,6 +1643,15 @@ Record: each pass or fail; for 007 T060 the four minutes, the net saved and A's 
 Open assembly K with K-1's same-name drawing **closed**, and open two drawings of K-2 and two of
 K-3 (all four showing their part in a view). Note the Window menu. Make K active and press Review.
 
+**Since feature 013, while section 3.10's switch is off** (this sitting): the review asks no
+same-name drawing question. The summary's drawings line gives the instruction in its place,
+`Open <K-1's drawing> in SOLIDWORKS, then press Review again with <K> active`, and only the
+governing questions are asked. Record that line in the 011 T067 row; write
+`blocked: switch off (013 T142)` in 011 T067's same-name half and in the rows of 011 T077's pane
+half and 011 T101 part 1, which need the same-name question answered; judge the governing
+questions, the brief and 009 T084 as written (009 T084 still needs three questions). With the
+switch on, at a later sitting, the review asks one same-name question per drawing file, as below.
+
 - 011 T067, pass: the questions include
   `A drawing with the same name sits beside <n> reviewed file(s) but is not open. Should the review read it?`
   (answers `Yes, open it read-only and read it`, `Review without it` and
@@ -1590,7 +1701,23 @@ K-3 (all four showing their part in a view). Note the Window menu. Make K active
   size, the True or False, and the five section lines. Whether the review's model itself called
   `get_drawing_brief` the development machine reads from the run folder.
 
-### 4.7 A candidate opened by you before confirming [011 T101]
+### 4.7 A candidate opened by you before confirming [011 T101; 013 T142]
+
+**Since feature 013, while section 3.10's switch is off** (this sitting): item 1's drawings line
+reads `Open <J's drawing> in SOLIDWORKS, then press Review again with <J> active`, and no question
+is asked. That is 013 T142's pane half; its pass also needs the host's answer, which the review
+records, with `$run` J's run folder:
+
+```powershell
+(Get-Content -LiteralPath "$run\session.json" -Raw -Encoding UTF8 | ConvertFrom-Json).drawing_read
+```
+
+Pass: `open_only`. Items 2 and 3 then run with no question: open J's drawing yourself, make part J
+active with the Window menu, press **Clear review**, then Review (a new review). Pass, when it
+finishes: the drawings line reads `Drawing read: <J's drawing>` with no instruction, in the same
+place; J's drawing is still open; and as many `drawing.context` lines as item 1 counted. Items 4
+and 5 run on that review as written. 011 T101's `drawing.confirmed_open` and `Show-DrawingReadLog`
+passes need the question answered: `blocked: switch off (013 T142)`.
 
 1. Close J's drawing. Open part J only and make it active; press Review. When
    `Waiting for your answers.` appears, record the summary's drawings line: pass, it reads
@@ -1618,6 +1745,60 @@ K-3 (all four showing their part in a view). Note the Window menu. Make K active
 
 Record: each pass or fail, the log line (as far as its `gated=` list), and any wording the owner
 would change (it would go in `review_words_v1.yaml` on the development machine).
+
+### 4.8 A again, with the version 4 profile [013 T143]
+
+After steps 2.6 and 4.7. The small assembly of step 4.1, reviewed twice more with the version 4
+profile. Answer its questions as the engineer answered them on 2026-09-26 (that sitting's findings
+document says how), all in one send each time.
+
+1. **A-plate's drawing closed.** Close A-plate's same-name drawing if it is open; open A resolved
+   and make it active; press Review (step 4's box). Pass (SC-005): the drawings line gives the
+   instruction once, `Open <A-plate's drawing> in SOLIDWORKS, then press Review again with <A>
+   active`, and no drawing question is asked.
+2. **A-plate's drawing open.** Open A-plate's drawing yourself (File > Open), make A active again
+   with the Window menu, press **Clear review**, then Review (a new review): the drawing is read,
+   and the drawings line reads `Drawing read: <A-plate's drawing>`. Answer the questions, then ask
+   one follow-up question in the Transcript's box (for example, what A-plate's drawing still needs)
+   and send it.
+
+On the second review, with `$run` its run folder and `Show-ReviewFacts $run` run after the
+follow-up's answer, pass for each:
+
+- SC-001: no row of **Modelling practice** or **Hygiene** in Findings by type names A-pin (open
+  both groups: each row names its part), and the summary's bought-parts line names A-pin once, as
+  not graded, with its reason: `<n> part(s) not graded for modelling practice or hygiene (bought):
+  <A-pin's file> (<reason>)`.
+- SC-004: no question asks for a vault version or whether a file is modified locally, and no
+  question repeats one already answered.
+- SC-003: every finding sits in one group or in the **Checked, no issue** fold, and no row of a type
+  group reads `checked within scope`.
+- SC-006: every finding card and question shows who wrote it - `Checked by code` or `AI guidance` -
+  and the follow-up's answer, pinned in Results, opens with `AI guidance` and then its basis line,
+  `Based on <n> results read for this answer.` or
+  `No evidence was read for this answer: this is general guidance.`, either followed by
+  ` No drawing was read in this review.` when the review read no drawing.
+- SC-008: the `tokens` line's `input` for the whole review, the answers' and the follow-up's turns
+  included, is **at most 400,000**; in the Transcript, each round of the answers' turn lists the
+  calls it made: record them.
+- Lever 14, on in the pane:
+
+  ```powershell
+  (Get-Content -LiteralPath "$run\session.json" -Raw -Encoding UTF8 | ConvertFrom-Json).efficiency.drop_prior_reasoning
+  ```
+
+  Pass: `True`. The follow-up's turn leaves the earlier turns' reasoning out of its request, so its
+  answer arriving shows the provider accepts that request; a refusal stops the review with
+  `The review stopped`: record its sentence (step 4's box, item 6).
+
+**Q, if the owner named one.** Open Q resolved and make it active; press Review, and answer its
+questions as the engineer says, all in one send. Record counts only: the parts the bought-parts
+line names as not graded, the parts it says may be bought, and how many parts the part-roles question
+lists (or that none was asked); never a file name.
+
+Record: both run folders' stamps and letters, the facts, the drawings lines with letters in place of
+names, the bought-parts line with A-pin's letter in place of its file name, each pass or fail, the
+tokens, the answers' turn's calls, lever 14's state, and Q's counts.
 
 ## Step 5. The other tabs, the live Gemini test, and the older build
 
@@ -1667,7 +1848,17 @@ them with every other run folder of the sitting into `run-folders.zip`, and the 
 machine runs 004 T003's `swreview remodel plan` over each `package.json` from there. They never
 enter the repository: only counts do.
 
-### 5.2 Standards [007 T059]
+**The census's parts, for feature 013.** Then, for each of N-1 to N-4 in turn, as for the owner's
+parts: open it on its own (File > Open), click its window so it is the active document, and on the
+Model check tab press **Model check**. Read only: if SOLIDWORKS offers to resolve, unsuppress or
+rebuild anything, answer **Cancel**, **No** or **Don't Save**, and change nothing in place. Pass,
+for each part: a grade appears and **Open check folder** opens a new folder ending `-check` that
+holds `package.json`. Close that Explorer window, then the part (Don't Save), before the next.
+Record, per part: its letter and its folder's stamp and letter (`20261002-141516-N1`); no part name,
+number or folder name. The development machine reruns feature 013's part-role census over the four
+`package.json` files (its `research.md` R2.4), counts only.
+
+### 5.2 Standards [007 T059; 013 T144]
 
 On the Standards tab press **Standards check** on part J and then on assembly A. Pass for each: a
 verdict with every check in a bucket; `ready to release` only when there are no errors **and** no
@@ -1679,6 +1870,26 @@ Record: both verdict lines.
 bucket chips. Copy J's `-standards` folder (Open check folder) into `$run` as in step 5.1 and run
 `Show-FindingsByType $run`. Pass and fail as in step 5.1. Record: pass or fail, and the printed
 lines.
+
+**013 T144, A-plate's drawing.** Open A-plate's same-name drawing, make it active, and on the
+Standards tab press **Standards check**. Copy its `-standards` folder into `$run`, then:
+
+```powershell
+Show-DrawingTables $run
+Select-String -Path "$run\report.md" -SimpleMatch 'no revision table was found' -Quiet
+```
+
+Pass (SC-009): the sheet that shows a revision table prints `revision tables 1` (or more) and the
+one that shows a bill of materials `bills of materials 1`; the last line is `False`: no check claims
+the drawing has no revision table; and the revision check is in a bucket with a reason, never a
+warning for a table the sheet shows. Fail: a count of 0 for a table the sheet shows, or `True`.
+
+Then the export-control check, before its result on real title blocks is trusted: press
+**Standards check** on S-1 and on S-2, each active in turn. Pass: the export-control check (the
+drawing check that no export-control statement appears) reports the statement found on S-1 and
+not found on S-2, as you know them to be. Record: A-plate's drawing's printed lines and `False`,
+and for S-1 and S-2 the export-control check's bucket; never the statement's text or anything
+else of a title block.
 
 ### 5.3 Remodel
 
@@ -2046,6 +2257,7 @@ For the development machine, once the folder comes back:
 | 006 | 006 T100, the audit half | the development machine scans the returned run folders for the owner's profile values before 008 T101 is ticked; the seat does the profile entry (steps 2.2 and 2.4) |
 | 010, 011 | setting either switch; 010 T104's and T106's counts | the development machine, as sections 3.10, 3.1 and 4.2 say |
 | 006 | PROBE-1 to PROBE-3 into research R4; `TRANSPARENCY_POLARITY`'s flip | the development machine, from step 3.1's two Standards probe reports |
+| 013 | 013 T142's second half; the census's counts | the sitting after the development machine sets `DrawingOpenScope.SeatValidated`: the host answers `opens_closed` and a review offers the read-only open once per drawing file; and the development machine reruns the part-role census over step 5.1's N folders, counts only |
 | 004 | 004 T003's dry run itself; the re-modeler probes' verdicts into the record | the development machine: `swreview remodel plan` over each `package.json` of step 5.1's P folders, counts only, each part by its letter and never its file name, into T003's table (`specs/004-resilient-remodeler/phase0-decision.md` section 4), where they replace 004 T148's provisional counts (its section 4.1, taken from other parts the development machine already held); the verdicts and raw readings of step 5.6's three answers files, as quickstart Scenario 4 says |
 
 Open seat or key tasks of earlier features, not asked this time:

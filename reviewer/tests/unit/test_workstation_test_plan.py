@@ -268,6 +268,19 @@ QUOTED: tuple[tuple[str, str], ...] = (
     ("SOLIDWORKS already has a document open.", "extractor/SwReview.Extractor/Rms/RemodelProbe.cs"),
     ("interop members: ", "extractor/SwReview.Extractor/Rms/RemodelProbe.cs"),
     ("BLOCKING ", "extractor/SwReview.Extractor/Rms/RemodelProbe.cs"),
+    # Feature 013's words, which steps 2.6, 4.6 to 4.8 and 5.2 read (013 T138, T094, T141 to T144).
+    ("sha256:", "reviewer/src/swreview/cli.py"),
+    ("in SOLIDWORKS, then press Review again with",
+     "reviewer/src/swreview/report/review_words_v1.yaml"),
+    ("not graded for modelling practice or hygiene (bought)",
+     "reviewer/src/swreview/checks/part_roles.py"),
+    ("Checked by code", "reviewer/src/swreview/report/review_words_v1.yaml"),
+    ("AI guidance", "reviewer/src/swreview/report/review_words_v1.yaml"),
+    ("results read for this answer.", "reviewer/src/swreview/report/review_words_v1.yaml"),
+    ("No evidence was read for this answer: this is general guidance.",
+     "reviewer/src/swreview/report/review_words_v1.yaml"),
+    (" No drawing was read in this review.", "reviewer/src/swreview/report/review_words_v1.yaml"),
+    ("no revision table was found", "reviewer/src/swreview/checks/standards/drawing.py"),
 )
 """Every product sentence the plan quotes, with the file that says it."""
 
@@ -737,7 +750,9 @@ def test_every_sentence_the_plan_quotes_is_the_products(
 def test_every_one_liner_compiles_and_holds_no_double_quote(plan: str) -> None:
     found = one_liners(plan)
 
-    assert len(found) == plan.count(ONE_LINER_START) == 3
+    # Four since feature 013 (013 T144): `Show-DrawingTables` joined `Show-ReviewFacts`,
+    # `Show-DumpFacts` and `Show-Documents`, edited deliberately.
+    assert len(found) == plan.count(ONE_LINER_START) == 4
     for code, argument in found:
         compile(code, "<the plan's one-liner>", "exec")
         assert argument.startswith("$"), argument
@@ -824,6 +839,30 @@ def test_the_review_facts_count_answers_sent_together_and_the_one_turn_they_resu
         "answers sent 3 | turns ended between the first and last answer 0 | turns ended after "
         "the last answer 1 | first round input after the answers 23456"
     )
+
+
+def test_the_drawing_tables_line_counts_each_sheets_tables_by_id(plan: str) -> None:
+    """013 T144 (step 5.2) reads A-plate's drawing's tables from its `-standards` folder:
+    `Show-DrawingTables` prints one line per native sheet - the drawing's id, the sheet's number,
+    and its revision tables, other tables and bills of materials, counts only - and no name."""
+    folder = FIXTURES / "drawings" / "drawing-root"
+    package = load_package(folder).package
+
+    lines = run_one_liner(one_liner_of(plan, "Show-DrawingTables"), folder)
+
+    expected = [
+        f"{record.document_id} sheet {sheet.index + 1} | revision tables "
+        f"{len(sheet.revision_tables)} | other tables {len(sheet.tables)} | bills of materials "
+        f"{sum(1 for table in sheet.tables if table.bom_rows)}"
+        for record in package.drawing_records
+        for sheet in record.sheets
+    ]
+    assert lines == expected
+    assert any("revision tables 1" in line for line in lines)
+    assert any("bills of materials 1" in line for line in lines)
+    for record in package.drawing_records:
+        for sheet in record.sheets:
+            assert all(sheet.name not in line for line in lines)
 
 
 def test_the_documents_list_names_each_document_by_its_id(plan: str) -> None:
@@ -1529,6 +1568,8 @@ def test_show_findings_by_type_prints_the_checked_fold_last(plan: str, tmp_path:
 
 
 TIME = re.compile(r"(?:(\d+) h)?\s*(?:(\d+) min)?")
+FEATURE_013_IN_STEP_5 = 20
+"""The census's four Model checks (step 5.1) and 013 T144 (step 5.2), 10 minutes each."""
 
 
 def minutes(estimate: str) -> int:
@@ -1542,7 +1583,9 @@ def minutes(estimate: str) -> int:
 def test_the_time_estimate_is_the_sum_of_its_steps(plan: str) -> None:
     """The headline figure is the table's steps added up, to the nearest quarter hour, so a
     step that grows (decision 15A added about 25 minutes) moves the headline too. Decision 18A
-    adds about 40: step 1 and step 5.1's row grow, and step 5.6 has a row of its own."""
+    adds about 40: step 1 and step 5.1's row grow, and step 5.6 has a row of its own. Feature 013
+    (2026-09-27, edited deliberately) adds about 90 more: step 2's row by 15 minutes, step 4's by
+    50 and step 5.1 to 5.4's by `FEATURE_013_IN_STEP_5`, which the decision 18A range leaves out."""
     section = plan[plan.index("## How long it takes") : plan.index("## 0. Before the sitting")]
     rows = re.findall(r"^\| ([^|]+) \| [^|]+ \| ([^|]+) \|$", section, re.MULTILINE)[1:]
     [(hours, mins)] = re.findall(r"About \*\*(\d+) hours(?: (\d+) minutes)? at the seat", section)
@@ -1550,8 +1593,10 @@ def test_the_time_estimate_is_the_sum_of_its_steps(plan: str) -> None:
 
     assert len(rows) == 8
     assert abs(sum(estimates.values()) - (int(hours) * 60 + int(mins or 0))) <= 7
-    assert estimates["5.6"] == 25 and estimates["1"] == 55 and estimates["5.1 to 5.4"] == 45
-    assert 30 <= estimates["5.6"] + (estimates["1"] - 50) + (estimates["5.1 to 5.4"] - 35) <= 45
+    assert estimates["5.6"] == 25 and estimates["1"] == 55 and estimates["5.1 to 5.4"] == 65
+    decision_18a_in_step_5 = estimates["5.1 to 5.4"] - 35 - FEATURE_013_IN_STEP_5
+    assert 30 <= estimates["5.6"] + (estimates["1"] - 50) + decision_18a_in_step_5 <= 45
+    assert (estimates["2"], estimates["4"]) == (35, 240)
 
 
 def powershell_parse_errors(sources: dict[str, str], folder: Path) -> str:
