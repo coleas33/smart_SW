@@ -290,20 +290,11 @@ public sealed class ReviewPageDrawingQuestionsTests
     // ---- the source word (feature 013 T103) ---------------------------------------------------
 
     /// <summary>
-    /// Why the test below is skipped: the drawing check's questions carry `source: code` only from
-    /// 013 T099 (lane D), and the generated fixture carries it once it is regenerated after that
-    /// (lane R's T093 regeneration, or the next one).
-    /// </summary>
-    private const string WaitsForT099 =
-        "013 T099 (lane D) gives the drawing check's questions source: code; integrator: remove this Skip "
-        + "once the drawing fixture is regenerated with it.";
-
-    /// <summary>
     /// The drawing check's questions are code's, so each pager line carries `labels.source`'s word
     /// for the question's own `source` - printed, never decided by the page
     /// (contracts/sources.md section 2).
     /// </summary>
-    [Fact(Skip = WaitsForT099)]
+    [Fact]
     public void EachDrawingQuestionsPagerLineCarriesTheBackendsSourceWord()
     {
         string[] sources = Asked.Select(question => question.GetProperty("source").GetString()!).ToArray();

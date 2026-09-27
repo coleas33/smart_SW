@@ -3,6 +3,7 @@
   "questions_asked": {
     "count": 3,
     "text": "3 questions for you",
+    "text_placeholder": "Or name the bought ones, separated by commas",
     "items": [
       {
         "id": "ER-001",
@@ -12,6 +13,8 @@
           "Review without it",
           "It is not the right drawing"
         ],
+        "allow_text": false,
+        "source": "code",
         "blocks": "drawing.manufacturing_inputs",
         "blocks_title": "Drawings",
         "what": "The same-name drawings FICT-TULMSORN-7003.SLDDRW, FICT-TULMSORN-7004.SLDDRW, FICT-TULMSORN-7005.SLDDRW, each beside a reviewed file and not open",
@@ -39,6 +42,8 @@
           "FICT-TULMKALO-7001-B.SLDDRW",
           "They all apply"
         ],
+        "allow_text": false,
+        "source": "code",
         "blocks": null,
         "blocks_title": null,
         "what": "Which of 2 open drawings governs FICT-TULMKALO-7001.SLDPRT: doc:0007 FICT-TULMKALO-7001.SLDDRW, doc:0008 FICT-TULMKALO-7001-B.SLDDRW",
@@ -62,6 +67,8 @@
         "id": "ER-003",
         "question": "5 open drawings show FICT-OKTAKALO-7002-TESSABRUN-DAVORUSK-LORIVENTA-QUILLSORN-HASKFENN-ARVOTULM-ZEPHOMBRA-NIXAKALO-…. Which one governs it?",
         "options": [],
+        "allow_text": false,
+        "source": "code",
         "blocks": null,
         "blocks_title": null,
         "what": "Which of 5 open drawings governs FICT-OKTAKALO-7002-TESSABRUN-DAVORUSK-LORIVENTA-QUILLSORN-HASKFENN-ARVOTULM-ZEPHOMBRA-NIXAKALO-MIRVEN-OKTAPELIN.SLDPRT: doc:0009 FICT-OKTAKALO-7002-A.SLDDRW, doc:0010 FICT-OKTAKALO-7002-B.SLDDRW, doc:0011 FICT-OKTAKALO-7002-C.SLDDRW, doc:0012 FICT-OKTAKALO-7002-D.SLDDRW, doc:0013 FICT-OKTAKALO-7002-E.SLDDRW",
@@ -126,7 +133,50 @@
     {
       "type": "coverage",
       "body": {
+        "bucket": "checked",
+        "item": {
+          "check": "provenance",
+          "scope": {
+            "component_ids": [],
+            "pairs": [],
+            "configuration": "Default",
+            "positions": [],
+            "document_ids": [
+              "doc:0001",
+              "doc:0002",
+              "doc:0003",
+              "doc:0004",
+              "doc:0005",
+              "doc:0006"
+            ]
+          },
+          "reason": "Reviewed as open in SOLIDWORKS: 6 documents, each at its own path in its active configuration; revision read on 0 of 6. The open files are taken as the latest: vault version and local modification are not read and never asked. A missing revision is reported by the hygiene checks.",
+          "error": null
+        }
+      }
+    },
+    {
+      "type": "coverage",
+      "body": {
         "bucket": "skipped",
+        "item": {
+          "check": "coverage.prerun.bought_parts",
+          "scope": {
+            "component_ids": [],
+            "pairs": [],
+            "configuration": null,
+            "positions": [],
+            "document_ids": []
+          },
+          "reason": "Bought parts were not told apart: no standards profile is attached",
+          "error": null
+        }
+      }
+    },
+    {
+      "type": "coverage",
+      "body": {
+        "bucket": "unresolved",
         "item": {
           "check": "drawing.context",
           "scope": {
@@ -138,7 +188,7 @@
               "doc:0001"
             ]
           },
-          "reason": "no open drawing shows it",
+          "reason": "no drawing named FICT-OKTAVEN-7000.SLDDRW sits beside it",
           "error": null
         }
       }
@@ -186,7 +236,7 @@
     {
       "type": "coverage",
       "body": {
-        "bucket": "skipped",
+        "bucket": "unresolved",
         "item": {
           "check": "drawing.context",
           "scope": {
@@ -198,7 +248,7 @@
               "doc:0004"
             ]
           },
-          "reason": "no open drawing shows it; a drawing with its name sits beside it (candidate)",
+          "reason": "a drawing with its name sits beside it (candidate)",
           "error": null
         }
       }
@@ -206,7 +256,7 @@
     {
       "type": "coverage",
       "body": {
-        "bucket": "skipped",
+        "bucket": "unresolved",
         "item": {
           "check": "drawing.context",
           "scope": {
@@ -218,7 +268,7 @@
               "doc:0005"
             ]
           },
-          "reason": "no open drawing shows it; a drawing with its name sits beside it (candidate)",
+          "reason": "a drawing with its name sits beside it (candidate)",
           "error": null
         }
       }
@@ -226,7 +276,7 @@
     {
       "type": "coverage",
       "body": {
-        "bucket": "skipped",
+        "bucket": "unresolved",
         "item": {
           "check": "drawing.context",
           "scope": {
@@ -238,7 +288,7 @@
               "doc:0006"
             ]
           },
-          "reason": "no open drawing shows it; a drawing with its name sits beside it (candidate)",
+          "reason": "a drawing with its name sits beside it (candidate)",
           "error": null
         }
       }
@@ -338,14 +388,15 @@
         ],
         "buckets": [
           "checked",
-          "skipped"
+          "skipped",
+          "unresolved"
         ]
       }
     },
     {
       "type": "coverage",
       "body": {
-        "bucket": "skipped",
+        "bucket": "unresolved",
         "item": {
           "check": "drawing.context",
           "scope": {
@@ -357,7 +408,7 @@
               "doc:0001"
             ]
           },
-          "reason": "no open drawing shows it",
+          "reason": "no drawing named FICT-OKTAVEN-7000.SLDDRW sits beside it",
           "error": null
         }
       }
@@ -405,7 +456,7 @@
     {
       "type": "coverage",
       "body": {
-        "bucket": "skipped",
+        "bucket": "unresolved",
         "item": {
           "check": "drawing.context",
           "scope": {
@@ -417,7 +468,7 @@
               "doc:0004"
             ]
           },
-          "reason": "no open drawing shows it; a drawing with its name sits beside it (candidate)",
+          "reason": "a drawing with its name sits beside it (candidate)",
           "error": null
         }
       }
@@ -425,7 +476,7 @@
     {
       "type": "coverage",
       "body": {
-        "bucket": "skipped",
+        "bucket": "unresolved",
         "item": {
           "check": "drawing.context",
           "scope": {
@@ -437,7 +488,7 @@
               "doc:0005"
             ]
           },
-          "reason": "no open drawing shows it; a drawing with its name sits beside it (candidate)",
+          "reason": "a drawing with its name sits beside it (candidate)",
           "error": null
         }
       }
@@ -445,7 +496,7 @@
     {
       "type": "coverage",
       "body": {
-        "bucket": "skipped",
+        "bucket": "unresolved",
         "item": {
           "check": "drawing.context",
           "scope": {
@@ -457,7 +508,7 @@
               "doc:0006"
             ]
           },
-          "reason": "no open drawing shows it; a drawing with its name sits beside it (candidate)",
+          "reason": "a drawing with its name sits beside it (candidate)",
           "error": null
         }
       }
@@ -492,11 +543,14 @@
   "questions_open_after": {
     "count": 1,
     "text": "1 question for you",
+    "text_placeholder": "Or name the bought ones, separated by commas",
     "items": [
       {
         "id": "ER-003",
         "question": "5 open drawings show FICT-OKTAKALO-7002-TESSABRUN-DAVORUSK-LORIVENTA-QUILLSORN-HASKFENN-ARVOTULM-ZEPHOMBRA-NIXAKALO-…. Which one governs it?",
         "options": [],
+        "allow_text": false,
+        "source": "code",
         "blocks": null,
         "blocks_title": null,
         "what": "Which of 5 open drawings governs FICT-OKTAKALO-7002-TESSABRUN-DAVORUSK-LORIVENTA-QUILLSORN-HASKFENN-ARVOTULM-ZEPHOMBRA-NIXAKALO-MIRVEN-OKTAPELIN.SLDPRT: doc:0009 FICT-OKTAKALO-7002-A.SLDDRW, doc:0010 FICT-OKTAKALO-7002-B.SLDDRW, doc:0011 FICT-OKTAKALO-7002-C.SLDDRW, doc:0012 FICT-OKTAKALO-7002-D.SLDDRW, doc:0013 FICT-OKTAKALO-7002-E.SLDDRW",

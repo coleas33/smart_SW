@@ -93,15 +93,6 @@ def strings(value: Any) -> Iterator[str]:
 # --- the file is the backend's ------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "013 T093 (lane R) regenerates this fixture in a commit of its own once US4's lane D "
-        "and S tasks are on main (it plays a scripted review through their code); until then "
-        "feature 013's setup rows (the part roles, provenance), the questions' new fields and "
-        "the drawing check's states move it - remove this marker with that commit"
-    ),
-)
 def test_the_committed_fixture_is_a_fresh_generation(generator: ModuleType, committed: str) -> None:
     fresh = generator.render(generator.drawing_questions_fixture())
 
@@ -253,9 +244,12 @@ def test_the_restated_drawing_check_is_withdrawn_before_it_is_restated(
     document's drawing context once - as the session does - and every confirmed open's item."""
     events = [(event["type"], event["body"]) for event in fixture["coverage_events"]]
     withdrawn = [body for kind, body in events if kind == "coverage.withdrawn"]
+    # 013 T079 (integration, 2026-09-27, edited deliberately): a same-name drawing not open is an
+    # unresolved `drawing.context` row now, not a skipped one, so the restated check also drops
+    # items from `unresolved`.
     assert withdrawn == [
         {"checks": ["drawing.context", "drawing_profile.conformance"],
-         "buckets": ["checked", "skipped"]}
+         "buckets": ["checked", "skipped", "unresolved"]}
     ]
 
     shown = mirror(events)
@@ -271,6 +265,23 @@ def test_the_restated_drawing_check_is_withdrawn_before_it_is_restated(
     assert [item["check"] for bucket in shown.values() for item in bucket].count(
         CONFIRMED_OPEN_CHECK
     ) == 3
+
+
+def test_a_seat_that_opens_closed_drawings_is_offered_the_open_not_told_to_open_them(
+    fixture: dict[str, Any], generator: ModuleType
+) -> None:
+    """013 T092 (drawing-capability.md sections 3 and 4): the scripted host answers `ping` with
+    `drawing_read: "opens_closed"`, so the candidate question is asked and the summary's drawings
+    line keeps feature 011's "found but not open" words - the instruction to open the drawing
+    and press Review again is for a seat that cannot open one."""
+    line = drawings_of(generator.drawing_review_package(), drawing_read="opens_closed")
+
+    assert line is not None
+    assert fixture["summary_drawings"] == line.model_dump(mode="json")
+    assert "found but not open" in line.text
+    assert "then press Review again" not in line.text
+    assert any(item["options"] == list(CANDIDATE_OPTIONS)
+               for item in fixture["questions_asked"]["items"])
 
 
 def test_the_summarys_drawings_line_is_the_backends_for_the_package_it_plays(

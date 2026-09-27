@@ -510,3 +510,20 @@ def test_the_states_and_reasons_are_all_worded() -> None:
     }
     assert words.goal_reasons["unresolved"] == "evidence missing"
     assert words.goal_reasons["no_check"] == "no check ran"
+
+
+def test_the_open_then_review_words_are_the_drawing_checks_instruction() -> None:
+    """One instruction, two places (integration of lanes D and R, 2026-09-27): the summary's
+    drawings words and the drawing check's coverage reason say the same thing, placeholder for
+    placeholder, so neither can drift."""
+    from swreview.checks.drawing_context import OPEN_THEN_REVIEW
+    from swreview.report.summary import load_words
+
+    drawings = load_words().drawings
+    check = OPEN_THEN_REVIEW.format(drawing="FICT-1.SLDDRW", model="FICT-1.SLDASM")
+    assert drawings.open_then_review_one.format(names="FICT-1.SLDDRW", model="FICT-1.SLDASM") == (
+        check
+    )
+    assert drawings.open_then_review_many.format(names="FICT-1.SLDDRW", model="FICT-1.SLDASM") == (
+        check
+    )
