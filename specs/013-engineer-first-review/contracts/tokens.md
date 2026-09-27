@@ -1,0 +1,100 @@
+# Contract: Answer Turns That Cost Only What They Need, and the Replay Gate
+
+Normative for FR-045 to FR-048 and User Story 6. Research R2.32 to R2.36, R3 C12, C13, R5. Amends
+feature 005's `contracts/levers.md` (lever 14), feature 008's `contracts/model-view.md` section 7
+(lever 14 beside pruning) and `contracts/replay.md` section 9 (a re-measured row per regeneration),
+and feature 001's `contracts/agent-tools.md` (`mark_coverage`'s result).
+
+## 1. The close-out, closed by code
+
+`coverage.closeout` is code-owned (`re-ask-guard.md` section 1). `finalize_session`
+(`agent/runner.py:436`) writes exactly one row for it, check `coverage.closeout`, bucket `checked`,
+withdrawn by identity and rewritten on a second finalization (rule 1, like its other rows):
+
+> Closed by code when the review ended: {r} open evidence requests are listed as unresolved coverage
+> (coverage.evidence_request); the package records {g} gaps: {n1} {kind1}, {n2} {kind2}, …
+
+`{kind}` is each gap kind's word, in the order the package lists kinds; "no gaps" when there are none.
+`was_cut_short`'s two reasons (`report/session.py:201-215`) and `_closeout`'s unresolved row for a turn
+cut short are untouched, so a cut-short turn still reads as one. `attention.CLOSEOUT_ITEM_ID`'s
+exclusion is unchanged.
+
+## 2. `open_items` on coverage results
+
+`mark_coverage`'s recorded result and `request_evidence`'s recorded result gain:
+
+```json
+{"status": "recorded", "bucket": "checked", "coverage_item": {…},
+ "open_items": ["interfaces.stack", "fasteners"]}
+```
+
+`open_items`: the model-owned checklist item ids still open after this call
+(`context.checklist.open_items(review)`, less code-owned items), in checklist order; `[]` when none.
+Non-error answers (`closed_by_code`, `already_answered`, `already_asked`) carry it too. The tool
+docstrings do not change.
+
+## 3. Refusal reasons reach the model
+
+`drawing-capability.md` section 6. Counted here because the sitting's answer turn after a refused
+read spent four rounds re-reading unchanged evidence.
+
+## 4. Lever 14: earlier turns' reasoning items leave the request view
+
+```python
+# reviewer/src/swreview/agent/settings.py
+class EfficiencySettings(BaseModel):
+    ...
+    drop_prior_reasoning: bool = False
+    """Lever 14: at a turn boundary, the OpenAI request view leaves out the reasoning items of
+    earlier turns and keeps the current turn's; the stored history is unchanged. Appended last."""
+```
+
+- **Where**: `agent/providers/openai_provider.py`, where the request's input items are built from the
+  history (`_encode_assistant`, `:697-713`). A turn is the span between two user messages of the
+  runner's history; an assistant message's raw `output` items of `type == "reasoning"` from any turn
+  before the current one are left out of the request; every other item, and every item of the current
+  turn, is sent byte for byte. The runner's history and `session.json` keep every item.
+- **Gemini** sends no reasoning items; the lever is inert there and the session records it as set.
+- **Off by default**, and off on the command line and in `benchmark run`. `LEVER_NAMES` and every
+  lever-count pin gain one ("the fourteen levers"); `GATED_ALONE` gains nothing.
+- **Adoption rule** (the owner's default, 2026-09-26): the replay (section 5) prices the lever off and
+  on over every fixture; when no recorded finding is lost and the requested input falls, a commit of
+  its own adds it to `pane_efficiency` and records the ledger row in `levers.md`; otherwise it stays
+  off and the figures and the reason are recorded there.
+- **Pricing** (research R3 C13): the replay has no reasoning items, only the recorded usage; for lever
+  14 on, each round of a turn after the first is priced lower by the sum of the recorded reasoning
+  output tokens of every earlier turn's rounds (their `usage` events), which the as-recorded pass
+  carries in that round's input. The figure is an estimate and is reported as one.
+- **Interaction**: none with lever 3 beyond a prefix break at each turn boundary, which pruning already
+  causes; recorded in `levers.md`'s interaction matrix.
+
+## 5. The replay gate
+
+Every change of this feature that moves what a tool returns, the system prompt, the checklist, the
+opening message or a resumed message passes this gate before it merges, on the machine that holds the
+recordings (the owner's mapping, 008 `replay.md` section 8):
+
+1. **Regenerate** the three fixtures with section 8's commands and then the pane fixture
+   (`tests/fixtures/pane/generate_pane_fixture.py --write`), in a commit of its own (decision 3A: the
+   fixtures follow the code; a fixture is never edited by hand).
+2. **Replay** under every configuration of section 9's latest row, with
+   `--standards-profile ../config/standards.example.yaml`.
+3. **Hold**: no recorded finding lost and none unreplayable (absolute); each fixture's recorded contact
+   groups (3, 2 and 0) reproduced exactly, none reclassified; pass A within 1% on every round of every
+   regenerated fixture; the real recordings' residual zero on every round (section 10).
+4. **Record** one "re-measured" row in section 9 naming the change, every figure that moved and why.
+5. **Payload pins**: no tool signature or docstring changes (research R3 C14); if a tool array's bytes
+   move, `python -m tests.unit.test_tool_payload --write` in a commit of its own, with the reason.
+
+Stories and what each moves are research R5's table. A story that moves nothing the model reads (User
+Story 5) runs steps 2 and 3 to prove it.
+
+## 6. Tests
+
+`test_finalize_closeout.py`: the close-out row written once; a second finalization gives one row; the
+reason's counts; `mark_coverage(coverage.closeout)` answers `closed_by_code`; a cut-short turn still
+reads as cut short. `test_tools_session.py`: `open_items` on every result kind, less code-owned items,
+in checklist order. `test_openai_prior_reasoning.py`: with the lever on, earlier turns' reasoning items
+are absent from the request and the current turn's present; with it off, the request is byte-identical
+to today's; the stored history unchanged. `test_efficiency_settings.py` and the lever-count pins (fourteen).
+`test_replay_lever_14.py`: the pricing over a scripted two-turn recording; no finding lost.

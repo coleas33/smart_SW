@@ -1,5 +1,7 @@
 # Curated Agent Tools
 
+*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), pending implementation:* `request_evidence` and `mark_coverage` gain non-error answers (`closed_by_code`, `already_answered`, `already_asked`) and `open_items`, and `request_evidence` accepts joint, feature and drawing entity ids, with no signature or docstring change; see 013 `contracts/re-ask-guard.md` and `contracts/tokens.md` section 2.
+
 The reviewer exposes exactly these tools to the model. There is no general code execution,
 no file system access, and no SolidWorks command outside this list (FR-006, Constitution
 Technical Constraints). Every tool is a plain Python function registered in

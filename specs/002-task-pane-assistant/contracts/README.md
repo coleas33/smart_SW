@@ -1,5 +1,7 @@
 # Contracts: Task Pane Assistant
 
+*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), pending implementation:* `chat-events.schema.json`: `text.done`'s body gains optional `basis`, and a `finding.withdrawn` event is added; see 013 `contracts/sources.md` section 3 and `contracts/part-roles.md` section 9.
+
 | Contract | File | Producer → Consumer |
 |----------|------|---------------------|
 | Chat backend HTTP + SSE | `chat-api.md` | Python `swreview chat serve` → add-in Review page |

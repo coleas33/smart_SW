@@ -1,5 +1,7 @@
 # Contract: the lever flags
 
+*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), pending implementation:* lever 14, `drop_prior_reasoning` (earlier turns' reasoning items out of the request view), off until the replay decides; see 013 `contracts/tokens.md` section 4.
+
 Every efficiency lever this feature designs, with its flag, its default, its scope, what reads it
 and when, how it is measured, and the rule under which it may be adopted.
 

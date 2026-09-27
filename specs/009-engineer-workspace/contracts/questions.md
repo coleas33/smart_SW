@@ -1,5 +1,7 @@
 # Contract: Questions for You
 
+*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), pending implementation:* `request_evidence` gains non-error answers after the four refusals (`closed_by_code`, `already_answered`, `already_asked`); `EvidenceRequest` and `QuestionView` gain `allow_text` and `source`; the panel draws options and a text box when `allow_text` is set; see 013 `contracts/re-ask-guard.md`, `contracts/part-roles.md` section 8 and `contracts/sources.md`.
+
 Normative for FR-013 to FR-016, SC-004 and the question edge cases.
 
 ## 1. The tool

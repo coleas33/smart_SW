@@ -1,5 +1,7 @@
 # Standards Check Catalogue
 
+*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), pending implementation:* `revision_matches` never reports a revision table absent on a sheet with a revision-table read gap or no sheet view, and `standards.part.sketches_fully_defined` reads the shared feature-tree reading; see 013 `contracts/readings.md` sections 2 and 3.
+
 Check ids are stable and appear verbatim in findings (`check`), coverage, exceptions, waiver
 files and the report. Sixteen ids: seven assembly-scope, four part-scope, four drawing-scope,
 one document-scope.

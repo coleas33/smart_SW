@@ -1,5 +1,7 @@
 # Contracts: SOLIDWORKS Agentic Design Review Pilot
 
+*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), pending implementation:* `review-session.schema.json` gains optional `allow_text` and `source` on `EvidenceRequest`, `source` on `Finding` and `CoverageItem`, and `drawing_read` on the session, each omitted at its default; see 013 `contracts/sources.md` and `data-model.md` section 3.
+
 These are the interfaces the feature exposes between its own layers and to the engineer.
 Field-level rules live in [data-model.md](../data-model.md); this directory pins the wire
 shapes.

@@ -1,5 +1,7 @@
 # Contract: The Replay
 
+*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), pending implementation:* every change of feature 013 that moves what the model reads passes the replay gate and records a re-measured section 9 row; see 013 `contracts/tokens.md` section 5.
+
 Normative for `swreview benchmark replay`, `benchmark/recording.py`, `benchmark/replay.py`, the
 `ReplayReport` model and the committed replay fixtures (FR-001 to FR-007, SC-001 to SC-005).
 Amended 2026-09-23 by the owner's decision 3A - the fixtures follow the code - in sections 8, 9

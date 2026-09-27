@@ -1,5 +1,7 @@
 # Contract: Hygiene
 
+*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), pending implementation:* the four property checks grade custom and unclear documents only, and `hygiene.component_not_resolved` still covers every document; see 013 `contracts/part-roles.md` section 6.
+
 Normative for FR-019, FR-020 and User Story 7. `checks/hygiene.py`; the data-card change in
 `checks/standards/document.py`.
 

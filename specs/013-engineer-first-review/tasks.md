@@ -1,0 +1,399 @@
+---
+
+description: "Task list for the engineer-first review"
+---
+
+# Tasks: Engineer-First Review
+
+**Input**: Design documents from `/specs/013-engineer-first-review/` (`spec.md`, `plan.md`, `research.md`, `data-model.md`, `contracts/`, `quickstart.md`)
+
+**Prerequisites**: features 001 to 011 on main (008's pre-run, re-call guard, answer batch, model view and replay; 009's goals, summary and questions panel; 010's hygiene; 011's drawing index, candidate question, confirmed read and seat switch). Phase W needs the licensed seat of the next sitting. No recorded package, run folder or real profile is read by a test or enters the repository; every new fixture is fictional (`FICT-`).
+
+**Tests**: REQUIRED, and **strictly test-first**: every implementation task follows the test task that must be written and must fail first. No tool signature or docstring changes (`test_docstring_split.py`, `test_tool_payload.py` unedited unless a task says it regenerates a pin, in a commit of its own). The tests that go red **by design** are named in the task that lands each change and are edited deliberately there, never loosened. A replayed finding may never be lost or become unreplayable (absolute), and each replay fixture's recorded contacts - 3, 2 and 0 groups - are reproduced exactly (008 `contracts/replay.md` sections 8 and 9).
+
+**Gates before every commit** (from `reviewer/`): `SWREVIEW_REQUIRE_TOKENIZER=1 uv run pytest -q -p no:warnings -o addopts="" -m "not live"` and `uv run ruff check src tests`; when C# or a page is touched, from the repository root, `dotnet build extractor/SwReview.sln -c Release --nologo -v q` (zero warnings) and `dotnet test extractor/SwReview.sln -c Release --no-build --nologo`. The replay gate (`contracts/tokens.md` section 5) closes each story that moves what the model reads.
+
+**Organization**: Setup; Foundational (shared matchers, the question shape, the records' new fields, the checklist's owner, the shared file key, the sitting-shaped fixture); US1 bought parts; US2 grouped findings; US3 questions the review never asks; US4 drawings that follow the seat; US5 sources; US6 answer-turn tokens; US7 readings; the test debt (U24); Polish; the workstation sitting (W).
+
+## Format: `[ID] [P?] [Story] [kind] Lane. Description`
+
+- **[P]**: can run in parallel (different files, no dependency on another unfinished task)
+- **[Story]**: `US1` to `US7`; Setup, Foundational, test-debt, Polish and Workstation tasks carry none
+- **[py]**, **[C#]**, **[page]**: the kind of code the task touches (Python reviewer; C# extractor or add-in; the Review page or the shared page scripts with their C# page tests)
+- **Lane P, R, S, D, W, X, T, E, U, G**: the lane that owns the files the task edits (`plan.md`, "Lanes and file ownership"); a task is done in its lane's queue
+- **Cause**: the analysts' cause at file:line (research R4), re-verified before editing
+- **Amends NNN**: the other feature's contract the task changes; the task writes that contract's amendment text (the one-line note is already there, T001)
+- **[W]**: needs the licensed SOLIDWORKS seat of the next sitting
+
+## Path Conventions
+
+- Python: `reviewer/src/swreview/`, tests in `reviewer/tests/`
+- C#: `extractor/SwReview.Extractor/`, `extractor/SwReview.AddIn/`, `extractor/SwReview.Extractor.Console/`; tests in `extractor/SwReview.Extractor.Tests/` and `extractor/SwReview.AddIn.Tests/`
+- Pages: `extractor/SwReview.AddIn/Review/ReviewPage/`, `extractor/SwReview.AddIn/web/shared/`
+
+---
+
+## Phase 1: Setup
+
+**Purpose**: the other features' contracts say they are amended, dated, before a line of code.
+
+- [x] T001 Add a one-line amendment note, dated 2026-09-26 and pointing at this package, to each contract feature 013 amends: 001 `contracts/README.md` and `contracts/agent-tools.md`; 002 `contracts/README.md`; 003 `contracts/rules.md` and `contracts/tools.md`; 005 `contracts/levers.md`; 006 `contracts/profile.md`, `contracts/rules.md` and `contracts/ir-additions.md`; 007 `contracts/attention.md`; 008 `contracts/checks-first.md`, `contracts/answer-batch.md`, `contracts/model-view.md` and `contracts/replay.md`; 009 `contracts/questions.md`, `contracts/review-summary.md`, `contracts/views.md` and `contracts/plain-words.md`; 010 `contracts/hygiene.md` and `contracts/code-first.md`; 011 `contracts/questions.md`, `contracts/confirmed-open.md`, `contracts/brief.md` and `contracts/native-evidence.md`. Documents only; `specs/004-resilient-remodeler/` untouched. *Done with this package, 2026-09-26.*
+
+**Checkpoint**: every amended contract says so.
+
+---
+
+## Phase 2: Foundational (Blocking Prerequisites)
+
+**Purpose**: the shared pieces two or more stories build on, each one reading of one thing.
+
+- [ ] T002 [P] [py] Lane P. Write `reviewer/tests/unit/test_name_patterns.py` and extend `test_standards_library.py`: `PrefixList.from_entries(entries, root)` with `.matches` and `.longest` reproduces every existing prefix vector; `name_matches(pattern, name, wildcards=True)` - `@` a letter and not a digit, `*` an empty and a long run, whole-name, case-insensitive; with `wildcards=False` `@` and `*` are literal, so `part_number_matches` keeps the macro's vocabulary; every existing traversal and data-card test unedited. Contract: `part-roles-profile.md` section 2. Acceptance: red for want of the two names
+- [ ] T003 [py] Lane P. Extract `PrefixList` from the private helpers of `checks/standards/library.py:137-181` (`PrefixMatcher` then holds four, no behaviour change) and generalise `part_number_matches` (`checks/standards/traversal.py:164`) into `name_matches(pattern, file_name, *, wildcards=False)`. Acceptance: T002 green; every `test_standards_*` green
+- [ ] T004 [P] [py] Lane S. Write `reviewer/tests/unit/test_questions.py`: `QuestionSpec` and `already_asked(requests, spec)` importable from `checks/questions.py` with today's exact-match rule; every drawing-question test (`test_drawing_context.py`, `test_tools_check_drawings.py`, `test_confirmed_drawing_read.py`) unedited. Research R3 C10
+- [ ] T005 [py] Lane S. Create `checks/questions.py` holding `QuestionSpec` (moved from `checks/drawing_context.py`) and the duplicate test (moved from `tools/drawings.py:68-74`, `_already_asked`); the two old modules import them (lane D's files touched only by the import line, in this task, before lane D starts). Acceptance: T004 green; no behaviour change
+- [ ] T006 [P] [py] Lane S. Write `reviewer/tests/unit/test_session_fields_013.py` and extend `test_schema_sync.py`: `Finding.source` (default `code`, omitted when `code`), `EvidenceRequest.source` (default `model`, omitted when `model`) and `allow_text` (default false, omitted when false), `CoverageItem.source` (default `code`, omitted when `code`), `ReviewSession.drawing_read` (`none`, `open_only`, `opens_closed`, omitted when null); every committed session (golden, replay and pane fixtures) round-trips to its own bytes; the regenerated `review-session.schema.json` carries the four optional properties with their omit rules. Contract: `data-model.md` section 3; `sources.md` section 1
+- [ ] T007 [py] Lane S. Add the four fields in `report/session.py` and `findings.py` with serializers that omit them at their defaults; regenerate `specs/001-agentic-design-review/contracts/review-session.schema.json`. **Amends 001** `review-session.schema.json`. Acceptance: T006 green; every `test_session*` green
+- [ ] T008 [P] [py] Lane S. Extend `reviewer/tests/unit/test_checklist.py`: `ChecklistItem.owner` defaults to `model`; a code-owned item renders "Closed by code before your first turn; never ask about it or mark it." in place of the `mark_coverage` line; `open_items(review, owner="model")` leaves code-owned items out; no item of `checklist_v1.yaml` is code-owned yet, so the rendered checklist is byte-identical (the loop at `test_checklist.py:225-232` unedited). Contract: `re-ask-guard.md` section 1
+- [ ] T009 [py] Lane S. Add `owner` to `agent/checklist.py`'s `ChecklistItem` and its render and `open_items`. Acceptance: T008 green; the opening-message pin unmoved
+- [ ] T010 [P] [py] Lane D. Extend `test_review_summary.py` and write `test_drawing_file_key.py`: `drawings/evidence.file_key(path)` equals today's `report/summary.py:706-709` rule (case and separator ignored); the summary's drawings line is unchanged. Cause: `report/summary.py:687-694`, `:706-709` against `checks/drawing_context.py:231-255`
+- [ ] T011 [py] Lane D. Move `_file_key` to `drawings/evidence.py` as `file_key`; `report/summary.py` imports it (one import line in lane R's file, in this task). Acceptance: T010 green
+- [ ] T012 [P] [py] Lane P. Write `reviewer/tests/support/sitting.py` and `reviewer/tests/fixtures/sitting/generate_fixture.py`, committing `reviewer/tests/fixtures/sitting/small-assembly/` (package, and a scripted session of the sitting's shape): an assembly and a custom plate following a fictional convention, one stem shared by both; a vendor pin with two instances under a fictional bought-parts folder, carrying a company-number-shaped property that differs from its file name; one part no rule decides; one vendor sub-assembly with one child; one same-name drawing candidate row per stem document; manifest entries with vault version and local-modified state unknown; and `reviewer/tests/unit/test_sitting_fixture_is_fictional.py` (every path under `C:\Fictional\`; every string from the builder's vocabulary; the denylist scan through `tests/support/fixture_denylist.py`, skipped naming the file when absent; re-running the generator reproduces every byte). Acceptance: the fixture validates as a package
+
+**Checkpoint**: one prefix matcher, one pattern matcher, one question shape, the new record fields, the checklist's owner, one file key, and the fixture every story's acceptance reads.
+
+---
+
+## Phase 3: User Story 1 - Bought Parts Are Not Graded for How They Were Modelled (Priority: P1) 🎯 MVP
+
+**Goal**: modelling-practice and hygiene checks grade custom and unclear parts only; bought parts named once; one question for the unclear ones, whose answer regrades at once.
+
+**Independent Test**: spec.md User Story 1; quickstart Scenarios 1 and 2.
+
+- [ ] T013 [P] [US1] [py] Lane P. Extend `reviewer/tests/unit/test_standards_profile.py` and `test_standards_no_company_values.py`: version 4 loads; versions 1 to 3 still load; a version 3 file with `part_roles` refused, named; version 4 without it refused; each blank entry refused by position; a wildcard-only pattern refused; a property without values and values without a property refused; an unknown key under `part_roles` refused; version 5 refused naming 1 to 4; the three shipped profiles differ pairwise in the four new fields; the distinctive-value scan covers the prefixes and patterns; no refusal message carries a value. Contract: `part-roles-profile.md` sections 1 and 3
+- [ ] T014 [US1] [py] Lane P. Implement version 4 in `checks/standards/profile.py` (`PartRolesSection`, `PROFILE_VERSION = 4`, `KNOWN_VERSIONS`, `VERSION_4_SECTIONS`, `SECTIONS_BY_VERSION[4]`), derive `_no_section_of_a_later_version`'s list from `SECTIONS_BY_VERSION`; give `config/standards.example.yaml`, `reviewer/tests/fixtures/standards/profile-a.yaml` and `profile-b.yaml` version 4 with pairwise-different fictional sections; regenerate the standards goldens' profile sha256 lines only. Cause: `checks/standards/profile.py:283-336`, `:317-321`. **Amends 006** `contracts/profile.md` (the schema block equal to the example, the field rules, the known versions, the name vocabulary) and `research.md` R5 (three rows "not carried by the macro"), and **011** `contracts/profile.md` section 1 (version 4 carries the drawing section unchanged). Acceptance: T013 green; `test_the_contract_block_is_what_the_example_file_ships` green
+- [ ] T015 [P] [US1] [py] Lane P. Write `reviewer/tests/unit/test_cli_profile_upgrade.py`: the input untouched; `--out` written with `version: 4` and the section; the skip list's entries present only as commented lines under the proposal comment; version 1, 2 and 4 inputs refused; an existing `--out` refused without `--force`; the output validates; stdout carries only the path and sha256 (no profile value). Contract: `part-roles-profile.md` section 5
+- [ ] T016 [US1] [py] Lane P. Implement `swreview profile upgrade` in `cli.py` over a pure `propose_version_4(text, profile) -> str` in `checks/standards/profile.py`. Acceptance: T015 green
+- [ ] T017 [P] [US1] [py] Lane P. Write `reviewer/tests/unit/test_part_roles.py` over fictional fixtures (T012's, plus table-driven packages): one case per decision-table row A to J; the conflicts of rules C, D and E; the root rule and its label; Toolbox with no profile; each state; no path; a properties gap; an unknown id graded; the zero-match guard; answers overriding every rule; rule H on and off; rule I with a convention-named child staying custom; no reason contains any distinctive profile value; `note_for` only while the question is open; `answered_roles` for "All bought", "None bought", a text list, an unmatched piece, and a look-alike request that is not the spec. Contract: `part-roles.md` sections 1 to 4, 9
+- [ ] T018 [US1] [py] Lane P. Implement `checks/part_roles.py`: `classify_parts`, `PartRole`, `PartRoles`, `note_unclear`, `roles_question`, `answered_roles`, reusing `PrefixList` and `name_matches` (T003) and the drawing index for rule H. Cause: nothing classifies a part today, `tools/rms_checks.py:263-269`, `checks/hygiene.py:313-315`, only `checks/standards/part.py:233` and `document.py:241` read prefixes. Acceptance: T017 green; a marked perf test under 50 ms on the big-assembly pane fixture's package
+- [ ] T019 [P] [US1] [py] Lane P. Write `reviewer/tests/unit/test_review_profile_attach.py`: `attach_standards` takes a loaded profile and its four refusal reasons are byte-identical; `review_profile(context)` returns the loaded profile when the standards phases were not dumped (the latent coupling at `tools/checks_mechanical.py:173-186`, `prerun.py:777-779`)
+- [ ] T020 [US1] [py] Lane P. Change `attach_standards` (`prerun.py:742`) to take the loaded profile; replace `_attached_profile` (`tools/checks_mechanical.py:173`) with `review_profile(context)`. Acceptance: T019 green
+- [ ] T021 [P] [US1] [py] Lane S. Write `reviewer/tests/unit/test_runner_part_roles.py` with the scripted provider: `start_review` loads the profile once, classifies after `build_context` and before `carry_over_findings` and the pre-run, attaches the roles under `PART_ROLES_ATTRIBUTE`; `reload_package` keeps them; a configured, a refused and an absent profile each give the right state
+- [ ] T022 [US1] [py] Lane S. Wire the roles in `agent/runner.py` (`start_review`, `:1178-1242`) and add `PART_ROLES_ATTRIBUTE` to `tools/registry.py`. Acceptance: T021 green
+- [ ] T023 [P] [US1] [py] Lane P. Extend `reviewer/tests/unit/test_tools_rms_checks.py`: the bought pin leaves the null selection; an explicit bought id is an error result naming the reason; unclear documents' fail and warn results carry the note; the Model check route tests unchanged (the root is always graded). Cause: `tools/rms_checks.py:253`. Contract: `part-roles.md` section 6
+- [ ] T024 [US1] [py] Lane P. Implement `part_documents` over graded documents and `note_unclear` in `run_part_checks` and `run_equation_checks` (`tools/rms_checks.py:104`, `:213`, `:253`); `carry_over.py` does not carry an RMS finding on a bought document (a carry-over test). **Amends 003** `contracts/tools.md` (null means every graded part document; a bought id refused). Acceptance: T023 green
+- [ ] T025 [P] [US1] [py] Lane P. Extend `reviewer/tests/unit/test_rms_assembly_rules.py`: a mate between a custom plane and a bought face passes on the custom side; a custom face mated to a bought face fails naming the custom entity; a mate between two bought parts is not graded (one skipped subject line); an unclear side is graded with the note. Contract: `part-roles.md` section 6; research R2.9
+- [ ] T026 [US1] [py] Lane P. Implement the custom side in `rms.assembly.mates_to_reference_geometry`. **Amends 003** `contracts/rules.md` (the rule's subject is the custom side; grading scope of the part and equation rules: graded documents). Acceptance: T025 green
+- [ ] T027 [P] [US1] [py] Lane P. Extend `reviewer/tests/unit/test_hygiene.py` and `test_tools_check_hygiene.py`: no revision, part-number or duplicate finding on the bought pin; a custom and a bought part sharing a description raise no duplicate; a lightweight bought part still raises `hygiene.component_not_resolved`; unclear findings carry the note; under the fictional version 3 profile `hygiene.part_number_matches_file` no longer fires on the library part once it is bought (version 4) and does fire, noted, while it is unclear (version 3)
+- [ ] T028 [US1] [py] Lane P. Implement `run_hygiene_checks(package, profile, roles)` (`checks/hygiene.py:309-315`) and pass the roles from `check_hygiene` (`tools/checks_mechanical.py:449`). **Amends 010** `contracts/hygiene.md` section 1 (graded documents; `component_not_resolved` over all) and `contracts/code-first.md` (hygiene reads the attached roles). Acceptance: T027 green
+- [ ] T029 [P] [US1] [py] Lane P. Extend `reviewer/tests/unit/test_prerun_digest.py`: `coverage.prerun.bought_parts` and `coverage.prerun.maybe_bought` rows equal their digest lines; the absent state's wording; the zero-match guard's `coverage.prerun.part_roles` row; none of the rows maps to a goal. Contract: `part-roles.md` section 7
+- [ ] T030 [US1] [py] Lane P. Add the two `NotEvaluated` lines and the guard row to `not_evaluated_families` (`prerun.py:798`). **Amends 008** `contracts/checks-first.md` sections 1 and 4 (roles attached before the pre-run; the two lines). Acceptance: T029 green
+- [ ] T031 [P] [US1] [py] Lane S. Extend `reviewer/tests/unit/test_runner_part_roles.py` and `test_package_brief.py` and `test_checklist.py`: the question is recorded once, before the pre-run, whether or not checks first is on, not in the absent state, not with no unclear part, not when the guard fired; asked once across a Retry; its fields exactly `part-roles.md` section 8 (question within 140 characters, the two options, `allow_text` true, `source` code, `blocks` none, at most ten names); with no pre-run the section 7 rows are recorded directly; the brief's `role=`; the two checklist sentences pinned
+- [ ] T032 [US1] [py] Lane S. Record the question in `start_review` through `record_evidence_request` (`tools/session.py:105`), passing `allow_text` and `source`; record the rows directly with no pre-run (the `standards_gap` precedent, `agent/runner.py:1281-1282`); add `role=` to `package_brief._document_line` (`agent/package_brief.py:69`); add "Custom parts only; bought parts are listed once, not graded." to `modeling.resilience` and `hygiene` in `agent/checklist_v1.yaml`. **Amends 009** `contracts/questions.md` sections 1 to 4 (`allow_text`: options and a text box; a code question's source). Acceptance: T031 green; the opening-message pin regenerated deliberately
+- [ ] T033 [P] [US1] [py] Lane R. Extend `reviewer/tests/unit/test_review_summary.py`, `test_review_words.py` and write `test_report_bought_parts.py`: `bought_parts` in each state, counted in no group, goal or headline, `None` when there is nothing to say; the words file's `part_roles` and `questions.text_placeholder`; `QuestionView.allow_text`; `report.md`'s "Bought parts" section rendered once
+- [ ] T034 [US1] [py] Lane R. Implement `review_summary`'s `bought_parts` (`report/summary.py:414`), `QuestionView.allow_text`, the words, and the report section in `report/markdown.py`. **Amends 009** `contracts/review-summary.md` section 4 and `data-model.md`. Acceptance: T033 green
+- [ ] T035 [P] [US1] [page] Lane W. Extend `ReviewPageQuestionsTests`: a question with `allow_text` draws its buttons and a text box with the placeholder from the labels; choosing a button sends its text verbatim; typing sends the trimmed text; a hostile placeholder or option renders as literal text; a question without `allow_text` renders as before
+- [ ] T036 [US1] [page] Lane W. Implement the options-plus-text-box layout in `render.js:577-594` and the answer in `app.js`. Acceptance: T035 green; `PageRuleScanTests` unchanged
+- [ ] T037 [P] [US1] [py] Lane S. Write `reviewer/tests/unit/test_answer_batch_roles.py` with the scripted provider over T012's fixture: "All bought" withdraws the unclear part's modelling and hygiene findings with `finding.withdrawn` events and the reason; "None bought" keeps every id and drops the note in place; a text list; an unmatched piece quoted in one coverage row; the resumed message's one added line; the model's own look-alike question does nothing; the guard answers a repeat from the restated calls; lever 13's withheld set and the guard's ledger consistent after the regrade; the drawing restate's existing tests pass; `test_events_schema.py` accepts `finding.withdrawn`. Contract: `part-roles.md` section 9
+- [ ] T038 [US1] [py] Lane S. Replace `_restate_drawing_check` (`agent/runner.py:902`) with `_restate(tools)`; call `answered_roles` in `answer_evidence_batch` (`:864`) after the answers are marked; add `ToolContext.withdraw_findings(ids, reason)` beside `withdraw_coverage` (`tools/context.py:275`) emitting `finding.withdrawn`; add the event to `specs/002-task-pane-assistant/contracts/chat-events.schema.json`. **Amends 008** `contracts/answer-batch.md` section 1 (the new step between 2 and 3; the message line; "no new event type" amended) and **002** `chat-events.schema.json`. Acceptance: T037 green
+- [ ] T039 [P] [US1] [page] Lane W. Extend `ReviewPageEventStreamTests`: `finding.withdrawn` removes the card and reloads the summary; an unknown id is ignored; an event for another chat is discarded
+- [ ] T040 [US1] [page] Lane W. Handle `finding.withdrawn` in `app.js`. Acceptance: T039 green
+- [ ] T041 [P] [US1] [py] Lane R. Write `reviewer/tests/unit/test_attention_family_fold.py`'s sitting case: after classification the modelling-practice family's representative is the custom plate's finding, not the pin's. Cause: `report/attention.py:497`, `:525`. Acceptance: red before T024, green after; no change to `attention.py`
+- [ ] T042 [US1] [py] Lane G. **Replay gate** (`contracts/tokens.md` section 5) for US1 on `main` after lanes P, S, R and W merge: regenerate the three replay fixtures and then the pane fixture (008 `replay.md` section 8, decision 3A), in a commit of its own; replay every configuration of section 9; hold the absolute rule, the 3, 2 and 0 contacts, pass A within 1%, the recordings' zero residual; record the re-measured row. **Amends 008** `contracts/replay.md` section 9
+
+**Checkpoint**: on the sitting-shaped fixture no modelling or hygiene finding is on the pin, the line names it once, one question lists the unclear part, and answering regrades.
+
+---
+
+## Phase 4: User Story 2 - Every Finding, Grouped by Type, No Pass Amplified (Priority: P1)
+
+**Goal**: one grouped list on the Review tab and in the report; no pass amplified anywhere.
+
+**Independent Test**: spec.md User Story 2; quickstart Scenario 3.
+
+- [ ] T043 [P] [US2] [py] Lane R. Extend `reviewer/tests/unit/test_attention.py`, `test_attention_record.py`, `test_gate_brief.py` and `test_finding_explanations.py`: three undecided rows and two passes give `top_n` 3 and 3 findings not amplified as checked within scope; all passes still give the empty reason; `attention.json` byte-identical where `top_n` does not change; the explanation pass never sends a pass; `ranked_rows` reproduces `rank()`'s rows. Cause: `report/attention.py:136`, `:450-457`, `:464`, `:472`, `:576-582`; `agent/runner.py:940`. Contract: `grouped-list.md` section 1
+- [ ] T044 [US2] [py] Lane R. Extract `ranked_rows(findings, policy, families)` from `rank()` and set `top_n = min(TOP_N, unsuppressed rows)` in `report/attention.py`. **Amends 007** `contracts/attention.md` sections 3 and 4 (`top_n` no longer the constant 5; the not-amplified count). Acceptance: T043 green
+- [ ] T045 [P] [US2] [py] Lane R. Extend `reviewer/tests/unit/test_review_words.py`, `test_review_summary.py` and `test_review_summary_fixture.py`: the `finding_groups`, `finding_group_other`, `finding_group_checked` and `finding_group_text` blocks; every goal's `group`; the new `standards` goal and the `hygiene` goal's reduced items and prefixes; every class key of `attention_policy_v1.yaml` maps to one of the seven groups; the goal-state tests that move with the split edited deliberately (Hygiene no longer reads `standards.release`). Cause: `review_words_v1.yaml:121-124`. Contract: `grouped-list.md` section 2
+- [ ] T046 [US2] [py] Lane R. Add the blocks and keys to `report/review_words_v1.yaml` (before `labels`; `errors` stays last) and the `Words` model in one commit. **Amends 009** `contracts/review-summary.md` section 3 (ten goals, the `group` key, Standards split from Hygiene). Acceptance: T045 green; `ErrorLabelsCoverTheHostTests` green
+- [ ] T047 [P] [US2] [py] Lane R. Write `reviewer/tests/unit/test_finding_groups.py`: the partition; no pass in a type group; within each group the order of `ranked_rows`, also on shuffled copies of the session; decided rows last; an unknown id in `other`, last; the family unfolded and the same-check fold kept; explanations on the same finding id; display titles; an empty and an all-pass session; a waived pass's tail; the sitting-shaped fixture after US1 gives its expected groups; a marked perf test under 100 ms on the big-assembly pane fixture. Contract: `grouped-list.md` section 3
+- [ ] T048 [US2] [py] Lane R. Implement `report/finding_groups.py` and `ReviewRanking.groups` (`report/summary.py:359-372`), carried by the attention, snapshot and disk routes (`test_review_snapshot.py`, `test_chat_attention_route.py`). **Amends 007** `data-model.md` (`ranked_rows`, `GroupRow`) and **009** `data-model.md` sections 1 and 2. Acceptance: T047 green
+- [ ] T049 [P] [US2] [py] Lane R. Extend `test_review_summary.py` and `test_review_summary_fixture.py`: the headline "{n} findings in {m} issues · {k} checked, no issue"; the tally line; `not_reached` naming goal titles in goal order and `None` when every goal was reached; `by_goal`, `modelling_practice` and the top-level goal list gone; `within_scope`'s label "Checked, no issue"; the partition (tally counts plus checked equal the findings). Cause: `report/summary.py:434-436`, `:489-507`, `:523-553`. Contract: `grouped-list.md` section 4
+- [ ] T050 [US2] [py] Lane R. Implement the summary block in `report/summary.py`. **Amends 009** `contracts/review-summary.md` sections 2, 4, 5, 6 and 7 and spec FR-007, FR-009, FR-010, SC-001. Acceptance: T049 green
+- [ ] T051 [P] [US2] [py] Lane R. Rewrite the golden of `reviewer/tests/unit/test_report_start_here.py` to "Findings by type"; write a parity test (each of the gate brief's ids appears in the report's index, in order within its group); `test_report_family_fold.py`, `test_rms_report.py` and `test_standards_report.py` render the index; the SC-006 re-render test shows "Findings by type" above "Findings". Contract: `grouped-list.md` section 6
+- [ ] T052 [US2] [py] Lane R. Replace `_render_start_here` (`report/markdown.py:251-270`) with the grouped index; drop the not-amplified line from the report. **Amends 007** `contracts/attention.md` section 3 and spec FR-013, FR-031, SC-004, SC-006, SC-009 (parity as a subset in order within each group). Acceptance: T051 green
+- [ ] T053 [P] [US2] [page] Lane W. Turn `ReviewPageAttentionPanelTests` into group tests (supplied order; open flags honoured; a row opens its cards; a hostile title literal; an empty group prints its state; the checked fold collapsed; a second ranking regroups without duplicating a card; a card no row names stays visible); replace the ranked-row and Show-all tests of `ReviewPageInjectionTests` (`:354-485`); extend `ReviewPageDefaultViewScanTests` (group headings and rows; no check id or raw token), `ReviewPageViewsTests`, `ReviewPageScaleTests` (1,000 findings grouped), `ReviewPageNarrowLayoutTests`, `ReviewPageSummaryTests` and `ReviewPageSummaryAcceptanceTests` (headline, tally and not-reached line in the 300 by 600 viewport); `AttentionSample.cs`, `SummarySample.cs` and `ReviewFixture` gain `groups`. Cause: `render.js:794-896`, `:945-963`; `index.html:196`, `:203-207`; `app.js:1118-1147`. Contract: `grouped-list.md` section 5
+- [ ] T054 [US2] [page] Lane W. Implement `render.typeGroups`, `applyRanking`'s move and `revealFinding`'s open in `render.js` and `app.js`; remove `attentionPanel`, `countLine`, `attentionIndex`, `attentionLine`, `findingCount`, `findingGroup`, `groupModellingPractice`, `ungroupFindings`, the Show-all styles in `app.css` and `#attention-panel` in `index.html`. **Amends 009** `contracts/views.md` sections 2, 5, 6 and 7 and `contracts/plain-words.md` sections 2 and 7; **007** `contracts/attention.md` section 6 (the Review tab renders groups; no Start here or Show all there) and spec FR-023. Acceptance: T053 green; `PageRuleScanTests` green with no new allowlist entry
+- [ ] T055 [P] [US2] [page] Lane W. Extend `ModelCheckPageTests`, `StandardsPageTests` and `SharedAttentionScriptTests` (`:149`): the check tabs' preview holds no pass; the Review tab renders no Start-here rows. `web/shared/attention.js` and `check-page.js` unchanged. Acceptance: green after T044
+- [ ] T056 [US2] [py] Lane G. Extend `reviewer/tests/fixtures/pane/generate_pane_fixture.py` to write `groups`, regenerate `extractor/SwReview.AddIn.Tests/Fixtures/review-big-assembly.json` (`test_pane_fixture.py`), in a commit of its own
+- [ ] T057 [US2] Lane R. Move `docs/workstation-test-plan-2026-09-23.md` steps 4.1, 5.1 and 5.2 from "Start here" and "Show all" to "Findings by type", including the PowerShell that parses `## Start here` (plan lines 297-306 and 1353-1362), and edit `reviewer/tests/unit/test_workstation_test_plan.py:250-253`'s mappings deliberately. Documents and one test
+- [ ] T058 [US2] [py] Lane G. **Replay gate** for US2: run every configuration; the gate brief moves only where a fixture has fewer than five undecided rows; regenerate if any fixture moves; record the row. **Amends 008** `contracts/replay.md` section 9
+
+**Checkpoint**: every finding in one row of one group or the checked fold; no pass amplified on any surface; the report and the pane agree.
+
+---
+
+## Phase 5: User Story 3 - The Review Never Asks What It Can Know or Has Been Told (Priority: P1)
+
+**Goal**: provenance closed by code; no re-asked question; the tools' ids accepted.
+
+**Independent Test**: spec.md User Story 3; quickstart Scenario 4.
+
+- [ ] T059 [P] [US3] [py] Lane S. Write `reviewer/tests/unit/test_provenance_closure.py`: a native package gives one checked row, no finding, no question, the counts in the reason; an ingest package with each discrepancy kind gives one finding each in severity order; the lever matrix (checks first on and off, the gate on and off, the command line, Retry) writes the row exactly once; a document with no manifest entry; a custom part missing its revision gives a hygiene finding while provenance stays checked; no profile. Extend `test_checklist.py`: the provenance item code-owned, its description pinned. Contract: `re-ask-guard.md` section 2
+- [ ] T060 [US3] [py] Lane S. Implement `checks/provenance.py` and `record_provenance` in `start_review` right after `record_partial_evidence` (`agent/runner.py:1241`); give `provenance` `owner: code` and the new description in `agent/checklist_v1.yaml`. Cause: `agent/checklist_v1.yaml:6-12`; no writer of provenance in `reviewer/src`. **Amends 008** `contracts/checks-first.md` (provenance at setup) and **001** `contracts/agent-tools.md`. Acceptance: T059 green; golden fixtures and the opening-message pin regenerated deliberately
+- [ ] T061 [P] [US3] [py] Lane S. Extend `reviewer/tests/unit/test_tools_session.py`: `mark_coverage(check="provenance")` and `request_evidence(blocks="provenance")` answer `closed_by_code` with the recorded reason; no coverage row, no failed row, no event, no id (the next real request is still ER-001). Cause: any error payload becomes failed coverage, `tools/registry.py:366-377`. Contract: `re-ask-guard.md` section 1
+- [ ] T062 [US3] [py] Lane S. Implement `closed_by_code` for code-owned items in `mark_coverage` and `request_evidence` (row 5) in `tools/session.py`. **Amends 009** `contracts/questions.md` section 1 (rows after the four refusals). Acceptance: T061 green
+- [ ] T063 [P] [US3] [py] Lane S. Extend `test_tools_session.py`, `test_questions.py` and a new `test_finalize_answered_items.py`: covered by an answered request (`already_answered`, the payload shape, the most recent answer wins); covered by an open one (`already_asked`); partial overlap allowed; a superset allowed; different blocks allowed; null blocks; the empty set; no id, no event, no failed row; the drawing check's duplicate test now the subset rule; finalization writes an item still open after its blocking request was answered as unresolved quoting the answer; and a regression test replaying the sitting's eight question calls with fictional ids from T012's fixture: ER-006, ER-007 and ER-008 come back `already_answered` citing ER-002, ER-003 and ER-005. Cause: `tools/session.py:60-102`, `:105-138`; `tools/drawings.py:68-74`. Contract: `re-ask-guard.md` section 3
+- [ ] T064 [US3] [py] Lane S. Implement `covering_requests` in `report/session.py`, rows 7 and 8 of `request_evidence`, the subset rule in `checks/questions.py`, and the finalization reason in `finalize_session` (`agent/runner.py:480-490`). **Amends 009** `contracts/questions.md` section 1, **011** `contracts/questions.md` section 4 (the duplicate test is the shared rule) and **001** `contracts/agent-tools.md`. Acceptance: T063 green; `test_docstring_split.py` and `test_tool_payload.py` unedited
+- [ ] T065 [P] [US3] [py] Lane S. Extend `test_tools_session.py`: a question naming `jnt:0001` after `check_joints` is recorded; a feature id and each drawing entity id of the fixture recorded; an unknown `jnt:` refused. Cause: `tools/context.py:387-412`; `tools/session.py:93-95`. Contract: `re-ask-guard.md` section 4
+- [ ] T066 [US3] [py] Lane S. Add the `joint`, `feature` and drawing kinds to `ToolContext.entity_kind`. Acceptance: T065 green
+- [ ] T067 [P] [US3] [py] Lane S. Extend `test_package_brief.py` (vault version and local-modified printed only when known) and pin system prompt steps 1 and 6's added sentences. Cause: `agent/package_brief.py:69-85`; `agent/prompts/system_v1.md:19-20`, `:41-45`
+- [ ] T068 [US3] [py] Lane S. Implement in `agent/package_brief.py` and `agent/prompts/system_v1.md`. Acceptance: T067 green; the opening-message pin regenerated deliberately
+- [ ] T069 [US3] [py] Lane G. **Replay gate** for US3 (checklist, prompt, brief, statuses, one row per session): regenerate, replay, hold, record; the recorded `mark_coverage(provenance)` calls and re-asks are the "changed" class. **Amends 008** `contracts/replay.md` section 9
+- [ ] T070 [P] [US3] [C#] Lane X. Extend `ManifestBuilderTests`: no local-modification gap and no vault-version gap when the build reads no vault; the revision-missing gap kept; every other manifest gap kept. Cause: `ManifestBuilder.cs:75-78`, `:126-157`
+- [ ] T071 [US3] [C#] Lane X. Change `ManifestBuilder.RecordGaps`, **in a commit after T069**, noting in the message that the carry-over key's gap digest moves once and the pane's gap count falls. **Amends 001** `contracts/README.md` (the manifest gaps described in `ir.schema.json`, text only). Acceptance: T070 green; zero warnings
+
+**Checkpoint**: no vault question; re-asks answered from the record; the tools' own ids accepted.
+
+---
+
+## Phase 6: User Story 4 - Drawings: Offer Only What the Seat Can Do, for Custom Documents Only (Priority: P1)
+
+**Goal**: the offer follows the seat; custom documents only; one read per file; code answers drawing requests; refusals reach the model.
+
+**Independent Test**: spec.md User Story 4; quickstart Scenario 5.
+
+- [ ] T072 [P] [US4] [C#] Lane D. Extend `BridgeDispatcherTests` (`drawing_read` `none` with no source, `open_only` with the switch off, `opens_closed` with it on), `BridgeProtocolTests` (the new minor version), `ConfirmedDrawingReadTests` (the property mirrors the scope), `ToolServiceWiringTests` (the add-in's source reports the shipped switch as `open_only`); `DrawingOpenTests.TheSeamShipsOffUntilTheSeatConfirmsIt` unedited. Cause: `Bridge/BridgeDispatcher.cs:27-50`, `:173-176`, `:456-462`; `Sw/DrawingOpenScope.cs:130`. Contract: `drawing-capability.md` section 1
+- [ ] T073 [US4] [C#] [py] Lane D. Add `OpensClosedDrawings` to `IConfirmedDrawingSource` and `ConfirmedDrawingRead`, expose the scope's switch in `DrawingOpenScope`, add `PingResult.DrawingRead` and fill it in `Ping()`; raise the protocol's minor version in `SwBridgeDispatcher.ProtocolVersion`, `extractor/SwReview.Extractor.Console/Serve/PROTOCOL.md`, `reviewer/src/swreview/bridge/PROTOCOL.md` and `bridge/client.PROTOCOL_VERSION` in **one commit** (the three-way test). **Amends 011** `contracts/confirmed-open.md` sections 2 and 4 (the switch is reported by ping; T077 needs no backend edit). Acceptance: T072 green; `test_bridge_client.py`'s version check green; zero warnings
+- [ ] T074 [P] [US4] [py] Lane D. Extend `reviewer/tests/unit/test_bridge_client.py`: `drawing_read_mode()` parses the three values; an absent field, an unknown value, an older protocol and a `BridgeError` give `none` and never raise; one ping, cached. Contract: `drawing-capability.md` section 2
+- [ ] T075 [US4] [py] Lane D. Implement `DrawingReadMode` and `BridgeClient.drawing_read_mode()` in `bridge/client.py`. Acceptance: T074 green
+- [ ] T076 [P] [US4] [py] Lane S. Write `reviewer/tests/unit/test_context_drawing_read.py`: `ToolContext.drawing_read_mode()` is lazy and cached, `none` with no bridge, called only when a custom or unclear document has a candidate (a package without candidates makes no ping); the value recorded on `session.drawing_read`
+- [ ] T077 [US4] [py] Lane S. Implement `ToolContext.drawing_read_mode()` in `tools/context.py`. **Amends 001** `review-session.schema.json` (`drawing_read`, landed by T007; its description here). Acceptance: T076 green
+- [ ] T078 [P] [US4] [py] Lane D. Extend `reviewer/tests/unit/test_drawing_context.py`: the state matrix (attached, candidate, absent, bought, unclear with its note); a shared stem gives one `CandidateFile` with two documents; a bought document's candidate row ignored; the candidate question only with `opens_closed`, once per file, counting files, within 140 characters with long names; the instruction line otherwise, naming the root; the governing questions skip bought documents; `absent` is unresolved coverage and never a finding. Cause: `checks/drawing_context.py:77-85`, `:196`, `:224-255`. Contract: `drawing-capability.md` sections 3 and 4
+- [ ] T079 [US4] [py] Lane D. Implement `drawing_states`, `candidate_files` and the offer by mode in `checks/drawing_context.py`; `run_drawing_context(package, profile, index, roles, mode)` (`:539`). **Amends 011** `contracts/questions.md` sections 3 and 4. Acceptance: T078 green
+- [ ] T080 [P] [US4] [py] Lane D. Extend `reviewer/tests/unit/test_confirmed_drawing_read.py`: nothing happens unless `opens_closed`; the question rebuilt with the same roles and mode still matches; one `drawing_read` per file with its first document id; each document of the file gets its item from that one outcome; a refused read gives one unresolved item per document with the same reason; two files still give two reads. Cause: `tools/drawings.py:240-296`, `:261`
+- [ ] T081 [US4] [py] Lane D. Implement one read per file in `read_confirmed_candidates` (`tools/drawings.py`). **Amends 011** `contracts/confirmed-open.md` section 1 ("once per candidate" becomes "once per distinct candidate path"). Acceptance: T080 green
+- [ ] T082 [P] [US4] [C#] Lane D. Extend `PackageAppenderTests`: merging a drawing removes every candidate row whose path matches it, ignoring case and separators; rows of other paths kept. Cause: `PackageAppender.cs:232-240`; `ConfirmedDrawingRead.cs:141-146`
+- [ ] T083 [US4] [C#] Lane D. Implement the merge in `Dump/PackageAppender.cs`. **Amends 011** `contracts/confirmed-open.md` section 2. Acceptance: T082 green; zero warnings
+- [ ] T084 [P] [US4] [py] Lane D. Extend `reviewer/tests/unit/test_tools_check_drawings.py`: the payload counts candidate files and carries `states`; with no attached drawing showing a custom document, `check_drawings` writes one `drawing.manufacturing_inputs` row (unresolved with a candidate or absent document, skipped when every subject is bought); with a drawing attached it writes none; a repeat adds nothing. Contract: `drawing-capability.md` sections 5 and 7
+- [ ] T085 [US4] [py] Lane D. Implement the closing row and the payload in `checks/drawing_context.py` and `tools/drawings.py`, exposing the one predicate `item_closed_by_code(index, roles)`. **Amends 011** `contracts/questions.md` section 5 and **008** `contracts/checks-first.md` (the digest line's counts). Acceptance: T084 green
+- [ ] T086 [P] [US4] [py] Lane S. Extend `test_tools_session.py` and `test_checklist.py`: `request_evidence(blocks="drawing.manufacturing_inputs")` on documents none of whose drawings is attached answers `closed_by_code` with each state and reason and records nothing; a component, hole or fastener id maps to its document; a mix names both groups (`attached` listed); a document with an attached drawing is recorded as today; `mark_coverage` on the item answers `closed_by_code` only in the predicate's state; the drawing item's new description and system prompt step 6's sentence pinned; and **edit deliberately** T063's regression of the sitting's eight calls: row 6 now answers the model's drawing requests (ER-003 and its re-ask ER-007) `closed_by_code` before the guard is reached, while ER-006 and ER-008 still come back `already_answered`. Cause: `tools/session.py:60-102`; `agent/checklist_v1.yaml:13-25`. Contract: `drawing-capability.md` section 5
+- [ ] T087 [US4] [py] Lane S. Implement row 6 of `request_evidence` and the predicate check in `mark_coverage` (`tools/session.py`), the drawing item's wording in `agent/checklist_v1.yaml` and the sentence in `agent/prompts/system_v1.md`. **Amends 009** `contracts/questions.md` section 1 and **001** `contracts/agent-tools.md`. Acceptance: T086 green
+- [ ] T088 [P] [US4] [py] Lane S. Extend `test_confirmed_drawing_read.py`'s runner cases: after a confirmed read the resumed message carries "Drawing {file}: {outcome}" per file, refusals included; a batch with no confirmed read sends today's message byte for byte. Cause: `agent/runner.py:209-214`, `:888-900`
+- [ ] T089 [US4] [py] Lane S. Add the outcome lines in `answer_evidence_batch` (`agent/runner.py`). **Amends 008** `contracts/answer-batch.md` section 1. Acceptance: T088 green
+- [ ] T090 [P] [US4] [py] Lane D. Extend `test_drawing_brief.py` and `test_tools_get_drawing_brief.py`: each document's state; candidates deduplicated; a confirmed-open outcome shown; the size budget kept; a bought document's brief says no drawing is expected. Cause: `drawings/brief.py:335-354`
+- [ ] T091 [US4] [py] Lane D. Implement in `drawings/brief.py`. **Amends 011** `contracts/brief.md` section 2. Acceptance: T090 green
+- [ ] T092 [P] [US4] [py] Lane R. Extend `test_review_summary.py`, `test_review_summary_fixture.py` and `test_pane_drawing_fixture.py`: the drawings line gives the instruction by `session.drawing_read` and the "not open" wording with `opens_closed`; the words `open_then_review_one` and `open_then_review_many`
+- [ ] T093 [US4] [py] Lane R. Implement in `report/summary.py` (`drawings_of`) and the words file; regenerate the pane drawing fixture (`tests/fixtures/pane/generate_drawing_questions.py`, `Fixtures/review-drawing-questions.json`). **Amends 009** `contracts/review-summary.md` section 4 (the drawings row). Acceptance: T092 green; `ReviewPageDrawingQuestionsTests` green
+- [ ] T094 [US4] Lane R. Update `docs/workstation-test-plan-2026-09-23.md` steps 3.9, 4.6 and 4.7 (switch off: the instruction line, no question; switch on: one question per file) and `reviewer/tests/unit/test_workstation_test_plan.py`'s pinned strings. Documents and one test
+- [ ] T095 [US4] [py] Lane G. **Replay gate** for US4 (the checklist's drawing item and the prompt move; the fixtures carry no drawing evidence, so the family stays unoffered): regenerate, replay, hold, record. **Amends 008** `contracts/replay.md` section 9
+
+**Checkpoint**: no offer the seat cannot honour; no bought part's drawing asked for; one read per file; every refusal reaches the model.
+
+---
+
+## Phase 7: User Story 5 - Every Surface Says Where It Came From (Priority: P2)
+
+**Goal**: source labels on every record, a basis line on every answer, no fallback explanation.
+
+**Independent Test**: spec.md User Story 5; quickstart Scenario 6.
+
+- [ ] T096 [P] [US5] [py] Lane S. Extend `test_tools_session.py` and `test_session.py`: `record_drawing_finding` writes `source: model`; `mark_coverage` writes `model`; `request_evidence`'s request is `model` and omitted from the dump (its tool result's bytes unchanged); an old finding with no source on `drawing.manufacturing_inputs` loads as `model`. Cause: `report/session.py:88-132`; `tools/session.py:209`, `:214-288`. Contract: `sources.md` section 1
+- [ ] T097 [US5] [py] Lane S. Implement the writers and the load rule in `tools/session.py` and `report/session.py`. Acceptance: T096 green; `test_tool_payload.py` unedited
+- [ ] T098 [P] [US5] [py] Lane D. Extend `test_drawing_context.py` and `test_tools_check_drawings.py`: the drawing check's questions carry `source: code`
+- [ ] T099 [US5] [py] Lane D. Pass `source="code"` at the drawing check's call site (`tools/drawings.py:96-107`). **Amends 011** `contracts/questions.md` (drawing questions carry `source: code`). Acceptance: T098 green
+- [ ] T100 [P] [US5] [py] Lane R. Extend `test_review_words.py`, the labels-route test, `test_display_titles.py`, `test_review_snapshot.py`, `test_review_summary.py` and the report tests: `labels.source`; the pane bodies state the source (`pane_finding`, the snapshot, `QuestionView.source`, `GroupRow.source`, `GoalLine.detail_source`, `NotClosed.source` omitted when code so `attention.json` keeps its bytes); `report.md`'s "Source: AI guidance", the evidence table's Source column, the model close-out mark. Contract: `sources.md` sections 1 and 2
+- [ ] T101 [US5] [py] Lane R. Implement in `report/titles.py`, `report/snapshot.py`, `report/summary.py`, `report/attention.py`, `report/finding_groups.py`, `report/markdown.py` and the words file; the event bodies in `tools/context.py:268-273`, `:355-358` are lane S's (T102). **Amends 009** `contracts/plain-words.md` sections 1 and 7 and **007** `contracts/attention.md` section 4 (`NotClosed.source`). Acceptance: T100 green
+- [ ] T102 [US5] [py] Lane S. State the source on the evidence and coverage event bodies in `tools/context.py` (`:268-273`, `:355-358`), with a test in `test_agent_events.py`. **Amends 002** `chat-events.schema.json` (the bodies reference the definitions). Acceptance: green
+- [ ] T103 [P] [US5] [page] Lane W. Extend `ReviewPageLabelsTests` (source words; with no labels, no chip), `ReviewPageQuestionsTests` and `ReviewPageDrawingQuestionsTests` (a code and a model question each show their chip; the card head no longer one fixed title), `ReviewPageInjectionTests` (the chip is text; a hostile label literal), `ReviewPageDefaultViewScanTests` (no raw `code` or `model` token visible). Cause: `render.js:297-304`, `:513-515`, `:549-600`
+- [ ] T104 [US5] [page] Lane W. Implement the chips in `render.js`, `app.js` and `app.css`. **Amends 009** `contracts/questions.md` sections 2, 3, 4 and 7. Acceptance: T103 green
+- [ ] T105 [P] [US5] [py] Lane R. Write `reviewer/tests/unit/test_answer_basis.py`: no steps; only writers and bookkeeping; failed steps not counted; one and n reads; a drawing read versus none; the words' placeholders. Contract: `sources.md` section 3
+- [ ] T106 [US5] [py] Lane R. Implement `report/sources.py` (`answer_basis`, `READ_EXCLUDED`) and the words file's `answer_basis`. Acceptance: T105 green
+- [ ] T107 [P] [US5] [py] Lane S. Extend the runner tests with the scripted provider and `test_events_schema.py`: `text.done` carries `basis`; turn 1 counts the pre-run; the answer turn counts a restated check; a stopped turn's steps roll into the next; the explanation pass gets no basis; `basis` optional in the schema. Cause: `chat-events.schema.json:22-23`; the sitting's follow-up called no tool
+- [ ] T108 [US5] [py] Lane S. Wrap the provider's `on_event` with the step marker in `agent/runner.py` (`:1036-1043`); add `basis` to `specs/002-task-pane-assistant/contracts/chat-events.schema.json`. **Amends 002** `chat-events.schema.json` and **009** spec FR-019. Acceptance: T107 green
+- [ ] T109 [P] [US5] [page] Lane W. Extend `ReviewPageEventStreamTests` and `ReviewPageTurnStateTests`: the pinned answer's first line is the basis after the chip; the transcript block carries the chip; a hostile basis literal; an older `text.done` without `basis` renders as before; a turn ended without `text.done` has no chip
+- [ ] T110 [US5] [page] Lane W. Implement in `render.js` (`pinnedAnswer`, `:217-225`) and `app.js` (`:699-726`). **Amends 009** `contracts/views.md` section 4. Acceptance: T109 green
+- [ ] T111 [P] [US5] [py] Lane R. Rewrite `test_finding_explanations.py:407-442` and extend it: no fallback persisted; a legacy fallback reaches no row, `attention.json` or `report.md`; partial acceptance keeps the valid items; each rejection logged with its finding id or position and rule and no model text (`caplog`); invalid JSON and a provider error store nothing and log; the request asks for 300 characters. Cause: `report/explanations.py:34-36`, `:73-121`, `:252-257`, `:276-281`; `report/attention.py:463-467`, `:657-660`. Contract: `sources.md` section 4
+- [ ] T112 [US5] [py] Lane R. Implement `parse_explanations`' partial acceptance and rejections, the logging, `keep_explained`, the legacy filter in `rank()`, and "AI guidance" in `report/markdown.py:405-407`. **Amends 007** `contracts/attention.md` section 6 (the fallback dropped; explanations labelled; failures logged). Acceptance: T111 green
+- [ ] T113 [US5] [py] Lane S. Replace the `fill_fallbacks` call with `keep_explained` (`agent/runner.py:967`). Acceptance: T111 and the runner tests green
+- [ ] T114 [P] [US5] [page] Lane W. Extend `ReviewPageNarrowLayoutTests` and the default-view scan: the explanation is first in the card fold, labelled "AI guidance"; "No model explanation" rendered nowhere. Implement the label in `app.js` (`:1508-1533`). Acceptance: green
+- [ ] T115 [US5] [py] Lane G. **Replay gate** for US5: replay every configuration and prove no byte the model reads moved (no regeneration expected; if one is needed, it is a defect of T097, not a regeneration). **Amends 008** `contracts/replay.md` section 9 only if a figure moved
+
+**Checkpoint**: every finding, question and answer says who wrote it; no fallback line anywhere.
+
+---
+
+## Phase 8: User Story 6 - Answer Turns Cost Only What They Need (Priority: P2)
+
+**Goal**: no bookkeeping rounds; earlier reasoning out of the request view when the replay says so.
+
+**Independent Test**: spec.md User Story 6; quickstart Scenario 7.
+
+- [ ] T116 [P] [US6] [py] Lane S. Write `reviewer/tests/unit/test_finalize_closeout.py`: one `coverage.closeout` row written by finalization, `checked`, counting open requests and gaps by kind; a second finalization gives one row; `mark_coverage(check="coverage.closeout")` answers `closed_by_code`; a turn cut short still reads as cut short (`was_cut_short`); the attention coverage block unchanged. Cause: `agent/runner.py:465-477`; the model marked the close-out every turn. Contract: `tokens.md` section 1
+- [ ] T117 [US6] [py] Lane S. Give `coverage.closeout` `owner: code` in `agent/checklist_v1.yaml` and write its row in `finalize_session` (`agent/runner.py:436-490`). **Amends 001** `contracts/agent-tools.md`. Acceptance: T116 green
+- [ ] T118 [P] [US6] [py] Lane S. Extend `test_tools_session.py`: `open_items` on every `mark_coverage` and `request_evidence` result, recorded and non-error alike, model-owned only, in checklist order, `[]` when none. Contract: `tokens.md` section 2
+- [ ] T119 [US6] [py] Lane S. Add `open_items` in `tools/session.py` (`:60-102`, `:174-211`). **Amends 001** `contracts/agent-tools.md`. Acceptance: T118 green; the tools' docstrings unchanged
+- [ ] T120 [P] [US6] [py] Lane E. Write `reviewer/tests/unit/test_openai_prior_reasoning.py` and extend `test_efficiency_settings.py` and every lever-count pin ("the fourteen levers"): with lever 14 on, reasoning items of earlier turns absent from the request and the current turn's present; with it off, the request byte-identical to today's; the stored history unchanged; Gemini inert. Cause: `agent/providers/openai_provider.py:3-8`, `:697-713`. Contract: `tokens.md` section 4
+- [ ] T121 [US6] [py] Lane E. Add `drop_prior_reasoning` to `EfficiencySettings` (`agent/settings.py`, appended last) and the request view in `agent/providers/openai_provider.py`; add lever 14's row and interaction to `specs/005-llm-efficiency/contracts/levers.md` (off, pending the replay). **Amends 005** `contracts/levers.md` and **008** `contracts/model-view.md` section 7 (lever 14 beside pruning). Acceptance: T120 green
+- [ ] T122 [P] [US6] [py] Lane E. Write `reviewer/tests/unit/test_replay_lever_14.py`: over a scripted two-turn recording, lever 14 on prices each later-turn round lower by the earlier turns' recorded reasoning output tokens, reported as an estimate; no finding lost; `--lever drop_prior_reasoning` accepted. Research R3 C13
+- [ ] T123 [US6] [py] Lane E. Implement the pricing in the replay (`benchmark/replay*.py`). Acceptance: T122 green
+- [ ] T124 [US6] [py] Lane G. **Replay gate** for US6: regenerate (the close-out render and the results move), replay every configuration with lever 14 off and on, hold, record both. **Amends 008** `contracts/replay.md` section 9
+- [ ] T125 [US6] [py] Lane E. **Lever 14's decision**, in a commit of its own: when T124 shows no recorded finding lost and a fall in requested input, add `drop_prior_reasoning=True` to `pane_efficiency` (`agent/settings.py`) and record the ledger row in `levers.md`; otherwise leave it off and record the figures and the reason there. FR-047
+
+**Checkpoint**: no close-out or checklist-only round; lever 14 decided and recorded.
+
+---
+
+## Phase 9: User Story 7 - Drawings and Feature Trees Are Read as SOLIDWORKS Holds Them (Priority: P2)
+
+**Goal**: each sheet's own view read; the revision check honest; one tree reading.
+
+**Independent Test**: spec.md User Story 7; quickstart Scenario 8.
+
+- [ ] T126 [P] [US7] [C#] Lane X. Extend `DrawingDumperTests` and `DrawingTraversalTests`: a fake whose `ISheet.GetViews` lacks the type-1 view while the document's per-sheet arrays carry it, with a revision table and a BOM, records one revision table, one table, no cross-check gap, and the sheet view as type 1; a count, name or type mismatch records the `drawing_sheet_view` gap and falls back; a revision table returned by two views recorded once; a multi-sheet drawing takes each sheet's array and calls no activation member; the traversal fakes no longer put the sheet view inside `ISheet.GetViews`. Cause: `DrawingDumper.cs:711-742`, `:1678-1711`, `:1935-1956`; `SwDrawingReader.cs:103`. Contract: `readings.md` section 1
+- [ ] T127 [US7] [C#] Lane X. Implement `IDrawingReader.SheetViews`, `ReadSheet`'s sheet view and the revision tables through `TableSeen` in `Dump/DrawingDumper.cs`, `Dump/SwDrawingReader.cs` and `Dump/SwOpenDrawingReader.cs` (one shared per-sheet reader, `:55-80`); correct the comment at `Console/Program.cs:2961-2966`; regenerate the goldens whose view ids shift. **Amends 006** `contracts/ir-additions.md` section 3 and spec FR-024 (the fallback named), and **011** `contracts/native-evidence.md` ("Tables"). Acceptance: T126 green; zero warnings
+- [ ] T128 [P] [US7] [py] Lane X. Write `reviewer/tests/unit/test_standards_drawing_revision.py`: the cross-check gap and no tables give unresolved citing the gap and no finding; a sheet with no type-1 view and no tables gives unresolved; a complete walk with a type-1 view and no table gives the warning; the property-to-model comparison passing beside an unresolved table gives both rows. Cause: `checks/standards/drawing.py:292-298`, `:353-357`, `:656-674`. Contract: `readings.md` section 2
+- [ ] T129 [US7] [py] Lane X. Implement in `checks/standards/drawing.py`. **Amends 006** `contracts/rules.md` (the `revision_matches` paragraph) and spec FR-020 acceptance scenario 4. Acceptance: T128 green; the standards goldens re-pinned deliberately
+- [ ] T130 [P] [US7] [py] Lane T. Write `reviewer/tests/unit/test_feature_nodes.py`: `tree_nodes`, `MergedRow` and `CarriedRow` importable from `checks/feature_nodes.py` and, unchanged, from `remodel/nodes.py`; the planner's output byte-identical on every remodel fixture (`test_tools_remodel_plan.py` unedited)
+- [ ] T131 [US7] [py] Lane T. Move the three names to `checks/feature_nodes.py`; `remodel/nodes.py` re-exports them. Cause: `remodel/nodes.py:1-60`, used only at `remodel/plan.py:61`, `:862`. Acceptance: T130 green
+- [ ] T132 [P] [US7] [py] Lane T. Extend `test_rms_part_rules.py`, `test_rms_groups.py` and `test_standards_part_rules.py` on the `remodel-absorbed-sketches` fixture: `rms.sketches.fully_defined` names each sketch once with its consumer; grouping lists each feature once and no absorbed sketch as its own loose row; `one_sketch_per_feature` does not count a second listing as a consumer (the vendor-pin shape's "4 features" becomes 3); a carried Hole Wizard profile sketch is not a loose row; the Standards sketch finding names one location; one coverage note per part counts what was merged and carried. Cause: `checks/rms/part.py:175-206`, `:188-200`, `:358-375`, `:884-927`; `checks/standards/part.py:211-235`, `:269-339`. Contract: `readings.md` section 3
+- [ ] T133 [US7] [py] Lane T. Read the tree through `tree_nodes` in `checks/rms/part.py` and `checks/standards/part.py`. **Amends 003** `contracts/rules.md` ("Content features" and the sketch rules) and **006** `contracts/rules.md` (`standards.part.sketches_fully_defined`). Acceptance: T132 green; the feature 001 to 003 goldens regenerated deliberately
+- [ ] T134 [US7] [py] Lane G. **Replay gate** for US7: regenerate (the part check's results shrink), replay, hold, record; re-read 008 T128 and T129's carried-finding comparisons against the regenerated fixtures. **Amends 008** `contracts/replay.md` section 9
+
+**Checkpoint**: the revision table read or honestly unresolved; one sketch, one row.
+
+---
+
+## Phase 10: Test Debt - Probe 1's Watchdog (U24)
+
+**Purpose**: a verdict that never depends on the machine's load. C# only; feature 004's documents are not edited.
+
+- [ ] T135 [P] [C#] Lane U. Write the reproduction first, in a non-parallel test collection in `extractor/SwReview.Extractor.Tests/RemodelProbeExecutorsTests.cs`: hold `ProcessorCount x 2` pool work items on an event, run probe 1 with a host that throws through today's `RunWithTimeout(500 ms)`, and observe `Refuted`. Cause: `Rms/RemodelProbeWatchdog.cs:65-72`; `RemodelProbeExecutors.cs:350-360`. Acceptance: red today (reads `Refuted`, expected `Unresolved`)
+- [ ] T136 [P] [C#] Lane U. Rewrite `RemodelProbeExecutorsTests` (`:42-96`, `:749-769`) and `RemodelProbeWatchdogTests` over a parking fake in `Fakes/RemodelProbeHostFakes.cs` ("attempt k parked" per attempt; released in `Dispose`): toggles give `Unresolved`; a host throw gives `Unresolved` with the host's message; blocked only with the flag clear gives `Verified`; both blocked give `Refuted`; blocked only with the flag set gives `Unresolved`; the flag-set attempt runs first; after `Dispose` no thread is parked; the watchdog returns true and false with a never-firing deadline, rethrows the host's exception (`Assert.Throws`), gives `Blocked` promptly when parked with a firing deadline, invokes the deadline only after the call signalled; one production-timer test in the blocking direction only; no `Thread.Sleep(Timeout.Infinite)` and no 500 ms timeout left. Contract: `readings.md` section 4
+- [ ] T137 [C#] Lane U. Implement `RemodelProbeWatchdog.Run(call, deadline, startBound)` with `RunWithTimeout` as its production wrapper, `RemodelProbeContext`'s deadline factory, probe 1's flag-set-first order, and the host's own message in `RemodelProbeRunner` (`Rms/RemodelProbe.cs:833-837`). Acceptance: T135 and T136 green; the full `dotnet test` green three times running
+
+**Checkpoint**: probe 1's verdict is decided by signals.
+
+---
+
+## Phase 11: Polish
+
+- [ ] T138 Add `013-engineer-first-review` to `reviewer/tests/support/seat_tasks.py`'s `PACKAGES` and name 013's open `[W]` tasks (`013 T141 to T144`) in `docs/workstation-test-plan-2026-09-23.md` and a row each in its results sheet; state probe 1's flag-set-first order at step 5.6 where the plan describes the two attempts (`test_a_message_box_is_answered_only_after_probe_1s_watchdog_has_timed_both_tries`). Acceptance: `test_workstation_test_plan.py` green
+- [ ] T139 Reconcile `plan.md`'s file list with what landed ("Landed as" table, as 011's plan does) and write each amended contract's landed-as note where the text differs from its task
+- [ ] T140 Run `quickstart.md` Scenarios 1 to 8 with no licence and record the results in `quickstart.md`; add feature 013 to `README.md`'s feature list
+
+---
+
+## Phase W: The next workstation sitting
+
+**Purpose**: what only the seat can show. Each writes its result into the sitting's findings document (outside the repository) and the test plan's results sheet; nothing from the seat is committed but the results' words.
+
+- [ ] T141 [W] Upgrade the seat's standards profile to version 4: run `swreview profile upgrade %LOCALAPPDATA%\SwReview\standards.yaml --out <new file>`; the owner confirms `part_roles` (the library root and the bought-parts folder under `bought_prefixes`; the purchased property and values if the company marks them; vendor name patterns), validates it (`exit code: 0`), and points the pane at it; confirm no profile value appears in any check record, session, report or pane message (only the path and hash). Never commit the file
+- [ ] T142 [W] Probe D14 (feature 011's probe, test-plan step 3.9); when it passes, the development machine sets `DrawingOpenScope.SeatValidated` (011 T077) in its own commit; on the next build confirm on the seat that `ping` answers `drawing_read: "opens_closed"` and the review offers the read-only open once per file; while it has not passed, confirm `open_only` and the instruction line
+- [ ] T143 [W] Re-review the small assembly (test-plan step 4.1) with the version 4 profile: first with the custom plate's drawing closed (the instruction line once, no drawing question, SC-005), then with the drawing open and Review pressed again with the assembly active (the drawing attached); answer the questions as on 2026-09-26 and ask one follow-up. Record with `Show-ReviewFacts`: no modelling or hygiene finding on the vendor pin and one bought-parts line (SC-001); no vault or local-modification question and no re-ask (SC-004); the grouped list and no pass amplified (SC-003 on the seat); every source label and basis line (SC-006); the total input tokens and every answer-turn round's calls (SC-008, at most 400,000 in total); lever 14's state
+- [ ] T144 [W] Standards on the custom plate's open drawing: the revision table and the bill of materials read from the sheet's own view, no "no revision table" warning (SC-009); then the export-control check on one drawing known to carry the phrase and one known not to, before its result on real title blocks is trusted (research R2.37's risk)
+
+---
+
+## Dependencies & Execution Order
+
+### Phase dependencies
+
+- **Setup** (T001): done.
+- **Foundational** (T002-T012): blocks every story; lanes P, S and D run their foundational tasks in parallel.
+- **US1** (T013-T042): needs T002-T003, T004-T009, T012. MVP.
+- **US2** (T043-T058): needs Foundational; its acceptance fixture reads US1's classification (T047's sitting case), so T047's sitting case lands after T024 and T028; everything else in US2 is independent of US1.
+- **US3** (T059-T071): needs T008-T009 (the owner field) and T006-T007; independent of US1 and US2.
+- **US4** (T072-T095): needs US1's classifier (T018, T022) for the states and T004-T005, T010-T011; T087 needs T085's predicate; T089 needs T081.
+- **US5** (T096-T115): needs T006-T007; T101 after T048 (the grouped rows carry the source); T104 after T054.
+- **US6** (T116-T125): needs T008-T009; T125 needs T124.
+- **US7** (T126-T134): independent of every other story.
+- **Test debt** (T135-T137): independent.
+- **Polish** (T138-T140): after the stories it describes.
+- **Workstation** (T141-T144): after US1 to US4 and US7 are on main and built on the seat.
+
+### Task-level dependencies
+
+- T003 before T014 (the profile's patterns use `name_matches`) and T018.
+- T005 before T032 and T079 (one question shape).
+- T007 before T032, T038, T077, T097.
+- T009 before T060, T062, T087, T117 (code-owned items).
+- T011 before T079, T081, T091.
+- T018 before T020-T030, T032, T038, T079.
+- T022 before T031-T032 and T038.
+- T044 before T048 and T055; T046 before T048 and T050 (the words file and the `Words` model in one commit).
+- T064 before T087 (row 6 sits before rows 7 and 8).
+- T073 in one commit with the Python protocol constant.
+- Each replay gate (T042, T058, T069, T095, T115, T124, T134) after its story's lanes merge, on `main`, in merge order; each regeneration a commit of its own.
+- T071 after T069.
+- T125 after T124.
+
+### Parallel opportunities, by lane
+
+| Lane | Tasks | Runs beside |
+|---|---|---|
+| P (profile, roles) [py] | T002-T003, T012-T020, T023-T030 | S, R, D, W, X, T, E, U |
+| R (report) [py] | T033-T034, T041, T043-T052, T057, T092-T094, T100-T101, T105-T106, T111-T112 | every lane but its own |
+| S (session, tools, runner) [py] | T004-T009, T021-T022, T031-T032, T037-T038, T059-T068, T076-T077, T086-T089, T096-T097, T102, T107-T108, T113, T116-T119 | every lane but its own; `agent/runner.py` edits in task order |
+| D (drawings) [py] [C#] | T010-T011, T072-T075, T078-T085, T090-T091, T098-T099 | P after T018; S; R; W; X; T; E; U |
+| W (pages) [page] | T035-T036, T039-T040, T053-T055, T103-T104, T109-T110, T114 | backend lanes, after the fields it renders exist |
+| X (extractor readings) [C#] [py] | T070-T071, T126-T129 | every lane |
+| T (tree reading) [py] | T130-T133 | every lane |
+| E (efficiency) [py] | T120-T123, T125 | every lane |
+| U (test debt) [C#] | T135-T137 | every lane |
+| G (replay gate) [py] | T042, T056, T058, T069, T095, T115, T124, T134 | nothing: serialized on `main` |
+
+### Files shared with other features' likely changes
+
+`Bridge/BridgeDispatcher.cs` (feature 004's lane D edits the remodel half; T073 touches only `PingResult`, `Ping()` and `IConfirmedDrawingSource`, in one commit); `remodel/nodes.py` (T131 keeps its public names); `docs/workstation-test-plan-2026-09-23.md` and `test_workstation_test_plan.py` (T057, T094, T138; feature 004's seat items live there too); the replay and pane fixtures (lane G only); `config/standards.example.yaml` and feature 006's contract block (T014).
+
+## Requirement coverage
+
+| Requirement | Tasks |
+|---|---|
+| FR-001 to FR-003 | T002-T003, T013-T014 |
+| FR-004 | T015-T016, T141 |
+| FR-005 to FR-008 | T017-T022 |
+| FR-009 | T023-T024, T027-T030, T033-T034 |
+| FR-010 | T025-T028 |
+| FR-011 | T031-T032, T035-T036 |
+| FR-012 | T037-T040 |
+| FR-013, FR-014 | T023-T024, T027-T028 |
+| FR-015 to FR-018, FR-022 | T045-T048, T053-T054 |
+| FR-019, FR-020 | T043-T044, T055 |
+| FR-021 | T051-T052 |
+| FR-023 | T049-T050 |
+| FR-024 to FR-026 | T059-T062, T067-T068 |
+| FR-027 to FR-029 | T063-T064 |
+| FR-030 | T065-T066 |
+| FR-031 | T070-T071 |
+| FR-032 | T063-T064, T067-T068 |
+| FR-033 | T072-T077 |
+| FR-034 to FR-038 | T078-T083, T092-T093 |
+| FR-039 | T084-T087 |
+| FR-040 | T088-T091 |
+| FR-041 | T006-T007, T096-T104 |
+| FR-042 | T105-T110 |
+| FR-043, FR-044 | T111-T114 |
+| FR-045 | T116-T117 |
+| FR-046 | T118-T119 |
+| FR-047 | T120-T125 |
+| FR-048 | T042, T058, T069, T095, T115, T124, T134 |
+| FR-049 | T126-T127, T144 |
+| FR-050 | T128-T129 |
+| FR-051 | T130-T133 |
+| FR-052 | T135-T137 |
+| FR-053 | T006-T007, T108 |
+| FR-054 | every task (docstrings unchanged); the replay gates |
+| FR-055 | T012, T013-T014, every fixture task |
+| SC-001, SC-004, SC-005, SC-006, SC-008 | T143 |
+| SC-002 | T017, T041, T047 |
+| SC-003 | T043, T047 |
+| SC-007 | the replay gates |
+| SC-009 | T144 |
+| SC-010 | T132 |
+
+## Notes
+
+- A task's "Cause" is the analysts' file and line at `9edc36c` (equal to `111bc82` outside one test file); re-verify before editing.
+- "Amends NNN" means the task writes that contract's amendment text in the same commit as the code; the one-line note pointing here is already in place (T001).
+- No task reads a run folder, a real profile or the sitting's debrief; the sitting-shaped fixture (T012) is fictional and generated.
+- The remodeler items of 2026-09-26 are feature 004's and are not tasks here.
