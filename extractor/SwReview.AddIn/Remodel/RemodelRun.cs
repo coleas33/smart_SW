@@ -65,6 +65,7 @@ public sealed class RemodelRun
 {
     private int _stop;
     private int _planLostNotice;
+    private bool _closedByPlanAgain;
 
     internal RemodelRun(
         string runDirectory, string copyPath, DateTime at, string? toolServiceAttachment)
@@ -100,6 +101,18 @@ public sealed class RemodelRun
 
     /// <summary>Whether the engineer has discarded this run's copy.</summary>
     public bool CopyDiscarded { get; internal set; }
+
+    /// <summary>
+    /// 004 T173: whether this plan was closed because the engineer planned again while it waited
+    /// for Start. A plan marked so is lost - its session is over - whatever attachment is
+    /// listening, and a Start naming it is `SessionLost` with <c>RemodelHost.PlanClosedMessage</c>.
+    /// Set once, by the host that planned again, and never cleared: the session it names is gone.
+    /// Volatile because it is read on the tool service's refresh thread as well as the message
+    /// thread that sets it.
+    /// </summary>
+    public bool ClosedByPlanAgain => Volatile.Read(ref _closedByPlanAgain);
+
+    internal void MarkClosedByPlanAgain() => Volatile.Write(ref _closedByPlanAgain, true);
 
     /// <summary>
     /// Whether a stop has been asked for, by `remodel.stop` or by the copy going away
