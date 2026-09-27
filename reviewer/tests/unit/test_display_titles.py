@@ -344,17 +344,20 @@ def test_the_review_ranking_without_a_package_is_whole_but_names_nothing(
     assert row.title == first_sentence(LONG)
 
 
-def test_report_md_shows_the_display_title_in_the_heading_and_in_start_here(
+def test_report_md_shows_the_display_title_in_the_heading_and_in_the_index(
     recorded_context: tuple[ToolContext, list[tuple[str, dict[str, Any]]]],
 ) -> None:
+    """Since feature 013 the section above Findings is "Findings by type", whose every row names
+    its finding by the display title after its reason (013 `contracts/grouped-list.md` 6)."""
     context, _ = recorded_context
     session, package = context.require_session(), context.ir
     shown = display_title(session.findings[0], component_names(package))
 
     report = render_report(session, package, ranking=rank(session))
+    index = report.split("## Findings by type\n", 1)[1].split("\n## ", 1)[0]
 
     assert f"#### F-001: {shown}" in report
-    assert f"({shown})" in report, "the needs-judgement row names what the judgement is about"
+    assert f"- **F-001** needs your judgement - {shown}" in index.splitlines()
     assert title_from(LONG) not in report
 
 

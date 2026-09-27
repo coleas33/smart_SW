@@ -4,11 +4,11 @@
 report is plain Markdown - headings and pipe tables, no HTML (constitution Principle VI):
 an engineer must be able to reproduce any finding from what is printed here.
 
-Section order: title, manifest discrepancies, summary counts, start here (only when the
-caller supplies a ranking), findings grouped by severity (high to info), contacts (only
-when the session holds one, feature 010), evidence requests, coverage (all five buckets,
-always), timing, tokens (only when the session carries usage), investigation trace
-(collapsed past 50 steps).
+Section order: title, manifest discrepancies, summary counts, findings by type (only when
+the caller supplies a ranking; "Start here" before feature 013), findings grouped by severity
+(high to info), contacts (only when the session holds one, feature 010), evidence requests,
+coverage (all five buckets, always), timing, tokens (only when the session carries usage),
+investigation trace (collapsed past 50 steps).
 """
 
 from __future__ import annotations
@@ -33,8 +33,9 @@ from swreview.report.attention import (
     coverage_line,
     family_of,
     family_title,
-    start_here_lines,
+    load_policy,
 )
+from swreview.report.finding_groups import GoalLine, GroupRow, findings_by_type, goal_state_text
 from swreview.report.names import component_names
 from swreview.report.session import (
     CoverageItem,
@@ -42,8 +43,9 @@ from swreview.report.session import (
     ReviewSession,
     SessionUsage,
 )
+from swreview.report.summary import Words, load_words
 from swreview.report.text import markdown_text
-from swreview.report.titles import display_title, with_display_titles
+from swreview.report.titles import display_title
 from swreview.report.unexamined import not_examined
 
 _SEVERITY_ORDER = ("high", "medium", "low", "info")
@@ -79,13 +81,12 @@ def render_report(
     produced before "Start here" existed, byte for byte.
 
     Every finding title here is the one a person reads (`report/titles.display_title`,
-    feature 009 decision 2A): whole, with the parts named from `package`. The ranking's rows
-    are titled the same way here, so every caller passes `rank(session)` as it always did.
+    feature 009 decision 2A): whole, with the parts named from `package`. The grouped index's
+    rows are titled the same way (`report/finding_groups.findings_by_type`), so every caller
+    passes `rank(session)` as it always did.
     """
     components_by_id = _components_by_id(package)
     names = component_names(package) if package is not None else {}
-    if ranking is not None:
-        ranking = with_display_titles(ranking, session.findings, names)
     lines: list[str] = []
 
     lines.extend(_render_title(session))
@@ -95,7 +96,7 @@ def render_report(
     lines.extend(_render_summary(session, package))
     lines.append("")
     if ranking is not None:
-        lines.extend(_render_start_here(ranking))
+        lines.extend(_render_findings_by_type(session, package, ranking))
         lines.append("")
     explanations = (
         {
@@ -245,29 +246,62 @@ def _render_summary(session: ReviewSession, package: EvidencePackage | None) -> 
     return lines
 
 
-# --- start here ------------------------------------------------------------------------
+# --- findings by type (feature 013) ------------------------------------------------------
 
 
-def _render_start_here(ranking: Ranking) -> list[str]:
-    """The ranking, immediately above Findings (contracts/attention.md section 3).
+def _render_findings_by_type(
+    session: ReviewSession, package: EvidencePackage | None, ranking: Ranking
+) -> list[str]:
+    """Every finding by type, immediately above Findings (013 `contracts/grouped-list.md` 6).
 
-    Amplify, never filter: this section names at most `ranking.top_n` rows, and every
-    finding still renders in full below in its severity section. The rows, the
-    not-amplified line and the coverage block are `attention.py`'s own words - this
-    function adds the heading, the blank lines between the three blocks and the footer,
-    which names the version the ranking was computed under rather than a literal, so a
-    report rendered from a future policy says which one ranked it.
+    The same groups, rows and order as the Review tab, built by the one function the pane's
+    routes call (`findings_by_type`), so the report and the pane cannot disagree (FR-021): each
+    group's heading and count line, its rows - one line each, a folded row's members and a
+    persisted explanation under it - and its goal lines; then the "Checked, no issue" fold.
+    Every row is listed, so there is no not-amplified line. The coverage block is
+    `attention.coverage_line`'s and the footer names the version the ranking was computed under
+    rather than a literal, as "Start here" did before feature 013. The gate brief and
+    `swreview attention` keep their five-row Start here (`attention.start_here_lines`).
     """
+    words = load_words()
+    view = findings_by_type(session, package, words, load_policy())
+    lines = ["## Findings by type", ""]
+    for group in view.groups:
+        lines.extend(_group_lines(group.title, group.text, group.rows, words))
+        if group.goals:
+            lines.append("Goals: " + "; ".join(_goal_phrase(line) for line in group.goals))
+        lines.append("")
+    if view.checked is not None:
+        lines.extend(_group_lines(view.checked.title, view.checked.text, view.checked.rows, words))
+        lines.append("")
     return [
-        "## Start here",
-        "",
-        *start_here_lines(ranking),
-        "",
+        *lines,
         *coverage_line(ranking),
         "",
         f"Ranked by {ranking.policy_version}; the rule is in "
         "reviewer/src/swreview/report/attention.py.",
     ]
+
+
+def _group_lines(title: str, text: str, rows: list[GroupRow], words: Words) -> list[str]:
+    """`### {title}: {text}`, then one line per row: its id, its reason, its title, and the
+    backend's fold count and reach after it, each joined by the separator."""
+    lines = [f"### {title}: {text}"]
+    for row in rows:
+        tail = "".join(
+            f"{words.separator}{word}" for word in (row.tail_text, row.reach_text) if word
+        )
+        lines.append(f"- **{row.finding_id}** {row.reason} - {row.title}{tail}")
+        if len(row.member_finding_ids) > 1:
+            lines.append(f"   - Members: {', '.join(row.member_finding_ids)}")
+        if row.explanation is not None:
+            lines.append(f"   - Explanation: {markdown_text(row.explanation)}")
+    return lines
+
+
+def _goal_phrase(line: GoalLine) -> str:
+    """`Fits and stacks - not reached (evidence missing)`: a goal line in one phrase."""
+    return f"{line.title} - {goal_state_text(line)}"
 
 
 # --- findings ------------------------------------------------------------------------

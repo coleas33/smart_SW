@@ -23,8 +23,9 @@ promises is held in its text:
   under "Not in this sitting" has a row, and it ships blank;
 - the four earlier seat tasks the owner added (decision 15A: 006 T101 and T102, 007 T059 and
   T060) each have a step where their documents are already open and a row, and are gone from
-  the table of earlier tasks not asked; `Show-StartHere` prints a committed report's Start here
-  rows in their order, the timing line passes `swreview timing`'s four inputs, and the headline
+  the table of earlier tasks not asked; `Show-FindingsByType` prints a committed report's
+  Findings by type, group by group, the timing line passes `swreview timing`'s four inputs, and
+  the headline
   time is the steps' sum;
 - feature 004's three items the owner added (decision 18A, 2026-09-25) do the same: the
   FeatureWorks record (004 T164, dated in 004's `tasks.md`) at step 1.7 is read only and prints
@@ -50,9 +51,11 @@ from typer.testing import CliRunner
 
 from swreview.cli import app
 from swreview.ir.loader import load_package
-from swreview.report.attention import rank
+from swreview.report.attention import load_policy
+from swreview.report.finding_groups import findings_by_type
 from swreview.report.rerender import rerender_run_folder
 from swreview.report.session import load_session
+from swreview.report.summary import load_words
 from swreview.tools.checks_interference import groups_of
 from tests.support.seat_tasks import (
     PACKAGES,
@@ -157,7 +160,7 @@ QUOTED: tuple[tuple[str, str], ...] = (
     # The summary's words.
     ("Same-name drawing found but not open: ", "reviewer/src/swreview/report/review_words_v1.yaml"),
     ("Drawing read: ", "reviewer/src/swreview/report/review_words_v1.yaml"),
-    ("need your decision", "reviewer/src/swreview/report/review_words_v1.yaml"),
+    ("Not reached: ", "reviewer/src/swreview/report/review_words_v1.yaml"),
     ("not reached", "reviewer/src/swreview/report/review_words_v1.yaml"),
     ("size-for-size contacts", "reviewer/src/swreview/report/review_words_v1.yaml"),
     ("Sending resumes the review once.", "reviewer/src/swreview/report/review_words_v1.yaml"),
@@ -247,9 +250,11 @@ QUOTED: tuple[tuple[str, str], ...] = (
     ("Visible=", "extractor/SwReview.Extractor.Console/Program.cs"),
     ("GetVisibility(1, null)=", "extractor/SwReview.Extractor.Console/Program.cs"),
     ("suppression=", "extractor/SwReview.Extractor.Console/Program.cs"),
-    # The Start here rows and the timing, which steps 4.1, 4.5, 5.1 and 5.2 read (007).
+    # The check tabs' Start here rows, the report's Findings by type and the timing, which
+    # steps 4.1, 4.5, 5.1 and 5.2 read (007; 013 T057).
     ("Start here", "extractor/SwReview.AddIn/web/shared/attention.js"),
-    ("Show all", "extractor/SwReview.AddIn/Review/ReviewPage/render.js"),
+    ("Findings by type", "reviewer/src/swreview/report/markdown.py"),
+    ("Checked, no issue", "reviewer/src/swreview/report/review_words_v1.yaml"),
     ("Nothing to start with", "reviewer/src/swreview/report/attention.py"),
     ("net saved: ", "reviewer/src/swreview/cli.py"),
     ("report: ", "reviewer/src/swreview/cli.py"),
@@ -1436,46 +1441,77 @@ def run_powershell(script: str, folder: Path) -> list[str]:
     return completed.stdout.splitlines()
 
 
-def show_start_here(plan: str, run: Path, folder: Path) -> list[str]:
-    """What the plan's `Show-StartHere` prints for the run folder `run`."""
+def show_findings_by_type(plan: str, run: Path, folder: Path) -> list[str]:
+    """What the plan's `Show-FindingsByType` prints for the run folder `run`."""
     quoted = str(run).replace("'", "''")
-    return run_powershell(f"{plan_function(plan, 'Show-StartHere')}\nShow-StartHere '{quoted}'\n",
-                          folder)
+    helper = plan_function(plan, "Show-FindingsByType")
+    return run_powershell(f"{helper}\nShow-FindingsByType '{quoted}'\n", folder)
+
+
+def expected_groups(run: Path) -> list[str]:
+    """One line per group of the folder's findings by type, as the report lists them: the
+    group's title and its rows' ids, or `no row`, the checked fold last (013 T057)."""
+    session = load_session(run / "session.json")
+    package = load_package(run).package if (run / "package.json").is_file() else None
+    view = findings_by_type(session, package, load_words(), load_policy())
+    shapes = [(group.title, group.rows) for group in view.groups]
+    if view.checked is not None:
+        shapes.append((view.checked.title, view.checked.rows))
+    return [
+        f"{title}: " + (", ".join(row.finding_id for row in rows) if rows else "no row")
+        for title, rows in shapes
+    ]
 
 
 @pytest.mark.skipif(shutil.which("powershell") is None, reason="Windows PowerShell is not on PATH")
 @pytest.mark.parametrize("fixture", ["review-folder", "check-folder"])
-def test_show_start_here_prints_the_reports_rows_in_its_order(
+def test_show_findings_by_type_prints_each_groups_rows_in_the_reports_order(
     plan: str, tmp_path: Path, fixture: str
 ) -> None:
-    """007 T059 compares the pane's Start here rows with `report.md`'s: the helper prints the
-    finding ids the report's own section lists, in its order and no more (the first `top_n` of
-    the ranking), for a review's folder and a check folder alike."""
+    """Feature 013 T057 (007 T059 as 013 changed it): the pane's grouped list and the check
+    tabs' Start here rows are compared with `report.md`'s Findings by type, so the helper
+    prints each group of that section and its rows' ids in its order, for a review's folder
+    and a check folder alike."""
     run = tmp_path / fixture
     shutil.copytree(FIXTURES / "attention" / fixture, run)
     rerender_run_folder(run)
-    ranking = rank(load_session(run / "session.json"))
-    expected = [row.finding_id for row in ranking.rows[: ranking.top_n]]
 
-    lines = show_start_here(plan, run, tmp_path)
+    lines = show_findings_by_type(plan, run, tmp_path)
 
-    assert expected
-    assert lines == ["Start here in report.md: " + ", ".join(expected)]
-    assert plan.index("function Show-StartHere ") < plan.index("Set-Location $R")
+    assert lines == expected_groups(run)
+    assert any(line.split(": ", 1)[1] != "no row" for line in lines)
+    assert plan.index("function Show-FindingsByType ") < plan.index("Set-Location $R")
 
 
 @pytest.mark.skipif(shutil.which("powershell") is None, reason="Windows PowerShell is not on PATH")
-def test_show_start_here_prints_the_nothing_to_start_with_line(plan: str, tmp_path: Path) -> None:
+def test_show_findings_by_type_prints_no_row_for_every_group_of_an_empty_review(
+    plan: str, tmp_path: Path
+) -> None:
     run = tmp_path / "run"
     shutil.copytree(FIXTURES / "attention" / "review-folder", run)
     session = json.loads((run / "session.json").read_text(encoding="utf-8"))
     session["findings"] = []
     (run / "session.json").write_text(json.dumps(session), encoding="utf-8")
     rerender_run_folder(run)
-    [nothing] = [line for line in (run / "report.md").read_text(encoding="utf-8").splitlines()
-                 if line.startswith("Nothing to start with")]
 
-    assert show_start_here(plan, run, tmp_path) == [nothing]
+    lines = show_findings_by_type(plan, run, tmp_path)
+
+    assert lines == [f"{group.title}: no row" for group in load_words().finding_groups]
+
+
+@pytest.mark.skipif(shutil.which("powershell") is None, reason="Windows PowerShell is not on PATH")
+def test_show_findings_by_type_prints_the_checked_fold_last(plan: str, tmp_path: Path) -> None:
+    run = tmp_path / "run"
+    shutil.copytree(FIXTURES / "attention" / "review-folder", run)
+    session = json.loads((run / "session.json").read_text(encoding="utf-8"))
+    session["findings"][0]["status"] = "checked_within_scope"
+    (run / "session.json").write_text(json.dumps(session), encoding="utf-8")
+    rerender_run_folder(run)
+
+    lines = show_findings_by_type(plan, run, tmp_path)
+
+    assert lines == expected_groups(run)
+    assert lines[-1] == f"Checked, no issue: {session['findings'][0]['id']}"
 
 
 TIME = re.compile(r"(?:(\d+) h)?\s*(?:(\d+) min)?")

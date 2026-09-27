@@ -1,43 +1,49 @@
-"""The "Start here" section of `report.md` (T025, contracts/attention.md section 3).
+"""The "Findings by type" section of `report.md` (feature 013 T051; "Start here" before it).
 
-`render_report(session, package=None, *, ranking=None)` grew one keyword-only parameter and
-one section. Four rules decide every test here.
+`render_report(session, package=None, *, ranking=None)` renders one section above Findings when
+it is given a ranking. Feature 007 made that section "Start here", the first five rows; feature
+013 made it "Findings by type" (its `contracts/grouped-list.md` section 6): every finding in one
+row of one group or of the "Checked, no issue" fold, the same groups, rows and order as the
+Review tab. Five rules decide every test here.
 
 **With no ranking the report is what it was.** The parameter defaults to `None` and the
-section is guarded exactly as `## Tokens` is guarded on `session.usage`
-(`report/markdown.py:74-76`), so a caller that has not been wired yet - six of the eight,
-until T032 - renders byte for byte what it rendered before. Two tests pin that from
-different directions: an equality against the un-ranked call on two different sessions, and
-`test_report_tokens.py`'s one golden of this renderer, which is left untouched (research
-R2.6).
+section is guarded exactly as `## Tokens` is guarded on `session.usage`, so a caller that
+renders without one gets byte for byte what it got before either section existed. Two tests pin
+that from different directions: an equality against the un-ranked call on two different
+sessions, and `test_report_tokens.py`'s one golden of this renderer, left untouched (research
+R2.6 of 007).
 
-**Amplify, never filter.** The section is an index, not a selection: every finding it does
-not name still renders in full below, in its severity section, in recording order. The test
-that matters most here is the one that asserts every finding id appears under `## Findings`
-whatever the ranking said about it.
+**Every finding is listed, and still renders in full below.** The index names every finding
+once - as a row, or as a folded row's member - and every finding still renders under
+`## Findings`, in its severity section, whatever the index said about it.
 
-**The section is rendered, never re-derived.** `attention.start_here_lines` and
-`attention.coverage_line` produce the rows, the not-amplified line and the coverage block;
-this module owns the heading, the blank lines and the footer only, and the footer names
-`ranking.policy_version` rather than a literal. A test that restated a reason sentence here
-would pin the same words in two files.
+**The section is rendered from the grouped view, never re-derived.** The groups, rows, counts
+and words are `report/finding_groups.findings_by_type`'s, the one function the pane's routes
+call; the coverage block is `attention.coverage_line`'s; this module owns the heading, the line
+shapes, the blank lines and the footer, and the footer names `ranking.policy_version` rather than
+a literal.
 
-**No percent sign anywhere.** The Standards page's body scan forbids one (research R2.14),
+**The gate brief keeps its Start here, and the two agree.** The model-facing five rows stay in
+the gate brief; the parity rule that replaced 007's anti-drift test (each of the brief's ids in
+this index, in order within its group) is `test_prerun_digest.py`'s.
+
+**No percent sign anywhere.** The Standards page's body scan forbids one (research R2.14 of 007),
 so the whole rendered report is scanned rather than the section alone.
 
-The new golden `test_the_ranked_report_matches_the_golden.md` pins the ranked shape of the
-2026-09-18 review fixture rendered with its package, which is the only place the section's
-exact bytes are written down.
+The golden `test_the_ranked_report_matches_the_golden.md` pins the ranked shape of the 2026-09-18
+review fixture rendered with its package, which is the only place the section's exact bytes are
+written down.
 
-Section 8 is the enumeration (T031, FR-019). A "Start here" section that one render site
-writes and the next erases is worse than none, so the production render sites are counted
-rather than trusted: the source tree is parsed and every call of *this* renderer has to be
-one of the seven named below and has to pass a ranking.
+Section 8 is the enumeration (007 T031, FR-019). A section that one render site writes and the
+next erases is worse than none, so the production render sites are counted rather than trusted:
+the source tree is parsed and every call of *this* renderer has to be one of the seven named
+below and has to pass a ranking.
 """
 
 from __future__ import annotations
 
 import ast
+import re
 from pathlib import Path
 
 import pytest
@@ -45,10 +51,12 @@ from pytest_regressions.file_regression import FileRegressionFixture
 
 import swreview
 from swreview.ir.loader import load_package
-from swreview.report.attention import TOP_N, Ranking, coverage_line, rank, start_here_lines
+from swreview.report.attention import TOP_N, Ranking, coverage_line, load_policy, rank
+from swreview.report.finding_groups import findings_by_type
 from swreview.report.markdown import render_report
 from swreview.report.session import ReviewSession, load_session
-from tests.support.attention import REVIEW_FOLDER, REVIEW_SESSION_FILE
+from swreview.report.summary import load_words
+from tests.support.attention import PIN_ONE, PIN_TWO, REVIEW_FOLDER, REVIEW_SESSION_FILE
 from tests.unit.test_attention import REVIEW_ORDER, disposition, session_of, spec
 from tests.unit.test_report import PACKAGE as REPORT_PACKAGE
 from tests.unit.test_report import build_session
@@ -58,12 +66,17 @@ TOKENS_GOLDEN = (
     / "test_report_tokens"
     / "test_a_session_without_usage_matches_the_golden.md"
 )
-"""The one golden of this renderer that existed before this feature (research R2.6)."""
+"""The one golden of this renderer that existed before feature 007 (research R2.6)."""
+
+HEADING = "## Findings by type"
 
 FOOTER = "Ranked by attention_policy_v1; the rule is in reviewer/src/swreview/report/attention.py."
 """What the footer reads on every fixture here, all of which rank under `attention_policy_v1`.
 The renderer builds it from `ranking.policy_version`; `test_the_footer_names_the_policy_the
 _ranking_carries` is what proves it is not this literal."""
+
+ROW = re.compile(r"^- \*\*(F-\d+)\*\* ")
+MEMBERS = re.compile(r"^   - Members: (.+)$")
 
 
 @pytest.fixture(scope="module")
@@ -88,14 +101,22 @@ def section_of(text: str, heading: str) -> list[str]:
     return lines[start:]
 
 
-def start_here_of(session: ReviewSession, package, ranking: Ranking | None = None) -> list[str]:
-    """The "Start here" section of one rendered report, sliced out of the whole thing.
-
-    The section is always read back out of the full report rather than from
-    `_render_start_here`, so what these tests assert is what an engineer opens.
-    """
+def index_of(session: ReviewSession, package, ranking: Ranking | None = None) -> list[str]:
+    """The "Findings by type" section of one rendered report, sliced out of the whole thing,
+    so what these tests assert is what an engineer opens."""
     ranking = ranking if ranking is not None else rank(session)
-    return section_of(render_report(session, package, ranking=ranking), "## Start here")
+    return section_of(render_report(session, package, ranking=ranking), HEADING)
+
+
+def listed_ids(lines: list[str]) -> list[str]:
+    """Every finding id the index names, a row's id then its other members, in order."""
+    ids: list[str] = []
+    for line in lines:
+        if row := ROW.match(line):
+            ids.append(row.group(1))
+        elif members := MEMBERS.match(line):
+            ids.extend(one for one in members.group(1).split(", ") if one not in ids)
+    return ids
 
 
 # --- 1. with no ranking, the report is byte-identical to today -------------------------
@@ -107,7 +128,7 @@ def test_passing_ranking_none_renders_the_review_fixture_byte_for_byte(
     with_keyword = render_report(review_session, review_package, ranking=None)
 
     assert with_keyword == render_report(review_session, review_package)
-    assert "## Start here" not in with_keyword
+    assert HEADING not in with_keyword
 
 
 def test_passing_ranking_none_renders_the_report_fixture_byte_for_byte() -> None:
@@ -119,16 +140,12 @@ def test_passing_ranking_none_renders_the_report_fixture_byte_for_byte() -> None
 
     assert with_keyword == render_report(session, REPORT_PACKAGE)
     assert with_keyword == render_report(session, package=REPORT_PACKAGE)
-    assert "Start here" not in with_keyword
+    assert "Findings by type" not in with_keyword
 
 
 def test_the_tokens_golden_of_this_renderer_still_passes() -> None:
-    """The one golden that covers `render_report` (research R2.6), read from here so the
-    byte-identity claim fails in this module rather than only in its own.
-
-    The comparison is line by line: the checked-in file's line endings are the working
-    tree's business (`.gitattributes`), and what this asserts is the report's text.
-    """
+    """The one golden that covers `render_report` with no ranking (research R2.6), read from
+    here so the byte-identity claim fails in this module rather than only in its own."""
     from tests.unit.test_report_tokens import PACKAGE as TOKENS_PACKAGE
     from tests.unit.test_report_tokens import make_session
 
@@ -146,50 +163,49 @@ def test_the_section_sits_between_summary_and_findings(
     review_session: ReviewSession, review_package
 ) -> None:
     text = render_report(review_session, review_package, ranking=rank(review_session))
+    lines = text.splitlines()
 
-    assert text.index("## Summary") < text.index("## Start here")
-    assert text.index("## Start here") < text.index("## Findings")
+    assert lines.index("## Summary") < lines.index(HEADING) < lines.index("## Findings")
 
 
-def test_the_section_is_rendered_exactly_once(
+def test_the_section_is_rendered_exactly_once_and_start_here_is_gone(
     review_session: ReviewSession, review_package
 ) -> None:
     text = render_report(review_session, review_package, ranking=rank(review_session))
 
-    assert text.count("## Start here") == 1
+    assert text.count(HEADING) == 1
     assert text.count(FOOTER) == 1
+    assert "## Start here" not in text
+    assert "Not amplified:" not in text, "every row is listed, so nothing is left unamplified"
 
 
 def test_a_session_rendered_with_no_package_still_carries_the_section(
     review_session: ReviewSession,
 ) -> None:
-    """A folder holding no package renders with none (`render_folder_report`); the section
-    does not read one."""
+    """A folder holding no package renders with none (`render_folder_report`): the rows are
+    then titled with the recorded ids, and the same findings are listed in the same order."""
     text = render_report(review_session, ranking=rank(review_session))
 
     assert "not supplied" in text.lower()
-    assert section_of(text, "## Start here") == start_here_of(
-        review_session, load_package(REVIEW_FOLDER).package
+    assert listed_ids(section_of(text, HEADING)) == listed_ids(
+        index_of(review_session, load_package(REVIEW_FOLDER).package)
     )
 
 
 # --- 3. what the section says -------------------------------------------------------------
 
 
-def test_the_section_is_the_two_renderers_verbatim_under_a_heading_and_a_footer(
+def test_the_section_is_the_grouped_view_then_the_coverage_block_and_the_footer(
     review_session: ReviewSession, review_package
 ) -> None:
-    """DRY: the rows, the not-amplified line and the coverage block are `attention.py`'s
-    words, and this renderer adds a heading, three blank lines and one footer."""
     ranking = rank(review_session)
+    view = findings_by_type(review_session, review_package, load_words(), load_policy())
 
-    lines = start_here_of(review_session, review_package, ranking)
+    lines = index_of(review_session, review_package, ranking)
 
-    assert lines == [
-        "## Start here",
-        "",
-        *start_here_lines(ranking),
-        "",
+    headings = [line for line in lines if line.startswith("### ")]
+    assert headings == [f"### {group.title}: {group.text}" for group in view.groups]
+    assert lines[-(len(coverage_line(ranking)) + 3) :] == [
         *coverage_line(ranking),
         "",
         FOOTER,
@@ -197,36 +213,94 @@ def test_the_section_is_the_two_renderers_verbatim_under_a_heading_and_a_footer(
     ]
 
 
-def test_the_section_lists_exactly_top_n_rows_in_the_ranked_order(
+def test_every_finding_is_listed_once(review_session: ReviewSession, review_package) -> None:
+    ids = listed_ids(index_of(review_session, review_package))
+
+    assert sorted(ids) == sorted(finding.id for finding in review_session.findings)
+    assert len(ids) == len(set(ids))
+
+
+def test_each_row_line_names_its_finding_its_reason_and_its_title(
     review_session: ReviewSession, review_package
 ) -> None:
-    ranking = rank(review_session)
-    assert len(ranking.rows) > TOP_N, "the fixture must have rows the section leaves out"
+    view = findings_by_type(review_session, review_package, load_words(), load_policy())
+    rows = [row for group in view.groups for row in group.rows]
 
-    lines = start_here_of(review_session, review_package, ranking)
-    numbered = [line for line in lines if line[:1].isdigit()]
+    lines = [line for line in index_of(review_session, review_package) if ROW.match(line)]
 
-    assert len(numbered) == TOP_N
-    for number, (line, row) in enumerate(zip(numbered, ranking.rows, strict=False), start=1):
-        assert line.startswith(f"{number}. **{row.finding_id}** `{row.check}` - ")
-        assert row.reason in line
+    assert lines == [f"- **{row.finding_id}** {row.reason} - {row.title}" for row in rows]
 
 
-def test_the_not_amplified_line_and_the_coverage_block_are_present(
+def test_the_rows_keep_the_rankings_order_within_their_group(
     review_session: ReviewSession, review_package
 ) -> None:
-    lines = start_here_of(review_session, review_package)
+    """The index is the ranking's order cut into groups: within each group, its ids in rank
+    order (REVIEW_ORDER is the order the owner agreed on 2026-09-19)."""
+    lines = index_of(review_session, review_package)
+    groups: dict[str, list[str]] = {}
+    current = ""
+    for line in lines:
+        if line.startswith("### "):
+            current = line
+            groups[current] = []
+        elif row := ROW.match(line):
+            groups[current].append(row.group(1))
 
-    assert "Not amplified: 3 findings (0 checked within scope, 0 already decided, " in "\n".join(
-        lines
+    for ids in groups.values():
+        assert ids == [one for one in REVIEW_ORDER if one in ids]
+
+
+def test_a_folded_row_names_its_members_its_count_and_its_reach() -> None:
+    specs = [
+        spec("rms.folders.present", component_ids=(PIN_ONE,)),
+        spec("rms.folders.present", component_ids=(PIN_TWO,)),
+    ]
+    session = session_of("report-folded", specs)
+
+    lines = index_of(session, None)
+
+    [row] = [line for line in lines if ROW.match(line)]
+    assert row.endswith(" · ×2 · reaches 2 components")
+    assert "   - Members: F-001, F-002" in lines
+
+
+def test_each_group_lists_its_goal_lines_after_its_rows(
+    review_session: ReviewSession, review_package
+) -> None:
+    lines = index_of(review_session, review_package)
+    start = lines.index(next(line for line in lines if line.startswith("### Interference")))
+    block = lines[start : lines.index("", start)]
+
+    assert block[-1].startswith("Goals: Interference - issues found; Hole alignment - ")
+    assert "; Fits and stacks - " in block[-1]
+
+
+def test_a_pass_is_listed_in_the_checked_fold_last() -> None:
+    specs = [
+        spec("interference.static"),
+        spec("rms.folders.present", status="checked_within_scope"),
+    ]
+    session = session_of("report-pass", specs)
+
+    lines = index_of(session, None)
+
+    headings = [line for line in lines if line.startswith("### ")]
+    assert headings[-1] == "### Checked, no issue: 1 finding"
+    fold = lines[lines.index(headings[-1]) :]
+    assert fold[1] == (
+        "- **F-002** checked within scope - "
+        + session.findings[1].title
     )
-    assert (
-        "What this run could not reach: 39 unresolved, 11 skipped, 0 failed, 7 out of scope."
-        in lines
-    )
-    assert sum(1 for line in lines if line.startswith("- ")) == 6, (
-        "five close-out bullets and the tail bullet"
-    )
+
+
+def test_a_persisted_explanation_is_printed_under_its_row() -> None:
+    session = session_of("report-explained", [spec("interference.static")])
+    session.finding_explanations = {"F-001": "why the overlap matters"}
+
+    lines = index_of(session, None)
+
+    row = next(index for index, line in enumerate(lines) if ROW.match(line))
+    assert lines[row + 1] == "   - Explanation: why the overlap matters"
 
 
 def test_the_footer_names_the_policy_the_ranking_carries(
@@ -247,17 +321,17 @@ def test_the_footer_names_the_policy_the_ranking_carries(
 # --- 4. the empty cases ---------------------------------------------------------------------
 
 
-def test_a_session_with_no_findings_prints_its_sentence_and_the_coverage_block() -> None:
+def test_a_session_with_no_findings_lists_each_group_by_its_goals_then_the_coverage() -> None:
     session = session_of("report-no-findings", [])
     ranking = rank(session)
 
-    lines = start_here_of(session, None, ranking)
+    lines = index_of(session, None, ranking)
 
-    assert lines == [
-        "## Start here",
-        "",
-        "Nothing to start with: no findings were recorded.",
-        "",
+    assert [line for line in lines if line.startswith("### ")] == [
+        f"### {group.title}: not reached (no check ran)" for group in load_words().finding_groups
+    ]
+    assert listed_ids(lines) == []
+    assert lines[-(len(coverage_line(ranking)) + 3) :] == [
         *coverage_line(ranking),
         "",
         FOOTER,
@@ -266,22 +340,7 @@ def test_a_session_with_no_findings_prints_its_sentence_and_the_coverage_block()
     assert "No findings." in render_report(session, ranking=ranking)
 
 
-def test_an_all_informational_session_prints_its_sentence_and_counts_them() -> None:
-    session = session_of(
-        "report-all-informational",
-        [
-            spec("rms.grouping.all_features_in_a_group", severity="info"),
-            spec("rms.folders.present", severity="info"),
-        ],
-    )
-    lines = start_here_of(session, None)
-
-    assert lines[2] == "Nothing to start with: every finding is informational or already decided."
-    assert "Not amplified: 2 findings (0 checked within scope, 0 already decided, " in lines[4]
-    assert lines[-2] == FOOTER
-
-
-def test_an_all_decided_session_still_renders_every_finding_below() -> None:
+def test_an_all_decided_session_lists_every_finding_and_renders_each_below() -> None:
     session = session_of(
         "report-all-decided",
         [
@@ -292,19 +351,19 @@ def test_an_all_decided_session_still_renders_every_finding_below() -> None:
 
     text = render_report(session, ranking=rank(session))
 
-    assert "Nothing to start with: every finding is informational or already decided." in text
+    assert "### Modelling practice: 2 findings · 2 decided" in text
+    assert listed_ids(section_of(text, HEADING)) == ["F-001", "F-002"]
     for finding in session.findings:
         assert f"#### {finding.id}: {finding.title}" in text
 
 
-# --- 5. amplify, never filter --------------------------------------------------------------
+# --- 5. every finding still renders below ------------------------------------------------------
 
 
 @pytest.mark.parametrize("with_package", [True, False], ids=["with-package", "no-package"])
 def test_no_finding_is_absent_from_the_severity_sections_below(
     review_session: ReviewSession, review_package, with_package: bool
 ) -> None:
-    """FR-013's other half: the section names five of eight, and all eight still render."""
     package = review_package if with_package else None
 
     text = render_report(review_session, package, ranking=rank(review_session))
@@ -318,7 +377,7 @@ def test_no_finding_is_absent_from_the_severity_sections_below(
 def test_the_findings_section_is_byte_identical_ranked_or_not(
     review_session: ReviewSession, review_package
 ) -> None:
-    """The ranking is a view; it writes nothing to the session and reorders no section."""
+    """The index is a view; it writes nothing to the session and reorders no section."""
     ranked = render_report(review_session, review_package, ranking=rank(review_session))
     plain = render_report(review_session, review_package)
 
@@ -360,9 +419,9 @@ def test_no_percent_sign_anywhere_in_a_ranked_report(
 def test_the_ranked_report_matches_the_golden(
     review_session: ReviewSession, review_package, file_regression: FileRegressionFixture
 ) -> None:
-    """The second golden of this renderer (research R2.6): the 2026-09-18 review with its
-    package, ranked. Regenerate with `uv run pytest tests/unit/test_report_start_here.py
-    --force-regen` and read the "Start here" block before committing it."""
+    """The second golden of this renderer (research R2.6 of 007): the 2026-09-18 review with
+    its package, ranked. Regenerate with `uv run pytest tests/unit/test_report_start_here.py
+    --force-regen` and read the "Findings by type" block before committing it."""
     report = render_report(review_session, review_package, ranking=rank(review_session))
 
     file_regression.check(report, extension=".md", encoding="utf-8", newline="")

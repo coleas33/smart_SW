@@ -182,6 +182,7 @@ package.json      the ModelCheck-profile dump; extractor.profile == "model_check
 exceptions.json   carried forward from the newest same-design run, before the rules run
 session.json      the recorded tool steps, so tool_result_ids name steps that exist
 report.md         the rule-by-rule result, opened by the "Start here" section
+                  ("Findings by type" since feature 013 T052)
 attention.json    the ranking the report was rendered from, and the session id it
                   describes (feature 007 `contracts/attention.md` section 4). Not a
                   session file: a folder holding only this one is not "a folder that

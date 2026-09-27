@@ -124,7 +124,7 @@ step 3.1 asks about (section 0.2), while the owner names the parts P; a new mach
 | 1 | Update, gates, health checks (registration only on a new machine), the FeatureWorks record | 55 min |
 | 2 | Profile and key | 20 min |
 | 3 | Dumps and the Standards probe of A and B, probes D1 to D14 and one pane review, with the fingerprints | 3 h 55 min |
-| 4 | The pane reviews, with the Start here panel and the timing of A's review | 3 h 10 min |
+| 4 | The pane reviews, with the findings by type and the timing of A's review | 3 h 10 min |
 | 5.1 to 5.4 | Model check on J and on the owner's parts, Standards (each with its Start here block), Remodel, the Gemini test | 45 min |
 | 5.5 | The older build and back: two builds, two SOLIDWORKS restarts, two reviews of A | 1 h |
 | 5.6 | The re-modeler probes: three runs with no document open, and the three options checked | 25 min |
@@ -290,20 +290,20 @@ function Show-DrawingReadLog {
         Select-Object -Last 3 | ForEach-Object { $_.Line }
 }
 
-function Show-StartHere {
+function Show-FindingsByType {
     param([string] $run)
     $run = $run.TrimEnd('\')
     $report = Get-Content -LiteralPath "$run\report.md" -Raw -Encoding UTF8
-    $start = $report.IndexOf('## Start here')
-    if ($start -lt 0) { 'report.md has no Start here section'; return }
+    $start = $report.IndexOf('## Findings by type')
+    if ($start -lt 0) { 'report.md has no Findings by type section'; return }
     $end = $report.IndexOf("`n## ", $start)
     if ($end -lt 0) { $end = $report.Length }
     $section = $report.Substring($start, $end - $start)
-    $ids = @([regex]::Matches($section, '(?m)^\d+\. \*\*([^*]+)\*\*') | ForEach-Object { $_.Groups[1].Value })
-    $nothing = [regex]::Match($section, '(?m)^Nothing to start with[^\r\n]*').Value
-    if ($ids.Count -gt 0) { 'Start here in report.md: ' + ($ids -join ', ') }
-    elseif ($nothing) { $nothing }
-    else { 'Start here in report.md: no row and no Nothing to start with line' }
+    foreach ($group in [regex]::Matches($section, '(?ms)^### ([^:\r\n]+):[^\n]*(.*?)(?=^### |\z)')) {
+        $ids = @([regex]::Matches($group.Groups[2].Value, '(?m)^- \*\*([^*]+)\*\*') | ForEach-Object { $_.Groups[1].Value })
+        if ($ids.Count -gt 0) { $group.Groups[1].Value + ': ' + ($ids -join ', ') }
+        else { $group.Groups[1].Value + ': no row' }
+    }
 }
 
 function Get-SeatHash {
@@ -382,9 +382,10 @@ What the commands do, so you know what you are running (each only reads):
 - `Show-SetupTime '<run folder>'` reads the backend log for how long the review's setup took.
 - `Show-DrawingReadLog` prints the last three `drawing.read` lines of the tool-service logs; the
   last line printed is the newest.
-- `Show-StartHere '<run folder>'` prints the finding ids the run folder's `report.md` lists under
-  **Start here**, in its order (`Start here in report.md: F-003, F-001, ...`), or its
-  `Nothing to start with: ...` line; it works on a review's folder and on a check folder alike.
+- `Show-FindingsByType '<run folder>'` prints, for each group of the run folder's `report.md`
+  section **Findings by type** in its order, one line: the group's title and the finding ids of its
+  rows in their order (`Interference and fit: F-007, F-008`), or `no row`, the **Checked, no issue**
+  fold last; it works on a review's folder and on a check folder alike (013 T057).
 - `Get-SeatHash "<full path>"` prints a file's SHA-256 while SOLIDWORKS may hold it open.
 - `Save-Fingerprint '<name>'` records the size, write time and SHA-256 of every lettered file and of
   every document the dumps list, in `notes\fingerprint-<name>.csv`; `Compare-Fingerprint '<name>'`
@@ -1287,20 +1288,25 @@ mismatch keeps it off, and research R4 records why.
    Show-ReviewFacts $run
    ```
 
-3. Read the summary at the top of Results, in the backend's own words:
-   - the headline, `<n> findings in <n> issues`;
-   - three lines, **Decide** (`<n> need your decision`), **Fix** (`<n> to fix`) and **Verify**
-     (`<n> to verify`), each followed by the check goals it covers with their counts;
+3. Read the summary at the top of Results, in the backend's own words (as feature 013 changed
+   it, 013 T050):
+   - the headline, `<n> findings in <n> issues`, followed by ` · <n> checked, no issue` when any
+     finding passed;
+   - one tally line, `Decide <n> · Fix <n> · Verify <n>`, followed by ` · Decided <n>` when any
+     finding is decided;
    - the questions line, `<n> questions for you`, and the parts line, `<n> of <n> parts not
      loaded`, when there are any;
    - **the drawings line**, when the review read or found drawings: `Drawings read: ...` and
      `Same-name drawings found but not open: ...`;
-   - nine goal lines, Interference to Modelling practice, each `issues found`, `checked, no issue`,
-     `not reached` (with a short reason) or `not applicable`.
+   - one line naming the goals the review did not reach, `Not reached: ...`, when there are any.
+
+   Below the questions, **Findings by type** lists the findings in their groups; each group ends
+   with its goal lines - ten goals in all, Interference to Modelling practice - each `issues
+   found`, `checked, no issue`, `not reached` (with a short reason) or `not applicable`.
 4. Press **Transcript**: its head shows the usage line,
    `<n> uncached + <n> cached input - <n> tokens in all - <n> round trips - last round <n> s`.
    Uncached plus cached is the review's input. Press **Results** to go back.
-5. **Questions**: when **Questions for you** appears above Start here, it shows `Question 1 of
+5. **Questions**: when **Questions for you** appears above Findings by type, it shows `Question 1 of
    <n>` with **Previous** and **Next**. Choose an answer on each question (or type one, or press
    **Skip for now**), then press **Send answers** once, for all of them together. Before sending,
    note the sentence beside Send, `Sending resumes the review once. Its last round sent <n> input
@@ -1344,24 +1350,28 @@ finished.
 - `interference groups ... | not judged 0`: every detected group judged, as a finding or a contact.
 - The comparison of the findings with the recorded small-assembly findings is the development
   machine's (008 T105): record the `findings` and `contacts` counts.
-- 009 T079: read the summary with the engineer who knows A. Pass: they agree the **Decide** line
-  names the decisions that are theirs, and the `not reached` goals are the ones the review did not
-  reach. Record their words.
+- 009 T079: read the summary with the engineer who knows A. Pass: they agree the tally's
+  **Decide** count and the **Interference and fit** and **Fasteners** groups name the decisions
+  that are theirs, and the `Not reached:` line names the goals the review did not reach. Record
+  their words.
 - If the review asked questions, answer them all in one send (box, item 5) and run
   `Show-ReviewFacts $run` again: record both `tokens` lines, before and after.
-- 007 T059, the Review half: once the review has ended (after the answers' turn, if it asked
-  questions), the **Start here** panel is pinned in Results, below the summary and the questions
-  and above the findings: a count line (`Start here: <n> of <n> issues ...`), then numbered rows,
-  each beginning with its finding id (`F-001` and so on). Write down the ids of those rows, top to
-  bottom (not the ones behind **Show all**), then:
+- 007 T059, the Review half, as feature 013 changed it (013 T057): once the review has ended
+  (after the answers' turn, if it asked questions), Results shows **Findings by type** below the
+  summary and the questions: the groups in their fixed order - Interference and fit, Fasteners,
+  Drawings, Standards, Modelling practice (collapsed), Hygiene, Mass and material, then Other
+  checks only when it holds a row - each with its count line, and the **Checked, no issue** fold
+  last. Open each group that holds rows (and the fold) and write down its rows' finding ids (`F-001`
+  and so on), top to bottom, then:
 
   ```powershell
-  Show-StartHere $run
+  Show-FindingsByType $run
   ```
 
-  Pass: it prints `Start here in report.md: ` and the same ids, in the same order, as many as the
-  panel's rows; or the panel and the line both say there is nothing to start with. Fail: an id
-  missing, extra or out of order. Record the printed line and the panel's count line.
+  Pass: it prints one line per group, in the pane's group order, each the group's title and the
+  same ids in the same order (or `no row`), the checked fold last; and no row of a type group
+  reads `checked within scope`. Fail: a group or an id missing, extra or out of order, or a pass in
+  a type group. Record the printed lines.
 - 007 T060, the minutes (the command that records them runs at step 4.5, item 4, once the backend
   no longer holds this review). Before the engineer who knows A leaves, ask them how many minutes
   a review of A by hand, without SwReview, takes them: the **baseline**. Then write down three
@@ -1372,8 +1382,8 @@ finished.
   wrong. The last two together are the whole time spent checking the findings; count no minute
   twice. Write the four numbers under this step's heading in the findings document.
 
-Record: the facts, the headline, the Decide, Fix and Verify lines, the goal lines, the drawings
-line (with letters in place of names), the usage line, and the start and end times.
+Record: the facts, the headline, the tally line, the not-reached line, the groups' goal lines,
+the drawings line (with letters in place of names), the usage line, and the start and end times.
 
 ### 4.2 B, the big assembly [009 T080; 008 T102; 010 T107; 010 T106; 009 T079]
 
@@ -1407,14 +1417,14 @@ rest of 4.2 from what is on screen.
   $shot.Save("$H\notes\pane-300x600-B.png", [Drawing.Imaging.ImageFormat]::Png)
   ```
 
-  Pass: the headline, the three groups and every `not reached` goal are in the picture without
-  scrolling. Only then go on to the facts below.
+  Pass: the headline, the tally line and the `Not reached:` line are in the picture without
+  scrolling (009 SC-001 as feature 013 amended it). Only then go on to the facts below.
 - 008 T102, pass: the `tokens` line's `input` (uncached plus cached) is **at most 995,853**, against
   the **12.4 million** of the same review at the last sitting; the usage line shows uncached and
   cached as two numbers, and so does the report's Tokens section (Open report). Fail: above
   995,853. With answers sent, judge as step 4.1 says: the report's total, both lines recorded.
 - 008 T102 and 010 T107, pass: `not judged 0`; the contacts appear in their own fold after the
-  findings, `<n> size-for-size contacts`, and no Start here row has the same title as a row in that
+  findings, `<n> size-for-size contacts`, and no row of Findings by type has the same title as a row in that
   contacts fold; `pre-run tools:` includes `check_joints`, `check_mass_material` and
   `check_hygiene`; and the next line, `called again after the first model round`, names none of
   the three (no model round spent on them).
@@ -1602,8 +1612,8 @@ K-3 (all four showing their part in a view). Note the Window menu. Make K active
 4. **Settings**, **Save** (the backend restarts); when the badge reads `Backend ready` again, with
    part J active press **Clear review**, then J's chip. Pass: the review comes back read-only with
    the same drawings line.
-5. The screenshot of step 4.2 again, now with the drawings line: pass when the headline, the three
-   groups, the drawings line and every `not reached` goal fit in 300 by 600 without scrolling. Save
+5. The screenshot of step 4.2 again, now with the drawings line: pass when the headline, the
+   tally line, the drawings line and the `Not reached:` line fit in 300 by 600 without scrolling. Save
    it with the same two blocks as step 4.2, naming the file `$H\notes\pane-300x600-J.png`.
 
 Record: each pass or fail, the log line (as far as its `gated=` list), and any wording the owner
@@ -1621,19 +1631,21 @@ selects its feature in J; and **Open check folder** opens a new folder ending `-
 `session.json`, `report.md` and `check.json`. Record: the counts, the line under them, and the
 folder's stamp (never its name).
 
-007 T059, the Model check half: below the grade, a **Start here** block (its heading, then numbered
-rows each beginning with a finding id, or a sentence saying why there is nothing to start with)
-sits **above** the row of filter chips (the buttons that show or hide the rules by bucket). Write
-down its rows' ids, top to bottom, then copy the `-check` folder (Open check folder) and:
+007 T059, the Model check half, as feature 013 changed it (013 T057): below the grade, a **Start
+here** block (its heading, then numbered rows each beginning with a finding id, or a sentence
+beginning `Nothing to start with`) sits **above** the row of filter chips (the buttons that show
+or hide the rules by bucket); it never lists a pass. Write down its rows' ids, top to
+bottom, then copy the `-check` folder (Open check folder) and:
 
 ```powershell
 $run = '<paste the -check folder>'
-Show-StartHere $run
+Show-FindingsByType $run
 ```
 
-Pass: the block is above the chips, and the printed ids are its rows' ids in the same order (or
-both say there is nothing to start with). Fail: the block below the chips or missing, or the ids
-differ. Record: pass or fail, and the printed line.
+Pass: the block is above the chips, none of its rows reads `checked within scope`, and each of its
+ids is in a printed line, the ids that share a printed line in the block's order (or the block says
+there is nothing to start with). Fail: the block below the chips or missing, a pass among its rows,
+or an id missing or out of order. Record: pass or fail, and the printed lines.
 
 **The owner's parts, for 004 T003.** Then, for each of P-1 to P-5 in turn: open it on its own
 (File > Open), click its window so it is the active document, and on the Model
@@ -1665,7 +1677,8 @@ Record: both verdict lines.
 007 T059, the Standards half, on J's result (before you press Standards check on A): as in step
 5.1, a **Start here** block sits below the verdict and above the list of sixteen checks and the
 bucket chips. Copy J's `-standards` folder (Open check folder) into `$run` as in step 5.1 and run
-`Show-StartHere $run`. Pass and fail as in step 5.1. Record: pass or fail, and the printed line.
+`Show-FindingsByType $run`. Pass and fail as in step 5.1. Record: pass or fail, and the printed
+lines.
 
 ### 5.3 Remodel
 

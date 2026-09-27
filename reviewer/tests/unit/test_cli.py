@@ -2259,8 +2259,8 @@ def test_exceptions_accept_re_renders_the_start_here_section_and_the_record(
     accept(joint_run_dir, tmp_package_dir)
 
     report = (joint_run_dir / "report.md").read_text(encoding="utf-8")
-    assert "## Start here" in report
-    assert report.index("## Start here") < report.index("## Findings")
+    assert "## Findings by type" in report
+    assert report.index("## Findings by type") < report.index("## Findings\n")
     session = load_session(joint_run_dir / "session.json")
     record = read_attention_record(joint_run_dir)
     assert record.session_id == session.session_id

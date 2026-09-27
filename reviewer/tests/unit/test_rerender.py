@@ -176,7 +176,7 @@ def test_the_record_it_writes_is_the_ranking_the_report_was_rendered_from(
     assert record.session_id == session.session_id
     assert record.rows == rank(session).rows
     for row in record.rows[: record.top_n]:
-        assert row.finding_id in report.split("## Findings")[0]
+        assert row.finding_id in report.split("## Findings\n")[0]
 
 
 # --- 2. a check folder ------------------------------------------------------------------

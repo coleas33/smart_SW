@@ -302,6 +302,19 @@ def test_the_report_header_carries_the_verdict_and_the_no_rebuild_sentence(
     assert NO_REBUILD_SENTENCE in report
 
 
+def test_the_report_carries_the_findings_by_type_above_findings(tmp_path: Path) -> None:
+    """Feature 013 T051 (006 `contracts/standards-check.md`, amended): after the verdict
+    header, "Findings by type" is the section above Findings, the standards findings under the
+    Standards group (and `standards.drawing.*` under Drawings)."""
+    run = check(tmp_path)
+
+    lines = run.report_file.read_text(encoding="utf-8").splitlines()
+
+    assert lines.index("## Findings by type") < lines.index("## Findings")
+    assert any(line.startswith("### Standards: ") for line in lines)
+    assert "## Start here" not in lines
+
+
 def test_the_check_record_carries_what_the_session_does_not(tmp_path: Path) -> None:
     run = check(tmp_path)
     record = record_of(run)

@@ -452,12 +452,12 @@ def test_apply_disposition_unknown_finding_id_raises_key_error(tmp_path: Path) -
 # --- dispositions re-render through the one folder function (T031, FR-019) ------------
 
 
-def test_apply_disposition_re_renders_the_start_here_section(tmp_path: Path) -> None:
+def test_apply_disposition_re_renders_the_findings_by_type_section(tmp_path: Path) -> None:
     """FR-019: a section one writer renders and the next erases is worse than none.
 
     `apply_disposition` used to render from the session alone, so a decision recorded on
-    any run folder silently removed "Start here" from the report until something else
-    re-rendered it.
+    any run folder silently removed "Start here" - "Findings by type" since feature 013 - from
+    the report until something else re-rendered it.
     """
     run_dir = tmp_path / "run"
     save_session(build_session(), run_dir / "session.json")
@@ -471,8 +471,8 @@ def test_apply_disposition_re_renders_the_start_here_section(tmp_path: Path) -> 
     )
 
     report = (run_dir / "report.md").read_text(encoding="utf-8")
-    assert "## Start here" in report
-    assert report.index("## Start here") < report.index("## Findings")
+    assert "## Findings by type" in report
+    assert report.index("## Findings by type") < report.index("## Findings\n")
 
 
 def test_apply_disposition_writes_the_ranking_record_beside_the_session(
@@ -519,7 +519,7 @@ def test_apply_disposition_on_a_standards_folder_keeps_its_verdict_header(
 
     after = (run_dir / "report.md").read_text(encoding="utf-8")
     assert after.startswith(header)
-    assert "## Start here" in after
+    assert "## Findings by type" in after
 
 
 # --- feature 002: the optional provider fields (T016) --------------------------------

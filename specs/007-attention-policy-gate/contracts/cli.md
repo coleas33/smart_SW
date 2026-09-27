@@ -19,7 +19,8 @@ verdict header and a re-render no longer loses the package's component names.
 ```
 <run_dir>/
 ├── session.json      unchanged shape; timing inputs recorded here
-├── report.md         gains "## Start here" above "## Findings"
+├── report.md         gains "## Start here" above "## Findings" ("## Findings by type" since
+│                     feature 013 T052; `swreview attention` no longer mirrors a report section)
 ├── attention.json    NEW: the ranking record (contracts/attention.md section 4)
 └── check.json        (check folders only) unchanged
 ```
