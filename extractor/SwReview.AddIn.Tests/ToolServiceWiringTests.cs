@@ -1984,7 +1984,7 @@ public sealed class ToolServiceWiringTests
         {
             world.PlanOnTheSeat();
 
-            SeatedHostWorld.PipeReply closed = world.Remodel(RemodelCommands.Close, new { discard_copy = false });
+            PipeReply closed = world.Remodel(RemodelCommands.Close, new { discard_copy = false });
 
             Assert.Equal(BridgeStatus.Ok, closed.Status);
             SeatedHostWorld.Ending ending = Assert.Single(world.Told);
@@ -2021,7 +2021,7 @@ public sealed class ToolServiceWiringTests
         using (var world = new SeatedHostWorld())
         {
             string probeId = world.Probe();
-            SeatedHostWorld.PipeReply unbound = world.Open(probeId);
+            PipeReply unbound = world.Open(probeId);
             Assert.Equal(RemodelErrorCodes.TargetMismatch, unbound.ErrorCode);
 
             world.Host.BindRemodelRun(world.RunDirectory);
@@ -2029,7 +2029,7 @@ public sealed class ToolServiceWiringTests
             Assert.Equal(BridgeStatus.Ok, world.Remodel(RemodelCommands.Close, new { discard_copy = true }).Status);
 
             // The run root went with the first open: the next run is refused until it is bound.
-            SeatedHostWorld.PipeReply again = world.Open(world.Probe());
+            PipeReply again = world.Open(world.Probe());
             Assert.Equal(RemodelErrorCodes.TargetMismatch, again.ErrorCode);
         }
     }
@@ -2275,25 +2275,8 @@ public sealed class ToolServiceWiringTests
         /// One <c>remodel.*</c> line with the remodel secret, written to the host's own pipe and
         /// answered on it, exactly as the backend's client would send it.
         /// </summary>
-        public PipeReply Remodel(string command, object parameters)
-        {
-            string line = JsonSerializer.Serialize(new Dictionary<string, object>
-            {
-                { "id", "1" },
-                { "command", command },
-                { "secret", Host.RemodelSecret },
-                { "params", parameters },
-            });
-
-            using (var client = new System.IO.Pipes.NamedPipeClientStream(".", Host.PipeName, System.IO.Pipes.PipeDirection.InOut))
-            {
-                client.Connect(10000);
-                var writer = new StreamWriter(client, new System.Text.UTF8Encoding(false)) { AutoFlush = true };
-                var reader = new StreamReader(client, new System.Text.UTF8Encoding(false));
-                writer.WriteLine(line);
-                return new PipeReply(reader.ReadLine()!);
-            }
-        }
+        public PipeReply Remodel(string command, object parameters) =>
+            RemodelPipe.Send(Host.PipeName, Host.RemodelSecret, command, parameters);
 
         public void Dispose()
         {
@@ -2309,33 +2292,6 @@ public sealed class ToolServiceWiringTests
             catch (UnauthorizedAccessException)
             {
             }
-        }
-
-        /// <summary>One response line as it came off the pipe.</summary>
-        public sealed class PipeReply
-        {
-            public PipeReply(string line)
-            {
-                JsonElement root = JsonDocument.Parse(line).RootElement.Clone();
-                Status = root.GetProperty("status").GetString()!;
-                Error = root.TryGetProperty("error", out JsonElement error) && error.ValueKind == JsonValueKind.String
-                    ? error.GetString()
-                    : null;
-                Result = root.TryGetProperty("result", out JsonElement result) ? result : default;
-                ErrorCode = Result.ValueKind == JsonValueKind.Object
-                    && Result.TryGetProperty("error_code", out JsonElement code)
-                    && code.ValueKind == JsonValueKind.String
-                        ? code.GetString()
-                        : null;
-            }
-
-            public string Status { get; }
-
-            public string? Error { get; }
-
-            public string? ErrorCode { get; }
-
-            public JsonElement Result { get; }
         }
 
         /// <summary>One ending the host was told of: what, on which thread, and whether the pipe had already stopped.</summary>
