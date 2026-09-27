@@ -462,6 +462,17 @@ that its `gated=` set is a subset of a named, checked-in read-only probe surface
 and `ListExternalFileReferencesCount2` - and that no stage-1 allowlist key appears in it. That is
 the machine-checkable form of "the source is only ever read".
 
+**Ending a session adds nothing to this list either.** *Added 2026-09-26 (default taken
+2026-09-26, the owner may revise; `tasks.md` T167, not yet built).* The one end-of-session routine
+(`bridge-remodel.md`, "Ending a session") calls three members this list already carries for that
+job - `ICustomPropertyManager.Delete2` for the tag, `ISldWorks.CloseDoc` for the copy, and the two
+toggle keys for the restore - and runs `VerifyTarget` before the first of them. Its writes are
+judged by the guard (`SwGate.Assert`) and recorded by the observer like every other remodel write,
+but are made outside the circuit breaker's count, the pattern the toggle put-back
+(`RemodelSystemToggles.PutBack`) already follows, so an open circuit cannot stop the clean-up. No
+key is added, and `Save3` is not among them: a session that ends without `remodel.save` leaves the
+copy unsaved.
+
 ## Explicitly not allowlisted in stage 1
 
 Listed so that stage 1's surface cannot silently come to include them, and so that a reader can

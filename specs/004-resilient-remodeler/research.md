@@ -17,6 +17,9 @@ numbered probe in R10 and is not trusted until that probe runs.
 **Owner decisions are binding and are recorded in R12.** Where a decision narrows the brief
 (the `EditDelete` allowlist entry, stage 2 not shipping in v1), the narrowing is applied
 everywhere in this document, not only in R12, and its consequences are named where they fall.
+*Added 2026-09-26:* the defaults taken on 2026-09-26, when the owner asked to proceed without
+questions unless blocked, are recorded in R13. They are not owner decisions: each is a default
+the owner may revise, and none is written as the owner's words.
 
 ---
 
@@ -1071,7 +1074,11 @@ Two operational rules, and a third added by the owner's decision 22A (2026-09-25
   told as soon as the plan is lost rather than at the next Start. The host hears of every
   tool-service attach and detach, so it posts `remodel.plan_lost` for the plan on screen once
   that plan's attachment is gone, and the page disables Start and offers Plan again; `SessionLost`
-  stays the backstop.
+  stays the backstop. *Amended 2026-09-26 (defaults taken 2026-09-26, the owner may revise;
+  R13.1, R13.4):* T167 is decided - a re-attach or an unload ends the session on the application
+  thread before the pipe closes, the copy closed unsaved and the settings restored - and planning
+  again while a plan waits closes the earlier plan's session first and marks that plan lost
+  (004 T173).
 
 ---
 
@@ -1222,3 +1229,190 @@ Four further owner decisions that are not numbered open questions but bind this 
    presented are the change list, the before-and-after RMS grade, and the geometry comparison.
 4. **Providers are OpenAI (default) and Gemini, through the existing provider layer. Never
    Claude.**
+
+---
+
+## R13. Defaults taken 2026-09-26: the sitting's remodel items
+
+**Sources.** The 2026-09-26 sitting on the pilot workstation, the first on the checks-first
+build, and its debrief, which is held outside this repository because it carries company data
+(nothing is copied from it here); and two of the six analysts' reports on that sitting: "remodel
+scope" (this feature's seat adapter, T152 to T159 and T161, and the then-undecided T167) and
+"logs, runs and U24" (the probe 1 race). The owner asked on 2026-09-26 to proceed without
+questions unless blocked, so each question those analysts put is settled below by a default.
+**Each is a default taken 2026-09-26, the owner may revise; none is the owner's own words, and
+none is an R12 decision.** The review-side items of the same sitting are feature 013's
+(`specs/013-engineer-first-review/`), which leaves this feature's documents to this section.
+
+**What the analysts found (VERIFIED by reading; SOLIDWORKS was not started).** The production
+seat was never built: `ToolServiceHost.Attach` never sets `BridgeServices.RemodelSeat`, so the
+Remodel tab shows its designed refusal (T157). The per-run folder handoff has no writer in the
+product (T158). The in-process dump reads whatever document is active (T159). Nothing ends a
+remodel session when the tool service goes away: a re-attach disposes only the pipe server, and
+the dispatcher has no teardown (T167). `remodel.close` runs its verification, untag and close
+outside any `try`, so one throw leaves the settings flipped and the session stuck, and no test
+covers it. The sitting's tool-service logs show three attachments across three documents in
+sixteen minutes, so a plan waiting for Start will routinely meet a re-attach: T167 is not a rare
+edge case.
+
+### R13.1 T167: the teardown ends the session
+
+**Decision**: on a re-attach or an add-in unload, on the application thread and before the pipe
+closes, one routine shared with `remodel.close` ends the session: verify the target; when it
+passes, remove the tag and close the copy unsaved, each write judged by the guard and logged but
+not counted against the circuit breaker; restore all four settings in a `finally`,
+`CommandInProgress` last; clear the session and the run root. The copy file stays in `copy/`, the
+run folder stays whole with `plan.json` untouched, and one teardown line goes to the tool-service
+log and to `remodel.log`. The pane is quiet on success and shows one plain-words status error on a
+failure. (004 T167; `contracts/bridge-remodel.md`, "Ending a session".)
+
+**Default taken 2026-09-26, the owner may revise.**
+
+**Why**: FR-005 and FR-031 ask for the settings restored in every case, and nothing restores them
+on a re-attach today. The three toggles are system options SOLIDWORKS keeps across sessions
+(INFERRED), so an unrestored plan could leave them off for good, and `CommandInProgress` left true
+suppresses modal boxes for the rest of the session. Once T157 gives the add-in a seat, the
+"Nothing was changed" of `SessionLostMessage` and `PlanLostMessage` would be false without it.
+Closing unsaved keeps the constitution's exception exactly as it is - the copy is saved only by
+`remodel.save` - and closing is what lets a later Discard delete `copy/`. Running inline at
+unload avoids a self-deadlock (`DisconnectFromSW` is already on the application thread); a
+re-attach, which comes from the thread pool, posts with a bounded wait. One routine for both
+paths also mends `remodel.close`'s unprotected failure path.
+
+**Alternatives weighed**: the pane only reports what was left behind and how to put it right
+(not taken: it leaves the engineer to restore four settings by hand after every document switch
+while a plan waits); delete the copy at teardown (not taken: a teardown deletes nothing, and
+Discard stays the one delete).
+
+### R13.2 T157 and T167 land together; T167 is a prerequisite of T135
+
+**Decision**: T157 (the seat) and T167 (the teardown) land in the same build, with T172 (R13.3),
+and T167 joins T152 to T160 as a prerequisite of T135. The pass line of test-plan step 5.3, the
+"not in this build" sentence today, becomes Plan, then Discard, with the engineer's file
+unchanged and the settings as they were.
+
+**Default taken 2026-09-26, the owner may revise.**
+
+**Why**: a seated build without the teardown is a build in which a document switch leaves the
+seat's settings changed; landing the two together means main never holds one.
+
+### R13.3 Start is switched off until the blocking probes pass
+
+**Decision**: a switch like `DrawingOpenScope.SeatValidated` - `RemodelStart.SeatValidated`,
+false as shipped - lets Plan run and refuses Start in plain words (`StartNotValidated`, before
+any call and with nothing written) until PROBE-1, 2, 3, 4 and 12 have verdicts from a seat. It is
+set true in a commit of its own that cites the capabilities ledger. While it is false the bridge
+refuses the six change commands as a backstop. (004 T172.)
+
+**Default taken 2026-09-26, the owner may revise.**
+
+**Why**: with T157, Start is reachable before step 5.6's verdicts, and PROBE-1 is exactly whether
+an illegal reorder's "Cannot reorder" box hangs the application thread; FR-005 says stage 1 must
+not run unattended if it does. Plan makes no reorder, so meanwhile it can exercise T153 to T159
+and the teardown on the seat. The cost is one more sitting before T135. The backstop follows
+`remodel.save`'s rule that a clause checked only by the caller is one the caller can skip.
+
+**Alternatives weighed**: a per-seat opt-in setting (not taken: a setting the engineer can turn
+on is a way past the probes, where the build switch needs a commit citing their verdicts); an
+instruction in the test plan only (not taken: nothing in the product would stop a Start).
+
+### R13.4 Planning again while an earlier plan waits; a copy is never a source
+
+**Decision**: when Plan is pressed while an earlier plan waits for Start, the host answers the
+refusals that need no bridge call first, then closes the earlier plan's session - unsaved, the
+folder kept, through `remodel.close` and so through R13.1's routine, and only when that plan's
+attachment is still the one listening - marks that plan lost (`remodel.plan_lost` for it, and
+`SessionLost` for a Start naming it), then plans. A source that lies in a run folder's `copy/`
+under `run_root` is refused (`SourceIsRemodelCopy`) before any bridge call. (004 T173.)
+
+**Default taken 2026-09-26, the owner may revise.**
+
+**Why**: the path is reachable and unhandled. The page keeps Plan enabled while a plan is held,
+the host makes the new run folder first, and the dispatcher refuses the second `remodel.open` as
+`run_in_progress`, because the earlier session is still open. After T159 the active document is
+the copy, so pressing Plan again without switching documents would probe the copy itself - dirty
+after the rollback and rebuild - and send the engineer to save it. Answering the no-call refusals
+first is a choice of this amendment (R13.8, D4).
+
+**Alternatives weighed**: refuse the new Plan with "Discard the earlier plan first" (not taken:
+one more press, for a plan the engineer has already chosen to replace).
+
+### R13.5 `GetVault` answers null, "not read by this build"
+
+**Decision**: the seat's `GetVault` answers null until T139 adds a vault read, and data-model
+sections 4.1 and 5 say that a null vault means "not read by this build", not "not in a vault".
+T139 decides how the two are told apart once a read exists.
+
+**Default taken 2026-09-26, the owner may revise.**
+
+**Why**: no PDM API is referenced anywhere in the product, and the code defines null as "not in a
+vault" (`Rms/RemodelCopy.cs`, `Rms/RemodelScopeProbe.cs`), so a null for a vault part would
+record something false in `plan.json`. The report already omits a null vault line
+(`remodel/report.py`), so it claims nothing either way. A vault part is still copied out and never
+refused for vault reasons (FR-006).
+
+**Alternatives weighed**: a late-bound PDM read now (not taken: unverified, and it needs a seat
+with the PDM client, which is T139's sitting).
+
+### R13.6 T135 on Part A: the refusal is an expected pass of FR-007
+
+**Decision**: T135 on benchmark Part A expects the scope refusal `rms_named_folder_wrong_members`,
+before anything is copied, and records it as an expected pass of FR-007. The compliant case runs
+on a variant of Part A with no group-named folders, judged against the development machine's dry
+run over the variant's package rather than against "a near-empty change list and a zero delta".
+
+**Default taken 2026-09-26, the owner may revise.**
+
+**Why**: T135 as written cannot pass on Part A. Its recipe has the six groups present and in
+order (`benchmarks/native/rms-part/RECIPE.md`), and the scope gate refuses any part that already
+carries a group-named folder, before the copy (`reviewer/src/swreview/remodel/scope.py`), because
+this version can neither verify nor repair their membership before the copy exists and has no
+dissolve path (R12, OQ-3). Phase 0's offline dry run refused the `rms-part` golden packages, which
+carry group folders, the same way (`phase0-decision.md`, rows 14 to 16). A variant with its
+folders dissolved is planned, and its folder creations make its change list and its grade delta
+non-trivial, which is why the dry run, not a fixed expectation, is the yardstick.
+
+### R13.7 Probe 1's watchdog is decided by signals, and runs flag-set first (U24)
+
+**Decision**: the probe 1 watchdog runs the call on a thread of its own and starts its deadline
+only once the call has begun; the deadline is a seam the tests control; a host's own exception
+reaches the ledger; and probe 1 runs its flag-set attempt first. The code is the change feature
+013 lists as 013 T135 to T137 (that package's research R2.41 records the same default); this
+feature records it as T171 and amends T033, because the probe is this feature's, and the change is
+built once.
+
+**Default taken 2026-09-26, the owner may revise.**
+
+**Why**: the verdict came from a wall-clock race: `Rms/RemodelProbeWatchdog.cs:65-72` counts
+thread-pool queueing as blocking, which a loaded test suite can turn into a false `Refuted`. On
+the seat, if the flag-clear attempt blocks as expected, its message box is still up when the
+flag-set attempt runs, which could read as blocked and give a false `Refuted` too; flag-set first
+gives the reading that matters a clean seat. `RemodelProbe1Logic.Decide` is unchanged.
+
+### R13.8 Design choices of this amendment
+
+Choices the defaults leave open, made here and changeable in review. They are neither owner
+decisions nor the defaults above:
+
+| # | Choice | Reason |
+|---|---|---|
+| D1 | The seat adapter is built in lanes A to F, plus U for the probe watchdog (`tasks.md`, "Build order") | The analysts' split: each lane owns its files, so lanes can be built side by side; the probe host's wrappers are split first because lane B builds on them |
+| D2 | `StartNotValidated` comes after `ResumeRefused` and before `SessionLost` in Start's refusal order | A Start this build can never honour says so before anything about the plan's session, so the engineer is not sent to plan again for nothing |
+| D3 | While Start is switched off the bridge refuses the change commands (`start_not_validated`, a `RemodelContractError`) | Defence in depth, as `remodel.save`'s `gate_not_passed` is; the pane refuses first, so reaching it is a bug in the caller |
+| D4 | Planning again answers the refusals that need no bridge call before it closes the earlier plan | A Plan refused on the spot costs the earlier plan nothing |
+| D5 | The run root is used up at `remodel.open` and bound per run through `IToolService.BindRemodelRun` (T158) | Stricter than "cleared at close": a second run gets a fresh root by construction |
+| D6 | Both dumps activate the copy first, activate only, and refuse rather than open it (T159) | `package-after.json` has the same gap as `package-before.json`, and a dump that opened a document would be a second way to open one |
+| D7 | Open step 12 compares each folder's name and member count, not its members' persist-ref strings (T174) | Feature 001's research R12: the bytes for one entity may differ, so string equality could refuse plain folders once the reader returns real refs (INFERRED; checked on the seat) |
+| D8 | The teardown's failure words name the settings by their Tools > Options labels and say whether the copy is still open, with no path | The engineer can put right only what the words name; the labels themselves are checked on the seat |
+
+**What only a seat can show** (the analysts' list, kept for the sittings): whether `OpenDoc7`
+with `Silent | LoadModel` activates the copy; the path's spelling after the open; the COM identity
+check; the tag round trip (PROBE-12); rollback, rebuild and error counts on real parts;
+`GetFeatures(true)` order against the dump's; persist-ref round trips, and whether member refs
+compare equal between source and copy; folder membership and end tags; `GetUnits`; the material
+name with the active configuration; mass properties (PROBE-8); reorders, folders and modal
+suppression (PROBE-1, 3, 4, 5 and 20); the equation manager (PROBE-2, 6, 7 and 21); `CloseDoc`
+closing a dirty copy with no prompt and releasing the file; the teardown on a real re-attach, an
+unload from Tools > Add-ins and a SOLIDWORKS exit; whether unrestored toggles persist across
+sessions; activating the copy before a dump; the vault read (T139, PROBE-13); the Tools > Options
+labels; and what happens when the engineer saves or closes the copy by hand while a plan waits.
