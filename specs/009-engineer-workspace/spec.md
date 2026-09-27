@@ -173,7 +173,7 @@ Everywhere in the engineer's default view, internal vocabulary gives way to word
 
 - **FR-017**: The Review tab MUST offer a two-way switch between Results and Transcript, each owning the pane.
 - **FR-018**: Results MUST show no tool call, argument or token count; Transcript MUST show every prose block and tool call in order with the round and call counts.
-- **FR-019**: A follow-up answer MUST be pinned in Results under its question.
+- **FR-019**: A follow-up answer MUST be pinned in Results under its question. *Amended 2026-09-27 (feature 013 T108):* every model answer's first line is its basis line - how many results its turn read and whether any drawing was read, computed by code (`text.done`'s `basis`) - after the "AI guidance" chip.
 
 **Sessions (User Story 6)**
 
