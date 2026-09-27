@@ -899,7 +899,11 @@ the recorded package when a finding of either family is unmatched.
 
 **Default taken 2026-09-27, the owner may revise.** It answers T134-Q2 as the question put it: "the
 tree-reading clause - not the type table's - ... on the same terms (one to one, the remaining
-references exact)".
+references exact)". *Landed as (T134, 2026-09-27):* `benchmark/replay.narrowable(check)` and
+`TREE_READING_STANDARDS_CHECKS`; with T132-T133 on `main` the generator narrows 29, 4 and 3
+recorded findings on the three recordings - 26, 3 and 2 `rms.*`, and 3, 1 and 1 Standards sketch
+findings by the tree-reading clause alone - and loses none, and the fixtures were regenerated
+(008 `contracts/replay.md` section 9, row "Feature 013 US7").
 
 **Why**: with T133 the fixture generator, which compares every recorded finding and grades the
 fixtures with the example profile, loses 3, 1 and 1 `standards.part.sketches_fully_defined` findings
