@@ -463,3 +463,51 @@ def test_the_contract_names_exactly_the_models_evidence_request_fields() -> None
 
     assert set(definition["properties"]) == set(EvidenceRequest.model_fields)
     assert {"question", "options", "blocks"}.isdisjoint(definition["required"])
+
+
+# --- the load rule of the one pre-013 model writer (feature 013 T096) ----------------------------
+
+
+def _finding_body(check: str) -> dict[str, object]:
+    finding = build_finding(
+        finding_id="F-001",
+        check=check,
+        title="A tapped hole has no thread depth",
+        status="suspected",
+        severity="medium",
+        package=build_package(),
+        configuration="Default",
+        observed="A tapped hole has no thread depth",
+        requirement="r",
+        recommended_action="a",
+        drawing_locations=[SourceRef(document_id="doc:2", sheet="Sheet1")],
+        numeric=False,
+    )
+    body = finding.model_dump(mode="json")
+    assert "source" not in body  # written before feature 013: no source on disk
+    return body
+
+
+def test_an_old_drawing_finding_with_no_source_loads_as_the_models() -> None:
+    from swreview.findings import Finding
+
+    loaded = Finding.model_validate(_finding_body("drawing.manufacturing_inputs"))
+
+    assert loaded.source == "model"
+
+
+def test_an_old_code_finding_with_no_source_loads_as_codes() -> None:
+    from swreview.findings import Finding
+
+    loaded = Finding.model_validate(_finding_body("interference.static"))
+
+    assert loaded.source == "code"
+    assert "source" not in loaded.model_dump(mode="json")
+
+
+def test_a_stated_source_is_never_overridden_by_the_load_rule() -> None:
+    from swreview.findings import Finding
+
+    body = {**_finding_body("drawing.manufacturing_inputs"), "source": "code"}
+
+    assert Finding.model_validate(body).source == "code"

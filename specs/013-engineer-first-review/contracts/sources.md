@@ -31,7 +31,11 @@ value the serializer keeps, so both echo the record through one helper, `as_json
 exclude={"source"})` (`tools/query.py:69` gains the optional `exclude`), and their results stay
 byte-identical to today's; `session.json` still stores the field. Every other tool result that
 carries a record carries one written at its kind's default, so the field is already absent there.
-*Added on review, 2026-09-26.*
+*Added on review, 2026-09-26.* *Landed as (T097, 2026-09-27):* `get_finding` (`tools/session.py`)
+returns any finding "exactly as the session records it", so a drawing finding the model wrote
+would carry `source: model` there; it echoes through the same `as_json(record, exclude=ECHO)`
+(`ECHO = {"source"}`), the third such tool. The load rule is a `Finding` validator
+(`findings.MODEL_FINDING_CHECK`); a stated source is never overridden.
 
 Bodies sent to the pane always state the source explicitly: `pane_finding` (`report/titles.py`), the
 evidence and coverage event bodies (`tools/context.py:268-273`, `:355-358`), the snapshot

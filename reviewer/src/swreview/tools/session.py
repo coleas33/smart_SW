@@ -27,7 +27,7 @@ from pydantic import ValidationError
 from swreview.agent.checklist import COVERAGE_BUCKETS
 from swreview.checks.questions import QuestionSpec, already_asked
 from swreview.drawings.evidence import DrawingIndex
-from swreview.findings import Source, build_finding
+from swreview.findings import MODEL_FINDING_CHECK, Source, build_finding
 from swreview.ir.models import DrawingSheet, SourceRef
 from swreview.report.attention import CHECKLIST_ITEM_IDS
 from swreview.report.session import (
@@ -55,8 +55,14 @@ MODEL_COVERAGE_BUCKETS: tuple[str, ...] = get_args(ModelCoverageBucket)
 
 DrawingFindingStatus = Literal["suspected", "unresolved"]
 DRAWING_FINDING_STATUSES: tuple[str, ...] = get_args(DrawingFindingStatus)
-DRAWING_FINDING_CHECK = "drawing.manufacturing_inputs"
+DRAWING_FINDING_CHECK = MODEL_FINDING_CHECK
 DRAWING_FINDING_SEVERITY: dict[str, str] = {"suspected": "medium", "unresolved": "low"}
+
+ECHO: set[str] = {"source"}
+"""What a tool that echoes a session record leaves out of its result (feature 013,
+`contracts/sources.md` section 1): `session.json` stores who wrote the record, and a record the
+model wrote - `mark_coverage`'s row, `record_drawing_finding`'s finding, and either read back by
+`get_finding` - carries `source: model` there; echoed without it, no byte the model reads moves."""
 
 CaptureView = Literal["iso", "front", "back", "left", "right", "top", "bottom", "current"]
 CAPTURE_VIEWS: tuple[str, ...] = get_args(CaptureView)
@@ -439,10 +445,11 @@ def mark_coverage(
     ]
     if unknown:
         return error_result(f"scope names ids not in this package: {unknown}")
-    item = CoverageItem(check=check, scope=scope, reason=reason, error=None)
+    item = CoverageItem(check=check, scope=scope, reason=reason, error=None, source="model")
     context.record_coverage(bucket, item)
     return with_open_items(
-        context, {"status": "recorded", "bucket": bucket, "coverage_item": as_json(item)}
+        context,
+        {"status": "recorded", "bucket": bucket, "coverage_item": as_json(item, exclude=ECHO)},
     )
 
 
@@ -516,11 +523,12 @@ def record_drawing_finding(
             drawing_locations=locations,
             coverage_limits=_drawing_coverage_limits(document_id, sheet, status),
             numeric=False,
+            source="model",
         )
     except ValueError as exc:
         return error_result(str(exc))
     context.record_finding(finding)
-    return {"status": "recorded", "finding": as_json(finding)}
+    return {"status": "recorded", "finding": as_json(finding, exclude=ECHO)}
 
 
 def _ingested_sheets(document_id: str, sheet: str | None) -> list[DrawingSheet]:
@@ -724,7 +732,7 @@ def get_finding(finding_id: str) -> ToolResult:
     finding = next((row for row in context.session.findings if row.id == finding_id), None)
     if finding is None:
         return unknown_id("finding", finding_id)
-    return {"finding": as_json(finding)}
+    return {"finding": as_json(finding, exclude=ECHO)}
 
 
 def request_capture(entity_id: str, view: CaptureView) -> ToolResult:

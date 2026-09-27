@@ -1391,3 +1391,133 @@ def test_an_error_carries_no_open_items(context: ToolContext) -> None:
     unknown = session.request_evidence(what="w", why="y", entity_ids=["cmp:9999"])
 
     assert set(refused) == {"error"} and set(unknown) == {"error"}
+
+
+# --- sources: who wrote each record (feature 013 T096, `contracts/sources.md` section 1) --------
+
+
+def saved(tool_context: ToolContext, tmp_path: Path) -> dict[str, Any]:
+    """The session as `session.json` stores it."""
+    from swreview.report.session import save_session
+
+    path = save_session(tool_context.require_session(), tmp_path / "session.json")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def test_a_drawing_finding_is_the_models_and_session_json_stores_it(
+    context: ToolContext, tmp_path: Path
+) -> None:
+    result = record_thread_depth_finding()
+
+    finding = context.require_session().findings[-1]
+    assert finding.source == "model"
+    assert saved(context, tmp_path)["findings"][-1]["source"] == "model"
+    assert result["status"] == "recorded"
+
+
+def test_the_drawing_findings_tool_result_echoes_no_source(context: ToolContext) -> None:
+    result = record_thread_depth_finding()
+
+    finding = context.require_session().findings[-1]
+    assert "source" not in result["finding"]
+    assert result["finding"] == finding.model_dump(mode="json", exclude={"source"})
+    assert result == {"status": "recorded", "finding": as_json(finding, exclude={"source"})}
+
+
+def test_a_marked_coverage_row_is_the_models_and_session_json_stores_it(
+    context: ToolContext, tmp_path: Path
+) -> None:
+    result = session.mark_coverage("fasteners", "unresolved", closed_scope(), "no torque given")
+
+    item = context.require_session().coverage.unresolved[-1]
+    assert item.source == "model"
+    assert saved(context, tmp_path)["coverage"]["unresolved"][-1]["source"] == "model"
+    assert result["status"] == "recorded"
+
+
+def test_the_coverage_tool_result_echoes_the_row_without_its_source(context: ToolContext) -> None:
+    result = session.mark_coverage("fasteners", "unresolved", closed_scope(), "no torque given")
+
+    assert result["coverage_item"] == {
+        "check": "fasteners",
+        "scope": closed_scope().model_dump(mode="json"),
+        "reason": "no torque given",
+        "error": None,
+    }
+
+
+def test_a_model_question_is_the_models_and_omitted_from_the_dump(
+    context: ToolContext, tmp_path: Path
+) -> None:
+    result = session.request_evidence(what="The torque", why="preload", entity_ids=[])
+
+    request = context.require_session().evidence_requests[-1]
+    assert request.source == "model"
+    assert "source" not in result["evidence_request"]
+    assert "source" not in saved(context, tmp_path)["evidence_requests"][-1]
+
+
+def test_get_finding_echoes_a_drawing_finding_without_its_source(context: ToolContext) -> None:
+    """`get_finding` returns a finding "exactly as the session records it"; a model-written one
+    carries `source: model` there, so it is echoed without it, as its writer's result is, and no
+    byte the model reads moves."""
+    record_thread_depth_finding()
+    finding = context.require_session().findings[-1]
+
+    result = session.get_finding(finding.id)
+
+    assert result == {"finding": as_json(finding, exclude={"source"})}
+    assert "source" not in result["finding"]
+
+
+def test_a_code_finding_keeps_every_byte_of_its_get_finding_result(context: ToolContext) -> None:
+    from swreview.findings import build_finding
+
+    finding = build_finding(
+        finding_id=next(context.finding_ids),
+        check="interference.static",
+        title="A code finding",
+        status="suspected",
+        severity="low",
+        package=context.ir,
+        configuration="Default",
+        observed="A code finding",
+        requirement="r",
+        recommended_action="a",
+        component_ids=["cmp:0001"],
+    )
+    context.record_finding(finding)
+
+    assert session.get_finding(finding.id) == {"finding": finding.model_dump(mode="json")}
+    assert "source" not in session.get_finding(finding.id)["finding"]
+
+
+def test_the_model_written_records_reach_the_surfaces_as_ai_guidance(
+    context: ToolContext,
+) -> None:
+    """The review of 2026-09-27: with the writers stating `model`, lane R's readers label the
+    records - the grouped row's chip, the goal line's detail source - where before they read
+    `code` and labelled nothing."""
+    from swreview.report.attention import coverage_source, finding_source, load_policy
+    from swreview.report.finding_groups import findings_by_type
+    from swreview.report.summary import load_words
+
+    record_thread_depth_finding()
+    session.mark_coverage("fasteners", "unresolved", closed_scope(), "no torque was given")
+    review = context.require_session()
+    words = load_words()
+
+    assert finding_source(review.findings[-1]) == "model"
+    assert coverage_source(review.coverage.unresolved[-1]) == "model"
+    grouped = findings_by_type(review, context.ir, words, load_policy())
+    [row] = [
+        row
+        for group in grouped.groups
+        for row in group.rows
+        if row.finding_id == review.findings[-1].id
+    ]
+    assert (row.source, row.chip) == ("model", words.labels.source["model"])
+    [fasteners] = [
+        line for group in grouped.groups for line in group.goals if line.goal == "fasteners"
+    ]
+    assert fasteners.detail_source == "model"

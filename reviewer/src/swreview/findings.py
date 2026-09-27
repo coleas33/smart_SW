@@ -20,6 +20,7 @@ from pydantic import (
     SerializerFunctionWrapHandler,
     StringConstraints,
     model_serializer,
+    model_validator,
 )
 
 from swreview.ids import SequentialIdAllocator
@@ -47,6 +48,13 @@ Each record kind defaults to its usual author and omits the field there, so ever
 written before the field keeps its bytes and no tool result that carries a record at its
 kind's default moves: a finding and a coverage item default to `code`, a request to `model`.
 """
+
+
+MODEL_FINDING_CHECK = "drawing.manufacturing_inputs"
+"""The check of the one tool whose finding is the model's reading, `record_drawing_finding`
+(`tools/session.py`, which names it `DRAWING_FINDING_CHECK`). A finding written before feature
+013 carries no `source`, and one of this check reads as the model's on load (013
+`contracts/sources.md` section 1): it was the one non-numeric writer before the field existed."""
 
 
 class ReviewModel(BaseModel):
@@ -139,6 +147,17 @@ class Finding(ReviewModel):
     """Who wrote the finding (feature 013): `code` for every check, `model` for
     `record_drawing_finding`, the one tool whose finding is the model's reading. Omitted when
     `code`, so every finding written before the field keeps its bytes."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _an_old_drawing_finding_is_the_models(cls, data: Any) -> Any:
+        """The load rule of 013 `contracts/sources.md` section 1: a finding with no `source`
+        whose check is `MODEL_FINDING_CHECK` was written by the model, the one writer of that
+        check; a stated source is never overridden, and every other finding keeps `code`."""
+        states_no_source = isinstance(data, dict) and "source" not in data
+        if states_no_source and data.get("check") == MODEL_FINDING_CHECK:
+            return {**data, "source": "model"}
+        return data
 
     @model_serializer(mode="wrap")
     def _omit_null_carry_over_fields(
@@ -308,11 +327,13 @@ def build_finding(
     capture_ids: Sequence[str] = (),
     exception_id: str | None = None,
     numeric: bool = True,
+    source: Source = "code",
 ) -> Finding:
     """Build a validated `Finding`, attaching provenance from the package manifest.
 
     `numeric=False` marks a finding that no deterministic calculation backs - a drawing
-    reading, for example - and restricts it to `suspected` or `unresolved`.
+    reading, for example - and restricts it to `suspected` or `unresolved`. `source` says who
+    wrote it (feature 013): `code` for every check, `model` for `record_drawing_finding`.
 
     `document_ids` binds a **document-scoped** finding: one about a document that has no
     `ComponentInstance` by nature - a drawing - and whose subjects may have nothing in
@@ -363,4 +384,5 @@ def build_finding(
         capture_ids=list(capture_ids),
         disposition=None,
         exception_id=exception_id,
+        source=source,
     )
