@@ -22,7 +22,7 @@ from typing import Any
 import pytest
 import yaml
 
-from swreview.checks.standards.library import PrefixMatch, PrefixMatcher
+from swreview.checks.standards.library import PrefixList, PrefixMatch, PrefixMatcher
 from swreview.checks.standards.profile import StandardsProfile, load_profile
 
 FIXTURE_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "standards"
@@ -428,3 +428,55 @@ def test_a_document_path_written_relative_to_the_vault_is_matched_too() -> None:
     match = PrefixMatcher.from_profile(profile).match(f"{lists['skip_prefixes'][1]}loom.SLDPRT")
 
     assert match.skip == lists["skip_prefixes"][1]
+
+
+# --- PrefixList: one list, the rules above, for any caller (feature 013 T002) --------------
+
+PREFIX_VECTORS: tuple[tuple[str, tuple[str, ...], str], ...] = (
+    ("D:/Vault", ("Library/Bonding/",), "D:/Vault/Library/Bonding/seal.SLDPRT"),
+    ("D:/Vault", ("Library/Bonding/",), "d:\\vault\\library\\bonding\\seal.SLDPRT"),
+    ("D:/Vault", ("library\\bonding\\",), "D:/Vault/Library/Bonding/a.SLDPRT"),
+    ("D:/Vault", ("Library/Bonding/",), "D:/Vault/Library/Bonding/"),
+    ("D:/Vault", ("Library/Bonding/",), "D:/Vault/Projects/Library/Bonding/a.SLDPRT"),
+    ("D:/Vault", ("Library/Bonding",), "D:/Vault/Library/BondingTape/a.SLDPRT"),
+    ("D:/Vault", ("Library/",), "E:/Scratch/Library/a.SLDPRT"),
+    ("D:/Vault", ("E:/Shared/Library/",), "E:/Shared/Library/a.SLDPRT"),
+    ("D:/Vault", ("E:/Shared/Library/",), "D:/Vault/E:/Shared/Library/a.SLDPRT"),
+    ("/srv/vault", ("library/",), "/srv/vault/library/a.SLDPRT"),
+    ("D:/Vault", ("Projects/Shared/PART-1.SLDPRT",), "D:/Vault/Projects/Shared/PART-1.SLDPRT"),
+    ("D:/Vault", ("",), "D:/Vault/Library/a.SLDPRT"),
+    ("D:/Vault", ("Library/", "Library/Bonding/"), "D:/Vault/Library/Bonding/a.SLDPRT"),
+    ("D:/Vault", ("Library/Bonding/", "Library/"), "D:/Vault/Library/Bonding/a.SLDPRT"),
+    ("D:/Vault", ("Library/",), "Library/Bonding/a.SLDPRT"),
+    ("D:/Vault", (), "D:/Vault/Library/a.SLDPRT"),
+)
+"""Every rule-1-to-5 vector above, as `(vault root, one list, path)`."""
+
+
+@pytest.mark.parametrize(("root", "entries", "path"), PREFIX_VECTORS)
+def test_a_prefix_list_answers_as_the_matchers_skip_list_does(
+    root: str, entries: tuple[str, ...], path: str
+) -> None:
+    """`PrefixList` is the rule the four lists share, extracted: no behaviour change."""
+    expected = matcher(vault_root=root, skip=list(entries)).match(path)
+
+    subject = PrefixList.from_entries(list(entries), root)
+
+    assert subject.matches(path) == expected.all_matches["skip_prefixes"]
+    assert subject.longest(path) == expected.skip
+
+
+def test_a_prefix_list_names_every_match_in_list_order_and_the_longest() -> None:
+    subject = PrefixList.from_entries(["Library/", "Library/Bonding/", "Other/"], "D:/Vault")
+
+    assert subject.matches("D:/Vault/Library/Bonding/a.SLDPRT") == ["Library/", "Library/Bonding/"]
+    assert subject.longest("D:/Vault/Library/Bonding/a.SLDPRT") == "Library/Bonding/"
+    assert subject.matches("D:/Vault/Else/a.SLDPRT") == []
+    assert subject.longest("D:/Vault/Else/a.SLDPRT") is None
+
+
+def test_the_matcher_holds_four_prefix_lists() -> None:
+    subject = PrefixMatcher.from_profile(load_profile(PROFILE_A))
+
+    lists = (subject.skip, subject.sketch_exempt, subject.one_mate, subject.two_mate)
+    assert all(isinstance(item, PrefixList) for item in lists)
