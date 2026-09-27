@@ -38,13 +38,25 @@ from swreview.ir.models import (
     EvidencePackage,
 )
 
-__all__ = ["DrawingIndex", "ViewEvidence", "file_name", "id_order", "view_label"]
+__all__ = ["DrawingIndex", "ViewEvidence", "file_key", "file_name", "id_order", "view_label"]
 
 
 def file_name(path: str) -> str:
     """The last part of a Windows path, whichever separator it was written with: how the
     drawing check's candidate question and the brief name a file, never by its folder."""
     return path.replace("/", "\\").rsplit("\\", 1)[-1]
+
+
+def file_key(path: str) -> str:
+    """One file however its path is spelled: case and the separator ignored, as the extractor's
+    discovery compares two paths.
+
+    The one rule that groups drawing candidates by file (013 `contracts/drawing-capability.md`
+    section 3, research R2.28): a part and an assembly of one stem in one folder share their
+    same-name drawing, so the drawing check, the brief, the confirmed read and the summary's
+    drawings line each name and read it once. Moved here from `report/summary.py` (013 T011).
+    """
+    return path.replace("/", "\\").casefold()
 
 
 def id_order(identifier: str) -> tuple[str, int, str]:

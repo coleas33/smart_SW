@@ -41,7 +41,7 @@ from typing import TYPE_CHECKING, Literal
 
 import yaml
 
-from swreview.drawings.evidence import file_name, id_order
+from swreview.drawings.evidence import file_key, file_name, id_order
 from swreview.findings import Finding, FindingStatus, ReviewModel, Severity
 from swreview.ir.models import EvidencePackage
 from swreview.report.attention import (
@@ -680,7 +680,7 @@ def drawings_of(package: EvidencePackage | None) -> DrawingsLine | None:
         key=lambda document_id: (id_order(document_id), document_id),
     )
     files_named = {
-        _file_key(documents[document_id].path)
+        file_key(documents[document_id].path)
         for document_id in read_ids
         if document_id in documents
     }
@@ -688,7 +688,7 @@ def drawings_of(package: EvidencePackage | None) -> DrawingsLine | None:
     for candidate in sorted(
         package.drawing_candidates, key=lambda item: id_order(item.document_id)
     ):
-        key = _file_key(candidate.path)
+        key = file_key(candidate.path)
         if key not in files_named:
             files_named.add(key)
             candidates.append(file_name(candidate.path))
@@ -701,12 +701,6 @@ def drawings_of(package: EvidencePackage | None) -> DrawingsLine | None:
     return DrawingsLine(
         read=read, candidates=candidates, text=load_words().drawings.of(read, candidates)
     )
-
-
-def _file_key(path: str) -> str:
-    """One file however its path is spelled: case and the separator ignored, as the extractor's
-    discovery compares two paths."""
-    return path.replace("/", "\\").casefold()
 
 
 def _not_loaded(package: EvidencePackage | None, words: Words) -> NotLoaded | None:

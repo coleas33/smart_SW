@@ -969,6 +969,27 @@ def test_one_candidate_file_beside_two_documents_is_named_once() -> None:
     assert line.candidates == [PLATE_CANDIDATE]
 
 
+@pytest.mark.parametrize(
+    "spelled",
+    [
+        pytest.param(str.upper, id="another-case"),
+        pytest.param(lambda path: path.replace("\\", "/"), id="forward-slashes"),
+    ],
+)
+def test_one_candidate_file_spelled_two_ways_is_named_once(spelled: Any) -> None:
+    """013 T010: the line groups candidate rows by the shared `drawings/evidence.file_key`, so
+    two rows of one file whose paths differ in case or separator name it once, as the first
+    row spells it - the line is unchanged by the move."""
+    plate = drawing_fixture("plate-drawing")
+    [candidate] = plate.drawing_candidates
+    twin = candidate.model_copy(update={"document_id": "doc:0005", "path": spelled(candidate.path)})
+
+    line = drawings_of(with_candidates(plate, twin))
+
+    assert line is not None
+    assert line.candidates == [PLATE_CANDIDATE]
+
+
 def test_pdf_ingested_sheets_are_drawings_read() -> None:
     line = drawings_of(load_package(GOLDEN_FIXTURES / "cover-blind-tap").package)
 
