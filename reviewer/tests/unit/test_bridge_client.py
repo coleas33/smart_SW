@@ -25,7 +25,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args
 
 import pytest
 
@@ -33,6 +33,7 @@ from swreview.bridge.client import (
     BRIDGE_VIEWS,
     CIRCUIT_LIMIT,
     COMMANDS,
+    DRAWING_READ_MODES,
     PROTOCOL_VERSION,
     REFUSING_COMMANDS,
     BridgeClient,
@@ -41,6 +42,7 @@ from swreview.bridge.client import (
     BridgeOpenError,
     BridgeRefusedError,
     BridgeUnauthorizedError,
+    DrawingReadMode,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -687,3 +689,161 @@ def test_the_secret_is_carried_next_to_the_pipe_name() -> None:
     assert bridge.pipe_name == "swreview-abc"
     assert bridge.secret == "s3cret"
     assert bridge.transport.path == r"\\.\pipe\swreview-abc"
+
+
+# --- the host's drawing capability (013 T074, contracts/drawing-capability.md section 2) --------
+#
+# The backend offers the candidate question only when the host can open a closed drawing. The host
+# says so on `ping` (protocol 1.4, `drawing_read`), and the client reads it once: a review pings at
+# most one time for it, and anything but a known answer from a 1.4 host - an absent field, an
+# unknown value, an older protocol, a bridge that failed or is closed - reads as `none`, the one
+# answer that offers nothing, and never raises (research R2.24: absent means unable).
+
+
+def pinged(result: Any, request_id: str = "1") -> dict[str, Any]:
+    """The host's `ok` answer to the `ping` of `request_id`."""
+    return ok(request_id, result)
+
+
+def pong(**fields: Any) -> dict[str, Any]:
+    """A 1.4 host's `ping` result, as `PingResult` writes it, with `fields` over it."""
+    body: dict[str, Any] = {
+        "pong": True,
+        "protocol": "1.4",
+        "sw_version": "32.5.0",
+        "document": "C:\\Fictional\\Vault\\FICT-OKTAVEN-7000.SLDASM",
+        "configuration": "Default",
+        "component_count": 3,
+    }
+    body.update(fields)
+    return body
+
+
+@pytest.mark.parametrize("mode", ["none", "open_only", "opens_closed"])
+def test_the_drawing_read_mode_is_what_ping_says(mode: str) -> None:
+    bridge, transport = client(pinged(pong(drawing_read=mode)))
+
+    assert bridge.drawing_read_mode() == mode
+    assert transport.requests == [{"id": "1", "command": "ping", "params": {}}]
+
+
+def test_the_modes_are_the_three_the_contract_names() -> None:
+    assert DRAWING_READ_MODES == ("none", "open_only", "opens_closed")
+    assert get_args(DrawingReadMode) == DRAWING_READ_MODES
+
+
+@pytest.mark.parametrize(
+    "result",
+    [
+        pytest.param(pong(), id="field-absent"),
+        pytest.param(pong(drawing_read="open_everything"), id="unknown-value"),
+        pytest.param(pong(drawing_read="OPENS_CLOSED"), id="another-case"),
+        pytest.param(pong(drawing_read=None), id="null"),
+        pytest.param(pong(drawing_read=True), id="not-a-string"),
+        pytest.param(pong(protocol="1.3", drawing_read="opens_closed"), id="older-protocol"),
+        pytest.param(pong(protocol="0.9", drawing_read="opens_closed"), id="much-older-protocol"),
+        pytest.param(
+            {key: value for key, value in pong(drawing_read="opens_closed").items()
+             if key != "protocol"},
+            id="no-protocol-stated",
+        ),
+        pytest.param(
+            pong(protocol="one point four", drawing_read="opens_closed"), id="bad-version"
+        ),
+        pytest.param(pong(protocol="1", drawing_read="opens_closed"), id="no-minor-version"),
+        pytest.param(pong(protocol=1.4, drawing_read="opens_closed"), id="version-not-a-string"),
+        pytest.param(None, id="null-result"),
+        pytest.param("pong", id="string-result"),
+        pytest.param(["opens_closed"], id="list-result"),
+    ],
+)
+def test_anything_but_a_known_mode_from_a_1_4_host_is_none(result: Any) -> None:
+    bridge, _ = client(pinged(result))
+
+    assert bridge.drawing_read_mode() == "none"
+
+
+@pytest.mark.parametrize("protocol", ["1.4", "1.10", "2.0"])
+def test_a_host_at_or_past_1_4_is_read(protocol: str) -> None:
+    """Versions compare as numbers, so 1.10 is past 1.4, not before it."""
+    bridge, _ = client(pinged(pong(protocol=protocol, drawing_read="opens_closed")))
+
+    assert bridge.drawing_read_mode() == "opens_closed"
+
+
+def test_a_failed_ping_is_none_and_never_raises() -> None:
+    bridge, _ = client(failed("1", "SOLIDWORKS stopped answering"))
+
+    assert bridge.drawing_read_mode() == "none"
+    assert bridge.last_error is not None
+    assert "stopped answering" in bridge.last_error
+
+
+def test_a_dead_pipe_is_none_and_never_raises() -> None:
+    bridge, _ = client(fail_with=OSError("the pipe is gone"))
+
+    assert bridge.drawing_read_mode() == "none"
+
+
+def test_an_open_circuit_is_none_and_sends_nothing() -> None:
+    bridge, transport = client(*[failed(str(index + 1), "COM failure") for index in range(3)])
+    for _ in range(CIRCUIT_LIMIT):
+        with pytest.raises(BridgeError):
+            bridge.call("ping", {})
+    sent = len(transport.requests)
+
+    assert bridge.drawing_read_mode() == "none"
+    assert len(transport.requests) == sent
+
+
+def test_an_unauthorized_ping_is_none() -> None:
+    bridge, _ = client(failed("1", "unauthorized"), secret="s")
+
+    assert bridge.drawing_read_mode() == "none"
+
+
+def test_one_ping_answers_every_later_question() -> None:
+    bridge, transport = client(pinged(pong(drawing_read="opens_closed")))
+
+    assert bridge.drawing_read_mode() == "opens_closed"
+    assert bridge.drawing_read_mode() == "opens_closed"
+    assert len(transport.requests) == 1
+
+
+def test_a_failed_ping_is_not_asked_again() -> None:
+    """The review goes on without the offer rather than pinging a failing host once per call."""
+    bridge, transport = client(
+        failed("1", "COM failure"), pinged(pong(drawing_read="opens_closed"), "2")
+    )
+
+    assert bridge.drawing_read_mode() == "none"
+    assert bridge.drawing_read_mode() == "none"
+    assert len(transport.requests) == 1
+
+
+def test_a_failed_ping_counts_once_toward_the_circuit_like_any_failure() -> None:
+    bridge, _ = client(
+        failed("1", "COM failure"), failed("2", "COM failure"), failed("3", "COM failure")
+    )
+
+    bridge.drawing_read_mode()
+    assert not bridge.circuit_open
+    for _ in range(CIRCUIT_LIMIT - 1):
+        with pytest.raises(BridgeError):
+            bridge.call("ping", {})
+    assert bridge.circuit_open
+
+
+def test_a_successful_ping_clears_earlier_failures_like_any_success() -> None:
+    bridge, _ = client(
+        failed("1", "one"), failed("2", "two"), pinged(pong(drawing_read="open_only"), "3"),
+        failed("4", "three"),
+    )
+    for _ in range(2):
+        with pytest.raises(BridgeError):
+            bridge.call("ping", {})
+
+    assert bridge.drawing_read_mode() == "open_only"
+    with pytest.raises(BridgeError):
+        bridge.call("ping", {})
+    assert not bridge.circuit_open
