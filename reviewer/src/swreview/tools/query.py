@@ -66,9 +66,14 @@ CompactKind = Literal["components", "faces", "holes", "mates", "fasteners"]
 ToolResult = dict[str, Any]
 
 
-def as_json(model: Any) -> dict[str, Any]:
-    """One place where an IR model becomes the JSON a tool result carries."""
-    return model.model_dump(mode="json")
+def as_json(model: Any, *, exclude: set[str] | None = None) -> dict[str, Any]:
+    """One place where an IR model becomes the JSON a tool result carries.
+
+    `exclude` leaves fields out of the result: a tool that echoes a record the model wrote
+    passes `{"source"}`, so `session.json` stores who wrote it and no byte the model reads moves
+    (feature 013, `contracts/sources.md` section 1).
+    """
+    return model.model_dump(mode="json", exclude=exclude)
 
 
 def package_summary(package: EvidencePackage) -> dict[str, Any]:
