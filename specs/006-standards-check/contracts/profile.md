@@ -158,7 +158,7 @@ part_roles:
   # relative entries resolve against vault_root, case-insensitive, at a folder boundary),
   # or inside a folder of one of these names anywhere in its path.
   bought_prefixes:
-    - "_library/purchased/"
+    - "_fict-bought/"
   bought_folder_names:
     - "FICT Purchased"
   # The make-or-buy switch the engineer sets: a custom property, read from the
@@ -187,7 +187,7 @@ part_roles:
   # as a configuration name, or as the whole value of one of these properties.
   catalogue_numbers:
     shapes:
-      - "FICT-####@##"
+      - "FICT-##@###"
     properties:
       - "FICT Vendor Number"
   # MEDIUM, custom: the company's own part-number prefixes. The file name (when it follows
