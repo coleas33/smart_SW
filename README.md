@@ -13,7 +13,8 @@ and the Model check tab in `specs/003-resilient-modeling/`, the Standards check 
 `specs/007-attention-policy-gate/`, checks first and the token budget in
 `specs/008-checks-first-review/`, the Review tab's summary, questions and kept reviews in
 `specs/009-engineer-workspace/`, the mechanical checks in `specs/010-mechanical-checks/`, the
-read-only drawing context in `specs/011-drawing-context/`, and the governing rules in
+read-only drawing context in `specs/011-drawing-context/`, the engineer-first review in
+`specs/013-engineer-first-review/`, and the governing rules in
 `.specify/memory/constitution.md`. `README-complete.md` is the original
 pilot proposal and `sw-review-architecture-proposal.md` the architecture decision record.
 
@@ -168,6 +169,28 @@ and from `swreview drawing brief --package <dir> --document <id> [--run <run dir
 <yaml>]`, the input a drawing creator (feature 012) will read. Every writer of the drawing API is
 refused by the read-only guard, generated from the interop. The contracts are
 `specs/011-drawing-context/contracts/`.
+
+**The engineer-first review** (feature 013). Bought parts are out of the grading: standards
+profile **version 4** adds a `part_roles` section (`swreview profile upgrade` proposes one from a
+version 3 file and decides nothing), and one classifier calls each part custom, bought or unclear
+by votes of its signals - Toolbox, a bought-parts folder, the make-or-buy property, vendor and
+distributor properties, catalogue numbers, part-number ranges, sparse properties, a same-name
+drawing. Modelling-practice and hygiene checks grade custom and unclear parts only, the bought
+ones are named once in a bought-parts line, the reviewed document is always graded (and says so
+when it looks bought), and one question with buttons and a text box asks about the unclear parts;
+its answer regrades the review before it resumes and withdraws what no longer holds
+(`finding.withdrawn`). Every finding is shown, grouped by type in a fixed order - Interference and
+fit, Fasteners, Drawings, Standards, Modelling practice, Hygiene, Mass and material - with passes
+in one "Checked, no issue" fold and no surface amplifying a pass; `report.md` carries the same
+"Findings by type". The review never asks what it can know or has been told: provenance is closed
+by code, a question repeating an answered one comes back to the model as already answered, and a
+drawing request is answered from the drawings code found. The drawing offer follows the seat:
+while the read-only open of a closed drawing is not validated (probe D14), no drawing question is
+asked and the summary says to open the drawing and press Review again. Every finding, question and
+coverage row says who wrote it - "Checked by code" or "AI guidance" - every model answer opens
+with a basis line computed from what its turn read, and no fallback stands in for a missing
+explanation. Answer turns carry no bookkeeping rounds, and lever 14 leaves earlier turns'
+reasoning out of the OpenAI request. The contracts are `specs/013-engineer-first-review/contracts/`.
 
 **The Review tab** (feature 009) opens its Results with a summary the backend computes and the
 page prints as supplied: how many findings in how many issues; the findings to **Decide**, **Fix**
