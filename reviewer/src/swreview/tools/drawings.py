@@ -34,7 +34,7 @@ from swreview.drawings.evidence import DrawingIndex
 from swreview.ir.loader import load_package
 from swreview.ir.models import EvidencePackage
 from swreview.report.session import CoverageItem, CoverageScope, EvidenceRequest
-from swreview.tools.checks_mechanical import _attached_profile
+from swreview.tools.checks_mechanical import review_profile
 from swreview.tools.context import ToolContext, current_context, error_result
 from swreview.tools.joint_context import joint_analysis
 from swreview.tools.query import ToolResult
@@ -82,7 +82,7 @@ def _record(context: ToolContext) -> dict[str, Any]:
     twice - even with no re-call guard in front of the tool (FR-035, SC-008).
     """
     session = context.require_session()
-    result = run_drawing_context(context.ir, profile=_attached_profile(context))
+    result = run_drawing_context(context.ir, profile=review_profile(context))
     context.withdraw_coverage((CONTEXT_CHECK, CONFORMANCE_CHECK), COVERAGE_BUCKETS)
     counts = dict.fromkeys(COVERAGE_BUCKETS, 0)
     for coverage in result.coverage:
@@ -176,7 +176,7 @@ def get_drawing_brief(document_id: str) -> ToolResult:
         brief = build_brief(
             context.ir,
             context.session,
-            _attached_profile(context),
+            review_profile(context),
             document_id,
             joint_map=joint_analysis(context).joint_map,
         )

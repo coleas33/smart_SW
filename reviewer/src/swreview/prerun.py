@@ -52,7 +52,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from swreview.agent.providers import ToolCallRequest, ToolCallResult, call_tool
 from swreview.agent.settings import EfficiencySettings, checks_first
@@ -80,6 +80,9 @@ from swreview.tools.context import ToolContext
 from swreview.tools.drawings import DRAWINGS_TOOL, drawing_evidence
 from swreview.tools.model_view import check_digest, count_findings
 from swreview.tools.registry import RecordedTool, ToolDispatch, record_call
+
+if TYPE_CHECKING:  # a standards module; see `_deferred` below
+    from swreview.checks.standards.profile import ReviewProfile
 
 __all__ = [
     "ALREADY_RUN",
@@ -740,7 +743,7 @@ def _deferred() -> None:
 
 
 def attach_standards(
-    context: ToolContext, profile_path: Path | str | None
+    context: ToolContext, profile: ReviewProfile | Path | str | None
 ) -> NotEvaluated | None:
     """Attach a standards run to `context`, or say why this review has no grading (FR-027).
 
@@ -751,28 +754,37 @@ def attach_standards(
 
     Args:
         context: The run being set up. The run is attached to it, and its package is what
-            the graded set and the phase rows are read from.
-        profile_path: The standards profile this design is graded against, or `None` when
-            the review was started without one.
+            the graded set and the phase rows are read from. The loaded profile is recorded
+            on it too, whether or not the run attaches, for `review_profile` (feature 013
+            `contracts/part-roles.md` section 5).
+        profile: The profile `start_review` loaded once (`load_review_profile`), so this does
+            not load it again; a path, or `None` for a review started without one, is loaded
+            here - the call form before feature 013's runner hands over its `ReviewProfile`.
 
     Returns:
         `None` when the run is attached and the checks will run, or the one `NotEvaluated`
         the pre-run counts and the brief prints. **Never raises**: every refusal the
         standards machinery can make is turned into a line here, because a review that
         cannot grade the release checklist is still a review (`contracts/gate.md` section 2).
+        The four reasons are the same bytes whichever form `profile` takes.
     """
     # Deferred: see `_deferred` above.
-    from swreview.checks.standards.profile import ProfileError, load_profile
+    from swreview.checks.standards import profile as standards_profile
     from swreview.checks.standards.run import missing_standards_phases
     from swreview.checks.standards.traversal import UngradableRootError, graded_documents
     from swreview.tools.standards_checks import StandardsRun, attach_standards_run
 
-    if profile_path is None:
+    loaded = (
+        profile
+        if isinstance(profile, standards_profile.ReviewProfile)
+        else standards_profile.load_review_profile(profile)
+    )
+    checks_mechanical.attach_review_profile(context, loaded.profile)
+    if loaded.path is None:
         return _standards_gap(STANDARDS_NO_PROFILE)
-    try:
-        profile = load_profile(profile_path)
-    except ProfileError as error:
-        return _standards_gap(STANDARDS_UNREADABLE.format(path=profile_path, error=error))
+    if loaded.profile is None:
+        return _standards_gap(STANDARDS_UNREADABLE.format(path=loaded.path, error=loaded.refusal))
+    profile = loaded.profile
 
     missing = missing_standards_phases(context.ir)
     if missing:

@@ -189,16 +189,34 @@ def review_roles(context: ToolContext) -> PartRoles | None:
     return getattr(context, PART_ROLES_ATTRIBUTE, None)
 
 
-def _attached_profile(context: ToolContext) -> StandardsProfile | None:
-    """The profile of the standards run attached to the review, or `None`: the joint and
-    hygiene checks read it, and never load one themselves.
+REVIEW_PROFILE_ATTRIBUTE = "review_profile"
+"""The context attribute the profile `start_review` loaded rides on, attached by
+`prerun.attach_standards` whether or not the standards run attaches (feature 013
+`contracts/part-roles.md` section 5)."""
 
-    Imported here, as prerun and the registry import every standards module: a module under
+
+def attach_review_profile(context: ToolContext, profile: StandardsProfile | None) -> None:
+    """Carry the review's loaded profile on `context`, or `None` when it has none."""
+    setattr(context, REVIEW_PROFILE_ATTRIBUTE, profile)
+
+
+def review_profile(context: ToolContext) -> StandardsProfile | None:
+    """The review's standards profile, or `None`: the joint, hygiene and drawing checks read
+    it, and never load one themselves.
+
+    The profile `attach_standards` recorded, even when the standards run could not attach -
+    before feature 013 a valid profile made hygiene say "no standards profile is attached"
+    whenever the standards phases were not dumped - and otherwise the profile of a standards
+    run attached directly, as a check run does. `standards_checks` is imported here, as
+    prerun and the registry import every standards module: a module under
     `checks/standards/` reaches `checks/rules/` and the runner, which import the pre-run,
     which imports this module (`prerun._deferred` says it once).
     """
     from swreview.tools.standards_checks import standards_run
 
+    loaded = getattr(context, REVIEW_PROFILE_ATTRIBUTE, None)
+    if loaded is not None:
+        return loaded
     run = standards_run(context)
     return None if run is None else run.profile
 
@@ -291,7 +309,7 @@ def check_joints() -> ToolResult:
     analysis = joint_analysis(context)
     joint_map = analysis.joint_map
     written = record_joint_map(context, joint_map)
-    lookup = ResolverLookup(context.ir, _attached_profile(context))
+    lookup = ResolverLookup(context.ir, review_profile(context))
     checks = run_joint_checks(context.ir, joint_map, lookup)
     refused = _record_folded(context, checks.results)
     if refused is not None:
@@ -473,12 +491,12 @@ def check_hygiene() -> ToolResult:
         Takes no argument. Property names come from the attached standards profile; without
         one those checks are skipped.
     """
-    # Deferred for the reason `_attached_profile` gives: hygiene reads a standards module.
+    # Deferred for the reason `review_profile` gives: hygiene reads a standards module.
     from swreview.checks.hygiene import SUMMARY_CHECK as HYGIENE_SUMMARY
     from swreview.checks.hygiene import run_hygiene_checks
 
     context = current_context()
-    profile = _attached_profile(context)
+    profile = review_profile(context)
     return _record_family(
         context,
         HYGIENE_SUMMARY,

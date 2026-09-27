@@ -23,6 +23,7 @@ from swreview.agent.providers.fake import FakeProvider, ScriptedTurn
 from swreview.agent.runner import start_review
 from swreview.agent.settings import EfficiencySettings
 from swreview.checks.drawing_context import CANDIDATE_CONFIRM
+from swreview.checks.drawing_context import CONFORMANCE_CHECK as CONFORMANCE
 from swreview.checks.standards.profile import load_profile
 from swreview.checks.standards.registry import CHECK_TOOL
 from swreview.checks.standards.traversal import graded_documents
@@ -163,6 +164,35 @@ def test_a_package_with_no_drawing_evidence_records_skipped_coverage_only() -> N
 
     assert result["drawings"] == 0 and result["candidates"] == 0 and result["questions"] == 0
     assert context.require_session().evidence_requests == []
+
+
+def test_a_valid_profile_is_compared_even_when_the_standards_phases_were_not_dumped() -> None:
+    """Feature 013 T019 (lane P, one case in this file): the drawing check now reads the
+    review's loaded profile (`checks_mechanical.review_profile`), not only the standards
+    run's, so `drawing_profile.conformance` is compared on a review whose standards phases
+    were not dumped - where it was skipped as "the standards profile is absent" before. The
+    rows it moves are pinned deliberately: one skipped row becomes two checked ones."""
+    from swreview.prerun import attach_standards
+
+    package = fixture("plate-drawing")
+    package = package.model_copy(
+        update={"extractor": package.extractor.model_copy(update={"phases": []})}
+    )
+    context = context_for(package)
+    assert attach_standards(context, STANDARDS_PROFILE) is not None  # the run did not attach
+    with use_context(context):
+        check_drawings()
+
+    coverage = context.require_session().coverage
+    conformance = {
+        bucket: [item.reason for item in getattr(coverage, bucket) if item.check == CONFORMANCE]
+        for bucket in ("checked", "skipped", "unresolved")
+    }
+    assert conformance["skipped"] == [] and conformance["unresolved"] == []
+    assert [reason.split(" agrees ")[0] for reason in conformance["checked"]] == [
+        "drawing doc:0006",
+        "drawing doc:0007",
+    ]
 
 
 # --- 2. the family: offered only with drawing evidence ------------------------------------------
