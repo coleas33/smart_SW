@@ -5,7 +5,7 @@
   "swconst_version": "32.5.0.48",
   "product": "SOLIDWORKS 2024 SP5",
   "generated_at": "2026-09-16T00:58:00Z",
-  "generated_by": "reflection over the installed SolidWorks.Interop.sldworks and .swconst assemblies (T055); swreview-extract probe interop --emit-manifest is the Phase 2 command that regenerates it by the same dump",
+  "generated_by": "reflection over the installed SolidWorks.Interop.sldworks and .swconst assemblies (T055); swreview-extract probe interop --emit-manifest is the Phase 2 command that regenerates it by the same dump; the T156 rows (2026-09-27, the seat adapter's plumbing) by the same metadata-only reflection over the installed 32.5.0.48 on the development machine, SOLIDWORKS not started",
   "members": [
     {
       "interface": "IModelDocExtension",
@@ -1258,6 +1258,329 @@
       ],
       "allowlisted": false,
       "note": "the second half of that reading"
+    },
+    {
+      "interface": "IModelDoc2",
+      "member": "get_Extension",
+      "kind": "property-get",
+      "arity": 0,
+      "parameters": [],
+      "returns": "SolidWorks.Interop.sldworks.ModelDocExtension",
+      "used_by": [
+        "remodel.probe_scope",
+        "remodel.open",
+        "remodel.snapshot",
+        "remodel.rename",
+        "remodel.reorder",
+        "remodel.folder",
+        "remodel.describe",
+        "remodel.rebuild",
+        "remodel.geometry",
+        "remodel.close",
+        "VerifyTarget"
+      ],
+      "allowlisted": false,
+      "note": "T156: every IModelDocExtension member the seat adapter calls is reached through it - the persist refs, the session tag's property manager, ReorderFeature, What's Wrong and CreateMassProperty2"
+    },
+    {
+      "interface": "IModelDoc2",
+      "member": "get_FeatureManager",
+      "kind": "property-get",
+      "arity": 0,
+      "parameters": [],
+      "returns": "SolidWorks.Interop.sldworks.FeatureManager",
+      "used_by": [
+        "remodel.probe_scope",
+        "remodel.open",
+        "remodel.snapshot",
+        "remodel.reorder",
+        "remodel.folder",
+        "remodel.rebuild"
+      ],
+      "allowlisted": false,
+      "note": "T156: GetFeatures, GetSheetMetalFolder, EditRollback, InsertFeatureTreeFolder2 and FeatureFolderLocation are all reached through it"
+    },
+    {
+      "interface": "IModelDoc2",
+      "member": "GetEquationMgr",
+      "kind": "method",
+      "arity": 0,
+      "parameters": [],
+      "returns": "SolidWorks.Interop.sldworks.EquationMgr",
+      "used_by": [
+        "remodel.snapshot",
+        "remodel.equation"
+      ],
+      "allowlisted": false,
+      "note": "T156: IRemodelDocument.Equations; the manager is handed to the shared, ungated SwEquationManager and to nothing else"
+    },
+    {
+      "interface": "IModelDoc2",
+      "member": "GetUnits",
+      "kind": "method",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.Object",
+      "used_by": [
+        "remodel.open"
+      ],
+      "allowlisted": false,
+      "note": "T156: IRemodelDocument.GetLengthUnit; element 0 is a swLengthUnit_e value, named by the pure RemodelLengthUnits table, and an answer that cannot be read is null, never metres (research R3.6); the bridge gates it under the bare key GetUnits"
+    },
+    {
+      "interface": "IModelDocExtension",
+      "member": "GetPersistReference3",
+      "kind": "method",
+      "arity": 1,
+      "parameters": [
+        {
+          "name": "DispObj",
+          "type": "System.Object"
+        }
+      ],
+      "returns": "System.Object",
+      "used_by": [
+        "remodel.probe_scope",
+        "remodel.open",
+        "remodel.snapshot",
+        "remodel.reorder",
+        "remodel.folder",
+        "remodel.rebuild"
+      ],
+      "allowlisted": false,
+      "note": "T156: IRemodelDocument.GetPersistReference and a folder's member refs; the byte array is encoded by the existing PersistRefCodec; the bridge gates it under the bare key GetPersistReference3"
+    },
+    {
+      "interface": "IFeatureManager",
+      "member": "GetFeatures",
+      "kind": "method",
+      "arity": 1,
+      "parameters": [
+        {
+          "name": "ToplevelOnly",
+          "type": "System.Boolean"
+        }
+      ],
+      "returns": "System.Object",
+      "used_by": [
+        "remodel.probe_scope",
+        "remodel.open",
+        "remodel.snapshot",
+        "remodel.reorder",
+        "remodel.folder",
+        "remodel.rebuild"
+      ],
+      "allowlisted": false,
+      "note": "T156: GetFeatures(true), the top-level tree in tree order, for IRemodelDocument.GetFeaturesInOrder and the scope-signal reader's walk; the bridge gates it under the bare key GetFeatures; its order against the dump's is a seat check (research R13.8)"
+    },
+    {
+      "interface": "IModelDoc2",
+      "member": "get_ConfigurationManager",
+      "kind": "property-get",
+      "arity": 0,
+      "parameters": [],
+      "returns": "SolidWorks.Interop.sldworks.ConfigurationManager",
+      "used_by": [
+        "remodel.geometry"
+      ],
+      "allowlisted": false,
+      "note": "T156: with IConfigurationManager.get_ActiveConfiguration and IConfiguration.get_Name, the active configuration IGeometrySource.GetMaterialName reads the material for, by the path Dump/PropertyDumper.cs already reads it"
+    },
+    {
+      "interface": "IConfigurationManager",
+      "member": "get_ActiveConfiguration",
+      "kind": "property-get",
+      "arity": 0,
+      "parameters": [],
+      "returns": "SolidWorks.Interop.sldworks.Configuration",
+      "used_by": [
+        "remodel.geometry"
+      ],
+      "allowlisted": false,
+      "note": "T156: the second step of that path"
+    },
+    {
+      "interface": "IConfiguration",
+      "member": "get_Name",
+      "kind": "property-get",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.String",
+      "used_by": [
+        "remodel.geometry"
+      ],
+      "allowlisted": false,
+      "note": "T156: the ConfigName GetMaterialPropertyName2 is asked for"
+    },
+    {
+      "interface": "IFeature",
+      "member": "GetSpecificFeature2",
+      "kind": "method",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.Object",
+      "used_by": [
+        "remodel.probe_scope",
+        "remodel.open"
+      ],
+      "allowlisted": false,
+      "note": "T156: an FtrFolder feature's IFeatureFolder, for the rms_named_folders row; the reader is shared by the probe source and the copy, so remodel.open step 12 reads the copy the same way"
+    },
+    {
+      "interface": "IFeatureFolder",
+      "member": "GetFeatures",
+      "kind": "method",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.Object",
+      "used_by": [
+        "remodel.probe_scope",
+        "remodel.open"
+      ],
+      "allowlisted": false,
+      "note": "T156: the folder's members, whose persist refs fill member_persist_refs (research R3.1 lists it VERIFIED)"
+    },
+    {
+      "interface": "ISldWorks",
+      "member": "GetOpenDocSpec",
+      "kind": "method",
+      "arity": 1,
+      "parameters": [
+        {
+          "name": "FileName",
+          "type": "System.String"
+        }
+      ],
+      "returns": "System.Object",
+      "used_by": [
+        "remodel.open",
+        "remodel.open_copy"
+      ],
+      "allowlisted": false,
+      "note": "T156: the one open-options helper builds the copy's open request from it, shared with the add-in's remodel.open_copy; OpenDoc7 takes the request, so Silent | LoadModel = 17 is written as its members"
+    },
+    {
+      "interface": "IDocumentSpecification",
+      "member": "set_DocumentType",
+      "kind": "property-set",
+      "arity": 1,
+      "parameters": [
+        {
+          "name": "DocumentType",
+          "type": "System.Int32"
+        }
+      ],
+      "returns": "System.Void",
+      "used_by": [
+        "remodel.open",
+        "remodel.open_copy"
+      ],
+      "allowlisted": false,
+      "note": "T156: swDocPART = 1; a property set on the throwaway open request, not a document write, so it is neither gated nor allowlisted"
+    },
+    {
+      "interface": "IDocumentSpecification",
+      "member": "set_Silent",
+      "kind": "property-set",
+      "arity": 1,
+      "parameters": [
+        {
+          "name": "OpenSilent",
+          "type": "System.Boolean"
+        }
+      ],
+      "returns": "System.Void",
+      "used_by": [
+        "remodel.open",
+        "remodel.open_copy"
+      ],
+      "allowlisted": false,
+      "note": "T156: true, the Silent half of RemodelCopy.OpenOptions (17); a property set on the throwaway open request, not a document write, so it is neither gated nor allowlisted"
+    },
+    {
+      "interface": "IDocumentSpecification",
+      "member": "set_LoadModel",
+      "kind": "property-set",
+      "arity": 1,
+      "parameters": [
+        {
+          "name": "LoadModel",
+          "type": "System.Boolean"
+        }
+      ],
+      "returns": "System.Void",
+      "used_by": [
+        "remodel.open",
+        "remodel.open_copy"
+      ],
+      "allowlisted": false,
+      "note": "T156: true, the LoadModel half of RemodelCopy.OpenOptions (17); a property set on the throwaway open request, not a document write, so it is neither gated nor allowlisted"
+    },
+    {
+      "interface": "IDocumentSpecification",
+      "member": "set_ReadOnly",
+      "kind": "property-set",
+      "arity": 1,
+      "parameters": [
+        {
+          "name": "OpenReadOnly",
+          "type": "System.Boolean"
+        }
+      ],
+      "returns": "System.Void",
+      "used_by": [
+        "remodel.open",
+        "remodel.open_copy"
+      ],
+      "allowlisted": false,
+      "note": "T156: always false, never ReadOnly (2); a property set on the throwaway open request, not a document write, so it is neither gated nor allowlisted"
+    },
+    {
+      "interface": "IDocumentSpecification",
+      "member": "set_ViewOnly",
+      "kind": "property-set",
+      "arity": 1,
+      "parameters": [
+        {
+          "name": "OpenViewOnly",
+          "type": "System.Boolean"
+        }
+      ],
+      "returns": "System.Void",
+      "used_by": [
+        "remodel.open",
+        "remodel.open_copy"
+      ],
+      "allowlisted": false,
+      "note": "T156: always false, never ViewOnly (4); a property set on the throwaway open request, not a document write, so it is neither gated nor allowlisted"
+    },
+    {
+      "interface": "IDocumentSpecification",
+      "member": "get_Error",
+      "kind": "property-get",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.Int32",
+      "used_by": [
+        "remodel.open",
+        "remodel.open_copy"
+      ],
+      "allowlisted": false,
+      "note": "T156: the swFileLoadError_e bits of an open that returned no document, named by FileLoadErrors.Describe"
+    },
+    {
+      "interface": "IDocumentSpecification",
+      "member": "get_Warning",
+      "kind": "property-get",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.Int32",
+      "used_by": [
+        "remodel.open",
+        "remodel.open_copy"
+      ],
+      "allowlisted": false,
+      "note": "T156: the swFileLoadWarning_e bits of the same open"
     }
   ],
   "enums": [

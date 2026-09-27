@@ -218,6 +218,56 @@ public static class RemodelInteropSurface
         // The two reads AssertFolderSelection makes, and nothing else.
         Call("ISelectionMgr", "GetSelectedObjectCount2", Method, "System.Int32", false, "Mark"),
         Call("ISelectionMgr", "GetSelectedObject6", Method, "System.Object", false, "Index", "Mark"),
+
+        // ---- the seat adapter's plumbing (T153 to T155; T156, 2026-09-27) -----------------
+        // Reads, and property sets on a throwaway open request, so none is allowlisted. The
+        // adapter calls them directly and gates nothing itself; the bridge gates the calls on
+        // the seam from outside, GetFeatures, GetPersistReference3 and GetUnits under those
+        // bare keys.
+
+        // The routes to every IModelDocExtension and IFeatureManager member above.
+        Call("IModelDoc2", "get_Extension", PropertyGet,
+            "SolidWorks.Interop.sldworks.ModelDocExtension", false),
+        Call("IModelDoc2", "get_FeatureManager", PropertyGet,
+            "SolidWorks.Interop.sldworks.FeatureManager", false),
+
+        // IRemodelDocument.Equations, handed to the shared SwEquationManager.
+        Call("IModelDoc2", "GetEquationMgr", Method, "SolidWorks.Interop.sldworks.EquationMgr", false),
+
+        // IRemodelDocument.GetLengthUnit: element 0 is a swLengthUnit_e value. An answer that
+        // cannot be read is null, never metres (research R3.6).
+        Call("IModelDoc2", "GetUnits", Method, "System.Object", false),
+
+        // IRemodelDocument.GetPersistReference and a folder's member refs, as PersistRefCodec
+        // encodes them; and the top-level tree in tree order, GetFeatures(true).
+        Call("IModelDocExtension", "GetPersistReference3", Method, "System.Object", false, "DispObj"),
+        Call("IFeatureManager", "GetFeatures", Method, "System.Object", false, "ToplevelOnly"),
+
+        // The active configuration IGeometrySource.GetMaterialName reads the material for, by
+        // the path Dump/PropertyDumper.cs already reads it.
+        Call("IModelDoc2", "get_ConfigurationManager", PropertyGet,
+            "SolidWorks.Interop.sldworks.ConfigurationManager", false),
+        Call("IConfigurationManager", "get_ActiveConfiguration", PropertyGet,
+            "SolidWorks.Interop.sldworks.Configuration", false),
+        Call("IConfiguration", "get_Name", PropertyGet, "System.String", false),
+
+        // An FtrFolder's members, for the rms_named_folders signal (research R3.1).
+        Call("IFeature", "GetSpecificFeature2", Method, "System.Object", false),
+        Call("IFeatureFolder", "GetFeatures", Method, "System.Object", false),
+
+        // The copy's open request, built by the one open-options helper the add-in's
+        // remodel.open_copy shares. OpenDoc7 takes the request, so RemodelCopy.OpenOptions
+        // (Silent | LoadModel = 17) is written as its members, and ReadOnly and ViewOnly are
+        // always set false.
+        Call("ISldWorks", "GetOpenDocSpec", Method, "System.Object", false, "FileName"),
+        Call("IDocumentSpecification", "set_DocumentType", PropertySet, "System.Void", false,
+            "DocumentType"),
+        Call("IDocumentSpecification", "set_Silent", PropertySet, "System.Void", false, "OpenSilent"),
+        Call("IDocumentSpecification", "set_LoadModel", PropertySet, "System.Void", false, "LoadModel"),
+        Call("IDocumentSpecification", "set_ReadOnly", PropertySet, "System.Void", false, "OpenReadOnly"),
+        Call("IDocumentSpecification", "set_ViewOnly", PropertySet, "System.Void", false, "OpenViewOnly"),
+        Call("IDocumentSpecification", "get_Error", PropertyGet, "System.Int32", false),
+        Call("IDocumentSpecification", "get_Warning", PropertyGet, "System.Int32", false),
     };
 
     /// <summary>The whole table, in the order it is declared above.</summary>

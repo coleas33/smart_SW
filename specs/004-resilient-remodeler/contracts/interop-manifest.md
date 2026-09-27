@@ -163,6 +163,63 @@ the same reflection dump that produced it and diffs:
 Regenerating the manifest is a deliberate, reviewed commit: the new file, the version bump, and a
 note in the quickstart saying which members moved. It is never a test that updates its own fixture.
 
+## The seat adapter's additions (T156, 2026-09-27)
+
+The production seat adapter (T153 to T155, the 004 build order's lane B) calls members the first
+generation did not record: the routes to members already recorded, the reads the bridge's seams
+leave to the adapter, and the copy's open request. Nineteen rows were added, none allowlisted,
+each read by the same metadata-only reflection over the installed `SolidWorks.Interop.sldworks`
+32.5.0.48 on the development machine (SOLIDWORKS not started) and checked there by test B. Nothing
+that was recorded moved, so `generated_at` stays the first generation's and `generated_by` names
+the additions. `RemodelInteropManifestTests.EveryMemberTheSeatAdapterAddsHasARowAndIsNotAllowlisted`
+pins the list by value.
+
+| Member | Why the adapter calls it | `used_by` |
+|---|---|---|
+| `IModelDoc2.get_Extension` | the route to every `IModelDocExtension` member (persist refs, the tag's property manager, `ReorderFeature`, What's Wrong, `CreateMassProperty2`) | every copy command, `remodel.probe_scope`, `VerifyTarget` |
+| `IModelDoc2.get_FeatureManager` | the route to `GetFeatures`, `GetSheetMetalFolder`, `EditRollback`, `InsertFeatureTreeFolder2`, `FeatureFolderLocation` | the tree walks |
+| `IModelDoc2.GetEquationMgr` | `IRemodelDocument.Equations`, handed to the shared `SwEquationManager` | `remodel.snapshot`, `remodel.equation` |
+| `IModelDoc2.GetUnits` | `IRemodelDocument.GetLengthUnit`: element 0 is a `swLengthUnit_e` value; unreadable is null, never metres | `remodel.open` |
+| `IModelDocExtension.GetPersistReference3` | `IRemodelDocument.GetPersistReference` and a folder's member refs, encoded by `PersistRefCodec` | the tree walks |
+| `IFeatureManager.GetFeatures` | `GetFeatures(true)`: `IRemodelDocument.GetFeaturesInOrder` and the scope-signal reader's walk | the tree walks |
+| `IModelDoc2.get_ConfigurationManager`, `IConfigurationManager.get_ActiveConfiguration`, `IConfiguration.get_Name` | the active configuration `IGeometrySource.GetMaterialName` reads the material for, by the path `Dump/PropertyDumper.cs` reads it | `remodel.geometry` |
+| `IFeature.GetSpecificFeature2`, `IFeatureFolder.GetFeatures` | an `FtrFolder`'s members for the `rms_named_folders` signal (research R3.1) | `remodel.probe_scope`, `remodel.open` |
+| `ISldWorks.GetOpenDocSpec`; `IDocumentSpecification.set_DocumentType`, `set_Silent`, `set_LoadModel`, `set_ReadOnly`, `set_ViewOnly`, `get_Error`, `get_Warning` | the copy's open request, built by the one open-options helper the add-in's `remodel.open_copy` shares: `OpenDoc7` takes the request, so `Silent \| LoadModel = 17` is written as its members, `ReadOnly` and `ViewOnly` always false; property sets on a throwaway request, never gated and not allowlisted (`guard-allowlist.md`, decision 17A's "Left open" row) | `remodel.open`, `remodel.open_copy` |
+
+"The tree walks" are `remodel.probe_scope`, `remodel.open`, `remodel.snapshot`, `remodel.reorder`,
+`remodel.folder` and `remodel.rebuild`. Three of the rows name members the bridge already gated
+under bare keys with no row: `GetFeatures`, `GetPersistReference3` and `GetUnits`. Where T153 to
+T155 leave the path open (the active configuration, a folder's members, the open request's error
+bits), the rows follow the repository's existing reads (*default taken 2026-09-27, the owner may
+revise*); a row lane B does not call is removed when its files merge. `set_ReadOnly` and the
+parameter name `LoadModel` match feature 011's refused `IDimension`/`INote.set_ReadOnly` and
+`IView.LoadModel` by name only, so they are two of `DrawingFamilyReadAuditTests`' named literals.
+
+## The seat adapter audit (T152): pure, runs everywhere
+
+Test A compares the fixture with a hand-written table, so a member the adapter called directly and
+nobody added to the table would pass it. The audit reads the adapter's source instead:
+`RemodelInteropManifestTests.EveryInteropMemberTheSeatAdapterSourceNamesHasARow`, over the files
+under `extractor/SwReview.AddIn/Remodel/Seat/` and lane A's shared `Rms/SwEquationManager.cs` and
+`Rms/SwMassProperty.cs`, found by the product-source scan `DrawingFamilyReadAuditTests` runs.
+
+- It takes every member access outside comments (strings are kept, since an interpolated string
+  holds code): a read is the member or its `get_` accessor, an assignment its `set_` accessor, a
+  compound assignment both.
+- It fails on a name that some public interface of the interop the product is built against
+  declares and that no row records, on any interface.
+- It cannot see which interface a name is called on, so a name recorded on one interface passes on
+  another, and an indexed property set (`x.Member[i] = v`) is read as a get. A name that is not a
+  SOLIDWORKS call but matches one (`Array.Length`) is a named exception with its reason, and a
+  staleness case fails an exception that is no longer needed.
+- A floor keeps it from passing on nothing: the shared classes are read and their interop calls
+  found, and a product file declaring one of the build order's adapter classes (`SwScopeSignalReader`,
+  `SwRemodelCopyDocument`, `SwRemodelProbeSource`, `SwRemodelBridgeSeat`, `CopyOpenSpecification`)
+  outside those paths fails it.
+
+`EveryMemberTheScopeProbeGatesHasARow` pins, beside it, that every member
+`RemodelScopeProbe.ProbeSurface` gates (T154's reads) and `RemodelSession`'s resolve pair has a row.
+
 ## Generation
 
 `swreview-extract probe interop --emit-manifest <path>` writes the file from the installed
