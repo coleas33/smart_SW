@@ -25,6 +25,7 @@ the subject an engineer would search for.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from pathlib import Path
 
 import pytest
 
@@ -44,6 +45,7 @@ from tests.support.features import (
 )
 
 TABLE = load_table()
+PROFILE_A = Path(__file__).resolve().parents[1] / "fixtures" / "standards" / "profile-a.yaml"
 ROOT = "doc:1"
 LIMIT = TABLE.assembly.mate_chain_depth_limit
 
@@ -149,7 +151,124 @@ def component_id(package: EvidencePackage, full_path: str) -> str:
     return next(row.id for row in package.components if row.full_path == full_path)
 
 
-# --- rms.assembly.mates_to_reference_geometry -------------------------------------
+# --- rms.assembly.mates_to_reference_geometry on the custom side (feature 013 T025) ------------
+
+
+class TestMatesOnTheCustomSide:
+    """`contracts/part-roles.md` section 6, research R2.9: mating to a bought part's faces is
+    the only way to mate to it, so the rule requires reference geometry only on the custom
+    (and unclear) side of a mate, and a mate between two bought parts is not graded.
+
+    Profile A decides the parts: `MR-10001` follows its convention with its custom prefix
+    (custom), the Toolbox pin is bought, and the spacer carries only sparse properties
+    (unclear, and asked about once the question is recorded)."""
+
+    RULE = "rms.assembly.mates_to_reference_geometry"
+
+    def build(self, *mates: MateSpec) -> EvidencePackage:
+        return assembly_package(
+            documents=[
+                part("doc:2", "MR-10001", InstanceSpec("plate-1")),
+                part(
+                    "doc:3",
+                    "fict-pin",
+                    InstanceSpec("pin-1", is_toolbox=True),
+                    InstanceSpec("pin-2", is_toolbox=True),
+                ),
+                part("doc:4", "fict-spacer", InstanceSpec("spacer-1")),
+            ],
+            mates=list(mates),
+        )
+
+    def run(self, package: EvidencePackage, *, asked: bool = False) -> dict[str, RuleResult]:
+        from swreview.checks.part_roles import classify_parts
+        from swreview.checks.standards.profile import load_profile
+
+        roles = classify_parts(package, load_profile(PROFILE_A))
+        assert [roles.by_document[key].role for key in ("doc:2", "doc:3", "doc:4")] == [
+            "custom",
+            "bought",
+            "unclear",
+        ]
+        keyed: dict[str, RuleResult] = {}
+        for result in evaluate_assembly(package, TABLE, roles.asking("ER-001") if asked else roles):
+            if result.rule_id == self.RULE:
+                assert result.outcome not in keyed
+                keyed[result.outcome] = result
+        return keyed
+
+    def test_a_custom_plane_mated_to_a_bought_face_passes(self) -> None:
+        package = self.build(MateSpec(entities=[("plate-1", PLANE), ("pin-1", FACE)]))
+
+        keyed = self.run(package)
+
+        assert list(keyed) == ["pass"]
+        assert labels(package, keyed["pass"]) == ["mate:0001", "plate-1", "pin-1"]
+
+    def test_a_custom_face_mated_to_a_bought_face_fails_naming_the_custom_side(self) -> None:
+        package = self.build(MateSpec(entities=[("plate-1", FACE), ("pin-1", FACE)]))
+
+        keyed = self.run(package)
+
+        assert list(keyed) == ["fail"]
+        assert keyed["fail"].result is not None
+        assert keyed["fail"].result.observed == (
+            "mate:0001 (COINCIDENT) references swSelFACES on plate-1"
+        )
+        assert labels(package, keyed["fail"]) == ["mate:0001", "plate-1"]
+
+    def test_a_mate_between_two_bought_parts_is_not_graded(self) -> None:
+        package = self.build(MateSpec(entities=[("pin-1", FACE), ("pin-2", FACE)]))
+
+        keyed = self.run(package)
+
+        assert list(keyed) == ["skip"]
+        assert keyed["skip"].reason == "mates between bought parts are not graded"
+        assert labels(package, keyed["skip"]) == ["mate:0001"]
+
+    def test_graded_mates_and_bought_only_mates_land_in_two_buckets(self) -> None:
+        package = self.build(
+            MateSpec(entities=[("plate-1", PLANE), ("spacer-1", PLANE)]),
+            MateSpec(entities=[("pin-1", FACE), ("pin-2", EDGE)]),
+            MateSpec(entities=[("pin-2", UNKNOWN_KIND), ("pin-1", FACE)]),
+        )
+
+        keyed = self.run(package)
+
+        assert sorted(keyed) == ["pass", "skip"]
+        assert labels(package, keyed["skip"]) == ["mate:0002", "mate:0003"]
+        assert labels(package, keyed["pass"]) == ["mate:0001", "plate-1", "spacer-1"]
+
+    def test_an_unlisted_kind_on_the_bought_side_leaves_nothing_open(self) -> None:
+        package = self.build(MateSpec(entities=[("plate-1", PLANE), ("pin-1", UNKNOWN_KIND)]))
+
+        assert list(self.run(package)) == ["pass"]
+
+    def test_an_unclear_side_is_graded_and_its_finding_carries_the_note(self) -> None:
+        package = self.build(MateSpec(entities=[("spacer-1", FACE), ("pin-1", FACE)]))
+
+        keyed = self.run(package, asked=True)
+
+        assert list(keyed) == ["fail"]
+        result = keyed["fail"].result
+        assert result is not None
+        assert result.coverage_limits == [
+            "may be a bought part: too little evidence: only few properties; asked in ER-001"
+        ]
+
+    def test_no_note_before_the_question_is_asked(self) -> None:
+        package = self.build(MateSpec(entities=[("spacer-1", FACE), ("pin-1", FACE)]))
+
+        result = self.run(package)["fail"].result
+
+        assert result is not None and result.coverage_limits == []
+
+    def test_without_roles_a_bought_face_still_fails_as_before(self) -> None:
+        package = self.build(MateSpec(entities=[("plate-1", PLANE), ("pin-1", FACE)]))
+
+        keyed = run(self.RULE, package)
+
+        assert list(keyed) == ["fail"]
 
 
 class TestMatesToReferenceGeometry:
