@@ -229,8 +229,9 @@ public sealed class ReviewPageQuestionsTests
 
     /// <summary>
     /// A question with `allow_text` draws its offered answers as buttons and, under them, one text
-    /// box whose placeholder is the backend's (`labels.questions.text_placeholder`), set as an
-    /// attribute of characters: the sample's placeholder carries markup and injects nothing.
+    /// box whose placeholder is the backend's (the question list's `text_placeholder`, which
+    /// `summary.questions` carries; integration of lanes R and W, 2026-09-27), set as an attribute
+    /// of characters: the sample's placeholder carries markup and injects nothing.
     /// </summary>
     [Fact]
     public void AQuestionThatAllowsTextDrawsItsButtonsAndATextBoxWithTheBackendsPlaceholder()
@@ -243,7 +244,7 @@ public sealed class ReviewPageQuestionsTests
         Assert.True(first.GetProperty("hasBox").GetBoolean(), "a question that allows text has no box.");
         Assert.True(first.GetProperty("boxAfterOptions").GetBoolean(), "the text box is not under the buttons.");
         Assert.Equal(string.Empty, first.GetProperty("boxValue").GetString());
-        Assert.Equal(LabelsSample.HostileTextPlaceholder, first.GetProperty("placeholder").GetString());
+        Assert.Equal(SummarySample.HostileTextPlaceholder, first.GetProperty("placeholder").GetString());
         Assert.Equal(0, first.GetProperty("injected").GetInt32());
         Assert.True(first.GetProperty("sendDisabled").GetBoolean(), "Send is offered with nothing answered.");
     }
@@ -303,8 +304,9 @@ public sealed class ReviewPageQuestionsTests
     }
 
     /// <summary>
-    /// FR-030: with no labels - an older backend - the box beside the buttons still appears, with
-    /// the placeholder the page's own free-text box has always carried.
+    /// FR-030: with no labels and a question list that carries no `text_placeholder` - an older
+    /// backend - the box beside the buttons still appears, with the placeholder the page's own
+    /// free-text box has always carried.
     /// </summary>
     [Fact]
     public void WithNoLabelsTheBoxBesideTheButtonsCarriesThePagesOwnPlaceholder()
@@ -343,8 +345,12 @@ public sealed class ReviewPageQuestionsTests
             driver => driver.InitialRoutes.Add(("GET", "/labels", 200, LabelsSample.Json())),
             async driver =>
             {
-                await driver.RouteAttention("chat-1", SummarySample.Json(summary => SummarySample.Ask(
-                    summary, SummarySample.PartRolesQuestion(), SummarySample.Question(0), SummarySample.Question(1))));
+                await driver.RouteAttention("chat-1", SummarySample.Json(summary =>
+                {
+                    SummarySample.Ask(
+                        summary, SummarySample.PartRolesQuestion(), SummarySample.Question(0), SummarySample.Question(1));
+                    SummarySample.WithTextPlaceholder(summary);
+                }));
                 await driver.Route("POST", "/sessions/chat-1/evidence", 202, "{}");
                 await driver.StartReview();
                 await driver.EndSession("chat-1");

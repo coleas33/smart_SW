@@ -14,11 +14,7 @@ namespace SwReview.AddIn.Tests;
 /// should print the label fails; and the evidence status `open` carries markup, because a label
 /// is backend text like any other and reaches the screen as characters (FR-029).
 ///
-/// Feature 013 adds the `questions` group (T035): the placeholder of the text box a question
-/// with `allow_text` draws beside its buttons (contracts/part-roles.md section 8, the words
-/// file's `questions.text_placeholder`). It carries markup for the same reason `open` does: a
-/// placeholder is an attribute the page sets from backend text, and it must stay characters.
-/// And the `source` group (T103): the words for who wrote a record, which the page prints on a
+/// Feature 013 adds the `source` group (T103): the words for who wrote a record, which the page prints on a
 /// finding's line, a question's pager line, an evidence record's head, a goal's recorded sentence
 /// and a coverage row whenever the body states its source (contracts/sources.md section 2).
 /// </summary>
@@ -30,10 +26,6 @@ internal static class LabelsSample
     public const string SourceCode = "Checked by code";
 
     public const string SourceModel = "AI guidance";
-
-    /// <summary>The text box's placeholder beside a question's buttons, with markup in it.</summary>
-    public const string HostileTextPlaceholder =
-        "<img src=x onerror=alert(5)>Or name the bought ones, separated by commas";
 
     public const string TurnRunning = "A review turn is still running. Wait for it to finish, or press Stop.";
 
@@ -89,12 +81,6 @@ internal static class LabelsSample
                 { "zero_volume", "touching" },
                 { "possible_only", "possible only" },
                 { "thread_model", "thread model" },
-            }
-        },
-        {
-            "questions", new Dictionary<string, string>
-            {
-                { "text_placeholder", HostileTextPlaceholder },
             }
         },
         {

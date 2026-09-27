@@ -517,6 +517,9 @@
       case 'finding':
         showFinding(body);
         return;
+      case 'finding.withdrawn':
+        withdrawFinding(body);
+        return;
       case 'evidence.requested':
         showEvidence(body);
         return;
@@ -568,6 +571,9 @@
     switch (event.type) {
       case 'finding':
         appendCard(render.findingMarker(body));
+        return;
+      case 'finding.withdrawn':
+        appendCard(render.withdrawalMarker(body));
         return;
       case 'coverage':
       case 'coverage.withdrawn':
@@ -854,8 +860,8 @@
    * it now stands. An id this page holds no card for is ignored: nothing leaves and nothing is read.
    *
    * Wired to the live stream (`onLiveEvent`) and, as its Transcript line alone, to a replay
-   * (`onReplayedEvent`: a snapshot is the session after every withdrawal) once 013 T038 puts the
-   * event in chat-events.schema.json - the page names no event type the contract does not carry
+   * (`onReplayedEvent`: a snapshot is the session after every withdrawal); 013 T038 put the event
+   * in chat-events.schema.json, and the page names no event type the contract does not carry
    * (ReviewPageContractTests).
    */
   function withdrawFinding(body) {
