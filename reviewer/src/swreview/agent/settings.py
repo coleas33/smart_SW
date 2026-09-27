@@ -482,10 +482,10 @@ class EfficiencySettings(BaseModel):
     drop_prior_reasoning: bool = False
     """Lever 14 (feature 013, `contracts/tokens.md` section 4): at a turn boundary, the OpenAI
     request view leaves out the reasoning items of earlier turns and keeps the current turn's;
-    the stored history is unchanged. Inert on Gemini, which sends none. Off until the replay
-    shows no recorded finding lost and a fall in requested input, and then adopted only by a
-    commit of its own into `pane_efficiency`. Appended last, and written into `session.json`
-    only when on, as lever 13 is."""
+    the stored history is unchanged. Inert on Gemini, which sends none. Off in the class, on
+    the command line and in `benchmark run`; a pane default since feature 013 T125, when the
+    replay showed no recorded finding lost and a fall in requested input (`pane_efficiency`).
+    Appended last, and written into `session.json` only when on, as lever 13 is."""
 
 
 def checks_first(efficiency: EfficiencySettings | None) -> bool:
@@ -507,13 +507,17 @@ def pane_efficiency(provider: ProviderName) -> EfficiencySettings:
     research R2.14, R2.40): Gemini has no switch and already makes parallel calls, and the
     scripted provider reads no request field, so both record the lever off; and the tools
     checks first ran leaving the array, for every provider, since 2026-09-23 (lever 13,
-    research R2.53). The command line and `benchmark run` stay all off; `swreview review
+    research R2.53); and earlier turns' reasoning out of the request view, for every provider,
+    since feature 013's replay gate priced it (lever 14, T124-T125: no recorded finding lost
+    and the requested input lower on every fixture; inert on Gemini, which sends no reasoning
+    items). The command line and `benchmark run` stay all off; `swreview review
     --pane-defaults` reproduces this.
     """
     return EfficiencySettings(
         prerun_checks=True,
         withhold_prerun_tools=True,
         parallel_tool_calls=provider is ProviderName.OPENAI,
+        drop_prior_reasoning=True,
     )
 
 

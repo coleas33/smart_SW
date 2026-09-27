@@ -662,17 +662,23 @@ def test_the_pane_runs_checks_first_on_every_provider(provider: ProviderName) ->
     assert checks_first(pane) is True
 
 
-PANE_LEVERS = ("prerun_checks", "withhold_prerun_tools", "parallel_tool_calls")
+PANE_LEVERS = (
+    "prerun_checks",
+    "withhold_prerun_tools",
+    "parallel_tool_calls",
+    "drop_prior_reasoning",
+)
 """The levers the pane decides per provider: checks first (User Story 2), the pre-run's tools
-leaving the array (the amendment of 2026-09-23, T107) and, for OpenAI, parallel tool calls
-(User Story 4, T080). Every other lever is the class default."""
+leaving the array (the amendment of 2026-09-23, T107), for OpenAI, parallel tool calls (User
+Story 4, T080), and earlier turns' reasoning out of the request view (feature 013 T125, edited
+deliberately). Every other lever is the class default."""
 
 
 @pytest.mark.parametrize("provider", list(ProviderName))
 def test_every_other_pane_lever_is_the_class_default(provider: ProviderName) -> None:
     """Checks first is the lever User Story 2 turns on in the pane; the amendment of
-    2026-09-23 widens this by exactly `withhold_prerun_tools` (T107), and US4 by exactly
-    `parallel_tool_calls` (T080)."""
+    2026-09-23 widens this by exactly `withhold_prerun_tools` (T107), US4 by exactly
+    `parallel_tool_calls` (T080), and feature 013 T125 by exactly `drop_prior_reasoning`."""
     pane = pane_efficiency(provider).model_dump()
     default = EfficiencySettings().model_dump()
 
@@ -805,13 +811,17 @@ def test_review_accepts_lever_13_with_checks_first_and_records_both(
 # --- lever 14, drop_prior_reasoning (feature 013 T120, contracts/tokens.md section 4) ----------
 
 
-def test_lever_14_is_off_by_default_and_off_in_the_pane() -> None:
+def test_lever_14_is_off_by_default_and_on_in_the_pane() -> None:
+    """013 T125 (edited deliberately): the US6 replay gate (T124) priced lever 14 off and on over
+    every fixture - no recorded finding lost, the requested input lower in every configuration -
+    so the pane adopts it, for every provider as lever 13 is (inert on Gemini, which sends no
+    reasoning items). The class, the command line and `benchmark run` stay off."""
     from swreview.agent.providers import ProviderName
     from swreview.agent.settings import pane_efficiency
 
     assert EfficiencySettings().drop_prior_reasoning is False
     for provider in ProviderName:
-        assert pane_efficiency(provider).drop_prior_reasoning is False
+        assert pane_efficiency(provider).drop_prior_reasoning is True
 
 
 def test_lever_14_resolves_alone_from_the_command_line() -> None:
