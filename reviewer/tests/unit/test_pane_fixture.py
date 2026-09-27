@@ -46,6 +46,14 @@ def fixture(committed: str) -> dict[str, Any]:
     return json.loads(committed)
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "013 T056 (lane G): feature 013 lane R moves the summary this fixture carries (the "
+        "Standards goal, the grouped view and the summary block); only the integrator "
+        "regenerates the pane fixture, in the G tasks' order - remove this mark then"
+    ),
+)
 def test_the_committed_fixture_is_a_fresh_generation(generator: ModuleType, committed: str) -> None:
     fresh = generator.render(generator.pane_fixture())
 

@@ -63,6 +63,12 @@ PLACEHOLDERS: dict[str, set[str]] = {
     "contacts.many": {"n"},
     "resume.with_tokens": {"tokens"},
     "resume.without": set(),
+    "finding_group_text.one": set(),
+    "finding_group_text.many": {"n"},
+    "finding_group_text.decided": {"d"},
+    "finding_group_text.fold_tail": {"n"},
+    "finding_group_text.reach_one": set(),
+    "finding_group_text.reach_many": {"n"},
 }
 """Every template `report/summary.py` formats, and the fields it formats it with. Every
 other string in the file is printed as it stands and so carries no placeholder at all."""
@@ -123,6 +129,10 @@ def test_the_words_are_loaded_once() -> None:
         ("resume",),
         ("labels",),
         ("goals", 0),
+        ("finding_groups", 0),
+        ("finding_group_other",),
+        ("finding_group_checked",),
+        ("finding_group_text",),
     ],
 )
 def test_an_extra_key_anywhere_is_refused(path: tuple[object, ...]) -> None:
@@ -201,25 +211,187 @@ def test_every_label_is_a_plain_word_not_a_token() -> None:
 # --- the goals ------------------------------------------------------------------------------
 
 
-def test_the_goals_are_the_nine_of_the_contract_in_their_order() -> None:
-    goals = load_words().goals
-    assert [goal.id for goal in goals] == [
+GOAL_TABLE: list[tuple[str, list[str], list[str], str]] = [
+    (
         "interference",
-        "fasteners",
-        "hole_alignment",
+        ["interference", "coverage.prerun.interference"],
+        ["interference."],
+        "interference_fit",
+    ),
+    ("fasteners", ["fasteners"], ["fastener."], "fasteners"),
+    ("hole_alignment", ["holes.alignment"], ["hole.", "joint."], "interference_fit"),
+    (
         "fits_and_stacks",
-        "tool_access",
+        ["interfaces.fit", "interfaces.stack"],
+        ["fit.", "stack."],
+        "interference_fit",
+    ),
+    ("tool_access", [], ["fastener.head_clearance", "fastener.head_fit"], "fasteners"),
+    (
         "mass_and_material",
-        "hygiene",
+        ["mass.material"],
+        ["mass.", "standards.part.material_assigned"],
+        "mass_material",
+    ),
+    ("hygiene", ["provenance", "hygiene"], ["provenance.", "hygiene."], "hygiene"),
+    (
+        "standards",
+        ["standards.release", "coverage.prerun.standards"],
+        ["standards."],
+        "standards",
+    ),
+    (
         "drawings",
-        "modelling_practice",
-    ]
-    practice = goals[-1]
-    assert (practice.title, practice.items, practice.prefixes) == (
-        "Modelling practice",
-        ["modeling.resilience"],
-        ["rms."],
+        ["drawing.manufacturing_inputs"],
+        ["drawing.", "drawing_profile.", "standards.drawing.", "rms.drawing."],
+        "drawings",
+    ),
+    ("modelling_practice", ["modeling.resilience"], ["rms."], "modelling_practice"),
+]
+"""013 `contracts/grouped-list.md` section 2: the ten goals, their items, prefixes and group.
+The `standards` goal is split out of `hygiene` (research R2.14)."""
+
+SEVEN_GROUPS: list[tuple[str, str, bool]] = [
+    ("interference_fit", "Interference and fit", True),
+    ("fasteners", "Fasteners", True),
+    ("drawings", "Drawings", True),
+    ("standards", "Standards", True),
+    ("modelling_practice", "Modelling practice", False),
+    ("hygiene", "Hygiene", True),
+    ("mass_material", "Mass and material", True),
+]
+"""013 research R2.13: the fixed order, Modelling practice arriving collapsed."""
+
+
+def test_the_goals_are_the_ten_of_the_contract_in_their_order() -> None:
+    goals = load_words().goals
+    assert [(goal.id, goal.items, goal.prefixes, goal.group) for goal in goals] == GOAL_TABLE
+    assert goals[-1].title == "Modelling practice"
+    assert [goal.title for goal in goals if goal.id == "standards"] == ["Standards"]
+
+
+def test_the_seven_groups_come_in_their_fixed_order_with_their_open_flags() -> None:
+    words = load_words()
+    assert [(group.id, group.title, group.open) for group in words.finding_groups] == SEVEN_GROUPS
+
+
+def test_other_checks_and_the_checked_fold_are_worded() -> None:
+    words = load_words()
+    other, checked = words.finding_group_other, words.finding_group_checked
+    assert (other.id, other.title, other.open) == ("other", "Other checks", True)
+    assert (checked.title, checked.open, checked.exception_tail) == (
+        "Checked, no issue",
+        False,
+        "within an accepted exception",
     )
+
+
+def test_the_group_and_row_words() -> None:
+    text = load_words().finding_group_text
+    assert (text.one, text.many.format(n=3), text.decided.format(d=2)) == (
+        "1 finding",
+        "3 findings",
+        "2 decided",
+    )
+    assert (text.fold_tail.format(n=3), text.reach_one, text.reach_many.format(n=2)) == (
+        "×3",
+        "reaches 1 component",
+        "reaches 2 components",
+    )
+
+
+def test_the_separator_is_one_word_the_summary_and_the_rows_share() -> None:
+    assert load_words().separator == " · "
+
+
+def test_every_goal_names_one_of_the_seven_groups() -> None:
+    words = load_words()
+    groups = {group.id for group in words.finding_groups}
+    assert {goal.group for goal in words.goals} <= groups
+    assert words.finding_group_other.id not in groups
+
+
+def test_every_group_has_a_goal_so_all_seven_render_by_default() -> None:
+    words = load_words()
+    assert {goal.group for goal in words.goals} == {group.id for group in words.finding_groups}
+
+
+def test_every_classified_check_lands_in_one_of_the_seven_groups() -> None:
+    """013 `contracts/grouped-list.md` section 7: no check id the policy classes falls to
+    "Other checks"."""
+    words = load_words()
+    groups = {group.id for group in words.finding_groups}
+    landed = {check: goal_of(check, words.goals) for check in load_policy().classes}
+    assert {check for check, goal in landed.items() if goal is None} == set()
+    assert {goal.group for goal in landed.values() if goal is not None} <= groups
+
+
+@pytest.mark.parametrize(
+    ("check", "group"),
+    [
+        ("standards.drawing.revision_matches", "drawings"),
+        ("standards.part.sketches_fully_defined", "standards"),
+        ("standards.part.material_assigned", "mass_material"),
+        ("rms.drawing.model_items_preferred", "drawings"),
+        ("rms.sketches.fully_defined", "modelling_practice"),
+        ("hygiene.revision_present", "hygiene"),
+        ("fastener.head_fit", "fasteners"),
+        ("hole.coaxiality", "interference_fit"),
+        ("stack.gap", "interference_fit"),
+        ("drawing_profile.conformance", "drawings"),
+        ("mass.density", "mass_material"),
+    ],
+)
+def test_a_check_lands_in_its_goals_group(check: str, group: str) -> None:
+    goal = goal_of(check, load_words().goals)
+    assert goal is not None and goal.group == group
+
+
+def with_goal_group(data: dict[str, Any], goal_id: str, group: str) -> dict[str, Any]:
+    for goal in data["goals"]:
+        if goal["id"] == goal_id:
+            goal["group"] = group
+    return data
+
+
+def test_a_goal_naming_a_group_the_file_does_not_list_is_refused() -> None:
+    data = with_goal_group(raw_words(), "hygiene", "housekeeping")
+
+    with pytest.raises(ValidationError, match="hygiene"):
+        Words.model_validate(data)
+
+
+def test_a_goal_without_a_group_is_refused() -> None:
+    data = raw_words()
+    del data["goals"][0]["group"]
+
+    with pytest.raises(ValidationError):
+        Words.model_validate(data)
+
+
+def test_a_group_listed_twice_is_refused() -> None:
+    data = raw_words()
+    data["finding_groups"].append(dict(data["finding_groups"][0]))
+
+    with pytest.raises(ValidationError, match="interference_fit"):
+        Words.model_validate(data)
+
+
+def test_other_checks_may_not_share_an_id_with_a_type_group() -> None:
+    data = raw_words()
+    data["finding_group_other"]["id"] = "hygiene"
+
+    with pytest.raises(ValidationError, match="hygiene"):
+        Words.model_validate(data)
+
+
+def test_folding_mass_and_material_into_hygiene_is_one_valid_edit() -> None:
+    """013 research R2.13: the owner may fold the seventh group away by one goal's `group`."""
+    words = Words.model_validate(with_goal_group(raw_words(), "mass_and_material", "hygiene"))
+
+    assert {goal.group for goal in words.goals} == {
+        group.id for group in words.finding_groups
+    } - {"mass_material"}
 
 
 def test_goal_ids_items_and_prefixes_are_unique() -> None:

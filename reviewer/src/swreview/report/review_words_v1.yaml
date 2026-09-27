@@ -7,8 +7,9 @@
 # Two rules for every string below:
 # - no percent sign: the ranking and these words reach the Standards tab, whose body scan
 #   forbids one (write "30 percent");
-# - a placeholder in braces is filled by `report/summary.py` and nowhere else; the ones
-#   each template may carry are pinned in `tests/unit/test_review_words.py`.
+# - a placeholder in braces is filled by `report/summary.py` or `report/finding_groups.py`
+#   and nowhere else; the ones each template may carry are pinned in
+#   `tests/unit/test_review_words.py`.
 version: review_words_v1
 
 headline:
@@ -17,6 +18,10 @@ headline:
   findings_many: "{n} findings"
   issues_one: "in 1 issue"
   issues_many: "in {n} issues"
+
+# What joins two parts of one line: a row's fold count, reach and tail, and a group's count
+# and decided count (feature 013).
+separator: " · "
 
 # The three owner groups first (the owner's labels, 2026-09-23), then the two shown only
 # when they hold a finding. `one` is used at exactly 1 and `many` otherwise, 0 included.
@@ -90,48 +95,94 @@ goal_reasons:
 # it, else to the goal with the longest prefix it starts with: `fastener.head_fit` is tool
 # access, not fasteners; `standards.drawing.*` and `rms.drawing.*` are drawings. Modelling
 # practice is a goal of its own (2026-09-23), so modelling findings never fill the hygiene
-# line.
+# line, and so is Standards (feature 013, its research R2.14). `group` is the
+# `finding_groups` id a goal's findings are listed under - one taxonomy for goals and groups:
+# folding Mass and material into Hygiene is that goal's `group: hygiene` and no other edit.
 goals:
   - id: interference
     title: "Interference"
     items: [interference, coverage.prerun.interference]
     prefixes: [interference.]
+    group: interference_fit
   - id: fasteners
     title: "Fasteners"
     items: [fasteners]
     prefixes: [fastener.]
+    group: fasteners
   - id: hole_alignment
     title: "Hole alignment"
     items: [holes.alignment]
     # `joint.` is feature 010's joint map (coverage rows only): the joints alignment is
     # judged on, the near misses listed for the engineer, and the holes it could not use.
     prefixes: [hole., joint.]
+    group: interference_fit
   - id: fits_and_stacks
     title: "Fits and stacks"
     items: [interfaces.fit, interfaces.stack]
     prefixes: [fit., stack.]
+    group: interference_fit
   - id: tool_access
     title: "Tool access"
     items: []
     prefixes: [fastener.head_clearance, fastener.head_fit]
+    group: fasteners
   - id: mass_and_material
     title: "Mass and material"
     items: [mass.material]
     prefixes: [mass., standards.part.material_assigned]
+    group: mass_material
   - id: hygiene
     title: "Hygiene"
-    items: [provenance, standards.release, coverage.prerun.standards, hygiene]
-    prefixes: [provenance., standards., hygiene.]
+    items: [provenance, hygiene]
+    prefixes: [provenance., hygiene.]
+    group: hygiene
+  - id: standards
+    title: "Standards"
+    items: [standards.release, coverage.prerun.standards]
+    prefixes: [standards.]
+    group: standards
   - id: drawings
     title: "Drawings"
     items: [drawing.manufacturing_inputs]
     # `drawing_profile.` is feature 011's drawing standard comparison: a drawings finding,
     # named so it cannot close the checklist item `drawing.manufacturing_inputs`.
     prefixes: [drawing., drawing_profile., standards.drawing., rms.drawing.]
+    group: drawings
   - id: modelling_practice
     title: "Modelling practice"
     items: [modeling.resilience]
     prefixes: [rms.]
+    group: modelling_practice
+
+# The groups the findings are listed under, in their fixed order (feature 013, its
+# `contracts/grouped-list.md` section 2): each row of a review sits in the group of its goal,
+# a check no goal names in "Other checks" (last, and only when it holds a row), and every pass
+# in the one "Checked, no issue" fold. `open` is how a group arrives on the Review tab. A group
+# with no goal and no row is left out.
+finding_groups:
+  - {id: interference_fit, title: "Interference and fit", open: true}
+  - {id: fasteners, title: "Fasteners", open: true}
+  - {id: drawings, title: "Drawings", open: true}
+  - {id: standards, title: "Standards", open: true}
+  - {id: modelling_practice, title: "Modelling practice", open: false}
+  - {id: hygiene, title: "Hygiene", open: true}
+  - {id: mass_material, title: "Mass and material", open: true}
+finding_group_other: {id: other, title: "Other checks", open: true}
+finding_group_checked:
+  title: "Checked, no issue"
+  open: false
+  exception_tail: "within an accepted exception"
+
+# A group's count line, and a row's fold count and reach: the page prints them and counts
+# nothing. `decided` follows the count after `separator`; a row's `fold_tail`, reach and tail
+# are joined by it too.
+finding_group_text:
+  one: "1 finding"
+  many: "{n} findings"
+  decided: "{d} decided"
+  fold_tail: "×{n}"
+  reach_one: "reaches 1 component"
+  reach_many: "reaches {n} components"
 
 # The card vocabulary `GET /labels` serves (data-model section 7). `errors` holds one
 # sentence per error class saying what to do next: every backend `ChatError` class, every

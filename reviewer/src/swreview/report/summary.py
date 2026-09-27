@@ -24,22 +24,27 @@ group, first match winning, by the ranking's own keys; severity is never read.
 
 **One goal per check** (research R2.4). A finding or a coverage row belongs to the goal
 whose `items` name its check, else to the goal with the longest prefix it starts with, so
-`standards.drawing.*` speaks for drawings and never also for hygiene.
+`standards.drawing.*` speaks for drawings and never also for standards.
 
 **A goal's state is a fixed precedence** (contracts/review-summary.md section 3): issues,
 then not reached, then checked, then not applicable. One case the contract's four rows left
 open - only rule rows that are unresolved, skipped or failed - reads not reached, its
 reason from the first of them, so every goal has a state.
+
+The goals, `goal_of` and the goal lines live in `report/finding_groups.py` since feature 013,
+where each goal names the group its findings are listed under (013 research R2.14); they are
+imported here and exported from here as before.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 import yaml
+from pydantic import model_validator
 
 from swreview.drawings.evidence import file_key, file_name, id_order
 from swreview.findings import Finding, FindingStatus, ReviewModel, Severity
@@ -52,6 +57,19 @@ from swreview.report.attention import (
     load_policy,
     rank,
 )
+from swreview.report.finding_groups import (
+    COVERAGE_BUCKETS,
+    CheckedFoldWords,
+    CoverageBucket,
+    FindingGroupText,
+    FindingGroupWords,
+    Goal,
+    GoalLine,
+    GoalReason,
+    GoalState,
+    goal_lines,
+    goal_of,
+)
 from swreview.report.names import and_list
 from swreview.report.names import component_names as all_component_names
 from swreview.report.titles import with_display_titles
@@ -59,7 +77,7 @@ from swreview.report.unexamined import not_examined
 
 if TYPE_CHECKING:  # pragma: no cover - imported for annotations only, never at run time
     from swreview.agent.events import UsageLedger
-    from swreview.report.session import CoverageItem, EvidenceRequest, ReviewSession
+    from swreview.report.session import EvidenceRequest, ReviewSession
 
 __all__ = [
     "COVERAGE_BUCKETS",
@@ -92,20 +110,6 @@ __all__ = [
 WORDS_FILE = Path(__file__).parent / "review_words_v1.yaml"
 """Every word the summary, the labels route and the read-only restore print."""
 
-CoverageBucket = Literal["checked", "skipped", "unresolved", "failed", "out_of_scope"]
-COVERAGE_BUCKETS: tuple[CoverageBucket, ...] = (
-    "checked",
-    "skipped",
-    "unresolved",
-    "failed",
-    "out_of_scope",
-)
-"""`report/session.CoverageBucket`, copied (see the module docstring), in `Coverage`'s
-order; `tests/unit/test_review_summary.py` asserts the two are one list."""
-
-NOT_REACHED_BUCKETS: tuple[CoverageBucket, ...] = ("unresolved", "skipped", "failed")
-"""The buckets that say a goal was not reached, in the order its reason is taken from."""
-
 GroupKind = Literal["decide", "fix", "verify", "decided", "within_scope"]
 OWNER_GROUPS: tuple[GroupKind, ...] = ("decide", "fix", "verify")
 """Always listed, in this order, at zero too (the owner's decision of 2026-09-23)."""
@@ -121,8 +125,6 @@ asserts the two are one number."""
 DRAWINGS_SEPARATOR = ". "
 """What joins the drawings line's two parts, each a sentence of its own."""
 
-GoalState = Literal["issues", "checked", "not_reached", "not_applicable"]
-GoalReason = Literal["unresolved", "skipped", "failed", "out_of_scope", "no_check"]
 EvidenceStatus = Literal["open", "answered"]
 ContactKind = Literal["zero_volume", "possible_only", "thread_model"]
 
@@ -203,15 +205,6 @@ class ResumeWords(ReviewModel):
         return self.without if tokens is None else self.with_tokens.format(tokens=f"{tokens:,}")
 
 
-class Goal(ReviewModel):
-    """One check goal: the coverage rows that close it and the check ids it owns."""
-
-    id: str
-    title: str
-    items: list[str]
-    prefixes: list[str]
-
-
 class Labels(ReviewModel):
     """The card vocabulary `GET /labels` serves, verbatim (data-model section 7)."""
 
@@ -226,10 +219,17 @@ class Labels(ReviewModel):
 
 class Words(ReviewModel):
     """`review_words_v1.yaml`, loaded (data-model section 1). Every model refuses a key it
-    does not name, so a misspelt word is an error and never a silently missing line."""
+    does not name, so a misspelt word is an error and never a silently missing line.
+
+    The groups (feature 013) are checked against the goals when the file loads: a goal naming
+    a group the file does not list, a group listed twice, or "Other checks" sharing a type
+    group's id would each file findings under a heading nobody renders, so each is refused by
+    name rather than discovered on the page.
+    """
 
     version: str
     headline: HeadlineWords
+    separator: str
     groups: dict[GroupKind, GroupWords]
     questions: CountWords
     not_loaded: NotLoadedWords
@@ -240,7 +240,28 @@ class Words(ReviewModel):
     goal_states: dict[GoalState, str]
     goal_reasons: dict[GoalReason, str]
     goals: list[Goal]
+    finding_groups: list[FindingGroupWords]
+    finding_group_other: FindingGroupWords
+    finding_group_checked: CheckedFoldWords
+    finding_group_text: FindingGroupText
     labels: Labels
+
+    @model_validator(mode="after")
+    def _every_goal_names_a_listed_group(self) -> Words:
+        ids = [group.id for group in self.finding_groups]
+        repeated = sorted({one for one in ids if ids.count(one) > 1})
+        if repeated:
+            raise ValueError(f"finding_groups lists {', '.join(repeated)} more than once")
+        if self.finding_group_other.id in ids:
+            raise ValueError(
+                f"finding_group_other's id {self.finding_group_other.id} is a type group's id"
+            )
+        unknown = [goal.id for goal in self.goals if goal.group not in ids]
+        if unknown:
+            raise ValueError(
+                f"goals {', '.join(unknown)} name a group finding_groups does not list"
+            )
+        return self
 
 
 @cache
@@ -264,16 +285,6 @@ class SummaryGroup(ReviewModel):
     count: int
     text: str
     by_goal: list[GoalCount]
-
-
-class GoalLine(ReviewModel):
-    goal: str
-    title: str
-    state: GoalState
-    state_label: str
-    findings: int
-    reason: str | None
-    detail: str | None
 
 
 class EntityName(ReviewModel):
@@ -372,25 +383,6 @@ class ReviewRanking(Ranking):
         return cls(**dict(ranking), summary=summary)
 
 
-# --- which goal a check belongs to ------------------------------------------------------------
-
-
-def goal_of(check: str, goals: Sequence[Goal]) -> Goal | None:
-    """The goal whose `items` name `check`, else the goal of its longest prefix, else none."""
-    for goal in goals:
-        if check in goal.items:
-            return goal
-    matches = [
-        (len(prefix), goal)
-        for goal in goals
-        for prefix in goal.prefixes
-        if check.startswith(prefix)
-    ]
-    if not matches:
-        return None
-    return max(matches, key=lambda match: match[0])[1]
-
-
 # --- the summary ------------------------------------------------------------------------------
 
 
@@ -443,7 +435,7 @@ def review_summary(
         questions=_questions(session.evidence_requests, words, names, package),
         not_loaded=_not_loaded(package, words),
         drawings=drawings_of(package),
-        goals=[_goal_line(goal, session, words) for goal in words.goals],
+        goals=goal_lines(session, words),
         contacts=contacts_of(session, names),
         component_names=names,
         resume_input_tokens=tokens,
@@ -551,65 +543,6 @@ def _by_goal(findings: Sequence[Finding], goals: Sequence[Goal]) -> list[GoalCou
         for goal in goals
         if counts[goal.id]
     ]
-
-
-# --- the goal lines ---------------------------------------------------------------------------
-
-
-def _goal_line(goal: Goal, session: ReviewSession, words: Words) -> GoalLine:
-    """One goal's state, first match winning (contracts/review-summary.md section 3)."""
-    goals = words.goals
-    mapped = [finding for finding in session.findings if goal_of(finding.check, goals) is goal]
-    issues = [finding for finding in mapped if finding.status != SUPPRESSED_STATUS]
-    rows = {
-        bucket: [
-            item for item in getattr(session.coverage, bucket) if goal_of(item.check, goals) is goal
-        ]
-        for bucket in COVERAGE_BUCKETS
-    }
-
-    def line(
-        state: GoalState, reason: GoalReason | None = None, detail: str | None = None
-    ) -> GoalLine:
-        return GoalLine(
-            goal=goal.id,
-            title=goal.title,
-            state=state,
-            state_label=words.goal_states[state],
-            findings=len(issues),
-            reason=None if reason is None else words.goal_reasons[reason],
-            detail=detail,
-        )
-
-    if issues:
-        return line("issues")
-    closeout = _first(rows, lambda item: item.check in goal.items)
-    if closeout is not None:
-        return line("not_reached", *closeout)
-    if not mapped and not any(rows.values()):
-        return line("not_reached", "no_check")
-    if rows["checked"] or mapped:
-        # `mapped` holds within-scope findings only here: `issues` was empty.
-        return line("checked")
-    rule_row = _first(rows, lambda item: True)
-    if rule_row is not None:
-        # The case the contract's four rows leave open: only rule rows, none checked, and
-        # at least one of them unresolved, skipped or failed.
-        return line("not_reached", *rule_row)
-    # Every row left is out of scope, and there is at least one: `no_check` took the rest.
-    return line("not_applicable", "out_of_scope", rows["out_of_scope"][0].reason)
-
-
-def _first(
-    rows: Mapping[CoverageBucket, Sequence[CoverageItem]],
-    wanted: Callable[[CoverageItem], bool],
-) -> tuple[GoalReason, str] | None:
-    """The bucket and reason of the first `wanted` row in unresolved, skipped, failed order."""
-    for bucket in NOT_REACHED_BUCKETS:
-        for item in rows[bucket]:
-            if wanted(item):
-                return bucket, item.reason
-    return None
 
 
 # --- questions and parts not loaded -----------------------------------------------------------
