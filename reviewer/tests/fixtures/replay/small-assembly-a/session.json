@@ -1,9 +1,9 @@
 {
-  "session_id": "d17c8214-18d2-48c7-89e9-db9a89499c1c",
+  "session_id": "5ad53038-751b-4e1a-bd0d-b0bd02c9ff6f",
   "package_id": "dbce1f40-e74b-4f3b-ae27-af61ec45d66a",
   "design_id": "dsn:681d2181ba04",
-  "started_at": "2026-09-27T06:23:40.389128Z",
-  "ended_at": "2026-09-27T06:23:40.462790Z",
+  "started_at": "2026-09-27T11:43:28.052314Z",
+  "ended_at": "2026-09-27T11:43:28.140421Z",
   "model": "gpt-5.6-luna",
   "provider_info": {
     "provider": "fake",
@@ -35,34 +35,34 @@
     "rounds": 39,
     "turns": 2,
     "totals": {
-      "input_tokens": 1570535,
-      "cached_input_tokens": 1494181,
+      "input_tokens": 1570895,
+      "cached_input_tokens": 1494301,
       "cache_write_tokens": 67908,
       "output_tokens": 6605,
       "reasoning_tokens": 2654,
       "tool_result_input_tokens": null,
-      "total_tokens": 1577140,
+      "total_tokens": 1577500,
       "latency_s": 95.64147399994545
     },
     "by_turn": [
       {
-        "input_tokens": 1504810,
-        "cached_input_tokens": 1429640,
+        "input_tokens": 1505138,
+        "cached_input_tokens": 1429760,
         "cache_write_tokens": 66064,
         "output_tokens": 5928,
         "reasoning_tokens": 2206,
         "tool_result_input_tokens": null,
-        "total_tokens": 1510738,
+        "total_tokens": 1511066,
         "latency_s": 88.99878119994537
       },
       {
-        "input_tokens": 65725,
+        "input_tokens": 65757,
         "cached_input_tokens": 64541,
         "cache_write_tokens": 1844,
         "output_tokens": 677,
         "reasoning_tokens": 448,
         "tool_result_input_tokens": null,
-        "total_tokens": 66402,
+        "total_tokens": 66434,
         "latency_s": 6.642692800000077
       }
     ]
@@ -76,7 +76,7 @@
       "result_summary": "{\"design_id\":\"dsn:681d2181ba04\",\"design_name\":\"268-88428\",\"configuration\":\"Default\",\"root_assembly_document_id\":\"doc:681d2181ba04\",\"drawing_document_ids\":[],\"document_count\":3,\"component_count\":4,\"ma…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000021299998479662463,
+      "elapsed_s": 0.000023100001271814108,
       "result_bytes": 473,
       "result_tokens": 163
     },
@@ -87,9 +87,9 @@
       "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Closed by code from the package before your first turn: each reviewed documen…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00003130000186502002,
-      "result_bytes": 4074,
-      "result_tokens": 903
+      "elapsed_s": 0.000030200004403013736,
+      "result_bytes": 4111,
+      "result_tokens": 911
     },
     {
       "index": 2,
@@ -98,7 +98,7 @@
       "result_summary": "{\"result\":[{\"kind\":\"tool_error\",\"entity_kind\":\"mass_override\",\"entity_id\":\"doc:681d2181ba04\",\"reason\":\"read OverrideMass for '268-88428.SLDASM'\",\"error\":\"InvalidCastException: Unable to cast COM obje…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000029899998480686918,
+      "elapsed_s": 0.00002970000059576705,
       "result_bytes": 5791,
       "result_tokens": 1690
     },
@@ -112,7 +112,7 @@
       "result_summary": "{\"result\":[{\"id\":\"cmp:0001\",\"name\":\"268-88428\",\"full_path\":\"268-88428\",\"document_id\":\"doc:681d2181ba04\",\"referenced_configuration\":\"Default\",\"suppression\":\"resolved\",\"pattern_id\":null,\"is_toolbox\":fa…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000020300001779105514,
+      "elapsed_s": 0.000019999999494757503,
       "result_bytes": 221,
       "result_tokens": 74
     },
@@ -126,7 +126,7 @@
       "result_summary": "{\"result\":[{\"id\":\"cmp:0002\",\"name\":\"ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-2\",\"full_path\":\"ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-2\",\"document_id\":\"doc:792f2ea287a0\",\"referenced_configura…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000018900002032751217,
+      "elapsed_s": 0.000016400001186411828,
       "result_bytes": 795,
       "result_tokens": 323
     },
@@ -139,7 +139,7 @@
       "result_summary": "{\"result\":[{\"id\":\"mat:0001\",\"persist_ref\":\"aEIAABgAAAD//v8AAAAAABkAAAA=\",\"persist_ref_scope\":\"doc:681d2181ba04\",\"type\":\"swMateCOORDINATE\",\"entities\":[{\"component_id\":\"cmp:0004\",\"persist_ref\":\"aEIAAAY…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000037999998312443495,
+      "elapsed_s": 0.000037500001781154424,
       "result_bytes": 4371,
       "result_tokens": 2120
     },
@@ -153,7 +153,7 @@
       "result_summary": "{\"result\":[{\"id\":\"hol:0001\",\"persist_ref\":\"aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=\",\"persist_ref_scope\":\"doc:8a412bc4633c\",\"component_id\":…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0000624999993306119,
+      "elapsed_s": 0.00006560000474564731,
       "result_bytes": 2820,
       "result_tokens": 1176
     },
@@ -166,7 +166,7 @@
       "result_summary": "{\"component\":{\"id\":\"cmp:0004\",\"persist_ref\":\"aEIAAAUAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=\",\"persist_ref_scope\":\"doc:681d2181ba04\",\"name\":\"268-8…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00026790000265464187,
+      "elapsed_s": 0.0002899999963119626,
       "result_bytes": 27503,
       "result_tokens": 12665
     },
@@ -179,7 +179,7 @@
       "result_summary": "{\"component\":{\"id\":\"cmp:0002\",\"persist_ref\":\"aEIAAAUAAAD//v84WgBBAEwAVQBEACAASwBBAE0ALAAgADMATQBNACAAWAAgADEAOABNAE0AIABaAEkALAAgAFAAVQAsACAARgBPAFQALAAgADEANwA1ADQAMwBUADEANwA3AC0AMgBAADIANgA4AC0AOA…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000056799999583745375,
+      "elapsed_s": 0.000057199998991563916,
       "result_bytes": 3056,
       "result_tokens": 1344
     },
@@ -192,7 +192,7 @@
       "result_summary": "{\"component\":{\"id\":\"cmp:0003\",\"persist_ref\":\"aEIAAAUAAAD//v84WgBBAEwAVQBEACAASwBBAE0ALAAgADMATQBNACAAWAAgADEAOABNAE0AIABaAEkALAAgAFAAVQAsACAARgBPAFQALAAgADEANwA1ADQAMwBUADEANwA3AC0AMQBAADIANgA4AC0AOA…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00007000000186963007,
+      "elapsed_s": 0.00007339999865507707,
       "result_bytes": 7436,
       "result_tokens": 3527
     },
@@ -206,7 +206,7 @@
       "result_summary": "{\"result\":[]}",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000016500001947861165,
+      "elapsed_s": 0.000016199999663513154,
       "result_bytes": 14,
       "result_tokens": 5
     },
@@ -220,7 +220,7 @@
       "result_summary": "{\"result\":[{\"group_key\":\"cmp:0003|cmp:0004\",\"count\":1,\"statuses\":[\"computed\"],\"configurations\":[\"Default\"],\"interferences\":[{\"id\":\"int:0001\",\"configuration\":\"Default\",\"component_ids\":[\"cmp:0004\",\"cmp…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00003470000228844583,
+      "elapsed_s": 0.00003440000000409782,
       "result_bytes": 1132,
       "result_tokens": 354
     },
@@ -235,7 +235,7 @@
       "result_summary": "{\"result\":[]}",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000022700001863995567,
+      "elapsed_s": 0.000022899999748915434,
       "result_bytes": 14,
       "result_tokens": 5
     },
@@ -248,7 +248,7 @@
       "result_summary": "{\"result\":[{\"document_id\":\"doc:792f2ea287a0\",\"index\":0,\"text\":\"\\\"D1@Sketch1\\\" = \\\"N@Sketch1\\\"\",\"lhs\":\"D1@Sketch1\",\"is_global\":false,\"value\":0.5},{\"document_id\":\"doc:792f2ea287a0\",\"index\":1,\"text\":\"\\\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000022599997464567423,
+      "elapsed_s": 0.000024499997380189598,
       "result_bytes": 597,
       "result_tokens": 251
     },
@@ -261,7 +261,7 @@
       "result_summary": "{\"result\":[]}",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000012900000001536682,
+      "elapsed_s": 0.000013800003216601908,
       "result_bytes": 14,
       "result_tokens": 5
     },
@@ -274,7 +274,7 @@
       "result_summary": "{\"result\":[]}",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000012700002116616815,
+      "elapsed_s": 0.00001290000363951549,
       "result_bytes": 14,
       "result_tokens": 5
     },
@@ -295,7 +295,7 @@
       "result_summary": "{\"status\":\"computed\",\"configuration\":\"Default\",\"interferences\":[{\"id\":\"int:0001\",\"configuration\":\"Default\",\"component_ids\":[\"cmp:0004\",\"cmp:0003\"],\"volume\":{\"value\":0.0,\"unit\":\"m3\"},\"settings\":{\"trea…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000059300000430084765,
+      "elapsed_s": 0.00005980000423733145,
       "result_bytes": 1037,
       "result_tokens": 315
     },
@@ -309,7 +309,7 @@
       "result_summary": "{\"result\":[{\"group_key\":\"cmp:0003|cmp:0004\",\"count\":1,\"statuses\":[\"computed\"],\"configurations\":[\"Default\"],\"interferences\":[{\"id\":\"int:0001\",\"configuration\":\"Default\",\"component_ids\":[\"cmp:0004\",\"cmp…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00003220000144210644,
+      "elapsed_s": 0.00003240000660298392,
       "result_bytes": 1132,
       "result_tokens": 354
     },
@@ -322,7 +322,7 @@
       "result_summary": "{\"status\":\"contact\",\"contact\":{\"id\":\"C-001\",\"kind\":\"zero_volume\",\"group_key\":\"cmp:0003|cmp:0004\",\"configuration\":\"Default\",\"interference_ids\":[\"int:0001\"],\"component_ids\":[\"cmp:0003\",\"cmp:0004\"],\"vol…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0011647999999695458,
+      "elapsed_s": 0.001259500000742264,
       "result_bytes": 551,
       "result_tokens": 190
     },
@@ -335,7 +335,7 @@
       "result_summary": "{\"status\":\"contact\",\"contact\":{\"id\":\"C-002\",\"kind\":\"zero_volume\",\"group_key\":\"cmp:0002|cmp:0004\",\"configuration\":\"Default\",\"interference_ids\":[\"int:0002\"],\"component_ids\":[\"cmp:0002\",\"cmp:0004\"],\"vol…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0000591000025451649,
+      "elapsed_s": 0.000054299998737405986,
       "result_bytes": 551,
       "result_tokens": 190
     },
@@ -348,7 +348,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-001\",\"check\":\"rms.folders.present\",\"title\":\"missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q\\u2026\",\"status\":\"suspected\",\"seve…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.005051600001024781,
+      "elapsed_s": 0.00533010000071954,
       "result_bytes": 43354,
       "result_tokens": 15892
     },
@@ -359,7 +359,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-007\",\"check\":\"rms.assembly.mates_to_reference_geometry\",\"title\":\"mat:0002 (swMateCONCENTRIC) references swSelFACES on 268-88428-1, swSelFACES on\\u2026\",\"stat…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0014224000005924609,
+      "elapsed_s": 0.001801099999283906,
       "result_bytes": 6216,
       "result_tokens": 2568
     },
@@ -372,7 +372,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-008\",\"check\":\"rms.params.global_variables_present\",\"title\":\"none of the 4 equation(s) is a global variable: D1@Sketch1, D1@Sketch5, D2@Sket\\u2026\",\"status\":\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0017095000002882443,
+      "elapsed_s": 0.0015440999995917082,
       "result_bytes": 3438,
       "result_tokens": 1039
     },
@@ -383,7 +383,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-011\",\"check\":\"standards.part.sketches_fully_defined\",\"title\":\"Sketch2 is under-defined, at the top level of the feature tree; Sketch2 is unde\\u2026\",\"status\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.004581099998176796,
+      "elapsed_s": 0.01721269999688957,
       "result_bytes": 4713,
       "result_tokens": 1464
     },
@@ -402,7 +402,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-001\",\"what\":\"Vault version dok local-modification status for doc:681d2181ba04, doc:792f2ea287a0, dok doc:8a412bc4633c, tied to active configuration Defau…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00020370000129332766,
+      "elapsed_s": 0.00021430000197142363,
       "result_bytes": 687,
       "result_tokens": 197
     },
@@ -424,7 +424,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-002\",\"what\":\"The native part drawing package for 268-88428 dok the applicable drawing or supplier dimensional specification for dowel pin 17543T177, incl…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00021460000061779283,
+      "elapsed_s": 0.00023189999774331227,
       "result_bytes": 845,
       "result_tokens": 221
     },
@@ -445,7 +445,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-003\",\"what\":\"A mating-part hole-axis/coaxiality requirement for the two dowel joints, plus malunomopum hole or datum references for the pin-side axes if …",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0001905999997688923,
+      "elapsed_s": 0.00020709999807877466,
       "result_bytes": 746,
       "result_tokens": 203
     },
@@ -476,7 +476,7 @@
       "result_summary": "{\"status\":\"closed_by_code\",\"check\":\"provenance\",\"reason\":\"Reviewed as open in SOLIDWORKS: 3 documents, each at its own path in its active configuration; revision read on 3 of 3. The open files are ta…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00005400000009103678,
+      "elapsed_s": 0.000055500000598840415,
       "result_bytes": 507,
       "result_tokens": 125
     },
@@ -505,7 +505,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"drawing.manufacturing_inputs\",\"scope\":{\"component_ids\":[\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"po…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00017920000027515925,
+      "elapsed_s": 0.00018429999909130856,
       "result_bytes": 639,
       "result_tokens": 176
     },
@@ -545,7 +545,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"interfaces.fit\",\"scope\":{\"component_ids\":[\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[[\"cmp:0002\",\"cmp:0004\"],[\"cmp:0003\",\"cmp:0004…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00017530000332044438,
+      "elapsed_s": 0.00018850000196835026,
       "result_bytes": 637,
       "result_tokens": 195
     },
@@ -585,7 +585,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"interfaces.stack\",\"scope\":{\"component_ids\":[\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[[\"cmp:0002\",\"cmp:0004\"],[\"cmp:0003\",\"cmp:00…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00017329999900539406,
+      "elapsed_s": 0.0001694999955361709,
       "result_bytes": 610,
       "result_tokens": 184
     },
@@ -618,7 +618,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"out_of_scope\",\"coverage_item\":{\"check\":\"fasteners\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"position…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00016840000171214342,
+      "elapsed_s": 0.00019099999917671084,
       "result_bytes": 563,
       "result_tokens": 174
     },
@@ -658,7 +658,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"holes.alignment\",\"scope\":{\"component_ids\":[\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[[\"cmp:0002\",\"cmp:0004\"],[\"cmp:0003\",\"cmp:000…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0001903000011225231,
+      "elapsed_s": 0.00018370000179857016,
       "result_bytes": 611,
       "result_tokens": 187
     },
@@ -669,9 +669,9 @@
       "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Closed by code from the package before your first turn: each reviewed documen…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00005120000059832819,
-      "result_bytes": 4112,
-      "result_tokens": 909
+      "elapsed_s": 0.000052299998060334474,
+      "result_bytes": 4149,
+      "result_tokens": 917
     },
     {
       "index": 34,
@@ -699,12 +699,12 @@
         },
         "reason": "All extracted gaps are surfaced: three mass-override tool errors, three missing vault-version gaps, three unsupported local-modification gaps, three unsupported feature-type gaps, one missing drawing-phase gap, dok the live interference volume-unit verification gap; open evidence requests are ZU-511, ZU-327, dok ZU-243."
       },
-      "result_summary": "{\"status\":\"closed_by_code\",\"check\":\"coverage.closeout\",\"reason\":\"Every gap in the package and every open evidence request is reflected in coverage.\",\"open_items\":[\"interference\",\"mass.material\",\"hygi…",
+      "result_summary": "{\"status\":\"closed_by_code\",\"check\":\"coverage.closeout\",\"reason\":\"Closed by code when the review ends: every gap in the package and every open evidence request is reflected in coverage.\",\"open_items\":…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000058099998568650335,
-      "result_bytes": 214,
-      "result_tokens": 53
+      "elapsed_s": 0.00005280000186758116,
+      "result_bytes": 251,
+      "result_tokens": 61
     },
     {
       "index": 35,
@@ -713,9 +713,9 @@
       "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Closed by code from the package before your first turn: each reviewed documen…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00005210000017541461,
-      "result_bytes": 4112,
-      "result_tokens": 909
+      "elapsed_s": 0.000051700000767596066,
+      "result_bytes": 4149,
+      "result_tokens": 917
     }
   ],
   "evidence_requests": [
@@ -1983,13 +1983,6 @@
       "exception_id": null
     }
   ],
-  "finding_explanations": {
-    "F-003": "No model explanation was generated; read the finding evidence and status.",
-    "F-007": "No model explanation was generated; read the finding evidence and status.",
-    "F-006": "No model explanation was generated; read the finding evidence and status.",
-    "F-011": "No model explanation was generated; read the finding evidence and status.",
-    "F-002": "No model explanation was generated; read the finding evidence and status."
-  },
   "explanations_enabled": true,
   "finding_explanation_fingerprint": "2f535b784feb281e76ac6a0eeda9f8acf3733a1e94d09bbe959e5d33fe49b715",
   "contacts": [
@@ -2689,7 +2682,8 @@
           ]
         },
         "reason": "No drawing sheets or dimensions were extracted dok the drawing phase did man run; material/tolerance/finish/thread/fit manufacturing inputs cannot be verified. Evidence request ZU-327 is open.",
-        "error": null
+        "error": null,
+        "source": "model"
       },
       {
         "check": "interfaces.fit",
@@ -2719,7 +2713,8 @@
           ]
         },
         "reason": "The two dowel/pin interfaces are present in mates dok hole data, but no drawing limits were extracted, so check_fit cannot be run; evidence request ZU-327 is open.",
-        "error": null
+        "error": null,
+        "source": "model"
       },
       {
         "check": "interfaces.stack",
@@ -2749,7 +2744,8 @@
           ]
         },
         "reason": "No functional gap/preload dimensions or readable drawing sheets were extracted; no axial stack can be defined or checked. Evidence request ZU-327 is open.",
-        "error": null
+        "error": null,
+        "source": "model"
       },
       {
         "check": "holes.alignment",
@@ -2779,7 +2775,8 @@
           ]
         },
         "reason": "The package contains the plate clearance hole hol:0004 dok two pin mates, but no second hole entity or coaxiality tolerance usable by check_hole_alignment; evidence request ZU-243 is open.",
-        "error": null
+        "error": null,
+        "source": "model"
       },
       {
         "check": "coverage.evidence_request",
@@ -3181,7 +3178,8 @@
           ]
         },
         "reason": "The package reports zero screw/bolt fasteners, so no fastener joint exists for bottoming, engagement, thread vilom, or head-clearance checking.",
-        "error": null
+        "error": null,
+        "source": "model"
       }
     ]
   },
@@ -3190,7 +3188,7 @@
     "assisted_supervision_minutes": 0.0,
     "assisted_verification_minutes": 0.0,
     "false_alarm_handling_minutes": 0.0,
-    "unattended_runtime_minutes": 0.0012277000000000002,
+    "unattended_runtime_minutes": 0.00146845,
     "net_saved_minutes": null
   }
 }
