@@ -487,7 +487,10 @@ def test_the_standards_material_rule_closes_the_standards_item_not_the_mass_item
 
 # --- 5. who owns an item (feature 013 T008, contracts/re-ask-guard.md section 1) -------------
 
-CODE_OWNED_LINE = "Closed by code before your first turn; never ask about it or mark it."
+CODE_OWNED_LINE = "Closed by code; never ask about it or mark it."
+"""Edited deliberately (013 T156, research R2.46): true of every code-owned item - `provenance` is
+closed at setup, `coverage.closeout` when the review ends - where it said "before your first
+turn" of both. Each item's own description says when."""
 
 
 def checklist_of(*items: ChecklistItem, version: int = 1) -> Checklist:
@@ -644,3 +647,44 @@ def test_the_withheld_rewording_keeps_each_items_owner() -> None:
         "code",
         "model",
     ]
+
+
+# --- the code-owned line is true of every code-owned item (feature 013 T156) -----------------
+
+
+def item_block(rendered: str, item_id: str) -> list[str]:
+    """The rendered lines of one item: its heading line and the indented lines under it."""
+    lines = rendered.splitlines()
+    start = lines.index(next(line for line in lines if line.startswith(f"- `{item_id}` ")))
+    block = [lines[start]]
+    for line in lines[start + 1 :]:
+        if not line.startswith("  "):
+            break
+        block.append(line)
+    return block
+
+
+def test_no_line_says_the_close_out_is_closed_before_the_first_turn() -> None:
+    """`coverage.closeout` is written by finalization (013 `contracts/tokens.md` section 1): the
+    checklist the model reads says when code closes it, and nothing it cannot keep."""
+    block = " ".join(line.strip() for line in item_block(CHECKLIST.render(), "coverage.closeout"))
+
+    assert CODE_OWNED_LINE in block
+    assert "before your first turn" not in block
+    assert "Closed by code when the review ends" in block
+
+
+def test_provenance_still_says_it_is_closed_before_the_first_turn() -> None:
+    block = " ".join(line.strip() for line in item_block(CHECKLIST.render(), "provenance"))
+
+    assert CODE_OWNED_LINE in block
+    assert "Closed by code from the package before your first turn" in block
+
+
+def test_every_code_owned_item_renders_the_one_line_and_no_other_claim_of_when() -> None:
+    rendered = CHECKLIST.render()
+    code_owned = [item.id for item in CHECKLIST.items if item.owner == "code"]
+
+    assert code_owned == ["provenance", "coverage.closeout"]
+    for item_id in code_owned:
+        assert item_block(rendered, item_id)[1] == f"  {CODE_OWNED_LINE}", item_id

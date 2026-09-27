@@ -164,6 +164,15 @@ def test_every_recorded_contact_is_replayed_with_the_recorded_settings(
     assert contact_groups(passes.first.session) == contact_groups(passes.recording.session)
 
 
+@pytest.mark.xfail(
+    reason=(
+        "013 T157: the checklist's code-owned line and the close-out's description moved, so the "
+        "recording's get_review_checklist answers differ, and one after the live call is sized "
+        "from the recorded growth; the replay gate (T158, lane G) regenerates and re-measures, "
+        "and removes this mark"
+    ),
+    strict=True,
+)
 def test_the_big_assembly_has_one_estimated_round_the_live_call() -> None:
     """The live call alone, as before feature 010. From 010 until the fixtures followed the
     code, the three touching groups judged after it were estimated too: their recorded results

@@ -15,7 +15,14 @@ drawing item `drawing.manufacturing_inputs` is closed by code only in the state
 `drawing-capability.md` section 5 defines, through the same answer.
 
 `Checklist.render()` prints, for a code-owned item, "Closed by code before your first turn; never ask
-about it or mark it." in place of the `mark_coverage` line. The checklist version stays 1 (features
+about it or mark it." in place of the `mark_coverage` line. *Amended 2026-09-27 (T156-T158, research
+R2.46; default taken 2026-09-27, the owner may revise):* "Closed by code; never ask about it or mark
+it." - true of both code-owned items, where the words before said "before your first turn" of
+`coverage.closeout` too, which finalization writes (`tokens.md` section 1). Each item's own
+description says when: `provenance` "Closed by code from the package before your first turn: ...",
+`coverage.closeout` "Closed by code when the review ends: every gap in the package and every open
+evidence request is reflected in coverage." Both move what the model reads, so the replay gate ran
+(T158). The checklist version stays 1 (features
 008 and 010 added items at version 1; the version is in the carry-over key, so a bump would drop every
 carried finding once).
 

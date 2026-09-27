@@ -63,7 +63,8 @@ items:
     check_prefix: coverage.
     owner: code
     description: >
-      Every gap in the package and every open evidence request is reflected in coverage.
+      Closed by code when the review ends: every gap in the package and every open
+      evidence request is reflected in coverage.
   - id: standards.release
     title: Release standards
     check_prefix: standards.
