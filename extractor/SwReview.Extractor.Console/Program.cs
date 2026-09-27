@@ -2959,10 +2959,12 @@ public static class Program
 
     /// <summary>
     /// PROBE-5's comparison: the <c>IDrawingDoc.GetFirstView()</c> / <c>IView.GetNextView()</c>
-    /// enumeration, which crosses every sheet without activating one. If the type-1
-    /// sheet-format pseudo-view is missing from <c>ISheet.GetViews()</c> and present here, the
-    /// fall-back enumeration is needed; if it is in neither, the export-control check is
-    /// unresolved for that sheet and this run is the reason it is.
+    /// enumeration, which walks the <b>current sheet only</b> - its own (type 1) view first, then
+    /// its drawing views - and does not cross to the other sheets. The type-1 view is missing from
+    /// <c>ISheet.GetViews()</c> and present here; the enumeration that reaches every sheet's own
+    /// view without activating one is <c>IDrawingDoc.GetViews()</c>, one array per sheet with the
+    /// sheet's own view first, which the drawing phase reads (feature 013,
+    /// contracts/readings.md section 1).
     /// </summary>
     private static void ProbeViewWalkFallback(
         SwGate gate, SwDrawingReader reader, object drawing, List<string> output)

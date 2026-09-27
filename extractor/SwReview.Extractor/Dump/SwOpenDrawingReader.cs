@@ -56,7 +56,8 @@ public sealed class SwOpenDrawingReader : IOpenDrawingSource
     /// Every view on every sheet, and the path each shows. <c>IDrawingDoc.GetViews</c> answers an
     /// array per sheet whose first element is the sheet's own view, which shows no model and so
     /// answers a blank name - kept, because discovery ignores a blank path by rule rather than by
-    /// position.
+    /// position. The arrays are read by <see cref="SwDrawingReader.PerSheetViews"/>, the one reading
+    /// the drawing phase uses too (feature 013).
     /// </summary>
     private IReadOnlyList<string> ReferencedPaths(IModelDoc2 document)
     {
@@ -65,15 +66,12 @@ public sealed class SwOpenDrawingReader : IOpenDrawingSource
                 "The document reported itself a drawing and did not answer as one.");
 
         var paths = new List<string>();
-        foreach (object sheet in Items(_gate.Call("GetViews", () => drawing.GetViews())))
+        foreach (IReadOnlyList<IView> sheet in SwDrawingReader.PerSheetViews(_gate.Call("GetViews", () => drawing.GetViews())))
         {
-            foreach (object item in Items(sheet))
+            foreach (IView view in sheet)
             {
-                if (item is IView view)
-                {
-                    paths.Add(_gate.Call(
-                        "GetReferencedModelName", () => view.GetReferencedModelName()) ?? string.Empty);
-                }
+                paths.Add(_gate.Call(
+                    "GetReferencedModelName", () => view.GetReferencedModelName()) ?? string.Empty);
             }
         }
 

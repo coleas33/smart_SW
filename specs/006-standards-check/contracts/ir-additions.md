@@ -140,6 +140,23 @@ single-array alternative.
 | `revision_tables` | list[`RevisionTable`] | `IView.GetTableAnnotations()` filtered on `ITableAnnotation.Type == swTableAnnotationType_e.swTableAnnotation_RevisionBlock` (3), with `ISheet.RevisionTable` as a cross-check | VERIFIED (`GetTableAnnotations`, `GetFirstTableAnnotation`, `ITableAnnotation.Type`, `ISheet.RevisionTable`); enumeration per sheet is PROBE-4 | Empty when the sheet has none; **every** sheet is read (difference q). **The enumeration is not `ISheet.RevisionTable`**: that is a single-valued property (`get_RevisionTable` returns one `RevisionTableAnnotation`), so a sheet carrying two revision tables would yield at most one record and the second would be silently invisible - a silent miss in the one check whose purpose is coverage. `ISheet.RevisionTable` is still read and compared, so a table the filtered walk missed is visible as a disagreement rather than as an absence |
 | `persist_ref`, `persist_ref_scope` | `PersistRef \| null`, `str \| null` | `GetPersistReference3` | PROBE-10 | |
 
+*Amended 2026-09-26 by feature 013 (T127; 013 `contracts/readings.md` section 1):* `views` are
+read from `IDrawingDoc.GetViews()`, read once per drawing, whose array *i* belongs to sheet *i*
+and starts with the sheet's own (type 1) view - the view `ISheet.GetViews()` leaves out, as the
+seat showed (none of a plate drawing's 14 views was it, and its revision table went unread). The
+array is taken once its first view is confirmed as type 1 and named as the sheet. When it is not
+- the arrays do not number the sheets, the sheet's array is empty, or its first view is of another
+type, has another name or has none - one `drawing_sheet_view` gap (`not_extracted`) on the sheet
+names what differed and the sheet keeps the `ISheet.GetViews()` reading; a failed
+`IDrawingDoc.GetViews()` is one `drawing_sheet_view` gap (`tool_error`) on the drawing and every
+sheet keeps that reading. A non-active sheet that lists no drawing view - its own view does not
+count - is the `drawing_sheet_views` gap it was (PROBE-7). `revision_tables` join the tables'
+de-duplication (by persistent reference, else by the annotation's identity, under the first view
+that returned the table), since the sheet's own view and a drawing view may return one table; with
+the sheet's own view read, the `ISheet.RevisionTable` cross-check no longer fires on a sheet whose
+table was found. No sheet is activated. View ids shift by one per sheet in packages dumped from now
+on (the sheet's own view takes the first).
+
 ### 3.3 `DrawingView`
 
 | Field | Type | Interop member | Mark | Null rule |
@@ -263,6 +280,10 @@ Each names one `entity_id` where one exists (the component, the document, the re
 kinds can exercise every one of them. `cut_list_folder` is emitted when a body folder's
 `IFeature.GetTypeName2` or `IFeature.GetSpecificFeature2` could not be read, which PROBE-8 makes
 likely enough to name; the folder is still recorded, with the gap saying what was missing.
+
+*Added 2026-09-26 by feature 013 (T127), beside these twenty-one:* `drawing_sheet_view` - a sheet
+whose own view could not be taken from `IDrawingDoc.GetViews()`, read through `ISheet.GetViews()`
+instead (section 3.2's amendment), or, on the drawing, that `IDrawingDoc.GetViews()` failed.
 
 There is deliberately **no `drawing_persist_ref` kind.** Section 4 is the design: a missing
 persistent reference is a **null `persist_ref`**, which is the statement FR-026 requires, and a

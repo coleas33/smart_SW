@@ -418,12 +418,16 @@ public class StandardsGateLogTests : IDisposable
         private readonly Dictionary<string, object> _sheets =
             new Dictionary<string, object>(StringComparer.Ordinal);
 
+        /// <summary>Each sheet's own (type 1) view, named after its sheet, as IDrawingDoc.GetViews gives it first (feature 013).</summary>
+        private readonly Dictionary<object, string> _sheetViews = new Dictionary<object, string>();
+
         public FakeDrawingReader(string[] sheetNames)
         {
             _sheetNames = sheetNames;
             foreach (string name in sheetNames)
             {
                 _sheets[name] = new object();
+                _sheetViews[new object()] = name;
             }
         }
 
@@ -443,11 +447,15 @@ public class StandardsGateLogTests : IDisposable
 
         public IReadOnlyList<object> Views(object sheet) => new[] { _view };
 
+        public IReadOnlyList<IReadOnlyList<object>> SheetViews(object drawing) =>
+            _sheetViews.Keys.Select(own => (IReadOnlyList<object>)new[] { own, _view }).ToList();
+
         public object? SheetRevisionTable(object sheet) => _table;
 
-        public string? ViewName(object view) => "Drawing View1";
+        public string? ViewName(object view) =>
+            _sheetViews.TryGetValue(view, out string? sheet) ? sheet : "Drawing View1";
 
-        public int ViewType(object view) => 2;
+        public int ViewType(object view) => _sheetViews.ContainsKey(view) ? 1 : 2;
 
         public string? ReferencedModelPath(object view) => HousingPath;
 

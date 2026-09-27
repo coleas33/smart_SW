@@ -86,8 +86,19 @@ public interface IDrawingReader : IDimensionToleranceReads, IAnnotationSymbolRea
     /// <summary><c>ISheet.GetSheetFormatName()</c>.</summary>
     string? SheetFormatName(object sheet);
 
-    /// <summary><c>ISheet.GetViews()</c>, in the order it returned them.</summary>
+    /// <summary>
+    /// <c>ISheet.GetViews()</c>, in the order it returned them. It leaves the sheet's own (type 1)
+    /// view out, so it is read only for a sheet <see cref="SheetViews"/> could not be matched to.
+    /// </summary>
     IReadOnlyList<object> Views(object sheet);
+
+    /// <summary>
+    /// <c>IDrawingDoc.GetViews()</c>: one list per sheet, in sheet order, each holding that sheet's
+    /// views in the order SOLIDWORKS gave them - the sheet's own (type 1) view first, which
+    /// <see cref="Views"/> leaves out (feature 013, contracts/readings.md section 1). One interop
+    /// call, which the dumper gates as <c>GetViews</c>. Nothing is activated.
+    /// </summary>
+    IReadOnlyList<IReadOnlyList<object>> SheetViews(object drawing);
 
     /// <summary>
     /// <c>ISheet.RevisionTable</c>: the single-valued property, read as a <b>cross-check</b>
@@ -325,9 +336,11 @@ public interface IDrawingReader : IDimensionToleranceReads, IAnnotationSymbolRea
 /// <see cref="DrawingTraversal"/> owns the order and the ids; this class owns the reads and
 /// what becomes of a read that failed. Four rules shape every one of them:
 ///
-///   * <b>Nothing is activated.</b> A non-active sheet is read as it stands. If its views
-///     come back empty - PROBE-7's open question - that is a <c>drawing_sheet_views</c> gap
-///     naming the sheet, and every drawing check is then unresolved for that sheet.
+///   * <b>Nothing is activated.</b> A non-active sheet is read as it stands, every sheet's
+///     views taken from the drawing's own per-sheet arrays, which carry the sheet's own view
+///     (feature 013). If a non-active sheet lists no drawing view - PROBE-7's open question -
+///     that is a <c>drawing_sheet_views</c> gap naming the sheet, and every drawing check is
+///     then unresolved for that sheet.
 ///     <c>ActivateSheet</c> and <c>ActivateView</c> are on the read-only denylist and are
 ///     not called (FR-044, research R2.7).
 ///   * <b>A number is never written with a guessed unit.</b> <c>dimension_type_raw</c>
@@ -355,6 +368,20 @@ public sealed class DrawingDumper : IDrawingSource
 
     /// <summary><c>swTableAnnotationType_e.swTableAnnotation_BillOfMaterials</c> (feature 011).</summary>
     private const int BillOfMaterialsTableType = 2;
+
+    /// <summary>
+    /// <c>swDrawingViewTypes_e.swDrawingSheet</c>: the sheet's own view, which the drawing's
+    /// <c>GetViews</c> gives first in each sheet's array and <c>ISheet.GetViews</c> leaves out.
+    /// </summary>
+    private const int SheetOwnViewType = 1;
+
+    /// <summary>
+    /// The gap kind of a sheet whose own view could not be taken from the drawing's per-sheet
+    /// arrays (feature 013, contracts/readings.md section 1): the sheet was read through
+    /// <c>ISheet.GetViews</c> instead. Not <c>drawing_sheet_views</c>, which says the sheet's
+    /// contents were not read at all.
+    /// </summary>
+    private const string SheetViewGap = "drawing_sheet_view";
 
     /// <summary>
     /// <c>swAnnotationType_e</c> (reflected on 2024 SP5): the typed annotations a drawing record
@@ -542,13 +569,25 @@ public sealed class DrawingDumper : IDrawingSource
 
         List<string> sheetNames = names ?? new List<string>();
 
+        // Every sheet's views, read once from the document (feature 013, contracts/readings.md
+        // section 1): each sheet's array starts with the sheet's own view, which ISheet.GetViews
+        // leaves out. Null when the read failed, and then every sheet is read the old way.
+        IReadOnlyList<IReadOnlyList<object>>? documentViews = sheetNames.Count == 0
+            ? null
+            : scope.Gaps.TryStep(
+                SheetViewGap,
+                documentId,
+                "read every sheet's views from the drawing's GetViews, so every sheet's views were "
+                + "read through ISheet.GetViews instead, which leaves out the sheet's own view",
+                () => _gate.Call("GetViews", () => _reader.SheetViews(drawing!)));
+
         // The loop position IS the sheet's index in the package (section 3.2), so it is
         // carried down rather than recomputed: a name the Sheet[name] indexer will not answer
         // for records no sheet, and the sheets after it keep the positions the drawing gives
-        // them instead of sliding up one.
+        // them instead of sliding up one - and keep their own arrays of documentViews.
         for (int index = 0; index < sheetNames.Count; index++)
         {
-            ReadSheet(scope, pass, drawing!, sheetNames[index], index, documentId);
+            ReadSheet(scope, pass, drawing!, sheetNames[index], index, documentId, documentViews, sheetNames.Count);
         }
 
         return pass.Traversal.Record;
@@ -652,14 +691,20 @@ public sealed class DrawingDumper : IDrawingSource
             _outsideNamed.Add(OpenDrawingDiscovery.Key(path) ?? path.Trim());
     }
 
-    /// <summary>One sheet: its own reads, then its views, then its revision-table cross-check.</summary>
+    /// <summary>
+    /// One sheet: its own reads, then its views - its array from <paramref name="documentViews"/>
+    /// once confirmed, its own view first, else <c>ISheet.GetViews</c> - then its revision-table
+    /// cross-check.
+    /// </summary>
     private void ReadSheet(
         DumpScope scope,
         DrawingPass pass,
         object drawing,
         string name,
         int index,
-        string documentId)
+        string documentId,
+        IReadOnlyList<IReadOnlyList<object>>? documentViews,
+        int sheetCount)
     {
         object? sheet = null;
         if (!scope.Gaps.TryStep(
@@ -708,7 +753,8 @@ public sealed class DrawingDumper : IDrawingSource
         record.PersistRef = reference?.Base64;
         record.PersistRefScope = reference?.ScopeDocumentId;
 
-        IReadOnlyList<object>? views = scope.Gaps.TryStep(
+        IReadOnlyList<object>? own = ConfirmedSheetViews(scope, record, sheetName, index, documentViews, sheetCount);
+        IReadOnlyList<object>? views = own ?? scope.Gaps.TryStep(
             "drawing_sheet_views",
             record.Id,
             $"enumerate the views of sheet '{sheetName}'",
@@ -719,7 +765,9 @@ public sealed class DrawingDumper : IDrawingSource
             return;
         }
 
-        if (views.Count == 0 && !record.WasActive)
+        // The sheet's own view is not a drawing view: it does not settle PROBE-7's question.
+        int drawingViews = own == null ? views.Count : views.Count - 1;
+        if (drawingViews == 0 && !record.WasActive)
         {
             // PROBE-7. Whether a non-active sheet's contents come back without activating it
             // is the open question, and this is the answer when they do not: an unresolved
@@ -728,8 +776,8 @@ public sealed class DrawingDumper : IDrawingSource
                 GapKind.NotExtracted,
                 "drawing_sheet_views",
                 record.Id,
-                $"Sheet '{sheetName}' was not the active sheet and listed no views, so nothing "
-                + "on it could be read. The sheet was not activated to look again.",
+                $"Sheet '{sheetName}' was not the active sheet and listed no drawing views, so "
+                + "nothing on it was read. The sheet was not activated to look again.",
                 null);
             return;
         }
@@ -740,6 +788,103 @@ public sealed class DrawingDumper : IDrawingSource
         }
 
         CrossCheckRevisionTable(scope, record, sheet!, sheetName);
+    }
+
+    /// <summary>
+    /// Sheet <paramref name="index"/>'s array from the drawing's <c>GetViews</c>, once its first
+    /// view is confirmed as the sheet's own: type 1, named as the sheet (feature 013,
+    /// contracts/readings.md section 1). Otherwise null, with one <c>drawing_sheet_view</c> gap on
+    /// the sheet naming it and what differed, and the caller reads <c>ISheet.GetViews</c> for this
+    /// sheet as before. Null with no gap of its own when the drawing's read failed, whose gap on the
+    /// drawing already says so.
+    /// </summary>
+    private IReadOnlyList<object>? ConfirmedSheetViews(
+        DumpScope scope,
+        DrawingSheetRecord record,
+        string sheetName,
+        int index,
+        IReadOnlyList<IReadOnlyList<object>>? documentViews,
+        int sheetCount)
+    {
+        if (documentViews == null)
+        {
+            return null;
+        }
+
+        string fallback =
+            $"so the views of sheet '{sheetName}' were read through ISheet.GetViews, which leaves out "
+            + "the sheet's own view and whatever is on it";
+        string firstView = $"The first view the drawing's GetViews gave for sheet '{sheetName}'";
+
+        if (documentViews.Count != sheetCount)
+        {
+            return NotTheSheetsOwn(
+                scope,
+                record,
+                $"The drawing's GetViews gave {documentViews.Count.ToString(CultureInfo.InvariantCulture)} "
+                + $"view list(s) for the {sheetCount.ToString(CultureInfo.InvariantCulture)} sheets "
+                + $"GetSheetNames listed, so none could be matched to sheet '{sheetName}' by its "
+                + $"position; {fallback}.");
+        }
+
+        IReadOnlyList<object> views = documentViews[index];
+        if (views.Count == 0)
+        {
+            return NotTheSheetsOwn(
+                scope, record, $"The drawing's GetViews gave sheet '{sheetName}' an empty view list; {fallback}.");
+        }
+
+        object first = views[0];
+        int? type = null;
+        if (!scope.Gaps.TryStep(
+            SheetViewGap,
+            record.Id,
+            $"read the type of the first view the drawing's GetViews gave for sheet '{sheetName}', "
+            + $"to confirm it as the sheet's own view; {fallback}",
+            () => { type = _gate.Call("Type", () => _reader.ViewType(first)); }))
+        {
+            return null;
+        }
+
+        if (type != SheetOwnViewType)
+        {
+            return NotTheSheetsOwn(
+                scope,
+                record,
+                $"{firstView} is of type {type!.Value.ToString(CultureInfo.InvariantCulture)}, not the "
+                + $"sheet's own view (type {SheetOwnViewType.ToString(CultureInfo.InvariantCulture)}); {fallback}.");
+        }
+
+        string? name = null;
+        if (!scope.Gaps.TryStep(
+            SheetViewGap,
+            record.Id,
+            $"read the name of the first view the drawing's GetViews gave for sheet '{sheetName}', "
+            + $"to confirm it as the sheet's own view; {fallback}",
+            () => { name = _gate.Call("GetName2", () => _reader.ViewName(first)); }))
+        {
+            return null;
+        }
+
+        if (name == null)
+        {
+            return NotTheSheetsOwn(
+                scope, record, $"{firstView} has no name, so it could not be confirmed as the sheet's own view; {fallback}.");
+        }
+
+        if (!string.Equals(name, sheetName, StringComparison.Ordinal))
+        {
+            return NotTheSheetsOwn(scope, record, $"{firstView} is named '{name}', not '{sheetName}'; {fallback}.");
+        }
+
+        return views;
+    }
+
+    /// <summary>The one gap an unconfirmed sheet array records; the sheet is then read the old way.</summary>
+    private static IReadOnlyList<object>? NotTheSheetsOwn(DumpScope scope, DrawingSheetRecord record, string reason)
+    {
+        scope.Gaps.Add(GapKind.NotExtracted, SheetViewGap, record.Id, reason, null);
+        return null;
     }
 
     /// <summary>
@@ -1876,7 +2021,12 @@ public sealed class DrawingDumper : IDrawingSource
         return rows;
     }
 
-    /// <summary>One revision table: both revision readings, and every cell.</summary>
+    /// <summary>
+    /// One revision table: both revision readings, and every cell. A table two views return - the
+    /// sheet's own view and a drawing view may (feature 013, contracts/readings.md section 1) - is
+    /// recorded once, by persistent reference when there is one, else by the annotation's
+    /// identity, under the first view that returned it: the rule every other table follows.
+    /// </summary>
     private void ReadRevisionTable(
         DumpScope scope,
         DrawingPass pass,
@@ -1884,7 +2034,25 @@ public sealed class DrawingDumper : IDrawingSource
         object table,
         string where)
     {
+        if (pass.TableHandleSeen(table))
+        {
+            return;
+        }
+
+        ScopedPersistRef? reference = scope.Gaps.TryStep(
+            "revision_table_read",
+            sheet.Id,
+            $"read a persistent reference for a revision table on {where}",
+            () => _reader.PersistRef(pass.Document, table));
+
+        if (pass.TableSeen(table, reference?.Base64))
+        {
+            return;
+        }
+
         RevisionTable record = pass.Traversal.AddRevisionTable(sheet);
+        record.PersistRef = reference?.Base64;
+        record.PersistRefScope = reference?.ScopeDocumentId;
 
         // Verbatim, including the empty string: the macro's author recorded that this comes
         // back empty under the vault, and the check names both readings with their source
@@ -1911,15 +2079,6 @@ public sealed class DrawingDumper : IDrawingSource
         record.RowCount = shape!.Value.RowCount;
         record.ColumnCount = shape!.Value.ColumnCount;
         record.Rows.AddRange(ReadCells(scope, "revision_table_read", record.Id, table, shape!.Value, where));
-
-        ScopedPersistRef? reference = scope.Gaps.TryStep(
-            "revision_table_read",
-            record.Id,
-            $"read a persistent reference for table {record.Id} on {where}",
-            () => _reader.PersistRef(pass.Document, table));
-
-        record.PersistRef = reference?.Base64;
-        record.PersistRefScope = reference?.ScopeDocumentId;
     }
 
     /// <summary>

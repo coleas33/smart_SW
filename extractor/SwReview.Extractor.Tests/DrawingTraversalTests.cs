@@ -17,7 +17,9 @@ namespace SwReview.Extractor.Tests;
 /// <c>IDrawingDoc</c> that this machine has no seat to produce, so the ordering rules -
 /// the ones a reader of a package actually depends on - would otherwise be testable only
 /// on the pilot workstation. <see cref="DrawingDumper"/> drives this class in
-/// <c>GetSheetNames()</c> and <c>ISheet.GetViews()</c> order, and
+/// <c>GetSheetNames()</c> order and, per sheet, in the order of that sheet's array from
+/// <c>IDrawingDoc.GetViews()</c> - the sheet's own view first - or of <c>ISheet.GetViews()</c> on
+/// the fallback (feature 013, contracts/readings.md section 1), and
 /// <see cref="DrawingDumperTests"/> pins that.
 ///
 /// Two rules are policy and live here rather than in the dumper:
@@ -237,7 +239,8 @@ public class DrawingTraversalTests
     {
         // swDrawingViewTypes_e.swDrawingSheet = 1 is where the export-control note lives.
         // Nothing here branches on the type: the number is recorded by the dumper and named
-        // in Python, and the pseudo-view keeps its place in GetViews() order.
+        // in Python, and the sheet's own view keeps its place - first - in the order the
+        // document's per-sheet array gives it (ISheet.GetViews leaves it out).
         var traversal = new DrawingTraversal(DocumentId, "Sheet1", new DrawingIdAllocators());
         DrawingSheetRecord sheet = traversal.AddSheet("Sheet1", 0);
 
