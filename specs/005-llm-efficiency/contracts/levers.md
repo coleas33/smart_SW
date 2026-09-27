@@ -551,6 +551,27 @@ has none in its environment - and, in use, by the follow-up turn of the next sit
 review of the small assembly (013 T143, test-plan step 4.8), whose answer arrives only if the
 provider accepts the request.
 
+**Amended 2026-09-27 (feature 013 T151-T152; default taken 2026-09-27, the owner may revise; 013
+research R2.44): the adapter falls back once when the endpoint refuses the request.** The request
+shape has still met only the fake transport, the development machine has no key, and the lever is a
+pane default, so a refusal would stop every review's second turn. When the OpenAI adapter sends a
+request that left earlier turns' reasoning items out and the endpoint refuses it with an
+invalid-request error (`400`, `BadRequestError`) about a missing reasoning item, an item not found
+or a linked item (`openai_provider.LEVER_14_REFUSALS`), the adapter sends **that same request again
+at once with every reasoning item kept** - byte for byte the request every review sent before the
+lever - turns the lever **off for the rest of that adapter's session**, and logs one plain line
+(`swreview.providers.openai`, the key redacted: "lever 14 (drop_prior_reasoning) is off for the rest
+of this session: the endpoint refused a request that left earlier turns' reasoning out (...), so it
+was sent again with that reasoning kept"). The refused request emits no `error` event and costs no
+usage. Raised as before: any other refusal (a refusal that names reasoning but no item - an effort
+the model does not offer - included), a refusal of a request the lever left nothing out of (the
+first turn: sending the same bytes again would change nothing), a server or connection error, and a
+refusal of the resent request, once. `session.efficiency` keeps the lever as the review requested it
+- the A/B arm it belongs to - and the stored history keeps every item, as always. The key-gated live
+test now fails when the adapter fell back (the lever off after its two turns), so its run at the
+next sitting, with the key the pane stores (test-plan step 2.7, 013 T153), says whether the endpoint
+accepts the request; `test_openai_prior_reasoning.py` pins the fallback against the fake transport.
+
 ### The array ceiling: what it is asserted on (owner decision 9A, 2026-09-23)
 
 FR-016's whole-array ceiling, `ARRAY_CEILING` in `tests/unit/test_tool_payload.py` (38,000 bytes,

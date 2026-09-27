@@ -41,6 +41,8 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
+import re
 from collections.abc import Callable, Collection, Mapping, Sequence
 from time import perf_counter
 from typing import Any
@@ -118,6 +120,18 @@ NOT_AN_OBJECT = "not run: the function call arguments were valid JSON but not a 
 
 HISTORY_KEY = "openai"
 """Where the raw `response.output` items ride the provider-neutral history."""
+
+LOG = logging.getLogger("swreview.providers.openai")
+
+LEVER_14_REFUSALS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\breasoning'?\s+items?\b", re.IGNORECASE),
+    re.compile(r"\bitems?\b[^.]*\bnot found\b", re.IGNORECASE),
+    re.compile(r"\bitems?\b[^.]*\blinked\b|\blinked\b[^.]*\bitems?\b", re.IGNORECASE),
+)
+"""What an invalid-request refusal of lever 14's request says (feature 013 T152): a reasoning item
+missing ("... was provided without its required 'reasoning' item: ..."), an item not found, or an
+item linked to one that was not sent. A refusal that names reasoning but no item - an effort the
+model does not offer, `reasoning.effort` - is not one of them."""
 
 
 class OpenAIProviderError(RuntimeError):
@@ -509,11 +523,12 @@ class OpenAIProvider:
         `withdraw_tools` is feature 005's lever 7: the tools stay in the request, because
         the echoed history refers to them, but the model may not call one.
         """
+        visible = self._visible(history, offered)
         request: dict[str, Any] = {
             "model": self.model,
             "instructions": system,
             "input": _encode_history(
-                self._visible(history, offered),
+                visible,
                 compact=self._compact,
                 drop_prior_reasoning=self.drops_prior_reasoning,
             ),
@@ -542,16 +557,16 @@ class OpenAIProvider:
                     "comparison_response_id": self._last_response_id
                 }
 
-        final: Response | None = None
         try:
-            with self._client.responses.create(**request) as stream:
-                for event in stream:
-                    if event.type == "response.output_text.delta":
-                        on_event("text.delta", {"text": event.delta})
-                    elif event.type in ("response.completed", "response.incomplete"):
-                        final = event.response
-                    elif event.type == "response.failed":
-                        raise self._failed(event.response, on_event)
+            final = self._stream(request, on_event)
+        except openai.BadRequestError as refused:
+            resend = self._with_reasoning_kept(request, visible, refused)
+            if resend is None:
+                raise self._mapped(refused, on_event) from refused
+            try:
+                final = self._stream(resend, on_event)
+            except openai.OpenAIError as exc:
+                raise self._mapped(exc, on_event) from exc
         except openai.OpenAIError as exc:
             raise self._mapped(exc, on_event) from exc
 
@@ -567,6 +582,58 @@ class OpenAIProvider:
         # in place: it is still the last prefix the service saw from us.
         self._last_response_id = getattr(final, "id", None)
         return final
+
+    def _stream(self, request: Mapping[str, Any], on_event: EventCallback) -> Response | None:
+        """Send `request` and stream it: text deltas go out as they arrive; the `Response` the
+        stream finished on, or `None` when it ended without one. An `openai` error is the
+        caller's to map; a `response.failed` event is raised here, named."""
+        final: Response | None = None
+        with self._client.responses.create(**request) as stream:
+            for event in stream:
+                if event.type == "response.output_text.delta":
+                    on_event("text.delta", {"text": event.delta})
+                elif event.type in ("response.completed", "response.incomplete"):
+                    final = event.response
+                elif event.type == "response.failed":
+                    raise self._failed(event.response, on_event)
+        return final
+
+    def _with_reasoning_kept(
+        self,
+        request: Mapping[str, Any],
+        visible: Sequence[Mapping[str, Any]],
+        refused: openai.BadRequestError,
+    ) -> dict[str, Any] | None:
+        """The request to send again when the endpoint refused lever 14's request, or `None`.
+
+        Lever 14 left earlier turns' reasoning items out of `request`, and the endpoint refused it
+        with an invalid-request error about a missing reasoning item or a linked item
+        (`LEVER_14_REFUSALS`; feature 013 T152, `contracts/tokens.md` section 4). Then the same
+        request with every reasoning item kept - byte for byte what every request was before the
+        lever - is the one to send, lever 14 is off for the rest of this adapter's session, and
+        one plain line is logged. `None` - the refusal is raised as it always was - when the
+        lever is off, when it left nothing out of this request (sending the same bytes again
+        would change nothing), and for a refusal of another kind. `session.efficiency` keeps the
+        lever as the review requested it; the log line says the adapter fell back.
+        """
+        why = " ".join(str(refused).split())
+        if not self.drops_prior_reasoning or not any(
+            pattern.search(why) for pattern in LEVER_14_REFUSALS
+        ):
+            return None
+        kept = {**request, "input": _encode_history(visible, compact=self._compact)}
+        if kept["input"] == request["input"]:
+            return None
+        self.drops_prior_reasoning = False
+        LOG.warning(
+            "%s",
+            self._redact(
+                "lever 14 (drop_prior_reasoning) is off for the rest of this session: the "
+                "endpoint refused a request that left earlier turns' reasoning out "
+                f"({type(refused).__name__}: {why}), so it was sent again with that reasoning kept"
+            ),
+        )
+        return kept
 
     def _hit_ceiling(self, response: Response, on_event: EventCallback) -> bool:
         """Whether this response ended on the output ceiling.
