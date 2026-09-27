@@ -15,9 +15,10 @@ given is decided here:
 - **the report**: a model finding says "Source: AI guidance", the evidence requests table has a
   Source column, and a model-written close-out sentence is marked "(AI guidance)".
 
-The bodies the pane receives from the stream and the snapshot (`pane_finding`, the evidence and
-coverage bodies) state the source once T007's schema carries the field: that half is noted for
-the integrator in `tasks.md`.
+The bodies the pane receives from the stream and the snapshot (T100's second half, landed once
+T007's schema carried the field): `pane_finding` and each request body always state the source; a
+coverage body states it only for `model`, as `NotClosed.source` does, so an older model-written
+row loaded from disk shows no label rather than a false "Checked by code" (section 8 below).
 """
 
 from __future__ import annotations
@@ -248,3 +249,70 @@ def test_no_source_token_reaches_a_rendered_word() -> None:
     assert json.dumps(load_words().labels.source) == json.dumps(
         {"code": CODE_WORD, "model": MODEL_WORD}
     )
+
+
+# --- 8. the bodies the pane receives (T100's second half) ---------------------------------------
+
+SESSION_SCHEMA = "https://smart-sw.local/contracts/review-session.schema.json"
+
+
+def _validator(definition: str):
+    from tests.support.contracts import contract_validator
+
+    validator = contract_validator("review-session.schema.json")
+    return validator.evolve(schema={"$ref": f"{SESSION_SCHEMA}#/$defs/{definition}"})
+
+
+def test_a_pane_finding_always_states_its_source_and_still_validates() -> None:
+    from swreview.report.titles import pane_finding
+
+    session = with_model_finding(
+        session_of("pane", [spec("drawing.manufacturing_inputs"), spec("rms.folders.present")])
+    )
+    model, code = (pane_finding(finding, {}) for finding in session.findings)
+
+    assert (model["source"], code["source"]) == ("model", "code")
+    for body in (model, code):
+        _validator("Finding").validate(body)
+
+
+def test_the_snapshot_states_each_finding_and_requests_source() -> None:
+    from swreview.report.snapshot import review_snapshot
+
+    requests = [request(1), written_by(request(2), "code")]
+    session = with_model_finding(
+        session_of(
+            "snapshot",
+            [spec("drawing.manufacturing_inputs"), spec("rms.folders.present")],
+            requests=requests,
+        )
+    )
+
+    snapshot = review_snapshot(session, attention_package(), run_id="run-013")
+
+    assert [body["source"] for body in snapshot["findings"]] == ["model", "code"]
+    assert [(body["id"], body["source"]) for body in snapshot["evidence_requests"]] == [
+        ("ER-001", "model"),
+        ("ER-002", "code"),
+    ]
+    for body in snapshot["evidence_requests"]:
+        _validator("EvidenceRequest").validate(body)
+
+
+def test_a_snapshot_coverage_row_states_its_source_only_when_the_model_wrote_it() -> None:
+    from swreview.report.snapshot import review_snapshot
+
+    coverage = CoverageSpec(
+        unresolved=[
+            CoverageRow(check="interfaces.fit", reason="the model found no limits."),
+            CoverageRow(check="fasteners", reason="no fastener was extracted."),
+        ]
+    )
+    session = session_of("coverage-bodies", [], coverage=coverage)
+    session.coverage.unresolved[0] = written_by(session.coverage.unresolved[0], "model")
+
+    snapshot = review_snapshot(session, attention_package(), run_id="run-013")
+
+    rows = {row["item"]["check"]: row["item"] for row in snapshot["coverage"]}
+    assert rows["interfaces.fit"]["source"] == "model"
+    assert "source" not in rows["fasteners"], "an older model row must not read as code's"

@@ -139,6 +139,14 @@ class EvidenceRequest(ReviewModel):
             data.pop("blocks", None)
         return omit_at_default(data, self, "allow_text", "source")
 
+    def pane_body(self) -> dict[str, Any]:
+        """The request as the pane receives it - the `evidence.requested` event and the
+        snapshot's requests: its JSON, with `source` always stated (feature 013,
+        `contracts/sources.md` section 1), because the dump omits it at `model` and the page
+        prints a chip only for a source it is given. Nothing the model reads carries this body.
+        """
+        return {**self.model_dump(mode="json"), "source": self.source}
+
 
 def latest_answered(requests: Iterable[EvidenceRequest]) -> EvidenceRequest | None:
     """The most recently answered of `requests`, or `None` when none is answered.

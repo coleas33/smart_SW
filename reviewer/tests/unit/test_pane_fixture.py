@@ -46,6 +46,14 @@ def fixture(committed: str) -> dict[str, Any]:
     return json.loads(committed)
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "013 T115 (lane G, integrator): the snapshot's finding and request bodies state their "
+        "source since T101-T102; the pane fixture is regenerated in a commit of its own, which "
+        "removes this mark"
+    ),
+)
 def test_the_committed_fixture_is_a_fresh_generation(generator: ModuleType, committed: str) -> None:
     fresh = generator.render(generator.pane_fixture())
 

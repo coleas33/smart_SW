@@ -353,3 +353,86 @@ def test_the_ledger_is_an_event_sink_listener(tmp_path: Path) -> None:
     usage = ledger.usage()
     assert usage is not None
     assert usage.rounds == 1
+
+
+# --- the bodies the review's records announce (feature 013 T102, `contracts/sources.md` 1) -------
+
+
+def _announced(record: str, value: Any) -> dict[str, Any]:
+    """The body `ToolContext`'s writer for `record` announces for `value`."""
+    from swreview.tools.context import context_for
+    from tests.support.packages import build_package
+
+    announced: list[tuple[str, dict[str, Any]]] = []
+    context = context_for(build_package())
+    context.emit_event = lambda kind, body: announced.append((kind, dict(body)))  # type: ignore[method-assign]
+    if record == "request":
+        context.record_evidence_request(value)
+    elif record == "coverage":
+        context.record_coverage("unresolved", value)
+    else:
+        context.record_finding(value)
+    [(_, body)] = announced
+    return body
+
+
+def _request(source: str) -> Any:
+    from swreview.report.session import EvidenceRequest
+
+    return EvidenceRequest(
+        id="ER-001",
+        what="The torque",
+        why="preload",
+        entity_ids=[],
+        status="open",
+        answer=None,
+        answered_at=None,
+        source=source,  # type: ignore[arg-type]
+    )
+
+
+@pytest.mark.parametrize("source", ["model", "code"])
+def test_an_evidence_requested_body_always_states_who_asked(source: str) -> None:
+    """The review of 2026-09-27: a model question's body had no `source` - the dump omits it at
+    its default - so the Transcript's evidence card showed no chip."""
+    body = _announced("request", _request(source))
+
+    assert body["source"] == source
+    assert body == {**_request(source).model_dump(mode="json"), "source": source}
+
+
+def test_a_coverage_body_states_the_source_only_when_the_model_wrote_the_row() -> None:
+    from swreview.report.session import CoverageItem, CoverageScope
+
+    def row(source: str) -> CoverageItem:
+        return CoverageItem(
+            check="fasteners",
+            scope=CoverageScope(),
+            reason="r",
+            error=None,
+            source=source,  # type: ignore[arg-type]
+        )
+
+    assert _announced("coverage", row("model"))["item"]["source"] == "model"
+    assert "source" not in _announced("coverage", row("code"))["item"]
+
+
+def test_a_finding_body_always_states_who_wrote_it() -> None:
+    from swreview.findings import build_finding
+    from tests.support.packages import build_package
+
+    finding = build_finding(
+        finding_id="F-001",
+        check="interference.static",
+        title="A code finding",
+        status="suspected",
+        severity="low",
+        package=build_package(),
+        configuration="Default",
+        observed="A code finding",
+        requirement="r",
+        recommended_action="a",
+        component_ids=["cmp:0001"],
+    )
+
+    assert _announced("finding", finding)["source"] == "code"

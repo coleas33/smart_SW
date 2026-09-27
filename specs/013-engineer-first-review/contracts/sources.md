@@ -42,7 +42,12 @@ evidence and coverage event bodies (`tools/context.py:268-273`, `:355-358`), the
 (`report/snapshot.py:67-73`), `QuestionView.source`, `GroupRow.source` (with its `chip`,
 `grouped-list.md` section 3), `GoalLine.detail_source`, and `NotClosed.source` (the last two omitted
 when `code`, so `attention.json` keeps its bytes and the page prints a coverage label only when the
-field is present, never comparing its value).
+field is present, never comparing its value). *Landed as (T101, T102, 2026-09-27):* a finding
+(`pane_finding`) and a request (`EvidenceRequest.pane_body`, shared by the `evidence.requested`
+event and the snapshot) always state it; a coverage body - the `coverage` event's item and the
+snapshot's - states it only when `model`, as `NotClosed.source` does, since the dump already omits
+`code`: an older model-written row loaded from disk reads as `code` and must show no label rather
+than a false "Checked by code" (the reason section 1 gives for the defaults).
 
 ## 2. The words and where they show
 
