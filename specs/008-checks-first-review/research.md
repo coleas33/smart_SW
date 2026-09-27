@@ -1518,11 +1518,16 @@ under the table the current code ships:
   loses its occurrences beyond the number of rows the reading keeps there, at most one per second
   listing: the second listing's occurrence goes, the depth-0 row's stays.
 
-The narrowed key is then compared exactly as R2.58 compares it: one to one, in recorded order, onto
-a requested-pass finding nothing else matched, its remaining locations reference by reference
-(decision 25A). `folded_locations(package, table)` reads the reading's side beside
+A location *may* be removed, for both clauses: the recorded finding narrows onto a requested-pass
+finding nothing else matched, one to one in recorded order, whose locations lie between its own and
+those left when every removable occurrence is removed (`narrowed_key`, the lowest key), its remaining
+locations compared reference by reference (decision 25A); of several, the one keeping the most
+locations. `folded_locations(package, table)` reads the reading's side beside
 `not_content_locations`; `narrowed_key` and `compare_finding_keys` apply both, and the generator
 reuses them unchanged. The summary line says "narrowed by the type table or the tree reading".
+The "may" matters on the big recording: `rms.sketches.one_sketch_per_feature` still names rows the
+table does not count (the hazard R5 records for T129) and the sketch rules still grade a carried
+sketch, so two of its findings would stay lost if every removable location had to go.
 
 **Why.** An absorbed sketch is listed in both of the extractor's walks with one persistent
 reference, so a finding recorded before T133 names it twice where the reading names it once; a
@@ -1531,7 +1536,8 @@ with T133 applied (2026-09-27, scratch): the 25, 3 and 2 `rms.*` findings the st
 loses each come back as one added finding whose locations are a sub-multiset of the recorded ones,
 and every location dropped names only carried rows the table does not count, only carried content
 rows, or one depth-0 row and its one second listing - recorded twice, named once, never both
-occurrences dropped.
+occurrences dropped. With the rule the three replay none lost and none added: 26, 3 and 2 findings
+narrowed, 283, 29 and 21 locations removed, a zero residual on every round.
 
 **How it stays strict.** The de-duplication is counted from the package, never assumed: the depth-0
 row's occurrence is never removed, so a finding whose absorbed sketch is no longer named at all is

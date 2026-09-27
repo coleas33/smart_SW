@@ -66,8 +66,9 @@ recording's (through the same map) - less each recorded `interference.static` fi
 contact of the fixture reclassifies, by the replay's own rule (`reclassifying_contacts` over
 `judged_group`, imported, never copied; owner decision 3A of 2026-09-23), since feature 010's
 code records a touching group as a contact, and with each recorded `rms.*` finding the current
-type table narrowed matched to the fixture finding it narrows onto, one to one, by the replay's
-own comparison (`compare_finding_keys`, imported; owner decision 23A of 2026-09-25) - every
+type table or the shared tree reading narrowed matched to the fixture finding it narrows onto, one
+to one, by the replay's own comparison (`compare_finding_keys`, imported; owner decision 23A of
+2026-09-25, and feature 013's default for T134-Q1 of 2026-09-27) - every
 result of 5,000 tokens or more on the raw recorded package, as the current code returns it, is
 within 5% of the same call's result on the fixture (the bar measures the scramble, not a change
 to the code) - and the live call's fixture result, whose raw result is its own fictional rows, is
@@ -484,7 +485,7 @@ def scrambled_key(fmap: FictionalMap, key: SubjectKey) -> SubjectKey:
 
 class FindingCheck(NamedTuple):
     """What the finding check found: why the fixture must not be written, and how many recorded
-    findings a contact reclassified and the type table narrowed."""
+    findings a contact reclassified and the type table or the tree reading narrowed."""
 
     problems: list[str]
     reclassified: int
@@ -507,9 +508,10 @@ def finding_problems(
     The keys are compared by the replay's own comparison, imported (owner decision 23A,
     `contracts/replay.md` sections 5 and 8): a recorded `rms.*` finding no fixture finding
     matches is narrowed over the recorded package - its locations that name only rows the
-    current type table does not count as content removed - and its narrowed key, carried into
-    the fixture's names by the map the rest of its key goes through, takes one fixture finding
-    nothing else matched. A recorded key still missing, or a new key, refuses.
+    current type table does not count as content removed, and since feature 013's default for
+    T134-Q1 those the shared tree reading folds (`folded_locations`) - and its narrowed key,
+    carried into the fixture's names by the map the rest of its key goes through, takes one
+    fixture finding nothing else matched. A recorded key still missing, or a new key, refuses.
     """
     contacts = reclassifying_contacts(
         [
@@ -655,7 +657,8 @@ def self_check(
     generic_property_words: set[str],
 ) -> FindingCheck:
     """Why the fixture must not be written - empty when it may - and how many recorded
-    findings its contacts reclassified and the type table narrowed (`finding_problems`).
+    findings its contacts reclassified and the type table or the tree reading narrowed
+    (`finding_problems`).
 
     `generic_property_words` are generic words made strict only by a property key or value.
     Outside the package the reviewer writes them in its own sentences (`not`, `and`), and the
@@ -803,7 +806,7 @@ def generate(recorded_dir: Path, name: str, groups: int | None) -> int:
     print(
         f"wrote {target}: {len(sizes)} calls ({estimated} sized from the recorded growth), "
         f"{len(recording.findings)} findings ({checked.reclassified} reclassified as contacts, "
-        f"{checked.narrowed} narrowed by the type table); the "
+        f"{checked.narrowed} narrowed by the type table or the tree reading); the "
         f"denylist holds {len(entries)} tokens and {len(folders)} folder names"
     )
     return 0

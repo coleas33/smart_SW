@@ -146,7 +146,11 @@ def test_the_human_output_counts_and_names_it_and_exits_0(run: Path) -> None:
     result = replay_cli(run)
 
     assert result.exit_code == 0, result.output
-    assert "0 reclassified as contacts, 1 narrowed by the type table" in result.stdout
+    # Edited deliberately (013 T146): the line names both clauses of the narrowed outcome.
+    assert (
+        "0 reclassified as contacts, 1 narrowed by the type table or the tree reading"
+        in result.stdout
+    )
     assert f"  narrowed: {LOOSE} - {NARROWED_SUBJECT} (1 location removed)" in result.stdout
 
 
@@ -181,7 +185,7 @@ def test_an_untouched_recording_narrows_nothing(tmp_path: Path) -> None:
 
     assert report.findings.narrowed == []
     assert json.loads(replay_cli(run, "--json").stdout)["findings"]["narrowed"] == []
-    assert "0 narrowed by the type table" in replay_cli(run).stdout
+    assert "0 narrowed by the type table or the tree reading" in replay_cli(run).stdout
 
 
 def test_a_system_row_whose_reference_only_other_system_rows_share_is_removed(

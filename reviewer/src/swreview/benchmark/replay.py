@@ -33,6 +33,7 @@ from collections import Counter
 from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -71,12 +72,13 @@ from swreview.benchmark.recording import (
     Recording,
     read_recording,
 )
+from swreview.checks.feature_nodes import tree_nodes
 from swreview.checks.interference import CHECK as INTERFERENCE_CHECK
 from swreview.checks.rms_types import RmsTypeTable, load_table
 from swreview.exceptions import RMS_CHECK_PREFIX
 from swreview.findings import Finding, SubjectKey, finding_subject_key, subject_locations
 from swreview.ir.loader import PACKAGE_FILE_NAME
-from swreview.ir.models import EvidencePackage
+from swreview.ir.models import EvidencePackage, Feature
 from swreview.prerun import ALREADY_RUN
 from swreview.report.session import Contact, ReviewSession
 from swreview.tokens import TOKENIZER_NAME, count_tokens, encoding
@@ -92,9 +94,11 @@ from swreview.tools.registry import (
 
 __all__ = [
     "EMPTY_EXPLANATIONS",
+    "NO_FOLDED_LOCATIONS",
     "FOLLOW_UP_PLACEHOLDER",
     "REGROUPED_ASSUMPTION",
     "CallClass",
+    "FoldedLocation",
     "JudgedGroup",
     "KeyComparison",
     "NarrowedFinding",
@@ -120,6 +124,7 @@ __all__ = [
     "compare_finding_keys",
     "drops_prior_reasoning",
     "estimated_sizes",
+    "folded_locations",
     "judged_group",
     "narrowed_key",
     "not_content_locations",
@@ -669,12 +674,14 @@ class ReclassifiedFinding(ReplayFinding):
 
 
 class NarrowedFinding(ReplayFinding):
-    """A recorded `rms.*` finding the current type table narrowed (owner decision 23A)."""
+    """A recorded `rms.*` finding the current type table or the shared tree reading narrowed
+    (owner decision 23A; feature 013 T134-Q1)."""
 
     step: int | None
     removed_locations: int
     """Its drawing locations taken out before its key matched: each named only rows the
-    current type table does not count as content (`narrowed_key`)."""
+    current type table does not count as content, or only rows the tree reading carries or
+    merges, or was a second listing's occurrence of a row the reading keeps (`narrowed_key`)."""
 
 
 class ReplayFindings(ReplayModel):
@@ -1688,30 +1695,124 @@ def not_content_locations(
 
 
 @dataclass(frozen=True)
+class FoldedLocation:
+    """What the shared tree reading does to the rows one `(scope, persist_ref)` names.
+
+    Feature 013 T134-Q1 (default taken 2026-09-27): `checks/feature_nodes.tree_nodes` reads one
+    node per feature position, merging an absorbed sketch's second listing into the depth-0 row
+    it repeats and carrying the Hole Wizard's profile sketch under its hole. Only a location that
+    names at least one row the reading merges or carries has one (`folded_locations`).
+    """
+
+    positions: int
+    """Rows it names that the reading keeps as a feature position and the table counts as
+    content: the occurrences a finding may still hold after the reading."""
+
+    listings: int
+    """Second listings it names, each merged into the depth-0 row it repeats."""
+
+
+NO_FOLDED_LOCATIONS: Mapping[PersistLocation, FoldedLocation] = MappingProxyType({})
+"""No location the tree reading folds: `narrowed_key` with the type table's clause alone."""
+
+
+def folded_locations(
+    package: EvidencePackage, table: RmsTypeTable
+) -> dict[PersistLocation, FoldedLocation]:
+    """Every `(scope, persist_ref)` of `package`'s feature rows that names a row the shared tree
+    reading folds: a second listing merged into its depth-0 row, or a sub-feature carried by its
+    owner (feature 013 T134-Q1; `contracts/replay.md` section 5).
+
+    The reading runs one document at a time, as `tree_nodes` requires - a persistent reference
+    names a feature only inside the document that owns it - under `table`, the one the current
+    code ships. A package with neither shape folds nothing, so the result is empty and narrowing
+    is decision 23A's alone.
+    """
+    by_document: dict[str, list[Feature]] = {}
+    for row in package.features:
+        by_document.setdefault(row.document_id, []).append(row)
+    merged: set[str] = set()
+    carried: set[str] = set()
+    for rows in by_document.values():
+        nodes = tree_nodes(rows, table)
+        merged.update(merge.dropped_id for merge in nodes.merged)
+        carried.update(carry.dropped_id for carry in nodes.carried)
+
+    positions: dict[PersistLocation, int] = {}
+    listings: dict[PersistLocation, int] = {}
+    folded: set[PersistLocation] = set()
+    for row in package.features:
+        location = (row.persist_ref_scope, row.persist_ref)
+        positions.setdefault(location, 0)
+        listings.setdefault(location, 0)
+        if row.id in merged:
+            listings[location] += 1
+            folded.add(location)
+        elif row.id in carried:
+            folded.add(location)
+        elif table.is_content(row):
+            positions[location] += 1
+    return {
+        location: FoldedLocation(positions=positions[location], listings=listings[location])
+        for location in positions
+        if location in folded
+    }
+
+
+@dataclass(frozen=True)
 class NarrowedKey:
-    """A recorded finding's key less the locations the current type table narrowed away."""
+    """A recorded finding's key less the locations the current code no longer names."""
 
     key: SubjectKey
     removed_locations: int
 
 
 def narrowed_key(
-    finding: Finding, not_content: Collection[PersistLocation]
+    finding: Finding,
+    not_content: Collection[PersistLocation],
+    *,
+    folded: Mapping[PersistLocation, FoldedLocation] = NO_FOLDED_LOCATIONS,
 ) -> NarrowedKey | None:
-    """`finding`'s key with each drawing location in `not_content` removed, or `None`.
+    """`finding`'s key with every location narrowing may remove removed, or `None`.
 
-    `None` for a finding of another family than `rms.*` - the type table decides only the RMS
-    rules' subjects - and for one that loses no location. A location with no persistent
-    reference is never removed.
+    The lowest a recorded finding can narrow to: `compare_finding_keys` narrows it onto a current
+    finding whose locations lie between these and the recorded ones, because a location *may* be
+    removed - a rule that still names a row narrowing could remove keeps it. Two clauses, both
+    over the recording's own package (`contracts/replay.md` section 5):
+
+    - decision 23A: every occurrence of a location in `not_content` - one whose reference names
+      only rows the type table does not count as content;
+    - feature 013 T134-Q1, from `folded` (`folded_locations`): every occurrence of a location
+      whose reference names only rows the tree reading carries, merges or does not count
+      (`positions == 0`); and of a location naming a depth-0 row the reading keeps with a second
+      listing merged into it, the occurrences beyond the rows it keeps there, at most one per
+      second listing - the second listing's occurrence goes, the depth-0 row's stays.
+
+    Of a location's occurrences the first are kept and the later removed. `None` for a finding
+    of another family than `rms.*` - the type table and the reading decide the RMS rules'
+    subjects only - and for one that loses no location. A location with no persistent reference
+    is never removed.
     """
     if not finding.check.startswith(RMS_CHECK_PREFIX):
         return None
-    kept = [
-        location
+    named = Counter(
+        (location.document_id, location.persist_ref)
         for location in finding.drawing_locations
-        if location.persist_ref is None
-        or (location.document_id, location.persist_ref) not in not_content
-    ]
+        if location.persist_ref is not None
+    )
+    keep = {
+        location: count - _removable(location, count, not_content, folded)
+        for location, count in named.items()
+    }
+    kept = []
+    for location in finding.drawing_locations:
+        if location.persist_ref is None:
+            kept.append(location)
+            continue
+        where = (location.document_id, location.persist_ref)
+        if keep[where] > 0:
+            keep[where] -= 1
+            kept.append(location)
     removed = len(finding.drawing_locations) - len(kept)
     if removed == 0:
         return None
@@ -1719,6 +1820,23 @@ def narrowed_key(
         key=finding_subject_key(finding.model_copy(update={"drawing_locations": kept})),
         removed_locations=removed,
     )
+
+
+def _removable(
+    location: PersistLocation,
+    occurrences: int,
+    not_content: Collection[PersistLocation],
+    folded: Mapping[PersistLocation, FoldedLocation],
+) -> int:
+    """How many of a finding's `occurrences` of `location` narrowing removes (`narrowed_key`)."""
+    if location in not_content:
+        return occurrences
+    rows = folded.get(location)
+    if rows is None:
+        return 0
+    if rows.positions == 0:
+        return occurrences
+    return min(rows.listings, max(occurrences - rows.positions, 0))
 
 
 @dataclass(frozen=True)
@@ -1763,6 +1881,31 @@ def _take_without_references(added: Counter[SubjectKey], target: SubjectKey) -> 
     return False
 
 
+def _narrowed_onto(
+    recorded: SubjectKey, lowest: SubjectKey, added: Counter[SubjectKey]
+) -> SubjectKey | None:
+    """The current key `recorded` narrows onto, or `None` (`contracts/replay.md` section 5).
+
+    One of `added` - nothing else matched it - with the recorded check, components, entity
+    inputs and configuration, whose locations lie between `lowest`'s (every location narrowing
+    may remove removed, `narrowed_key`) and `recorded`'s, as multisets: the recorded finding less
+    some of the locations narrowing may remove, and nothing else. Of several, the one keeping the
+    most locations, the first in the current findings' order among equals.
+    """
+    upper, lower = Counter(recorded[2]), Counter(lowest[2])
+    fixed = (recorded[0], recorded[1], recorded[3], recorded[4])
+    target: SubjectKey | None = None
+    for key, count in added.items():
+        if count <= 0 or (key[0], key[1], key[3], key[4]) != fixed:
+            continue
+        locations = Counter(key[2])
+        if locations - upper or lower - locations:
+            continue
+        if target is None or len(key[2]) > len(target[2]):
+            target = key
+    return target
+
+
 def compare_finding_keys(
     findings: Sequence[Finding],
     current: Iterable[SubjectKey],
@@ -1775,10 +1918,12 @@ def compare_finding_keys(
 
     `contracts/replay.md` section 5. Each recorded finding, in order, takes one current finding
     of its key while any remains, so of several with one key the later ones are unmatched.
-    Then each unmatched `rms.*` finding is narrowed (`narrowed_key`) over the recorded package
-    at `package_path`, under the type table the current code ships, and takes one current
-    finding **nothing else matched** - no recorded key, compared or `uncompared` - whose key
-    equals its narrowed key, one to one in recorded order. What is still unmatched is lost.
+    Then each unmatched `rms.*` finding is narrowed over the recorded package at
+    `package_path`, under the type table the current code ships and the shared tree reading
+    (`narrowed_key`, `folded_locations`), and takes one current finding **nothing else matched** -
+    no recorded key, compared or `uncompared` - whose key is its own less some of the locations
+    narrowing may remove (`_narrowed_onto`), one to one in recorded order. What is still
+    unmatched is lost.
     A key holds each drawing location's persistent reference (`finding_subject_key`, owner
     decision 25A), so both matches compare which subjects a finding names, not how many.
 
@@ -1807,20 +1952,24 @@ def compare_finding_keys(
             unmatched.append(position)
     added = current_keys - (Counter(keys) + Counter(named(key) for key in uncompared))
     not_content: frozenset[PersistLocation] = frozenset()
+    folded: Mapping[PersistLocation, FoldedLocation] = NO_FOLDED_LOCATIONS
     if any(findings[position].check.startswith(RMS_CHECK_PREFIX) for position in unmatched):
         package = EvidencePackage.model_validate_json(package_path.read_bytes())
-        not_content = not_content_locations(package, load_table())
+        table = load_table()
+        not_content = not_content_locations(package, table)
+        folded = folded_locations(package, table)
     still: list[int] = []
     narrowed: list[tuple[int, int]] = []
     for position in unmatched:
-        candidate = narrowed_key(findings[position], not_content)
+        candidate = narrowed_key(findings[position], not_content, folded=folded)
+        target = None
         if candidate is not None:
-            target = named(candidate.key)
-            if added[target] > 0:
-                added[target] -= 1
-                narrowed.append((position, candidate.removed_locations))
-                continue
-        still.append(position)
+            target = _narrowed_onto(keys[position], named(candidate.key), added)
+        if target is None:
+            still.append(position)
+            continue
+        added[target] -= 1
+        narrowed.append((position, len(keys[position][2]) - len(target[2])))
     lost: list[int] = []
     for position in still:
         finding = findings[position]
@@ -1992,7 +2141,7 @@ def render_replay_lines(report: ReplayReport) -> list[str]:
         f"{len(findings.lost)} lost, {len(findings.added)} added, "
         f"{len(findings.not_replayable)} not replayable offline, "
         f"{len(findings.reclassified)} reclassified as contacts, "
-        f"{len(findings.narrowed)} narrowed by the type table"
+        f"{len(findings.narrowed)} narrowed by the type table or the tree reading"
     )
     lines += [f"  lost: {item.check} - {item.subject}" for item in findings.lost]
     lines += [f"  added: {item.check} - {item.subject}" for item in findings.added]
