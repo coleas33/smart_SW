@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -38,6 +39,11 @@ namespace SwReview.Extractor.Tests;
 ///     turns a SOLIDWORKS upgrade from a runtime surprise into a red build.
 ///
 /// Regenerating the fixture is a deliberate, reviewed commit. Neither test ever updates it.
+///
+/// Since 004 T181 the fixture is written by <c>swreview-extract probe interop --emit-manifest</c>
+/// from the committed selection (<see cref="RemodelInteropSurface"/>) and reflection
+/// (<see cref="RemodelInteropManifest"/>), and <see cref="TheFixtureIsWhatTheCommandWrites"/> holds
+/// it to that, so no row is typed by hand.
 /// </summary>
 public class RemodelInteropManifestTests
 {
@@ -181,6 +187,59 @@ public class RemodelInteropManifestTests
         Assert.Equal(guard, manifest);
     }
 
+    // --------------------------------------------------- the fixture is regenerated (T181)
+
+    /// <summary>
+    /// 004 T181 (default taken 2026-09-27, the owner may revise; research R15.1): the fixture is
+    /// exactly what <c>swreview-extract probe interop --emit-manifest</c> writes from the committed
+    /// selection and the interop the product is built against, at the fixture's own
+    /// <c>generated_at</c>. So a row typed into the fixture by hand, a <c>used_by</c> or note edited
+    /// there, or a builder row, constant or absence changed without regenerating, fails here - and
+    /// the message says how to regenerate.
+    /// </summary>
+    [Fact]
+    public void TheFixtureIsWhatTheCommandWrites()
+    {
+        RemodelInteropGeneration generation = RemodelInteropManifest.Generate(BuiltAgainst, Loaded.GeneratedAt);
+        Assert.True(
+            generation.Succeeded,
+            "the committed selection does not read against the interop the product is built against: "
+            + string.Join("; ", generation.Problems));
+
+        string[] written = RemodelInteropManifest.Write(generation.Document).Split('\n');
+        string[] fixture = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, FixturePath))
+            .Replace("\r\n", "\n")
+            .Split('\n');
+
+        int differs = -1;
+        for (int line = 0; line < Math.Max(written.Length, fixture.Length); line++)
+        {
+            if (line >= written.Length || line >= fixture.Length
+                || !string.Equals(written[line], fixture[line], StringComparison.Ordinal))
+            {
+                differs = line;
+                break;
+            }
+        }
+
+        Assert.True(
+            differs < 0,
+            $"the fixture is not what the manifest command writes; first difference at line {differs + 1}:"
+            + Environment.NewLine + "    fixture: " + (differs >= 0 && differs < fixture.Length ? fixture[differs] : "(end)")
+            + Environment.NewLine + "    command: " + (differs >= 0 && differs < written.Length ? written[differs] : "(end)")
+            + Environment.NewLine + "Add or change the row in RemodelInteropSurface and regenerate with "
+            + "swreview-extract probe interop --emit-manifest "
+            + "extractor/SwReview.Extractor.Tests/" + FixturePath.Replace('\\', '/') + " --force.");
+    }
+
+    /// <summary>The interop the product is compiled against, read for its metadata as the command reads the installed one.</summary>
+    private static RemodelInteropAssemblies BuiltAgainst =>
+        new RemodelInteropAssemblies(
+            typeof(SolidWorks.Interop.sldworks.IModelDoc2).Assembly,
+            RemodelInteropAssemblies.SldWorksName,
+            typeof(SolidWorks.Interop.swconst.swOpenDocOptions_e).Assembly,
+            RemodelInteropAssemblies.SwConstName);
+
     // --------------------------------------------------- the fixture's own consistency
 
     [Fact]
@@ -191,6 +250,8 @@ public class RemodelInteropManifestTests
         Assert.Equal("32.5.0.48", Loaded.AssemblyVersion);
         Assert.Equal("32.5.0.48", Loaded.SwconstVersion);
         Assert.Equal("SOLIDWORKS 2024 SP5", Loaded.Product);
+        Assert.Equal(RemodelInteropManifest.GeneratedBy, Loaded.GeneratedBy);
+        Assert.Equal(DateTimeKind.Utc, Loaded.GeneratedAt.Kind);
     }
 
     /// <summary>
@@ -827,8 +888,9 @@ public class RemodelInteropManifestTests
     // =====================================================================================
 
     /// <summary>
-    /// Regenerates <c>{interface, member, arity, ordered parameter names, return type}</c> from
-    /// the installed assembly by the same reflection dump that produced the fixture, and diffs.
+    /// Regenerates <c>{interface, member, kind, arity, ordered parameter names and types, return
+    /// type}</c> from the installed assembly by the manifest command's own reflection
+    /// (<see cref="RemodelInteropManifest"/>, 004 T181), for the fixture's own rows, and diffs.
     ///
     /// A member whose signature changed fails, naming the interface, the member and both
     /// signatures; a member that disappeared fails; a member that appeared in
@@ -842,105 +904,58 @@ public class RemodelInteropManifestTests
     [InteropAssembliesPresentFact]
     public void InstalledAssemblyMatchesManifest()
     {
-        string redist = InstalledInterop.RedistDirectory()!;
-        Assembly swconst = InstalledInterop.Load(redist, "SolidWorks.Interop.swconst");
-        Assembly sldworks = InstalledInterop.Load(redist, "SolidWorks.Interop.sldworks");
+        RemodelInteropAssemblies installed = RemodelInteropAssemblies.FromRedist(InstalledInterop.RedistDirectory())!;
 
-        var differences = new List<string>();
+        // The fixture's own rows, constants and absences, read by the command's reflection: what
+        // the installed assembly says of every one of them, whatever the builder table holds.
+        RemodelInteropGeneration generation = RemodelInteropManifest.Generate(
+            Loaded.Members.Select(row => row.AsCall()).ToArray(),
+            Loaded.Enums.Select(declared => new RemodelInteropConstants(declared.Name, declared.Values.Keys.ToArray())).ToArray(),
+            Loaded.Absences.Select(absence => absence.AsAbsence()).ToArray(),
+            installed,
+            Loaded.GeneratedAt);
 
+        var differences = new List<string>(generation.Problems);
+
+        var reflected = generation.Document.Members.ToDictionary(row => row.Key, StringComparer.Ordinal);
         foreach (ManifestMember row in Loaded.Members)
         {
-            Type? type = sldworks.GetType("SolidWorks.Interop.sldworks." + row.Interface);
-            if (type == null)
+            if (!reflected.TryGetValue(row.Key, out RemodelInteropManifestRow? now))
             {
-                differences.Add($"{row.Interface} is gone from the installed assembly ({row.Key})");
                 continue;
             }
 
-            MethodInfo[] found = type.GetMethods()
-                .Where(m => string.Equals(m.Name, row.Member, StringComparison.Ordinal))
-                .ToArray();
-
-            if (found.Length == 0)
-            {
-                differences.Add($"{row.Key} is gone from the installed assembly; manifest had {row.Signature}");
-                continue;
-            }
-
-            if (found.Length > 1)
-            {
-                differences.Add(
-                    $"{row.Key} now has {found.Length} overloads, so the manifest's single "
-                    + $"signature {row.Signature} no longer identifies it");
-                continue;
-            }
-
-            string installed = InstalledInterop.SignatureOf(found[0]);
-            if (!string.Equals(installed, row.Signature, StringComparison.Ordinal))
+            if (!string.Equals(now.Signature, row.Signature, StringComparison.Ordinal))
             {
                 differences.Add(
                     $"{row.Interface}.{row.Member} changed signature{Environment.NewLine}"
                     + $"    manifest : {row.Signature}{Environment.NewLine}"
-                    + $"    installed: {installed}");
+                    + $"    installed: {now.Signature}");
+            }
+
+            if (!string.Equals(now.Kind, row.Kind, StringComparison.Ordinal))
+            {
+                differences.Add($"{row.Key} is a {now.Kind} on the installed assembly and a {row.Kind} in the manifest");
             }
         }
 
-        foreach (ManifestAbsence absence in Loaded.Absences)
+        foreach (RemodelInteropEnumRow now in generation.Document.Enums)
         {
-            Type? type = sldworks.GetType("SolidWorks.Interop.sldworks." + absence.Interface);
-            if (type == null)
+            ManifestEnum declared = Loaded.Enums.Single(e => string.Equals(e.Name, now.Name, StringComparison.Ordinal));
+            foreach (KeyValuePair<string, int> value in now.Values)
             {
-                differences.Add($"{absence.Interface} is gone, so its recorded absence cannot be checked");
-                continue;
-            }
-
-            string[] appeared = type.GetMembers()
-                .Select(m => m.Name)
-                .Distinct(StringComparer.Ordinal)
-                .Where(absence.Matches)
-                .OrderBy(n => n, StringComparer.Ordinal)
-                .ToArray();
-
-            if (appeared.Length > 0)
-            {
-                differences.Add(
-                    $"{absence.Interface}.{absence.Member ?? absence.MemberPattern} was absent and "
-                    + $"is now present as {string.Join(", ", appeared)}; the design depends on its "
-                    + $"absence: {absence.Consequence}");
-            }
-        }
-
-        foreach (ManifestEnum declared in Loaded.Enums)
-        {
-            Type? type = swconst.GetType("SolidWorks.Interop.swconst." + declared.Name);
-            if (type == null)
-            {
-                differences.Add($"{declared.Name} is gone from the installed swconst assembly");
-                continue;
-            }
-
-            foreach (KeyValuePair<string, int> value in declared.Values)
-            {
-                if (!Enum.IsDefined(type, value.Key))
-                {
-                    differences.Add($"{declared.Name}.{value.Key} is gone from the installed assembly");
-                    continue;
-                }
-
-                int installed = (int)(object)Enum.Parse(type, value.Key);
-                if (installed != value.Value)
+                int recorded = declared.Values[value.Key];
+                if (recorded != value.Value)
                 {
                     differences.Add(
-                        $"{declared.Name}.{value.Key} is {installed} on the installed assembly and "
-                        + $"{value.Value} in the manifest");
+                        $"{now.Name}.{value.Key} is {value.Value} on the installed assembly and {recorded} in the manifest");
                 }
             }
         }
 
-        string installedVersion = sldworks.GetName().Version?.ToString() ?? "(none)";
         Assert.True(
             differences.Count == 0,
-            $"installed SolidWorks.Interop.sldworks {installedVersion}, manifest "
+            $"installed SolidWorks.Interop.sldworks {generation.Document.AssemblyVersion}, manifest "
             + $"{Loaded.AssemblyVersion}{Environment.NewLine}"
             + string.Join(Environment.NewLine, differences)
             + Environment.NewLine
@@ -1061,29 +1076,6 @@ public class RemodelInteropManifestTests
 
         public static Assembly Load(string redist, string name) =>
             Assembly.LoadFrom(Path.Combine(redist, name + ".dll"));
-
-        /// <summary>
-        /// The one spelling of a signature both halves of this test compare, so a difference is
-        /// a difference of the signature and never of the formatting.
-        /// </summary>
-        public static string SignatureOf(MethodInfo method)
-        {
-            var text = new StringBuilder();
-            text.Append('(');
-            ParameterInfo[] parameters = method.GetParameters();
-            for (int i = 0; i < parameters.Length; i++)
-            {
-                if (i > 0)
-                {
-                    text.Append(", ");
-                }
-
-                text.Append(parameters[i].Name).Append(':').Append(parameters[i].ParameterType.FullName);
-            }
-
-            text.Append(") -> ").Append(method.ReturnType.FullName);
-            return text.ToString();
-        }
     }
 
     // ------------------------------------------------------------------ the fixture model
@@ -1099,6 +1091,10 @@ public class RemodelInteropManifestTests
         public string SwconstVersion { get; private set; } = string.Empty;
 
         public string Product { get; private set; } = string.Empty;
+
+        public DateTime GeneratedAt { get; private set; }
+
+        public string GeneratedBy { get; private set; } = string.Empty;
 
         public IReadOnlyList<ManifestMember> Members { get; private set; } = Array.Empty<ManifestMember>();
 
@@ -1143,6 +1139,12 @@ public class RemodelInteropManifestTests
                     AssemblyVersion = root.GetProperty("assembly_version").GetString() ?? string.Empty,
                     SwconstVersion = root.GetProperty("swconst_version").GetString() ?? string.Empty,
                     Product = root.GetProperty("product").GetString() ?? string.Empty,
+                    GeneratedAt = DateTime.ParseExact(
+                        root.GetProperty("generated_at").GetString() ?? string.Empty,
+                        RemodelInteropManifest.GeneratedAtFormat,
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal),
+                    GeneratedBy = root.GetProperty("generated_by").GetString() ?? string.Empty,
                     Members = root.GetProperty("members").EnumerateArray().Select(ManifestMember.Read).ToArray(),
                     Enums = root.GetProperty("enums").EnumerateArray().Select(ManifestEnum.Read).ToArray(),
                     Absences = root.GetProperty("absences").EnumerateArray().Select(ManifestAbsence.Read).ToArray(),
@@ -1172,9 +1174,16 @@ public class RemodelInteropManifestTests
 
         public string Key => Interface + "." + Member;
 
-        /// <summary>The one spelling both halves of the manifest test compare.</summary>
+        /// <summary>The one spelling both halves of the manifest test compare: the command's.</summary>
         public string Signature =>
-            "(" + string.Join(", ", Parameters.Select(p => p.Name + ":" + p.Type)) + ") -> " + Returns;
+            RemodelInteropManifest.Signature(
+                Parameters.Select(p => new KeyValuePair<string, string>(p.Name, p.Type)), Returns);
+
+        /// <summary>This row as the selection the command reads it from.</summary>
+        public RemodelInteropCall AsCall() =>
+            new RemodelInteropCall(
+                Interface, Member, Kind, Parameters.Select(p => p.Name).ToArray(), Returns, Allowlisted)
+                .WithUsedBy(UsedBy.ToArray());
 
         public static ManifestMember Read(JsonElement element) => new ManifestMember
         {
@@ -1245,24 +1254,11 @@ public class RemodelInteropManifestTests
 
         public string Consequence { get; private set; } = string.Empty;
 
-        public bool Matches(string memberName)
-        {
-            if (Except.Contains(memberName, StringComparer.Ordinal))
-            {
-                return false;
-            }
-
-            if (Member != null)
-            {
-                return string.Equals(Member, memberName, StringComparison.Ordinal);
-            }
-
-            string pattern = MemberPattern ?? string.Empty;
-            string core = pattern.Trim('*');
-            return pattern.StartsWith("*", StringComparison.Ordinal)
-                && pattern.EndsWith("*", StringComparison.Ordinal)
-                && memberName.IndexOf(core, StringComparison.Ordinal) >= 0;
-        }
+        /// <summary>This absence as the selection the command checks it from, which decides a match.</summary>
+        public RemodelInteropAbsence AsAbsence() =>
+            Member != null
+                ? RemodelInteropAbsence.OfMember(Interface, Member, Consequence)
+                : RemodelInteropAbsence.OfPattern(Interface, MemberPattern ?? string.Empty, Consequence, Except.ToArray());
 
         public static ManifestAbsence Read(JsonElement element) => new ManifestAbsence
         {

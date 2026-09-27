@@ -4,8 +4,8 @@
   "assembly_version": "32.5.0.48",
   "swconst_version": "32.5.0.48",
   "product": "SOLIDWORKS 2024 SP5",
-  "generated_at": "2026-09-16T00:58:00Z",
-  "generated_by": "reflection over the installed SolidWorks.Interop.sldworks and .swconst assemblies (T055); swreview-extract probe interop --emit-manifest is the Phase 2 command that regenerates it by the same dump; the T156 rows and enum values (2026-09-27, the seat adapter's plumbing) by the same metadata-only reflection over the installed 32.5.0.48 on the development machine, SOLIDWORKS not started",
+  "generated_at": "2026-09-27T16:50:45Z",
+  "generated_by": "swreview-extract probe interop --emit-manifest",
   "members": [
     {
       "interface": "IModelDocExtension",

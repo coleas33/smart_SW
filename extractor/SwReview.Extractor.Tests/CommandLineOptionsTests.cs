@@ -430,8 +430,9 @@ public class CommandLineOptionsTests
         // the shipped one, so a subject added to the switch and forgotten here - or the
         // reverse - is a failing test rather than an "Unknown probe" at the workstation.
         // "remodel" (tasks.md T031, T032) is the third and the one mutating subject; "drawings"
-        // (feature 011 T081, edited deliberately) is the fourth.
-        Assert.Equal(new[] { "rms", "standards", "remodel", "drawings" }, Program.ProbeSubjects);
+        // (feature 011 T081, edited deliberately) is the fourth; "interop" (feature 004 T181, the
+        // manifest's regeneration, edited deliberately) is the fifth.
+        Assert.Equal(new[] { "rms", "standards", "remodel", "drawings", "interop" }, Program.ProbeSubjects);
     }
 
     [Fact]

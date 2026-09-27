@@ -1249,7 +1249,7 @@ public class DrawingFamilyReadAuditTests
     };
 
     /// <summary>The extractor folder: the one holding SwReview.sln, found upward from the test assembly.</summary>
-    private static string ExtractorRoot()
+    internal static string ExtractorRoot()
     {
         DirectoryInfo? directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory != null && !File.Exists(Path.Combine(directory.FullName, "SwReview.sln")))
