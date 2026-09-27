@@ -56,7 +56,13 @@ def request(of: QuestionSpec, **changes: object) -> EvidenceRequest:
 def test_the_drawing_check_uses_the_shared_shape_and_test() -> None:
     """Moved, not copied: two definitions would be two shapes the day one of them changes."""
     assert drawing_context.QuestionSpec is QuestionSpec
-    assert drawings.already_asked is already_asked
+    # 013 T099 (integration, 2026-09-27, edited deliberately): the drawing check records its
+    # questions through `tools/session.record_question`, the one path a code question takes,
+    # whose duplicate test is this module's `already_asked`.
+    from swreview.tools import session as tools_session
+
+    assert drawings.record_question is tools_session.record_question
+    assert tools_session.already_asked is already_asked
     assert not hasattr(drawings, "_already_asked")
 
 

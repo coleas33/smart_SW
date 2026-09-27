@@ -35,7 +35,6 @@ from swreview.checks.drawing_context import (
     candidate_question,
     run_drawing_context,
 )
-from swreview.checks.questions import already_asked
 from swreview.checks.result import DocumentResult
 from swreview.drawings.brief import BriefRefused, build_brief
 from swreview.drawings.evidence import DrawingIndex
@@ -47,7 +46,7 @@ from swreview.tools.context import ToolContext, current_context, error_result
 from swreview.tools.joint_context import joint_analysis
 from swreview.tools.query import ToolResult
 from swreview.tools.recording import record_result
-from swreview.tools.session import record_evidence_request
+from swreview.tools.session import record_question
 
 if TYPE_CHECKING:
     from swreview.checks.part_roles import PartRoles  # 013 T018, lane P
@@ -145,7 +144,7 @@ def _record(context: ToolContext) -> dict[str, Any]:
     the change that closed it. Once a drawing is attached the model owns the item, and only this
     check's own closing row is withdrawn, never a row the model wrote.
     """
-    session = context.require_session()
+    context.require_session()  # first, so a sessionless context refuses before anything else
     index = DrawingIndex.for_package(context.ir)
     roles = _review_roles(context)
     result = run_drawing_context(
@@ -171,18 +170,10 @@ def _record(context: ToolContext) -> dict[str, Any]:
     finding_ids = _record_conformance(context, result.conformance.findings)
     if isinstance(finding_ids, dict):
         return finding_ids
+    # 013 T099: through the one path every question code asks takes (`record_question`: the
+    # shared exact duplicate test, then the one writer with `source="code"`).
     for spec in result.questions:
-        if already_asked(session.evidence_requests, spec):
-            continue
-        record_evidence_request(
-            context,
-            spec.what,
-            spec.why,
-            list(spec.entity_ids),
-            question=spec.question,
-            options=list(spec.options),
-            blocks=spec.blocks,
-        )
+        record_question(context, spec)
     states = [state.state for state in result.states.values()]
     return {
         "status": "recorded",

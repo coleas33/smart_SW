@@ -680,3 +680,22 @@ def test_while_closed_the_closing_row_supersedes_the_items_other_rows() -> None:
     [(bucket, _, reason)] = item_rows(context)
     assert bucket == "unresolved"
     assert reason.startswith(CLOSED_BY_CODE)
+
+
+# --- 7. the drawing check's questions are written by code (013 T098) ----------------------------
+
+
+def test_the_drawing_checks_questions_carry_source_code() -> None:
+    """013 `contracts/sources.md` section 1: a question code wrote says so, so the pane labels
+    it and the re-ask guard never lets it cover a model question. 013 T099: `check_drawings`
+    records its questions through `tools/session.record_question`, which writes
+    `source="code"`, and this test holds it there."""
+    candidate, _ = recorded(fixture("plate-drawing"), host=ModeHost("opens_closed"))
+    governing, _ = recorded(fixture("assembly-drawings"))
+
+    requests = [
+        *candidate.require_session().evidence_requests,
+        *governing.require_session().evidence_requests,
+    ]
+    assert len(requests) == 2
+    assert [getattr(request, "source", None) for request in requests] == ["code", "code"]
