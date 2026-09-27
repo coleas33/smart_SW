@@ -34,7 +34,9 @@ from swreview.report.attention import (
     coverage_line,
     family_of,
     family_title,
+    finding_source,
     load_policy,
+    request_source,
 )
 from swreview.report.finding_groups import GoalLine, GroupRow, findings_by_type, goal_state_text
 from swreview.report.names import component_names
@@ -296,7 +298,7 @@ def _render_findings_by_type(
         lines.append("")
     return [
         *lines,
-        *coverage_line(ranking),
+        *coverage_line(ranking, model_mark=words.labels.source["model"]),
         "",
         f"Ranked by {ranking.policy_version}; the rule is in "
         "reviewer/src/swreview/report/attention.py.",
@@ -460,6 +462,8 @@ def _render_finding(
     if explanation is not None:
         lines.append(f"- Explanation: {markdown_text(explanation)}")
     lines.append(f"- Check: {finding.check}")
+    if finding_source(finding) == "model":
+        lines.append(f"- Source: {load_words().labels.source['model']}")
     lines.append(f"- Status: {finding.status}")
     lines.append(f"- Severity: {finding.severity}")
     lines.append(f"- Configuration: {finding.configuration}")
@@ -646,14 +650,15 @@ def _render_evidence_requests(session: ReviewSession) -> list[str]:
     ordered = sorted(
         session.evidence_requests, key=lambda request: 0 if request.status == "open" else 1
     )
-    lines.append("| ID | What | Why | Entity IDs | Status | Answer | Answered At |")
-    lines.append("|---|---|---|---|---|---|---|")
+    sources = load_words().labels.source
+    lines.append("| ID | What | Why | Entity IDs | Status | Answer | Answered At | Source |")
+    lines.append("|---|---|---|---|---|---|---|---|")
     for request in ordered:
         answered_at = _fmt_dt(request.answered_at) if request.answered_at else ""
         lines.append(
             f"| {request.id} | {request.what} | {request.why} "
             f"| {', '.join(request.entity_ids)} | {request.status} "
-            f"| {request.answer or ''} | {answered_at} |"
+            f"| {request.answer or ''} | {answered_at} | {sources[request_source(request)]} |"
         )
     return lines
 

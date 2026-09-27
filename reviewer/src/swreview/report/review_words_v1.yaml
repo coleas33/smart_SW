@@ -231,6 +231,11 @@ labels:
     zero_volume: "touching"
     possible_only: "possible only"
     thread_model: "thread model"
+  # Who wrote a finding, a question or a coverage row (feature 013): the page prints the word
+  # for a record's `source` token and compares nothing; `report.md` uses the same two.
+  source:
+    code: "Checked by code"
+    model: "AI guidance"
   errors:
     AlreadyAccepted: "That condition already has an active exception, so nothing new was recorded."
     AlreadyAnswered: "That question was already answered, perhaps in another window. Reload the review to see its answer."

@@ -211,6 +211,11 @@ Points the record exists to enforce:
 - **Reproducible from the session alone.** `rank(load_session(...), policy)` reproduces the
   record exactly; a record whose `session_id` is not the session beside it is stale, the same
   rule `check.json` already follows.
+- **`NotClosed.source`** (*amended 2026-09-26, feature 013 T101*, 013 `contracts/sources.md`
+  section 1): a close-out row the model wrote (`mark_coverage`) carries `"source": "model"`; one
+  code wrote carries nothing, the key omitted, so a record of code-written rows keeps its bytes.
+  `report.md` marks the model's sentence "(AI guidance)"; the gate brief and `swreview attention`
+  print it as before.
 - **`top_n` is not the constant 5** (*amended 2026-09-26, feature 013 T044*): it is
   `min(5, rows not suppressed)`, so a session with fewer than five undecided rows records fewer
   (the sitting's record said `top_n` 5 over three passes, and `not_amplified.total` 0). A

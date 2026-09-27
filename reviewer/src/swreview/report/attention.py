@@ -67,16 +67,20 @@ __all__ = [
     "Policy",
     "Ranking",
     "RuleCounts",
+    "Source",
     "coverage_line",
+    "coverage_source",
     "family_counts",
     "family_of",
     "family_title",
+    "finding_source",
     "fold",
     "is_decided",
     "load_policy",
     "persisted_explanation",
     "rank",
     "ranked_rows",
+    "request_source",
     "start_here_lines",
 ]
 
@@ -186,6 +190,32 @@ EVIDENCE_REQUEST_CHECK = "coverage.evidence_request"
 EMPTY_NO_FINDINGS = "no findings were recorded"
 EMPTY_ALL_DECIDED = "every finding is informational or already decided"
 """The two things the section says when it has nothing to amplify (contract section 3)."""
+
+Source = Literal["code", "model"]
+"""Who wrote a record (feature 013, its `contracts/sources.md` section 1): a check's code, or the
+model. Findings, evidence requests and coverage rows carry it as an optional `source`, omitted
+from `session.json` at each kind's usual author; the three readers below state each kind's
+default in one place."""
+
+
+def finding_source(finding: Finding) -> Source:
+    """A finding's author: `code` unless it says otherwise - only `record_drawing_finding`
+    writes `model` (lane S's 013 T007 adds the field; a record without it is a code one)."""
+    return getattr(finding, "source", "code")
+
+
+def request_source(request: object) -> Source:
+    """An evidence request's author: `model` unless it says otherwise - the drawing check and the
+    part-roles question write `code`, so an older session's code question reads as AI guidance,
+    never the reverse."""
+    return getattr(request, "source", "model")
+
+
+def coverage_source(item: object) -> Source:
+    """A coverage row's author: `code` unless it says otherwise - only `mark_coverage` writes
+    `model`, so an older model row shows no label rather than a false "Checked by code"."""
+    return getattr(item, "source", "code")
+
 
 FAMILY_TITLES: dict[str, str] = {"rms": "Modelling practice"}
 """What a folded rule family is called, by the check-id prefix that names it (feature 008).
@@ -336,6 +366,16 @@ class NotClosed(ReviewModel):
 
     item: str
     reason: str
+    source: Source | None = None
+    """`model` when the model wrote the row (`mark_coverage`), else `None`, which is omitted, so
+    a record of code-written close-out rows keeps its bytes (feature 013)."""
+
+    @model_serializer(mode="wrap")
+    def _omit_a_code_source(self, handler: SerializerFunctionWrapHandler) -> dict[str, object]:
+        data = handler(self)
+        if self.source is None:
+            data.pop("source", None)
+        return data
 
 
 class RuleCounts(ReviewModel):
@@ -654,7 +694,11 @@ def _coverage_block(coverage: Coverage) -> CoverageBlock:
     """
     items = set(CHECKLIST_ITEM_IDS)
     not_closed = [
-        NotClosed(item=item.check, reason=item.reason)
+        NotClosed(
+            item=item.check,
+            reason=item.reason,
+            source="model" if coverage_source(item) == "model" else None,
+        )
         for item in coverage.unresolved
         if item.check in items and item.check != CLOSEOUT_ITEM_ID
     ]
@@ -731,12 +775,16 @@ def _not_amplified_line(not_amplified: NotAmplified) -> str:
     )
 
 
-def coverage_line(ranking: Ranking) -> list[str]:
+def coverage_line(ranking: Ranking, *, model_mark: str | None = None) -> list[str]:
     """What the run could not reach: the bucket counts, then the run's own close-out.
 
     Named for the one line it always produces; the close-out sentences and the tail below
     it are bullets under that line. A check folder writes no close-out row, so there it is
     the bucket counts and the rule counts only (contract section 3).
+
+    `model_mark` is the word a close-out sentence the model wrote is marked with, in brackets
+    after it - `report.md` passes the words file's (feature 013, its `contracts/sources.md`
+    section 2); the gate brief and `swreview attention` pass none and print as before.
     """
     coverage = ranking.coverage
     lines = [
@@ -744,7 +792,11 @@ def coverage_line(ranking: Ranking) -> list[str]:
         f"{coverage.skipped} skipped, {coverage.failed} failed, "
         f"{coverage.out_of_scope} out of scope."
     ]
-    lines.extend(f"- {entry.item}: {entry.reason}" for entry in coverage.not_closed)
+    lines.extend(
+        f"- {entry.item}: {entry.reason}"
+        + (f" ({model_mark})" if model_mark and entry.source == "model" else "")
+        for entry in coverage.not_closed
+    )
     tail = _rules_clauses(coverage)
     if tail:
         lines.append(f"- {'; '.join(tail)}.")
