@@ -52,6 +52,7 @@ from swreview.ir.models import EvidencePackage
 from swreview.report.markdown import render_report
 from swreview.report.names import component_names
 from swreview.report.session import (
+    CLOSEOUT_CHECK,
     MAX_STEPS_CLOSEOUT,
     TRUNCATED_CLOSEOUT,
     ReviewSession,
@@ -73,6 +74,10 @@ from tests.support.carry_over import (
 )
 from tests.support.contracts import contract_validator
 from tests.support.features import AssemblySpec, InstanceSpec, PartSpec, rms_package
+
+CODE_CLOSED_CHECKS = frozenset({PROVENANCE_CHECK, CLOSEOUT_CHECK})
+"""The checked rows code writes in every review (feature 013): provenance at setup, the
+close-out at finalization."""
 
 ON = EfficiencySettings(carry_over_rms=True)
 OFF = EfficiencySettings()
@@ -696,8 +701,11 @@ def test_a_review_stamps_keys_and_the_next_one_carries_what_did_not_move(
 
     (carried,) = second.findings
     assert carried.carried_over_from == first.session_id
-    # Edited deliberately by feature 013 T060: provenance's checked row is written first.
-    (carried_row,) = [item for item in second.coverage.checked if item.check != PROVENANCE_CHECK]
+    # Edited deliberately by feature 013 T060 and T117: provenance's checked row is written at
+    # setup and the close-out's at finalization.
+    (carried_row,) = [
+        item for item in second.coverage.checked if item.check not in CODE_CLOSED_CHECKS
+    ]
     assert carried_row.reason.startswith(CARRIED_REASON_PREFIX)
 
 
@@ -727,8 +735,8 @@ def test_a_previous_run_the_runner_itself_cut_short_carries_nothing(tmp_path: An
     second = review(tmp_path, "two", efficiency=ON, previous_session=previous_path)
 
     assert second.findings == []
-    # Edited deliberately by feature 013 T060: provenance's row is the only checked one.
-    assert [item.check for item in second.coverage.checked] == [PROVENANCE_CHECK]
+    # Edited deliberately by feature 013 T060 and T117: code's two rows are the only checked ones.
+    assert [item.check for item in second.coverage.checked] == [PROVENANCE_CHECK, CLOSEOUT_CHECK]
 
 
 def test_the_same_two_reviews_with_the_flag_off_carry_nothing(tmp_path: Any) -> None:

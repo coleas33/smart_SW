@@ -103,22 +103,21 @@ def request_evidence(
         return error_result(refusal)
     # Feature 013 (`contracts/re-ask-guard.md` section 3): after the four refusals, the
     # non-error answers - each records nothing, takes no id and writes no failed row.
-    closed = closed_by_code(context, blocks)
-    if closed is not None:
-        return closed
-    if blocks == DRAWING_FINDING_CHECK:
-        drawings = drawing_request_closed(context, entity_ids)
-        if drawings is not None:
-            return drawings
-    covering = covering_requests(context.require_session(), blocks, entity_ids)
-    if covering.answered is not None:
-        return _repeat(ALREADY_ANSWERED, covering.answered, ALREADY_ANSWERED_NOTE)
-    if covering.open is not None:
-        return _repeat(ALREADY_ASKED, covering.open, ALREADY_ASKED_NOTE)
-    request = record_evidence_request(
-        context, what, why, entity_ids, question=question, options=options, blocks=blocks
-    )
-    return {"status": "open", "evidence_request": as_json(request)}
+    answer = closed_by_code(context, blocks)
+    if answer is None and blocks == DRAWING_FINDING_CHECK:
+        answer = drawing_request_closed(context, entity_ids)
+    if answer is None:
+        covering = covering_requests(context.require_session(), blocks, entity_ids)
+        if covering.answered is not None:
+            answer = _repeat(ALREADY_ANSWERED, covering.answered, ALREADY_ANSWERED_NOTE)
+        elif covering.open is not None:
+            answer = _repeat(ALREADY_ASKED, covering.open, ALREADY_ASKED_NOTE)
+    if answer is None:
+        request = record_evidence_request(
+            context, what, why, entity_ids, question=question, options=options, blocks=blocks
+        )
+        answer = {"status": "open", "evidence_request": as_json(request)}
+    return with_open_items(context, answer)
 
 
 def record_evidence_request(
@@ -192,6 +191,18 @@ def record_question(context: ToolContext, spec: QuestionSpec) -> EvidenceRequest
 
 CLOSED_BY_CODE = "closed_by_code"
 """The non-error status of a call on an item code closes (feature 013)."""
+
+
+def with_open_items(context: ToolContext, answer: dict[str, Any]) -> dict[str, Any]:
+    """`answer` with `open_items`: the model-owned checklist items still open after the call,
+    in checklist order, `[]` when none (feature 013, `contracts/tokens.md` section 2).
+
+    On every non-error answer of `mark_coverage` and `request_evidence`, so the model never
+    spends a round re-reading the checklist to learn what is left. Code-owned items are never
+    listed: they are not the model's to close. The tools' docstrings do not change.
+    """
+    still_open = context.checklist.open_items(context.require_session(), owner="model")
+    return {**answer, "open_items": [item.id for item in still_open]}
 
 
 def closed_by_code(context: ToolContext, check: str | None) -> dict[str, str] | None:
@@ -413,7 +424,7 @@ def mark_coverage(
     if closed is None and check == DRAWING_FINDING_CHECK and drawing_item_closed(context):
         closed = _closure(context, check)
     if closed is not None:
-        return closed
+        return with_open_items(context, closed)
     if bucket not in MODEL_COVERAGE_BUCKETS:
         if bucket == "failed":
             return error_result(
@@ -430,7 +441,9 @@ def mark_coverage(
         return error_result(f"scope names ids not in this package: {unknown}")
     item = CoverageItem(check=check, scope=scope, reason=reason, error=None)
     context.record_coverage(bucket, item)
-    return {"status": "recorded", "bucket": bucket, "coverage_item": as_json(item)}
+    return with_open_items(
+        context, {"status": "recorded", "bucket": bucket, "coverage_item": as_json(item)}
+    )
 
 
 def record_drawing_finding(

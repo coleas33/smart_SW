@@ -163,13 +163,28 @@ def test_a_fresh_session_is_not_complete() -> None:
     assert runner.coverage_complete(CHECKLIST, empty_session()) is False
 
 
-@pytest.mark.parametrize("open_item", [item.id for item in CHECKLIST.items])
+@pytest.mark.parametrize(
+    "open_item", [item.id for item in CHECKLIST.items if item.owner == "model"]
+)
 def test_one_open_item_is_not_complete(open_item: str) -> None:
-    """Any one of the nine left open keeps the tools on the wire."""
+    """Any one model-owned item left open keeps the tools on the wire.
+
+    Edited deliberately by feature 013 T117: a code-owned item is code's to close, so it is
+    asserted the other way below."""
     session = closed_by_coverage("checked", omit=[open_item])
 
     assert [item.id for item in CHECKLIST.open_items(session)] == [open_item]
     assert runner.coverage_complete(CHECKLIST, session) is False
+
+
+@pytest.mark.parametrize(
+    "open_item", [item.id for item in CHECKLIST.items if item.owner == "code"]
+)
+def test_a_code_owned_item_left_open_does_not_hold_the_stop(open_item: str) -> None:
+    session = closed_by_coverage("checked", omit=[open_item])
+
+    assert [item.id for item in CHECKLIST.open_items(session)] == [open_item]
+    assert runner.coverage_complete(CHECKLIST, session) is True
 
 
 def test_one_open_evidence_request_is_not_complete() -> None:

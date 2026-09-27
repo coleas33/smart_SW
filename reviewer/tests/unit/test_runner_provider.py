@@ -423,10 +423,15 @@ def test_coverage_the_model_records_is_announced_with_the_bucket_it_went_into(
 ) -> None:
     run = review([turn("done", call("mark_coverage", **COVERAGE_ARGUMENTS))])
 
-    # Edited deliberately by feature 013: the rows setup wrote are not the turn's.
+    # Edited deliberately by feature 013: the rows setup wrote are not the turn's (T060 and
+    # the part roles), and finalization appends the close-out after the model's row (T117).
     announced = turn_coverage(run)
     assert [body["bucket"] for body in announced] == ["checked"]
-    assert announced[0]["item"] == run.session.coverage.checked[-1].model_dump(mode="json")
+    [recorded] = [
+        item for item in run.session.coverage.checked
+        if item.check == COVERAGE_ARGUMENTS["check"]
+    ]
+    assert announced[0]["item"] == recorded.model_dump(mode="json")
 
 
 def test_a_failed_tool_call_announces_the_failed_coverage_it_wrote(
@@ -904,16 +909,18 @@ def test_a_second_finalization_produces_the_same_coverage_not_duplicates(
 def test_finalization_keeps_coverage_the_model_recorded_itself(
     review: Callable[..., runner.ReviewRun],
 ) -> None:
+    # Edited deliberately by feature 013 T117: the close-out is code's now, so the model's own
+    # row is on an item it owns.
     run = review(
         [
             turn(
                 "done",
                 call(
                     "mark_coverage",
-                    check="coverage.closeout",
+                    check="interfaces.stack",
                     bucket="unresolved",
                     scope={},
-                    reason="the package has no interference results to close this out",
+                    reason="the package has no stack to close this out",
                 ),
             )
         ]
@@ -921,11 +928,11 @@ def test_finalization_keeps_coverage_the_model_recorded_itself(
 
     run.finalize()
 
-    closeout = [
-        item for item in run.session.coverage.unresolved if item.check == runner.CLOSEOUT_CHECK
+    stack = [
+        item for item in run.session.coverage.unresolved if item.check == "interfaces.stack"
     ]
-    assert len(closeout) == 1
-    assert "interference results" in closeout[0].reason
+    assert len(stack) == 1
+    assert "no stack" in stack[0].reason
 
 
 # --- resume rule (b): an answered request stops being unresolved -------------------------------
@@ -1137,8 +1144,11 @@ def test_open_checklist_items_become_unresolved_coverage(
         ]
     )
 
-    # Edited deliberately by feature 013 T060: code closes provenance before the turn.
-    closed = {"drawing.manufacturing_inputs", "interference", PROVENANCE_CHECK}
+    # Edited deliberately by feature 013 T060 and T117: code closes provenance before the turn
+    # and the close-out when the review ends.
+    closed = {
+        "drawing.manufacturing_inputs", "interference", PROVENANCE_CHECK, runner.CLOSEOUT_CHECK,
+    }
     expected = [item.id for item in load_checklist().items if item.id not in closed]
     left_open = [
         item.check

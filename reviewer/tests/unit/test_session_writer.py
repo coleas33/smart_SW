@@ -91,7 +91,15 @@ def test_request_evidence_writes_through_the_writer_exactly_as_before() -> None:
         )
 
     [request] = context.require_session().evidence_requests
-    assert result == {"status": "open", "evidence_request": request.model_dump(mode="json")}
+    # Edited deliberately by feature 013 T119: the answer also lists the items still open.
+    assert result == {
+        "status": "open",
+        "evidence_request": request.model_dump(mode="json"),
+        "open_items": [
+            item.id
+            for item in context.checklist.open_items(context.require_session(), owner="model")
+        ],
+    }
     assert request.id == "ER-001"
     assert events == [("evidence.requested", request.model_dump(mode="json"))]
 
