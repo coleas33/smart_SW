@@ -8,7 +8,8 @@ It plays one review of a fictional package built here by code - an assembly whos
 shown by two open drawings, whose long-named part is shown by five, and whose three blocks
 each have a same-name drawing beside them and not open - through the real runner, the real
 `check_drawings`, the real session writer and the real `BridgeClient`. The one thing played
-is the add-in on the far end of the pipe: `HostLines` answers each `drawing.read` line with a
+is the add-in on the far end of the pipe: `HostLines` answers `ping` as a seat whose switch is
+on (`drawing_read: "opens_closed"`, protocol 1.4, feature 013) and each `drawing.read` line with a
 line of the host's own shape (`extractor/SwReview.Extractor/Bridge/BridgeDispatcher.cs`,
 `ConfirmedDrawingResult`, and a refusal's `error`), so the first block is read and closed, the
 second is refused with the host's not-validated sentence (`Sw/DrawingOpenScope.cs`) and the
@@ -60,7 +61,7 @@ from tests.support.mechanical import PackageBuilder  # noqa: E402
 
 from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn  # noqa: E402
 from swreview.agent.runner import start_review  # noqa: E402
-from swreview.bridge.client import BridgeClient  # noqa: E402
+from swreview.bridge.client import PROTOCOL_VERSION, BridgeClient  # noqa: E402
 from swreview.checks.drawing_context import ALL_APPLY, CANDIDATE_CONFIRM  # noqa: E402
 from swreview.ir.loader import save_package  # noqa: E402
 from swreview.ir.models import DrawingCandidate, EvidencePackage  # noqa: E402
@@ -149,8 +150,21 @@ def host_answers(package: EvidencePackage) -> dict[str, tuple[str, Any]]:
     }
 
 
+PING_ANSWER: dict[str, Any] = {
+    "pong": True,
+    "protocol": PROTOCOL_VERSION,
+    "drawing_read": "opens_closed",
+    "component_count": 0,
+}
+"""What the host's `ping` answers (`BridgeDispatcher.PingResult`, protocol 1.4, feature 013 T073):
+a seat whose switch is on, so the review offers the read-only open of the three blocks' drawings
+(013 `contracts/drawing-capability.md` sections 1 to 4). Its document and configuration are not
+stated: the drawing check reads only `drawing_read`."""
+
+
 class HostLines:
-    """The add-in on the far end of the pipe: one `drawing.read` answer line per request line."""
+    """The add-in on the far end of the pipe: one answer line per request line - `ping` with
+    `PING_ANSWER`, `drawing.read` with the host's own shape."""
 
     def __init__(self, answers: Mapping[str, tuple[str, Any]]) -> None:
         self.answers = dict(answers)
@@ -159,8 +173,12 @@ class HostLines:
     def request(self, line: str) -> str:
         request = json.loads(line)
         self.requests.append(request)
+        if request["command"] == "ping":
+            return json.dumps({"id": request["id"], "status": "ok", "result": PING_ANSWER})
         if request["command"] != "drawing.read":
-            raise AssertionError(f"the scripted host answers drawing.read only, not {line}")
+            raise AssertionError(
+                f"the scripted host answers ping and drawing.read only, not {line}"
+            )
         status, body = self.answers[request["params"]["document_id"]]
         reply: dict[str, Any] = {"id": request["id"], "status": status}
         reply["result" if status == "ok" else "error"] = body
