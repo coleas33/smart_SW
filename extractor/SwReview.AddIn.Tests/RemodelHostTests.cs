@@ -1449,14 +1449,17 @@ public sealed class RemodelHostTests
     }
 
     /// <summary>
-    /// A plan refused after a good one leaves the good one exactly as it was: startable while
-    /// its attachment is listening, refused once it is not. The refused plan records nothing,
-    /// so it can neither re-bind the earlier run to the attachment it ran on nor spoil it.
+    /// A plan refused after a good one records nothing, so it cannot re-bind the earlier run to
+    /// the attachment it ran on. *Amended 2026-09-27 (004 T173):* it can no longer leave the
+    /// earlier plan as it was either, once it has got as far as the bridge - the dirty source is
+    /// read by the probe, and the earlier plan's session is closed before the probe, so that plan
+    /// is lost whether or not the tool service re-attached in between. A plan refused on the spot,
+    /// before any call, still costs it nothing (<see cref="APlanRefusedOnTheSpotCostsTheEarlierPlanNothing"/>).
     /// </summary>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ARefusedPlanNeitherRescuesNorSpoilsAnEarlierPlan(bool reattachedBetween)
+    public void ARefusedPlanNeitherRescuesAnEarlierPlanNorLeavesItOnceTheBridgeWasAsked(bool reattachedBetween)
     {
         using (var world = new RemodelWorld())
         {
@@ -1471,19 +1474,14 @@ public sealed class RemodelHostTests
             world.Pipeline.Signals.SaveFlagDirty = true;
             world.Receive("remodel.plan", "p2", new { });
             Assert.Equal("DocumentDirty", world.ErrorClass("p2"));
+            Assert.Equal(reattachedBetween ? 0 : 1, world.Pipeline.Count("close"));
 
             world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
 
-            if (reattachedBetween)
-            {
-                Assert.Equal("SessionLost", world.ErrorClass("s1"));
-                Assert.Equal(0, world.Pipeline.Count("run"));
-            }
-            else
-            {
-                world.Reply("remodel.started", "s1");
-                Assert.Equal(1, world.Pipeline.Count("run"));
-            }
+            JsonElement error = world.Reply("error", "s1");
+            Assert.Equal("SessionLost", error.GetProperty("error_class").GetString());
+            Assert.Equal(RemodelHost.PlanClosedMessage, error.GetProperty("message").GetString());
+            Assert.Equal(0, world.Pipeline.Count("run"));
         }
     }
 
@@ -1841,40 +1839,49 @@ public sealed class RemodelHostTests
     }
 
     /// <summary>
-    /// Nothing is told while a plan holds the host, even about the plan still on screen from
-    /// before: that plan is about to be replaced, and a notice for it mid-plan would be a notice
-    /// for a folder the page is leaving. When the second plan ends the plan on screen is the
+    /// Nothing about a re-attach is told while a plan holds the host: a notice mid-plan would
+    /// be about a folder the page is leaving. When the second plan ends the plan on screen is the
     /// one it recorded, lost on arrival, and that is the one the page is told about - once.
+    /// *Amended 2026-09-27 (004 T173):* the first plan is still told about exactly once, but as
+    /// the plan the second one closed, before its probe and in <see cref="RemodelHost.PlanClosedMessage"/>'s
+    /// words - never for the re-attach, which reaches it after it is already lost.
     /// </summary>
     [Fact]
-    public void AReattachDuringASecondPlanIsToldAboutTheSecondWhenItEndsAndNeverAboutTheFirst()
+    public void AReattachDuringASecondPlanIsToldAboutTheSecondWhenItEndsAndTheFirstOnlyAsClosed()
     {
         using (var world = new RemodelWorld())
         {
             world.Open();
             world.Receive("remodel.plan", "p1", new { });
             world.Reply("remodel.planned", "p1");
-            int toldDuringThePlan = -1;
+            JsonElement[] toldDuringThePlan = new JsonElement[0];
             world.Pipeline.DuringPlan = () =>
             {
                 world.Reattach(SecondAttachment);
-                toldDuringThePlan = world.AllPosted("remodel.plan_lost").Length;
+                toldDuringThePlan = world.AllPosted("remodel.plan_lost");
             };
 
             world.Receive("remodel.plan", "p2", new { });
 
-            Assert.Equal(0, toldDuringThePlan);
+            JsonElement closed = Assert.Single(toldDuringThePlan);
+            Assert.Equal(world.ExpectedRunDirectory, closed.GetProperty("run_dir").GetString());
+            Assert.Equal(RemodelHost.PlanClosedMessage, closed.GetProperty("message").GetString());
+
             string second = world.Reply("remodel.planned", "p2").GetProperty("run_dir").GetString()!;
             Assert.NotEqual(world.ExpectedRunDirectory, second);
-            JsonElement notice = Assert.Single(world.AllPosted("remodel.plan_lost"));
-            Assert.Equal(second, notice.GetProperty("run_dir").GetString());
+            JsonElement[] notices = world.AllPosted("remodel.plan_lost");
+            Assert.Equal(2, notices.Length);
+            Assert.Equal(second, notices[1].GetProperty("run_dir").GetString());
+            Assert.Equal(RemodelHost.PlanLostMessage, notices[1].GetProperty("message").GetString());
         }
     }
 
     /// <summary>
     /// The same race under a plan that fails: it records nothing, so the plan still on screen
     /// is the earlier one - made on the attachment that has just gone - and that is the one the
-    /// page is told about when the failed plan releases the host.
+    /// page is told about. *Amended 2026-09-27 (004 T173):* it is told when the failed plan
+    /// closes it, before that plan's probe, in <see cref="RemodelHost.PlanClosedMessage"/>'s words,
+    /// and once: the re-attach finds it already told.
     /// </summary>
     [Fact]
     public void AReattachDuringARefusedPlanIsToldAboutThePlanStillOnScreen()
@@ -1896,6 +1903,7 @@ public sealed class RemodelHostTests
             Assert.Equal(world.ExpectedRunDirectory, world.Host.LatestRun!.RunDirectory);
             JsonElement notice = Assert.Single(world.AllPosted("remodel.plan_lost"));
             Assert.Equal(world.ExpectedRunDirectory, notice.GetProperty("run_dir").GetString());
+            Assert.Equal(RemodelHost.PlanClosedMessage, notice.GetProperty("message").GetString());
         }
     }
 
@@ -2718,6 +2726,567 @@ public sealed class RemodelHostTests
 
     // ---- the world -----------------------------------------------------------------------
 
+    // ---- 004 T172: Start is switched off until the blocking probes pass ---------------------
+
+    [Fact]
+    public void WhileStartIsSwitchedOffStartIsRefusedInPlainWordsBeforeAnyCallAndWithNothingWritten()
+    {
+        using (var world = new RemodelWorld { StartValidated = false })
+        {
+            world.CreateSourceFile();
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Reply("remodel.planned", "p1");
+            string[] runBefore = RemodelWorld.Snapshot(world.ExpectedRunDirectory);
+            int calls = world.Pipeline.Calls.Count;
+            int posted = world.Posted.Count;
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            JsonElement error = world.Reply("error", "s1");
+            Assert.Equal("StartNotValidated", error.GetProperty("error_class").GetString());
+            Assert.Equal(RemodelHost.StartNotValidatedMessage, error.GetProperty("message").GetString());
+            Assert.False(error.GetProperty("retryable").GetBoolean());
+
+            // Nothing called, nothing started, nothing written, and the message is the only one.
+            Assert.Equal(calls, world.Pipeline.Calls.Count);
+            Assert.Equal(new[] { "error" }, world.TypesPostedSince(posted));
+            Assert.Equal(runBefore, RemodelWorld.Snapshot(world.ExpectedRunDirectory));
+            Assert.False(world.Host.RunInProgress);
+
+            // Plan still runs, and so does Discard.
+            world.Receive("remodel.discard_copy", "d1", new { run_dir = world.ExpectedRunDirectory });
+            world.Reply("ok", "d1");
+        }
+    }
+
+    [Fact]
+    public void TheShippedHostIsBuiltWithTheShippedSwitch()
+    {
+        var channel = new CollectingChannel(new List<string>());
+        var shipped = new RemodelHost(new RemodelHostOptions(channel, () => Path.GetTempPath()));
+        var off = new RemodelHost(new RemodelHostOptions(channel, () => Path.GetTempPath()), startValidated: false);
+        var on = new RemodelHost(new RemodelHostOptions(channel, () => Path.GetTempPath()), startValidated: true);
+
+        Assert.Equal(RemodelStart.SeatValidated, shipped.StartValidated);
+        Assert.False(off.StartValidated);
+        Assert.True(on.StartValidated);
+    }
+
+    [Fact]
+    public void TheStartNotValidatedSentenceKeepsSessionLostsRules()
+    {
+        string sentence = RemodelHost.StartNotValidatedMessage;
+
+        Assert.Contains("Nothing was changed", sentence, StringComparison.Ordinal);
+        Assert.Contains("not switched on in this build", sentence, StringComparison.Ordinal);
+        Assert.DoesNotContain("remodel.", sentence, StringComparison.Ordinal);
+        Assert.DoesNotContain("PROBE", sentence, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotMatch(@"\d", sentence);
+        Assert.DoesNotContain("\\", sentence, StringComparison.Ordinal);
+        Assert.DoesNotContain("SeatValidated", sentence, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// In Start's order after `ResumeRefused` and before `SessionLost`: a run that can never be
+    /// resumed says so first, and a Start this build would refuse anyway is refused before the
+    /// engineer is sent to plan again for a lost session.
+    /// </summary>
+    [Fact]
+    public void TheSwitchIsRefusedAfterResumeRefusedAndBeforeSessionLost()
+    {
+        using (var world = new RemodelWorld { StartValidated = false })
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+
+            world.WritePlanState("applying");
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+            Assert.Equal("ResumeRefused", world.ErrorClass("s1"));
+
+            world.WritePlanState("planned");
+            world.Attachment = SecondAttachment;
+            world.Receive("remodel.start", "s2", new { run_dir = world.ExpectedRunDirectory });
+            Assert.Equal("StartNotValidated", world.ErrorClass("s2"));
+
+            world.RemodelCapability = RemodelAvailability.Unavailable;
+            world.Receive("remodel.start", "s3", new { run_dir = world.ExpectedRunDirectory });
+            Assert.Equal("StartNotValidated", world.ErrorClass("s3"));
+        }
+    }
+
+    [Fact]
+    public void TheSwitchComesAfterRunNotFoundAndCopyDiscarded()
+    {
+        using (var world = new RemodelWorld { StartValidated = false })
+        {
+            world.Open();
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+            Assert.Equal("RunNotFound", world.ErrorClass("s1"));
+
+            world.Receive("remodel.plan", "p1", new { });
+            world.Receive("remodel.discard_copy", "d1", new { run_dir = world.ExpectedRunDirectory });
+            world.Receive("remodel.start", "s2", new { run_dir = world.ExpectedRunDirectory });
+            Assert.Equal("CopyDiscarded", world.ErrorClass("s2"));
+        }
+    }
+
+    /// <summary>
+    /// Nothing a plan records depends on the switch: the plan a build with Start switched off
+    /// makes is the plan one with it on makes, message for message and file for file, so once
+    /// the switch is set the same plan starts. (The switch is the host's constructor argument, so
+    /// one host cannot flip it; two hosts over two run roots show the plans are the same.)
+    /// </summary>
+    [Fact]
+    public void APlanMadeWhileTheSwitchIsOffIsThePlanThatStartsOnceItIsOn()
+    {
+        using (var off = new RemodelWorld { StartValidated = false })
+        using (var on = new RemodelWorld { StartValidated = true })
+        {
+            off.Open();
+            on.Open();
+            off.Receive("remodel.plan", "p1", new { });
+            on.Receive("remodel.plan", "p1", new { });
+
+            Assert.Equal(StripRunRoot(off, off.Posted), StripRunRoot(on, on.Posted));
+            Assert.Equal(off.Pipeline.Calls, on.Pipeline.Calls);
+            Assert.Equal(
+                File.ReadAllText(Path.Combine(off.ExpectedRunDirectory, "plan.json")),
+                File.ReadAllText(Path.Combine(on.ExpectedRunDirectory, "plan.json")));
+
+            on.Receive("remodel.start", "s1", new { run_dir = on.ExpectedRunDirectory });
+            on.Reply("remodel.started", "s1");
+            Assert.Equal(1, on.Pipeline.Count("run"));
+        }
+    }
+
+    private static string[] StripRunRoot(RemodelWorld world, IEnumerable<string> posted) =>
+        posted.Select(message => message.Replace(JsonSerializer.Serialize(world.RunRoot).Trim('"'), "<run_root>")).ToArray();
+
+    // ---- 004 T173: planning again while an earlier plan waits for Start ----------------------
+
+    [Fact]
+    public void PlanningAgainClosesTheEarlierPlanThenMarksItLostAndTellsThePageThenPlans()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            string first = world.ExpectedRunDirectory;
+            string firstCopy = world.ExpectedCopyPath;
+            int postedAtClose = -1;
+            int postedAtProbe = -1;
+            world.Pipeline.DuringClose = () => postedAtClose = world.Posted.Count;
+            world.Pipeline.DuringProbe = () => postedAtProbe = world.Posted.Count;
+
+            world.Receive("remodel.plan", "p2", new { });
+
+            // The close, then the mark and the notice, then the plan as today.
+            Assert.Equal(new[] { first }, world.Pipeline.Closed);
+            int notice = world.Posted.FindIndex(message => message.Contains("\"remodel.plan_lost\""));
+            Assert.True(postedAtClose >= 0 && notice >= postedAtClose, "the notice came before the close");
+            Assert.True(postedAtProbe > notice, "the new plan probed before the earlier plan was told lost");
+            JsonElement lost = Assert.Single(world.AllPosted("remodel.plan_lost"));
+            Assert.Equal(first, lost.GetProperty("run_dir").GetString());
+            Assert.Equal(RemodelHost.PlanClosedMessage, lost.GetProperty("message").GetString());
+
+            string second = world.Reply("remodel.planned", "p2").GetProperty("run_dir").GetString()!;
+            Assert.NotEqual(first, second);
+
+            // The earlier plan's folder is whole, its copy still in copy/, plan.json still planned.
+            Assert.True(File.Exists(firstCopy));
+            Assert.Contains("\"state\":\"planned\"", File.ReadAllText(Path.Combine(first, "plan.json")), StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void AStartNamingTheEarlierPlanIsSessionLostInThePlanClosedWordsAndCallsNothing()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            string first = world.ExpectedRunDirectory;
+            world.Receive("remodel.plan", "p2", new { });
+            string second = world.Reply("remodel.planned", "p2").GetProperty("run_dir").GetString()!;
+            int calls = world.Pipeline.Calls.Count;
+
+            world.Receive("remodel.start", "s1", new { run_dir = first });
+
+            JsonElement error = world.Reply("error", "s1");
+            Assert.Equal("SessionLost", error.GetProperty("error_class").GetString());
+            Assert.Equal(RemodelHost.PlanClosedMessage, error.GetProperty("message").GetString());
+            Assert.Equal(calls, world.Pipeline.Calls.Count);
+
+            // The new plan is the one on screen, and it starts.
+            world.Receive("ready", "r1", new { });
+            JsonElement latest = world.Reply("init", "r1").GetProperty("latest_run");
+            Assert.Equal(second, latest.GetProperty("run_dir").GetString());
+            Assert.Equal(JsonValueKind.Null, latest.GetProperty("plan_lost").ValueKind);
+            world.Receive("remodel.start", "s2", new { run_dir = second });
+            world.Reply("remodel.started", "s2");
+        }
+    }
+
+    public static IEnumerable<object[]> OnTheSpotRefusals => new[]
+    {
+        new object[] { "NoDocument" },
+        new object[] { "NotAPart" },
+        new object[] { "RemodelUnavailable" },
+        new object[] { "SourceIsRemodelCopy" },
+    };
+
+    [Theory]
+    [MemberData(nameof(OnTheSpotRefusals))]
+    public void APlanRefusedOnTheSpotCostsTheEarlierPlanNothing(string refusal)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            PageDocument? source = world.Document;
+            int posted = world.Posted.Count;
+
+            switch (refusal)
+            {
+                case "NoDocument":
+                    world.Document = null;
+                    break;
+                case "NotAPart":
+                    world.Document = new PageDocument(@"C:\parts\bracket-assy.SLDASM", "Default");
+                    break;
+                case "RemodelUnavailable":
+                    world.RemodelCapability = RemodelAvailability.Unavailable;
+                    break;
+                default:
+                    // Once the pipeline activates the copy for its dump (T159), the earlier plan's
+                    // own copy can be the active document when Plan is pressed again.
+                    world.Document = new PageDocument(world.ExpectedCopyPath, "Default");
+                    break;
+            }
+
+            world.Receive("remodel.plan", "p2", new { });
+
+            Assert.Equal(refusal, world.ErrorClass("p2"));
+            Assert.Empty(world.Pipeline.Closed);
+            Assert.DoesNotContain("remodel.plan_lost", world.TypesPostedSince(posted));
+
+            world.Document = source;
+            world.RemodelCapability = RemodelAvailability.Available;
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+            world.Reply("remodel.started", "s1");
+        }
+    }
+
+    [Fact]
+    public void AReattachSinceTheEarlierPlanSendsNoCloseAndStillMarksItLost()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            string first = world.ExpectedRunDirectory;
+
+            // The attachment changed with no refresh to tell the page: the plan's session went
+            // with it, so there is nothing to close through the attachment listening now.
+            world.Attachment = SecondAttachment;
+            world.Receive("remodel.plan", "p2", new { });
+
+            Assert.Empty(world.Pipeline.Closed);
+            JsonElement lost = Assert.Single(world.AllPosted("remodel.plan_lost"));
+            Assert.Equal(first, lost.GetProperty("run_dir").GetString());
+            Assert.Equal(RemodelHost.PlanClosedMessage, lost.GetProperty("message").GetString());
+            world.Reply("remodel.planned", "p2");
+
+            world.Receive("remodel.start", "s1", new { run_dir = first });
+            Assert.Equal(RemodelHost.PlanClosedMessage, world.Reply("error", "s1").GetProperty("message").GetString());
+        }
+    }
+
+    [Fact]
+    public void APlanAlreadyToldLostIsNotToldAgainWhenPlanningAgainClosesIt()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Reattach(SecondAttachment);
+            Assert.Equal(RemodelHost.PlanLostMessage, Assert.Single(world.AllPosted("remodel.plan_lost")).GetProperty("message").GetString());
+
+            world.Receive("remodel.plan", "p2", new { });
+
+            Assert.Single(world.AllPosted("remodel.plan_lost"));
+            Assert.Empty(world.Pipeline.Closed);
+            world.Reply("remodel.planned", "p2");
+        }
+    }
+
+    [Fact]
+    public void ANewPlanTheScopeGateRefusesLeavesTheEarlierPlanLostAndItsNoticeStanding()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            string first = world.ExpectedRunDirectory;
+            world.Pipeline.Refusals = new[] { "weldment: the part is a weldment" };
+
+            world.Receive("remodel.plan", "p2", new { });
+
+            Assert.Equal("ScopeRefused", world.ErrorClass("p2"));
+            Assert.Equal(new[] { first }, world.Pipeline.Closed);
+            Assert.Equal(first, Assert.Single(world.AllPosted("remodel.plan_lost")).GetProperty("run_dir").GetString());
+
+            world.Receive("ready", "r1", new { });
+            JsonElement latest = world.Reply("init", "r1").GetProperty("latest_run");
+            Assert.Equal(first, latest.GetProperty("run_dir").GetString());
+            Assert.Equal(RemodelHost.PlanClosedMessage, latest.GetProperty("plan_lost").GetString());
+
+            world.Receive("remodel.start", "s1", new { run_dir = first });
+            Assert.Equal("SessionLost", world.ErrorClass("s1"));
+        }
+    }
+
+    [Fact]
+    public void ACloseTheBridgeCouldNotAnswerRefusesTheNewPlanAndLeavesTheEarlierOneAsItWas()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Pipeline.CloseFailure = new RemodelRefusal(
+                "BridgeUnavailable", "the SOLIDWORKS bridge did not answer remodel.close", retryable: true);
+
+            world.Receive("remodel.plan", "p2", new { });
+
+            Assert.Equal("BridgeUnavailable", world.ErrorClass("p2"));
+            // The earlier plan's probe only: the new plan went no further than the close.
+            Assert.Equal(1, world.Pipeline.Count("probe"));
+            Assert.Empty(world.AllPosted("remodel.plan_lost"));
+            Assert.Single(Directory.GetDirectories(world.RunRoot));
+
+            world.Pipeline.CloseFailure = null;
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+            world.Reply("remodel.started", "s1");
+        }
+    }
+
+    [Fact]
+    public void ACloseThatFailedWithoutANamedRefusalCountsAsUnanswered()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Pipeline.CloseFailure = new InvalidOperationException("the loopback socket closed");
+
+            world.Receive("remodel.plan", "p2", new { });
+
+            JsonElement error = world.Reply("error", "p2");
+            Assert.Equal("BridgeUnavailable", error.GetProperty("error_class").GetString());
+            Assert.Contains("the loopback socket closed", error.GetProperty("message").GetString(), StringComparison.Ordinal);
+            Assert.Empty(world.AllPosted("remodel.plan_lost"));
+
+            world.Pipeline.CloseFailure = null;
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+            world.Reply("remodel.started", "s1");
+        }
+    }
+
+    /// <summary>
+    /// A close the bridge answered with what it left - the routine clears the session whatever it
+    /// left - lets the new plan go ahead. What it left reaches the page as T167's one status
+    /// error through <c>ToolServiceOptions.RemodelSessionEnded</c>, which is told every ending,
+    /// this close's included, so nothing here posts a second one.
+    /// </summary>
+    [Fact]
+    public void ACloseThatAnsweredWithWhatItLeftLetsTheNewPlanGoAhead()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            string first = world.ExpectedRunDirectory;
+            world.Pipeline.CloseFailure = new RemodelRefusal(
+                "RunFolderFailed", "the session is over, but its clean-up did not all land");
+            int posted = world.Posted.Count;
+
+            world.Receive("remodel.plan", "p2", new { });
+
+            world.Reply("remodel.planned", "p2");
+            Assert.Equal(first, Assert.Single(world.AllPosted("remodel.plan_lost")).GetProperty("run_dir").GetString());
+            Assert.DoesNotContain(
+                world.Posted.Skip(posted),
+                message => message.Contains("clean-up did not all land"));
+        }
+    }
+
+    [Fact]
+    public void PlanningAfterTheEarlierRunFinishedOrItsCopyWasDiscardedClosesNothing()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Receive("remodel.discard_copy", "d1", new { run_dir = world.ExpectedRunDirectory });
+            Assert.Single(world.Pipeline.Closed);
+
+            world.Receive("remodel.plan", "p2", new { });
+            string second = world.Reply("remodel.planned", "p2").GetProperty("run_dir").GetString()!;
+            Assert.Single(world.Pipeline.Closed);
+
+            world.Receive("remodel.start", "s1", new { run_dir = second });
+            world.Reply("remodel.started", "s1");
+            world.Receive("remodel.plan", "p3", new { });
+            world.Reply("remodel.planned", "p3");
+
+            Assert.Single(world.Pipeline.Closed);
+            Assert.Empty(world.AllPosted("remodel.plan_lost"));
+        }
+    }
+
+    /// <summary>
+    /// T168's hazard, the other way round: `remodel.close` names no run, and the bridge closes
+    /// whatever session it holds - after planning again, that is the new plan's. A plan planning
+    /// again closed has no session left anywhere, so discarding it sends no close, on its own
+    /// attachment or any other, and still deletes its copy and writes `discarded`; the new plan
+    /// is untouched and starts.
+    /// </summary>
+    [Fact]
+    public void DiscardingAPlanThatPlanningAgainClosedSendsNoCloseAndLeavesTheNewPlanStartable()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            string first = world.ExpectedRunDirectory;
+            world.Receive("remodel.plan", "p2", new { });
+            string second = world.Reply("remodel.planned", "p2").GetProperty("run_dir").GetString()!;
+            Assert.Equal(new[] { first }, world.Pipeline.Closed);
+
+            world.Receive("remodel.discard_copy", "d1", new { run_dir = first });
+
+            world.Reply("ok", "d1");
+            Assert.Equal(new[] { first }, world.Pipeline.Closed);
+            Assert.False(Directory.Exists(Path.Combine(first, "copy")));
+            world.Receive("remodel.result", "g1", new { run_dir = first });
+            Assert.Equal("discarded", world.Reply("remodel.result", "g1").GetProperty("state").GetString());
+
+            world.Receive("remodel.start", "s1", new { run_dir = second });
+            world.Reply("remodel.started", "s1");
+        }
+    }
+
+    [Fact]
+    public void PlanningAgainAfterAPlanAgainWasRefusedDoesNotCloseTheEarlierPlanTwice()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            string first = world.ExpectedRunDirectory;
+            world.Pipeline.Refusals = new[] { "weldment: the part is a weldment" };
+            world.Receive("remodel.plan", "p2", new { });
+            Assert.Equal("ScopeRefused", world.ErrorClass("p2"));
+
+            world.Pipeline.Refusals = new string[0];
+            world.Receive("remodel.plan", "p3", new { });
+
+            world.Reply("remodel.planned", "p3");
+            Assert.Equal(new[] { first }, world.Pipeline.Closed);
+            Assert.Single(world.AllPosted("remodel.plan_lost"));
+        }
+    }
+
+    [Fact]
+    public void ThePlanClosedSentenceKeepsSessionLostsRulesAndNamesThePlanAgainButton()
+    {
+        string sentence = RemodelHost.PlanClosedMessage;
+
+        Assert.Contains("Nothing was changed", sentence, StringComparison.Ordinal);
+        Assert.Contains("Plan again", sentence, StringComparison.Ordinal);
+        Assert.DoesNotContain("remodel.", sentence, StringComparison.Ordinal);
+        Assert.DoesNotContain("\\", sentence, StringComparison.Ordinal);
+        Assert.NotEqual(RemodelHost.PlanLostMessage, sentence);
+    }
+
+    // ---- 004 T173: a copy is never a source -------------------------------------------------
+
+    public static IEnumerable<object[]> CopyPaths => new[]
+    {
+        new object[] { "the run's copy", false },
+        new object[] { "another case", false },
+        new object[] { "through ..", false },
+        new object[] { "a part outside run_root", true },
+        new object[] { "a folder merely named copy elsewhere", true },
+        new object[] { "a copy folder two levels down", true },
+        new object[] { "a part in a run folder but not in its copy", true },
+    };
+
+    [Theory]
+    [MemberData(nameof(CopyPaths))]
+    public void AnActiveDocumentInARunFoldersCopyIsRefusedBeforeAnyBridgeCall(string where, bool allowed)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            string runRoot = world.RunRoot;
+            string run = Path.Combine(runRoot, "20260915-090000-bracket-remodel");
+            string path;
+            switch (where)
+            {
+                case "the run's copy":
+                    path = Path.Combine(run, "copy", "bracket-RMS.SLDPRT");
+                    break;
+                case "another case":
+                    path = Path.Combine(runRoot.ToUpperInvariant(), "20260915-090000-BRACKET-REMODEL", "COPY", "BRACKET-RMS.SLDPRT");
+                    break;
+                case "through ..":
+                    path = Path.Combine(runRoot, "elsewhere", "..", "20260915-090000-bracket-remodel", "copy", "bracket-RMS.SLDPRT");
+                    break;
+                case "a part outside run_root":
+                    path = SourcePath;
+                    break;
+                case "a folder merely named copy elsewhere":
+                    path = Path.Combine(Path.GetDirectoryName(runRoot)!, "work", "copy", "bracket.SLDPRT");
+                    break;
+                case "a copy folder two levels down":
+                    path = Path.Combine(run, "nested", "copy", "bracket.SLDPRT");
+                    break;
+                default:
+                    path = Path.Combine(run, "bracket.SLDPRT");
+                    break;
+            }
+
+            world.Document = new PageDocument(path, "Default");
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            if (allowed)
+            {
+                world.Reply("remodel.planned", "p1");
+                return;
+            }
+
+            JsonElement error = world.Reply("error", "p1");
+            Assert.Equal("SourceIsRemodelCopy", error.GetProperty("error_class").GetString());
+            Assert.Equal(RemodelHost.SourceIsRemodelCopyMessage, error.GetProperty("message").GetString());
+            Assert.Empty(world.Pipeline.Calls);
+            world.AssertNothingWasCopied();
+        }
+    }
+
+    [Fact]
+    public void TheCopySentenceNamesNoPathAndSendsTheEngineerBackToTheirOwnPart()
+    {
+        string sentence = RemodelHost.SourceIsRemodelCopyMessage;
+
+        Assert.DoesNotContain("\\", sentence, StringComparison.Ordinal);
+        Assert.DoesNotContain(":", sentence, StringComparison.Ordinal);
+        Assert.DoesNotContain("remodel.", sentence, StringComparison.Ordinal);
+        Assert.Contains("your own part", sentence, StringComparison.Ordinal);
+    }
+
     private static string ChangeLine(int seq, string status) =>
         "{\"seq\":" + seq + ",\"at\":\"2026-09-16T14:22:31.481Z\",\"kind\":\"reorder\","
         + "\"subject\":{\"feature_id\":\"feat:0042\",\"name\":\"Fillet3\","
@@ -2754,6 +3323,13 @@ public sealed class RemodelHostTests
         public bool UsePipeline { get; set; } = true;
 
         public RemodelAvailability RemodelCapability { get; set; } = RemodelAvailability.Available;
+
+        /// <summary>
+        /// The Start switch the host is built with (004 T172). On here, because most of what
+        /// this suite drives is a Start a validated build answers; the switch's own cases build
+        /// their host with it off, or with the shipped <see cref="RemodelStart.SeatValidated"/>.
+        /// </summary>
+        public bool StartValidated { get; set; } = true;
 
         /// <summary>
         /// The tool-service attachment listening now, as `ToolServiceGate.Attachment` answers
@@ -2814,7 +3390,8 @@ public sealed class RemodelHostTests
                 // nothing has to be waited for. The add-in's own scheduler runs the same body on
                 // a worker, which is what lets `remodel.stop` be delivered at all.
                 Schedule = work => work(),
-            });
+            },
+            StartValidated);
         }
 
         public void Receive(string type, string id, object payload) =>
@@ -3114,6 +3691,7 @@ public sealed class RemodelHostTests
         public RemodelScopeReading ProbeScope()
         {
             Calls.Add("probe");
+            DuringProbe?.Invoke();
             if (ProbeFailure != null)
             {
                 throw ProbeFailure;
@@ -3150,7 +3728,28 @@ public sealed class RemodelHostTests
             return new RemodelCopyReading(CopyPath, RebuildErrorCount, CopyPresent);
         }
 
-        public void CloseCopy(string runDirectory) => Calls.Add("close");
+        /// <summary>Every run folder <see cref="CloseCopy"/> was asked to close, in order.</summary>
+        public List<string> Closed { get; } = new List<string>();
+
+        /// <summary>What <see cref="CloseCopy"/> throws, if anything: a bridge that did not answer, or one that answered with what it left.</summary>
+        public Exception? CloseFailure { get; set; }
+
+        /// <summary>Runs inside <see cref="CloseCopy"/>, before it answers.</summary>
+        public Action? DuringClose { get; set; }
+
+        /// <summary>Runs inside <see cref="ProbeScope"/>, before it answers.</summary>
+        public Action? DuringProbe { get; set; }
+
+        public void CloseCopy(string runDirectory)
+        {
+            Calls.Add("close");
+            Closed.Add(runDirectory);
+            DuringClose?.Invoke();
+            if (CloseFailure != null)
+            {
+                throw CloseFailure;
+            }
+        }
 
         public string Plan(string runDirectory, IRemodelRunReporter reporter)
         {

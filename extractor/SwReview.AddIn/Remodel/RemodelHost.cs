@@ -185,10 +185,46 @@ public sealed class RemodelHost : IDisposable
         + "again.";
 
     /// <summary>
+    /// What `remodel.start` answers while Start is switched off in this build (004 T172, default
+    /// taken 2026-09-26, the owner may revise; research R13.3): until the workstation probes that
+    /// decide whether a Start is safe have verdicts, Plan runs and Start is refused.
+    ///
+    /// By <see cref="SessionLostMessage"/>'s rules: no command, no path, and no probe number -
+    /// the engineer cannot act on one. It says Start is not switched on yet, that the two other
+    /// buttons still work, by the labels the page gives them, and that nothing was changed.
+    /// </summary>
+    public const string StartNotValidatedMessage =
+        "Start is not switched on in this build yet, so this plan cannot be applied to the copy. "
+        + "Remodel a copy and Discard copy still work, and the plan stays in its run folder. "
+        + NothingWasChanged;
+
+    /// <summary>
+    /// What a plan closed by planning again is told with (004 T173, default taken 2026-09-26, the
+    /// owner may revise; research R13.4): its `remodel.plan_lost` notice, its
+    /// `init.latest_run.plan_lost`, and the `SessionLost` a Start naming it gets. In
+    /// <see cref="SessionLostMessage"/>'s plain words, and naming the button the notice offers.
+    /// </summary>
+    public const string PlanClosedMessage =
+        "This plan was set aside when a new plan was asked for, so it can no longer be started. "
+        + NothingWasChanged + " Make your part the active document and press Plan again.";
+
+    /// <summary>
+    /// What `remodel.plan` answers when the active document is one of the re-modeler's own copies
+    /// (004 T173): a part in a run folder's <c>copy</c> folder under the run root. It names no
+    /// path and sends the engineer back to their own part, by the label of the button they press.
+    /// </summary>
+    public const string SourceIsRemodelCopyMessage =
+        "The active document is a copy the re-modeler made, not your own part. Make your own part "
+        + "the active document and press Remodel a copy again.";
+
+    /// <summary>
     /// The one sentence <see cref="SessionLostMessage"/> and <see cref="PlanLostMessage"/> share:
     /// the same condition, told at two moments, reassures the engineer in the same words.
     /// </summary>
     private const string NothingWasChanged = "Nothing was changed: not your part and not the copy.";
+
+    /// <summary>The refusal class of a bridge that did not answer, as the pipeline names it.</summary>
+    private const string BridgeUnavailableClass = "BridgeUnavailable";
 
     /// <summary>The only scope this feature reorganizes. Parts only, by owner decision.</summary>
     private const string PartKind = "part";
@@ -219,9 +255,26 @@ public sealed class RemodelHost : IDisposable
     /// <summary>The `remodel.stop` that is waiting for the executor to finalize.</summary>
     private string? _pendingStopId;
 
+    /// <summary>
+    /// The host as shipped: Start is switched on or off by <see cref="RemodelStart.SeatValidated"/>
+    /// (004 T172).
+    /// </summary>
     public RemodelHost(RemodelHostOptions options)
+        : this(options, RemodelStart.SeatValidated)
+    {
+    }
+
+    /// <summary>
+    /// The host with the Start switch given, as <c>DrawingOpenScope</c> takes its own: the tests
+    /// of a Start pass true, and the tests of the switch pass what they mean.
+    /// </summary>
+    /// <param name="options">Everything the host is given.</param>
+    /// <param name="startValidated">004 T172: false refuses every `remodel.start` with
+    /// `StartNotValidated`, before any call.</param>
+    public RemodelHost(RemodelHostOptions options, bool startValidated)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        StartValidated = startValidated;
         _actions = new PaneActions(new PaneActionsOptions(
             options.Channel,
             options.RunRoot,
@@ -241,6 +294,13 @@ public sealed class RemodelHost : IDisposable
 
     /// <summary>The runs this host planned, oldest first.</summary>
     public IReadOnlyList<RemodelRun> Runs => _runs;
+
+    /// <summary>
+    /// 004 T172: whether Start may run in this build. While false, `remodel.start` is refused
+    /// `StartNotValidated` after `ResumeRefused` and before `SessionLost`, and the bridge refuses
+    /// the change commands as the backstop.
+    /// </summary>
+    public bool StartValidated { get; }
 
     /// <summary>
     /// Whether a plan or a run is in flight - the same fact `remodel.plan` refuses a second
@@ -525,7 +585,7 @@ public sealed class RemodelHost : IDisposable
                         // the notice's own rule, whatever holds the host, since `init`
                         // describes the run it names; the notice's once-per-plan claim is
                         // neither spent nor needed here.
-                        { "plan_lost", IsLostPlan(latest) ? PlanLostMessage : null },
+                        { "plan_lost", IsLostPlan(latest) ? LostMessage(latest) : null },
                     }
             },
         });
@@ -622,6 +682,15 @@ public sealed class RemodelHost : IDisposable
             return;
         }
 
+        // 004 T173: a copy is never a source. Checked on every Plan, before any bridge call: once
+        // the pipeline activates the copy for its dump, the copy can be the active document when
+        // the engineer presses Plan, and probing it would read a dirty copy of their part.
+        if (IsRemodelCopy(document.Path))
+        {
+            _actions.SendError(id, "SourceIsRemodelCopy", SourceIsRemodelCopyMessage, retryable: true);
+            return;
+        }
+
         _busy = true;
         try
         {
@@ -631,6 +700,14 @@ public sealed class RemodelHost : IDisposable
             // to. A re-attach that still lands while the plan runs leaves the run holding the
             // attachment it began on, and Start refuses it.
             string? attachment = _options.ToolServiceAttachment();
+
+            // 004 T173: an earlier plan waiting for Start is ended - its session closed, the plan
+            // marked lost and the page told - after every refusal that needs no call and before
+            // this plan's first one, so a Plan refused on the spot costs it nothing.
+            if (!EndTheWaitingPlan(id, pipeline, attachment))
+            {
+                return;
+            }
 
             RemodelScopeReading scope;
             try
@@ -780,6 +857,106 @@ public sealed class RemodelHost : IDisposable
     }
 
     /// <summary>
+    /// 004 T173 (default taken 2026-09-26, the owner may revise; research R13.4): planning again
+    /// while an earlier plan waits for Start. The earlier plan is the latest run while it is
+    /// planned and waiting - not started, not finished, its copy not discarded - whatever marks it
+    /// already carries.
+    ///
+    /// Its session is closed through the pipeline's close (`POST /remodel/close`,
+    /// <c>discard_copy: false</c>, which reaches the bridge's end-of-session routine) when its
+    /// attachment is the one listening now - Start's and Discard's predicate - and nothing is
+    /// sent when it is gone, since that session went with its attachment. The close is unsaved:
+    /// the copy stays in <c>copy/</c>, the folder stays whole and <c>plan.json</c> stays
+    /// <c>planned</c>. Then the plan is marked lost in this host's record and the page is told
+    /// once, with <see cref="PlanClosedMessage"/>.
+    ///
+    /// A close the bridge could not answer - refused as <c>BridgeUnavailable</c>, or failed with no
+    /// named refusal at all - refuses the new plan with <c>BridgeUnavailable</c> and leaves the
+    /// earlier plan as it was (lane D's default, 2026-09-27). A close that answered with what it
+    /// left - any other named refusal - lets the new plan go ahead: the routine clears the session
+    /// whatever it left, and what it left reaches the page as T167's one status error through
+    /// <c>ToolServiceOptions.RemodelSessionEnded</c>, which is told every ending, so nothing is
+    /// posted here for it.
+    /// </summary>
+    /// <returns>False when the new plan was refused and has been answered.</returns>
+    private bool EndTheWaitingPlan(string? id, IRemodelPipeline pipeline, string? attachment)
+    {
+        RemodelRun? waiting = LatestRun;
+        if (waiting == null || waiting.Phase != RemodelRunPhase.Planned || waiting.CopyDiscarded)
+        {
+            return true;
+        }
+
+        if (HoldsItsSession(waiting, attachment))
+        {
+            try
+            {
+                pipeline.CloseCopy(waiting.RunDirectory);
+            }
+            catch (RemodelRefusal refusal)
+            {
+                if (string.Equals(refusal.ErrorClass, BridgeUnavailableClass, StringComparison.Ordinal))
+                {
+                    SendRefusal(id, refusal);
+                    return false;
+                }
+
+                // Answered, with what it left: see the remarks.
+            }
+            catch (Exception failure)
+            {
+                _actions.SendError(
+                    id,
+                    BridgeUnavailableClass,
+                    "the SOLIDWORKS bridge did not answer the close of the earlier plan, so that plan "
+                    + "is left as it was and no new plan was made: " + failure.Message,
+                    retryable: true);
+                return false;
+            }
+        }
+
+        waiting.MarkClosedByPlanAgain();
+        TellPlanLost(waiting);
+        return true;
+    }
+
+    /// <summary>
+    /// 004 T173: whether <paramref name="documentPath"/> is one of the re-modeler's own copies - a
+    /// file in a <c>copy</c> folder whose run folder is a direct child of the run root in force, by
+    /// <see cref="RemodelCopy.RunDirectoryOf"/>'s rule, canonical and case-insensitive (lane D's
+    /// default, 2026-09-27). A folder merely named <c>copy</c> anywhere else is not one, and a path
+    /// that cannot be read as one is not one either: this check refuses, it never guesses.
+    /// </summary>
+    private bool IsRemodelCopy(string documentPath)
+    {
+        string runDirectory;
+        string runRoot;
+        try
+        {
+            runDirectory = RemodelCopy.RunDirectoryOf(documentPath);
+            runRoot = Path.GetFullPath(_options.RunRoot())
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+        catch (Exception error) when (error is Extractor.Guard.MutatingCallError
+            || error is Extractor.Bridge.RemodelCommandError
+            || error is ArgumentException
+            || error is NotSupportedException
+            || error is PathTooLongException)
+        {
+            // Not in a copy folder (the rule's refusal), or not a path that canonicalizes.
+            return false;
+        }
+
+        string? parent = Path.GetDirectoryName(
+            runDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        return parent != null
+            && string.Equals(
+                parent.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                runRoot,
+                StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// The scope half of the refusals, in the contract's order: the three the bridge raises
     /// before any signal comes back, then the pure gate's verdict, then any signal that could
     /// not be read at all.
@@ -903,11 +1080,28 @@ public sealed class RemodelHost : IDisposable
             return;
         }
 
+        // 004 T172: Start is switched off until the blocking probes pass. After ResumeRefused, so
+        // a run that can never be resumed says so first, and before SessionLost, so the engineer
+        // is never sent to plan again for a Start this build would refuse anyway. Before any
+        // pipeline, backend or bridge call, and with nothing written.
+        if (!StartValidated)
+        {
+            _actions.SendError(id, "StartNotValidated", StartNotValidatedMessage, retryable: false);
+            return;
+        }
+
         // Decision 22A: the plan's bridge session lives on the attachment the plan was made on
         // and does not survive a re-attach, so a run whose attachment is not the one listening
         // now is refused here, before `remodel.started` and before any call that could change
         // anything. Ahead of the seat check on purpose: mid-restart the seat reads as still
         // being checked, and asking the engineer to wait would only earn this answer next time.
+        // 004 T173: a plan planning again closed is lost the same way, in its own words.
+        if (run.ClosedByPlanAgain)
+        {
+            _actions.SendError(id, "SessionLost", PlanClosedMessage, retryable: false);
+            return;
+        }
+
         if (!SameAttachment(run.ToolServiceAttachment, _options.ToolServiceAttachment()))
         {
             _actions.SendError(id, "SessionLost", SessionLostMessage, retryable: false);
@@ -1021,6 +1215,16 @@ public sealed class RemodelHost : IDisposable
         && string.Equals(planned, now, StringComparison.Ordinal);
 
     /// <summary>
+    /// Whether <paramref name="run"/>'s bridge session can still be on the bridge listening now,
+    /// so that a `remodel.close` - which names no run and closes whatever session the bridge holds
+    /// - would reach its session and nobody else's: made on the attachment listening now
+    /// (<see cref="SameAttachment"/>, T168) and not closed by planning again (004 T173). One
+    /// predicate for Discard's close and planning again's.
+    /// </summary>
+    private static bool HoldsItsSession(RemodelRun run, string? attachmentNow) =>
+        !run.ClosedByPlanAgain && SameAttachment(run.ToolServiceAttachment, attachmentNow);
+
+    /// <summary>
     /// Whether <paramref name="run"/> is a plan that can no longer be started (decision 24A):
     /// planned and waiting for Start - not started, not finished, its copy not discarded - and
     /// made on an attachment that is not the one listening now, none included, by Start's own
@@ -1036,7 +1240,16 @@ public sealed class RemodelHost : IDisposable
         run != null
         && run.Phase == RemodelRunPhase.Planned
         && !run.CopyDiscarded
-        && !SameAttachment(run.ToolServiceAttachment, _options.ToolServiceAttachment());
+        && (run.ClosedByPlanAgain
+            || !SameAttachment(run.ToolServiceAttachment, _options.ToolServiceAttachment()));
+
+    /// <summary>
+    /// The sentence a lost plan is told with: <see cref="PlanClosedMessage"/> for one planning
+    /// again closed (004 T173), whatever else it also lost, and <see cref="PlanLostMessage"/> for
+    /// one a re-attach took (decision 24A). One rule for the notice and for `init`.
+    /// </summary>
+    private static string LostMessage(RemodelRun run) =>
+        run.ClosedByPlanAgain ? PlanClosedMessage : PlanLostMessage;
 
     /// <summary>
     /// Tells the page that the plan on screen can no longer be started, once, as soon as this
@@ -1063,7 +1276,23 @@ public sealed class RemodelHost : IDisposable
         }
 
         RemodelRun? run = LatestRun;
-        if (run == null || !IsLostPlan(run) || !run.ClaimPlanLostNotice())
+        if (run == null || !IsLostPlan(run))
+        {
+            return;
+        }
+
+        TellPlanLost(run);
+    }
+
+    /// <summary>
+    /// `remodel.plan_lost {run_dir, message}` for <paramref name="run"/>, once per plan
+    /// (<see cref="RemodelRun.ClaimPlanLostNotice"/>), in <see cref="LostMessage"/>'s words. The one
+    /// place the notice is posted: by <see cref="AnnounceLostPlan"/> when a refresh finds the plan
+    /// lost, and by planning again, which marks it lost while it holds the host (004 T173).
+    /// </summary>
+    private void TellPlanLost(RemodelRun run)
+    {
+        if (!run.ClaimPlanLostNotice())
         {
             return;
         }
@@ -1071,7 +1300,7 @@ public sealed class RemodelHost : IDisposable
         Post("remodel.plan_lost", new Dictionary<string, object?>
         {
             { "run_dir", run.RunDirectory },
-            { "message", PlanLostMessage },
+            { "message", LostMessage(run) },
         });
     }
 
@@ -1215,14 +1444,13 @@ public sealed class RemodelHost : IDisposable
         }
 
         // T168 (decision 22A): `remodel.close` names no run - the bridge closes whatever session
-        // its dispatcher holds - so the copy is closed only through the attachment this run's
-        // plan was made on, by Start's own predicate. When that attachment is gone, the run's
-        // session went with it, and a close sent through the one listening now would close the
-        // copy of whichever plan was made there. The folder is deleted either way.
-        IRemodelPipeline? pipeline =
-            SameAttachment(run.ToolServiceAttachment, _options.ToolServiceAttachment())
-                ? _options.Pipeline
-                : null;
+        // its dispatcher holds - so the copy is closed only while the run still holds its session
+        // on the attachment listening now (HoldsItsSession). When that attachment is gone, or
+        // planning again already closed the session (004 T173), a close sent now would close the
+        // copy of whichever plan holds the bridge. The folder is deleted either way.
+        IRemodelPipeline? pipeline = HoldsItsSession(run, _options.ToolServiceAttachment())
+            ? _options.Pipeline
+            : null;
         try
         {
             DeleteCopyFolder(pipeline, run.RunDirectory);

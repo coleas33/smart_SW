@@ -701,6 +701,117 @@ public sealed class RemodelPageContractTests
         Assert.Contains("press " + label + " to plan again", RemodelHost.SessionLostMessage, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// 004 T172 over the real transport: a Start refused because Start is switched off in this
+    /// build prints the host's sentence verbatim in the banner - the page has no words file - and
+    /// leaves Remodel a copy pressable, since Plan still runs.
+    /// </summary>
+    [Fact]
+    public void AStartRefusedBecauseStartIsSwitchedOffPrintsTheHostsSentenceVerbatim()
+    {
+        HostStub? stub = null;
+        string? banner = null;
+        bool planDisabled = true;
+
+        OffscreenReviewPage.WithPage(
+            RemodelPageFiles.PageUrl,
+            page =>
+            {
+                stub = new HostStub(
+                    page, startRefusal: ("StartNotValidated", RemodelHost.StartNotValidatedMessage));
+            },
+            async page =>
+            {
+                await Settled(page);
+                await Click(page, "plan-run");
+                await Click(page, "start-run");
+
+                banner = await Banner(page);
+                planDisabled = await Disabled(page, "plan-run");
+            });
+
+        Assert.Equal(RemodelHost.StartNotValidatedMessage, banner);
+        Assert.False(planDisabled);
+        Assert.Equal(1, stub!.Starts);
+    }
+
+    /// <summary>
+    /// The switch's sentence names the two buttons that still work by the labels the page gives
+    /// them, read from the page rather than restated, so the two cannot drift.
+    /// </summary>
+    [Fact]
+    public void TheStartNotValidatedMessageNamesTheButtonsThatStillWorkByTheirLabels()
+    {
+        string html = RemodelPageFiles.Read("index.html");
+        foreach (string id in new[] { "plan-run", "discard-copy" })
+        {
+            Match button = Regex.Match(html, @"<button[^>]*\bid=""" + id + @"""[^>]*>([^<]+)</button>");
+            Assert.True(button.Success, "index.html has no " + id + " button");
+            Assert.Contains(button.Groups[1].Value.Trim(), RemodelHost.StartNotValidatedMessage, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// 004 T173: the sentence for a plan planning again closed names the button the notice offers,
+    /// and the copy refusal's names the plan button, each by its label on the page.
+    /// </summary>
+    [Fact]
+    public void ThePlanClosedAndCopyRefusalSentencesNameTheirButtonsByTheirLabels()
+    {
+        string html = RemodelPageFiles.Read("index.html");
+        string Label(string id) =>
+            Regex.Match(html, @"<button[^>]*\bid=""" + id + @"""[^>]*>([^<]+)</button>").Groups[1].Value.Trim();
+
+        Assert.Contains("press " + Label("plan-again"), RemodelHost.PlanClosedMessage, StringComparison.Ordinal);
+        Assert.Contains("press " + Label("plan-run"), RemodelHost.SourceIsRemodelCopyMessage, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 004 T173 over the real transport: Plan pressed again while a plan is held. The host tells
+    /// the page the held plan is lost - the notice for that folder, in the host's words - and
+    /// then answers the new plan, which is on screen, not lost, and startable.
+    /// </summary>
+    [Fact]
+    public void PlanAgainWithAPlanHeldShowsTheNoticeForTheEarlierFolderThenAStartableNewPlan()
+    {
+        HostStub? stub = null;
+        string[] noticesSeen = new string[0];
+        LostPlanView? after = null;
+        string? runDirShown = null;
+        int starts = 0;
+
+        OffscreenReviewPage.WithPage(
+            RemodelPageFiles.PageUrl,
+            page => { stub = new HostStub(page) { ClosesTheHeldPlanOnPlanAgain = true }; },
+            async page =>
+            {
+                await Settled(page);
+                await Click(page, "plan-run");
+
+                // Every text the notice showed while it was showing, as the page drew it.
+                await page.ExecuteScriptAsync(
+                    "window.__notices = [];"
+                    + "new MutationObserver(function () {"
+                    + "  var notice = document.getElementById('plan-lost');"
+                    + "  if (!notice.hidden) { window.__notices.push(document.getElementById('plan-lost-text').textContent); }"
+                    + "}).observe(document.body, { subtree: true, childList: true, attributes: true, characterData: true });");
+
+                await Click(page, "plan-run");
+                noticesSeen = JsonSerializer.Deserialize<string[]>(await page.ExecuteScriptAsync("window.__notices"))!;
+                after = await ReadLostPlanView(page);
+                runDirShown = await TextOf(page, "run-dir");
+
+                await Click(page, "start-run");
+                starts = stub!.Starts;
+            });
+
+        Assert.Contains(RemodelHost.PlanClosedMessage, noticesSeen);
+        Assert.True(after!.NoticeHidden, "the new plan was shown as lost");
+        Assert.False(after.StartDisabled);
+        Assert.Equal(HostStub.RunDirFor(2), runDirShown);
+        Assert.Equal(1, starts);
+    }
+
     [Fact]
     public void ABridgeWithoutARemodelSeatDisablesActionsAndShowsGuidanceBeforePosting()
     {
@@ -1368,6 +1479,14 @@ public sealed class RemodelPageContractTests
         /// </summary>
         public (string ErrorClass, string Message)? PlanRefusal { get; set; }
 
+        /// <summary>
+        /// 004 T173: when set, a `remodel.plan` that arrives while a plan is held is answered as
+        /// `RemodelHost` answers it - the held plan's `remodel.plan_lost` with
+        /// <see cref="RemodelHost.PlanClosedMessage"/> first, then the new plan's
+        /// `remodel.planned`.
+        /// </summary>
+        public bool ClosesTheHeldPlanOnPlanAgain { get; set; }
+
         /// <summary>The folder the <paramref name="plan"/>th accepted `remodel.plan` is answered with.</summary>
         public static string RunDirFor(int plan) => plan == 1 ? RunDir : RunDir + "-" + plan;
 
@@ -1423,6 +1542,11 @@ public sealed class RemodelPageContractTests
                             retryable = true,
                         });
                         return;
+                    }
+
+                    if (ClosesTheHeldPlanOnPlanAgain && _planned > 0)
+                    {
+                        Post("remodel.plan_lost", new { run_dir = RunDirFor(_planned), message = RemodelHost.PlanClosedMessage });
                     }
 
                     _planned++;
