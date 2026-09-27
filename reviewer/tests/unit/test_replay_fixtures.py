@@ -5,8 +5,9 @@ one - and replaying it with the settings it was recorded with must reproduce eve
 round within 1% and the finding set exactly: every recorded finding replayed. Every replay of a
 committed fixture is graded with `config/standards.example.yaml`, the profile the pilot ran
 (research R2.10). The payload shapes that make later savings measurable are pinned too: the
-part check's 760 feature rows (866 until feature 003's decision 20A tolerated the system rows
-of the real dumps) and the 110 mate entities with their persistent references.
+part check's 583 feature rows (760 until feature 013 T133 read the tree one node per feature
+position, 866 until feature 003's decision 20A tolerated the system rows of the real dumps) and
+the 110 mate entities with their persistent references.
 
 Since the owner's decision 3A of 2026-09-23 the fixtures follow the code (research R2.54 to
 R2.56, `contracts/replay.md` sections 8 and 9): a deliberate change to what a tool returns, or
@@ -81,16 +82,6 @@ FIXTURES = REPO_ROOT / "reviewer" / "tests" / "fixtures" / "replay"
 NAMES = ("big-assembly", "small-assembly-a", "small-assembly-b")
 TOLERANCE = 0.01
 
-T134_PENDING = pytest.mark.xfail(
-    reason=(
-        "013 T133 reads the part tree one node per feature position, which moves the RMS "
-        "findings the replay fixtures recorded; lane G regenerates them in 013 T134, and "
-        "that commit removes this mark (strict, so a regenerated fixture cannot keep it)"
-    ),
-    strict=True,
-)
-
-
 @cache
 def as_recorded(name: str) -> ReplayReport:
     """The fixture replayed with its recorded settings (all off), graded with the example."""
@@ -102,7 +93,6 @@ def as_recorded(name: str) -> ReplayReport:
 
 
 @pytest.mark.parametrize("name", NAMES)
-@T134_PENDING
 def test_every_round_is_within_one_percent_of_the_recorded_input(name: str) -> None:
     report = as_recorded(name)
 
@@ -140,7 +130,6 @@ def contact_groups(session: ReviewSession) -> Counter[tuple[str, str]]:
 
 
 @pytest.mark.parametrize("name", NAMES)
-@T134_PENDING
 def test_the_finding_set_is_exact(name: str) -> None:
     findings = as_recorded(name).findings
 
@@ -200,7 +189,7 @@ def test_the_big_assembly_carries_one_presentation_round() -> None:
     assert [r.kind for r in report.rounds].count("presentation") == 1
 
 
-BIG_RECORDED_TOTAL = 11_736_827
+BIG_RECORDED_TOTAL = 10_582_573
 """The big fixture's recorded input. The recording's bill is 12.4M, and the fixture was within 1%
 of it until feature 003's decision 20A (2026-09-25): the fixtures follow the code (decision 3A),
 and the part check the recorded review made no longer names the 106 system rows the eleven
@@ -236,6 +225,13 @@ close-out's description now says when code closes it ("Closed by code when the r
 every later round. The code-owned line itself ("Closed by code; never ask about it or mark it.")
 is in the rendered checklist only, which is the same size (4 tokens shorter on each of the two
 code-owned items, the description 8 longer).
+
+Feature 013's User Story 7 gate (T134, 2026-09-27, after T132-T133) moves it by -1,154,254 to
+10,582,573: the part check reads the tree one node per feature position, so it names each absorbed
+sketch once and no carried row - 583 feature rows from 760 - and its result is 36,478 tokens
+smaller (146,370 from 182,848), carried by the 31 rounds after it (1,130,818); and the Standards
+sketch finding names each absorbed sketch once too, so the one `check_standards` result is 837
+tokens smaller (4,354 from 5,191), carried by the 28 rounds after it (23,436).
 
 Pinned exactly, not within 1% (the review of decision 23A, 008 T127): the figure is the sum of
 the fixture's recorded usage, so nothing but a regeneration moves it, and `contracts/replay.md`
@@ -273,7 +269,6 @@ def big_checks_first(tmp_path_factory: pytest.TempPathFactory) -> ReplayPasses:
 
 
 @pytest.mark.parametrize("name", NAMES)
-@T134_PENDING
 def test_checks_first_alone_loses_no_recorded_finding(name: str) -> None:
     no_recorded_finding_lost(checks_first(name).findings)
 
@@ -327,7 +322,6 @@ def test_the_opening_is_the_digest_with_the_family_counted_and_no_rms_id(
     assert f"{len(rms_ids)} findings across" in family_line
 
 
-@T134_PENDING
 def test_the_rms_verdicts_equal_the_recordings(big_checks_first: ReplayPasses) -> None:
     recorded = Counter(
         finding_subject_key(item.finding)
@@ -343,7 +337,6 @@ def test_the_rms_verdicts_equal_the_recordings(big_checks_first: ReplayPasses) -
     assert requested == recorded
 
 
-@T134_PENDING
 def test_the_big_assembly_keeps_the_recorded_payload_shapes() -> None:
     package = load_package(FIXTURES / "big-assembly").package
     dispatch = ToolRegistry().dispatch(context_for(package))
@@ -351,8 +344,9 @@ def test_the_big_assembly_keeps_the_recorded_payload_shapes() -> None:
     part = dispatch.call("check_rms_part", {"document_id": None}).payload
     mates = dispatch.call("list_mates", {"component_id": None}).payload
 
-    # 866 until decision 20A: the part check named 106 system rows loose that it now tolerates.
-    assert sum(len(rows) for rows in part["subjects"].values()) == 760
+    # 866 until decision 20A: the part check named 106 system rows loose that it now tolerates;
+    # 760 until 013 T133, which names each absorbed sketch once and no carried row (013 T134).
+    assert sum(len(rows) for rows in part["subjects"].values()) == 583
     entities = [entity for mate in mates["result"] for entity in mate["entities"]]
     assert len(entities) == 110
     assert all(entity["persist_ref"] for entity in entities)
@@ -398,7 +392,6 @@ def big_pane(tmp_path_factory: pytest.TempPathFactory) -> tuple[ReplayPasses, Pa
 
 
 @pytest.mark.parametrize("name", NAMES)
-@T134_PENDING
 def test_the_pane_defaults_lose_no_recorded_finding(name: str) -> None:
     no_recorded_finding_lost(with_pane_defaults(name).findings)
 
@@ -503,7 +496,7 @@ REGROUPED_TARGET = 300_000
 """SC-003 as amended (research R2.43, R4): each small fixture's regrouped estimate."""
 FOLLOW_UP_TARGET = 30_000
 """SC-004: the big fixture's follow-up question, against 405k recorded."""
-BIG_FOLLOW_UP_RECORDED = 383_628
+BIG_FOLLOW_UP_RECORDED = 346_313
 """The big fixture's follow-up round's recorded input. The recording's follow-up carried 405k
 (405,320 on the fixtures before decision 20A); since 003 T092 the part check it carries is 21,928
 tokens smaller (383,392); 013 T042 made it 42 larger (383,434: both checklist answers 26 tokens
@@ -512,7 +505,9 @@ larger each, the standards result 10 smaller) and 013 T069 11 smaller (both chec
 both checklist answers 10 tokens larger with the drawing item's words), and 013 T124 161 larger
 (383,604: the coverage and request answers' `open_items` and the close-out answered by code),
 and 013 T158 24 larger (383,628: both checklist answers and the close-out mark 8 tokens larger
-each, with the close-out's description saying when code closes it).
+each, with the close-out's description saying when code closes it), and 013 T134 37,315 smaller
+(346,313: the part check's result 36,478 tokens smaller and the standards result 837 smaller,
+each absorbed sketch named once and no carried row, after T132-T133).
 Pinned exactly, as
 `BIG_RECORDED_TOTAL` is and for the same reason (008 T127): it was held above a floor of
 400,000, then 380,000, which a regeneration could cross or not unseen."""
@@ -565,7 +560,6 @@ fixtures' pane with lever 13 off (`--no-pane-defaults --lever prerun_checks --pa
 
 @pytest.mark.parametrize("setting", REQUESTED_SETTINGS)
 @pytest.mark.parametrize("name", NAMES)
-@T134_PENDING
 def test_every_requested_setting_loses_no_recorded_finding_and_holds_every_recorded_contact(
     name: str, setting: str, tmp_path: Path
 ) -> None:
@@ -598,7 +592,6 @@ def test_the_openai_pane_is_the_fixture_pane_plus_parallel_calls() -> None:
 
 
 @pytest.mark.parametrize("name", NAMES)
-@T134_PENDING
 def test_the_openai_pane_loses_no_recorded_finding(name: str) -> None:
     no_recorded_finding_lost(with_openai_pane(name).findings)
 
@@ -643,7 +636,6 @@ def test_the_big_assemblys_follow_up_is_under_thirty_thousand() -> None:
     assert follow_up.recorded_input == BIG_FOLLOW_UP_RECORDED
 
 
-@T134_PENDING
 def test_both_prune_ages_are_priced_for_the_owner() -> None:
     """Research R2.37: two rounds is the default, one is the owner's call; both are printed."""
     one, two = with_pane_defaults("big-assembly", 1), with_pane_defaults("big-assembly", 2)
@@ -709,7 +701,6 @@ def with_lever_13_off(name: str) -> ReplayReport:
 
 
 @pytest.mark.parametrize("name", NAMES)
-@T134_PENDING
 def test_lever_13_cuts_every_round_of_every_fixture_and_loses_no_finding(name: str) -> None:
     on, off = with_pane_defaults(name), with_lever_13_off(name)
 

@@ -1,9 +1,9 @@
 {
-  "session_id": "5ad53038-751b-4e1a-bd0d-b0bd02c9ff6f",
+  "session_id": "c1e209db-a05f-4900-8fdd-27b096f1e98f",
   "package_id": "dbce1f40-e74b-4f3b-ae27-af61ec45d66a",
   "design_id": "dsn:681d2181ba04",
-  "started_at": "2026-09-27T11:43:28.052314Z",
-  "ended_at": "2026-09-27T11:43:28.140421Z",
+  "started_at": "2026-09-27T16:52:53.876628Z",
+  "ended_at": "2026-09-27T16:52:53.960900Z",
   "model": "gpt-5.6-luna",
   "provider_info": {
     "provider": "fake",
@@ -35,34 +35,34 @@
     "rounds": 39,
     "turns": 2,
     "totals": {
-      "input_tokens": 1570895,
-      "cached_input_tokens": 1494301,
+      "input_tokens": 1507165,
+      "cached_input_tokens": 1436897,
       "cache_write_tokens": 67908,
       "output_tokens": 6605,
       "reasoning_tokens": 2654,
       "tool_result_input_tokens": null,
-      "total_tokens": 1577500,
+      "total_tokens": 1513770,
       "latency_s": 95.64147399994545
     },
     "by_turn": [
       {
-        "input_tokens": 1505138,
-        "cached_input_tokens": 1429760,
+        "input_tokens": 1445193,
+        "cached_input_tokens": 1374925,
         "cache_write_tokens": 66064,
         "output_tokens": 5928,
         "reasoning_tokens": 2206,
         "tool_result_input_tokens": null,
-        "total_tokens": 1511066,
+        "total_tokens": 1451121,
         "latency_s": 88.99878119994537
       },
       {
-        "input_tokens": 65757,
-        "cached_input_tokens": 64541,
+        "input_tokens": 61972,
+        "cached_input_tokens": 61972,
         "cache_write_tokens": 1844,
         "output_tokens": 677,
         "reasoning_tokens": 448,
         "tool_result_input_tokens": null,
-        "total_tokens": 66434,
+        "total_tokens": 62649,
         "latency_s": 6.642692800000077
       }
     ]
@@ -76,7 +76,7 @@
       "result_summary": "{\"design_id\":\"dsn:681d2181ba04\",\"design_name\":\"268-88428\",\"configuration\":\"Default\",\"root_assembly_document_id\":\"doc:681d2181ba04\",\"drawing_document_ids\":[],\"document_count\":3,\"component_count\":4,\"ma…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000023100001271814108,
+      "elapsed_s": 0.00002179999864893034,
       "result_bytes": 473,
       "result_tokens": 163
     },
@@ -87,7 +87,7 @@
       "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Closed by code from the package before your first turn: each reviewed documen…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000030200004403013736,
+      "elapsed_s": 0.00003229999856557697,
       "result_bytes": 4111,
       "result_tokens": 911
     },
@@ -98,7 +98,7 @@
       "result_summary": "{\"result\":[{\"kind\":\"tool_error\",\"entity_kind\":\"mass_override\",\"entity_id\":\"doc:681d2181ba04\",\"reason\":\"read OverrideMass for '268-88428.SLDASM'\",\"error\":\"InvalidCastException: Unable to cast COM obje…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00002970000059576705,
+      "elapsed_s": 0.000032199997804127634,
       "result_bytes": 5791,
       "result_tokens": 1690
     },
@@ -112,7 +112,7 @@
       "result_summary": "{\"result\":[{\"id\":\"cmp:0001\",\"name\":\"268-88428\",\"full_path\":\"268-88428\",\"document_id\":\"doc:681d2181ba04\",\"referenced_configuration\":\"Default\",\"suppression\":\"resolved\",\"pattern_id\":null,\"is_toolbox\":fa…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000019999999494757503,
+      "elapsed_s": 0.000020700004824902862,
       "result_bytes": 221,
       "result_tokens": 74
     },
@@ -126,7 +126,7 @@
       "result_summary": "{\"result\":[{\"id\":\"cmp:0002\",\"name\":\"ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-2\",\"full_path\":\"ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-2\",\"document_id\":\"doc:792f2ea287a0\",\"referenced_configura…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000016400001186411828,
+      "elapsed_s": 0.000017499995010439306,
       "result_bytes": 795,
       "result_tokens": 323
     },
@@ -139,7 +139,7 @@
       "result_summary": "{\"result\":[{\"id\":\"mat:0001\",\"persist_ref\":\"aEIAABgAAAD//v8AAAAAABkAAAA=\",\"persist_ref_scope\":\"doc:681d2181ba04\",\"type\":\"swMateCOORDINATE\",\"entities\":[{\"component_id\":\"cmp:0004\",\"persist_ref\":\"aEIAAAY…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000037500001781154424,
+      "elapsed_s": 0.00003930000093532726,
       "result_bytes": 4371,
       "result_tokens": 2120
     },
@@ -153,7 +153,7 @@
       "result_summary": "{\"result\":[{\"id\":\"hol:0001\",\"persist_ref\":\"aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=\",\"persist_ref_scope\":\"doc:8a412bc4633c\",\"component_id\":…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00006560000474564731,
+      "elapsed_s": 0.00006539999594679102,
       "result_bytes": 2820,
       "result_tokens": 1176
     },
@@ -166,7 +166,7 @@
       "result_summary": "{\"component\":{\"id\":\"cmp:0004\",\"persist_ref\":\"aEIAAAUAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=\",\"persist_ref_scope\":\"doc:681d2181ba04\",\"name\":\"268-8…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0002899999963119626,
+      "elapsed_s": 0.00029769999673590064,
       "result_bytes": 27503,
       "result_tokens": 12665
     },
@@ -179,7 +179,7 @@
       "result_summary": "{\"component\":{\"id\":\"cmp:0002\",\"persist_ref\":\"aEIAAAUAAAD//v84WgBBAEwAVQBEACAASwBBAE0ALAAgADMATQBNACAAWAAgADEAOABNAE0AIABaAEkALAAgAFAAVQAsACAARgBPAFQALAAgADEANwA1ADQAMwBUADEANwA3AC0AMgBAADIANgA4AC0AOA…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000057199998991563916,
+      "elapsed_s": 0.0000627999979769811,
       "result_bytes": 3056,
       "result_tokens": 1344
     },
@@ -192,7 +192,7 @@
       "result_summary": "{\"component\":{\"id\":\"cmp:0003\",\"persist_ref\":\"aEIAAAUAAAD//v84WgBBAEwAVQBEACAASwBBAE0ALAAgADMATQBNACAAWAAgADEAOABNAE0AIABaAEkALAAgAFAAVQAsACAARgBPAFQALAAgADEANwA1ADQAMwBUADEANwA3AC0AMQBAADIANgA4AC0AOA…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00007339999865507707,
+      "elapsed_s": 0.00008259999594883993,
       "result_bytes": 7436,
       "result_tokens": 3527
     },
@@ -206,7 +206,7 @@
       "result_summary": "{\"result\":[]}",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000016199999663513154,
+      "elapsed_s": 0.000017600003047846258,
       "result_bytes": 14,
       "result_tokens": 5
     },
@@ -220,7 +220,7 @@
       "result_summary": "{\"result\":[{\"group_key\":\"cmp:0003|cmp:0004\",\"count\":1,\"statuses\":[\"computed\"],\"configurations\":[\"Default\"],\"interferences\":[{\"id\":\"int:0001\",\"configuration\":\"Default\",\"component_ids\":[\"cmp:0004\",\"cmp…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00003440000000409782,
+      "elapsed_s": 0.00003930000093532726,
       "result_bytes": 1132,
       "result_tokens": 354
     },
@@ -235,7 +235,7 @@
       "result_summary": "{\"result\":[]}",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000022899999748915434,
+      "elapsed_s": 0.00002559999848017469,
       "result_bytes": 14,
       "result_tokens": 5
     },
@@ -248,7 +248,7 @@
       "result_summary": "{\"result\":[{\"document_id\":\"doc:792f2ea287a0\",\"index\":0,\"text\":\"\\\"D1@Sketch1\\\" = \\\"N@Sketch1\\\"\",\"lhs\":\"D1@Sketch1\",\"is_global\":false,\"value\":0.5},{\"document_id\":\"doc:792f2ea287a0\",\"index\":1,\"text\":\"\\\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000024499997380189598,
+      "elapsed_s": 0.000024900000425986946,
       "result_bytes": 597,
       "result_tokens": 251
     },
@@ -261,7 +261,7 @@
       "result_summary": "{\"result\":[]}",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000013800003216601908,
+      "elapsed_s": 0.000013600001693703234,
       "result_bytes": 14,
       "result_tokens": 5
     },
@@ -274,7 +274,7 @@
       "result_summary": "{\"result\":[]}",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00001290000363951549,
+      "elapsed_s": 0.000013999997463542968,
       "result_bytes": 14,
       "result_tokens": 5
     },
@@ -295,7 +295,7 @@
       "result_summary": "{\"status\":\"computed\",\"configuration\":\"Default\",\"interferences\":[{\"id\":\"int:0001\",\"configuration\":\"Default\",\"component_ids\":[\"cmp:0004\",\"cmp:0003\"],\"volume\":{\"value\":0.0,\"unit\":\"m3\"},\"settings\":{\"trea…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00005980000423733145,
+      "elapsed_s": 0.00006679999933112413,
       "result_bytes": 1037,
       "result_tokens": 315
     },
@@ -309,7 +309,7 @@
       "result_summary": "{\"result\":[{\"group_key\":\"cmp:0003|cmp:0004\",\"count\":1,\"statuses\":[\"computed\"],\"configurations\":[\"Default\"],\"interferences\":[{\"id\":\"int:0001\",\"configuration\":\"Default\",\"component_ids\":[\"cmp:0004\",\"cmp…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00003240000660298392,
+      "elapsed_s": 0.00003529999958118424,
       "result_bytes": 1132,
       "result_tokens": 354
     },
@@ -322,7 +322,7 @@
       "result_summary": "{\"status\":\"contact\",\"contact\":{\"id\":\"C-001\",\"kind\":\"zero_volume\",\"group_key\":\"cmp:0003|cmp:0004\",\"configuration\":\"Default\",\"interference_ids\":[\"int:0001\"],\"component_ids\":[\"cmp:0003\",\"cmp:0004\"],\"vol…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.001259500000742264,
+      "elapsed_s": 0.0013591000024462119,
       "result_bytes": 551,
       "result_tokens": 190
     },
@@ -335,7 +335,7 @@
       "result_summary": "{\"status\":\"contact\",\"contact\":{\"id\":\"C-002\",\"kind\":\"zero_volume\",\"group_key\":\"cmp:0002|cmp:0004\",\"configuration\":\"Default\",\"interference_ids\":[\"int:0002\"],\"component_ids\":[\"cmp:0002\",\"cmp:0004\"],\"vol…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000054299998737405986,
+      "elapsed_s": 0.00005750000127591193,
       "result_bytes": 551,
       "result_tokens": 190
     },
@@ -348,9 +348,9 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-001\",\"check\":\"rms.folders.present\",\"title\":\"missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q\\u2026\",\"status\":\"suspected\",\"seve…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00533010000071954,
-      "result_bytes": 43354,
-      "result_tokens": 15892
+      "elapsed_s": 0.007678600006329361,
+      "result_bytes": 33777,
+      "result_tokens": 12312
     },
     {
       "index": 21,
@@ -359,7 +359,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-007\",\"check\":\"rms.assembly.mates_to_reference_geometry\",\"title\":\"mat:0002 (swMateCONCENTRIC) references swSelFACES on 268-88428-1, swSelFACES on\\u2026\",\"stat…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.001801099999283906,
+      "elapsed_s": 0.0016839000018080696,
       "result_bytes": 6216,
       "result_tokens": 2568
     },
@@ -372,7 +372,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-008\",\"check\":\"rms.params.global_variables_present\",\"title\":\"none of the 4 equation(s) is a global variable: D1@Sketch1, D1@Sketch5, D2@Sket\\u2026\",\"status\":\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0015440999995917082,
+      "elapsed_s": 0.0017521000045235269,
       "result_bytes": 3438,
       "result_tokens": 1039
     },
@@ -380,12 +380,12 @@
       "index": 23,
       "tool": "check_standards",
       "arguments": {},
-      "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-011\",\"check\":\"standards.part.sketches_fully_defined\",\"title\":\"Sketch2 is under-defined, at the top level of the feature tree; Sketch2 is unde\\u2026\",\"status\"…",
+      "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-011\",\"check\":\"standards.part.sketches_fully_defined\",\"title\":\"Sketch2 is under-defined, at the top level of the feature tree\",\"status\":\"demonstrated\",\"severi…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.01721269999688957,
-      "result_bytes": 4713,
-      "result_tokens": 1464
+      "elapsed_s": 0.021251600002869964,
+      "result_bytes": 4159,
+      "result_tokens": 1257
     },
     {
       "index": 24,
@@ -402,7 +402,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-001\",\"what\":\"Vault version dok local-modification status for doc:681d2181ba04, doc:792f2ea287a0, dok doc:8a412bc4633c, tied to active configuration Defau…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00021430000197142363,
+      "elapsed_s": 0.00024280000070575625,
       "result_bytes": 687,
       "result_tokens": 197
     },
@@ -424,7 +424,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-002\",\"what\":\"The native part drawing package for 268-88428 dok the applicable drawing or supplier dimensional specification for dowel pin 17543T177, incl…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00023189999774331227,
+      "elapsed_s": 0.0002451999971526675,
       "result_bytes": 845,
       "result_tokens": 221
     },
@@ -445,7 +445,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-003\",\"what\":\"A mating-part hole-axis/coaxiality requirement for the two dowel joints, plus malunomopum hole or datum references for the pin-side axes if …",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00020709999807877466,
+      "elapsed_s": 0.00022420000459533185,
       "result_bytes": 746,
       "result_tokens": 203
     },
@@ -476,7 +476,7 @@
       "result_summary": "{\"status\":\"closed_by_code\",\"check\":\"provenance\",\"reason\":\"Reviewed as open in SOLIDWORKS: 3 documents, each at its own path in its active configuration; revision read on 3 of 3. The open files are ta…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000055500000598840415,
+      "elapsed_s": 0.00006120000034570694,
       "result_bytes": 507,
       "result_tokens": 125
     },
@@ -505,7 +505,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"drawing.manufacturing_inputs\",\"scope\":{\"component_ids\":[\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"po…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00018429999909130856,
+      "elapsed_s": 0.0001947999990079552,
       "result_bytes": 639,
       "result_tokens": 176
     },
@@ -545,7 +545,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"interfaces.fit\",\"scope\":{\"component_ids\":[\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[[\"cmp:0002\",\"cmp:0004\"],[\"cmp:0003\",\"cmp:0004…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00018850000196835026,
+      "elapsed_s": 0.00018740000086836517,
       "result_bytes": 637,
       "result_tokens": 195
     },
@@ -585,7 +585,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"interfaces.stack\",\"scope\":{\"component_ids\":[\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[[\"cmp:0002\",\"cmp:0004\"],[\"cmp:0003\",\"cmp:00…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0001694999955361709,
+      "elapsed_s": 0.0002204000047640875,
       "result_bytes": 610,
       "result_tokens": 184
     },
@@ -618,7 +618,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"out_of_scope\",\"coverage_item\":{\"check\":\"fasteners\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"position…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00019099999917671084,
+      "elapsed_s": 0.00018400000408291817,
       "result_bytes": 563,
       "result_tokens": 174
     },
@@ -658,7 +658,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"holes.alignment\",\"scope\":{\"component_ids\":[\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[[\"cmp:0002\",\"cmp:0004\"],[\"cmp:0003\",\"cmp:000…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00018370000179857016,
+      "elapsed_s": 0.00021189999824855477,
       "result_bytes": 611,
       "result_tokens": 187
     },
@@ -669,7 +669,7 @@
       "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Closed by code from the package before your first turn: each reviewed documen…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000052299998060334474,
+      "elapsed_s": 0.00005570000212173909,
       "result_bytes": 4149,
       "result_tokens": 917
     },
@@ -702,7 +702,7 @@
       "result_summary": "{\"status\":\"closed_by_code\",\"check\":\"coverage.closeout\",\"reason\":\"Closed by code when the review ends: every gap in the package and every open evidence request is reflected in coverage.\",\"open_items\":…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00005280000186758116,
+      "elapsed_s": 0.00005709999823011458,
       "result_bytes": 251,
       "result_tokens": 61
     },
@@ -713,7 +713,7 @@
       "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Closed by code from the package before your first turn: each reviewed documen…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000051700000767596066,
+      "elapsed_s": 0.000053499999921768904,
       "result_bytes": 4149,
       "result_tokens": 917
     }
@@ -807,7 +807,7 @@
     {
       "id": "F-002",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "14 content feature(s) sit outside every group: MateReferences, Default-<1>, Tab…",
+      "title": "8 content feature(s) sit outside every group: MateReferences, Default-<1>, Tabl…",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -874,15 +874,6 @@
           "sheet": null,
           "view": null,
           "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAACgAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:792f2ea287a0",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
           "persist_ref": "aEIAAAEAAAD//v8AAAAAADsAAAA=",
           "page": null,
           "bbox": null
@@ -901,15 +892,6 @@
           "sheet": null,
           "view": null,
           "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAADsAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:792f2ea287a0",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
           "persist_ref": "aEIAAAEAAAD//v8AAAAAAEIAAAA=",
           "page": null,
           "bbox": null
@@ -920,15 +902,6 @@
           "view": null,
           "annotation": null,
           "persist_ref": "aEIAAAEAAAD//v8AAAAAAEgAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:792f2ea287a0",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAEIAAAA=",
           "page": null,
           "bbox": null
         },
@@ -956,7 +929,7 @@
         }
       ],
       "configuration": "Default",
-      "observed": "14 content feature(s) sit outside every group: MateReferences, Default-<1>, Tables, Sketch1, Sketch2, Extrude1, Sketch2, Sketch3, Extrude2, Sketch3, Sketch4, Extrude3, Sketch4, Sketch5",
+      "observed": "8 content feature(s) sit outside every group: MateReferences, Default-<1>, Tables, Sketch1, Extrude1 (with Sketch2), Extrude2 (with Sketch3), Extrude3 (with Sketch4), Sketch5",
       "requirement": "Every content feature lives inside a group.",
       "inputs": [
         "feat:0023 MateReferences [MateReferenceGroupFolder] persist_ref=aEIAACQAAAD//v8AAAAAAHsAAAA= scope=doc:792f2ea287a0",
@@ -965,13 +938,10 @@
         "feat:0028 Sketch1 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAACIAAAA= scope=doc:792f2ea287a0",
         "feat:0029 Sketch2 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAACgAAAA= scope=doc:792f2ea287a0",
         "feat:0030 Extrude1 [Extrusion] persist_ref=aEIAAAEAAAD//v8AAAAAAC0AAAA= scope=doc:792f2ea287a0",
-        "feat:0031 Sketch2 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAACgAAAA= scope=doc:792f2ea287a0",
         "feat:0032 Sketch3 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAADsAAAA= scope=doc:792f2ea287a0",
         "feat:0033 Extrude2 [ICE] persist_ref=aEIAAAEAAAD//v8AAAAAAEEAAAA= scope=doc:792f2ea287a0",
-        "feat:0034 Sketch3 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAADsAAAA= scope=doc:792f2ea287a0",
         "feat:0035 Sketch4 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAEIAAAA= scope=doc:792f2ea287a0",
         "feat:0036 Extrude3 [ICE] persist_ref=aEIAAAEAAAD//v8AAAAAAEgAAAA= scope=doc:792f2ea287a0",
-        "feat:0037 Sketch4 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAEIAAAA= scope=doc:792f2ea287a0",
         "feat:0038 Sketch5 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAG4AAAA= scope=doc:792f2ea287a0"
       ],
       "calculation": null,
@@ -1060,7 +1030,7 @@
       "requirement": "No sketch is consumed by more than one feature.",
       "inputs": [
         "feat:0028 Sketch1 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAACIAAAA= scope=doc:792f2ea287a0",
-        "feat:0031 Sketch2 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAACgAAAA= scope=doc:792f2ea287a0",
+        "feat:0029 Sketch2 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAACgAAAA= scope=doc:792f2ea287a0",
         "feat:0033 Extrude2 [ICE] persist_ref=aEIAAAEAAAD//v8AAAAAAEEAAAA= scope=doc:792f2ea287a0",
         "feat:0036 Extrude3 [ICE] persist_ref=aEIAAAEAAAD//v8AAAAAAEgAAAA= scope=doc:792f2ea287a0",
         "feat:0030 Extrude1 [Extrusion] persist_ref=aEIAAAEAAAD//v8AAAAAAC0AAAA= scope=doc:792f2ea287a0"
@@ -1117,7 +1087,7 @@
     {
       "id": "F-005",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "48 content feature(s) sit outside every group: Axis1, Axis2, Axis3, Sketch1, Bo…",
+      "title": "22 content feature(s) sit outside every group: Axis1, Axis2, Axis3, Boss-Extrud…",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -1174,15 +1144,6 @@
           "sheet": null,
           "view": null,
           "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAJEBAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
           "persist_ref": "aEIAAAEAAAD//v8AAAAAAJsBAAA=",
           "page": null,
           "bbox": null
@@ -1193,15 +1154,6 @@
           "view": null,
           "annotation": null,
           "persist_ref": "aEIAAAEAAAD//v8AAAAAAKEBAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAJsBAAA=",
           "page": null,
           "bbox": null
         },
@@ -1228,24 +1180,6 @@
           "sheet": null,
           "view": null,
           "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAKgBAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAKcBAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
           "persist_ref": "aEIAAAEAAAD//v8AAAAAAL4BAAA=",
           "page": null,
           "bbox": null
@@ -1256,24 +1190,6 @@
           "view": null,
           "annotation": null,
           "persist_ref": "aEIAAAEAAAD//v8AAAAAAL8BAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAL4BAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAL0BAAA=",
           "page": null,
           "bbox": null
         },
@@ -1300,15 +1216,6 @@
           "sheet": null,
           "view": null,
           "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAOwBAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
           "persist_ref": "aEIAAAEAAAD//v8AAAAAAAoCAAA=",
           "page": null,
           "bbox": null
@@ -1319,15 +1226,6 @@
           "view": null,
           "annotation": null,
           "persist_ref": "aEIAAAEAAAD//v8AAAAAABQCAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAoCAAA=",
           "page": null,
           "bbox": null
         },
@@ -1354,15 +1252,6 @@
           "sheet": null,
           "view": null,
           "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAADICAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
           "persist_ref": "aEIAAAEAAAD//v8AAAAAAFgCAAA=",
           "page": null,
           "bbox": null
@@ -1381,15 +1270,6 @@
           "sheet": null,
           "view": null,
           "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAFgCAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
           "persist_ref": "aEIAAAEAAAD//v8AAAAAAHACAAA=",
           "page": null,
           "bbox": null
@@ -1400,15 +1280,6 @@
           "view": null,
           "annotation": null,
           "persist_ref": "aEIAAAEAAAD//v8AAAAAAHYCAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAHACAAA=",
           "page": null,
           "bbox": null
         },
@@ -1444,24 +1315,6 @@
           "sheet": null,
           "view": null,
           "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAB0CAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAABoCAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
           "persist_ref": "aEIAAAEAAAD//v8AAAAAAEoCAAA=",
           "page": null,
           "bbox": null
@@ -1472,24 +1325,6 @@
           "view": null,
           "annotation": null,
           "persist_ref": "aEIAAAEAAAD//v8AAAAAAEsCAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAEoCAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAEkCAAA=",
           "page": null,
           "bbox": null
         },
@@ -1571,7 +1406,7 @@
         }
       ],
       "configuration": "Default",
-      "observed": "48 content feature(s) sit outside every group: Axis1, Axis2, Axis3, Sketch1, Boss-Extrude1, Sketch1, Sketch2, Boss-Extrude2, Sketch2, Sketch5, CBORE for M8 KAPO7, Sketch5, Sketch4, Sketch8, CBORE for M8 TOPU3, Sketch8, Sketch7, Sketch10, Cut-Extrude1, Sketch10, Sketch11, Cut-Extrude2, Sketch11, Sketch15, Cut-Extrude3, Sketch15, Sketch19, Cut-Extrude4, Sketch19, Sketch20, Cut-Extrude5, Sketch20, Chamfer1, Sketch14, M5x0.8 Tapped Hole1, Sketch14, Sketch13, Sketch18, Ø3.0mm Fidaz Hole1, Sketch18, Sketch17, Fillet4, Fillet1, Fillet2, Fillet3, Fillet6, Fillet5, Fillet8",
+      "observed": "22 content feature(s) sit outside every group: Axis1, Axis2, Axis3, Boss-Extrude1 (with Sketch1), Boss-Extrude2 (with Sketch2), CBORE for M8 KAPO7 (with Sketch5), CBORE for M8 TOPU3 (with Sketch8), Cut-Extrude1 (with Sketch10), Cut-Extrude2 (with Sketch11), Cut-Extrude3 (with Sketch15), Cut-Extrude4 (with Sketch19), Cut-Extrude5 (with Sketch20), Chamfer1, M5x0.8 Tapped Hole1 (with Sketch14), Ø3.0mm Fidaz Hole1 (with Sketch18), Fillet4, Fillet1, Fillet2, Fillet3, Fillet6, Fillet5, Fillet8",
       "requirement": "Every content feature lives inside a group.",
       "inputs": [
         "feat:0062 Axis1 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAAC8AAAA= scope=doc:8a412bc4633c",
@@ -1579,42 +1414,27 @@
         "feat:0064 Axis3 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAADEAAAA= scope=doc:8a412bc4633c",
         "feat:0066 Sketch1 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAJEBAAA= scope=doc:8a412bc4633c",
         "feat:0067 Boss-Extrude1 [Extrusion] persist_ref=aEIAAAEAAAD//v8AAAAAAJoBAAA= scope=doc:8a412bc4633c",
-        "feat:0068 Sketch1 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAJEBAAA= scope=doc:8a412bc4633c",
         "feat:0069 Sketch2 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAJsBAAA= scope=doc:8a412bc4633c",
         "feat:0070 Boss-Extrude2 [ICE] persist_ref=aEIAAAEAAAD//v8AAAAAAKEBAAA= scope=doc:8a412bc4633c",
-        "feat:0071 Sketch2 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAJsBAAA= scope=doc:8a412bc4633c",
         "feat:0072 Sketch5 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAKgBAAA= scope=doc:8a412bc4633c",
         "feat:0073 CBORE for M8 KAPO7 [HoleWzd] persist_ref=aEIAAAEAAAD//v8AAAAAAKkBAAA= scope=doc:8a412bc4633c",
-        "feat:0074 Sketch5 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAKgBAAA= scope=doc:8a412bc4633c",
-        "feat:0075 Sketch4 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAKcBAAA= scope=doc:8a412bc4633c",
         "feat:0076 Sketch8 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAL4BAAA= scope=doc:8a412bc4633c",
         "feat:0077 CBORE for M8 TOPU3 [HoleWzd] persist_ref=aEIAAAEAAAD//v8AAAAAAL8BAAA= scope=doc:8a412bc4633c",
-        "feat:0078 Sketch8 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAL4BAAA= scope=doc:8a412bc4633c",
-        "feat:0079 Sketch7 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAL0BAAA= scope=doc:8a412bc4633c",
         "feat:0080 Sketch10 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAOwBAAA= scope=doc:8a412bc4633c",
         "feat:0081 Cut-Extrude1 [ICE] persist_ref=aEIAAAEAAAD//v8AAAAAAPIBAAA= scope=doc:8a412bc4633c",
-        "feat:0082 Sketch10 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAOwBAAA= scope=doc:8a412bc4633c",
         "feat:0083 Sketch11 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAAoCAAA= scope=doc:8a412bc4633c",
         "feat:0084 Cut-Extrude2 [ICE] persist_ref=aEIAAAEAAAD//v8AAAAAABQCAAA= scope=doc:8a412bc4633c",
-        "feat:0085 Sketch11 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAAoCAAA= scope=doc:8a412bc4633c",
         "feat:0086 Sketch15 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAADICAAA= scope=doc:8a412bc4633c",
         "feat:0087 Cut-Extrude3 [ICE] persist_ref=aEIAAAEAAAD//v8AAAAAADwCAAA= scope=doc:8a412bc4633c",
-        "feat:0088 Sketch15 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAADICAAA= scope=doc:8a412bc4633c",
         "feat:0089 Sketch19 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAFgCAAA= scope=doc:8a412bc4633c",
         "feat:0090 Cut-Extrude4 [ICE] persist_ref=aEIAAAEAAAD//v8AAAAAAGACAAA= scope=doc:8a412bc4633c",
-        "feat:0091 Sketch19 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAFgCAAA= scope=doc:8a412bc4633c",
         "feat:0092 Sketch20 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAHACAAA= scope=doc:8a412bc4633c",
         "feat:0093 Cut-Extrude5 [ICE] persist_ref=aEIAAAEAAAD//v8AAAAAAHYCAAA= scope=doc:8a412bc4633c",
-        "feat:0094 Sketch20 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAHACAAA= scope=doc:8a412bc4633c",
         "feat:0095 Chamfer1 [Chamfer] persist_ref=aEIAAAEAAAD//v8AAAAAACMCAAA= scope=doc:8a412bc4633c",
         "feat:0096 Sketch14 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAB0CAAA= scope=doc:8a412bc4633c",
         "feat:0097 M5x0.8 Tapped Hole1 [HoleWzd] persist_ref=aEIAAAEAAAD//v8AAAAAAB4CAAA= scope=doc:8a412bc4633c",
-        "feat:0098 Sketch14 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAB0CAAA= scope=doc:8a412bc4633c",
-        "feat:0099 Sketch13 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAABoCAAA= scope=doc:8a412bc4633c",
         "feat:0100 Sketch18 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAEoCAAA= scope=doc:8a412bc4633c",
         "feat:0101 Ø3.0mm Fidaz Hole1 [HoleWzd] persist_ref=aEIAAAEAAAD//v8AAAAAAEsCAAA= scope=doc:8a412bc4633c",
-        "feat:0102 Sketch18 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAEoCAAA= scope=doc:8a412bc4633c",
-        "feat:0103 Sketch17 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAEkCAAA= scope=doc:8a412bc4633c",
         "feat:0104 Fillet4 [Fillet] persist_ref=aEIAAAEAAAD//v8AAAAAAC0CAAA= scope=doc:8a412bc4633c",
         "feat:0105 Fillet1 [Fillet] persist_ref=aEIAAAEAAAD//v8AAAAAACACAAA= scope=doc:8a412bc4633c",
         "feat:0106 Fillet2 [Fillet] persist_ref=aEIAAAEAAAD//v8AAAAAACkCAAA= scope=doc:8a412bc4633c",
@@ -1637,7 +1457,7 @@
     {
       "id": "F-006",
       "check": "rms.sketches.fully_defined",
-      "title": "Sketch2 constrained status is under_defined; Sketch2 constrained status is unde…",
+      "title": "Sketch2 constrained status is under_defined",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -1661,15 +1481,6 @@
           "persist_ref": "aEIAAAEAAAD//v8AAAAAAKEBAAA=",
           "page": null,
           "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAJsBAAA=",
-          "page": null,
-          "bbox": null
         }
       ],
       "provenance": [
@@ -1686,12 +1497,11 @@
         }
       ],
       "configuration": "Default",
-      "observed": "Sketch2 constrained status is under_defined; Sketch2 constrained status is under_defined",
+      "observed": "Sketch2 constrained status is under_defined",
       "requirement": "Every sketch is fully defined. Only under_defined fails.",
       "inputs": [
         "feat:0069 Sketch2 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAJsBAAA= scope=doc:8a412bc4633c",
-        "feat:0070 Boss-Extrude2 [ICE] persist_ref=aEIAAAEAAAD//v8AAAAAAKEBAAA= scope=doc:8a412bc4633c",
-        "feat:0071 Sketch2 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAJsBAAA= scope=doc:8a412bc4633c"
+        "feat:0070 Boss-Extrude2 [ICE] persist_ref=aEIAAAEAAAD//v8AAAAAAKEBAAA= scope=doc:8a412bc4633c"
       ],
       "calculation": null,
       "tool_result_ids": [
@@ -1922,22 +1732,13 @@
     {
       "id": "F-011",
       "check": "standards.part.sketches_fully_defined",
-      "title": "Sketch2 is under-defined, at the top level of the feature tree; Sketch2 is unde…",
+      "title": "Sketch2 is under-defined, at the top level of the feature tree",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
         "cmp:0004"
       ],
       "drawing_locations": [
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAJsBAAA=",
-          "page": null,
-          "bbox": null
-        },
         {
           "document_id": "doc:8a412bc4633c",
           "sheet": null,
@@ -1962,11 +1763,10 @@
         }
       ],
       "configuration": "Default",
-      "observed": "Sketch2 is under-defined, at the top level of the feature tree; Sketch2 is under-defined, under Boss-Extrude2",
+      "observed": "Sketch2 is under-defined, at the top level of the feature tree",
       "requirement": "Every sketch is fully defined.",
       "inputs": [
-        "sketch feat:0069 Sketch2 persist_ref=aEIAAAEAAAD//v8AAAAAAJsBAAA= scope=doc:8a412bc4633c",
-        "sketch feat:0071 Sketch2 persist_ref=aEIAAAEAAAD//v8AAAAAAJsBAAA= scope=doc:8a412bc4633c"
+        "sketch feat:0069 Sketch2 persist_ref=aEIAAAEAAAD//v8AAAAAAJsBAAA= scope=doc:8a412bc4633c"
       ],
       "calculation": null,
       "tool_result_ids": [
@@ -1984,7 +1784,7 @@
     }
   ],
   "explanations_enabled": true,
-  "finding_explanation_fingerprint": "2f535b784feb281e76ac6a0eeda9f8acf3733a1e94d09bbe959e5d33fe49b715",
+  "finding_explanation_fingerprint": "da7594aea452290abad2fcabea3fb8e5385a46315989a644ad5631836d6f296d",
   "contacts": [
     {
       "id": "C-001",
@@ -2119,6 +1919,21 @@
           ]
         },
         "reason": "1 document(s)",
+        "error": null
+      },
+      {
+        "check": "rms.tree.folded_rows",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177.SLDPRT: 3 second listings merged, 5 carried sub-features read with their feature; 268-88428.SLDPRT: 11 second listings merged, 9 carried sub-features read with their feature",
         "error": null
       },
       {
@@ -3188,7 +3003,7 @@
     "assisted_supervision_minutes": 0.0,
     "assisted_verification_minutes": 0.0,
     "false_alarm_handling_minutes": 0.0,
-    "unattended_runtime_minutes": 0.00146845,
+    "unattended_runtime_minutes": 0.0014045333333333333,
     "net_saved_minutes": null
   }
 }
