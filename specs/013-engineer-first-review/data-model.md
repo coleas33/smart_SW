@@ -33,7 +33,7 @@ signal off)
 and `load_review_profile(path)`, which never raises: what `start_review` loads once.
 Contract: `contracts/part-roles-profile.md`.
 
-**Shared matchers** (`checks/standards/library.py`, `traversal.py`): `PrefixList.from_entries(entries,
+**Shared matchers** (`checks/standards/library.py`; `profile.py`, re-exported by `traversal.py`, which imports the rules runner and so cannot be imported by the classifier): `PrefixList.from_entries(entries,
 root)` with `.matches(path)` and `.longest(path)`; `PrefixMatcher` holds four of them (no behaviour
 change). `name_matches(pattern, text, *, wildcards: bool) -> bool`; `part_number_matches` calls it
 with `wildcards=False`. `property_key(name) -> str`: the name folded and every space removed, the one

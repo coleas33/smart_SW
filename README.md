@@ -135,7 +135,7 @@ shared descriptions and part numbers and missing revisions, and flags suppressed
 components. A zero-volume interference row is a **contact**, kept in its own list beside the
 findings and never in "Start here". The part-number and description properties the hygiene checks
 read, and the general tolerance by decimal places, come from standards profile **version 2** or
-later (`config/standards.example.yaml` is version 3); a version 1 profile still loads, with the two
+later (`config/standards.example.yaml` is version 4); a version 1 profile still loads, with the two
 property checks skipped naming the setting and no general tolerance applied, so the owner's real
 profile has to be regenerated at version 2 or 3 before they grade a real run.
 

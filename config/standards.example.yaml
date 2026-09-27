@@ -1,8 +1,8 @@
 # standards.yaml - the company's release checklist configuration.
 # Every value below is FICTIONAL placeholder data. Replace all of it.
-# Version 2 adds general_tolerance and hygiene; version 3 adds drawing. A version 1 or 2
-# file still loads without the sections it predates.
-version: 3
+# Version 2 adds general_tolerance and hygiene; version 3 adds drawing; version 4 adds
+# part_roles. A version 1, 2 or 3 file still loads without the sections it predates.
+version: 4
 
 # Absolute path to the vault or project root. Library prefixes below may be written
 # relative to it; an absolute prefix is matched as written. A root that does not exist
@@ -121,3 +121,60 @@ drawing:
   # template it was made from, so neither is compared.
   drawing_template: "example-template.drwdot"
   bom_template: "example-bom.sldbomtbt"
+
+part_roles:
+  # Tells custom parts (designed here) from bought ones (catalogue, vendor, library), so
+  # modelling-practice and hygiene checks grade custom parts only (feature 013). Each entry
+  # below is one signal that votes custom or bought with a strength; a part the votes do
+  # not decide is asked about. An empty list or property means that signal is not used.
+  #
+  # STRONG, bought: a document under one of these prefixes (the library prefix rules:
+  # relative entries resolve against vault_root, case-insensitive, at a folder boundary),
+  # or inside a folder of one of these names anywhere in its path.
+  bought_prefixes:
+    - "_library/purchased/"
+  bought_folder_names:
+    - "FICT Purchased"
+  # The make-or-buy switch the engineer sets: a custom property, read from the
+  # configuration a component uses first, then from the document. A bought value is STRONG
+  # (it is set on purpose); a custom value is WEAK (it is often the template's default).
+  switch:
+    property: "Make or Buy"
+    bought_values:
+      - "Buy"
+    custom_values:
+      - "Make"
+  # STRONG, bought: any of these properties carrying a value.
+  vendor_properties:
+    - "FICT Vendor"
+    - "FICT Vendor Number"
+  # STRONG, bought: a distributor's download block - at least min_valued of these
+  # properties carrying a value. An empty list with min_valued 0 means not used.
+  distributor_block:
+    properties:
+      - "FICT Catalog Page"
+      - "FICT Terms of Use"
+      - "FICT Item Text"
+    min_valued: 2
+  # MEDIUM, bought: a catalogue number, in the name-pattern vocabulary ('#' a digit, '@' a
+  # letter, '?' any one character, '*' any run), found as a whole token of the file name,
+  # as a configuration name, or as the whole value of one of these properties.
+  catalogue_numbers:
+    shapes:
+      - "FICT-####@##"
+    properties:
+      - "FICT Vendor Number"
+  # MEDIUM, custom: the company's own part-number prefixes. The file name (when it follows
+  # part_number.pattern) or the hygiene part-number property starts with one.
+  custom_prefixes:
+    - "EX-1"
+    - "EX-2"
+  # MEDIUM, bought: the part-number ranges the company gives bought parts, read the same way.
+  bought_number_prefixes:
+    - "EX-9"
+  # WEAK, custom: properties only catalogue parts carry. A part whose properties were read
+  # and carry none of these, none of vendor_properties and none of distributor_block's is
+  # sparse, which is how custom parts usually look.
+  detail_properties:
+    - "FICT Thread Size"
+    - "FICT Unit Cost"

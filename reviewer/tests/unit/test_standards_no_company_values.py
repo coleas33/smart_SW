@@ -379,7 +379,32 @@ def distinctive_values(data: Mapping[str, Any]) -> set[str]:
     for item in flat.get("data_card.properties", []) or []:
         if isinstance(item, str) and " " in item:
             values.add(item)
+    # Feature 013 T013: version 4's folders, folder names and catalogue shapes are as
+    # distinctive as the library's folders and the part-number pattern.
+    for name in PART_ROLES_DISTINCTIVE:
+        values.update(item for item in flat.get(name, []) or [] if isinstance(item, str) and item)
     return {value for value in values if len(value) >= 6}
+
+
+PART_ROLES_DISTINCTIVE: tuple[str, ...] = (
+    "part_roles.bought_prefixes",
+    "part_roles.bought_folder_names",
+    "part_roles.catalogue_numbers.shapes",
+)
+"""The version 4 lists the literal scan reads (`013 contracts/part-roles-profile.md` section 6)."""
+
+
+def test_the_distinctive_values_cover_the_part_role_folders_and_shapes() -> None:
+    for name, data in profiles().items():
+        flat = value_bearing(data)
+        expected = {
+            item
+            for field in PART_ROLES_DISTINCTIVE
+            for item in flat[field]
+            if len(item) >= 6
+        }
+        assert expected <= distinctive_values(data), name
+    assert any(value_bearing(data)[PART_ROLES_DISTINCTIVE[1]] for data in profiles().values())
 
 
 # --- (a) the field-by-field comparison ---------------------------------------------------

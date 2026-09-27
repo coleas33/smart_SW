@@ -3,7 +3,9 @@
 # carried (research.md R5), field by field. Its one-mate prefix is LONGER than the
 # two-mate prefix it overlaps, which is the ordinary case; profile B carries the
 # reversed one (contracts/profile.md prefix semantics rule 6).
-version: 3
+version: 4
+# Version 4 (feature 013 T014): its part_roles section names every signal, and the
+# sitting-shaped fixture (tests/fixtures/sitting) is classified against it.
 
 vault_root: "/srv/meridian-vault"
 
@@ -64,3 +66,38 @@ drawing:
   dimension_unit: "mm"
   drawing_template: "meridian-sheet.drwdot"
   bom_template: "meridian-parts.sldbomtbt"
+
+part_roles:
+  bought_prefixes:
+    - "catalog/purchased/"
+  bought_folder_names:
+    - "Meridian Supplied"
+  switch:
+    property: "Meridian Sourcing"
+    bought_values:
+      - "Procured"
+    custom_values:
+      - "Fabricated"
+  vendor_properties:
+    - "Meridian Supplier"
+    - "Meridian Supplier Ref"
+  distributor_block:
+    properties:
+      - "Meridian Dist Page"
+      - "Meridian Dist Terms"
+      - "Meridian Dist Text"
+    min_valued: 3
+  catalogue_numbers:
+    shapes:
+      - "MX###-##@"
+    properties:
+      - "Meridian Supplier Ref"
+  custom_prefixes:
+    - "MR-1"
+    - "MR-2"
+  bought_number_prefixes:
+    - "MR-8"
+    - "MR-9"
+  detail_properties:
+    - "Meridian Thread Note"
+    - "Meridian Unit Cost"

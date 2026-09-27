@@ -118,6 +118,17 @@ LIST_FIELDS: tuple[str, ...] = (
     "data_card.properties",
     "general_tolerance.linear",
     "drawing.sheet_formats",
+    # Feature 013 T013: the part_roles lists that stand alone. The switch's two value lists,
+    # the distributor block and the catalogue shapes are tied to a sibling field and are
+    # emptied together in `test_a_version_4_profile_with_every_signal_off_loads`.
+    "part_roles.bought_prefixes",
+    "part_roles.bought_folder_names",
+    "part_roles.switch.bought_values",
+    "part_roles.vendor_properties",
+    "part_roles.catalogue_numbers.properties",
+    "part_roles.custom_prefixes",
+    "part_roles.bought_number_prefixes",
+    "part_roles.detail_properties",
 )
 VERSION_2_SECTIONS: tuple[str, ...] = ("general_tolerance", "hygiene")
 """The two sections version 2 adds (feature 010 research R2.19): required on version 2,
@@ -137,9 +148,29 @@ DRAWING_KEYS: tuple[str, ...] = (
 )
 
 
+VERSION_4_SECTIONS: tuple[str, ...] = ("part_roles",)
+"""The section version 4 adds (feature 013 `contracts/part-roles-profile.md` section 1):
+required on version 4, absent on versions 1 to 3."""
+
+
+def as_version_3(data: dict[str, Any]) -> dict[str, Any]:
+    """A version 4 fixture written back as the version 3 profile it extends."""
+    copy = {key: value for key, value in deepcopy(data).items() if key not in VERSION_4_SECTIONS}
+    copy["version"] = 3
+    return copy
+
+
 def as_version_2(data: dict[str, Any]) -> dict[str, Any]:
-    """A version 3 fixture written back as the version 2 profile it extends."""
-    copy = {key: value for key, value in deepcopy(data).items() if key not in VERSION_3_SECTIONS}
+    """A version 4 fixture written back as the version 2 profile it extends.
+
+    Edited deliberately by feature 013 T014: the fixtures moved to version 4, so version 2 is
+    version 3 without its drawing section.
+    """
+    copy = {
+        key: value
+        for key, value in as_version_3(data).items()
+        if key not in VERSION_3_SECTIONS
+    }
     copy["version"] = 2
     return copy
 
@@ -174,8 +205,28 @@ def test_every_field_carries_the_type_the_contract_states(fixture: Path) -> None
     profile = load_profile(fixture)
 
     # Edited deliberately by feature 011 T028: the fixtures moved to version 3 with the
-    # drawing section (`contracts/profile.md` section 1).
-    assert profile.version == 3
+    # drawing section (`contracts/profile.md` section 1); and by feature 013 T014: they moved
+    # to version 4 with the part_roles section.
+    assert profile.version == 4
+    assert profile.part_roles is not None
+    roles = profile.part_roles
+    for field in (
+        roles.bought_prefixes,
+        roles.bought_folder_names,
+        roles.switch.bought_values,
+        roles.switch.custom_values,
+        roles.vendor_properties,
+        roles.distributor_block.properties,
+        roles.catalogue_numbers.shapes,
+        roles.catalogue_numbers.properties,
+        roles.custom_prefixes,
+        roles.bought_number_prefixes,
+        roles.detail_properties,
+    ):
+        assert isinstance(field, list)
+        assert all(isinstance(item, str) for item in field)
+    assert isinstance(roles.switch.property, str)
+    assert isinstance(roles.distributor_block.min_valued, int)
     assert profile.drawing is not None
     assert isinstance(profile.drawing.sheet_formats, list)
     assert all(isinstance(item, str) for item in profile.drawing.sheet_formats)
@@ -295,12 +346,13 @@ def test_an_unknown_key_is_refused_naming_it(tmp_path: Path, dotted: str) -> Non
     assert dotted.rsplit(".", 1)[-1] in str(raised.value)
 
 
-@pytest.mark.parametrize("version", [0, 4, 17, "3"], ids=repr)
+@pytest.mark.parametrize("version", [0, 5, 17, "4"], ids=repr)
 def test_an_unknown_version_is_refused_naming_the_known_versions(
     tmp_path: Path, version: Any
 ) -> None:
     # Edited deliberately by feature 011 T028: 3 is a known version now, so 4 and the string
-    # "3" take its place, and the refusal names all three known versions.
+    # "3" take its place, and the refusal names all three known versions. Edited again by
+    # feature 013 T014: 4 is known too, so 5 and the string "4" take its place.
     path = write(tmp_path, replacing(raw(PROFILE_A), "version", version))
 
     with pytest.raises(ProfileInvalid) as raised:
@@ -308,7 +360,7 @@ def test_an_unknown_version_is_refused_naming_the_known_versions(
 
     message = str(raised.value)
     assert repr(version) in message or str(version) in message
-    assert "versions 1, 2 and 3" in message, "the refusal names the versions this build knows"
+    assert "versions 1, 2, 3 and 4" in message, "the refusal names the versions this build knows"
     assert str(path) in message
 
 
@@ -361,10 +413,13 @@ def test_a_version_2_section_written_as_null_is_refused_naming_it(
 
 
 @pytest.mark.parametrize("fixture", FIXTURES, ids=lambda path: path.stem)
-def test_a_version_3_profile_with_its_drawing_section_loads(fixture: Path) -> None:
-    profile = load_profile(fixture)
+def test_a_version_3_profile_with_its_drawing_section_loads(tmp_path: Path, fixture: Path) -> None:
+    # Edited deliberately by feature 013 T014: the fixtures are version 4, so the version 3
+    # profile each extends is written back and loaded.
+    profile = load_profile(write(tmp_path, as_version_3(raw(fixture))))
 
     assert profile.version == 3
+    assert profile.part_roles is None
     assert profile.drawing is not None
     assert profile.model_dump()["drawing"] == raw(fixture)["drawing"]
     assert list(raw(fixture)["drawing"]) == list(DRAWING_KEYS)
@@ -543,11 +598,318 @@ def test_a_drawing_section_on_an_earlier_version_is_refused_naming_it(
     assert f"version {version}" in message
 
 
-def test_the_known_versions_are_one_two_and_three() -> None:
+def test_the_known_versions_are_one_to_four() -> None:
+    # Edited deliberately by feature 013 T014: version 4 adds part_roles.
     from swreview.checks.standards.profile import KNOWN_VERSIONS, PROFILE_VERSION
 
-    assert KNOWN_VERSIONS == (1, 2, 3)
-    assert PROFILE_VERSION == 3
+    assert KNOWN_VERSIONS == (1, 2, 3, 4)
+    assert PROFILE_VERSION == 4
+
+
+# --- version 4: part_roles (feature 013 T013, contracts/part-roles-profile.md sections 1, 3) --
+
+PART_ROLES_LISTS: tuple[str, ...] = (
+    "part_roles.bought_prefixes",
+    "part_roles.bought_folder_names",
+    "part_roles.switch.bought_values",
+    "part_roles.switch.custom_values",
+    "part_roles.vendor_properties",
+    "part_roles.distributor_block.properties",
+    "part_roles.catalogue_numbers.shapes",
+    "part_roles.catalogue_numbers.properties",
+    "part_roles.custom_prefixes",
+    "part_roles.bought_number_prefixes",
+    "part_roles.detail_properties",
+)
+"""Every list of the section; each refuses a blank entry by its position."""
+
+LEAK = "FICTLEAK"
+"""A marker no refusal may quote: a refusal names the field and the position only."""
+
+ALL_SIGNALS_OFF: dict[str, Any] = {
+    "bought_prefixes": [],
+    "bought_folder_names": [],
+    "switch": {"property": "", "bought_values": [], "custom_values": []},
+    "vendor_properties": [],
+    "distributor_block": {"properties": [], "min_valued": 0},
+    "catalogue_numbers": {"shapes": [], "properties": []},
+    "custom_prefixes": [],
+    "bought_number_prefixes": [],
+    "detail_properties": [],
+}
+"""The section with every signal turned off: what the upgrade helper writes."""
+
+
+def refusal(tmp_path: Path, data: dict[str, Any]) -> str:
+    """The loader's refusal of `data`, which must be refused."""
+    with pytest.raises(ProfileInvalid) as raised:
+        load_profile(write(tmp_path, data))
+    return str(raised.value)
+
+
+def with_roles(**fields: Any) -> dict[str, Any]:
+    """Profile A with `part_roles` fields replaced, nested keys written `switch__property`."""
+    data = raw(PROFILE_A)
+    for name, value in fields.items():
+        data = replacing(data, "part_roles." + name.replace("__", "."), value)
+    return data
+
+
+@pytest.mark.parametrize("fixture", FIXTURES, ids=lambda path: path.stem)
+def test_a_version_4_profile_with_its_part_roles_section_loads(fixture: Path) -> None:
+    profile = load_profile(fixture)
+
+    assert profile.version == 4
+    assert profile.part_roles is not None
+    assert profile.model_dump()["part_roles"] == raw(fixture)["part_roles"]
+
+
+def test_a_version_4_profile_with_every_signal_off_loads(tmp_path: Path) -> None:
+    data = replacing(raw(PROFILE_A), "part_roles", ALL_SIGNALS_OFF)
+
+    assert load_profile(write(tmp_path, data)).model_dump()["part_roles"] == ALL_SIGNALS_OFF
+
+
+@pytest.mark.parametrize("version", [1, 2, 3])
+def test_every_earlier_version_still_loads_without_part_roles(
+    tmp_path: Path, version: int
+) -> None:
+    earlier = {1: as_version_1, 2: as_version_2, 3: as_version_3}[version]
+
+    profile = load_profile(write(tmp_path, earlier(raw(PROFILE_A))))
+
+    assert (profile.version, profile.part_roles) == (version, None)
+
+
+@pytest.mark.parametrize("version", [1, 2, 3])
+def test_part_roles_on_an_earlier_version_is_refused_naming_it(
+    tmp_path: Path, version: int
+) -> None:
+    earlier = {1: as_version_1, 2: as_version_2, 3: as_version_3}[version]
+    data = {**earlier(raw(PROFILE_A)), "part_roles": raw(PROFILE_A)["part_roles"]}
+
+    message = refusal(tmp_path, data)
+
+    assert "part_roles (a version 4 section)" in message
+    assert f"version {version}" in message
+
+
+def test_a_version_4_profile_without_part_roles_is_refused_naming_it(tmp_path: Path) -> None:
+    assert "part_roles" in refusal(tmp_path, without(raw(PROFILE_A), "part_roles"))
+    assert "part_roles" in refusal(tmp_path, replacing(raw(PROFILE_A), "part_roles", None))
+
+
+@pytest.mark.parametrize("field", PART_ROLES_LISTS)
+def test_a_blank_entry_is_refused_by_its_position(tmp_path: Path, field: str) -> None:
+    data = raw(PROFILE_A)
+    head, _, leaf = field.rpartition(".")
+    section = data
+    for key in head.split("."):
+        section = section[key]
+    entries = [*section[leaf], "   "]
+    if field == "part_roles.distributor_block.properties":
+        section["min_valued"] = 1
+    section[leaf] = entries
+
+    message = refusal(tmp_path, data)
+
+    assert leaf in message
+    assert f" {len(entries)} is blank" in message
+
+
+@pytest.mark.parametrize("name", [f"{LEAK}/Purchased", f"{LEAK}\\Purchased", "/"])
+def test_a_folder_name_holding_a_separator_is_refused(tmp_path: Path, name: str) -> None:
+    message = refusal(tmp_path, with_roles(bought_folder_names=["FICT Supplied", name]))
+
+    assert "folder name 2 holds a path separator; name one folder" in message
+    assert LEAK not in message
+
+
+@pytest.mark.parametrize("shape", ["*", "?", "@", "**", "@@*", "*?@", " * "])
+def test_a_shape_made_only_of_wildcards_is_refused(tmp_path: Path, shape: str) -> None:
+    message = refusal(tmp_path, with_roles(catalogue_numbers__shapes=["FICT-####", shape]))
+
+    assert "shape 2 would match every token" in message
+
+
+def test_a_shape_with_one_literal_character_loads(tmp_path: Path) -> None:
+    data = with_roles(catalogue_numbers__shapes=["*-*", "#", "@@?#"])
+
+    assert load_profile(write(tmp_path, data)).part_roles is not None
+
+
+def test_a_switch_property_without_values_is_refused(tmp_path: Path) -> None:
+    message = refusal(tmp_path, with_roles(switch__bought_values=[], switch__custom_values=[]))
+
+    assert "switch.property needs at least one bought or custom value" in message
+
+
+def test_switch_values_without_a_property_are_refused(tmp_path: Path) -> None:
+    message = refusal(tmp_path, with_roles(switch__property=""))
+
+    assert "switch values need switch.property" in message
+
+
+def test_a_switch_with_only_one_kind_of_value_loads(tmp_path: Path) -> None:
+    """The owner may mark only purchased parts, or only built ones."""
+    for kind in ("bought_values", "custom_values"):
+        data = with_roles(**{f"switch__{kind}": []})
+        assert load_profile(write(tmp_path, data)).part_roles is not None
+
+
+def test_a_value_in_both_switch_lists_is_refused(tmp_path: Path) -> None:
+    data = with_roles(switch__bought_values=[f"{LEAK}One"], switch__custom_values=[f" {LEAK}ONE "])
+
+    message = refusal(tmp_path, data)
+
+    assert "custom value 1 repeats bought value 1" in message
+    assert LEAK.casefold() not in message.casefold()
+
+
+def test_a_switch_value_listed_twice_is_refused(tmp_path: Path) -> None:
+    data = with_roles(switch__bought_values=[f"{LEAK}One", f"{LEAK}one"])
+
+    message = refusal(tmp_path, data)
+
+    assert "entry 2 repeats entry 1" in message
+    assert LEAK.casefold() not in message.casefold()
+
+
+@pytest.mark.parametrize(
+    ("properties", "min_valued", "expected"),
+    [
+        ([], 1, "min_valued must be 0 when the block names no properties"),
+        (["FICT A", "FICT B"], 0, "min_valued must be from 1 to the number of properties (2)"),
+        (["FICT A", "FICT B"], 3, "min_valued must be from 1 to the number of properties (2)"),
+    ],
+)
+def test_a_distributor_count_that_does_not_fit_the_block_is_refused(
+    tmp_path: Path, properties: list[str], min_valued: int, expected: str
+) -> None:
+    data = with_roles(distributor_block={"properties": properties, "min_valued": min_valued})
+
+    assert expected in refusal(tmp_path, data)
+
+
+def test_a_negative_distributor_count_is_refused(tmp_path: Path) -> None:
+    data = with_roles(distributor_block={"properties": ["FICT A"], "min_valued": -1})
+
+    assert "min_valued" in refusal(tmp_path, data)
+
+
+def test_catalogue_properties_without_a_shape_are_refused(tmp_path: Path) -> None:
+    message = refusal(tmp_path, with_roles(catalogue_numbers__shapes=[]))
+
+    assert "catalogue_numbers.properties need at least one shape" in message
+
+
+@pytest.mark.parametrize(
+    ("custom", "bought"),
+    [
+        ([f"{LEAK}-1"], [f"{LEAK}-1"]),
+        ([f"{LEAK}-"], [f"{LEAK}-8"]),
+        ([f"{LEAK}-8"], [f"{LEAK}-"]),
+        ([f"{LEAK}-1"], [f"{LEAK.lower()}-1"]),
+    ],
+    ids=["equal", "custom-is-the-start", "bought-is-the-start", "case"],
+)
+def test_overlapping_custom_and_bought_prefixes_are_refused(
+    tmp_path: Path, custom: list[str], bought: list[str]
+) -> None:
+    data = with_roles(custom_prefixes=["FICT-2", *custom], bought_number_prefixes=bought)
+
+    message = refusal(tmp_path, data)
+
+    assert "custom prefix 2 overlaps bought prefix 1" in message
+    assert LEAK.casefold() not in message.casefold()
+
+
+def test_prefixes_that_only_share_a_start_load(tmp_path: Path) -> None:
+    """`FICT-1` and `FICT-9` share `FICT-` but neither starts the other: no number votes both."""
+    data = with_roles(custom_prefixes=["FICT-1"], bought_number_prefixes=["FICT-9"])
+
+    assert load_profile(write(tmp_path, data)).part_roles is not None
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "vendor_properties",
+        "detail_properties",
+        "catalogue_numbers__properties",
+    ],
+)
+@pytest.mark.parametrize(
+    "second", [f"{LEAK} Name", f"{LEAK}Name", f"{LEAK.lower()} name", f" {LEAK}  NAME "]
+)
+def test_a_property_named_twice_is_refused_ignoring_case_and_spaces(
+    tmp_path: Path, field: str, second: str
+) -> None:
+    message = refusal(tmp_path, with_roles(**{field: [f"{LEAK} Name", second]}))
+
+    assert "entry 2 repeats entry 1 (property names are compared ignoring case and spaces)" in (
+        message
+    )
+    assert LEAK.casefold() not in message.casefold()
+
+
+def test_a_distributor_property_named_twice_is_refused(tmp_path: Path) -> None:
+    data = with_roles(distributor_block={"properties": ["FICT A", "fictA"], "min_valued": 1})
+
+    assert "entry 2 repeats entry 1" in refusal(tmp_path, data)
+
+
+@pytest.mark.parametrize(
+    "dotted",
+    [
+        "part_roles.nickname",
+        "part_roles.purchased_property",
+        "part_roles.switch.nickname",
+        "part_roles.distributor_block.nickname",
+        "part_roles.catalogue_numbers.nickname",
+    ],
+)
+def test_an_unknown_part_roles_key_is_refused_naming_it(tmp_path: Path, dotted: str) -> None:
+    message = refusal(tmp_path, replacing(raw(PROFILE_A), dotted, ["anything"]))
+
+    assert dotted.rsplit(".", 1)[-1] in message
+
+
+def test_the_later_sections_are_derived_from_the_version_table() -> None:
+    from swreview.checks.standards.profile import LATER_SECTIONS, SECTIONS_BY_VERSION
+
+    assert LATER_SECTIONS == ("general_tolerance", "hygiene", "drawing", "part_roles")
+    assert set(LATER_SECTIONS) == {name for names in SECTIONS_BY_VERSION.values() for name in names}
+
+
+# --- the profile a review loads once (feature 013 contracts/part-roles.md section 5) ---------
+
+
+def test_a_review_without_a_profile_loads_nothing_and_refuses_nothing() -> None:
+    from swreview.checks.standards.profile import ReviewProfile, load_review_profile
+
+    assert load_review_profile(None) == ReviewProfile(path=None, profile=None, refusal=None)
+
+
+def test_a_review_profile_carries_the_loaded_profile() -> None:
+    from swreview.checks.standards.profile import load_review_profile
+
+    loaded = load_review_profile(PROFILE_A)
+
+    assert loaded.path == str(PROFILE_A)
+    assert loaded.refusal is None
+    assert loaded.profile is not None
+    assert loaded.profile.identity == load_profile(PROFILE_A).identity
+
+
+def test_a_refused_review_profile_is_a_value_and_never_raises(tmp_path: Path) -> None:
+    from swreview.checks.standards.profile import load_review_profile
+
+    missing = load_review_profile(tmp_path / "absent.yaml")
+    invalid = load_review_profile(write(tmp_path, without(raw(PROFILE_A), "part_roles")))
+
+    assert missing.profile is None and isinstance(missing.refusal, ProfileUnreadable)
+    assert invalid.profile is None and isinstance(invalid.refusal, ProfileInvalid)
 
 
 def bands(*rows: tuple[Any, Any]) -> list[dict[str, Any]]:

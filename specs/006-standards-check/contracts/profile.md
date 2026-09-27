@@ -1,6 +1,6 @@
 # The Standards Profile
 
-*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), pending implementation:* profile version 4 adds the `part_roles` section (bought prefixes, a purchased property and its values, vendor name patterns) and extends the name-pattern vocabulary with `@` and `*` for those patterns only; see 013 `contracts/part-roles-profile.md`.
+*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed with 013 T014:* profile version 4 adds the `part_roles` section - one entry per part-role signal (bought prefixes and folder names, the make-or-buy switch, vendor properties, a distributor block, catalogue shapes, custom and bought number prefixes, detail properties), each refused by position when blank - and extends the name-pattern vocabulary with `@` (one letter) and `*` (any run) for the catalogue shapes only; `part_number.pattern` keeps `#` and `?`. The known versions are 1 to 4, a version 1 to 3 file carrying `part_roles` is refused naming it, and property names are compared ignoring case and every space. The block below is the example, version 4; the field rules are 013 `contracts/part-roles-profile.md` section 3.
 
 The company's configuration for the sixteen checks. **This file is not committed to this
 repository** (FR-001). The repository ships `config/standards.example.yaml` with fictional
@@ -26,9 +26,9 @@ clean result, which is the worst failure a release gate has.
 ```yaml
 # standards.yaml - the company's release checklist configuration.
 # Every value below is FICTIONAL placeholder data. Replace all of it.
-# Version 2 adds general_tolerance and hygiene; version 3 adds drawing. A version 1 or 2
-# file still loads without the sections it predates.
-version: 3
+# Version 2 adds general_tolerance and hygiene; version 3 adds drawing; version 4 adds
+# part_roles. A version 1, 2 or 3 file still loads without the sections it predates.
+version: 4
 
 # Absolute path to the vault or project root. Library prefixes below may be written
 # relative to it; an absolute prefix is matched as written. A root that does not exist
@@ -110,6 +110,10 @@ general_tolerance:
   # decimal_places decimals (.XX is 2) and carrying no tolerance of its own takes
   # plus_minus_mm. Bands ascend by decimal places. An empty list and a null angular_deg
   # mean the company declares none; nothing defaults to a standard class.
+  #
+  # EXAMPLE VALUES ONLY: the bands below are placeholders to show the shape. They are not
+  # the company's general tolerance, which the owner supplies with the real profile; do not
+  # review against them.
   linear:
     - {decimal_places: 1, plus_minus_mm: 0.3}
     - {decimal_places: 2, plus_minus_mm: 0.13}
@@ -143,6 +147,63 @@ drawing:
   # template it was made from, so neither is compared.
   drawing_template: "example-template.drwdot"
   bom_template: "example-bom.sldbomtbt"
+
+part_roles:
+  # Tells custom parts (designed here) from bought ones (catalogue, vendor, library), so
+  # modelling-practice and hygiene checks grade custom parts only (feature 013). Each entry
+  # below is one signal that votes custom or bought with a strength; a part the votes do
+  # not decide is asked about. An empty list or property means that signal is not used.
+  #
+  # STRONG, bought: a document under one of these prefixes (the library prefix rules:
+  # relative entries resolve against vault_root, case-insensitive, at a folder boundary),
+  # or inside a folder of one of these names anywhere in its path.
+  bought_prefixes:
+    - "_library/purchased/"
+  bought_folder_names:
+    - "FICT Purchased"
+  # The make-or-buy switch the engineer sets: a custom property, read from the
+  # configuration a component uses first, then from the document. A bought value is STRONG
+  # (it is set on purpose); a custom value is WEAK (it is often the template's default).
+  switch:
+    property: "Make or Buy"
+    bought_values:
+      - "Buy"
+    custom_values:
+      - "Make"
+  # STRONG, bought: any of these properties carrying a value.
+  vendor_properties:
+    - "FICT Vendor"
+    - "FICT Vendor Number"
+  # STRONG, bought: a distributor's download block - at least min_valued of these
+  # properties carrying a value. An empty list with min_valued 0 means not used.
+  distributor_block:
+    properties:
+      - "FICT Catalog Page"
+      - "FICT Terms of Use"
+      - "FICT Item Text"
+    min_valued: 2
+  # MEDIUM, bought: a catalogue number, in the name-pattern vocabulary ('#' a digit, '@' a
+  # letter, '?' any one character, '*' any run), found as a whole token of the file name,
+  # as a configuration name, or as the whole value of one of these properties.
+  catalogue_numbers:
+    shapes:
+      - "FICT-####@##"
+    properties:
+      - "FICT Vendor Number"
+  # MEDIUM, custom: the company's own part-number prefixes. The file name (when it follows
+  # part_number.pattern) or the hygiene part-number property starts with one.
+  custom_prefixes:
+    - "EX-1"
+    - "EX-2"
+  # MEDIUM, bought: the part-number ranges the company gives bought parts, read the same way.
+  bought_number_prefixes:
+    - "EX-9"
+  # WEAK, custom: properties only catalogue parts carry. A part whose properties were read
+  # and carry none of these, none of vendor_properties and none of distributor_block's is
+  # sparse, which is how custom parts usually look.
+  detail_properties:
+    - "FICT Thread Size"
+    - "FICT Unit Cost"
 ```
 
 **This block is itself an example profile, and SC-005 scans it.** The YAML above is what the
@@ -159,7 +220,8 @@ both fixture profiles.
 
 | Field | Type | Required | Rules |
 |---|---|---|---|
-| `version` | int | yes | `1`, `2` or `3`. A profile whose version this build does not know **refuses the run naming it and the known versions**, rather than ignoring the fields it does not recognize. Version 2 (feature 010 research R2.19) requires the two sections below and version 1 must carry neither, so the owner's version 1 file keeps loading until it is rewritten. Version 3 (feature 011, *amended 2026-09-23*) requires everything version 2 requires and the `drawing` section, which versions 1 and 2 must not carry |
+| `version` | int | yes | `1`, `2` or `3`. A profile whose version this build does not know **refuses the run naming it and the known versions**, rather than ignoring the fields it does not recognize. Version 2 (feature 010 research R2.19) requires the two sections below and version 1 must carry neither, so the owner's version 1 file keeps loading until it is rewritten. Version 3 (feature 011, *amended 2026-09-23*) requires everything version 2 requires and the `drawing` section, which versions 1 and 2 must not carry. Version 4 (feature 013, *amended 2026-09-26*) requires everything version 3 requires and the `part_roles` section, which versions 1 to 3 must not carry ("part_roles (a version 4 section)"); the known versions are `1` to `4` |
+| `part_roles` | mapping | version 4 | Feature 013 `contracts/part-roles-profile.md` sections 1 to 3: one entry per part-role signal - `bought_prefixes` (the prefix semantics below), `bought_folder_names`, `switch` (`property`, `bought_values`, `custom_values`), `vendor_properties`, `distributor_block` (`properties`, `min_valued`), `catalogue_numbers` (`shapes`, `properties`), `custom_prefixes`, `bought_number_prefixes`, `detail_properties`. Every key required, every value may be empty, which turns that signal off. A blank entry is refused by position; a shape made only of `*`, `?` and `@`, a switch property without values or values without it, overlapping custom and bought prefixes, and a property named twice (ignoring case and spaces) are refused; a refusal never quotes a value |
 | `drawing` | mapping | version 3 | Feature 011 `contracts/profile.md` section 1: `sheet_formats` (list of accepted sheet format names, no name twice), `drafting_standard` (str), `projection` (`first_angle`, `third_angle` or empty), `dimension_unit` (`mm`, `in` or empty - the unit `general_tolerance`'s decimal places are counted in), `drawing_template` and `bom_template` (str, recorded for feature 012 and not compared). Every key required, every value may be empty, which skips that comparison. `general_tolerance` is not restated here; a `drawing.general_tolerance` key is an unknown key |
 | `general_tolerance` | mapping | version 2 | `linear`: a list of `{decimal_places, plus_minus_mm}` bands, ascending by decimal places (owner answer 2026-09-23: the general tolerance is by decimal places), `decimal_places` a whole number from 0, `plus_minus_mm` above 0; `angular_deg` above 0 or null. An empty list and a null angle mean the company declares none. Read by feature 010's tolerance resolver only for a dimension with no tolerance of its own |
 | `hygiene` | mapping | version 2 | `part_number_property` and `description_property`, the property names feature 010's hygiene checks read; either may be empty, which skips the checks that need it |
