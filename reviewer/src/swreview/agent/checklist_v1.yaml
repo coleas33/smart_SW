@@ -61,6 +61,7 @@ items:
   - id: coverage.closeout
     title: Coverage close-out
     check_prefix: coverage.
+    owner: code
     description: >
       Every gap in the package and every open evidence request is reflected in coverage.
   - id: standards.release

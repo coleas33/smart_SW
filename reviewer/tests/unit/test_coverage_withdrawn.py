@@ -302,6 +302,8 @@ ALLOWED_SLICE_ASSIGNMENTS: frozenset[tuple[str, str]] = frozenset(
         # Finalization withdraws only the items its own previous call appended, which it never
         # announced (`finalize_session`'s docstring): the stream has nothing to take back.
         ("agent/runner.py", "review.coverage.unresolved"),
+        # The same for its `checked` close-out row (feature 013 T117), also never announced.
+        ("agent/runner.py", "review.coverage.checked"),
         # Not coverage: the folded findings, the pre-run's interference rows, a query's page.
         ("agent/runner.py", "session.findings"),
         # Not coverage: the one place a finding leaves a session, and announces it (feature 013,

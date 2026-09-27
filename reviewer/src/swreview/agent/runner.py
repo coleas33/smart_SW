@@ -39,6 +39,7 @@ injectable for the same reason: `--bridge` needs a workstation, a unit test does
 from __future__ import annotations
 
 import json
+from collections import Counter
 from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -108,6 +109,7 @@ from swreview.report.explanations import (
     fill_fallbacks,
     generate_explanations,
 )
+from swreview.report.names import plural
 from swreview.report.session import (
     CLOSEOUT_CHECK,
     CoverageBucket,
@@ -549,6 +551,43 @@ def open_evidence_requests(session: ReviewSession) -> list[EvidenceRequest]:
     return [request for request in session.evidence_requests if request.status == "open"]
 
 
+CLOSEOUT_REASON = (
+    "Closed by code when the review ended: {requests} listed as unresolved coverage "
+    "({evidence_check}); the package records {gaps}"
+)
+"""The close-out row's reason (feature 013, `contracts/tokens.md` section 1)."""
+
+
+def closeout_item(review: ReviewSession, package: EvidencePackage) -> CoverageItem:
+    """The one `checked` row that closes `coverage.closeout`, written by finalization.
+
+    It counts the open evidence requests finalization lists as unresolved coverage, and the
+    package's gaps by kind - each kind's word, in the order the package first lists it - or
+    "no gaps". The `unresolved` row a turn cut short writes under the same check is another
+    fact, and `was_cut_short` still reads it.
+    """
+    still_open = len(open_evidence_requests(review))
+    requests = (
+        f"{plural(still_open, 'open evidence request')} "
+        + ("is" if still_open == 1 else "are")
+    )
+    kinds = Counter(gap.kind for gap in package.gaps)
+    gaps = (
+        "no gaps"
+        if not kinds
+        else f"{plural(len(package.gaps), 'gap')}: "
+        + ", ".join(f"{count} {kind.replace('_', ' ')}" for kind, count in kinds.items())
+    )
+    return CoverageItem(
+        check=CLOSEOUT_CHECK,
+        scope=CoverageScope(),
+        reason=CLOSEOUT_REASON.format(
+            requests=requests, evidence_check=EVIDENCE_CHECK, gaps=gaps
+        ),
+        error=None,
+    )
+
+
 def finalize_session(
     context: ToolContext,
     started: datetime,
@@ -576,8 +615,16 @@ def finalize_session(
     review.coverage.unresolved[:] = [
         item for item in review.coverage.unresolved if all(item is not stale for stale in previous)
     ]
+    review.coverage.checked[:] = [
+        item for item in review.coverage.checked if all(item is not stale for stale in previous)
+    ]
     previous.clear()
 
+    # Feature 013 (`contracts/tokens.md` section 1): the close-out is code's, written first so
+    # the item is closed before the open items are counted, and rebuilt like every row here.
+    closeout = closeout_item(review, context.ir)
+    review.coverage.checked.append(closeout)
+    previous.append(closeout)
     for request in open_evidence_requests(review):
         previous.append(
             _unresolved(
@@ -664,8 +711,12 @@ def coverage_complete(checklist: Checklist, session: ReviewSession) -> bool:
     """
     if open_evidence_requests(session):
         return False
+    # Model-owned items only (feature 013): a code-owned item is code's to close - provenance
+    # at setup, the close-out only at finalization - so it never holds the stop back.
     return all(
-        checklist.bucket_of(item, session) in STOP_CLOSING_BUCKETS for item in checklist.items
+        checklist.bucket_of(item, session) in STOP_CLOSING_BUCKETS
+        for item in checklist.items
+        if item.owner == "model"
     )
 
 

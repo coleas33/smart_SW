@@ -173,7 +173,12 @@ item still open after its blocking request was answered is unresolved quoting th
 document with no attached drawing answers `closed_by_code` with each such document's drawing
 state and reason, and `mark_coverage` on that item answers `closed_by_code` while code has closed
 it; both only on a package that carries drawing evidence (013 `contracts/drawing-capability.md`
-section 5).
+section 5). *And by T117 and T119* (013 `contracts/tokens.md` sections 1 and 2):
+`coverage.closeout` is code-owned - finalization writes its one `checked` row, counting the open
+requests and the package's gaps by kind, and `mark_coverage` on it answers `closed_by_code` - and
+every non-error answer of `mark_coverage` and `request_evidence` (recorded, `closed_by_code`,
+`already_answered`, `already_asked`) carries `open_items`: the model-owned checklist item ids still
+open after the call, in checklist order, `[]` when none.
 
 ### Reading one finding in full: `get_finding` (feature 008, conditional)
 

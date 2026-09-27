@@ -136,6 +136,10 @@ def test_a_request_without_the_short_form_is_recorded_as_before(context: ToolCon
             "answer": None,
             "answered_at": None,
         },
+        # Edited deliberately by feature 013 T119: every answer lists the items still open.
+        "open_items": [
+            item.id for item in context.checklist.items if item.owner == "model"
+        ],
     }
 
 
@@ -617,7 +621,12 @@ def test_mark_coverage_on_provenance_is_closed_by_code_with_the_recorded_reason(
 
     result = session.mark_coverage("provenance", "checked", closed_scope(), "vault checked")
 
-    assert result == {"status": "closed_by_code", "check": "provenance", "reason": row.reason}
+    assert result == {
+        "status": "closed_by_code",
+        "check": "provenance",
+        "reason": row.reason,
+        "open_items": model_items(context),
+    }
     assert held(context) == before
     assert emitted == []
 
@@ -629,7 +638,12 @@ def test_without_a_recorded_row_the_reason_is_the_items_own_description(
 
     result = session.mark_coverage("provenance", "unresolved", closed_scope(), "why not")
 
-    assert result == {"status": "closed_by_code", "check": "provenance", "reason": item.description}
+    assert result == {
+        "status": "closed_by_code",
+        "check": "provenance",
+        "reason": item.description,
+        "open_items": model_items(context),
+    }
 
 
 def test_a_code_owned_item_is_closed_by_code_whatever_bucket_is_asked(
@@ -748,6 +762,7 @@ def test_a_question_an_answered_request_covers_is_answered_from_it(
             "entity_ids": ["cmp:0001", "cmp:0002"],
         },
         "note": ANSWERED_NOTE.format(id="ER-001"),
+        "open_items": model_items(context),
     }
     assert held(context) == before
     assert emitted == []
@@ -1040,6 +1055,7 @@ def test_a_drawing_request_on_documents_with_no_attached_drawing_is_closed_by_co
         "check": DRAWING_ITEM,
         "drawings": expected_states(tool_context, ["doc:0002", "doc:0003"]),
         "attached": [],
+        "open_items": model_items(tool_context),
     }
     assert [item["state"] for item in result["drawings"]] == ["candidate", "bought"]
     assert held(tool_context) == before
@@ -1298,3 +1314,80 @@ def test_mark_coverage_scope_still_reads_components_and_documents(context: ToolC
     )
 
     assert "error" in result
+
+
+# --- feature 013 T118: every answer lists the items still open (tokens.md section 2) -----------
+
+
+def model_items(tool_context: ToolContext) -> list[str]:
+    return [item.id for item in tool_context.checklist.items if item.owner == "model"]
+
+
+def test_a_recorded_coverage_row_lists_the_model_owned_items_still_open(
+    context: ToolContext,
+) -> None:
+    result = session.mark_coverage("fasteners", "checked", closed_scope(), "all engage")
+
+    assert result["open_items"] == [item for item in model_items(context) if item != "fasteners"]
+    assert "provenance" not in result["open_items"]
+    assert "coverage.closeout" not in result["open_items"]
+
+
+def test_the_open_items_follow_the_checklists_order(context: ToolContext) -> None:
+    for check in ("hygiene", "interference", "interfaces.fit"):
+        result = session.mark_coverage(check, "skipped", closed_scope(), "r")
+
+    expected = [
+        item for item in model_items(context)
+        if item not in {"hygiene", "interference", "interfaces.fit"}
+    ]
+    assert result["open_items"] == expected
+
+
+def test_a_recorded_request_lists_them_too_and_its_request_stays_as_it_was(
+    context: ToolContext,
+) -> None:
+    result = session.request_evidence(what="The torque", why="preload", entity_ids=["cmp:0001"])
+
+    assert result["status"] == "open"
+    assert set(result) == {"status", "evidence_request", "open_items"}
+    assert result["open_items"] == model_items(context)
+
+
+def test_every_non_error_answer_lists_them(context: ToolContext) -> None:
+    ask(question="Fit?", blocks="interfaces.fit", entity_ids=["cmp:0001"])
+    closed = session.mark_coverage("provenance", "checked", closed_scope(), "r")
+    closed_request = ask(blocks="provenance")
+    asked = ask(question="Fit again?", blocks="interfaces.fit", entity_ids=["cmp:0001"])
+    answer(context, "ER-001", "press fit")
+    answered = ask(question="Fit, once more?", blocks="interfaces.fit", entity_ids=["cmp:0001"])
+
+    for result in (closed, closed_request, asked, answered):
+        assert result["open_items"] == model_items(context), result["status"]
+
+
+def test_the_drawing_answer_lists_them() -> None:
+    tool_context = drawings_context()
+    with use_context(tool_context):
+        result = session.request_evidence(
+            what="w", why="y", entity_ids=["doc:0002"], blocks=DRAWING_ITEM
+        )
+
+    assert result["status"] == "closed_by_code"
+    assert result["open_items"] == model_items(tool_context)
+
+
+def test_with_every_model_owned_item_closed_the_list_is_empty(context: ToolContext) -> None:
+    for check in model_items(context)[:-1]:
+        session.mark_coverage(check, "checked", closed_scope(), "r")
+
+    result = session.mark_coverage(model_items(context)[-1], "checked", closed_scope(), "r")
+
+    assert result["open_items"] == []
+
+
+def test_an_error_carries_no_open_items(context: ToolContext) -> None:
+    refused = session.mark_coverage("fasteners", "failed", closed_scope(), "r")  # type: ignore[arg-type]
+    unknown = session.request_evidence(what="w", why="y", entity_ids=["cmp:9999"])
+
+    assert set(refused) == {"error"} and set(unknown) == {"error"}
