@@ -130,6 +130,20 @@ internal static class SummarySample
         };
     }
 
+    /// <summary>
+    /// The text box's placeholder beside a question's buttons, as the backend serves it on the
+    /// question list (`summary.questions.text_placeholder`, the words file's
+    /// `questions.text_placeholder`; feature 013 T034), with markup in it: a placeholder is an
+    /// attribute the page sets from backend text, and it must stay characters.
+    /// </summary>
+    public const string HostileTextPlaceholder =
+        "<img src=x onerror=alert(5)>Or name the bought ones, separated by commas";
+
+    /// <summary>Gives a summary's question list <see cref="HostileTextPlaceholder"/>, as a backend
+    /// that serves feature 013's words does.</summary>
+    public static void WithTextPlaceholder(JsonObject summary) =>
+        summary["questions"]!["text_placeholder"] = HostileTextPlaceholder;
+
     /// <summary>One of <see cref="QuestionIds"/>' questions as this sample lists it, a fresh copy.</summary>
     public static JsonNode Question(int index) => Summary()["questions"]!["items"]![index]!.DeepClone();
 

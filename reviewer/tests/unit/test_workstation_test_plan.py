@@ -726,28 +726,7 @@ def test_the_plan_says_what_allows_each_switch_and_names_every_probe(plan: str) 
         assert re.search(rf"\bD{probe}\b", plan), f"D{probe}"
 
 
-WAITS_FOR_013_T057 = ("Show all", "extractor/SwReview.AddIn/Review/ReviewPage/render.js")
-"""The quote that waits for 013 T057 (lane R). 013 T054 (lane W) removed the Review tab's
-"Show all": its grouped findings replaced Start here and "Show all" (013
-`contracts/grouped-list.md` section 5). T057 moves steps 4.1, 5.1 and 5.2 to "Findings by type"
-and edits this mapping, taking this xfail with it. Strict, so a "Show all" back in the page
-fails here."""
-
-WAITS_FOR_013_T057_MARK = pytest.mark.xfail(
-    strict=True, reason="013 T057 rewrites the plan's Show all steps"
-)
-
-
-@pytest.mark.parametrize(
-    ("sentence", "source"),
-    [
-        pytest.param(*quote, marks=WAITS_FOR_013_T057_MARK)
-        if quote == WAITS_FOR_013_T057
-        else quote
-        for quote in QUOTED
-    ],
-    ids=[source for _, source in QUOTED],
-)
+@pytest.mark.parametrize(("sentence", "source"), QUOTED, ids=[source for _, source in QUOTED])
 def test_every_sentence_the_plan_quotes_is_the_products(
     plan: str, sentence: str, source: str
 ) -> None:

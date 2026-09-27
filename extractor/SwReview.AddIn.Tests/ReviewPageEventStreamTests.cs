@@ -274,17 +274,10 @@ public sealed class ReviewPageEventStreamTests
     // ---- a finding withdrawn (feature 013 T039, contracts/part-roles.md section 9) --------------
 
     /// <summary>
-    /// Why the tests below are skipped. The page names every event type it handles as a dotted
-    /// literal, and <see cref="ReviewPageContractTests.EveryMessageTypeThePageNamesIsDocumented"/>
-    /// refuses one that `chat-events.schema.json` does not carry; `finding.withdrawn` joins the
-    /// schema with 013 T038 (lane S), together with its Python producer, which the Python event
-    /// tests require of every type in it. Until then the page cannot name it, so T040's two case
-    /// lines wait with these tests (`withdrawFinding` and `render.withdrawalMarker` are in place).
+    /// The scripted run the withdrawal tests read. `finding.withdrawn` is in
+    /// `chat-events.schema.json` since 013 T038, so the page names it (T040's two case lines;
+    /// <see cref="ReviewPageContractTests.EveryMessageTypeThePageNamesIsDocumented"/>).
     /// </summary>
-    private const string WaitsForT038 =
-        "013 T040 waits for 013 T038: finding.withdrawn joins chat-events.schema.json (lane S); "
-        + "integrator: wire the two case lines in app.js, then remove this Skip.";
-
     private static readonly Lazy<Withdrawal> Withdrawn = new Lazy<Withdrawal>(DriveWithdrawal);
 
     /// <summary>
@@ -292,13 +285,16 @@ public sealed class ReviewPageEventStreamTests
     /// card leaves Results, the Transcript says so beside the line that recorded it, and the page
     /// reads the ranking again, so the summary and the groups are the session's as it now stands.
     /// </summary>
-    [Fact(Skip = WaitsForT038)]
+    [Fact]
     public void AWithdrawnFindingLeavesResultsAndThePageReadsTheRankingAgain()
     {
         Withdrawal run = Withdrawn.Value;
 
-        Assert.Equal(new[] { "F-007", "F-008", "F-003" }, ReviewPageDriver.Strings(run.Before, "cards"));
-        Assert.Equal(new[] { "F-007", "F-008" }, ReviewPageDriver.Strings(run.After, "cards"));
+        // The cards sit in the grouped rows' member order once the ranking is read - GroupsSample
+        // lists the decided F-007 after F-008 - not in arrival order (integration, 2026-09-27:
+        // first run with T040's case lines wired, edited deliberately).
+        Assert.Equal(new[] { "F-008", "F-007", "F-003" }, ReviewPageDriver.Strings(run.Before, "cards"));
+        Assert.Equal(new[] { "F-008", "F-007" }, ReviewPageDriver.Strings(run.After, "cards"));
         Assert.Equal(run.Before.GetProperty("attentionReads").GetInt32() + 1, run.After.GetProperty("attentionReads").GetInt32());
         Assert.Equal(RegradedHeadline, run.After.GetProperty("headline").GetString());
         Assert.Contains("F-003 withdrawn: " + WithdrawnReason, ReviewPageDriver.Strings(run.After, "markers"));
@@ -306,7 +302,7 @@ public sealed class ReviewPageEventStreamTests
     }
 
     /// <summary>An id the page holds no card for is ignored: nothing leaves, and nothing is read again.</summary>
-    [Fact(Skip = WaitsForT038)]
+    [Fact]
     public void AWithdrawalOfAnUnknownIdIsIgnored()
     {
         Withdrawal run = Withdrawn.Value;
@@ -317,7 +313,7 @@ public sealed class ReviewPageEventStreamTests
     }
 
     /// <summary>A withdrawal for another chat belongs to a review that is not on screen, and is discarded.</summary>
-    [Fact(Skip = WaitsForT038)]
+    [Fact]
     public void AWithdrawalForAnotherChatIsDiscarded()
     {
         Withdrawal run = Withdrawn.Value;
@@ -327,7 +323,7 @@ public sealed class ReviewPageEventStreamTests
     }
 
     /// <summary>The withdrawal's reason is backend text, and the Transcript's line is characters (FR-029).</summary>
-    [Fact(Skip = WaitsForT038)]
+    [Fact]
     public void AHostileWithdrawalReasonIsLiteralText()
     {
         JsonElement hostile = Withdrawn.Value.Hostile;

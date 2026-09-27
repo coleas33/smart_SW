@@ -93,8 +93,8 @@
 
   /**
    * The free-text box's placeholder: the page's own word for a question with no offered answers,
-   * and the fallback beside the buttons of a question that allows text when the backend's labels
-   * carry no `questions.text_placeholder` (FR-030).
+   * and the fallback beside the buttons of a question that allows text when the backend's
+   * question list carries no `text_placeholder` - an older backend (FR-030).
    */
   var ANSWER_PLACEHOLDER = 'Your answer';
 
@@ -654,8 +654,10 @@
     if (!options.length || withText) {
       var box = el('input', 'question-answer');
       box.setAttribute('type', 'text');
-      box.setAttribute('placeholder', (options.length && withText)
-        ? labelOf(more.labels, 'questions', 'text_placeholder', ANSWER_PLACEHOLDER)
+      // Beside buttons, the backend's words: the question list's `text_placeholder` (the words
+      // file's `questions.text_placeholder`, served on `summary.questions`), verbatim.
+      box.setAttribute('placeholder', (options.length && withText && asked.text_placeholder)
+        ? String(asked.text_placeholder)
         : ANSWER_PLACEHOLDER);
       box.setAttribute('data-request-id', id);
       box.value = (chosen === null || picked) ? '' : chosen;
