@@ -100,13 +100,13 @@ A pattern matches the **whole** string it is given. `part_number.pattern` keeps 
 is matched against the whole file name, extension included: `name_matches(pattern, text, *,
 wildcards=False)` is what the data card and the part-number convention call. `wildcards=True` is
 what `catalogue_numbers.shapes` call, against one token, one configuration name or one property
-value at a time (`part-roles.md` section 2.1). One matcher (`checks/standards/traversal.py`); the
-owner writes no regular expression.
+value at a time (`part-roles.md` section 2.1). One matcher (`checks/standards/profile.py`,
+re-exported by `traversal.py`); the owner writes no regular expression.
 
 **Property names** are compared ignoring case **and every space**: real files spell one property
 both with and without a space (a part-number property is written "Part Ref" on some documents and
 "PartRef" on others, and both are the same property). `property_key(name)` is the one
-normalisation, in `checks/standards/traversal.py`, and every reader of a named property in
+normalisation, in `checks/standards/profile.py` (re-exported by `traversal.py`), and every reader of a named property in
 `checks/part_roles.py` and `checks/hygiene.py` compares through it. **Property values** (the
 switch's values, the prefixes, the shapes) are compared ignoring case and surrounding spaces.
 

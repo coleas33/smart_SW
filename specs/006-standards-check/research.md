@@ -400,6 +400,19 @@ placeholder example in `config/standards.example.yaml` uses fictional values in 
 | `drawing.dimension_unit` | not carried by the macro | none | Profile version 3: an enumeration (`mm`, `in` or empty), not a secret; the unit `general_tolerance`'s decimal places are counted in, and every shipped profile carries a different member |
 | `drawing.drawing_template` | not carried by the macro | none | Profile version 3: recorded for drawing creation (feature 012) and not compared |
 | `drawing.bom_template` | not carried by the macro | none | Profile version 3: recorded for drawing creation (feature 012) and not compared |
+| `part_roles.bought_prefixes` | not carried by the macro | none | Profile version 4 (feature 013, 2026-09-26): folder or file prefixes whose documents are bought parts, a strong bought signal; the library prefix semantics |
+| `part_roles.bought_folder_names` | not carried by the macro | none | Profile version 4: folder names that mark bought parts wherever they sit in a path, a strong bought signal |
+| `part_roles.switch.property` | not carried by the macro | none | Profile version 4: the make-or-buy property the engineer sets, read from the configuration first |
+| `part_roles.switch.bought_values` | not carried by the macro | none | Profile version 4: the switch's bought values, a strong bought signal |
+| `part_roles.switch.custom_values` | not carried by the macro | none | Profile version 4: the switch's custom values, a weak custom signal (often the template's default) |
+| `part_roles.vendor_properties` | not carried by the macro | none | Profile version 4: properties whose value marks a vendor part, a strong bought signal |
+| `part_roles.distributor_block.properties` | not carried by the macro | none | Profile version 4: a distributor's download block of properties, a strong bought signal |
+| `part_roles.distributor_block.min_valued` | not carried by the macro | none | Profile version 4: how many of the block's properties must carry a value; 0 exactly when the block names none |
+| `part_roles.catalogue_numbers.shapes` | not carried by the macro | none | Profile version 4: catalogue-number shapes in the name-pattern vocabulary with `@` and `*`, a medium bought signal |
+| `part_roles.catalogue_numbers.properties` | not carried by the macro | none | Profile version 4: the properties whose values the shapes are tested on |
+| `part_roles.custom_prefixes` | not carried by the macro | none | Profile version 4: the company's own part-number prefixes, a medium custom signal |
+| `part_roles.bought_number_prefixes` | not carried by the macro | none | Profile version 4: the part-number ranges the company gives bought parts, a medium bought signal |
+| `part_roles.detail_properties` | not carried by the macro | none | Profile version 4: properties only catalogue parts carry; a part with none of them is sparse, a weak custom signal |
 **Not company-specific, and therefore not in the profile**: the configuration-independent
 property tab (C27, the empty configuration name), the cut-list item name prefix (C34 -
 replaced by structural identification, difference bb), the document-kind extensions (C35 -

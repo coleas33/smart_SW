@@ -26,6 +26,8 @@ no second copy of it exists in either tree.
 from __future__ import annotations
 
 import hashlib
+import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from itertools import pairwise
 from pathlib import Path
@@ -47,13 +49,17 @@ __all__ = [
     "DEFAULT_PATH",
     "DIMENSION_UNITS",
     "KNOWN_VERSIONS",
+    "LATER_SECTIONS",
     "PROFILE_VERSION",
     "PROJECTIONS",
     "SECTIONS_BY_VERSION",
     "SETTING_NAME",
     "VERSION_2_SECTIONS",
     "VERSION_3_SECTIONS",
+    "VERSION_4_SECTIONS",
+    "CatalogueNumbers",
     "DataCardSection",
+    "DistributorBlock",
     "DrawingSection",
     "ExportControlSection",
     "GeneralToleranceSection",
@@ -62,42 +68,64 @@ __all__ = [
     "LinearBand",
     "MaterialSection",
     "PartNumberSection",
+    "PartRolesSection",
     "ProfileError",
     "ProfileIdentity",
     "ProfileInvalid",
     "ProfileUnreadable",
+    "ReviewProfile",
     "RevisionCell",
     "RevisionSection",
     "StandardsProfile",
+    "SwitchSection",
     "load_profile",
+    "load_review_profile",
+    "name_matches",
+    "property_key",
 ]
 
-PROFILE_VERSION = 3
+PROFILE_VERSION = 4
 """The newest schema version this build writes into its examples. A profile carrying a
 version outside `KNOWN_VERSIONS` is refused naming it and the known ones, rather than loaded
 while its unrecognised fields are ignored."""
 
-KNOWN_VERSIONS: tuple[int, ...] = (1, 2, 3)
+KNOWN_VERSIONS: tuple[int, ...] = (1, 2, 3, 4)
 """Version 1 is feature 006's schema; version 2 adds `general_tolerance` and `hygiene`
 (feature 010 research R2.19); version 3 adds `drawing` (feature 011 `contracts/profile.md`
-section 1). All three load: the owner's real profile stays at its version until the owner
-rewrites it, and the newer sources are simply absent until then (plan RK-7, 011 RK-9)."""
+section 1); version 4 adds `part_roles` (feature 013 `contracts/part-roles-profile.md`). All
+four load: the owner's real profile stays at its version until the owner rewrites it, and the
+newer sources are simply absent until then (plan RK-7, 011 RK-9)."""
 
 VERSION_2_SECTIONS: tuple[str, ...] = ("general_tolerance", "hygiene")
-"""Required on versions 2 and 3, absent on version 1: every key is required, so adding them to
+"""Required on versions 2 to 4, absent on version 1: every key is required, so adding them to
 version 1 would have refused every version 1 file."""
 
 VERSION_3_SECTIONS: tuple[str, ...] = ("drawing",)
-"""Required on version 3, absent on versions 1 and 2, for the same reason."""
+"""Required on versions 3 and 4, absent on versions 1 and 2, for the same reason."""
+
+VERSION_4_SECTIONS: tuple[str, ...] = ("part_roles",)
+"""Required on version 4, absent on versions 1 to 3, for the same reason."""
 
 SECTIONS_BY_VERSION: dict[int, tuple[str, ...]] = {
     1: (),
     2: VERSION_2_SECTIONS,
     3: (*VERSION_2_SECTIONS, *VERSION_3_SECTIONS),
+    4: (*VERSION_2_SECTIONS, *VERSION_3_SECTIONS, *VERSION_4_SECTIONS),
 }
 """The optional-by-version sections each known version must carry; every other one it must
 not. One table, so "version 3 also requires everything version 2 requires" is a row, not a
 second validator."""
+
+LATER_SECTIONS: tuple[str, ...] = tuple(
+    dict.fromkeys(name for names in SECTIONS_BY_VERSION.values() for name in names)
+)
+"""Every section some version adds, in the order the versions add them: what
+`_no_section_of_a_later_version` checks, derived from the table so a version 5 needs no edit
+there (feature 013 `contracts/part-roles-profile.md` section 3)."""
+
+PATH_SEPARATORS: tuple[str, ...] = ("/", "\\")
+WILDCARDS: frozenset[str] = frozenset("*?@")
+"""A catalogue shape made only of these would match every token, so it is refused."""
 
 PROJECTIONS: tuple[str, ...] = ("first_angle", "third_angle", "")
 """`drawing.projection`: first-angle or third-angle projection, or empty to skip it."""
@@ -275,6 +303,214 @@ def _one_of(value: str, allowed: tuple[str, ...], what: str) -> str:
     )
 
 
+def property_key(name: str) -> str:
+    """How a custom property's name is compared: folded, with every space removed.
+
+    Real files spell one property both with and without a space, and SOLIDWORKS reads a name
+    without regard to case (feature 013 `contracts/part-roles-profile.md` section 2). Every
+    reader of a named property - the part-role signals, the hygiene checks, the refusal of a
+    name listed twice below - compares through this, so the two spellings are one property
+    everywhere. Defined here, the lowest module of the family; `traversal.py` re-exports it
+    beside `name_matches`.
+    """
+    return "".join(name.split()).casefold()
+
+
+_CONVENTION_CLASSES: dict[str, str] = {"#": "[0-9]", "?": "."}
+"""The part-number convention's vocabulary (feature 006 `contracts/rules.md`)."""
+
+_WILDCARD_CLASSES: dict[str, str] = {**_CONVENTION_CLASSES, "@": "[^\\W\\d_]", "*": ".*"}
+"""Profile version 4's catalogue-number shapes add one letter and any run (feature 013
+`contracts/part-roles-profile.md` section 2). `[^\\W\\d_]` is a word character that is
+neither a digit nor an underscore: a letter, in any script a file name can carry."""
+
+
+def name_matches(pattern: str, text: str, *, wildcards: bool = False) -> bool:
+    """Whether the whole of `text` is spelled by `pattern`, ignoring case.
+
+    The one matcher of the names the owner writes. `#` is one digit and `?` any one
+    character; with `wildcards`, `@` is one letter and `*` any run, the empty run included;
+    every other character is itself. `part_number.pattern` is matched with `wildcards`
+    false, so the convention keeps the vocabulary the macro had and `@` or `*` in it is a
+    literal character. An empty pattern or an empty text matches nothing. The owner writes
+    no regular expression: the pattern is translated into one here, every other character
+    escaped. Defined here, beside the schema whose patterns it reads and below every module
+    that matches them; `traversal.py` re-exports it.
+    """
+    if not pattern or not text:
+        return False
+    classes = _WILDCARD_CLASSES if wildcards else _CONVENTION_CLASSES
+    expression = "".join(classes.get(character, re.escape(character)) for character in pattern)
+    return re.fullmatch(expression, text, flags=re.IGNORECASE) is not None
+
+
+def _value_key(value: str) -> str:
+    """How a value the owner writes is compared: folded, surrounding spaces ignored."""
+    return value.strip().casefold()
+
+
+def _no_blank(entries: list[str], what: str = "entry") -> list[str]:
+    """Refuse a blank entry by its position (1-based), never quoting a value (a refusal can
+    reach a public log)."""
+    blank = next((index for index, entry in enumerate(entries, 1) if not entry.strip()), None)
+    if blank is not None:
+        raise ValueError(f"{what} {blank} is blank; remove it or write the value")
+    return entries
+
+
+def _no_repeat(entries: list[str], key: Callable[[str], str], rule: str) -> list[str]:
+    """Refuse an entry that repeats an earlier one under `key`, by both positions."""
+    seen: dict[str, int] = {}
+    for index, entry in enumerate(entries, 1):
+        folded = key(entry)
+        if folded in seen:
+            raise ValueError(f"entry {index} repeats entry {seen[folded]} ({rule})")
+        seen[folded] = index
+    return entries
+
+
+_NAMES_RULE = "property names are compared ignoring case and spaces"
+_VALUES_RULE = "compared ignoring case"
+
+
+def _property_names(entries: list[str]) -> list[str]:
+    return _no_repeat(_no_blank(entries), property_key, _NAMES_RULE)
+
+
+class SwitchSection(_Section):
+    """The make-or-buy switch the engineer sets (feature 013 `contracts/part-roles.md`
+    section 2.1): its bought value is strong evidence, its custom value weak. An empty
+    property with no values means the signal is not used."""
+
+    property: str
+    bought_values: list[str]
+    custom_values: list[str]
+
+    @field_validator("bought_values", "custom_values")
+    @classmethod
+    def _values_are_written(cls, values: list[str]) -> list[str]:
+        return _no_repeat(_no_blank(values, "value"), _value_key, _VALUES_RULE)
+
+    @model_validator(mode="after")
+    def _a_property_and_its_values_come_together(self) -> SwitchSection:
+        has_values = bool(self.bought_values or self.custom_values)
+        if self.property.strip() and not has_values:
+            raise ValueError("switch.property needs at least one bought or custom value")
+        if has_values and not self.property.strip():
+            raise ValueError("switch values need switch.property, the property that holds them")
+        bought = {_value_key(value): index for index, value in enumerate(self.bought_values, 1)}
+        for index, value in enumerate(self.custom_values, 1):
+            if _value_key(value) in bought:
+                raise ValueError(
+                    f"custom value {index} repeats bought value {bought[_value_key(value)]}; a "
+                    "value cannot mean both"
+                )
+        return self
+
+
+class DistributorBlock(_Section):
+    """A distributor's download block: strong bought evidence when at least `min_valued` of
+    its properties carry a value. No properties with `min_valued` 0 means not used."""
+
+    properties: list[str]
+    min_valued: NonNegativeInt
+
+    @field_validator("properties")
+    @classmethod
+    def _names_are_written(cls, values: list[str]) -> list[str]:
+        return _property_names(values)
+
+    @model_validator(mode="after")
+    def _the_count_fits_the_block(self) -> DistributorBlock:
+        count = len(self.properties)
+        if count == 0 and self.min_valued != 0:
+            raise ValueError("min_valued must be 0 when the block names no properties")
+        if count and not 1 <= self.min_valued <= count:
+            raise ValueError(f"min_valued must be from 1 to the number of properties ({count})")
+        return self
+
+
+class CatalogueNumbers(_Section):
+    """Catalogue-number shapes, in the name-pattern vocabulary, and the properties whose
+    values they are tested on besides file-name tokens and configuration names."""
+
+    shapes: list[str]
+    properties: list[str]
+
+    @field_validator("shapes")
+    @classmethod
+    def _shapes_say_something(cls, values: list[str]) -> list[str]:
+        _no_blank(values, "shape")
+        for index, shape in enumerate(values, 1):
+            if set(shape.strip()) <= WILDCARDS:
+                raise ValueError(f"shape {index} would match every token")
+        return _no_repeat(values, _value_key, _VALUES_RULE)
+
+    @field_validator("properties")
+    @classmethod
+    def _names_are_written(cls, values: list[str]) -> list[str]:
+        return _property_names(values)
+
+    @model_validator(mode="after")
+    def _properties_need_a_shape(self) -> CatalogueNumbers:
+        if self.properties and not self.shapes:
+            raise ValueError("catalogue_numbers.properties need at least one shape to test")
+        return self
+
+
+class PartRolesSection(_Section):
+    """What each part-role signal looks for (profile version 4, feature 013
+    `contracts/part-roles-profile.md` section 1). The strengths are the classifier's, not the
+    profile's; every value may be empty, which turns its signal off."""
+
+    bought_prefixes: list[str]
+    bought_folder_names: list[str]
+    switch: SwitchSection
+    vendor_properties: list[str]
+    distributor_block: DistributorBlock
+    catalogue_numbers: CatalogueNumbers
+    custom_prefixes: list[str]
+    bought_number_prefixes: list[str]
+    detail_properties: list[str]
+
+    @field_validator("bought_prefixes")
+    @classmethod
+    def _prefixes_are_written(cls, values: list[str]) -> list[str]:
+        return _no_blank(values)
+
+    @field_validator("bought_folder_names")
+    @classmethod
+    def _folder_names_are_one_folder(cls, values: list[str]) -> list[str]:
+        _no_blank(values, "folder name")
+        for index, name in enumerate(values, 1):
+            if any(separator in name for separator in PATH_SEPARATORS):
+                raise ValueError(f"folder name {index} holds a path separator; name one folder")
+        return _no_repeat(values, _value_key, _VALUES_RULE)
+
+    @field_validator("vendor_properties", "detail_properties")
+    @classmethod
+    def _names_are_written(cls, values: list[str]) -> list[str]:
+        return _property_names(values)
+
+    @field_validator("custom_prefixes", "bought_number_prefixes")
+    @classmethod
+    def _number_prefixes_are_written(cls, values: list[str]) -> list[str]:
+        return _no_repeat(_no_blank(values, "prefix"), _value_key, _VALUES_RULE)
+
+    @model_validator(mode="after")
+    def _a_number_votes_one_way(self) -> PartRolesSection:
+        """A custom and a bought prefix that overlap would let one number vote both ways."""
+        for custom_index, custom in enumerate(self.custom_prefixes, 1):
+            for bought_index, bought in enumerate(self.bought_number_prefixes, 1):
+                left, right = _value_key(custom), _value_key(bought)
+                if left.startswith(right) or right.startswith(left):
+                    raise ValueError(
+                        f"custom prefix {custom_index} overlaps bought prefix {bought_index}; "
+                        "a number could then vote both ways"
+                    )
+        return self
+
+
 def _introduced_in(section: str) -> int:
     """The first version that carries `section`."""
     return min(version for version, names in SECTIONS_BY_VERSION.items() if section in names)
@@ -283,10 +519,10 @@ def _introduced_in(section: str) -> int:
 class StandardsProfile(_Section):
     """The whole schema. Built by `load_profile`, which is what gives it its identity.
 
-    The version 2 and version 3 sections are required fields that may only be null on a
-    version that predates them: a version 1 file carries none of the three and reads as all
-    absent, a version 2 file carries `general_tolerance` and `hygiene` and no `drawing`, a
-    version 3 file carries all three, and none has a default (FR-002). `SECTIONS_BY_VERSION`
+    The version 2 to 4 sections are required fields that may only be null on a version that
+    predates them: a version 1 file carries none of the four and reads as all absent, a
+    version 2 file carries `general_tolerance` and `hygiene`, a version 3 file adds `drawing`,
+    a version 4 file adds `part_roles`, and none has a default (FR-002). `SECTIONS_BY_VERSION`
     is the one table both validators read.
     """
 
@@ -301,6 +537,7 @@ class StandardsProfile(_Section):
     general_tolerance: GeneralToleranceSection | None
     hygiene: HygieneSection | None
     drawing: DrawingSection | None
+    part_roles: PartRolesSection | None
 
     _identity: ProfileIdentity | None = PrivateAttr(default=None)
 
@@ -314,11 +551,7 @@ class StandardsProfile(_Section):
         version = data.get("version")
         if isinstance(version, bool) or version not in SECTIONS_BY_VERSION:
             return data
-        later = [
-            name
-            for name in (*VERSION_2_SECTIONS, *VERSION_3_SECTIONS)
-            if name not in SECTIONS_BY_VERSION[version]
-        ]
+        later = [name for name in LATER_SECTIONS if name not in SECTIONS_BY_VERSION[version]]
         carried = [name for name in later if name in data]
         if carried:
             named = ", ".join(
@@ -368,6 +601,36 @@ def load_profile(path: Path | str) -> StandardsProfile:
 
     profile._identity = identity
     return profile
+
+
+@dataclass(frozen=True, slots=True)
+class ReviewProfile:
+    """What a review loaded, once: the path it was given, and the profile or the refusal.
+
+    `start_review` loads the profile once and hands this to the classifier and to
+    `attach_standards` (feature 013 `contracts/part-roles.md` section 5), so the two cannot
+    read two different files and nothing loads it twice. Exactly one of `profile` and
+    `refusal` is set when `path` is; neither when the review was started without one.
+    """
+
+    path: str | None
+    profile: StandardsProfile | None
+    refusal: ProfileError | None
+
+
+def load_review_profile(path: Path | str | None) -> ReviewProfile:
+    """Load the profile at `path` for a review, turning a refusal into a value.
+
+    Never raises for a profile problem: a review with a refused profile is still a review, and
+    the refusal is what the standards line and the part-roles state say (`attach_standards`,
+    `classify_parts(profile_refusal=...)`).
+    """
+    if path is None:
+        return ReviewProfile(path=None, profile=None, refusal=None)
+    try:
+        return ReviewProfile(path=str(path), profile=load_profile(path), refusal=None)
+    except ProfileError as error:
+        return ReviewProfile(path=str(path), profile=None, refusal=error)
 
 
 def _read(path: Path) -> bytes:

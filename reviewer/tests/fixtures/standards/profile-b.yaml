@@ -3,7 +3,9 @@
 # carried (research.md R5), field by field. Its two-mate prefix "parts/hardware/dowels/"
 # is LONGER than the one-mate prefix "parts/hardware/" it overlaps, so the reversed case
 # of contracts/profile.md prefix semantics rule 6 is exercised rather than assumed.
-version: 3
+version: 4
+# Version 4 (feature 013 T014): its part_roles section leaves the distributor block,
+# the bought number prefixes and the detail properties empty, so those signals are off.
 
 vault_root: "K:/kestrel-store"
 
@@ -63,3 +65,30 @@ drawing:
   dimension_unit: ""
   drawing_template: ""
   bom_template: ""
+
+part_roles:
+  bought_prefixes:
+    - "vendor-cad/"
+  bought_folder_names:
+    - "Kestrel Bought In"
+  switch:
+    property: "Kestrel Origin"
+    bought_values:
+      - "Sourced"
+      - "Consigned"
+    custom_values:
+      - "Inhouse"
+  vendor_properties:
+    - "Kestrel Maker"
+  distributor_block:
+    properties: []
+    min_valued: 0
+  catalogue_numbers:
+    shapes:
+      - "@@-#####*"
+    properties: []
+  custom_prefixes:
+    - "AB"
+    - "AC"
+  bought_number_prefixes: []
+  detail_properties: []
