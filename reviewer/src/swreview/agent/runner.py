@@ -62,6 +62,7 @@ from swreview.agent.package_brief import package_brief
 from swreview.agent.providers import (
     AgentProvider,
     EffortLevel,
+    EventType,
     ModelViewAware,
     PriorReasoningAware,
     PromptCacheAware,
@@ -124,6 +125,8 @@ from swreview.report.session import (
     latest_answered,
     save_session,
 )
+from swreview.report.sources import answer_basis
+from swreview.report.summary import load_words
 from swreview.tools.checks_mechanical import attach_part_roles, check_hygiene, review_roles
 from swreview.tools.context import ToolContext, build_context
 from swreview.tools.drawings import DRAWINGS_TOOL, ConfirmedRead, read_confirmed_candidates
@@ -1080,6 +1083,13 @@ class ReviewRun:
         self._explanation_allowed = False
         self._pending_turn_end: str | None = None
         self.check_presentation_cancelled: Callable[[], None] = lambda: None
+        self._basis_from = 0
+        """The step marker of the answer basis (feature 013, `contracts/sources.md` section 3): the
+        first of `session.steps` the next answer's basis counts. It starts at 0, so turn 1 counts
+        the pre-run's checks, and it advances only when a turn that answered ends, so a restated
+        check counts in its answer turn and a stopped turn's steps roll into the next answer."""
+        self._answered = False
+        """Whether the turn running now has emitted a `text.done`."""
 
     @property
     def session(self) -> ReviewSession:
@@ -1402,6 +1412,7 @@ class ReviewRun:
         self.session.ended_at = None
         self._explanation_allowed = False
         self._pending_turn_end = None
+        self._answered = False
         if self._coverage_stop is not None:
             # Lever 7: the withdrawal lasts one turn. A follow-up question, or an answered
             # evidence request, arrives at a session whose checklist is already closed and
@@ -1414,13 +1425,14 @@ class ReviewRun:
                 tools=self.tools,
                 effort=self.effort,
                 max_steps=self.max_steps,
-                on_event=self.sink.emit,
+                on_event=self._emit_turn_event,
             )
         except Exception as exc:
             # The redaction, the `error_body` shape and the `turn.ended` that closes the
             # turn are `agent/events.py`'s, shared with the re-model run (004 T106); what
             # is this run's own is what follows - finalize, then re-raise.
             self._explanation_allowed = False
+            self._close_basis()
             emit_turn_failed(self.sink, exc, self.redact)
             self.finalize()
             raise
@@ -1429,6 +1441,7 @@ class ReviewRun:
         # (feature 008, `providers/pruning.py`), never the history itself, so a result's age
         # is counted from the full record every time and a follow-up prunes it afresh.
         self.messages = [dict(message) for message in result.messages]
+        self._close_basis()
         self._explanation_allowed = result.reason == "end"
         self.total_steps += result.steps
         cut_short = cut_short_reason(result.reason, self.max_steps)
@@ -1439,6 +1452,28 @@ class ReviewRun:
         else:
             self.sink.emit("turn.ended", {"reason": result.reason})
         return result
+
+    def _emit_turn_event(self, event_type: EventType, body: Mapping[str, Any]) -> None:
+        """The provider's `on_event` for a turn: the sink's, with the answer basis on every
+        `text.done` (feature 013, `contracts/sources.md` section 3).
+
+        The basis is computed by code from the steps since the marker - `answer_basis` counts
+        the results they read and says whether the review read any drawing - and never from the
+        model's text. Every other event reaches the sink unchanged, and the explanation pass,
+        which never calls this, gets no basis.
+        """
+        if event_type == "text.done":
+            steps = self.session.steps[self._basis_from :]
+            body = {**body, "basis": answer_basis(steps, self.context.ir, load_words())}
+            self._answered = True
+        self.sink.emit(event_type, body)
+
+    def _close_basis(self) -> None:
+        """End the turn for the basis marker: a turn that answered moves it past every step
+        recorded so far; a turn that did not leaves it, so its steps count in the next answer."""
+        if self._answered:
+            self._basis_from = len(self.session.steps)
+            self._answered = False
 
     def _closeout(self, reason: str) -> None:
         """Record why this turn stopped short, and say so on the stream.
