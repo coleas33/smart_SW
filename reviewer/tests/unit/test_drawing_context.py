@@ -39,6 +39,7 @@ from swreview.checks.drawing_context import (
     QuestionSpec,
     candidate_files,
     candidate_question,
+    drawing_request_answer,
     drawing_states,
     run_drawing_context,
 )
@@ -714,3 +715,70 @@ def test_the_states_follow_the_real_classifier_once_it_lands() -> None:
         "doc:0003": ("bought", BOUGHT_REASON, False),
         "doc:0004": ("absent", f"no drawing named {LOOSE}.SLDDRW sits beside it", False),
     }
+
+
+# --- 5. code answers the model's drawing requests: the drawings side (013 section 5) --------------
+#
+# `request_evidence(blocks="drawing.manufacturing_inputs")` (013 T087, lane S) maps its entity ids
+# to documents and asks `drawing_request_answer`: while any named document has no attached drawing
+# the answer is `closed_by_code` with each such document's state and reason, and nothing is
+# recorded; when every one is attached the request is recorded as before.
+
+
+def answer_for(package: EvidencePackage, roles: Any, mode: str, *documents: str) -> Any:
+    return drawing_request_answer(DrawingIndex.for_package(package), roles, mode, documents)
+
+
+def test_a_request_about_documents_without_a_drawing_is_answered_by_code() -> None:
+    answer = answer_for(sitting(), sitting_roles(), "open_only", "doc:0003", "doc:0002")
+
+    assert answer == {
+        "status": "closed_by_code",
+        "check": "drawing.manufacturing_inputs",
+        "drawings": [
+            {"document_id": "doc:0003", "state": "bought", "reason": BOUGHT_REASON},
+            {"document_id": "doc:0002", "state": "candidate", "reason": INSTRUCTION},
+        ],
+        "attached": [],
+    }, "in the order the request named them"
+
+
+def test_a_request_about_attached_documents_only_is_left_to_the_model() -> None:
+    plate = fixture("plate-drawing")  # the plate, doc:0002, is shown by its open drawings
+
+    assert answer_for(plate, None, "none", "doc:0002") is None
+
+
+def test_a_mix_names_both_groups() -> None:
+    plate = fixture("plate-drawing")
+
+    answer = answer_for(plate, None, "opens_closed", "doc:0002", "doc:0003", "doc:0002")
+
+    assert answer is not None
+    assert answer["drawings"] == [
+        {"document_id": "doc:0003", "state": "candidate", "reason": CANDIDATE_REASON}
+    ]
+    assert answer["attached"] == ["doc:0002"], "each document once"
+
+
+def test_ids_that_are_no_reviewed_part_or_assembly_are_neither() -> None:
+    plate = fixture("plate-drawing")  # doc:0006 is a drawing
+
+    assert answer_for(plate, None, "none", "doc:0006", "doc:9999") is None
+    assert answer_for(plate, None, "none") is None
+    answer = answer_for(plate, None, "none", "doc:0006", "doc:0004")
+    assert answer is not None
+    assert [row["document_id"] for row in answer["drawings"]] == ["doc:0004"]
+    assert answer["attached"] == []
+
+
+def test_the_answer_reads_the_same_states_the_check_writes() -> None:
+    package, roles = sitting(), sitting_roles()
+    states = drawing_states(DrawingIndex.for_package(package), roles, "open_only")
+
+    answer = answer_for(package, roles, "open_only", *states)
+
+    assert answer is not None
+    assert [(row["document_id"], row["state"], row["reason"]) for row in answer["drawings"]] == [
+        (state.document_id, state.state, state.reason) for state in states.values()
+    ]

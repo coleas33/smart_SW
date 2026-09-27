@@ -45,9 +45,9 @@ id, so it closes nothing.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from swreview.checks.questions import QuestionSpec
 from swreview.checks.result import CheckResult, DocumentResult
@@ -110,6 +110,7 @@ __all__ = [
     "candidate_files",
     "candidate_question",
     "compare_with_profile",
+    "drawing_request_answer",
     "drawing_states",
     "item_closed_by_code",
     "run_drawing_context",
@@ -406,6 +407,40 @@ def item_closed_by_code(index: DrawingIndex, roles: PartRoles | None) -> bool:
     writes the item's row and `mark_coverage` on it answers `closed_by_code`; when a drawing is
     attached the model owns the item. One predicate decides both (013 T085, T087)."""
     return _nothing_attached(drawing_states(index, roles, "none"))
+
+
+def drawing_request_answer(
+    index: DrawingIndex,
+    roles: PartRoles | None,
+    mode: DrawingReadMode,
+    document_ids: Sequence[str],
+) -> dict[str, Any] | None:
+    """The drawings side of code answering the model's drawing requests (013
+    `contracts/drawing-capability.md` section 5; `request_evidence`'s row 6, 013 T087, lane S).
+
+    `document_ids` are the documents a `request_evidence(blocks="drawing.manufacturing_inputs")`
+    names, its entity ids already mapped to documents by the caller (a component to its document,
+    a hole or fastener to its component's). Each is taken once, in the order named; an id that is
+    no reviewed part or assembly (a drawing, an unknown id) is neither. `None` when every named
+    document is attached - the model may ask about a drawing's content, and the request is recorded
+    as before. Otherwise the non-error answer, recording nothing: `closed_by_code` with each named
+    document that has no attached drawing, its state and its reason, and `attached` naming the ones
+    that do.
+    """
+    states = drawing_states(index, roles, mode)
+    named = [states[document] for document in dict.fromkeys(document_ids) if document in states]
+    closed = [state for state in named if state.state != "attached"]
+    if not closed:
+        return None
+    return {
+        "status": "closed_by_code",
+        "check": CANDIDATES_BLOCK,
+        "drawings": [
+            {"document_id": state.document_id, "state": state.state, "reason": state.reason}
+            for state in closed
+        ],
+        "attached": [state.document_id for state in named if state.state == "attached"],
+    }
 
 
 def _closing_row(
