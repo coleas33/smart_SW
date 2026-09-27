@@ -30,8 +30,10 @@ public sealed class RmsNamedFolder
 
 /// <summary>
 /// Where an EPDM source lives, recorded and <b>never</b> a refusal reason (owner decision: an
-/// EPDM part is copied out, not refused). Null means "not in a vault"; a vault whose revision
-/// could not be read is a different answer and the report says which.
+/// EPDM part is copied out, not refused). A null reference means <b>not read by this build</b>,
+/// never "not in a vault": the seat answers null for every source until T139 adds a vault read,
+/// and T139 decides how the two are told apart (feature 004 T155's amendment, research R13.5,
+/// data-model.md section 4.1).
 /// </summary>
 public sealed class VaultReference
 {

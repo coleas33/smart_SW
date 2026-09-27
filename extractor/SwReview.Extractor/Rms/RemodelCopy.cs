@@ -131,9 +131,11 @@ public sealed class SourceAttestation
     public string CopyPath { get; }
 
     /// <summary>
-    /// The EPDM vault path and revision, or null when the source is not in a vault. Null, never
-    /// an empty string: "not in a vault" and "in a vault whose revision could not be read" are
-    /// different answers and the report says which.
+    /// The EPDM vault path and revision, or null. Null means <b>not read by this build</b>, never
+    /// "not in a vault": no PDM API is referenced anywhere in the product, so the seat's
+    /// <c>GetVault</c> answers null for every source until T139 adds a vault read, and T139
+    /// decides how "not in a vault" and "not read" are told apart (feature 004 T155's amendment,
+    /// research R13.5, data-model.md section 5). Null, never an empty string.
     /// </summary>
     [JsonPropertyName("vault_path")]
     public string? VaultPath { get; }
@@ -340,8 +342,9 @@ public static class RemodelCopy
     /// to the source could exist. Reading it never opens the source for writing.
     ///
     /// <paramref name="vaultPath"/> and <paramref name="vaultRevision"/> come from the caller
-    /// that can read the vault, and are null for a source that is not in one. Nothing here
-    /// inspects the path for a vault, because nothing here may refuse a source for being in one.
+    /// that can read the vault, and are null when it did not read one - which, until T139 adds a
+    /// vault read, is every source (research R13.5). Nothing here inspects the path for a vault,
+    /// because nothing here may refuse a source for being in one.
     /// </summary>
     public static SourceAttestation RecordSource(
         string sourcePath,

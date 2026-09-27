@@ -166,8 +166,10 @@ public interface IRemodelSeat : IRemodelToggleHost
     void CloseDocument(string documentPath);
 
     /// <summary>
-    /// The EPDM vault path and revision of a source that is in one, or null. Recorded, never a
-    /// refusal reason: an EPDM part is copied out (owner decision).
+    /// The EPDM vault path and revision of a source that is in one, or null, which means "not read
+    /// by this build" and never "not in a vault": the seat answers null until T139 adds a vault
+    /// read (T155's amendment, research R13.5). Recorded, never a refusal reason: an EPDM part is
+    /// copied out (owner decision).
     /// </summary>
     VaultReference? GetVault(string sourcePath);
 }

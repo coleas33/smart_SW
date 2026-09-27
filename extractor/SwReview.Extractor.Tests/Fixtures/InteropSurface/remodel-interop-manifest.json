@@ -5,7 +5,7 @@
   "swconst_version": "32.5.0.48",
   "product": "SOLIDWORKS 2024 SP5",
   "generated_at": "2026-09-16T00:58:00Z",
-  "generated_by": "reflection over the installed SolidWorks.Interop.sldworks and .swconst assemblies (T055); swreview-extract probe interop --emit-manifest is the Phase 2 command that regenerates it by the same dump; the T156 rows (2026-09-27, the seat adapter's plumbing) by the same metadata-only reflection over the installed 32.5.0.48 on the development machine, SOLIDWORKS not started",
+  "generated_by": "reflection over the installed SolidWorks.Interop.sldworks and .swconst assemblies (T055); swreview-extract probe interop --emit-manifest is the Phase 2 command that regenerates it by the same dump; the T156 rows and enum values (2026-09-27, the seat adapter's plumbing) by the same metadata-only reflection over the installed 32.5.0.48 on the development machine, SOLIDWORKS not started",
   "members": [
     {
       "interface": "IModelDocExtension",
@@ -1581,6 +1581,20 @@
       ],
       "allowlisted": false,
       "note": "T156: the swFileLoadWarning_e bits of the same open"
+    },
+    {
+      "interface": "IFeatureFolder",
+      "member": "GetFeatureCount",
+      "kind": "method",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.Int32",
+      "used_by": [
+        "remodel.probe_scope",
+        "remodel.open"
+      ],
+      "allowlisted": false,
+      "note": "T156: the count a folder's GetFeatures is read against; a length that disagrees makes the whole rms_named_folders listing null rather than a shorter one (a null answer with a count of zero is an empty folder)"
     }
   ],
   "enums": [
@@ -1686,7 +1700,8 @@
         "swSolidBody": 0,
         "swSheetBody": 1,
         "swMeshBody": 6,
-        "swGraphicsBody": 7
+        "swGraphicsBody": 7,
+        "swAllBodies": -1
       }
     },
     {
@@ -1701,6 +1716,28 @@
         "swThisConfiguration": 1,
         "swAllConfiguration": 2,
         "swSpecifyConfiguration": 3
+      }
+    },
+    {
+      "enum": "swPersistReferencedObjectStates_e",
+      "values": {
+        "swPersistReferencedObject_Invalid": 1
+      }
+    },
+    {
+      "enum": "swLengthUnit_e",
+      "values": {
+        "swMM": 0,
+        "swCM": 1,
+        "swMETER": 2,
+        "swINCHES": 3,
+        "swFEET": 4,
+        "swFEETINCHES": 5,
+        "swANGSTROM": 6,
+        "swNANOMETER": 7,
+        "swMICRON": 8,
+        "swMIL": 9,
+        "swUIN": 10
       }
     }
   ],

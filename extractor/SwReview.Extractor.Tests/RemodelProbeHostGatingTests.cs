@@ -4,8 +4,6 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
-using System.Runtime.Remoting.Messaging;
-using System.Runtime.Remoting.Proxies;
 using System.Text.RegularExpressions;
 using SolidWorks.Interop.sldworks;
 using SwReview.Extractor.Guard;
@@ -353,8 +351,6 @@ public class RemodelProbeHostGatingTests
 /// </summary>
 public class SharedRemodelInteropTests
 {
-    private static readonly Type[] Forbidden = { typeof(SwGate), typeof(ICallGuard), typeof(RemodelScope) };
-
     /// <summary>Each shared class, the interface it is named for, and the interop object it maps that interface onto.</summary>
     public static IEnumerable<object[]> SharedClasses() => new[]
     {
@@ -395,7 +391,7 @@ public class SharedRemodelInteropTests
     [MemberData(nameof(SharedClass))]
     public void TheSharedClassTakesAndHoldsNoGateNoGuardAndNoScope(Type shared)
     {
-        Assert.Empty(MentionsOfForbiddenTypes(shared));
+        Assert.Empty(AdapterShape.MentionsOfForbiddenTypes(shared));
     }
 
     /// <summary>
@@ -407,7 +403,7 @@ public class SharedRemodelInteropTests
     [InlineData(typeof(GatedMassPropertyReading))]
     public void TheForbiddenTypeCheckFlagsAClassThatHoldsAGate(Type gated)
     {
-        Assert.NotEmpty(MentionsOfForbiddenTypes(gated));
+        Assert.NotEmpty(AdapterShape.MentionsOfForbiddenTypes(gated));
     }
 
     /// <summary>
@@ -418,14 +414,9 @@ public class SharedRemodelInteropTests
     [MemberData(nameof(SharedClass))]
     public void NoMemberOfTheSharedClassTakesADocumentPath(Type shared)
     {
-        var pathLike = new Regex("path|file|document|title", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-        IEnumerable<ParameterInfo> parameters = shared
-            .GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
-            .Cast<MethodBase>()
-            .Concat(shared.GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
-            .SelectMany(method => method.GetParameters());
+        IEnumerable<ParameterInfo> parameters = AdapterShape.DeclaredParameters(shared).Select(declared => declared.Parameter);
 
-        Assert.Empty(parameters.Where(parameter => pathLike.IsMatch(parameter.Name ?? string.Empty)).Select(parameter => parameter.Name));
+        Assert.Empty(parameters.Where(parameter => AdapterShape.PathLike.IsMatch(parameter.Name ?? string.Empty)).Select(parameter => parameter.Name));
     }
 
     /// <summary>
@@ -438,7 +429,7 @@ public class SharedRemodelInteropTests
     {
         List<string> mappings = LoadableTypes(shared.Assembly)
             .Where(type => type.IsClass && named.IsAssignableFrom(type))
-            .Where(type => AllFields(type).Any(field => field.FieldType.Assembly == interop.Assembly))
+            .Where(type => AdapterShape.AllFields(type).Any(field => field.FieldType.Assembly == interop.Assembly))
             .Select(type => type.FullName!)
             .ToList();
 
@@ -454,13 +445,9 @@ public class SharedRemodelInteropTests
     [MemberData(nameof(SharedClasses))]
     public void TheSharedClassSourceMakesNoGatedCall(Type shared, Type named, Type interop)
     {
-        string code = string.Join(
-            "\n",
-            ProbeWrapperCases.ProductSource(shared.Name + ".cs")
-                .Split('\n')
-                .Where(line => !line.TrimStart().StartsWith("//", StringComparison.Ordinal)));
+        string code = AdapterShape.CodeOutsideComments(ProbeWrapperCases.ProductSource(shared.Name + ".cs"));
 
-        foreach (string token in new[] { "SwGate", "ICallGuard", "RemodelScope", "RemodelGuard", ".Call(", ".CallOptional(", ".Assert(" })
+        foreach (string token in AdapterShape.GatedCallTokens)
         {
             Assert.DoesNotContain(token, code, StringComparison.Ordinal);
         }
@@ -649,61 +636,6 @@ public class SharedRemodelInteropTests
         }
 
         return array;
-    }
-
-    /// <summary>Every place <paramref name="type"/> could take or hold a forbidden type, named.</summary>
-    private static List<string> MentionsOfForbiddenTypes(Type type)
-    {
-        const BindingFlags Everything =
-            BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
-        var found = new List<string>();
-
-        for (Type? current = type; current != null && current != typeof(object); current = current.BaseType)
-        {
-            found.AddRange(current.GetFields(Everything).Where(field => Mentions(field.FieldType)).Select(field => "field " + field.Name));
-            found.AddRange(current.GetProperties(Everything).Where(property => Mentions(property.PropertyType)).Select(property => "property " + property.Name));
-
-            IEnumerable<MethodBase> methods = current.GetMethods(Everything).Cast<MethodBase>().Concat(current.GetConstructors(Everything));
-            foreach (MethodBase method in methods)
-            {
-                found.AddRange(method.GetParameters().Where(parameter => Mentions(parameter.ParameterType)).Select(parameter => $"{method.Name}({parameter.Name})"));
-                if (method is MethodInfo info && Mentions(info.ReturnType))
-                {
-                    found.Add(method.Name + " returns " + info.ReturnType.Name);
-                }
-            }
-        }
-
-        return found;
-    }
-
-    /// <summary>A forbidden type, or one built from it: an array, a by-ref, or a generic argument (a <c>Func&lt;SwGate&gt;</c>).</summary>
-    private static bool Mentions(Type type)
-    {
-        if (type.HasElementType)
-        {
-            return Mentions(type.GetElementType()!);
-        }
-
-        if (type.IsGenericType && type.GetGenericArguments().Any(Mentions))
-        {
-            return true;
-        }
-
-        return Forbidden.Any(forbidden => forbidden.IsAssignableFrom(type));
-    }
-
-    private static IEnumerable<FieldInfo> AllFields(Type type)
-    {
-        const BindingFlags Everything =
-            BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
-        for (Type? current = type; current != null && current != typeof(object); current = current.BaseType)
-        {
-            foreach (FieldInfo field in current.GetFields(Everything))
-            {
-                yield return field;
-            }
-        }
     }
 
     private static IEnumerable<Type> LoadableTypes(Assembly assembly)
@@ -939,58 +871,4 @@ internal sealed class GateCallLog : ISwGateObserver
     public void Gated(string interopMember) => Keys.Add(interopMember);
 
     public void Refused(MutatingCallError refusal) => Refusals.Add(refusal);
-}
-
-/// <summary>
-/// A stand-in for one SOLIDWORKS interop interface that records every member called on it, under
-/// the name the interop declares it by (a property read is <c>get_X</c>, a write <c>set_X</c>),
-/// with its arguments, and answers what the test set for that member - or the return type's
-/// default. A transparent proxy, so a test can name the interop type without writing out its
-/// thirty-odd members; no COM object exists and SOLIDWORKS is never started.
-/// </summary>
-internal sealed class InteropRecorder<TInterface> : RealProxy
-    where TInterface : class
-{
-    private readonly Dictionary<string, object?> _answers = new Dictionary<string, object?>(StringComparer.Ordinal);
-    private readonly Dictionary<string, Exception> _failures = new Dictionary<string, Exception>(StringComparer.Ordinal);
-
-    public InteropRecorder()
-        : base(typeof(TInterface))
-    {
-    }
-
-    public TInterface Instance => (TInterface)GetTransparentProxy();
-
-    /// <summary>Every member called, in order, with the arguments it was handed.</summary>
-    public List<(string Member, object?[] Arguments)> Calls { get; } = new List<(string, object?[])>();
-
-    public InteropRecorder<TInterface> Answer(string member, object? answer)
-    {
-        _answers[member] = answer;
-        return this;
-    }
-
-    public InteropRecorder<TInterface> Fail(string member, Exception failure)
-    {
-        _failures[member] = failure;
-        return this;
-    }
-
-    public override IMessage Invoke(IMessage message)
-    {
-        var call = (IMethodCallMessage)message;
-        Calls.Add((call.MethodName, call.Args));
-
-        if (_failures.TryGetValue(call.MethodName, out Exception? failure))
-        {
-            return new ReturnMessage(failure, call);
-        }
-
-        Type returns = ((MethodInfo)call.MethodBase).ReturnType;
-        object? answer = _answers.TryGetValue(call.MethodName, out object? set)
-            ? set
-            : returns.IsValueType && returns != typeof(void) ? Activator.CreateInstance(returns) : null;
-
-        return new ReturnMessage(answer, null, 0, call.LogicalCallContext, call);
-    }
 }

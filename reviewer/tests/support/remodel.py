@@ -584,7 +584,8 @@ def scope_signals(**overrides: Any) -> dict[str, Any]:
     Every default is a readable, in-scope value - one solid body, no weldment, no
     sheet-metal folder, no mesh or graphics body, no 3D Interconnect, one configuration -
     so a signal that is `None` in a test is one the test asked to be unreadable. `vault`
-    is the single exception: no vault is `None`, and it is recorded, never refused.
+    is the single exception: `None` is a vault this build did not read - never "not in a
+    vault" (004 T155's amendment, research R13.5) - and it is recorded, never refused.
 
     A name the table does not carry is refused, so a signal renamed in the data model
     cannot be silently added here as a second spelling.

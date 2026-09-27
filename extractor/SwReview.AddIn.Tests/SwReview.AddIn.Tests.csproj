@@ -66,6 +66,18 @@
   </ItemGroup>
 
   <!--
+    Feature 004, build order lane B (default taken 2026-09-27, the owner may revise): the seat
+    adapter's tests use the recording interop stand-in and the ungated-adapter shape checks that
+    lane A's tests use, compiled from the one copy in SwReview.Extractor.Tests rather than a second
+    that could drift. Both files are internal test support in the SwReview.Extractor.Tests
+    namespace; nothing in them starts SOLIDWORKS.
+  -->
+  <ItemGroup>
+    <Compile Include="..\SwReview.Extractor.Tests\InteropRecorder.cs" Link="Shared\InteropRecorder.cs" />
+    <Compile Include="..\SwReview.Extractor.Tests\AdapterShape.cs" Link="Shared\AdapterShape.cs" />
+  </ItemGroup>
+
+  <!--
     The settings contract is the single source of truth
     (specs/002-task-pane-assistant/contracts/settings.schema.json). It is copied, not
     duplicated, so a schema change breaks UserSettingsTests immediately.
