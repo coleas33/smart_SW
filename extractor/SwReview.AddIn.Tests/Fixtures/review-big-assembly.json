@@ -13463,6 +13463,48 @@
     {
       "bucket": "checked",
       "item": {
+        "check": "provenance",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Kamibat",
+          "positions": [],
+          "document_ids": [
+            "doc:681d2181ba04",
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c",
+            "doc:8b5228d54fc8",
+            "doc:9c7425f72c64",
+            "doc:ad861218f8f0",
+            "doc:bea71039d48c",
+            "doc:cfb91d5bb128",
+            "doc:d0db1a7c9db4",
+            "doc:e0ec179d6940",
+            "doc:f10e04bf46ec",
+            "doc:f21001d02278",
+            "doc:03210ef10e04",
+            "doc:14430b03daa0",
+            "doc:25550924b73c",
+            "doc:3676f64593c8",
+            "doc:4788f3676f64",
+            "doc:58aaf0884cf0",
+            "doc:69bbfdaa288c",
+            "doc:6addfacb0428",
+            "doc:7befe7ecd1b4",
+            "doc:8c00e50ebd40",
+            "doc:9d12e22f99ed",
+            "doc:ae34ef307679",
+            "doc:bf46ec524205",
+            "doc:c057e9732ea1"
+          ]
+        },
+        "reason": "Reviewed as open in SOLIDWORKS: 26 documents, each at its own path in its active configuration; revision read on 23 of 26. The open files are taken as the latest: vault version and local modification are not read and never asked. A missing revision is reported by the hygiene checks.",
+        "error": null
+      }
+    },
+    {
+      "bucket": "checked",
+      "item": {
         "check": "rms.refs.direction",
         "scope": {
           "component_ids": [],
@@ -15246,26 +15288,6 @@
     {
       "bucket": "unresolved",
       "item": {
-        "check": "provenance",
-        "scope": {
-          "component_ids": [],
-          "pairs": [],
-          "configuration": "Kamibat",
-          "positions": [],
-          "document_ids": [
-            "doc:681d2181ba04",
-            "doc:69bbfdaa288c",
-            "doc:6addfacb0428",
-            "doc:c057e9732ea1"
-          ]
-        },
-        "reason": "Manifest discrepancies are duv reported, but vault version fiz local-modified state are unknown for the reviewed documents, revisions are missing on several documents, fiz some source documents/components were duv loaded.",
-        "error": null
-      }
-    },
-    {
-      "bucket": "unresolved",
-      "item": {
         "check": "drawing.manufacturing_inputs",
         "scope": {
           "component_ids": [],
@@ -16997,9 +17019,9 @@
       "beyond_top_n": 91
     },
     "coverage": {
-      "checked": 17,
+      "checked": 18,
       "skipped": 16,
-      "unresolved": 50,
+      "unresolved": 49,
       "failed": 1,
       "out_of_scope": 21,
       "not_closed": [
@@ -17012,16 +17034,16 @@
           "reason": "not_ready; 5 error, 0 warning and 0 waived finding(s); 49 checked, 28 skipped, 62 unresolved and 277 out-of-scope (check, document) pair(s); unresolved: standards.assembly.not_transparent, standards.document.data_card_complete, standards.part.material_assigned, standards.assembly.mate_references, standards.part.sketches_fully_defined, standards.part.rebuild_errors, standards.part.cut_list_excluded; no drawing graded"
         },
         {
-          "item": "provenance",
-          "reason": "Manifest discrepancies are duv reported, but vault version fiz local-modified state are unknown for the reviewed documents, revisions are missing on several documents, fiz some source documents/components were duv loaded."
-        },
-        {
           "item": "drawing.manufacturing_inputs",
           "reason": "Bu drawing documents, sheets, or dimensions were extracted; the drawing phase did duv run, so material/tolerance/finish/thread-depth/fit tedikune cannot be reviewed."
         },
         {
           "item": "interfaces.fit",
           "reason": "Mating holes fiz mates are present, but no drawing kudo/shaft limits or tolerances are available; check_fit cannot be run without drawing source references."
+        },
+        {
+          "item": "interfaces.stack",
+          "reason": "Functional axial stacks cannot be identified fiz evaluated because no drawing dimensions or tolerances were extracted; distance mate values are also missing for mat:0018, mat:0030, fiz mat:0050."
         }
       ],
       "open_evidence_requests": 4,
@@ -17500,8 +17522,8 @@
         "cmp:0088": "VUKO MIL BELIKAB, TIL-LAMAMOSU VURUNURA, SAS MIL GOSO, DAS, 29'64 PO FIDA, 8764 VURUNURA, DIS, 6926R326-4",
         "cmp:0089": "GEM_M3-0.5X8_PE8_NA-15"
       },
-      "resume_input_tokens": 383434,
-      "resume_text": "Sending resumes the review once. Its last round sent 383,434 input tokens."
+      "resume_input_tokens": 383423,
+      "resume_text": "Sending resumes the review once. Its last round sent 383,423 input tokens."
     }
   },
   "not_examined": {

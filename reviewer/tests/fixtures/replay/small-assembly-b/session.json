@@ -1,9 +1,9 @@
 {
-  "session_id": "6a0e8ee2-3854-4e39-95d0-ce01cdafd688",
+  "session_id": "c2a16b61-4d78-489e-9458-7cbc124aed06",
   "package_id": "011bb926-a012-4587-bdf8-d1480ac3ec90",
   "design_id": "dsn:681d2181ba04",
-  "started_at": "2026-09-27T05:05:45.623625Z",
-  "ended_at": "2026-09-27T05:05:45.687178Z",
+  "started_at": "2026-09-27T05:30:54.316074Z",
+  "ended_at": "2026-09-27T05:30:54.391227Z",
   "model": "gpt-5.6-luna",
   "provider_info": {
     "provider": "fake",
@@ -35,54 +35,54 @@
     "rounds": 37,
     "turns": 4,
     "totals": {
-      "input_tokens": 1484336,
+      "input_tokens": 1484498,
       "cached_input_tokens": 1413047,
       "cache_write_tokens": 51130,
       "output_tokens": 6311,
       "reasoning_tokens": 2357,
       "tool_result_input_tokens": null,
-      "total_tokens": 1490647,
+      "total_tokens": 1490809,
       "latency_s": 94.78629639997962
     },
     "by_turn": [
       {
-        "input_tokens": 1306383,
+        "input_tokens": 1306539,
         "cached_input_tokens": 1240045,
         "cache_write_tokens": 48981,
         "output_tokens": 5128,
         "reasoning_tokens": 1805,
         "tool_result_input_tokens": null,
-        "total_tokens": 1311511,
+        "total_tokens": 1311667,
         "latency_s": 79.63422639996861
       },
       {
-        "input_tokens": 58938,
+        "input_tokens": 58940,
         "cached_input_tokens": 56773,
         "cache_write_tokens": 1231,
         "output_tokens": 210,
         "reasoning_tokens": 74,
         "tool_result_input_tokens": null,
-        "total_tokens": 59148,
+        "total_tokens": 59150,
         "latency_s": 2.8785140000109095
       },
       {
-        "input_tokens": 59159,
+        "input_tokens": 59161,
         "cached_input_tokens": 58004,
         "cache_write_tokens": 221,
         "output_tokens": 687,
         "reasoning_tokens": 374,
         "tool_result_input_tokens": null,
-        "total_tokens": 59846,
+        "total_tokens": 59848,
         "latency_s": 7.736465699999826
       },
       {
-        "input_tokens": 59856,
+        "input_tokens": 59858,
         "cached_input_tokens": 58225,
         "cache_write_tokens": 697,
         "output_tokens": 286,
         "reasoning_tokens": 104,
         "tool_result_input_tokens": null,
-        "total_tokens": 60142,
+        "total_tokens": 60144,
         "latency_s": 4.537090300000273
       }
     ]
@@ -96,7 +96,7 @@
       "result_summary": "{\"design_id\":\"dsn:681d2181ba04\",\"design_name\":\"268-88428\",\"configuration\":\"Default\",\"root_assembly_document_id\":\"doc:681d2181ba04\",\"drawing_document_ids\":[],\"document_count\":3,\"component_count\":4,\"ma…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00002359999780310318,
+      "elapsed_s": 0.000020899999071843922,
       "result_bytes": 473,
       "result_tokens": 163
     },
@@ -104,12 +104,12 @@
       "index": 1,
       "tool": "get_review_checklist",
       "arguments": {},
-      "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Confirm every reviewed document matches the manifest (vault version, revision…",
+      "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Closed by code from the package before your first turn: each reviewed documen…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000029199996788520366,
-      "result_bytes": 3960,
-      "result_tokens": 869
+      "elapsed_s": 0.00003110000034212135,
+      "result_bytes": 4056,
+      "result_tokens": 893
     },
     {
       "index": 2,
@@ -118,7 +118,7 @@
       "result_summary": "{\"result\":[{\"kind\":\"not_extracted\",\"entity_kind\":\"component\",\"entity_id\":null,\"reason\":\"'ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-2' has no loaded model document, so Toolbox identity could man be…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00003680000008898787,
+      "elapsed_s": 0.000043799998820759356,
       "result_bytes": 7215,
       "result_tokens": 2222
     },
@@ -132,7 +132,7 @@
       "result_summary": "{\"result\":[{\"id\":\"cmp:0001\",\"name\":\"268-88428\",\"full_path\":\"268-88428\",\"document_id\":\"doc:681d2181ba04\",\"referenced_configuration\":\"Default\",\"suppression\":\"resolved\",\"pattern_id\":null,\"is_toolbox\":fa…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000018999999156221747,
+      "elapsed_s": 0.000018900002032751217,
       "result_bytes": 221,
       "result_tokens": 74
     },
@@ -146,7 +146,7 @@
       "result_summary": "{\"result\":[{\"id\":\"cmp:0002\",\"name\":\"ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-2\",\"full_path\":\"ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-2\",\"document_id\":\"doc:792f2ea287a0\",\"referenced_configura…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000016699999832781032,
+      "elapsed_s": 0.000017300000763498247,
       "result_bytes": 801,
       "result_tokens": 325
     },
@@ -159,7 +159,7 @@
       "result_summary": "{\"component\":{\"id\":\"cmp:0001\",\"persist_ref\":\"aEIAAAUAAAD//v8AAAAAAA==\",\"persist_ref_scope\":\"doc:681d2181ba04\",\"name\":\"268-88428\",\"document_id\":\"doc:681d2181ba04\",\"parent_id\":null,\"referenced_configur…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00006969999958528206,
+      "elapsed_s": 0.000067299999500392,
       "result_bytes": 3303,
       "result_tokens": 1382
     },
@@ -185,7 +185,7 @@
       "result_summary": "{\"component\":{\"id\":\"cmp:0003\",\"persist_ref\":\"aEIAAAUAAAD//v84WgBBAEwAVQBEACAASwBBAE0ALAAgADMATQBNACAAWAAgADEAOABNAE0AIABaAEkALAAgAFAAVQAsACAARgBPAFQALAAgADEANwA1ADQAMwBUADEANwA3AC0AMQBAADIANgA4AC0AOA…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000048999998398358,
+      "elapsed_s": 0.00004940000144415535,
       "result_bytes": 4923,
       "result_tokens": 2380
     },
@@ -198,7 +198,7 @@
       "result_summary": "{\"component\":{\"id\":\"cmp:0004\",\"persist_ref\":\"aEIAAAUAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=\",\"persist_ref_scope\":\"doc:681d2181ba04\",\"name\":\"268-8…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0002922000021499116,
+      "elapsed_s": 0.00028949999978067353,
       "result_bytes": 27503,
       "result_tokens": 12651
     },
@@ -212,7 +212,7 @@
       "result_summary": "{\"result\":[{\"id\":\"hol:0001\",\"persist_ref\":\"aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=\",\"persist_ref_scope\":\"doc:8a412bc4633c\",\"component_id\":…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00005609999789157882,
+      "elapsed_s": 0.00005700000110664405,
       "result_bytes": 2820,
       "result_tokens": 1176
     },
@@ -226,7 +226,7 @@
       "result_summary": "{\"result\":[]}",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00001620000330149196,
+      "elapsed_s": 0.00001720000000204891,
       "result_bytes": 14,
       "result_tokens": 5
     },
@@ -239,7 +239,7 @@
       "result_summary": "{\"result\":[{\"id\":\"mat:0001\",\"persist_ref\":\"aEIAABgAAAD//v8AAAAAABkAAAA=\",\"persist_ref_scope\":\"doc:681d2181ba04\",\"type\":\"swMateCOORDINATE\",\"entities\":[{\"component_id\":\"cmp:0004\",\"persist_ref\":\"aEIAAAY…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000032899999496294186,
+      "elapsed_s": 0.0000351999988197349,
       "result_bytes": 4371,
       "result_tokens": 2106
     },
@@ -252,7 +252,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-001\",\"check\":\"rms.folders.present\",\"title\":\"missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q\\u2026\",\"status\":\"suspected\",\"seve…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.006499800001620315,
+      "elapsed_s": 0.006782100001146318,
       "result_bytes": 31852,
       "result_tokens": 11637
     },
@@ -263,7 +263,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-004\",\"check\":\"rms.assembly.mates_to_reference_geometry\",\"title\":\"mat:0002 (swMateCONCENTRIC) references swSelFACES on 268-88428-1, swSelFACES on\\u2026\",\"stat…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0013465000010910444,
+      "elapsed_s": 0.0014343999973789323,
       "result_bytes": 6219,
       "result_tokens": 2568
     },
@@ -276,7 +276,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-005\",\"check\":\"rms.params.global_variables_present\",\"title\":\"the equation manager holds no equations\",\"status\":\"demonstrated\",\"severity\":\"medium\",\"component_i…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0013639999997394625,
+      "elapsed_s": 0.0014133000004221685,
       "result_bytes": 2320,
       "result_tokens": 675
     },
@@ -297,7 +297,7 @@
       "result_summary": "{\"status\":\"computed\",\"configuration\":\"Default\",\"interferences\":[],\"added_to_package\":0,\"gaps\":[]}",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00003560000186553225,
+      "elapsed_s": 0.00003510000169626437,
       "result_bytes": 106,
       "result_tokens": 31
     },
@@ -311,7 +311,7 @@
       "result_summary": "{\"result\":[]}",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00001550000160932541,
+      "elapsed_s": 0.000014900000678608194,
       "result_bytes": 14,
       "result_tokens": 5
     },
@@ -322,7 +322,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-007\",\"check\":\"standards.part.sketches_fully_defined\",\"title\":\"Sketch2 is under-defined, at the top level of the feature tree; Sketch2 is unde\\u2026\",\"status\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00466940000114846,
+      "elapsed_s": 0.005277399999613408,
       "result_bytes": 5164,
       "result_tokens": 1585
     },
@@ -341,7 +341,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-001\",\"what\":\"Vault version and local-modified status for doc:681d2181ba04, doc:792f2ea287a0, and doc:8a412bc4633c; revision for doc:792f2ea287a0.\",\"why\":…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00017759999900590628,
+      "elapsed_s": 0.0001875000016298145,
       "result_bytes": 520,
       "result_tokens": 164
     },
@@ -364,7 +364,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-002\",\"what\":\"Native part and assembly drawings for the reviewed Default configuration, with readable text layers, including material, general tolerance, …",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00016549999782000668,
+      "elapsed_s": 0.00017010000010486692,
       "result_bytes": 745,
       "result_tokens": 205
     },
@@ -383,7 +383,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-003\",\"what\":\"Resolved geometry for dowel-pin instances cmp:0002 and cmp:0003, including their cylindrical axes/diameter and the mating 3.0 mm hole axes, …",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00016939999841270037,
+      "elapsed_s": 0.00017160000061267056,
       "result_bytes": 598,
       "result_tokens": 155
     },
@@ -403,7 +403,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-004\",\"what\":\"Functional axial gap or preload requirement for the assembled Default configuration, with the complete contributing drawing dimensions and t…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0001646999990043696,
+      "elapsed_s": 0.00015780000103404745,
       "result_bytes": 502,
       "result_tokens": 127
     },
@@ -431,12 +431,12 @@
         },
         "reason": "No manifest discrepancy was reported, but vault version and local-modified status are unavailable for all three documents and the dowel-pin revision is missing; PO-259 is open."
       },
-      "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"provenance\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"positions…",
+      "result_summary": "{\"status\":\"closed_by_code\",\"check\":\"provenance\",\"reason\":\"Reviewed as open in SOLIDWORKS: 3 documents, each at its own path in its active configuration; revision read on 2 of 3. The open files are ta…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00014490000103251077,
-      "result_bytes": 507,
-      "result_tokens": 152
+      "elapsed_s": 0.000020300001779105514,
+      "result_bytes": 345,
+      "result_tokens": 84
     },
     {
       "index": 23,
@@ -465,7 +465,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"drawing.manufacturing_inputs\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"D…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0001384999995934777,
+      "elapsed_s": 0.00015449999773409218,
       "result_bytes": 540,
       "result_tokens": 161
     },
@@ -503,7 +503,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"interfaces.fit\",\"scope\":{\"component_ids\":[\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[[\"cmp:0003\",\"cmp:0004\"],[\"cmp:0002\",\"cmp:0004…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00015409999832627364,
+      "elapsed_s": 0.00014879999798722565,
       "result_bytes": 543,
       "result_tokens": 168
     },
@@ -534,7 +534,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"interfaces.stack\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"positions\":[\"a…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000143599998409627,
+      "elapsed_s": 0.00013469999976223335,
       "result_bytes": 465,
       "result_tokens": 132
     },
@@ -565,7 +565,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"out_of_scope\",\"coverage_item\":{\"check\":\"fasteners\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"position…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00013600000238511711,
+      "elapsed_s": 0.0001357000001007691,
       "result_bytes": 492,
       "result_tokens": 152
     },
@@ -605,7 +605,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"holes.alignment\",\"scope\":{\"component_ids\":[\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[[\"cmp:0003\",\"cmp:0004\"],[\"cmp:0002\",\"cmp:000…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00019629999951575883,
+      "elapsed_s": 0.00016110000069602393,
       "result_bytes": 587,
       "result_tokens": 175
     },
@@ -636,7 +636,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"checked\",\"coverage_item\":{\"check\":\"interference\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"positions\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0001427000024705194,
+      "elapsed_s": 0.00019309999697725289,
       "result_bytes": 668,
       "result_tokens": 159
     },
@@ -644,12 +644,12 @@
       "index": 29,
       "tool": "get_review_checklist",
       "arguments": {},
-      "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Confirm every reviewed document matches the manifest (vault version, revision…",
+      "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Closed by code from the package before your first turn: each reviewed documen…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00005560000136028975,
-      "result_bytes": 4007,
-      "result_tokens": 876
+      "elapsed_s": 0.00005400000009103678,
+      "result_bytes": 4097,
+      "result_tokens": 899
     },
     {
       "index": 30,
@@ -678,7 +678,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"coverage.closeout\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"po…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0001415999977325555,
+      "elapsed_s": 0.00013830000170855783,
       "result_bytes": 656,
       "result_tokens": 181
     },
@@ -686,12 +686,12 @@
       "index": 31,
       "tool": "get_review_checklist",
       "arguments": {},
-      "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Confirm every reviewed document matches the manifest (vault version, revision…",
+      "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Closed by code from the package before your first turn: each reviewed documen…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00005339999916031957,
-      "result_bytes": 4013,
-      "result_tokens": 877
+      "elapsed_s": 0.00005199999941396527,
+      "result_bytes": 4103,
+      "result_tokens": 900
     }
   ],
   "evidence_requests": [
@@ -1639,6 +1639,22 @@
   "coverage": {
     "checked": [
       {
+        "check": "provenance",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:681d2181ba04",
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "Reviewed as open in SOLIDWORKS: 3 documents, each at its own path in its active configuration; revision read on 2 of 3. The open files are taken as the latest: vault version and local modification are not read and never asked. A missing revision is reported by the hygiene checks.",
+        "error": null
+      },
+      {
         "check": "rms.refs.direction",
         "scope": {
           "component_ids": [],
@@ -2557,27 +2573,6 @@
         "error": null
       },
       {
-        "check": "provenance",
-        "scope": {
-          "component_ids": [
-            "cmp:0001",
-            "cmp:0002",
-            "cmp:0003",
-            "cmp:0004"
-          ],
-          "pairs": [],
-          "configuration": "Default",
-          "positions": [],
-          "document_ids": [
-            "doc:681d2181ba04",
-            "doc:792f2ea287a0",
-            "doc:8a412bc4633c"
-          ]
-        },
-        "reason": "No manifest discrepancy was reported, but vault version and local-modified status are unavailable for all three documents and the dowel-pin revision is missing; PO-259 is open.",
-        "error": null
-      },
-      {
         "check": "drawing.manufacturing_inputs",
         "scope": {
           "component_ids": [
@@ -3105,7 +3100,7 @@
     "assisted_supervision_minutes": 0.0,
     "assisted_verification_minutes": 0.0,
     "false_alarm_handling_minutes": 0.0,
-    "unattended_runtime_minutes": 0.0010592166666666667,
+    "unattended_runtime_minutes": 0.00125255,
     "net_saved_minutes": null
   }
 }
