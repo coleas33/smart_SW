@@ -870,11 +870,58 @@ included, and with T133 it also loses 3, 1 and 1 `standards.part.sketches_fully_
 the Standards sketch check reads the same tree since T133 - each exactly one occurrence of a merged
 pair. They are not `rms.*`, so the default does not narrow them, the generator refuses, and T134
 stops before regenerating, with the owner question T134-Q2 (tasks.md T134; 008 research R5).
+T134-Q2 is answered by a default beside this one, R2.47.
 
 **Alternatives**: a new outcome beside `narrowed` (a second list with the same meaning); removing
 every occurrence of a merged pair's reference (it would hide the depth-0 row dropped); a hand list of
 the 30 findings (it drifts); regenerating the fixtures with T133 and accepting the recordings' loss
 (the rule that no recorded finding is lost is absolute).
+
+#### R2.47 The tree-reading clause reads every check that reads the tree (T134-Q2)
+
+*Numbered after R2.46 and placed beside R2.42, the clause it extends.*
+
+**Decision**: R2.42's tree-reading clause applies to every check that reads the shared tree reading
+(`checks/feature_nodes.tree_nodes`): the `rms.*` rules and `standards.part.sketches_fully_defined`,
+which T133 moves onto the same reading, named explicitly by its check id - not the rest of
+`standards.*`, whose checks read the package's rows as dumped. For the Standards sketch check it is
+the tree-reading clause alone: a location is removable only when it names a row the reading merges
+as a second listing or carries as a sub-feature (`folded_locations`), and decision 23A's type-table
+clause (`not_content_locations`) never removes one of its locations - the type table decides what the
+RMS rules count as a subject, not what a Standards check names. Everything else is on R2.42's terms:
+a location *may* be removed; the recorded finding narrows one to one, in recorded order, onto a
+finding nothing else matched, whose locations lie between its own and the lowest key; its remaining
+locations are compared reference by reference (decision 25A); the depth-0 row's occurrence of a
+merged pair is never removed; and it is listed as narrowed with the locations removed. The rule is
+still written once, in the function the replay and the generator share: `narrowed_key` names the
+check (`TREE_READING_STANDARDS_CHECKS`) beside the `rms.*` prefix, and `compare_finding_keys` reads
+the recorded package when a finding of either family is unmatched.
+
+**Default taken 2026-09-27, the owner may revise.** It answers T134-Q2 as the question put it: "the
+tree-reading clause - not the type table's - ... on the same terms (one to one, the remaining
+references exact)".
+
+**Why**: with T133 the fixture generator, which compares every recorded finding and grades the
+fixtures with the example profile, loses 3, 1 and 1 `standards.part.sketches_fully_defined` findings
+on the three recordings, and each is exactly one occurrence of a merged pair: the Standards sketch
+check names an absorbed sketch once where the recording named its depth-0 row and its second listing
+- R2.42's shape. The real recordings' replay cannot see them (it runs with no standards profile, so
+they are not replayable), and a replay of fixtures regenerated without the rule would have nothing
+to compare them with. The line follows what reads the tree, not the prefix: the clause exists
+because a check reads one node per feature position, so every check that does is read by it, and no
+check that does not.
+
+**How it stays strict**: the check is named, never a prefix, so another Standards check - one that
+reads the rows as dumped, where a subject lost is a real one - is never narrowed, and a later reader
+of the tree joins by name; the type table's clause stays `rms.*`'s alone; a sketch whose depth-0 row
+the current finding no longer names is lost, as is any other remaining sketch subject swapped or
+dropped; the one-to-one matching and the exact references are unchanged.
+
+**Alternatives**: every `standards.*` check (the others do not read the tree, so a subject they lost
+would pass unseen); both clauses for the sketch check (the type table says nothing about what the
+Standards check names, so it would only loosen); a separate outcome (the same meaning as
+`narrowed`); keeping T132-T133 off `main` (the generator refuses the fixtures over a shape the rule
+already reads for `rms.*`).
 
 #### R2.43 The Model check says its open part looks bought (FR-008, US1 scenario 6)
 

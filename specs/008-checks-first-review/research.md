@@ -1544,7 +1544,7 @@ recorded finding, standards included, and on the three recordings with T133 appl
 3, 1 and 1 `standards.part.sketches_fully_defined` findings, each exactly one occurrence of a merged
 pair (the Standards sketch check reads the same tree since T133). They are not `rms.*`, so the rule
 does not narrow them and the generator refuses: T134 stops before regenerating (013 T134, owner
-question T134-Q2, R5).
+question T134-Q2, R5). T134-Q2 is answered by a default, R2.60.
 
 **How it stays strict.** The de-duplication is counted from the package, never assumed: the depth-0
 row's occurrence is never removed, so a finding whose absorbed sketch is no longer named at all is
@@ -1557,8 +1557,49 @@ and a package with neither shape folds nothing, so every R2.58 case is unchanged
 |---|---|
 | A new outcome beside `narrowed` | A second list meaning the same thing: the finding kept its part, configuration and remaining subjects, and lost only what a reading of the tree folds. |
 | Remove every occurrence of a merged pair's reference | It would also remove the depth-0 row, a real position, and let a finding that dropped it pass unseen. |
-| Narrow the standards sketch check's findings too | Beyond the question T134-Q1 put, which asked about `rms.*` findings; decision 23A never narrows another family. |
+| Narrow the standards sketch check's findings too | Beyond the question T134-Q1 put, which asked about `rms.*` findings; decision 23A never narrows another family. (*Taken 2026-09-27 as T134-Q2's default, R2.60, for that one check and by the tree-reading clause alone.*) |
 | A hand-kept list of the 30 findings | The rule says which; a list drifts. |
+
+### Amendment 2026-09-27 (feature 013 T134-Q2, default taken): the Standards sketch check read by the same clause
+
+#### R2.60 The tree-reading clause reads every check that reads the tree
+
+**Decision** (default taken 2026-09-27, the owner may revise; feature 013 task T134, owner question
+T134-Q2, 013 research R2.47). R2.59's tree-reading clause applies to every check that reads the
+shared tree reading: the `rms.*` rules and `standards.part.sketches_fully_defined`, which 013 T133
+moves onto `checks/feature_nodes.tree_nodes` too, named explicitly by its check id - never the rest
+of `standards.*`, whose checks read the package's rows as dumped. For the Standards sketch check it
+is the tree-reading clause alone: a location is removable only when it names a row the reading
+merges as a second listing or carries as a sub-feature (`folded_locations`); R2.58's type-table
+clause (`not_content_locations`), which decides what the RMS rules count, never removes one of its
+locations. Everything else is R2.59's: *may*; one to one in recorded order onto a requested-pass
+finding nothing else matched whose locations lie between the recorded finding's and the lowest key;
+the remaining locations compared reference by reference (decision 25A); the depth-0 row's occurrence
+of a merged pair never removed; listed as narrowed with the locations removed. `narrowed_key` holds
+the family test (the `rms.*` prefix, and `TREE_READING_STANDARDS_CHECKS` by name), and
+`compare_finding_keys` reads the recorded package when a finding of either family is unmatched; the
+generator reuses both unchanged (`contracts/replay.md` sections 5 and 8).
+
+**Why.** With 013 T133 the fixture generator loses 3, 1 and 1 `standards.part.sketches_fully_defined`
+findings on the three recordings (R2.59), each exactly one occurrence of a merged pair: the check
+names an absorbed sketch once where the recording named its depth-0 row and its second listing,
+R2.59's shape. The real recordings' replay runs with no standards profile, so it cannot see them.
+The clause exists because a check reads one node per feature position; the line is drawn at the
+checks that do, by name.
+
+**How it stays strict.** A named check, never a prefix: another Standards check is never narrowed
+and a later reader of the tree joins by name; the type table's clause stays `rms.*`'s alone; a
+sketch whose depth-0 row the current finding no longer names is lost, as is a remaining subject
+swapped or dropped.
+
+**Alternatives.**
+
+| Option | Why not |
+|---|---|
+| Every `standards.*` check | The others read the rows as dumped, so a subject they lost is a real one and would pass unseen. |
+| Both clauses for the sketch check | The type table says nothing about what a Standards check names; it would only loosen. |
+| A separate outcome | The same meaning as `narrowed`. |
+| Keep 013 T132-T133 off `main` | The generator refuses the fixtures over a shape the rule already reads for `rms.*`. |
 
 ## R3. Verified facts the plan relies on
 
@@ -1649,5 +1690,5 @@ Re-opened on 2026-09-23 at `43e9b15` for this reconciliation (the rest are the d
 | Settled 2026-09-25 (owner decision 25A): a narrowed finding's remaining locations must carry the persistent references of the current finding it takes, and the exact comparison compares references too (T128, R2.8) | owner | nothing: every narrowed finding on the three recordings has a current finding with the same references |
 | Should narrowing demand more of a location it removes (T129)? It removes any location naming only rows that are not content, in any document's scope, and compares it with nothing. On the three recordings every removable location names only rows of `tolerated_loose` types (108, 10 and 5) and lies in the scope of a location that remains; they belong to the 20, 2 and 1 narrowed `rms.grouping.all_features_in_a_group` findings and, on the big recording, to two `rms.sketches.one_sketch_per_feature` findings that match exactly because today's code still names those rows - so a change to a rule other than the grouping rule could narrow too. Options: narrow only `rms.grouping.all_features_in_a_group`; remove only a `tolerated_loose` type's row; remove only a location in a remaining location's scope; keep the rule | owner | nothing: no figure depends on the answer |
 | The replay plays no previous session, so a recorded finding lever 11a carried is lost unless the requested pass computes it again (checks first); existing before decision 25A (T129) | backlog | nothing: `carry_over_rms` is a workstation lever, off by default, and no recording holds a carried finding |
-| T134-Q2 (013 T134, 2026-09-27): should R2.59's tree-reading clause - not the type table's - also narrow a recorded `standards.part.sketches_fully_defined` finding, the one check outside `rms.*` that reads the shared tree since 013 T133? With T133 the generator loses 3, 1 and 1 of them, each exactly one occurrence of a merged pair; the real recordings' replay cannot see them (no standards profile) | owner | 013 T132-T134: the generator refuses the three fixtures until it is answered |
+| Settled 2026-09-27 by a default the owner may revise (R2.60): yes, by the tree-reading clause alone, for that one check id, named. T134-Q2 (013 T134, 2026-09-27): should R2.59's tree-reading clause - not the type table's - also narrow a recorded `standards.part.sketches_fully_defined` finding, the one check outside `rms.*` that reads the shared tree since 013 T133? With T133 the generator loses 3, 1 and 1 of them, each exactly one occurrence of a merged pair; the real recordings' replay cannot see them (no standards profile) | owner | nothing since the default: 013 T132-T134 land with it (before it, the generator refused the three fixtures) |
 | A printed subject names every location's base64 reference (decision 25A, section 7): the review measured the big recording's 20 narrowed subjects at 49,774 characters, none holding a denylist token; a shorter printed form, such as a digest, would change what 25A decided is printed (T129) | owner | nothing |

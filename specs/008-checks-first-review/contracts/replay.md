@@ -1,13 +1,14 @@
 # Contract: The Replay
 
-*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed for User Stories 1 to 6 (013 T042, T058, T069, T095, T115, T124; section 9's rows "Feature 013 US1" to "Feature 013 US2") and the follow-ups (013 T158, the row "Feature 013 follow-ups"), User Story 7's gate pending (013 T134; its question T134-Q1 answered by a default taken 2026-09-27, section 5's tree-reading clause, built by 013 T145-T146; stopped again on the owner's question T134-Q2, the Standards sketch check's findings):* every change of feature 013 that moves what the model reads passes the replay gate and records a re-measured section 9 row; see 013 `contracts/tokens.md` section 5.
+*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed for User Stories 1 to 6 (013 T042, T058, T069, T095, T115, T124; section 9's rows "Feature 013 US1" to "Feature 013 US2") and the follow-ups (013 T158, the row "Feature 013 follow-ups"), User Story 7's gate pending (013 T134; its question T134-Q1 answered by a default taken 2026-09-27, section 5's tree-reading clause, built by 013 T145-T146; its question T134-Q2, the Standards sketch check's findings, answered by a default taken 2026-09-27, section 5's clause read for every check that reads the tree):* every change of feature 013 that moves what the model reads passes the replay gate and records a re-measured section 9 row; see 013 `contracts/tokens.md` section 5.
 
 Normative for `swreview benchmark replay`, `benchmark/recording.py`, `benchmark/replay.py`, the
 `ReplayReport` model and the committed replay fixtures (FR-001 to FR-007, SC-001 to SC-005).
 Amended 2026-09-23 by the owner's decision 3A - the fixtures follow the code - in sections 8, 9
 and 10. Amended 2026-09-25 by the owner's decision 23A - a recorded RMS finding the type table
 narrowed - in sections 5, 7, 8 and 10. Amended 2026-09-27 by feature 013's default for T134-Q1
-- a recorded RMS finding the tree reading narrowed - in sections 5, 7 and 8.
+- a recorded RMS finding the tree reading narrowed - in sections 5, 7 and 8, and by its
+default for T134-Q2 - the Standards sketch check read by the same clause - in sections 5 and 8.
 
 ## 1. The command
 
@@ -373,6 +374,35 @@ feature) and 283, 29 and 21 locations removed, and a zero residual on every roun
 drift rule). `test_replay_narrowed_tree.py` pins the rule; `test_replay_narrowed.py` and
 `test_replay_generator_narrowed.py` are unchanged but for the summary line's words (section 7).
 
+*Amended 2026-09-27 (feature 013 T134-Q2; default taken 2026-09-27, the owner may revise; 013
+research R2.47, research R2.60): every check that reads the tree.* The tree-reading clause above
+applies to every check that reads the shared tree reading: the `rms.*` rules and
+`standards.part.sketches_fully_defined`, which 013 T133 moves onto the same reading, named
+explicitly by its check id - never the rest of `standards.*`, whose checks read the rows as dumped.
+So the family sentence above reads, since this default: a `standards.*` finding other than
+`standards.part.sketches_fully_defined` is never narrowed. For the Standards sketch check it is the
+tree-reading clause alone:
+
+- a location is removable only when it names a row the reading merges as a second listing or
+  carries as a sub-feature (`folded_locations`): every occurrence of one naming no row the reading
+  keeps as a position the table counts, and of a merged pair the occurrences beyond the rows the
+  reading keeps there, at most one per second listing - the depth-0 row's occurrence never;
+- decision 23A's clause (`not_content_locations`) never removes one of its locations: the type table
+  decides what the RMS rules count as a subject, not what a Standards check names.
+
+Everything else is as for `rms.*`: *may*; one to one in recorded order onto a finding nothing else
+matched, whose locations lie between the recorded finding's and the lowest key; the remaining
+locations compared reference by reference (decision 25A); the carried-finding comparison (T129);
+listed as narrowed with the locations removed, in the same count. A sketch the current finding no
+longer names at all is lost, and so is a remaining sketch subject swapped or dropped. The rule is
+still written once: `narrowed_key` holds the family test - the `rms.*` prefix, and
+`TREE_READING_STANDARDS_CHECKS` by name - and `compare_finding_keys` reads the recorded package when
+a finding of either family is unmatched; the generator reuses both unchanged (section 8). *Why:* with
+013 T133 the fixture generator loses 3, 1 and 1 `standards.part.sketches_fully_defined` findings on
+the three recordings, each exactly one occurrence of a merged pair - the shape the clause narrows
+for `rms.*`; the real recordings' replay runs with no standards profile, so it cannot see them.
+`test_replay_narrowed_tree.py` pins it.
+
 ## 6. The regrouped estimate (from User Story 4)
 
 Printed beside the strict figure whenever a rule applies, with its assumption: "the model does
@@ -643,7 +673,10 @@ package (section 5) narrows onto the fixture finding nothing else matched, its n
 carried into the fixture's names by `scrambled_key` as before. The generator prints the count as
 `N narrowed by the type table or the tree reading`. Every other self-check is unchanged: a
 recorded key still missing, or a new key, refuses - a `standards.*` finding included, which is
-never narrowed.
+never narrowed. *Amended 2026-09-27 (013 T134-Q2; default taken 2026-09-27, the owner may revise):*
+but for `standards.part.sketches_fully_defined`, the one Standards check that reads the shared tree,
+which narrows by the tree-reading clause alone (section 5), through the same `compare_finding_keys`,
+and is counted in the same `N`; every other `standards.*` finding is still never narrowed.
 
 ## 9. The acceptance each story cites
 
