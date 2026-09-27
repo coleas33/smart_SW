@@ -1605,6 +1605,35 @@ swapped or dropped.
 | A separate outcome | The same meaning as `narrowed`. |
 | Keep 013 T132-T133 off `main` | The generator refuses the fixtures over a shape the rule already reads for `rms.*`. |
 
+### Amendment 2026-09-27 (feature 013 T159, default taken on review): what each check can still name
+
+#### R2.61 A carried row is a place for the checks that still grade it
+
+**Decision** (default taken 2026-09-27, the owner may revise; feature 013 task T159, 013 research
+R2.48). The tree-reading clause of R2.59 and R2.60 removes a location only where the current check
+can no longer name what it names. `standards.part.rebuild_errors` reads the shared tree reading too
+(013 T133 gave every part check one `Part.features`) and joins `TREE_READING_STANDARDS_CHECKS` by
+name. For every check that still grades a carried row as its owner's - the three RMS sketch rules
+(`CARRIED_SKETCH_RMS_CHECKS`) and both Standards checks - a carried row is a place its finding may
+still name, so a location naming one is never removed wholesale and a carried sketch or
+sub-feature dropped is lost; the other `rms.*` rules give it no place and it goes, as before. The
+places are counted per family (`FoldedLocation`: `positions`, `carried` and `features`), the
+Standards checks' without the type table. The merged half reads every family unchanged
+(`contracts/replay.md` section 5).
+
+**Why.** The review of 2026-09-27 found a Standards or RMS sketch finding that stopped naming the
+Hole Wizard's carried profile sketch narrowed rather than lost, a pre-T133 rebuild-error finding
+on an absorbed sketch's two listings lost against today's one location, and the Standards count
+read from the type table R2.60 said it never reads. On the three recordings the figures do not move:
+every carried location removed is a grouping finding's, and the sketch rules drop merged pairs alone.
+
+**Alternatives.**
+
+| Option | Why not |
+|---|---|
+| The rebuild-error check back on the rows as dumped | One feature named twice in one finding, the duplicate 013 FR-051 removes for sketches. |
+| A carried consumer removable for the sketch rules, a carried sketch not | A location carries no row kind; the recordings drop no carried consumer; a false loss is the safe side. |
+
 ## R3. Verified facts the plan relies on
 
 Re-opened on 2026-09-23 at `43e9b15` for this reconciliation (the rest are the design passes'):

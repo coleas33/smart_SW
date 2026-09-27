@@ -563,6 +563,19 @@ folder stays whole, and `plan.json` is untouched (still `planned`; the pane alre
 as lost, decision 24A). A run in progress when the add-in unloads ends the same way: its changes go
 with the unsaved close, `changes.jsonl` stays whole, and the run is never resumed.
 
+*Amended 2026-09-27 on review (defaults taken 2026-09-27, the owner may revise; `tasks.md` T183,
+research R15.4 and R15.5):* a failed open's unwind that holds no document handle asks before it says
+the copy is closed. When the copy was never made, the open was never called: `copy_closed` is true
+and nothing is asked. When the copy exists and no handle came back - `OpenDoc7` answered null, it or
+the document's wrapper threw, or the gate refused it - the seat is asked, by the same clean-up read
+under `GetOpenDocumentByName`, whether SOLIDWORKS has a document open at the copy's path: none is
+`copy_closed` true; one is closed unsaved by the one close helper and confirmed as every close is; a
+read that throws is not closed, with a failure saying whether SOLIDWORKS opened the copy could not be
+read. And an untag SOLIDWORKS did not carry out is said as "untag: Delete2 answered {answer}, so the
+session tag was not removed from the open copy; the ending never saves, so the copy on disk carries
+the tag only if remodel.save saved it there": the untag reaches only the open document, and a copy
+`remodel.save` saved keeps on disk the tag it was saved with, whatever the untag answered.
+
 On a re-attach or an unload, `ToolServiceHost.Dispose` runs the routine on the application thread
 **before** the pipe server is disposed: inline when it is already on that thread (an unload, from
 `DisconnectFromSW`), and posted with a bounded wait otherwise (a re-attach, from the thread pool).
