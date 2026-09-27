@@ -35,7 +35,7 @@ source: one bad path join beside a source inside an EPDM vault writes into the v
 | `report.md` | `remodel/report.py` | prose | The engineer-facing summary |
 | `events.jsonl` | `agent/events.py` | feature 002 `contracts/chat-events.schema.json` | The agent run, same shape as a review, through the **extracted** sink |
 | `session.json` | the recorded `ToolRegistry` steps | feature 001 session schema | So `tool_result_ids` reference steps that exist |
-| `remodel.log` | `BridgeDispatcher` | one line per request | Command, elapsed, gated members, and the **target path** of every mutating call |
+| `remodel.log` | `BridgeDispatcher` | one line per request | Command, elapsed, gated members, and the **target path** of every mutating call. *Added 2026-09-26 (default taken 2026-09-26, the owner may revise; `tasks.md` T167, not yet built):* plus one teardown line when a session ends without `remodel.close` - a tool-service re-attach or an add-in unload - carrying the gated set of the clean-up and its outcome (settings restored, copy closed, each failure); the same line goes to the tool-service log. A teardown writes no other file: `plan.json` stays `planned`, and `copy/` keeps the unsaved byte copy |
 
 `report.md` is the product, and its section order is fixed, because Principle VI fixes the first
 three and FR-056 fixes the last:

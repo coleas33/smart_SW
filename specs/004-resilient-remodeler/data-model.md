@@ -421,7 +421,15 @@ by side on a `Refusal` (section 4.2) cannot be mistaken for each other.
 | `save_flag_dirty` | bool | `GetSaveFlag()` on the source, when it is open |
 | `read_only` | bool | |
 | `rebuild_error_count` | int | `GetWhatsWrongCount()` after the baseline rollback and rebuild |
-| `vault` | `{path, revision}` \| null | EPDM; recorded, never a refusal reason |
+| `vault` | `{path, revision}` \| null | EPDM; recorded, never a refusal reason. Null means **not read by this build**, never "not in a vault" (amended 2026-09-26, below) |
+
+*Amended 2026-09-26 (default taken 2026-09-26, the owner may revise; research R13.5; tasks T155
+and T139).* No PDM API is referenced anywhere in the product, so the seat's `GetVault` answers null
+for every source until T139 adds a vault read. A null `vault` therefore says that this build did
+not read one, and nothing more: a reader may not take it to mean the source is outside a vault, and
+the report, which omits a null vault line, claims nothing either way. T139 decides how "not in a
+vault" and "not read" are told apart once a read exists. Whatever it holds, `vault` is never a
+refusal reason (FR-006).
 
 A `null` signal is **not** treated as a pass. It produces an `unresolved` scope item naming the
 signal, and a run may not proceed on an unresolved multibody, weldment, sheet-metal, mesh, 3D
@@ -481,7 +489,7 @@ that moves it before the copy.
 | `recorded_at` | ISO 8601 | Before the copy is made |
 | `rechecked_at` | ISO 8601 \| null | At report time |
 | `matches` | bool \| null | All three re-checked values equal. **`False` is a hard failure of the run**, whatever the copy looks like |
-| `vault_path`, `vault_revision` | str \| null | EPDM source; the copy is taken out of the vault into the run folder |
+| `vault_path`, `vault_revision` | str \| null | EPDM source; the copy is taken out of the vault into the run folder. Null means **not read by this build** until T139 adds a vault read (section 4.1's amendment of 2026-09-26) |
 | `copy_path`, `copy_sha256_after_save` | str, str \| null | Recorded so the artifact in the run folder is identifiable later |
 
 ---
@@ -706,6 +714,14 @@ Rules the transitions obey:
 - **A run never auto-resumes.** After a crash the state on disk is whatever transition last
   completed; recovery is manual. A resumed run over a tree that was not re-verified is exactly
   the wrong risk, and a test asserts that resume is refused.
+- **A lost plan stays `planned` on disk.** *Added 2026-09-26 (defaults taken 2026-09-26, the
+  owner may revise; research R13.1 and R13.4).* A plan whose session ended without Start - a
+  tool-service re-attach or an add-in unload (`tasks.md` T167, whose teardown leaves `plan.json`
+  untouched), or a new plan made while it waited (T173) - keeps `state: planned` and its copy file
+  in `copy/`. There is no `lost` state: whether a plan can still be started is the host's to know
+  (the attachment it was made on, and T173's mark), and a Start of a lost plan is refused before
+  anything is written (`contracts/pane-remodel-messages.md`, `SessionLost`). A reader of the
+  folder alone sees a plan that was never started, which is true.
 
 Crash recovery reads the state from artifacts rather than trusting the last written `state`:
 

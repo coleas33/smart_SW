@@ -159,7 +159,10 @@ Sequence, in order, with the call that performs each step:
    canonicalized, `.SLDPRT`, not the source, not another run's copy.
 5. Record the source attestation: absolute path, length, `LastWriteTimeUtc`, SHA-256, and, when
    the path is inside an EPDM vault, the vault path and the revision as read from the vault. An
-   EPDM part is **copied out, never refused for vault reasons**.
+   EPDM part is **copied out, never refused for vault reasons**. *Amended 2026-09-26 (default
+   taken 2026-09-26, the owner may revise; `tasks.md` T155, T139):* until T139 adds a vault read
+   the seat's `GetVault` answers null and both vault fields are recorded null, which means "not
+   read by this build", never "not in a vault" (`data-model.md` section 4.1).
 6. Set the three system toggles through `ISldWorks.SetUserPreferenceToggle` -
    `swInputDimValOnCreate = 10`, `swShowErrorsEveryRebuild = 77`,
    `swWarnSaveUpdateErrors = 329` (all VERIFIED values) - plus the separately allowlisted
@@ -188,7 +191,10 @@ Sequence, in order, with the call that performs each step:
 12. Re-read the same scope signals, this time **on the copy**, and compare them field for field
     with the probe's. A difference is `scope_changed`: the document being changed is not the one
     the verdict was reached on, and the run stops with the copy deleted. This costs one pass over
-    the tree and closes the only gap the two-step ordering opens.
+    the tree and closes the only gap the two-step ordering opens. *Amended 2026-09-26 (a design
+    choice, `tasks.md` T174, not yet built):* the folder row is compared by each folder's name and
+    member count, not by its members' persist-ref strings, because the bytes for one entity may
+    differ between source and copy (feature 001's research R12).
 
 The returned `scope_signals` are the copy's, measured at step 12, and are what the plan records:
 the plan should describe the document the run actually changed. The probe's signals are what the
@@ -462,6 +468,14 @@ would lose the evidence Principle VI asks for and "what did it propose" must sta
 the engineer says no. The system toggles are restored in the `finally` that wraps the run,
 including on recovery from a previous run that died.
 
+*Amended 2026-09-26 (default taken 2026-09-26, the owner may revise; `tasks.md` T167, not yet
+built):* `remodel.close` runs through the one end-of-session routine below ("Ending a session"),
+so a verification that fails, an untag or a close that throws, or an open circuit no longer leaves
+the settings flipped and the session stuck - today the three calls run outside any `try`, and one
+throw made every later `remodel.open` on that attachment answer `run_in_progress`. What the
+routine could not do travels in the error's `detail`. With `discard_copy: true` the delete of
+`copy/` comes after the routine; the teardown never deletes.
+
 ### The session and the tool service's attachment
 
 *Added 2026-09-25 (owner, decision 22A; 004 T160).* The run's `RemodelSession` lives on the
@@ -482,7 +496,57 @@ this bridge session") before any write, so the run changes nothing either way.
 
 What the discarded session leaves on the seat - the system toggles `remodel.open` set, and the
 copy still open in SOLIDWORKS, since neither the dispatcher nor `ToolServiceHost.Dispose` ends a
-session - is 004 T167, not decided.
+session - is 004 T167, not decided. *Decided 2026-09-26 (default taken 2026-09-26, the owner may
+revise; research R13.1):* the teardown ends it ("Ending a session", next).
+
+### Ending a session
+
+*Added 2026-09-26 (default taken 2026-09-26, the owner may revise; `tasks.md` T167, not yet
+built).* A session ends in one routine, `SwBridgeDispatcher.EndRemodelSession(reason)`, whatever
+ends it: `remodel.close`, a tool-service re-attach, or an add-in unload.
+
+1. `VerifyTarget` (`guard-allowlist.md`).
+2. When it passes, remove the session tag (`ICustomPropertyManager.Delete2`) and close the copy
+   **unsaved** (`ISldWorks.CloseDoc`). Each write is judged by the guard and logged like any other
+   remodel write, but does not count against the circuit breaker, the pattern
+   `RemodelSystemToggles.PutBack` already follows, so an open circuit cannot stop the clean-up.
+   When the verification fails, nothing is closed, and the outcome names the check that failed.
+3. In a `finally`, restore all four settings - the three toggles, then `CommandInProgress` last.
+   A restore is safe to run twice.
+4. In an outer `finally`, clear the session and the run root, so the next `remodel.open` is never
+   answered `run_in_progress` by a session that is already over.
+
+It returns an outcome: whether the settings were restored and how many, whether the copy was
+closed, and every failure. It **never saves** - `remodel.save` stays the one save - and a
+re-attach or an unload **never deletes**: the copy stays in `copy/` as the byte copy it was, the run
+folder stays whole, and `plan.json` is untouched (still `planned`; the pane already treats the plan
+as lost, decision 24A). A run in progress when the add-in unloads ends the same way: its changes go
+with the unsaved close, `changes.jsonl` stays whole, and the run is never resumed.
+
+On a re-attach or an unload, `ToolServiceHost.Dispose` runs the routine on the application thread
+**before** the pipe server is disposed: inline when it is already on that thread (an unload, from
+`DisconnectFromSW`), and posted with a bounded wait otherwise (a re-attach, from the thread pool).
+The pipe server is disposed in a `finally` whatever the routine did. One teardown line - the gated
+set drained from the observer, and the outcome - goes to the tool-service log and to the run's
+`remodel.log` (`run-artifacts.md`), since the request logger writes only per request. The outcome
+reaches the add-in through `ToolServiceOptions.RemodelSessionEnded`, and a failure becomes the
+Remodel page's one status error (`pane-remodel-messages.md`).
+
+**The run root is used up at open** (`tasks.md` T158, a design choice of 2026-09-26, not yet
+built): the host binds the run's folder before `remodel.open`, `remodel.open` reads it and clears
+it, and so every run needs a fresh bind and a second run can never inherit the first one's folder.
+
+### The Start switch
+
+*Added 2026-09-26 (default taken 2026-09-26, the owner may revise; `tasks.md` T172, not yet
+built).* `RemodelStart.SeatValidated` is false as shipped, like `DrawingOpenScope.SeatValidated`,
+and is set true in a commit of its own once PROBE-1, 2, 3, 4 and 12 have verdicts from a seat.
+While it is false the six change commands - `remodel.rename`, `remodel.reorder`, `remodel.folder`,
+`remodel.describe`, `remodel.equation` and `remodel.save` - answer `start_not_validated` before
+`VerifyTarget` and before any write, and the commands Plan and Discard use (`remodel.probe_scope`,
+`remodel.open`, `remodel.snapshot`, `remodel.rebuild`, `remodel.geometry` and `remodel.close`) are
+unchanged. The pane refuses Start first (`StartNotValidated`), so this answer is the backstop: a
+clause checked only by the caller is a clause the caller can skip.
 
 ## Error codes
 
@@ -518,6 +582,7 @@ stays unknown and is never guessed into the nearest class.
 | `gate_not_passed` | `remodel.save` called before a `pass` verdict | `RemodelContractError` | Nothing is saved |
 | `save_failed` | `Save3` returned a non-zero error | `RemodelSaveError` | Failed run |
 | `not_in_v1` | A reserved stage-2 operation was requested | `RemodelNotInV1Error` | Refused |
+| `start_not_validated` | A change command while `RemodelStart.SeatValidated` is false ("The Start switch"; T172, added 2026-09-26, not yet built) | `RemodelContractError` | Refused before any write; the pane refuses Start first, so this is a bug in the caller |
 | `run_in_progress` | A second run was started on the same host | `RemodelRunInProgress` | Refused |
 | `bad_request` | The request cannot be honoured as sent: a missing or empty parameter, `folder` `rename` aimed at a feature that is not an `FtrFolder`, a `describe` whose previous text will not read and therefore has no inverse, or a command in the table with no handler in this build | `RemodelContractError` | Refused; the change never lands. A bug in the caller, not a condition of the part, which is why it is a contract error and not a change error |
 
