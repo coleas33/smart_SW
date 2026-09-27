@@ -263,3 +263,26 @@ def test_propose_version_4_is_pure_text_in_text_out(tmp_path: Path) -> None:
 
     assert proposed == propose_version_4(text, load_profile(source))
     assert "version: 4" in proposed and "version: 3" not in proposed
+
+
+def test_the_unfilled_output_classifies_as_its_version_3_input(tmp_path: Path) -> None:
+    """The review of 2026-09-27: pointed at the pane before the owner fills it, the helper's
+    output decides exactly what its version 3 input decides (the convention-only state), rather
+    than firing the zero-match guard with every signal off."""
+    from swreview.checks.part_roles import classify_parts
+    from swreview.checks.standards.profile import load_profile, propose_version_4
+    from tests.support.sitting import sitting_package
+
+    source = tmp_path / "v3.yaml"
+    source.write_text(yaml.safe_dump(as_version(3), sort_keys=False), encoding="utf-8")
+    version_3 = load_profile(source)
+    proposed = tmp_path / "v4.yaml"
+    text = propose_version_4(source.read_text(encoding="utf-8"), version_3)
+    proposed.write_text(text, encoding="utf-8")
+    version_4 = load_profile(proposed)
+    subject = sitting_package()
+
+    assert version_4.version == 4 and version_4.part_roles is not None
+    assert version_4.part_roles.signals_unused
+    assert classify_parts(subject, version_4) == classify_parts(subject, version_3)
+    assert classify_parts(subject, version_4).state == "convention_only"

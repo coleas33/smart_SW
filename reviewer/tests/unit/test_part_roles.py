@@ -822,6 +822,110 @@ def test_a_version_3_profile_with_no_convention_is_absent() -> None:
     assert (roles.state, roles.state_reason) == ("absent", STATE_NO_CONVENTION)
 
 
+UNUSED_SIGNALS: dict[str, Any] = {
+    "bought_prefixes": [],
+    "bought_folder_names": [],
+    "switch__property": "",
+    "switch__bought_values": [],
+    "switch__custom_values": [],
+    "vendor_properties": [],
+    "distributor_block__properties": [],
+    "distributor_block__min_valued": 0,
+    "catalogue_numbers__shapes": [],
+    "catalogue_numbers__properties": [],
+    "custom_prefixes": [],
+    "bought_number_prefixes": [],
+    "detail_properties": [],
+}
+"""A `part_roles` section in which every signal is unused: what `swreview profile upgrade`
+writes before the owner fills it in (`part-roles-profile.md` section 5)."""
+
+
+def unfilled(**filled: Any) -> StandardsProfile:
+    """Profile A at version 4 with every signal unused, but those `filled` (same keys)."""
+    return profile_with(**{**UNUSED_SIGNALS, **filled})
+
+
+def mixed_package() -> EvidencePackage:
+    """The convention-only table's package: a plate on the convention, a Toolbox screw, and a
+    spacer in a bought-parts folder with a same-name drawing candidate."""
+    plate = document("doc:2", CUSTOM_NAME)
+    screw = document("doc:3", "fict-screw.SLDPRT")
+    spacer = document("doc:4", "fict-spacer.SLDPRT", path=f"{BOUGHT_FOLDER}fict-spacer.SLDPRT")
+    components = [
+        instance("cmp:0002", "doc:2"),
+        instance("cmp:0003", "doc:3", toolbox=True),
+        instance("cmp:0004", "doc:4"),
+    ]
+    return package(plate, screw, spacer, components=components, candidates=["doc:4"])
+
+
+def test_an_unfilled_section_reads_as_the_convention_it_was_proposed_from() -> None:
+    """The review of 2026-09-27: the upgrade helper's output, before the owner fills it, turned
+    every signal off and fired the zero-match guard - no question asked, the unclear parts graded
+    with no note - where its own version 3 input decided by the convention and asked. A section
+    that decides nothing is read as the convention-only state, so the unfilled file behaves as the
+    file it came from until the owner fills it."""
+    subject = mixed_package()
+
+    proposed = classify_parts(subject, unfilled())
+    before = classify_parts(subject, version_3())
+
+    assert proposed.state == before.state == "convention_only"
+    assert proposed == before
+    assert not proposed.guard_fired
+    assert roles_question(proposed, subject) == roles_question(before, subject) is not None
+
+
+def test_an_unfilled_section_with_no_convention_is_absent() -> None:
+    """As a version 3 profile with an empty pattern is (section 1's table)."""
+    data = unfilled().model_dump(mode="json")
+    data["part_number"] = {**data["part_number"], "pattern": ""}
+    no_convention = StandardsProfile.model_validate(data)
+
+    roles = classify_parts(mixed_package(), no_convention)
+
+    assert (roles.state, roles.state_reason) == ("absent", STATE_NO_CONVENTION)
+
+
+@pytest.mark.parametrize(
+    "filled",
+    [
+        {"bought_prefixes": [BOUGHT_FOLDER]},
+        {"bought_folder_names": ["fict-bought"]},
+        {"switch__property": "fict sourcing", "switch__bought_values": ["procured"]},
+        {"vendor_properties": ["fict supplier"]},
+        {"distributor_block__properties": ["fict stock"], "distributor_block__min_valued": 1},
+        {"catalogue_numbers__shapes": ["MX@@@-##P"]},
+        {"custom_prefixes": [CUSTOM_PREFIX]},
+        {"bought_number_prefixes": ["FICT-9"]},
+        {"detail_properties": ["fict summary"]},
+    ],
+    ids=[
+        "bought-prefixes",
+        "folder-names",
+        "switch",
+        "vendor",
+        "distributor",
+        "catalogue",
+        "custom-prefixes",
+        "bought-numbers",
+        "detail",
+    ],
+)
+def test_any_one_signal_filled_is_the_configured_state(filled: dict[str, Any]) -> None:
+    profile = unfilled(**filled)
+
+    assert profile.part_roles is not None and not profile.part_roles.signals_unused
+    assert classify_parts(mixed_package(), profile).state == "configured"
+
+
+def test_the_shipped_fictional_profiles_are_filled() -> None:
+    assert profile_a().part_roles is not None
+    assert not profile_a().part_roles.signals_unused
+    assert unfilled().part_roles is not None and unfilled().part_roles.signals_unused
+
+
 def test_the_convention_only_state_reads_the_answer_toolbox_and_the_convention() -> None:
     plate = document("doc:2", CUSTOM_NAME)
     screw = document("doc:3", "fict-screw.SLDPRT")

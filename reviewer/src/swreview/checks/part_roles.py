@@ -669,7 +669,7 @@ def classify_parts(
     state, state_reason = _state(profile, profile_refusal)
     reader = (
         _Reader(profile, profile.part_roles)
-        if profile is not None and profile.part_roles is not None
+        if state == "configured" and profile is not None and profile.part_roles is not None
         else None
     )
     own = {
@@ -724,8 +724,10 @@ def _state(
         if profile_refusal:
             return "absent", STATE_REFUSED.format(refusal=profile_refusal)
         return "absent", STATE_NO_PROFILE
-    if profile.part_roles is not None:
+    if profile.part_roles is not None and not profile.part_roles.signals_unused:
         return "configured", None
+    # A section with every signal off - the upgrade helper's output before the owner fills it -
+    # decides nothing a version 3 profile would not: read as the file it was proposed from.
     if profile.part_number.pattern:
         return "convention_only", None
     return "absent", STATE_NO_CONVENTION
