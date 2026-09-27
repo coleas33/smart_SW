@@ -1578,7 +1578,11 @@ the remaining locations compared reference by reference (decision 25A); the dept
 of a merged pair never removed; listed as narrowed with the locations removed. `narrowed_key` holds
 the family test (the `rms.*` prefix, and `TREE_READING_STANDARDS_CHECKS` by name), and
 `compare_finding_keys` reads the recorded package when a finding of either family is unmatched; the
-generator reuses both unchanged (`contracts/replay.md` sections 5 and 8).
+generator reuses both unchanged (`contracts/replay.md` sections 5 and 8). *Landed as (013 T134, 2026-09-27):* `benchmark/replay.narrowable(check)` and
+`TREE_READING_STANDARDS_CHECKS`; with T132-T133 on `main` the generator narrows 29, 4 and 3
+recorded findings on the three recordings - 26, 3 and 2 `rms.*`, and 3, 1 and 1 Standards sketch
+findings by the tree-reading clause alone - and loses none, and the fixtures were regenerated
+(`contracts/replay.md` section 9, row "Feature 013 US7").
 
 **Why.** With 013 T133 the fixture generator loses 3, 1 and 1 `standards.part.sketches_fully_defined`
 findings on the three recordings (R2.59), each exactly one occurrence of a merged pair: the check
