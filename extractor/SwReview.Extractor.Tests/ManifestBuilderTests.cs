@@ -17,7 +17,8 @@ namespace SwReview.Extractor.Tests;
 /// Before them the manifest held no modification time, no file size and no content hash:
 /// <c>document_id</c> is a SHA-1 of the lowercased normalized path, <c>vault_version</c> and
 /// <c>revision</c> are null unless a vault writes them back, and <c>local_modified</c> is
-/// hardcoded null with an <c>unsupported</c> gap on every document of every dump. A reuse key
+/// hardcoded null (with an <c>unsupported</c> gap on every document until feature 013 T071
+/// removed it, as a fact of the build rather than of each document). A reuse key
 /// over that reduces to "the same files, in the same configurations", which says nothing about
 /// whether any of them changed (data-model.md 9.1).
 ///
@@ -199,6 +200,78 @@ public sealed class ManifestBuilderTests : IDisposable
         Assert.Equal(4096, entry.FileSizeBytes);
     }
 
+    // ---- the gaps a build that reads no vault writes (feature 013 T070, research R2.21) ---------
+    //
+    // This build reads no vault, so for every document the vault version (unless a property
+    // carries it) and the local-modification state are unknown by construction. The review
+    // states that once, in the provenance row code writes at setup (013 R2.20), instead of two
+    // gaps per document that every list_gaps call re-reads and the close-out asked to reflect.
+
+    [Fact]
+    public void ABuildThatReadsNoVault_WritesNoVaultVersionGapAndNoLocalModificationGap()
+    {
+        string path = WriteFile("cover.sldprt", 8);
+        var scope = NewScope();
+
+        ManifestEntry entry = Build(scope, path);
+
+        Assert.Null(entry.VaultVersion);
+        Assert.Null(entry.LocalModified);
+        Assert.DoesNotContain(scope.Gaps.Gaps, gap => gap.Kind == GapKind.Unsupported);
+        Assert.DoesNotContain(
+            scope.Gaps.Gaps, gap => gap.Reason.IndexOf("vault", StringComparison.OrdinalIgnoreCase) >= 0);
+    }
+
+    [Fact]
+    public void ARevisionThatIsMissing_IsStillTheOneGap()
+    {
+        string path = WriteFile("cover.sldprt", 8);
+        var scope = NewScope();
+
+        Build(scope, path);
+
+        Gap gap = Assert.Single(scope.Gaps.Gaps);
+        Assert.Equal(GapKind.NotExtracted, gap.Kind);
+        Assert.Equal("manifest", gap.EntityKind);
+        Assert.Equal("doc:1", gap.EntityId);
+        Assert.Contains("No revision was found for 'cover.sldprt'", gap.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ADocumentWithItsRevisionAndASavedFile_WritesNoManifestGapAtAll()
+    {
+        string path = WriteFile("cover.sldprt", 8);
+        var scope = NewScope();
+
+        Build(scope, path, revision: "B");
+
+        Assert.Empty(scope.Gaps.Gaps);
+    }
+
+    [Fact]
+    public void AMissingFile_KeepsItsStatGapBesideTheRevisionGap()
+    {
+        var scope = NewScope();
+
+        Build(scope, Path.Combine(_root, "never-written.sldprt"));
+
+        Assert.Equal(2, scope.Gaps.Gaps.Count(gap => gap.EntityKind == "manifest"));
+        Assert.Contains(scope.Gaps.Gaps, gap => gap.Reason.IndexOf("modification time", StringComparison.Ordinal) >= 0);
+        Assert.Contains(scope.Gaps.Gaps, gap => gap.Reason.IndexOf("No revision was found", StringComparison.Ordinal) >= 0);
+    }
+
+    [Fact]
+    public void AVaultVersionAPropertyCarries_IsStillRead()
+    {
+        string path = WriteFile("cover.sldprt", 8);
+        var scope = NewScope();
+
+        ManifestEntry entry = Build(scope, path, revision: "B", version: "12");
+
+        Assert.Equal(12, entry.VaultVersion);
+        Assert.Empty(scope.Gaps.Gaps);
+    }
+
     private static DateTime Truncate(DateTime value) =>
         new DateTime(value.Ticks - (value.Ticks % 10), value.Kind);
 
@@ -212,7 +285,8 @@ public sealed class ManifestBuilderTests : IDisposable
     private static DumpScope NewScope() =>
         new DumpScope(new GapCollector(), new DumpOptions(), new ComponentTreeResult());
 
-    private static ManifestEntry Build(DumpScope scope, string documentPath, SwGate? gate = null)
+    private static ManifestEntry Build(
+        DumpScope scope, string documentPath, SwGate? gate = null, string? revision = null, string? version = null)
     {
         var document = new Document
         {
@@ -221,6 +295,16 @@ public sealed class ManifestBuilderTests : IDisposable
             Path = documentPath,
             ActiveConfiguration = "Default",
         };
+
+        if (revision != null)
+        {
+            document.CustomProperties["Revision"] = revision;
+        }
+
+        if (version != null)
+        {
+            document.CustomProperties["PDM Version"] = version;
+        }
 
         Manifest manifest = new ManifestBuilder(gate).Build(scope, new List<Document> { document });
 

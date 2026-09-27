@@ -13,13 +13,15 @@ namespace SwReview.Extractor.Dump;
 ///
 /// The EPDM API is out of scope for this task, so the vault version is read only from
 /// custom properties a vault typically writes back ("PDM Version", "Version"), and the
-/// revision from "Revision" or "Rev". When neither is present the field is null AND a Gap
-/// is recorded: a review that cannot say which version it looked at cannot claim the
-/// finding applies to the released design (constitution Principle I, FR-002).
+/// revision from "Revision" or "Rev". A missing revision is null AND a Gap (constitution
+/// Principle I, FR-002). A missing vault version is null with no gap, and so is
+/// <c>local_modified</c>, which only the vault knows: this build reads no vault, so both are
+/// unknown for every document by construction, and the review says so once, in the provenance
+/// row it writes at setup, instead of two gaps per document (feature 013, research R2.20 and
+/// R2.21).
 ///
 /// <c>vault_path</c> is the file path as SOLIDWORKS reports it; on a vault workstation that
-/// IS the vault view path. <c>local_modified</c> stays null for the same reason as the
-/// version: only the vault knows.
+/// IS the vault view path.
 /// </summary>
 public sealed class ManifestBuilder : IManifestSource
 {
@@ -81,7 +83,7 @@ public sealed class ManifestBuilder : IManifestSource
                 FileSizeBytes = stat.SizeBytes,
             });
 
-            RecordGaps(scope, document, revision, version);
+            RecordGaps(scope, document, revision);
             RecordStatGap(scope, document, stat);
         }
 
@@ -123,20 +125,16 @@ public sealed class ManifestBuilder : IManifestSource
             stat.Error);
     }
 
-    private static void RecordGaps(DumpScope scope, Document document, string? revision, int? version)
+    /// <summary>
+    /// The one manifest gap a document's properties can leave: no revision. This build reads no
+    /// vault, so a vault version no property carries and the local-modification state are unknown
+    /// for every document by construction; they are not gaps of the document but a fact of the
+    /// build, which the review states once, in the provenance row code writes at setup (feature
+    /// 013, research R2.20 and R2.21), rather than two gaps per document that every reader of the
+    /// gaps re-reads. The file stat's gap is <see cref="RecordStatGap"/>'s.
+    /// </summary>
+    private static void RecordGaps(DumpScope scope, Document document, string? revision)
     {
-        if (version == null)
-        {
-            scope.Gaps.Add(
-                GapKind.NotExtracted,
-                "manifest",
-                document.DocumentId,
-                $"No vault version was found for '{document.FileName}'. The EPDM API is not read by "
-                + "this build, and no 'PDM Version' or 'Version' custom property is set, so the "
-                + "version this review looked at cannot be stated.",
-                null);
-        }
-
         if (revision == null)
         {
             scope.Gaps.Add(
@@ -147,14 +145,6 @@ public sealed class ManifestBuilder : IManifestSource
                 + "('Revision' or 'Rev' custom property is not set).",
                 null);
         }
-
-        scope.Gaps.Add(
-            GapKind.Unsupported,
-            "manifest",
-            document.DocumentId,
-            $"Whether '{document.FileName}' is modified locally relative to the vault was not "
-            + "determined; only the vault knows, and the EPDM API is out of scope for this build.",
-            null);
     }
 
     /// <summary>
