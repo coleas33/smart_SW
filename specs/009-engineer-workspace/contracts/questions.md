@@ -32,6 +32,11 @@ nothing - no request, no id, no event, no failed row (013 `contracts/re-ask-guar
 | # | Check | Answer |
 |---|---|---|
 | 5 | `blocks` is a code-owned checklist item (`provenance`, `coverage.closeout`) | `{"status": "closed_by_code", "check", "reason"}` |
+| 7 | an earlier **model-written** request with the same `blocks` (null equals null) covers it - the ids a non-empty subset of its ids, or both empty with a checklist item - and is answered; the most recent answer wins (T064) | `{"status": "already_answered", "evidence_request": {id, question or what, answer, answered_at, blocks, entity_ids}, "note"}` |
+| 8 | such a request covers it and is still open (T064) | `already_asked`, the same shape, the open request |
+
+A question with no checklist item and no ids is never covered, and a code-written request covers
+only itself (`report/session.covering_requests`). Row 6 is feature 013 US4's (drawing requests).
 
 The docstring's `Args` describe the three; its `Notes` add: ask one decision per request; offer
 `options` only when the answers are a closed set; never guess a fit class, a tolerance or a thread

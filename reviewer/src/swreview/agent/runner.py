@@ -118,6 +118,7 @@ from swreview.report.session import (
     ProviderInfo,
     ReviewSession,
     cut_short_reason,
+    latest_answered,
     save_session,
 )
 from swreview.tools.checks_mechanical import attach_part_roles, check_hygiene, review_roles
@@ -138,6 +139,10 @@ SESSION_FILE_NAME = "session.json"
 
 EVIDENCE_CHECK = "coverage.evidence_request"
 PROFILE_CHECK = "coverage.extractor_profile"
+
+ANSWERED_BUT_OPEN = "{title}: still open after {request_id} was answered: '{answer}'"
+"""Finalization's reason for an item still open after its blocking request was answered
+(feature 013, `contracts/re-ask-guard.md` section 3): the answer stands, quoted."""
 
 REDUCED_PROFILE_SKIPPED = (
     "the evidence was written by the {profile!r} dump profile: the {phases} phases were "
@@ -592,13 +597,19 @@ def finalize_session(
             # finding (feature 010 research R2.25) - already says why it went nowhere; `failed`
             # closes no item, and "ended without a coverage entry" beside it would be false.
             continue
-        previous.append(
-            _unresolved(
-                review,
-                item.id,
-                f"{item.title}: the review ended without a finding or a coverage entry for it",
-            )
+        # Feature 013 (`contracts/re-ask-guard.md` section 3): an item left open after the
+        # question blocking it was answered says which answer it was left with.
+        answered = latest_answered(
+            request for request in review.evidence_requests if request.blocks == item.id
         )
+        reason = (
+            ANSWERED_BUT_OPEN.format(
+                title=item.title, request_id=answered.id, answer=answered.answer
+            )
+            if answered is not None
+            else f"{item.title}: the review ended without a finding or a coverage entry for it"
+        )
+        previous.append(_unresolved(review, item.id, reason))
 
     stamp_carry_over_keys(
         review,

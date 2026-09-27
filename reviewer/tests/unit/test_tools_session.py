@@ -695,3 +695,245 @@ def test_a_model_owned_item_is_still_recorded(context: ToolContext) -> None:
     result = session.mark_coverage("fasteners", "checked", closed_scope(), "all engage")
 
     assert result["status"] == "recorded"
+
+
+# --- feature 013 T063: the re-ask guard (re-ask-guard.md section 3) ----------------------------
+
+ANSWERED_NOTE = (
+    "{id} answered this. Use that answer and record the check with it; if it is not enough, "
+    "mark the check unresolved quoting it. To ask something different, name the specific hole, "
+    "fastener or face."
+)
+ASKED_NOTE = "{id} already asks this; wait for the engineer's answer."
+
+
+def ask(**fields: Any) -> dict[str, Any]:
+    arguments: dict[str, Any] = {"what": "a value", "why": "a reason", "entity_ids": []}
+    arguments.update(fields)
+    return session.request_evidence(**arguments)
+
+
+def answer(tool_context: ToolContext, request_id: str, text: str, minute: int = 0) -> None:
+    from datetime import UTC, datetime
+
+    request = next(
+        item for item in tool_context.require_session().evidence_requests if item.id == request_id
+    )
+    request.status = "answered"
+    request.answer = text
+    request.answered_at = datetime(2026, 9, 26, 10, minute, tzinfo=UTC)
+
+
+def test_a_question_an_answered_request_covers_is_answered_from_it(
+    context: ToolContext, emitted: list[tuple[str, dict]]
+) -> None:
+    ask(question="What fit class is the pin in the plate?", blocks="interfaces.fit",
+        entity_ids=["cmp:0001", "cmp:0002"])
+    answer(context, "ER-001", "press fit")
+    emitted.clear()
+    before = held(context)
+
+    result = ask(question="Give the numeric limits of the press fit", blocks="interfaces.fit",
+                 entity_ids=["cmp:0002"])
+
+    assert result == {
+        "status": "already_answered",
+        "evidence_request": {
+            "id": "ER-001",
+            "question": "What fit class is the pin in the plate?",
+            "answer": "press fit",
+            "answered_at": "2026-09-26T10:00:00Z",
+            "blocks": "interfaces.fit",
+            "entity_ids": ["cmp:0001", "cmp:0002"],
+        },
+        "note": ANSWERED_NOTE.format(id="ER-001"),
+    }
+    assert held(context) == before
+    assert emitted == []
+    assert ask(what="another", entity_ids=["hole:1"])["evidence_request"]["id"] == "ER-002"
+
+
+def test_a_request_with_no_question_is_cited_by_its_what(context: ToolContext) -> None:
+    ask(what="The usable thread depth of hole:1", blocks="fasteners", entity_ids=["hole:1"])
+    answer(context, "ER-001", "12 mm")
+
+    result = ask(what="Thread depth again", blocks="fasteners", entity_ids=["hole:1"])
+
+    assert result["evidence_request"]["what"] == "The usable thread depth of hole:1"
+    assert "question" not in result["evidence_request"]
+
+
+def test_a_question_an_open_request_covers_is_already_asked(context: ToolContext) -> None:
+    ask(question="What fit class?", blocks="interfaces.fit", entity_ids=["cmp:0001"])
+
+    result = ask(question="Which fit, please?", blocks="interfaces.fit", entity_ids=["cmp:0001"])
+
+    assert result["status"] == "already_asked"
+    assert result["evidence_request"]["id"] == "ER-001"
+    assert result["evidence_request"]["answer"] is None
+    assert result["note"] == ASKED_NOTE.format(id="ER-001")
+    assert len(context.session.evidence_requests) == 1
+
+
+def test_the_most_recent_answer_wins(context: ToolContext) -> None:
+    ask(question="Fit?", blocks="interfaces.fit", entity_ids=["cmp:0001"])
+    ask(question="Fit, both parts?", blocks="interfaces.fit", entity_ids=["cmp:0001", "cmp:0002"])
+    answer(context, "ER-002", "slip fit", minute=1)
+    answer(context, "ER-001", "press fit", minute=5)
+
+    result = ask(question="Fit again?", blocks="interfaces.fit", entity_ids=["cmp:0001"])
+
+    assert result["evidence_request"]["id"] == "ER-001"
+    assert result["evidence_request"]["answer"] == "press fit"
+
+
+def test_an_answered_request_is_cited_before_an_open_one(context: ToolContext) -> None:
+    ask(question="Fit?", blocks="interfaces.fit", entity_ids=["cmp:0001"])
+    answer(context, "ER-001", "press fit")
+    ask(question="Fit of both?", blocks="interfaces.fit", entity_ids=["cmp:0001", "cmp:0002"])
+
+    result = ask(question="Fit again?", blocks="interfaces.fit", entity_ids=["cmp:0001"])
+
+    assert result["status"] == "already_answered"
+    assert result["evidence_request"]["id"] == "ER-001"
+
+
+@pytest.mark.parametrize(
+    ("earlier", "later"),
+    [
+        ({"blocks": "interfaces.fit", "entity_ids": ["cmp:0001"]},
+         {"blocks": "interfaces.fit", "entity_ids": ["cmp:0001", "cmp:0002"]}),
+        ({"blocks": "interfaces.fit", "entity_ids": ["cmp:0001", "hole:1"]},
+         {"blocks": "interfaces.fit", "entity_ids": ["cmp:0001", "cmp:0002"]}),
+        ({"blocks": "interfaces.fit", "entity_ids": ["cmp:0001"]},
+         {"blocks": "fasteners", "entity_ids": ["cmp:0001"]}),
+        ({"blocks": None, "entity_ids": ["cmp:0001"]},
+         {"blocks": "interfaces.fit", "entity_ids": ["cmp:0001"]}),
+        ({"blocks": "interfaces.fit", "entity_ids": ["cmp:0001"]},
+         {"blocks": "interfaces.fit", "entity_ids": []}),
+        ({"blocks": None, "entity_ids": []},
+         {"blocks": None, "entity_ids": []}),
+    ],
+    ids=["superset", "partial-overlap", "other-blocks", "null-versus-an-item",
+         "empty-against-ids", "no-item-no-ids-twice"],
+)
+def test_a_question_the_answer_does_not_cover_is_recorded(
+    context: ToolContext, earlier: dict[str, Any], later: dict[str, Any]
+) -> None:
+    ask(question="First?", **earlier)
+    answer(context, "ER-001", "an answer")
+
+    result = ask(question="Second?", **later)
+
+    assert result["status"] == "open"
+    assert result["evidence_request"]["id"] == "ER-002"
+
+
+@pytest.mark.parametrize(
+    ("earlier", "later"),
+    [
+        ({"blocks": None, "entity_ids": ["cmp:0001", "cmp:0002"]},
+         {"blocks": None, "entity_ids": ["cmp:0002"]}),
+        ({"blocks": "interfaces.stack", "entity_ids": []},
+         {"blocks": "interfaces.stack", "entity_ids": []}),
+        ({"blocks": "interfaces.fit", "entity_ids": ["cmp:0001", "cmp:0002"]},
+         {"blocks": "interfaces.fit", "entity_ids": ["cmp:0002", "cmp:0001"]}),
+    ],
+    ids=["no-item-subset-pinned", "item-and-no-ids-twice", "same-ids-other-order"],
+)
+def test_a_question_the_answer_covers_is_not_recorded(
+    context: ToolContext, earlier: dict[str, Any], later: dict[str, Any]
+) -> None:
+    """The first case is pinned on purpose (research R2.22): a model question with no checklist
+    item naming a subset of an answered model question's parts, also with no item, is covered."""
+    ask(question="First?", **earlier)
+    answer(context, "ER-001", "an answer")
+
+    result = ask(question="Second?", **later)
+
+    assert result["status"] == "already_answered"
+
+
+def test_a_code_written_request_covers_only_itself(context: ToolContext) -> None:
+    """The part-roles question has no checklist item and names the unclear parts; answered, it
+    never answers a later model question about one of them."""
+    session.record_evidence_request(
+        context,
+        "Parts no rule tells apart: housing.SLDPRT",
+        "Bought parts are not graded.",
+        ["doc:2"],
+        question="Are these bought parts?",
+        options=["All bought", "None bought"],
+        allow_text=True,
+        source="code",
+    )
+    answer(context, "ER-001", "All bought")
+
+    result = ask(question="What material is the housing?", entity_ids=["doc:2"])
+
+    assert result["status"] == "open"
+    assert result["evidence_request"]["id"] == "ER-002"
+
+
+def test_an_unknown_id_is_still_refused_before_the_guard(context: ToolContext) -> None:
+    ask(question="Fit?", blocks="interfaces.fit", entity_ids=["cmp:0001"])
+    answer(context, "ER-001", "press fit")
+
+    result = ask(question="Fit?", blocks="interfaces.fit", entity_ids=["cmp:0001", "cmp:9999"])
+
+    assert "error" in result
+
+
+def test_through_the_registry_a_covered_question_writes_no_failed_row(
+    make_package: MakePackage,
+) -> None:
+    tool_context = context_for(make_package())
+    tools = ToolRegistry().dispatch(tool_context)
+    arguments = {"what": "w", "why": "y", "entity_ids": ["cmp:0001"], "blocks": "interfaces.fit"}
+    tools.call("request_evidence", arguments)
+    answer(tool_context, "ER-001", "press fit")
+
+    covered = tools.call("request_evidence", {**arguments, "what": "again"})
+
+    assert covered.payload["status"] == "already_answered"
+    assert not covered.is_error
+    assert tool_context.require_session().coverage.failed == []
+    assert len(tool_context.require_session().evidence_requests) == 1
+
+
+def test_the_sittings_eight_question_calls_come_back_with_three_already_answered(
+    context: ToolContext,
+) -> None:
+    """The 2026-09-26 sitting's shape, with fictional ids: five questions asked and answered,
+    then three re-asks - provenance in other words, the vendor pin's drawing, and the fit
+    follow-up - each answered from the request it repeats, and nothing new recorded."""
+    first_five: list[dict[str, Any]] = [
+        {"question": "Is there a drawing for the plate?", "entity_ids": ["doc:1"]},
+        {"question": "Are these the latest released files?", "entity_ids": ["doc:1", "doc:2"]},
+        {"question": "Can you provide the pin's drawing?", "entity_ids": ["doc:2"],
+         "blocks": "drawing.manufacturing_inputs"},
+        {"question": "Is the interference intended?", "entity_ids": ["cmp:0001", "cmp:0002"],
+         "blocks": "interference"},
+        {"question": "What fit class is the pin in the plate?",
+         "entity_ids": ["cmp:0001", "cmp:0002"], "blocks": "interfaces.fit"},
+    ]
+    for index, fields in enumerate(first_five, start=1):
+        assert ask(**fields)["evidence_request"]["id"] == f"ER-{index:03d}"
+        answer(context, f"ER-{index:03d}", f"answer {index}", minute=index)
+    re_asks: list[dict[str, Any]] = [
+        {"question": "Please confirm the vault versions of these files",
+         "entity_ids": ["doc:2", "doc:1"]},
+        {"question": "Please attach the pin drawing", "entity_ids": ["doc:2"],
+         "blocks": "drawing.manufacturing_inputs"},
+        {"question": "Give the numeric limits of the press fit", "entity_ids": ["cmp:0002"],
+         "blocks": "interfaces.fit"},
+    ]
+
+    results = [ask(**fields) for fields in re_asks]
+
+    assert [(result["status"], result["evidence_request"]["id"]) for result in results] == [
+        ("already_answered", "ER-002"),
+        ("already_answered", "ER-003"),
+        ("already_answered", "ER-005"),
+    ]
+    assert len(context.session.evidence_requests) == 5

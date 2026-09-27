@@ -1530,9 +1530,16 @@ def test_an_answer_is_refused_while_a_turn_is_running(
 # --- several answers at once (feature 008 T084, contracts/answer-batch.md section 2) --------
 
 THREE_REQUESTS = tuple(
-    call("request_evidence", **{**EVIDENCE_ARGUMENTS, "what": what})
-    for what in ("The usable thread depth of hole:1", "The washer grade", "The drawing revision")
+    call("request_evidence", **{**EVIDENCE_ARGUMENTS, "what": what, "entity_ids": ids})
+    for what, ids in (
+        ("The usable thread depth of hole:1", EVIDENCE_ARGUMENTS["entity_ids"]),
+        ("The washer grade", ["fst:1"]),
+        ("The drawing revision", ["cmp:0002"]),
+    )
 )
+"""Edited deliberately by feature 013 T064: each ask names its own entity, since the re-ask
+guard answers a model question naming the same parts with no checklist item from the earlier one
+(contracts/re-ask-guard.md section 3)."""
 
 ANSWERS: list[dict[str, str]] = [
     {"request_id": "ER-002", "answer": "Grade 8.8, zinc flake."},

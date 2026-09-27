@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import re
 from decimal import Decimal
-from typing import Literal, get_args
+from typing import Any, Literal, get_args
 
 from pydantic import ValidationError
 
@@ -35,6 +35,7 @@ from swreview.report.session import (
     CoverageItem,
     CoverageScope,
     EvidenceRequest,
+    covering_requests,
 )
 from swreview.tools.context import (
     ToolContext,
@@ -103,6 +104,11 @@ def request_evidence(
     closed = closed_by_code(context, blocks)
     if closed is not None:
         return closed
+    covering = covering_requests(context.require_session(), blocks, entity_ids)
+    if covering.answered is not None:
+        return _repeat(ALREADY_ANSWERED, covering.answered, ALREADY_ANSWERED_NOTE)
+    if covering.open is not None:
+        return _repeat(ALREADY_ASKED, covering.open, ALREADY_ASKED_NOTE)
     request = record_evidence_request(
         context, what, why, entity_ids, question=question, options=options, blocks=blocks
     )
@@ -212,6 +218,35 @@ def closed_by_code(context: ToolContext, check: str | None) -> dict[str, str] | 
         "check": item.id,
         "reason": recorded if recorded is not None else item.description,
     }
+
+
+ALREADY_ANSWERED = "already_answered"
+ALREADY_ASKED = "already_asked"
+ALREADY_ANSWERED_NOTE = (
+    "{id} answered this. Use that answer and record the check with it; if it is not enough, "
+    "mark the check unresolved quoting it. To ask something different, name the specific hole, "
+    "fastener or face."
+)
+ALREADY_ASKED_NOTE = "{id} already asks this; wait for the engineer's answer."
+
+
+def _repeat(status: str, request: EvidenceRequest, note: str) -> dict[str, Any]:
+    """The re-ask guard's answer (`contracts/re-ask-guard.md` section 3): the request the new
+    question repeats - its question, or its `what` when it has none, its answer and when, what it
+    blocks and its ids - and what to do instead. Nothing is recorded: no id, no event, no row."""
+    dumped = request.model_dump(mode="json")
+    cited: dict[str, Any] = {"id": request.id}
+    if request.question is not None:
+        cited["question"] = request.question
+    else:
+        cited["what"] = request.what
+    cited.update(
+        answer=request.answer,
+        answered_at=dumped["answered_at"],
+        blocks=request.blocks,
+        entity_ids=list(request.entity_ids),
+    )
+    return {"status": status, "evidence_request": cited, "note": note.format(id=request.id)}
 
 
 def _short_form_refusal(question: str | None, options: list[str], blocks: str | None) -> str | None:
