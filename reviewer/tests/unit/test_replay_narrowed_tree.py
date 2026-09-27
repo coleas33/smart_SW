@@ -20,6 +20,12 @@ so a rule that still names a removable row - the sketch rules grade a carried sk
 - keeps it. Everything else is decision 23A's and 25A's: the family, the one-to-one matching onto
 a finding nothing else matched, the remaining references compared exactly.
 
+By the default taken 2026-09-27 for T134-Q2 (013 research R2.47, 008 research R2.60), the family is
+every check that reads the shared tree reading: the `rms.*` rules and, named by its id,
+`standards.part.sketches_fully_defined`, which T133 moves onto the same reading. For that check the
+clause is the tree reading's alone - decision 23A's type-table clause never removes one of its
+locations - and every other Standards check is never narrowed.
+
 The recordings here are made by today's code, whose reading still names every row, on the
 planner's fictional real-shape package (`tests/support/remodel.py`); the current side is the keys
 one node per feature position gives, written out by name.
@@ -45,6 +51,7 @@ from swreview.benchmark.replay import (
     not_content_locations,
 )
 from swreview.checks.rms_types import load_table
+from swreview.checks.standards.registry import RULES as STANDARDS_RULES
 from swreview.findings import Finding, finding_subject_key
 from swreview.ir.loader import PACKAGE_FILE_NAME, load_package
 from swreview.ir.models import EvidencePackage, Feature, SourceRef
@@ -67,6 +74,8 @@ CARRIED = "Sketch9"
 BOSS = "Boss-Extrude1"
 CUT = "Cut-Extrude1"
 STANDARDS_SKETCHES = "standards.part.sketches_fully_defined"
+OTHER_STANDARDS_CHECKS = tuple(sorted(set(STANDARDS_RULES) - {STANDARDS_SKETCHES}))
+"""Every Standards check but the sketch check: none reads the shared tree reading."""
 GENERATOR = Path(__file__).resolve().parents[1] / "fixtures" / "replay" / "generate_fixtures.py"
 SCRIPT_TOOLS = ("get_package_summary", "check_rms_part")
 
@@ -372,15 +381,154 @@ def test_a_finding_that_also_gained_a_subject_is_lost(recorded: Finding, tmp_pat
     assert outcome(comparison) == ((0,), (), 1)
 
 
-def test_a_standards_finding_is_never_narrowed_by_the_reading(
+# --- the Standards sketch check (T134-Q2) ---------------------------------------------------
+
+
+def test_a_standards_sketch_finding_that_lost_only_a_second_listing_narrows(
     recorded: Finding, tmp_path: Path
 ) -> None:
-    """The Standards sketch check reads the same tree since T133, but narrowing is decision 23A's
-    `rms.*` outcome: the default of T134-Q1 does not widen the family."""
+    """The Standards sketch check reads the same tree since T133 and names an absorbed sketch once
+    where the recording named its depth-0 row and its second listing: by T134-Q2's default the
+    tree-reading clause reads it, one location removed, neither lost nor added."""
     comparison = compared(
-        tmp_path, recorded, ["Sketch1", "Sketch1"], ["Sketch1"], check=STANDARDS_SKETCHES
+        tmp_path,
+        recorded,
+        ["Sketch1", "Sketch1", "Sketch2"],
+        ["Sketch1", "Sketch2"],
+        check=STANDARDS_SKETCHES,
     )
 
+    assert outcome(comparison) == ((), ((0, 1),), 0)
+
+
+def test_a_standards_sketch_finding_still_naming_its_carried_sketch_narrows_by_the_listing(
+    recorded: Finding, tmp_path: Path
+) -> None:
+    """T133's Standards check still grades the hole's carried profile sketch under its hole, so its
+    current finding keeps it: the carried row *may* be removed, and the finding narrows by the
+    second listing's occurrence alone."""
+    comparison = compared(
+        tmp_path,
+        recorded,
+        ["Sketch1", "Sketch1", CARRIED],
+        ["Sketch1", CARRIED],
+        check=STANDARDS_SKETCHES,
+    )
+
+    assert outcome(comparison) == ((), ((0, 1),), 0)
+
+
+@pytest.mark.parametrize(
+    ("recorded_names", "current_names"),
+    [
+        pytest.param(
+            ["Sketch1", "Sketch1", "Sketch2"], ["Sketch1"], id="a-sketch-named-once-dropped"
+        ),
+        pytest.param(
+            ["Sketch1", "Sketch1", "Sketch2", "Sketch2"],
+            ["Sketch1"],
+            id="a-merged-pair-dropped-whole",
+        ),
+        pytest.param(["Sketch1", "Sketch1"], ["Sketch2"], id="the-sketch-swapped-for-another"),
+        pytest.param(["Sketch1", "Sketch1"], ["Sketch1", "Sketch2"], id="a-sketch-gained"),
+        pytest.param(
+            ["Sketch1", "Sketch1", "Sketch1"], ["Sketch1"], id="more-than-one-per-second-listing"
+        ),
+    ],
+)
+def test_a_real_sketch_subject_lost_from_a_standards_sketch_finding_stays_lost(
+    recorded: Finding,
+    tmp_path: Path,
+    recorded_names: list[str],
+    current_names: list[str],
+) -> None:
+    """The depth-0 row is a real position the reading never drops: a sketch the current finding
+    no longer names, one swapped for another, one gained, or a pair de-duplicated beyond its one
+    second listing is lost and the current finding added, as for `rms.*`."""
+    comparison = compared(
+        tmp_path, recorded, recorded_names, current_names, check=STANDARDS_SKETCHES
+    )
+
+    assert outcome(comparison) == ((0,), (), 1)
+
+
+def test_the_type_tables_clause_never_narrows_a_standards_sketch_finding(
+    recorded: Finding, tmp_path: Path
+) -> None:
+    """A location naming only rows the table does not count, and no row the reading folds, is
+    decision 23A's to remove; the type table decides the RMS rules' subjects, not what a
+    Standards check names. The same two findings narrow under an `rms.*` check and are lost
+    under the Standards sketch check."""
+    package = real_shape()
+    table = load_table()
+    plane = at(package, "Front Plane")
+    assert (plane.document_id, plane.persist_ref) in not_content_locations(package, table)
+    assert (plane.document_id, plane.persist_ref) not in folded_locations(package, table)
+
+    rms = compared(tmp_path / "rms", recorded, ["Front Plane", "Sketch1"], ["Sketch1"])
+    standards = compared(
+        tmp_path / "standards",
+        recorded,
+        ["Front Plane", "Sketch1"],
+        ["Sketch1"],
+        check=STANDARDS_SKETCHES,
+    )
+
+    assert outcome(rms) == ((), ((0, 1),), 0)
+    assert outcome(standards) == ((0,), (), 1)
+
+
+def test_narrowed_key_reads_a_standards_sketch_finding_by_the_readings_clause_alone(
+    recorded: Finding,
+) -> None:
+    """The second listing's occurrence and the carried row go; the row the table does not count
+    stays, although it is in the type table's set."""
+    package = real_shape()
+    table = load_table()
+    finding = naming(
+        recorded,
+        package,
+        ["Front Plane", "Sketch1", "Sketch1", CARRIED],
+        check=STANDARDS_SKETCHES,
+    )
+
+    narrowed = narrowed_key(
+        finding, not_content_locations(package, table), folded=folded_locations(package, table)
+    )
+
+    assert narrowed is not None
+    assert narrowed.removed_locations == 2
+    assert narrowed.key == key_of(
+        recorded, package, ["Front Plane", "Sketch1"], check=STANDARDS_SKETCHES
+    )
+
+
+def test_every_other_standards_check_is_listed() -> None:
+    """The cases below run over the catalogue itself, so a Standards check added later is held."""
+    assert len(OTHER_STANDARDS_CHECKS) == len(STANDARDS_RULES) - 1
+    assert all(check.startswith("standards.") for check in OTHER_STANDARDS_CHECKS)
+
+
+@pytest.mark.parametrize("check", OTHER_STANDARDS_CHECKS)
+def test_any_other_standards_check_is_never_narrowed(
+    recorded: Finding, tmp_path: Path, check: str
+) -> None:
+    """Only the sketch check reads the shared tree reading; every other Standards check reads the
+    rows as dumped, so a subject it no longer names is a real one: lost, never narrowed."""
+    package = real_shape()
+    table = load_table()
+    names = ["Sketch1", "Sketch1", CARRIED]
+
+    comparison = compared(tmp_path, recorded, names, ["Sketch1"], check=check)
+
+    assert (
+        narrowed_key(
+            naming(recorded, package, names, check=check),
+            not_content_locations(package, table),
+            folded=folded_locations(package, table),
+        )
+        is None
+    )
     assert outcome(comparison) == ((0,), (), 1)
 
 
@@ -476,6 +624,41 @@ def test_the_reading_is_run_only_when_an_rms_finding_is_unmatched(
     assert outcome(comparison) == ((), (), 0)
 
 
+def test_the_reading_is_run_when_a_standards_sketch_finding_is_unmatched(
+    recorded: Finding, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[EvidencePackage] = []
+    real = replay_module.folded_locations
+
+    def spy(package: EvidencePackage, table: Any) -> Any:
+        calls.append(package)
+        return real(package, table)
+
+    monkeypatch.setattr(replay_module, "folded_locations", spy)
+
+    comparison = compared(
+        tmp_path, recorded, ["Sketch1", "Sketch1"], ["Sketch1"], check=STANDARDS_SKETCHES
+    )
+
+    assert len(calls) == 1
+    assert outcome(comparison) == ((), ((0, 1),), 0)
+
+
+def test_the_reading_is_not_run_when_only_another_standards_finding_is_unmatched(
+    recorded: Finding, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def refuse(*arguments: Any) -> Any:
+        raise AssertionError("no finding of a family narrowing reads was unmatched")
+
+    monkeypatch.setattr(replay_module, "folded_locations", refuse)
+
+    comparison = compared(
+        tmp_path, recorded, ["Sketch1", "Sketch1"], ["Sketch1"], check=OTHER_STANDARDS_CHECKS[0]
+    )
+
+    assert outcome(comparison) == ((0,), (), 1)
+
+
 def test_the_recordings_own_package_and_the_current_table_are_read(
     recorded: Finding, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -512,16 +695,27 @@ def fixture_of(tmp_path: Path, recording: Path, fmap: FictionalMap) -> Path:
     return record_scripted_review(tmp_path / "fixture", package_dir, SCRIPT)
 
 
-def one_node_per_position(run: Path) -> None:
-    """Each loose finding of `run` as the reading gives it: every location repeated for a second
-    listing named once, and the carried row's location gone."""
+def relabelled(run: Path, check: str) -> None:
+    """Every loose finding of `run` under `check`: the same subjects under another check's key."""
+
+    def relabel(session: dict[str, Any]) -> None:
+        for finding in session["findings"]:
+            if finding["check"] == LOOSE:
+                finding["check"] = check
+
+    rewrite_session(run, relabel)
+
+
+def one_node_per_position(run: Path, check: str = LOOSE) -> None:
+    """Each `check` finding of `run` (the loose one by default) as the reading gives it: every
+    location repeated for a second listing named once, and the carried row's location gone."""
     package = load_package(run).package
     carried = only(package, CARRIED)
     carried_at = (carried.persist_ref_scope, carried.persist_ref)
 
     def folded(session: dict[str, Any]) -> None:
         for finding in session["findings"]:
-            if finding["check"] != LOOSE:
+            if finding["check"] != check:
                 continue
             seen: set[tuple[str, str]] = set()
             kept = []
@@ -553,3 +747,38 @@ def test_the_generators_finding_check_narrows_through_the_same_function(
 
     assert unchanged == ([], 0, 0)
     assert checked == ([], 0, 1)
+
+
+@pytest.mark.parametrize(
+    ("check", "expected"),
+    [
+        pytest.param(STANDARDS_SKETCHES, ([], 0, 1), id="the-standards-sketch-check-narrows"),
+        pytest.param(
+            OTHER_STANDARDS_CHECKS[0],
+            (["the finding keys differ: 1 recorded keys are missing and 1 are new"], 0, 0),
+            id="another-standards-check-refuses",
+        ),
+    ],
+)
+def test_the_generator_reads_the_standards_sketch_check_through_the_same_function(
+    tmp_path: Path, check: str, expected: tuple[list[str], int, int]
+) -> None:
+    """T134-Q2's default in the generator's finding check, which compares every recorded finding,
+    standards included: the same subjects folded one node per position narrow under the sketch
+    check and refuse the fixture under any other Standards check."""
+    generator = mechanical.load_generator(GENERATOR)
+    recording = record(tmp_path / "recording", real_shape())
+    raw = json.loads((recording / PACKAGE_FILE_NAME).read_text(encoding="utf-8"))
+    fmap = FictionalMap(keep={row["type_name"] for row in raw["features"]})
+    fixture = fixture_of(tmp_path, recording, fmap)
+    relabelled(recording, check)
+    relabelled(fixture, check)
+    unchanged = generator.finding_problems(
+        read_recording(recording), read_recording(fixture), fmap
+    )
+    one_node_per_position(fixture, check)
+
+    checked = generator.finding_problems(read_recording(recording), read_recording(fixture), fmap)
+
+    assert unchanged == ([], 0, 0)
+    assert checked == expected
