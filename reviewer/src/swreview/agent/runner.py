@@ -1130,9 +1130,12 @@ class ReviewRun:
         id named twice, an unknown id or an answered one raises, naming the first failing
         id, with no request marked, no event written and no turn run. Then each request is
         answered in submission order with its own `evidence.answered` event, and one turn
-        resumes on `answers_message(answers)`. The requests stop being open, so
-        finalization no longer reports them as unresolved (rule 2), and a check the resumed
-        turn re-runs replaces its earlier verdict rather than adding a second one (rule 3).
+        resumes on `answers_message(answers)` - after a confirmed read with one outcome line
+        per drawing file above it, and after a part-roles answer that withdrew findings with
+        one line below it (feature 013); byte for byte otherwise. The requests stop being
+        open, so finalization no longer reports them as unresolved (rule 2), and a check the
+        resumed turn re-runs replaces its earlier verdict rather than adding a second one
+        (rule 3).
         """
         if not answers:
             raise ValueError("an answer batch needs at least one answer")
