@@ -1,5 +1,7 @@
 # Contract: Checks First
 
+*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), pending implementation:* part roles are attached before the pre-run, which gains the bought-parts and maybe-bought lines; provenance is closed by code at setup; the `check_drawings` digest counts candidate files; see 013 `contracts/part-roles.md`, `contracts/re-ask-guard.md` section 2 and `contracts/drawing-capability.md` section 7.
+
 Normative for the pre-run under the pane default, live interference and its persistence, the
 opening digest, the re-call guard and the folded modelling-practice group (FR-008 to FR-014,
 SC-006), and the tools that leave the array once it ran them (FR-030, section 7).

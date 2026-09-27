@@ -1,5 +1,7 @@
 # Contract: The Model's View
 
+*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), pending implementation:* lever 14 drops earlier turns' reasoning items from the request view, beside pruning's stubs; see 013 `contracts/tokens.md` section 4.
+
 Normative for what the model reads of a tool result, the bridge tools' entity ids, pruning, the
 stub, the stored results and the settings that switch them (FR-015 to FR-023, SC-007, SC-008).
 

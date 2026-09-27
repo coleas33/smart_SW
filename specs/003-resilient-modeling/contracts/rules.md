@@ -1,5 +1,7 @@
 # RMS Rule Catalogue
 
+*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), pending implementation:* the part and equation rules grade custom and unclear part documents only, `rms.assembly.mates_to_reference_geometry` judges the custom side of a mate, and content features and the sketch rules read the shared feature-tree reading; see 013 `contracts/part-roles.md` section 6 and `contracts/readings.md` section 3.
+
 Rule ids are stable and appear verbatim in findings (`check`), coverage, exceptions, waiver
 files, and the checklist. `Severity` is the method's: `fail` → `demonstrated`, `warn` →
 `suspected` (see data-model section 2 for the full mapping). `Subjects` names what a finding

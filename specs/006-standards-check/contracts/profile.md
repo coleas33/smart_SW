@@ -1,5 +1,7 @@
 # The Standards Profile
 
+*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), pending implementation:* profile version 4 adds the `part_roles` section (bought prefixes, a purchased property and its values, vendor name patterns) and extends the name-pattern vocabulary with `@` and `*` for those patterns only; see 013 `contracts/part-roles-profile.md`.
+
 The company's configuration for the sixteen checks. **This file is not committed to this
 repository** (FR-001). The repository ships `config/standards.example.yaml` with fictional
 placeholder values; the tests use two fictional fixtures whose values differ in every field;

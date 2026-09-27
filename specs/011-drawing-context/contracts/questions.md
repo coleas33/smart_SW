@@ -1,5 +1,7 @@
 # Contract: The Drawing Check and Its Questions
 
+*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), pending implementation:* bought documents are no drawing subject; candidates are grouped by file; the candidate question is asked only when the host opens closed drawings, and otherwise an instruction line is shown; drawing questions carry `source: code`; the duplicate test is the shared subset rule; see 013 `contracts/drawing-capability.md` and `contracts/re-ask-guard.md` section 3.
+
 Normative for FR-032 to FR-037, User Story 5, SC-007 and SC-008.
 
 ## 1. The drawing family
