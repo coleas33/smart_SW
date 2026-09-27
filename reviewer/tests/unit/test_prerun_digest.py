@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Any
 
 from swreview.agent.package_brief import package_brief
@@ -498,3 +499,163 @@ def test_a_single_call_renders_exactly_as_its_own_line() -> None:
     prerun = PrerunResult(calls=(call,), not_evaluated=())
 
     assert call.line() in prerun.digest().splitlines()
+
+
+# --- feature 013 T029: the bought-parts lines (contracts/part-roles.md section 7) --------------
+
+SITTING = Path(__file__).resolve().parents[1] / "fixtures" / "sitting"
+PROFILE_A = SITTING.parent / "standards" / "profile-a.yaml"
+
+
+def sitting_package() -> Any:
+    from swreview.ir.loader import load_package
+
+    return load_package(SITTING / "small-assembly").package
+
+
+def sitting_roles(package: Any, profile: Any = "a", *, asked: bool = True) -> Any:
+    from swreview.checks.part_roles import classify_parts
+    from swreview.checks.standards.profile import load_profile
+
+    roles = classify_parts(package, load_profile(PROFILE_A) if profile == "a" else profile)
+    return roles.asking("ER-001") if asked else roles
+
+
+def part_role_rows(families: Sequence[NotEvaluated]) -> dict[str, NotEvaluated]:
+    return {
+        family.check: family
+        for family in families
+        if family.check
+        in {
+            f"{PRERUN_CHECK_PREFIX}bought_parts",
+            f"{PRERUN_CHECK_PREFIX}maybe_bought",
+            f"{PRERUN_CHECK_PREFIX}part_roles",
+        }
+    }
+
+
+def test_the_bought_parts_and_maybe_bought_lines_equal_their_rows() -> None:
+    from swreview.checks.part_roles import bought_parts_sentence, maybe_bought_sentence
+
+    package = sitting_package()
+    roles = sitting_roles(package)
+
+    rows = part_role_rows(not_evaluated_families(package, [], None, roles=roles))
+
+    bought = rows[f"{PRERUN_CHECK_PREFIX}bought_parts"]
+    maybe = rows[f"{PRERUN_CHECK_PREFIX}maybe_bought"]
+    assert (bought.bucket, maybe.bucket) == ("skipped", "unresolved")
+    assert bought.reason == bought_parts_sentence(roles, package)
+    assert maybe.reason == maybe_bought_sentence(roles, package)
+    assert bought.coverage_item().reason == bought.reason
+    assert bought.line() == f"  {bought.label}: {bought.reason}"
+    assert bought.coverage_item().scope.document_ids == ["doc:5", "doc:3", "doc:6"]
+    assert maybe.coverage_item().scope.document_ids == ["doc:4"]
+    assert f"{PRERUN_CHECK_PREFIX}part_roles" not in rows
+
+
+def test_the_line_labels_are_the_classifiers_words() -> None:
+    from swreview.checks.part_roles import BOUGHT_PARTS_LABEL, MAYBE_BOUGHT_LABEL
+
+    package = sitting_package()
+    rows = part_role_rows(not_evaluated_families(package, [], None, roles=sitting_roles(package)))
+
+    assert rows[f"{PRERUN_CHECK_PREFIX}bought_parts"].label == BOUGHT_PARTS_LABEL
+    assert rows[f"{PRERUN_CHECK_PREFIX}maybe_bought"].label == MAYBE_BOUGHT_LABEL
+
+
+def test_no_maybe_bought_line_before_the_question_is_asked() -> None:
+    package = sitting_package()
+
+    rows = part_role_rows(
+        not_evaluated_families(package, [], None, roles=sitting_roles(package, asked=False))
+    )
+
+    assert set(rows) == {f"{PRERUN_CHECK_PREFIX}bought_parts"}
+
+
+def test_the_absent_state_says_bought_parts_were_not_told_apart() -> None:
+    package = sitting_package()
+
+    rows = part_role_rows(
+        not_evaluated_families(package, [], None, roles=sitting_roles(package, None))
+    )
+
+    assert set(rows) == {f"{PRERUN_CHECK_PREFIX}bought_parts"}
+    assert rows[f"{PRERUN_CHECK_PREFIX}bought_parts"].reason == (
+        "Bought parts were not told apart: no standards profile is attached"
+    )
+    assert rows[f"{PRERUN_CHECK_PREFIX}bought_parts"].coverage_item().scope.document_ids == []
+
+
+def test_the_zero_match_guard_is_one_unresolved_row_and_asks_nothing() -> None:
+    from swreview.checks.part_roles import classify_parts
+    from swreview.checks.standards.profile import load_profile
+
+    package = sitting_package()
+    profile = load_profile(PROFILE_A)
+    blind = profile.model_copy(update={"version": 3, "part_roles": None})
+    blind = blind.model_copy(
+        update={"part_number": blind.part_number.model_copy(update={"pattern": "FICT-#.SLD???"})}
+    )
+    roles = classify_parts(package, blind).asking("ER-001")
+    assert roles.guard_fired
+
+    rows = part_role_rows(not_evaluated_families(package, [], None, roles=roles))
+
+    guard = rows[f"{PRERUN_CHECK_PREFIX}part_roles"]
+    assert guard.bucket == "unresolved"
+    assert guard.reason == (
+        "the part-number convention matched none of the 6 documents; check part_number.pattern"
+    )
+    assert f"{PRERUN_CHECK_PREFIX}maybe_bought" not in rows
+
+
+def test_without_roles_the_families_are_what_they_were() -> None:
+    package = sitting_package()
+
+    assert not_evaluated_families(package, [], None) == not_evaluated_families(
+        package, [], None, roles=None
+    )
+    assert part_role_rows(not_evaluated_families(package, [], None)) == {}
+
+
+def test_none_of_the_part_role_rows_maps_to_a_goal() -> None:
+    from swreview.report.summary import goal_of, load_words
+
+    goals = load_words().goals
+    for suffix in ("bought_parts", "maybe_bought", "part_roles"):
+        assert goal_of(f"{PRERUN_CHECK_PREFIX}{suffix}", goals) is None, suffix
+
+
+def test_the_check_ids_are_the_classifiers_under_the_pre_run_prefix() -> None:
+    from swreview.checks.part_roles import BOUGHT_PARTS_CHECK, MAYBE_BOUGHT_CHECK, PART_ROLES_CHECK
+
+    assert BOUGHT_PARTS_CHECK == f"{PRERUN_CHECK_PREFIX}bought_parts"
+    assert MAYBE_BOUGHT_CHECK == f"{PRERUN_CHECK_PREFIX}maybe_bought"
+    assert PART_ROLES_CHECK == f"{PRERUN_CHECK_PREFIX}part_roles"
+
+
+def test_the_pre_run_records_the_rows_from_the_roles_attached_to_the_review() -> None:
+    from swreview.prerun import prerun_checks
+    from swreview.tools.checks_mechanical import attach_part_roles
+    from swreview.tools.context import context_for
+    from swreview.tools.registry import ToolRegistry
+
+    package = sitting_package()
+    context = context_for(package)
+    attach_part_roles(context, sitting_roles(package))
+
+    result = prerun_checks(context, ToolRegistry().dispatch(context), efficiency=ON)
+
+    assert result is not None
+    coverage = context.require_session().coverage
+    skipped = {item.check: item for item in coverage.skipped}
+    unresolved = {item.check: item for item in coverage.unresolved}
+    assert skipped[f"{PRERUN_CHECK_PREFIX}bought_parts"].scope.document_ids == [
+        "doc:5",
+        "doc:3",
+        "doc:6",
+    ]
+    assert unresolved[f"{PRERUN_CHECK_PREFIX}maybe_bought"].scope.document_ids == ["doc:4"]
+    assert "  bought parts: 3 parts not graded" in result.digest()
