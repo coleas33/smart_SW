@@ -744,17 +744,31 @@ public sealed class InProcPipeServer : IDisposable
     /// One connection: request lines in, response lines out, on this connection's own thread.
     /// One reader and one writer per connection means no lock is needed on the wire; the
     /// ordering that does matter is enforced by the single queue behind <see cref="Answer"/>.
+    /// Internal so a test can hand it a connection <see cref="Dispose"/> has already closed.
     /// </summary>
-    private void ServeClient(NamedPipeServerStream pipe)
+    internal void ServeClient(NamedPipeServerStream pipe)
     {
         // No BOM, and flushed per line: a client blocked on a response must not wait for a
         // buffer to fill.
         var encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
-        var input = new StreamReader(pipe, encoding, detectEncodingFromByteOrderMarks: false, bufferSize: 4096);
-        var output = new StreamWriter(pipe, encoding) { AutoFlush = true, NewLine = "\n" };
 
         try
         {
+            StreamReader input;
+            StreamWriter output;
+            try
+            {
+                input = new StreamReader(pipe, encoding, detectEncodingFromByteOrderMarks: false, bufferSize: 4096);
+                output = new StreamWriter(pipe, encoding) { AutoFlush = true, NewLine = "\n" };
+            }
+            catch (Exception)
+            {
+                // Dispose closed the pipe after the accept loop handed it here and before this
+                // thread ran (setting AutoFlush flushes, which throws on a closed pipe). Nothing
+                // may leave this thread - the process is SOLIDWORKS - so the connection just ends.
+                return;
+            }
+
             while (!_stopping.IsCancellationRequested)
             {
                 string? line;

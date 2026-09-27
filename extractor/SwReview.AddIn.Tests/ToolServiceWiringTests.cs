@@ -1827,7 +1827,7 @@ public sealed class ToolServiceWiringTests
                 StringComparison.Ordinal);
             Assert.Contains(" target=" + world.CopyPath, teardown, StringComparison.Ordinal);
             Assert.DoesNotContain("failures=", teardown, StringComparison.Ordinal);
-            Assert.DoesNotContain(world.Host.RemodelSecret, File.ReadAllText(world.Host.LogPath), StringComparison.Ordinal);
+            Assert.DoesNotContain(world.Host.RemodelSecret, LiveFile.ReadAllText(world.Host.LogPath), StringComparison.Ordinal);
 
             // One line, the same one, in the run folder beside the plan it ended.
             string remodelLog = File.ReadAllText(Path.Combine(world.RunDirectory, RemodelRunLog.FileName));
@@ -1949,36 +1949,54 @@ public sealed class ToolServiceWiringTests
     /// A busy application thread: the waiter gives up at the bounded wait and the pipe closes
     /// anyway, and the teardown - abandoned by the waiter, not cancelled - still runs when the
     /// thread is free, ending the session, writing its line and telling the host then.
+    ///
+    /// Ordered by the fake application thread's queue, not by the clock: the busy call is queued
+    /// before Dispose posts the teardown, so nothing of the teardown runs until the test lets the
+    /// busy call go, and an empty call queued behind the teardown comes back only once the
+    /// teardown has returned, its line written. Every read of the log comes after that. (It used
+    /// to wait for the host to be told and then poll the log, and a poll that met the teardown
+    /// still appending its line either failed on the sharing violation or made the append fail,
+    /// so the line was never written.)
     /// </summary>
     [Fact]
     public void ATeardownThatDoesNotAnswerInTimeIsLeftToRunLaterAndThePipeClosesNow()
     {
-        using (var world = new SeatedHostWorld(TimeSpan.FromMilliseconds(300)))
+        // The event outlives the world, so the application thread is joined before it is disposed.
         using (var release = new ManualResetEventSlim(false))
-        using (var ran = new ManualResetEventSlim(false))
+        using (var world = new SeatedHostWorld(TimeSpan.FromMilliseconds(300)))
         {
             world.PlanOnTheSeat();
-            world.SessionEnded = ran.Set;
-            ((IAppThreadInvoker)world.App).Post(() => release.Wait(TimeSpan.FromSeconds(30)));
+            try
+            {
+                ((IAppThreadInvoker)world.App).Post(() => release.Wait());
 
-            world.Host.Dispose();
+                world.Host.Dispose();
 
-            Assert.True(world.PipeStopped, "the pipe server was not disposed");
-            Assert.Contains(world.LogLines, line => line.Contains("remodel teardown did not answer within 0.3 s"));
-            Assert.Empty(world.Told);
-            Assert.Empty(world.Seat.Closed);
+                Assert.True(world.PipeStopped, "the pipe server was not disposed");
+                Assert.Contains(world.LogLines, line => line.Contains("remodel teardown did not answer within 0.3 s"));
+                Assert.Empty(world.Told);
+                Assert.Empty(world.Seat.Closed);
+            }
+            finally
+            {
+                // Let go whatever was asserted, so a failure above cannot leave the application
+                // thread held and the abandoned teardown queued behind it.
+                release.Set();
+            }
 
-            release.Set();
-            Assert.True(ran.Wait(TimeSpan.FromSeconds(30)), "the abandoned teardown never ran");
+            // Queued behind the abandoned teardown: back only once the teardown has run.
+            world.App.RunOnApplicationThread(() => { });
 
-            // The host is told from inside the routine; the line is written when it returns.
-            Assert.True(
-                SpinWait.SpinUntil(
-                    () => world.LogLines.Any(line => line.Contains("remodel teardown thread=posted")),
-                    TimeSpan.FromSeconds(30)),
-                "the abandoned teardown wrote no line");
-            Assert.Equal(world.App.ThreadId, Assert.Single(world.Told).ThreadId);
+            SeatedHostWorld.Ending ending = Assert.Single(world.Told);
+            Assert.Equal(world.App.ThreadId, ending.ThreadId);
+            Assert.True(ending.PipeHadStopped, "the abandoned teardown ran before the pipe server was disposed");
             Assert.Equal(world.CopyPath, Assert.Single(world.Seat.Closed));
+
+            string[] lines = world.LogLines;
+            string teardown = Assert.Single(lines, line => line.Contains("remodel teardown thread=posted"));
+            Assert.True(
+                Array.IndexOf(lines, teardown) > Array.FindIndex(lines, line => line.EndsWith("stopped", StringComparison.Ordinal)),
+                "the abandoned teardown's line was written before the pipe server stopped");
         }
     }
 
@@ -2277,8 +2295,13 @@ public sealed class ToolServiceWiringTests
             }
         }
 
+        /// <summary>
+        /// The tool-service log's lines, read without locking out the host's writer (see
+        /// <see cref="LiveFile"/>): an abandoned teardown appends its line on the application
+        /// thread after <see cref="ToolServiceHost.Dispose"/> has returned.
+        /// </summary>
         public string[] LogLines => File.Exists(Host.LogPath)
-            ? File.ReadAllLines(Host.LogPath)
+            ? LiveFile.ReadAllLines(Host.LogPath)
             : new string[0];
 
         /// <summary>Whether the pipe server has logged its last line, which it writes at the end of its disposal.</summary>
