@@ -157,6 +157,22 @@ public sealed class ReviewPageDefaultViewScanTests
         }
     }
 
+    /// <summary>
+    /// Feature 013 T103 (contracts/sources.md section 2): no chip prints the raw source tokens -
+    /// a finding's, a question's or a grouped row's source is the backend's word ("Checked by code",
+    /// "AI guidance") or nothing. Read off the chips rather than the whole text, because "model" is
+    /// an ordinary word in the fixture's own questions.
+    /// </summary>
+    [Fact]
+    public void NoChipPrintsARawSourceToken()
+    {
+        string[] chips = ReviewPageDriver.Strings(Titles.Value, "chips");
+
+        Assert.NotEmpty(chips);
+        Assert.DoesNotContain("code", chips);
+        Assert.DoesNotContain("model", chips);
+    }
+
     [Fact]
     public void NoErrorClassNameIsVisible()
     {
@@ -226,6 +242,7 @@ return JSON.stringify({
   cardTitles: h.texts(results, '.card.finding h3.title'),
   rowIds: h.attrs(groups, 'details.type-row', 'data-finding-id'),
   rowTitles: h.texts(groups, 'details.type-row > summary .type-row-title'),
+  chips: h.texts(results, '.chip'),
   groupHeads: heads
 });";
 }

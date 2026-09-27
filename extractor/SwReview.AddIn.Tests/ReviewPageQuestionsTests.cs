@@ -316,6 +316,22 @@ public sealed class ReviewPageQuestionsTests
         Assert.Equal("Your answer", unlabelled.GetProperty("placeholder").GetString());
     }
 
+    /// <summary>
+    /// Feature 013 T103 (contracts/sources.md section 2): the pager line carries the backend's word
+    /// for who asked - the part-roles question is code's, the sample's fit question the model's -
+    /// looked up from `labels.source` by the question's `source`, never compared; and with no
+    /// labels, none.
+    /// </summary>
+    [Fact]
+    public void ThePagerLineCarriesTheQuestionsSourceWord()
+    {
+        TextRun run = TextScripted.Value;
+
+        Assert.Equal(LabelsSample.SourceCode, run.First.GetProperty("sourceChip").GetString());
+        Assert.Equal(LabelsSample.SourceModel, run.OptionsOnly.GetProperty("sourceChip").GetString());
+        Assert.Equal(JsonValueKind.Null, Scripted.Value.First.GetProperty("sourceChip").ValueKind);
+    }
+
     /// <summary>What the engineer types into the part-roles question's box, spaces and all.</summary>
     private const string TypedNames = "  FICT-PIN-01.SLDPRT, FICT-SPACER-02.SLDPRT  ";
 
@@ -523,6 +539,7 @@ return JSON.stringify({
   afterSummary: h.before(document.getElementById('summary'), section),
   beforeGroups: h.before(section, document.getElementById('findings-by-type')),
   position: h.text(section, '.question-position'),
+  sourceChip: h.text(section, '.question-pager .source-chip'),
   question: h.text(section, '.question-text'),
   blocks: h.text(section, '.question-blocks'),
   about: h.text(section, '.question-about'),

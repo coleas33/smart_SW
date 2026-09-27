@@ -680,7 +680,7 @@ body.results-stale .card.evidence {
   font-size: var(--text-label);
 }
 
-/* A row the model wrote carries the backend's source word. */
+/* A row the model wrote carries the backend's source word, in the model's hue (below). */
 .chip.type-row-chip {
   flex: 0 0 auto;
   background: var(--open-bg);
@@ -807,6 +807,30 @@ body.results-stale .card.evidence {
 .chip.error-class {
   background: var(--critical-bg);
   color: var(--critical);
+}
+
+/*
+  Who wrote a record (feature 013, contracts/sources.md section 2), in the backend's words. The
+  token reaches the class by interpolation, never by comparison: code's checks in the quiet hue,
+  the model's guidance in its own, so the two claims never read alike.
+*/
+.chip.source-code {
+  background: var(--quiet-bg);
+  color: var(--quiet);
+}
+
+.chip.source-model {
+  background: var(--open-bg);
+  color: var(--open);
+}
+
+/* The chip after a coverage row's words, and before a goal's recorded sentence. */
+.bucket-item .source-chip {
+  margin-left: 6px;
+}
+
+.goal-detail .source-chip {
+  margin-right: 6px;
 }
 
 /* ---- kept reviews (feature 009 User Story 6) --------------------------------------------- */

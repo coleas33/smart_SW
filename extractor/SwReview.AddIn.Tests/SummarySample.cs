@@ -253,6 +253,7 @@ internal static class SummarySample
                     new
                     {
                         id = QuestionIds[0],
+                        source = "model",
                         question = "Is Pin-A-1 meant to be a press fit in Plate-1?",
                         options = new[] { "Press fit", "Slip fit", "Not sure" },
                         blocks = "interfaces.fit",
@@ -268,6 +269,7 @@ internal static class SummarySample
                     new
                     {
                         id = QuestionIds[1],
+                        source = "model",
                         question = "Which drawing governs Plate-1?",
                         options = new string[0],
                         blocks = "drawing.manufacturing_inputs",
@@ -279,6 +281,7 @@ internal static class SummarySample
                     new
                     {
                         id = QuestionIds[2],
+                        source = "model",
                         question = "Please confirm which surface of the base plate is the primary datum for the "
                             + "hole pattern, because the extract carries no datum feature symbols and the alignment "
                             + "check cannot choose one without guessing.",

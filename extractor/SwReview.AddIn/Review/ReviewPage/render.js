@@ -67,6 +67,18 @@
   var labelOf = attention.labelOf;
 
   /**
+   * Who wrote a record, in the backend's words (feature 013, contracts/sources.md section 2): a
+   * chip holding `labels.source`'s word for the body's `source` token ("Checked by code", "AI
+   * guidance"), or nothing - when the body states no source, or the labels name none (an older
+   * backend, FR-030). A lookup and never a comparison: the page prints a source only where the
+   * backend sent one, and the token reaches a class name by interpolation, as a status does.
+   */
+  function sourceChip(labels, source) {
+    var word = (typeof source === 'string' && source) ? labelOf(labels, 'source', source, '') : '';
+    return word ? el('span', 'chip source-chip source-' + source, word) : null;
+  }
+
+  /**
    * What the coverage fold is called. Not "Coverage": the fold is closed until an engineer asks
    * for it, and the question it answers when they do is what the review did not reach.
    */
@@ -316,6 +328,7 @@
     // The words on the chips are the backend's labels for them (feature 009 FR-024).
     line.appendChild(el('span', 'chip status-' + status, labelOf(labels, 'status', status, status)));
     line.appendChild(el('span', 'chip sev-' + severity, labelOf(labels, 'severity', severity, severity)));
+    append(line, [sourceChip(labels, body.source)]);
     // The check id is not on the line since feature 009 (FR-025): it is developer vocabulary, and
     // it is the fold's first labelled row, "Rule" - one press away, never gone.
     head.appendChild(line);
@@ -524,9 +537,11 @@
     var card = el('article', 'card evidence status-' + lifecycle);
     card.setAttribute('data-request-id', String(body.id || ''));
 
+    // The head is the request's lifecycle and who asked it (feature 013): a code question and a
+    // model question are not the same claim, so one fixed title for both is gone.
     var head = el('header', 'card-head');
     head.appendChild(el('span', 'chip evidence-status', labelOf(labels, 'evidence_status', lifecycle, lifecycle)));
-    head.appendChild(el('h3', 'title', 'The review needs an input'));
+    append(head, [sourceChip(labels, body.source)]);
     card.appendChild(head);
 
     card.appendChild(el('p', 'question', body.what));
@@ -574,6 +589,7 @@
 
     var pager = el('div', 'question-pager');
     pager.appendChild(el('span', 'question-position', 'Question ' + (position + 1) + ' of ' + scalar(asked.count)));
+    append(pager, [sourceChip(more.labels, item.source)]);
     pager.appendChild(button('Previous', 'question-previous', 'action question-previous'));
     pager.appendChild(button('Next', 'question-next', 'action question-next'));
     panel.appendChild(pager);
@@ -942,9 +958,10 @@
    * One check goal: its title, its state in words and the few words of its reason. The
    * sentence the run recorded behind that reason - a close-out row's reason can run to four
    * hundred characters, and is never cut (FR-027's own principle) - is behind a shut fold whose
-   * head is the line itself, so the line reads the same whether or not there is one.
+   * head is the line itself, so the line reads the same whether or not there is one. A sentence
+   * the model recorded says so (`detail_source`, sent only for the model's; feature 013).
    */
-  function goalLine(line) {
+  function goalLine(line, labels) {
     var item = el('li', 'summary-goal goal-' + String(line.state || ''));
     var parts = [
       el('span', 'goal-title', line.title),
@@ -955,7 +972,9 @@
     if (typeof line.detail === 'string' && line.detail) {
       var fold = el('details', 'goal-fold');
       fold.appendChild(append(el('summary', 'goal-head'), parts));
-      fold.appendChild(el('p', 'goal-detail', line.detail));
+      var detail = append(el('p', 'goal-detail'), [sourceChip(labels, line.detail_source)]);
+      write(detail, line.detail);
+      fold.appendChild(detail);
       item.appendChild(fold);
     } else {
       item.appendChild(append(el('div', 'goal-head'), parts));
@@ -1098,6 +1117,8 @@
       if (item.error) {
         write(line, ' [' + item.error + ']');
       }
+      // Who recorded the row, when its body says (feature 013: the model's `mark_coverage` rows).
+      append(line, [sourceChip(labels, item.source)]);
       lines.appendChild(line);
     }
 
