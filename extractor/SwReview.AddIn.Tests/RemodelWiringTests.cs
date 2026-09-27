@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
+using SwReview.AddIn.Review;
+using SwReview.AddIn.ToolService;
 using SwReview.Extractor.Tests;
 using Xunit;
 
@@ -13,18 +15,21 @@ namespace SwReview.AddIn.Tests;
 /// source because <c>SwReviewAddIn</c> cannot be built without a live <c>ISldWorks</c>. Kept apart
 /// from <see cref="ToolServiceWiringTests"/>, which lane D owns.
 ///
-/// Two lines, each of which every host, pipeline and page test would survive losing: the one
-/// pipeline the add-in builds must be handed its bind (T158), and nothing in the add-in may set
-/// the Start switch (T172), which only its own commit, citing the probes' verdicts, changes.
+/// Lines each of which every host, pipeline and page test would survive losing: the one
+/// pipeline the add-in builds must be handed its bind (T158), and the bind must reach the tool
+/// service listening now; the tool service's session endings must reach the Remodel host (T167);
+/// and nothing in the add-in may set the Start switch (T172), which only its own commit, citing
+/// the probes' verdicts, changes. The last three are lanes D and E integrated.
 /// </summary>
 public sealed class RemodelWiringTests
 {
     /// <summary>
     /// The add-in builds exactly one <c>BackendRemodelPipeline</c>, in <c>StartRemodelHost</c>, and
     /// hands it the add-in's <c>BindRemodelRun</c> as its bind, beside the remodel half of the
-    /// tool service it binds for. What the bind answers is lane D's <c>BindRemodelRun</c> once the
-    /// two lanes are integrated; until then the add-in's answers false, and the pipeline refuses a
-    /// false bind as <c>BridgeUnavailable</c> before any open (<see cref="BackendRemodelPipelineTests"/>).
+    /// tool service it binds for. The bind is the gate's <c>BindRemodelRun</c>
+    /// (<see cref="TheAddInsBindIsTheGatesBindOnTheServiceListeningNow"/>), and the pipeline refuses
+    /// a false or throwing bind as <c>BridgeUnavailable</c> before any open
+    /// (<see cref="BackendRemodelPipelineTests"/>).
     /// </summary>
     [Fact]
     public void TheAddInsOnePipelineIsHandedItsBind()
@@ -42,7 +47,72 @@ public sealed class RemodelWiringTests
             StringComparison.Ordinal);
 
         string source = Collapsed("SwReviewAddIn.cs");
-        Assert.Contains("private bool BindRemodelRun(string runDirectory)", source, StringComparison.Ordinal);
+        Assert.Contains(
+            "private bool BindRemodelRun(string runDirectory) => BindRemodelRun(_toolService, runDirectory);",
+            source,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 004 T158, lanes D and E integrated: the add-in's bind hands the run folder to the tool
+    /// service listening now, through the gate the add-in holds. With no gate yet it answers
+    /// false; with a gate but no service listening - before the first start, mid-restart, after a
+    /// failed start or a dispose - the gate's refusal is thrown on, as is whatever the service
+    /// throws (a refused folder, an application thread that did not answer), so the pipeline keeps
+    /// it as the cause of its <c>BridgeUnavailable</c>. Only a bind the service took answers true.
+    /// </summary>
+    [Fact]
+    public void TheAddInsBindIsTheGatesBindOnTheServiceListeningNow()
+    {
+        const string first = @"C:\runs\20260927-100000-bracket-remodel";
+        const string second = @"C:\runs\20260927-100100-bracket-remodel";
+        var services = new List<FakeToolService>();
+        var gate = new ToolServiceGate(
+            () => new PageDocument(@"C:\models\bracket.sldprt", "Default"),
+            () =>
+            {
+                var service = new FakeToolService(services.Count + 1);
+                services.Add(service);
+                return service;
+            },
+            _ => { },
+            (_, __) => { },
+            schedule: work => work());
+
+        Assert.False(SwReviewAddIn.BindRemodelRun(null, first));
+        Assert.Throws<InvalidOperationException>(() => SwReviewAddIn.BindRemodelRun(gate, first));
+
+        gate.EnsureStarted();
+        Assert.True(SwReviewAddIn.BindRemodelRun(gate, first));
+        Assert.Equal(new[] { first }, Assert.Single(services).Bound);
+
+        services[0].BindFailure = new TimeoutException("the application thread did not answer");
+        Assert.Throws<TimeoutException>(() => SwReviewAddIn.BindRemodelRun(gate, second));
+
+        gate.Dispose();
+        Assert.Throws<InvalidOperationException>(() => SwReviewAddIn.BindRemodelRun(gate, second));
+        Assert.Equal(new[] { first, second }, services[0].Bound);
+    }
+
+    /// <summary>
+    /// 004 T167, lanes D and E integrated: every ending of a remodel session the tool service
+    /// reports - <c>remodel.close</c>'s, and the teardown a re-attach or an unload runs - is handed
+    /// to the Remodel host as the routine reported it, read through the field per call (the host
+    /// is built after the gate and can be gone by the time a teardown runs), and the host posts
+    /// the one status error its words make of it, or nothing
+    /// (<see cref="RemodelHostTests"/>, "the routine's outcome").
+    /// </summary>
+    [Fact]
+    public void TheToolServicesSessionEndingsReachTheRemodelHost()
+    {
+        string source = Collapsed("SwReviewAddIn.cs");
+        int start = source.IndexOf("private ToolServiceGate CreateToolServiceGate(", StringComparison.Ordinal);
+        int end = start < 0 ? -1 : source.IndexOf("private void StartBackend(", start, StringComparison.Ordinal);
+        Assert.True(end > start, "SwReviewAddIn.CreateToolServiceGate was not found.");
+        string gate = source.Substring(start, end - start);
+
+        Assert.Contains("new ToolServiceOptions(app, new ControlAppThreadInvoker(pane)) {", gate, StringComparison.Ordinal);
+        Assert.Contains("RemodelSessionEnded = outcome => _remodelHost?.SessionEnded(outcome),", gate, StringComparison.Ordinal);
     }
 
     /// <summary>

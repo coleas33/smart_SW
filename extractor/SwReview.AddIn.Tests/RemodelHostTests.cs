@@ -3305,6 +3305,171 @@ public sealed class RemodelHostTests
         host.SessionEnded(RemodelSystemToggles.SuppressedToggles, true, false);
     }
 
+    // ---- the routine's outcome, as the add-in hands it over (lanes D and E integrated) ----------
+
+    /// <summary>
+    /// An ending of a session that existed, as lane D's routine reports it: the settings still
+    /// holding the run's value by <see cref="RemodelSystemToggles.Outstanding"/>'s names, and
+    /// whether the copy was closed. Everything else is what a clean ending has.
+    /// </summary>
+    private static RemodelSessionEnd Ended(
+        IReadOnlyList<string> settingsOutstanding,
+        bool copyClosed = true,
+        bool verified = true,
+        bool tagRemoved = true,
+        string reason = RemodelSessionEnd.ReasonToolServiceStopped)
+    {
+        var failures = new List<string>();
+        if (settingsOutstanding.Count > 0)
+        {
+            failures.Add("the settings were not all put back");
+        }
+
+        if (!copyClosed)
+        {
+            failures.Add("close: the copy was not closed");
+        }
+
+        if (!tagRemoved)
+        {
+            failures.Add("untag: the tag did not come off");
+        }
+
+        return new RemodelSessionEnd(
+            reason,
+            @"C:\runs\20260916-142201-bracket-remodel",
+            @"C:\runs\20260916-142201-bracket-remodel\copy\bracket-RMS.SLDPRT",
+            verified,
+            verified ? (RemodelTargetCheck?)null : RemodelTargetCheck.DocumentPath,
+            tagRemoved,
+            copyClosed,
+            settingsOutstanding,
+            failures);
+    }
+
+    /// <summary>
+    /// The add-in hands <see cref="RemodelHost.SessionEnded(RemodelSessionEnd)"/> the routine's
+    /// outcome as it is, and the host reads the three facts its words need off it: each setting
+    /// left by the name the routine gives it, <c>CommandInProgress</c> apart, and whether the
+    /// copy was closed. What is posted is exactly what the three-fact seam posts for the same
+    /// facts, so the words have one source.
+    /// </summary>
+    [Fact]
+    public void AnOutcomeThatLeftSomethingPostsTheWordsForWhatItLeft()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            int before = world.Posted.Count;
+
+            world.Host.SessionEnded(Ended(
+                new[]
+                {
+                    RemodelSystemToggles.SettingName(RemodelSystemToggles.ShowErrorsEveryRebuild),
+                    RemodelSystemToggles.CommandInProgressSetting,
+                },
+                copyClosed: false));
+
+            Assert.Equal(new[] { "status" }, world.TypesPostedSince(before));
+            JsonElement status = world.LastPosted("status");
+            Assert.Equal("error", status.GetProperty("stage").GetString());
+            Assert.Equal(
+                RemodelHost.SessionEndedMessage(new[] { RemodelSystemToggles.ShowErrorsEveryRebuild }, true, false),
+                status.GetProperty("message").GetString());
+        }
+    }
+
+    /// <summary>
+    /// Every one of the three toggles the routine can report is read back to its value, so each
+    /// is named by its label; the routine's order does not matter.
+    /// </summary>
+    [Fact]
+    public void EveryToggleTheRoutineNamesIsReadBackToItsLabel()
+    {
+        Assert.Equal(
+            RemodelHost.SessionEndedMessage(RemodelSystemToggles.SuppressedToggles, false, true),
+            RemodelHost.SessionEndedMessage(Ended(RemodelSystemToggles.SuppressedToggles
+                .Reverse()
+                .Select(RemodelSystemToggles.SettingName)
+                .ToArray())));
+    }
+
+    /// <summary>
+    /// A clean ending tells the page nothing, whatever ended it; and neither does an ending of
+    /// no session, which the routine reports when a teardown found nothing to end.
+    /// </summary>
+    [Theory]
+    [InlineData(RemodelSessionEnd.ReasonClose)]
+    [InlineData(RemodelSessionEnd.ReasonToolServiceStopped)]
+    public void ACleanEndingOrNoSessionTellsThePageNothing(string reason)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            int before = world.Posted.Count;
+
+            world.Host.SessionEnded(Ended(new string[0], reason: reason));
+            world.Host.SessionEnded(RemodelSessionEnd.NoSession(reason));
+
+            Assert.Equal(before, world.Posted.Count);
+            Assert.Null(RemodelHost.SessionEndedMessage(Ended(new string[0], reason: reason)));
+            Assert.Null(RemodelHost.SessionEndedMessage(RemodelSessionEnd.NoSession(reason)));
+        }
+    }
+
+    /// <summary>
+    /// A verification that failed closes nothing, so the copy may still be open and the words say
+    /// so, by its suffix; the settings the routine put back regardless are not mentioned.
+    /// </summary>
+    [Fact]
+    public void AnEndingWhoseVerificationFailedSaysTheCopyMayStillBeOpen()
+    {
+        Assert.Equal(
+            NothingPutBack + " The copy may still be open in SOLIDWORKS (its name ends in -RMS): close "
+            + "it without saving.",
+            RemodelHost.SessionEndedMessage(Ended(new string[0], copyClosed: false, verified: false, tagRemoved: false)));
+    }
+
+    /// <summary>
+    /// A setting name the host has no toggle for is still something left, worded as another
+    /// setting rather than dropped.
+    /// </summary>
+    [Fact]
+    public void ASettingNameTheHostDoesNotKnowIsStillSaid()
+    {
+        Assert.Equal(
+            NothingPutBack + " A setting the plan changed may not be as you had it.",
+            RemodelHost.SessionEndedMessage(Ended(new[] { "swSomeFutureToggle" })));
+    }
+
+    /// <summary>
+    /// A tag the routine could not take off, with the copy closed and every setting back, leaves
+    /// nothing the engineer can act on - the unsaved close took the tag with the document - so it
+    /// tells the page nothing; the routine's line in the logs carries it.
+    /// </summary>
+    [Fact]
+    public void ATagLeftOnAClosedCopyTellsThePageNothing()
+    {
+        Assert.Null(RemodelHost.SessionEndedMessage(Ended(new string[0], tagRemoved: false)));
+    }
+
+    /// <summary>Called from the tool service's teardown, so a null outcome is nothing, never a throw.</summary>
+    [Fact]
+    public void ANullOutcomeIsNothingAndNeverAThrow()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            int before = world.Posted.Count;
+
+            world.Host.SessionEnded((RemodelSessionEnd?)null);
+
+            Assert.Equal(before, world.Posted.Count);
+            new RemodelHost(new RemodelHostOptions(new ThrowingChannel(), () => "C:\\runs"))
+                .SessionEnded(Ended(RemodelSystemToggles.SuppressedToggles.Select(RemodelSystemToggles.SettingName).ToArray(), copyClosed: false));
+        }
+    }
+
     // ---- the words rule ----------------------------------------------------------------------
 
     /// <summary>The build's plumbing, which no sentence this tab shows the engineer may name (U13).</summary>
