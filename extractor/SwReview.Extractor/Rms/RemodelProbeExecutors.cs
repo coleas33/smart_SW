@@ -339,21 +339,33 @@ public static partial class RemodelProbeExecutors
 
     private static readonly AnalyticSolidSpec Probe8Cylinder = AnalyticSolidSpec.Cylinder(0.02, 0.06);
 
-    // ---- PROBE-1: the watchdog-timed illegal reorder, flag clear and flag set ----------
+    // ---- PROBE-1: the watchdog-timed illegal reorder, flag set and then flag clear ------
 
+    /// <summary>
+    /// The flag-<b>set</b> attempt runs first and the flag-clear attempt second (013
+    /// contracts/readings.md section 4, 004 T033 as amended 2026-09-26): a "Cannot reorder" box
+    /// the flag-clear attempt raises may still be open afterwards, and running it last means it
+    /// cannot spoil the reading that decides the verdict. Each attempt is watched by the
+    /// context's deadline, started only once that attempt has begun.
+    /// </summary>
     private static RemodelProbeReading Probe1(RemodelProbeContext context)
     {
         const string mover = "Boss-Extrude1";
         const string anchor = "Shell1";
         int illegalLocation = (int)swMoveLocation_e.swMoveAfter;
 
-        context.Gate.Call(RemodelSystemToggles.CommandInProgressMember, () => context.Host.SetCommandInProgress(false));
-        RemodelProbeWatchdogOutcome clearOutcome = RemodelProbeWatchdog.RunWithTimeout(
-            () => context.Host.ReorderFeature(context.Part, mover, anchor, illegalLocation), context.WatchdogTimeout);
+        RemodelProbeWatchdogOutcome Attempt(bool commandInProgress)
+        {
+            context.Gate.Call(
+                RemodelSystemToggles.CommandInProgressMember, () => context.Host.SetCommandInProgress(commandInProgress));
+            return RemodelProbeWatchdog.Run(
+                () => context.Host.ReorderFeature(context.Part, mover, anchor, illegalLocation),
+                context.WatchdogDeadline,
+                RemodelProbeWatchdog.StartBound);
+        }
 
-        context.Gate.Call(RemodelSystemToggles.CommandInProgressMember, () => context.Host.SetCommandInProgress(true));
-        RemodelProbeWatchdogOutcome setOutcome = RemodelProbeWatchdog.RunWithTimeout(
-            () => context.Host.ReorderFeature(context.Part, mover, anchor, illegalLocation), context.WatchdogTimeout);
+        RemodelProbeWatchdogOutcome setOutcome = Attempt(commandInProgress: true);
+        RemodelProbeWatchdogOutcome clearOutcome = Attempt(commandInProgress: false);
 
         bool blockedClear = !clearOutcome.Completed;
         bool blockedSet = !setOutcome.Completed;

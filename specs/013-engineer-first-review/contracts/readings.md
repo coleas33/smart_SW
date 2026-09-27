@@ -84,6 +84,13 @@ public static RemodelProbeWatchdogOutcome RunWithTimeout(Func<bool> call, TimeSp
 *Added 2026-09-26, after this package:* feature 004 records the same change as 004 T171 (004
 research R13.7); it is built once, with the signature above, under whichever list reaches it first.
 
+*Landed 2026-09-26 (013 T137, 004 T171):* `Run` takes a fourth, optional argument,
+`Func<Func<bool>, Task<bool>>? startCall = null` - how the call's thread is started, null for a
+thread of its own - so a test can hold the call before its first line and show that no deadline
+starts meanwhile; `StartBound` is `RemodelProbeWatchdog.StartBound`, and
+`RemodelProbeWatchdog.Deadline(timeout)` is the one production deadline, used by `RunWithTimeout`
+and by `RemodelProbeContext.WatchdogDeadline`'s default.
+
 Probe 1 (`Rms/RemodelProbeExecutors.cs:344-372`) runs the **flag-set** attempt first, then the
 flag-clear attempt, so a message box left open by one cannot spoil the other's reading;
 `RemodelProbe1Logic.Decide` and the ledger's raw keys are unchanged. `RemodelProbeRunner` records the
