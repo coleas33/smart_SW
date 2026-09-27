@@ -118,6 +118,7 @@ __all__ = [
     "TurnKind",
     "TurnPlan",
     "compare_finding_keys",
+    "drops_prior_reasoning",
     "estimated_sizes",
     "judged_group",
     "narrowed_key",
@@ -904,6 +905,7 @@ def report_of(passes: ReplayPasses) -> ReplayReport:
     pricing_first = replace(pricing_first, offered=first.offered | unrun)
     pricing_second = replace(pricing_second, offered=second.offered | unrun)
     prefix_difference = count_tokens(second.prefix) - count_tokens(first.prefix)
+    drop_prior_reasoning = drops_prior_reasoning(recording, passes.requested)
     rounds = _rounds(
         recording,
         classes,
@@ -914,6 +916,7 @@ def report_of(passes: ReplayPasses) -> ReplayReport:
         lower,
         answered,
         prefix_difference=prefix_difference,
+        drop_prior_reasoning=drop_prior_reasoning,
     )
     return ReplayReport(
         run_dir=str(recording.run_dir),
@@ -930,7 +933,11 @@ def report_of(passes: ReplayPasses) -> ReplayReport:
         rounds=rounds,
         totals=_totals(rounds),
         regrouped=_regrouped_estimate(
-            recording, passes.regrouped, pricing_second, prefix_difference=prefix_difference
+            recording,
+            passes.regrouped,
+            pricing_second,
+            prefix_difference=prefix_difference,
+            drop_prior_reasoning=drop_prior_reasoning,
         ),
         findings=_findings(recording, classes, second, answered),
     )
@@ -1277,8 +1284,14 @@ def _rounds(
     answered: Mapping[int, str],
     *,
     prefix_difference: int,
+    drop_prior_reasoning: bool = False,
 ) -> list[ReplayRound]:
-    """Price every recorded round in both passes (contracts/replay.md section 4)."""
+    """Price every recorded round in both passes (contracts/replay.md section 4).
+
+    With `drop_prior_reasoning` (lever 14, `drops_prior_reasoning`), each requested round of
+    a turn after the first is priced lower by the earlier committed turns' recorded reasoning
+    tokens, and says it is an estimate (`estimated`); the as-recorded pass is untouched.
+    """
     by_step = {item.recorded.step: item for item in classes}
     played_first = {(r.turn, r.index): r for r in first.rounds}
     played_second = {(r.turn, r.index): r for r in second.rounds}
@@ -1323,11 +1336,14 @@ def _rounds(
                 if a is not None
                 else recorded_input
             )
+            # Lever 14's estimate (feature 013): the earlier turns' reasoning, which the
+            # recorded input carries, leaves the requested one.
+            saving = conversation.prior_reasoning if drop_prior_reasoning else 0
             requested_input = (
                 fixed + prefix_difference + _results_tokens(b, pricing_second, cache_second)
                 if b is not None
                 else recorded_input
-            )
+            ) - saving
             rounds.append(
                 ReplayRound(
                     turn=turn.index,
@@ -1336,13 +1352,16 @@ def _rounds(
                     recorded_input=recorded_input,
                     as_recorded_input=as_recorded,
                     requested_input=requested_input,
-                    estimated=any(i.class_ == "estimated" for i in items),
+                    estimated=any(i.class_ == "estimated" for i in items) or saving > 0,
                     lower_bound=any(i.index in lower for i in items)
                     or (conversation.words_unknown and turn.index > 0),
                     calls=calls,
                 )
             )
-            conversation.add_output(recorded_round.usage.output_tokens or 0)
+            conversation.add_output(
+                recorded_round.usage.output_tokens or 0,
+                recorded_round.usage.reasoning_tokens or 0,
+            )
         conversation.end(turn)
     return rounds
 
@@ -1370,6 +1389,12 @@ class _Conversation:
     outputs: int = 0
     committed_outputs: int = 0
     committed_words: int = 0
+    reasoning: int = 0
+    """The reasoning output tokens among `outputs` (feature 013, lever 14)."""
+    committed_reasoning: int = 0
+    prior_reasoning: int = 0
+    """The reasoning tokens of the turns committed before the current one: what lever 14
+    leaves out of each of the current turn's requests. Fixed when the turn begins."""
 
     @classmethod
     def of(cls, recording: Recording) -> _Conversation:
@@ -1380,18 +1405,30 @@ class _Conversation:
             self.words = self.committed_words + (turn.user_tokens or 0)
             self.words_unknown = self.words_unknown or turn.user_tokens is None
         self.outputs = self.committed_outputs
+        self.reasoning = self.prior_reasoning = self.committed_reasoning
 
     @property
     def fixed(self) -> int:
         return self.base + self.outputs + self.words
 
-    def add_output(self, tokens: int) -> None:
+    def add_output(self, tokens: int, reasoning: int = 0) -> None:
         self.outputs += tokens
+        self.reasoning += reasoning
 
     def end(self, turn: RecordedTurn) -> None:
         if turn.end_reason not in UNCOMMITTED_ENDS:
             self.committed_outputs = self.outputs
             self.committed_words = self.words
+            self.committed_reasoning = self.reasoning
+
+
+def drops_prior_reasoning(recording: Recording, requested: EfficiencySettings) -> bool:
+    """Whether the requested pass prices lever 14 (feature 013, `contracts/tokens.md` 4).
+
+    Only where the adapter that made the recording echoes its reasoning items back, so that
+    the recorded input carries them: every provider but Gemini, which sends none (the
+    scripted provider's recordings report OpenAI's counts)."""
+    return requested.drop_prior_reasoning and recording.provider != "gemini"
 
 
 # --- the regrouped estimate (User Story 4, contracts/replay.md section 6) ----------------------
@@ -1481,13 +1518,15 @@ def _regrouped_estimate(
     requested: _Pricing,
     *,
     prefix_difference: int,
+    drop_prior_reasoning: bool = False,
 ) -> Regrouped | None:
     """Price the regrouped script as the strict figure prices pass B (section 4).
 
     Each regrouped round's output is its recorded rounds' outputs together; a round rule R
     emptied is gone with its output, because the model never answered it. A call the replay
     could not run keeps pass B's pricing, under its new position in the script. The closing
-    round and every carried presentation round are priced as the strict figure prices them.
+    round and every carried presentation round are priced as the strict figure prices them,
+    lever 14's estimate included.
     """
     if regrouped is None:
         return None
@@ -1525,8 +1564,11 @@ def _regrouped_estimate(
                 + _results_tokens(round_, pricing, cache)
                 if round_ is not None
                 else sources[0].usage.input_tokens or 0
+            ) - (conversation.prior_reasoning if drop_prior_reasoning else 0)
+            conversation.add_output(
+                sum(s.usage.output_tokens or 0 for s in sources),
+                sum(s.usage.reasoning_tokens or 0 for s in sources),
             )
-            conversation.add_output(sum(s.usage.output_tokens or 0 for s in sources))
         carried = [r for r in turn.rounds if r.kind == "presentation"]
         total += sum(r.usage.input_tokens or 0 for r in carried)
         count += len(priced) + len(carried)
