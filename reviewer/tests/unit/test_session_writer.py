@@ -50,9 +50,11 @@ def test_the_writer_allocates_validates_appends_and_announces() -> None:
     )
     assert (second.question, second.options, second.blocks) == (None, [], None)
     assert context.require_session().evidence_requests == [first, second]
+    # Feature 013 T102, edited deliberately: the announced body states who asked
+    # (`EvidenceRequest.pane_body`), which the dump omits at `model`.
     assert events == [
-        ("evidence.requested", first.model_dump(mode="json")),
-        ("evidence.requested", second.model_dump(mode="json")),
+        ("evidence.requested", first.pane_body()),
+        ("evidence.requested", second.pane_body()),
     ]
 
 
@@ -101,7 +103,7 @@ def test_request_evidence_writes_through_the_writer_exactly_as_before() -> None:
         ],
     }
     assert request.id == "ER-001"
-    assert events == [("evidence.requested", request.model_dump(mode="json"))]
+    assert events == [("evidence.requested", request.pane_body())]  # 013 T102: states its source
 
 
 @pytest.mark.parametrize(

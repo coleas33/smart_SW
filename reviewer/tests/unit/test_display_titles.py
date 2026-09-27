@@ -200,7 +200,9 @@ def test_the_pane_body_is_the_finding_with_only_its_title_changed() -> None:
 
     body = pane_finding(recorded, NAMES)
 
-    expected = recorded.model_dump(mode="json")
+    # Feature 013 T101, edited deliberately: the pane body also states who wrote the finding
+    # (`contracts/sources.md` section 1), which the dump omits at `code`.
+    expected = {**recorded.model_dump(mode="json"), "source": recorded.source}
     assert list(body) == list(expected)
     assert {key: value for key, value in body.items() if key != "title"} == {
         key: value for key, value in expected.items() if key != "title"

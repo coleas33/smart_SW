@@ -25,9 +25,11 @@ from pydantic_core import to_jsonable_python
 
 from swreview.ir.loader import load_package
 from swreview.ir.models import EvidencePackage
+from swreview.report.names import component_names
 from swreview.report.session import ReviewSession, load_session
 from swreview.report.snapshot import review_snapshot
 from swreview.report.summary import load_words, review_ranking
+from swreview.report.titles import pane_finding
 from swreview.report.unexamined import not_examined
 from tests.support.attention import REVIEW_FOLDER
 from tests.support.contracts import contract_validator
@@ -90,10 +92,15 @@ def test_the_findings_and_requests_are_their_stream_bodies_in_session_order(
 ) -> None:
     snapshot = review_snapshot(session, package, run_id=RUN_ID)
 
-    assert snapshot["findings"] == [finding.model_dump(mode="json") for finding in session.findings]
+    # Feature 013 T101, edited deliberately: the stream's bodies state who wrote each record
+    # (`contracts/sources.md` section 1) - `pane_finding` and `EvidenceRequest.pane_body` - so the
+    # snapshot's do too, where before they were the records' plain dumps.
+    names = component_names(package)
+    assert snapshot["findings"] == [pane_finding(finding, names) for finding in session.findings]
     assert snapshot["evidence_requests"] == [
-        request.model_dump(mode="json") for request in session.evidence_requests
+        request.pane_body() for request in session.evidence_requests
     ]
+    assert all("source" in body for body in [*snapshot["findings"], *snapshot["evidence_requests"]])
     assert [one["id"] for one in snapshot["findings"]] == [f.id for f in session.findings]
 
 

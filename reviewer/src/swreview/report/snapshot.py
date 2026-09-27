@@ -51,7 +51,9 @@ def review_snapshot(
     Every finding, request and coverage entry is exactly the body its stream event carries
     (`finding`, `evidence.requested`, `coverage`), so the page renders a restored review
     with the functions that rendered it live - a finding's with its display title
-    (`report/titles.pane_finding`, feature 009 decision 2A), as the ranking's rows are.
+    (`report/titles.pane_finding`, feature 009 decision 2A), as the ranking's rows are. A
+    finding and a request state their source always, a coverage entry only when the model
+    wrote it (feature 013, `contracts/sources.md` section 1).
     """
     block = not_examined(package)
     names = component_names(package)
@@ -63,9 +65,7 @@ def review_snapshot(
         "last_seq": last_seq,
         "document": _root_document(package),
         "findings": [pane_finding(finding, names) for finding in session.findings],
-        "evidence_requests": [
-            request.model_dump(mode="json") for request in session.evidence_requests
-        ],
+        "evidence_requests": [request.pane_body() for request in session.evidence_requests],
         "coverage": [
             {"bucket": bucket, "item": item.model_dump(mode="json")}
             for bucket in COVERAGE_BUCKETS

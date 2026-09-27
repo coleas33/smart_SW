@@ -82,13 +82,16 @@ def display_title(finding: Finding, names: Mapping[str, str]) -> str:
 
 
 def pane_finding(finding: Finding, names: Mapping[str, str]) -> dict[str, Any]:
-    """`finding` as the pane receives it: its JSON body, with `title` its display title.
+    """`finding` as the pane receives it: its JSON body, with `title` its display title and
+    `source` always stated (feature 013, `contracts/sources.md` section 1) - the dump omits it
+    at `code`, and the page prints a finding card's source chip only for a source it is given.
 
     Every other field, and the key order, is the `Finding`'s own, so the body still validates
     as `review-session.schema.json#/$defs/Finding` and `observed` keeps its ids.
     """
     body = finding.model_dump(mode="json")
     body["title"] = display_title(finding, names)
+    body["source"] = finding.source
     return body
 
 

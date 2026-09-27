@@ -269,7 +269,11 @@ class ToolContext:
         return pane_finding(finding, component_names(self.ir))
 
     def record_coverage(self, bucket: CoverageBucket, item: CoverageItem) -> None:
-        """Append a coverage item to `bucket` and announce which bucket it went into."""
+        """Append a coverage item to `bucket` and announce which bucket it went into.
+
+        The item's body states its source only when the model wrote it (feature 013,
+        `contracts/sources.md` section 1): the dump omits `code`, and the page labels a coverage
+        row only when told, so an older model-written row never reads as code's."""
         getattr(self.require_session().coverage, bucket).append(item)
         self.emit_event(
             "coverage", {"bucket": bucket, "item": item.model_dump(mode="json")}
@@ -379,7 +383,7 @@ class ToolContext:
     def record_evidence_request(self, request: EvidenceRequest) -> None:
         """Open an evidence request on the session and announce it."""
         self.require_session().evidence_requests.append(request)
-        self.emit_event("evidence.requested", request.model_dump(mode="json"))
+        self.emit_event("evidence.requested", request.pane_body())
 
     def exception_store(self) -> ExceptionStore | None:
         """The retained exceptions as a store, or `None` when this run has none.
