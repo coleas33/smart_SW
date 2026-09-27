@@ -240,6 +240,14 @@ class Drawing:
     unreadable: tuple[tuple[DrawingSheetRecord, str], ...]
     """The native sheets whose contents it could not, each with the gap that says so."""
 
+    tables_unread: tuple[tuple[DrawingSheetRecord, str], ...]
+    """The graded sheets whose revision table may not have been read, each with why: the
+    extractor flagged the sheet (a `revision_table_read` gap on its id - its
+    `ISheet.RevisionTable` cross-check reports a table the view walk did not find), or the
+    sheet recorded no view of its own (type 1), the view a revision table sits on (feature 013,
+    `contracts/readings.md` section 2). Graded sheets are otherwise read as before; only the
+    claim "no revision table" waits on these."""
+
     ingested: tuple[DrawingSheet, ...]
     """The PDF ingest's sheet evidence for this drawing, which is never graded here."""
 
@@ -291,11 +299,7 @@ class Drawing:
 
     def sheets_without_format_view(self) -> tuple[DrawingSheetRecord, ...]:
         """The graded sheets that recorded no type-1 sheet-format pseudo-view."""
-        return tuple(
-            sheet
-            for sheet in self.sheets
-            if not any(view.view_type_raw == SHEET_FORMAT_VIEW for view in sheet.views)
-        )
+        return tuple(sheet for sheet in self.sheets if not _has_format_view(sheet))
 
     def referenced_documents(self) -> tuple[Document, ...]:
         """Each document a view on a graded sheet references, once, in traversal order."""
@@ -356,6 +360,7 @@ def drawing_scope(
         if find_gap(package, sheet.id, "drawing_sheet_views") is not None
     )
     lost = {sheet.id for sheet, _ in unreadable}
+    graded = tuple(sheet for sheet in native if sheet.id not in lost)
     return Drawing(
         document=document,
         row=row,
@@ -363,12 +368,45 @@ def drawing_scope(
         profile=profile,
         record=record,
         native=native,
-        sheets=tuple(sheet for sheet in native if sheet.id not in lost),
+        sheets=graded,
         unreadable=unreadable,
+        tables_unread=_tables_unread(package, graded),
         ingested=tuple(
             sheet for sheet in package.drawings if sheet.document_id == document.document_id
         ),
     )
+
+
+def _has_format_view(sheet: DrawingSheetRecord) -> bool:
+    """Whether `sheet` recorded its own type-1 view."""
+    return any(view.view_type_raw == SHEET_FORMAT_VIEW for view in sheet.views)
+
+
+def _why_no_format_view(package: EvidencePackage, sheet: DrawingSheetRecord) -> str:
+    """Why `sheet` recorded no type-1 view: the gap the dump recorded for it - a sheet whose own
+    view could not be taken from `IDrawingDoc.GetViews` (`drawing_sheet_view`, feature 013)
+    among them - or that it recorded none."""
+    return gap_note(package, sheet.id, "drawing_sheet_view", "drawing_sheet_views", "drawing_view")
+
+
+def _tables_unread(
+    package: EvidencePackage, sheets: tuple[DrawingSheetRecord, ...]
+) -> tuple[tuple[DrawingSheetRecord, str], ...]:
+    """Of `sheets`, those whose revision table may not have been read, in sheet order, each
+    with why (`Drawing.tables_unread`)."""
+    unread: list[tuple[DrawingSheetRecord, str]] = []
+    for sheet in sheets:
+        if find_gap(package, sheet.id, "revision_table_read") is not None:
+            unread.append((sheet, gap_note(package, sheet.id, "revision_table_read")))
+        elif not _has_format_view(sheet):
+            unread.append(
+                (
+                    sheet,
+                    f"sheet {sheet.name!r} recorded no view of its own (type 1), the view a "
+                    f"revision table sits on; {_why_no_format_view(package, sheet)}",
+                )
+            )
+    return tuple(unread)
 
 
 def evaluate_drawing(
@@ -616,8 +654,11 @@ def revision_matches(scope: Drawing) -> list[RuleResult]:
     One finding for the drawing naming **every** disagreement it found, in three cases: no
     revision table on any sheet, a table disagreeing with the drawing's revision property,
     and the drawing's property disagreeing with a referenced document's. The first of those
-    is claimed only when **every** native sheet could be enumerated: where one could not, the
-    table may sit on it, so the absence is unresolved rather than a warning (FR-029). A view
+    is claimed only when **every** native sheet could be enumerated, recorded its own (type 1)
+    view and was not flagged by the extractor as carrying a revision table it did not read:
+    otherwise the table may sit where nothing was read, so the absence is unresolved, citing
+    the gap, rather than a warning (FR-029; feature 013, `contracts/readings.md` section 2),
+    and the property comparisons still run beside it. A view
     whose referenced model was not loaded is unresolved naming the model, for the same
     reason: an absent comparison is never a silent one. The revision is
     read from the cell `revision.cell` names, and where `IRevisionTableAnnotation`'s own
@@ -659,13 +700,24 @@ def revision_matches(scope: Drawing) -> list[RuleResult]:
             f"no revision table was found on the {len(scope.sheets)} native sheet(s) of "
             f"{scope.name} that could be enumerated"
         )
+        # The table may sit on a sheet the dump could not enumerate, on a sheet the extractor
+        # flagged as carrying one it did not read, or on the own view a sheet did not record,
+        # so the absence is unresolved rather than a warning finding (FR-029; feature 013,
+        # contracts/readings.md section 2).
+        unread: list[str] = []
         if scope.unreadable:
-            # The table may sit on the very sheet the dump could not enumerate, so the
-            # absence is unresolved rather than a warning finding (FR-029).
+            unread.append(
+                f"the contents of {len(scope.unreadable)} further native sheet(s) could not be "
+                "read"
+            )
+        unread.extend(
+            f"sheet {sheet.name!r} may carry one that was not read ({why})"
+            for sheet, why in scope.tables_unread
+        )
+        if unread:
             unknown.append(
-                f"{searched}, and the contents of {len(scope.unreadable)} further native "
-                f"sheet(s) could not be read, so whether {scope.name} carries a revision "
-                "table at all is not something this package can state"
+                f"{searched}, and {'; and '.join(unread)}, so whether {scope.name} carries a "
+                "revision table at all is not something this package can state"
             )
         else:
             disagreements.append(
@@ -867,7 +919,7 @@ def no_itar_statement(scope: Drawing) -> list[RuleResult]:
             _sheet_subject(sheet, scope.configuration, scope.document_id),
             "it recorded no type-1 sheet-format view, which is where the export-control "
             "statement is found, so the absence of the phrase on it is not something this "
-            f"package can state; {scope.why(sheet.id, 'drawing_sheet_views', 'drawing_view')}",
+            f"package can state; {_why_no_format_view(scope.package, sheet)}",
         )
         for sheet in scope.sheets_without_format_view()
     ]
