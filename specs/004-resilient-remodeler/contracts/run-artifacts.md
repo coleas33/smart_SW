@@ -24,8 +24,8 @@ source: one bad path join beside a source inside an EPDM vault writes into the v
 | `copy/<doc>-RMS.SLDPRT` | `RemodelCopy`, then SOLIDWORKS | n/a | The working copy and **the only file SOLIDWORKS may write**. Created by a filesystem copy with `overwrite: false` before any document handle exists |
 | `plan.json` | `remodel/plan.py` | `RemodelPlan`, `plan_schema: "1.0"` | One file, rewritten in place: `plan_revision` is 1 after the planner and 2 after the judgement phase, and `state` is rewritten at every transition so the run's state is readable from disk after a crash (data-model.md section 11) |
 | `changes.jsonl` | `remodel/apply.py` | one `ChangeRecord` per line, append-only | Both the undo record and the change list the pane shows |
-| `package-before.json` | `SwReviewDump` with 003's `DumpProfile.ModelCheck` | feature 001 `contracts/ir.schema.json` 1.2.0, `extractor.profile: "model_check"` | The copy at open, which is the source's tree |
-| `package-after.json` | the same dumper | the same schema | After the last change |
+| `package-before.json` | `SwReviewDump` with 003's `DumpProfile.ModelCheck` | feature 001 `contracts/ir.schema.json` 1.2.0, `extractor.profile: "model_check"` | The copy at open, which is the source's tree. *Amended 2026-09-27 (T159):* read with the copy made the active document first - activate only, never an open - and refused as `CopyNotActive` otherwise (`pane-remodel-messages.md`) |
+| `package-after.json` | the same dumper | the same schema | After the last change, with the copy made the active document first, as `package-before.json` is (T159) |
 | `rms-before.json` | `checks/rms/run.py::run_rms_check` | 003's `RmsCheckRun` | Over `package-before.json` |
 | `rms-after.json` | the same entry point | the same schema | Over `package-after.json` |
 | `grades.json` | `remodel/report.py` | below | 003's `RmsGrade` before and after, plus the per-rule delta |
