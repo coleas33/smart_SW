@@ -245,6 +245,19 @@ notice standing. `SourceIsRemodelCopy` is checked on every Plan, not only when a
 the pipeline activates the copy for its dump (004 T159), the copy can be the active document when
 the engineer presses Plan.
 
+*Amended 2026-09-27 (defaults taken 2026-09-27, the owner may revise; `tasks.md`, lane D's note):*
+the refusals that need no bridge call keep the order `remodel.plan` already answers them in -
+`RunInProgress`, `NoDocument`, `RemodelUnavailable`, `NotAttached`, `NotAPart` - with
+`SourceIsRemodelCopy` after them. A close refused as `BridgeUnavailable`, or one that fails without
+a named refusal, is a close the bridge could not answer; any other named refusal is one it
+answered, and what it left reaches the page as the one status error of "When a re-attach or an
+unload ends the session", because `ToolServiceOptions.RemodelSessionEnded` is told every ending,
+`remodel.close`'s included. A plan closed this way answers `PlanClosedMessage` for its notice, for
+`init.latest_run.plan_lost` and at a Start naming it, whatever else it also lost.
+`SourceIsRemodelCopy` is the copy rule `remodel.open` reads (a file in a `copy` folder, the run
+folder above it) on the canonical path, plus "that run folder is a direct child of `run_root`",
+compared case-insensitively.
+
 ## Host to page (unsolicited)
 
 | type | payload |
