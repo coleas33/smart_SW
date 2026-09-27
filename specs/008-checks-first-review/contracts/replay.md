@@ -1,12 +1,13 @@
 # Contract: The Replay
 
-*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed for User Stories 1 to 6 (013 T042, T058, T069, T095, T115, T124; section 9's rows "Feature 013 US1" to "Feature 013 US2"), User Story 7's gate pending (013 T134, stopped for the owner's question T134-Q1):* every change of feature 013 that moves what the model reads passes the replay gate and records a re-measured section 9 row; see 013 `contracts/tokens.md` section 5.
+*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed for User Stories 1 to 6 (013 T042, T058, T069, T095, T115, T124; section 9's rows "Feature 013 US1" to "Feature 013 US2"), User Story 7's gate pending (013 T134; its question T134-Q1 answered by a default taken 2026-09-27, section 5's tree-reading clause, built by 013 T145-T146):* every change of feature 013 that moves what the model reads passes the replay gate and records a re-measured section 9 row; see 013 `contracts/tokens.md` section 5.
 
 Normative for `swreview benchmark replay`, `benchmark/recording.py`, `benchmark/replay.py`, the
 `ReplayReport` model and the committed replay fixtures (FR-001 to FR-007, SC-001 to SC-005).
 Amended 2026-09-23 by the owner's decision 3A - the fixtures follow the code - in sections 8, 9
 and 10. Amended 2026-09-25 by the owner's decision 23A - a recorded RMS finding the type table
-narrowed - in sections 5, 7, 8 and 10.
+narrowed - in sections 5, 7, 8 and 10. Amended 2026-09-27 by feature 013's default for T134-Q1
+- a recorded RMS finding the tree reading narrowed - in sections 5, 7 and 8.
 
 ## 1. The command
 
@@ -308,6 +309,70 @@ not compare.*
   can remove names only rows of `tolerated_loose` types and lies in the scope of a location that
   remains, so no figure depends on the answer.
 
+*Amended 2026-09-27 (feature 013 T134-Q1; default taken 2026-09-27, the owner may revise; 013
+research R2.42, research R2.59; 013 T145-T146): a finding the tree reading narrowed.* Feature 013
+T133 reads a part's tree the way feature 004's planner does, through
+`checks/feature_nodes.tree_nodes`: an absorbed sketch the dump lists at depth 0 and again under
+the feature consuming it, with one persistent reference, is its depth-0 row alone (the **second
+listing** is merged into it), and a row listed only under the feature that owns it - the Hole
+Wizard's profile sketch - is **carried** by its owner and holds no position of its own. A recorded
+`rms.*` finding that named such rows keeps its part, configuration, components, inputs and
+remaining subjects, and loses only those. So narrowing also reads the recording's own package
+through the reading, one document at a time, under the table the current code ships, and a
+location **may** be removed - it is removable - when:
+
+- its `(scope, persist_ref)` names only rows the reading carries, merges as a second listing, or
+  the table does not count as content: every occurrence of it may go - the type table's "only"
+  above, with the reading's two shapes beside it. A reference any row the reading keeps as a
+  position, and the table counts, also carries is not removable wholesale;
+- it names a depth-0 row the reading keeps together with the second listing(s) merged into it:
+  its occurrences beyond the number of rows the reading keeps there may go, at most one per second
+  listing - the second listing's own occurrence, never the depth-0 row's. A recorded finding that
+  named the pair twice may be de-duplicated to once; one that named it once keeps it; one whose
+  current finding no longer names it at all is lost - the depth-0 row is a real position, and the
+  reading never drops it;
+- a location with no reference is never removable.
+
+*May*, for both clauses: the recorded finding is narrowed onto a requested-pass finding nothing
+else matched, with its check, components, entity inputs and configuration, whose locations lie
+between the recorded finding's and the lowest it can narrow to - every removable occurrence
+removed (`narrowed_key`) - as multisets: the recorded finding less some of its removable
+locations, and nothing else. Of several such findings it takes the one keeping the most
+locations, the first in the requested pass's order among equals; the count listed is the
+locations it lost. A rule that still names a removable row keeps it: since T133 the sketch rules
+grade a carried sketch as its owner's, and `rms.sketches.one_sketch_per_feature` still names rows
+the table does not count (the hazard research R5 recorded for T129), so on the big recording two
+of its findings would stay lost if every removable location had to go. For a recording decision
+23A's clause alone narrows, the lowest key is the one the paragraphs above compare, and a current
+finding that dropped every removable row - every recording and fixture so far - narrows as it
+did.
+
+Everything else is exactly as above: the family (`rms.*`; a `standards.*` finding is never
+narrowed, although the Standards sketch check reads the same tree since T133), the one-to-one
+matching in recorded order onto a finding nothing else matched, the remaining locations compared
+reference by reference (decision 25A), the carried-finding comparison (T129), and the listing
+with the locations removed, both clauses counted together. A package with neither shape folds
+nothing. The rule is still written once: `benchmark/replay.folded_locations(package, table)`
+gives each location the reading folds its `FoldedLocation` - the rows it names that the reading
+keeps as a position and the table counts (`positions`) and its second listings (`listings`) -
+beside `not_content_locations`; `narrowed_key(finding, not_content, folded=...)` gives the lowest
+key, and `compare_finding_keys` reads both, only when an `rms.*` finding is unmatched, and narrows
+onto a finding between (`_narrowed_onto`); the generator reuses it unchanged (section 8).
+
+*Why, and measured.* On the three recordings with T133 applied (2026-09-27, a scratch copy of
+`main` with 013 T132-T133's source; the recordings replayed as recorded), the strict comparison
+loses 25, 3 and 2 `rms.*` findings - 19, 2 and 1 `rms.grouping.all_features_in_a_group`, 3, 1 and
+1 `rms.sketches.fully_defined`, 3, 0 and 0 `rms.sketches.one_sketch_per_feature` - and each comes
+back as one added finding on the same part, configuration, components and inputs, whose locations
+are a sub-multiset of the recorded ones; every location dropped names only carried rows the table
+does not count (101, 10 and 5 occurrences), only carried content rows (29, 4 and 4), or one depth-0
+row and its one second listing, recorded twice and named once (148, 15 and 12), never both
+occurrences dropped. With this rule the three replay none lost and none added, with 26, 3 and 2
+findings narrowed (20, 2 and 1 grouping, 3, 1 and 1 fully defined, 3, 0 and 0 one sketch per
+feature) and 283, 29 and 21 locations removed, and a zero residual on every round (section 10's
+drift rule). `test_replay_narrowed_tree.py` pins the rule; `test_replay_narrowed.py` and
+`test_replay_generator_narrowed.py` are unchanged but for the summary line's words (section 7).
+
 ## 6. The regrouped estimate (from User Story 4)
 
 Printed beside the strict figure whenever a rule applies, with its assumption: "the model does
@@ -367,7 +432,10 @@ slimming, history pruning after N rounds`; a round holding a `stored` call is fl
 contacts, M narrowed by the type table`, and after the reclassified lines each narrowed finding
 has one, `narrowed: <check> - <subject> (<k> locations removed)` (`1 location removed`), its
 subject the recorded finding's, as every other list's is. `findings.narrowed` is always present,
-empty when nothing narrowed. *Amended 2026-09-25 (owner decision 25A):* a subject prints each
+empty when nothing narrowed. *Amended 2026-09-27 (feature 013 T146):* the line ends `…, M narrowed by
+the type table or the tree reading`, one count for both clauses of section 5, and a narrowed
+finding's line counts every location either clause removed. *Amended 2026-09-25 (owner
+decision 25A):* a subject prints each
 location as `at <document_id>`, then `sheet`, `view`, `annotation`, `page` and `persist_ref`, each
 with its value where it has one, so the lost line and the added line of a swapped subject differ
 in the reference, as the findings do (section 5).
@@ -567,6 +635,15 @@ bar alike; `size_problems` names the recorded size in its refusal
 (`test_replay_generator_size_bar.py`). The three committed fixtures pass it as written, so none is
 regenerated: the generator, run again with the three commands above, writes them again with only
 the ids and clocks every run mints moved, and without `--groups 113` it refuses the big one.
+
+*Amended 2026-09-27 (feature 013 T146; the default for T134-Q1): the finding check reads the
+tree-reading clause.* Through the same `compare_finding_keys`, imported and never copied, a
+recorded `rms.*` finding that lost only the rows the shared tree reading folds over the recorded
+package (section 5) narrows onto the fixture finding nothing else matched, its narrowed key
+carried into the fixture's names by `scrambled_key` as before. The generator prints the count as
+`N narrowed by the type table or the tree reading`. Every other self-check is unchanged: a
+recorded key still missing, or a new key, refuses - a `standards.*` finding included, which is
+never narrowed.
 
 ## 9. The acceptance each story cites
 

@@ -832,12 +832,20 @@ document at a time under the current type table, a location may also be removed:
   it, the occurrences beyond the number of rows the reading keeps there, at most one per second
   listing: the second listing's own occurrence goes and the depth-0 row's stays.
 
-Everything else stays exact: the family, the one-to-one matching in recorded order onto a finding
-nothing else matched, the remaining locations compared reference by reference (decision 25A), the
-carried-finding comparison (008 T129), and a narrowed finding listed with the locations removed.
+*May*, for both clauses: the recorded finding narrows onto a finding nothing else matched whose
+locations lie between its own and those left when every removable occurrence is removed
+(`narrowed_key`), so a rule that still names a removable row keeps it. Everything else stays exact:
+the family, the one-to-one matching in recorded order onto a finding nothing else matched, the
+remaining locations compared reference by reference (decision 25A), the carried-finding comparison
+(008 T129), and a narrowed finding listed with the locations removed.
 
 **Default taken 2026-09-27, the owner may revise.** It answers T134-Q1 as the question put it, for
-`rms.*` findings.
+`rms.*` findings - "its locations a sub-multiset of the recorded ones, every location dropped or
+de-duplicated one that the reading merges or carries, or that the type table does not count".
+*Landed as (T145-T146):* the "may" is decision 23A's clause's too. Read as "every removable location
+must go", two of the big recording's `rms.sketches.one_sketch_per_feature` findings stay lost with
+T133: the rule still names rows the table does not count (the hazard 008 research R5 recorded for
+T129), and the sketch rules still grade a carried sketch as its owner's.
 
 **Why**: with T133's reading the real recordings' replay lost 25, 3 and 2 `rms.*` findings, and
 the scratch measurement of 2026-09-27 shows the shape exactly: every one comes back as one added
@@ -846,7 +854,9 @@ the recorded ones, and every location it dropped is one of three kinds - a refer
 rows the table does not count (on the recordings, system rows carried under a feature: 101, 10 and
 5 occurrences), a reference naming only carried content rows (29, 4 and 4), or a reference naming
 one depth-0 row and its one second listing, recorded twice and named once now (148, 15 and 12;
-never both occurrences dropped). A second listing is not a second feature: SOLIDWORKS lists an
+never both occurrences dropped). With the rule, the same scratch copy replays the three recordings
+with none lost and none added - 26, 3 and 2 findings narrowed, 283, 29 and 21 locations removed -
+and a zero residual on every round. A second listing is not a second feature: SOLIDWORKS lists an
 absorbed sketch in both walks with one persistent reference, and the reading that grades it once
 is the one the planner already uses (R2.38).
 
