@@ -500,13 +500,9 @@ def test_the_drawing_check_asks_the_context_for_the_mode_once_it_can_say(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """013 T077 (lane S) gives `ToolContext.drawing_read_mode()`, lazy, cached and recorded on
-    the session; the check must then ask it rather than the bridge. Here the context says
-    `opens_closed` with no bridge at all, so only a check that asks the context offers."""
-    if not hasattr(ToolContext, "drawing_read_mode"):
-        pytest.xfail(
-            "013 T077 (lane S) adds ToolContext.drawing_read_mode(); tools/drawings._read_mode "
-            "asks the bridge until then"
-        )
+    the session; the check asks it rather than the bridge (`tools/drawings.read_mode_for`). Here
+    the context says `opens_closed` with no bridge at all, so only a check that asks the context
+    offers."""
     monkeypatch.setattr(ToolContext, "drawing_read_mode", lambda self: "opens_closed")
 
     _, result = recorded(fixture("plate-drawing"))

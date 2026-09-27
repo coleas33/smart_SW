@@ -275,7 +275,7 @@ def confirmed(run: ReviewRun) -> dict[str, tuple[str, str]]:
     }
 
 
-# --- 1. the trigger -------------------------------------------------------------------------------
+# --- 1. the trigger ----------------------------------------------------------------------------
 
 
 def test_confirming_the_plate_drawings_candidate_reads_it_before_the_turn_resumes(
@@ -301,7 +301,11 @@ def test_confirming_the_plate_drawings_candidate_reads_it_before_the_turn_resume
         if kind == "coverage" and body["item"]["check"] == CONFIRMED_OPEN_CHECK
     )
     assert answered < coverage < len(kinds) - 1 - kinds[::-1].index("turn.ended")
-    assert run.messages[-2]["content"] == answers_message([(request, CANDIDATE_CONFIRM)])
+    # Edited deliberately by feature 013 T088: the outcome of each file read comes first.
+    assert run.messages[-2]["content"] == (
+        f"Drawing {candidate_name('doc:0003')}: opened read-only, read and closed "
+        "(1 sheet)\n\n" + answers_message([(request, CANDIDATE_CONFIRM)])
+    )
 
 
 def test_after_the_read_the_package_is_reloaded_from_the_run_folder(tmp_path: Path) -> None:
@@ -404,7 +408,7 @@ def test_each_outcome_is_one_coverage_item_with_its_reason(
     assert confirmed(run) == {"doc:0003": outcome}
 
 
-# --- 2. what opens nothing ------------------------------------------------------------------------
+# --- 2. what opens nothing ---------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -515,7 +519,7 @@ def test_a_package_that_cannot_be_reloaded_leaves_the_read_unresolved_naming_why
                              "run folder could not be reloaded:")
 
 
-# --- 3. the drawing check is restated over the drawing just read ---------------------------------
+# --- 3. the drawing check is restated over the drawing just read -------------------------------
 
 
 def prerun_reviewed(
@@ -706,7 +710,7 @@ def test_the_function_acts_only_on_the_confirmed_candidate_question(tmp_path: Pa
     assert host.calls == [], "an open request is not a confirmation"
 
 
-# --- 4. the fake host rewords the stale drawing gap as the host does (T088) ----------------------
+# --- 4. the fake host rewords the stale drawing gap as the host does (T088) --------------------
 #
 # Since feature 011 T079 the host's `PackageAppender.MergeDrawing` rewords the dump's standing
 # drawing gap - written when the extraction's drawing phase did not run - in its own place, once a
@@ -1009,3 +1013,99 @@ def test_the_question_is_rebuilt_with_the_roles_it_was_asked_with(tmp_path: Path
         "asked": [("run-0001", "doc:0001"), ("run-0001", "doc:0003")],
         "regraded first": [],
     }
+
+
+# --- feature 013 T088: every read's outcome reaches the model (drawing-capability.md 6) --------
+
+
+def candidate_name(document_id: str) -> str:
+    """The file name of `document_id`'s candidate in the plate fixture, as it was before any
+    read (the run folder's package is the reloaded one, without the row)."""
+    return candidate_files_of(load_package(FIXTURES / "plate-drawing").package)[document_id]
+
+
+def resumed(run: ReviewRun) -> str:
+    return str([message for message in run.messages if message["role"] == "user"][1]["content"])
+
+
+def candidate_files_of(package: EvidencePackage) -> dict[str, str]:
+    from swreview.drawings.evidence import file_name
+
+    return {item.document_id: file_name(item.path) for item in package.drawing_candidates}
+
+
+def test_each_read_files_outcome_opens_the_resumed_message(tmp_path: Path) -> None:
+    package = candidates_package(2)
+    names = candidate_files_of(package)
+    first, second = names
+    run, _, _ = reviewed(
+        tmp_path,
+        package,
+        lambda folder: {first: merged(folder, first), second: BridgeError("the host refused")},
+    )
+    request = question_id(run)
+
+    run.answer_evidence_batch([(request, CANDIDATE_CONFIRM)])
+
+    assert resumed(run) == (
+        f"Drawing {names[first]}: opened read-only, read and closed (1 sheet)\n"
+        f"Drawing {names[second]}: the host refused\n\n"
+        + answers_message([(request, CANDIDATE_CONFIRM)])
+    )
+
+
+def test_a_review_with_no_bridge_asks_no_candidate_question_so_no_line_can_arise(
+    tmp_path: Path,
+) -> None:
+    """Edited deliberately at integration (2026-09-27): lane D's T079 asks the candidate
+    question only when the host's ping says `opens_closed` (`drawing-capability.md` section 4),
+    and with no bridge the mode is `none` - recorded on the session - so no read happens and no
+    outcome line can arise. (Written against a stand-in that asked whatever the host could do,
+    this case expected a "no connection" line.)"""
+    run, _, _ = reviewed(tmp_path, candidates_package(1), None, bridge=False)
+
+    assert [request for request in run.session.evidence_requests if request.options] == []
+    assert run.session.drawing_read == "none"
+
+
+def test_the_ten_drawing_bound_reaches_the_model_too(tmp_path: Path) -> None:
+    package = candidates_package(1, drawings=MAX_DRAWINGS)
+    [(document_id, name)] = candidate_files_of(package).items()
+    run, _, _ = reviewed(tmp_path, package, lambda folder: {document_id: merged(folder,
+                                                                                  document_id)})
+
+    run.answer_evidence_batch([(question_id(run), CANDIDATE_CONFIRM)])
+
+    assert resumed(run).startswith(f"Drawing {name}: {TEN_DRAWINGS}\n\n")
+
+
+@pytest.mark.parametrize("answer", ["Review without it", "It is not the right drawing"])
+def test_a_batch_with_no_confirmed_read_sends_todays_message_byte_for_byte(
+    tmp_path: Path, answer: str
+) -> None:
+    run, _, _ = reviewed(tmp_path, None, lambda folder: {"doc:0003": merged(folder, "doc:0003")})
+    request = question_id(run)
+
+    run.answer_evidence_batch([(request, answer)])
+
+    assert resumed(run) == answers_message([(request, answer)])
+
+
+def test_two_documents_of_one_file_give_one_line(tmp_path: Path) -> None:
+    """Two candidate rows naming one file (a shared stem) are one file, and one line."""
+    package = candidates_package(2)
+    rows = list(package.drawing_candidates)
+    shared = rows[1].model_copy(update={"path": rows[0].path})
+    package = package.model_copy(update={"drawing_candidates": [rows[0], shared]})
+    first, second = rows[0].document_id, rows[1].document_id
+    run, _, _ = reviewed(
+        tmp_path,
+        package,
+        lambda folder: {first: merged(folder, first), second: BridgeError("already read")},
+    )
+
+    run.answer_evidence_batch([(question_id(run), CANDIDATE_CONFIRM)])
+
+    lines = [line for line in resumed(run).split("\n\n")[0].splitlines()]
+    assert len(lines) == 1
+    assert lines[0].startswith(f"Drawing {candidate_files_of(package)[first]}: ")

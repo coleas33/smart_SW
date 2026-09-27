@@ -36,7 +36,16 @@ nothing - no request, no id, no event, no failed row (013 `contracts/re-ask-guar
 | 8 | such a request covers it and is still open (T064) | `already_asked`, the same shape, the open request |
 
 A question with no checklist item and no ids is never covered, and a code-written request covers
-only itself (`report/session.covering_requests`). Row 6 is feature 013 US4's (drawing requests).
+only itself (`report/session.covering_requests`).
+
+*Row 6, amended by feature 013 (T087):* between rows 5 and 7, `blocks ==
+"drawing.manufacturing_inputs"` with a named document (a document itself, a component's, a hole's
+or a fastener's) that has no attached drawing answers `{"status": "closed_by_code", "check",
+"drawings": [{document_id, state, reason}], "attached": [...]}` - each unattached document's state
+and reason as the drawing check decides them - and records nothing; only on a package the drawing
+family is offered on (it carries drawing evidence). `mark_coverage` on the drawing item answers
+`closed_by_code` exactly while code has closed it (no attached drawing shows a custom or unclear
+document, on such a package). 013 `contracts/drawing-capability.md` section 5.
 
 The docstring's `Args` describe the three; its `Notes` add: ask one decision per request; offer
 `options` only when the answers are a closed set; never guess a fit class, a tolerance or a thread
