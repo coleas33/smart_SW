@@ -86,11 +86,13 @@ def dropping_provider() -> OpenAIProvider:
 def test_with_the_lever_on_earlier_turns_reasoning_leaves_the_request() -> None:
     bodies, _ = two_turns(dropping_provider())
 
-    # Turn 2's first request: turn 1's two reasoning items are gone, nothing else is.
+    # Turn 2's first request: turn 1's two reasoning items are gone, nothing else is. Edited
+    # deliberately on the review of 2026-09-27: the answer turn 1 gave is sent in the easy form
+    # (its reasoning item is gone, so it carries no item id), hence the role, not "message".
     turn_2_first = bodies[2]
     assert reasoning_ids(turn_2_first) == []
     types = [item.get("type", item.get("role")) for item in turn_2_first["input"]]
-    assert types == ["user", "function_call", "function_call_output", "message", "user"]
+    assert types == ["user", "function_call", "function_call_output", "assistant", "user"]
 
 
 @respx.mock
@@ -138,7 +140,10 @@ def test_the_encoder_drops_only_before_the_last_user_message() -> None:
     kept = _encode_history(history, drop_prior_reasoning=True)
     whole = _encode_history(history)
 
-    assert [item.get("id") for item in kept] == [None, "msg_a", None, "rs_b", "msg_b"]
+    # Edited deliberately on the review of 2026-09-27: the earlier turn's message lost its
+    # reasoning item, so it is sent in the easy form with no item id (section "item ids" below).
+    assert [item.get("id") for item in kept] == [None, None, None, "rs_b", "msg_b"]
+    assert kept[1] == {"role": "assistant", "content": "a"}
     assert [item.get("id") for item in whole] == [None, "rs_a", "msg_a", None, "rs_b", "msg_b"]
 
 
@@ -162,6 +167,88 @@ def test_an_earlier_round_of_reasoning_alone_contributes_nothing() -> None:
         {"role": "user", "content": "one"},
         {"role": "user", "content": "two"},
     ]
+
+
+# --- item ids: nothing sent still points at a reasoning item left out (review, 2026-09-27) --------
+#
+# The Responses API ties the items one response produced: a `function_call` or `message` item sent
+# back with its id, stored (the adapter leaves `store` at its default), is refused without the
+# `reasoning` item that preceded it ("... was provided without its required 'reasoning' item").
+# Lever 14 leaves those reasoning items out, so the items of the same earlier message are sent
+# without their ids: a call keeps its `call_id`, which its output answers, and drops `id`; an
+# answer is sent in the easy form, `{"role": "assistant", "content": text}` - the form this adapter
+# already sends for an assistant turn it did not produce.
+
+
+def earlier_turn(*output: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        {"role": "user", "content": "one"},
+        {"role": "assistant", "content": "a", "openai": {"output": list(output)}},
+        {"role": "tool", "call_id": "call_1", "content": {"mass_kg": 1}},
+        {"role": "user", "content": "two"},
+    ]
+
+
+def test_an_earlier_call_whose_reasoning_is_left_out_is_sent_without_its_item_id() -> None:
+    call = function_call_item(call_id="call_1")
+
+    history = earlier_turn(reasoning_item(item_id="rs_a"), call)
+
+    kept = _encode_history(history, drop_prior_reasoning=True)
+
+    sent = kept[1]
+    assert sent == {key: value for key, value in call.items() if key != "id"}
+    assert sent["call_id"] == "call_1" and "id" not in sent
+    assert kept[2]["type"] == "function_call_output" and kept[2]["call_id"] == "call_1"
+
+
+def test_an_earlier_answer_whose_reasoning_is_left_out_is_sent_in_the_easy_form() -> None:
+    answer = message_item("the mass is 1 kg", item_id="msg_a")
+
+    history = earlier_turn(reasoning_item(item_id="rs_a"), answer)
+
+    kept = _encode_history(history, drop_prior_reasoning=True)
+
+    assert kept[1] == {"role": "assistant", "content": "the mass is 1 kg"}
+
+
+def test_an_answer_of_several_text_parts_is_sent_as_their_text_in_order() -> None:
+    answer = message_item("first", item_id="msg_a")
+    answer["content"].append({"type": "output_text", "text": " second", "annotations": []})
+
+    kept = _encode_history(earlier_turn(reasoning_item(), answer), drop_prior_reasoning=True)
+
+    assert kept[1] == {"role": "assistant", "content": "first second"}
+
+
+def test_an_earlier_message_that_had_no_reasoning_item_keeps_every_byte() -> None:
+    call = function_call_item(call_id="call_1")
+    history = earlier_turn(call)
+
+    assert _encode_history(history, drop_prior_reasoning=True) == _encode_history(history)
+    assert _encode_history(history, drop_prior_reasoning=True)[1]["id"] == "fc_1"
+
+
+def test_the_current_turns_items_keep_their_ids() -> None:
+    history = [
+        *earlier_turn(reasoning_item(item_id="rs_a"), function_call_item(call_id="call_1")),
+        {"role": "assistant", "content": "", "openai": {"output": [
+            reasoning_item(item_id="rs_b"), function_call_item(call_id="call_2")]}},
+    ]
+
+    kept = _encode_history(history, drop_prior_reasoning=True)
+
+    assert [item.get("id") for item in kept[-2:]] == ["rs_b", "fc_1"]
+
+
+@respx.mock
+def test_no_request_with_the_lever_on_sends_an_item_id_of_an_earlier_turn() -> None:
+    bodies, _ = two_turns(dropping_provider())
+
+    # Turn 2's second request: turn 1's items (the first four), then turn 2's own.
+    earlier, current = bodies[3]["input"][:4], bodies[3]["input"][5:]
+    assert all("id" not in item for item in earlier)
+    assert [item.get("id") for item in current if item.get("id")] == ["rs_turn2", "fc_1"]
 
 
 # --- the adapters, and start_review -----------------------------------------------------------

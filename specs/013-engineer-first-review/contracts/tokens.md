@@ -54,6 +54,11 @@ class EfficiencySettings(BaseModel):
   runner's history; an assistant message's raw `output` items of `type == "reasoning"` from any turn
   before the current one are left out of the request; every other item, and every item of the current
   turn, is sent byte for byte. The runner's history and `session.json` keep every item.
+  *Amended 2026-09-27 (the review of that day):* the other items of an earlier message that lost a
+  reasoning item are sent without their item ids - a call without `id` (its `call_id` kept), an
+  answer in the easy form - because the Responses API refuses a stored item sent back without the
+  reasoning item that preceded it; 005 `contracts/levers.md`, lever 14, and the key-gated
+  `tests/live/test_openai_live_prior_reasoning.py`.
 - **Gemini** sends no reasoning items; the lever is inert there and the session records it as set.
 - **Off by default**, and off on the command line and in `benchmark run`. `LEVER_NAMES` and every
   lever-count pin gain one ("the fourteen levers"); `GATED_ALONE` gains nothing.
