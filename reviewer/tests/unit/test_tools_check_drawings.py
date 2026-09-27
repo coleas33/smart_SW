@@ -28,6 +28,7 @@ from swreview.checks.drawing_context import (
     item_closed_by_code,
 )
 from swreview.checks.drawing_context import CONFORMANCE_CHECK as CONFORMANCE
+from swreview.checks.part_roles import PART_ROLES_ATTRIBUTE
 from swreview.checks.standards.profile import load_profile
 from swreview.checks.standards.registry import CHECK_TOOL
 from swreview.checks.standards.traversal import graded_documents
@@ -48,7 +49,6 @@ from swreview.tools import checks_mechanical, registry
 from swreview.tools.context import ToolContext, context_for, use_context
 from swreview.tools.drawings import (
     DRAWINGS_TOOL,
-    PART_ROLES_ATTRIBUTE,
     check_drawings,
     drawing_evidence,
 )
@@ -483,13 +483,17 @@ def test_a_bought_document_is_no_drawing_subject_and_its_candidate_is_not_offere
 
 
 def test_the_drawing_check_reads_the_roles_where_start_review_attaches_them() -> None:
-    """The stand-in attribute name is the registry's once 013 T022 (lane S) defines it."""
-    if not hasattr(registry, "PART_ROLES_ATTRIBUTE"):
-        pytest.xfail(
-            "013 T022 (lane S) adds tools/registry.PART_ROLES_ATTRIBUTE; "
-            "tools/drawings.PART_ROLES_ATTRIBUTE stands in for it until then"
-        )
-    assert PART_ROLES_ATTRIBUTE == registry.PART_ROLES_ATTRIBUTE
+    """One name and one reader (integration of lanes D and S, 2026-09-27, edited deliberately:
+    the lane's stand-in constant gave way to the classifier's own): `start_review` attaches the
+    roles under the classifier's `PART_ROLES_ATTRIBUTE`, which the registry re-exports, and the
+    drawing check reads them back through `checks_mechanical.review_roles`, as every other
+    consumer does."""
+    from swreview.tools import drawings
+
+    assert registry.PART_ROLES_ATTRIBUTE == PART_ROLES_ATTRIBUTE == "part_roles"
+    assert drawings.review_roles is checks_mechanical.review_roles
+    assert not hasattr(drawings, "PART_ROLES_ATTRIBUTE")
+    assert not hasattr(drawings, "_review_roles")
 
 
 def test_the_drawing_check_asks_the_context_for_the_mode_once_it_can_say(

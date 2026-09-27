@@ -38,6 +38,7 @@ from swreview.checks.drawing_context import (
     CONTEXT_CHECK,
     candidate_question,
 )
+from swreview.checks.part_roles import PART_ROLES_ATTRIBUTE
 from swreview.drawings.evidence import DrawingIndex, file_key
 from swreview.ir.loader import load_package, save_package
 from swreview.ir.models import EvidencePackage, Gap
@@ -47,7 +48,6 @@ from swreview.tools.drawings import (
     DRAWINGS_TOOL,
     MAX_DRAWINGS,
     NO_CONNECTION,
-    PART_ROLES_ATTRIBUTE,
     TEN_DRAWINGS,
     ConfirmedRead,
     read_confirmed_candidates,
