@@ -251,9 +251,11 @@ public static class RemodelInteropSurface
             "SolidWorks.Interop.sldworks.Configuration", false),
         Call("IConfiguration", "get_Name", PropertyGet, "System.String", false),
 
-        // An FtrFolder's members, for the rms_named_folders signal (research R3.1).
+        // An FtrFolder's members, for the rms_named_folders signal (research R3.1), read only when
+        // their number agrees with the folder's count.
         Call("IFeature", "GetSpecificFeature2", Method, "System.Object", false),
         Call("IFeatureFolder", "GetFeatures", Method, "System.Object", false),
+        Call("IFeatureFolder", "GetFeatureCount", Method, "System.Int32", false),
 
         // The copy's open request, built by the one open-options helper the add-in's
         // remodel.open_copy shares. OpenDoc7 takes the request, so RemodelCopy.OpenOptions

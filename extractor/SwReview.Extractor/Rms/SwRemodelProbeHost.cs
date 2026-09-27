@@ -125,10 +125,17 @@ public sealed class SwRemodelProbeHost : IRemodelProbeHost, IRemodelToggleHost
     private readonly ISldWorks _swApp;
     private readonly SwGate _gate;
 
+    /// <summary>
+    /// The four toggle members' one mapping onto <c>ISldWorks</c>, shared with the add-in's bridge
+    /// seat (<see cref="SwRemodelToggleHost"/>; feature 004, build order lane B).
+    /// </summary>
+    private readonly SwRemodelToggleHost _toggles;
+
     public SwRemodelProbeHost(ISldWorks swApp, SwGate gate)
     {
         _swApp = swApp ?? throw new ArgumentNullException(nameof(swApp));
         _gate = gate ?? throw new ArgumentNullException(nameof(gate));
+        _toggles = new SwRemodelToggleHost(swApp);
     }
 
     /// <inheritdoc />
@@ -359,7 +366,7 @@ public sealed class SwRemodelProbeHost : IRemodelProbeHost, IRemodelToggleHost
             Member.GetWhatsWrong,
             () => document.Extension.GetWhatsWrong(out features, out errorCodes, out warnings));
 
-        return new RemodelWhatsWrongReading(count, callSucceeded, DescribeWhatsWrongElementKind(features));
+        return new RemodelWhatsWrongReading(count, callSucceeded, RemodelWhatsWrong.ElementKind(features));
     }
 
     /// <inheritdoc />
@@ -566,17 +573,16 @@ public sealed class SwRemodelProbeHost : IRemodelProbeHost, IRemodelToggleHost
     }
 
     /// <inheritdoc />
-    public bool GetUserPreferenceToggle(int toggle) => _swApp.GetUserPreferenceToggle(toggle);
+    public bool GetUserPreferenceToggle(int toggle) => _toggles.GetUserPreferenceToggle(toggle);
 
     /// <inheritdoc />
-    public void SetUserPreferenceToggle(int toggle, bool value) =>
-        _swApp.SetUserPreferenceToggle(toggle, value);
+    public void SetUserPreferenceToggle(int toggle, bool value) => _toggles.SetUserPreferenceToggle(toggle, value);
 
     /// <inheritdoc />
-    public bool GetCommandInProgress() => _swApp.CommandInProgress;
+    public bool GetCommandInProgress() => _toggles.GetCommandInProgress();
 
     /// <inheritdoc />
-    public void SetCommandInProgress(bool value) => _swApp.CommandInProgress = value;
+    public void SetCommandInProgress(bool value) => _toggles.SetCommandInProgress(value);
 
     private object BuildStep(
         IModelDoc2 document, RemodelProbeFeatureStep step, IReadOnlyDictionary<string, object> byName)
@@ -937,31 +943,5 @@ public sealed class SwRemodelProbeHost : IRemodelProbeHost, IRemodelToggleHost
         }
 
         return manager;
-    }
-
-    /// <summary>
-    /// PROBE-9's own question, decided from the runtime type of <c>GetWhatsWrong</c>'s
-    /// <c>Features</c> array first element: a name, a live <c>IFeature</c>, or - "unrecognised
-    /// gives unresolved rather than a guess" - anything else, described rather than assumed.
-    /// </summary>
-    private static string DescribeWhatsWrongElementKind(object? featuresArrayLike)
-    {
-        if (!(featuresArrayLike is Array array) || array.Length == 0)
-        {
-            return "empty";
-        }
-
-        object? first = array.GetValue(0);
-        if (first is string)
-        {
-            return "feature_names";
-        }
-
-        if (first is IFeature)
-        {
-            return "feature_objects";
-        }
-
-        return "unknown:" + (first?.GetType().Name ?? "null");
     }
 }

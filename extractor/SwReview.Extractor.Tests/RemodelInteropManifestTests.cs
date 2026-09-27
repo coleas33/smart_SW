@@ -274,8 +274,11 @@ public class RemodelInteropManifestTests
         "IConfiguration.get_Name",
 
         // A folder's members, for the rms_named_folders signal (T153 and T154's shared reader).
+        // GetFeatureCount is the count the members are read against, found by the cross-check
+        // when lane B merged (default taken 2026-09-27, the owner may revise).
         "IFeature.GetSpecificFeature2",
         "IFeatureFolder.GetFeatures",
+        "IFeatureFolder.GetFeatureCount",
 
         // The copy's open request (T155's open-options helper, shared with remodel.open_copy).
         "ISldWorks.GetOpenDocSpec",
@@ -320,6 +323,50 @@ public class RemodelInteropManifestTests
             missing.Count == 0,
             "the seat adapter calls interop members with no builder row or no manifest row, so "
             + "nothing would notice if their signatures moved: " + string.Join(", ", missing));
+    }
+
+    /// <summary>
+    /// The constants the seat adapter writes by their swconst names and the manifest did not
+    /// record (004 build order, the lane B and C cross-check; default taken 2026-09-27, the owner
+    /// may revise): <c>swAllBodies</c>, the body type the mesh and graphics rows ask
+    /// <c>GetBodies2</c> for; <c>swPersistReferencedObject_Invalid</c>, what a persist ref that
+    /// does not decode answers without asking SOLIDWORKS; and every <c>swLengthUnit_e</c> member,
+    /// the keys of <see cref="RemodelLengthUnits"/>' table. Each is pinned here as an integer,
+    /// test B holds it to the installed swconst, and the length-unit table is read through the
+    /// manifest's integers, so a unit whose integer moved under its name cannot be named wrong
+    /// silently.
+    /// </summary>
+    [Fact]
+    public void EveryConstantTheSeatAdapterComposesHasAnEnumRow()
+    {
+        Assert.Equal(-1, Loaded.Enum("swBodyType_e", "swAllBodies"));
+        Assert.Equal(1, Loaded.Enum("swPersistReferencedObjectStates_e", "swPersistReferencedObject_Invalid"));
+
+        var tokens = new Dictionary<string, (int Value, string Token)>(StringComparer.Ordinal)
+        {
+            ["swMM"] = (0, "mm"),
+            ["swCM"] = (1, "cm"),
+            ["swMETER"] = (2, "m"),
+            ["swINCHES"] = (3, "in"),
+            ["swFEET"] = (4, "ft"),
+            ["swFEETINCHES"] = (5, "ft-in"),
+            ["swANGSTROM"] = (6, "angstrom"),
+            ["swNANOMETER"] = (7, "nm"),
+            ["swMICRON"] = (8, "um"),
+            ["swMIL"] = (9, "mil"),
+            ["swUIN"] = (10, "uin"),
+        };
+
+        ManifestEnum units = Loaded.Enums.Single(e => string.Equals(e.Name, "swLengthUnit_e", StringComparison.Ordinal));
+        Assert.Equal(
+            tokens.Keys.OrderBy(name => name, StringComparer.Ordinal),
+            units.Values.Keys.OrderBy(name => name, StringComparer.Ordinal));
+        foreach (KeyValuePair<string, (int Value, string Token)> unit in tokens)
+        {
+            int recorded = Loaded.Enum("swLengthUnit_e", unit.Key);
+            Assert.Equal(unit.Value.Value, recorded);
+            Assert.Equal(unit.Value.Token, RemodelLengthUnits.TokenFor(recorded));
+        }
     }
 
     /// <summary>
@@ -672,7 +719,8 @@ public class RemodelInteropManifestTests
     ///
     /// <b>What it reads.</b> The files under <see cref="SeatFolder"/> (lane B's adapters) and
     /// <see cref="SharedFiles"/> (lane A's ungated <c>IEquationTarget</c> and
-    /// <c>IMassPropertyReading</c> classes, which the copy adapter uses directly), found by the
+    /// <c>IMassPropertyReading</c> classes, which the copy adapter uses directly, and lane B's
+    /// extractor-side files the adapters share with the probe host), found by the
     /// product-source scan <see cref="DrawingFamilyReadAuditTests"/> runs.
     ///
     /// <b>What it decides.</b> A name that some public interface of the interop the product is
@@ -690,11 +738,20 @@ public class RemodelInteropManifestTests
         /// <summary>Lane B's folder, relative to the extractor folder. Absent until lane B lands.</summary>
         public static readonly string SeatFolder = Path.Combine("SwReview.AddIn", "Remodel", "Seat");
 
-        /// <summary>Lane A's shared classes, relative to the extractor folder.</summary>
+        /// <summary>
+        /// The shared classes outside <see cref="SeatFolder"/>, relative to the extractor folder:
+        /// lane A's two, and lane B's three the adapters share with the probe host - the toggle
+        /// mapping, the What's Wrong element reading and the pure length-unit table, read so that
+        /// an interop call added to any of them later is audited too (default taken 2026-09-27,
+        /// the owner may revise).
+        /// </summary>
         public static readonly string[] SharedFiles =
         {
             Path.Combine("SwReview.Extractor", "Rms", "SwEquationManager.cs"),
             Path.Combine("SwReview.Extractor", "Rms", "SwMassProperty.cs"),
+            Path.Combine("SwReview.Extractor", "Rms", "SwRemodelToggleHost.cs"),
+            Path.Combine("SwReview.Extractor", "Rms", "RemodelWhatsWrong.cs"),
+            Path.Combine("SwReview.Extractor", "Rms", "RemodelLengthUnits.cs"),
         };
 
         /// <summary>The adapter classes the build order names for lane B; each must be declared where the audit reads.</summary>
@@ -713,6 +770,19 @@ public class RemodelInteropManifestTests
             {
                 ["Length"] = "SwMassProperty.cs: System.Array.Length, the length of the SAFEARRAY a triple is "
                     + "read from; no interop property named Length is read",
+
+                // Lane B's, found when its files merged (defaults taken 2026-09-27, the owner may revise).
+                ["Add"] = "SwScopeSignalReader.cs, SwRemodelReads.cs and RemodelWhatsWrong.cs: List<T>.Add, "
+                    + "collecting what was read; the adapter writes a custom property with "
+                    + "ICustomPropertyManager.Add3, which has its row, and calls no interop Add",
+                ["Features"] = "SwScopeSignalReader.cs and SwRemodelCopyDocument.cs: SwRemodelReads.Features, "
+                    + "the adapter's own walk over IFeatureManager.GetFeatures, which has its row; no "
+                    + "interop Features member is read",
+                ["GetBodyCount"] = "SwRemodelCopyDocument.cs and SwRemodelProbeSource.cs: "
+                    + "IScopeSignalSource.GetBodyCount, the product's own interface, answered by "
+                    + "SwScopeSignalReader from IPartDoc.GetBodies2, which has its row",
+                ["Message"] = "SwRemodelBridgeSeat.cs: Exception.Message, the refusal's text carried into "
+                    + "the ArgumentException; no interop Message member is read",
             };
 
         private static readonly Lazy<HashSet<string>> InteropMemberNames = new Lazy<HashSet<string>>(() =>

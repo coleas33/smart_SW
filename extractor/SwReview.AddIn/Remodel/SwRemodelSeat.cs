@@ -3,6 +3,7 @@ using System.Globalization;
 using System.IO;
 using SolidWorks.Interop.sldworks;
 using SolidWorks.Interop.swconst;
+using SwReview.AddIn.Remodel.Seat;
 using SwReview.AddIn.Review;
 using SwReview.Extractor.Sw;
 
@@ -21,7 +22,8 @@ namespace SwReview.AddIn.Remodel;
 ///    geometry gate measured it, and a rebuild on activation would dirty a document the report
 ///    has already been written against.
 /// 2. Otherwise <c>OpenDoc7</c> with <c>Silent</c> and <c>LoadModel</c> - the
-///    <c>RemodelCopy.OpenOptions</c> integer 17 that `remodel.open` pins - and never
+///    <c>RemodelCopy.OpenOptions</c> integer 17 that `remodel.open` pins, through the same
+///    <see cref="CopyOpenSpecification"/> the bridge seat opens the copy with - and never
 ///    <c>ReadOnly</c> or <c>ViewOnly</c>. A copy the engineer cannot edit is a copy they cannot
 ///    accept: the whole point of the run is that they Save As it somewhere of their own
 ///    choosing.
@@ -82,21 +84,9 @@ public sealed class SwRemodelSeat : IRemodelSeat
 
     private void Open(string copyPath)
     {
-        var specification = _swApp.GetOpenDocSpec(copyPath) as IDocumentSpecification;
-        if (specification == null)
-        {
-            throw new InvalidOperationException(
-                "SOLIDWORKS would not describe how to open '" + copyPath + "'.");
-        }
-
-        specification.DocumentType = (int)swDocumentTypes_e.swDocPART;
-
-        // The two halves of RemodelCopy.OpenOptions (Silent | LoadModel = 17), stated as the
-        // specification's own members, and the two that are never set.
-        specification.Silent = true;
-        specification.LoadModel = true;
-        specification.ReadOnly = false;
-        specification.ViewOnly = false;
+        // RemodelCopy.OpenOptions (Silent | LoadModel = 17) as the specification's own members,
+        // stated once for both opens of a copy (feature 004, build order lane B).
+        IDocumentSpecification specification = CopyOpenSpecification.For(_swApp, copyPath);
 
         IModelDoc2? opened = _swApp.OpenDoc7(specification);
         if (opened == null)
