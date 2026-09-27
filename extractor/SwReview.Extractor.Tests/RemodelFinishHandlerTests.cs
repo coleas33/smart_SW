@@ -409,7 +409,52 @@ public class RemodelFinishHandlerTests : IDisposable
         Assert.Equal(RemodelErrorCodes.CloseIncomplete, RemodelHarness.Refusal(response));
         Assert.Equal("false", Detail(response)["copy_closed"]);
         Assert.Equal("4", Detail(response)["settings_restored"]);
+        Assert.Contains("The copy may still be open and 4 of 4 settings are back.", response.Error!, StringComparison.Ordinal);
         _harness.Seat.CloseFailure = null;
+        AssertTheSessionIsOverAndTheNextOpenGoesThrough();
+    }
+
+    /// <summary>
+    /// 004 T179 (default taken 2026-09-27, the owner may revise; research R15.3): <c>Delete2</c>'s
+    /// answer decides <c>tag_removed</c>. One that is not <c>swCustomInfoDeleteResult_OK</c> is named,
+    /// and the copy is still closed.
+    /// </summary>
+    [Fact]
+    public void Close_WhoseUntagSolidworksDeclined_IsCloseIncomplete_NamingTheAnswer()
+    {
+        _harness.Copy.UntagAnswer = 1;
+
+        BridgeResponse response = _harness.Dispatch(RemodelCommands.Close, "{}");
+
+        Assert.Equal(RemodelErrorCodes.CloseIncomplete, RemodelHarness.Refusal(response));
+        Assert.Equal("false", Detail(response)["tag_removed"]);
+        Assert.Equal("true", Detail(response)["copy_closed"]);
+        Assert.Contains("Delete2 answered swCustomInfoDeleteResult_NotPresent (1)", response.Error!, StringComparison.Ordinal);
+        Assert.Contains("The copy was closed unsaved", response.Error!, StringComparison.Ordinal);
+        _harness.Copy.UntagAnswer = 0;
+        AssertTheSessionIsOverAndTheNextOpenGoesThrough();
+    }
+
+    /// <summary>
+    /// 004 T179: a <c>CloseDoc</c> that returned and left the copy open is no close - the answer says
+    /// SOLIDWORKS still has it, and that the copy may still be open rather than that it was closed.
+    /// </summary>
+    [Fact]
+    public void Close_ThatSolidworksDidNotCarryOut_IsCloseIncomplete_AndSaysTheCopyMayStillBeOpen()
+    {
+        _harness.Seat.CloseLeavesItOpen = true;
+
+        BridgeResponse response = _harness.Dispatch(RemodelCommands.Close, "{}");
+
+        Assert.Equal(RemodelErrorCodes.CloseIncomplete, RemodelHarness.Refusal(response));
+        Assert.Equal("true", Detail(response)["tag_removed"]);
+        Assert.Equal("false", Detail(response)["copy_closed"]);
+        Assert.Equal("4", Detail(response)["settings_restored"]);
+        Assert.Contains("SOLIDWORKS still has the copy open", response.Error!, StringComparison.Ordinal);
+        Assert.Contains("The copy may still be open", response.Error!, StringComparison.Ordinal);
+        Assert.DoesNotContain("closed unsaved", response.Error!, StringComparison.Ordinal);
+        _harness.Seat.CloseLeavesItOpen = false;
+        _harness.Seat.OpenDocuments.Clear();
         AssertTheSessionIsOverAndTheNextOpenGoesThrough();
     }
 

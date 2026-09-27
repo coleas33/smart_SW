@@ -3844,6 +3844,34 @@ public sealed class RemodelHostTests
     }
 
     /// <summary>
+    /// 004 T179 (default taken 2026-09-27, the owner may revise; research R15.3): a close SOLIDWORKS
+    /// did not carry out, and one nobody could confirm, are both a copy not closed, and the words -
+    /// that it may still be open - are true of both; the tag SOLIDWORKS would not remove is still
+    /// not worded.
+    /// </summary>
+    [Theory]
+    [InlineData("close: CloseDoc returned, but SOLIDWORKS still has the copy open")]
+    [InlineData("close: CloseDoc returned, but whether SOLIDWORKS still has the copy open could not be read, so it is not counted as closed: COMException: the RPC server is unavailable")]
+    public void AnEndingWhoseCloseWasNotConfirmedSaysTheCopyMayStillBeOpen(string failure)
+    {
+        var outcome = new RemodelSessionEnd(
+            RemodelSessionEnd.ReasonToolServiceStopped,
+            @"C:\runs\20260916-142201-bracket-remodel",
+            @"C:\runs\20260916-142201-bracket-remodel\copy\bracket-RMS.SLDPRT",
+            verified: true,
+            failedCheck: null,
+            tagRemoved: false,
+            copyClosed: false,
+            settingsOutstanding: new string[0],
+            failures: new[] { "untag: Delete2 answered swCustomInfoDeleteResult_NotPresent (1)", failure });
+
+        Assert.Equal(
+            NothingPutBack + " The copy may still be open in SOLIDWORKS (its name ends in -RMS): close "
+            + "it without saving.",
+            RemodelHost.SessionEndedMessage(outcome));
+    }
+
+    /// <summary>
     /// A setting name the host has no toggle for is still something left, worded as another
     /// setting rather than dropped.
     /// </summary>

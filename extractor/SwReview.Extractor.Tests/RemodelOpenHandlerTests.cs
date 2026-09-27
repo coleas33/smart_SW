@@ -801,6 +801,32 @@ public class RemodelOpenHandlerTests : IDisposable
     }
 
     /// <summary>
+    /// 004 T179 (default taken 2026-09-27, the owner may revise; research R15.3): the unwind shares
+    /// the routine's close, so its close is confirmed the same way - a <c>CloseDoc</c> that returned
+    /// and left the copy open is no close, and the ending says the copy may still be open.
+    /// </summary>
+    [Fact]
+    public void Open_WhoseUnwindCloseLeftTheCopyOpen_TellsAnEndingWithTheCopyNotClosed()
+    {
+        FakeRemodelSeat seat = Seat();
+        seat.Copy!.WhatsWrongCount = 2;
+        seat.CloseLeavesItOpen = true;
+        var told = new List<RemodelSessionEnd>();
+        BridgeServices services = Services(seat, _runDirectory);
+        services.RemodelSessionEnded = told.Add;
+        var dispatcher = new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+
+        BridgeResponse response = dispatcher.Dispatch(OpenRequest(Probe(dispatcher)));
+
+        Assert.Equal(RemodelErrorCodes.PreexistingRebuildErrors, Refusal(response));
+        RemodelSessionEnd outcome = Assert.Single(told);
+        Assert.False(outcome.CopyClosed);
+        Assert.Equal("close: CloseDoc returned, but SOLIDWORKS still has the copy open", Assert.Single(outcome.Failures));
+        Assert.Equal(Path.GetFullPath(_copyPath), Assert.Single(seat.OpenReads));
+        Assert.Empty(outcome.SettingsOutstanding);
+    }
+
+    /// <summary>
     /// A failed open that put everything back is told too, as a clean ending the pane stays quiet
     /// about; and one that failed before any document was opened closed nothing and says the copy
     /// is not open.

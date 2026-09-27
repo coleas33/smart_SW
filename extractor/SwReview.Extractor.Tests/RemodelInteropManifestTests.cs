@@ -187,6 +187,28 @@ public class RemodelInteropManifestTests
         Assert.Equal(guard, manifest);
     }
 
+    /// <summary>
+    /// 004 T179 (default taken 2026-09-27, the owner may revise; research R15.3): the teardown
+    /// judges <c>Delete2</c>'s answer by the manifest's integers - <c>OK</c> is the one answer that
+    /// says the tag came off - and names every answer the manifest records by that answer's own name.
+    /// </summary>
+    [Fact]
+    public void TheTeardownJudgesDelete2sAnswerByTheManifestsIntegers()
+    {
+        int removed = RemodelCopy.UntagRemoved;
+        Assert.Equal(Loaded.Enum("swCustomInfoDeleteResult_e", "swCustomInfoDeleteResult_OK"), removed);
+
+        ManifestEnum answers = Loaded.Enums.Single(e => string.Equals(e.Name, "swCustomInfoDeleteResult_e", StringComparison.Ordinal));
+        Assert.Equal(3, answers.Values.Count);
+        foreach (KeyValuePair<string, int> answer in answers.Values)
+        {
+            Assert.Equal(
+                string.Equals(answer.Key, "swCustomInfoDeleteResult_OK", StringComparison.Ordinal),
+                RemodelCopy.TagCameOff(answer.Value));
+            Assert.StartsWith(answer.Key + " (", RemodelCopy.DescribeUntagAnswer(answer.Value), StringComparison.Ordinal);
+        }
+    }
+
     // --------------------------------------------------- the fixture is regenerated (T181)
 
     /// <summary>

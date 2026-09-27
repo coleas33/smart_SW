@@ -1050,7 +1050,7 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
             // preexisting_rebuild_errors, scope_changed and the still-rolled-back refusal, where
             // the audit record matters most - judged by the guard and recorded by the observer
             // but not counted by the breaker, so a circuit this failing open opened cannot stop
-            // it (CleanUpWrite). The close, the delete and the put-back are each attempted
+            // it (CleanUpCall). The close, the delete and the put-back are each attempted
             // whatever the others did, and none of their failures replaces the reason the open
             // stopped, which is what is thrown below.
             var failures = new List<string>();
@@ -1094,7 +1094,7 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
         }
 
         IRemodelProbeSource reader = seat.ProbeSource;
-        if (!_remodelGate.Call("GetOpenDocumentByName", () => reader.IsOpen(source)))
+        if (!_remodelGate.Call(OpenDocumentKey, () => reader.IsOpen(source)))
         {
             throw new RemodelCommandError(
                 RemodelErrorCodes.SourceNotOpen,
@@ -1705,6 +1705,13 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
 
     private const string SaveKey = "IModelDoc2.Save3";
     private const string CloseKey = "ISldWorks.CloseDoc";
+
+    /// <summary>
+    /// <c>ISldWorks.GetOpenDocumentByName</c>, as the gate is told about it: the probe's check that
+    /// the source is open, and the read that confirms a close (004 T179). A read: it takes
+    /// <see cref="RemodelGuard"/>'s delegation branch.
+    /// </summary>
+    private const string OpenDocumentKey = "GetOpenDocumentByName";
     private const string ErrorCodeMember = "GetErrorCode2";
     private const string WhatsWrongMember = "GetWhatsWrong";
     private const string SaveFlagMember = "GetSaveFlag";
@@ -1962,7 +1969,7 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
                 outcome.Verified ? RemodelErrorCodes.CloseIncomplete : RemodelErrorCodes.TargetMismatch,
                 "the session is over, but its clean-up did not all land: "
                 + string.Join("; ", outcome.Failures)
-                + ". " + (outcome.CopyClosed ? "The copy was closed unsaved" : "The copy was not closed")
+                + ". " + (outcome.CopyClosed ? "The copy was closed unsaved" : "The copy may still be open")
                 + " and " + outcome.SettingsRestored.ToString(CultureInfo.InvariantCulture) + " of "
                 + RemodelSystemToggles.SettingCount.ToString(CultureInfo.InvariantCulture)
                 + " settings are back.",
@@ -1986,7 +1993,12 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     ///      and each judged by the guard and recorded by the observer but not counted against the
     ///      circuit breaker, the pattern <see cref="RemodelSystemToggles"/>' put-back follows, so an
     ///      open circuit cannot stop the clean-up. When the verification fails, or cannot run at
-    ///      all, nothing is closed and the outcome names the check when there is one.
+    ///      all, nothing is closed and the outcome names the check when there is one. Each is
+    ///      judged by what SOLIDWORKS answered (004 T179): the tag came off only when
+    ///      <c>Delete2</c> answered <c>swCustomInfoDeleteResult_OK</c>, and the copy was closed only
+    ///      when <c>CloseDoc</c> returned and the seat then answers that no document is open at the
+    ///      copy's path (<see cref="IRemodelSeat.IsDocumentOpen"/>, a clean-up read under
+    ///      <c>GetOpenDocumentByName</c>); a read that cannot answer is not a close.
     ///   3. In a <c>finally</c>, all four settings put back, <c>CommandInProgress</c> last, by
     ///      <see cref="RemodelSystemToggles.Restore"/>, which is safe to run twice.
     ///   4. In an outer <c>finally</c>, the session and the bound run root cleared, so the next
@@ -2046,8 +2058,7 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
 
                 if (verified)
                 {
-                    tagRemoved = CleanUpWrite(
-                        session.Gate, UntagKey, () => RemodelCopy.Untag(session.Document), "untag", failures);
+                    tagRemoved = RemoveSessionTag(session, failures);
                     copyClosed = CloseCopyUnsaved(session.Gate, _services.RemodelSeat, copy, failures);
                 }
             }
@@ -2134,22 +2145,38 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     }
 
     /// <summary>
-    /// One clean-up write: the guard asked and the observer told (<see cref="SwGate.Assert"/>),
-    /// then the call, outside the breaker's count. True when it returned; otherwise the failure
-    /// is added as a sentence and the routine goes on.
+    /// One clean-up call, a write or the read that confirms one: the guard asked and the observer
+    /// told (<see cref="SwGate.Assert"/>), then the call, outside the breaker's count. True when it
+    /// returned; otherwise the failure is added as a sentence and the routine goes on.
     /// </summary>
-    private static bool CleanUpWrite(
-        SwGate gate, string key, Action write, string what, List<string> failures)
+    private static bool CleanUpCall(
+        SwGate gate, string key, Action call, string what, List<string> failures) =>
+        CleanUpCall(
+            gate,
+            key,
+            () =>
+            {
+                call();
+                return true;
+            },
+            what,
+            failures,
+            out bool _);
+
+    /// <summary>The same, for a call SOLIDWORKS answers: <paramref name="answer"/> is its answer when it returned.</summary>
+    private static bool CleanUpCall<T>(
+        SwGate gate, string key, Func<T> call, string what, List<string> failures, out T answer)
     {
         try
         {
             gate.Assert(key);
-            write();
+            answer = call();
             return true;
         }
         catch (Exception error)
         {
             failures.Add(what + ": " + error.GetType().Name + ": " + error.Message);
+            answer = default!;
             return false;
         }
     }
@@ -2161,14 +2188,61 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     }
 
     /// <summary>
-    /// The copy closed unsaved (<c>ISldWorks.CloseDoc</c>) as a clean-up write: the one close both
-    /// the end-of-session routine and a failed open's unwind make (004 T167, T177). True when it
-    /// returned; with no seat, or when it threw, false and a sentence in <paramref name="failures"/>.
+    /// The session tag off (<c>ICustomPropertyManager.Delete2</c>) as a clean-up write, judged by
+    /// its answer (004 T179; default taken 2026-09-27, the owner may revise; research R15.3): true
+    /// only for <c>swCustomInfoDeleteResult_OK</c>; any other answer, and a throw, are false with a
+    /// sentence in <paramref name="failures"/> naming what SOLIDWORKS said.
     /// </summary>
-    private static bool CloseCopyUnsaved(SwGate gate, IRemodelSeat? seat, string copy, List<string> failures) =>
-        seat == null
-            ? Failed(failures, "close: this bridge has no remodel seat to close the copy through")
-            : CleanUpWrite(gate, CloseKey, () => seat.CloseDocument(copy), "close", failures);
+    private static bool RemoveSessionTag(RemodelSession session, List<string> failures)
+    {
+        if (!CleanUpCall(session.Gate, UntagKey, () => RemodelCopy.Untag(session.Document), "untag", failures, out int answer))
+        {
+            return false;
+        }
+
+        return RemodelCopy.TagCameOff(answer)
+            || Failed(
+                failures,
+                "untag: Delete2 answered " + RemodelCopy.DescribeUntagAnswer(answer)
+                + ", so the session tag was not removed; the copy's close is unsaved, so a closed copy "
+                + "does not keep it");
+    }
+
+    /// <summary>
+    /// The copy closed unsaved (<c>ISldWorks.CloseDoc</c>) as a clean-up write: the one close both
+    /// the end-of-session routine and a failed open's unwind make (004 T167, T177). <c>CloseDoc</c>
+    /// returns nothing, so a close that returned is confirmed by the seat's own answer (004 T179):
+    /// true only when SOLIDWORKS then has no document open at the copy's path. With no seat, a close
+    /// that threw, a copy still open, or a confirmation that could not be read - unknown is not
+    /// closed - false and a sentence in <paramref name="failures"/>.
+    /// </summary>
+    private static bool CloseCopyUnsaved(SwGate gate, IRemodelSeat? seat, string copy, List<string> failures)
+    {
+        if (seat == null)
+        {
+            return Failed(failures, "close: this bridge has no remodel seat to close the copy through");
+        }
+
+        if (!CleanUpCall(gate, CloseKey, () => seat.CloseDocument(copy), "close", failures))
+        {
+            return false;
+        }
+
+        if (!CleanUpCall(
+                gate,
+                OpenDocumentKey,
+                () => seat.IsDocumentOpen(copy),
+                "close: CloseDoc returned, but whether SOLIDWORKS still has the copy open could not be read, "
+                + "so it is not counted as closed",
+                failures,
+                out bool stillOpen))
+        {
+            return false;
+        }
+
+        return !stillOpen
+            || Failed(failures, "close: CloseDoc returned, but SOLIDWORKS still has the copy open");
+    }
 
     /// <summary>
     /// All four settings put back, <c>CommandInProgress</c> last, by

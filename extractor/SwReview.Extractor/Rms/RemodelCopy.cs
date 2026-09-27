@@ -191,6 +191,14 @@ public static class RemodelCopy
     public const int SessionTagOverwrite = (int)swCustomPropertyAddOption_e.swCustomPropertyReplaceValue;
 
     /// <summary>
+    /// <c>swCustomInfoDeleteResult_e.swCustomInfoDeleteResult_OK</c> (VERIFIED value 0): the one
+    /// answer of <c>ICustomPropertyManager.Delete2</c> that says the session tag came off (004 T179;
+    /// default taken 2026-09-27, the owner may revise; research R15.3). The manifest test holds it,
+    /// and every name <see cref="DescribeUntagAnswer"/> gives, to the manifest's recorded integers.
+    /// </summary>
+    public const int UntagRemoved = (int)swCustomInfoDeleteResult_e.swCustomInfoDeleteResult_OK;
+
+    /// <summary>
     /// <c>swOpenDocOptions_Silent(1) | swOpenDocOptions_LoadModel(16) = 17</c>, and never
     /// <c>ReadOnly(2)</c> or <c>ViewOnly(4)</c>: a copy opened either way cannot be changed and
     /// the run would report a success it never made. The integer, not the name, is what the
@@ -417,8 +425,9 @@ public static class RemodelCopy
     /// <see cref="Tag"/>: the tag exists to prove the document is this run's copy before a
     /// write, and by the time this runs there is no write left to protect - the next call
     /// closes the document. A refusal here would leave the copy open with the run over. The
-    /// answer is handed back for `remodel.log` instead, so the run report can still say what
-    /// the seat did.
+    /// answer is handed back instead, and the end-of-session routine judges it by
+    /// <see cref="TagCameOff"/> and names it by <see cref="DescribeUntagAnswer"/> (004 T179), so
+    /// the teardown says what the seat did.
     /// </summary>
     public static int Untag(IRemodelCopyTarget target)
     {
@@ -428,6 +437,27 @@ public static class RemodelCopy
         }
 
         return target.RemoveSessionTag(SessionTagName);
+    }
+
+    /// <summary>
+    /// Whether <c>Delete2</c>'s answer says the tag came off: <see cref="UntagRemoved"/> and
+    /// nothing else (004 T179). <c>swCustomInfoDeleteResult_NotPresent</c> and
+    /// <c>swCustomInfoDeleteResult_LinkedProp</c> leave it where it was, and so does an integer
+    /// that is no <c>swCustomInfoDeleteResult_e</c> value.
+    /// </summary>
+    public static bool TagCameOff(int answer) => answer == UntagRemoved;
+
+    /// <summary>
+    /// <c>Delete2</c>'s answer in words, for the sentence the end-of-session routine writes when
+    /// the tag did not come off: its swconst name and integer, or the integer and that it is no
+    /// <c>swCustomInfoDeleteResult_e</c> value.
+    /// </summary>
+    public static string DescribeUntagAnswer(int answer)
+    {
+        string number = answer.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return Enum.IsDefined(typeof(swCustomInfoDeleteResult_e), answer)
+            ? ((swCustomInfoDeleteResult_e)answer) + " (" + number + ")"
+            : number + ", which is not a swCustomInfoDeleteResult_e value";
     }
 
     /// <summary>

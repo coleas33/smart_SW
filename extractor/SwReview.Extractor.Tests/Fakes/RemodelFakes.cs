@@ -553,6 +553,12 @@ public sealed class FakeRemodelDocument : IRemodelDocument
     /// </summary>
     public Exception? UntagFailure { get; set; }
 
+    /// <summary>
+    /// What <c>Delete2</c> answers (004 T179): <c>swCustomInfoDeleteResult_OK</c> (0) by default,
+    /// which removes the tag; any other answer leaves it where it was.
+    /// </summary>
+    public int UntagAnswer { get; set; }
+
     public int RemoveSessionTag(string fieldName)
     {
         Members.Add(nameof(RemoveSessionTag));
@@ -561,8 +567,12 @@ public sealed class FakeRemodelDocument : IRemodelDocument
             throw UntagFailure;
         }
 
-        SessionTag = null;
-        return 0;
+        if (UntagAnswer == 0)
+        {
+            SessionTag = null;
+        }
+
+        return UntagAnswer;
     }
 
     // ---- IScopeSignalSource ----------------------------------------------------------
@@ -903,6 +913,24 @@ public sealed class FakeRemodelSeat : IRemodelSeat
     /// </summary>
     public Exception? CloseFailure { get; set; }
 
+    /// <summary>
+    /// The paths SOLIDWORKS has a document open at, as <see cref="IsDocumentOpen"/> answers: a copy
+    /// from its <see cref="OpenDocument"/> to a <see cref="CloseDocument"/> that closed it (004 T179).
+    /// </summary>
+    public HashSet<string> OpenDocuments { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// A <c>CloseDoc</c> that returns and closes nothing, for the teardown's confirmation (004
+    /// T179): the copy stays in <see cref="OpenDocuments"/>.
+    /// </summary>
+    public bool CloseLeavesItOpen { get; set; }
+
+    /// <summary>What <see cref="IsDocumentOpen"/> throws: a confirmation that cannot be read.</summary>
+    public Exception? OpenReadFailure { get; set; }
+
+    /// <summary>Every path <see cref="IsDocumentOpen"/> was asked about, in order.</summary>
+    public List<string> OpenReads { get; } = new List<string>();
+
     public VaultReference? Vault { get; set; }
 
     public bool CommandInProgress { get; set; }
@@ -926,6 +954,7 @@ public sealed class FakeRemodelSeat : IRemodelSeat
         if (Copy != null)
         {
             Copy.PathName = Copy.PathName ?? documentPath;
+            OpenDocuments.Add(documentPath);
         }
 
         return Copy;
@@ -938,6 +967,22 @@ public sealed class FakeRemodelSeat : IRemodelSeat
         {
             throw CloseFailure;
         }
+
+        if (!CloseLeavesItOpen)
+        {
+            OpenDocuments.Remove(documentPath);
+        }
+    }
+
+    public bool IsDocumentOpen(string documentPath)
+    {
+        OpenReads.Add(documentPath);
+        if (OpenReadFailure != null)
+        {
+            throw OpenReadFailure;
+        }
+
+        return OpenDocuments.Contains(documentPath);
     }
 
     public VaultReference? GetVault(string sourcePath) => Vault;

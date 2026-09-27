@@ -240,6 +240,11 @@ session, post nothing. *Amended 2026-09-27 (004 T177):* a `remodel.open` that fa
 changed the settings is an ending too, with the reason `remodel.open`, and is worded the same way:
 the reason decides no word. A session tag the routine could not remove is not worded: the close is
 unsaved, so a closed copy took its tag with it, and a copy left open is already said.
+*Amended 2026-09-27 (default taken 2026-09-27, the owner may revise; `tasks.md` T179, research
+R15.3):* `CopyClosed` is now what SOLIDWORKS answered - `CloseDoc` returned and SOLIDWORKS then has
+no document open at the copy's path - so a close it did not carry out, and one nobody could
+confirm, are a copy not closed, and the page says that the copy may still be open, which is true of
+both. The words are unchanged; the page stays quiet about the copy only when its close was confirmed.
 
 ### Start is switched off until the blocking probes pass (T172)
 

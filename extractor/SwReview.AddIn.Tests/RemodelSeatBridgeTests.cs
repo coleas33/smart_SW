@@ -179,7 +179,80 @@ public sealed class RemodelSeatBridgeTests : IDisposable
             _solidworks.Application.Calls.Where(call => call.Member == "set_CommandInProgress").Select(call => call.Arguments));
     }
 
+    // ---- 004 T179: the close is confirmed by SOLIDWORKS's own answer ----------------------------------
+
+    /// <summary>
+    /// <c>remodel.close</c> asks, after <c>CloseDoc</c> returned, whether SOLIDWORKS still has a
+    /// document at the copy's path - <c>GetOpenDocumentByName(copy)</c>, and nothing else - and the
+    /// close is a close because it has not.
+    /// </summary>
+    [Fact]
+    public void AReturnedCloseIsConfirmedBySolidworksNoLongerHavingTheCopyOpen()
+    {
+        SwBridgeDispatcher dispatcher = PlanOnTheSeat();
+
+        var close = Ok<RemodelCloseResult>(dispatcher.Dispatch(Request(RemodelCommands.Close, new { discard_copy = false })));
+
+        Assert.True(close.Closed);
+        List<(string Member, object?[] Arguments)> calls = _solidworks.Application.Calls.Select(call => (call.Member, call.Arguments)).ToList();
+        int closed = calls.FindIndex(call => call.Member == "CloseDoc");
+        Assert.True(closed >= 0, "CloseDoc was not called");
+        Assert.Equal(("GetOpenDocumentByName", _copyPath), (calls[closed + 1].Member, (string?)calls[closed + 1].Arguments[0]));
+        Assert.Contains("GetOpenDocumentByName", _observer.Members);
+        Assert.Empty(_observer.Refusals);
+    }
+
+    /// <summary>
+    /// A <c>CloseDoc</c> that returns and leaves the copy open - the stand-in's close does nothing
+    /// here - is no close: <c>close_incomplete</c>, <c>copy_closed</c> false, and the answer says the
+    /// copy may still be open.
+    /// </summary>
+    [Fact]
+    public void ACloseSolidworksDidNotCarryOutIsCloseIncompleteWithTheCopyNotClosed()
+    {
+        SwBridgeDispatcher dispatcher = PlanOnTheSeat();
+        _solidworks.Application.Handle("CloseDoc", arguments => null);
+
+        BridgeResponse response = dispatcher.Dispatch(Request(RemodelCommands.Close, new { discard_copy = false }));
+
+        Assert.Equal(RemodelErrorCodes.CloseIncomplete, Assert.IsType<RemodelErrorResult>(response.Result).ErrorCode);
+        Assert.Contains("SOLIDWORKS still has the copy open", response.Error, StringComparison.Ordinal);
+        Assert.Contains("The copy may still be open", response.Error, StringComparison.Ordinal);
+        Assert.True(_solidworks.CopyOpen);
+    }
+
+    /// <summary>
+    /// <see cref="SwRemodelBridgeSeat.IsDocumentOpen"/> asks about a copy's path only, refusing any
+    /// other before SOLIDWORKS is asked anything, and answers what <c>GetOpenDocumentByName</c> says.
+    /// </summary>
+    [Fact]
+    public void TheSeatAsksWhetherACopyIsOpenAndAboutNothingElse()
+    {
+        var seat = new SwRemodelBridgeSeat(_solidworks.Application.Instance);
+
+        Assert.Throws<ArgumentException>(() => seat.IsDocumentOpen(_sourcePath));
+        Assert.Empty(_solidworks.Application.Calls);
+
+        Assert.False(seat.IsDocumentOpen(_copyPath));
+        Assert.NotNull(seat.OpenDocument(_copyPath, RemodelCopy.OpenOptions));
+        Assert.True(seat.IsDocumentOpen(_copyPath));
+        seat.CloseDocument(_copyPath);
+        Assert.False(seat.IsDocumentOpen(_copyPath));
+        Assert.Equal(3, _solidworks.Application.Calls.Count(call => call.Member == "GetOpenDocumentByName"));
+    }
+
     // ---- the world -------------------------------------------------------------------------------------
+
+    /// <summary>A probe and an open through the seat, leaving the copy open and tagged: a plan waiting.</summary>
+    private SwBridgeDispatcher PlanOnTheSeat()
+    {
+        SwBridgeDispatcher dispatcher = Dispatcher();
+        var probe = Ok<RemodelProbeScopeResult>(dispatcher.Dispatch(Request(RemodelCommands.ProbeScope, new { source_path = _sourcePath })));
+        Ok<RemodelOpenResult>(dispatcher.Dispatch(Request(
+            RemodelCommands.Open,
+            new { source_path = _sourcePath, copy_path = _copyPath, run_id = RunId, probe_id = probe.ProbeId })));
+        return dispatcher;
+    }
 
     private SwBridgeDispatcher Dispatcher()
     {

@@ -175,6 +175,7 @@ public class RemodelSeatAdapterShapeTests
             "SwRemodelProbeSource.IsOpen(documentPath)",                   // the engineer's open source, never opened
             "SwRemodelBridgeSeat.OpenDocument(documentPath)",              // the copy, refused unless inside copy/
             "SwRemodelBridgeSeat.CloseDocument(documentPath)",             // the tagged copy, refused unless inside copy/
+            "SwRemodelBridgeSeat.IsDocumentOpen(documentPath)",            // the close's confirmation (T179), refused unless inside copy/
             "SwRemodelBridgeSeat.GetVault(sourcePath)",                    // answers null and reads nothing
             "SwRemodelBridgeSeat.RequireCopyPath(documentPath)",           // the copy check itself
             "CopyOpenSpecification.For(copyPath)",                         // the path OpenDocument has checked
