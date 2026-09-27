@@ -2,9 +2,10 @@ result:
   checklist:
   - bucket: open
     check_prefix: provenance.
-    description: Confirm every reviewed document matches the manifest (vault version,
-      revision, configuration, local modification). Surface every discrepancy at the
-      top of the report before any other finding.
+    description: 'Closed by code from the package before your first turn: each reviewed
+      document''s path, configuration and revision. The open files are reviewed as
+      the latest; never ask for a vault version or whether a file is modified locally.
+      A missing revision on a custom part is a hygiene finding.'
     id: provenance
     title: Provenance and manifest discrepancies
   - bucket: finding
