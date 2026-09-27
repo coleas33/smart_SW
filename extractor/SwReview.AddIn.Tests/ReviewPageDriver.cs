@@ -180,6 +180,67 @@ internal sealed class ReviewPageDriver
     /// <summary>The host says the active document changed.</summary>
     public Task DocumentChanged(object? document) => Post("document.changed", document);
 
+    /// <summary>
+    /// Waits until <paramref name="condition"/> - about what the page has posted to this host -
+    /// holds. A message the page posts reaches the host on its own schedule, apart from any
+    /// script, so this polls while the page runs; the bound only turns a page that never posts
+    /// into a failure rather than a hang.
+    /// </summary>
+    public async Task Until(Func<bool> condition, string what)
+    {
+        var bound = System.Diagnostics.Stopwatch.StartNew();
+        while (!condition())
+        {
+            if (bound.Elapsed > TimeSpan.FromSeconds(30))
+            {
+                throw new TimeoutException("the page never " + what + ".");
+            }
+
+            await Page.ExecuteScriptAsync("0");
+            await Task.Delay(5);
+        }
+    }
+
+    // ---- the page's timers ----------------------------------------------------------------------
+
+    /// <summary>
+    /// Holds the page's timers from here on: `window.setTimeout` records its callback instead of
+    /// starting a clock, and <see cref="RunHeldTimers"/> runs what it recorded. The Review page has
+    /// one timer, the event stream's reconnect (one second at first), so a state that lasts until it
+    /// fires - "Reconnecting to the review." - is read without racing it, and the reconnect happens
+    /// when the test says so rather than after a second of wall clock.
+    /// </summary>
+    public Task HoldTimers() => Page.ExecuteScriptAsync(@"(function () {
+  if (window.__heldTimers) { return 0; }
+  var held = window.__heldTimers = [];
+  var realClear = window.clearTimeout;
+  var next = -1;
+  window.setTimeout = function (callback, delay) {
+    var id = next--;
+    held.push({ id: id, callback: callback, delay: delay });
+    return id;
+  };
+  window.clearTimeout = function (id) {
+    for (var i = 0; i < held.length; i++) {
+      if (held[i].id === id) { held.splice(i, 1); return; }
+    }
+    realClear.call(window, id);
+  };
+  return 0;
+}())");
+
+    /// <summary>Runs every timer held so far, in the order they were set, lets the page react, and answers how many ran.</summary>
+    public async Task<int> RunHeldTimers()
+    {
+        string raw = await Page.ExecuteScriptAsync(@"(function () {
+  var due = window.__heldTimers.splice(0);
+  for (var i = 0; i < due.length; i++) { due[i].callback(); }
+  return due.length;
+}())");
+        await OffscreenReviewPage.Settled(Page);
+        return int.Parse(raw, System.Globalization.CultureInfo.InvariantCulture);
+    }
+
     // ---- the page -----------------------------------------------------------------------------
 
     /// <summary>Presses Review and lets the reply settle.</summary>

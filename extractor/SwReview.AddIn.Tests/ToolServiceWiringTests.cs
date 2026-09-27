@@ -910,30 +910,48 @@ public sealed class ToolServiceWiringTests
 
     // ---- the thread it starts on -------------------------------------------------------------
 
+    /// <summary>
+    /// How long a test waits for the thread pool to get to work the gate queued on it. Not a
+    /// timing the test asserts - what it proves is decided by ordering before it waits - but a
+    /// bound, so a gate that dropped the work fails rather than hangs; the pool of a loaded test
+    /// run has taken over ten seconds to get to one.
+    /// </summary>
+    private static readonly TimeSpan PoolBound = TimeSpan.FromMinutes(2);
+
     [Fact]
     public void TheStartRunsOffTheCallingThread()
     {
-        var done = new ManualResetEventSlim();
         int caller = Thread.CurrentThread.ManagedThreadId;
-        int starter = caller;
+        int starter = 0;
+        bool onThePool = false;
 
-        var world = new GateWorld();
-        world.OnStart = () =>
+        using (var started = new ManualResetEventSlim())
         {
-            starter = Thread.CurrentThread.ManagedThreadId;
-            done.Set();
-        };
+            var world = new GateWorld();
+            world.OnStart = () =>
+            {
+                onThePool = Thread.CurrentThread.IsThreadPoolThread;
+                Volatile.Write(ref starter, Thread.CurrentThread.ManagedThreadId);
+                started.Set();
+            };
 
-        // Null schedule: the gate's own, which is the one SwReviewAddIn gets. The add-in calls
-        // EnsureStarted from the application thread, and ToolServiceHost.Start marshals its
-        // attach onto that same thread and waits for it, so starting inline would deadlock
-        // SOLIDWORKS until the attach timeout expired.
-        ToolServiceGate gate = world.Gate(schedule: null);
-        gate.EnsureStarted();
+            // Null schedule: the gate's own, which is the one SwReviewAddIn gets. The add-in calls
+            // EnsureStarted from the application thread, and ToolServiceHost.Start marshals its
+            // attach onto that same thread and waits for it, so starting inline would deadlock
+            // SOLIDWORKS until the attach timeout expired.
+            ToolServiceGate gate = world.Gate(schedule: null);
+            gate.EnsureStarted();
 
-        Assert.True(done.Wait(TimeSpan.FromSeconds(10)), "the tool service start never ran.");
-        Assert.NotEqual(caller, starter);
-        gate.Dispose();
+            // Decided when EnsureStarted returns, whatever the pool is doing: a start run inline
+            // would already have run, on this thread. Queued, it has not run or ran elsewhere.
+            Assert.NotEqual(caller, Volatile.Read(ref starter));
+
+            // And it does run, on the pool, waited for by its own signal.
+            Assert.True(started.Wait(PoolBound), "the tool service start never ran.");
+            Assert.NotEqual(caller, starter);
+            Assert.True(onThePool, "the start ran on a thread of its own rather than the pool's.");
+            gate.Dispose();
+        }
     }
 
     /// <summary>
@@ -947,55 +965,74 @@ public sealed class ToolServiceWiringTests
     [Fact]
     public void TheBusyProbeTheTeardownAndTheRestartAllRunOffTheCallingThread()
     {
-        var attached = new ManualResetEventSlim();
-        var probing = new ManualResetEventSlim();
-        var release = new ManualResetEventSlim();
-        var restarted = new ManualResetEventSlim();
-        int caller = Thread.CurrentThread.ManagedThreadId;
-        int prober = caller;
-        int starter = caller;
-
-        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM" };
-        world.Publish = _ =>
+        using (var attached = new ManualResetEventSlim())
+        using (var probing = new ManualResetEventSlim())
+        using (var release = new ManualResetEventSlim())
+        using (var restarted = new ManualResetEventSlim())
         {
-            if (world.Services.Count > 1)
+            int caller = Thread.CurrentThread.ManagedThreadId;
+            int prober = 0;
+            int starter = caller;
+
+            var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM" };
+            world.Publish = _ =>
             {
-                restarted.Set();
-                return;
+                if (world.Services.Count > 1)
+                {
+                    restarted.Set();
+                    return;
+                }
+
+                attached.Set();
+            };
+
+            // Null schedule: the gate's own, which is the one SwReviewAddIn gets.
+            ToolServiceGate gate = world.Gate(schedule: null);
+            gate.EnsureStarted();
+            Assert.True(attached.Wait(PoolBound), "the first tool service never started.");
+
+            FakeToolService first = world.Services[0];
+            world.OnBusy = () =>
+            {
+                Volatile.Write(ref prober, Thread.CurrentThread.ManagedThreadId);
+                probing.Set();
+
+                // Held until the test has looked, however long that takes - unless this is the
+                // calling thread, where holding it would hang the test instead of failing it.
+                if (Thread.CurrentThread.ManagedThreadId != caller)
+                {
+                    release.Wait();
+                }
+            };
+            world.OnStart = () => starter = Thread.CurrentThread.ManagedThreadId;
+            world.DocumentPath = @"C:\models\bracket.SLDPRT";
+
+            try
+            {
+                gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+
+                // Decided when FollowDocument returns: a busy question asked inline would already
+                // have been asked, on this thread. Before the fix, this line waited for it.
+                Assert.NotEqual(caller, Volatile.Read(ref prober));
+
+                Assert.True(probing.Wait(PoolBound), "the busy question was never asked.");
+
+                // Still out, and held there, so nothing has been taken down yet.
+                Assert.False(first.Disposed);
+            }
+            finally
+            {
+                release.Set();
             }
 
-            attached.Set();
-        };
-
-        // Null schedule: the gate's own, which is the one SwReviewAddIn gets.
-        ToolServiceGate gate = world.Gate(schedule: null);
-        gate.EnsureStarted();
-        Assert.True(attached.Wait(TimeSpan.FromSeconds(10)), "the first tool service never started.");
-
-        FakeToolService first = world.Services[0];
-        world.OnBusy = () =>
-        {
-            prober = Thread.CurrentThread.ManagedThreadId;
-            probing.Set();
-            release.Wait(TimeSpan.FromSeconds(10));
-        };
-        world.OnStart = () => starter = Thread.CurrentThread.ManagedThreadId;
-        world.DocumentPath = @"C:\models\bracket.SLDPRT";
-
-        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
-
-        // Reached while the busy question is still out: before the fix, this line waited for it.
-        Assert.True(probing.Wait(TimeSpan.FromSeconds(10)), "the busy question was never asked.");
-        Assert.False(first.Disposed);
-        release.Set();
-
-        Assert.True(restarted.Wait(TimeSpan.FromSeconds(10)), "the tool service never re-attached.");
-        Assert.NotEqual(caller, prober);
-        Assert.NotEqual(caller, first.DisposedThreadId);
-        Assert.NotEqual(caller, starter);
-        Assert.Equal(@"C:\models\bracket.SLDPRT", gate.DocumentPath);
-        Assert.Empty(world.Reports);
-        gate.Dispose();
+            Assert.True(restarted.Wait(PoolBound), "the tool service never re-attached.");
+            Assert.NotEqual(caller, prober);
+            Assert.NotEqual(caller, first.DisposedThreadId);
+            Assert.NotEqual(caller, starter);
+            Assert.Equal(@"C:\models\bracket.SLDPRT", gate.DocumentPath);
+            Assert.Empty(world.Reports);
+            gate.Dispose();
+        }
     }
 
     // ---- the remodel gate observer (T057) -----------------------------------------------------
@@ -1997,6 +2034,54 @@ public sealed class ToolServiceWiringTests
             Assert.True(
                 Array.IndexOf(lines, teardown) > Array.FindIndex(lines, line => line.EndsWith("stopped", StringComparison.Ordinal)),
                 "the abandoned teardown's line was written before the pipe server stopped");
+        }
+    }
+
+    /// <summary>
+    /// 004 T184 (default taken 2026-09-27, the owner may revise): an abandoned teardown that fails
+    /// when it does run still writes its line - the posted line, carrying the failure - where it
+    /// used to write nothing, because the call it ran in discarded what nobody waited for. Here the
+    /// session ends and the host is told, then the clock the line is stamped with throws.
+    /// </summary>
+    [Fact]
+    public void AnAbandonedTeardownThatFailsWhenItRunsWritesItsPostedLineWithTheFailure()
+    {
+        using (var release = new ManualResetEventSlim(false))
+        using (var world = new SeatedHostWorld(TimeSpan.FromMilliseconds(300)))
+        {
+            world.PlanOnTheSeat();
+            try
+            {
+                ((IAppThreadInvoker)world.App).Post(() => release.Wait());
+
+                world.Host.Dispose();
+
+                Assert.Contains(world.LogLines, line => line.Contains("remodel teardown did not answer within 0.3 s"));
+                world.ClockFails = true;
+            }
+            finally
+            {
+                release.Set();
+            }
+
+            // Queued behind the abandoned teardown: back only once the teardown has run.
+            world.App.RunOnApplicationThread(() => { });
+
+            string[] lines = world.LogLines;
+            string teardown = Assert.Single(lines, line => line.Contains("remodel teardown thread=posted"));
+            Assert.EndsWith(
+                "remodel teardown thread=posted reason=tool_service_stopped failed after the pipe closed: "
+                + "InvalidOperationException: the clock stopped",
+                teardown,
+                StringComparison.Ordinal);
+            Assert.True(
+                Array.IndexOf(lines, teardown) > Array.FindIndex(lines, line => line.EndsWith("stopped", StringComparison.Ordinal)),
+                "the late teardown's line was written before the pipe server stopped");
+            Assert.DoesNotContain(lines, line => line.Contains("failed before the pipe closed"));
+
+            // The routine ended the session before the clock was read.
+            Assert.Equal(world.CopyPath, Assert.Single(world.Seat.Closed));
+            Assert.True(Assert.Single(world.Told).PipeHadStopped);
         }
     }
 

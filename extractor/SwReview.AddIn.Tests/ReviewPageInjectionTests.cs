@@ -1157,20 +1157,96 @@ internal static class OffscreenReviewPage
     }
 
     /// <summary>
-    /// Lets the page's promise chain drain.
+    /// Waits until the page has handled every host message posted to it so far (<see cref="Handled"/>),
+    /// then lets the page's promise chain drain.
     ///
     /// `bridge.postMessage` and the host's reply cross a process boundary and everything the
     /// page does with a reply is a microtask behind it, so "the page has finished reacting" is
     /// a few round trips through the renderer rather than a single one. Each `ExecuteScriptAsync`
     /// is ordered behind everything the previous one queued, which is what makes this bounded
-    /// rather than a race.
+    /// rather than a race. What is not ordered behind a script is a message posted to the page -
+    /// the two travel apart - so its delivery is waited for first, by a signal, not by these turns.
     /// </summary>
     public static async Task Settled(CoreWebView2 page)
     {
+        await Handled(page);
         for (int turn = 0; turn < 12; turn++)
         {
             await page.ExecuteScriptAsync("0");
             await Task.Delay(15);
+        }
+    }
+
+    /// <summary>The type of the harness's own marker message; every page ignores a type it does not know.</summary>
+    private const string HandledMarkerType = "harness.handled";
+
+    /// <summary>How long <see cref="Handled"/> waits before calling the harness broken: a bound on a signal, not a pause.</summary>
+    private static readonly TimeSpan HandledBound = TimeSpan.FromSeconds(30);
+
+    private static int _handledTokens;
+
+    /// <summary>
+    /// The harness's own listener, put in once per document: it records the token of the last
+    /// marker it saw. Answers -2 where there is no WebView2 bridge, -1 when it has just been put
+    /// in (a document no marker has been posted to), and otherwise the last token seen.
+    /// </summary>
+    private const string HandledListener = @"(function () {
+  if (!window.chrome || !window.chrome.webview) { return -2; }
+  if (window.__harnessHandled === undefined) {
+    window.__harnessHandled = 0;
+    window.chrome.webview.addEventListener('message', function (event) {
+      var message = event.data;
+      if (message && message.type === '" + HandledMarkerType + @"' && message.payload) {
+        window.__harnessHandled = message.payload.token;
+      }
+    });
+    return -1;
+  }
+  return window.__harnessHandled;
+}())";
+
+    /// <summary>
+    /// Returns once the page has handled every host message posted to it before this call - by a
+    /// signal, not after a pause. WebView2 delivers the messages posted to a page in the order they
+    /// were posted, and the page handles each in its own listener, so a marker posted after them
+    /// that has reached a listener of the harness's own proves every one before it has been
+    /// through the page's. A page that navigated meanwhile has lost that listener; it is put back
+    /// and the marker posted again.
+    /// </summary>
+    public static async Task Handled(CoreWebView2 page)
+    {
+        int token = System.Threading.Interlocked.Increment(ref _handledTokens);
+        string marker = JsonSerializer.Serialize(new { type = HandledMarkerType, id = (string?)null, payload = new { token } });
+        var bound = System.Diagnostics.Stopwatch.StartNew();
+        bool posted = false;
+
+        while (true)
+        {
+            string raw = await page.ExecuteScriptAsync(HandledListener);
+            int seen = int.TryParse(raw, out int value) ? value : -2;
+            if (seen >= token)
+            {
+                return;
+            }
+
+            if (seen == -1)
+            {
+                posted = false;
+            }
+
+            if (seen != -2 && !posted)
+            {
+                page.PostWebMessageAsJson(marker);
+                posted = true;
+            }
+
+            if (bound.Elapsed > HandledBound)
+            {
+                throw new TimeoutException(
+                    $"the page never handled the host messages posted to it (the harness's marker {token} did not arrive).");
+            }
+
+            await Task.Delay(5);
         }
     }
 

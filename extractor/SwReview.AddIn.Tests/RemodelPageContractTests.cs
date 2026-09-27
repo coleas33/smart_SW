@@ -1790,15 +1790,11 @@ public sealed class RemodelPageContractTests
                         .Select(view => view.CoreWebView2?.Source ?? "<no core>")));
     }
 
-    /// <summary>Lets the renderer act on what it was just told, bounded rather than raced.</summary>
-    private static async Task Settled(CoreWebView2 page)
-    {
-        for (int turn = 0; turn < 12; turn++)
-        {
-            await page.ExecuteScriptAsync("0");
-            await Task.Delay(15);
-        }
-    }
+    /// <summary>
+    /// Lets the renderer act on what it was just told: the one settle every page test uses, which
+    /// waits for the messages posted to the page by a signal before it drains the page's promises.
+    /// </summary>
+    private static Task Settled(CoreWebView2 page) => OffscreenReviewPage.Settled(page);
 
     private static IEnumerable<Control> Descendants(Control root)
     {
