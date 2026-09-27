@@ -1,0 +1,107 @@
+{
+  "first_turn": [
+    {
+      "arguments": {
+        "what": "the fit of the pin in the plate",
+        "why": "to decide the fit check for the pin",
+        "entity_ids": [
+          "cmp:0003",
+          "cmp:0002"
+        ],
+        "question": "What fit does the pin take in the plate?",
+        "blocks": "interfaces.fit"
+      }
+    },
+    {
+      "arguments": {
+        "what": "the revision of the assembly",
+        "why": "to record the provenance check",
+        "entity_ids": [
+          "doc:1"
+        ],
+        "question": "Is this the latest version of the assembly?",
+        "blocks": "provenance"
+      }
+    },
+    {
+      "arguments": {
+        "what": "a drawing for the pin",
+        "why": "to check the drawing of the pin",
+        "entity_ids": [
+          "doc:3"
+        ],
+        "question": "Is there a drawing for the pin?",
+        "blocks": "drawing.manufacturing_inputs"
+      }
+    },
+    {
+      "arguments": {
+        "what": "the revision of the spacer",
+        "why": "to record the revision check",
+        "entity_ids": [
+          "doc:4"
+        ],
+        "question": "Is the spacer released?",
+        "blocks": "hygiene"
+      }
+    },
+    {
+      "arguments": {
+        "what": "the fit of the second pin instance in the spacer",
+        "why": "to decide the fit check for the second instance",
+        "entity_ids": [
+          "cmp:0004",
+          "cmp:0005"
+        ],
+        "question": "What fit does the second pin instance take?",
+        "blocks": "interfaces.fit"
+      }
+    }
+  ],
+  "answers": {
+    "ER-001": "slip fit",
+    "ER-002": "latest version",
+    "ER-003": "no drawing, it is bought",
+    "ER-004": "released",
+    "ER-005": "press fit"
+  },
+  "second_turn": [
+    {
+      "repeats": "ER-002",
+      "arguments": {
+        "what": "the revision of the assembly",
+        "why": "to record the provenance check",
+        "entity_ids": [
+          "doc:1"
+        ],
+        "question": "Is this the latest version of the assembly?",
+        "blocks": "provenance"
+      }
+    },
+    {
+      "repeats": "ER-003",
+      "arguments": {
+        "what": "a drawing for the pin",
+        "why": "to check the drawing of the pin",
+        "entity_ids": [
+          "doc:3"
+        ],
+        "question": "Is there a drawing for the pin?",
+        "blocks": "drawing.manufacturing_inputs"
+      }
+    },
+    {
+      "repeats": "ER-005",
+      "arguments": {
+        "what": "the fit of the second pin instance in the spacer",
+        "why": "to decide the fit check for the second instance",
+        "entity_ids": [
+          "cmp:0004",
+          "cmp:0005"
+        ],
+        "question": "What fit does the second pin instance take?",
+        "blocks": "interfaces.fit"
+      }
+    }
+  ]
+}

@@ -1,0 +1,711 @@
+{
+  "schema_version": "1.6.0",
+  "package_id": "11111111-2222-4333-8444-555555555555",
+  "created_at": "2026-09-12T12:00:00Z",
+  "reuse_key": null,
+  "reused_from": null,
+  "reused_at": null,
+  "extractor": {
+    "name": "SwReview.Extractor",
+    "version": "0.1.0",
+    "sw_version": null,
+    "machine": "test",
+    "profile": "full"
+  },
+  "manifest": {
+    "entries": [
+      {
+        "document_id": "doc:1",
+        "vault_path": "C:\\Fictional\\Vault\\arvo\\kalo\\MR-10420.SLDASM",
+        "vault_version": null,
+        "revision": "A",
+        "configuration": "Default",
+        "local_modified": null,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:5",
+        "vault_path": "C:\\Fictional\\Vault\\arvo\\kalo\\ven-okta-drive.SLDASM",
+        "vault_version": null,
+        "revision": "A",
+        "configuration": "Default",
+        "local_modified": null,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:2",
+        "vault_path": "C:\\Fictional\\Vault\\arvo\\kalo\\MR-10420.SLDPRT",
+        "vault_version": null,
+        "revision": "A",
+        "configuration": "Default",
+        "local_modified": null,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:3",
+        "vault_path": "C:\\Fictional\\Vault\\arvo\\kalo\\Meridian Supplied\\MX204-18P.SLDPRT",
+        "vault_version": null,
+        "revision": "A",
+        "configuration": "Default",
+        "local_modified": null,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:4",
+        "vault_path": "C:\\Fictional\\Vault\\arvo\\kalo\\tessa-spacer.SLDPRT",
+        "vault_version": null,
+        "revision": "A",
+        "configuration": "Default",
+        "local_modified": null,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:6",
+        "vault_path": "C:\\Fictional\\Vault\\arvo\\kalo\\okta\\ven-okta-shaft.SLDPRT",
+        "vault_version": null,
+        "revision": "A",
+        "configuration": "Default",
+        "local_modified": null,
+        "export_method": "native"
+      }
+    ],
+    "discrepancies": []
+  },
+  "design": {
+    "design_id": "dsn:kalo",
+    "name": "MR-10420",
+    "root_assembly_document_id": "doc:1",
+    "active_configuration": "Default",
+    "drawing_document_ids": []
+  },
+  "documents": [
+    {
+      "document_id": "doc:1",
+      "kind": "assembly",
+      "file_name": "MR-10420.SLDASM",
+      "path": "C:\\Fictional\\Vault\\arvo\\kalo\\MR-10420.SLDASM",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "Meridian Part Ref": "MR-10420",
+        "Meridian Summary": "kalo frame",
+        "MeridianRev": "A",
+        "Meridian Sourcing": "Fabricated"
+      },
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    },
+    {
+      "document_id": "doc:5",
+      "kind": "assembly",
+      "file_name": "ven-okta-drive.SLDASM",
+      "path": "C:\\Fictional\\Vault\\arvo\\kalo\\ven-okta-drive.SLDASM",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "Meridian Supplier": "fict okta works",
+        "Meridian Supplier Ref": "MX310-22D",
+        "Meridian Summary": "okta drive",
+        "Meridian Sourcing": "Fabricated"
+      },
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    },
+    {
+      "document_id": "doc:2",
+      "kind": "part",
+      "file_name": "MR-10420.SLDPRT",
+      "path": "C:\\Fictional\\Vault\\arvo\\kalo\\MR-10420.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "Meridian Part Ref": "MR-10420",
+        "Meridian Summary": "kalo plate",
+        "MeridianRev": "A",
+        "Meridian Sourcing": "Fabricated"
+      },
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    },
+    {
+      "document_id": "doc:3",
+      "kind": "part",
+      "file_name": "MX204-18P.SLDPRT",
+      "path": "C:\\Fictional\\Vault\\arvo\\kalo\\Meridian Supplied\\MX204-18P.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "MeridianPartRef": "MR-80311",
+        "Meridian Summary": "fict dowel pin",
+        "Meridian Sourcing": "Procured"
+      },
+      "config_properties": {
+        "Default": {
+          "Meridian Sourcing": "Procured"
+        }
+      },
+      "material": null,
+      "mass": null
+    },
+    {
+      "document_id": "doc:4",
+      "kind": "part",
+      "file_name": "tessa-spacer.SLDPRT",
+      "path": "C:\\Fictional\\Vault\\arvo\\kalo\\tessa-spacer.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "Meridian Summary": "tessa spacer",
+        "MeridianRev": "A",
+        "Meridian Sourcing": "Fabricated",
+        "Meridian Thread Note": ""
+      },
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    },
+    {
+      "document_id": "doc:6",
+      "kind": "part",
+      "file_name": "ven-okta-shaft.SLDPRT",
+      "path": "C:\\Fictional\\Vault\\arvo\\kalo\\okta\\ven-okta-shaft.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {},
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    }
+  ],
+  "components": [
+    {
+      "id": "cmp:0001",
+      "persist_ref": "Y21wOjAwMDE=",
+      "persist_ref_scope": "doc:1",
+      "name": "MR-10420",
+      "document_id": "doc:1",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": true,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-10420",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0002",
+      "persist_ref": "Y21wOjAwMDI=",
+      "persist_ref_scope": "doc:1",
+      "name": "plate-1",
+      "document_id": "doc:2",
+      "parent_id": "cmp:0001",
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": true,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "plate-1",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0003",
+      "persist_ref": "Y21wOjAwMDM=",
+      "persist_ref_scope": "doc:1",
+      "name": "pin-1",
+      "document_id": "doc:3",
+      "parent_id": "cmp:0001",
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "pin-1",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0004",
+      "persist_ref": "Y21wOjAwMDQ=",
+      "persist_ref_scope": "doc:1",
+      "name": "pin-2",
+      "document_id": "doc:3",
+      "parent_id": "cmp:0001",
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "pin-2",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0005",
+      "persist_ref": "Y21wOjAwMDU=",
+      "persist_ref_scope": "doc:1",
+      "name": "spacer-1",
+      "document_id": "doc:4",
+      "parent_id": "cmp:0001",
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "spacer-1",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0006",
+      "persist_ref": "Y21wOjAwMDY=",
+      "persist_ref_scope": "doc:1",
+      "name": "shaft-1",
+      "document_id": "doc:6",
+      "parent_id": "cmp:0007",
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "lightweight",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "drive-1/shaft-1",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0007",
+      "persist_ref": "Y21wOjAwMDc=",
+      "persist_ref_scope": "doc:1",
+      "name": "drive-1",
+      "document_id": "doc:5",
+      "parent_id": "cmp:0001",
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "drive-1",
+      "constrained_status_raw": null
+    }
+  ],
+  "mates": [
+    {
+      "id": "mate:0001",
+      "persist_ref": "bWF0ZTowMDAx",
+      "persist_ref_scope": "doc:1",
+      "type": "COINCIDENT",
+      "entities": [
+        {
+          "component_id": "cmp:0002",
+          "persist_ref": "bWF0ZTowMDAxL3BsYXRlLTE=",
+          "entity_kind": "swSelDATUMPLANES"
+        },
+        {
+          "component_id": "cmp:0003",
+          "persist_ref": "bWF0ZTowMDAxL3Bpbi0x",
+          "entity_kind": "swSelFACES"
+        }
+      ],
+      "alignment": "aligned",
+      "suppressed": false,
+      "distance": null,
+      "angle": null
+    },
+    {
+      "id": "mate:0002",
+      "persist_ref": "bWF0ZTowMDAy",
+      "persist_ref_scope": "doc:1",
+      "type": "COINCIDENT",
+      "entities": [
+        {
+          "component_id": "cmp:0002",
+          "persist_ref": "bWF0ZTowMDAyL3BsYXRlLTE=",
+          "entity_kind": "swSelFACES"
+        },
+        {
+          "component_id": "cmp:0005",
+          "persist_ref": "bWF0ZTowMDAyL3NwYWNlci0x",
+          "entity_kind": "swSelFACES"
+        }
+      ],
+      "alignment": "aligned",
+      "suppressed": false,
+      "distance": null,
+      "angle": null
+    }
+  ],
+  "holes": [],
+  "threads": [],
+  "fasteners": [],
+  "faces": [],
+  "bodies": [],
+  "interferences": [],
+  "captures": [],
+  "drawings": [],
+  "features": [
+    {
+      "id": "feat:0001",
+      "persist_ref": "ZG9jOjIvcGxhdGUgU2tldGNoMQ==",
+      "persist_ref_scope": "doc:2",
+      "document_id": "doc:2",
+      "configuration": "Default",
+      "name": "plate Sketch1",
+      "type_name": "ProfileFeature",
+      "description": "intent",
+      "index": 0,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0002"
+      ],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": 2,
+        "consumer_ids": [
+          "feat:0002"
+        ]
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0002",
+      "persist_ref": "ZG9jOjIvcGxhdGUgQm9zcy1FeHRydWRlMQ==",
+      "persist_ref_scope": "doc:2",
+      "document_id": "doc:2",
+      "configuration": "Default",
+      "name": "plate Boss-Extrude1",
+      "type_name": "Extrusion",
+      "description": "intent",
+      "index": 1,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [
+        "feat:0001"
+      ],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0003",
+      "persist_ref": "ZG9jOjMvcGluIFNrZXRjaDE=",
+      "persist_ref_scope": "doc:3",
+      "document_id": "doc:3",
+      "configuration": "Default",
+      "name": "pin Sketch1",
+      "type_name": "ProfileFeature",
+      "description": "intent",
+      "index": 0,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0004"
+      ],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": 2,
+        "consumer_ids": [
+          "feat:0004"
+        ]
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0004",
+      "persist_ref": "ZG9jOjMvcGluIEJvc3MtRXh0cnVkZTE=",
+      "persist_ref_scope": "doc:3",
+      "document_id": "doc:3",
+      "configuration": "Default",
+      "name": "pin Boss-Extrude1",
+      "type_name": "Extrusion",
+      "description": "intent",
+      "index": 1,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [
+        "feat:0003"
+      ],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0005",
+      "persist_ref": "ZG9jOjQvc3BhY2VyIFNrZXRjaDE=",
+      "persist_ref_scope": "doc:4",
+      "document_id": "doc:4",
+      "configuration": "Default",
+      "name": "spacer Sketch1",
+      "type_name": "ProfileFeature",
+      "description": "intent",
+      "index": 0,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0006"
+      ],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": 2,
+        "consumer_ids": [
+          "feat:0006"
+        ]
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0006",
+      "persist_ref": "ZG9jOjQvc3BhY2VyIEJvc3MtRXh0cnVkZTE=",
+      "persist_ref_scope": "doc:4",
+      "document_id": "doc:4",
+      "configuration": "Default",
+      "name": "spacer Boss-Extrude1",
+      "type_name": "Extrusion",
+      "description": "intent",
+      "index": 1,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [
+        "feat:0005"
+      ],
+      "sketch": null,
+      "fillet": null
+    }
+  ],
+  "equations": [],
+  "drawing_candidates": [
+    {
+      "document_id": "doc:1",
+      "path": "C:\\Fictional\\Vault\\arvo\\kalo\\MR-10420.SLDDRW",
+      "reason": "same_name_beside_model"
+    },
+    {
+      "document_id": "doc:2",
+      "path": "C:\\Fictional\\Vault\\arvo\\kalo\\MR-10420.SLDDRW",
+      "reason": "same_name_beside_model"
+    }
+  ],
+  "rms_suppress_test": null,
+  "gaps": [
+    {
+      "kind": "not_extracted",
+      "entity_kind": "feature_tree_unavailable",
+      "entity_id": "cmp:0006",
+      "reason": "component drive-1/shaft-1 is lightweight; feature tree not read",
+      "error": null
+    },
+    {
+      "kind": "not_extracted",
+      "entity_kind": "document",
+      "entity_id": "doc:6",
+      "reason": "'ven-okta-shaft.SLDPRT' is not open in SOLIDWORKS, so its properties, material and mass were not read.",
+      "error": null
+    }
+  ]
+}

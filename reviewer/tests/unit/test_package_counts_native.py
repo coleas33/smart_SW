@@ -35,6 +35,8 @@ TODAY: dict[str, tuple[str, str, int]] = {
     "fixtures/replay/big-assembly": ("8bd2ac126bd459eb", "99ccced8ae40549d", 0),
     "fixtures/replay/small-assembly-a": ("2a3cfc66e10d6ed2", "728fe7c25f147e6e", 0),
     "fixtures/replay/small-assembly-b": ("06f016850e3565e1", "0554a3c26ba29f8b", 0),
+    # Feature 013 T012: new with the sitting-shaped fixture, pinned from its own output.
+    "fixtures/sitting/small-assembly": ("a3576d924c042427", "f4c1795ab6e19aed", 0),
     "golden/fixtures/_smoke": ("29a9cc9e297de535", "2a4ce199772a3295", 0),
     "golden/fixtures/angle-not-length": ("eab35adb4cb414ca", "78b3508649429ac5", 0),
     "golden/fixtures/bracket-assy-interference": ("0853d93d193a1583", "14d0ebf610c89b8d", 0),
