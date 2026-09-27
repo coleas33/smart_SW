@@ -28,6 +28,8 @@ was making rather than unwind out of the loop.
 from __future__ import annotations
 
 import json
+import re
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -412,14 +414,69 @@ ERROR_TABLE: tuple[tuple[str, type[RemodelError]], ...] = (
     ("gate_not_passed", RemodelContractError),
     ("save_failed", RemodelSaveError),
     ("not_in_v1", RemodelNotInV1Error),
+    ("start_not_validated", RemodelContractError),
+    ("close_incomplete", RemodelTargetError),
     ("run_in_progress", RemodelRunInProgress),
     ("bad_request", RemodelContractError),
 )
 
 
-def test_the_error_table_is_the_contracts_twenty_four_rows() -> None:
+def test_the_error_table_is_the_contracts_twenty_six_rows() -> None:
     assert dict(ERROR_TABLE) == ERROR_CLASSES
-    assert len(ERROR_TABLE) == len(ERROR_CLASSES) == 24
+    assert list(ERROR_CLASSES) == [token for token, _ in ERROR_TABLE]
+    assert len(ERROR_TABLE) == len(ERROR_CLASSES) == 26
+
+
+def test_the_error_table_is_the_contracts_table_token_for_token_and_class_for_class() -> None:
+    """The contract's "Error codes" table, read from the file, is this client's table in its
+    order: a token the host gains (004 T167's `close_incomplete`, T172's `start_not_validated`)
+    cannot reach one document and not the other."""
+    contract = (
+        Path(__file__).resolve().parents[3]
+        / "specs"
+        / "004-resilient-remodeler"
+        / "contracts"
+        / "bridge-remodel.md"
+    ).read_text(encoding="utf-8")
+    section = contract[contract.index("## Error codes") : contract.index("## The Python client")]
+    rows = re.findall(r"^\| `([a-z0-9_]+)` \|[^|]*\| `([A-Za-z0-9]+)` \|", section, re.MULTILINE)
+
+    assert [(token, ERROR_CLASSES[token].__name__) for token in ERROR_CLASSES] == rows
+
+
+def test_the_start_switch_refusal_is_a_contract_error() -> None:
+    """004 T172: a change command while Start is switched off is a bug in the caller - the pane
+    refuses Start first - so the executor reads it as "the caller sent junk", not as a change to
+    invert."""
+    bridge, _ = client(
+        refused("1", "start_not_validated", "Start is switched off in this build")
+    )
+
+    with pytest.raises(RemodelContractError) as caught:
+        bridge.rename("ref:boss", "Boss-Base1")
+
+    assert caught.value.error_code == "start_not_validated"
+
+
+def test_a_close_that_left_something_carries_what_it_left() -> None:
+    """004 T167 (default taken 2026-09-27): `remodel.close` ended the session but not all of its
+    clean-up landed; the detail names what was left, and the class is the target's."""
+    detail = {
+        "reason": "remodel.close",
+        "verified": "true",
+        "tag_removed": "true",
+        "copy_closed": "false",
+        "settings_restored": "3",
+        "settings_outstanding": "CommandInProgress",
+        "copy_deleted": "false",
+    }
+    bridge, _ = client(refused("1", "close_incomplete", "the clean-up did not all land", detail))
+
+    with pytest.raises(RemodelTargetError) as caught:
+        bridge.close_document(False)
+
+    assert caught.value.error_code == "close_incomplete"
+    assert caught.value.detail == detail
 
 
 @pytest.mark.parametrize(("error_code", "expected"), ERROR_TABLE)

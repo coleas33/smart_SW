@@ -581,6 +581,111 @@ public class RemodelOpenHandlerTests : IDisposable
         Assert.Equal(2, result.FeatureCount);
     }
 
+    // ---- the run root is used up at open (004 T158, research R13.8 D5) ---------------
+
+    [Fact]
+    public void Open_UsesTheBoundRunRootUp_SoTheNextOpenNeedsAFreshBind()
+    {
+        var services = Services(Seat(), _runDirectory);
+        var dispatcher = new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+
+        Ok<RemodelOpenResult>(dispatcher.Dispatch(OpenRequest(Probe(dispatcher))));
+
+        Assert.Null(services.RemodelRunRoot);
+
+        // The run holds its own folder; the bridge holds none for the next one.
+        Assert.Equal(Path.GetFullPath(_runDirectory), dispatcher.RemodelRunDirectory);
+    }
+
+    [Fact]
+    public void Open_RefusedAtItsFirstStep_StillUsesTheRootUp()
+    {
+        var services = Services(Seat(), _runDirectory);
+        var dispatcher = new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+
+        Assert.Equal(
+            RemodelErrorCodes.ScopeNotProbed,
+            Refusal(dispatcher.Dispatch(OpenRequest("probe:never-minted"))));
+        Assert.Null(services.RemodelRunRoot);
+
+        // So the retry, with a probe this time, has no folder until the host binds one.
+        Assert.Equal(
+            RemodelErrorCodes.TargetMismatch,
+            Refusal(dispatcher.Dispatch(OpenRequest(Probe(dispatcher)))));
+        Assert.False(File.Exists(_copyPath));
+    }
+
+    [Fact]
+    public void Open_WithAMalformedRequest_StillUsesTheRootUp()
+    {
+        var services = Services(Seat(), _runDirectory);
+        var dispatcher = new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+
+        Assert.Equal(
+            RemodelErrorCodes.BadRequest,
+            Refusal(dispatcher.Dispatch(Request("2", RemodelCommands.Open, "{}"))));
+        Assert.Null(services.RemodelRunRoot);
+    }
+
+    [Fact]
+    public void Open_AfterAFreshBind_GoesThroughIntoTheBoundFolder()
+    {
+        var services = Services(Seat(), null);
+        var dispatcher = new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+
+        dispatcher.BindRemodelRun(_runDirectory);
+        var result = Ok<RemodelOpenResult>(dispatcher.Dispatch(OpenRequest(Probe(dispatcher))));
+
+        Assert.Equal(Path.GetFullPath(_copyPath), result.DocumentPath);
+        Assert.Null(services.RemodelRunRoot);
+    }
+
+    [Fact]
+    public void BindRemodelRun_HoldsTheFolderCanonicalized()
+    {
+        var services = Services(Seat(), null);
+        var dispatcher = new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+        string spelt = Path.Combine(_root, "work", "..", RunId) + Path.DirectorySeparatorChar;
+
+        dispatcher.BindRemodelRun(spelt);
+
+        Assert.Equal(Path.GetFullPath(_runDirectory), services.RemodelRunRoot);
+    }
+
+    public static IEnumerable<object[]> BadRunFolders => new[]
+    {
+        new object[] { string.Empty },
+        new object[] { "   " },
+        new object[] { "relative\\run-folder" },
+        new object[] { "C:drive-relative" },
+        new object[] { "\\rooted-on-no-drive" },
+        new object[] { "C:\\" + Guid.NewGuid().ToString("N") + "\\missing" },
+        new object[] { "C:\\bad<name>\\run" },
+    };
+
+    [Theory]
+    [MemberData(nameof(BadRunFolders))]
+    public void BindRemodelRun_RefusesAFolderThatIsNotAWholePathToOneThatExists_AndUnbindsAnyEarlierOne(
+        string folder)
+    {
+        var services = Services(Seat(), _runDirectory);
+        var dispatcher = new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+
+        Assert.Throws<ArgumentException>(() => dispatcher.BindRemodelRun(folder));
+
+        Assert.Null(services.RemodelRunRoot);
+    }
+
+    [Fact]
+    public void BindRemodelRun_RefusesAFileWhereAFolderShouldBe()
+    {
+        var services = Services(Seat(), null);
+        var dispatcher = new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+
+        Assert.Throws<ArgumentException>(() => dispatcher.BindRemodelRun(_sourcePath));
+        Assert.Null(services.RemodelRunRoot);
+    }
+
     // ---- helpers ---------------------------------------------------------------------
 
     /// <summary>A two-feature copy and a source SOLIDWORKS already has open.</summary>
@@ -596,9 +701,12 @@ public class RemodelOpenHandlerTests : IDisposable
 
     private SwBridgeDispatcher Dispatcher(FakeRemodelSeat seat) => Dispatcher(seat, _runDirectory);
 
-    private SwBridgeDispatcher Dispatcher(FakeRemodelSeat seat, string? runRoot)
+    private SwBridgeDispatcher Dispatcher(FakeRemodelSeat seat, string? runRoot) =>
+        new SwBridgeDispatcher(Services(seat, runRoot), NoSecretPolicy.Instance);
+
+    private BridgeServices Services(FakeRemodelSeat seat, string? runRoot)
     {
-        var services = new BridgeServices(
+        return new BridgeServices(
             new FakeCaptureView(),
             new FakeMeasureSource("no measure source in this test"),
             new FakeInterferenceSource(new FakeInterferenceDetector()),
@@ -612,8 +720,6 @@ public class RemodelOpenHandlerTests : IDisposable
             // over, and never one derived from a request's copy_path.
             RemodelRunRoot = runRoot,
         };
-
-        return new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
     }
 
     /// <summary>A dispatcher with the probe done and the copy open.</summary>

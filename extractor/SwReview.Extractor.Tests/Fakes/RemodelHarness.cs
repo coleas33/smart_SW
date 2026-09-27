@@ -20,12 +20,23 @@ namespace SwReview.Extractor.Tests.Fakes;
 /// command that runs on the scope starts where that command starts. The open sequence itself
 /// has its own suite, <c>RemodelOpenHandlerTests</c>, which wires the bridge explicitly because
 /// what it asserts on <i>is</i> the wiring.
+///
+/// The Start switch (004 T172) is <b>on</b> by default here, because most of what this harness
+/// drives is the change commands only a validated build answers; a test of the switch itself
+/// builds its harness with the switch it means.
 /// </summary>
 public sealed class RemodelHarness : IDisposable
 {
     public const string RunId = "20260916-142201-bracket-remodel";
 
     public RemodelHarness(params FakeFeature[] features)
+        : this(true, features)
+    {
+    }
+
+    /// <param name="startValidated">The Start switch the dispatcher is built with (004 T172).</param>
+    /// <param name="features">The copy's feature tree, top to bottom.</param>
+    public RemodelHarness(bool startValidated, params FakeFeature[] features)
     {
         Root = Path.Combine(Path.GetTempPath(), "swreview-remodel", Guid.NewGuid().ToString("N"));
         RunDirectory = Path.Combine(Root, RunId);
@@ -40,7 +51,7 @@ public sealed class RemodelHarness : IDisposable
         Seat = new FakeRemodelSeat(new FakeProbeSource(), Copy);
         Gate = new SwGate(new CircuitBreaker(), new RemodelGuard()) { Observer = Observer };
 
-        var services = new BridgeServices(
+        Services = new BridgeServices(
             new FakeCaptureView(),
             new FakeMeasureSource("no measure source in this test"),
             new FakeInterferenceSource(new FakeInterferenceDetector()),
@@ -52,8 +63,11 @@ public sealed class RemodelHarness : IDisposable
             RemodelRunRoot = RunDirectory,
         };
 
-        Dispatcher = new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+        Dispatcher = new SwBridgeDispatcher(Services, NoSecretPolicy.Instance, startValidated);
     }
+
+    /// <summary>What the dispatcher was built with, so a test can read the run root it holds.</summary>
+    public BridgeServices Services { get; }
 
     public string Root { get; }
 
@@ -81,9 +95,16 @@ public sealed class RemodelHarness : IDisposable
         }
     }
 
-    /// <summary>Probe, then open, asserting both succeeded. The state every scope command needs.</summary>
+    /// <summary>
+    /// Bind this run's folder, probe, then open, asserting both succeeded. The state every scope
+    /// command needs. The bind is the host's, before every open (004 T158): <c>remodel.open</c>
+    /// uses the bound root up, so a second open in one test needs a second bind, as a second run
+    /// does.
+    /// </summary>
     public void Open()
     {
+        Dispatcher.BindRemodelRun(RunDirectory);
+
         var probe = Ok<RemodelProbeScopeResult>(Dispatch(
             RemodelCommands.ProbeScope,
             "{\"source_path\":" + JsonSerializer.Serialize(SourcePath) + "}"));

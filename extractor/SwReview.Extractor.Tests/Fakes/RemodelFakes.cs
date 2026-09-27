@@ -487,9 +487,20 @@ public sealed class FakeRemodelDocument : IRemodelDocument
 
     // ---- IRemodelCopyTarget ----------------------------------------------------------
 
+    /// <summary>
+    /// What <see cref="GetPathName"/> throws, for a verification that cannot run at all - not a
+    /// failed check but a SOLIDWORKS that does not answer (004 T167).
+    /// </summary>
+    public Exception? PathNameFailure { get; set; }
+
     public string? GetPathName()
     {
         Members.Add(nameof(GetPathName));
+        if (PathNameFailure != null)
+        {
+            throw PathNameFailure;
+        }
+
         return PathName;
     }
 
@@ -524,9 +535,20 @@ public sealed class FakeRemodelDocument : IRemodelDocument
         return TagWriteAnswer;
     }
 
+    /// <summary>
+    /// What <see cref="RemoveSessionTag"/> throws, for the end-of-session routine (004 T167): an
+    /// untag that fails must neither stop the close nor leave the settings flipped.
+    /// </summary>
+    public Exception? UntagFailure { get; set; }
+
     public int RemoveSessionTag(string fieldName)
     {
         Members.Add(nameof(RemoveSessionTag));
+        if (UntagFailure != null)
+        {
+            throw UntagFailure;
+        }
+
         SessionTag = null;
         return 0;
     }
@@ -870,6 +892,13 @@ public sealed class FakeRemodelSeat : IRemodelSeat
     /// <summary>Every toggle write, in order, as <c>toggle=value</c>.</summary>
     public List<string> ToggleWrites { get; } = new List<string>();
 
+    /// <summary>
+    /// Writes that throw, spelt as <see cref="ToggleWrites"/> spells them (<c>77=False</c>,
+    /// <c>CommandInProgress=False</c>), for a restore that fails part of the way (004 T167). The
+    /// attempt is still recorded, and the value is left as it was.
+    /// </summary>
+    public HashSet<string> FailingWrites { get; } = new HashSet<string>(StringComparer.Ordinal);
+
     public IRemodelProbeSource ProbeSource => Probe;
 
     public IRemodelDocument? OpenDocument(string documentPath, int options)
@@ -903,15 +932,24 @@ public sealed class FakeRemodelSeat : IRemodelSeat
 
     public void SetUserPreferenceToggle(int toggle, bool value)
     {
+        Write(toggle + "=" + value);
         _toggles[toggle] = value;
-        ToggleWrites.Add(toggle + "=" + value);
     }
 
     public bool GetCommandInProgress() => CommandInProgress;
 
     public void SetCommandInProgress(bool value)
     {
+        Write("CommandInProgress=" + value);
         CommandInProgress = value;
-        ToggleWrites.Add("CommandInProgress=" + value);
+    }
+
+    private void Write(string write)
+    {
+        ToggleWrites.Add(write);
+        if (FailingWrites.Contains(write))
+        {
+            throw new InvalidOperationException("the seat refused " + write);
+        }
     }
 }

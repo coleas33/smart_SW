@@ -345,4 +345,189 @@ public class RemodelFinishHandlerTests : IDisposable
                 RemodelHarness.Refusal(fresh.Dispatch(RemodelCommands.Close, "{}")));
         }
     }
+
+    // ---- remodel.close through the end-of-session routine (004 T167) ------------------
+    //
+    // The verification, the untag and the close used to run outside any `try`, so one throw
+    // left the four settings flipped and every later `remodel.open` on that attachment answered
+    // `run_in_progress`. Now the close is the routine a teardown runs too
+    // (contracts/bridge-remodel.md, "Ending a session"): whatever fails, all four settings are
+    // put back, the session is cleared, and the answer names what was left.
+
+    [Fact]
+    public void Close_WhoseVerificationFails_IsTargetMismatch_ClosesNothing_AndRestoresAllFour()
+    {
+        _harness.Copy.SessionTag = "20260101-000000-another-run";
+        _harness.Seat.ToggleWrites.Clear();
+
+        BridgeResponse response = _harness.Dispatch(RemodelCommands.Close, "{}");
+
+        Assert.Equal(RemodelErrorCodes.TargetMismatch, RemodelHarness.Refusal(response));
+        IReadOnlyDictionary<string, string> detail = Detail(response);
+        Assert.Equal("false", detail["verified"]);
+        Assert.Equal("2", detail["failed_check"]);
+        Assert.Equal("false", detail["copy_closed"]);
+        Assert.Equal("4", detail["settings_restored"]);
+        Assert.Equal(string.Empty, detail["settings_outstanding"]);
+        Assert.Equal("false", detail["copy_deleted"]);
+        Assert.Equal(RemodelSessionEnd.ReasonClose, detail["reason"]);
+        Assert.Contains("check 2", response.Error!, StringComparison.Ordinal);
+
+        Assert.Empty(_harness.Seat.Closed);
+        Assert.Equal(
+            new[] { "10=False", "77=False", "329=False", "CommandInProgress=False" },
+            _harness.Seat.ToggleWrites);
+        AssertTheSessionIsOverAndTheNextOpenGoesThrough();
+    }
+
+    [Fact]
+    public void Close_WhoseUntagThrows_IsCloseIncomplete_ButStillClosesAndRestores()
+    {
+        _harness.Copy.UntagFailure = new System.Runtime.InteropServices.COMException("Delete2 refused");
+
+        BridgeResponse response = _harness.Dispatch(RemodelCommands.Close, "{}");
+
+        Assert.Equal(RemodelErrorCodes.CloseIncomplete, RemodelHarness.Refusal(response));
+        IReadOnlyDictionary<string, string> detail = Detail(response);
+        Assert.Equal("true", detail["verified"]);
+        Assert.False(detail.ContainsKey("failed_check"));
+        Assert.Equal("false", detail["tag_removed"]);
+        Assert.Equal("true", detail["copy_closed"]);
+        Assert.Equal("4", detail["settings_restored"]);
+        Assert.Contains("Delete2 refused", response.Error!, StringComparison.Ordinal);
+        Assert.Equal(_harness.CopyPath, Assert.Single(_harness.Seat.Closed));
+        AssertTheSessionIsOverAndTheNextOpenGoesThrough();
+    }
+
+    [Fact]
+    public void Close_WhoseCloseThrows_IsCloseIncomplete_AndSaysTheCopyWasNotClosed()
+    {
+        _harness.Seat.CloseFailure = new System.Runtime.InteropServices.COMException("CloseDoc refused");
+
+        BridgeResponse response = _harness.Dispatch(RemodelCommands.Close, "{}");
+
+        Assert.Equal(RemodelErrorCodes.CloseIncomplete, RemodelHarness.Refusal(response));
+        Assert.Equal("false", Detail(response)["copy_closed"]);
+        Assert.Equal("4", Detail(response)["settings_restored"]);
+        _harness.Seat.CloseFailure = null;
+        AssertTheSessionIsOverAndTheNextOpenGoesThrough();
+    }
+
+    [Fact]
+    public void Close_WhoseRestoreFailsPartWay_IsCloseIncomplete_NamingTheSettingStillSet()
+    {
+        _harness.Seat.FailingWrites.Add("CommandInProgress=False");
+
+        BridgeResponse response = _harness.Dispatch(RemodelCommands.Close, "{}");
+
+        Assert.Equal(RemodelErrorCodes.CloseIncomplete, RemodelHarness.Refusal(response));
+        Assert.Equal("3", Detail(response)["settings_restored"]);
+        Assert.Equal(
+            RemodelSystemToggles.CommandInProgressSetting, Detail(response)["settings_outstanding"]);
+        Assert.Equal("true", Detail(response)["copy_closed"]);
+        _harness.Seat.FailingWrites.Clear();
+        AssertTheSessionIsOverAndTheNextOpenGoesThrough();
+    }
+
+    [Fact]
+    public void Close_WhoseCircuitIsOpen_StillClosesTheCopyAndRestoresAllFour()
+    {
+        while (!_harness.Gate.Breaker.IsOpen)
+        {
+            try
+            {
+                _harness.Gate.Breaker.Execute<int>(
+                    () => throw new System.Runtime.InteropServices.COMException("the session died"));
+            }
+            catch (System.Runtime.InteropServices.COMException)
+            {
+            }
+        }
+
+        _harness.Seat.ToggleWrites.Clear();
+
+        var result = RemodelHarness.Ok<RemodelCloseResult>(_harness.Dispatch(RemodelCommands.Close, "{}"));
+
+        Assert.True(result.Closed);
+        Assert.Equal(_harness.CopyPath, Assert.Single(_harness.Seat.Closed));
+        Assert.Equal(
+            new[] { "10=False", "77=False", "329=False", "CommandInProgress=False" },
+            _harness.Seat.ToggleWrites);
+    }
+
+    [Fact]
+    public void Close_WithDiscard_WhoseRoutineFailed_StillDeletesTheCopyAndSaysSo()
+    {
+        string plan = Path.Combine(_harness.RunDirectory, "plan.json");
+        File.WriteAllText(plan, "{}");
+        _harness.Copy.PathName = Path.Combine(_harness.Root, "work", "somebody-else.SLDPRT");
+
+        BridgeResponse response = _harness.Dispatch(RemodelCommands.Close, "{\"discard_copy\":true}");
+
+        Assert.Equal(RemodelErrorCodes.TargetMismatch, RemodelHarness.Refusal(response));
+        Assert.Equal("true", Detail(response)["copy_deleted"]);
+        Assert.False(File.Exists(_harness.CopyPath));
+        Assert.True(File.Exists(plan));
+    }
+
+    [Fact]
+    public void Close_TellsTheHostItEndedTheSession()
+    {
+        var told = new List<RemodelSessionEnd>();
+        _harness.Services.RemodelSessionEnded = told.Add;
+
+        RemodelHarness.Ok<RemodelCloseResult>(_harness.Dispatch(RemodelCommands.Close, "{}"));
+
+        RemodelSessionEnd outcome = Assert.Single(told);
+        Assert.Equal(RemodelSessionEnd.ReasonClose, outcome.Reason);
+        Assert.True(outcome.Succeeded);
+    }
+
+    [Fact]
+    public void Close_ThatFailed_TellsTheHostWhatWasLeft()
+    {
+        var told = new List<RemodelSessionEnd>();
+        _harness.Services.RemodelSessionEnded = told.Add;
+        _harness.Seat.CloseFailure = new System.Runtime.InteropServices.COMException("CloseDoc refused");
+
+        _harness.Dispatch(RemodelCommands.Close, "{}");
+
+        RemodelSessionEnd outcome = Assert.Single(told);
+        Assert.False(outcome.Succeeded);
+        Assert.False(outcome.CopyClosed);
+    }
+
+    [Fact]
+    public void Close_ClearsTheRunRootWithTheSession()
+    {
+        _harness.Dispatcher.BindRemodelRun(_harness.RunDirectory);
+
+        _harness.Dispatch(RemodelCommands.Close, "{}");
+
+        Assert.Null(_harness.Services.RemodelRunRoot);
+    }
+
+    private static IReadOnlyDictionary<string, string> Detail(BridgeResponse response) =>
+        Assert.IsType<RemodelErrorResult>(response.Result).Detail!;
+
+    /// <summary>
+    /// The session is over whatever the close answered: the next command has no scope, and a
+    /// fresh open on the same bridge is not answered <c>run_in_progress</c>.
+    /// </summary>
+    private void AssertTheSessionIsOverAndTheNextOpenGoesThrough()
+    {
+        Assert.Equal(
+            RemodelErrorCodes.TargetMismatch,
+            RemodelHarness.Refusal(_harness.Dispatch(RemodelCommands.Snapshot, "{}")));
+
+        if (File.Exists(_harness.CopyPath))
+        {
+            File.Delete(_harness.CopyPath);
+        }
+
+        _harness.Copy.PathName = _harness.CopyPath;
+        _harness.Copy.SessionTag = null;
+        _harness.Copy.UntagFailure = null;
+        _harness.Open();
+    }
 }

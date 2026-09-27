@@ -315,8 +315,23 @@ public sealed class BridgeServices
     ///
     /// Null on a bridge that answers no remodel command, exactly like
     /// <see cref="RemodelSeat"/>: <c>remodel.open</c> refuses rather than inventing one.
+    ///
+    /// <b>Used up at open</b> (004 T158, research R13.8 D5): the host binds it for one run
+    /// (<see cref="SwBridgeDispatcher.BindRemodelRun"/>), <c>remodel.open</c> takes it as it starts,
+    /// whatever it then answers, and the end-of-session routine clears it, so a second run can
+    /// never inherit the first one's folder.
     /// </summary>
     public string? RemodelRunRoot { get; set; }
+
+    /// <summary>
+    /// 004 T167: told every ending of a remodel session that existed - <c>remodel.close</c>, a
+    /// tool-service re-attach, an add-in unload - with what the end-of-session routine did, on
+    /// the thread the routine ran on (the application thread), after the session is cleared.
+    /// The add-in's host wires it to <c>ToolServiceOptions.RemodelSessionEnded</c>, so the
+    /// Remodel page's one failure status has one source. Null is a host that listens to none;
+    /// a callback that throws is caught and never reaches the routine or the request.
+    /// </summary>
+    public Action<RemodelSessionEnd>? RemodelSessionEnded { get; set; }
 
     /// <summary>
     /// Feature 011, protocol 1.3. The source <c>drawing.read</c> reads a confirmed candidate
@@ -382,6 +397,15 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     /// </summary>
     private RemodelSession? _session;
 
+    /// <summary>
+    /// 004 T172: whether Start may run in this build. While false the six change commands
+    /// (<see cref="RemodelStart.ChangeCommands"/>) are refused before anything else.
+    /// </summary>
+    private readonly bool _startValidated;
+
+    /// <summary>
+    /// The dispatcher as shipped: the Start switch is <see cref="RemodelStart.SeatValidated"/>.
+    /// </summary>
     /// <param name="services">Everything SOLIDWORKS, as interfaces.</param>
     /// <param name="secrets">
     /// How the <c>secret</c> on a request line is judged. Required rather than defaulted,
@@ -391,6 +415,26 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     /// <param name="captureIds">Test hook: the allocator capture ids come from.</param>
     public SwBridgeDispatcher(
         BridgeServices services, ISecretPolicy secrets, Ids.IdAllocator? captureIds = null)
+        : this(services, secrets, RemodelStart.SeatValidated, captureIds)
+    {
+    }
+
+    /// <summary>
+    /// The dispatcher with the Start switch given, as <c>DrawingOpenScope</c> takes its own: the
+    /// tests of the change commands pass true, and the tests of the switch pass what they mean.
+    /// </summary>
+    /// <param name="services">Everything SOLIDWORKS, as interfaces.</param>
+    /// <param name="secrets">How the <c>secret</c> on a request line is judged.</param>
+    /// <param name="startValidated">
+    /// 004 T172: false refuses every change command with
+    /// <see cref="RemodelErrorCodes.StartNotValidated"/>.
+    /// </param>
+    /// <param name="captureIds">Test hook: the allocator capture ids come from.</param>
+    public SwBridgeDispatcher(
+        BridgeServices services,
+        ISecretPolicy secrets,
+        bool startValidated,
+        Ids.IdAllocator? captureIds = null)
     {
         _services = services ?? throw new ArgumentNullException(nameof(services));
         _secrets = secrets ?? throw new ArgumentNullException(nameof(secrets));
@@ -398,6 +442,7 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
         _remodelGate = services.RemodelGate
             ?? new SwGate(new CircuitBreaker(), new RemodelGuard());
         _probes = new RemodelScopeProbe(_remodelGate);
+        _startValidated = startValidated;
     }
 
     /// <summary>
@@ -746,6 +791,19 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
 
     private BridgeResponse Remodel(BridgeRequest request)
     {
+        // 004 T172, the backstop: the pane refuses Start first, and a clause checked only by the
+        // caller is one the caller can skip. First of all, because the switch is a fact about
+        // this build and not about the request: before its parameters, before the session and
+        // before VerifyTarget, so nothing is read or written.
+        if (!_startValidated && RemodelStart.IsChangeCommand(request.Command))
+        {
+            throw new RemodelCommandError(
+                RemodelErrorCodes.StartNotValidated,
+                $"'{request.Command}' changes the copy, and Start is switched off in this build "
+                + "until the blocking probes (PROBE-1, 2, 3, 4 and 12) have verdicts from a seat "
+                + "(RemodelStart.SeatValidated). Nothing was read or written.");
+        }
+
         switch (request.Command)
         {
             case RemodelCommands.ProbeScope:
@@ -825,6 +883,11 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     /// </summary>
     private RemodelOpenResult Open(BridgeRequest request)
     {
+        // 004 T158: the root the host bound for this run is used up here, before anything else,
+        // so an open refused or failed at any step leaves nothing bound and the next run needs a
+        // fresh bind. Whether there was one is still step 4's refusal, so the order is unchanged.
+        string? boundRunRoot = TakeRunRoot();
+
         RemodelOpenParams parameters = RemodelOpenParams.Read(request);
         IRemodelSeat seat = Seat();
 
@@ -848,7 +911,7 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
         // 4. The save target, before a byte is written. The run folder is the HOST's - see
         // BridgeServices.RemodelRunRoot - and never one derived from the request, or both of
         // this step's clauses would be satisfied by whatever path the client sent.
-        string runDirectory = RunRoot();
+        string runDirectory = RunRoot(boundRunRoot);
         string copy = System.IO.Path.GetFullPath(parameters.CopyPath.Trim());
         string declaredRun = RemodelCopy.RunDirectoryOf(copy);
 
@@ -1838,33 +1901,27 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
             });
 
     /// <summary>
-    /// <c>remodel.close</c>. Closes the tagged copy - the target is verified first, so the
-    /// close cannot land on a document that became something else - and with
-    /// <c>discard_copy</c> deletes the copy and <b>nothing else</b>.
+    /// <c>remodel.close</c>. Ends the session through the one end-of-session routine a teardown
+    /// runs too (<see cref="EndRemodelSession"/>, 004 T167): the target verified, the tag off and
+    /// the copy closed unsaved, and all four settings put back whatever failed on the way. With
+    /// <c>discard_copy</c> it then deletes the copy and <b>nothing else</b>.
     ///
     /// Discard keeps every other artifact. Deleting the run folder would lose the evidence
     /// Principle VI asks for, and "what did it propose?" has to stay answerable after the
-    /// engineer says no.
+    /// engineer says no. The routine itself never deletes; the delete is this command's, after
+    /// the routine, whatever the routine did.
     ///
-    /// The system toggles are restored here, and <see cref="RemodelSystemToggles.Restore"/> is
-    /// idempotent, so a host that also restores them in its own <c>finally</c> does not write
-    /// the engineer's settings twice.
+    /// The session is over whatever the answer: a routine that could not do all of it answers
+    /// <c>target_mismatch</c> when the verification failed and <c>close_incomplete</c> when the
+    /// rest did not land, with the outcome in <c>detail</c> (lane D's defaults, 2026-09-27), and
+    /// the next <c>remodel.open</c> is never answered <c>run_in_progress</c> by it.
     /// </summary>
     private RemodelCloseResult Close(BridgeRequest request)
     {
         RemodelCloseParams parameters = RemodelCloseParams.Read(request);
-        RemodelSession session = Session();
-        IRemodelSeat seat = Seat();
-        string copy = session.Scope.CopyPath;
+        string copy = Session().Scope.CopyPath;
 
-        // The close-out pair, behind one verification. The tag is VerifyTarget's own check 2,
-        // so the run cannot verify again between removing it and closing: the removal is the
-        // last thing the session does to the document and the close is the next. The saved
-        // file keeps the tag it was saved with - Save3 runs before this and the run saves once
-        // - so this removes the tag from the open document, not from the artifact on disk.
-        session.Scope.VerifyTarget();
-        session.Gate.Call(UntagKey, () => RemodelCopy.Untag(session.Document));
-        session.Gate.Call(CloseKey, () => seat.CloseDocument(copy));
+        RemodelSessionEnd outcome = EndRemodelSession(RemodelSessionEnd.ReasonClose);
 
         bool deleted = false;
         if (parameters.DiscardCopy)
@@ -1873,36 +1930,291 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
             deleted = !System.IO.File.Exists(copy);
         }
 
-        // A restore that could not put every setting back raises, and the run still ends: the
-        // document is already closed, so leaving the session open would let a later command
-        // address a document that is gone.
-        try
+        if (!outcome.Succeeded)
         {
-            session.Toggles.Restore();
-        }
-        finally
-        {
-            _session = null;
+            var detail = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (KeyValuePair<string, string> field in outcome.Fields())
+            {
+                detail[field.Key] = field.Value;
+            }
+
+            detail["copy_deleted"] = deleted ? "true" : "false";
+
+            throw new RemodelCommandError(
+                outcome.Verified ? RemodelErrorCodes.CloseIncomplete : RemodelErrorCodes.TargetMismatch,
+                "the session is over, but its clean-up did not all land: "
+                + string.Join("; ", outcome.Failures)
+                + ". " + (outcome.CopyClosed ? "The copy was closed unsaved" : "The copy was not closed")
+                + " and " + outcome.SettingsRestored.ToString(CultureInfo.InvariantCulture) + " of "
+                + RemodelSystemToggles.SettingCount.ToString(CultureInfo.InvariantCulture)
+                + " settings are back.",
+                detail);
         }
 
         return new RemodelCloseResult { Closed = true, CopyDeleted = deleted };
     }
 
     /// <summary>
-    /// This run's folder as the host set it, canonicalized, or the refusal a bridge built
-    /// without one answers with. It is never taken from a request: see
-    /// <see cref="BridgeServices.RemodelRunRoot"/>.
+    /// 004 T167 (default taken 2026-09-26, the owner may revise; research R13.1): the one routine
+    /// that ends a remodel session, whatever ends it - <c>remodel.close</c>, a tool-service
+    /// re-attach or an add-in unload (contracts/bridge-remodel.md, "Ending a session"). Called on
+    /// the application thread, like every command: the tool service runs it there before its
+    /// pipe closes.
+    ///
+    ///   1. <c>VerifyTarget</c>, ungated as it is before every write.
+    ///   2. When it passes, the session tag off (<c>ICustomPropertyManager.Delete2</c>) and the copy
+    ///      closed <b>unsaved</b> (<c>ISldWorks.CloseDoc</c>), each attempted whatever the other did
+    ///      - the close is unsaved, so a tag the untag could not remove goes with the document -
+    ///      and each judged by the guard and recorded by the observer but not counted against the
+    ///      circuit breaker, the pattern <see cref="RemodelSystemToggles"/>' put-back follows, so an
+    ///      open circuit cannot stop the clean-up. When the verification fails, or cannot run at
+    ///      all, nothing is closed and the outcome names the check when there is one.
+    ///   3. In a <c>finally</c>, all four settings put back, <c>CommandInProgress</c> last, by
+    ///      <see cref="RemodelSystemToggles.Restore"/>, which is safe to run twice.
+    ///   4. In an outer <c>finally</c>, the session and the bound run root cleared, so the next
+    ///      <c>remodel.open</c> is never answered <c>run_in_progress</c> by a session that is over.
+    ///
+    /// It never saves and never deletes: the copy stays in <c>copy/</c> as the byte copy it was
+    /// and the run folder stays whole. It never throws for anything the seat does; every failure
+    /// is a sentence in the outcome. With no session it calls nothing - no SOLIDWORKS member and
+    /// no gate key - and only clears a bound run root. The outcome of a session that existed is
+    /// told to <see cref="BridgeServices.RemodelSessionEnded"/> once the session is cleared.
     /// </summary>
-    private string RunRoot()
+    /// <param name="reason">What ended it: <see cref="RemodelSessionEnd.ReasonClose"/> or
+    /// <see cref="RemodelSessionEnd.ReasonToolServiceStopped"/>.</param>
+    public RemodelSessionEnd EndRemodelSession(string reason)
+    {
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            throw new ArgumentException(
+                "A session ends for a reason; name it (remodel.close, tool_service_stopped).",
+                nameof(reason));
+        }
+
+        RemodelSession? session = _session;
+        if (session == null)
+        {
+            _services.RemodelRunRoot = null;
+            return RemodelSessionEnd.NoSession(reason);
+        }
+
+        var failures = new List<string>();
+        bool verified = false;
+        RemodelTargetCheck? failedCheck = null;
+        bool tagRemoved = false;
+        bool copyClosed = false;
+        string copy = session.Scope.CopyPath;
+
+        try
+        {
+            try
+            {
+                try
+                {
+                    session.Scope.VerifyTarget();
+                    verified = true;
+                }
+                catch (RemodelTargetError error)
+                {
+                    failedCheck = error.Check;
+                    failures.Add("the copy could not be verified, so nothing was closed: " + error.Message);
+                }
+                catch (Exception error)
+                {
+                    failures.Add(
+                        "the copy's verification could not run, so nothing was closed: "
+                        + error.GetType().Name + ": " + error.Message);
+                }
+
+                if (verified)
+                {
+                    tagRemoved = CleanUpWrite(
+                        session.Gate, UntagKey, () => RemodelCopy.Untag(session.Document), "untag", failures);
+
+                    IRemodelSeat? seat = _services.RemodelSeat;
+                    copyClosed = seat == null
+                        ? Failed(failures, "close: this bridge has no remodel seat to close the copy through")
+                        : CleanUpWrite(session.Gate, CloseKey, () => seat.CloseDocument(copy), "close", failures);
+                }
+            }
+            finally
+            {
+                try
+                {
+                    session.Toggles.Restore();
+                }
+                catch (Exception error)
+                {
+                    failures.Add("the settings were not all put back: " + error.Message);
+                }
+            }
+        }
+        finally
+        {
+            _session = null;
+            _services.RemodelRunRoot = null;
+        }
+
+        var outcome = new RemodelSessionEnd(
+            reason,
+            session.Scope.RunDirectory,
+            copy,
+            verified,
+            failedCheck,
+            tagRemoved,
+            copyClosed,
+            session.Toggles.Outstanding,
+            failures);
+
+        Tell(outcome);
+        return outcome;
+    }
+
+    /// <summary>
+    /// 004 T158: binds this run's folder, the one <c>RunFolders.CreateForRemodel</c> made, for the
+    /// next <c>remodel.open</c> to take. The host's call, on the application thread, before every
+    /// open - never a path from a request.
+    ///
+    /// A blank, relative or drive-relative path, one that will not canonicalize, and one that is
+    /// not an existing folder are refused with <see cref="ArgumentException"/>, and a refused bind
+    /// clears any earlier binding, so a stale folder is never the next open's (default taken
+    /// 2026-09-27, the owner may revise). The folder is held canonicalized.
+    /// </summary>
+    public void BindRemodelRun(string runDirectory)
+    {
+        _services.RemodelRunRoot = null;
+
+        if (string.IsNullOrWhiteSpace(runDirectory))
+        {
+            throw new ArgumentException(
+                "A run folder is required; the host binds the one it made for this run.",
+                nameof(runDirectory));
+        }
+
+        string trimmed = runDirectory.Trim();
+        string full;
+        bool qualified;
+        try
+        {
+            qualified = IsFullyQualified(trimmed);
+            full = System.IO.Path.GetFullPath(trimmed).TrimEnd(System.IO.Path.DirectorySeparatorChar);
+        }
+        catch (Exception error) when (RemodelScope.IsPathError(error))
+        {
+            throw new ArgumentException(
+                $"'{trimmed}' is not a path a run folder can have: {error.Message}",
+                nameof(runDirectory),
+                error);
+        }
+
+        if (!qualified)
+        {
+            throw new ArgumentException(
+                $"'{trimmed}' is not a whole path. A run folder is bound as the absolute path "
+                + "RunFolders.CreateForRemodel made, never relative to wherever the process is.",
+                nameof(runDirectory));
+        }
+
+        if (!System.IO.Directory.Exists(full))
+        {
+            throw new ArgumentException(
+                $"'{full}' is not an existing folder, so no run can be bound to it. The host "
+                + "makes the run folder before it binds it.",
+                nameof(runDirectory));
+        }
+
+        _services.RemodelRunRoot = full;
+    }
+
+    /// <summary>
+    /// One clean-up write: the guard asked and the observer told (<see cref="SwGate.Assert"/>),
+    /// then the call, outside the breaker's count. True when it returned; otherwise the failure
+    /// is added as a sentence and the routine goes on.
+    /// </summary>
+    private static bool CleanUpWrite(
+        SwGate gate, string key, Action write, string what, List<string> failures)
+    {
+        try
+        {
+            gate.Assert(key);
+            write();
+            return true;
+        }
+        catch (Exception error)
+        {
+            failures.Add(what + ": " + error.GetType().Name + ": " + error.Message);
+            return false;
+        }
+    }
+
+    private static bool Failed(List<string> failures, string failure)
+    {
+        failures.Add(failure);
+        return false;
+    }
+
+    /// <summary>The host is told; nothing it does in return reaches the routine or the request.</summary>
+    private void Tell(RemodelSessionEnd outcome)
+    {
+        Action<RemodelSessionEnd>? told = _services.RemodelSessionEnded;
+        if (told == null)
+        {
+            return;
+        }
+
+        try
+        {
+            told(outcome);
+        }
+        catch (Exception)
+        {
+            // The host's own failure to listen: the session is already over, and the routine's
+            // outcome is still returned to its caller.
+        }
+    }
+
+    /// <summary>A path with a drive and a root (<c>C:\</c>) or a UNC share - nothing relative to anything.</summary>
+    private static bool IsFullyQualified(string path)
+    {
+        string? root = System.IO.Path.GetPathRoot(path);
+        if (string.IsNullOrEmpty(root))
+        {
+            return false;
+        }
+
+        if (root!.StartsWith(@"\\", StringComparison.Ordinal) || root.StartsWith("//", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return root.Length >= 3
+            && root[1] == ':'
+            && (root[2] == System.IO.Path.DirectorySeparatorChar
+                || root[2] == System.IO.Path.AltDirectorySeparatorChar);
+    }
+
+    /// <summary>The run root the host bound, taken: from here nothing is bound (004 T158).</summary>
+    private string? TakeRunRoot()
     {
         string? root = _services.RemodelRunRoot;
+        _services.RemodelRunRoot = null;
+        return root;
+    }
+
+    /// <summary>
+    /// This run's folder as the host bound it, canonicalized, or the refusal an open with none
+    /// bound answers with. It is never taken from a request: see
+    /// <see cref="BridgeServices.RemodelRunRoot"/>.
+    /// </summary>
+    private static string RunRoot(string? root)
+    {
         if (string.IsNullOrWhiteSpace(root))
         {
             throw new RemodelCommandError(
                 RemodelErrorCodes.TargetMismatch,
-                "this bridge was not built with a remodel run folder, so there is nowhere a "
-                + "copy may be created. The run folder is the host's and is never taken from "
-                + "the request.");
+                "this bridge has no remodel run folder bound for this open, so there is nowhere "
+                + "a copy may be created. The run folder is the host's, bound before each open, "
+                + "and is never taken from the request.");
         }
 
         return System.IO.Path.GetFullPath(root!.Trim())
