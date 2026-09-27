@@ -18,15 +18,36 @@ No discrepancies between the manifest and the reviewed documents.
 - Open evidence requests: 3 of 3
 - Coverage: Checked: 5, Skipped: 11, Unresolved: 39, Failed: 0, Out of Scope: 7
 
-## Start here
+## Findings by type
 
-1. **F-007** `interference.static` - needs your judgement (Static interference between the housing and the second pin)
-2. **F-008** `interference.static` - needs your judgement (Static interference between the housing and the first pin)
-3. **F-004** `rms.assembly.mates_to_reference_geometry` - rebuild breaker, demonstrated
-4. **F-003** `rms.sketches.fully_defined` - rebuild breaker, demonstrated
-5. **F-002** `rms.grouping.all_features_in_a_group` - discipline, demonstrated
+### Interference and fit: 2 findings
+- **F-007** needs your judgement - Static interference between the housing and the second pin
+- **F-008** needs your judgement - Static interference between the housing and the first pin
+Goals: Interference - issues found; Hole alignment - not reached (evidence missing); Fits and stacks - not reached (evidence missing)
 
-Not amplified: 3 findings (0 checked within scope, 0 already decided, 0 informational, 3 beyond the top five).
+### Fasteners: not reached (evidence missing)
+Goals: Fasteners - not reached (evidence missing); Tool access - not reached (no check ran)
+
+### Drawings: not reached (evidence missing)
+Goals: Drawings - not reached (evidence missing)
+
+### Standards: not reached (no check ran)
+Goals: Standards - not reached (no check ran)
+
+### Modelling practice: 6 findings
+- **F-004** rebuild breaker, demonstrated - Two mates reference faces rather than reference geometry
+- **F-003** rebuild breaker, demonstrated - An under-defined sketch drives a Core feature
+- **F-002** discipline, demonstrated - Content features sit outside every group
+- **F-005** discipline, demonstrated - The part declares no global variable
+- **F-006** discipline, suspected - No dimension is driven by an equation
+- **F-001** hygiene, suspected - Three of the six groups are missing from the part tree
+Goals: Modelling practice - issues found
+
+### Hygiene: not reached (evidence missing)
+Goals: Hygiene - not reached (evidence missing)
+
+### Mass and material: not reached (no check ran)
+Goals: Mass and material - not reached (no check ran)
 
 What this run could not reach: 39 unresolved, 11 skipped, 0 failed, 7 out of scope.
 - fasteners: list_fasteners returned zero instances, so no screw or bolt joint could be checked.

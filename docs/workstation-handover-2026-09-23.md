@@ -241,10 +241,11 @@ row per step and task id. The development machine moves each answer into the res
     in step 11. The replay's requested figure, 459,000, assumes the model makes the recorded
     calls; the 0.3M assumes it does not repeat what the digest reported (the regrouped estimate),
     so a review that repeats checks fails T103 by design - record which calls repeated. The same
-    review is **007 T059**'s: when it ends, the pinned Start here panel's rows are the finding ids
-    `report.md`'s "Start here" lists, in its order (`Show-StartHere $run`, the test plan's step
-    4.1); Model check and Standards on part J show their Start here block above the chips, with
-    the ids of their own folders' reports (its steps 5.1 and 5.2). And it is **007 T060**'s timed
+    review is **007 T059**'s, as feature 013 changed it (013 T057): when it ends, the pane's
+    Findings by type lists the groups and rows `report.md`'s "Findings by type" lists, in its order
+    (`Show-FindingsByType $run`, the test plan's step 4.1); Model check and Standards on part J
+    show their Start here block above the chips, never a pass, each of its ids in their own
+    folders' reports in order within its group (its steps 5.1 and 5.2). And it is **007 T060**'s timed
     run: the engineer who knows the design gives the baseline, the seat notes supervision,
     verification and false-alarm minutes, and `swreview timing` records the four on its run
     folder only after a backend restart (the test plan's step 4.5, item 4), since a backend still

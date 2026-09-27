@@ -258,6 +258,7 @@ exceptions.json   carried forward from the newest same-design run, before the ch
 session.json      the recorded tool steps, so tool_result_ids name steps that exist
 report.md         the check-by-check result, headed by the verdict and the no-rebuild
                   sentence, with "Start here" as the section above Findings
+                  ("Findings by type" since feature 013 T052)
 attention.json    the ranking the report was rendered from, and the session id it
                   describes (feature 007 `contracts/attention.md` section 4). Not a
                   session file, and identical in shape to the one a model check writes

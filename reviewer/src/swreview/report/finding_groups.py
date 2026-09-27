@@ -66,6 +66,7 @@ __all__ = [
     "findings_by_type",
     "goal_lines",
     "goal_of",
+    "goal_state_text",
 ]
 
 CoverageBucket = Literal["checked", "skipped", "unresolved", "failed", "out_of_scope"]
@@ -432,5 +433,12 @@ def _goal_text(goals: Sequence[GoalLine]) -> str:
     """What a group with no row says: its first goal line's state in feature 009's precedence
     (issues, not reached, checked, not applicable), with that line's reason. A group with no row
     has a goal, or it is not rendered, and the precedence names every state."""
-    line = next(line for state in GOAL_STATE_PRECEDENCE for line in goals if line.state == state)
+    return goal_state_text(
+        next(line for state in GOAL_STATE_PRECEDENCE for line in goals if line.state == state)
+    )
+
+
+def goal_state_text(line: GoalLine) -> str:
+    """`not reached (evidence missing)`: a goal line's state and, when it has one, its reason -
+    the one wording of a goal state in a line, for a group with no row and for the report."""
     return line.state_label if line.reason is None else f"{line.state_label} ({line.reason})"

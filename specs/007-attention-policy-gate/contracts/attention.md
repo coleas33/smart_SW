@@ -103,6 +103,17 @@ and every existing golden, renders byte-identically (008 research R2.21).
 
 ## 3. The "Start here" section
 
+*Amended 2026-09-26 (feature 013 T052, its `contracts/grouped-list.md` section 6):* `report.md` no
+longer renders this section. In its place, with the same guard, stands `## Findings by type`: every
+finding in one row of one group or of the "Checked, no issue" fold, built by
+`report/finding_groups.findings_by_type` (the pane's own grouped view) - each group as `### {title}:
+{text}`, its rows as `- **F-007** {reason} - {title}` with the backend's fold count and reach after
+the title, a folded row's `   - Members: …` and a persisted explanation beneath, then the group's
+`Goals: …` line - followed by the coverage block and the policy footer below, unchanged. Every row is
+listed, so the report carries no not-amplified line. The gate brief and `swreview attention` keep the
+five-row Start here and its not-amplified line (`attention.start_here_lines`). What follows
+describes the section before feature 013.
+
 Rendered by `render_report(session, package=None, *, ranking=None)` only when a ranking is
 supplied, immediately above `## Findings`:
 

@@ -22,6 +22,9 @@ import re
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
+from uuid import UUID
+
+import pytest
 
 from swreview.agent.providers.fake import FakeProvider, ScriptedTurn
 from swreview.agent.runner import OPENING_MESSAGE, PROFILE_CHECK, ReviewRun, start_review
@@ -50,7 +53,15 @@ from swreview.prerun import (
 from swreview.report.attention import rank
 from swreview.report.markdown import render_report
 from swreview.report.session import ReviewSession, load_session
-from tests.support.attention import REVIEW_SESSION_FILE
+from tests.support.attention import (
+    PART_COMPONENT,
+    PIN_ONE,
+    PIN_TWO,
+    REVIEW_SESSION_FILE,
+    CoverageSpec,
+    FindingSpec,
+    build_attention_session,
+)
 from tests.support.prerun import (
     GATE_ON,
     MODEL_DRIVEN_CALLS,
@@ -61,6 +72,7 @@ from tests.support.prerun import (
 )
 from tests.support.roles_review import review_brief
 from tests.unit.test_report_start_here import section_of
+from tests.unit.test_review_summary import BIG_ASSEMBLY
 
 
 def started(
@@ -362,29 +374,79 @@ def test_the_gate_alone_runs_the_pre_run_and_opens_with_the_unchanged_digest(
     assert gated.system == lever5.system, "the brief is a user message, never the prefix"
 
 
-def test_the_briefs_start_here_ids_are_the_reports_start_here_ids_in_order() -> None:
-    """FR-031, and structurally: both sides read `ranking.rows` through
-    `attention.start_here_lines`, so this fails only if one of them stops doing that.
+def parity_sessions() -> list[ReviewSession]:
+    """The 2026-09-18 review (eight findings, two needing judgement, a sixth row the cap
+    leaves out), the big assembly (a folded family whose row the brief amplifies), and a
+    session of three undecided rows and two passes."""
+    passes = [
+        FindingSpec(check=check, status=status, component_ids=components, tool_result_ids=(0,))
+        for check, status, components in (
+            ("interference.static", "demonstrated", (PIN_ONE, PART_COMPONENT)),
+            ("rms.sketches.fully_defined", "demonstrated", (PART_COMPONENT,)),
+            ("rms.folders.present", "suspected", (PIN_ONE,)),
+            ("rms.folders.present", "checked_within_scope", (PIN_TWO,)),
+            ("hygiene.revision_present", "checked_within_scope", (PART_COMPONENT,)),
+        )
+    ]
+    return [
+        load_session(REVIEW_SESSION_FILE),
+        load_session(BIG_ASSEMBLY / "session.json"),
+        build_attention_session(
+            session_id=UUID("7a1e6d64-1f2b-4c3a-9d5e-00000000013a"),
+            findings=passes,
+            coverage=CoverageSpec(),
+            steps=("check_rms_part",),
+        ),
+    ]
 
-    The committed 2026-09-18 review session is the fixture, because it is the one whose
-    ordering was argued over: eight findings, two of them needing judgement, and a sixth row
-    that the cap leaves out of both renderings.
-    """
-    session = load_session(REVIEW_SESSION_FILE)
+
+@pytest.mark.parametrize("index", range(3), ids=["review", "big-assembly", "passes"])
+def test_each_of_the_briefs_ids_is_in_the_reports_index_in_order_within_its_group(
+    index: int,
+) -> None:
+    """Feature 007's FR-031 as feature 013 amended it (T051, its `contracts/grouped-list.md`
+    section 6): the report lists every finding by type, the brief amplifies at most five rows,
+    so each finding id of the brief's Start here is in the report's "Findings by type" - as a
+    row, or as a folded row's member - and the ids that share a group keep the brief's order
+    there. It replaces 007's anti-drift test, which compared the two Start here lists."""
+    session = parity_sessions()[index]
     ranking = rank(session)
 
     brief = gate_brief(PrerunResult(calls=(), not_evaluated=()), ranking)
     report = render_report(session, ranking=ranking)
 
-    in_brief = finding_ids(brief.splitlines())
-    in_report = finding_ids(section_of(report, "## Start here"))
-    assert in_brief == in_report
-    assert len(in_brief) == ranking.top_n
+    start_here = brief.split(f"{GATE_START_HERE_HEADER}\n", 1)[1].split("\n\n", 1)[0]
+    in_brief = finding_ids(start_here.splitlines())
+    groups = index_groups(section_of(report, "## Findings by type"))
+    assert in_brief and len(in_brief) == ranking.top_n
+    placed = {one: title for title, ids in groups.items() for one in ids}
+    assert set(in_brief) <= set(placed), "every amplified id is in the report's index"
+    for title, ids in groups.items():
+        assert [one for one in ids if one in in_brief] == [
+            one for one in in_brief if placed[one] == title
+        ], title
 
 
 FINDING_ID = re.compile(r"\*\*(F-\d+)\*\*")
-"""How both renderings spell an amplified row's finding id: `attention.start_here_lines`
-writes `**F-001**` and neither caller rewrites it."""
+"""How both renderings spell a row's finding id: `attention.start_here_lines` writes
+`**F-001**`, and so does the report's index."""
+
+MEMBER_IDS = re.compile(r"^   - Members: (.+)$")
+
+
+def index_groups(lines: Sequence[str]) -> dict[str, list[str]]:
+    """The report's "Findings by type", as each group heading's finding ids in order: a row's
+    id, then its other members."""
+    groups: dict[str, list[str]] = {}
+    ids: list[str] = []
+    for line in lines:
+        if line.startswith("### "):
+            ids = groups.setdefault(line, [])
+        elif line.startswith("- **"):
+            ids.extend(finding_ids([line]))
+        elif members := MEMBER_IDS.match(line):
+            ids.extend(one for one in members.group(1).split(", ") if one not in ids)
+    return groups
 
 
 def finding_ids(lines: Sequence[str]) -> list[str]:

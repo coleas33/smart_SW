@@ -65,6 +65,14 @@ silently dropped. The anti-drift test asserts the brief's finding ids
 equal the report's "Start here" ids in order for one fixture session, and it is structural:
 both come from `ranking.rows`.
 
+*Amended 2026-09-26 (feature 013 T052):* the report renders "Findings by type" (every row listed)
+in place of "Start here", so part 2's `Start here:` lines and not-amplified line are the brief's own,
+still rendered from the same `Ranking` by `attention.start_here_lines`, and `top_n` never counts a
+pass. The anti-drift test is the parity rule: each finding id of the brief's `Start here:` part is in
+the report's "Findings by type" - as a row or a folded row's member - and the ids that share a group
+keep the brief's order there (`test_prerun_digest.py`, on the 2026-09-18 review, the big assembly
+and a session with passes).
+
 ## 4. The checklist item
 
 ```yaml

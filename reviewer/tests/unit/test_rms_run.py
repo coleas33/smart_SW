@@ -260,6 +260,20 @@ class TestRunFolder:
         assert run.session_file.is_file()
         assert DESCRIBED_RULE in run.report_file.read_text(encoding="utf-8")
 
+    def test_the_report_opens_its_findings_with_the_findings_by_type(
+        self, check_dir: Path
+    ) -> None:
+        """Feature 013 T051 (003 `contracts/model-check.md`, amended): the check folder's
+        report carries "Findings by type" above Findings, every rms finding a row or a member
+        of the Modelling practice group."""
+        run = run_rms_check(check_dir, scope=RmsScope.all)
+
+        lines = run.report_file.read_text(encoding="utf-8").splitlines()
+
+        assert lines.index("## Findings by type") < lines.index("## Findings")
+        assert any(line.startswith("### Modelling practice: ") for line in lines)
+        assert "## Start here" not in lines
+
     def test_out_dir_takes_the_run_and_the_package_is_not_written(
         self, check_dir: Path, tmp_path: Path
     ) -> None:

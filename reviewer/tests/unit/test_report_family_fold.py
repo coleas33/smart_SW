@@ -108,15 +108,19 @@ def _finding_lines(report: str, heading: str) -> list[str]:
     return lines[start:end]
 
 
-def test_start_here_and_the_summary_agree_with_the_fold() -> None:
+def test_the_index_lists_the_family_unfolded_and_agrees_with_the_summary() -> None:
+    """Feature 013 (its `contracts/grouped-list.md` section 6): the report's "Findings by type"
+    replaced Start here, and there the family is unfolded - the Modelling practice group is the
+    fold - so its six findings of six rules are six rows, beside the two interference rows."""
     report = rendered(folded())
 
     summary = section_of(report, "## Summary")
-    start_here = section_of(report, "## Start here")
+    index = section_of(report, "## Findings by type")
     assert "- Total findings: 8" in summary
-    assert any("Modelling practice: 6 findings across 6 rules" in line for line in start_here)
-    numbered = [line for line in start_here if re.match(r"^\d+\. ", line)]
-    assert len(numbered) == 3
+    assert "### Modelling practice: 6 findings" in index
+    rows = [line for line in index if re.match(r"^- \*\*F-\d+\*\* ", line)]
+    assert len(rows) == 8
+    assert not [line for line in index if "across 6 rules" in line]
 
 
 def test_an_unfolded_session_renders_exactly_as_before() -> None:
@@ -126,7 +130,9 @@ def test_an_unfolded_session_renders_exactly_as_before() -> None:
     before = render_report(session, attention_package(), ranking=rank(session))
     assert render_report(explicit, attention_package(), ranking=rank(explicit)) == before
     assert "<details>" not in before
-    assert "Modelling practice" not in before
+    assert "Modelling practice" not in "\n".join(findings_section(before)), (
+        "no family subsection; the index's Modelling practice group is feature 013's"
+    )
 
 
 def test_a_family_with_no_findings_renders_no_subsection() -> None:
