@@ -50,6 +50,50 @@ public sealed class PingResult
     /// </summary>
     [JsonPropertyName("component_count")]
     public int ComponentCount { get; set; }
+
+    /// <summary>
+    /// Protocol 1.4, feature 013 (contracts/drawing-capability.md section 1): what
+    /// <c>drawing.read</c> can do on this host, one of <see cref="DrawingReadModes.All"/>, read from
+    /// the source that answers it (<see cref="DrawingReadModes.Of"/>). The backend offers the
+    /// candidate question only on <c>opens_closed</c>. Unfilled, it says <c>none</c>: absent means
+    /// unable, so an answer never claims more than the host can do.
+    /// </summary>
+    [JsonPropertyName("drawing_read")]
+    public string DrawingRead { get; set; } = DrawingReadModes.None;
+}
+
+/// <summary>
+/// Feature 013 (contracts/drawing-capability.md section 1, research R2.24): the three answers
+/// <see cref="PingResult.DrawingRead"/> gives, and the one rule that picks among them.
+/// </summary>
+public static class DrawingReadModes
+{
+    /// <summary>No confirmed-drawing source: the console host, or an add-in with no review records.</summary>
+    public const string None = "none";
+
+    /// <summary>A source whose seam's switch is off: an open drawing is read, a closed one refused.</summary>
+    public const string OpenOnly = "open_only";
+
+    /// <summary>A source whose seam's switch is on: a closed drawing is opened read-only and read.</summary>
+    public const string OpensClosed = "opens_closed";
+
+    /// <summary>Every answer, in the contract's order.</summary>
+    public static readonly string[] All = { None, OpenOnly, OpensClosed };
+
+    /// <summary>
+    /// What <paramref name="source"/> can do: <see cref="None"/> without one, otherwise its seam's
+    /// switch - read from the object that answers <c>drawing.read</c>, so ping and the read cannot
+    /// disagree.
+    /// </summary>
+    public static string Of(IConfirmedDrawingSource? source)
+    {
+        if (source == null)
+        {
+            return None;
+        }
+
+        return source.OpensClosedDrawings ? OpensClosed : OpenOnly;
+    }
 }
 
 /// <summary>What <c>capture</c> answers.</summary>
@@ -173,6 +217,13 @@ public sealed class ConfirmedDrawingRefused : InvalidOperationException
 public interface IConfirmedDrawingSource
 {
     ConfirmedDrawingResult Read(string runId, string documentId);
+
+    /// <summary>
+    /// Feature 013 (contracts/drawing-capability.md section 1): whether <see cref="Read"/> may open
+    /// a closed drawing - the switch of the seam it opens through, which <c>ping</c> reports as
+    /// <see cref="PingResult.DrawingRead"/>. Reading it opens, reads and calls nothing.
+    /// </summary>
+    bool OpensClosedDrawings { get; }
 }
 
 /// <summary>What <c>interference</c> answers.</summary>
@@ -301,12 +352,13 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     /// 1.1 is additive: the four 1.0 commands and the envelope are untouched, and it adds the
     /// <c>remodel.*</c> family and <c>result.error_code</c> on a failed reply. 1.2 is additive
     /// again: everything 1.1 speaks is unchanged and it adds one command, <c>tessellate</c>. 1.3
-    /// (feature 011) adds one more, <c>drawing.read</c>, and changes nothing else.
+    /// (feature 011) adds one more, <c>drawing.read</c>, and changes nothing else. 1.4 (feature 013)
+    /// adds one member to the <c>ping</c> answer, <c>drawing_read</c>, and changes nothing else.
     /// <c>ping</c> reports this value and a client compares against it
     /// (<c>PROTOCOL_VERSION</c> in <c>reviewer/src/swreview/bridge/client.py</c>), so it is
     /// what the document says it is or the two ends have already come apart.
     /// </summary>
-    public const string ProtocolVersion = "1.3";
+    public const string ProtocolVersion = "1.4";
 
     /// <summary>
     /// The whole of what a refused request is told (T045). One word, the same for a wrong
@@ -459,6 +511,7 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
         Document = _services.DocumentPath,
         Configuration = _services.Configuration,
         ComponentCount = _services.Components.Count,
+        DrawingRead = DrawingReadModes.Of(_services.ConfirmedDrawings),
     };
 
     private BridgeResponse Capture(BridgeRequest request)

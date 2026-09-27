@@ -1,6 +1,6 @@
 # Bridge protocol (`swreview-extract serve`)
 
-Protocol version **1.3**. This file is the contract the Python client in
+Protocol version **1.4**. This file is the contract the Python client in
 `reviewer/src/swreview/bridge/client.py` (T073) is written against; the agent-facing tool
 names and arguments are in
 `specs/001-agentic-design-review/contracts/agent-tools.md`.
@@ -22,6 +22,11 @@ the rule it states - one additive minor per added command - is what 1.2 obeys.
 **1.3 is additive to 1.2** (feature 011, T072). Everything 1.2 speaks is untouched, and 1.3
 adds exactly one command, `drawing.read`, described under "`drawing.read`" below. A client
 written against 1.0, 1.1 or 1.2 works against a 1.3 host without an edit.
+
+**1.4 is additive to 1.3** (feature 013, T073). Everything 1.3 speaks is untouched, and 1.4 adds
+exactly one member to the `ping` answer, `drawing_read`, described under "`ping`" below. No command
+is added. A client written against 1.0 to 1.3 works against a 1.4 host without an edit and ignores
+the member; the backend reads it (`specs/013-engineer-first-review/contracts/drawing-capability.md`).
 
 `ping` reports the host's own `SwBridgeDispatcher.ProtocolVersion`, which is what a client
 compares against.
@@ -126,12 +131,25 @@ an `Interference` that travels over the bridge is byte-identical to one written 
 ```
 
 ```json
-{"id":"1","status":"ok","result":{"pong":true,"protocol":"1.3","sw_version":"32.5.0","document":"C:\\work\\bracket-assy.SLDASM","configuration":"Default","component_count":17},"error":null,"elapsed_ms":1}
+{"id":"1","status":"ok","result":{"pong":true,"protocol":"1.4","sw_version":"32.5.0","document":"C:\\work\\bracket-assy.SLDASM","configuration":"Default","component_count":17,"drawing_read":"open_only"},"error":null,"elapsed_ms":1}
 ```
 
 `document` and `component_count` are how a client checks that the component ids in its
 `package.json` mean the same thing here: they only do while this is the assembly that was
 dumped, in the same configuration.
+
+`drawing_read` (1.4) says what `drawing.read` can do on this host, read from the source that
+answers it, so the two cannot disagree:
+
+| Value | When | What `drawing.read` does |
+|-------|------|--------------------------|
+| `none` | no confirmed-drawing source: the console host, or an add-in with no review records | answers that this bridge cannot read a drawing |
+| `open_only` | the source's seam is off (`DrawingOpenScope.SeatValidated` false, as shipped until probe D14) | reads a candidate the engineer has open; refuses a closed one |
+| `opens_closed` | the source's seam is on | also opens a closed candidate read-only and hidden, reads it and closes it |
+
+The backend offers the engineer the candidate question only on `opens_closed`; otherwise it shows
+an instruction line ("Open {drawing} in SOLIDWORKS, then press Review again with {model} active").
+A client that finds the member absent, an unknown value or an older `protocol` reads `none`.
 
 ## `capture` — `bridge_capture(persist_ref, view)`
 

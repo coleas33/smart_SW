@@ -1204,6 +1204,61 @@ public sealed class ToolServiceWiringTests
     // confirmed read is given. Every rule of the read itself is the extractor's
     // (`ConfirmedDrawingReadTests`, `DrawingOpenTests`); these pin the wiring.
 
+    // ---- ping's drawing capability (feature 013 T072, contracts/drawing-capability.md section 1) --
+    //
+    // The backend offers the candidate question only when the host can open a closed drawing. The
+    // add-in reports it on ping from the source it built, so ping and `drawing.read` read one
+    // switch: `open_only` while the seam is off (an open drawing is still read), `opens_closed` once
+    // it is on, and `none` when the host keeps no review records and so built no source.
+
+    [Theory]
+    [InlineData(false, "open_only")]
+    [InlineData(true, "opens_closed")]
+    public void PingReportsTheSwitchTheAddInsSourceWasBuiltWith(bool seatValidated, string expected)
+    {
+        using (var world = new DrawingReadWorld(seatValidated))
+        {
+            BridgeResponse response = world.Ping(DrawingReadWorld.ReviewSecret);
+
+            Assert.Equal(BridgeStatus.Ok, response.Status);
+            Assert.Equal(expected, Assert.IsType<PingResult>(response.Result).DrawingRead);
+            Assert.Empty(world.Seat.Calls);
+            Assert.Empty(world.LookupRunIds);
+        }
+    }
+
+    [Fact]
+    public void AHostGivenNoReviewRecordsReportsThatItReadsNoDrawing()
+    {
+        using (var world = new DrawingReadWorld(seatValidated: true, reviewRecords: false))
+        {
+            BridgeResponse response = world.Ping(DrawingReadWorld.ReviewSecret);
+
+            Assert.Null(world.Source);
+            Assert.Equal(DrawingReadModes.None, Assert.IsType<PingResult>(response.Result).DrawingRead);
+        }
+    }
+
+    /// <summary>
+    /// The add-in builds its source with <see cref="DrawingOpenScope.SeatValidated"/>, which is off
+    /// until probe D14 passes at a seat, so today ping answers <c>open_only</c> and the backend shows
+    /// the instruction line rather than a question it cannot honour. Read relatively, as every test
+    /// but <c>DrawingOpenScopeTests.TheSeamShipsOffUntilTheSeatConfirmsIt</c> reads the shipped
+    /// switch, so 011 T077's flip turns this answer into <c>opens_closed</c> with no edit here.
+    /// </summary>
+    [Fact]
+    public void TheShippedSwitchIsReportedAsWhatItMeansOpenOnlyUntilProbeD14Passes()
+    {
+        using (var world = new DrawingReadWorld(seatValidated: DrawingOpenScope.SeatValidated))
+        {
+            BridgeResponse response = world.Ping(DrawingReadWorld.ReviewSecret);
+
+            Assert.Equal(
+                DrawingOpenScope.SeatValidated ? DrawingReadModes.OpensClosed : DrawingReadModes.OpenOnly,
+                Assert.IsType<PingResult>(response.Result).DrawingRead);
+        }
+    }
+
     /// <summary>
     /// Null review records - <c>ToolServiceOptions.ReviewRunDirectory</c>'s default - build no
     /// source, and the command then answers the dispatcher's sentence rather than reading from
@@ -1860,6 +1915,15 @@ public sealed class ToolServiceWiringTests
                 { "command", BridgeCommands.DrawingRead },
                 { "secret", secret },
                 { "params", new Dictionary<string, string> { { "run_id", runId }, { "document_id", documentId } } },
+            }));
+
+        /// <summary>One <c>ping</c> line, answered through the whole request path.</summary>
+        public BridgeResponse Ping(string secret) =>
+            Answer(JsonSerializer.Serialize(new Dictionary<string, object>
+            {
+                { "id", "8" },
+                { "command", BridgeCommands.Ping },
+                { "secret", secret },
             }));
 
         /// <summary>One request line exactly as written, answered through the whole request path.</summary>

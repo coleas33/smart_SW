@@ -108,6 +108,33 @@ public class BridgeProtocolTests
         Assert.DoesNotContain("\r", line, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Feature 013 T072: protocol 1.4 adds one member to the ping answer, <c>drawing_read</c>, and
+    /// changes nothing else - the line Serve/PROTOCOL.md shows, with the capability last.
+    /// </summary>
+    [Fact]
+    public void WriteResponse_APingAnswerIsProtocol14AndCarriesTheDrawingCapability()
+    {
+        string line = BridgeCodec.WriteResponse(BridgeResponse.Ok(
+            "1",
+            new PingResult
+            {
+                SwVersion = "32.5.0",
+                Document = @"C:\work\bracket-assy.SLDASM",
+                Configuration = "Default",
+                ComponentCount = 17,
+                DrawingRead = DrawingReadModes.OpenOnly,
+            }));
+
+        Assert.Contains(
+            "\"result\":{\"pong\":true,\"protocol\":\"1.4\",\"sw_version\":\"32.5.0\","
+            + "\"document\":\"C:\\\\work\\\\bracket-assy.SLDASM\",\"configuration\":\"Default\","
+            + "\"component_count\":17,\"drawing_read\":\"open_only\"}",
+            line,
+            StringComparison.Ordinal);
+        Assert.Equal("1.4", SwBridgeDispatcher.ProtocolVersion);
+    }
+
     [Fact]
     public void WriteResponse_CarriesTheEnvelopeFieldsProtocolMdNames()
     {

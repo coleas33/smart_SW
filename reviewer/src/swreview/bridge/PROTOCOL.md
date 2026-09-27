@@ -1,7 +1,7 @@
 # Bridge protocol (Python side)
 
 **The authoritative protocol is
-`extractor/SwReview.Extractor.Console/Serve/PROTOCOL.md`** (protocol version 1.3). That
+`extractor/SwReview.Extractor.Console/Serve/PROTOCOL.md`** (protocol version 1.4). That
 file describes what `SwReview.Extractor.Console.exe serve --pipe <name>` speaks;
 `swreview.bridge.client` is written against it, and
 `reviewer/tests/unit/test_bridge_client.py` is the executable copy of what this client
