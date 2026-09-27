@@ -1,6 +1,6 @@
 # Workstation findings <date>
 
-The results sheet of `docs/workstation-test-plan-2026-09-23.md`. The plan's step 1.4, once the
+The results sheet of `docs/test-plan-2026-09-27/workstation-test-plan.md`. The plan's step 1.4, once the
 update has brought this file, copies it into the handover folder as `pane-findings-<date>.md`,
 where the date is the handover folder's own date, the first day of the sitting. Fill it in there as
 each step ends; step 6.4 finishes it and step 6.5 hands it over with the folder. Nothing in it is

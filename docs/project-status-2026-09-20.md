@@ -153,7 +153,7 @@ outer `smart_SW-handoff-2026-09-20/` directory so the original relative paths wo
 the owner's decision 11B of 2026-09-24 the tracked ones name the assemblies in words - the
 small assembly, the big assembly - instead of by design number.)
 
-- [Original handoff overview](../README-START-HERE.md).
+- [Original handoff overview](handoff-2026-09-20-start-here.md).
 - [Detailed findings and U1–U7 recommendations](pane-findings-2026-09-20.md).
 - The small assembly's Review report, `report.md` in `dumps/20260919-184136-…/`, with
   the package, session, attention record, and event stream alongside it.

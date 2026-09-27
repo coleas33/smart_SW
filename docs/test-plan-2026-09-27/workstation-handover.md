@@ -13,9 +13,9 @@ step 2, 007 T059 and T060 in step 13), and of three items of feature 004 the own
 where its record goes. The task
 texts in `specs/00N-*/tasks.md` stay the source of truth: where this document and a task
 disagree, the task wins and the difference is a finding. The engineer who runs the sitting follows
-`docs/workstation-test-plan-2026-09-23.md` (011 T100): the same sitting in plain, numbered steps,
+`docs/test-plan-2026-09-27/workstation-test-plan.md` (011 T100): the same sitting in plain, numbered steps,
 each with its exact command and what counts as pass or fail, and its results sheet
-`docs/workstation-results-2026-09-23.md`, which becomes the findings document. **Where this list
+`docs/test-plan-2026-09-27/workstation-results.md`, which becomes the findings document. **Where this list
 and the test plan differ, the test plan is what the seat follows.** On any failure, the test plan's
 sections "When a step fails", "If SOLIDWORKS stops answering" and "Going back to the build you
 had", and its Results table, are what the seat follows; this list does not repeat them.
@@ -157,7 +157,7 @@ if (-not (Test-Path "$H\notes\commit-before.txt")) { git rev-parse --short HEAD 
 git fetch origin; git log --oneline HEAD..origin/main
 git pull --ff-only origin main; "pull exit code: $LASTEXITCODE"
 .\extractor\tools\update-workstation.ps1 -NoPull      # add -TokenizerFrom "<file>" or -SolidWorksRoot "<root>" as section 2 says
-git log --oneline -1; Test-Path docs\workstation-results-2026-09-23.md   # the commit, then True: the results sheet is there
+git log --oneline -1; Test-Path docs\test-plan-2026-09-27\workstation-results.md   # the commit, then True: the results sheet is there
 git merge-base --is-ancestor 8d308be HEAD; "holds 8d308be: $($LASTEXITCODE -eq 0)"   # True: the probe names each dimension (T066)
 Select-String -Path "$env:LOCALAPPDATA\SwReview\standards.yaml" -Pattern '^version:'   # after step 1 below
 ```
@@ -186,7 +186,7 @@ alias in the shell it runs in; every `uv run` command runs from `<repo>\reviewer
 Each step: the task, what to run, what decides it, and where the record goes. "The findings
 document" is `pane-findings-<date>.md` in `%LOCALAPPDATA%\SwReview\handover\<date>\` (runbook
 section 8), where the date is the handover folder's, the sitting's first day: the test plan copies
-`docs/workstation-results-2026-09-23.md` there at its step 1.4, on day 1, once the update has
+`docs/test-plan-2026-09-27/workstation-results.md` there at its step 1.4, on day 1, once the update has
 brought it (an older checkout has no such file before the pull), and its Results table takes one
 row per step and task id. The development machine moves each answer into the research file named.
 

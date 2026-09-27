@@ -22,7 +22,7 @@ pilot proposal and `sw-review-architecture-proposal.md` the architecture decisio
 
 See [the September 20 project status](docs/project-status-2026-09-20.md) for the
 current baseline, pilot findings, and prioritized next steps. The imported
-[handoff overview](README-START-HERE.md) and
+[handoff overview](docs/handoff-2026-09-20-start-here.md) and
 [detailed findings](docs/pane-findings-2026-09-20.md) preserve the pilot report.
 
 The [pre-test readiness plan](docs/pretest-readiness-plan-2026-09-20.md) records the
@@ -211,7 +211,7 @@ and dispositions disabled. The contracts are `specs/009-engineer-workspace/contr
 Installing, updating and checking the add-in on the pilot workstation, including where the
 per-machine files live and how findings come back: `docs/workstation-runbook.md`. The next
 licensed-seat sitting, in plain steps for the engineer who runs it:
-[the workstation test plan](docs/workstation-test-plan-2026-09-23.md).
+[the workstation test plan](docs/test-plan-2026-09-27/workstation-test-plan.md).
 
 ## Resilient Modeling checks
 
