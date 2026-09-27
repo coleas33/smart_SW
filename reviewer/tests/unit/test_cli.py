@@ -2620,8 +2620,9 @@ def test_pane_defaults_records_the_panes_settings(tmp_package_dir: Path, tmp_pat
     recorded = reviewed_settings(tmp_package_dir, tmp_path / "run", "--pane-defaults")
 
     pane = pane_defaults(ProviderName.FAKE)
-    # Edited deliberately by feature 013 T121: lever 14, off in the pane, is not written.
-    assert recorded["efficiency"] == pane.efficiency.model_dump(exclude={"drop_prior_reasoning"})
+    # Edited deliberately by feature 013 T121 and T125: lever 14, on in the pane since T125, is
+    # written with the other levers.
+    assert recorded["efficiency"] == pane.efficiency.model_dump()
     assert recorded["model_view"] == pane.model_view.model_dump()
 
 
