@@ -112,6 +112,7 @@ public sealed class ReviewPageViewsTests
         Assert.True(run.NoChat.GetProperty("stateHidden").GetBoolean(), "the status line is shown with no chat.");
         Assert.Equal("The review is running.", run.Running.GetProperty("state").GetString());
         Assert.Equal("Reconnecting to the review.", run.Reconnecting.GetProperty("state").GetString());
+        Assert.Equal(1, run.ReconnectsHeld);
         Assert.Equal("Waiting for your answers.", run.Waiting.GetProperty("state").GetString());
         Assert.Equal("The review has finished.", run.Finished.GetProperty("state").GetString());
     }
@@ -224,10 +225,15 @@ return JSON.stringify({
                 await driver.Settle();
                 run.PinWaiting = await driver.Read(ReadPins);
 
+                // The page's one timer is the stream's reconnect. Held, "Reconnecting" is read
+                // after the page has handled the closure and before the reconnect can end it, and
+                // the reconnect runs when the script says so rather than after a second.
+                await driver.HoldTimers();
+                int opens = driver.Posted("events.open").Length;
                 await driver.Post("events.closed", new { chat_id = "chat-1", reason = "the backend closed the event stream." });
                 run.Reconnecting = await driver.Read(ReadState);
-                await Task.Delay(1300);
-                await driver.Settle();
+                run.ReconnectsHeld = await driver.RunHeldTimers();
+                await driver.Until(() => driver.Posted("events.open").Length > opens, "reopened the event stream it lost");
 
                 await driver.Push("chat-1", 300, "text.done", @"{""text"":""Because the pin overlaps the bore.""}");
                 await driver.Settle();
@@ -344,6 +350,9 @@ return JSON.stringify({
         public JsonElement PinWaiting { get; set; }
 
         public JsonElement Reconnecting { get; set; }
+
+        /// <summary>How many timers the page had set when the stream closed: the reconnect, and nothing else.</summary>
+        public int ReconnectsHeld { get; set; }
 
         public JsonElement PinAnswered { get; set; }
 

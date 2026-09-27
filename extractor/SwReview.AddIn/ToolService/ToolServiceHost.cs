@@ -927,7 +927,14 @@ public sealed class ToolServiceHost : IToolService
     /// The teardown's reach to the application thread. A teardown that cannot be posted, or that
     /// does not answer within <see cref="ToolServiceOptions.TeardownTimeout"/>, is written down;
     /// an abandoned one still runs when the application thread is free, and writes its own line
-    /// then (<see cref="AppThreadCall{T}"/> runs a late delegate and only discards its result).
+    /// then (<see cref="AppThreadCall{T}"/> runs a late delegate; no waiter reads its result).
+    ///
+    /// 004 T184 (default taken 2026-09-27, the owner may revise): giving up is
+    /// <see cref="AppThreadCall{T}.WaitOrAbandon"/>, one step under the call's lock, so a teardown
+    /// that answers as the wait runs out is taken as answered - its failure thrown here, as one in
+    /// time is - and is never written down as not answering. One that fails after it was abandoned
+    /// writes the posted line with its failure (<see cref="LateTeardownFailed"/>) instead of
+    /// nothing.
     /// </summary>
     private void EndRemodelSessionOnApplicationThread()
     {
@@ -945,15 +952,24 @@ public sealed class ToolServiceHost : IToolService
             return;
         }
 
-        AppThreadCall<bool> call = AppThreadCall<bool>.Post(_invoker, () =>
-        {
-            EndRemodelSession(inline: false);
-            return true;
-        });
+        AppThreadCall<bool> call = AppThreadCall<bool>.Post(
+            _invoker,
+            () =>
+            {
+                EndRemodelSession(inline: false);
+                return true;
+            },
+            late: (_, failure) =>
+            {
+                // A late success wrote its own line inside the routine.
+                if (failure != null)
+                {
+                    LateTeardownFailed(failure);
+                }
+            });
 
-        if (!call.Wait(_teardownTimeout))
+        if (!call.WaitOrAbandon(_teardownTimeout))
         {
-            call.Abandon();
             _log.WriteLine(
                 "remodel teardown did not answer within "
                 + _teardownTimeout.TotalSeconds.ToString("0.###", CultureInfo.InvariantCulture)
@@ -989,6 +1005,19 @@ public sealed class ToolServiceHost : IToolService
             new RemodelRunLog(() => outcome.RunDirectory).Write(line);
         }
     }
+
+    /// <summary>
+    /// On the application thread, for a posted teardown that threw after its waiter gave up: the
+    /// posted line, carrying the failure, where a teardown that fails in time is written down by
+    /// <see cref="Dispose"/> as failing before the pipe closed. What the routine had done before
+    /// it threw is not known here, so the line claims nothing about the session; it is stamped
+    /// with the machine's clock, since the host's may be what failed, and goes to this service's
+    /// log only, as the one in time does.
+    /// </summary>
+    private void LateTeardownFailed(Exception failure) => _log.WriteLine(
+        "remodel teardown thread=posted reason=" + RemodelSessionEnd.ReasonToolServiceStopped
+        + " failed after the pipe closed: " + failure.GetType().Name + ": "
+        + failure.Message.Replace("\r", " ").Replace("\n", " "));
 
     /// <summary>
     /// The teardown line, without its trailing newline: what ended, on which path, the gated set
@@ -1252,9 +1281,8 @@ public sealed class ToolServiceHost : IToolService
         }
 
         AppThreadCall<T> call = AppThreadCall<T>.Post(invoker, work);
-        if (!call.Wait(timeout))
+        if (!call.WaitOrAbandon(timeout))
         {
-            call.Abandon();
             throw new TimeoutException(InProcPipeServer.TimedOutError(timeout) + ".");
         }
 

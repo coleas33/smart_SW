@@ -492,6 +492,102 @@ public sealed class InProcPipeServerTests
         }
     }
 
+    // ---- giving up and abandoning are one step (004 T184) -----------------------------------
+    //
+    // A waiter that timed out and then abandoned in a second step left a moment between the two
+    // in which the work could finish: its answer was then thrown away and the waiter reported a
+    // call that had answered as one that had not. WaitOrAbandon decides under the call's one
+    // lock, and what the work produces after it was abandoned goes to the work's own late report.
+
+    [Fact]
+    public void WaitOrAbandonTakesAnAnswerThatHasArrivedEvenWithNoTimeLeft()
+    {
+        using (var app = new FakeAppThread(manual: true))
+        {
+            AppThreadCall<int> call = AppThreadCall<int>.Post(app, () => 42);
+            app.ReleaseOne();
+            Until(() => app.Ran == 1, "the delegate ran");
+
+            Assert.True(call.WaitOrAbandon(TimeSpan.Zero), "an answer already in was reported as none");
+            Assert.False(call.Abandoned);
+            Assert.Equal(42, call.Result);
+        }
+    }
+
+    [Fact]
+    public void WaitOrAbandonThatGivesUpHandsWhatTheWorkLaterProducesToItsLateReport()
+    {
+        using (var app = new GatedInvoker())
+        {
+            app.Release();
+            var late = new List<(int Value, Exception? Failure)>();
+            AppThreadCall<int> call = AppThreadCall<int>.Post(app, () => 42, (value, failure) => late.Add((value, failure)));
+
+            Assert.False(call.WaitOrAbandon(TimeSpan.Zero));
+            Assert.True(call.Abandoned);
+            Assert.Empty(late);
+
+            app.RunPending();
+
+            Assert.Equal(new[] { (42, (Exception?)null) }, late);
+            Assert.False(call.Completed);
+        }
+    }
+
+    [Fact]
+    public void ALateFailureGoesToTheLateReportAndNotToTheWaiter()
+    {
+        using (var app = new GatedInvoker())
+        {
+            app.Release();
+            Exception? reported = null;
+            AppThreadCall<int> call = AppThreadCall<int>.Post(
+                app, () => throw new InvalidOperationException("the clock stopped"), (_, failure) => reported = failure);
+
+            Assert.False(call.WaitOrAbandon(TimeSpan.Zero));
+            app.RunPending();
+
+            Assert.Equal("the clock stopped", Assert.IsType<InvalidOperationException>(reported).Message);
+            Assert.Null(call.Failure);
+        }
+    }
+
+    [Fact]
+    public void AnAnswerInTimeIsNeverReportedLate()
+    {
+        using (var app = new GatedInvoker())
+        {
+            app.Release();
+            int lateReports = 0;
+            AppThreadCall<int> call = AppThreadCall<int>.Post(app, () => 42, (_, _) => lateReports++);
+
+            app.RunPending();
+
+            Assert.True(call.WaitOrAbandon(TimeSpan.Zero));
+            Assert.Equal(42, call.Result);
+            Assert.Equal(0, lateReports);
+        }
+    }
+
+    /// <summary>
+    /// The late report runs on the application thread, where an exception ends the process, and
+    /// the process is SOLIDWORKS: whatever it throws stays there.
+    /// </summary>
+    [Fact]
+    public void ALateReportThatThrowsDoesNotLeaveTheApplicationThread()
+    {
+        using (var app = new GatedInvoker())
+        {
+            app.Release();
+            AppThreadCall<int> call = AppThreadCall<int>.Post(
+                app, () => 42, (_, _) => throw new InvalidOperationException("the log is gone"));
+
+            Assert.False(call.WaitOrAbandon(TimeSpan.Zero));
+
+            Assert.Null(Record.Exception(app.RunPending));
+        }
+    }
+
     // ---- the control the work is marshalled onto --------------------------------------------
 
     [Fact]

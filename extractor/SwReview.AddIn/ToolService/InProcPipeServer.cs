@@ -131,17 +131,26 @@ public sealed class ControlAppThreadInvoker : IAppThreadInvoker
 ///
 /// Deliberately built on <see cref="Monitor"/> rather than an event handle: nothing here is
 /// disposable, so a late delegate cannot meet a disposed wait handle.
+///
+/// 004 T184 (default taken 2026-09-27, the owner may revise): a waiter that gives up does so with
+/// <see cref="WaitOrAbandon"/>, which decides under the one lock the delegate publishes under, so
+/// there is no moment between "the wait ran out" and "abandoned" in which an answer can arrive
+/// and be thrown away while the waiter reports none; and what the delegate produces after it was
+/// abandoned - a result or a failure - goes to the late report it was posted with, on the
+/// application thread, instead of nowhere.
 /// </summary>
 public sealed class AppThreadCall<T>
 {
     private readonly object _gate = new object();
+    private readonly Action<T?, Exception?>? _late;
     private bool _completed;
     private bool _abandoned;
     private T? _result;
     private Exception? _failure;
 
-    private AppThreadCall()
+    private AppThreadCall(Action<T?, Exception?>? late)
     {
+        _late = late;
     }
 
     /// <summary>True once the delegate published a result the waiter may read.</summary>
@@ -196,7 +205,11 @@ public sealed class AppThreadCall<T>
     /// Queues <paramref name="work"/> onto the application thread. Whatever
     /// <see cref="IAppThreadInvoker.Post"/> throws is thrown here, before a call exists.
     /// </summary>
-    public static AppThreadCall<T> Post(IAppThreadInvoker invoker, Func<T> work)
+    /// <param name="late">Told, on the application thread, what <paramref name="work"/> returned
+    /// or threw when it finished after the call was abandoned - the only place that outcome can
+    /// still be reported. Whatever it throws is swallowed there: the application thread is
+    /// SOLIDWORKS'.</param>
+    public static AppThreadCall<T> Post(IAppThreadInvoker invoker, Func<T> work, Action<T?, Exception?>? late = null)
     {
         if (invoker == null)
         {
@@ -208,7 +221,7 @@ public sealed class AppThreadCall<T>
             throw new ArgumentNullException(nameof(work));
         }
 
-        var call = new AppThreadCall<T>();
+        var call = new AppThreadCall<T>(late);
         invoker.Post(() => call.Publish(work));
         return call;
     }
@@ -217,7 +230,18 @@ public sealed class AppThreadCall<T>
     /// Waits up to <paramref name="timeout"/>. False means the call has not answered - it
     /// timed out, or it was abandoned by <see cref="Abandon"/>.
     /// </summary>
-    public bool Wait(TimeSpan timeout)
+    public bool Wait(TimeSpan timeout) => WaitCore(timeout, abandonWhenItRunsOut: false);
+
+    /// <summary>
+    /// Waits up to <paramref name="timeout"/> and, if the call has not answered by then, abandons
+    /// it in the same step, under the lock the delegate publishes under. True: it answered, in
+    /// time or at the last moment, and <see cref="Result"/> and <see cref="Failure"/> are its. False:
+    /// it is abandoned (here, or earlier by <see cref="Abandon"/>), and what the delegate produces
+    /// later goes to its late report.
+    /// </summary>
+    public bool WaitOrAbandon(TimeSpan timeout) => WaitCore(timeout, abandonWhenItRunsOut: true);
+
+    private bool WaitCore(TimeSpan timeout, bool abandonWhenItRunsOut)
     {
         var clock = Stopwatch.StartNew();
         lock (_gate)
@@ -227,6 +251,12 @@ public sealed class AppThreadCall<T>
                 TimeSpan remaining = timeout - clock.Elapsed;
                 if (remaining <= TimeSpan.Zero)
                 {
+                    if (abandonWhenItRunsOut)
+                    {
+                        _abandoned = true;
+                        Monitor.PulseAll(_gate);
+                    }
+
                     return false;
                 }
 
@@ -265,16 +295,25 @@ public sealed class AppThreadCall<T>
 
         lock (_gate)
         {
-            if (_abandoned)
+            if (!_abandoned)
             {
-                // Too late. Nobody is listening and nobody may be told.
+                _result = value;
+                _failure = failure;
+                _completed = true;
+                Monitor.PulseAll(_gate);
                 return;
             }
+        }
 
-            _result = value;
-            _failure = failure;
-            _completed = true;
-            Monitor.PulseAll(_gate);
+        // Too late: nobody is listening and no waiter may be told. The late report, if the
+        // work has one, is the only place this outcome can still go.
+        try
+        {
+            _late?.Invoke(value, failure);
+        }
+        catch (Exception)
+        {
+            // On the application thread, where nothing may escape.
         }
     }
 }
@@ -907,13 +946,13 @@ public sealed class InProcPipeServer : IDisposable
 
         try
         {
-            if (call.Wait(_timeout))
+            // Giving up and abandoning in one step (004 T184): a request that answers as the wait
+            // runs out is answered with what it did, never told it timed out, and nothing this
+            // call does after it was abandoned may reach a client.
+            if (call.WaitOrAbandon(_timeout))
             {
                 return call.Result!;
             }
-
-            // Nothing this call does later may reach a client.
-            call.Abandon();
 
             if (_stopping.IsCancellationRequested)
             {

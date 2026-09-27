@@ -585,6 +585,22 @@ set drained from the observer, and the outcome - goes to the tool-service log an
 reaches the add-in through `ToolServiceOptions.RemodelSessionEnded`, and a failure becomes the
 Remodel page's one status error (`pane-remodel-messages.md`).
 
+*Amended 2026-09-27 (default taken 2026-09-27, the owner may revise; `tasks.md` T184):* **the
+teardown's log is true about a posted teardown whatever time it answers.** The bounded wait gives up
+and abandons in one step, under the lock the posted call publishes under
+(`AppThreadCall.WaitOrAbandon`), so a teardown that answers as the wait runs out is taken as
+answered: its line is its own, a failure it threw is written as failing before the pipe closed, as
+one in time is, and no "did not answer within ... s" line is written for it. A teardown that did not
+answer is written down once as not answering, the pipe closes, and the teardown still runs when the
+application thread is free. When it then succeeds it writes its own teardown line (`thread=posted`),
+as before; when it throws it writes the posted line with the failure,
+`remodel teardown thread=posted reason=tool_service_stopped failed after the pipe closed: {type}: {message}`,
+stamped with the machine's clock (the host's may be what failed) and claiming nothing about the
+session it does not know - where until now it wrote nothing, because the call discarded what nobody
+waited for. Like the failure written in time, it goes to the tool-service log only. The request path
+and the attach and bind waits give up the same way, so a request that answers as its wait runs out
+is answered with what it did rather than told the application thread did not answer.
+
 **The run root is used up at open** (`tasks.md` T158, a design choice of 2026-09-26; the bridge half and
 the bind landed 2026-09-27, lane D): the host binds the run's folder before `remodel.open`, `remodel.open` reads it and clears
 it, and so every run needs a fresh bind and a second run can never inherit the first one's folder.
