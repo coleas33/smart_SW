@@ -141,3 +141,34 @@ def test_with_a_version_1_profile_the_two_property_settings_are_skipped() -> Non
         "hygiene.revision_present": 1,
         "hygiene.component_not_resolved": 3,
     }
+
+
+# --- feature 013 T027: the tool reads the roles attached to the review ---------------------
+
+
+def test_with_part_roles_attached_the_bought_parts_get_no_property_finding() -> None:
+    from swreview.checks.part_roles import classify_parts
+    from swreview.tools.checks_mechanical import attach_part_roles
+    from swreview.tools.context import context_for
+
+    fixtures = Path(__file__).resolve().parents[1] / "fixtures"
+    package = load_package(fixtures / "sitting" / "small-assembly").package
+    profile = load_profile(fixtures / "standards" / "profile-a.yaml")
+    with_roles, without = context_for(package), context_for(package)
+    for context in (with_roles, without):
+        attach_standards_run(context, StandardsRun(profile, graded_documents(package, profile)))
+    attach_part_roles(with_roles, classify_parts(package, profile))
+
+    for context in (with_roles, without):
+        with use_context(context):
+            check_hygiene()
+
+    def on_the_pin(context: ToolContext) -> list[str]:
+        return [
+            finding.check
+            for finding in context.require_session().findings
+            if set(finding.component_ids) & {"cmp:0003", "cmp:0004"}
+        ]
+
+    assert on_the_pin(with_roles) == []
+    assert "hygiene.part_number_matches_file" in on_the_pin(without)

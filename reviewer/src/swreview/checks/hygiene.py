@@ -26,11 +26,12 @@ is named in one skipped `hygiene.coverage` item and left out of the property che
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from swreview.checks.documents import DocumentTree
+from swreview.checks.part_roles import PartRoles, note_unclear
 from swreview.checks.result import CheckResult, DocumentResult
-from swreview.checks.standards.profile import StandardsProfile
+from swreview.checks.standards.profile import StandardsProfile, property_key
 from swreview.checks.standards.results import properties_gap
 from swreview.ir.models import ComponentInstance, Document, EvidencePackage
 from swreview.report.session import CoverageItem, CoverageScope
@@ -127,15 +128,17 @@ def _skip_reason(check: str, setting: _Setting, profile: StandardsProfile | None
 
 
 def _value(document: Document, name: str) -> str | None:
-    """The property `name`, the active configuration's first, matched without regard to
-    case as SOLIDWORKS matches property names; `None` when neither carries it."""
-    wanted = name.casefold()
+    """The property `name`, the active configuration's first, matched ignoring case and
+    every space (`property_key`): real files spell one property both with and without a
+    space, and a reader that kept the spaces reported it missing (feature 013
+    `contracts/part-roles-profile.md` section 2); `None` when neither carries it."""
+    wanted = property_key(name)
     for properties in (
         document.config_properties.get(document.active_configuration, {}),
         document.custom_properties,
     ):
         for key, value in properties.items():
-            if key.casefold() == wanted:
+            if property_key(key) == wanted:
                 return value
     return None
 
@@ -306,14 +309,52 @@ def _counted(check: str, passed: int, what: str, scope: Sequence[str]) -> Covera
     )
 
 
+def _graded(documents: Sequence[Document], roles: PartRoles | None) -> list[Document]:
+    """The documents the property checks grade: all of them with no roles attached, else the
+    custom and unclear ones and the root (feature 013 `contracts/part-roles.md` section 6)."""
+    return [item for item in documents if roles is None or roles.graded(item.document_id)]
+
+
+def _noted(found: Sequence[DocumentResult], roles: PartRoles | None) -> list[DocumentResult]:
+    """Each finding on an unclear document carrying the note that it may be bought, while the
+    part-roles question is open; a duplicate naming two unclear documents carries both."""
+    if roles is None:
+        return list(found)
+    noted: list[DocumentResult] = []
+    for item in found:
+        result = item.result
+        for document_id in item.documents:
+            result = note_unclear(result, roles.note_for(document_id))
+        noted.append(item if result is item.result else replace(item, result=result))
+    return noted
+
+
 def run_hygiene_checks(
-    package: EvidencePackage, profile: StandardsProfile | None = None
+    package: EvidencePackage,
+    profile: StandardsProfile | None = None,
+    roles: PartRoles | None = None,
 ) -> HygieneChecks:
-    """The five checks, as plain values (`contracts/code-first.md` section 6)."""
+    """The five checks, as plain values (`contracts/code-first.md` section 6).
+
+    With the review's part `roles`, the four property checks grade the graded documents
+    only - duplicates are compared among them alone, and a bought part's unread properties
+    are not reported, since no property check would have read them - while
+    `hygiene.component_not_resolved` still covers every document (feature 013).
+    """
     tree = DocumentTree(package)
     models = [document for document in tree.reached if document.kind in MODEL_KINDS]
-    unread = [document for document in models if properties_gap(package, document.document_id)]
-    read = [document for document in models if document not in unread]
+    unread = _graded(
+        [document for document in models if properties_gap(package, document.document_id)],
+        roles,
+    )
+    read = _graded(
+        [
+            document
+            for document in models
+            if properties_gap(package, document.document_id) is None
+        ],
+        roles,
+    )
     scope = [cid for document in read for cid in tree.component_ids(document)]
     findings: list[DocumentResult] = []
     checked: list[CoverageItem] = []
@@ -346,7 +387,7 @@ def run_hygiene_checks(
             )
         else:
             found, passed = _duplicates(check, setting.name, read, tree)
-        findings.extend(found)
+        findings.extend(_noted(found, roles))
         if passed:
             checked.append(_counted(check, passed, passes[check], scope))
 

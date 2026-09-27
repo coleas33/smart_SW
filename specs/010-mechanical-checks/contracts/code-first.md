@@ -1,6 +1,6 @@
 # Contract: The Registration Point and the Three Tools
 
-*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), pending implementation:* `check_hygiene` reads the part roles attached to the review; see 013 `contracts/part-roles.md` sections 5 and 6.
+*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed with 013 T020 and T028:* `check_hygiene` reads the part roles attached to the review (`review_roles(context)`) and the review's loaded profile (`review_profile(context)`, which replaces `_attached_profile` and answers even when the standards phases were not dumped); see 013 `contracts/part-roles.md` sections 5 and 6.
 
 Normative for how every check in this feature joins the code-first pass (FR-026, SC-006).
 
