@@ -75,6 +75,10 @@ exact duplicate test (`checks/questions.already_asked`), then `record_evidence_r
 part-roles question carries `allow_text: true`, two options and `blocks` none; the drawing
 questions keep `allow_text` false.
 
+*Amended 2026-09-26 by feature 013 T104 (the page's half):* `EvidenceRequest.source` (`code` or
+`model`, 013 `contracts/sources.md` section 1) reaches the page on the `evidence.requested` body,
+which states it explicitly, and the transcript's record prints its word (section 7).
+
 ## 3. The summary's questions
 
 `summary.questions = {count, text, items}`; `items` are the requests whose status is `open`, in
@@ -83,6 +87,9 @@ session order, each a `QuestionView` (data-model section 2): the short `question
 
 *Amended by feature 013 (T032; the view is lane R's T034 and T100):* each `QuestionView` also
 carries the request's `allow_text` and `source`, verbatim.
+
+*Amended 2026-09-26 by feature 013 T104 (the page's half):* each `QuestionView` also states its
+`source` and `allow_text` (013 T034), which the panel reads (section 4).
 
 ## 4. The panel
 
@@ -111,6 +118,16 @@ skipped and unanswered ones are absent. On `202` the turn runs and the stream re
 does; the drafts of the sent questions are dropped. Drafts are kept per chat id in page memory while
 the page lives, so choosing another review and coming back keeps them.
 
+*Amended 2026-09-26 by feature 013 (013 T036 and T104):* the panel sits before the grouped findings
+(Start here is gone, 013 `contracts/grouped-list.md` section 5). The pager line carries the
+question's source word - `labels.source`'s word for its `source` ("Checked by code", "AI
+guidance"), printed only when the question states a source and the labels name it, never compared.
+A question with `allow_text` draws its options as buttons and, under them, one text box whose
+placeholder is `labels.questions.text_placeholder` (the page's own "Your answer" when the labels
+carry none); the draft holds one answer - the pressed button's text or what was typed: typing lets
+go of every button, a button pressed after typing empties the box, and Send carries the answer
+trimmed. A question without `allow_text` renders as before.
+
 ## 5. The resume cost
 
 `summary.resume_input_tokens` is `UsageLedger.last_conversation_input()`: the input tokens of the
@@ -137,3 +154,7 @@ Nothing is recorded on any refusal (008 `contracts/answer-batch.md` section 2).
 `render.evidenceCard` keeps the question, `why`, "about" and, once answered, the answer; it no longer
 carries an answer box or a Send button. The single-answer route stays in the backend; the page no
 longer calls it.
+
+*Amended 2026-09-26 by feature 013 T104:* the card's head is its lifecycle chip and its source word
+(`labels.source`, when the body states a source); the one fixed title "The review needs an input"
+is gone, because a code question and a model question are not the same claim.

@@ -880,6 +880,7 @@
       what: entry.body.what,
       why: entry.body.why,
       entity_ids: entry.body.entity_ids,
+      source: entry.body.source,
       status: 'answered',
       answer: body.answer
     }, state.labels);

@@ -98,6 +98,38 @@ public sealed class ReviewPageInjectionTests
         AssertLiteral(rendered, HostileSummary);
     }
 
+    /// <summary>A source word that carries markup: `labels.source` is backend text like any other label.</summary>
+    private const string HostileSource = "<img src=x onerror=alert(16)></span>AI guidance";
+
+    /// <summary>
+    /// Feature 013 T103 (contracts/sources.md section 2): the source chip is text. A finding's line
+    /// and an evidence record's head print `labels.source`'s word as characters, whatever it holds.
+    /// </summary>
+    [Fact]
+    public void ASourceWordThatCarriesMarkupIsLiteralTextOnEveryChip()
+    {
+        string labels = Json(new { source = new { code = HostileSource, model = HostileSource } });
+        JsonElement rendered = OffscreenReviewPage.Evaluate(
+            "var labels = " + labels + ";"
+            + "var host = document.createElement('div'); document.body.appendChild(host);"
+            + "host.appendChild(window.SwReviewRender.findingCard("
+            + Json(new { id = "F-020", check = "drawing.manufacturing_inputs", title = "A drawing note is missing", status = "suspected", severity = "low", source = "model" })
+            + ", labels));"
+            + "host.appendChild(window.SwReviewRender.evidenceCard("
+            + Json(new { id = "ER-020", what = "Which drawing governs the plate?", status = "open", source = "code" })
+            + ", labels));"
+            + "var seen = describe(host);"
+            + "var chips = host.querySelectorAll('.source-chip'); seen.words = [];"
+            + "for (var i = 0; i < chips.length; i++) { seen.words.push(chips[i].textContent); }"
+            + "return JSON.stringify(seen);");
+
+        Assert.True(rendered.GetProperty("ok").GetBoolean(), rendered.ToString());
+        Assert.Equal(new[] { HostileSource, HostileSource }, Strings(rendered, "words"));
+        Assert.Equal(0, rendered.GetProperty("injected").GetInt32());
+        Assert.Equal(0, rendered.GetProperty("handlers").GetInt32());
+        Assert.DoesNotContain("<img", rendered.GetProperty("html").GetString()!);
+    }
+
     private static void AssertLiteral(JsonElement rendered, params string[] expected)
     {
         Assert.True(

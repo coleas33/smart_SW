@@ -287,6 +287,48 @@ public sealed class ReviewPageDrawingQuestionsTests
         return run;
     }
 
+    // ---- the source word (feature 013 T103) ---------------------------------------------------
+
+    /// <summary>
+    /// Why the test below is skipped: the drawing check's questions carry `source: code` only from
+    /// 013 T099 (lane D), and the generated fixture carries it once it is regenerated after that
+    /// (lane R's T093 regeneration, or the next one).
+    /// </summary>
+    private const string WaitsForT099 =
+        "013 T099 (lane D) gives the drawing check's questions source: code; integrator: remove this Skip "
+        + "once the drawing fixture is regenerated with it.";
+
+    /// <summary>
+    /// The drawing check's questions are code's, so each pager line carries `labels.source`'s word
+    /// for the question's own `source` - printed, never decided by the page
+    /// (contracts/sources.md section 2).
+    /// </summary>
+    [Fact(Skip = WaitsForT099)]
+    public void EachDrawingQuestionsPagerLineCarriesTheBackendsSourceWord()
+    {
+        string[] sources = Asked.Select(question => question.GetProperty("source").GetString()!).ToArray();
+        Assert.All(sources, source => Assert.Equal("code", source));
+
+        string[] chips = new string[Asked.Length];
+        ReviewPageDriver.Run(
+            driver => driver.InitialRoutes.Add(("GET", "/labels", 200, LabelsSample.Json())),
+            async driver =>
+            {
+                await driver.RouteAttention("chat-1", SummarySample.Json(summary => Ask(summary, "questions_asked")));
+                await driver.StartReview();
+                await driver.EndSession("chat-1");
+                for (int index = 0; index < chips.Length; index++)
+                {
+                    JsonElement page = await driver.Read(
+                        (index > 0 ? Press("question-next") : string.Empty)
+                        + "return JSON.stringify({ok: true, chip: h.text(document.getElementById('questions'), '.question-pager .source-chip')});");
+                    chips[index] = page.GetProperty("chip").GetString() ?? string.Empty;
+                }
+            });
+
+        Assert.All(chips, chip => Assert.Equal(LabelsSample.SourceCode, chip));
+    }
+
     /// <summary>The summary's questions replaced by the fixture's block of that name.</summary>
     private static void Ask(JsonObject summary, string block) =>
         summary["questions"] = JsonNode.Parse(DrawingQuestionsFixture.Value.GetProperty(block).GetRawText());

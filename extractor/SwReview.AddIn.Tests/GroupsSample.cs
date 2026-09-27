@@ -81,6 +81,11 @@ internal static class GroupsSample
     /// <summary>The goal lines under Fasteners, a group with no row.</summary>
     public static readonly string[] FastenersGoalTitles = { "Fasteners", "Tool access" };
 
+    /// <summary>The goal whose recorded sentence the model wrote (`detail_source` "model"), and one whose sentence is code's.</summary>
+    public const string ModelDetailGoal = "Fits and stacks";
+
+    public const string CodeDetailGoal = "Fasteners";
+
     /// <summary>Fasteners' first goal's recorded sentence, behind its fold.</summary>
     public const string FastenersDetail = "list_fasteners returned zero instances, so no screw or bolt joint could be checked.";
 
@@ -218,7 +223,8 @@ internal static class GroupsSample
                 },
                 Goal("interference", "Interference", "issues", "issues found", null, null),
                 Goal("hole_alignment", "Hole alignment", "checked", "checked, no issue", null, null),
-                Goal("fits_and_stacks", "Fits and stacks", "not_reached", "not reached", "a check failed", SummarySample.HostileDetail)),
+                Goal("fits_and_stacks", "Fits and stacks", "not_reached", "not reached", "a check failed", SummarySample.HostileDetail,
+                    detailSource: "model")),
             Group("fasteners", GroupTitles[1], true, 0, 0, GroupTexts[1], new object[0],
                 Goal("fasteners", "Fasteners", "not_reached", "not reached", "evidence missing", FastenersDetail),
                 Goal("tool_access", "Tool access", "not_reached", "not reached", "no check ran", null)),
@@ -312,9 +318,15 @@ internal static class GroupsSample
         { "chip", chip },
     };
 
-    /// <summary>One `GoalLine` (feature 009's data model section 2), as a group carries it.</summary>
-    private static object Goal(string goal, string title, string state, string label, string? reason, string? detail) =>
-        new Dictionary<string, object?>
+    /// <summary>
+    /// One `GoalLine` (feature 009's data model section 2), as a group carries it; `detail_source`
+    /// only when the recorded sentence is the model's (feature 013 sources.md section 1: omitted
+    /// when `code`).
+    /// </summary>
+    private static object Goal(
+        string goal, string title, string state, string label, string? reason, string? detail, string? detailSource = null)
+    {
+        var line = new Dictionary<string, object?>
         {
             { "goal", goal },
             { "title", title },
@@ -324,4 +336,11 @@ internal static class GroupsSample
             { "reason", reason },
             { "detail", detail },
         };
+        if (detailSource != null)
+        {
+            line["detail_source"] = detailSource;
+        }
+
+        return line;
+    }
 }
