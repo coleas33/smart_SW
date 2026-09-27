@@ -50,10 +50,10 @@ from swreview.drawings.evidence import file_key, file_name, id_order
 from swreview.findings import Finding, FindingStatus, ReviewModel, Severity
 from swreview.ir.models import EvidencePackage
 from swreview.report.attention import (
-    DECIDED_DECISIONS,
     SUPPRESSED_STATUS,
     Policy,
     Ranking,
+    is_decided,
     load_policy,
     rank,
 )
@@ -63,10 +63,12 @@ from swreview.report.finding_groups import (
     CoverageBucket,
     FindingGroupText,
     FindingGroupWords,
+    FindingsByType,
     Goal,
     GoalLine,
     GoalReason,
     GoalState,
+    findings_by_type,
     goal_lines,
     goal_of,
 )
@@ -368,19 +370,23 @@ class ReviewSummary(ReviewModel):
 
 
 class ReviewRanking(Ranking):
-    """The Review tab's ranking body: `Ranking` unchanged, plus its summary.
+    """The Review tab's ranking body: `Ranking` unchanged, plus its summary and its findings
+    by type (feature 013).
 
-    A subclass rather than a field on `Ranking`, so `attention.json` and both check bodies
-    - which serialize `Ranking` - never carry it, and the ranking module never imports this
-    one (research R2.2).
+    A subclass rather than fields on `Ranking`, so `attention.json` and both check bodies
+    - which serialize `Ranking` - never carry them, and the ranking module never imports this
+    one (research R2.2). Every route that answers one (attention, snapshot, disk) builds it
+    with `review_ranking` from the session, so there is no ranking without `groups` for the
+    page to fall back from (013 `contracts/grouped-list.md` section 3).
     """
 
     summary: ReviewSummary
+    groups: FindingsByType
 
     @classmethod
-    def of(cls, ranking: Ranking, summary: ReviewSummary) -> ReviewRanking:
-        """`ranking` with `summary` beside it, every ranking field carried as it is."""
-        return cls(**dict(ranking), summary=summary)
+    def of(cls, ranking: Ranking, summary: ReviewSummary, groups: FindingsByType) -> ReviewRanking:
+        """`ranking` with `summary` and `groups` beside it, every ranking field as it is."""
+        return cls(**dict(ranking), summary=summary, groups=groups)
 
 
 # --- the summary ------------------------------------------------------------------------------
@@ -392,15 +398,21 @@ def review_ranking(
     *,
     usage: UsageLedger | None = None,
 ) -> ReviewRanking:
-    """`rank(session)` with its summary: what the attention, snapshot and disk routes answer.
+    """`rank(session)` with its summary and its findings by type: what the attention,
+    snapshot and disk routes answer.
 
     The rows carry the titles a person reads (`report/titles.with_display_titles`, feature 009
     decision 2A): the Review tab prints them. Order, keys and reasons are `rank`'s own, and
-    `attention.json` keeps the recorded titles.
+    `attention.json` keeps the recorded titles. `groups` is `findings_by_type` over the same
+    session, policy and package (feature 013).
     """
     names = all_component_names(package) if package is not None else {}
-    ranking = with_display_titles(rank(session), session.findings, names)
-    return ReviewRanking.of(ranking, review_summary(ranking, session, package, usage=usage))
+    policy = load_policy()
+    ranking = with_display_titles(rank(session, policy), session.findings, names)
+    groups = findings_by_type(session, package, load_words(), policy)
+    return ReviewRanking.of(
+        ranking, review_summary(ranking, session, package, usage=usage), groups
+    )
 
 
 def review_summary(
@@ -503,7 +515,7 @@ def _group_of(finding: Finding, policy: Policy) -> GroupKind:
     """Research R2.3, first match winning: the order `attention._not_amplified` counts in."""
     if finding.status == SUPPRESSED_STATUS:
         return "within_scope"
-    if finding.disposition is not None and finding.disposition.decision in DECIDED_DECISIONS:
+    if is_decided(finding):
         return "decided"
     if policy.needs_judgement_of(finding.check):
         return "decide"

@@ -131,6 +131,7 @@ def test_the_ranking_is_the_review_ranking_with_its_summary(
     assert snapshot["ranking"] == to_jsonable_python(review_ranking(session, package))
     assert "summary" in snapshot["ranking"]
     assert snapshot["ranking"]["summary"]["resume_input_tokens"] is None
+    assert snapshot["ranking"]["groups"]["version"] == 1, "feature 013: the grouped view"
 
 
 def test_the_document_is_the_package_roots_path_and_active_configuration(

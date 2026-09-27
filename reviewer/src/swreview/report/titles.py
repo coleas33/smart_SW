@@ -44,6 +44,7 @@ __all__ = [
     "first_sentence",
     "pane_finding",
     "title_from",
+    "titled_rows",
     "with_display_titles",
 ]
 
@@ -94,13 +95,22 @@ def pane_finding(finding: Finding, names: Mapping[str, str]) -> dict[str, Any]:
 def with_display_titles(
     ranking: Ranking, findings: Sequence[Finding], names: Mapping[str, str]
 ) -> Ranking:
-    """`ranking` with every row a person reads titled with its survivor's display title.
+    """`ranking` with every row a person reads titled with its survivor's display title
+    (`titled_rows`). The order, keys, reasons and every other field are the ranking's own;
+    `ranking` is not changed, and titling a titled ranking again changes nothing."""
+    return ranking.model_copy(update={"rows": titled_rows(ranking.rows, findings, names)})
+
+
+def titled_rows(
+    rows: Sequence[AttentionRow], findings: Sequence[Finding], names: Mapping[str, str]
+) -> list[AttentionRow]:
+    """`rows`, each titled with its survivor's display title: the ranking's rows and the grouped
+    view's (feature 013) are titled by this one rule.
 
     A row's survivor is `row.finding_id`, the finding its recorded title came from. A folded
     family's row keeps its family title - it counts findings and rules and names no finding - and
     a row whose finding is not among `findings` keeps its title rather than guessing one. The
-    order, keys, reasons and every other field are the ranking's own; `ranking` is not changed,
-    and titling a titled ranking again changes nothing.
+    rows passed in are not changed.
     """
     by_id = {finding.id: finding for finding in findings}
 
@@ -110,4 +120,4 @@ def with_display_titles(
             return row
         return row.model_copy(update={"title": display_title(survivor, names)})
 
-    return ranking.model_copy(update={"rows": [titled(row) for row in ranking.rows]})
+    return [titled(row) for row in rows]
