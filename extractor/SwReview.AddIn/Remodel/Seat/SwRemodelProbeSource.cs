@@ -103,6 +103,9 @@ public sealed class SwRemodelProbeSource : IRemodelProbeSource
     /// <inheritdoc />
     public IReadOnlyList<RmsNamedFolder>? GetFolders() => Signals().GetFolders();
 
+    /// <inheritdoc />
+    public IReadOnlyList<string>? GetFeatureTypeNames() => Signals().GetFeatureTypeNames();
+
     private IModelDoc2 Bound() => _document ?? throw NotBound();
 
     private SwScopeSignalReader Signals() => _signals ?? throw NotBound();

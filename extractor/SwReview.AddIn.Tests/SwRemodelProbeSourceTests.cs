@@ -80,6 +80,7 @@ public class SwRemodelProbeSourceTests
         _application.Answer("GetOpenDocumentByName", _source.Instance);
         _source.Document.Answer("GetType", 1).Answer("IsWeldment", false).Answer("GetConfigurationNames", new[] { "Default", "Long" });
         _source.WithBodies(new Dictionary<int, object?> { [0] = new object[] { new object() } });
+        _source.WithFeatures(StandInDocument.Feature("Sketch1", "ProfileFeature"), StandInDocument.Feature("Mirror-Part1", "MirrorStock"));
         var probe = new SwRemodelProbeSource(_application.Instance);
         probe.IsOpen(SourcePath);
         var reader = new SwScopeSignalReader(_source.Instance);
@@ -88,6 +89,8 @@ public class SwRemodelProbeSourceTests
         Assert.Equal(reader.GetBodyCount(0), probe.GetBodyCount(0));
         Assert.Equal(reader.IsWeldment(), probe.IsWeldment());
         Assert.Equal(reader.GetConfigurationNames(), probe.GetConfigurationNames());
+        Assert.Equal(new[] { "ProfileFeature", "MirrorStock" }, probe.GetFeatureTypeNames());
+        Assert.Equal(reader.GetFeatureTypeNames(), probe.GetFeatureTypeNames());
     }
 
     public static IEnumerable<object[]> BoundReads() => new[]
@@ -104,6 +107,7 @@ public class SwRemodelProbeSourceTests
         new object[] { "GetImportedFileNames" },
         new object[] { "GetConfigurationNames" },
         new object[] { "GetFolders" },
+        new object[] { "GetFeatureTypeNames" },
     };
 
     /// <summary>The table above is every read of the interface, so a member added to it is a red test until it is here.</summary>
@@ -208,6 +212,9 @@ public class SwRemodelProbeSourceTests
                 break;
             case "GetFolders":
                 probe.GetFolders();
+                break;
+            case "GetFeatureTypeNames":
+                probe.GetFeatureTypeNames();
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(read), read, "Not a read.");

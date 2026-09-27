@@ -49,7 +49,7 @@ that `state` is always readable from disk.
 | `package_before` | str | Relative path, `package-before.json` |
 | `type_table_version`, `type_table_calibrated_version` | str | From `rms_types.yaml`, recorded so a re-grade on another machine is comparable |
 | `scope` | `ScopeReport` | Section 4 |
-| `tree_refusals` | list[`Refusal`] | The refusals decided from the package's feature rows rather than from the probe's signals: v1 has one, `derived_part` (section 4.2). Only tree codes; a non-empty list means `state: failed`. Added 2026-09-25 (decision 17A, T147) |
+| `tree_refusals` | list[`Refusal`] | The refusals decided from the package's feature rows rather than from the probe's signals: v1 has one, `derived_part` (section 4.2). Only tree codes; a non-empty list means `state: failed`. Added 2026-09-25 (decision 17A, T147). Since T161 (2026-09-27) the scope gate reaches `derived_part` from the probe too, so this list is the planner's reading of it: the dry run's, and a backstop after the copy |
 | `targets` | list[`PlanTarget`] | One per feature in the tree, including the ones that are not content. One per **feature**, not per row: a row the dump lists a second time under the feature that consumes it is that feature (`contracts/run-artifacts.md`, "How the planner reads the tree"; decision 17A, 2026-09-25) |
 | `ranks` | list[`FeatureRank`] | One per content feature with a resolved target |
 | `order` | `OrderPlan` | |
@@ -417,6 +417,7 @@ by side on a `Refusal` (section 4.2) cannot be mistaken for each other.
 | `imported_file_names` | list[str] | `IFeature.GetImportedFileName` |
 | `configuration_names` | list[str] | `IModelDoc2.GetConfigurationNames` |
 | `rms_named_folders` | list[{`name`: str, `member_persist_refs`: list[str]}] \| null | folders where `GetTypeName2() == "FtrFolder"`, with each folder's members. This row is what makes `rms_named_folder_wrong_members` decidable in `scope.py` from `ScopeSignals` alone, which is what puts FR-007's refusal ahead of the copy |
+| `feature_type_names` | list[str] \| null | every feature's `IFeature.GetTypeName2()`, verbatim, in the scope reader's walk order, repeats kept; null when the walk or any feature's type cannot be read. A measurement: `scope.py` refuses a part whose walk carries a `derived_base` type with `derived_part`, before the copy (added 2026-09-27, T161, below) |
 | `external_reference_count` | int | `ListExternalFileReferencesCount2()` |
 | `save_flag_dirty` | bool | `GetSaveFlag()` on the source, when it is open |
 | `read_only` | bool | |
@@ -433,9 +434,17 @@ refusal reason (FR-006).
 
 A `null` signal is **not** treated as a pass. It produces an `unresolved` scope item naming the
 signal, and a run may not proceed on an unresolved multibody, weldment, sheet-metal, mesh, 3D
-Interconnect **or `rms_named_folders`** signal. An unreadable folder listing is `signal_unresolved`
-for the same reason every other unreadable signal is; otherwise the new row reopens the FR-007 hole
-from the other side.
+Interconnect, **`rms_named_folders` or `feature_type_names`** signal. An unreadable folder listing
+is `signal_unresolved` for the same reason every other unreadable signal is; otherwise the new row
+reopens the FR-007 hole from the other side.
+
+*Added 2026-09-27 (`tasks.md` T161; defaults taken 2026-09-27, the owner may revise; build order
+lane F's defaults 1 to 6).* `feature_type_names` carries the tree's type names so that the
+derived-part refusal is decidable from `ScopeSignals`, before the copy. The C# side names no
+derived base; `rms_types.yaml`'s `derived_base` stays the one list, read by the gate and the
+planner alike. A feature whose type answers null or blank makes the whole listing null, because
+that feature could be the base feature. A dry run holds it null, never synthesised from the
+package. `remodel.open` step 12 compares it as an ordered list.
 
 ### 4.2 `ScopeReport`
 
@@ -474,6 +483,18 @@ carries the tree yet, so `plan_reorganize` decides it from the package - after t
 cycle refusal is decided - and records it in `RemodelPlan.tree_refusals`, never in
 `scope.refusals`, whose verdict stays the probe's alone. `tasks.md` T161 adds the probe's reading
 that moves it before the copy.
+
+*Amended 2026-09-27 (T161 landed; defaults taken 2026-09-27, the owner may revise; build order
+lane F's defaults 3 and 4).* The gate now decides `derived_part` too, from the probe's
+`feature_type_names` (section 4.1), so a derived or mirrored part is refused before the copy and
+the refusal is in `scope.refusals` with `signal: "feature_type_names"`. The planner keeps its own
+reading from the package, because a dry run has no probe and after the copy it is a backstop
+should the dump's walk and the probe's disagree; that reading stays in `tree_refusals` with
+`signal: "features[].type_name"`. `derived_part` is therefore a gate code **and** the one tree
+code: the gate and bridge-only codes partition the closed set, and the tree codes are a subset
+of the gate codes. A plan made over both readings lists both in `plan_refusals`, each under its
+own signal; a real run never reaches the planner with the probe's, because the host refuses at the
+probe.
 
 ---
 

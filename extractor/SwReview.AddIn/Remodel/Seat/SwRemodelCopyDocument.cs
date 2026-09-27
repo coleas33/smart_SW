@@ -124,6 +124,9 @@ public sealed class SwRemodelCopyDocument : IRemodelDocument
     /// <inheritdoc />
     public IReadOnlyList<RmsNamedFolder>? GetFolders() => _signals.GetFolders();
 
+    /// <inheritdoc />
+    public IReadOnlyList<string>? GetFeatureTypeNames() => _signals.GetFeatureTypeNames();
+
     // ---- IGeometrySource: what remodel.geometry measures ---------------------------------------
 
     /// <inheritdoc />

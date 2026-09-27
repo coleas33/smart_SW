@@ -130,6 +130,18 @@ decided from the `rms_named_folders[]` signal in the same pass, which is what ma
 | surface bodies | `GetBodies2(swSheetBody = 1, false)` | `sheet_body_count` |
 | configurations | `IModelDoc2.GetConfigurationNames` | `configuration_names` |
 | RMS-named folders | `GetTypeName2() == "FtrFolder"` plus the folder's members | `rms_named_folders[]` with `{name, member_persist_refs[]}` |
+| feature types | `IFeature.GetTypeName2()` on every feature | `feature_type_names[]` |
+
+*Added 2026-09-27 (`tasks.md` T161; defaults taken 2026-09-27, the owner may revise; build order
+lane F's defaults 1 to 3).* `feature_type_names[]` is every feature's type name, verbatim, one
+entry per feature with repeats kept, in the scope reader's walk order (`GetFeatures(false)`,
+nested ones included); null when the walk or any feature's type cannot be read, never a shorter
+list. It is a measurement, not a decision: the bridge names no derived base and refuses nothing
+for it. `remodel/scope.py` refuses a part whose walk carries a type in `rms_types.yaml`'s
+`derived_base` (`MirrorStock`, `Stock`) with `derived_part`, **before the copy**, and an
+unreadable listing is `signal_unresolved`. The row is read with `GetTypeName2`, the member the
+folder row is read with, so it is gated under that key and the probe's read-only surface keeps
+its thirteen members.
 
 **Pre-existing rebuild errors are not in this table and cannot be.** Reading them needs
 `EditRollback` to the end of the tree and a `ForceRebuild3`, both writes, and neither may touch
@@ -192,9 +204,12 @@ Sequence, in order, with the call that performs each step:
     with the probe's. A difference is `scope_changed`: the document being changed is not the one
     the verdict was reached on, and the run stops with the copy deleted. This costs one pass over
     the tree and closes the only gap the two-step ordering opens. *Amended 2026-09-26 (a design
-    choice, `tasks.md` T174, not yet built):* the folder row is compared by each folder's name and
-    member count, not by its members' persist-ref strings, because the bytes for one entity may
-    differ between source and copy (feature 001's research R12).
+    choice, `tasks.md` T174; landed 2026-09-27):* the folder row is compared position by position
+    by each folder's name (ordinal) and member count, not by its members' persist-ref strings,
+    because the bytes for one entity may differ between source and copy (feature 001's research
+    R12); the number and order of the folders, and a null listing against a read one, still
+    differ, and the copy's refs are still what the plan records. `feature_type_names[]` (T161)
+    compares as an ordered list, ordinal, as every other list row does.
 
 The returned `scope_signals` are the copy's, measured at step 12, and are what the plan records:
 the plan should describe the document the run actually changed. The probe's signals are what the

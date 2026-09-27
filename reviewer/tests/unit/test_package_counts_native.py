@@ -73,6 +73,12 @@ TODAY: dict[str, tuple[str, str, int]] = {
         "5130cf677d8e9814",
         0,
     ),
+    # Feature 004, T161 (build order lane F): new with that round, pinned from its own output.
+    "golden/fixtures/remodel-plan/remodel-refusal-derived-part-probe": (
+        "40c89674091c8877",
+        "8fe812b4005b52dd",
+        0,
+    ),
     "golden/fixtures/remodel-plan/remodel-refusal-mesh-body": (
         "2e275cf9428c6317",
         "0b58b731215ddee9",

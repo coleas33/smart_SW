@@ -140,6 +140,7 @@ public class SwRemodelCopyDocumentTests
     {
         _copy.Document.Answer("GetType", 1).Answer("IsWeldment", true).Answer("GetConfigurationNames", new[] { "Default" });
         _copy.WithBodies(new Dictionary<int, object?> { [0] = new object[] { new object() } });
+        _copy.WithFeatures(StandInDocument.Feature("Sketch1", "ProfileFeature"), StandInDocument.Feature("Boss-Extrude1"));
         SwRemodelCopyDocument adapter = Adapter();
         var reader = new SwScopeSignalReader(_copy.Instance);
 
@@ -147,6 +148,8 @@ public class SwRemodelCopyDocumentTests
         Assert.Equal(reader.GetBodyCount(0), adapter.GetBodyCount(0));
         Assert.Equal(reader.IsWeldment(), adapter.IsWeldment());
         Assert.Equal(reader.GetConfigurationNames(), adapter.GetConfigurationNames());
+        Assert.Equal(new[] { "ProfileFeature", "Extrusion" }, adapter.GetFeatureTypeNames());
+        Assert.Equal(reader.GetFeatureTypeNames(), adapter.GetFeatureTypeNames());
     }
 
     // ---- IGeometrySource ---------------------------------------------------------------------------------
