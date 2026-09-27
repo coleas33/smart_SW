@@ -1396,8 +1396,10 @@ class DrawingSheetRecord(IRModel):
     )
     views: list[DrawingView] = Field(
         default_factory=list,
-        description="ISheet.GetViews() order. Empty plus a drawing_sheet_views gap when the "
-        "enumeration failed or came back empty on a non-active sheet",
+        description="The sheet's array from IDrawingDoc.GetViews(), its own (type 1) view "
+        "first, or ISheet.GetViews() order beside a drawing_sheet_view gap when that array could "
+        "not be matched to the sheet (feature 013). Empty plus a drawing_sheet_views gap when the "
+        "enumeration failed or listed no drawing view on a non-active sheet",
     )
     revision_tables: list[RevisionTable] = Field(
         default_factory=list, description="Every revision table on the sheet, not just one"
