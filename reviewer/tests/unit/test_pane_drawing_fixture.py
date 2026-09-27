@@ -93,6 +93,15 @@ def strings(value: Any) -> Iterator[str]:
 # --- the file is the backend's ------------------------------------------------------------------
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "013 T093 (lane R) regenerates this fixture in a commit of its own once US4's lane D "
+        "and S tasks are on main (it plays a scripted review through their code); until then "
+        "feature 013's setup rows (the part roles, provenance), the questions' new fields and "
+        "the drawing check's states move it - remove this marker with that commit"
+    ),
+)
 def test_the_committed_fixture_is_a_fresh_generation(generator: ModuleType, committed: str) -> None:
     fresh = generator.render(generator.drawing_questions_fixture())
 

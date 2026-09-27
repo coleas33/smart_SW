@@ -23,7 +23,8 @@ from typing import Literal, get_args
 
 from pydantic import ValidationError
 
-from swreview.findings import build_finding
+from swreview.checks.questions import QuestionSpec, already_asked
+from swreview.findings import Source, build_finding
 from swreview.ir.models import DrawingSheet, SourceRef
 from swreview.report.attention import CHECKLIST_ITEM_IDS
 from swreview.report.session import (
@@ -110,6 +111,9 @@ def record_evidence_request(
     question: str | None = None,
     options: list[str] | None = None,
     blocks: str | None = None,
+    *,
+    allow_text: bool = False,
+    source: Source = "model",
 ) -> EvidenceRequest:
     """Open one evidence request on the session and announce it: the one writer (feature 011
     `contracts/questions.md` section 4).
@@ -119,6 +123,9 @@ def record_evidence_request(
     request is validated through `EvidenceRequest` **before** its id is allocated, so a refused
     one takes no number; a validation error is the caller's to prevent, as `request_evidence`'s
     refusals do. Raises `ValueError` outside a review session.
+
+    `allow_text` and `source` are feature 013's (`data-model.md` section 3): a code question says
+    `source="code"`, and the part-roles question offers a text box beside its options.
     """
     context.require_session()  # first, so a sessionless context refuses before anything else
     draft = EvidenceRequest(
@@ -132,10 +139,37 @@ def record_evidence_request(
         question=question,
         options=list(options or []),
         blocks=blocks,
+        allow_text=allow_text,
+        source=source,
     )
     request = draft.model_copy(update={"id": next(context.evidence_request_ids)})
     context.record_evidence_request(request)
     return request
+
+
+def record_question(context: ToolContext, spec: QuestionSpec) -> EvidenceRequest:
+    """Ask a code question once: the request already asking exactly `spec`, or a new one.
+
+    The one path a check's `QuestionSpec` takes to the session (feature 013 research R3 C10):
+    today's exact duplicate test (`checks/questions.already_asked`), then the one writer, with
+    `source="code"` and the spec's `allow_text`. Returns the request on the session that asks
+    it, so a caller can cite its id - the part-roles note does ("asked in ER-001").
+    """
+    session = context.require_session()
+    for request in session.evidence_requests:
+        if already_asked([request], spec):
+            return request
+    return record_evidence_request(
+        context,
+        spec.what,
+        spec.why,
+        list(spec.entity_ids),
+        question=spec.question,
+        options=list(spec.options),
+        blocks=spec.blocks,
+        allow_text=spec.allow_text,
+        source="code",
+    )
 
 
 def _short_form_refusal(question: str | None, options: list[str], blocks: str | None) -> str | None:

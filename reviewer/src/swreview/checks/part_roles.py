@@ -33,12 +33,12 @@ from dataclasses import dataclass, field, replace
 from functools import cache
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 
+from swreview.checks.questions import QuestionSpec
 from swreview.checks.result import CheckResult
 from swreview.ir.models import ComponentInstance, Document, EvidencePackage
 from swreview.report.names import and_list, plural
 
 if TYPE_CHECKING:
-    from swreview.checks.drawing_context import QuestionSpec
     from swreview.checks.standards.profile import PartRolesSection, StandardsProfile
     from swreview.report.session import EvidenceRequest
 
@@ -195,6 +195,9 @@ PART_ROLES_CHECK = "coverage.prerun.part_roles"
 """The coverage rows of section 7 and the zero-match guard: the pre-run's prefix
 (`prerun.PRERUN_CHECK_PREFIX`) and a family, spelled out here because this module does not
 import the pre-run. The summary reads the first two back (`scope.document_ids`)."""
+ROW_CHECKS: tuple[str, ...] = (BOUGHT_PARTS_CHECK, MAYBE_BOUGHT_CHECK, PART_ROLES_CHECK)
+"""Every coverage check the part roles write: what `start_review` and a regrade withdraw
+before they record the rows again, so a restated row replaces the earlier one."""
 
 BOUGHT_PARTS_LABEL = "bought parts"
 MAYBE_BOUGHT_LABEL = "parts that may be bought"
@@ -210,6 +213,9 @@ NOT_TOLD_APART = "Bought parts were not told apart: {reason}"
 NOT_TOLD_APART_TOOLBOX = (
     "Bought parts were not told apart: {reason}; Toolbox parts were not graded: {names}"
 )
+WITHDRAWN_TAIL = "; withdrew {ids}"
+"""Appended to the restated bought-parts sentence after the part-roles answer withdrew
+findings (section 9: "the bought-parts row is restated naming the withdrawn ids")."""
 UNMATCHED_ONE = "{piece} names none of the listed parts"
 UNMATCHED_MANY = "{pieces} name none of the listed parts"
 BOUGHT_REFUSAL = "a bought part: not graded for modelling practice"
@@ -800,8 +806,15 @@ def _file_names(package: EvidencePackage) -> dict[str, str]:
     return {document.document_id: document.file_name for document in package.documents}
 
 
-def bought_parts_sentence(roles: PartRoles, package: EvidencePackage) -> str | None:
-    """The `coverage.prerun.bought_parts` sentence (section 7), or `None` with nothing to say."""
+def bought_parts_sentence(
+    roles: PartRoles, package: EvidencePackage, *, withdrawn: Sequence[str] = ()
+) -> str | None:
+    """The `coverage.prerun.bought_parts` sentence (section 7), or `None` with nothing to say.
+
+    `withdrawn` names the findings the part-roles answer withdrew when a regrade restates the
+    row (section 9); only a configured or convention-only review asks, so the absent state's
+    sentence never carries them.
+    """
     names = _file_names(package)
     bought = roles.bought()
     if roles.state == "absent":
@@ -813,10 +826,13 @@ def bought_parts_sentence(roles: PartRoles, package: EvidencePackage) -> str | N
         )
     if not bought:
         return None
-    return BOUGHT_LINE.format(
+    sentence = BOUGHT_LINE.format(
         parts=plural(len(bought), "part"),
         names=_listed([f"{names[role.document_id]} ({role.reason})" for role in bought]),
     )
+    if withdrawn:
+        sentence += WITHDRAWN_TAIL.format(ids=", ".join(withdrawn))
+    return sentence
 
 
 def maybe_bought_sentence(roles: PartRoles, package: EvidencePackage) -> str | None:
@@ -842,12 +858,9 @@ def guard_sentence(roles: PartRoles) -> str | None:
 
 def roles_question(roles: PartRoles, package: EvidencePackage) -> QuestionSpec | None:
     """The one part-roles question (section 8), or `None` when none is asked: the absent
-    state, the guard fired, or nothing is unclear. `allow_text` and `source` are passed by its
-    one writer (`start_review`, lane S), since the spec records neither."""
-    # Where it is used: `QuestionSpec` moves to `checks/questions.py` with T005 (lane S), and
-    # `drawing_context` will read the roles, so this module does not import it at the top.
-    from swreview.checks.drawing_context import QuestionSpec
-
+    state, the guard fired, or nothing is unclear. The spec carries section 8's `allow_text`;
+    its one writer (`tools/session.record_question`) adds `source="code"`, as it does for
+    every question code asks."""
     unclear = roles.unclear()
     if roles.state == "absent" or roles.guard_fired or not unclear:
         return None
@@ -860,6 +873,7 @@ def roles_question(roles: PartRoles, package: EvidencePackage) -> QuestionSpec |
         question=QUESTION,
         options=(OPTION_ALL, OPTION_NONE),
         blocks=None,
+        allow_text=True,
     )
 
 

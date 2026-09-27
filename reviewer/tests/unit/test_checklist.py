@@ -378,7 +378,8 @@ def test_the_hygiene_item_reads_as_the_family_it_closes() -> None:
         "number, every model carries a revision, and suppressed or lightweight components "
         "are findings. The property names come from the standards profile; without one "
         "those checks are skipped, naming the setting. Closed by a hygiene finding, or by "
-        "the family's summary coverage item."
+        "the family's summary coverage item. Custom parts only; bought parts are listed "
+        "once, not graded."
     )
     assert f"- `{HYGIENE_ITEM_ID}` - Model hygiene" in CHECKLIST.render()
 
@@ -579,6 +580,26 @@ def test_the_loader_refuses_an_unknown_owner_by_item(tmp_path: Any) -> None:
 
     with pytest.raises(ValueError, match="'a'.*owner.*'engineer'"):
         load_checklist(path)
+
+
+CUSTOM_PARTS_ONLY = "Custom parts only; bought parts are listed once, not graded."
+
+
+@pytest.mark.parametrize("item_id", ["modeling.resilience", HYGIENE_ITEM_ID])
+def test_the_modelling_and_hygiene_items_say_they_grade_custom_parts_only(item_id: str) -> None:
+    """Feature 013 T032 (`contracts/part-roles.md` section 6): the model is told the two
+    families grade custom and unclear parts, and bought parts are listed once."""
+    assert CUSTOM_PARTS_ONLY in item_named(CHECKLIST, item_id).description
+
+
+def test_no_other_item_says_it_grades_custom_parts_only() -> None:
+    others = [
+        item.id
+        for item in CHECKLIST.items
+        if item.id not in {"modeling.resilience", HYGIENE_ITEM_ID}
+        and CUSTOM_PARTS_ONLY in item.description
+    ]
+    assert others == []
 
 
 def test_the_withheld_rewording_keeps_each_items_owner() -> None:

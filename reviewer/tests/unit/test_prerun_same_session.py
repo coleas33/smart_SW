@@ -27,6 +27,7 @@ from typing import Any
 from swreview.agent.providers.fake import ScriptedToolCall
 from swreview.agent.runner import _verdict_key
 from swreview.benchmark.scorecard import seconds_to_first_finding
+from swreview.checks.part_roles import BOUGHT_PARTS_CHECK, ROW_CHECKS
 from swreview.prerun import PRERUN_CHECK_PREFIX, planned_calls
 from swreview.report.session import ReviewSession
 from swreview.tools.context import context_for
@@ -94,7 +95,16 @@ def test_the_pre_run_closes_the_same_coverage_a_model_driven_run_closes(
         if not check.startswith(PRERUN_CHECK_PREFIX)
     ]
     assert digest_items, "the digest's not-evaluated lines are written as coverage"
-    assert rest == checks_in(driven, "skipped")
+    # Feature 013 (integration of lanes P and S, 2026-09-27, edited deliberately): with no
+    # pre-run, `start_review` records the part roles' rows directly (`contracts/part-roles.md`
+    # section 7, the `standards_gap` precedent), so both arms hold the same rows - the pre-run's
+    # beside its digest lines, the model-driven run's written at setup.
+    driven_roles = [check for check in checks_in(driven, "skipped") if check in ROW_CHECKS]
+    assert driven_roles == [check for check in digest_items if check in ROW_CHECKS]
+    assert driven_roles, "a review with no profile says bought parts were not told apart"
+    assert rest == [
+        check for check in checks_in(driven, "skipped") if check not in ROW_CHECKS
+    ]
 
 
 # --- real steps, real events, real provenance -------------------------------------------
@@ -227,8 +237,11 @@ def test_the_flag_off_runs_nothing_at_all(tmp_path: Any) -> None:
 
     assert off.steps == []
     assert off.findings == []
-    assert not [
-        item
+    # Feature 013 (integration of lanes P and S, 2026-09-27, edited deliberately): no check
+    # runs; the one row under the pre-run's prefix is the part roles', which `start_review`
+    # records directly when there is no pre-run (`contracts/part-roles.md` section 7).
+    assert [
+        item.check
         for item in off.coverage.skipped
         if item.check.startswith(PRERUN_CHECK_PREFIX)
-    ]
+    ] == [BOUGHT_PARTS_CHECK]

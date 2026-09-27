@@ -918,6 +918,9 @@ def test_the_sitting_question_and_its_lines() -> None:
     assert question.why == WHY
     assert question.entity_ids == ("doc:4",)
     assert question.blocks is None
+    # Integration of lanes P and S (2026-09-27): section 8's `allow_text` is the spec's own, so
+    # the one writer (`tools/session.record_question`) passes it on and nothing re-adds it.
+    assert question.allow_text is True
     assert maybe_bought_sentence(roles, subject) is None
     asked = roles.asking("ER-001")
     assert asked.note_for("doc:4") == (
@@ -1210,3 +1213,41 @@ def test_an_empty_package_of_models_fires_no_guard() -> None:
 
     assert roles.by_document == {}
     assert roles.guard_fired is False
+
+
+# --- integration of lanes P and S (2026-09-27): the rows a regrade restates ------------------
+
+
+def test_the_row_checks_are_the_three_coverage_checks_the_classifier_writes() -> None:
+    """What `start_review` and a regrade withdraw before they record the rows again."""
+    from swreview.checks.part_roles import (
+        BOUGHT_PARTS_CHECK,
+        MAYBE_BOUGHT_CHECK,
+        PART_ROLES_CHECK,
+        ROW_CHECKS,
+    )
+
+    assert ROW_CHECKS == (BOUGHT_PARTS_CHECK, MAYBE_BOUGHT_CHECK, PART_ROLES_CHECK)
+
+
+def test_a_restated_bought_parts_sentence_names_the_findings_the_answer_withdrew() -> None:
+    """Section 9: "The bought-parts row is restated naming the withdrawn ids"."""
+    subject = sitting()
+    roles = classify_parts(subject, profile_a())
+    plain = bought_parts_sentence(roles, subject)
+
+    restated = bought_parts_sentence(roles, subject, withdrawn=("F-002", "F-005"))
+
+    assert plain is not None
+    assert restated == f"{plain}; withdrew F-002, F-005"
+    assert bought_parts_sentence(roles, subject, withdrawn=()) == plain
+
+
+def test_the_absent_state_never_names_a_withdrawal() -> None:
+    """Nothing is bought by an answer in the absent state (no question is asked), so no tail."""
+    subject = sitting()
+    roles = classify_parts(subject, None)
+
+    assert bought_parts_sentence(roles, subject, withdrawn=("F-002",)) == bought_parts_sentence(
+        roles, subject
+    )

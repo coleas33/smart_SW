@@ -73,9 +73,11 @@ MODELING_RESILIENCE = (
     "fully defined sketches and described features; the root assembly mates to reference "
     "geometry with a fixed or fully constrained first component and shallow chains; parts "
     "carry global variables. Checks first ran the three RMS checks before the first turn. "
-    "Drawing and judgement-only rules are recorded as out of scope with the reason."
+    "Drawing and judgement-only rules are recorded as out of scope with the reason. "
+    "Custom parts only; bought parts are listed once, not graded."
 )
-"""The contract's text (`contracts/checks-first.md` section 7), pinned whole."""
+"""The contract's text (`contracts/checks-first.md` section 7), pinned whole, with feature
+013's last sentence (T032, `contracts/part-roles.md` section 6), which no rewording touches."""
 
 FEATURE_003_SENTENCE = (
     "the evidence was written by the {profile!r} dump profile: the {phases} phases were "
