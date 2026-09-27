@@ -22,13 +22,11 @@ namespace SwReview.AddIn.Tests;
 ///
 /// <b>There is one row beyond `top_n`, and it folds three findings.</b> Six rows and `top_n` of
 /// five. The check tabs render the first `top_n` and nothing else, so a check tab that shows
-/// <see cref="BeyondTopN"/> fails. The Review tab shows every row in the order supplied - the
-/// first `top_n` under Start here and the rest one line each behind its "Show all" control
-/// (U12, contracts/attention.md section 6) - so there <see cref="BeyondTopN"/> is present only
-/// once that control is opened, and after the five. Because the sixth row folds three findings,
-/// the rows (<see cref="IssueCount"/>) and the findings (<see cref="FindingCount"/>,
-/// <see cref="BeyondTopNFindings"/>) are different numbers, and a count line that confused the
-/// two units prints the wrong one.
+/// <see cref="BeyondTopN"/> fails. Because the sixth row folds three findings, the rows
+/// (<see cref="IssueCount"/>) and the findings (<see cref="FindingCount"/>,
+/// <see cref="BeyondTopNFindings"/>) are different numbers. Since feature 013 the Review tab
+/// shows no Start here: its ranking also carries the grouped findings (<see cref="GroupsSample"/>,
+/// through <see cref="SummarySample"/>), which `attention.json` and the check bodies never do.
 ///
 /// Every field of the contract is here even though the pages read three of them. A page that
 /// started reading `key` or `consequence_class` would then be tested against the real shape
@@ -120,6 +118,47 @@ internal static class AttentionSample
     /// </summary>
     public static object Ranking(string? firstReason = null) =>
         Build(firstReason ?? ShownReasons[0]);
+
+    /// <summary>
+    /// Feature 013 (contracts/grouped-list.md section 1, 013 T044): three undecided rows and two
+    /// passes, as `rank()` answers once no surface amplifies a pass - the passes carry
+    /// `key.suppressed` 1 and sort after every other row, and `top_n` is 3, the unsuppressed rows,
+    /// with the passes counted as checked within scope. A check tab's preview is `rows[0..top_n)`.
+    /// </summary>
+    public static readonly string[] UndecidedFindingIds = { "F-007", "F-008", "F-003" };
+
+    /// <summary>The two passes, after the undecided rows and beyond `top_n`.</summary>
+    public static readonly string[] PassFindingIds = { "F-012", "F-015" };
+
+    /// <summary>The ranking with passes, as a JSON literal a page test can embed.</summary>
+    public static string WithPassesJson() => JsonSerializer.Serialize(new
+    {
+        policy_version = "attention_policy_v1",
+        rows = new object[]
+        {
+            Row("F-007", "interference.static", ShownTitles[0], "demonstrated", "medium",
+                new[] { "cmp:0002", "cmp:0003" }, "interface", judgement: 0, reason: ShownReasons[0]),
+            Row("F-008", "interference.static", ShownTitles[1], "demonstrated", "medium",
+                new[] { "cmp:0004", "cmp:0005" }, "interface", judgement: 0, reason: ShownReasons[1]),
+            Row("F-003", "rms.assembly.mates_to_reference_geometry", ShownTitles[2], "demonstrated", "medium",
+                new[] { "cmp:0001", "cmp:0002" }, "rebuild_breaker", judgement: 1, reason: ShownReasons[2]),
+            Row(PassFindingIds[0], "interference.static", "The third pin clears its bore", "checked_within_scope", "info",
+                new[] { "cmp:0006" }, "interface", judgement: 1, reason: "checked within scope", suppressed: 1),
+            Row(PassFindingIds[1], "hole.alignment", "The hole pattern lines up", "checked_within_scope", "info",
+                new[] { "cmp:0007" }, "interface", judgement: 1, reason: "checked within scope", suppressed: 1),
+        },
+        top_n = 3,
+        not_amplified = new
+        {
+            total = 2,
+            checked_within_scope = 2,
+            dispositioned = 0,
+            info = 0,
+            beyond_top_n = 0,
+        },
+        coverage = Coverage(),
+        empty_reason = (string?)null,
+    });
 
     /// <summary>
     /// The ranking a run that produced no findings answers with: no rows, and the sentence
@@ -222,7 +261,8 @@ internal static class AttentionSample
         string consequenceClass,
         int judgement,
         string reason,
-        string[]? members = null) => new
+        string[]? members = null,
+        int suppressed = 0) => new
     {
         finding_id = findingId,
         member_finding_ids = members ?? new[] { findingId },
@@ -238,7 +278,7 @@ internal static class AttentionSample
         // of the names - `check` and `status` - are already parameters here.
         key = new Dictionary<string, object>
         {
-            { "suppressed", 0 },
+            { "suppressed", suppressed },
             { "judgement", judgement },
             { "consequence", 1 },
             { "status", 0 },

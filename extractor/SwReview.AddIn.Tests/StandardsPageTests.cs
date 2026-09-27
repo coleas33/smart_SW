@@ -574,6 +574,25 @@ public sealed class StandardsPageTests
             "#attention must come before #filters in the document.");
     }
 
+    /// <summary>
+    /// Feature 013 T055 (contracts/grouped-list.md section 1, research R2.17): the preview holds no
+    /// pass. A ranking of three undecided findings and two passes has `top_n` 3 once no surface
+    /// amplifies a pass (013 T044), and the tab renders the three, in the order supplied, and
+    /// neither pass.
+    /// </summary>
+    [Fact]
+    public void ThePreviewHoldsNoPass()
+    {
+        JsonElement rendered = RenderMutated(
+            "result.attention = " + AttentionSample.WithPassesJson() + ";",
+            "return JSON.stringify({ok: true, "
+            + "rows: attrs('#attention .attention-row', 'data-finding-id'), "
+            + "text: document.getElementById('attention').textContent});");
+
+        Assert.Equal(AttentionSample.UndecidedFindingIds, Strings(rendered, "rows"));
+        Assert.All(AttentionSample.PassFindingIds, pass => Assert.DoesNotContain(pass, rendered.GetProperty("text").GetString()!));
+    }
+
     [Fact]
     public void ARankingWithNoRowsPrintsItsOwnSentenceAndNoList()
     {
