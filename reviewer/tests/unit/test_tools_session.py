@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable, Iterator
 from dataclasses import replace
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -937,3 +938,111 @@ def test_the_sittings_eight_question_calls_come_back_with_three_already_answered
         ("already_answered", "ER-005"),
     ]
     assert len(context.session.evidence_requests) == 5
+
+
+# --- feature 013 T065: the ids the tools hand out are accepted (re-ask-guard.md section 4) -----
+
+DRAWINGS = Path(__file__).resolve().parents[1] / "fixtures" / "drawings"
+
+
+def drawing_ids(package: EvidencePackage) -> dict[str, str]:
+    """`{id: kind}` for every sheet, view, dimension, annotation and note the package holds."""
+    found: dict[str, str] = {}
+    for record in package.drawing_records:
+        for sheet in record.sheets:
+            found[sheet.id] = "drawing_sheet"
+            for view in sheet.views:
+                found[view.id] = "drawing_view"
+                found.update({item.id: "drawing_dimension" for item in view.display_dimensions})
+                found.update({item.id: "drawing_annotation" for item in view.annotations})
+                found.update({item.id: "drawing_note" for item in view.notes})
+    return found
+
+
+def test_a_joint_id_is_accepted_after_check_joints_hands_it_out() -> None:
+    from tests.unit.test_joint_map import pattern_package
+
+    tool_context = context_for(pattern_package())
+    tools = ToolRegistry().dispatch(tool_context)
+    tools.call("check_joints", {})
+    joint_id = next(iter(tool_context.joint_analysis.joint_map.joints)).id
+    handed_out = json.dumps(
+        [finding.model_dump(mode="json") for finding in tool_context.require_session().findings]
+    )
+    assert joint_id.startswith("jnt:") and joint_id in handed_out
+
+    with use_context(tool_context):
+        result = session.request_evidence(what="the joint's torque", why="fasteners",
+                                          entity_ids=[joint_id])
+
+    assert result["status"] == "open"
+    assert tool_context.entity_kind(joint_id) == "joint"
+
+
+def test_a_joint_id_before_any_joint_map_or_an_unknown_one_is_refused() -> None:
+    tool_context = context_for(prerun_package())
+
+    with use_context(tool_context):
+        before = session.request_evidence(what="w", why="y", entity_ids=["jnt:0001"])
+        ToolRegistry().dispatch(tool_context).call("check_joints", {})
+        unknown = session.request_evidence(what="w", why="y", entity_ids=["jnt:9999"])
+
+    assert "error" in before and "jnt:0001" in before["error"]
+    assert "error" in unknown and "jnt:9999" in unknown["error"]
+
+
+def test_a_feature_id_is_accepted() -> None:
+    package = prerun_package()
+    feature_id = package.features[0].id
+    tool_context = context_for(package)
+
+    with use_context(tool_context):
+        result = session.request_evidence(what="the sketch", why="modeling.resilience",
+                                          entity_ids=[feature_id])
+        unknown = session.request_evidence(what="w", why="y", entity_ids=["feat:99999"])
+
+    assert result["status"] == "open"
+    assert tool_context.entity_kind(feature_id) == "feature"
+    assert "error" in unknown
+
+
+def test_every_drawing_entity_id_of_the_fixture_is_accepted() -> None:
+    from swreview.ir.loader import load_package
+
+    loaded = load_package(DRAWINGS / "plate-drawing")
+    tool_context = ToolContext(
+        package=loaded, session=context_for(loaded.package).session,
+        checklist=context_for(loaded.package).checklist,
+    )
+    kinds = drawing_ids(loaded.package)
+    assert {"drawing_sheet", "drawing_view"} <= set(kinds.values())
+
+    assert {entity_id: tool_context.entity_kind(entity_id) for entity_id in kinds} == kinds
+    with use_context(tool_context):
+        result = session.request_evidence(what="the note", why="drawing text",
+                                          entity_ids=list(kinds))
+        unknown = session.request_evidence(what="w", why="y", entity_ids=["dvw:9999"])
+    assert result["status"] == "open"
+    assert "error" in unknown
+
+
+def test_a_reloaded_package_answers_for_its_own_drawing_ids() -> None:
+    from swreview.ir.loader import load_package
+
+    loaded = load_package(DRAWINGS / "plate-drawing")
+    tool_context = context_for(prerun_package())
+    some_view = next(entity for entity, kind in drawing_ids(loaded.package).items()
+                     if kind == "drawing_view")
+    assert tool_context.entity_kind(some_view) is None
+
+    tool_context.reload_package(loaded)
+
+    assert tool_context.entity_kind(some_view) == "drawing_view"
+
+
+def test_mark_coverage_scope_still_reads_components_and_documents(context: ToolContext) -> None:
+    result = session.mark_coverage(
+        "fasteners", "checked", CoverageScope(component_ids=["cmp:9999"]), "why"
+    )
+
+    assert "error" in result

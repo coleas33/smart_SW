@@ -188,6 +188,7 @@ class ToolContext:
         self._documents = {item.document_id: item for item in package.documents}
         self._holes = {item.id: item for item in package.holes}
         self._fasteners = {item.id: item for item in package.fasteners}
+        self._handed_out = _handed_out_kinds(package)
 
     def reload_package(self, package: LoadedPackage) -> None:
         """Replace the package every tool reads, and the lookups built over it.
@@ -430,7 +431,34 @@ class ToolContext:
         ):
             if any(item.id == entity_id for item in items):
                 return kind
+        # Feature 013 (`contracts/re-ask-guard.md` section 4): the ids the tools hand the
+        # model - a feature row, a drawing entity, and a joint once the joint map is built
+        # (`check_joints`, or the interference tool's thread-model rule) - name what they name.
+        if entity_id in self._handed_out:
+            return self._handed_out[entity_id]
+        if self.joint_analysis is not None and any(
+            joint.id == entity_id for joint in self.joint_analysis.joint_map.joints
+        ):
+            return "joint"
         return None
+
+
+def _handed_out_kinds(package: EvidencePackage) -> dict[str, str]:
+    """`{id: kind}` for the feature rows and the natively read drawing entities of `package`:
+    ids a tool hands the model (`list_features`, the drawing brief), indexed once per package so
+    `entity_kind` does not walk every drawing on every id."""
+    kinds = {feature.id: "feature" for feature in package.features}
+    for record in package.drawing_records:
+        for sheet in record.sheets:
+            kinds[sheet.id] = "drawing_sheet"
+            for view in sheet.views:
+                kinds[view.id] = "drawing_view"
+                kinds.update(dict.fromkeys((item.id for item in view.display_dimensions),
+                                           "drawing_dimension"))
+                kinds.update(dict.fromkeys((item.id for item in view.annotations),
+                                           "drawing_annotation"))
+                kinds.update(dict.fromkeys((item.id for item in view.notes), "drawing_note"))
+    return kinds
 
 
 _CURRENT: ContextVar[ToolContext] = ContextVar("swreview_tool_context")
