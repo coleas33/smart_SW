@@ -843,3 +843,65 @@ class TestFr005:
             ),
         )
         assert outcomes(evaluate(package, "doc:2"), MATERIAL_ASSIGNED) == {"fail"}
+
+
+# --- feature 013 T132: one sketch, one location (contracts/readings.md section 3) --------------
+
+ABSORBED = (
+    Path(__file__).resolve().parents[1]
+    / "golden"
+    / "fixtures"
+    / "remodel-plan"
+    / "remodel-absorbed-sketches"
+)
+"""Three absorbed sketches listed twice (at depth 0 and under their feature, one persist ref) and
+the Hole Wizard's profile sketch listed only under its hole (`feat:0012`)."""
+
+
+def absorbed(under_defined: Sequence[str]) -> EvidencePackage:
+    """The fixture with every sketch's text read (none) and `under_defined` rows unsolved."""
+    from swreview.ir.loader import load_package
+
+    package = load_package(ABSORBED).package
+    rows = [
+        row.model_copy(
+            update={
+                "sketch": row.sketch.model_copy(
+                    update={
+                        "text_segment_count": 0,
+                        "raw_status": UNDER_DEFINED if row.id in under_defined else FULLY_DEFINED,
+                    }
+                )
+            }
+        )
+        if row.sketch is not None
+        else row
+        for row in package.features
+    ]
+    return package.model_copy(update={"features": rows})
+
+
+def test_an_absorbed_sketch_is_named_once_at_one_location() -> None:
+    """Before, the sketch was named twice: at the top level and again under its hole."""
+    results = evaluate(absorbed(["feat:0009", "feat:0011"]))
+
+    assert observed(results, SKETCHES_FULLY_DEFINED) == (
+        "Sketch3 is under-defined, at the top level of the feature tree, and belongs to the "
+        "hole-wizard feature Hole1"
+    )
+    assert row(results, SKETCHES_FULLY_DEFINED, "fail").subjects == ["feat:0009"]
+
+
+def test_a_carried_hole_wizard_sketch_is_still_checked_under_its_hole() -> None:
+    results = evaluate(absorbed(["feat:0012"]))
+
+    assert observed(results, SKETCHES_FULLY_DEFINED) == (
+        "Sketch9 is under-defined, under Hole1, and belongs to the hole-wizard feature Hole1"
+    )
+
+
+def test_the_passing_sketches_are_each_named_once() -> None:
+    results = evaluate(absorbed([]))
+
+    passing = row(results, SKETCHES_FULLY_DEFINED, "pass")
+    assert passing.subjects == ["feat:0002", "feat:0005", "feat:0009", "feat:0012"]

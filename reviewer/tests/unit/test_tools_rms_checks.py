@@ -1204,3 +1204,42 @@ def test_the_assembly_tool_grades_the_custom_side_of_each_mate() -> None:
         "mate:0002 (COINCIDENT) references swSelFACES on plate-1, swSelFACES on spacer-1"
     ]
     assert "mate:0001" in mate_findings(without)[0]
+
+
+# --- feature 013 T132: what the tree reading folded is said (contracts/readings.md 3) ----------
+
+ABSORBED = (
+    Path(__file__).resolve().parents[1]
+    / "golden"
+    / "fixtures"
+    / "remodel-plan"
+    / "remodel-absorbed-sketches"
+)
+TREE_NOTE = "rms.tree.folded_rows"
+
+
+def notes_of(context: ToolContext) -> list[CoverageItem]:
+    return [item for item in session_of(context).coverage.checked if item.check == TREE_NOTE]
+
+
+def test_the_part_check_says_what_the_tree_reading_merged_and_carried() -> None:
+    """Counts never drop without a word: three second listings and one carried sketch."""
+    context = context_for(load_package(ABSORBED).package)
+
+    run_tool(context, "check_rms_part")
+    run_tool(context, "check_rms_part")
+
+    [note] = notes_of(context)
+    assert note.reason == (
+        "remodel-absorbed-sketches.SLDPRT: 3 second listings merged, 1 carried sub-feature "
+        "read with its feature"
+    )
+    assert note.scope.document_ids == ["doc:1"]
+
+
+def test_a_tree_with_nothing_to_fold_says_nothing() -> None:
+    context = sitting_context(roles=False)
+
+    run_tool(context, "check_rms_part")
+
+    assert notes_of(context) == []

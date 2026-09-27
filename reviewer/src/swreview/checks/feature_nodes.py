@@ -66,7 +66,7 @@ from dataclasses import dataclass
 from swreview.checks.rms_types import RmsTypeTable
 from swreview.ir.models import Feature
 
-__all__ = ["CarriedRow", "MergedRow", "TreeNodes", "tree_nodes"]
+__all__ = ["CarriedRow", "MergedRow", "TreeNodes", "carried_rows", "tree_nodes"]
 
 
 @dataclass(frozen=True)
@@ -152,6 +152,27 @@ def tree_nodes(rows: Sequence[Feature], table: RmsTypeTable) -> TreeNodes:
         ),
         merged=tuple(merged),
         carried=carried,
+    )
+
+
+def carried_rows(rows: Sequence[Feature], nodes: TreeNodes) -> tuple[Feature, ...]:
+    """The carried rows themselves, in the order they arrived, for a check that reads each
+    sketch once (feature 013 `contracts/readings.md` section 3).
+
+    A carried row holds no position, so `tree_nodes` leaves it out of `nodes.rows`; but it
+    is still a feature with readings - the Hole Wizard's profile sketch has a constrained
+    status - and a check that dropped it would grade less than the package holds without a
+    word. A check reads it as its owner's: its `folder_id` names the row a second listing
+    folded into, so its place in the tree is the kept row's.
+    """
+    carried = {carry.dropped_id for carry in nodes.carried}
+    into = {merge.dropped_id: merge.kept_id for merge in nodes.merged}
+    return tuple(
+        row.model_copy(update={"folder_id": into[row.folder_id]})
+        if row.folder_id in into
+        else row
+        for row in rows
+        if row.id in carried
     )
 
 

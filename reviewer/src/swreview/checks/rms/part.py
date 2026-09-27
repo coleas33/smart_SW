@@ -37,6 +37,7 @@ from dataclasses import dataclass
 from itertools import pairwise
 
 from swreview import units
+from swreview.checks.feature_nodes import MergedRow, carried_rows, tree_nodes
 from swreview.checks.rms.groups import GroupAssignment
 from swreview.checks.rms.registry import RULES, RmsRule, bind, evaluable
 from swreview.checks.rms.results import (
@@ -134,16 +135,27 @@ class PartTree:
 
     document_id: str
     rows: tuple[Feature, ...]
-    """Every row of the document's tree in `index` order, folders and end tags included."""
+    """One row per feature position, in `index` order, folders and end tags included: the
+    tree as `checks/feature_nodes.tree_nodes` reads it (feature 013 `contracts/readings.md`
+    section 3), so an absorbed sketch listed twice is one row and a carried sub-feature is
+    not a row of its own."""
 
     content: tuple[Feature, ...]
     """The rows the method holds to its rules (`rules.md`, "Content features")."""
 
     by_id: Mapping[str, Feature]
+    """Every row above, and every carried row, by id."""
+
     groups_present: frozenset[str]
     table: RmsTypeTable
     assignment: GroupAssignment
     package: EvidencePackage
+    merged: tuple[MergedRow, ...] = ()
+    """The second listings `tree_nodes` merged into the row they repeat."""
+
+    carried: tuple[Feature, ...] = ()
+    """The carried rows - the Hole Wizard's profile sketch under its hole - read as their
+    owner's: no position of their own, but a sketch among them is still graded, once."""
 
     def group_name(self, role: int) -> str:
         """The tree name of the group in `role`, e.g. `4-Detail` for `DETAIL`."""
@@ -194,15 +206,20 @@ def part_tree(
             )
         if row.id not in assignment.by_feature_id:
             raise ValueError(f"{row.id} is not in the group assignment of {document_id}")
+    nodes = tree_nodes(rows, table)
+    kept = tuple(sorted(nodes.rows, key=lambda row: row.index))
+    carried = carried_rows(rows, nodes)
     return PartTree(
         document_id=document_id,
-        rows=rows,
-        content=tuple(row for row in rows if table.is_content(row)),
-        by_id={row.id: row for row in rows},
+        rows=kept,
+        content=tuple(row for row in kept if table.is_content(row)),
+        by_id={row.id: row for row in (*kept, *carried)},
         groups_present=frozenset(name for name, _ in assignment.groups_seen),
         table=table,
         assignment=assignment,
         package=package,
+        merged=nodes.merged,
+        carried=carried,
     )
 
 
@@ -282,7 +299,29 @@ def _sketch_subjects(tree: PartTree, rows: Sequence[Feature]) -> list[Feature]:
 
 
 def _sketches(tree: PartTree) -> list[Feature]:
-    return [row for row in tree.content if row.sketch is not None]
+    """Every sketch of the document once: the content rows' and the carried rows' (the Hole
+    Wizard's profile sketch is its hole's, and still a sketch with a status), in tree order."""
+    carried = [row for row in tree.carried if tree.table.is_content(row)]
+    return _ordered([row for row in (*tree.content, *carried) if row.sketch is not None])
+
+
+def _absorbed(tree: PartTree) -> dict[str, Feature]:
+    """`{absorbed sketch id: the content feature consuming it}`.
+
+    An absorbed sketch is a sketch the dump listed a second time under the feature that
+    consumes it (a `merged` row's kept row): it moves with that feature, so the grouping rule
+    reports it as part of the feature rather than as a row of its own. A sketch with no
+    content consumer is a feature like any other.
+    """
+    absorbed: dict[str, Feature] = {}
+    for merge in tree.merged:
+        row = tree.by_id.get(merge.kept_id)
+        if row is None or row.sketch is None:
+            continue
+        owners = [consumer for consumer in _consumers(tree, row) if tree.table.is_content(consumer)]
+        if owners:
+            absorbed[row.id] = owners[0]
+    return absorbed
 
 
 # --- rms.folders.present ----------------------------------------------------------
@@ -359,17 +398,30 @@ def folders_ordered(tree: PartTree) -> list[RuleResult]:
 def grouping_all_features_in_a_group(tree: PartTree) -> list[RuleResult]:
     """Every content feature lives inside a group. Never skips: no folders means all loose."""
     rule = RULES[GROUPING]
-    loose = [row for row in tree.content if tree.group_of(row) is None]
-    grouped = [row for row in tree.content if tree.group_of(row) is not None]
+    absorbed = _absorbed(tree)
+    loose = [
+        row for row in tree.content if row.id not in absorbed and tree.group_of(row) is None
+    ]
+    with_sketches = {
+        row.id: [tree.by_id[sketch] for sketch, owner in absorbed.items() if owner.id == row.id]
+        for row in loose
+    }
+    subjects = _ordered([*loose, *(sketch for rows in with_sketches.values() for sketch in rows)])
+    subject_ids = {row.id for row in subjects}
+    grouped = [row for row in tree.content if row.id not in subject_ids]
     violation = None
     if loose:
+        named = ", ".join(
+            f"{row.name} (with {_named(with_sketches[row.id])})"
+            if with_sketches[row.id]
+            else row.name
+            for row in loose
+        )
         violation = finding(
             rule,
             tree.document_id,
-            loose,
-            observed=(
-                f"{len(loose)} content feature(s) sit outside every group: {_named(loose)}"
-            ),
+            subjects,
+            observed=f"{len(loose)} content feature(s) sit outside every group: {named}",
             recommended_action="Move each feature into the group folder its role belongs to.",
         )
     return _verdict(rule, tree, violation=violation, passing=grouped)

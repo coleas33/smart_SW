@@ -21,7 +21,10 @@ bridge call, five standards findings that need a profile). Since the owner's dec
 recorded RMS finding that lost only the subjects the current type table stopped counting is
 **narrowed** - matched to the replayed finding once those locations are taken out, and listed -
 so it is among the reproduced, never lost or added, and each recording's narrowed findings are
-pinned by check and by the locations removed.
+pinned by check and by the locations removed. Since feature 013 T133 the RMS part rules read the
+tree one node per feature position, and by the default for T134-Q1 (`contracts/replay.md` section
+5) a recorded finding that lost only a merged second listing's occurrence or a carried row is
+narrowed the same way.
 
 No `pytest.mark.integration`: that marker means "needs a saved native evidence package" and
 `tests/conftest.py` skips it whole when that package is absent, which it is on the machine that
@@ -51,7 +54,6 @@ MAIN_ROUNDS = dict(zip(RUNS, (40, 38, 36), strict=True))
 the rule must cover every one, or it would pass by holding nothing."""
 
 pytestmark = pytest.mark.usefixtures("vocabulary")
-
 
 def as_recorded(run: str) -> tuple[ReplayPasses, ReplayReport]:
     """Both passes of the recording with its own settings (every lever and the view off);
@@ -91,27 +93,60 @@ def test_replayed_and_not_replayable_findings_are_the_recorded_set(run: str) -> 
 
 
 LOOSE = "rms.grouping.all_features_in_a_group"
+FULLY_DEFINED = "rms.sketches.fully_defined"
+ONE_SKETCH = "rms.sketches.one_sketch_per_feature"
 NARROWED: dict[str, Counter[str]] = dict(
-    zip(RUNS, (Counter({LOOSE: 20}), Counter({LOOSE: 2}), Counter({LOOSE: 1})), strict=True)
+    zip(
+        RUNS,
+        (
+            Counter({LOOSE: 20, FULLY_DEFINED: 3, ONE_SKETCH: 3}),
+            Counter({LOOSE: 2, FULLY_DEFINED: 1}),
+            Counter({LOOSE: 1, FULLY_DEFINED: 1}),
+        ),
+        strict=True,
+    )
 )
-"""The recorded findings each recording's replay narrows, by check (owner decision 23A,
-`contracts/replay.md` sections 5 and 10). None until feature 003's decision 20A made the eleven
-system types of the real dumps `tolerated_loose` (003 T090 to T092); since, 20, 2 and 1 part
-checks' loose-feature findings, each on the same part and configuration as recorded, without
-its system-row subjects."""
-REMOVED_LOCATIONS = dict(zip(RUNS, (106, 10, 5), strict=True))
-"""The drawing locations those narrowed findings lose, in all: one per system row the part
-check named loose when the recordings were made (the 106, 10 and 5 rows 003 T092 counted)."""
+"""The recorded findings each recording's replay narrows, by check (owner decision 23A, feature
+013's default for T134-Q1; `contracts/replay.md` sections 5 and 10). None until feature 003's
+decision 20A made the eleven system types of the real dumps `tolerated_loose` (003 T090 to T092);
+then 20, 2 and 1 part checks' loose-feature findings, each on the same part and configuration as
+recorded, without its system-row subjects. Since 013 T133 reads the tree one node per feature
+position (013 T134), also 3, 1 and 1 sketch findings naming an absorbed sketch once where the
+recording named its depth-0 row and its second listing, and on the big recording 3
+`one_sketch_per_feature` findings that no longer count a second listing as a consumer. No
+Standards finding is among them: the recordings are replayed with no standards profile, so the
+Standards sketch check's findings are not replayable here (the fixtures, graded with the example
+profile, carry that case)."""
+REMOVED_LOCATIONS: dict[str, Counter[str]] = dict(
+    zip(
+        RUNS,
+        (
+            Counter({LOOSE: 272, FULLY_DEFINED: 4, ONE_SKETCH: 7}),
+            Counter({LOOSE: 28, FULLY_DEFINED: 1}),
+            Counter({LOOSE: 20, FULLY_DEFINED: 1}),
+        ),
+        strict=True,
+    )
+)
+"""The drawing locations those narrowed findings lose, by check, both clauses counted together:
+283, 29 and 21 in all (013 T134; 106, 10 and 5 before T133, one per system row the part check
+named loose when the recordings were made, the rows 003 T092 counted)."""
 
 
 @pytest.mark.parametrize("run", RUNS)
-def test_the_narrowed_findings_are_what_the_type_table_stopped_counting(run: str) -> None:
-    """A narrowed finding is one the replayed pass matched once the locations naming only rows
-    the current table does not count were taken out: listed, never lost, never added."""
+def test_the_narrowed_findings_are_what_the_table_and_the_tree_reading_took_away(
+    run: str,
+) -> None:
+    """A narrowed finding is one the replayed pass matched once locations naming only rows the
+    current table does not count, or the tree reading folds, were taken out: listed, never lost,
+    never added."""
     findings = as_recorded(run)[1].findings
 
     assert Counter(item.check for item in findings.narrowed) == NARROWED[run]
-    assert sum(item.removed_locations for item in findings.narrowed) == REMOVED_LOCATIONS[run]
+    removed: Counter[str] = Counter()
+    for item in findings.narrowed:
+        removed[item.check] += item.removed_locations
+    assert removed == REMOVED_LOCATIONS[run]
 
 
 def test_the_big_run_replays_88_findings_and_lists_11_it_cannot() -> None:

@@ -24,6 +24,7 @@ tree half of it - no Detail group, no run, a run for another document.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -33,6 +34,7 @@ from swreview.checks.rms.groups import assign_groups
 from swreview.checks.rms.part import PartTree, evaluate_part, part_tree
 from swreview.checks.rms.results import RuleResult
 from swreview.checks.rms_types import load_table
+from swreview.ir.loader import load_package
 from swreview.ir.models import Gap
 from tests.support.features import (
     EquationSpec,
@@ -1576,3 +1578,145 @@ class TestEvaluatePart:
         )
 
         assert not set(EQUATION_RULE_IDS) & {result.rule_id for result in results}
+
+
+# --- feature 013 T132: one tree reading (contracts/readings.md section 3) ----------------------
+
+ABSORBED = (
+    Path(__file__).resolve().parents[1]
+    / "golden"
+    / "fixtures"
+    / "remodel-plan"
+    / "remodel-absorbed-sketches"
+)
+"""The planner's fixture of the real packages' two shapes: three absorbed sketches each listed
+at depth 0 and again under the feature consuming it (`feat:0004`, `:0007`, `:0011`), and the
+Hole Wizard's profile sketch listed only under its hole (`feat:0012`)."""
+
+GROUPING_RULE = "rms.grouping.all_features_in_a_group"
+FULLY_DEFINED_RULE = "rms.sketches.fully_defined"
+NOT_OVER_DEFINED_RULE = "rms.sketches.not_over_defined"
+ONE_SKETCH_RULE = "rms.sketches.one_sketch_per_feature"
+
+
+def absorbed(**changes: dict[str, Any]) -> tuple[Any, list[Any]]:
+    """The fixture's package and rows, a row's fields replaced (`feat_0012={"raw_status": 2}`
+    sets a sketch reading; any other key replaces the row's own field)."""
+    package = load_package(ABSORBED).package
+    rows = []
+    for row in package.features:
+        change = dict(changes.get(row.id.replace(":", "_"), {}))
+        sketch_fields = {
+            key: change.pop(key) for key in ("raw_status", "consumer_ids") if key in change
+        }
+        if sketch_fields:
+            change["sketch"] = row.sketch.model_copy(update=sketch_fields)
+        rows.append(row.model_copy(update=change))
+    return package.model_copy(update={"features": rows}), rows
+
+
+def absorbed_results(package: Any, rows: list[Any]) -> dict[str, dict[str, RuleResult]]:
+    keyed: dict[str, dict[str, RuleResult]] = {}
+    for result in evaluate_part("doc:1", rows, TABLE, assign_groups(rows, TABLE), package):
+        keyed.setdefault(result.rule_id, {})[result.outcome] = result
+    return keyed
+
+
+def subject_rows(result: RuleResult) -> list[str]:
+    return [row.name for row in result.subject_rows]
+
+
+def test_the_part_tree_keeps_one_node_per_position() -> None:
+    package, rows = absorbed()
+
+    tree = part_tree("doc:1", rows, TABLE, assign_groups(rows, TABLE), package)
+
+    assert [row.id for row in tree.rows] == [
+        "feat:0001",
+        "feat:0002",
+        "feat:0003",
+        "feat:0005",
+        "feat:0006",
+        "feat:0008",
+        "feat:0009",
+        "feat:0010",
+    ]
+    assert [(merge.dropped_id, merge.kept_id) for merge in tree.merged] == [
+        ("feat:0004", "feat:0002"),
+        ("feat:0007", "feat:0005"),
+        ("feat:0011", "feat:0009"),
+    ]
+    assert [row.id for row in tree.carried] == ["feat:0012"]
+
+
+def test_grouping_lists_each_feature_once_and_no_absorbed_or_carried_sketch_as_a_row() -> None:
+    """An absorbed sketch moves with the feature consuming it and is reported as part of it;
+    the Hole Wizard's profile sketch is its hole's (before: 11 rows, three sketches twice)."""
+    package, rows = absorbed()
+
+    fail = absorbed_results(package, rows)[GROUPING_RULE]["fail"]
+
+    assert fail.result is not None
+    assert fail.result.observed == (
+        "4 content feature(s) sit outside every group: Boss-Extrude1 (with Sketch1), "
+        "Cut-Extrude1 (with Sketch2), Fillet1, Hole1 (with Sketch3)"
+    )
+    assert subject_rows(fail) == [
+        "Sketch1",
+        "Boss-Extrude1",
+        "Sketch2",
+        "Cut-Extrude1",
+        "Fillet1",
+        "Sketch3",
+        "Hole1",
+    ]
+
+
+def test_the_sketch_rules_name_each_sketch_once_with_its_consumer() -> None:
+    package, rows = absorbed()
+
+    keyed = absorbed_results(package, rows)
+
+    for rule_id in (FULLY_DEFINED_RULE, NOT_OVER_DEFINED_RULE):
+        assert list(keyed[rule_id]) == ["pass"], rule_id
+        assert subject_rows(keyed[rule_id]["pass"]) == [
+            "Sketch1",
+            "Boss-Extrude1",
+            "Sketch2",
+            "Cut-Extrude1",
+            "Sketch3",
+            "Hole1",
+            "Sketch9",
+        ], rule_id
+
+
+def test_an_under_defined_carried_sketch_is_still_graded_with_its_hole() -> None:
+    """Carried is not dropped: the profile sketch is read with its feature, and graded."""
+    package, rows = absorbed(feat_0012={"raw_status": 2})
+
+    fail = absorbed_results(package, rows)[FULLY_DEFINED_RULE]["fail"]
+
+    assert fail.result is not None
+    assert fail.result.observed == "Sketch9 constrained status is under_defined"
+    assert subject_rows(fail) == ["Sketch9", "Hole1"]
+
+
+def test_an_under_defined_absorbed_sketch_is_named_once() -> None:
+    package, rows = absorbed(feat_0009={"raw_status": 2}, feat_0011={"raw_status": 2})
+
+    fail = absorbed_results(package, rows)[FULLY_DEFINED_RULE]["fail"]
+
+    assert fail.result is not None
+    assert fail.result.observed == "Sketch3 constrained status is under_defined"
+
+
+def test_one_sketch_per_feature_does_not_count_a_second_listing_as_a_consumer() -> None:
+    """Sketch1 named Sketch2 twice - once at depth 0 and once as its second listing - so it read
+    as consumed by three features; it is consumed by two."""
+    consumers = ["feat:0003", "feat:0005", "feat:0007"]
+    package, rows = absorbed(feat_0002={"consumer_ids": consumers, "child_ids": consumers})
+
+    fail = absorbed_results(package, rows)[ONE_SKETCH_RULE]["fail"]
+
+    assert fail.result is not None
+    assert fail.result.observed == "Sketch1 is consumed by 2 features: Boss-Extrude1, Sketch2"
