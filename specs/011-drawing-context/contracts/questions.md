@@ -52,6 +52,8 @@ coverage item per part or assembly document the package reviews, in traversal or
 A drawing root's own document is not a subject of this coverage (it is graded by feature 006); its
 referenced documents are.
 
+*Amended 2026-09-27 by feature 013 T099:* the drawing check's questions - the candidate and the governing ones - carry `source: code` (013 `contracts/sources.md` section 1): `check_drawings` records each through `tools/session.record_question`, the one path a code question takes (the shared exact duplicate test, then `record_evidence_request` with `source="code"`), so the pane labels them and the re-ask guard never lets one cover a model question.
+
 *Amended 2026-09-26 by feature 013 T079 (013 `contracts/drawing-capability.md` section 3):*
 `run_drawing_context(package, profile=None, index=None, roles=None, mode="none")` first gives each
 reviewed part or assembly document a drawing state (`drawing_states(index, roles, mode)`), in this
