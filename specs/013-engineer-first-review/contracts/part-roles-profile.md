@@ -170,6 +170,11 @@ swreview profile upgrade <profile.yaml> --out <profile-v4.yaml>
 - Validates the written file with the loader and prints the path and its sha256; no profile value is
   printed.
 - A version 4 input is refused: "already version 4".
+- *Amended 2026-09-27 (the review of that day):* until the owner fills it, the written file
+  decides exactly what its version 3 input decides: a section with every signal unused is read as
+  the version 3 profile (`part-roles.md` section 1's amendment), so pointing the pane at the
+  unfilled output never fires the zero-match guard where the version 3 file asked about the
+  unclear parts. Nothing is bought until an entry is filled in.
 
 ## 6. Tests
 

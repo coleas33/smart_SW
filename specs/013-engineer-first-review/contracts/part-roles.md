@@ -37,6 +37,17 @@ and refused, so the no-profile line can say why.
 | `convention_only` | a version 1 to 3 profile with a non-empty `part_number.pattern` | the table of section 2.4 only (research R2.5): the answer, Toolbox, the part-number convention; every other document is `unclear` and listed in the question, even beside a same-name drawing or inside a vendor assembly |
 | `absent` | no profile, an unreadable or invalid one, or a version 1 to 3 profile with an empty pattern | the answer (never populated: no question is asked) and Toolbox; every other document is `unclear` with the state's reason, graded, **with no note** and no question |
 
+*Amended 2026-09-27 (the review of that day):* a version 4 profile whose `part_roles` section has
+**every signal unused** - `PartRolesSection.signals_unused`: no bought prefix or folder name, no
+switch property, no vendor, distributor or detail property, no catalogue shape, no custom or bought
+number prefix; what `swreview profile upgrade` writes before the owner fills it in
+(`part-roles-profile.md` section 5) - is read as the version 3 profile it was proposed from:
+`convention_only` with a non-empty `part_number.pattern`, `absent` with an empty one. With every
+signal off only Toolbox and the same-name drawing could vote, so the zero-match guard fired on the
+sitting's package and no part-roles question was asked, where the version 3 file asked about the
+unclear parts; the unfilled file now decides exactly what its input decides, and `configured`
+means a version 4 section with at least one signal in use.
+
 ## 2. How a document is decided
 
 ### 2.1 The signals (the `configured` state)

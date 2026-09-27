@@ -500,6 +500,26 @@ class PartRolesSection(_Section):
     def _number_prefixes_are_written(cls, values: list[str]) -> list[str]:
         return _no_repeat(_no_blank(values, "prefix"), _value_key, _VALUES_RULE)
 
+    @property
+    def signals_unused(self) -> bool:
+        """Whether every signal this section configures is off: what `swreview profile upgrade`
+        writes before the owner fills it in (`propose_version_4`). Such a section decides nothing
+        a version 3 profile would not, so the classifier reads the profile as the version 3 file
+        it was proposed from (feature 013 `contracts/part-roles.md` section 1, amended
+        2026-09-27): Toolbox and the part-number convention decide, and the unclear parts are
+        asked about, where every signal off fired the zero-match guard and asked nothing."""
+        return not (
+            self.bought_prefixes
+            or self.bought_folder_names
+            or self.switch.property.strip()
+            or self.vendor_properties
+            or self.distributor_block.properties
+            or self.catalogue_numbers.shapes
+            or self.custom_prefixes
+            or self.bought_number_prefixes
+            or self.detail_properties
+        )
+
     @model_validator(mode="after")
     def _a_number_votes_one_way(self) -> PartRolesSection:
         """A custom and a bought prefix that overlap would let one number vote both ways."""
