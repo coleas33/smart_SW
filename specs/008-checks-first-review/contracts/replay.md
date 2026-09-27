@@ -405,6 +405,35 @@ for `rms.*`; the real recordings' replay runs with no standards profile, so it c
 the generator narrows 29, 4 and 3 recorded findings - 26, 3 and 2 `rms.*` and 3, 1 and 1 Standards
 sketch findings - loses none, and writes the three fixtures (section 9, row "Feature 013 US7").
 
+*Amended 2026-09-27 on review (feature 013 T159; default taken 2026-09-27, the owner may revise;
+013 research R2.48, research R2.61): what each check can still name.* The tree-reading clause
+removes a location only where the current check can no longer name the rows it names:
+
+- **the family** is every check that reads the shared tree reading, named: the `rms.*` rules and, in
+  `TREE_READING_STANDARDS_CHECKS`, `standards.part.sketches_fully_defined` and
+  `standards.part.rebuild_errors`, which reads the same `Part.features` since 013 T133 (the paragraph
+  above said the rest of `standards.*` reads the rows as dumped; the rebuild-error check did not).
+  No other Standards check reads a part's tree, and none is narrowed;
+- **a carried row is a place** for every check that still grades it as its owner's - the three RMS
+  sketch rules (`rms.sketches.fully_defined`, `rms.sketches.not_over_defined`,
+  `rms.sketches.one_sketch_per_feature`, `CARRIED_SKETCH_RMS_CHECKS`) and both Standards checks - so
+  for them a location naming a carried row is never removed wholesale, and a carried sketch or
+  sub-feature the current finding no longer names is **lost**. The other `rms.*` rules give a
+  carried row no place, and for them it goes as above;
+- **the places are counted per family** (`FoldedLocation`): for the other `rms.*` rules the rows the
+  reading keeps as a position and the table counts (`positions`), for the three sketch rules those
+  and the carried rows the table counts (`carried`), and for the Standards checks every row the
+  reading keeps or carries, whatever the table says (`features`), so an absorbed sketch whose name
+  or type the table excludes keeps its depth-0 occurrence for a Standards check. The merged half -
+  a merged pair's occurrences beyond the places, at most one per second listing - reads every
+  family unchanged, and decision 23A's clause still reads `rms.*` alone.
+
+Everything else is as above. Measured before the code: on the three recordings every carried
+location narrowing removes is in a grouping finding and the sketch rules' narrowed findings drop
+merged pairs alone, so none is lost, none added, 26, 3 and 2 narrowed and 283, 29 and 21 locations
+removed, as before; no check's output moves, so the fixtures do not.
+`test_replay_narrowed_tree.py` pins it.
+
 ## 6. The regrouped estimate (from User Story 4)
 
 Printed beside the strict figure whenever a rule applies, with its assumption: "the model does

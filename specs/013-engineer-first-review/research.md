@@ -879,7 +879,10 @@ the 30 findings (it drifts); regenerating the fixtures with T133 and accepting t
 
 #### R2.47 The tree-reading clause reads every check that reads the tree (T134-Q2)
 
-*Numbered after R2.46 and placed beside R2.42, the clause it extends.*
+*Numbered after R2.46 and placed beside R2.42, the clause it extends.* *Corrected 2026-09-27 on
+review (R2.48, T159):* `standards.part.rebuild_errors` reads the tree too and joins the named
+checks; for them and for the three RMS sketch rules a carried row is a place, never removed
+wholesale; and a Standards check's places are counted without the type table.
 
 **Decision**: R2.42's tree-reading clause applies to every check that reads the shared tree reading
 (`checks/feature_nodes.tree_nodes`): the `rms.*` rules and `standards.part.sketches_fully_defined`,
@@ -926,6 +929,69 @@ would pass unseen); both clauses for the sketch check (the type table says nothi
 Standards check names, so it would only loosen); a separate outcome (the same meaning as
 `narrowed`); keeping T132-T133 off `main` (the generator refuses the fixtures over a shape the rule
 already reads for `rms.*`).
+
+#### R2.48 The tree-reading clause removes only what each check can no longer name (review of 2026-09-27, T159)
+
+*Numbered after R2.47 and placed beside it, the clause it corrects.*
+
+**Decision**: the review of 2026-09-27 found three places where R2.42 and R2.47's clause did not
+follow what the checks read since T133, and one count it asked about. Each is answered here:
+
+- **A carried row is a place for the checks that still grade it.** The carried half of the clause
+  (every occurrence of a location naming only rows the reading carries, merges or does not count)
+  reads only the checks that give a carried row no place: the `rms.*` rules that read
+  `PartTree.content` or `rows`, grouping first. A check that still grades a carried row as its
+  owner's counts it as a place its finding may still name, so a location naming one is never
+  removed wholesale and a carried sketch the current finding no longer names is **lost**: the three
+  RMS sketch rules, `rms.sketches.fully_defined`, `rms.sketches.not_over_defined` and
+  `rms.sketches.one_sketch_per_feature` (each grades every sketch once through `_sketches`, a carried
+  content sketch included), named by `benchmark/replay.CARRIED_SKETCH_RMS_CHECKS`, and every
+  Standards check that reads the tree. The merged half (a merged pair's occurrences beyond the rows
+  the reading keeps there, at most one per second listing) reads all of them unchanged.
+- **`standards.part.rebuild_errors` reads the tree.** T133 gave `part_scope` one `features` for every
+  part check, so the rebuild-error check reads it too, as landed: a feature listed twice is one
+  subject at its depth-0 location, and a carried sub-feature is still a subject, under its owner. It
+  joins `TREE_READING_STANDARDS_CHECKS` by name beside the sketch check. The other two part checks
+  read no feature row, and no other Standards check reads a part's tree, so R2.47's line - the
+  checks that read the tree, by name - is where it was; its sentence that the rest of `standards.*`
+  reads the rows as dumped was untrue of this one check.
+- **A Standards check's places are counted without the type table.** For
+  `TREE_READING_STANDARDS_CHECKS` the rows a location names that the check may still name are every
+  row the reading keeps as a position or carries, whatever its type or name
+  (`FoldedLocation.features`), so an absorbed sketch whose name the table excludes (`Origin`, a
+  default plane's name) or whose type it tolerates keeps its depth-0 occurrence as every other
+  sketch does. The `rms.*` rules keep the table's count (`FoldedLocation.positions`, plus
+  `FoldedLocation.carried` - carried rows the table counts - for the three sketch rules).
+- **The grouping finding's count is its features, its subjects more.** Nothing changes: the finding
+  says how many content features sit outside every group (the 22 of the custom plate an engineer
+  moves, SC-010), and its subjects are those features with, after each, the absorbed sketches it
+  consumes ("Boss-Extrude1 (with Sketch1)"), so each sketch keeps its drawing location (33 subjects
+  there). No surface states a finding's subject count as its features; the checks digest's
+  `subjects` sums every finding's subjects across a call, sketch consumers included, and never did.
+  003 `contracts/rules.md` says so.
+
+**Default taken 2026-09-27, the owner may revise.**
+
+**Why**: R2.47's "a remaining sketch subject swapped or dropped stays lost" and 006
+`contracts/rules.md`'s "a carried sub-feature ... is still a subject" were not what the clause did:
+a Standards or RMS sketch finding that stopped naming the Hole Wizard's carried profile sketch came
+back narrowed, because a carried row never counted as a place. A pre-T133 recording of a rebuild
+error on an absorbed sketch's two listings read as lost against today's one location, the shape
+the clause narrows for the sketch check. And the Standards count read the type table R2.47 said it
+never reads. Measured on the three real recordings before the code (2026-09-27, `main` at
+`d2af5cc`): every carried location narrowing removes lies in an `rms.grouping.all_features_in_a_group`
+finding (29, 4 and 4 carried content sketches, the rest carried rows the table does not count), and
+the sketch rules' narrowed findings drop merged pairs alone (4 and 7 occurrences on the big
+recording, 1 and 1 on the small ones), so the figures stay 26, 3 and 2 narrowed and 283, 29 and 21
+locations removed; no check's output moves, so neither does a fixture.
+
+**Alternatives**: read the rebuild-error check from the rows as dumped again, as the documents said
+(it would name one feature twice, one persistent reference twice in one finding - the duplicate
+FR-051 removes for sketches - through a second reading of the part inside one scope); keep a carried
+*consumer* removable for the RMS sketch rules while a carried sketch is not (a location carries no
+row kind, the recordings drop no carried consumer, and a false loss is the safe side); a separate
+count of rows as dumped for the Standards clause (the reading already says which rows are one
+feature).
 
 #### R2.43 The Model check says its open part looks bought (FR-008, US1 scenario 6)
 

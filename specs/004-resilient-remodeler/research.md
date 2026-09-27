@@ -1686,3 +1686,61 @@ a new three-valued field for the close (not taken: `remodel.close`'s `detail` an
 three-fact seam read a boolean, and unknown is not closed); confirm the close through the copy's own
 `GetOpenDocumentIdentity` (not taken: it is `VerifyTarget`'s ungated read on a document that has
 just been closed, where the seat's read is gated and asks the application).
+
+### R15.4 A failed open's unwind asks SOLIDWORKS when no document came back (review of 2026-09-27, T183)
+
+**Decision**: the unwind of a `remodel.open` that failed after it changed the settings (T177) no
+longer reports the copy closed without asking whenever it holds no document handle. What it does
+depends on how far the open got:
+
+- **The copy was never made** (`RemodelCopy.CreateCopy` refused or threw): `OpenDoc7` was never
+  called, so nothing was opened; `copy_closed` is true and nothing is asked. A file the byte copy
+  refused to overwrite is not the run's, and neither is a document open at its path.
+- **The copy exists but no handle came back** - `OpenDoc7` answered null, it or the document's
+  wrapper (`SwRemodelCopyDocument`, built after `OpenDoc7` returns) threw, or the gate refused the
+  call: SOLIDWORKS may have opened the file anyway. The unwind asks the seat
+  (`IRemodelSeat.IsDocumentOpen(copy)`, the clean-up read under `GetOpenDocumentByName`, guarded and
+  observed but not counted, as R15.3's confirmation is) whether a document is open at the copy's
+  path. None is `copy_closed` true. One is closed unsaved by the same close helper - `CloseDoc`, then
+  the confirmation - so its `copy_closed` is judged as every other close is. A read that throws is
+  unknown, and unknown is not closed: false, with a sentence that whether SOLIDWORKS opened the copy
+  could not be read.
+- **A handle came back**: unchanged, the close helper as before.
+
+The copy is deleted after this, as before, whatever it found; the reason the open stopped is still
+what is thrown.
+
+**Default taken 2026-09-27, the owner may revise.**
+
+**Why**: `copy_closed = document == null || CloseCopyUnsaved(...)` reported a copy closed with no
+`GetOpenDocumentByName` read whenever no handle came back, although everywhere else the teardown is
+judged by SOLIDWORKS's answers (R15.3), and a copy left open after a failed open would also make the
+delete that follows fail. The copy's path is the run's own folder, just made by a byte copy that
+refuses to overwrite, so a document open there can only be the one this open made.
+
+**Alternatives weighed**: close by path without asking (not taken: a `CloseDoc` of nothing is a write
+the guard and the log would show for no document, and it still needs the confirmation); ask even
+when the copy was never made (not taken: the open was never called, and a document at a path the run
+did not create is not the run's to close).
+
+### R15.5 The untag's failure sentence says what is true after a save (review of 2026-09-27, T183)
+
+**Decision**: when `Delete2` does not answer `swCustomInfoDeleteResult_OK`, the failure sentence reads
+"untag: Delete2 answered {answer}, so the session tag was not removed from the open copy; the ending
+never saves, so the copy on disk carries the tag only if remodel.save saved it there". The fields,
+the close attempted whatever the untag answered, and the page's words (which do not word the tag)
+are unchanged; the page's reason is restated: the untag reaches only the open document, an unsaved
+close discards the tag there, and a copy `remodel.save` saved keeps on disk the tag it was saved
+with, whatever the untag answered.
+
+**Default taken 2026-09-27, the owner may revise.**
+
+**Why**: the sentence ended "the copy's close is unsaved, so a closed copy does not keep it", which is
+false once `remodel.save` has run - the copy on disk keeps the tag it was saved with
+(`contracts/bridge-remodel.md`, `remodel.close`) - and says nothing true when the close then fails.
+The new words are true whether or not the run saved and whether or not the close succeeded.
+
+**Alternatives weighed**: record on the session whether `remodel.save` ran and word two sentences
+(not taken: new state for one sentence, and the one sentence true in every case says as much);
+drop the clause (not taken: an engineer reading "the tag was not removed" should know whether the
+file on disk carries it).
