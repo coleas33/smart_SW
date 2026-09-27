@@ -76,6 +76,17 @@ cross-product test proves. `fold(findings) -> list[list[Finding]]` groups by (ch
 severity) with pairwise-disjoint `component_ids`, never a needs-judgement check, and never two
 findings sharing a subject; single findings are singleton groups.
 
+*Amended 2026-09-26 (feature 013 T044, T048):* `ranked_rows(findings, policy, families) ->
+list[AttentionRow]` is the fold, row and sort steps of `rank`, public; `rank` calls it, and
+`top_n` is `min(5, rows not suppressed)`. Feature 013's grouped view
+(`report/finding_groups.py`) calls it with `families=()` and extends each row as
+`GroupRow = AttentionRow + {tail_text: str | None, reach_text: str | None, hide_card_title:
+bool}` - the fold count ("×3", and for a pass whose every member is waived "within an accepted
+exception"), the reach of a folded row, and whether a single member's card repeats the row's
+title (013 `contracts/grouped-list.md` section 3). `is_decided(finding)` and
+`persisted_explanation(session, finding_id)` are the one test of a decision and the one reader of
+the persisted explanations that both use.
+
 ### `AttentionRecord` (`attention.json`)
 
 | Field | Type | Rules |

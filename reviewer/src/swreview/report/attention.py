@@ -72,7 +72,9 @@ __all__ = [
     "family_of",
     "family_title",
     "fold",
+    "is_decided",
     "load_policy",
+    "persisted_explanation",
     "rank",
     "ranked_rows",
     "start_here_lines",
@@ -488,11 +490,8 @@ def rank(session: ReviewSession, policy: Policy | None = None) -> Ranking:
     # prose participate in the ranking keys.
     empty_reason = _empty_reason(rows)
     amplified_rows = rows[:top_n] if empty_reason is None else []
-    persisted = getattr(session, "finding_explanations", {})
     for row in amplified_rows:
-        text = persisted.get(row.finding_id)
-        if isinstance(text, str) and text:
-            row.explanation = text
+        row.explanation = persisted_explanation(session, row.finding_id)
 
     return Ranking(
         policy_version=policy.version,
@@ -505,6 +504,17 @@ def rank(session: ReviewSession, policy: Policy | None = None) -> Ranking:
         coverage=_coverage_block(session.coverage),
         empty_reason=empty_reason,
     )
+
+
+def persisted_explanation(session: ReviewSession, finding_id: str) -> str | None:
+    """The explanation the session persisted for `finding_id`, or `None` (feature 007 U5).
+
+    The one reader of `ReviewSession.finding_explanations`: the ranking attaches it to the
+    amplified rows and the grouped view (feature 013) to the row of the same finding id. Read
+    with `getattr`, so a session-shaped object that predates the field has none.
+    """
+    text = getattr(session, "finding_explanations", {}).get(finding_id)
+    return text if isinstance(text, str) and text else None
 
 
 def _row(
@@ -562,11 +572,18 @@ def _family_row(family: str, group: Sequence[Finding], policy: Policy) -> Attent
     )
 
 
+def is_decided(finding: Finding) -> bool:
+    """FR-008: the engineer accepted or rejected the finding; `deferred` decides nothing.
+
+    The one test of a decision: key 1, the not-amplified count, the summary's Decided group and
+    the grouped view's decided count (feature 013) all read it here.
+    """
+    return finding.disposition is not None and finding.disposition.decision in DECIDED_DECISIONS
+
+
 def _is_suppressed(finding: Finding) -> bool:
     """FR-008: a status of checked within scope, or a decision, and nothing else."""
-    return finding.status == SUPPRESSED_STATUS or (
-        finding.disposition is not None and finding.disposition.decision in DECIDED_DECISIONS
-    )
+    return finding.status == SUPPRESSED_STATUS or is_decided(finding)
 
 
 def _reason(finding: Finding, consequence: ConsequenceClass, key: AttentionKey, reach: int) -> str:
@@ -620,7 +637,7 @@ def _not_amplified(findings: Iterable[Finding], amplified: set[str]) -> NotAmpli
             continue
         if finding.status == SUPPRESSED_STATUS:
             counts["checked_within_scope"] += 1
-        elif finding.disposition is not None and finding.disposition.decision in DECIDED_DECISIONS:
+        elif is_decided(finding):
             counts["dispositioned"] += 1
         elif finding.severity == "info":
             counts["info"] += 1

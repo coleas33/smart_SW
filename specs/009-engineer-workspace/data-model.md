@@ -33,7 +33,8 @@ Loaded once per process by `summary.load_words() -> Words` (`functools.cache`, l
 | `read_only` | str | "The backend restarted, so this review is shown from its run folder. Follow-ups, decisions and answers are off." |
 | `goal_states` | map `issues \| checked \| not_reached \| not_applicable` → str | "issues found", "checked, no issue", "not reached", "not applicable" |
 | `goal_reasons` | map `unresolved \| skipped \| failed \| out_of_scope \| no_check` → str | "evidence missing", "skipped", "a check failed", "out of scope", "no check ran" |
-| `goals` | list of `{id, title, items: list[str], prefixes: list[str]}` | the eight goals of research R2.4, in the owner's order |
+| `goals` | list of `{id, title, items: list[str], prefixes: list[str]}` | the eight goals of research R2.4, in the owner's order (*amended 2026-09-26, feature 013 T046:* ten goals with `standards` split from `hygiene`, each with `group`, a `finding_groups` id) |
+| `separator`, `finding_groups`, `finding_group_other`, `finding_group_checked`, `finding_group_text` | see feature 013 `contracts/grouped-list.md` section 2 | *added 2026-09-26 (feature 013 T046):* the seven groups `{id, title, open}` in their fixed order, "Other checks", the "Checked, no issue" fold with its exception tail, and a group's and a row's words; `separator` " · " joins two parts of one line |
 | `labels` | see section 7 | the card vocabulary served by `GET /labels` |
 
 Rules a test asserts: every template's placeholders are exactly the ones the code fills; every goal
@@ -134,7 +135,10 @@ volume_mm3: float | None, text}` where `text` joins the names (the id where a na
 
 `report/attention.Ranking` plus `summary: ReviewSummary`. What `GET /sessions/{chat_id}/attention`,
 the snapshot and the disk route answer. `Ranking` itself, `AttentionRecord` and the check bodies are
-unchanged.
+unchanged. *Amended 2026-09-26 (feature 013 T048):* plus `groups: FindingsByType` -
+`findings_by_type(session, package, words, policy)` of `report/finding_groups.py`, every finding in
+one row of one group or in the checked fold (013 `contracts/grouped-list.md` section 3). Every route
+builds it from the session, so no ranking reaches the page without it.
 
 ## 3. The names helper (`reviewer/src/swreview/report/names.py`, pure)
 

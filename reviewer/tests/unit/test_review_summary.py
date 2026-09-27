@@ -38,7 +38,9 @@ from pydantic_core import to_jsonable_python
 from swreview.checks.drawing_context import CANDIDATE_CONFIRM, CANDIDATES_NAMED
 from swreview.ir.loader import load_package
 from swreview.ir.models import DrawingCandidate, EvidencePackage
-from swreview.report.attention import AttentionRow, rank
+from swreview.report.attention import AttentionRow, load_policy, rank
+from swreview.report.attention_record import AttentionRecord
+from swreview.report.finding_groups import findings_by_type
 from swreview.report.session import (
     Contact,
     Coverage,
@@ -758,20 +760,34 @@ def test_the_review_ranking_is_the_ranking_byte_for_byte_plus_its_summary() -> N
 
     body = to_jsonable_python(review_ranking(session, package))
     summary = body.pop("summary")
+    groups = body.pop("groups")
 
     assert json.dumps(body) == json.dumps(to_jsonable_python(rank(session)))
     assert summary == to_jsonable_python(review_summary(rank(session), session, package))
+    assert groups == to_jsonable_python(
+        findings_by_type(session, package, load_words(), load_policy())
+    )
 
 
 def test_review_ranking_of_copies_every_ranking_field() -> None:
     session = session_of("of", [spec("rms.folders.present")])
     ranking = rank(session)
     summary = review_summary(ranking, session, None)
+    groups = findings_by_type(session, None, load_words(), load_policy())
 
-    wrapped = ReviewRanking.of(ranking, summary)
+    wrapped = ReviewRanking.of(ranking, summary, groups)
 
     assert {name: getattr(wrapped, name) for name in type(ranking).model_fields} == dict(ranking)
-    assert wrapped.summary == summary
+    assert (wrapped.summary, wrapped.groups) == (summary, groups)
+
+
+def test_the_attention_record_of_a_review_ranking_carries_neither_summary_nor_groups() -> None:
+    """013 `contracts/grouped-list.md` section 3: `attention.json` does not carry `groups`."""
+    session = session_of("record", [spec("rms.folders.present")])
+
+    record = AttentionRecord.of(review_ranking(session, None), session.session_id)
+
+    assert not {"summary", "groups"} & set(json.loads(record.model_dump_json()))
 
 
 def modules_loaded_by(module: str) -> list[str]:

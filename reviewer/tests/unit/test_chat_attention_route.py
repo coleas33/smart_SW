@@ -37,8 +37,9 @@ from starlette.testclient import TestClient
 from swreview.ir.loader import save_package
 from swreview.ir.models import EvidencePackage
 from swreview.prerun import RMS_PRERUN_TOOLS
-from swreview.report.attention import rank
+from swreview.report.attention import load_policy, rank
 from swreview.report.attention_record import read_attention_record
+from swreview.report.finding_groups import findings_by_type
 from swreview.report.session import load_session
 from swreview.report.summary import load_words, review_summary
 from tests.support.packages import build_package
@@ -147,6 +148,7 @@ def test_a_settled_review_answers_the_ranking_of_its_live_session(
     assert response.status_code == 200, response.text
     body = response.json()
     body.pop("summary")
+    body.pop("groups")
     assert body == to_jsonable_python(rank(load_session(run_dir / "session.json")))
 
 
@@ -166,6 +168,7 @@ def test_the_body_is_the_block_the_check_bodies_carry(
         "coverage",
         "empty_reason",
         "summary",
+        "groups",
     }
     assert body["policy_version"] == "attention_policy_v1"
     assert body["empty_reason"] is None
@@ -320,10 +323,14 @@ def test_the_body_is_the_live_ranking_plus_the_live_summary(
 
     body = get(client, reviewed_chat).json()
     summary = body.pop("summary")
+    groups = body.pop("groups")
 
     assert body == to_jsonable_python(rank(run.session))
     assert summary == to_jsonable_python(
         review_summary(rank(run.session), run.session, run.context.ir, usage=run.usage_ledger)
+    )
+    assert groups == to_jsonable_python(
+        findings_by_type(run.session, run.context.ir, load_words(), load_policy())
     )
     # Feature 008 T047, edited deliberately: the pane runs checks first, so the fixture
     # package's three modelling-practice findings are recorded before the model's drawing

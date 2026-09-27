@@ -31,7 +31,8 @@ from starlette.testclient import TestClient
 
 from swreview.chat.server import UnknownReview, create_app
 from swreview.ir.loader import load_package
-from swreview.report.attention import rank
+from swreview.report.attention import load_policy, rank
+from swreview.report.finding_groups import findings_by_type
 from swreview.report.session import load_session
 from swreview.report.snapshot import review_snapshot
 from swreview.report.summary import load_words
@@ -182,7 +183,11 @@ def test_the_run_folder_restores_read_only_with_the_words_files_reason(
     assert (body["chat_state"], body["last_seq"]) == (None, None)
     ranking = dict(body["ranking"])
     summary = ranking.pop("summary")
+    groups = ranking.pop("groups")
     assert ranking == to_jsonable_python(rank(session))
+    assert groups == to_jsonable_python(
+        findings_by_type(session, package, load_words(), load_policy())
+    ), "feature 013: the disk route carries the grouped view, recomputed from session.json"
     assert summary["resume_input_tokens"] is None
     assert summary["resume_text"] == "Sending resumes the review once."
 
