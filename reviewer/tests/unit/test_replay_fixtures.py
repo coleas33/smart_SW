@@ -189,7 +189,7 @@ def test_the_big_assembly_carries_one_presentation_round() -> None:
     assert [r.kind for r in report.rounds].count("presentation") == 1
 
 
-BIG_RECORDED_TOTAL = 11_733_699
+BIG_RECORDED_TOTAL = 11_734_099
 """The big fixture's recorded input. The recording's bill is 12.4M, and the fixture was within 1%
 of it until feature 003's decision 20A (2026-09-25): the fixtures follow the code (decision 3A),
 and the part check the recorded review made no longer names the 106 system rows the eleven
@@ -207,6 +207,10 @@ Feature 013's User Story 3 gate (T069, 2026-09-27) moves it by +378 to 11,733,69
 code-owned, says it is closed by code before the first turn), and the recorded
 `mark_coverage(provenance)` call is now answered `closed_by_code`, a result 58 tokens smaller
 than the recorded one, each carried by every later round.
+
+Feature 013's User Story 4 gate (T095, 2026-09-27) moves it by +400 to 11,734,099: each
+`get_review_checklist` answer is 10 tokens larger (the drawing item says the drawing check
+decides which drawings exist; never request a drawing or a drawing's version).
 
 Pinned exactly, not within 1% (the review of decision 23A, 008 T127): the figure is the sum of
 the fixture's recorded usage, so nothing but a regeneration moves it, and `contracts/replay.md`
@@ -470,12 +474,13 @@ REGROUPED_TARGET = 300_000
 """SC-003 as amended (research R2.43, R4): each small fixture's regrouped estimate."""
 FOLLOW_UP_TARGET = 30_000
 """SC-004: the big fixture's follow-up question, against 405k recorded."""
-BIG_FOLLOW_UP_RECORDED = 383_423
+BIG_FOLLOW_UP_RECORDED = 383_443
 """The big fixture's follow-up round's recorded input. The recording's follow-up carried 405k
 (405,320 on the fixtures before decision 20A); since 003 T092 the part check it carries is 21,928
 tokens smaller (383,392); 013 T042 made it 42 larger (383,434: both checklist answers 26 tokens
 larger each, the standards result 10 smaller) and 013 T069 11 smaller (both checklist answers
-24 and 23 tokens larger, the provenance mark 58 smaller). Pinned exactly, as
+24 and 23 tokens larger, the provenance mark 58 smaller), and 013 T095 20 larger (383,443:
+both checklist answers 10 tokens larger with the drawing item's words). Pinned exactly, as
 `BIG_RECORDED_TOTAL` is and for the same reason (008 T127): it was held above a floor of
 400,000, then 380,000, which a regeneration could cross or not unseen."""
 
