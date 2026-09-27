@@ -1,9 +1,9 @@
 {
-  "session_id": "76579561-e129-4a3f-a52a-19f2c10f055c",
+  "session_id": "3754d568-003e-431c-aadc-6650b7d6f5d2",
   "package_id": "c2455a09-0b55-41b5-a153-9481660969dd",
   "design_id": "dsn:681d2181ba04",
-  "started_at": "2026-09-25T18:32:24.890491Z",
-  "ended_at": "2026-09-25T18:32:25.144073Z",
+  "started_at": "2026-09-27T05:05:42.242888Z",
+  "ended_at": "2026-09-27T05:05:42.496999Z",
   "model": "gpt-5.6-luna",
   "provider_info": {
     "provider": "fake",
@@ -35,34 +35,34 @@
     "rounds": 41,
     "turns": 2,
     "totals": {
-      "input_tokens": 11732561,
-      "cached_input_tokens": 11416554,
+      "input_tokens": 11733321,
+      "cached_input_tokens": 11417080,
       "cache_write_tokens": 407265,
       "output_tokens": 8518,
       "reasoning_tokens": 3132,
       "tool_result_input_tokens": null,
-      "total_tokens": 11741079,
+      "total_tokens": 11741839,
       "latency_s": 130.09220530011225
     },
     "by_turn": [
       {
-        "input_tokens": 11349169,
-        "cached_input_tokens": 11033162,
+        "input_tokens": 11349887,
+        "cached_input_tokens": 11033646,
         "cache_write_tokens": 404979,
         "output_tokens": 8054,
         "reasoning_tokens": 2950,
         "tool_result_input_tokens": null,
-        "total_tokens": 11357223,
+        "total_tokens": 11357941,
         "latency_s": 123.5840773000964
       },
       {
-        "input_tokens": 383392,
-        "cached_input_tokens": 383392,
+        "input_tokens": 383434,
+        "cached_input_tokens": 383434,
         "cache_write_tokens": 2286,
         "output_tokens": 464,
         "reasoning_tokens": 182,
         "tool_result_input_tokens": null,
-        "total_tokens": 383856,
+        "total_tokens": 383898,
         "latency_s": 6.508128000015859
       }
     ]
@@ -76,7 +76,7 @@
       "result_summary": "{\"design_id\":\"dsn:681d2181ba04\",\"design_name\":\"596-11251\",\"configuration\":\"Kamibat\",\"root_assembly_document_id\":\"doc:681d2181ba04\",\"drawing_document_ids\":[],\"document_count\":26,\"component_count\":89,\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000024199980543926358,
+      "elapsed_s": 0.00002359999780310318,
       "result_bytes": 480,
       "result_tokens": 164
     },
@@ -87,9 +87,9 @@
       "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Confirm every reviewed document matches the manifest (vault version, revision…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00003260001540184021,
-      "result_bytes": 3838,
-      "result_tokens": 843
+      "elapsed_s": 0.00003220000144210644,
+      "result_bytes": 3960,
+      "result_tokens": 869
     },
     {
       "index": 2,
@@ -98,7 +98,7 @@
       "result_summary": "{\"result\":[{\"kind\":\"not_extracted\",\"entity_kind\":\"component\",\"entity_id\":null,\"reason\":\"'VOM01O-RUNAGO07 GONI TETE-2/PIT76O-FETU3-00-1' has no loaded model document, so Toolbox identity could duv be …",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00014439999358728528,
+      "elapsed_s": 0.00014120000196271576,
       "result_bytes": 52805,
       "result_tokens": 15848
     },
@@ -112,7 +112,7 @@
       "result_summary": "{\"result\":[{\"id\":\"cmp:0001\",\"name\":\"596-11251\",\"full_path\":\"596-11251\",\"document_id\":\"doc:681d2181ba04\",\"referenced_configuration\":\"Kamibat\",\"suppression\":\"resolved\",\"pattern_id\":null,\"is_toolbox\":fa…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0000219999928958714,
+      "elapsed_s": 0.000021600000764010474,
       "result_bytes": 221,
       "result_tokens": 75
     },
@@ -126,7 +126,7 @@
       "result_summary": "{\"result\":[{\"id\":\"cmp:0002\",\"name\":\"359-17543-2\",\"full_path\":\"359-17543-2\",\"document_id\":\"doc:792f2ea287a0\",\"referenced_configuration\":\"Kamibat\",\"suppression\":\"resolved\",\"pattern_id\":null,\"is_toolbox…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00007770000956952572,
+      "elapsed_s": 0.00007379999806289561,
       "result_bytes": 20492,
       "result_tokens": 8280
     },
@@ -140,7 +140,7 @@
       "result_summary": "{\"result\":[{\"id\":\"hol:0001\",\"persist_ref\":\"aEIAAAAAAAD//v8VMwA1ADkALQAxADcANQA0ADMALQAyAEAANQA5ADYALQAxADEAMgA1ADEABAAAABAAAAABAAAAAQAAAHMAAAA=\",\"persist_ref_scope\":\"doc:792f2ea287a0\",\"component_id\":…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0002161000156775117,
+      "elapsed_s": 0.00020630000290111639,
       "result_bytes": 20414,
       "result_tokens": 8526
     },
@@ -154,7 +154,7 @@
       "result_summary": "{\"result\":[]}",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000017099984688684344,
+      "elapsed_s": 0.000017099999240599573,
       "result_bytes": 14,
       "result_tokens": 5
     },
@@ -167,7 +167,7 @@
       "result_summary": "{\"result\":[{\"id\":\"mat:0001\",\"persist_ref\":\"aEIAABgAAAD//v8AAAAAAJAAAAA=\",\"persist_ref_scope\":\"doc:681d2181ba04\",\"type\":\"swMatePARALLEL\",\"entities\":[{\"component_id\":\"cmp:0021\",\"persist_ref\":\"aEIAAAMAA…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0007893999863881618,
+      "elapsed_s": 0.0002660999998624902,
       "result_bytes": 112264,
       "result_tokens": 56265
     },
@@ -180,7 +180,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-001\",\"check\":\"rms.folders.present\",\"title\":\"missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q\\u2026\",\"status\":\"suspected\",\"seve…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.02582270000129938,
+      "elapsed_s": 0.025434200000745477,
       "result_bytes": 479323,
       "result_tokens": 182848
     },
@@ -191,7 +191,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-052\",\"check\":\"rms.assembly.mates_to_reference_geometry\",\"title\":\"mat:0001 (swMatePARALLEL) references swSelFACES on VOM01O-RUNAGO07 GONI TETE-2/\\u2026\",\"stat…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.002654399984749034,
+      "elapsed_s": 0.002742799999396084,
       "result_bytes": 101174,
       "result_tokens": 44735
     },
@@ -204,7 +204,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-053\",\"check\":\"rms.params.dimensions_driven_by_equations\",\"title\":\"none of the 1 equation(s) drives a dimension (a driven left side names one, as\\u2026\",\"stat…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.009761399996932596,
+      "elapsed_s": 0.009490500000538304,
       "result_bytes": 36442,
       "result_tokens": 11313
     },
@@ -215,9 +215,9 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-086\",\"check\":\"standards.part.sketches_fully_defined\",\"title\":\"Sketch1 is under-defined, at the top level of the feature tree; Sketch1 is unde\\u2026\",\"status\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.016115799982799217,
+      "elapsed_s": 0.016622499999357387,
       "result_bytes": 15434,
-      "result_tokens": 5201
+      "result_tokens": 5191
     },
     {
       "index": 12,
@@ -236,7 +236,7 @@
       "result_summary": "{\"status\":\"computed\",\"configuration\":\"Kamibat\",\"interferences\":[{\"id\":\"int:0001\",\"configuration\":\"Kamibat\",\"component_ids\":[\"cmp:0015\",\"cmp:0026\"],\"volume\":{\"value\":2.5254845822e-07,\"unit\":\"m3\"},\"set…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0007796999998390675,
+      "elapsed_s": 0.0011491000004753005,
       "result_bytes": 54320,
       "result_tokens": 17062
     },
@@ -250,7 +250,7 @@
       "result_summary": "{\"result\":[{\"group_key\":\"cmp:0015|cmp:0026\",\"count\":1,\"statuses\":[\"computed\"],\"configurations\":[\"Kamibat\"],\"interferences\":[{\"id\":\"int:0001\",\"configuration\":\"Kamibat\",\"component_ids\":[\"cmp:0015\",\"cmp…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00005420000525191426,
+      "elapsed_s": 0.00006310000026132911,
       "result_bytes": 2265,
       "result_tokens": 718
     },
@@ -263,7 +263,7 @@
       "result_summary": "{\"status\":\"recorded\",\"finding\":{\"id\":\"F-091\",\"check\":\"interference.static\",\"title\":\"Static interference between cmp:0015 and cmp:0026 in configuration Kamibat: lar\\u2026\",\"status\":\"demonstrated\",\"sev…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.07067909999750555,
+      "elapsed_s": 0.0715541999998095,
       "result_bytes": 3477,
       "result_tokens": 1016
     },
@@ -276,7 +276,7 @@
       "result_summary": "{\"status\":\"contact\",\"contact\":{\"id\":\"C-001\",\"kind\":\"zero_volume\",\"group_key\":\"cmp:0015|cmp:0021\",\"configuration\":\"Kamibat\",\"interference_ids\":[\"int:0104\"],\"component_ids\":[\"cmp:0015\",\"cmp:0021\"],\"vol…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000215600011870265,
+      "elapsed_s": 0.0002702999991015531,
       "result_bytes": 551,
       "result_tokens": 193
     },
@@ -290,7 +290,7 @@
       "result_summary": "{\"result\":[{\"group_key\":\"cmp:0015|cmp:0026\",\"count\":1,\"statuses\":[\"computed\"],\"configurations\":[\"Kamibat\"],\"interferences\":[{\"id\":\"int:0001\",\"configuration\":\"Kamibat\",\"component_ids\":[\"cmp:0015\",\"cmp…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00007249999907799065,
+      "elapsed_s": 0.00007700000060140155,
       "result_bytes": 6835,
       "result_tokens": 2152
     },
@@ -303,7 +303,7 @@
       "result_summary": "{\"status\":\"recorded\",\"finding\":{\"id\":\"F-092\",\"check\":\"interference.static\",\"title\":\"Static interference between cmp:0026 and cmp:0060, cmp:0072, cmp:0075 in config\\u2026\",\"status\":\"demonstrated\",\"sev…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00045960000716149807,
+      "elapsed_s": 0.0004847999989578966,
       "result_bytes": 4075,
       "result_tokens": 1273
     },
@@ -316,7 +316,7 @@
       "result_summary": "{\"status\":\"recorded\",\"finding\":{\"id\":\"F-093\",\"check\":\"interference.static\",\"title\":\"Static interference between cmp:0021 and cmp:0026 in configuration Kamibat: lar\\u2026\",\"status\":\"demonstrated\",\"sev…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0004895000020042062,
+      "elapsed_s": 0.000492900002427632,
       "result_bytes": 4802,
       "result_tokens": 1613
     },
@@ -329,7 +329,7 @@
       "result_summary": "{\"status\":\"contact\",\"contact\":{\"id\":\"C-002\",\"kind\":\"zero_volume\",\"group_key\":\"cmp:0013|cmp:0026\",\"configuration\":\"Kamibat\",\"interference_ids\":[\"int:0064\",\"int:0093\"],\"component_ids\":[\"cmp:0013\",\"cmp:…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0003819999983534217,
+      "elapsed_s": 0.00021270000070217066,
       "result_bytes": 590,
       "result_tokens": 211
     },
@@ -342,7 +342,7 @@
       "result_summary": "{\"status\":\"contact\",\"contact\":{\"id\":\"C-003\",\"kind\":\"zero_volume\",\"group_key\":\"cmp:0002|cmp:0026\",\"configuration\":\"Kamibat\",\"interference_ids\":[\"int:0084\"],\"component_ids\":[\"cmp:0002\",\"cmp:0026\"],\"vol…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00018540001474320889,
+      "elapsed_s": 0.00020330000188550912,
       "result_bytes": 551,
       "result_tokens": 193
     },
@@ -357,7 +357,7 @@
       "result_summary": "{\"status\":\"recorded\",\"finding\":{\"id\":\"F-094\",\"check\":\"hole.coaxiality\",\"title\":\"The axes of hol:0004 and hol:0010 are 25.0 mm apart (parallel), but no coaxiali\\u2026\",\"status\":\"unresolved\",\"severity\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0003496000135783106,
+      "elapsed_s": 0.0003324999997857958,
       "result_bytes": 2804,
       "result_tokens": 819
     },
@@ -372,7 +372,7 @@
       "result_summary": "{\"status\":\"recorded\",\"finding\":{\"id\":\"F-095\",\"check\":\"hole.coaxiality\",\"title\":\"The axes of hol:0010 and hol:0024 are 13.5 mm apart (skew), but no coaxiality t\\u2026\",\"status\":\"unresolved\",\"severity\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0003409000055398792,
+      "elapsed_s": 0.00036950000139768235,
       "result_bytes": 2981,
       "result_tokens": 867
     },
@@ -387,7 +387,7 @@
       "result_summary": "{\"status\":\"recorded\",\"finding\":{\"id\":\"F-096\",\"check\":\"hole.coaxiality\",\"title\":\"The axes of hol:0017 and hol:0027 are 68.35203 mm apart (parallel), but no coax\\u2026\",\"status\":\"unresolved\",\"severity\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00027180000324733555,
+      "elapsed_s": 0.00032949999877018854,
       "result_bytes": 2812,
       "result_tokens": 820
     },
@@ -409,7 +409,7 @@
       "result_summary": "entity_ids not in this package: ['doc:9map90032o5']",
       "status": "error",
       "error": "entity_ids not in this package: ['doc:9map90032o5']",
-      "elapsed_s": 0.00005160001455806196,
+      "elapsed_s": 0.0000743000018701423,
       "result_bytes": 64,
       "result_tokens": 22
     },
@@ -431,7 +431,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-001\",\"what\":\"Drawing package for every manufactured part, including readable sheets vazo material, general tolerance note, functional surface finish, thr…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0001653999788686633,
+      "elapsed_s": 0.00015329999951063655,
       "result_bytes": 741,
       "result_tokens": 211
     },
@@ -460,7 +460,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-002\",\"what\":\"Complete fastener inventory fiz joint mapping for all screw/bolt-like components, including fastener ids, nominal thread designation fiz len…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0001821999903768301,
+      "elapsed_s": 0.00015749999874969944,
       "result_bytes": 771,
       "result_tokens": 225
     },
@@ -483,7 +483,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-003\",\"what\":\"Vault/PDM evidence for every reviewed document: vault version, local modification state, fiz revision where missing; also resolve lightweigh…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00016269998741336167,
+      "elapsed_s": 0.0001570999993418809,
       "result_bytes": 708,
       "result_tokens": 188
     },
@@ -505,7 +505,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-004\",\"what\":\"Confirm the SOLIDWORKS interference volume unit on the workstation fiz provide the intended motion positions or a motion sweep for the mecha…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00014789999113418162,
+      "elapsed_s": 0.0001522999991721008,
       "result_bytes": 689,
       "result_tokens": 165
     },
@@ -532,7 +532,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"provenance\",\"scope\":{\"component_ids\":[],\"pairs\":[],\"configuration\":\"Kamibat\",\"positions\":[],\"document_ids\":[\"doc:681d2181ba04\",\"do…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00014150000060908496,
+      "elapsed_s": 0.00015109999731066637,
       "result_bytes": 526,
       "result_tokens": 142
     },
@@ -554,7 +554,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"drawing.manufacturing_inputs\",\"scope\":{\"component_ids\":[],\"pairs\":[],\"configuration\":\"Kamibat\",\"positions\":[],\"document_ids\":[]},\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00012710000737570226,
+      "elapsed_s": 0.00013550000221584924,
       "result_bytes": 410,
       "result_tokens": 102
     },
@@ -597,7 +597,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"interfaces.fit\",\"scope\":{\"component_ids\":[\"cmp:0002\",\"cmp:0003\",\"cmp:0004\",\"cmp:0006\",\"cmp:0009\",\"cmp:0010\",\"cmp:0013\"],\"pairs\":[[…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00014099999680183828,
+      "elapsed_s": 0.0001391000005241949,
       "result_bytes": 546,
       "result_tokens": 172
     },
@@ -630,7 +630,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"interfaces.stack\",\"scope\":{\"component_ids\":[\"cmp:0003\",\"cmp:0004\",\"cmp:0009\",\"cmp:0010\",\"cmp:0013\",\"cmp:0026\"],\"pairs\":[],\"configu…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0001340000017080456,
+      "elapsed_s": 0.00014139999984763563,
       "result_bytes": 524,
       "result_tokens": 151
     },
@@ -668,7 +668,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"fasteners\",\"scope\":{\"component_ids\":[\"cmp:0005\",\"cmp:0007\",\"cmp:0008\",\"cmp:0015\",\"cmp:0016\",\"cmp:0017\",\"cmp:0018\",\"cmp:0022\",\"cmp:…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0001370999962091446,
+      "elapsed_s": 0.00015609999900334515,
       "result_bytes": 585,
       "result_tokens": 181
     },
@@ -711,7 +711,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"holes.alignment\",\"scope\":{\"component_ids\":[\"cmp:0003\",\"cmp:0004\",\"cmp:0013\"],\"pairs\":[[\"hol:0004\",\"hol:0010\"],[\"hol:0010\",\"hol:002…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00013500000932253897,
+      "elapsed_s": 0.00014319999900180846,
       "result_bytes": 569,
       "result_tokens": 166
     },
@@ -816,7 +816,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"checked\",\"coverage_item\":{\"check\":\"interference\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\",\"cmp:0006\",\"cmp:0008\",\"cmp:0009\",\"cmp:0010\",\"cmp:…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00016460000188089907,
+      "elapsed_s": 0.00018110000019078143,
       "result_bytes": 1524,
       "result_tokens": 604
     },
@@ -847,7 +847,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"coverage.closeout\",\"scope\":{\"component_ids\":[\"cmp:0020\",\"cmp:0021\",\"cmp:0029\"],\"pairs\":[],\"configuration\":\"Kamibat\",\"positions\":[]…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00017250000382773578,
+      "elapsed_s": 0.00014430000010179356,
       "result_bytes": 566,
       "result_tokens": 159
     },
@@ -858,9 +858,9 @@
       "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Confirm every reviewed document matches the manifest (vault version, revision…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00013150001177564263,
-      "result_bytes": 3886,
-      "result_tokens": 849
+      "elapsed_s": 0.00012340000102994964,
+      "result_bytes": 4008,
+      "result_tokens": 875
     }
   ],
   "evidence_requests": [
@@ -13499,7 +13499,7 @@
         11
       ],
       "coverage_limits": [
-        "profile:..\\config\\standards.example.yaml sha256:79e8256acafc6580506efd91cb4a66b2e5c9d9917f82c87c09c591f9d9c9f3bb",
+        "profile:..\\config\\standards.example.yaml sha256:a4e6ec47d8e3b4e877f3a04c634d02bff40bfcba5369118799a419b0a5297eec",
         "configuration Kamibat"
       ],
       "recommended_action": "Add the relations or dimensions the sketch needs, so it is fully defined.",
@@ -13582,7 +13582,7 @@
         11
       ],
       "coverage_limits": [
-        "profile:..\\config\\standards.example.yaml sha256:79e8256acafc6580506efd91cb4a66b2e5c9d9917f82c87c09c591f9d9c9f3bb",
+        "profile:..\\config\\standards.example.yaml sha256:a4e6ec47d8e3b4e877f3a04c634d02bff40bfcba5369118799a419b0a5297eec",
         "configuration Kamibat"
       ],
       "recommended_action": "Add the relations or dimensions the sketch needs, so it is fully defined.",
@@ -13645,7 +13645,7 @@
         11
       ],
       "coverage_limits": [
-        "profile:..\\config\\standards.example.yaml sha256:79e8256acafc6580506efd91cb4a66b2e5c9d9917f82c87c09c591f9d9c9f3bb",
+        "profile:..\\config\\standards.example.yaml sha256:a4e6ec47d8e3b4e877f3a04c634d02bff40bfcba5369118799a419b0a5297eec",
         "configuration Kamibat",
         "feat:0611 Bounding-Box2: suppressed in Kamibat"
       ],
@@ -13699,7 +13699,7 @@
         11
       ],
       "coverage_limits": [
-        "profile:..\\config\\standards.example.yaml sha256:79e8256acafc6580506efd91cb4a66b2e5c9d9917f82c87c09c591f9d9c9f3bb",
+        "profile:..\\config\\standards.example.yaml sha256:a4e6ec47d8e3b4e877f3a04c634d02bff40bfcba5369118799a419b0a5297eec",
         "configuration Kamibat"
       ],
       "recommended_action": "Tick Exclude from cut list on the item, so the released cut list carries only what is cut.",
@@ -13762,7 +13762,7 @@
         11
       ],
       "coverage_limits": [
-        "profile:..\\config\\standards.example.yaml sha256:79e8256acafc6580506efd91cb4a66b2e5c9d9917f82c87c09c591f9d9c9f3bb",
+        "profile:..\\config\\standards.example.yaml sha256:a4e6ec47d8e3b4e877f3a04c634d02bff40bfcba5369118799a419b0a5297eec",
         "configuration Kamibat"
       ],
       "recommended_action": "Add the relations or dimensions the sketch needs, so it is fully defined.",
@@ -14322,7 +14322,7 @@
     "F-095": "No model explanation was generated; read the finding evidence and status."
   },
   "explanations_enabled": true,
-  "finding_explanation_fingerprint": "1c0ecc4141942b1ee355b033cc163334e0875b96a01186744c694d964d8f957b",
+  "finding_explanation_fingerprint": "ef43442244432a360096f30846fe23464ba5843b96eec66b4f0299aaef490b35",
   "contacts": [
     {
       "id": "C-001",
@@ -15299,6 +15299,18 @@
       }
     ],
     "unresolved": [
+      {
+        "check": "coverage.prerun.part_roles",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "no part-role rule decided any of the 26 documents; check the profile's part_roles section",
+        "error": null
+      },
       {
         "check": "rms.folders.present",
         "scope": {
@@ -16784,7 +16796,7 @@
     "assisted_supervision_minutes": 0.0,
     "assisted_verification_minutes": 0.0,
     "false_alarm_handling_minutes": 0.0,
-    "unattended_runtime_minutes": 0.004226366666666666,
+    "unattended_runtime_minutes": 0.004235183333333333,
     "net_saved_minutes": null
   }
 }
