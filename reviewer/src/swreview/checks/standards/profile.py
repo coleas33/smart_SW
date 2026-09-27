@@ -653,6 +653,12 @@ class ReviewProfile:
     profile: StandardsProfile | None
     refusal: ProfileError | None
 
+    @property
+    def refusal_reason(self) -> str | None:
+        """The refusal's reason, which names no path (`ProfileError.reason`), or `None`: what the
+        part-roles classifier's `absent` state quotes (feature 013 T155)."""
+        return None if self.refusal is None else self.refusal.reason
+
 
 def load_review_profile(path: Path | str | None) -> ReviewProfile:
     """Load the profile at `path` for a review, turning a refusal into a value.

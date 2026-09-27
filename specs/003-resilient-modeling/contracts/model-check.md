@@ -1,6 +1,6 @@
 # Model Check Tab: Routes, Messages, Run Folder, Accept
 
-*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed by 2026-09-27 (013 T052):* a Model check folder's `report.md` is opened by "Findings by type", in place of "Start here"; the Model check page's five-row preview is unchanged and never shows a pass; see 013 `contracts/grouped-list.md` sections 1 and 6 (lands with 013 T052).
+*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed by 2026-09-27 (013 T052):* a Model check folder's `report.md` is opened by "Findings by type", in place of "Start here"; the Model check page's five-row preview is unchanged and never shows a pass; see 013 `contracts/grouped-list.md` sections 1 and 6 (lands with 013 T052). *Amended 2026-09-27 by feature 013 (T147-T150; default taken 2026-09-27, the owner may revise; 013 research R2.43):* `POST /checks/rms` takes an optional `standards_profile` and the `CheckResult` then carries `bought_parts`, the root rule's label when the open part looks bought (sections 1 and 2).
 
 The contract for User Story 6 (spec FR-022 to FR-033): the three backend routes the Model
 check page calls, the two message tables between that page and `ModelCheckHost`, the check run
@@ -29,13 +29,30 @@ normative source for both.
 
 | Method | Path | Body | Response |
 |--------|------|------|----------|
-| POST | `/checks/rms` | `{run_dir, scope: "part" \| "equations" \| "all", document_id: str \| null}` | `201 CheckResult` (below). 400 when `run_dir` fails the path rule, when `run_dir/package.json` is missing or invalid, or when the package's `features` array is empty (`error_class: "EmptyFeatureTree"`); 400 with `error_class: "UnreadableExceptions"` when the carry-forward candidate exists and cannot be parsed. Runs synchronously: there is no provider, no network call and no turn. |
+| POST | `/checks/rms` | `{run_dir, scope: "part" \| "equations" \| "all", document_id: str \| null, standards_profile?: str \| null}` (`standards_profile` since feature 013 T148; below) | `201 CheckResult` (below). 400 when `run_dir` fails the path rule, when `run_dir/package.json` is missing or invalid, or when the package's `features` array is empty (`error_class: "EmptyFeatureTree"`); 400 with `error_class: "UnreadableExceptions"` when the carry-forward candidate exists and cannot be parsed. Runs synchronously: there is no provider, no network call and no turn. |
 | GET | `/checks/{check_id}` | | `200 CheckResult` re-read from that check's run folder; 404 when no such check folder is under the run root. |
 | POST | `/checks/{check_id}/exceptions/{finding_id}` | `{note, by}` | `200 {finding, exception_id}` with the finding re-rendered as checked within scope carrying the exception id; `400 EmptyNote` when the note is blank; `404` for an unknown check or finding; `409 RuleNotAcceptable` when the finding's rule severity is `warn` (FR-016); `409 AlreadyAccepted` when an active exception with the same bindings and check already exists. Re-renders `report.md`. |
 
 `check_id` is the check run folder's name (`<yyyyMMdd-HHmmss>-<doc>-check`), so a check is
 addressable after a restart without any server-side registry, and `GET` resolves it under the
 configured run root through the same path rule the `run_dir` body field goes through.
+
+`standards_profile` (*amended 2026-09-27, feature 013 T147-T150; FR-008, US1 scenario 6*) is the
+path of the standards profile the Review tab uses (`UserSettings.StandardsProfilePath`), which the
+host hands the page in `init` (section 2) and the page relays. Absent, null or blank, the body is
+byte for byte what it was, with no `bought_parts` key; any other value that is not a string is a
+400 naming the field. With a path, the backend loads it through the review's own loader
+(`load_review_profile`, which never raises), classifies the dump's documents with the one
+classifier (`checks/part_roles.classify_parts`), and the body carries **`bought_parts`**: the
+part-roles sentence (`bought_parts_sentence`) - for the check's one part, the package's root and
+the document under review, the root rule's clause "{file} looks bought ({reason}); graded because
+it is the document under review" when the rules call it bought, the refusal's sentence naming no
+path when the profile is refused ("Bought parts were not told apart: the standards profile was
+refused (...)"), and null when there is nothing to say. The page prints it verbatim. The rules,
+the findings and the grade do not move: the open part is always graded. `check.json` records the
+path and the sentence (only when a profile was given, so a check without one writes the record it
+always wrote), so `GET /checks/{check_id}` answers the line the POST did and an Accept re-grades
+against the profile the check was graded with. No profile value and no path is in the body.
 
 `scope` is one of `"part"`, `"equations"` and `"all"` - the three the route offers, as
 `OFFERED_SCOPES` in `chat/server.py` names them; `"all"` means every offered family and not
@@ -93,7 +110,10 @@ R3 named the drift and this is the correction.)
   "not_examined": null,  /* or {"sentence": "...", "headline": "...", "instances": [{"id":
                             "cmp:0002", "name": "DOWEL PIN", "state": "lightweight"}, ...]} */
   "rule_statements": {"rms.refs.direction": "Reference geometry follows the method's axes and planes.",
-                      "rms.detail.holes_last": "Holes are the last features in the Detail group."}
+                      "rms.detail.holes_last": "Holes are the last features in the Detail group."},
+  "bought_parts": "bracket.SLDPRT looks bought (a vendor property); graded because it is the document under review"
+                  /* only when the request named a standards_profile; null when there is nothing
+                     to say (feature 013 T148) */
 }
 ```
 
