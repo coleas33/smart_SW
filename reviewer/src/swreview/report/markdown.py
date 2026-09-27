@@ -4,7 +4,8 @@
 report is plain Markdown - headings and pipe tables, no HTML (constitution Principle VI):
 an engineer must be able to reproduce any finding from what is printed here.
 
-Section order: title, manifest discrepancies, summary counts, findings by type (only when
+Section order: title, manifest discrepancies, summary counts, bought parts (only when the
+session holds a part-roles row, feature 013), findings by type (only when
 the caller supplies a ranking; "Start here" before feature 013), findings grouped by severity
 (high to info), contacts (only when the session holds one, feature 010), evidence requests,
 coverage (all five buckets, always), timing, tokens (only when the session carries usage),
@@ -43,7 +44,7 @@ from swreview.report.session import (
     ReviewSession,
     SessionUsage,
 )
-from swreview.report.summary import Words, load_words
+from swreview.report.summary import Words, bought_rows, load_words
 from swreview.report.text import markdown_text
 from swreview.report.titles import display_title
 from swreview.report.unexamined import not_examined
@@ -95,6 +96,10 @@ def render_report(
     lines.append("")
     lines.extend(_render_summary(session, package))
     lines.append("")
+    rows = bought_rows(session)
+    if rows:
+        lines.extend(_render_bought_parts(rows))
+        lines.append("")
     if ranking is not None:
         lines.extend(_render_findings_by_type(session, package, ranking))
         lines.append("")
@@ -244,6 +249,21 @@ def _render_summary(session: ReviewSession, package: EvidencePackage | None) -> 
         lines.append(f"- Not examined: {unread.sentence}")
 
     return lines
+
+
+# --- bought parts (feature 013) ----------------------------------------------------------
+
+
+def _render_bought_parts(rows: tuple[CoverageItem, ...]) -> list[str]:
+    """The parts not graded because bought, and those graded that may be bought, once, under the
+    words file's heading: each pre-run row's sentence, verbatim (013 `contracts/part-roles.md`
+    section 7). Rendered only when a row is there, so every earlier session's report keeps its
+    bytes; the rows stay in Coverage too, where every row is listed."""
+    return [
+        f"## {load_words().bought_parts.heading}",
+        "",
+        *(f"- {row.reason}" for row in rows),
+    ]
 
 
 # --- findings by type (feature 013) ------------------------------------------------------

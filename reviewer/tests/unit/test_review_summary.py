@@ -468,6 +468,42 @@ def test_a_request_without_the_short_form_asks_its_what_verbatim() -> None:
     ]
 
 
+def test_a_question_that_allows_text_says_so_and_the_list_carries_the_placeholder() -> None:
+    """Feature 013 T033 (its `contracts/part-roles.md` section 8): the part-roles question has
+    two options and a text box; the page draws the box for a question with `allow_text` and
+    prints the list's placeholder in it, a word of the words file."""
+    requests = [
+        request(1).model_copy(
+            update={
+                "question": "Are these bought parts?",
+                "options": ["All bought", "None bought"],
+                "allow_text": True,
+            }
+        ),
+        request(2).model_copy(update={"options": ["Yes", "No"]}),
+        request(3),
+    ]
+    questions = summary_of(session_of("allow-text", [], evidence_requests=requests)).questions
+
+    assert [(item.id, item.allow_text) for item in questions.items] == [
+        ("ER-001", True),
+        ("ER-002", False),
+        ("ER-003", False),
+    ]
+    assert questions.items[0].options == ["All bought", "None bought"]
+    assert questions.text_placeholder == "Or name the bought ones, separated by commas"
+    assert questions.text_placeholder == load_words().questions.text_placeholder
+
+
+def test_with_no_question_the_placeholder_is_still_the_words() -> None:
+    questions = summary_of(session_of("no-question-placeholder", [])).questions
+
+    assert (questions.count, questions.text_placeholder) == (
+        0,
+        load_words().questions.text_placeholder,
+    )
+
+
 def test_a_request_with_the_short_form_asks_its_short_question() -> None:
     """contracts/questions.md section 3 (T037): the short question, its offered answers in
     order, the checklist item it blocks and that item's goal title; `what` and `why` stay
@@ -818,6 +854,16 @@ def test_the_summary_loads_no_provider_settings_or_network_module() -> None:
 
     assert "swreview.report.summary" in loaded
     assert [name for name in loaded if name.startswith(forbidden)] == []
+
+
+def test_the_bought_parts_check_ids_are_the_classifiers() -> None:
+    """The summary copies the two row ids (it may not import the classifier, which reaches the
+    session module); integration of lanes P and R, 2026-09-27: one name each, held equal here."""
+    from swreview.checks import part_roles
+    from swreview.report import summary
+
+    assert summary.BOUGHT_PARTS_CHECK == part_roles.BOUGHT_PARTS_CHECK
+    assert summary.MAYBE_BOUGHT_CHECK == part_roles.MAYBE_BOUGHT_CHECK
 
 
 def test_the_big_assembly_package_loads_for_the_headline_test() -> None:

@@ -137,6 +137,8 @@ def test_the_words_are_loaded_once() -> None:
         ("finding_group_checked",),
         ("finding_group_text",),
         ("tally",),
+        ("questions",),
+        ("bought_parts",),
     ],
 )
 def test_an_extra_key_anywhere_is_refused(path: tuple[object, ...]) -> None:
@@ -179,6 +181,15 @@ def test_a_pass_is_checked_no_issue_in_the_groups_the_fold_and_the_goal_states()
     assert words.groups["within_scope"].of(2) == "2 checked, no issue"
     assert words.headline.checked.format(n=2) == "2 checked, no issue"
     assert words.goal_states["checked"] == "checked, no issue"
+
+
+def test_the_bought_parts_heading_and_the_text_box_placeholder_are_pane_words() -> None:
+    """Feature 013 T033: the words file carries only these two part-roles words; the reasons,
+    the rows' sentences and the question reach the model and are `checks/part_roles.py`'s
+    constants (its `contracts/part-roles.md` section 3)."""
+    words = load_words()
+    assert words.bought_parts.heading == "Bought parts"
+    assert words.questions.text_placeholder == "Or name the bought ones, separated by commas"
 
 
 def test_the_three_owner_labels_are_decide_fix_verify() -> None:

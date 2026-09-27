@@ -25,7 +25,8 @@ Loaded once per process by `summary.load_words() -> Words` (`functools.cache`, l
 | `version` | str | `review_words_v1` |
 | `headline` | `{none, findings_one, findings_many, issues_one, issues_many}` | "No findings were recorded", "1 finding", "{n} findings", "in 1 issue", "in {n} issues" |
 | `groups` | map `decide \| fix \| verify \| decided \| within_scope` → `{label, one, many}` | labels "Decide", "Fix", "Verify" (owner, 2026-09-23), "Decided", "Within limits"; templates such as "{n} needs your decision" / "{n} need your decision" |
-| `questions` | `{one, many}` | "1 question for you", "{n} questions for you" |
+| `questions` | `{one, many}` | "1 question for you", "{n} questions for you" (*amended 2026-09-26, feature 013 T034:* plus `text_placeholder`, "Or name the bought ones, separated by commas") |
+| `bought_parts` | `{heading}` | *added 2026-09-26 (feature 013 T034):* "Bought parts", the report's heading over the part-roles rows' sentences |
 | `not_loaded` | `{text}` | "{count} of {total} parts not loaded" |
 | `drawings` | `{read_one, read_many, candidates_one, candidates_many, more}` | "Drawing read: {names}", "Drawings read: {names}", "Same-name drawing found but not open: {names}", "Same-name drawings found but not open: {names}", "{names} and {n} more" (*added 2026-09-23, decision 10A*) |
 | `contacts` | `{one, many}` | "1 size-for-size contact", "{n} size-for-size contacts" |
@@ -70,6 +71,12 @@ the words file; imports no provider and no settings; writes nothing.
 Partition, asserted: `sum(group.count) + (modelling_practice.findings if present else 0) ==
 findings`.
 
+*Amended 2026-09-26 (feature 013 T034, T050):* `issues` is the number of rows of the type groups
+(`ReviewRanking.groups`), `headline` counts passes as checked, `tally: {text}` and `not_reached:
+{titles, text} | None` are added, `modelling_practice` and `goals` are removed (the partition is
+`sum(group.count) == findings`), and `bought_parts: {count, names, maybe_count, maybe_names, text} |
+None` - read from the persisted part-roles rows, never classified again - sits after `drawings`.
+
 ### `SummaryGroup`
 
 | Field | Type | Rules |
@@ -100,6 +107,7 @@ finding_ids: list[str] (the row's member_finding_ids, in the row's order)}`.
 | `blocks_title` | str \| None | the title of the goal whose `items` hold `blocks` |
 | `what`, `why` | str | verbatim |
 | `about` | list[`{id, name}`] | each entity id with the component's name or the document's file name; `name` is `None` for any other id |
+| `allow_text` | bool | *added 2026-09-26 (feature 013 T034):* the request's `allow_text` (false when absent): the question takes typed words beside its options, in a text box whose placeholder is `QuestionList.text_placeholder` (the words file's `questions.text_placeholder`) |
 
 ### `NotLoaded`
 
