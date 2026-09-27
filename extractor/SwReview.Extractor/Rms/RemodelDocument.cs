@@ -146,7 +146,8 @@ public interface IRemodelDocument : IRemodelCopyTarget, IScopeSignalSource, IGeo
 
 /// <summary>
 /// The SOLIDWORKS application, as the remodel commands reach it. Three things and no more:
-/// the read-only view of the engineer's open source, the one open of the copy, and the close.
+/// the read-only view of the engineer's open source, the one open of the copy, and the close,
+/// with the read that confirms it (004 T179).
 ///
 /// There is deliberately no member that opens the source and none that hands back a document
 /// for a path the run did not create.
@@ -164,6 +165,14 @@ public interface IRemodelSeat : IRemodelToggleHost
 
     /// <summary><c>ISldWorks.CloseDoc</c>, on the tagged copy only.</summary>
     void CloseDocument(string documentPath);
+
+    /// <summary>
+    /// Whether SOLIDWORKS has a document open at <paramref name="documentPath"/>:
+    /// <c>ISldWorks.GetOpenDocumentByName(documentPath)</c> answered one. The read that confirms a
+    /// close (004 T179; default taken 2026-09-27, the owner may revise; research R15.3), since
+    /// <c>CloseDoc</c> returns nothing; asked, like the open and the close, only about a copy.
+    /// </summary>
+    bool IsDocumentOpen(string documentPath);
 
     /// <summary>
     /// The EPDM vault path and revision of a source that is in one, or null, which means "not read

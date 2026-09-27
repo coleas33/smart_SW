@@ -1819,8 +1819,10 @@ public sealed class ToolServiceWiringTests
 
             string teardown = Assert.Single(world.LogLines, line => line.Contains("remodel teardown"));
             Assert.Contains(" reason=tool_service_stopped verified=true tag_removed=true copy_closed=true settings_restored=4 settings_outstanding= ", teardown, StringComparison.Ordinal);
+            // The close's confirmation (004 T179) is in the set, straight after the close.
             Assert.Contains(
-                " gated=ICustomPropertyManager.Delete2,ISldWorks.CloseDoc,ISldWorks.SetUserPreferenceToggle,ISldWorks.set_CommandInProgress",
+                " gated=ICustomPropertyManager.Delete2,ISldWorks.CloseDoc,GetOpenDocumentByName,"
+                + "ISldWorks.SetUserPreferenceToggle,ISldWorks.set_CommandInProgress",
                 teardown,
                 StringComparison.Ordinal);
             Assert.Contains(" target=" + world.CopyPath, teardown, StringComparison.Ordinal);
@@ -1855,6 +1857,40 @@ public sealed class ToolServiceWiringTests
             Assert.Contains(" settings_restored=3 settings_outstanding=CommandInProgress ", teardown, StringComparison.Ordinal);
             Assert.Contains("failures=\"close: COMException: CloseDoc refused", teardown, StringComparison.Ordinal);
             Assert.True(world.PipeStopped, "the pipe server was not disposed");
+        }
+    }
+
+    /// <summary>
+    /// 004 T179 (default taken 2026-09-27, the owner may revise; research R15.3): a close SOLIDWORKS
+    /// did not carry out, and a tag it would not remove, are reported as SOLIDWORKS answered them -
+    /// in the teardown line, and to the host, whose page words then say the copy may still be open.
+    /// </summary>
+    [Fact]
+    public void ATeardownWhoseCloseAndUntagSolidworksDidNotCarryOutSaysSoInItsLineAndToTheHost()
+    {
+        using (var world = new SeatedHostWorld())
+        {
+            world.PlanOnTheSeat();
+            world.Seat.CloseLeavesItOpen = true;
+            world.Copy.UntagAnswer = 1;
+
+            world.Host.Dispose();
+
+            RemodelSessionEnd outcome = Assert.Single(world.Told).Outcome;
+            Assert.False(outcome.TagRemoved);
+            Assert.False(outcome.CopyClosed);
+            Assert.Contains(
+                "copy may still be open",
+                Remodel.RemodelHost.SessionEndedMessage(outcome) ?? string.Empty,
+                StringComparison.Ordinal);
+
+            string teardown = Assert.Single(world.LogLines, line => line.Contains("remodel teardown"));
+            Assert.Contains(" tag_removed=false copy_closed=false settings_restored=4 ", teardown, StringComparison.Ordinal);
+            Assert.Contains(
+                "failures=\"untag: Delete2 answered swCustomInfoDeleteResult_NotPresent (1), so the session tag was not removed",
+                teardown,
+                StringComparison.Ordinal);
+            Assert.Contains("close: CloseDoc returned, but SOLIDWORKS still has the copy open\"", teardown, StringComparison.Ordinal);
         }
     }
 

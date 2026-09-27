@@ -4,7 +4,7 @@
   "assembly_version": "32.5.0.48",
   "swconst_version": "32.5.0.48",
   "product": "SOLIDWORKS 2024 SP5",
-  "generated_at": "2026-09-27T16:58:05Z",
+  "generated_at": "2026-09-27T17:09:41Z",
   "generated_by": "swreview-extract probe interop --emit-manifest",
   "members": [
     {
@@ -422,7 +422,7 @@
         "remodel.close"
       ],
       "allowlisted": true,
-      "note": "the session tag removed at close; the bare name Delete2 means IEntity.Delete2, which is the collision the qualified key exists for"
+      "note": "the session tag removed at close; the bare name Delete2 means IEntity.Delete2, which is the collision the qualified key exists for; T179: its answer is judged against swCustomInfoDeleteResult_e, and only OK = 0 removed the tag"
     },
     {
       "interface": "ISldWorks",
@@ -482,7 +482,7 @@
         "remodel.close"
       ],
       "allowlisted": true,
-      "note": "closes the tagged copy only"
+      "note": "closes the tagged copy only; T179: it answers nothing, so a GetOpenDocumentByName read of the copy's path confirms it"
     },
     {
       "interface": "ISldWorks",
@@ -502,10 +502,11 @@
         "VerifyTarget",
         "remodel.open_copy",
         "remodel.plan",
-        "remodel.start"
+        "remodel.start",
+        "remodel.close"
       ],
       "allowlisted": false,
-      "note": "reaches the engineer's already-open source, and is VerifyTarget check 3 on the copy; T181: the pane seat finds the copy with it before it activates it"
+      "note": "reaches the engineer's already-open source, and is VerifyTarget check 3 on the copy; T181: the pane seat finds the copy with it before it activates it; T179: IRemodelSeat.IsDocumentOpen, the read that confirms the copy's close"
     },
     {
       "interface": "ISldWorks",

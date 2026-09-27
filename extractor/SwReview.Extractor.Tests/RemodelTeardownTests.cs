@@ -393,18 +393,162 @@ public sealed class RemodelTeardownTests : IDisposable
 
         _harness.Dispatcher.EndRemodelSession(Reason);
 
-        // Exactly the keys this job has on the allowlist, and nothing read through the gate: the
+        // Exactly the keys this job has on the allowlist, and one read through the gate - the
+        // close's confirmation (004 T179), under the bare read key, straight after the close. The
         // verification's reads are ungated, as they are before every write.
         Assert.Equal(
             new[]
             {
                 "ICustomPropertyManager.Delete2",
                 "ISldWorks.CloseDoc",
+                "GetOpenDocumentByName",
                 RemodelSystemToggles.ToggleMember,
                 RemodelSystemToggles.CommandInProgressMember,
             },
             observer.Members);
         Assert.Empty(observer.Refusals);
+    }
+
+    // ---- what SOLIDWORKS answered (004 T179) ---------------------------------------------
+    //
+    // Defaults taken 2026-09-27, the owner may revise (research R15.3): the tag came off only when
+    // Delete2 answered swCustomInfoDeleteResult_OK, and the copy was closed only when CloseDoc
+    // returned and the seat then answers that nothing is open at the copy's path.
+
+    [Theory]
+    [InlineData(1, "swCustomInfoDeleteResult_NotPresent (1)")]
+    [InlineData(2, "swCustomInfoDeleteResult_LinkedProp (2)")]
+    [InlineData(7, "7, which is not a swCustomInfoDeleteResult_e value")]
+    [InlineData(-1, "-1, which is not a swCustomInfoDeleteResult_e value")]
+    public void AnUntagSolidworksDidNotCarryOutIsNotRemovedAndItsAnswerIsNamed(int answer, string named)
+    {
+        _harness.Open();
+        _harness.Copy.UntagAnswer = answer;
+        _harness.Seat.ToggleWrites.Clear();
+
+        RemodelSessionEnd outcome = _harness.Dispatcher.EndRemodelSession(Reason);
+
+        Assert.False(outcome.Succeeded);
+        Assert.True(outcome.Verified);
+        Assert.False(outcome.TagRemoved);
+        Assert.True(outcome.CopyClosed);
+        Assert.Equal(4, outcome.SettingsRestored);
+        Assert.Equal(
+            "untag: Delete2 answered " + named + ", so the session tag was not removed; the copy's close is "
+            + "unsaved, so a closed copy does not keep it",
+            Assert.Single(outcome.Failures));
+
+        // The close is attempted whatever the untag answered, and the session is over.
+        Assert.Equal(_harness.CopyPath, Assert.Single(_harness.Seat.Closed));
+        Assert.Equal(WholeRestore, _harness.Seat.ToggleWrites);
+        Assert.Null(_harness.Dispatcher.RemodelTargetPath);
+    }
+
+    [Fact]
+    public void AnUntagAnsweredOkIsRemoved()
+    {
+        _harness.Open();
+        _harness.Copy.UntagAnswer = RemodelCopy.UntagRemoved;
+
+        RemodelSessionEnd outcome = _harness.Dispatcher.EndRemodelSession(Reason);
+
+        Assert.True(outcome.TagRemoved);
+        Assert.True(outcome.Succeeded);
+    }
+
+    [Fact]
+    public void TheCloseIsConfirmedByAskingWhetherTheCopyIsStillOpenAfterItReturned()
+    {
+        _harness.Open();
+
+        RemodelSessionEnd outcome = _harness.Dispatcher.EndRemodelSession(Reason);
+
+        Assert.True(outcome.CopyClosed);
+        Assert.Equal(_harness.CopyPath, Assert.Single(_harness.Seat.OpenReads));
+        Assert.DoesNotContain(_harness.CopyPath, _harness.Seat.OpenDocuments);
+    }
+
+    [Fact]
+    public void ACloseThatReturnedButLeftTheCopyOpenIsNotAClose()
+    {
+        _harness.Open();
+        _harness.Seat.CloseLeavesItOpen = true;
+        _harness.Seat.ToggleWrites.Clear();
+
+        RemodelSessionEnd outcome = _harness.Dispatcher.EndRemodelSession(Reason);
+
+        Assert.False(outcome.Succeeded);
+        Assert.True(outcome.TagRemoved);
+        Assert.False(outcome.CopyClosed);
+        Assert.Equal(4, outcome.SettingsRestored);
+        Assert.Equal("close: CloseDoc returned, but SOLIDWORKS still has the copy open", Assert.Single(outcome.Failures));
+        Assert.Equal(_harness.CopyPath, Assert.Single(_harness.Seat.Closed));
+        Assert.Equal(WholeRestore, _harness.Seat.ToggleWrites);
+        Assert.Null(_harness.Dispatcher.RemodelTargetPath);
+    }
+
+    /// <summary>Unknown is not closed: a confirmation that cannot be read reports the copy as possibly open.</summary>
+    [Fact]
+    public void AConfirmationThatCannotBeReadIsNotAClose()
+    {
+        _harness.Open();
+        _harness.Seat.OpenReadFailure = new COMException("the RPC server is unavailable");
+
+        RemodelSessionEnd outcome = _harness.Dispatcher.EndRemodelSession(Reason);
+
+        Assert.False(outcome.Succeeded);
+        Assert.False(outcome.CopyClosed);
+        Assert.Equal(4, outcome.SettingsRestored);
+        Assert.Equal(
+            "close: CloseDoc returned, but whether SOLIDWORKS still has the copy open could not be read, so it "
+            + "is not counted as closed: COMException: the RPC server is unavailable",
+            Assert.Single(outcome.Failures));
+    }
+
+    [Fact]
+    public void ACloseThatThrewIsNotConfirmedByARead()
+    {
+        _harness.Open();
+        _harness.Seat.CloseFailure = new COMException("CloseDoc refused");
+
+        RemodelSessionEnd outcome = _harness.Dispatcher.EndRemodelSession(Reason);
+
+        Assert.False(outcome.CopyClosed);
+        Assert.Empty(_harness.Seat.OpenReads);
+    }
+
+    [Fact]
+    public void AnOpenCircuitDoesNotStopTheConfirmationAndAFailedOneIsNotCounted()
+    {
+        _harness.Open();
+        Trip(_harness.Gate.Breaker);
+
+        RemodelSessionEnd tripped = _harness.Dispatcher.EndRemodelSession(Reason);
+
+        Assert.True(tripped.CopyClosed);
+        Assert.Equal(_harness.CopyPath, Assert.Single(_harness.Seat.OpenReads));
+
+        _harness.Gate.Breaker.Reset();
+        OpenAgain();
+        _harness.Seat.OpenReadFailure = new COMException("the RPC server is unavailable");
+        int before = _harness.Gate.Breaker.ConsecutiveFailures;
+
+        _harness.Dispatcher.EndRemodelSession(Reason);
+
+        Assert.Equal(before, _harness.Gate.Breaker.ConsecutiveFailures);
+    }
+
+    [Fact]
+    public void AFailedConfirmationIsInTheFieldsAsACopyNotClosed()
+    {
+        _harness.Open();
+        _harness.Seat.CloseLeavesItOpen = true;
+
+        IReadOnlyList<KeyValuePair<string, string>> fields = _harness.Dispatcher.EndRemodelSession(Reason).Fields();
+
+        Assert.Equal("true", fields.Single(field => field.Key == "tag_removed").Value);
+        Assert.Equal("false", fields.Single(field => field.Key == "copy_closed").Value);
+        Assert.Equal("4", fields.Single(field => field.Key == "settings_restored").Value);
     }
 
     [Fact]

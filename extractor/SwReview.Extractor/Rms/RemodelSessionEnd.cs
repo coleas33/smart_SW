@@ -102,10 +102,20 @@ public sealed class RemodelSessionEnd
     /// <summary>The check that failed, or null when the verification passed or could not say which.</summary>
     public RemodelTargetCheck? FailedCheck { get; }
 
-    /// <summary>Whether the session tag came off the open document.</summary>
+    /// <summary>
+    /// Whether the session tag came off the open document, by SOLIDWORKS's own answer (004 T179):
+    /// <c>Delete2</c> answered <c>swCustomInfoDeleteResult_OK</c>. Any other answer is false, and
+    /// <see cref="Failures"/> names it.
+    /// </summary>
     public bool TagRemoved { get; }
 
-    /// <summary>Whether <c>CloseDoc</c> returned for the copy. False means the copy may still be open.</summary>
+    /// <summary>
+    /// Whether the copy is known to be closed (004 T179): <c>CloseDoc</c> returned and SOLIDWORKS
+    /// then answered that it has no document open at the copy's path. False means it may still be
+    /// open - the close threw, SOLIDWORKS still has it open, or that could not be read - and
+    /// <see cref="Failures"/> says which. For a failed open's unwind it is also true when no
+    /// document was opened.
+    /// </summary>
     public bool CopyClosed { get; }
 
     /// <summary>

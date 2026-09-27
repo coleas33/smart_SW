@@ -88,6 +88,17 @@ public sealed class SwRemodelBridgeSeat : SwReview.Extractor.Rms.IRemodelSeat
         _swApp.CloseDoc(documentPath);
     }
 
+    /// <summary>
+    /// <c>ISldWorks.GetOpenDocumentByName(documentPath)</c> answered a document, on a path inside a
+    /// run folder's <c>copy/</c> only: the read that confirms a close (004 T179). It binds nothing
+    /// and keeps nothing; the document it finds, if any, is only asked whether it is there.
+    /// </summary>
+    public bool IsDocumentOpen(string documentPath)
+    {
+        RequireCopyPath(documentPath, nameof(documentPath));
+        return _swApp.GetOpenDocumentByName(documentPath) != null;
+    }
+
     /// <summary>Null, "not read by this build", until T139 adds a vault read (research R13.5).</summary>
     public VaultReference? GetVault(string sourcePath) => null;
 

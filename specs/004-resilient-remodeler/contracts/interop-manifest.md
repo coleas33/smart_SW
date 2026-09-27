@@ -261,7 +261,9 @@ the audit, with T181's regeneration.
 - **Two enums join**: `swCustomInfoDeleteResult_e` (`OK = 0`, `NotPresent = 1`, `LinkedProp = 2`),
   the answers T179's teardown names, and `swRebuildOnActivation_e.swDontRebuildActiveDoc = 1`, the
   constant the pane seat composes. A new case, `EveryConstantTheSeatSourceNamesHasAnEnumRow`, holds
-  every `sw*_e.member` the audited files name outside comments to an enum row.
+  every `sw*_e.member` the audited files name outside comments to an enum row. (*Added with T179,
+  2026-09-27:* `GetOpenDocumentByName`'s `used_by` names `remodel.close`, whose close it now
+  confirms, and the `Delete2` and `CloseDoc` notes say how each is judged; regenerated.)
 - **The audit reads `SwReview.AddIn/Remodel/SwRemodelSeat.cs`**, and `SwRemodelSeat` joins the
   classes whose declaring file it must read; the floor finds `ActivateDoc3`, `get_ActiveDoc` and
   `GetTitle` in it.

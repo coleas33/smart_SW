@@ -304,7 +304,8 @@ public static class RemodelInteropSurface
         Call("ICustomPropertyManager", "Delete2", Method, "System.Int32", true, "FieldName")
             .WithUsedBy("remodel.close")
             .WithNote("the session tag removed at close; the bare name Delete2 means IEntity.Delete2, "
-                + "which is the collision the qualified key exists for"),
+                + "which is the collision the qualified key exists for; T179: its answer is judged "
+                + "against swCustomInfoDeleteResult_e, and only OK = 0 removed the tag"),
 
         // The three user-preference toggles and the run-scoped modal-suppression flag, all
         // restored in a finally. CommandInProgress is a property rather than a
@@ -321,7 +322,8 @@ public static class RemodelInteropSurface
         // Close the tagged copy.
         Call("ISldWorks", "CloseDoc", Method, "System.Void", true, "Name")
             .WithUsedBy("remodel.close")
-            .WithNote("closes the tagged copy only"),
+            .WithNote("closes the tagged copy only; T179: it answers nothing, so a GetOpenDocumentByName "
+                + "read of the copy's path confirms it"),
 
         // ---- the read members the bridge uses -----------------------------------------------
         // Allowlisted: false. They take RemodelGuard's delegation branch to ReadOnlyGuard,
@@ -331,9 +333,10 @@ public static class RemodelInteropSurface
         Call("ISldWorks", "GetOpenDocumentByName", Method, "System.Object", false, "DocumentName")
             .WithUsedBy(
                 "remodel.probe_scope", "remodel.open", "VerifyTarget", "remodel.open_copy", "remodel.plan",
-                "remodel.start")
+                "remodel.start", "remodel.close")
             .WithNote("reaches the engineer's already-open source, and is VerifyTarget check 3 on the "
-                + "copy; T181: the pane seat finds the copy with it before it activates it"),
+                + "copy; T181: the pane seat finds the copy with it before it activates it; T179: "
+                + "IRemodelSeat.IsDocumentOpen, the read that confirms the copy's close"),
         Call("ISldWorks", "OpenDoc7", Method, "SolidWorks.Interop.sldworks.ModelDoc2", false,
             "Specification")
             .WithUsedBy("remodel.open", "remodel.open_copy")
