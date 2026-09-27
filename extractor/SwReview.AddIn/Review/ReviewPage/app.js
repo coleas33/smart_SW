@@ -838,6 +838,30 @@
     state.findings[body.id] = { body: body, card: card };
   }
 
+  /**
+   * A `finding.withdrawn` body (feature 013 T040, contracts/part-roles.md section 9): an answer
+   * regraded the review and the backend dropped a finding no check produces any more - the first
+   * time a finding leaves a session. Its card leaves Results, the Transcript says so and why, and
+   * the ranking is read again, so the summary, the questions and the groups are the session's as
+   * it now stands. An id this page holds no card for is ignored: nothing leaves and nothing is read.
+   *
+   * Wired to the live stream (`onLiveEvent`) and, as its Transcript line alone, to a replay
+   * (`onReplayedEvent`: a snapshot is the session after every withdrawal) once 013 T038 puts the
+   * event in chat-events.schema.json - the page names no event type the contract does not carry
+   * (ReviewPageContractTests).
+   */
+  function withdrawFinding(body) {
+    var id = String((body && body.finding_id) || '');
+    var entry = state.findings[id];
+    if (!entry) {
+      return;
+    }
+    entry.card.parentNode.removeChild(entry.card);
+    delete state.findings[id];
+    appendCard(render.withdrawalMarker(body));
+    loadAttention();
+  }
+
   function showEvidence(body) {
     var card = appendCard(render.evidenceCard(body, state.labels));
     state.evidence[body.id] = { body: body, card: card };
