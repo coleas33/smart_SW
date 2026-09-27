@@ -158,6 +158,14 @@ set), exactly as `get_finding` and `compact_query` are described outside it.
 | `mark_coverage` | `check: str`, `bucket: "checked" \| "skipped" \| "unresolved" \| "out_of_scope"`, `scope: CoverageScope`, `reason: str` | Adds a `CoverageItem`. The `failed` bucket is written only by the tool layer itself. |
 | `request_capture` | `entity_id: str`, `view: str` | Returns an existing `Capture` or, when the live SolidWorks bridge is enabled, requests one through the bridge and returns its file. Otherwise `unresolved`. |
 
+*Amended by feature 013 (T060, T062), no signature or docstring change:* a checklist item may be
+code-owned (`provenance`; `coverage.closeout`). `mark_coverage(check=<code-owned item>)`, whatever
+bucket it asks for, and `request_evidence(blocks=<code-owned item>)`, after its four refusals,
+answer `{"status": "closed_by_code", "check": ..., "reason": ...}` - the reason code recorded, or
+the item's description before code has written its row - and record nothing: no coverage row, no
+failed row, no event, no request id (013 `contracts/re-ask-guard.md` section 1). Provenance is
+closed by code at setup (section 2).
+
 ### Reading one finding in full: `get_finding` (feature 008, conditional)
 
 When the review runs with payload slimming on (`ModelViewSettings.payload_slimming`, the pane

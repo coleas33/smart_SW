@@ -43,6 +43,7 @@ from swreview.carry_over import (
     stamp_carry_over_keys,
 )
 from swreview.checks.part_roles import classify_parts
+from swreview.checks.provenance import PROVENANCE_CHECK
 from swreview.checks.rms.part import INDIVIDUALLY_SUPPRESSIBLE
 from swreview.exceptions import ExceptionStore
 from swreview.findings import Disposition, Finding
@@ -695,7 +696,9 @@ def test_a_review_stamps_keys_and_the_next_one_carries_what_did_not_move(
 
     (carried,) = second.findings
     assert carried.carried_over_from == first.session_id
-    assert second.coverage.checked[0].reason.startswith(CARRIED_REASON_PREFIX)
+    # Edited deliberately by feature 013 T060: provenance's checked row is written first.
+    (carried_row,) = [item for item in second.coverage.checked if item.check != PROVENANCE_CHECK]
+    assert carried_row.reason.startswith(CARRIED_REASON_PREFIX)
 
 
 def test_a_previous_run_the_runner_itself_cut_short_carries_nothing(tmp_path: Any) -> None:
@@ -724,7 +727,8 @@ def test_a_previous_run_the_runner_itself_cut_short_carries_nothing(tmp_path: An
     second = review(tmp_path, "two", efficiency=ON, previous_session=previous_path)
 
     assert second.findings == []
-    assert second.coverage.checked == []
+    # Edited deliberately by feature 013 T060: provenance's row is the only checked one.
+    assert [item.check for item in second.coverage.checked] == [PROVENANCE_CHECK]
 
 
 def test_the_same_two_reviews_with_the_flag_off_carry_nothing(tmp_path: Any) -> None:

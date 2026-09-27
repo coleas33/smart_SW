@@ -345,10 +345,10 @@ def test_a_subscriber_receives_every_event_of_the_turn_in_order(
         received = subscriber.drain()
 
     written = list(replay_events(chat.events_path))
-    # Feature 013 (integration of lanes P and S, 2026-09-27, edited deliberately): setup also
-    # records the part roles' row - with no profile, "Bought parts were not told apart"
+    # Edited deliberately by feature 013: setup also announces provenance's checked row (T060)
+    # and the part roles' row - with no profile, "Bought parts were not told apart"
     # (`contracts/part-roles.md` section 7) - before any subscriber exists.
-    assert [event.type for event in setup] == ["session.started", "coverage"]
+    assert [event.type for event in setup] == ["session.started", "coverage", "coverage"]
     assert [event.seq for event in received] == [
         event.seq for event in written[len(setup) :]
     ]

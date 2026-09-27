@@ -23,6 +23,7 @@ from typing import Literal, get_args
 
 from pydantic import ValidationError
 
+from swreview.agent.checklist import COVERAGE_BUCKETS
 from swreview.checks.questions import QuestionSpec, already_asked
 from swreview.findings import Source, build_finding
 from swreview.ir.models import DrawingSheet, SourceRef
@@ -97,6 +98,11 @@ def request_evidence(
     refusal = _short_form_refusal(question, options or [], blocks)
     if refusal is not None:
         return error_result(refusal)
+    # Feature 013 (`contracts/re-ask-guard.md` section 3): after the four refusals, the
+    # non-error answers - each records nothing, takes no id and writes no failed row.
+    closed = closed_by_code(context, blocks)
+    if closed is not None:
+        return closed
     request = record_evidence_request(
         context, what, why, entity_ids, question=question, options=options, blocks=blocks
     )
@@ -172,6 +178,42 @@ def record_question(context: ToolContext, spec: QuestionSpec) -> EvidenceRequest
     )
 
 
+CLOSED_BY_CODE = "closed_by_code"
+"""The non-error status of a call on an item code closes (feature 013)."""
+
+
+def closed_by_code(context: ToolContext, check: str | None) -> dict[str, str] | None:
+    """The `closed_by_code` answer when `check` is a code-owned checklist item, else `None`.
+
+    `{"status": "closed_by_code", "check": ..., "reason": ...}`, never an error: any error
+    payload becomes failed coverage (`tools/registry.py`), and nothing failed - code closed the
+    item (`contracts/re-ask-guard.md` section 1). The reason is the one code recorded, when a
+    row closes the item already; before it does (the close-out, which finalization writes),
+    it is the item's own description, which says how code closes it.
+    """
+    item = next(
+        (entry for entry in context.checklist.items if entry.id == check and entry.owner == "code"),
+        None,
+    )
+    if item is None:
+        return None
+    coverage = context.require_session().coverage
+    recorded = next(
+        (
+            entry.reason
+            for bucket in COVERAGE_BUCKETS
+            for entry in getattr(coverage, bucket)
+            if entry.check == item.id
+        ),
+        None,
+    )
+    return {
+        "status": CLOSED_BY_CODE,
+        "check": item.id,
+        "reason": recorded if recorded is not None else item.description,
+    }
+
+
 def _short_form_refusal(question: str | None, options: list[str], blocks: str | None) -> str | None:
     """Why the short form of a request is refused, or `None` when it is not.
 
@@ -226,6 +268,11 @@ def mark_coverage(
         a tool fails.
     """
     context = current_context()
+    # First: a code-owned item is not the model's to mark, whatever bucket it asks for
+    # (feature 013, `contracts/re-ask-guard.md` section 1).
+    closed = closed_by_code(context, check)
+    if closed is not None:
+        return closed
     if bucket not in MODEL_COVERAGE_BUCKETS:
         if bucket == "failed":
             return error_result(
