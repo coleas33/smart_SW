@@ -43,6 +43,25 @@ submission"), found by `repeated_request_id`, in the runner and the route alike.
 message does not repeat `ANSWER_MESSAGE`'s instruction to re-run the check each request named;
 it is worded as this section gives it.
 
+*Amended by feature 013 (T038, `contracts/part-roles.md` section 9).* A new step sits between 2
+and 3: **2a. Read, regrade, restate.** `read_confirmed_candidates` runs first, with the roles its
+question was built with; then, when the batch answers the part-roles question (exactly the
+question the current roles ask), the parts are classified again with the answer; then one
+`ReviewRun._restate` - which replaces `_restate_drawing_check` - restates the union of what
+changed, each check once (`check_rms_part`, `check_rms_equations`, `check_rms_assembly`,
+`check_hygiene` and `check_drawings` when the roles changed; `check_drawings` when a read reloaded
+the package), each a recorded step the pre-run's guard answers repeats from. `_restate` folds
+each restated finding onto the earlier one with the same verdict key, which keeps its id, and
+withdraws every earlier finding of a restated check that nothing re-produced through
+`ToolContext.withdraw_findings`, the one place a finding leaves the session. **This adds an event
+type** - "no new event type" no longer holds: `finding.withdrawn {finding_id, reason}`, the reason
+"bought part (your answer to ER-001)" (002 `chat-events.schema.json`). The bought-parts rows are
+restated naming the withdrawn ids, and step 3's `before` index is taken only after `_restate`
+returns. The resumed message gains one line when the answer withdrew findings - "Checks first
+graded again after your answer: withdrew F-003, F-004 (bought parts)." - and is
+`answers_message(answers)` byte for byte otherwise. A check the session never ran is not
+restated: restating supersedes the call it restates.
+
 ## 2. The route
 
 | Method | Path | Body | Answer |

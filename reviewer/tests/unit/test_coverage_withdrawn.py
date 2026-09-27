@@ -299,6 +299,9 @@ ALLOWED_SLICE_ASSIGNMENTS: frozenset[tuple[str, str]] = frozenset(
         ("agent/runner.py", "review.coverage.unresolved"),
         # Not coverage: the folded findings, the pre-run's interference rows, a query's page.
         ("agent/runner.py", "session.findings"),
+        # Not coverage: the one place a finding leaves a session, and announces it (feature 013,
+        # `ToolContext.withdraw_findings` and its `finding.withdrawn` event).
+        ("tools/context.py", "session.findings"),
         ("prerun.py", "package.interferences"),
         ("tools/query.py", "page"),
     }

@@ -306,6 +306,27 @@ class ToolContext:
                 },
             )
 
+    def withdraw_findings(self, finding_ids: Collection[str], reason: str) -> list[str]:
+        """Remove each named finding from the session and announce it, with why (feature 013).
+
+        The one place a finding leaves the session, the sibling of `withdraw_coverage`: a check
+        restated after the engineer's answer no longer produces a finding it produced before -
+        a bought part is not graded (`contracts/part-roles.md` section 9) - and the finding is
+        withdrawn rather than left standing beside the new state. Each one is announced as a
+        `finding.withdrawn {finding_id, reason}` event, in session order, so the pane drops
+        exactly what the session dropped. An id the session does not hold is ignored. Returns
+        the ids withdrawn, in session order.
+        """
+        session = self.require_session()
+        wanted = set(finding_ids)
+        gone = [finding.id for finding in session.findings if finding.id in wanted]
+        if not gone:
+            return []
+        session.findings[:] = [finding for finding in session.findings if finding.id not in wanted]
+        for finding_id in gone:
+            self.emit_event("finding.withdrawn", {"finding_id": finding_id, "reason": reason})
+        return gone
+
     def replace_coverage(
         self,
         check: str,
