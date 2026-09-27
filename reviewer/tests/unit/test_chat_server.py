@@ -433,8 +433,10 @@ def test_labels_answer_the_words_files_card_vocabulary(client: TestClient) -> No
         "bucket",
         "evidence_status",
         "contact_kind",
+        "source",
         "errors",
     }
+    assert body["source"] == {"code": "Checked by code", "model": "AI guidance"}, "feature 013"
     assert body["status"]["checked_within_scope"] == "checked within scope"
     assert body["errors"]["TurnRunning"].startswith("A review turn is still running.")
 

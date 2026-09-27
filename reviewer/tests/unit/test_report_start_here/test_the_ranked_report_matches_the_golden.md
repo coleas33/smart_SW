@@ -292,11 +292,11 @@ Ranked by attention_policy_v1; the rule is in reviewer/src/swreview/report/atten
 
 ## Evidence Requests
 
-| ID | What | Why | Entity IDs | Status | Answer | Answered At |
-|---|---|---|---|---|---|---|
-| ER-001 | The vault version and the local-modification state of every reviewed document | provenance cannot be confirmed from the manifest as dumped | doc:1, doc:2, doc:3 | open |  |  |
-| ER-002 | A part drawing for the housing carrying material, tolerance and thread notes | drawing.manufacturing_inputs has no sheet to read | doc:2 | open |  |  |
-| ER-003 | The pin geometry and the hole each pin seats in | interfaces.fit and holes.alignment cannot be computed without them | cmp:0002, cmp:0004 | open |  |  |
+| ID | What | Why | Entity IDs | Status | Answer | Answered At | Source |
+|---|---|---|---|---|---|---|---|
+| ER-001 | The vault version and the local-modification state of every reviewed document | provenance cannot be confirmed from the manifest as dumped | doc:1, doc:2, doc:3 | open |  |  | AI guidance |
+| ER-002 | A part drawing for the housing carrying material, tolerance and thread notes | drawing.manufacturing_inputs has no sheet to read | doc:2 | open |  |  | AI guidance |
+| ER-003 | The pin geometry and the hole each pin seats in | interfaces.fit and holes.alignment cannot be computed without them | cmp:0002, cmp:0004 | open |  |  | AI guidance |
 
 ## Coverage
 

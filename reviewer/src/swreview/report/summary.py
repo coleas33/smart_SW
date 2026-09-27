@@ -53,9 +53,11 @@ from swreview.report.attention import (
     SUPPRESSED_STATUS,
     Policy,
     Ranking,
+    Source,
     is_decided,
     load_policy,
     rank,
+    request_source,
 )
 from swreview.report.finding_groups import (
     COVERAGE_BUCKETS,
@@ -259,6 +261,7 @@ class Labels(ReviewModel):
     bucket: dict[CoverageBucket, str]
     evidence_status: dict[EvidenceStatus, str]
     contact_kind: dict[ContactKind, str]
+    source: dict[Source, str]
     errors: dict[str, str]
 
 
@@ -355,6 +358,9 @@ class QuestionView(ReviewModel):
     allow_text: bool
     """Whether the question takes typed words beside its options (feature 013): the page then
     draws its buttons and a text box, whose placeholder is the list's `text_placeholder`."""
+    source: Source
+    """Who asked (feature 013): `code` for the drawing check's and the part-roles question,
+    `model` for the model's own; the page prints the labels' word for it."""
     blocks: str | None
     blocks_title: str | None
     what: str
@@ -634,6 +640,7 @@ def _questions(
             # `allow_text` is feature 013's optional field (its T007): read so a request of an
             # older session, and of a build before that field, takes no text.
             allow_text=getattr(request, "allow_text", False),
+            source=request_source(request),
             blocks=request.blocks,
             blocks_title=_blocks_title(request.blocks, words.goals),
             what=request.what,

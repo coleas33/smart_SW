@@ -32,12 +32,17 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Literal
 
+from pydantic import SerializerFunctionWrapHandler, model_serializer
+
 from swreview.findings import Finding, ReviewModel
 from swreview.ir.models import EvidencePackage
 from swreview.report.attention import (
     SUPPRESSED_STATUS,
     AttentionRow,
     Policy,
+    Source,
+    coverage_source,
+    finding_source,
     is_decided,
     persisted_explanation,
     ranked_rows,
@@ -144,6 +149,16 @@ class GoalLine(ReviewModel):
     findings: int
     reason: str | None
     detail: str | None
+    detail_source: Source | None = None
+    """`model` when the model wrote the row `detail` is taken from, else `None`, which is
+    omitted: the page prints a label only when the field is present (feature 013)."""
+
+    @model_serializer(mode="wrap")
+    def _omit_a_code_source(self, handler: SerializerFunctionWrapHandler) -> dict[str, object]:
+        data = handler(self)
+        if self.detail_source is None:
+            data.pop("detail_source", None)
+        return data
 
 
 # --- which goal a check belongs to ------------------------------------------------------------
@@ -199,8 +214,9 @@ def _goal_line(
     issues = [finding for finding in mapped if finding.status != SUPPRESSED_STATUS]
 
     def line(
-        state: GoalState, reason: GoalReason | None = None, detail: str | None = None
+        state: GoalState, reason: GoalReason | None = None, row: CoverageItem | None = None
     ) -> GoalLine:
+        """The goal's line; its `detail` is `row`'s reason, and says who wrote it."""
         return GoalLine(
             goal=goal.id,
             title=goal.title,
@@ -208,7 +224,8 @@ def _goal_line(
             state_label=words.goal_states[state],
             findings=len(issues),
             reason=None if reason is None else words.goal_reasons[reason],
-            detail=detail,
+            detail=None if row is None else row.reason,
+            detail_source="model" if row is not None and coverage_source(row) == "model" else None,
         )
 
     if issues:
@@ -227,18 +244,18 @@ def _goal_line(
         # at least one of them unresolved, skipped or failed.
         return line("not_reached", *rule_row)
     # Every row left is out of scope, and there is at least one: `no_check` took the rest.
-    return line("not_applicable", "out_of_scope", rows["out_of_scope"][0].reason)
+    return line("not_applicable", "out_of_scope", rows["out_of_scope"][0])
 
 
 def _first(
     rows: Mapping[CoverageBucket, Sequence[CoverageItem]],
     wanted: Callable[[CoverageItem], bool],
-) -> tuple[GoalReason, str] | None:
-    """The bucket and reason of the first `wanted` row in unresolved, skipped, failed order."""
+) -> tuple[GoalReason, CoverageItem] | None:
+    """The bucket of the first `wanted` row in unresolved, skipped, failed order, and the row."""
     for bucket in NOT_REACHED_BUCKETS:
         for item in rows[bucket]:
             if wanted(item):
-                return bucket, item.reason
+                return bucket, item
     return None
 
 
@@ -258,6 +275,11 @@ class GroupRow(AttentionRow):
     tail_text: str | None
     reach_text: str | None
     hide_card_title: bool
+    source: Source
+    """Who wrote the row's finding (feature 013, its `contracts/sources.md` section 1)."""
+    chip: str | None
+    """The words file's `labels.source` word for a model row ("AI guidance"), `None` for a code
+    row: the page prints it verbatim and compares nothing."""
 
 
 class TypeGroup(ReviewModel):
@@ -316,7 +338,12 @@ def findings_by_type(
         members = [by_id[member] for member in row.member_finding_ids]
         passed = row.status == SUPPRESSED_STATUS
         grouped = _group_row(
-            row, members, passed, persisted_explanation(session, row.finding_id), words
+            row,
+            by_id[row.finding_id],
+            members,
+            passed,
+            persisted_explanation(session, row.finding_id),
+            words,
         )
         if passed:
             checked.append(grouped)
@@ -343,12 +370,14 @@ def findings_by_type(
 
 def _group_row(
     row: AttentionRow,
+    survivor: Finding,
     members: Sequence[Finding],
     passed: bool,
     explanation: str | None,
     words: Words,
 ) -> GroupRow:
-    """`row` with its words: the fold count and a waived pass's tail, the reach, the flag.
+    """`row` with its words: the fold count and a waived pass's tail, the reach, the flag, and
+    who wrote it - the survivor's source, which a fold's members share with it (one check).
 
     A pass's tail claims the accepted exception only when every member carries one: a fold
     does not read `exception_id`, so a clean pass can share a row with a waived one, and the
@@ -359,11 +388,14 @@ def _group_row(
     tails = [text.fold_tail.format(n=len(members))] if folded else []
     if passed and all(member.exception_id is not None for member in members):
         tails.append(words.finding_group_checked.exception_tail)
+    source = finding_source(survivor)
     return GroupRow(
         **{**dict(row), "explanation": explanation},
         tail_text=words.separator.join(tails) if tails else None,
         reach_text=_reach_text(len(row.component_ids), words) if folded else None,
         hide_card_title=not folded,
+        source=source,
+        chip=words.labels.source["model"] if source == "model" else None,
     )
 
 

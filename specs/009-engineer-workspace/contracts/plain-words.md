@@ -25,6 +25,15 @@ is not a string - an absent key, a 404 from an older backend, a token that names
 | contacts fold | `contact_kind` (also carried as `kind_label` on the summary) |
 | error card, card status lines, settings save line | `errors` |
 
+*Amended 2026-09-26 (feature 013 T101, its `contracts/sources.md` section 2):* the block gains
+`source: {code: "Checked by code", model: "AI guidance"}`, before `errors` (which stays last). The
+page prints `labelOf(labels, "source", token, "")`: a chip on the finding card's line, on the
+question pager and the evidence card head; on a grouped row it prints `GroupRow.chip` verbatim (the
+backend's word for a model row, `null` for a code row); a goal detail or coverage row shows a label
+only when its body carries `detail_source` or `NotClosed.source`, which are sent for `model` only.
+`report.md` uses the same two words: "Source: AI guidance" on a model finding, a Source column in the
+evidence requests table, and "(AI guidance)" after a close-out sentence the model wrote.
+
 ## 2. Titles
 
 *Amended 2026-09-23 by the owner (decision 2A, research R2.28).* A finding has two titles, and
@@ -127,6 +136,10 @@ reads the words file by indentation; it was skipped until the py lane's T008 wro
 runs since.
 
 ## 7. The default-view scan (SC-003)
+
+*Amended 2026-09-26 (feature 013 T101):* the scan also finds no raw `code` or `model` source token
+visible, and the backend half scans the grouped list's headings, count lines and row words beside the
+summary block (`test_plain_words_fixture.py`).
 
 A WebView2 test loads the big-assembly pane fixture with its labels, finishes the review, and reads
 the visible text of Results - skipping the contents of shut `<details>` and of hidden finding folds
