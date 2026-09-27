@@ -583,7 +583,7 @@ public sealed class RemodelBackendClientTests
     /// </summary>
     private sealed class FakeBackend : IDisposable
     {
-        private readonly HttpListener _listener = new HttpListener();
+        private readonly HttpListener _listener;
         private readonly Thread _thread;
         private readonly List<RecordedRequest> _requests = new List<RecordedRequest>();
         private readonly object _gate = new object();
@@ -593,9 +593,7 @@ public sealed class RemodelBackendClientTests
 
         public FakeBackend()
         {
-            int port = FreePort();
-            _listener.Prefixes.Add("http://127.0.0.1:" + port + "/");
-            _listener.Start();
+            _listener = LoopbackPort.StartListener(out int port);
             Endpoint = new BackendEndpoint(port, Token);
             _thread = new Thread(Serve) { IsBackground = true, Name = "fake-remodel-backend" };
             _thread.Start();
@@ -689,21 +687,6 @@ public sealed class RemodelBackendClientTests
                 context.Response.ContentLength64 = payload.Length;
                 context.Response.OutputStream.Write(payload, 0, payload.Length);
                 context.Response.Close();
-            }
-        }
-
-        /// <summary>A port the operating system has just confirmed is free.</summary>
-        private static int FreePort()
-        {
-            var probe = new TcpListener(IPAddress.Loopback, 0);
-            probe.Start();
-            try
-            {
-                return ((IPEndPoint)probe.LocalEndpoint).Port;
-            }
-            finally
-            {
-                probe.Stop();
             }
         }
     }
