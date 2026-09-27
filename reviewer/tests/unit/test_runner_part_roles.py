@@ -28,6 +28,7 @@ from tests.support.roles_review import (
     PIN_STEM,
     PLATE_ID,
     ROOT_ID,
+    review_brief,
     roles_review,
     write_profile,
 )
@@ -71,18 +72,48 @@ def test_a_configured_profile_is_loaded_and_handed_to_the_classifier(
     assert roles_of(run).state == "convention_only"
 
 
+def broken_profile(tmp_path: Path) -> Path:
+    """A version this build does not know, in a folder standing for a local user folder."""
+    folder = tmp_path / "private-owner-folder"
+    folder.mkdir()
+    broken = folder / "broken.yaml"
+    broken.write_text("version: 99\n", encoding="utf-8")
+    return broken
+
+
 def test_a_refused_profile_hands_the_classifier_the_loaders_reason(
     tmp_path: Path, recorder: Recorder
 ) -> None:
-    broken = tmp_path / "broken.yaml"
-    broken.write_text("version: 99\n", encoding="utf-8")
+    """Edited deliberately (013 T154): the loader's reason, which names no path - not the
+    profile's, not its folder, not its file name."""
+    broken = broken_profile(tmp_path)
 
     run = roles_review(tmp_path, profile=broken)
 
     [call] = recorder.calls
     assert call["profile"] is None
-    assert str(broken) in call["profile_refusal"]
+    assert "version 99" in call["profile_refusal"]
+    for where in (str(broken), str(broken.parent), broken.name, "private-owner-folder"):
+        assert where not in call["profile_refusal"], where
     assert roles_of(run).state == "absent"
+
+
+def test_no_path_rides_the_bought_parts_line(tmp_path: Path) -> None:
+    """The bought-parts row and its digest line say the profile was refused and why, and neither
+    they nor the brief name a path (013 research R2.45). The standards family's own line still
+    names the file: it is what the engineer changes, and it is not this sentence."""
+    broken = broken_profile(tmp_path)
+    run = roles_review(tmp_path, profile=broken, efficiency=CHECKS_FIRST)
+    run.start()
+
+    [(_, row)] = rows_of(run, part_roles.BOUGHT_PARTS_CHECK)
+    opening = str(run.messages[0]["content"])
+    [line] = [line for line in opening.splitlines() if "Bought parts were not told apart" in line]
+    assert "the standards profile was refused (" in row.reason
+    assert "the standards profile was refused (" in line
+    for text in (row.reason, line, review_brief(run)):
+        for where in (str(tmp_path), broken.name, "private-owner-folder"):
+            assert where not in text, (where, text)
 
 
 def test_a_review_without_a_profile_classifies_in_the_absent_state(

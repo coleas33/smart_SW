@@ -32,11 +32,13 @@ import yaml
 from pydantic import BaseModel
 
 from swreview.checks.standards.profile import (
+    ProfileError,
     ProfileIdentity,
     ProfileInvalid,
     ProfileUnreadable,
     StandardsProfile,
     load_profile,
+    load_review_profile,
 )
 
 FIXTURE_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "standards"
@@ -1180,3 +1182,68 @@ def test_the_extractor_side_knows_the_path_and_not_the_schema() -> None:
     ]
 
     assert offenders == []
+
+
+# --- a refusal's reason names no path (feature 013 T154-T155) ---------------------------------
+
+PRIVATE = "private-owner-folder"
+"""A folder name standing for the local user folder a real profile sits in."""
+
+REFUSALS: dict[str, tuple[type[ProfileError], bytes | None, str]] = {
+    "missing": (ProfileUnreadable, None, "no file at the configured path"),
+    "a-folder": (ProfileUnreadable, None, "cannot be read"),
+    "not-utf-8": (ProfileUnreadable, b"\xff\xfe\xfd", "not UTF-8 text"),
+    "not-yaml": (ProfileInvalid, b": [\n", "not valid YAML"),
+    "not-a-mapping": (ProfileInvalid, b"- a\n- b\n", "a profile is a YAML mapping"),
+    "unknown-version": (ProfileInvalid, b"version: 99\n", "version 99"),
+    "the-schema": (ProfileInvalid, b"version: 3\n", "not a valid standards profile"),
+}
+"""Every refusal the loader makes, how to provoke it, and the words its reason must still say."""
+
+
+def refused_path(tmp_path: Path, kind: str) -> Path:
+    folder = tmp_path / PRIVATE
+    folder.mkdir()
+    path = folder / "standards.yaml"
+    _, content, _ = REFUSALS[kind]
+    if kind == "a-folder":
+        path.mkdir()
+    elif content is not None:
+        path.write_bytes(content)
+    return path
+
+
+@pytest.mark.parametrize("kind", sorted(REFUSALS))
+def test_every_refusals_reason_says_why_and_names_no_path(tmp_path: Path, kind: str) -> None:
+    """The part-roles state quotes the reason, and that sentence rides the bought-parts line
+    into the digest, the coverage row, the summary and the report: it names what is wrong with
+    the profile and never where the profile is (013 research R2.45)."""
+    path = refused_path(tmp_path, kind)
+    kind_of, _, says = REFUSALS[kind]
+
+    refusal = load_review_profile(path).refusal
+
+    assert isinstance(refusal, kind_of)
+    assert says in refusal.reason
+    for where in (str(path), str(path.parent), str(tmp_path), path.name, PRIVATE):
+        assert where not in refusal.reason, where
+
+
+@pytest.mark.parametrize("kind", sorted(REFUSALS))
+def test_every_refusals_message_still_names_the_path(tmp_path: Path, kind: str) -> None:
+    """The message the Standards tab and the standards line show the engineer is unchanged: it
+    says which file, because that is what the engineer has to change."""
+    path = refused_path(tmp_path, kind)
+
+    refusal = load_review_profile(path).refusal
+
+    assert refusal is not None
+    assert str(path) in str(refusal)
+
+
+def test_a_refusal_raised_without_a_reason_is_its_own_message() -> None:
+    """Every refusal made outside the loader - the route's for an absent `profile_path` - names no
+    path already, so its reason is its message."""
+    refusal = ProfileUnreadable("profile_path is required")
+
+    assert refusal.reason == str(refusal) == "profile_path is required"

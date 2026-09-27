@@ -439,9 +439,11 @@ def load_standards_profile(path: Path | str | None) -> Any:
 
 
 def profile_refusal_of(loaded: Any) -> str | None:
-    """The loader's own sentence when a configured profile was refused, else `None`: what the
-    classifier's `absent` state says (`contracts/part-roles.md` section 1)."""
-    return None if loaded.refusal is None else str(loaded.refusal)
+    """The loader's reason when a configured profile was refused, else `None`: what the
+    classifier's `absent` state says (`contracts/part-roles.md` section 1). Its `reason`, never
+    `str()`: the message names the profile's path, a local user folder, and this sentence rides
+    the bought-parts line into the digest, the row, the summary and the report (013 T155)."""
+    return None if loaded.refusal is None else loaded.refusal.reason
 
 
 def classify_part_roles(
