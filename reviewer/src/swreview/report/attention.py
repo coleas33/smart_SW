@@ -74,6 +74,7 @@ __all__ = [
     "fold",
     "load_policy",
     "rank",
+    "ranked_rows",
     "start_here_lines",
 ]
 
@@ -135,8 +136,10 @@ it on one wide finding."""
 
 TOP_N = 5
 TOP_N_WORD = "five"
-"""How many rows the section amplifies, as a number and as the word the line prints.
-The two move together; `tests/unit/test_attention.py` pins the rendered sentence."""
+"""How many rows the section amplifies at most, as a number and as the word the line prints.
+The two move together; `tests/unit/test_attention.py` pins the rendered sentence. A ranking's
+own `top_n` is this or the number of rows that are not suppressed, whichever is smaller
+(feature 013): it still means "how many rows the section amplifies"."""
 
 MAX_NOT_CLOSED = 5
 """How many close-out sentences the coverage block prints (FR-013)."""
@@ -438,6 +441,30 @@ def fold(
 # --- the rank --------------------------------------------------------------------------------
 
 
+def ranked_rows(
+    findings: Sequence[Finding],
+    policy: Policy | None = None,
+    families: Iterable[str] = (),
+) -> list[AttentionRow]:
+    """`findings` folded into rows and sorted by the nine keys: `rank()`'s order, alone.
+
+    The fold, row and sort steps of `rank`, public so the grouped view (feature 013,
+    `report/finding_groups.py`) orders its rows by this rule and by no second one. With
+    `families` empty every family is unfolded and only the same-check fold of disjoint
+    subjects remains. Explanations are not attached and nothing is written to `findings`.
+    """
+    policy = policy if policy is not None else load_policy()
+    folded = tuple(families)
+    rows = [
+        _family_row(family, group, policy)
+        if (family := family_of(group[0].check, folded)) is not None
+        else _row(group, policy)
+        for group in fold(findings, policy, folded)
+    ]
+    rows.sort(key=lambda row: row.key.order())
+    return rows
+
+
 def rank(session: ReviewSession, policy: Policy | None = None) -> Ranking:
     """Rank a finished session's findings. Total: it raises on no `ReviewSession`.
 
@@ -445,37 +472,36 @@ def rank(session: ReviewSession, policy: Policy | None = None) -> Ranking:
     nothing anywhere - the report, the record beside the session and the two check bodies
     are all rendered from what comes back. The families are read with `getattr` so a
     session-shaped object that predates the field ranks as unfolded.
+
+    **No surface amplifies a pass** (feature 013, its `contracts/grouped-list.md` section 1):
+    `top_n` is `TOP_N` or the number of rows that are not suppressed, whichever is smaller.
+    Suppressed rows sort last (key 1), so `rows[:top_n]` - what the check tabs, the gate
+    brief, `swreview attention` and the explanation pass slice - never holds a pass or a
+    decided row, and `not_amplified` counts every one of them in its own bucket.
     """
     policy = policy if policy is not None else load_policy()
-    families = tuple(getattr(session, "folded_families", ()))
-    rows = [
-        _family_row(family, group, policy)
-        if (family := family_of(group[0].check, families)) is not None
-        else _row(group, policy)
-        for group in fold(session.findings, policy, families)
-    ]
-    rows.sort(key=lambda row: row.key.order())
+    rows = ranked_rows(session.findings, policy, getattr(session, "folded_families", ()))
+    top_n = min(TOP_N, sum(1 for row in rows if not row.key.suppressed))
 
     # Explanations are prose attached after this deterministic order is computed. Reading
     # the persisted map here keeps every report and API re-render in sync without letting
     # prose participate in the ranking keys.
     empty_reason = _empty_reason(rows)
+    amplified_rows = rows[:top_n] if empty_reason is None else []
     persisted = getattr(session, "finding_explanations", {})
-    for row in rows[:TOP_N] if empty_reason is None else []:
+    for row in amplified_rows:
         text = persisted.get(row.finding_id)
         if isinstance(text, str) and text:
             row.explanation = text
 
-    amplified = (
-        set()
-        if empty_reason is not None
-        else {member for row in rows[:TOP_N] for member in row.member_finding_ids}
-    )
     return Ranking(
         policy_version=policy.version,
         rows=rows,
-        top_n=TOP_N,
-        not_amplified=_not_amplified(session.findings, amplified),
+        top_n=top_n,
+        not_amplified=_not_amplified(
+            session.findings,
+            {member for row in amplified_rows for member in row.member_finding_ids},
+        ),
         coverage=_coverage_block(session.coverage),
         empty_reason=empty_reason,
     )
