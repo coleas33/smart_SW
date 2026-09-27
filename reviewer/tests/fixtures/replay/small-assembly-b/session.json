@@ -1,9 +1,9 @@
 {
-  "session_id": "c57fd33a-3966-4948-aae8-ba5951cdba42",
+  "session_id": "7cf841f2-55c7-4d68-bca1-72261120604e",
   "package_id": "011bb926-a012-4587-bdf8-d1480ac3ec90",
   "design_id": "dsn:681d2181ba04",
-  "started_at": "2026-09-27T11:43:29.485219Z",
-  "ended_at": "2026-09-27T11:43:29.556365Z",
+  "started_at": "2026-09-27T16:52:55.406442Z",
+  "ended_at": "2026-09-27T16:52:55.493294Z",
   "model": "gpt-5.6-luna",
   "provider_info": {
     "provider": "fake",
@@ -35,54 +35,54 @@
     "rounds": 37,
     "turns": 4,
     "totals": {
-      "input_tokens": 1489283,
-      "cached_input_tokens": 1413047,
+      "input_tokens": 1416304,
+      "cached_input_tokens": 1374289,
       "cache_write_tokens": 51130,
       "output_tokens": 6311,
       "reasoning_tokens": 2357,
       "tool_result_input_tokens": null,
-      "total_tokens": 1495594,
+      "total_tokens": 1422615,
       "latency_s": 94.78629639997962
     },
     "by_turn": [
       {
-        "input_tokens": 1310466,
-        "cached_input_tokens": 1240045,
+        "input_tokens": 1247141,
+        "cached_input_tokens": 1205126,
         "cache_write_tokens": 48981,
         "output_tokens": 5128,
         "reasoning_tokens": 1805,
         "tool_result_input_tokens": null,
-        "total_tokens": 1315594,
+        "total_tokens": 1252269,
         "latency_s": 79.63422639996861
       },
       {
-        "input_tokens": 59226,
-        "cached_input_tokens": 56773,
+        "input_tokens": 56008,
+        "cached_input_tokens": 56008,
         "cache_write_tokens": 1231,
         "output_tokens": 210,
         "reasoning_tokens": 74,
         "tool_result_input_tokens": null,
-        "total_tokens": 59436,
+        "total_tokens": 56218,
         "latency_s": 2.8785140000109095
       },
       {
-        "input_tokens": 59447,
-        "cached_input_tokens": 58004,
+        "input_tokens": 56229,
+        "cached_input_tokens": 56229,
         "cache_write_tokens": 221,
         "output_tokens": 687,
         "reasoning_tokens": 374,
         "tool_result_input_tokens": null,
-        "total_tokens": 60134,
+        "total_tokens": 56916,
         "latency_s": 7.736465699999826
       },
       {
-        "input_tokens": 60144,
-        "cached_input_tokens": 58225,
+        "input_tokens": 56926,
+        "cached_input_tokens": 56926,
         "cache_write_tokens": 697,
         "output_tokens": 286,
         "reasoning_tokens": 104,
         "tool_result_input_tokens": null,
-        "total_tokens": 60430,
+        "total_tokens": 57212,
         "latency_s": 4.537090300000273
       }
     ]
@@ -96,7 +96,7 @@
       "result_summary": "{\"design_id\":\"dsn:681d2181ba04\",\"design_name\":\"268-88428\",\"configuration\":\"Default\",\"root_assembly_document_id\":\"doc:681d2181ba04\",\"drawing_document_ids\":[],\"document_count\":3,\"component_count\":4,\"ma…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00004649999755201861,
+      "elapsed_s": 0.000020699997548945248,
       "result_bytes": 473,
       "result_tokens": 163
     },
@@ -107,7 +107,7 @@
       "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Closed by code from the package before your first turn: each reviewed documen…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00003060000017285347,
+      "elapsed_s": 0.0000318000020342879,
       "result_bytes": 4111,
       "result_tokens": 911
     },
@@ -118,7 +118,7 @@
       "result_summary": "{\"result\":[{\"kind\":\"not_extracted\",\"entity_kind\":\"component\",\"entity_id\":null,\"reason\":\"'ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-2' has no loaded model document, so Toolbox identity could man be…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00003809999907389283,
+      "elapsed_s": 0.000039900005504023284,
       "result_bytes": 7215,
       "result_tokens": 2222
     },
@@ -132,7 +132,7 @@
       "result_summary": "{\"result\":[{\"id\":\"cmp:0001\",\"name\":\"268-88428\",\"full_path\":\"268-88428\",\"document_id\":\"doc:681d2181ba04\",\"referenced_configuration\":\"Default\",\"suppression\":\"resolved\",\"pattern_id\":null,\"is_toolbox\":fa…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00001889999839477241,
+      "elapsed_s": 0.000019700004486367106,
       "result_bytes": 221,
       "result_tokens": 74
     },
@@ -146,7 +146,7 @@
       "result_summary": "{\"result\":[{\"id\":\"cmp:0002\",\"name\":\"ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-2\",\"full_path\":\"ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-2\",\"document_id\":\"doc:792f2ea287a0\",\"referenced_configura…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000015600002370774746,
+      "elapsed_s": 0.00001670000347075984,
       "result_bytes": 801,
       "result_tokens": 325
     },
@@ -159,7 +159,7 @@
       "result_summary": "{\"component\":{\"id\":\"cmp:0001\",\"persist_ref\":\"aEIAAAUAAAD//v8AAAAAAA==\",\"persist_ref_scope\":\"doc:681d2181ba04\",\"name\":\"268-88428\",\"document_id\":\"doc:681d2181ba04\",\"parent_id\":null,\"referenced_configur…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00006659999780822545,
+      "elapsed_s": 0.0000777000022935681,
       "result_bytes": 3303,
       "result_tokens": 1382
     },
@@ -172,7 +172,7 @@
       "result_summary": "{\"component\":{\"id\":\"cmp:0002\",\"persist_ref\":\"aEIAAAUAAAD//v84WgBBAEwAVQBEACAASwBBAE0ALAAgADMATQBNACAAWAAgADEAOABNAE0AIABaAEkALAAgAFAAVQAsACAARgBPAFQALAAgADEANwA1ADQAMwBUADEANwA3AC0AMgBAADIANgA4AC0AOA…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000042100000428035855,
+      "elapsed_s": 0.00003960000321967527,
       "result_bytes": 1260,
       "result_tokens": 554
     },
@@ -185,7 +185,7 @@
       "result_summary": "{\"component\":{\"id\":\"cmp:0003\",\"persist_ref\":\"aEIAAAUAAAD//v84WgBBAEwAVQBEACAASwBBAE0ALAAgADMATQBNACAAWAAgADEAOABNAE0AIABaAEkALAAgAFAAVQAsACAARgBPAFQALAAgADEANwA1ADQAMwBUADEANwA3AC0AMQBAADIANgA4AC0AOA…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000048000001697801054,
+      "elapsed_s": 0.00005130000499775633,
       "result_bytes": 4923,
       "result_tokens": 2380
     },
@@ -198,7 +198,7 @@
       "result_summary": "{\"component\":{\"id\":\"cmp:0004\",\"persist_ref\":\"aEIAAAUAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=\",\"persist_ref_scope\":\"doc:681d2181ba04\",\"name\":\"268-8…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000305499997921288,
+      "elapsed_s": 0.00033629999961704016,
       "result_bytes": 27503,
       "result_tokens": 12651
     },
@@ -212,7 +212,7 @@
       "result_summary": "{\"result\":[{\"id\":\"hol:0001\",\"persist_ref\":\"aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=\",\"persist_ref_scope\":\"doc:8a412bc4633c\",\"component_id\":…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00005970000347588211,
+      "elapsed_s": 0.00006369999755406752,
       "result_bytes": 2820,
       "result_tokens": 1176
     },
@@ -226,7 +226,7 @@
       "result_summary": "{\"result\":[]}",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000016000005416572094,
+      "elapsed_s": 0.000018500002624932677,
       "result_bytes": 14,
       "result_tokens": 5
     },
@@ -239,7 +239,7 @@
       "result_summary": "{\"result\":[{\"id\":\"mat:0001\",\"persist_ref\":\"aEIAABgAAAD//v8AAAAAABkAAAA=\",\"persist_ref_scope\":\"doc:681d2181ba04\",\"type\":\"swMateCOORDINATE\",\"entities\":[{\"component_id\":\"cmp:0004\",\"persist_ref\":\"aEIAAAY…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00003300000389572233,
+      "elapsed_s": 0.00003759999526664615,
       "result_bytes": 4371,
       "result_tokens": 2106
     },
@@ -252,9 +252,9 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-001\",\"check\":\"rms.folders.present\",\"title\":\"missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q\\u2026\",\"status\":\"suspected\",\"seve…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.006318300002021715,
-      "result_bytes": 31852,
-      "result_tokens": 11637
+      "elapsed_s": 0.007320199998503085,
+      "result_bytes": 23797,
+      "result_tokens": 8626
     },
     {
       "index": 13,
@@ -263,7 +263,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-004\",\"check\":\"rms.assembly.mates_to_reference_geometry\",\"title\":\"mat:0002 (swMateCONCENTRIC) references swSelFACES on 268-88428-1, swSelFACES on\\u2026\",\"stat…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0016087999974843115,
+      "elapsed_s": 0.0015056999982334673,
       "result_bytes": 6219,
       "result_tokens": 2568
     },
@@ -276,7 +276,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-005\",\"check\":\"rms.params.global_variables_present\",\"title\":\"the equation manager holds no equations\",\"status\":\"demonstrated\",\"severity\":\"medium\",\"component_i…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0014118000035523437,
+      "elapsed_s": 0.0015963999976520427,
       "result_bytes": 2320,
       "result_tokens": 675
     },
@@ -297,7 +297,7 @@
       "result_summary": "{\"status\":\"computed\",\"configuration\":\"Default\",\"interferences\":[],\"added_to_package\":0,\"gaps\":[]}",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000033899996196851134,
+      "elapsed_s": 0.00003680000372696668,
       "result_bytes": 106,
       "result_tokens": 31
     },
@@ -311,7 +311,7 @@
       "result_summary": "{\"result\":[]}",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00001550000160932541,
+      "elapsed_s": 0.000016399993910454214,
       "result_bytes": 14,
       "result_tokens": 5
     },
@@ -319,12 +319,12 @@
       "index": 17,
       "tool": "check_standards",
       "arguments": {},
-      "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-007\",\"check\":\"standards.part.sketches_fully_defined\",\"title\":\"Sketch2 is under-defined, at the top level of the feature tree; Sketch2 is unde\\u2026\",\"status\"…",
+      "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-007\",\"check\":\"standards.part.sketches_fully_defined\",\"title\":\"Sketch2 is under-defined, at the top level of the feature tree\",\"status\":\"demonstrated\",\"severi…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.005320900003425777,
-      "result_bytes": 5164,
-      "result_tokens": 1585
+      "elapsed_s": 0.005771199997980148,
+      "result_bytes": 4610,
+      "result_tokens": 1378
     },
     {
       "index": 18,
@@ -341,7 +341,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-001\",\"what\":\"Vault version and local-modified status for doc:681d2181ba04, doc:792f2ea287a0, and doc:8a412bc4633c; revision for doc:792f2ea287a0.\",\"why\":…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00021829999604960904,
+      "elapsed_s": 0.00023090000468073413,
       "result_bytes": 682,
       "result_tokens": 206
     },
@@ -364,7 +364,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-002\",\"what\":\"Native part and assembly drawings for the reviewed Default configuration, with readable text layers, including material, general tolerance, …",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0003389999983482994,
+      "elapsed_s": 0.00022879999596625566,
       "result_bytes": 907,
       "result_tokens": 247
     },
@@ -383,7 +383,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-003\",\"what\":\"Resolved geometry for dowel-pin instances cmp:0002 and cmp:0003, including their cylindrical axes/diameter and the mating 3.0 mm hole axes, …",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0003049000006285496,
+      "elapsed_s": 0.00021440000273287296,
       "result_bytes": 760,
       "result_tokens": 197
     },
@@ -403,7 +403,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-004\",\"what\":\"Functional axial gap or preload requirement for the assembled Default configuration, with the complete contributing drawing dimensions and t…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0002012999975704588,
+      "elapsed_s": 0.00020640000002458692,
       "result_bytes": 664,
       "result_tokens": 169
     },
@@ -434,7 +434,7 @@
       "result_summary": "{\"status\":\"closed_by_code\",\"check\":\"provenance\",\"reason\":\"Reviewed as open in SOLIDWORKS: 3 documents, each at its own path in its active configuration; revision read on 2 of 3. The open files are ta…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000058400000852998346,
+      "elapsed_s": 0.0000594000011915341,
       "result_bytes": 507,
       "result_tokens": 125
     },
@@ -465,7 +465,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"drawing.manufacturing_inputs\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"D…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00019069999689236283,
+      "elapsed_s": 0.00020659999427152798,
       "result_bytes": 670,
       "result_tokens": 196
     },
@@ -503,7 +503,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"interfaces.fit\",\"scope\":{\"component_ids\":[\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[[\"cmp:0003\",\"cmp:0004\"],[\"cmp:0002\",\"cmp:0004…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00018140000611310825,
+      "elapsed_s": 0.00018699999782256782,
       "result_bytes": 655,
       "result_tokens": 199
     },
@@ -534,7 +534,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"interfaces.stack\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"positions\":[\"a…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00017459999799029902,
+      "elapsed_s": 0.00018119999731425196,
       "result_bytes": 557,
       "result_tokens": 159
     },
@@ -565,7 +565,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"out_of_scope\",\"coverage_item\":{\"check\":\"fasteners\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"position…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00020119999680900946,
+      "elapsed_s": 0.0001857999959611334,
       "result_bytes": 571,
       "result_tokens": 175
     },
@@ -605,7 +605,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"holes.alignment\",\"scope\":{\"component_ids\":[\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[[\"cmp:0003\",\"cmp:0004\"],[\"cmp:0002\",\"cmp:000…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00019379999866941944,
+      "elapsed_s": 0.00018700000509852543,
       "result_bytes": 647,
       "result_tokens": 193
     },
@@ -636,7 +636,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"checked\",\"coverage_item\":{\"check\":\"interference\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"positions\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0001736999984132126,
+      "elapsed_s": 0.0001829999964684248,
       "result_bytes": 712,
       "result_tokens": 173
     },
@@ -647,7 +647,7 @@
       "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Closed by code from the package before your first turn: each reviewed documen…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00005319999763742089,
+      "elapsed_s": 0.00005450000026030466,
       "result_bytes": 4152,
       "result_tokens": 917
     },
@@ -678,7 +678,7 @@
       "result_summary": "{\"status\":\"closed_by_code\",\"check\":\"coverage.closeout\",\"reason\":\"Closed by code when the review ends: every gap in the package and every open evidence request is reflected in coverage.\",\"open_items\":…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00005570000212173909,
+      "elapsed_s": 0.000054299998737405986,
       "result_bytes": 235,
       "result_tokens": 57
     },
@@ -689,7 +689,7 @@
       "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Closed by code from the package before your first turn: each reviewed documen…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000053499999921768904,
+      "elapsed_s": 0.00005300000339047983,
       "result_bytes": 4152,
       "result_tokens": 917
     }
@@ -795,7 +795,7 @@
     {
       "id": "F-002",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "48 content feature(s) sit outside every group: Axis1, Axis2, Axis3, Sketch1, Bo…",
+      "title": "22 content feature(s) sit outside every group: Axis1, Axis2, Axis3, Boss-Extrud…",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -852,15 +852,6 @@
           "sheet": null,
           "view": null,
           "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAJEBAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
           "persist_ref": "aEIAAAEAAAD//v8AAAAAAJsBAAA=",
           "page": null,
           "bbox": null
@@ -871,15 +862,6 @@
           "view": null,
           "annotation": null,
           "persist_ref": "aEIAAAEAAAD//v8AAAAAAKEBAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAJsBAAA=",
           "page": null,
           "bbox": null
         },
@@ -906,24 +888,6 @@
           "sheet": null,
           "view": null,
           "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAKgBAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAKcBAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
           "persist_ref": "aEIAAAEAAAD//v8AAAAAAL4BAAA=",
           "page": null,
           "bbox": null
@@ -934,24 +898,6 @@
           "view": null,
           "annotation": null,
           "persist_ref": "aEIAAAEAAAD//v8AAAAAAL8BAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAL4BAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAL0BAAA=",
           "page": null,
           "bbox": null
         },
@@ -978,15 +924,6 @@
           "sheet": null,
           "view": null,
           "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAOwBAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
           "persist_ref": "aEIAAAEAAAD//v8AAAAAAAoCAAA=",
           "page": null,
           "bbox": null
@@ -997,15 +934,6 @@
           "view": null,
           "annotation": null,
           "persist_ref": "aEIAAAEAAAD//v8AAAAAABQCAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAoCAAA=",
           "page": null,
           "bbox": null
         },
@@ -1032,15 +960,6 @@
           "sheet": null,
           "view": null,
           "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAADICAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
           "persist_ref": "aEIAAAEAAAD//v8AAAAAAFgCAAA=",
           "page": null,
           "bbox": null
@@ -1059,15 +978,6 @@
           "sheet": null,
           "view": null,
           "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAFgCAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
           "persist_ref": "aEIAAAEAAAD//v8AAAAAAHACAAA=",
           "page": null,
           "bbox": null
@@ -1078,15 +988,6 @@
           "view": null,
           "annotation": null,
           "persist_ref": "aEIAAAEAAAD//v8AAAAAAHYCAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAHACAAA=",
           "page": null,
           "bbox": null
         },
@@ -1122,24 +1023,6 @@
           "sheet": null,
           "view": null,
           "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAB0CAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAABoCAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
           "persist_ref": "aEIAAAEAAAD//v8AAAAAAEoCAAA=",
           "page": null,
           "bbox": null
@@ -1150,24 +1033,6 @@
           "view": null,
           "annotation": null,
           "persist_ref": "aEIAAAEAAAD//v8AAAAAAEsCAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAEoCAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAEkCAAA=",
           "page": null,
           "bbox": null
         },
@@ -1249,7 +1114,7 @@
         }
       ],
       "configuration": "Default",
-      "observed": "48 content feature(s) sit outside every group: Axis1, Axis2, Axis3, Sketch1, Boss-Extrude1, Sketch1, Sketch2, Boss-Extrude2, Sketch2, Sketch5, CBORE for M8 BEBE9, Sketch5, Sketch4, Sketch8, CBORE for M8 NUBI6, Sketch8, Sketch7, Sketch10, Cut-Extrude1, Sketch10, Sketch11, Cut-Extrude2, Sketch11, Sketch15, Cut-Extrude3, Sketch15, Sketch19, Cut-Extrude4, Sketch19, Sketch20, Cut-Extrude5, Sketch20, Chamfer1, Sketch14, M5x0.8 Tapped Hole1, Sketch14, Sketch13, Sketch18, Ø3.0mm Dowel Hole1, Sketch18, Sketch17, Fillet4, Fillet1, Fillet2, Fillet3, Fillet6, Fillet5, Fillet8",
+      "observed": "22 content feature(s) sit outside every group: Axis1, Axis2, Axis3, Boss-Extrude1 (with Sketch1), Boss-Extrude2 (with Sketch2), CBORE for M8 BEBE9 (with Sketch5), CBORE for M8 NUBI6 (with Sketch8), Cut-Extrude1 (with Sketch10), Cut-Extrude2 (with Sketch11), Cut-Extrude3 (with Sketch15), Cut-Extrude4 (with Sketch19), Cut-Extrude5 (with Sketch20), Chamfer1, M5x0.8 Tapped Hole1 (with Sketch14), Ø3.0mm Dowel Hole1 (with Sketch18), Fillet4, Fillet1, Fillet2, Fillet3, Fillet6, Fillet5, Fillet8",
       "requirement": "Every content feature lives inside a group.",
       "inputs": [
         "feat:0023 Axis1 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAAC8AAAA= scope=doc:8a412bc4633c",
@@ -1257,42 +1122,27 @@
         "feat:0025 Axis3 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAADEAAAA= scope=doc:8a412bc4633c",
         "feat:0027 Sketch1 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAJEBAAA= scope=doc:8a412bc4633c",
         "feat:0028 Boss-Extrude1 [Extrusion] persist_ref=aEIAAAEAAAD//v8AAAAAAJoBAAA= scope=doc:8a412bc4633c",
-        "feat:0029 Sketch1 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAJEBAAA= scope=doc:8a412bc4633c",
         "feat:0030 Sketch2 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAJsBAAA= scope=doc:8a412bc4633c",
         "feat:0031 Boss-Extrude2 [ICE] persist_ref=aEIAAAEAAAD//v8AAAAAAKEBAAA= scope=doc:8a412bc4633c",
-        "feat:0032 Sketch2 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAJsBAAA= scope=doc:8a412bc4633c",
         "feat:0033 Sketch5 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAKgBAAA= scope=doc:8a412bc4633c",
         "feat:0034 CBORE for M8 BEBE9 [HoleWzd] persist_ref=aEIAAAEAAAD//v8AAAAAAKkBAAA= scope=doc:8a412bc4633c",
-        "feat:0035 Sketch5 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAKgBAAA= scope=doc:8a412bc4633c",
-        "feat:0036 Sketch4 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAKcBAAA= scope=doc:8a412bc4633c",
         "feat:0037 Sketch8 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAL4BAAA= scope=doc:8a412bc4633c",
         "feat:0038 CBORE for M8 NUBI6 [HoleWzd] persist_ref=aEIAAAEAAAD//v8AAAAAAL8BAAA= scope=doc:8a412bc4633c",
-        "feat:0039 Sketch8 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAL4BAAA= scope=doc:8a412bc4633c",
-        "feat:0040 Sketch7 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAL0BAAA= scope=doc:8a412bc4633c",
         "feat:0041 Sketch10 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAOwBAAA= scope=doc:8a412bc4633c",
         "feat:0042 Cut-Extrude1 [ICE] persist_ref=aEIAAAEAAAD//v8AAAAAAPIBAAA= scope=doc:8a412bc4633c",
-        "feat:0043 Sketch10 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAOwBAAA= scope=doc:8a412bc4633c",
         "feat:0044 Sketch11 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAAoCAAA= scope=doc:8a412bc4633c",
         "feat:0045 Cut-Extrude2 [ICE] persist_ref=aEIAAAEAAAD//v8AAAAAABQCAAA= scope=doc:8a412bc4633c",
-        "feat:0046 Sketch11 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAAoCAAA= scope=doc:8a412bc4633c",
         "feat:0047 Sketch15 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAADICAAA= scope=doc:8a412bc4633c",
         "feat:0048 Cut-Extrude3 [ICE] persist_ref=aEIAAAEAAAD//v8AAAAAADwCAAA= scope=doc:8a412bc4633c",
-        "feat:0049 Sketch15 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAADICAAA= scope=doc:8a412bc4633c",
         "feat:0050 Sketch19 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAFgCAAA= scope=doc:8a412bc4633c",
         "feat:0051 Cut-Extrude4 [ICE] persist_ref=aEIAAAEAAAD//v8AAAAAAGACAAA= scope=doc:8a412bc4633c",
-        "feat:0052 Sketch19 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAFgCAAA= scope=doc:8a412bc4633c",
         "feat:0053 Sketch20 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAHACAAA= scope=doc:8a412bc4633c",
         "feat:0054 Cut-Extrude5 [ICE] persist_ref=aEIAAAEAAAD//v8AAAAAAHYCAAA= scope=doc:8a412bc4633c",
-        "feat:0055 Sketch20 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAHACAAA= scope=doc:8a412bc4633c",
         "feat:0056 Chamfer1 [Chamfer] persist_ref=aEIAAAEAAAD//v8AAAAAACMCAAA= scope=doc:8a412bc4633c",
         "feat:0057 Sketch14 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAB0CAAA= scope=doc:8a412bc4633c",
         "feat:0058 M5x0.8 Tapped Hole1 [HoleWzd] persist_ref=aEIAAAEAAAD//v8AAAAAAB4CAAA= scope=doc:8a412bc4633c",
-        "feat:0059 Sketch14 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAB0CAAA= scope=doc:8a412bc4633c",
-        "feat:0060 Sketch13 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAABoCAAA= scope=doc:8a412bc4633c",
         "feat:0061 Sketch18 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAEoCAAA= scope=doc:8a412bc4633c",
         "feat:0062 Ø3.0mm Dowel Hole1 [HoleWzd] persist_ref=aEIAAAEAAAD//v8AAAAAAEsCAAA= scope=doc:8a412bc4633c",
-        "feat:0063 Sketch18 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAEoCAAA= scope=doc:8a412bc4633c",
-        "feat:0064 Sketch17 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAEkCAAA= scope=doc:8a412bc4633c",
         "feat:0065 Fillet4 [Fillet] persist_ref=aEIAAAEAAAD//v8AAAAAAC0CAAA= scope=doc:8a412bc4633c",
         "feat:0066 Fillet1 [Fillet] persist_ref=aEIAAAEAAAD//v8AAAAAACACAAA= scope=doc:8a412bc4633c",
         "feat:0067 Fillet2 [Fillet] persist_ref=aEIAAAEAAAD//v8AAAAAACkCAAA= scope=doc:8a412bc4633c",
@@ -1315,7 +1165,7 @@
     {
       "id": "F-003",
       "check": "rms.sketches.fully_defined",
-      "title": "Sketch2 constrained status is under_defined; Sketch2 constrained status is unde…",
+      "title": "Sketch2 constrained status is under_defined",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -1339,15 +1189,6 @@
           "persist_ref": "aEIAAAEAAAD//v8AAAAAAKEBAAA=",
           "page": null,
           "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAJsBAAA=",
-          "page": null,
-          "bbox": null
         }
       ],
       "provenance": [
@@ -1364,12 +1205,11 @@
         }
       ],
       "configuration": "Default",
-      "observed": "Sketch2 constrained status is under_defined; Sketch2 constrained status is under_defined",
+      "observed": "Sketch2 constrained status is under_defined",
       "requirement": "Every sketch is fully defined. Only under_defined fails.",
       "inputs": [
         "feat:0030 Sketch2 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAJsBAAA= scope=doc:8a412bc4633c",
-        "feat:0031 Boss-Extrude2 [ICE] persist_ref=aEIAAAEAAAD//v8AAAAAAKEBAAA= scope=doc:8a412bc4633c",
-        "feat:0032 Sketch2 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAJsBAAA= scope=doc:8a412bc4633c"
+        "feat:0031 Boss-Extrude2 [ICE] persist_ref=aEIAAAEAAAD//v8AAAAAAKEBAAA= scope=doc:8a412bc4633c"
       ],
       "calculation": null,
       "tool_result_ids": [
@@ -1561,22 +1401,13 @@
     {
       "id": "F-007",
       "check": "standards.part.sketches_fully_defined",
-      "title": "Sketch2 is under-defined, at the top level of the feature tree; Sketch2 is unde…",
+      "title": "Sketch2 is under-defined, at the top level of the feature tree",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
         "cmp:0004"
       ],
       "drawing_locations": [
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAJsBAAA=",
-          "page": null,
-          "bbox": null
-        },
         {
           "document_id": "doc:8a412bc4633c",
           "sheet": null,
@@ -1601,11 +1432,10 @@
         }
       ],
       "configuration": "Default",
-      "observed": "Sketch2 is under-defined, at the top level of the feature tree; Sketch2 is under-defined, under Boss-Extrude2",
+      "observed": "Sketch2 is under-defined, at the top level of the feature tree",
       "requirement": "Every sketch is fully defined.",
       "inputs": [
-        "sketch feat:0030 Sketch2 persist_ref=aEIAAAEAAAD//v8AAAAAAJsBAAA= scope=doc:8a412bc4633c",
-        "sketch feat:0032 Sketch2 persist_ref=aEIAAAEAAAD//v8AAAAAAJsBAAA= scope=doc:8a412bc4633c"
+        "sketch feat:0030 Sketch2 persist_ref=aEIAAAEAAAD//v8AAAAAAJsBAAA= scope=doc:8a412bc4633c"
       ],
       "calculation": null,
       "tool_result_ids": [
@@ -1623,7 +1453,7 @@
     }
   ],
   "explanations_enabled": true,
-  "finding_explanation_fingerprint": "19044f0d823dbc8d8da9c2075f719b538eea66db28ff0f94353e896eae27b0c2",
+  "finding_explanation_fingerprint": "a1679d3c6cb6113eb4e81ed98f929e5a7e0cdc06e6531ea757ce36b3817c831f",
   "model_view": {
     "payload_slimming": false,
     "history_pruning": false,
@@ -1701,6 +1531,20 @@
           ]
         },
         "reason": "1 document(s)",
+        "error": null
+      },
+      {
+        "check": "rms.tree.folded_rows",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "268-88428.SLDPRT: 11 second listings merged, 9 carried sub-features read with their feature",
         "error": null
       },
       {
@@ -3090,7 +2934,7 @@
     "assisted_supervision_minutes": 0.0,
     "assisted_verification_minutes": 0.0,
     "false_alarm_handling_minutes": 0.0,
-    "unattended_runtime_minutes": 0.0011857666666666667,
+    "unattended_runtime_minutes": 0.0014475333333333334,
     "net_saved_minutes": null
   }
 }

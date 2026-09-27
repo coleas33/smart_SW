@@ -41,16 +41,6 @@ pytestmark = pytest.mark.usefixtures("vocabulary")
 
 ARMS = ("recorded", "pane")
 
-T134_PENDING = pytest.mark.xfail(
-    reason=(
-        "013 T133 reads the part tree one node per feature position, which moves the RMS "
-        "findings the replay fixtures recorded; lane G regenerates them in 013 T134, and "
-        "that commit removes this mark (strict, so a regenerated fixture cannot keep it)"
-    ),
-    strict=True,
-)
-
-
 def requested(name: str, arm: str) -> Any:
     return (EfficiencySettings(), MODEL_VIEW_OFF) if arm == "recorded" else pane_request(name)
 
@@ -115,7 +105,6 @@ def test_no_drawing_tool_is_offered_and_none_is_planned(both: Any) -> None:
         assert DRAWINGS_TOOL not in review.opening
 
 
-@T134_PENDING
 def test_no_recorded_finding_is_lost_unreplayable_or_reclassified(both: Any) -> None:
     registered, patched, _, _ = both
 
