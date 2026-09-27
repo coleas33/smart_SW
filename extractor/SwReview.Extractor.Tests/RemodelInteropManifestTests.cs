@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using SwReview.Extractor.Guard;
 using SwReview.Extractor.Rms;
 using Xunit;
@@ -242,6 +243,512 @@ public class RemodelInteropManifestTests
             Assert.True(
                 !string.IsNullOrWhiteSpace(absence.Member) || !string.IsNullOrWhiteSpace(absence.MemberPattern),
                 "an absence row names neither a member nor a member pattern");
+        }
+    }
+
+    // =====================================================================================
+    // T152's manifest half and T156 (004 build order, lane C): the seat adapter's surface.
+    // =====================================================================================
+
+    /// <summary>
+    /// T156. The interop members the production seat adapter (T153 to T155) calls that the
+    /// fixture did not record, pinned by value. Every one is a read, or a property set on a
+    /// throwaway open request, so none is allowlisted: the guard's list changes only as the 004
+    /// contracts say, and they say nothing here. <c>InstalledAssemblyMatchesManifest</c> checks
+    /// each signature against the installed interop, like every other row.
+    /// </summary>
+    private static readonly string[] SeatAdapterAdditions =
+    {
+        // The copy adapter's plumbing (T153): every IModelDocExtension member is reached
+        // through get_Extension and every IFeatureManager member through get_FeatureManager.
+        "IModelDoc2.get_Extension",
+        "IModelDoc2.get_FeatureManager",
+        "IModelDoc2.GetEquationMgr",
+        "IModelDoc2.GetUnits",
+        "IModelDocExtension.GetPersistReference3",
+        "IFeatureManager.GetFeatures",
+
+        // The material's configuration (IGeometrySource.GetMaterialName reads the active one).
+        "IModelDoc2.get_ConfigurationManager",
+        "IConfigurationManager.get_ActiveConfiguration",
+        "IConfiguration.get_Name",
+
+        // A folder's members, for the rms_named_folders signal (T153 and T154's shared reader).
+        "IFeature.GetSpecificFeature2",
+        "IFeatureFolder.GetFeatures",
+
+        // The copy's open request (T155's open-options helper, shared with remodel.open_copy).
+        "ISldWorks.GetOpenDocSpec",
+        "IDocumentSpecification.set_DocumentType",
+        "IDocumentSpecification.set_Silent",
+        "IDocumentSpecification.set_LoadModel",
+        "IDocumentSpecification.set_ReadOnly",
+        "IDocumentSpecification.set_ViewOnly",
+        "IDocumentSpecification.get_Error",
+        "IDocumentSpecification.get_Warning",
+    };
+
+    /// <summary>
+    /// T156: each addition has a builder row and a manifest row, and neither is allowlisted, so
+    /// <c>CodeMatchesManifest</c> compares its signature and its allowlist flag like any other.
+    /// </summary>
+    [Fact]
+    public void EveryMemberTheSeatAdapterAddsHasARowAndIsNotAllowlisted()
+    {
+        Assert.Equal(
+            SeatAdapterAdditions.Length,
+            SeatAdapterAdditions.Distinct(StringComparer.Ordinal).Count());
+
+        var builders = RemodelInteropSurface.Calls.ToDictionary(c => c.Key, StringComparer.Ordinal);
+        var missing = new List<string>();
+        foreach (string key in SeatAdapterAdditions)
+        {
+            if (!builders.TryGetValue(key, out RemodelInteropCall? call)
+                || call == null
+                || !Loaded.Members.Any(m => string.Equals(m.Key, key, StringComparison.Ordinal)))
+            {
+                missing.Add(key);
+                continue;
+            }
+
+            Assert.False(call.Allowlisted, key + " is a read and is not allowlisted in the builder table");
+            Assert.False(Loaded.Member(key).Allowlisted, key + " is a read and is not allowlisted in the manifest");
+            Assert.DoesNotContain(key, RemodelGuard.AllowedKeys);
+        }
+
+        Assert.True(
+            missing.Count == 0,
+            "the seat adapter calls interop members with no builder row or no manifest row, so "
+            + "nothing would notice if their signatures moved: " + string.Join(", ", missing));
+    }
+
+    /// <summary>
+    /// T154's reads are exactly <see cref="RemodelScopeProbe.ProbeSurface"/> (the
+    /// <c>scope_signals</c> table plus the three protocol reads), and the resolve pair every
+    /// change command makes is <see cref="RemodelSession"/>'s: each gated name has a row, read as
+    /// the member itself or its <c>get_</c> accessor (the probe gates
+    /// <c>Is3DInterconnectFeature</c>, a property).
+    /// </summary>
+    [Fact]
+    public void EveryMemberTheScopeProbeGatesHasARow()
+    {
+        string[] gated = RemodelScopeProbe.ProbeSurface
+            .Concat(new[] { RemodelSession.ResolveMember, RemodelSession.NameMember })
+            .ToArray();
+        Assert.Equal(15, gated.Length);
+
+        HashSet<string> recorded = RecordedMembers;
+        string[] unrecorded = gated
+            .Where(member => !InteropMemberScan.Candidates(member, MemberUse.Read).Any(recorded.Contains))
+            .ToArray();
+        Assert.True(
+            unrecorded.Length == 0,
+            "the remodel seam gates members the frozen manifest does not record: " + string.Join(", ", unrecorded));
+    }
+
+    /// <summary>
+    /// The audit of T152 (004 build order, lane C): every interop member the seat adapter's
+    /// source names has a row. <see cref="CodeMatchesManifest"/> compares the manifest with a
+    /// hand-written table, so a member called directly and never added to the table would pass
+    /// it; this reads the adapter's own source instead, by the file scan
+    /// <see cref="DrawingFamilyReadAuditTests"/> runs.
+    ///
+    /// What it can and cannot see is <see cref="SeatAdapterScan"/>'s to say; the short of it is
+    /// that it knows a member's name and how it is used, never the interface it is called on.
+    /// </summary>
+    [Fact]
+    public void EveryInteropMemberTheSeatAdapterSourceNamesHasARow()
+    {
+        string[] unrecorded = SeatAdapterScan.Files()
+            .SelectMany(file => SeatAdapterScan.UnrecordedIn(File.ReadAllText(file))
+                .Select(name => (Name: name, Where: Path.GetFileName(file))))
+            .Where(found => !SeatAdapterScan.NamedExceptions.ContainsKey(found.Name))
+            .Select(found => $"{found.Name} in {found.Where}")
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(found => found, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.True(
+            unrecorded.Length == 0,
+            "the seat adapter's source names interop members the frozen manifest does not record, "
+            + "so nothing would notice if their signatures moved. Add each one's row to "
+            + "RemodelInteropSurface and to the fixture (by reflection over the installed interop, "
+            + "contracts/interop-manifest.md), or, for a name that is not a SOLIDWORKS call, a "
+            + "named exception with its reason: " + string.Join(", ", unrecorded));
+    }
+
+    /// <summary>
+    /// A floor, so the audit cannot pass by reading nothing: the shared classes are read, the
+    /// interop calls they make are found, and a file declaring one of the build order's adapter
+    /// classes is read wherever it is, so a move cannot quietly shrink the scan.
+    /// </summary>
+    [Fact]
+    public void TheSeatAdapterScanReadsTheAdapterSource()
+    {
+        IReadOnlyList<string> files = SeatAdapterScan.Files();
+        foreach (string shared in SeatAdapterScan.SharedFiles)
+        {
+            Assert.True(
+                files.Any(file => file.EndsWith(Path.DirectorySeparatorChar + shared, StringComparison.OrdinalIgnoreCase)),
+                shared + " is not among the files the audit reads; a shared class that moved is one it no longer audits.");
+        }
+
+        foreach (string file in DrawingFamilyReadAuditTests.ProductSourceFiles())
+        {
+            string code = InteropMemberScan.CodeOnly(File.ReadAllText(file));
+            foreach (string adapter in SeatAdapterScan.AdapterClasses)
+            {
+                if (Regex.IsMatch(code, @"\b(?:class|struct|record)\s+" + adapter + @"\b"))
+                {
+                    Assert.True(
+                        SeatAdapterScan.IsScanned(file),
+                        $"{adapter} is declared in {file}, which the seat adapter audit does not read.");
+                }
+            }
+        }
+
+        var named = new HashSet<string>(
+            files.SelectMany(file => InteropMemberScan.Accesses(File.ReadAllText(file)))
+                .SelectMany(access => InteropMemberScan.Candidates(access.Name, access.Use)),
+            StringComparer.Ordinal);
+        foreach (string member in new[]
+                 {
+                     "GetCount", "get_Equation", "Add3", "Add2", "set_Equation", "Delete",
+                     "Recalculate", "set_AccuracyLevel", "set_UseSystemUnits", "get_Volume", "get_CenterOfMass",
+                 })
+        {
+            Assert.Contains(member, named);
+        }
+    }
+
+    /// <summary>
+    /// Each named exception is still needed: still a name the scan finds in the adapter's source,
+    /// still declared by the interop and still without a row. One that is not hides nothing today
+    /// and would hide a real call tomorrow.
+    /// </summary>
+    [Fact]
+    public void EveryNamedExceptionIsStillAnUnrecordedInteropNameTheScanFinds()
+    {
+        var unrecorded = new HashSet<string>(
+            SeatAdapterScan.Files().SelectMany(file => SeatAdapterScan.UnrecordedIn(File.ReadAllText(file))),
+            StringComparer.Ordinal);
+
+        Assert.NotEmpty(SeatAdapterScan.NamedExceptions);
+        foreach (KeyValuePair<string, string> exception in SeatAdapterScan.NamedExceptions)
+        {
+            Assert.True(
+                unrecorded.Contains(exception.Key),
+                $"the named exception '{exception.Key}' is no longer an unrecorded interop name in the "
+                + "seat adapter's source; remove it.");
+            Assert.False(string.IsNullOrWhiteSpace(exception.Value), exception.Key);
+        }
+    }
+
+    /// <summary>The audit's decision on single lines, against the real interop and the real fixture.</summary>
+    [Theory]
+    [InlineData("document.GetPathName();", "")]
+    [InlineData("document.GetTitle();", "GetTitle")]
+    [InlineData("feature.Name = name;", "")]
+    [InlineData("specification.FileName = path;", "FileName")]
+    [InlineData("int count = features.Count;", "Count")]
+    [InlineData("reader.NotASolidWorksMember();", "")]
+    [InlineData("// document.GetTitle();", "")]
+    public void TheAuditFlagsANameTheInteropDeclaresAndNoRowRecords(string source, string expected)
+    {
+        Assert.Equal(expected, string.Join("|", SeatAdapterScan.UnrecordedIn(source)));
+    }
+
+    /// <summary>
+    /// The scanner itself: comments are dropped and strings kept (a name in a message is read,
+    /// which can only add to what the audit asks for), a string or a character literal is never
+    /// mistaken for a comment, directives name namespaces rather than members, and the use of
+    /// each member decides the accessor it names.
+    /// </summary>
+    [Theory]
+    [InlineData("x.Name = y;", "Name:Assign")]
+    [InlineData("x.Name == y", "Name:Read")]
+    [InlineData("x.Name != y && x.Count <= 2", "Name:Read|Count:Read")]
+    [InlineData("x.Count += 1; x.Mask |= 4;", "Count:CompoundAssign|Mask:CompoundAssign")]
+    [InlineData("Func<int> f = () => x.Value;", "Value:Read")]
+    [InlineData("a?.B?.C()", "B:Read|C:Read")]
+    [InlineData("x\n    .Chained()\n    .Again = 1;", "Chained:Read|Again:Assign")]
+    [InlineData("list.Cast<object>()", "Cast:Read")]
+    [InlineData("double d = 1.5 + 2.0e3; y.Shown", "Shown:Read")]
+    [InlineData("// x.Hidden();\ny.Shown", "Shown:Read")]
+    [InlineData("/// <c>IModelDoc2.Hidden</c>\ny.Shown", "Shown:Read")]
+    [InlineData("/* x.Hidden\n z.Hidden */ y.Shown", "Shown:Read")]
+    [InlineData("y.Shown(); // x.Hidden()", "Shown:Read")]
+    [InlineData("var s = \"http://a.InString\"; y.Shown", "InString:Read|Shown:Read")]
+    [InlineData("var s = \"say \\\"// x.InString\\\"\"; y.Shown", "InString:Read|Shown:Read")]
+    [InlineData("var s = @\"a\"\"// x.InString\"; y.Shown", "InString:Read|Shown:Read")]
+    [InlineData("var s = $@\"{a.Hole}\"\"//\"; y.Shown", "Hole:Read|Shown:Read")]
+    [InlineData("var c = '\"'; y.Shown // x.Hidden", "Shown:Read")]
+    [InlineData("var c = '\\''; y.Shown // x.Hidden", "Shown:Read")]
+    [InlineData("using SolidWorks.Interop.sldworks;\nusing Alias = System.IO.Path;\nnamespace A.B;\ny.Shown", "Shown:Read")]
+    [InlineData("using (var stream = File.Open(p)) { stream.Shown(); }", "Open:Read|Shown:Read")]
+    public void TheScannerReadsEachMemberAccessAndHowItIsUsed(string source, string expected)
+    {
+        Assert.Equal(
+            expected,
+            string.Join("|", InteropMemberScan.Accesses(source).Select(access => access.Name + ":" + access.Use)));
+    }
+
+    [Theory]
+    [InlineData(MemberUse.Read, "Volume|get_Volume")]
+    [InlineData(MemberUse.Assign, "set_Volume")]
+    [InlineData(MemberUse.CompoundAssign, "get_Volume|set_Volume")]
+    public void EachUseNamesTheAccessorsItCanReach(MemberUse use, string expected)
+    {
+        Assert.Equal(expected, string.Join("|", InteropMemberScan.Candidates("Volume", use)));
+    }
+
+    /// <summary>Every member name the fixture records, whatever its interface.</summary>
+    private static HashSet<string> RecordedMembers =>
+        new HashSet<string>(Loaded.Members.Select(m => m.Member), StringComparer.Ordinal);
+
+    /// <summary>How a member access uses the member, which decides the accessor it can reach.</summary>
+    public enum MemberUse
+    {
+        /// <summary>A call, a property read, or a method group: the member itself or its getter.</summary>
+        Read,
+
+        /// <summary><c>x.Member = value</c>: the setter.</summary>
+        Assign,
+
+        /// <summary><c>x.Member += value</c> and the other compound assignments: the getter and the setter.</summary>
+        CompoundAssign,
+    }
+
+    /// <summary>
+    /// Member accesses in C# source, read without a compiler: <c>.Name</c> anywhere outside a
+    /// comment, with the use that follows it. Strings are kept rather than blanked, because an
+    /// interpolated string holds code and a name inside a message can only make the audit ask
+    /// for more, never less.
+    /// </summary>
+    internal static class InteropMemberScan
+    {
+        private static readonly Regex Access = new Regex(
+            @"\.(?<name>[A-Za-z_][A-Za-z0-9_]*)(?<assign>\s*(?<op><<|>>|\?\?|[+\-*/%&|^])?=(?![=>]))?",
+            RegexOptions.Compiled);
+
+        /// <summary>
+        /// <c>using</c> directives (an alias included, a <c>using (...)</c> statement not) and
+        /// <c>namespace</c> declarations name namespaces, not members.
+        /// </summary>
+        private static readonly Regex Directive = new Regex(
+            @"^[ \t]*(?:(?:global[ \t]+)?using[ \t]+[^;(\r\n]*;|namespace[ \t]+[A-Za-z0-9_.]+)",
+            RegexOptions.Compiled | RegexOptions.Multiline);
+
+        /// <summary>The interop names a use of <paramref name="name"/> can reach.</summary>
+        public static IReadOnlyList<string> Candidates(string name, MemberUse use)
+        {
+            switch (use)
+            {
+                case MemberUse.Assign:
+                    return new[] { "set_" + name };
+                case MemberUse.CompoundAssign:
+                    return new[] { "get_" + name, "set_" + name };
+                default:
+                    return new[] { name, "get_" + name };
+            }
+        }
+
+        public static IEnumerable<(string Name, MemberUse Use)> Accesses(string source)
+        {
+            foreach (Match match in Access.Matches(CodeOnly(source)))
+            {
+                MemberUse use = !match.Groups["assign"].Success
+                    ? MemberUse.Read
+                    : match.Groups["op"].Success ? MemberUse.CompoundAssign : MemberUse.Assign;
+                yield return (match.Groups["name"].Value, use);
+            }
+        }
+
+        /// <summary>
+        /// The source with its comments and directives removed. A string or character literal is
+        /// copied as it stands, and only so that a <c>//</c> or a quote inside it is not taken for
+        /// the start of a comment or of another literal.
+        /// </summary>
+        public static string CodeOnly(string source)
+        {
+            var code = new StringBuilder(source.Length);
+            int at = 0;
+            while (at < source.Length)
+            {
+                char current = source[at];
+                char next = at + 1 < source.Length ? source[at + 1] : '\0';
+
+                if (current == '/' && next == '/')
+                {
+                    while (at < source.Length && source[at] != '\n')
+                    {
+                        at++;
+                    }
+
+                    continue;
+                }
+
+                if (current == '/' && next == '*')
+                {
+                    int close = source.IndexOf("*/", at + 2, StringComparison.Ordinal);
+                    at = close < 0 ? source.Length : close + 2;
+                    code.Append(' ');
+                    continue;
+                }
+
+                if (current == '"' || current == '\'')
+                {
+                    int end = EndOfLiteral(source, at);
+                    code.Append(source, at, end - at);
+                    at = end;
+                    continue;
+                }
+
+                code.Append(current);
+                at++;
+            }
+
+            return Directive.Replace(code.ToString(), string.Empty);
+        }
+
+        /// <summary>
+        /// Where the literal opening at <paramref name="start"/> ends: a verbatim string
+        /// (<c>@"</c>, <c>$@"</c>, <c>@$"</c>) at its unpaired closing quote; a regular string
+        /// or a character literal at its unescaped closing quote, or at the end of the line when
+        /// it has none.
+        /// </summary>
+        private static int EndOfLiteral(string source, int start)
+        {
+            char quote = source[start];
+            bool verbatim = quote == '"'
+                && ((start >= 1 && source[start - 1] == '@')
+                    || (start >= 2 && source[start - 1] == '$' && source[start - 2] == '@'));
+
+            int at = start + 1;
+            while (at < source.Length)
+            {
+                char current = source[at];
+                if (verbatim)
+                {
+                    if (current == '"')
+                    {
+                        if (at + 1 < source.Length && source[at + 1] == '"')
+                        {
+                            at += 2;
+                            continue;
+                        }
+
+                        return at + 1;
+                    }
+                }
+                else
+                {
+                    if (current == '\\')
+                    {
+                        at += 2;
+                        continue;
+                    }
+
+                    if (current == quote)
+                    {
+                        return at + 1;
+                    }
+
+                    if (current == '\n')
+                    {
+                        return at;
+                    }
+                }
+
+                at++;
+            }
+
+            return source.Length;
+        }
+    }
+
+    /// <summary>
+    /// The seat adapter's source as the audit reads it (004 build order, lane C).
+    ///
+    /// <b>What it reads.</b> The files under <see cref="SeatFolder"/> (lane B's adapters) and
+    /// <see cref="SharedFiles"/> (lane A's ungated <c>IEquationTarget</c> and
+    /// <c>IMassPropertyReading</c> classes, which the copy adapter uses directly), found by the
+    /// product-source scan <see cref="DrawingFamilyReadAuditTests"/> runs.
+    ///
+    /// <b>What it decides.</b> A name that some public interface of the interop the product is
+    /// built against declares - as itself, or as the accessor its use reaches - and that no
+    /// manifest row records, on any interface. So it catches a SOLIDWORKS call with no frozen
+    /// signature at all; it <b>cannot</b> see which interface a name is called on, so a name
+    /// recorded on one interface passes when it is called on another, and an indexed property
+    /// set (<c>x.Member[i] = v</c>) is read as a get. A name that is not a SOLIDWORKS call but
+    /// matches one is a <see cref="NamedExceptions"/> entry with its reason, and
+    /// <c>EveryNamedExceptionIsStillAnUnrecordedInteropNameTheScanFinds</c> keeps each one
+    /// needed.
+    /// </summary>
+    internal static class SeatAdapterScan
+    {
+        /// <summary>Lane B's folder, relative to the extractor folder. Absent until lane B lands.</summary>
+        public static readonly string SeatFolder = Path.Combine("SwReview.AddIn", "Remodel", "Seat");
+
+        /// <summary>Lane A's shared classes, relative to the extractor folder.</summary>
+        public static readonly string[] SharedFiles =
+        {
+            Path.Combine("SwReview.Extractor", "Rms", "SwEquationManager.cs"),
+            Path.Combine("SwReview.Extractor", "Rms", "SwMassProperty.cs"),
+        };
+
+        /// <summary>The adapter classes the build order names for lane B; each must be declared where the audit reads.</summary>
+        public static readonly string[] AdapterClasses =
+        {
+            "SwScopeSignalReader",
+            "SwRemodelCopyDocument",
+            "SwRemodelProbeSource",
+            "SwRemodelBridgeSeat",
+            "CopyOpenSpecification",
+        };
+
+        /// <summary>Names the scan finds that are not SOLIDWORKS calls, each with where and why.</summary>
+        public static readonly IReadOnlyDictionary<string, string> NamedExceptions =
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Length"] = "SwMassProperty.cs: System.Array.Length, the length of the SAFEARRAY a triple is "
+                    + "read from; no interop property named Length is read",
+            };
+
+        private static readonly Lazy<HashSet<string>> InteropMemberNames = new Lazy<HashSet<string>>(() =>
+            new HashSet<string>(
+                typeof(SolidWorks.Interop.sldworks.IModelDoc2).Assembly.GetExportedTypes()
+                    .Where(type => type.IsInterface)
+                    .SelectMany(type => type.GetMethods())
+                    .Select(method => method.Name),
+                StringComparer.Ordinal));
+
+        public static bool IsScanned(string file) =>
+            SharedFiles.Any(shared => file.EndsWith(Path.DirectorySeparatorChar + shared, StringComparison.OrdinalIgnoreCase))
+            || file.IndexOf(
+                Path.DirectorySeparatorChar + SeatFolder + Path.DirectorySeparatorChar,
+                StringComparison.OrdinalIgnoreCase) >= 0;
+
+        public static IReadOnlyList<string> Files() =>
+            DrawingFamilyReadAuditTests.ProductSourceFiles().Where(IsScanned).ToList();
+
+        /// <summary>
+        /// The names in <paramref name="source"/> the interop declares and no row records, in the
+        /// order they occur, each once. Named exceptions are not removed here, so the staleness
+        /// case can see them.
+        /// </summary>
+        public static IReadOnlyList<string> UnrecordedIn(string source)
+        {
+            HashSet<string> recorded = RecordedMembers;
+            return InteropMemberScan.Accesses(source)
+                .Where(access =>
+                {
+                    IReadOnlyList<string> reachable = InteropMemberScan.Candidates(access.Name, access.Use);
+                    return reachable.Any(InteropMemberNames.Value.Contains) && !reachable.Any(recorded.Contains);
+                })
+                .Select(access => access.Name)
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
         }
     }
 

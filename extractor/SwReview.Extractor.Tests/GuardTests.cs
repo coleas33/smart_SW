@@ -1232,6 +1232,11 @@ public class DrawingFamilyReadAuditTests
             ["LoadFile4"] = "Program.cs: a member probe standards asserts is absent from its gate log",
             ["dimensions"] = "Ir/DrawingSheet.cs: a JSON property name, matching IDrawingDoc.Dimensions only by case",
             ["dissolve"] = "Bridge/BridgeProtocol.cs: a remodel.folder operation name in the protocol",
+            ["LoadModel"] = "Rms/RemodelInteropSurface.cs: the parameter name of IDocumentSpecification.set_LoadModel "
+                + "in the frozen interop manifest's builder table (feature 004 T156), matching IView.LoadModel only by name",
+            ["set_ReadOnly"] = "Rms/RemodelInteropSurface.cs: IDocumentSpecification.set_ReadOnly in the frozen interop "
+                + "manifest's builder table (feature 004 T156), a property of the throwaway open request that is set "
+                + "false and never gated, matching IDimension's and INote's only by name",
         };
 
     private static readonly Regex StringLiteral = new Regex("\"((?:[^\"\\\\\\r\\n]|\\\\.)*)\"", RegexOptions.Compiled);
