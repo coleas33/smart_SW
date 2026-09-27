@@ -426,3 +426,11 @@ Two buttons and what they must say. **Open copy** activates the copy in SOLIDWOR
   labels. `RemodelWiringTests`: the add-in's one pipeline is built with its bind, and nothing in the
   add-in sets the switch: its one host and its one dispatcher are built through the shipped
   constructors, which pass `RemodelStart.SeatValidated`.
+- *Added 2026-09-27 (lanes D, E and F integrated).* `RemodelPlanEndToEndTests`: a Plan driven over
+  the fakes through the real Remodel host, pipeline, gate, tool service and dispatcher, with the
+  production seat over recording stand-ins - probe, bind, open, geometry, activation, dump and plan
+  in that order, the engineer's part only read, the copy opened once and tagged - then Start
+  refused `StartNotValidated` in the host's words with no backend run, a change command refused
+  `start_not_validated` at the bridge, and Discard ending the session with nothing posted; and a
+  tool service stopped while a plan waits telling the page the plan is lost, then, in one status
+  error, the settings its teardown could not put back.
