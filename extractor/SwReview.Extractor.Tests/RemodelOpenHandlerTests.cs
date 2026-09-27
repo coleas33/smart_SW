@@ -860,6 +860,95 @@ public class RemodelOpenHandlerTests : IDisposable
         Assert.True(outcome.CopyClosed);
         Assert.Empty(outcome.SettingsOutstanding);
         Assert.Equal(how == "preexisting" ? 1 : 0, seat.Closed.Count);
+
+        // 004 T183: a copy never made was never opened, so nothing is asked; the one read after
+        // the preexisting refusal's close is its confirmation.
+        Assert.Equal(how == "preexisting" ? 1 : 0, seat.OpenReads.Count);
+    }
+
+    // ---- 004 T183: a failed open's unwind asks before it says the copy is closed ------------
+
+    /// <summary>
+    /// 004 T183 (default taken 2026-09-27, the owner may revise; research R15.4): <c>OpenDoc7</c>
+    /// opened the copy and the document's wrapper then threw, so no handle came back. The unwind
+    /// asks SOLIDWORKS whether the copy is open, finds it, closes it unsaved and confirms the close
+    /// - the read before and the read after - and then deletes it.
+    /// </summary>
+    [Fact]
+    public void Open_ThatOpenedTheCopyAndThrew_AsksClosesAndConfirmsTheCopy()
+    {
+        FakeRemodelSeat seat = Seat();
+        seat.OpenFailure = new InvalidOperationException("the copy's document could not be wrapped");
+        var told = new List<RemodelSessionEnd>();
+        BridgeServices services = Services(seat, _runDirectory);
+        services.RemodelSessionEnded = told.Add;
+        var dispatcher = new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+
+        BridgeResponse response = dispatcher.Dispatch(OpenRequest(Probe(dispatcher)));
+
+        Assert.Equal(BridgeStatus.Error, response.Status);
+        Assert.Contains("the copy's document could not be wrapped", response.Error, StringComparison.Ordinal);
+        RemodelSessionEnd outcome = Assert.Single(told);
+        Assert.True(outcome.Succeeded);
+        Assert.True(outcome.CopyClosed);
+        string copy = Path.GetFullPath(_copyPath);
+        Assert.Equal(copy, Assert.Single(seat.Closed));
+        Assert.Equal(new[] { copy, copy }, seat.OpenReads);
+        Assert.Empty(seat.OpenDocuments);
+        Assert.False(File.Exists(_copyPath));
+        Assert.Contains("ISldWorks.CloseDoc", _observer.Members);
+    }
+
+    /// <summary>
+    /// <c>OpenDoc7</c> answered no document and SOLIDWORKS has none open at the copy's path: the
+    /// unwind asks, closes nothing, and the copy is closed by that answer.
+    /// </summary>
+    [Fact]
+    public void Open_ThatSolidworksAnsweredWithNoDocument_AsksAndClosesNothing()
+    {
+        FakeRemodelSeat seat = Seat();
+        seat.Copy = null;
+        var told = new List<RemodelSessionEnd>();
+        BridgeServices services = Services(seat, _runDirectory);
+        services.RemodelSessionEnded = told.Add;
+        var dispatcher = new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+
+        Assert.Equal(
+            RemodelErrorCodes.OpenFailed, Refusal(dispatcher.Dispatch(OpenRequest(Probe(dispatcher)))));
+
+        RemodelSessionEnd outcome = Assert.Single(told);
+        Assert.True(outcome.Succeeded);
+        Assert.True(outcome.CopyClosed);
+        Assert.Empty(seat.Closed);
+        Assert.Equal(Path.GetFullPath(_copyPath), Assert.Single(seat.OpenReads));
+        Assert.False(File.Exists(_copyPath));
+    }
+
+    /// <summary>
+    /// With no handle back and a read that cannot answer, whether SOLIDWORKS opened the copy is
+    /// unknown, and unknown is not closed: the ending says so, and nothing is closed on a guess.
+    /// </summary>
+    [Fact]
+    public void Open_WhoseUnwindCannotReadWhetherTheCopyWasOpened_DoesNotCountItClosed()
+    {
+        FakeRemodelSeat seat = Seat();
+        seat.OpenFailure = new InvalidOperationException("the copy's document could not be wrapped");
+        seat.OpenReadFailure = new InvalidOperationException("the application did not answer");
+        var told = new List<RemodelSessionEnd>();
+        BridgeServices services = Services(seat, _runDirectory);
+        services.RemodelSessionEnded = told.Add;
+        var dispatcher = new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+
+        dispatcher.Dispatch(OpenRequest(Probe(dispatcher)));
+
+        RemodelSessionEnd outcome = Assert.Single(told);
+        Assert.False(outcome.CopyClosed);
+        Assert.Equal(
+            "close: whether SOLIDWORKS opened the copy could not be read, so it is not counted as closed: "
+            + "InvalidOperationException: the application did not answer",
+            Assert.Single(outcome.Failures));
+        Assert.Empty(seat.Closed);
+        Assert.Empty(outcome.SettingsOutstanding);
     }
 
     /// <summary>An open refused before the settings were changed ended no session, and tells nothing.</summary>

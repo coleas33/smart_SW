@@ -40,8 +40,9 @@ public sealed class RemodelSessionEnd
     /// <c>remodel.open</c> that failed after it changed the settings ends the session it was making,
     /// by the routine's clean-up rules - no verification (there may be no scope yet), the copy
     /// closed unsaved and deleted, the settings put back. <see cref="Verified"/> and
-    /// <see cref="TagRemoved"/> are false for it; <see cref="CopyClosed"/> is true when no document
-    /// was opened.
+    /// <see cref="TagRemoved"/> are false for it; <see cref="CopyClosed"/> is true when the copy was
+    /// never made, and when no handle came back and SOLIDWORKS then answered that nothing is open at
+    /// the copy's path (004 T183).
     /// </summary>
     public const string ReasonOpenFailed = "remodel.open";
 
@@ -113,8 +114,10 @@ public sealed class RemodelSessionEnd
     /// Whether the copy is known to be closed (004 T179): <c>CloseDoc</c> returned and SOLIDWORKS
     /// then answered that it has no document open at the copy's path. False means it may still be
     /// open - the close threw, SOLIDWORKS still has it open, or that could not be read - and
-    /// <see cref="Failures"/> says which. For a failed open's unwind it is also true when no
-    /// document was opened.
+    /// <see cref="Failures"/> says which. For a failed open's unwind it is also true when the copy
+    /// was never made, so nothing was opened, and when no document handle came back and SOLIDWORKS
+    /// then answered that it has no document open at the copy's path (004 T183); a read that could
+    /// not answer is false.
     /// </summary>
     public bool CopyClosed { get; }
 

@@ -928,6 +928,13 @@ public sealed class FakeRemodelSeat : IRemodelSeat
     /// <summary>What <see cref="IsDocumentOpen"/> throws: a confirmation that cannot be read.</summary>
     public Exception? OpenReadFailure { get; set; }
 
+    /// <summary>
+    /// What <see cref="OpenDocument"/> throws once SOLIDWORKS has opened the copy (004 T183): with a
+    /// <see cref="Copy"/>, the copy is left in <see cref="OpenDocuments"/> and no handle comes back,
+    /// as when <c>OpenDoc7</c> opened the file and the document's wrapper then failed.
+    /// </summary>
+    public Exception? OpenFailure { get; set; }
+
     /// <summary>Every path <see cref="IsDocumentOpen"/> was asked about, in order.</summary>
     public List<string> OpenReads { get; } = new List<string>();
 
@@ -955,6 +962,11 @@ public sealed class FakeRemodelSeat : IRemodelSeat
         {
             Copy.PathName = Copy.PathName ?? documentPath;
             OpenDocuments.Add(documentPath);
+        }
+
+        if (OpenFailure != null)
+        {
+            throw OpenFailure;
         }
 
         return Copy;
