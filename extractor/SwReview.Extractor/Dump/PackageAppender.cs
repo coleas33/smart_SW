@@ -175,8 +175,9 @@ public static class PackageAppender
     /// contracts/confirmed-open.md section 2): the record - <c>opened_by_review: true</c> when the
     /// read opened it, the member omitted otherwise and never false - its <c>documents[]</c> row
     /// and manifest entry, its id in <c>design.drawing_document_ids</c>, its gaps, and the removal
-    /// of the document's candidate row. A drawing the package already holds is refused, and the
-    /// package is left as it was.
+    /// of the document's candidate row and of every other row whose path is the drawing's (feature
+    /// 013, contracts/drawing-capability.md section 4). A drawing the package already holds is
+    /// refused, and the package is left as it was.
     /// </summary>
     public static void MergeDrawing(
         EvidencePackage package,
@@ -231,8 +232,13 @@ public static class PackageAppender
 
         if (package.DrawingCandidates != null)
         {
+            // Feature 013 T083: every row of the path just read goes, not only the named
+            // document's - a part and an assembly of one stem share their same-name drawing, and a
+            // row left behind would have the backend ask again and the host refuse it as already a
+            // document of the review. Paths are compared as discovery compares them.
             package.DrawingCandidates.RemoveAll(
-                row => string.Equals(row.DocumentId, candidateDocumentId, StringComparison.Ordinal));
+                row => string.Equals(row.DocumentId, candidateDocumentId, StringComparison.Ordinal)
+                    || OpenDrawingDiscovery.SamePath(row.Path, document.Path));
             if (package.DrawingCandidates.Count == 0)
             {
                 package.DrawingCandidates = null;

@@ -304,6 +304,66 @@ public class PackageAppenderTests : IDisposable
         Assert.True(PackageAppender.Load(_directory).DrawingRecords!.Last().OpenedByReview);
     }
 
+    /// <summary>
+    /// Feature 013 T082 (contracts/drawing-capability.md section 4, research R2.28): a part and an
+    /// assembly of one stem share their same-name drawing, so two documents can hold a candidate
+    /// row for the one file. The backend reads it once, with the file's first document; the merge
+    /// removes every row whose path is the drawing just read - compared as discovery compares
+    /// paths, case and separators ignored - so no second read is refused as "already a document of
+    /// the review". Rows of other paths are kept.
+    /// </summary>
+    [Fact]
+    public void MergeDrawing_RemovesEveryCandidateRowOfTheDrawingsPathHoweverItIsSpelled()
+    {
+        EvidencePackage package = Fakes.ConfirmedDrawingPackage.Build();
+        package.DrawingCandidates!.Add(new DrawingCandidate
+        {
+            DocumentId = Fakes.ConfirmedDrawingPackage.AssemblyId,
+            Path = Fakes.ConfirmedDrawingPackage.HousingDrawingPath.ToUpperInvariant(),
+        });
+        package.DrawingCandidates.Add(new DrawingCandidate
+        {
+            DocumentId = "doc:0000000000aa",
+            Path = Fakes.ConfirmedDrawingPackage.HousingDrawingPath.Replace('\\', '/'),
+        });
+        package.DrawingCandidates.Add(new DrawingCandidate
+        {
+            DocumentId = "doc:0000000000bb",
+            Path = Fakes.ConfirmedDrawingPackage.Folder + @"\housing-b.SLDDRW",
+        });
+        var drawing = ConfirmedDrawing();
+
+        PackageAppender.MergeDrawing(
+            package, drawing.Record, drawing.Document, drawing.Entry, Array.Empty<Gap>(),
+            Fakes.ConfirmedDrawingPackage.HousingId, openedByReview: true);
+
+        Assert.Equal(
+            new[]
+            {
+                (Fakes.ConfirmedDrawingPackage.PinId, Fakes.ConfirmedDrawingPackage.PinDrawingPath),
+                ("doc:0000000000bb", Fakes.ConfirmedDrawingPackage.Folder + @"\housing-b.SLDDRW"),
+            },
+            package.DrawingCandidates!.Select(row => (row.DocumentId, row.Path)));
+    }
+
+    [Fact]
+    public void MergeDrawing_StillRemovesTheNamedDocumentsRowWhateverItsPath()
+    {
+        // The document the host was asked about loses its row even were its path another
+        // spelling discovery could not match (ConfirmedDrawingRead checks it first).
+        EvidencePackage package = Fakes.ConfirmedDrawingPackage.Build();
+        package.DrawingCandidates![0].Path = "housing.SLDDRW";
+        var drawing = ConfirmedDrawing();
+
+        PackageAppender.MergeDrawing(
+            package, drawing.Record, drawing.Document, drawing.Entry, Array.Empty<Gap>(),
+            Fakes.ConfirmedDrawingPackage.HousingId, openedByReview: true);
+
+        Assert.Equal(
+            new[] { Fakes.ConfirmedDrawingPackage.PinId },
+            package.DrawingCandidates!.Select(row => row.DocumentId));
+    }
+
     [Fact]
     public void MergeDrawing_OfADrawingThatWasAlreadyOpen_OmitsTheOpenedFlagRatherThanWritingFalse()
     {

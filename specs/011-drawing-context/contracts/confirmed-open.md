@@ -108,6 +108,13 @@ row and manifest entry (`open-drawings.md` section 4), its id appended to
 `design.drawing_document_ids`, its gaps appended, and the document's `drawing_candidates[]` row
 removed.
 
+*Amended 2026-09-26 by feature 013 T083 (013 `contracts/drawing-capability.md` section 4):* the
+merge removes the named document's row **and every other candidate row whose path is the drawing
+just read**, compared as discovery compares paths (`OpenDrawingDiscovery.SamePath`: case and
+separators ignored). A part and an assembly of one stem share their same-name drawing; the backend
+reads it once, with the file's first document, and a row left for the other would be read again
+and refused as "already a document of the review". Rows of other paths are kept.
+
 *Amended 2026-09-23 (T078, T079)*: a review whose extraction read no drawing carries the dump's
 standing drawing gap (`open-drawings.md` section 6: "No open drawing shows this design, so no
 drawing was read natively...", or the listing or the profile sentence) beside a `drawing` phase
