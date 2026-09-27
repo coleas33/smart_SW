@@ -16,6 +16,7 @@ the pane's "Questions for you" panel and feature 008's batch route serve them un
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -24,6 +25,7 @@ from swreview.checks.drawing_context import (
     CANDIDATE_CONFIRM,
     CONFORMANCE_CHECK,
     CONTEXT_CHECK,
+    CandidateFile,
     QuestionSpec,
     candidate_files,
     candidate_question,
@@ -52,6 +54,7 @@ __all__ = [
     "NO_CONNECTION",
     "PART_ROLES_ATTRIBUTE",
     "TEN_DRAWINGS",
+    "ConfirmedRead",
     "check_drawings",
     "drawing_evidence",
     "get_drawing_brief",
@@ -281,43 +284,65 @@ def _confirmed_item(document_id: str, reason: str, error: str | None = None) -> 
     )
 
 
+@dataclass(frozen=True)
+class ConfirmedRead:
+    """One candidate file's confirmed read (013 `contracts/drawing-capability.md` section 4): the
+    host was asked once for the file, and each of its documents got one `drawing.confirmed_open`
+    item carrying `outcome`."""
+
+    file_name: str
+    document_ids: tuple[str, ...]
+    """Every document the file sits beside, in id order; the host was asked with the first."""
+    outcome: str
+    """The items' reason: what the host did, or its refusal, the bridge error, the ten-drawing
+    bound, no connection, or a read the package could not be reloaded after - the words the
+    resumed message's "Drawing {file}: {outcome}" line carries (section 6)."""
+    read: bool
+    """The host read it and the package was reloaded: the items are `checked`, not unresolved."""
+
+
 def read_confirmed_candidates(
     context: ToolContext, answered: Sequence[EvidenceRequest], run_dir: Path
-) -> list[CoverageItem]:
-    """Read every confirmed candidate through the bridge, then reload the package.
+) -> list[ConfirmedRead]:
+    """Read every confirmed candidate file through the bridge, then reload the package.
 
     Called by `ReviewRun.answer_evidence_batch` after the answers are marked and before the
     resumed turn (`contracts/confirmed-open.md` section 1). It acts only on an answered request
-    that is this package's candidate question answered `CANDIDATE_CONFIRM`; then it asks
-    `context.bridge.drawing_read(run_id, document_id)` once per candidate, in the question's
-    order, with the run folder's own name as `run_id` and never a path, while the package holds
-    fewer than ten drawing records. The host (the add-in) opens, reads, appends and closes;
-    this side only asks, records one `drawing.confirmed_open` coverage item per candidate, and
-    reloads `run_dir/package.json` into `context` when a read succeeded. Returns the items
-    recorded, in the question's order; nothing else in the session changes.
+    that is this package's candidate question answered `CANDIDATE_CONFIRM` - the question rebuilt
+    with the review's roles and the host's mode as they are now, which are the ones it was asked
+    with (013 `contracts/part-roles.md` section 9: this runs before any regrade), so nothing
+    happens unless the host opens closed drawings. Then it asks
+    `context.bridge.drawing_read(run_id, document_id)` **once per candidate file** (013 section
+    4), in the files' order, with the file's first document id and the run folder's own name as
+    `run_id`, never a path, while the package holds fewer than ten drawing records; the host's
+    merge removes every candidate row of the path it read, so the file's other documents are
+    never read a second time. The host (the add-in) opens, reads, appends and closes; this side
+    only asks, records one `drawing.confirmed_open` coverage item per document of each file from
+    that file's one outcome, and reloads `run_dir/package.json` into `context` when a read
+    succeeded. Returns one `ConfirmedRead` per file, in order; nothing else in the session
+    changes.
     """
     index = DrawingIndex.for_package(context.ir)
     roles = _review_roles(context)
     spec = candidate_question(index, roles, _read_mode(context, index, roles))
     if not any(_is_confirmed_candidate(request, spec) for request in answered):
         return []
-    assert spec is not None
     held = len(context.ir.drawing_records)
-    outcomes: list[tuple[str, str, str | None, bool]] = []
-    for document_id in spec.entity_ids:
+    outcomes: list[tuple[CandidateFile, str, str | None, bool]] = []
+    for file in candidate_files(index, roles):
         if context.bridge is None:
-            outcomes.append((document_id, NO_CONNECTION, None, False))
+            outcomes.append((file, NO_CONNECTION, None, False))
             continue
         if held >= MAX_DRAWINGS:
-            outcomes.append((document_id, TEN_DRAWINGS, None, False))
+            outcomes.append((file, TEN_DRAWINGS, None, False))
             continue
         try:
-            result = context.bridge.drawing_read(run_dir.name, document_id)
+            result = context.bridge.drawing_read(run_dir.name, file.document_ids[0])
         except BridgeError as error:
-            outcomes.append((document_id, str(error), type(error).__name__, False))
+            outcomes.append((file, str(error), type(error).__name__, False))
             continue
         held += 1
-        outcomes.append((document_id, _read_outcome(result), None, True))
+        outcomes.append((file, _read_outcome(result), None, True))
 
     reload_error = None
     if any(read for *_, read in outcomes):
@@ -325,18 +350,17 @@ def read_confirmed_candidates(
             context.reload_package(load_package(run_dir))
         except (OSError, ValueError) as error:
             reload_error = f"{type(error).__name__}: {error}"
-    items: list[CoverageItem] = []
-    for document_id, reason, error, read in outcomes:
+    reads: list[ConfirmedRead] = []
+    for file, reason, error, read in outcomes:
         if read and reload_error is not None:
-            item = _confirmed_item(
-                document_id,
+            reason = (
                 f"{reason}; but the package in the run folder could not be reloaded: "
-                f"{reload_error}",
-                reload_error,
+                f"{reload_error}"
             )
-            context.record_coverage("unresolved", item)
-        else:
-            item = _confirmed_item(document_id, reason, error)
-            context.record_coverage("checked" if read else "unresolved", item)
-        items.append(item)
-    return items
+            error, read = reload_error, False
+        for document_id in file.document_ids:
+            context.record_coverage(
+                "checked" if read else "unresolved", _confirmed_item(document_id, reason, error)
+            )
+        reads.append(ConfirmedRead(file.file_name, file.document_ids, reason, read))
+    return reads

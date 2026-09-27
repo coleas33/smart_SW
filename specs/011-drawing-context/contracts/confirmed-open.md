@@ -37,6 +37,17 @@ the same document, and under checks first the model could not refresh it (the gu
 restated: while `DRAWING_BINDING_VALIDATED` is false no drawing dimension binds, and the standards
 run is attached once per review (T066 revisits the stack when it sets the switch).
 
+*Amended 2026-09-26 by feature 013 T081 (013 `contracts/drawing-capability.md` section 4):* "once
+per candidate" becomes **once per distinct candidate path**. `read_confirmed_candidates` rebuilds the
+question with the review's part roles and the host's mode as they are when it runs - the ones the
+question was asked with, since it runs before any regrade (013 `contracts/part-roles.md` section 9)
+- so nothing happens unless the host opens closed drawings. It then asks the bridge once per
+candidate file (`checks/drawing_context.candidate_files`, grouped by `drawings/evidence.file_key`),
+in the files' order, with the file's first document id; each document of the file gets its
+`drawing.confirmed_open` item from that one outcome, a refusal included. It returns one
+`ConfirmedRead {file_name, document_ids, outcome, read}` per file, the words the resumed message's
+outcome lines carry (013 section 6).
+
 Each candidate's outcome is one coverage item, check `drawing.confirmed_open`, subject the
 document id:
 
