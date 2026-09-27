@@ -829,7 +829,7 @@ def _standards_gap(reason: str) -> NotEvaluated:
 
 
 def part_role_families(
-    package: EvidencePackage, roles: PartRoles | None
+    package: EvidencePackage, roles: PartRoles | None, *, withdrawn: Sequence[str] = ()
 ) -> tuple[NotEvaluated, ...]:
     """The bought-parts lines and the zero-match guard's row (feature 013
     `contracts/part-roles.md` sections 2 and 7), each coverage row and its digest line from
@@ -840,12 +840,13 @@ def part_role_families(
     `coverage.prerun.maybe_bought` (unresolved) names the unclear documents while the
     part-roles question is open; `coverage.prerun.part_roles` (unresolved) is the guard's.
     `start_review` records the same rows directly when there is no pre-run (the
-    `standards_gap` precedent).
+    `standards_gap` precedent), and a regrade after the part-roles answer restates them from
+    here, `withdrawn` naming the findings the answer withdrew (section 9).
     """
     if roles is None:
         return ()
     families: list[NotEvaluated] = []
-    bought = bought_parts_sentence(roles, package)
+    bought = bought_parts_sentence(roles, package, withdrawn=withdrawn)
     if bought is not None:
         families.append(
             NotEvaluated(

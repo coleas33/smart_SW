@@ -53,6 +53,7 @@ from pydantic_core import to_jsonable_python
 from swreview.agent.providers import ToolCallResult, summarize_result, tool_result_text
 from swreview.agent.providers.schema import ToolSpec, tool_spec
 from swreview.agent.settings import EfficiencySettings, ModelViewSettings
+from swreview.checks import part_roles
 from swreview.report.session import (
     CoverageItem,
     CoverageScope,
@@ -186,6 +187,16 @@ Named here rather than in `tools/standards_checks.py` so that the predicate belo
 import at all: `checks/rules/run.py` imports this module, so this module cannot import the
 standards family at the top of the file without a cycle. `attach_standards_run` reads the
 name from here, so the setter and the reader cannot disagree about it.
+"""
+
+PART_ROLES_ATTRIBUTE = part_roles.PART_ROLES_ATTRIBUTE
+"""The attribute a review's part roles are carried on (feature 013, `contracts/part-roles.md`
+section 5): each part and assembly document custom, bought or unclear, computed once by
+`start_review` before the carry-over and the pre-run and read by every consumer (the RMS and
+hygiene tools, the drawing check, the brief). Absent on a context no review built - a check
+run, general chat - where every document is graded. Defined once, in `checks/part_roles.py`
+beside the type it carries, and re-exported here beside `STANDARDS_RUN_ATTRIBUTE`, so the
+setter and every reader take one name.
 """
 
 

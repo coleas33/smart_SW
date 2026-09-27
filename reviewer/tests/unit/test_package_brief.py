@@ -208,3 +208,53 @@ def test_brief_includes_bounded_extracted_mate_connections() -> None:
     assert "state=suppressed" in brief
     assert "cmp:0001,cmp:0002" in brief
     assert len(brief.encode("utf-8")) <= MAX_BRIEF_BYTES
+
+
+# --- feature 013 T031: each document's part role -------------------------------------------------
+
+
+def document_lines(brief: str) -> dict[str, str]:
+    """`{document id: its brief line}` for every document line of `brief`."""
+    return {
+        line.split()[1]: line
+        for line in brief.splitlines()
+        if line.startswith("- doc:") and " kind=" in line
+    }
+
+
+def test_a_brief_without_roles_names_no_role() -> None:
+    assert "role=" not in package_brief(build_package())
+
+
+def test_each_classified_document_line_carries_its_role(tmp_path) -> None:
+    from swreview.tools.registry import PART_ROLES_ATTRIBUTE
+    from tests.support.roles_review import PIN_ID, PLATE_ID, ROOT_ID, roles_review
+
+    run = roles_review(tmp_path)
+    roles = getattr(run.context, PART_ROLES_ATTRIBUTE)
+
+    lines = document_lines(package_brief(run.context.ir, roles=roles))
+
+    assert " kind=part role=custom " in lines[PLATE_ID]
+    assert " kind=part role=unclear " in lines[PIN_ID]
+    assert " kind=assembly role=custom " in lines[ROOT_ID]
+
+
+def test_the_opening_message_brief_carries_the_roles(tmp_path) -> None:
+    from tests.support.roles_review import PIN_ID, roles_review
+
+    run = roles_review(tmp_path)
+
+    assert " role=unclear " in document_lines(run.opening_message)[PIN_ID]
+
+
+def test_a_document_the_roles_do_not_name_carries_no_role(tmp_path) -> None:
+    """A drawing is never classified; an unknown id is not given a role it was never given."""
+    from swreview.tools.registry import PART_ROLES_ATTRIBUTE
+    from tests.support.roles_review import roles_review
+
+    run = roles_review(tmp_path)
+    roles = getattr(run.context, PART_ROLES_ATTRIBUTE)
+    package = build_package()
+
+    assert "role=" not in package_brief(package, roles=roles)

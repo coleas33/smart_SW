@@ -66,7 +66,17 @@ def _manifest_by_document(package: EvidencePackage) -> dict[str, ManifestEntry]:
     return result
 
 
-def _document_line(document: Document, manifest: ManifestEntry | None) -> str:
+def _role_of(roles: Any | None, document_id: str) -> str:
+    """` role=<role>` for a document the part roles classified, else nothing (feature 013,
+    `contracts/part-roles.md` section 6): a brief built without roles, or a drawing, keeps
+    exactly the bytes it had."""
+    role = None if roles is None else roles.by_document.get(document_id)
+    return "" if role is None else f" role={role.role}"
+
+
+def _document_line(
+    document: Document, manifest: ManifestEntry | None, roles: Any | None = None
+) -> str:
     """Render document identity/provenance without exposing a full filesystem path."""
     revision = manifest.revision if manifest is not None else None
     vault_version = manifest.vault_version if manifest is not None else None
@@ -77,7 +87,7 @@ def _document_line(document: Document, manifest: ManifestEntry | None) -> str:
         configs += f" (+{len(document.configurations) - 4})"
     return (
         f"- {_value(document.document_id, limit=40)} {_file_name(document.file_name)}"
-        f" kind={_value(document.kind, limit=24)} "
+        f" kind={_value(document.kind, limit=24)}{_role_of(roles, document.document_id)} "
         f"active_cfg={_value(document.active_configuration)}"
         f" configs={configs or '?'} material={_value(document.material)}"
         f" revision={_value(revision)} vault_version={_value(vault_version)}"
@@ -222,8 +232,14 @@ def package_brief(
     package: EvidencePackage,
     *,
     standards_gap: Any | None = None,
+    roles: Any | None = None,
 ) -> str:
-    """Render the bounded automatic context brief for one evidence package."""
+    """Render the bounded automatic context brief for one evidence package.
+
+    `roles` is the review's part roles (feature 013, `checks/part_roles.PartRoles`): each
+    classified document's line says `role=custom|bought|unclear`. `None` - every caller that
+    predates it - renders the brief it always did.
+    """
     documents = list(package.documents)
     manifest = _manifest_by_document(package)
     root = next(
@@ -262,7 +278,9 @@ def package_brief(
     root_kind = _value(root.kind, limit=24) if root is not None else "unknown"
 
     standards_note = _standards_note(standards_gap)
-    document_rows = [_document_line(item, manifest.get(item.document_id)) for item in documents]
+    document_rows = [
+        _document_line(item, manifest.get(item.document_id), roles) for item in documents
+    ]
     document_total = len(document_rows)
     component_total = len(package.components)
     component_by_id = {item.id: item for item in package.components}

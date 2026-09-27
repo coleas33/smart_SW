@@ -27,7 +27,6 @@ from typing import Any
 import pytest
 
 from swreview.agent import runner
-from swreview.agent.package_brief import package_brief
 from swreview.agent.providers import (
     AgentEvent,
     EffortLevel,
@@ -38,10 +37,12 @@ from swreview.agent.providers import (
     TurnResult,
 )
 from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
+from swreview.checks import part_roles
 from swreview.report.names import component_names
 from swreview.report.session import ReviewSession
 from swreview.report.titles import display_title, pane_finding, title_from
 from tests.support.contracts import contract_validator
+from tests.support.roles_review import review_brief
 
 MODEL = "fake-1"
 EFFORT: EffortLevel = "high"
@@ -204,7 +205,7 @@ def test_the_provider_is_given_the_system_prompt_the_tools_and_the_opening_messa
     assert seen["messages"] == [
         {
             "role": "user",
-            "content": f"{package_brief(run.context.ir)}\n\n{runner.OPENING_MESSAGE}",
+            "content": f"{review_brief(run)}\n\n{runner.OPENING_MESSAGE}",
         }
     ]
     assert seen["effort"] == EFFORT
@@ -290,8 +291,12 @@ def test_events_are_written_in_order_with_a_monotonic_seq(
 
     events = events_of(run)
     assert [event["seq"] for event in events] == list(range(1, len(events) + 1))
-    assert [event["type"] for event in events][:5] == [
+    # Feature 013 (integration of lanes P and S, 2026-09-27, edited deliberately): a review
+    # with no profile classifies in the `absent` state and setup records its bought-parts row
+    # ("Bought parts were not told apart"), announced before the first round.
+    assert [event["type"] for event in events][:6] == [
         "session.started",
+        "coverage",
         "usage",
         "tool.started",
         "tool.finished",
@@ -374,6 +379,17 @@ def test_session_ended_carries_the_end_time_and_the_timing(
 # --- what the tools write reaches the stream while the turn runs (FR-013) ------------------
 
 
+def model_coverage(run: runner.ReviewRun) -> list[dict[str, Any]]:
+    """The coverage the turns announced, without setup's part-roles rows (feature 013: a review
+    with no profile records "Bought parts were not told apart" before its first round;
+    integration of lanes P and S, 2026-09-27, edited deliberately)."""
+    return [
+        body
+        for body in bodies_of(run, "coverage")
+        if body["item"]["check"] not in part_roles.ROW_CHECKS
+    ]
+
+
 def bodies_of(run: runner.ReviewRun, event_type: str) -> list[dict[str, Any]]:
     return [event["body"] for event in events_of(run) if event["type"] == event_type]
 
@@ -404,7 +420,7 @@ def test_coverage_the_model_records_is_announced_with_the_bucket_it_went_into(
 ) -> None:
     run = review([turn("done", call("mark_coverage", **COVERAGE_ARGUMENTS))])
 
-    announced = bodies_of(run, "coverage")
+    announced = model_coverage(run)
     assert [body["bucket"] for body in announced] == ["checked"]
     assert announced[0]["item"] == run.session.coverage.checked[0].model_dump(mode="json")
 
@@ -415,7 +431,7 @@ def test_a_failed_tool_call_announces_the_failed_coverage_it_wrote(
     """The bucket the model cannot write itself reaches the pane the same way."""
     run = review([turn("done", call("list_gaps"))], fail_tool=("list_gaps",))
 
-    announced = bodies_of(run, "coverage")
+    announced = model_coverage(run)
     assert [body["bucket"] for body in announced] == ["failed"]
     assert announced[0]["item"]["check"] == "tool.list_gaps"
     assert announced[0]["item"]["error"] == run.session.coverage.failed[0].error
@@ -426,7 +442,7 @@ def test_a_turn_cut_short_announces_the_unresolved_item_it_wrote(
 ) -> None:
     run = review([turn("cut short", call("list_gaps"), call("list_gaps"))], max_steps=1)
 
-    announced = bodies_of(run, "coverage")
+    announced = model_coverage(run)
     assert [body["bucket"] for body in announced] == ["unresolved"]
     assert announced[0]["item"]["check"] == runner.CLOSEOUT_CHECK
 
@@ -519,7 +535,7 @@ def test_continue_session_appends_a_user_turn_and_runs_it(
 
     assert run.messages[0] == {
         "role": "user",
-        "content": f"{package_brief(run.context.ir)}\n\n{runner.OPENING_MESSAGE}",
+        "content": f"{review_brief(run)}\n\n{runner.OPENING_MESSAGE}",
     }
     follow_ups = [
         message

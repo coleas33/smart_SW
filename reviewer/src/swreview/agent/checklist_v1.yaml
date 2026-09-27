@@ -55,6 +55,7 @@ items:
       geometry with a fixed or fully constrained first component and shallow chains; parts
       carry global variables. Run check_rms_part, check_rms_assembly and check_rms_equations.
       Drawing and judgement-only rules are recorded as out of scope with the reason.
+      Custom parts only; bought parts are listed once, not graded.
   - id: coverage.closeout
     title: Coverage close-out
     check_prefix: coverage.
@@ -82,4 +83,5 @@ items:
       number, every model carries a revision, and suppressed or lightweight components are
       findings. The property names come from the standards profile; without one those
       checks are skipped, naming the setting. Closed by a hygiene finding, or by the
-      family's summary coverage item.
+      family's summary coverage item. Custom parts only; bought parts are listed once, not
+      graded.

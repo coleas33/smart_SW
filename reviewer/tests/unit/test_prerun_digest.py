@@ -23,7 +23,6 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from swreview.agent.package_brief import package_brief
 from swreview.agent.providers.fake import FakeProvider, ScriptedTurn
 from swreview.agent.runner import OPENING_MESSAGE, PROFILE_CHECK, ReviewRun, start_review
 from swreview.findings import Finding
@@ -60,6 +59,7 @@ from tests.support.prerun import (
     empty_model_check_package,
     prerun_package,
 )
+from tests.support.roles_review import review_brief
 from tests.unit.test_report_start_here import section_of
 
 
@@ -108,7 +108,7 @@ def test_the_digest_is_prepended_to_the_opening_message_and_not_to_the_system_pr
     assert on_run.system == off_run.system
     assert opening_of(on_run).endswith(OPENING_MESSAGE)
     assert opening_of(on_run) != OPENING_MESSAGE
-    assert opening_of(off_run) == f"{package_brief(off_run.context.ir)}\n\n{OPENING_MESSAGE}"
+    assert opening_of(off_run) == f"{review_brief(off_run)}\n\n{OPENING_MESSAGE}"
 
 
 # --- one source, two renderings ----------------------------------------------------------
@@ -127,13 +127,21 @@ def expected_families() -> tuple[NotEvaluated, ...]:
     """The families a checks-first review of `prerun_package()` with no bridge and no
     profile counts: the "no profile" standards family (T037), and - the package holds one
     interference group and SOLIDWORKS is not attached - the "live detection did not run"
-    interference family (T042)."""
+    interference family (T042). Feature 013 (integration of lanes P and S, 2026-09-27, edited
+    deliberately): a review with no profile classifies in the `absent` state, whose
+    bought-parts line says bought parts were not told apart (`contracts/part-roles.md`
+    section 7), so the roles that review attaches are counted too."""
+    from swreview.checks.part_roles import classify_parts
+
     no_bridge = LiveOutcome(
         configuration="Default",
         settings=PRERUN_INTERFERENCE_SETTINGS,
         not_attempted=LIVE_NO_BRIDGE,
     )
-    return not_evaluated_families(prerun_package(), (), standards_gap(), live=no_bridge)
+    package = prerun_package()
+    return not_evaluated_families(
+        package, (), standards_gap(), live=no_bridge, roles=classify_parts(package, None)
+    )
 
 
 def test_every_not_evaluated_line_is_a_skipped_coverage_item_with_the_same_sentence(
@@ -318,7 +326,7 @@ def test_with_the_gate_off_lever_5_still_sends_the_digest_and_nothing_else(
     message = opening_of(run)
 
     assert message == (
-        f"{package_brief(run.context.ir)}\n\n{digest_of(run)}\n\n{OPENING_MESSAGE}"
+        f"{review_brief(run)}\n\n{digest_of(run)}\n\n{OPENING_MESSAGE}"
     )
     assert digest_of(run).startswith(DIGEST_HEADER)
     for header in (GATE_START_HERE_HEADER, GATE_JUDGEMENT_HEADER, GATE_INSTRUCTION):
@@ -552,6 +560,23 @@ def test_the_bought_parts_and_maybe_bought_lines_equal_their_rows() -> None:
     assert bought.coverage_item().scope.document_ids == ["doc:5", "doc:3", "doc:6"]
     assert maybe.coverage_item().scope.document_ids == ["doc:4"]
     assert f"{PRERUN_CHECK_PREFIX}part_roles" not in rows
+
+
+def test_a_regrade_restates_the_bought_parts_line_naming_what_it_withdrew() -> None:
+    """Integration of lanes P and S (2026-09-27): `start_review`'s rows with no pre-run and a
+    regrade's restated rows come from this one function, so the withdrawn ids ride on it."""
+    from swreview.checks.part_roles import bought_parts_sentence
+    from swreview.prerun import part_role_families
+
+    package = sitting_package()
+    roles = sitting_roles(package)
+
+    rows = part_role_rows(part_role_families(package, roles, withdrawn=("F-004",)))
+
+    bought = rows[f"{PRERUN_CHECK_PREFIX}bought_parts"]
+    assert bought.reason == bought_parts_sentence(roles, package, withdrawn=("F-004",))
+    assert bought.reason.endswith("; withdrew F-004")
+    assert part_role_families(package, roles) == part_role_families(package, roles, withdrawn=())
 
 
 def test_the_line_labels_are_the_classifiers_words() -> None:

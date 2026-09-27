@@ -82,6 +82,7 @@ from swreview.agent.withheld_wording import (
 )
 from swreview.bridge.client import DEFAULT_PIPE_NAME, BridgeClient
 from swreview.carry_over import carry_over_findings, stamp_carry_over_keys
+from swreview.checks import part_roles
 from swreview.checks.rms.registry import RMS_FAMILY
 from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore
 from swreview.findings import Finding
@@ -92,6 +93,7 @@ from swreview.prerun import (
     PrerunResult,
     attach_standards,
     gate_brief,
+    part_role_families,
     prerun_checks,
     recorded_call,
 )
@@ -113,6 +115,7 @@ from swreview.report.session import (
     cut_short_reason,
     save_session,
 )
+from swreview.tools.checks_mechanical import attach_part_roles, review_roles
 from swreview.tools.context import ToolContext, build_context
 from swreview.tools.drawings import DRAWINGS_TOOL, read_confirmed_candidates
 from swreview.tools.query import package_summary
@@ -122,6 +125,7 @@ from swreview.tools.registry import (
     ToolDispatch,
     ToolRegistry,
 )
+from swreview.tools.session import record_question
 
 SYSTEM_PROMPT_FILE = Path(__file__).parent / "prompts" / "system_v1.md"
 SESSION_FILE_NAME = "session.json"
@@ -375,6 +379,81 @@ def record_partial_evidence(session: ReviewSession, package: EvidencePackage) ->
             error=None,
         )
     )
+
+
+def load_standards_profile(path: Path | str | None) -> Any:
+    """The standards profile this review grades against, loaded once: a `ReviewProfile`
+    holding the profile, or the loader's refusal, or neither when the review was started
+    without one. Never raises: a review is not lost over its profile (`prerun.attach_standards`
+    says the same for the standards family). The one load `start_review` makes; the classifier
+    and `attach_standards` both read what it returns (feature 013 `contracts/part-roles.md`
+    section 5).
+    """
+    # Deferred: see `prerun._deferred` - every module under `checks/standards/` reaches this one.
+    from swreview.checks.standards.profile import load_review_profile
+
+    return load_review_profile(path)
+
+
+def profile_refusal_of(loaded: Any) -> str | None:
+    """The loader's own sentence when a configured profile was refused, else `None`: what the
+    classifier's `absent` state says (`contracts/part-roles.md` section 1)."""
+    return None if loaded.refusal is None else str(loaded.refusal)
+
+
+def classify_part_roles(
+    context: ToolContext,
+    profile: Any | None,
+    profile_refusal: str | None,
+    answers: Mapping[str, part_roles.Voted] | None = None,
+) -> part_roles.PartRoles:
+    """Classify every part and assembly document and attach the roles to `context` (013).
+
+    `checks/part_roles.classify_parts` is the one classifier (`contracts/part-roles.md`); its
+    roles ride on the context (`checks_mechanical.attach_part_roles`), where the RMS and
+    hygiene tools, the drawing check, the pre-run and the brief read them. Called by
+    `start_review` before the carry-over and the pre-run, and again with the engineer's
+    answers when the part-roles question is answered (section 9). Returns the roles attached.
+    """
+    roles = part_roles.classify_parts(
+        context.ir, profile, answers, profile_refusal=profile_refusal
+    )
+    attach_part_roles(context, roles)
+    return roles
+
+
+def ask_part_roles(context: ToolContext) -> EvidenceRequest | None:
+    """Ask the part-roles question once, when the roles call for it (013, part-roles.md 8).
+
+    `checks/part_roles.roles_question` decides whether there is a question - none in the
+    `absent` state, when the zero-match guard fired, or when no part is unclear - and words it;
+    the request goes through the one writer with the shared exact duplicate test
+    (`tools/session.record_question`). The roles attached afterwards carry the request's id
+    (`PartRoles.asking`), which each unclear document's note cites while the question is open.
+    """
+    roles = review_roles(context)
+    if roles is None:
+        return None
+    spec = part_roles.roles_question(roles, context.ir)
+    if spec is None:
+        return None
+    request = record_question(context, spec)
+    attach_part_roles(context, roles.asking(request.id))
+    return request
+
+
+def record_part_roles_rows(context: ToolContext, *, withdrawn: Sequence[str] = ()) -> None:
+    """Record the bought-parts coverage rows of `contracts/part-roles.md` section 7.
+
+    With checks first the pre-run records them beside its digest lines
+    (`prerun.not_evaluated_families`); with no pre-run the runner records the same rows here,
+    from the same `prerun.part_role_families`, as it does the standards family's
+    (`standards_gap`). A regrade restates them: the earlier rows are withdrawn first, and
+    `withdrawn` names the findings the answer withdrew.
+    """
+    context.withdraw_coverage(part_roles.ROW_CHECKS, ("skipped", "unresolved"))
+    for family in part_role_families(context.ir, review_roles(context), withdrawn=withdrawn):
+        context.record_coverage(family.bucket, family.coverage_item())
 
 
 def _skipped_phases(package: EvidencePackage) -> list[str]:
@@ -1190,6 +1269,12 @@ def start_review(
         # keeps its full result in the run folder. Only a review sets this, so a check run
         # and MCP general chat write none.
         context.tool_results_dir = out / TOOL_RESULTS_DIR_NAME
+        # Feature 013 (`contracts/part-roles.md` section 5): the profile is loaded once and
+        # every part classified right after the context, before the carry-over and the
+        # pre-run read the roles. Pure: nothing is written and nothing is announced here.
+        loaded_profile = load_standards_profile(standards_profile)
+        profile_refusal = profile_refusal_of(loaded_profile)
+        classify_part_roles(context, loaded_profile.profile, profile_refusal)
         session.provider_info = ProviderInfo(
             provider=str(provider.name),
             model=chosen_model,
@@ -1253,7 +1338,7 @@ def start_review(
         # Under checks first a review with no profile reports the family with its reason
         # (feature 008 US2 scenario 3), which supersedes 007 FR-030 for lever 5.
         standards_gap = (
-            attach_standards(context, standards_profile)
+            attach_standards(context, loaded_profile)
             if standards_profile is not None or checks_first(session.efficiency)
             else None
         )
@@ -1263,6 +1348,10 @@ def start_review(
             efficiency=session.efficiency,
             model_view=session.model_view,
         )
+        # Feature 013 (`contracts/part-roles.md` section 8): the one part-roles question, after
+        # the dispatch and before the pre-run, whether or not checks first is on, so its id is
+        # there for the notes the pre-run's findings carry.
+        ask_part_roles(context)
         # Lever 5, and the last thing setup does: the checks that enumerate themselves run
         # here, through the dispatch the provider is about to be handed, so their steps,
         # findings and events are the ones a model-driven call would have produced. `None`
@@ -1281,6 +1370,8 @@ def start_review(
         # disappear from session.json and report.md.
         if standards_gap is not None and prerun is None:
             context.record_coverage("skipped", standards_gap.coverage_item())
+        if prerun is None:
+            record_part_roles_rows(context)
         if session.steps:
             # Setup wrote steps - today only the pre-run does - so the adapter numbers its
             # own calls from there rather than from 0. `tool.started.step_index` identifies
@@ -1337,6 +1428,7 @@ def start_review(
             session,
             loaded.package,
             standards_gap=standards_gap if standards_profile is not None else None,
+            roles=review_roles(context),
         ),
         bridge=bridge_client,
         redact=redact,
@@ -1351,6 +1443,7 @@ def _opening_message(
     package: EvidencePackage | None = None,
     *,
     standards_gap: Any | None = None,
+    roles: Any | None = None,
 ) -> str:
     """The first user message: the opening instruction, and what the pre-run put above it.
 
@@ -1367,7 +1460,7 @@ def _opening_message(
     """
     parts: list[str] = []
     if package is not None:
-        parts.append(package_brief(package, standards_gap=standards_gap))
+        parts.append(package_brief(package, standards_gap=standards_gap, roles=roles))
     if prerun is not None:
         gated = session.efficiency is not None and session.efficiency.procedural_gate
         parts.append(gate_brief(prerun, rank(session)) if gated else prerun.digest())

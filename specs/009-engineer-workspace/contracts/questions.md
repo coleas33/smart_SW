@@ -45,11 +45,23 @@ constants (`QUESTION_MAX_LENGTH`, `MAX_OPTIONS`, `OPTION_MAX_LENGTH`), which the
 dump when empty. `review-session.schema.json` `$defs.EvidenceRequest` gains them as optional
 properties in the same change. The `evidence.requested` event carries them through its `$ref`.
 
+*Amended by feature 013 (T007, T032):* `EvidenceRequest` also gains `allow_text` (default false,
+omitted when false) and `source` (`code` or `model`, default `model`, omitted when `model`, so
+`request_evidence`'s result keeps its bytes). A code question - the drawing check's (feature 011)
+and the part-roles question (013 `contracts/part-roles.md` section 8) - is written through the one
+writer with `source: code`, by one path, `tools/session.record_question(context, spec)`: the shared
+exact duplicate test (`checks/questions.already_asked`), then `record_evidence_request`. The
+part-roles question carries `allow_text: true`, two options and `blocks` none; the drawing
+questions keep `allow_text` false.
+
 ## 3. The summary's questions
 
 `summary.questions = {count, text, items}`; `items` are the requests whose status is `open`, in
 session order, each a `QuestionView` (data-model section 2): the short `question` or `what`, the
 `options`, `blocks` and the title of its goal, `what` and `why` verbatim, and `about` with names.
+
+*Amended by feature 013 (T032; the view is lane R's T034 and T100):* each `QuestionView` also
+carries the request's `allow_text` and `source`, verbatim.
 
 ## 4. The panel
 
@@ -62,6 +74,9 @@ session order, each a `QuestionView` (data-model section 2): the short `question
   and the ids behind a shut fold;
 - the options as buttons, one selectable at a time (`aria-pressed`), the answer being the option's
   text verbatim; or, with no options, one text box;
+- *amended by feature 013 (T032; the page is lane W's T036):* with `allow_text`, the buttons **and**
+  one text box whose placeholder is the words file's `questions.text_placeholder`; a button sends
+  its text verbatim, the box its trimmed text;
 - "Skip for now": marks the question skipped in page memory, drops any draft answer for it and
   moves on (on the last question it stays, reading "Skipped for now."); sends nothing; choosing
   an option or typing an answer un-skips it;
