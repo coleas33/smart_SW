@@ -23,8 +23,11 @@ from typing import TYPE_CHECKING, Any
 from swreview.bridge.client import BridgeError, DrawingReadMode
 from swreview.checks.drawing_context import (
     CANDIDATE_CONFIRM,
+    CANDIDATES_BLOCK,
+    CLOSED_BY_CODE,
     CONFORMANCE_CHECK,
     CONTEXT_CHECK,
+    DRAWING_STATES,
     CandidateFile,
     QuestionSpec,
     candidate_files,
@@ -113,12 +116,33 @@ def _read_mode(
     return mode
 
 
+def _closing_rows_only(context: ToolContext) -> bool:
+    """Whether the session holds rows of `drawing.manufacturing_inputs` and every one is this
+    check's own closing row (`CLOSED_BY_CODE`): the state just left "closed by code" - a confirmed
+    read attached a drawing - and the model, refused while it was closed, has written none."""
+    coverage = context.require_session().coverage
+    held = [
+        item
+        for bucket in COVERAGE_BUCKETS
+        for item in getattr(coverage, bucket)
+        if item.check == CANDIDATES_BLOCK
+    ]
+    return bool(held) and all(item.reason.startswith(CLOSED_BY_CODE) for item in held)
+
+
 def _record(context: ToolContext) -> dict[str, Any]:
     """Record the drawing context into `context`'s session and count what it recorded.
 
     The coverage stands for the current state of every reviewed document, so a second call
     restates it rather than adding to it, and a question already on the session is never asked
     twice - even with no re-call guard in front of the tool (FR-035, SC-008).
+
+    While no attached drawing shows a custom or unclear document the checklist's
+    `drawing.manufacturing_inputs` item is closed here by code (013
+    `contracts/drawing-capability.md` section 5): its rows are withdrawn and the closing row
+    recorded - the model is refused the item in that state, so a row of its own can only predate
+    the change that closed it. Once a drawing is attached the model owns the item, and only this
+    check's own closing row is withdrawn, never a row the model wrote.
     """
     session = context.require_session()
     index = DrawingIndex.for_package(context.ir)
@@ -130,11 +154,17 @@ def _record(context: ToolContext) -> dict[str, Any]:
         roles=roles,
         mode=_read_mode(context, index, roles),
     )
-    context.withdraw_coverage((CONTEXT_CHECK, CONFORMANCE_CHECK), COVERAGE_BUCKETS)
+    restated = [CONTEXT_CHECK, CONFORMANCE_CHECK]
+    if result.closing is not None or _closing_rows_only(context):
+        restated.append(CANDIDATES_BLOCK)
+    context.withdraw_coverage(tuple(restated), COVERAGE_BUCKETS)
     counts = dict.fromkeys(COVERAGE_BUCKETS, 0)
     for coverage in result.coverage:
         context.record_coverage(coverage.status, coverage.coverage_item())
         counts[coverage.status] += 1
+    if result.closing is not None:
+        context.record_coverage(*result.closing)
+        counts[result.closing[0]] += 1
     for bucket, item in result.conformance.coverage:
         context.record_coverage(bucket, item)
     finding_ids = _record_conformance(context, result.conformance.findings)
@@ -152,13 +182,15 @@ def _record(context: ToolContext) -> dict[str, Any]:
             options=list(spec.options),
             blocks=spec.blocks,
         )
+    states = [state.state for state in result.states.values()]
     return {
         "status": "recorded",
         "drawings": len(context.ir.drawing_records),
-        "candidates": len(context.ir.drawing_candidates),
+        "candidates": len(candidate_files(index, roles)),
         "questions": len(result.questions),
         "findings": len(finding_ids),
         "finding_ids": finding_ids,
+        "states": {state: states.count(state) for state in DRAWING_STATES},
         "coverage": counts,
     }
 
