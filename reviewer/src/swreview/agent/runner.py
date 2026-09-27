@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -89,6 +90,8 @@ from swreview.findings import Finding
 from swreview.ir.loader import LoadedPackage, load_package
 from swreview.ir.models import EvidencePackage
 from swreview.prerun import (
+    RMS_PRERUN_TOOLS,
+    PrerunCall,
     PrerunGuard,
     PrerunResult,
     attach_standards,
@@ -106,6 +109,7 @@ from swreview.report.explanations import (
 )
 from swreview.report.session import (
     CLOSEOUT_CHECK,
+    CoverageBucket,
     CoverageItem,
     CoverageScope,
     EvidenceRequest,
@@ -115,7 +119,7 @@ from swreview.report.session import (
     cut_short_reason,
     save_session,
 )
-from swreview.tools.checks_mechanical import attach_part_roles, review_roles
+from swreview.tools.checks_mechanical import attach_part_roles, check_hygiene, review_roles
 from swreview.tools.context import ToolContext, build_context
 from swreview.tools.drawings import DRAWINGS_TOOL, read_confirmed_candidates
 from swreview.tools.query import package_summary
@@ -812,6 +816,73 @@ def repeated_request_id(answers: Sequence[tuple[str, str]]) -> str | None:
     return None
 
 
+# --- the regrade after the part-roles answer (feature 013, contracts/part-roles.md 9) ---------
+
+ROLES_RESTATED: tuple[str, ...] = (*RMS_PRERUN_TOOLS, check_hygiene.__name__, DRAWINGS_TOOL)
+"""What an answer to the part-roles question restates, in this order: every check whose
+grading reads the roles. Interference, fits, fasteners, mass and joints include bought parts
+and are not restated (section 6)."""
+
+BOUGHT_WITHDRAWAL = "bought part (your answer to {request_id})"
+"""Why a finding a restated check no longer produces left the session after the answer."""
+
+DRAWING_WITHDRAWAL = "not found again when the drawing check ran after the confirmed read"
+"""Why a drawing-check finding left the session when only a confirmed read restated it."""
+
+REGRADED_LINE = "Checks first graded again after your answer: withdrew {ids} (bought parts)."
+"""The one line the resumed message gains when the answer withdrew findings. A batch that
+withdrew nothing sends `answers_message` byte for byte, as the replays rebuild it."""
+
+
+@dataclass(frozen=True)
+class RolesRegrade:
+    """What answering the part-roles question did: which request it was, and the coverage
+    rows quoting any typed piece that named none of the listed parts."""
+
+    request_id: str
+    unmatched: tuple[tuple[CoverageBucket, CoverageItem], ...] = ()
+
+
+def unmatched_rows(
+    answer: part_roles.RolesAnswer,
+) -> tuple[tuple[CoverageBucket, CoverageItem], ...]:
+    """The one `coverage.prerun.part_roles` row quoting the typed pieces that named none of
+    the listed parts (`contracts/part-roles.md` section 9), or none when every piece matched.
+    Unresolved, as the guard's row under the same check is: the engineer said something the
+    review could not place."""
+    sentence = part_roles.unmatched_sentence(answer.unmatched)
+    if sentence is None:
+        return ()
+    item = CoverageItem(
+        check=part_roles.PART_ROLES_CHECK, scope=CoverageScope(), reason=sentence, error=None
+    )
+    return (("unresolved", item),)
+
+
+def _returned_finding_ids(call: PrerunCall) -> list[str]:
+    """The finding ids a restated call returned without adding them: a de-duplicating check
+    (`check_drawings`) hands back the id of a finding the session already holds."""
+    payload = call.payload if isinstance(call.payload, Mapping) else {}
+    returned = payload.get("finding_ids")
+    if not isinstance(returned, list):
+        return []
+    return [item for item in returned if isinstance(item, str)]
+
+
+def _restated_tool_of(finding: Finding, restated_steps: Mapping[int, str]) -> str | None:
+    """The restated check whose earlier step `finding` cites, or `None`.
+
+    A carried finding (lever 11a) cites its originating session's steps, which may share
+    numbers with this session's; it is never read as this session's call.
+    """
+    if finding.carried_over_from is not None:
+        return None
+    return next(
+        (restated_steps[step] for step in finding.tool_result_ids if step in restated_steps),
+        None,
+    )
+
+
 # --- one review in flight ----------------------------------------------------------------
 
 
@@ -841,6 +912,8 @@ class ReviewRun:
         redact: Callable[[str], str] = no_redaction,
         dispatch: ToolDispatch | None = None,
         prerun_guard: PrerunGuard | None = None,
+        profile: Any | None = None,
+        profile_refusal: str | None = None,
     ) -> None:
         self.context = context
         self.provider = provider
@@ -889,11 +962,16 @@ class ReviewRun:
         sink.add_listener(self.usage_ledger)
         self._dispatch = dispatch
         """The registry's own dispatch, beneath every wrapper `tools` may carry (the re-call
-        guard, lever 7, the pane's Stop): feature 011 restates the drawing check through it
-        after a confirmed read (`_restate_drawing_check`). `None` restates nothing."""
+        guard, lever 7, the pane's Stop): the drawing check after a confirmed read (feature
+        011) and the role-reading checks after the part-roles answer (feature 013) are restated
+        through it (`_restate`). `None` restates nothing."""
         self._prerun_guard = prerun_guard
         """The pre-run's re-call guard when checks first ran, held by identity for the reason
-        `_coverage_stop` is; told to answer a repeat from the restated drawing check."""
+        `_coverage_stop` is; told to answer a repeat from each restated check."""
+        self._profile = profile
+        self._profile_refusal = profile_refusal
+        """The standards profile `start_review` loaded, or the loader's refusal: the part-roles
+        answer classifies the parts again with them (`_regrade_roles`)."""
         self._explanation_allowed = False
         self._pending_turn_end: str | None = None
         self.check_presentation_cancelled: Callable[[], None] = lambda: None
@@ -964,43 +1042,148 @@ class ReviewRun:
             request.answered_at = utc_now()
             self.sink.emit("evidence.answered", {"request_id": request_id, "answer": answer})
 
-        before = len(self.session.findings)
-        # Feature 011 (owner, 2026-09-23): a confirmed drawing candidate is read read-only by
-        # the host before the review resumes, so the resumed turn sees it. Every other answer
-        # does nothing here (`contracts/confirmed-open.md` section 1). A read reloads the
-        # package, and the drawing check is restated over it before the turn resumes.
+        # The order is feature 013's (`contracts/part-roles.md` section 9). (1) Feature 011
+        # (owner, 2026-09-23): a confirmed drawing candidate is read read-only by the host
+        # first, with the roles its question was built with, so the rebuilt question still
+        # matches exactly (`contracts/confirmed-open.md` section 1); a read reloads the
+        # package. (2) Then the part-roles answer, when the batch carries one, classifies the
+        # parts again. (3) Then one `_restate` restates the union of what changed, each tool
+        # once, and reconciles its own calls. Every other answer does nothing here.
         package = self.context.package
         read_confirmed_candidates(self.context, requests, self.out_dir)
+        reasons: dict[str, str] = {}
         if self.context.package is not package:
-            self._restate_drawing_check()
-        self._ask(answers_message(answers))
+            reasons[DRAWINGS_TOOL] = DRAWING_WITHDRAWAL
+        regrade = self._regrade_roles(requests)
+        bought = None
+        if regrade is not None:
+            bought = BOUGHT_WITHDRAWAL.format(request_id=regrade.request_id)
+            reasons = {tool: reasons.get(tool, bought) for tool in ROLES_RESTATED}
+        withdrawn = self._restate(reasons)
+        message = answers_message(answers)
+        if regrade is not None:
+            by_answer = [finding_id for finding_id, reason in withdrawn if reason == bought]
+            record_part_roles_rows(self.context, withdrawn=by_answer)
+            for bucket, item in regrade.unmatched:
+                self.context.record_coverage(bucket, item)
+            if by_answer:
+                message += "\n" + REGRADED_LINE.format(ids=", ".join(by_answer))
+        # Taken only after `_restate` returns, so a withdrawal can never shift a restated
+        # finding into the earlier part, where it would stay as a duplicate under a new id.
+        before = len(self.session.findings)
+        self._ask(message)
         for finding in _reconcile_reruns(self.session, before):
             self.sink.emit("finding", self.context.finding_body(finding))
         return self.finalize()
 
-    def _restate_drawing_check(self) -> None:
-        """Run `check_drawings` again over the package a confirmed read just reloaded.
+    def _regrade_roles(self, answered: Sequence[EvidenceRequest]) -> RolesRegrade | None:
+        """Classify the parts again when `answered` holds the part-roles question (013).
 
-        The call that asked the candidate question described the package before the read: its
-        `drawing.context` items still name the candidate, and the drawing just read was never
-        compared with the profile (FR-046). With checks first on, the re-call guard would also
-        answer the model's repeat from that outcome, and lever 13 has taken the check off the
-        array. So the check is restated here, as one recorded step through the registry's own
-        dispatch - exactly as the pre-run calls it, its coverage restated rather than added to
-        and its findings citing this step - the guard answers a repeat from it, and the
-        adapter numbers the resumed turn's calls after it (`contracts/confirmed-open.md`
-        section 1; found on review, 2026-09-23).
+        `checks/part_roles.answered_roles` reads a request only when it **is** the question the
+        current roles ask - its question, options and entity ids equal the spec's - so the
+        model's look-alike question changes nothing (`contracts/part-roles.md` section 9). The
+        roles are classified again with the answer (rule A) and attached; `None` when the batch
+        does not answer the question, and then nothing changes.
         """
-        if self._dispatch is None or not isinstance(
-            self._dispatch.get(DRAWINGS_TOOL), RecordedTool
-        ):
-            return
-        call = recorded_call(
-            self.context, self._dispatch, DRAWINGS_TOOL, {}, call_id="confirmed_drawings"
-        )
-        if self._prerun_guard is not None:
-            self._prerun_guard.answer_repeats_with(call)
-        self.provider.start_steps_at(len(self.session.steps))
+        roles = review_roles(self.context)
+        if roles is None:
+            return None
+        spec = part_roles.roles_question(roles, self.context.ir)
+        for request in answered:
+            answer = part_roles.answered_roles(request, spec, self.context.ir)
+            if answer is None:
+                continue
+            classify_part_roles(
+                self.context, self._profile, self._profile_refusal, answer.answers
+            )
+            return RolesRegrade(request_id=request.id, unmatched=unmatched_rows(answer))
+        return None
+
+    def _restate(self, reasons: Mapping[str, str]) -> list[tuple[str, str]]:
+        """Run each named check again, once, and reconcile what it re-produced (013).
+
+        `reasons` maps each check to restate, in order, to the reason an earlier finding of it
+        that nothing re-produced is withdrawn with. A check is restated when the registry's own
+        dispatch holds it and the session already ran it: restating supersedes the call it
+        restates, and a check nobody ran has nothing to supersede.
+
+        Each is one recorded step through the registry's dispatch - exactly as the pre-run
+        calls it, its coverage restated rather than added to and its findings citing this step
+        (feature 011 found this for the drawing check after a confirmed read, 2026-09-23). The
+        pre-run's guard answers a repeat from it, and the adapter numbers the resumed turn's
+        calls after it. Then `_reconcile_restated` folds and withdraws. Returns every
+        withdrawn finding's `(id, reason)`, in session order.
+        """
+        dispatch = self._dispatch
+        if dispatch is None or not reasons:
+            return []
+        session = self.session
+        ran = {step.tool for step in session.steps}
+        tools = [
+            name
+            for name in reasons
+            if name in ran and isinstance(dispatch.get(name), RecordedTool)
+        ]
+        if not tools:
+            return []
+        mark = len(session.findings)
+        restated_steps = {step.index: step.tool for step in session.steps if step.tool in tools}
+        calls = []
+        for name in tools:
+            call = recorded_call(self.context, dispatch, name, {}, call_id=f"restated_{name}")
+            if self._prerun_guard is not None:
+                self._prerun_guard.answer_repeats_with(call)
+            calls.append(call)
+        self.provider.start_steps_at(len(session.steps))
+        return self._reconcile_restated(mark, restated_steps, calls, reasons)
+
+    def _reconcile_restated(
+        self,
+        mark: int,
+        restated_steps: Mapping[int, str],
+        calls: Sequence[PrerunCall],
+        reasons: Mapping[str, str],
+    ) -> list[tuple[str, str]]:
+        """Fold the restated calls' findings onto what they re-judge; withdraw the rest.
+
+        `mark` is how many findings the session held before the first restated call. Each
+        finding a restated call added takes the id of the earlier finding with the same
+        verdict key and its place (`_verdict_key` ignores coverage limits, so a "may be
+        bought" note drops in place), and is announced again under that id. An earlier finding
+        of a restated check - one that cites one of its earlier steps, and was not carried from
+        another run, whose step numbers are that run's - is kept when a restated finding took
+        its place or a restated call returned its id (a check that de-duplicates, as
+        `check_drawings` does); every other one is no longer produced and is withdrawn.
+        """
+        session = self.session
+        earlier = list(session.findings[:mark])
+        by_key = {_verdict_key(finding): index for index, finding in enumerate(earlier)}
+        merged = list(earlier)
+        taken: set[str] = set()
+        added: list[Finding] = []
+        folded: list[Finding] = []
+        for finding in session.findings[mark:]:
+            index = by_key.get(_verdict_key(finding))
+            if index is None:
+                added.append(finding)
+                continue
+            merged[index] = finding.model_copy(update={"id": earlier[index].id})
+            taken.add(earlier[index].id)
+            folded.append(merged[index])
+        returned = {finding_id for call in calls for finding_id in _returned_finding_ids(call)}
+        stale: list[tuple[str, str]] = []
+        for finding in earlier:
+            tool = _restated_tool_of(finding, restated_steps)
+            if tool is not None and finding.id not in taken | returned:
+                stale.append((finding.id, reasons[tool]))
+        session.findings[:] = [*merged, *added]
+        for finding in folded:
+            self.sink.emit("finding", self.context.finding_body(finding))
+        for reason in dict.fromkeys(why for _, why in stale):
+            self.context.withdraw_findings(
+                [finding_id for finding_id, why in stale if why == reason], reason
+            )
+        return stale
 
     def finalize(self) -> ReviewSession:
         """Close the session out, write `session.json` and `attention.json`, and say so.
@@ -1434,6 +1617,8 @@ def start_review(
         redact=redact,
         dispatch=tools,
         prerun_guard=guard,
+        profile=loaded_profile.profile,
+        profile_refusal=profile_refusal,
     )
 
 

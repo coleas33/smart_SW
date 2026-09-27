@@ -18,8 +18,8 @@ Three things are asserted here that the lever 5 module has no reason to:
   so with the gate on: calling it would write the tier's refusal against a request the model
   never made, and the tier's own sentence goes into the digest instead.
 - **No new event type.** FR-032. The gate adds a message, not a protocol; the types of
-  `chat-events.schema.json` (fifteen since feature 011 T092) are what a gated run emits and
-  nothing else.
+  `chat-events.schema.json` (fifteen since feature 011 T092, sixteen since feature 013 T038)
+  are what a gated run emits and nothing else.
 """
 
 from __future__ import annotations
@@ -198,16 +198,17 @@ def test_the_stream_still_opens_with_session_started(tmp_path: Any) -> None:
 # --- 3. no new event type ---------------------------------------------------------------------
 
 
-def test_a_gated_run_emits_no_event_type_outside_the_fifteen(tmp_path: Any) -> None:
+def test_a_gated_run_emits_no_event_type_outside_the_sixteen(tmp_path: Any) -> None:
     """FR-032. The gate is a message, not a protocol.
 
     Edited deliberately on 2026-09-23 (feature 011 T092): the contract's fifteenth type,
     `coverage.withdrawn`, is the coverage a restating check withdrew - not the gate's - and the
-    gate still adds none."""
+    gate still adds none. Edited deliberately again on 2026-09-26 (feature 013 T038): the
+    sixteenth, `finding.withdrawn`, is the finding a regrade withdrew - not the gate's either."""
     gated(tmp_path)
 
     emitted = {event["type"] for event in events_of(tmp_path, "gated")}
 
     assert emitted
     assert emitted <= SCHEMA_EVENT_TYPES
-    assert len(SCHEMA_EVENT_TYPES) == 15
+    assert len(SCHEMA_EVENT_TYPES) == 16

@@ -105,6 +105,7 @@ EventType = Literal[
     "tool.started",
     "tool.finished",
     "finding",
+    "finding.withdrawn",
     "evidence.requested",
     "evidence.answered",
     "disposition",

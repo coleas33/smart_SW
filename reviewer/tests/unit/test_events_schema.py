@@ -135,7 +135,10 @@ def full_run(start: Callable[..., runner.ReviewRun]) -> runner.ReviewRun:
     drawing finding, so the three types the tool layer emits are all in the stream, and
     calls `check_mass_material` twice, whose second call withdraws the family's summary row
     before restating it (`coverage.withdrawn`, feature 011 T092). The
-    engineer then dispositions that finding, which is the only producer of `disposition`.
+    engineer then dispositions that finding, which is the only producer of `disposition`, and
+    the finding is withdrawn through `ToolContext.withdraw_findings`, the only producer of
+    `finding.withdrawn` (feature 013), called directly as `record_disposition` is: the regrade
+    that calls it in a review is `test_answer_batch_roles.py`'s.
     The third turn is asked for after the script has run out, which is a provider failure:
     the runner reports `error`, ends the turn and finalizes before re-raising (data-model
     section 3, rule 5).
@@ -171,6 +174,9 @@ def full_run(start: Callable[..., runner.ReviewRun]) -> runner.ReviewRun:
         decision="accepted",
         note="the callout is being fixed in the next revision",
         by="a.engineer",
+    )
+    run.context.withdraw_findings(
+        [run.session.findings[0].id], "bought part (your answer to ER-001)"
     )
     with pytest.raises(ValueError, match="the script has 2 turn"):
         run.continue_session("Anything else?")

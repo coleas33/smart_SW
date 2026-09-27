@@ -10,7 +10,7 @@
     "seq": { "type": "integer", "minimum": 1 },
     "at": { "type": "string", "format": "date-time" },
     "type": {
-      "enum": ["session.started", "text.delta", "text.done", "tool.started", "tool.finished", "finding", "evidence.requested", "evidence.answered", "disposition", "coverage", "coverage.withdrawn", "usage", "turn.ended", "session.ended", "error"]
+      "enum": ["session.started", "text.delta", "text.done", "tool.started", "tool.finished", "finding", "finding.withdrawn", "evidence.requested", "evidence.answered", "disposition", "coverage", "coverage.withdrawn", "usage", "turn.ended", "session.ended", "error"]
     },
     "body": { "type": "object" }
   },
@@ -29,6 +29,10 @@
         "properties": { "step_index": { "type": "integer" }, "status": { "enum": ["ok", "error"] }, "result_summary": { "type": "string" }, "elapsed_s": { "type": "number" }, "error": { "type": ["string", "null"] } } } } } },
     { "if": { "properties": { "type": { "const": "finding" } } },
       "then": { "properties": { "body": { "$ref": "https://smart-sw.local/contracts/review-session.schema.json#/$defs/Finding" } } } },
+    { "if": { "properties": { "type": { "const": "finding.withdrawn" } } },
+      "then": { "properties": { "body": { "type": "object", "additionalProperties": false, "required": ["finding_id", "reason"],
+        "description": "Feature 013 (contracts/part-roles.md section 9): the finding left the session, because a check restated after the engineer answered no longer produces it - a part answered bought is not graded. Emitted by ToolContext.withdraw_findings, the one place a finding leaves the session, once per finding in session order. A reader of the stream drops the finding with this id; an id it does not hold is ignored.",
+        "properties": { "finding_id": { "type": "string", "pattern": "^F-[0-9]{3,}$" }, "reason": { "type": "string" } } } } } },
     { "if": { "properties": { "type": { "const": "evidence.requested" } } },
       "then": { "properties": { "body": { "$ref": "https://smart-sw.local/contracts/review-session.schema.json#/$defs/EvidenceRequest" } } } },
     { "if": { "properties": { "type": { "const": "evidence.answered" } } },
