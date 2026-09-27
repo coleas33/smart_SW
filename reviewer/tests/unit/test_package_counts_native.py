@@ -27,25 +27,27 @@ DRAWINGS = TESTS / "fixtures" / "drawings"
 
 TODAY: dict[str, tuple[str, str, int]] = {
     # (sha256[:16] of the summary JSON, of the brief, native sheets), before feature 011 T025.
-    "fixtures/attention/check-folder": ("071acee33067b52f", "68254c3010306b06", 0),
-    "fixtures/attention/review-folder": ("071acee33067b52f", "68254c3010306b06", 0),
+    # Brief digests re-pinned by feature 013 T068 wherever the manifest leaves a vault version or
+    # a local modification unknown: the brief no longer prints either as `?`.
+    "fixtures/attention/check-folder": ("071acee33067b52f", "34533983f799f2c0", 0),
+    "fixtures/attention/review-folder": ("071acee33067b52f", "34533983f799f2c0", 0),
     "fixtures/mechanical/big-assembly": ("12fc49448100bea6", "6ea0efd2910b07b8", 0),
     "fixtures/mechanical/small-assembly": ("a31f65543114ae57", "af42373b31a1829f", 0),
     "fixtures/mechanical/tolerances": ("53d5957528f48318", "53cf0c871122b1f2", 0),
-    "fixtures/replay/big-assembly": ("8bd2ac126bd459eb", "99ccced8ae40549d", 0),
-    "fixtures/replay/small-assembly-a": ("2a3cfc66e10d6ed2", "728fe7c25f147e6e", 0),
-    "fixtures/replay/small-assembly-b": ("06f016850e3565e1", "0554a3c26ba29f8b", 0),
+    "fixtures/replay/big-assembly": ("8bd2ac126bd459eb", "34f360375ccf3eb6", 0),
+    "fixtures/replay/small-assembly-a": ("2a3cfc66e10d6ed2", "35fcf62be14406ff", 0),
+    "fixtures/replay/small-assembly-b": ("06f016850e3565e1", "8ae16bb86d51ad1b", 0),
     # Feature 013 T012: new with the sitting-shaped fixture, pinned from its own output.
-    "fixtures/sitting/small-assembly": ("a3576d924c042427", "f4c1795ab6e19aed", 0),
-    "golden/fixtures/_smoke": ("29a9cc9e297de535", "2a4ce199772a3295", 0),
-    "golden/fixtures/angle-not-length": ("eab35adb4cb414ca", "78b3508649429ac5", 0),
+    "fixtures/sitting/small-assembly": ("a3576d924c042427", "8027fe60091aa054", 0),
+    "golden/fixtures/_smoke": ("29a9cc9e297de535", "9a6b3ec65f56ec35", 0),
+    "golden/fixtures/angle-not-length": ("eab35adb4cb414ca", "32cdfeac5ac7c71d", 0),
     "golden/fixtures/bracket-assy-interference": ("0853d93d193a1583", "14d0ebf610c89b8d", 0),
-    "golden/fixtures/cover-blind-tap": ("dbba4226c0e1f0f3", "87f179b06b456d65", 0),
-    "golden/fixtures/joint-bottoming": ("f8df1ccf2825d9d0", "aa122112190cbca9", 0),
-    "golden/fixtures/joint-ok": ("f8df1ccf2825d9d0", "aa122112190cbca9", 0),
-    "golden/fixtures/joint-unsupported": ("f8df1ccf2825d9d0", "aa122112190cbca9", 0),
-    "golden/fixtures/mixed-units": ("4c1160b5d03154da", "c017d61574ee9ede", 0),
-    "golden/fixtures/plate-stack": ("eab35adb4cb414ca", "8fcd0a985a2654c7", 0),
+    "golden/fixtures/cover-blind-tap": ("dbba4226c0e1f0f3", "635a2e5758ca48bc", 0),
+    "golden/fixtures/joint-bottoming": ("f8df1ccf2825d9d0", "d94b0f86ad59128a", 0),
+    "golden/fixtures/joint-ok": ("f8df1ccf2825d9d0", "d94b0f86ad59128a", 0),
+    "golden/fixtures/joint-unsupported": ("f8df1ccf2825d9d0", "d94b0f86ad59128a", 0),
+    "golden/fixtures/mixed-units": ("4c1160b5d03154da", "d68d67e3efc25e79", 0),
+    "golden/fixtures/plate-stack": ("eab35adb4cb414ca", "81357ce7d45ee980", 0),
     # Feature 004, decision 17A (T143): new with that round, pinned from its own output.
     "golden/fixtures/remodel-plan/remodel-absorbed-sketches": (
         "e1cd36bf8bce5dda",
@@ -111,7 +113,7 @@ TODAY: dict[str, tuple[str, str, int]] = {
     "golden/fixtures/rms-equations": ("c02c3ff858a2543a", "d4b2ac8c9d8d1977", 0),
     "golden/fixtures/rms-exceptions": ("7de329cb021de932", "7e4157b79eeeeb5b", 0),
     "golden/fixtures/rms-part": ("ee9c3e0646b7e88a", "c3829f39828c861f", 0),
-    "golden/fixtures/shaft-bore": ("eab35adb4cb414ca", "78b3508649429ac5", 0),
+    "golden/fixtures/shaft-bore": ("eab35adb4cb414ca", "32cdfeac5ac7c71d", 0),
     "golden/fixtures/standards-compliant": ("e3deaa7067cd96ee", "cd538879da7f7712", 2),
     "golden/fixtures/standards-compliant-flat": ("44ceafd60ba2ecdf", "385209320bd30754", 1),
     "golden/fixtures/standards-drawings/standards-drawings-compliant": (
@@ -149,8 +151,8 @@ TODAY: dict[str, tuple[str, str, int]] = {
         1,
     ),
     "golden/fixtures/standards-unknown": ("6f499317928b1485", "782822ee80b30573", 1),
-    "golden/fixtures/thread-mismatch": ("f8df1ccf2825d9d0", "aa122112190cbca9", 0),
-    "golden/fixtures/tool-envelope": ("f8df1ccf2825d9d0", "aa122112190cbca9", 0),
+    "golden/fixtures/thread-mismatch": ("f8df1ccf2825d9d0", "d94b0f86ad59128a", 0),
+    "golden/fixtures/tool-envelope": ("f8df1ccf2825d9d0", "d94b0f86ad59128a", 0),
 }
 
 SUMMARY_KEY = "native_drawing_sheet_count"
