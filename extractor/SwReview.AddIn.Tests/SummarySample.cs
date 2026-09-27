@@ -52,6 +52,15 @@ internal static class SummarySample
     public const string ResumeText =
         "Sending resumes the review once. Its last round sent 405,861 input tokens.";
 
+    /// <summary>
+    /// The summary's one line about bought parts (feature 013, contracts/part-roles.md section 7):
+    /// the persisted rows' sentence, which names the parts not graded once and counts nothing the
+    /// page could count - it is the backend's, and the page prints it as sent.
+    /// </summary>
+    public const string BoughtPartsText =
+        "2 parts not graded for modelling practice or hygiene (bought): FICT-PIN-01.SLDPRT (under the "
+        + "bought-parts folder), FICT-VALVE-ASM.SLDASM (a Toolbox part)";
+
     /// <summary>A recorded sentence that carries markup, on the fits-and-stacks goal.</summary>
     public const string HostileDetail = "<img src=x onerror=alert(1)></details><script>alert(2)</script>";
 
@@ -91,6 +100,54 @@ internal static class SummarySample
     /// <summary>The three open questions, in the order the summary supplies them.</summary>
     public static readonly string[] QuestionIds = { "ER-002", "ER-004", "ER-007" };
 
+    /// <summary>The part-roles question's short form (feature 013, contracts/part-roles.md section 8).</summary>
+    public const string PartRolesQuestionText =
+        "Are these bought parts? Until you answer, they are graded for modelling practice and hygiene.";
+
+    /// <summary>Its two offered answers, in the order the question offers them.</summary>
+    public static readonly string[] PartRolesOptions = { "All bought", "None bought" };
+
+    /// <summary>
+    /// The part-roles question as the summary lists it (`QuestionView`, feature 013 T034): the one
+    /// code-written question with two buttons and a text box (`allow_text`), about the documents
+    /// no rule tells apart. Hand-built from the contract, fictional names only, a fresh node on
+    /// every call so a test can place it in a summary of its own.
+    /// </summary>
+    public static JsonNode PartRolesQuestion() => JsonNode.Parse(JsonSerializer.Serialize(new
+    {
+        id = "ER-001",
+        question = PartRolesQuestionText,
+        options = PartRolesOptions,
+        allow_text = true,
+        source = "code",
+        blocks = (string?)null,
+        blocks_title = (string?)null,
+        what = "Parts no rule tells apart: FICT-PIN-01.SLDPRT, FICT-SPACER-02.SLDPRT",
+        why = "Bought parts are not graded for modelling practice or hygiene. Answer to regrade this review now.",
+        about = new object[]
+        {
+            new { id = "doc:0003", name = "FICT-PIN-01.SLDPRT" },
+            new { id = "doc:0004", name = "FICT-SPACER-02.SLDPRT" },
+        },
+    }))!;
+
+    /// <summary>
+    /// Replaces a summary's open questions with <paramref name="items"/>, in that order, counted
+    /// the way the backend counts them (the questions line is the words file's).
+    /// </summary>
+    public static void Ask(JsonObject summary, params JsonNode[] items)
+    {
+        summary["questions"] = new JsonObject
+        {
+            ["count"] = items.Length,
+            ["text"] = items.Length == 1 ? "1 question for you" : items.Length + " questions for you",
+            ["items"] = new JsonArray(items),
+        };
+    }
+
+    /// <summary>One of <see cref="QuestionIds"/>' questions as this sample lists it, a fresh copy.</summary>
+    public static JsonNode Question(int index) => Summary()["questions"]!["items"]![index]!.DeepClone();
+
     /// <summary>The ranking with its summary, as a JSON literal a page test can embed.</summary>
     /// <param name="change">Edits the summary object before it is serialized.</param>
     public static string Json(Action<JsonObject>? change = null) => Ranking(change).ToJsonString();
@@ -129,6 +186,7 @@ internal static class SummarySample
         summary["questions"] = JsonNode.Parse(@"{""count"":0,""text"":null,""items"":[]}");
         summary["not_loaded"] = null;
         summary["drawings"] = null;
+        summary["bought_parts"] = null;
         ranking["summary"] = summary;
         return ranking.ToJsonString();
     }
@@ -241,6 +299,19 @@ internal static class SummarySample
         // The backend's whole block; the page reads `text` alone, as it reads `questions` and
         // `not_loaded` (contracts/review-summary.md sections 4 and 5).
         { "drawings", DrawingsLine },
+
+        // Feature 013: `{count, names, maybe_count, maybe_names, text}`, read from the persisted
+        // rows; the page reads `text` alone (contracts/part-roles.md section 7).
+        {
+            "bought_parts", new
+            {
+                count = 2,
+                names = new[] { "FICT-PIN-01.SLDPRT", "FICT-VALVE-ASM.SLDASM" },
+                maybe_count = 0,
+                maybe_names = new string[0],
+                text = BoughtPartsText,
+            }
+        },
         {
             "goals", Array.ConvertAll(Goals, line => (object)new Dictionary<string, object?>
             {

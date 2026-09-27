@@ -222,6 +222,155 @@ public sealed class ReviewPageQuestionsTests
         Assert.Equal(0, record.GetProperty("sends").GetInt32());
     }
 
+    // ---- buttons and a text box (feature 013 T035, contracts/part-roles.md section 8) -------------
+
+    /// <summary>The run with the backend's labels, whose part-roles question allows text.</summary>
+    private static readonly Lazy<TextRun> TextScripted = new Lazy<TextRun>(DriveTextBox);
+
+    /// <summary>
+    /// A question with `allow_text` draws its offered answers as buttons and, under them, one text
+    /// box whose placeholder is the backend's (`labels.questions.text_placeholder`), set as an
+    /// attribute of characters: the sample's placeholder carries markup and injects nothing.
+    /// </summary>
+    [Fact]
+    public void AQuestionThatAllowsTextDrawsItsButtonsAndATextBoxWithTheBackendsPlaceholder()
+    {
+        JsonElement first = TextScripted.Value.First;
+
+        Assert.Equal(SummarySample.PartRolesQuestionText, first.GetProperty("question").GetString());
+        Assert.Equal(SummarySample.PartRolesOptions, ReviewPageDriver.Strings(first, "options"));
+        Assert.Equal(new[] { "false", "false" }, ReviewPageDriver.Strings(first, "pressed"));
+        Assert.True(first.GetProperty("hasBox").GetBoolean(), "a question that allows text has no box.");
+        Assert.True(first.GetProperty("boxAfterOptions").GetBoolean(), "the text box is not under the buttons.");
+        Assert.Equal(string.Empty, first.GetProperty("boxValue").GetString());
+        Assert.Equal(LabelsSample.HostileTextPlaceholder, first.GetProperty("placeholder").GetString());
+        Assert.Equal(0, first.GetProperty("injected").GetInt32());
+        Assert.True(first.GetProperty("sendDisabled").GetBoolean(), "Send is offered with nothing answered.");
+    }
+
+    /// <summary>Pressing a button answers with its text, verbatim, and only that button is pressed.</summary>
+    [Fact]
+    public void ChoosingAButtonSendsItsTextVerbatim()
+    {
+        TextRun run = TextScripted.Value;
+
+        Assert.Equal(new[] { "true", "false" }, ReviewPageDriver.Strings(run.AfterOption, "pressed"));
+        Assert.Equal(string.Empty, run.AfterOption.GetProperty("boxValue").GetString());
+        Assert.Equal(new[] { ("ER-001", "All bought") }, Answers(run.OptionCalls));
+    }
+
+    /// <summary>
+    /// Typing answers with the text: every button lets go as the engineer types, the draft
+    /// survives going to another question and back, and Send carries the text trimmed.
+    /// </summary>
+    [Fact]
+    public void TypingLetsGoOfTheButtonsAndSendsTheTrimmedText()
+    {
+        TextRun run = TextScripted.Value;
+
+        Assert.Equal(new[] { "false", "false" }, ReviewPageDriver.Strings(run.AfterTyping, "pressed"));
+        Assert.Equal(TypedNames, run.AfterTyping.GetProperty("boxValue").GetString());
+        Assert.False(run.AfterTyping.GetProperty("sendDisabled").GetBoolean(), "Send stayed disabled with a typed answer.");
+        Assert.Equal(TypedNames, run.TypedBack.GetProperty("boxValue").GetString());
+        Assert.Equal(new[] { "false", "false" }, ReviewPageDriver.Strings(run.TypedBack, "pressed"));
+        Assert.Equal(new[] { ("ER-001", TypedNames.Trim()) }, Answers(run.TypedCalls));
+    }
+
+    /// <summary>A button pressed after typing is the answer: the box empties and that button is pressed.</summary>
+    [Fact]
+    public void AButtonPressedAfterTypingIsTheAnswerAndEmptiesTheBox()
+    {
+        JsonElement repressed = TextScripted.Value.Repressed;
+
+        Assert.Equal(new[] { "false", "true" }, ReviewPageDriver.Strings(repressed, "pressed"));
+        Assert.Equal(string.Empty, repressed.GetProperty("boxValue").GetString());
+    }
+
+    /// <summary>
+    /// A question without `allow_text` renders as before: offered answers are buttons and no
+    /// box, and a question with none gets one box with the page's own placeholder.
+    /// </summary>
+    [Fact]
+    public void AQuestionWithoutAllowTextRendersAsBefore()
+    {
+        TextRun run = TextScripted.Value;
+
+        Assert.Equal(new[] { "Press fit", "Slip fit", "Not sure" }, ReviewPageDriver.Strings(run.OptionsOnly, "options"));
+        Assert.False(run.OptionsOnly.GetProperty("hasBox").GetBoolean(), "a question without allow_text drew a box beside its buttons.");
+        Assert.Empty(ReviewPageDriver.Strings(run.FreeText, "options"));
+        Assert.True(run.FreeText.GetProperty("hasBox").GetBoolean(), "a question with no options has no box.");
+        Assert.Equal("Your answer", run.FreeText.GetProperty("placeholder").GetString());
+    }
+
+    /// <summary>
+    /// FR-030: with no labels - an older backend - the box beside the buttons still appears, with
+    /// the placeholder the page's own free-text box has always carried.
+    /// </summary>
+    [Fact]
+    public void WithNoLabelsTheBoxBesideTheButtonsCarriesThePagesOwnPlaceholder()
+    {
+        JsonElement unlabelled = Scripted.Value.TextNoLabels;
+
+        Assert.Equal(SummarySample.PartRolesOptions, ReviewPageDriver.Strings(unlabelled, "options"));
+        Assert.True(unlabelled.GetProperty("hasBox").GetBoolean(), "the box beside the buttons is missing with no labels.");
+        Assert.Equal("Your answer", unlabelled.GetProperty("placeholder").GetString());
+    }
+
+    /// <summary>What the engineer types into the part-roles question's box, spaces and all.</summary>
+    private const string TypedNames = "  FICT-PIN-01.SLDPRT, FICT-SPACER-02.SLDPRT  ";
+
+    private static TextRun DriveTextBox()
+    {
+        var run = new TextRun();
+
+        ReviewPageDriver.Run(
+            driver => driver.InitialRoutes.Add(("GET", "/labels", 200, LabelsSample.Json())),
+            async driver =>
+            {
+                await driver.RouteAttention("chat-1", SummarySample.Json(summary => SummarySample.Ask(
+                    summary, SummarySample.PartRolesQuestion(), SummarySample.Question(0), SummarySample.Question(1))));
+                await driver.Route("POST", "/sessions/chat-1/evidence", 202, "{}");
+                await driver.StartReview();
+                await driver.EndSession("chat-1");
+                run.First = await driver.Read(ReadPanel);
+
+                run.AfterOption = await driver.Read(Option(0) + ReadPanelBody);
+                run.OptionCalls = await SendAndEndTheTurn(driver);
+
+                run.AfterTyping = await driver.Read(Option(1) + Type(TypedNames) + ReadPanelBody);
+                run.TypedBack = await driver.Read(Press("question-next") + Press("question-previous") + ReadPanelBody);
+                run.TypedCalls = await SendAndEndTheTurn(driver);
+
+                run.Repressed = await driver.Read(Type("FICT-PIN-01") + Option(1) + ReadPanelBody);
+                run.OptionsOnly = await driver.Read(Press("question-next") + ReadPanelBody);
+                run.FreeText = await driver.Read(Press("question-next") + ReadPanelBody);
+            });
+
+        return run;
+    }
+
+    /// <summary>Presses Send, reads what the page posted, and ends the resumed turn.</summary>
+    private static async System.Threading.Tasks.Task<JsonElement[]> SendAndEndTheTurn(ReviewPageDriver driver)
+    {
+        await driver.ClearCalls();
+        await driver.Read(Press("question-send") + "return JSON.stringify({ok: true});");
+        await driver.Settle();
+        JsonElement[] calls = await driver.Calls();
+        await driver.EndSession("chat-1");
+        return calls;
+    }
+
+    /// <summary>The `(request_id, answer)` pairs of the one evidence submission among <paramref name="calls"/>.</summary>
+    private static (string, string)[] Answers(JsonElement[] calls)
+    {
+        JsonElement post = Assert.Single(calls, call => call.GetProperty("method").GetString() == "POST");
+        Assert.Equal("/sessions/chat-1/evidence", post.GetProperty("path").GetString());
+        return JsonDocument.Parse(post.GetProperty("body").GetString()!).RootElement
+            .GetProperty("answers").EnumerateArray()
+            .Select(answer => (answer.GetProperty("request_id").GetString()!, answer.GetProperty("answer").GetString()!))
+            .ToArray();
+    }
+
     /// <summary>No page script names the single-answer route any more (contracts/questions.md section 7).</summary>
     [Fact]
     public void NoPageScriptPostsToTheSingleAnswerRoute()
@@ -321,6 +470,12 @@ public sealed class ReviewPageQuestionsTests
                 await driver.RouteAttention("chat-4", AttentionSample.Json());
                 await driver.EndSession("chat-4");
                 run.NoSummary = await driver.Read(ReadPanel);
+
+                // Feature 013 T035: this run has no labels, and its last review asks the part-roles question.
+                await driver.StartReview();
+                await driver.RouteAttention("chat-5", SummarySample.Json(summary => SummarySample.Ask(summary, SummarySample.PartRolesQuestion())));
+                await driver.EndSession("chat-5");
+                run.TextNoLabels = await driver.Read(ReadPanel);
             });
 
         return run;
@@ -375,6 +530,8 @@ return JSON.stringify({
   pressed: h.attrs(section, '[data-action=""question-option""]', 'aria-pressed'),
   hasBox: !!box,
   boxValue: box ? box.value : null,
+  placeholder: box ? box.getAttribute('placeholder') : null,
+  boxAfterOptions: h.before(section.querySelector('.question-options'), box),
   previousDisabled: byAction('question-previous'),
   nextDisabled: byAction('question-next'),
   sendDisabled: byAction('question-send'),
@@ -445,5 +602,28 @@ return JSON.stringify({
         public JsonElement NoneCounted { get; set; }
 
         public JsonElement NoSummary { get; set; }
+
+        public JsonElement TextNoLabels { get; set; }
+    }
+
+    private sealed class TextRun
+    {
+        public JsonElement First { get; set; }
+
+        public JsonElement AfterOption { get; set; }
+
+        public JsonElement[] OptionCalls { get; set; } = new JsonElement[0];
+
+        public JsonElement AfterTyping { get; set; }
+
+        public JsonElement TypedBack { get; set; }
+
+        public JsonElement[] TypedCalls { get; set; } = new JsonElement[0];
+
+        public JsonElement Repressed { get; set; }
+
+        public JsonElement OptionsOnly { get; set; }
+
+        public JsonElement FreeText { get; set; }
     }
 }

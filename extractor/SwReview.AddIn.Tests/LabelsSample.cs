@@ -13,10 +13,19 @@ namespace SwReview.AddIn.Tests;
 /// the raw tokens ("medium severity" for `medium`), so a page that printed the token where it
 /// should print the label fails; and the evidence status `open` carries markup, because a label
 /// is backend text like any other and reaches the screen as characters (FR-029).
+///
+/// Feature 013 adds the `questions` group (T035): the placeholder of the text box a question
+/// with `allow_text` draws beside its buttons (contracts/part-roles.md section 8, the words
+/// file's `questions.text_placeholder`). It carries markup for the same reason `open` does: a
+/// placeholder is an attribute the page sets from backend text, and it must stay characters.
 /// </summary>
 internal static class LabelsSample
 {
     public const string HostileOpen = "<img src=x onerror=alert(1)>waiting for you";
+
+    /// <summary>The text box's placeholder beside a question's buttons, with markup in it.</summary>
+    public const string HostileTextPlaceholder =
+        "<img src=x onerror=alert(5)>Or name the bought ones, separated by commas";
 
     public const string TurnRunning = "A review turn is still running. Wait for it to finish, or press Stop.";
 
@@ -72,6 +81,12 @@ internal static class LabelsSample
                 { "zero_volume", "touching" },
                 { "possible_only", "possible only" },
                 { "thread_model", "thread model" },
+            }
+        },
+        {
+            "questions", new Dictionary<string, string>
+            {
+                { "text_placeholder", HostileTextPlaceholder },
             }
         },
         {

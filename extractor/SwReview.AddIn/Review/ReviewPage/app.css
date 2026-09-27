@@ -415,14 +415,18 @@ body.results-stale .card.evidence {
 
 .summary-questions,
 .summary-not-loaded,
-.summary-drawings {
+.summary-drawings,
+.summary-bought-parts {
   margin: 0;
   font-size: var(--text-small);
 }
 
-/* The one line about drawings: information, so the second tier of ink rather than a state colour. */
-.summary-drawings {
+/* The lines about drawings and bought parts: information, so the second tier of ink rather
+   than a state colour. */
+.summary-drawings,
+.summary-bought-parts {
   color: var(--ink-2);
+  overflow-wrap: anywhere;
 }
 
 .summary-questions {
