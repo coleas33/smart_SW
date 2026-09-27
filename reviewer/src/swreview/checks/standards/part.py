@@ -128,7 +128,8 @@ class Part:
     """The document's features, each once, in `index` order: an absorbed sketch the dump listed
     a second time under its feature is its depth-0 row alone, and a carried sub-feature (the
     Hole Wizard's profile sketch) is read under its owner (`checks/feature_nodes.py`, feature 013
-    `contracts/readings.md` section 3), so a sketch finding names one location."""
+    `contracts/readings.md` section 3), so a sketch or rebuild-error finding names one location
+    per feature and still names a carried one (013 research R2.48)."""
 
     cut_list: tuple[CutListItem, ...]
     profile: StandardsProfile

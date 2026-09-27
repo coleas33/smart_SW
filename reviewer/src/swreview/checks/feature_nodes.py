@@ -2,8 +2,9 @@
 
 Written for the planner (feature 004) and moved here by feature 013 (`specs/013-engineer-first-
 review/contracts/readings.md` section 3), so the grading checks - the RMS part rules and the
-Standards sketch check - read the tree the way the planner does; `remodel/nodes.py` re-exports
-these names unchanged.
+Standards part checks that read features, the sketch check and the rebuild-error check (013
+research R2.48) - read the tree the way the planner does; `remodel/nodes.py` re-exports these
+names unchanged.
 
 The extractor walks a part's tree twice over: with `FirstFeature`/`GetNextFeature` for the
 flat order, and under every feature with `GetFirstSubFeature`/`GetNextSubFeature`

@@ -74,7 +74,11 @@ from swreview.benchmark.recording import (
 )
 from swreview.checks.feature_nodes import tree_nodes
 from swreview.checks.interference import CHECK as INTERFERENCE_CHECK
+from swreview.checks.rms.part import ONE_SKETCH_PER_FEATURE as RMS_ONE_SKETCH_PER_FEATURE
+from swreview.checks.rms.part import SKETCHES_FULLY_DEFINED as RMS_SKETCHES_FULLY_DEFINED
+from swreview.checks.rms.part import SKETCHES_NOT_OVER_DEFINED as RMS_SKETCHES_NOT_OVER_DEFINED
 from swreview.checks.rms_types import RmsTypeTable, load_table
+from swreview.checks.standards.part import REBUILD_ERRORS as STANDARDS_REBUILD_ERRORS
 from swreview.checks.standards.part import SKETCHES_FULLY_DEFINED as STANDARDS_SKETCHES
 from swreview.exceptions import RMS_CHECK_PREFIX
 from swreview.findings import Finding, SubjectKey, finding_subject_key, subject_locations
@@ -676,14 +680,15 @@ class ReclassifiedFinding(ReplayFinding):
 
 class NarrowedFinding(ReplayFinding):
     """A recorded `rms.*` finding the current type table or the shared tree reading narrowed, or
-    a recorded Standards sketch finding the tree reading narrowed (owner decision 23A; feature
-    013 T134-Q1 and T134-Q2)."""
+    a recorded finding of a Standards check that reads the tree the tree reading narrowed (owner
+    decision 23A; feature 013 T134-Q1, T134-Q2 and T159)."""
 
     step: int | None
     removed_locations: int
     """Its drawing locations taken out before its key matched: each named only rows the
-    current type table does not count as content, or only rows the tree reading carries or
-    merges, or was a second listing's occurrence of a row the reading keeps (`narrowed_key`)."""
+    current type table does not count as content, or no row the check may still name (the
+    reading carries or merges the rest), or was a second listing's occurrence of a row the
+    reading keeps (`narrowed_key`)."""
 
 
 class ReplayFindings(ReplayModel):
@@ -701,7 +706,7 @@ class ReplayFindings(ReplayModel):
     less drawing locations the current type table does not count as content (`rms.*` only) or the
     tree reading folds, is a requested-pass finding nothing else matched, one to one
     (`compare_finding_keys`; `contracts/replay.md` section 5, owner decision 23A, feature 013
-    T134-Q1 and T134-Q2). Neither lost nor added."""
+    T134-Q1, T134-Q2 and T159). Neither lost nor added."""
 
 
 RegroupRule = Literal["R", "M"]
@@ -1705,11 +1710,23 @@ class FoldedLocation:
     node per feature position, merging an absorbed sketch's second listing into the depth-0 row
     it repeats and carrying the Hole Wizard's profile sketch under its hole. Only a location that
     names at least one row the reading merges or carries has one (`folded_locations`).
+
+    Feature 013 T159 (default taken 2026-09-27): which of its rows a finding may still name
+    depends on what the finding's check reads, so the rows are counted three ways, one per family
+    (`_places`): the occurrences a finding may still hold after the reading, one per row.
     """
 
     positions: int
     """Rows it names that the reading keeps as a feature position and the table counts as
-    content: the occurrences a finding may still hold after the reading."""
+    content: the places of an `rms.*` rule, which reads `PartTree.content`."""
+
+    carried: int
+    """Rows it names that the reading carries under their owner and the table counts as content:
+    places too for `CARRIED_SKETCH_RMS_CHECKS`, which grade a carried sketch as its owner's."""
+
+    features: int
+    """Rows it names that the reading keeps as a position or carries, whatever the table says:
+    the places of `TREE_READING_STANDARDS_CHECKS`, whose subjects the type table does not decide."""
 
     listings: int
     """Second listings it names, each merged into the depth-0 row it repeats."""
@@ -1724,7 +1741,8 @@ def folded_locations(
 ) -> dict[PersistLocation, FoldedLocation]:
     """Every `(scope, persist_ref)` of `package`'s feature rows that names a row the shared tree
     reading folds: a second listing merged into its depth-0 row, or a sub-feature carried by its
-    owner (feature 013 T134-Q1; `contracts/replay.md` section 5).
+    owner (feature 013 T134-Q1; `contracts/replay.md` section 5), with its rows counted for each
+    family (`FoldedLocation`, T159).
 
     The reading runs one document at a time, as `tree_nodes` requires - a persistent reference
     names a feature only inside the document that owns it - under `table`, the one the current
@@ -1741,31 +1759,51 @@ def folded_locations(
         merged.update(merge.dropped_id for merge in nodes.merged)
         carried.update(carry.dropped_id for carry in nodes.carried)
 
-    positions: dict[PersistLocation, int] = {}
-    listings: dict[PersistLocation, int] = {}
-    folded: set[PersistLocation] = set()
+    positions: Counter[PersistLocation] = Counter()
+    carried_content: Counter[PersistLocation] = Counter()
+    features: Counter[PersistLocation] = Counter()
+    listings: Counter[PersistLocation] = Counter()
+    folded: dict[PersistLocation, None] = {}
     for row in package.features:
         location = (row.persist_ref_scope, row.persist_ref)
-        positions.setdefault(location, 0)
-        listings.setdefault(location, 0)
         if row.id in merged:
             listings[location] += 1
-            folded.add(location)
-        elif row.id in carried:
-            folded.add(location)
+            folded[location] = None
+            continue
+        features[location] += 1
+        if row.id in carried:
+            folded[location] = None
+            if table.is_content(row):
+                carried_content[location] += 1
         elif table.is_content(row):
             positions[location] += 1
     return {
-        location: FoldedLocation(positions=positions[location], listings=listings[location])
-        for location in positions
-        if location in folded
+        location: FoldedLocation(
+            positions=positions[location],
+            carried=carried_content[location],
+            features=features[location],
+            listings=listings[location],
+        )
+        for location in folded
     }
 
 
-TREE_READING_STANDARDS_CHECKS: frozenset[str] = frozenset({STANDARDS_SKETCHES})
+TREE_READING_STANDARDS_CHECKS: frozenset[str] = frozenset(
+    {STANDARDS_SKETCHES, STANDARDS_REBUILD_ERRORS}
+)
 """The checks outside `rms.*` that read the shared tree reading, named: since feature 013 T133 the
-Standards sketch check alone. Narrowing reads their findings by the tree-reading clause alone,
-never the type table's (T134-Q2, default taken 2026-09-27; `contracts/replay.md` section 5)."""
+two Standards part checks that read `Part.features`, the sketch check (T134-Q2) and the
+rebuild-error check (T159). Narrowing reads their findings by the tree-reading clause alone,
+never the type table's, and counts their places without the table (defaults taken 2026-09-27;
+`contracts/replay.md` section 5)."""
+
+CARRIED_SKETCH_RMS_CHECKS: frozenset[str] = frozenset(
+    {RMS_SKETCHES_FULLY_DEFINED, RMS_SKETCHES_NOT_OVER_DEFINED, RMS_ONE_SKETCH_PER_FEATURE}
+)
+"""The `rms.*` rules that still grade a carried row: the three sketch rules, which since feature
+013 T133 grade every sketch once, a carried sketch included, as its owner's (`checks/rms/part`'s
+`_sketches`). For them a carried row the table counts is a place, never removed wholesale (T159,
+default taken 2026-09-27); every other `rms.*` rule gives it none."""
 
 
 def narrowable(check: str) -> bool:
@@ -1773,6 +1811,18 @@ def narrowable(check: str) -> bool:
     reading - the `rms.*` rules, by both clauses, and `TREE_READING_STANDARDS_CHECKS`, by the
     tree-reading clause alone. Every other finding is compared exactly and never narrowed."""
     return check.startswith(RMS_CHECK_PREFIX) or check in TREE_READING_STANDARDS_CHECKS
+
+
+def _places(check: str, rows: FoldedLocation) -> int:
+    """How many of a folded location's rows a finding of `check` may still name, one occurrence
+    each (feature 013 T159): every row the reading keeps or carries for a Standards check that
+    reads the tree; the counted positions and carried rows for an RMS sketch rule, which grades a
+    carried sketch as its owner's; the counted positions alone for every other `rms.*` rule."""
+    if check in TREE_READING_STANDARDS_CHECKS:
+        return rows.features
+    if check in CARRIED_SKETCH_RMS_CHECKS:
+        return rows.positions + rows.carried
+    return rows.positions
 
 
 @dataclass(frozen=True)
@@ -1799,17 +1849,20 @@ def narrowed_key(
     - decision 23A: every occurrence of a location in `not_content` - one whose reference names
       only rows the type table does not count as content;
     - feature 013 T134-Q1, from `folded` (`folded_locations`): every occurrence of a location
-      whose reference names only rows the tree reading carries, merges or does not count
-      (`positions == 0`); and of a location naming a depth-0 row the reading keeps with a second
-      listing merged into it, the occurrences beyond the rows it keeps there, at most one per
-      second listing - the second listing's occurrence goes, the depth-0 row's stays.
+      whose reference names no row the finding's check may still name - no place (`_places`,
+      T159): the rows are all carried, merged or, for an `rms.*` rule, not counted; and of a
+      location naming a depth-0 row the reading keeps with a second listing merged into it, the
+      occurrences beyond its places, at most one per second listing - the second listing's
+      occurrence goes, the depth-0 row's stays. A carried row is a place for every check that
+      still grades it as its owner's (`CARRIED_SKETCH_RMS_CHECKS`, `TREE_READING_STANDARDS_CHECKS`),
+      so for them it is never removed.
 
     Of a location's occurrences the first are kept and the later removed. The family is every
     check that reads the shared tree reading (`narrowable`): an `rms.*` finding by both clauses;
-    a finding of `TREE_READING_STANDARDS_CHECKS` by the tree-reading clause alone, because the
-    type table decides the RMS rules' subjects, not what a Standards check names (T134-Q2).
-    `None` for a finding of any other check and for one that loses no location. A location with
-    no persistent reference is never removed.
+    a finding of `TREE_READING_STANDARDS_CHECKS` by the tree-reading clause alone, its places
+    counted without the table, because the type table decides the RMS rules' subjects, not what a
+    Standards check names (T134-Q2, T159). `None` for a finding of any other check and for one
+    that loses no location. A location with no persistent reference is never removed.
     """
     if not narrowable(finding.check):
         return None
@@ -1822,7 +1875,7 @@ def narrowed_key(
         if location.persist_ref is not None
     )
     keep = {
-        location: count - _removable(location, count, type_table_clause, folded)
+        location: count - _removable(finding.check, location, count, type_table_clause, folded)
         for location, count in named.items()
     }
     kept = []
@@ -1844,20 +1897,23 @@ def narrowed_key(
 
 
 def _removable(
+    check: str,
     location: PersistLocation,
     occurrences: int,
     not_content: Collection[PersistLocation],
     folded: Mapping[PersistLocation, FoldedLocation],
 ) -> int:
-    """How many of a finding's `occurrences` of `location` narrowing removes (`narrowed_key`)."""
+    """How many of a `check` finding's `occurrences` of `location` narrowing removes
+    (`narrowed_key`)."""
     if location in not_content:
         return occurrences
     rows = folded.get(location)
     if rows is None:
         return 0
-    if rows.positions == 0:
+    places = _places(check, rows)
+    if places == 0:
         return occurrences
-    return min(rows.listings, max(occurrences - rows.positions, 0))
+    return min(rows.listings, max(occurrences - places, 0))
 
 
 @dataclass(frozen=True)
@@ -1940,10 +1996,10 @@ def compare_finding_keys(
     `contracts/replay.md` section 5. Each recorded finding, in order, takes one current finding
     of its key while any remains, so of several with one key the later ones are unmatched.
     Then each unmatched finding of a check that reads the shared tree reading (`narrowable`: the
-    `rms.*` rules, and the Standards sketch check by the tree-reading clause alone) is narrowed
-    over the recorded package at `package_path`, under the type table the current code ships and
-    the shared tree reading (`narrowed_key`, `folded_locations`), and takes one current finding
-    **nothing else matched** -
+    `rms.*` rules, and the Standards checks that read the tree by the tree-reading clause alone)
+    is narrowed over the recorded package at `package_path`, under the type table the current code
+    ships and the shared tree reading (`narrowed_key`, `folded_locations`), each location's places
+    counted for its check's family (T159), and takes one current finding **nothing else matched** -
     no recorded key, compared or `uncompared` - whose key is its own less some of the locations
     narrowing may remove (`_narrowed_onto`), one to one in recorded order. What is still
     unmatched is lost.

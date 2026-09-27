@@ -905,3 +905,39 @@ def test_the_passing_sketches_are_each_named_once() -> None:
 
     passing = row(results, SKETCHES_FULLY_DEFINED, "pass")
     assert passing.subjects == ["feat:0002", "feat:0005", "feat:0009", "feat:0012"]
+
+
+# --- feature 013 T159: the rebuild-error check reads the same tree (research R2.48) ------------
+
+
+def with_error(package: EvidencePackage, *feature_ids: str) -> EvidencePackage:
+    """`package` with error code 1 on each of `feature_ids`."""
+    return package.model_copy(
+        update={
+            "features": [
+                item.model_copy(update={"error_code": 1}) if item.id in feature_ids else item
+                for item in package.features
+            ]
+        }
+    )
+
+
+def test_a_rebuild_error_on_a_feature_listed_twice_is_named_once_at_one_location() -> None:
+    """Sketch2 is listed at the top level and again under Cut-Extrude1, one persist ref: one
+    feature, named at its depth-0 row, as the sketch check names it."""
+    results = evaluate(with_error(absorbed([]), "feat:0005", "feat:0007"))
+
+    assert row(results, REBUILD_ERRORS, "fail").subjects == ["feat:0005"]
+    assert observed(results, REBUILD_ERRORS) == (
+        "Sketch2 carries error code 1, at the top level of the feature tree; the counts are as "
+        "the document stood when they were read and nothing was rebuilt to obtain them"
+    )
+
+
+def test_a_rebuild_error_on_a_carried_sub_feature_is_named_under_its_owner() -> None:
+    results = evaluate(with_error(absorbed([]), "feat:0012"))
+
+    assert row(results, REBUILD_ERRORS, "fail").subjects == ["feat:0012"]
+    assert observed(results, REBUILD_ERRORS).startswith(
+        "Sketch9 carries error code 1, under Hole1;"
+    )
