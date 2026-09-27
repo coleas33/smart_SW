@@ -3,7 +3,7 @@
   "read_only": false,
   "read_only_reason": null,
   "chat_state": "ended",
-  "last_seq": 361,
+  "last_seq": 360,
   "document": {
     "path": "C:\\FictionalVault\\3_GERU\\2072_PASIM\\DUBINUN ZABORAL\\M5 Bidetof\\TODOVUBID, LI\\596-11251.SLDASM",
     "configuration": "Kamibat"
@@ -14003,6 +14003,21 @@
       }
     },
     {
+      "bucket": "checked",
+      "item": {
+        "check": "coverage.closeout",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "Closed by code when the review ended: 4 open evidence requests are listed as unresolved coverage (coverage.evidence_request); the package records 139 gaps: 58 not extracted, 23 tool error, 58 unsupported",
+        "error": null
+      }
+    },
+    {
       "bucket": "skipped",
       "item": {
         "check": "rms.folders.ordered",
@@ -15426,30 +15441,6 @@
           ]
         },
         "reason": "Modelled axis measurements were obtained for representative hole pairs, but no drawing coaxiality/position tolerances or definitive hole-pair mapping are available; several hole axes are also unknown.",
-        "error": null
-      }
-    },
-    {
-      "bucket": "unresolved",
-      "item": {
-        "check": "coverage.closeout",
-        "scope": {
-          "component_ids": [
-            "cmp:0020",
-            "cmp:0021",
-            "cmp:0029"
-          ],
-          "pairs": [],
-          "configuration": "Kamibat",
-          "positions": [],
-          "document_ids": [
-            "doc:681d2181ba04",
-            "doc:69bbfdaa288c",
-            "doc:6addfacb0428",
-            "doc:c057e9732ea1"
-          ]
-        },
-        "reason": "535 initial extraction gaps plus live interference volume-unit/component-naming gaps remain; open evidence requests PI-047 through PI-964 cover drawings, fasteners, provenance/resolution, fiz interference interpretation.",
         "error": null
       }
     },
@@ -17019,9 +17010,9 @@
       "beyond_top_n": 91
     },
     "coverage": {
-      "checked": 18,
+      "checked": 19,
       "skipped": 16,
-      "unresolved": 49,
+      "unresolved": 48,
       "failed": 1,
       "out_of_scope": 21,
       "not_closed": [
@@ -17522,8 +17513,8 @@
         "cmp:0088": "VUKO MIL BELIKAB, TIL-LAMAMOSU VURUNURA, SAS MIL GOSO, DAS, 29'64 PO FIDA, 8764 VURUNURA, DIS, 6926R326-4",
         "cmp:0089": "GEM_M3-0.5X8_PE8_NA-15"
       },
-      "resume_input_tokens": 383443,
-      "resume_text": "Sending resumes the review once. Its last round sent 383,443 input tokens."
+      "resume_input_tokens": 383604,
+      "resume_text": "Sending resumes the review once. Its last round sent 383,604 input tokens."
     }
   },
   "not_examined": {

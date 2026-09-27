@@ -1,9 +1,9 @@
 {
-  "session_id": "6c692453-afb5-4127-a280-a3a65ecf5215",
+  "session_id": "31d4c4e2-8a88-45ba-b53a-ad383f6763e4",
   "package_id": "011bb926-a012-4587-bdf8-d1480ac3ec90",
   "design_id": "dsn:681d2181ba04",
-  "started_at": "2026-09-27T06:12:37.107689Z",
-  "ended_at": "2026-09-27T06:12:37.188182Z",
+  "started_at": "2026-09-27T06:23:41.811946Z",
+  "ended_at": "2026-09-27T06:23:41.881215Z",
   "model": "gpt-5.6-luna",
   "provider_info": {
     "provider": "fake",
@@ -35,54 +35,54 @@
     "rounds": 37,
     "turns": 4,
     "totals": {
-      "input_tokens": 1484938,
+      "input_tokens": 1488891,
       "cached_input_tokens": 1413047,
       "cache_write_tokens": 51130,
       "output_tokens": 6311,
       "reasoning_tokens": 2357,
       "tool_result_input_tokens": null,
-      "total_tokens": 1491249,
+      "total_tokens": 1495202,
       "latency_s": 94.78629639997962
     },
     "by_turn": [
       {
-        "input_tokens": 1306889,
+        "input_tokens": 1310170,
         "cached_input_tokens": 1240045,
         "cache_write_tokens": 48981,
         "output_tokens": 5128,
         "reasoning_tokens": 1805,
         "tool_result_input_tokens": null,
-        "total_tokens": 1312017,
+        "total_tokens": 1315298,
         "latency_s": 79.63422639996861
       },
       {
-        "input_tokens": 58970,
+        "input_tokens": 59194,
         "cached_input_tokens": 56773,
         "cache_write_tokens": 1231,
         "output_tokens": 210,
         "reasoning_tokens": 74,
         "tool_result_input_tokens": null,
-        "total_tokens": 59180,
+        "total_tokens": 59404,
         "latency_s": 2.8785140000109095
       },
       {
-        "input_tokens": 59191,
+        "input_tokens": 59415,
         "cached_input_tokens": 58004,
         "cache_write_tokens": 221,
         "output_tokens": 687,
         "reasoning_tokens": 374,
         "tool_result_input_tokens": null,
-        "total_tokens": 59878,
+        "total_tokens": 60102,
         "latency_s": 7.736465699999826
       },
       {
-        "input_tokens": 59888,
+        "input_tokens": 60112,
         "cached_input_tokens": 58225,
         "cache_write_tokens": 697,
         "output_tokens": 286,
         "reasoning_tokens": 104,
         "tool_result_input_tokens": null,
-        "total_tokens": 60174,
+        "total_tokens": 60398,
         "latency_s": 4.537090300000273
       }
     ]
@@ -96,7 +96,7 @@
       "result_summary": "{\"design_id\":\"dsn:681d2181ba04\",\"design_name\":\"268-88428\",\"configuration\":\"Default\",\"root_assembly_document_id\":\"doc:681d2181ba04\",\"drawing_document_ids\":[],\"document_count\":3,\"component_count\":4,\"ma…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000022500000341096893,
+      "elapsed_s": 0.000020800001948373392,
       "result_bytes": 473,
       "result_tokens": 163
     },
@@ -107,7 +107,7 @@
       "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Closed by code from the package before your first turn: each reviewed documen…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000029599999834317714,
+      "elapsed_s": 0.000029499999072868377,
       "result_bytes": 4074,
       "result_tokens": 903
     },
@@ -118,7 +118,7 @@
       "result_summary": "{\"result\":[{\"kind\":\"not_extracted\",\"entity_kind\":\"component\",\"entity_id\":null,\"reason\":\"'ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-2' has no loaded model document, so Toolbox identity could man be…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0000441999982285779,
+      "elapsed_s": 0.00003760000254260376,
       "result_bytes": 7215,
       "result_tokens": 2222
     },
@@ -132,7 +132,7 @@
       "result_summary": "{\"result\":[{\"id\":\"cmp:0001\",\"name\":\"268-88428\",\"full_path\":\"268-88428\",\"document_id\":\"doc:681d2181ba04\",\"referenced_configuration\":\"Default\",\"suppression\":\"resolved\",\"pattern_id\":null,\"is_toolbox\":fa…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00002099999983329326,
+      "elapsed_s": 0.000019099999917671084,
       "result_bytes": 221,
       "result_tokens": 74
     },
@@ -146,7 +146,7 @@
       "result_summary": "{\"result\":[{\"id\":\"cmp:0002\",\"name\":\"ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-2\",\"full_path\":\"ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-2\",\"document_id\":\"doc:792f2ea287a0\",\"referenced_configura…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000017700000171316788,
+      "elapsed_s": 0.00001680000059423037,
       "result_bytes": 801,
       "result_tokens": 325
     },
@@ -159,7 +159,7 @@
       "result_summary": "{\"component\":{\"id\":\"cmp:0001\",\"persist_ref\":\"aEIAAAUAAAD//v8AAAAAAA==\",\"persist_ref_scope\":\"doc:681d2181ba04\",\"name\":\"268-88428\",\"document_id\":\"doc:681d2181ba04\",\"parent_id\":null,\"referenced_configur…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00007679999907850288,
+      "elapsed_s": 0.00007279999772435986,
       "result_bytes": 3303,
       "result_tokens": 1382
     },
@@ -172,7 +172,7 @@
       "result_summary": "{\"component\":{\"id\":\"cmp:0002\",\"persist_ref\":\"aEIAAAUAAAD//v84WgBBAEwAVQBEACAASwBBAE0ALAAgADMATQBNACAAWAAgADEAOABNAE0AIABaAEkALAAgAFAAVQAsACAARgBPAFQALAAgADEANwA1ADQAMwBUADEANwA3AC0AMgBAADIANgA4AC0AOA…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00004579999949783087,
+      "elapsed_s": 0.00004050000279676169,
       "result_bytes": 1260,
       "result_tokens": 554
     },
@@ -185,7 +185,7 @@
       "result_summary": "{\"component\":{\"id\":\"cmp:0003\",\"persist_ref\":\"aEIAAAUAAAD//v84WgBBAEwAVQBEACAASwBBAE0ALAAgADMATQBNACAAWAAgADEAOABNAE0AIABaAEkALAAgAFAAVQAsACAARgBPAFQALAAgADEANwA1ADQAMwBUADEANwA3AC0AMQBAADIANgA4AC0AOA…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0000608000009378884,
+      "elapsed_s": 0.00004780000017490238,
       "result_bytes": 4923,
       "result_tokens": 2380
     },
@@ -198,7 +198,7 @@
       "result_summary": "{\"component\":{\"id\":\"cmp:0004\",\"persist_ref\":\"aEIAAAUAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=\",\"persist_ref_scope\":\"doc:681d2181ba04\",\"name\":\"268-8…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0003099000023212284,
+      "elapsed_s": 0.00030560000232071616,
       "result_bytes": 27503,
       "result_tokens": 12651
     },
@@ -212,7 +212,7 @@
       "result_summary": "{\"result\":[{\"id\":\"hol:0001\",\"persist_ref\":\"aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=\",\"persist_ref_scope\":\"doc:8a412bc4633c\",\"component_id\":…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00006089999806135893,
+      "elapsed_s": 0.0000610999995842576,
       "result_bytes": 2820,
       "result_tokens": 1176
     },
@@ -226,7 +226,7 @@
       "result_summary": "{\"result\":[]}",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000016400001186411828,
+      "elapsed_s": 0.00001590000101714395,
       "result_bytes": 14,
       "result_tokens": 5
     },
@@ -239,7 +239,7 @@
       "result_summary": "{\"result\":[{\"id\":\"mat:0001\",\"persist_ref\":\"aEIAABgAAAD//v8AAAAAABkAAAA=\",\"persist_ref_scope\":\"doc:681d2181ba04\",\"type\":\"swMateCOORDINATE\",\"entities\":[{\"component_id\":\"cmp:0004\",\"persist_ref\":\"aEIAAAY…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00003349999678903259,
+      "elapsed_s": 0.000033700001949910074,
       "result_bytes": 4371,
       "result_tokens": 2106
     },
@@ -252,7 +252,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-001\",\"check\":\"rms.folders.present\",\"title\":\"missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q\\u2026\",\"status\":\"suspected\",\"seve…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00655670000196551,
+      "elapsed_s": 0.0063812000007601455,
       "result_bytes": 31852,
       "result_tokens": 11637
     },
@@ -263,7 +263,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-004\",\"check\":\"rms.assembly.mates_to_reference_geometry\",\"title\":\"mat:0002 (swMateCONCENTRIC) references swSelFACES on 268-88428-1, swSelFACES on\\u2026\",\"stat…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.001522599999589147,
+      "elapsed_s": 0.0015437000001838896,
       "result_bytes": 6219,
       "result_tokens": 2568
     },
@@ -276,7 +276,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-005\",\"check\":\"rms.params.global_variables_present\",\"title\":\"the equation manager holds no equations\",\"status\":\"demonstrated\",\"severity\":\"medium\",\"component_i…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0013524999994842801,
+      "elapsed_s": 0.0015286000016203616,
       "result_bytes": 2320,
       "result_tokens": 675
     },
@@ -297,7 +297,7 @@
       "result_summary": "{\"status\":\"computed\",\"configuration\":\"Default\",\"interferences\":[],\"added_to_package\":0,\"gaps\":[]}",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00003609999839682132,
+      "elapsed_s": 0.000037999998312443495,
       "result_bytes": 106,
       "result_tokens": 31
     },
@@ -311,7 +311,7 @@
       "result_summary": "{\"result\":[]}",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000015499997971346602,
+      "elapsed_s": 0.000016000001778593287,
       "result_bytes": 14,
       "result_tokens": 5
     },
@@ -322,7 +322,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-007\",\"check\":\"standards.part.sketches_fully_defined\",\"title\":\"Sketch2 is under-defined, at the top level of the feature tree; Sketch2 is unde\\u2026\",\"status\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.005008000000088941,
+      "elapsed_s": 0.005027999999583699,
       "result_bytes": 5164,
       "result_tokens": 1585
     },
@@ -341,9 +341,9 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-001\",\"what\":\"Vault version and local-modified status for doc:681d2181ba04, doc:792f2ea287a0, and doc:8a412bc4633c; revision for doc:792f2ea287a0.\",\"why\":…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00019020000036107376,
-      "result_bytes": 520,
-      "result_tokens": 164
+      "elapsed_s": 0.0002472000014677178,
+      "result_bytes": 682,
+      "result_tokens": 206
     },
     {
       "index": 19,
@@ -364,9 +364,9 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-002\",\"what\":\"Native part and assembly drawings for the reviewed Default configuration, with readable text layers, including material, general tolerance, …",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00015970000094966963,
-      "result_bytes": 745,
-      "result_tokens": 205
+      "elapsed_s": 0.0001999000014620833,
+      "result_bytes": 907,
+      "result_tokens": 247
     },
     {
       "index": 20,
@@ -383,9 +383,9 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-003\",\"what\":\"Resolved geometry for dowel-pin instances cmp:0002 and cmp:0003, including their cylindrical axes/diameter and the mating 3.0 mm hole axes, …",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0001632999992580153,
-      "result_bytes": 598,
-      "result_tokens": 155
+      "elapsed_s": 0.00020280000171624124,
+      "result_bytes": 760,
+      "result_tokens": 197
     },
     {
       "index": 21,
@@ -403,9 +403,9 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-004\",\"what\":\"Functional axial gap or preload requirement for the assembled Default configuration, with the complete contributing drawing dimensions and t…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00015789999815751798,
-      "result_bytes": 502,
-      "result_tokens": 127
+      "elapsed_s": 0.00019489999976940453,
+      "result_bytes": 664,
+      "result_tokens": 169
     },
     {
       "index": 22,
@@ -434,9 +434,9 @@
       "result_summary": "{\"status\":\"closed_by_code\",\"check\":\"provenance\",\"reason\":\"Reviewed as open in SOLIDWORKS: 3 documents, each at its own path in its active configuration; revision read on 2 of 3. The open files are ta…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00002130000211764127,
-      "result_bytes": 345,
-      "result_tokens": 84
+      "elapsed_s": 0.0000591000025451649,
+      "result_bytes": 507,
+      "result_tokens": 125
     },
     {
       "index": 23,
@@ -465,9 +465,9 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"drawing.manufacturing_inputs\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"D…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0001446999995096121,
-      "result_bytes": 540,
-      "result_tokens": 161
+      "elapsed_s": 0.00018669999917619862,
+      "result_bytes": 670,
+      "result_tokens": 196
     },
     {
       "index": 24,
@@ -503,9 +503,9 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"interfaces.fit\",\"scope\":{\"component_ids\":[\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[[\"cmp:0003\",\"cmp:0004\"],[\"cmp:0002\",\"cmp:0004…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0001370999998471234,
-      "result_bytes": 543,
-      "result_tokens": 168
+      "elapsed_s": 0.0001965000010386575,
+      "result_bytes": 655,
+      "result_tokens": 199
     },
     {
       "index": 25,
@@ -534,9 +534,9 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"interfaces.stack\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"positions\":[\"a…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00013930000204709359,
-      "result_bytes": 465,
-      "result_tokens": 132
+      "elapsed_s": 0.00017899999875226058,
+      "result_bytes": 557,
+      "result_tokens": 159
     },
     {
       "index": 26,
@@ -565,9 +565,9 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"out_of_scope\",\"coverage_item\":{\"check\":\"fasteners\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"position…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00014549999832524918,
-      "result_bytes": 492,
-      "result_tokens": 152
+      "elapsed_s": 0.00017770000340533443,
+      "result_bytes": 571,
+      "result_tokens": 175
     },
     {
       "index": 27,
@@ -605,9 +605,9 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"holes.alignment\",\"scope\":{\"component_ids\":[\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[[\"cmp:0003\",\"cmp:0004\"],[\"cmp:0002\",\"cmp:000…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00014449999798671342,
-      "result_bytes": 587,
-      "result_tokens": 175
+      "elapsed_s": 0.0001827000014600344,
+      "result_bytes": 647,
+      "result_tokens": 193
     },
     {
       "index": 28,
@@ -636,9 +636,9 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"checked\",\"coverage_item\":{\"check\":\"interference\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"positions\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00018869999985327013,
-      "result_bytes": 668,
-      "result_tokens": 159
+      "elapsed_s": 0.00019750000137719326,
+      "result_bytes": 712,
+      "result_tokens": 173
     },
     {
       "index": 29,
@@ -647,7 +647,7 @@
       "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Closed by code from the package before your first turn: each reviewed documen…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00005319999763742089,
+      "elapsed_s": 0.00005249999958323315,
       "result_bytes": 4115,
       "result_tokens": 909
     },
@@ -675,12 +675,12 @@
         },
         "reason": "All 23 package gaps are reflected: missing vault/local provenance, lightweight pin properties/feature trees/equations/holes/meshes, mass-read errors, skipped feature types, and absent drawing extraction; open evidence requests PO-259 through PO-692 keep provenance, drawing inputs, fit, stack and alignment unresolved."
       },
-      "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"coverage.closeout\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"po…",
+      "result_summary": "{\"status\":\"closed_by_code\",\"check\":\"coverage.closeout\",\"reason\":\"Every gap in the package and every open evidence request is reflected in coverage.\",\"open_items\":[\"mass.material\",\"hygiene\"]}",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0001388000018778257,
-      "result_bytes": 656,
-      "result_tokens": 181
+      "elapsed_s": 0.00005410000085248612,
+      "result_bytes": 198,
+      "result_tokens": 49
     },
     {
       "index": 31,
@@ -689,9 +689,9 @@
       "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Closed by code from the package before your first turn: each reviewed documen…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00005210000017541461,
-      "result_bytes": 4121,
-      "result_tokens": 910
+      "elapsed_s": 0.000054299998737405986,
+      "result_bytes": 4115,
+      "result_tokens": 909
     }
   ],
   "evidence_requests": [
@@ -1842,6 +1842,18 @@
         },
         "reason": "Live interference detection was computed for the whole assembly in Default with coincident-as-interference, subassemblies-as-components, multibody inclusion, hidden bodies included, and fasteners included; no interference groups, truncated pairs, or failed pairs were returned. Motion across other positions was man checked.",
         "error": null
+      },
+      {
+        "check": "coverage.closeout",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "Closed by code when the review ended: 4 open evidence requests are listed as unresolved coverage (coverage.evidence_request); the package records 23 gaps: 15 not extracted, 2 tool error, 6 unsupported",
+        "error": null
       }
     ],
     "skipped": [
@@ -2673,27 +2685,6 @@
         "error": null
       },
       {
-        "check": "coverage.closeout",
-        "scope": {
-          "component_ids": [
-            "cmp:0001",
-            "cmp:0002",
-            "cmp:0003",
-            "cmp:0004"
-          ],
-          "pairs": [],
-          "configuration": "Default",
-          "positions": [],
-          "document_ids": [
-            "doc:681d2181ba04",
-            "doc:792f2ea287a0",
-            "doc:8a412bc4633c"
-          ]
-        },
-        "reason": "All 23 package gaps are reflected: missing vault/local provenance, lightweight pin properties/feature trees/equations/holes/meshes, mass-read errors, skipped feature types, and absent drawing extraction; open evidence requests PO-259 through PO-692 keep provenance, drawing inputs, fit, stack and alignment unresolved.",
-        "error": null
-      },
-      {
         "check": "coverage.evidence_request",
         "scope": {
           "component_ids": [],
@@ -3100,7 +3091,7 @@
     "assisted_supervision_minutes": 0.0,
     "assisted_verification_minutes": 0.0,
     "false_alarm_handling_minutes": 0.0,
-    "unattended_runtime_minutes": 0.00134155,
+    "unattended_runtime_minutes": 0.0011544833333333334,
     "net_saved_minutes": null
   }
 }
