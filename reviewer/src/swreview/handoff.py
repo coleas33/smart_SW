@@ -28,6 +28,7 @@ from pydantic import SecretStr
 
 from swreview.agent.settings import MASK, redact
 from swreview.ir.loader import reject_answer_key_path
+from swreview.report.attention import EXPLANATION_UNAVAILABLE
 from swreview.secrets import KEY_SHAPES
 
 __all__ = [
@@ -335,9 +336,7 @@ def _session_summary(session: Mapping[str, Any] | None) -> dict[str, Any] | None
         "explanations": {
             "enabled": bool(session.get("explanations_enabled", False)),
             "fingerprint": session.get("finding_explanation_fingerprint"),
-            "count": len(session.get("finding_explanations", {}))
-            if isinstance(session.get("finding_explanations"), Mapping)
-            else 0,
+            "count": _explanation_count(session.get("finding_explanations")),
         },
         "coverage_counts": coverage_counts,
         "coverage_status": coverage_status,
@@ -345,6 +344,15 @@ def _session_summary(session: Mapping[str, Any] | None) -> dict[str, Any] | None
         "evidence_request_status": request_status,
         "usage": session.get("usage"),
     }
+
+
+def _explanation_count(explanations: Any) -> int:
+    """How many explanations the model wrote: a run folder written before feature 013 may hold
+    the pass's fallback sentence for a row it did not explain, which is not one (013
+    `contracts/sources.md` section 4, FR-043)."""
+    if not isinstance(explanations, Mapping):
+        return 0
+    return sum(1 for text in explanations.values() if text != EXPLANATION_UNAVAILABLE)
 
 
 def _provenance_summary(provenance: Mapping[str, Any] | None) -> dict[str, Any] | None:

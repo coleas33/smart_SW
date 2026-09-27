@@ -27,7 +27,6 @@ __all__ = [
     "ParsedExplanations",
     "Rejection",
     "explanation_signature",
-    "fill_fallbacks",
     "generate_explanations",
     "keep_explained",
     "parse_explanations",
@@ -346,14 +345,3 @@ def keep_explained(session: Any, rows: Sequence[Any]) -> None:
         and text != EXPLANATION_UNAVAILABLE
     }
 
-
-def fill_fallbacks(session: Any, rows: Sequence[Any]) -> None:
-    """Persist one safe value for each amplified row whose model text is absent.
-
-    Superseded by `keep_explained` (feature 013): kept only while the runner still calls it
-    (013 T113 replaces the call), and harmless meanwhile - every reader filters the fallback
-    (`attention.persisted_explanation`)."""
-    session.finding_explanations = {
-        row.finding_id: session.finding_explanations.get(row.finding_id, EXPLANATION_UNAVAILABLE)
-        for row in rows[:MAX_EXPLANATIONS]
-    }

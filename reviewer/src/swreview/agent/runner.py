@@ -108,8 +108,8 @@ from swreview.report.attention import rank
 from swreview.report.attention_record import write_attention_record
 from swreview.report.explanations import (
     explanation_signature,
-    fill_fallbacks,
     generate_explanations,
+    keep_explained,
 )
 from swreview.report.names import plural
 from swreview.report.session import (
@@ -1321,7 +1321,7 @@ class ReviewRun:
         ranking = rank(session)
         # Feature 008: a folded family's row never reaches the presentation pass - the
         # model is told only the family's counts (FR-014), and the pass sends each row's
-        # finding evidence - so neither the request nor the fallbacks see it (R2.22).
+        # finding evidence - so neither the request nor the kept explanations see it (R2.22).
         explained = [row for row in ranking.rows[: ranking.top_n] if row.family is None]
         if session.explanations_enabled and ranking.rows and ranking.empty_reason is None:
             signature = explanation_signature(session, self.context.ir)
@@ -1349,7 +1349,9 @@ class ReviewRun:
                     # never attempted presentation may try on a later successful turn.
                     session.finding_explanation_fingerprint = signature
                 session.finding_explanations.update(generated)
-            fill_fallbacks(session, explained)
+            # Feature 013 (`contracts/sources.md` section 4): only what the pass explained is
+            # kept; nothing stands in for a missing explanation.
+            keep_explained(session, explained)
         elif not ranking.rows or ranking.empty_reason is not None:
             session.finding_explanations.clear()
             session.finding_explanation_fingerprint = None
