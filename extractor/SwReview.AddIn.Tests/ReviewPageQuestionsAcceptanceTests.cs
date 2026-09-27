@@ -12,7 +12,8 @@ namespace SwReview.AddIn.Tests;
 /// three of its open requests given the short form by the harness, standing in for a backend
 /// whose model asked them that way.
 ///
-/// The Independent Test: "Question 1 of 3" above Start here; answering two and skipping one
+/// The Independent Test: "Question 1 of 3" above the grouped findings (feature 013; Start here
+/// until then); answering two and skipping one
 /// posts one submission carrying two answers (SC-004's page half); the resume sentence - the
 /// backend's, with the figure the run measured - was on screen before Send; and the summary the
 /// backend answers after the resumed turn still lists the skipped question, because skipping
@@ -23,7 +24,7 @@ public sealed class ReviewPageQuestionsAcceptanceTests
     private static readonly Lazy<Run> Scripted = new Lazy<Run>(Drive);
 
     [Fact]
-    public void TheFirstOfThreeQuestionsIsAskedAboveStartHere()
+    public void TheFirstOfThreeQuestionsIsAskedAboveTheGroupedFindings()
     {
         JsonElement first = Scripted.Value.First;
 
@@ -31,7 +32,7 @@ public sealed class ReviewPageQuestionsAcceptanceTests
         Assert.Equal("Which vault version of the assembly was reviewed?", first.GetProperty("question").GetString());
         Assert.Equal("Blocks: Hygiene", first.GetProperty("blocks").GetString());
         Assert.True(first.GetProperty("afterSummary").GetBoolean(), "the questions must come after the summary.");
-        Assert.True(first.GetProperty("beforeAttention").GetBoolean(), "the questions must come before Start here.");
+        Assert.True(first.GetProperty("beforeGroups").GetBoolean(), "the questions must come before the grouped findings.");
     }
 
     /// <summary>The cost of resuming was said before Send was pressed, in the backend's words.</summary>
@@ -161,7 +162,7 @@ var send = section.querySelector('[data-action=""question-send""]');
 return JSON.stringify({
   ok: true,
   afterSummary: h.before(document.getElementById('summary'), section),
-  beforeAttention: h.before(section, document.getElementById('attention-panel')),
+  beforeGroups: h.before(section, document.getElementById('findings-by-type')),
   position: h.text(section, '.question-position'),
   question: h.text(section, '.question-text'),
   blocks: h.text(section, '.question-blocks'),

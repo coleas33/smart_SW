@@ -13,7 +13,7 @@ namespace SwReview.AddIn.Tests;
 ///
 /// Every evening review asked for drawings and fit intent in long paragraphs nobody answered,
 /// and each answer would have cost a whole turn. The review now asks one short question at a
-/// time above Start here; the engineer picks an offered answer or types one, skips what they
+/// time above the grouped findings; the engineer picks an offered answer or types one, skips what they
 /// cannot answer yet, and sends what they answered together - one `POST /sessions/{chat_id}
 /// /evidence` (feature 008's batch route), one resumed turn - with the cost of resuming said
 /// beside Send before they press it.
@@ -33,13 +33,13 @@ public sealed class ReviewPageQuestionsTests
     private static readonly Lazy<Run> Scripted = new Lazy<Run>(Drive);
 
     [Fact]
-    public void TheFirstQuestionSitsAfterTheSummaryAndBeforeStartHereWithAPager()
+    public void TheFirstQuestionSitsAfterTheSummaryAndBeforeTheGroupedFindingsWithAPager()
     {
         JsonElement first = Scripted.Value.First;
 
         Assert.False(first.GetProperty("hidden").GetBoolean(), "#questions stayed hidden.");
         Assert.True(first.GetProperty("afterSummary").GetBoolean(), "#questions must come after #summary.");
-        Assert.True(first.GetProperty("beforeAttention").GetBoolean(), "#questions must come before #attention-panel.");
+        Assert.True(first.GetProperty("beforeGroups").GetBoolean(), "#questions must come before #findings-by-type.");
         Assert.Equal("Question 1 of 3", first.GetProperty("position").GetString());
         Assert.True(first.GetProperty("previousDisabled").GetBoolean(), "Previous is offered on the first question.");
         Assert.False(first.GetProperty("nextDisabled").GetBoolean(), "Next is refused on the first question.");
@@ -521,7 +521,7 @@ return JSON.stringify({
   ok: true,
   hidden: !!section.hidden,
   afterSummary: h.before(document.getElementById('summary'), section),
-  beforeAttention: h.before(section, document.getElementById('attention-panel')),
+  beforeGroups: h.before(section, document.getElementById('findings-by-type')),
   position: h.text(section, '.question-position'),
   question: h.text(section, '.question-text'),
   blocks: h.text(section, '.question-blocks'),

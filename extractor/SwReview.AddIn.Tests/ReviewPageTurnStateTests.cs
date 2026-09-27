@@ -82,7 +82,7 @@ public sealed class ReviewPageTurnStateTests
         Assert.Equal(
             "2 of 4 component instances were not read: DOWEL PIN cmp:0002 (lightweight).",
             state.NotExamined);
-        Assert.True(state.WarningBeforeAttention, "the warning must be above Start here.");
+        Assert.True(state.WarningBeforeGroups, "the warning must be above the grouped findings.");
         Assert.Equal("anywhere", state.WarningWrap);
     }
 
@@ -170,7 +170,7 @@ public sealed class ReviewPageTurnStateTests
             RunDir = fields.GetProperty("runDir").GetString(),
             TurnRunning = fields.GetProperty("turnRunning").GetBoolean(),
             NotExamined = fields.GetProperty("notExamined").GetString(),
-            WarningBeforeAttention = fields.GetProperty("warningBeforeAttention").GetBoolean(),
+            WarningBeforeGroups = fields.GetProperty("warningBeforeGroups").GetBoolean(),
             WarningWrap = fields.GetProperty("warningWrap").GetString(),
         };
     }
@@ -190,8 +190,8 @@ public sealed class ReviewPageTurnStateTests
   runDir: document.getElementById('run-dir').textContent,
   turnRunning: !document.getElementById('stop-turn').disabled,
   notExamined: document.getElementById('not-examined').textContent,
-  warningBeforeAttention: !!(document.getElementById('not-examined').compareDocumentPosition(
-    document.getElementById('attention-panel')) & Node.DOCUMENT_POSITION_FOLLOWING),
+  warningBeforeGroups: !!(document.getElementById('not-examined').compareDocumentPosition(
+    document.getElementById('findings-by-type')) & Node.DOCUMENT_POSITION_FOLLOWING),
   warningWrap: getComputedStyle(document.getElementById('not-examined')).overflowWrap
 })";
 
@@ -241,7 +241,7 @@ public sealed class ReviewPageTurnStateTests
 
         public string? NotExamined { get; set; }
 
-        public bool WarningBeforeAttention { get; set; }
+        public bool WarningBeforeGroups { get; set; }
 
         public string? WarningWrap { get; set; }
 

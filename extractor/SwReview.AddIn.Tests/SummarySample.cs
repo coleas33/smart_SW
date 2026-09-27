@@ -6,20 +6,23 @@ using System.Text.Json.Nodes;
 namespace SwReview.AddIn.Tests;
 
 /// <summary>
-/// One `ReviewRanking` as `specs/009-engineer-workspace/contracts/review-summary.md` prints it:
-/// <see cref="AttentionSample"/>'s ranking plus the `summary` the backend computes beside it
-/// (data-model section 2). Hand-built, so the page tests of User Stories 3 to 7 run before the
-/// backend that computes it has landed (tasks.md: "its page tasks need only the contract").
+/// One `ReviewRanking` as `specs/009-engineer-workspace/contracts/review-summary.md` prints it,
+/// amended by feature 013 (`specs/013-engineer-first-review/contracts/grouped-list.md` sections 3
+/// and 4): <see cref="AttentionSample"/>'s ranking plus the `summary` the backend computes beside it
+/// and the grouped findings (`groups`, <see cref="GroupsSample"/>). Hand-built, so the page tests
+/// run before the backend that computes them has landed (tasks.md: "its page tasks need only the
+/// contract").
 ///
 /// What is deliberate about it:
 ///
-/// <b>Every number is one no page could have computed.</b> The groups' counts, the goals'
-/// states and the headline do not follow from <see cref="AttentionSample"/>'s six rows: a page
-/// that counted anything prints a different number and fails. The page prints and slices.
+/// <b>Every number is one no page could have computed.</b> The headline, the tally and the
+/// not-reached line do not follow from <see cref="AttentionSample"/>'s six rows or from the
+/// groups: a page that counted anything prints a different number and fails. The page prints.
 ///
-/// <b>Every goal state is here</b>, and the goals come in the words file's order (nine goals,
-/// modelling practice the ninth, contracts/review-summary.md section 3), one with a hostile
-/// recorded sentence - a close-out row's `reason` is written by the model and travels verbatim.
+/// <b>The summary is 013's.</b> The headline counts passes as checked; one tally line replaces the
+/// Decide, Fix and Verify lines with their goal counts; one not-reached line names the goals the
+/// review did not reach, in goal order; the goal lines themselves live under their groups
+/// (<see cref="GroupsSample"/>), and `modelling_practice` and the top-level goal list are gone.
 ///
 /// <b>The three questions are the three shapes</b> contracts/questions.md names: a short form
 /// with offered answers and the goal it blocks, a short form answered in free text, and an older
@@ -33,7 +36,13 @@ namespace SwReview.AddIn.Tests;
 /// </summary>
 internal static class SummarySample
 {
-    public const string Headline = "99 findings in 18 issues";
+    public const string Headline = "99 findings in 18 issues · 2 checked, no issue";
+
+    /// <summary>The one tally line (grouped-list.md section 4): the kinds of action, independent of the type.</summary>
+    public const string TallyText = "Decide 9 · Fix 56 · Verify 34 · Decided 1";
+
+    /// <summary>The goals the review did not reach, in goal order, in the backend's words.</summary>
+    public const string NotReachedText = "Not reached: Fasteners, Fits and stacks, Tool access";
 
     public const string QuestionsText = "3 questions for you";
 
@@ -61,32 +70,8 @@ internal static class SummarySample
         "2 parts not graded for modelling practice or hygiene (bought): FICT-PIN-01.SLDPRT (under the "
         + "bought-parts folder), FICT-VALVE-ASM.SLDASM (a Toolbox part)";
 
-    /// <summary>A recorded sentence that carries markup, on the fits-and-stacks goal.</summary>
+    /// <summary>A recorded sentence that carries markup, on the fits-and-stacks goal (<see cref="GroupsSample"/>).</summary>
     public const string HostileDetail = "<img src=x onerror=alert(1)></details><script>alert(2)</script>";
-
-    /// <summary>The group lines in the order the backend supplies them: label, text, "title count".</summary>
-    public static readonly (string Kind, string Label, string Text, string[] Goals)[] Groups =
-    {
-        ("decide", "Decide", "9 need your decision", new[] { "Interference 6", "Hole alignment 3" }),
-        ("fix", "Fix", "56 to fix", new[] { "Modelling practice 51", "Hygiene 5" }),
-        ("verify", "Verify", "34 to verify", new[] { "Drawings 20", "Fasteners 14" }),
-        ("decided", "Decided", "1 decided", new[] { "Interference 1" }),
-    };
-
-    /// <summary>The goal lines in the words file's order: title, state, state label, reason, detail.</summary>
-    public static readonly (string Goal, string Title, string State, string Label, string? Reason, string? Detail)[] Goals =
-    {
-        ("interference", "Interference", "issues", "issues found", null, null),
-        ("fasteners", "Fasteners", "not_reached", "not reached", "evidence missing",
-            "list_fasteners returned zero instances, so no screw or bolt joint could be checked."),
-        ("hole_alignment", "Hole alignment", "checked", "checked, no issue", null, null),
-        ("fits_and_stacks", "Fits and stacks", "not_reached", "not reached", "a check failed", HostileDetail),
-        ("tool_access", "Tool access", "not_reached", "not reached", "no check ran", null),
-        ("mass_and_material", "Mass and material", "not_applicable", "not applicable", "out of scope", null),
-        ("hygiene", "Hygiene", "issues", "issues found", null, null),
-        ("drawings", "Drawings", "issues", "issues found", null, null),
-        ("modelling_practice", "Modelling practice", "issues", "issues found", null, null),
-    };
 
     /// <summary>The names the Review tab prints instead of ids: every component but one.</summary>
     public static readonly Dictionary<string, string> ComponentNames = new Dictionary<string, string>
@@ -148,17 +133,18 @@ internal static class SummarySample
     /// <summary>One of <see cref="QuestionIds"/>' questions as this sample lists it, a fresh copy.</summary>
     public static JsonNode Question(int index) => Summary()["questions"]!["items"]![index]!.DeepClone();
 
-    /// <summary>The ranking with its summary, as a JSON literal a page test can embed.</summary>
+    /// <summary>The ranking with its summary and its groups, as a JSON literal a page test can embed.</summary>
     /// <param name="change">Edits the summary object before it is serialized.</param>
     public static string Json(Action<JsonObject>? change = null) => Ranking(change).ToJsonString();
 
-    /// <summary>The ranking with its summary, as a mutable node.</summary>
+    /// <summary>The ranking with its summary and its groups (<see cref="GroupsSample"/>), as a mutable node.</summary>
     public static JsonObject Ranking(Action<JsonObject>? change = null)
     {
         JsonObject ranking = JsonNode.Parse(AttentionSample.Json())!.AsObject();
         JsonObject summary = Summary();
         change?.Invoke(summary);
         ranking["summary"] = summary;
+        ranking["groups"] = GroupsSample.Groups();
         return ranking;
     }
 
@@ -166,15 +152,15 @@ internal static class SummarySample
     public static JsonObject Summary() => JsonNode.Parse(JsonSerializer.Serialize(Build()))!.AsObject();
 
     /// <summary>
-    /// The summary of a review that recorded nothing: the headline says so in words, the three
-    /// owner groups are there at zero, and every goal line is still there (review-summary.md
-    /// section 6).
+    /// The ranking of a review that recorded nothing: the headline says so in words, the tally is
+    /// at zero, the not-reached line names what was not reached, and the groups print their goals'
+    /// state with no row (review-summary.md section 6, grouped-list.md section 3).
     /// </summary>
     public static string EmptyJson()
     {
         JsonObject ranking = JsonNode.Parse(AttentionSample.EmptyJson())!.AsObject();
         JsonObject summary = Summary();
-        summary["headline"] = "No findings were recorded";
+        summary["headline"] = EmptyHeadline;
         summary["findings"] = 0;
         summary["issues"] = 0;
         summary["groups"] = JsonNode.Parse(JsonSerializer.Serialize(new object[]
@@ -183,13 +169,26 @@ internal static class SummarySample
             Group("fix", "Fix", 0, "0 to fix"),
             Group("verify", "Verify", 0, "0 to verify"),
         }));
+        summary["tally"] = new JsonObject { ["text"] = EmptyTallyText };
+        summary["not_reached"] = JsonNode.Parse(JsonSerializer.Serialize(new
+        {
+            titles = new[] { "Interference", "Fasteners" },
+            text = EmptyNotReachedText,
+        }));
         summary["questions"] = JsonNode.Parse(@"{""count"":0,""text"":null,""items"":[]}");
         summary["not_loaded"] = null;
         summary["drawings"] = null;
         summary["bought_parts"] = null;
         ranking["summary"] = summary;
+        ranking["groups"] = GroupsSample.EmptyGroups();
         return ranking.ToJsonString();
     }
+
+    public const string EmptyHeadline = "No findings were recorded";
+
+    public const string EmptyTallyText = "Decide 0 · Fix 0 · Verify 0";
+
+    public const string EmptyNotReachedText = "Not reached: Interference, Fasteners";
 
     /// <summary>
     /// A size-for-size contact list (feature 010's `ReviewSession.contacts`, as the summary maps
@@ -236,13 +235,14 @@ internal static class SummarySample
         {
             "groups", new object[]
             {
-                Group("decide", "Decide", 9, "9 need your decision", ("interference", "Interference", 6), ("hole_alignment", "Hole alignment", 3)),
-                Group("fix", "Fix", 56, "56 to fix", ("modelling_practice", "Modelling practice", 51), ("hygiene", "Hygiene", 5)),
-                Group("verify", "Verify", 34, "34 to verify", ("drawings", "Drawings", 20), ("fasteners", "Fasteners", 14)),
-                Group("decided", "Decided", 1, "1 decided", ("interference", "Interference", 1)),
+                Group("decide", "Decide", 9, "9 need your decision"),
+                Group("fix", "Fix", 56, "56 to fix"),
+                Group("verify", "Verify", 34, "34 to verify"),
+                Group("decided", "Decided", 1, "1 decided"),
             }
         },
-        { "modelling_practice", null },
+        { "tally", new { text = TallyText } },
+        { "not_reached", new { titles = new[] { "Fasteners", "Fits and stacks", "Tool access" }, text = NotReachedText } },
         {
             "questions", new
             {
@@ -312,31 +312,13 @@ internal static class SummarySample
                 text = BoughtPartsText,
             }
         },
-        {
-            "goals", Array.ConvertAll(Goals, line => (object)new Dictionary<string, object?>
-            {
-                { "goal", line.Goal },
-                { "title", line.Title },
-                { "state", line.State },
-                { "state_label", line.Label },
-                { "findings", line.State == "issues" ? 3 : 0 },
-                { "reason", line.Reason },
-                { "detail", line.Detail },
-            })
-        },
         { "contacts", null },
         { "component_names", ComponentNames },
         { "resume_input_tokens", 405861 },
         { "resume_text", ResumeText },
     };
 
-    private static object Group(string kind, string label, int count, string text, params (string Goal, string Title, int Count)[] goals) =>
-        new
-        {
-            kind,
-            label,
-            count,
-            text,
-            by_goal = Array.ConvertAll(goals, goal => (object)new { goal = goal.Goal, title = goal.Title, count = goal.Count }),
-        };
+    /// <summary>One owner group - `SummaryGroup` without the `by_goal` feature 013 removed; the tally line is its words.</summary>
+    private static object Group(string kind, string label, int count, string text) =>
+        new { kind, label, count, text };
 }

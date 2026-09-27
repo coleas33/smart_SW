@@ -186,6 +186,7 @@ Written beside the policy are the preconditions for ever adding an agentic triag
 - **FR-021**: Writing the record MUST NOT change how a check folder is told apart from a review folder, and a review that claims an RMS check folder MUST rotate the check's record aside with the check's session.
 - **FR-022**: The model-check and standards results the backend returns MUST carry the ranking, and the contracts defining those results MUST be amended.
 - **FR-023**: The Model check and Standards tabs MUST render the ranking above the bucket chips from the result they already hold, and the Review tab MUST render it as a pinned panel above the transcript when the session ends, fetched from a read-only session route that computes it from the live session and writes nothing; no page script MUST contain a severity order or a ranking rule.
+  *Amended 2026-09-26 by feature 013 T054:* the Review tab renders the ranking's grouped findings (`groups`) as one section in Results when the session ends - not a Start-here panel - fetched from the same read-only route; the check tabs are unchanged, and no page script contains a severity order or a ranking rule (013 `contracts/grouped-list.md` section 5).
 - **FR-024**: The Review panel MUST state, for a session that ended before its first finding, that there is nothing to start with and why.
 - **FR-025**: No check-tab path MUST construct a provider or read a key.
 

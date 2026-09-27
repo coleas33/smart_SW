@@ -150,8 +150,8 @@
 
 <!--
   Results: what is wrong, in the order an engineer reads it - one line of where the review stands,
-  the summary, the questions, the parts not loaded, Start here, the findings (with the
-  modelling-practice group and the contacts after them), what was not reached, the error cards in
+  the summary, the questions, the parts not loaded, the findings grouped by type (with the
+  contacts after them), what was not reached, the error cards in
   plain words, and the follow-up answers pinned under their questions. No tool call, no argument,
   no token count (FR-018). It scrolls as one, and nothing arriving on the stream ever moves it.
 -->
@@ -163,8 +163,9 @@
 <p id="read-only" class="read-only" role="status" hidden></p>
 
 <!--
-  The review in ten seconds (feature 009 User Story 3): the headline, Decide / Fix / Verify, the
-  questions, the parts not loaded and one line per check goal. The backend computes every number
+  The review in ten seconds (feature 009 User Story 3, as feature 013 amends it): the headline,
+  the tally, the questions, the parts not loaded, the drawings, the bought parts and the goals not
+  reached - the goal lines live under their groups. The backend computes every number
   and word of it and sends it beside the ranking (`summary` on GET /sessions/{chat_id}/attention);
   app.js prints it here, above everything else the review shows, and computes nothing
   (contracts/review-summary.md section 5). Hidden until a summary arrives, so a backend that sends
@@ -188,29 +189,28 @@
 <div id="not-examined" class="not-examined" hidden></div>
 
 <!--
-  What to start with: the rows the backend ranked, read from `GET /sessions/{chat_id}/attention`
-  when the session ends and shown above the findings, because a panel under a list that has just
-  grown by a whole review is a panel nobody scrolls to (contracts/attention.md section 6). Hidden
-  until there is something to show.
--->
-<section id="attention-panel" class="panel" hidden></section>
+  The findings (feature 013, contracts/grouped-list.md section 5). Collapse all sits over them
+  (U10): it shuts every open row and every finding's own fold, and leaves the groups as they are.
 
-<!--
-  The findings, one headline card each, in the order they arrived; a re-run replaces its card in
-  place. Collapse all sits over them (U10): it shuts every finding's own fold, so the list goes
-  back to one headline per finding however many of them an engineer opened.
+  `#findings-by-type` is the one grouped section that replaced Start here, "Show all" and the flat
+  list: one fold per group in the backend's order, one line per row, the checked fold last. It is
+  built from `groups` on GET /sessions/{chat_id}/attention when the session ends, and hidden until
+  then. `#findings` is the holding list: while a turn runs each card arrives there, one headline
+  each, in arrival order (a re-run replaces its card in place); a ranking moves each card into its
+  row, and a card no row names stays here.
 -->
 <div id="findings-head" class="findings-head" hidden>
   <h3 class="eyebrow">Findings</h3>
   <button type="button" id="collapse-findings" class="link">Collapse all</button>
 </div>
+<section id="findings-by-type" class="findings-by-type" aria-label="Findings by type" hidden></section>
 <div id="findings" class="findings"></div>
 
 <!--
   The size-for-size contacts (feature 009 FR-011, the owner's decision of 2026-09-23): one shut
   list after the findings and apart from them, printed from the summary's `contacts`. A contact is
-  not a finding, so it is never in a finding card, in Start here or in the modelling-practice
-  group. Hidden while there are none.
+  not a finding, so it is never in a finding card or in the grouped findings. Hidden while there
+  are none.
 -->
 <section id="contacts" class="panel" aria-label="Size-for-size contacts" hidden></section>
 

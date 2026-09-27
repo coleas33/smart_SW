@@ -69,7 +69,7 @@ public sealed class ReviewPageDocumentBindingTests
     // ---- another document ---------------------------------------------------------------------
 
     /// <summary>
-    /// Another document hides Start here, the not-examined warning, the coverage fold and every
+    /// Another document hides the grouped findings, the not-examined warning, the coverage fold and every
     /// finding and evidence card, and disables Open report, Open run folder and the follow-up.
     /// Review stays pressable - reviewing the document on screen is exactly what the line says
     /// to do - and nothing about the previous review is thrown away.
@@ -151,7 +151,7 @@ public sealed class ReviewPageDocumentBindingTests
 
     /// <summary>
     /// Clear review empties the pane without opening another document and without spending a
-    /// token: the transcript, Start here, the warning and the coverage go, the chat and its run
+    /// token: the transcript, the grouped findings, the warning and the coverage go, the chat and its run
     /// folder are forgotten, and every control that acted on them is disabled. Since feature 009
     /// the findings are in Results' own list, so "the transcript" is both of them.
     /// </summary>
@@ -161,8 +161,8 @@ public sealed class ReviewPageDocumentBindingTests
         JsonElement state = Scripted.Value.Cleared;
 
         Assert.Equal(0, state.GetProperty("transcriptChildren").GetInt32());
-        Assert.Equal(0, state.GetProperty("attentionChildren").GetInt32());
-        Assert.False(Flag(state, "attention"), "Start here survived Clear review.");
+        Assert.Equal(0, state.GetProperty("groupsChildren").GetInt32());
+        Assert.False(Flag(state, "groups"), "the grouped findings survived Clear review.");
         Assert.False(Flag(state, "notExamined"), "the warning survived Clear review.");
         Assert.False(Flag(state, "coverage"), "the coverage fold survived Clear review.");
         Assert.Equal(string.Empty, Text(state, "runDir"));
@@ -309,7 +309,7 @@ public sealed class ReviewPageDocumentBindingTests
     private static void AssertBound(JsonElement state)
     {
         Assert.True(state.GetProperty("staleHidden").GetBoolean(), "the line is shown for the reviewed document.");
-        Assert.True(Flag(state, "attention"), "Start here is not shown.");
+        Assert.True(Flag(state, "groups"), "the grouped findings are not shown.");
         Assert.True(Flag(state, "notExamined"), "the not-examined warning is not shown.");
         Assert.True(Flag(state, "coverage"), "the coverage fold is not shown.");
         Assert.True(Flag(state, "evidence"), "the evidence request is not shown.");
@@ -323,7 +323,7 @@ public sealed class ReviewPageDocumentBindingTests
 
     private static void AssertResultsHidden(JsonElement state)
     {
-        Assert.False(Flag(state, "attention"), "Start here is still shown.");
+        Assert.False(Flag(state, "groups"), "the grouped findings are still shown.");
         Assert.False(Flag(state, "notExamined"), "the not-examined warning is still shown.");
         Assert.False(Flag(state, "coverage"), "the coverage fold is still shown.");
         Assert.False(Flag(state, "evidence"), "an evidence request is still shown.");
@@ -398,7 +398,9 @@ public sealed class ReviewPageDocumentBindingTests
 
                 // 1. A review of the open document, ended, with every kind of result on screen.
                 await Click(page, "start-review");
-                await Push(page, "chat-1", 1, "finding", Finding("F-007"));
+                // The findings are ids no row of the sample's groups names, so each card stays in the
+                // holding list, where it is on screen whenever the review is (feature 013).
+                await Push(page, "chat-1", 1, "finding", Finding("F-001"));
                 await Push(page, "chat-1", 2, "evidence.requested", Evidence);
                 await Push(page, "chat-1", 3, "coverage", Coverage);
                 await EndSession(page, "chat-1");
@@ -429,11 +431,11 @@ public sealed class ReviewPageDocumentBindingTests
                 //    finding while it is open, then a Clear review forced past its disabled
                 //    button, then the reviewed document again.
                 await Click(page, "start-review");
-                await Push(page, "chat-2", 1, "finding", Finding("F-008"));
+                await Push(page, "chat-2", 1, "finding", Finding("F-005"));
                 await DocumentChanged(page, new { path = OtherPath, configuration = "Machined" });
                 run.RunningElsewhere = await Read(page);
 
-                await Push(page, "chat-2", 2, "finding", Finding("F-009"));
+                await Push(page, "chat-2", 2, "finding", Finding("F-006"));
                 await page.ExecuteScriptAsync(
                     "var clear = document.getElementById('clear-review'); clear.disabled = false; clear.click();0");
                 await OffscreenReviewPage.Settled(page);
@@ -519,10 +521,10 @@ public sealed class ReviewPageDocumentBindingTests
         return state;
     }
 
-    /// <summary>The attention read, answered with the shared sample.</summary>
+    /// <summary>The attention read, answered with the shared sample: the ranking, its summary and its groups.</summary>
     private static readonly string FetchStub = @"
 (function () {
-  var body = " + AttentionSample.Json() + @";
+  var body = " + SummarySample.Json() + @";
   window.fetch = function () {
     return Promise.resolve({
       ok: true,
@@ -544,7 +546,7 @@ public sealed class ReviewPageDocumentBindingTests
     var line = byId('stale-review');
     // The findings live in Results and the evidence record in the Transcript since feature 009
     // (User Story 5): the record is read in the Transcript view, which is where it is seen.
-    var cards = document.querySelectorAll('#findings .card.finding');
+    var cards = document.querySelectorAll('#results .card.finding');
     var shown = 0;
     for (var i = 0; i < cards.length; i++) { if (rendered(cards[i])) { shown++; } }
     byId('view-transcript').click();
@@ -557,7 +559,7 @@ public sealed class ReviewPageDocumentBindingTests
       headerTitle: byId('document-name').getAttribute('title'),
       staleHidden: !!line.hidden,
       staleText: line.textContent,
-      attention: rendered(byId('attention-panel')),
+      groups: rendered(byId('findings-by-type')),
       notExamined: rendered(byId('not-examined')),
       coverage: rendered(byId('coverage-panel')),
       evidence: evidence,
@@ -571,7 +573,7 @@ public sealed class ReviewPageDocumentBindingTests
       clearDisabled: disabled('clear-review'),
       runDir: byId('run-dir').textContent,
       transcriptChildren: byId('transcript').children.length + byId('findings').children.length,
-      attentionChildren: byId('attention-panel').children.length
+      groupsChildren: byId('findings-by-type').children.length
     });
   } catch (error) {
     return JSON.stringify({ ok: false, error: '' + ((error && error.message) || error) });

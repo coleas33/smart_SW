@@ -48,10 +48,11 @@
   var seconds = dom.seconds;
 
   /*
-    The Start-here row - its heading, its stripe map, `amplified`, the row and its meta line -
-    lives in `web/shared/attention.js`, loaded before this file and by both check tabs, so the
-    Review tab and the check tabs render the same row from one copy (feature 009 increment 3).
-    The separator is that file's too.
+    `web/shared/attention.js` holds the check tabs' Start-here row and the pieces every tab that
+    shows the ranking shares: the stripe map (`stripeOf`), the label lookup and the separator,
+    loaded before this file. The Review tab shows no Start here since feature 013 - its grouped
+    findings replaced it (contracts/grouped-list.md section 5) - and its grouped rows take their
+    stripe from the same one map, so a row reads the same on every tab.
   */
   var attention = window.SwReviewAttention;
   var DOT = attention.DOT;
@@ -66,20 +67,10 @@
   var labelOf = attention.labelOf;
 
   /**
-   * The fallback when a ranking arrives with no rows and no sentence of its own. The backend
-   * always sends one (FR-024); this is what the panel says rather than standing empty if it
-   * ever does not.
-   */
-  var NOTHING_TO_START_WITH = 'Nothing to start with.';
-
-  /**
    * What the coverage fold is called. Not "Coverage": the fold is closed until an engineer asks
    * for it, and the question it answers when they do is what the review did not reach.
    */
   var COVERAGE_HEADING = 'Not reached';
-
-  /** The multiplication sign a folded row's member count is written with, as an escape. */
-  var TIMES = '\u00d7';
 
   /**
    * The free-text box's placeholder: the page's own word for a question with no offered answers,
@@ -523,7 +514,7 @@
    * what it is about, and - once answered - the answer (FR-005).
    *
    * A record and no longer a form (feature 009 User Story 4, contracts/questions.md section 7):
-   * the one way to answer is the questions panel above Start here, which sends every answer the
+   * the one way to answer is the questions panel above the findings, which sends every answer the
    * engineer gave in one submission and resumes the review once. A box on each card was a second
    * way in, and each answer through it cost a turn of its own.
    */
@@ -811,151 +802,118 @@
   }
 
   /**
-   * What to start with: every row the backend ranked, in the order it supplied them.
+   * The findings, grouped by type (feature 013, contracts/grouped-list.md section 5): one fold per
+   * group in the order the backend supplied them, then the checked fold. `byType` is the ranking's
+   * `groups` (`FindingsByType`, section 3).
    *
-   * Rebuilt from the whole ranking on every call, like `coverageSummary` beside it and for the
-   * same reason - the ranking is the whole truth about what to look at first, and a panel that
-   * only grew would show a re-run's rows twice.
-   *
-   * This amplifies; it never filters. The first `top_n` rows - the ones `report/attention.py`
-   * placed first, with the same ids and reasons the report's "Start here" section prints - are
-   * the Start-here cards, built by `web/shared/attention.js` exactly as the check tabs build
-   * them. Every other row follows them behind "Show all", one line each, in the same supplied
-   * order (U12, docs/pane-findings-2026-09-20-review-gui.md section 5; contracts/attention.md
-   * section 6): on the big assembly the five cards were the only way in to 99 findings.
-   * Nothing here reads a severity, compares two rows or sorts; the counts are the backend's
-   * numbers.
-   * `PageRuleScanTests` is the test that keeps it that way.
+   * A printer, like the summary. Every group, row, count, plural and word is the backend's - each
+   * group's `text`, each row's `tail_text`, `reach_text` and `chip` - and the page prints each
+   * verbatim or honours each flag (`open`, `hide_card_title`); nothing here sorts, counts or
+   * compares, so a row whose words disagree with its members prints its words (FR-022). The rows'
+   * bodies are empty: `app.js` moves the finding cards into them, in each row's member order.
+   * Rebuilt whole from every ranking, like the coverage fold.
    */
-  function attentionPanel(ranking, labels) {
-    var panel = el('section', 'attention');
-    panel.appendChild(el('h3', 'eyebrow attention-heading', attention.HEADING));
-
-    var rows = (ranking && !ranking.empty_reason) ? (ranking.rows || []) : [];
-    if (!rows.length) {
-      panel.appendChild(el(
-        'p', 'attention-empty', (ranking && ranking.empty_reason) || NOTHING_TO_START_WITH));
-      return panel;
+  function typeGroups(byType, labels) {
+    var body = byType || {};
+    var root = el('div', 'type-groups');
+    var groups = body.groups || [];
+    for (var index = 0; index < groups.length; index++) {
+      var group = groups[index] || {};
+      root.appendChild(typeGroup('type-group', group.id, group, labels));
     }
-
-    var shown = attention.amplified(ranking);
-    panel.appendChild(el('p', 'attention-count', countLine(ranking, shown.length)));
-    panel.appendChild(attention.rowList(shown, rowOptions(ranking, labels)));
-    if (shown.length < rows.length) {
-      panel.appendChild(attentionIndex(rows, shown.length));
+    // The passes, in one fold last - "Checked, no issue" - collapsed as the backend says. It has
+    // no id of its own; `data-group` names the fold for the stylesheet and the tests alike.
+    if (body.checked) {
+      root.appendChild(typeGroup('type-group checked-fold', 'checked', body.checked, labels));
     }
-    return panel;
+    return root;
   }
 
   /**
-   * What the Review tab hands the shared row's meta line: the summary's component names, so a
-   * row names parts rather than ids (feature 009 FR-012), and the backend's labels, so its status
-   * and severity are words (FR-024). A ranking with no summary and no labels - an older backend -
-   * hands nothing, and the row prints ids and tokens exactly as the check tabs do.
+   * One group: a `<details>` open as the backend says, headed by its title and its `text`, then
+   * its rows, then the goal lines of the goals mapped to it - a group with no row prints its
+   * goals' state as its `text` and its goal lines alone.
    */
-  function rowOptions(ranking, labels) {
-    var summary = ranking ? ranking.summary : null;
-    var names = (summary && summary.component_names) || null;
-    return (names || labels) ? { names: names, labels: labels || null } : undefined;
-  }
+  function typeGroup(className, id, group, labels) {
+    var fold = el('details', className);
+    fold.setAttribute('data-group', String(id || ''));
+    fold.open = group.open === true;
+    fold.appendChild(append(el('summary', 'type-group-head'), [
+      el('span', 'type-group-title', group.title),
+      el('span', 'type-group-text', group.text)
+    ]));
 
-  /**
-   * "Start here: 5 of 18 issues - 94 findings not in Start here", from the backend's numbers,
-   * saying which unit each counts. The rows are issues: a row can fold several findings of one
-   * check (contracts/attention.md section 2), so `rows.length` counts issues. The second number
-   * is `not_amplified.beyond_top_n`, which the backend counts in findings. A ranking that does
-   * not carry it says nothing about findings rather than a number made up here.
-   */
-  function countLine(ranking, shownCount) {
-    var line = attention.HEADING + ': ' + shownCount + ' of '
-      + counted(ranking.rows.length, 'issue', 'issues');
-    var beyond = ranking.not_amplified ? ranking.not_amplified.beyond_top_n : null;
-    if (typeof beyond === 'number') {
-      line += DOT + counted(beyond, 'finding', 'findings') + ' not in ' + attention.HEADING;
+    var inside = el('div', 'type-group-body');
+    var rows = group.rows || [];
+    for (var index = 0; index < rows.length; index++) {
+      inside.appendChild(typeRow(rows[index] || {}));
     }
-    return line;
-  }
-
-  /**
-   * The rows after the first `shownCount`, in the order supplied, one line each, behind a fold
-   * that names both units: "Show all 18 issues (99 findings)". A `<details>` like the coverage
-   * fold, shut when it arrives, so opening it is the engineer's press and nothing on this page
-   * holds its state. The lines continue the Start-here numbering, in the stylesheet.
-   */
-  function attentionIndex(rows, shownCount) {
-    var fold = el('details', 'attention-more');
-    fold.appendChild(el(
-      'summary',
-      'attention-more-head',
-      'Show all ' + counted(rows.length, 'issue', 'issues')
-        + ' (' + counted(findingCount(rows), 'finding', 'findings') + ')'));
-
-    var lines = el('ol', 'attention-index');
-    for (var index = shownCount; index < rows.length; index++) {
-      lines.appendChild(attentionLine(rows[index] || {}));
+    var goals = group.goals || [];
+    if (goals.length) {
+      var lines = el('ul', 'type-group-goals');
+      for (var goal = 0; goal < goals.length; goal++) {
+        lines.appendChild(goalLine(goals[goal] || {}, labels));
+      }
+      inside.appendChild(lines);
     }
-    fold.appendChild(lines);
+    fold.appendChild(inside);
     return fold;
   }
 
   /**
-   * One row as one line: which finding, its title, how many findings it folds when it folds
-   * more than one, and how many components it reaches. The stripe is the same restatement of
-   * the row's consequence class the Start-here cards carry, from the same shared map. The whole
-   * row stays in the report and in the finding's own card; a click on the line goes there.
+   * One row, one line: a `<details>` whose head is the display title under a one-line clamp (the
+   * stylesheet's), then `tail_text`, `reach_text` and `chip`, each printed verbatim and only when
+   * the backend sent it; its body is where `app.js` moves the row's finding cards. The stripe is
+   * the shared map's (`attention.stripeOf`); `hide-card-title` honours `hide_card_title`, so a
+   * single-member row's card does not repeat the row's title.
    */
-  function attentionLine(row) {
-    var item = el('li', 'attention-line ' + attention.stripeOf(row));
-    item.setAttribute('data-finding-id', String(row.finding_id || ''));
-
-    var members = row.member_finding_ids || [];
-    var components = row.component_ids || [];
-    append(item, [
-      el('span', 'line-id', row.finding_id || ''),
-      el('span', 'line-title', row.title || ''),
-      members.length > 1 ? el('span', 'line-members', TIMES + members.length) : null,
-      components.length
-        ? el('span', 'line-reach', counted(components.length, 'component', 'components'))
-        : null
-    ]);
-    return item;
+  function typeRow(row) {
+    var className = 'type-row ' + attention.stripeOf(row) + (row.hide_card_title === true ? ' hide-card-title' : '');
+    var fold = el('details', className);
+    fold.setAttribute('data-finding-id', String(row.finding_id || ''));
+    fold.appendChild(append(el('summary', 'type-row-head'), [
+      el('span', 'type-row-title', row.title || ''),
+      typeof row.tail_text === 'string' ? el('span', 'type-row-tail', row.tail_text) : null,
+      typeof row.reach_text === 'string' ? el('span', 'type-row-reach', row.reach_text) : null,
+      typeof row.chip === 'string' ? el('span', 'chip type-row-chip', row.chip) : null
+    ]));
+    fold.appendChild(el('div', 'type-row-body'));
+    return fold;
   }
 
-  /** How many findings the rows stand for: each row's members, or the row itself. */
-  function findingCount(rows) {
-    var total = 0;
-    for (var index = 0; index < rows.length; index++) {
-      var members = (rows[index] || {}).member_finding_ids;
-      total += (members && members.length) ? members.length : 1;
-    }
-    return total;
+  /**
+   * A persisted explanation of a finding, as the first line inside its card's fold (U5, U10): the
+   * backend's text as sent, never derived here (feature 013 sources.md section 4).
+   */
+  function findingExplanation(text) {
+    var line = el('p', 'finding-explanation');
+    line.appendChild(el('span', 'explanation-text', text));
+    return line;
   }
 
   // ---- the summary (feature 009 User Story 3) ------------------------------------------
 
   /**
-   * The review in ten seconds, at the top of Results: the headline, Decide / Fix / Verify (and
-   * decided and within limits when the backend sent them), the questions, the parts not
-   * loaded, and one line per check goal (contracts/review-summary.md section 5).
+   * The review in ten seconds, at the top of Results: the headline, the tally, the questions, the
+   * parts not loaded, the drawings, the bought parts and the goals not reached
+   * (contracts/review-summary.md section 5, as feature 013's contracts/grouped-list.md section 4
+   * amends it: the goal lines live under their groups now).
    *
    * A printer and nothing more. Every number, every word and every order here is the
-   * backend's: `report/summary.py` counts the findings by the policy's own keys and states each
-   * goal, and this prints what it was handed, in the order it was handed it (FR-009). The two
-   * class names interpolate the group's `kind` and the goal's `state`, so the stylesheet can
-   * colour them without any script comparing either to anything (PageRuleScanTests).
+   * backend's: `report/summary.py` counts the findings and states each goal, and this prints what
+   * it was handed, in the order it was handed it (FR-009). Each line is printed when the backend
+   * sent it and left out when it did not.
    */
   function summaryBlock(summary) {
     var body = summary || {};
     var block = el('div', 'summary');
     block.appendChild(el('p', 'summary-headline', body.headline));
 
-    var groups = el('ul', 'summary-groups');
-    var groupRows = body.groups || [];
-    for (var index = 0; index < groupRows.length; index++) {
-      groups.appendChild(summaryGroup(groupRows[index] || {}));
+    // Decide, Fix and Verify in one line (feature 013): the kinds of action, independent of the
+    // type the groups below sort findings into.
+    if (body.tally && body.tally.text) {
+      block.appendChild(el('p', 'summary-tally', body.tally.text));
     }
-    block.appendChild(groups);
-
     if (body.questions && body.questions.text) {
       block.appendChild(el('p', 'summary-questions', body.questions.text));
     }
@@ -972,35 +930,12 @@
     if (body.bought_parts && body.bought_parts.text) {
       block.appendChild(el('p', 'summary-bought-parts', body.bought_parts.text));
     }
-
-    var goals = el('ul', 'summary-goals');
-    var goalRows = body.goals || [];
-    for (var goal = 0; goal < goalRows.length; goal++) {
-      goals.appendChild(goalLine(goalRows[goal] || {}));
+    // The goals the review did not reach, by title in goal order, so the first screen still names
+    // the coverage gaps (feature 013); nothing when every goal was reached.
+    if (body.not_reached && body.not_reached.text) {
+      block.appendChild(el('p', 'summary-not-reached', body.not_reached.text));
     }
-    block.appendChild(goals);
     return block;
-  }
-
-  /** One group: its label in the lead face, its sentence, and its goals as "title count". */
-  function summaryGroup(group) {
-    var item = el('li', 'summary-group group-' + String(group.kind || ''));
-    item.appendChild(el('span', 'group-label', group.label));
-    item.appendChild(el('span', 'group-text', group.text));
-
-    var goals = group.by_goal || [];
-    if (goals.length) {
-      var line = el('span', 'group-goals');
-      for (var index = 0; index < goals.length; index++) {
-        var count = goals[index] || {};
-        if (index > 0) {
-          write(line, DOT);
-        }
-        line.appendChild(el('span', 'group-goal', joined([count.title, scalar(count.count)], ' ')));
-      }
-      item.appendChild(line);
-    }
-    return item;
   }
 
   /**
@@ -1056,18 +991,6 @@
       block.appendChild(fold);
     }
     return block;
-  }
-
-  /**
-   * The fold the modelling-practice findings are moved into (FR-010): shut when it arrives, its
-   * head the backend's own line ("Modelling practice: 51 findings across 12 rules"), its body
-   * empty. `app.js` moves the cards the summary names into it; nothing here chooses them.
-   */
-  function findingGroup(title) {
-    var group = el('details', 'finding-group');
-    group.appendChild(el('summary', 'finding-group-head', title));
-    group.appendChild(el('div', 'finding-group-body'));
-    return group;
   }
 
   /**
@@ -1159,11 +1082,6 @@
       'This review was restored from its run folder; its transcript is in events.jsonl there.');
     block.appendChild(button('Open run folder', 'open-folder', 'action open-folder'));
     return block;
-  }
-
-  /** A count and its noun, in the singular when there is one. */
-  function counted(count, one, many) {
-    return count + ' ' + (count === 1 ? one : many);
   }
 
   function coverageBucket(name, items, labels) {
@@ -1270,9 +1188,9 @@
     errorCard: errorCard,
     plainError: plainError,
     coverageSummary: coverageSummary,
-    attentionPanel: attentionPanel,
+    typeGroups: typeGroups,
+    findingExplanation: findingExplanation,
     summaryBlock: summaryBlock,
-    findingGroup: findingGroup,
     contactList: contactList,
     notExaminedHeadline: notExaminedHeadline,
     reviewChips: reviewChips,

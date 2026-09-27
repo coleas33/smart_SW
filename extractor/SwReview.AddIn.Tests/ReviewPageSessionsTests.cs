@@ -35,6 +35,13 @@ public sealed class ReviewPageSessionsTests
 
     private static readonly string[] FindingsA = { "F-007", "F-008", "F-002" };
 
+    /// <summary>
+    /// <see cref="FindingsA"/> as Results holds them once the ranking has grouped them (feature 013):
+    /// in their rows' order, which is <see cref="GroupsSample"/>'s - not the order they arrived in.
+    /// </summary>
+    private static readonly string[] FindingsAGrouped =
+        GroupsSample.GroupCardIds.SelectMany(cards => cards).Where(id => FindingsA.Contains(id)).ToArray();
+
     private static readonly Lazy<NightRun> Night = new Lazy<NightRun>(DriveNight);
 
     private static readonly Lazy<ReloadRun> Reload = new Lazy<ReloadRun>(DriveReload);
@@ -62,7 +69,7 @@ public sealed class ReviewPageSessionsTests
     /// <summary>
     /// Choosing a review is one `GET /sessions/{chat}/snapshot`, no `POST` and no `review.start`
     /// (SC-005), and what it renders is the review as it was rendered live: the same cards, the
-    /// same Start-here rows, the same summary.
+    /// same grouped rows, the same summary.
     /// </summary>
     [Fact]
     public void RestoringAReviewIsOneGetAndRendersWhatTheLiveReviewRendered()
@@ -74,9 +81,9 @@ public sealed class ReviewPageSessionsTests
         Assert.Equal("/sessions/chat-1/snapshot", call.GetProperty("path").GetString());
         Assert.Equal(run.StartsBeforeRestore, run.StartsAfterRestore);
 
-        Assert.Equal(FindingsA, ReviewPageDriver.Strings(run.RestoredA, "cards"));
+        Assert.Equal(FindingsAGrouped, ReviewPageDriver.Strings(run.RestoredA, "cards"));
         Assert.Equal(ReviewPageDriver.Strings(run.Live, "cards"), ReviewPageDriver.Strings(run.RestoredA, "cards"));
-        Assert.Equal(ReviewPageDriver.Strings(run.Live, "startHere"), ReviewPageDriver.Strings(run.RestoredA, "startHere"));
+        Assert.Equal(ReviewPageDriver.Strings(run.Live, "groupRows"), ReviewPageDriver.Strings(run.RestoredA, "groupRows"));
         Assert.Equal(run.Live.GetProperty("summary").GetString(), run.RestoredA.GetProperty("summary").GetString());
     }
 
@@ -180,7 +187,7 @@ public sealed class ReviewPageSessionsTests
     {
         ReloadRun run = Reload.Value;
 
-        Assert.Equal(FindingsA, ReviewPageDriver.Strings(run.Reloaded, "cards"));
+        Assert.Equal(FindingsAGrouped, ReviewPageDriver.Strings(run.Reloaded, "cards"));
         Assert.Equal(@"C:\SwReviewRuns\20260923-091500-bracket-7", run.Reloaded.GetProperty("runDir").GetString());
         Assert.Equal(new[] { "true", "false" }, ReviewPageDriver.Strings(run.Reloaded, "chipCurrent"));
         Assert.False(run.Reloaded.GetProperty("stopDisabled").GetBoolean(), "the running turn's Stop is disabled.");
@@ -537,7 +544,7 @@ return JSON.stringify({ ok: true, boxValue: box ? box.value : null });";
 var transcript = document.getElementById('transcript');
 return JSON.stringify({
   ok: true,
-  f007Cards: document.querySelectorAll('#findings .card.finding[data-finding-id=""F-007""]').length,
+  f007Cards: document.querySelectorAll('#results .card.finding[data-finding-id=""F-007""]').length,
   markers: h.texts(transcript, '.marker'),
   transcript: transcript.textContent
 });";
@@ -545,7 +552,7 @@ return JSON.stringify({
     private const string ReadState = @"
 var chips = document.querySelectorAll('#review-chips [data-action=""review-chip""]');
 var gone = document.querySelector('#review-chips .review-chip.gone');
-var decisions = document.querySelectorAll('#findings [data-action=""accept""], #findings [data-action=""reject""], #findings [data-action=""defer""], #findings input.note');
+var decisions = document.querySelectorAll('#results .card.finding [data-action=""accept""], #results .card.finding [data-action=""reject""], #results .card.finding [data-action=""defer""], #results .card.finding input.note');
 var decisionsDisabled = decisions.length > 0;
 for (var i = 0; i < decisions.length; i++) { if (!decisions[i].disabled) { decisionsDisabled = false; } }
 var questionControls = document.querySelectorAll('#questions button, #questions input');
@@ -561,8 +568,8 @@ return JSON.stringify({
   chipCurrent: h.attrs(document, '#review-chips [data-action=""review-chip""]', 'aria-current'),
   goneChip: gone ? gone.textContent : '',
   hasRemove: !!document.querySelector('#review-chips [data-action=""review-forget""]'),
-  cards: h.attrs(document.getElementById('findings'), '.card.finding', 'data-finding-id'),
-  startHere: h.attrs(document.getElementById('attention-panel'), '.attention-row', 'data-finding-id'),
+  cards: h.attrs(document.getElementById('results'), '.card.finding', 'data-finding-id'),
+  groupRows: h.attrs(document.getElementById('findings-by-type'), 'details.type-row', 'data-finding-id'),
   summary: document.getElementById('summary').textContent,
   staleHidden: !!document.getElementById('stale-review').hidden,
   staleText: document.getElementById('stale-review').textContent,

@@ -39,6 +39,14 @@ Results scrolls as one.
 "Collapse all" sits in Results over the findings. The old transcript fold (its toggle, the
 `folded` class and its rules) is gone.
 
+*Amended 2026-09-26 by feature 013 T054* (013 `contracts/grouped-list.md` section 5):
+`#attention-panel` is gone, and with it Start here, "Show all" and the modelling-practice group.
+Results holds `#findings-head` (Findings, Collapse all), then `<section id="findings-by-type">` -
+one `<details class="type-group">` per group in the backend's order, one `<details
+class="type-row">` per row, a group's goal lines after its rows, the checked fold last - then
+`#findings`, the holding list. The summary's goal lines live under their groups. Collapse all
+shuts every row and every card's fold, and leaves the groups as they are.
+
 ## 3. The status line
 
 `#results-state` reads, from page state alone:
@@ -68,14 +76,28 @@ record card to `#transcript`; the question reaches Results through the summary. 
 renders the plain card into Results and an error line into Transcript. Only Transcript scrolls to
 its end on new content; Results never moves under the reader.
 
+*Amended 2026-09-26 by feature 013 T054:* `#findings` is the holding list. While a turn runs each
+card arrives there, in arrival order; a ranking returns every card to it in arrival order, then
+moves each into its row's body in the row's `member_finding_ids` order, and a card no row names
+stays there, never dropped. A second ranking regroups without duplicating a card.
+
 ## 6. SC-006
 
 Every finding of the big-assembly fixture is reachable from the top of Results in at most two
 clicks: a headline card in `#findings` needs none (scrolling is not a click); a card inside the
 modelling-practice group needs one; a Start-here or "Show all" row reaches its card in one or two.
 
+*Amended 2026-09-26 by feature 013 T054:* a grouped row is a shut `<details>`, so a card is one click
+from the top of Results when its group is open (its row) and two when its group is collapsed (the
+group, then the row); Modelling practice arrives collapsed. A card no row names is in the holding
+list and needs none.
+
 ## 7. Performance
 
 With 1,000 findings and a 1,000-row ranking rendered from a snapshot, Results is rendered within 3 s
 offscreen and its first card is in view. Paging by 100 behind "Show 100 more", in the supplied
 order, is the fallback if not (research R2.25).
+
+*Amended 2026-09-26 by feature 013 T054:* the bound holds for the grouped list - 1,000 findings
+and 1,000 grouped rows, every card moved into its row within 3 s, the first row in view with
+Results at its top (`ReviewPageScaleTests`).

@@ -10,7 +10,7 @@ namespace SwReview.AddIn.Tests;
 /// Feature 009 T046: Results or Transcript, not both (User Story 5, FR-017 to FR-019,
 /// contracts/views.md).
 ///
-/// Results answers "what is wrong": the summary, the questions, Start here, the findings, what
+/// Results answers "what is wrong": the summary, the questions, the findings grouped by type, what
 /// was not reached, the error cards and the pinned follow-up answers - no tool call, no argument,
 /// no token count. Transcript answers "how the reviewer got there": every prose block and tool
 /// call in the order it happened, a one-line marker where each finding was recorded, the
@@ -58,6 +58,20 @@ public sealed class ReviewPageViewsTests
             ReviewPageDriver.Strings(running, "markers"));
         Assert.Equal(new[] { "F-007", "F-008" }, ReviewPageDriver.Strings(running, "findingCards"));
         Assert.Equal(0, running.GetProperty("cardsInTranscript").GetInt32());
+    }
+
+    /// <summary>
+    /// Feature 013 T053: once the session ends, the findings grouped by type are in Results -
+    /// "what is wrong" - and nowhere in the Transcript, which keeps its one marker per finding.
+    /// </summary>
+    [Fact]
+    public void TheGroupedFindingsAreInResultsAndNotInTheTranscript()
+    {
+        JsonElement waiting = Scripted.Value.Waiting;
+
+        Assert.True(waiting.GetProperty("groupsInResults").GetBoolean(), "the grouped findings are not shown in Results.");
+        Assert.Equal(0, waiting.GetProperty("groupsInTranscript").GetInt32());
+        Assert.Equal(0, waiting.GetProperty("cardsInTranscript").GetInt32());
     }
 
     /// <summary>
@@ -278,6 +292,9 @@ return JSON.stringify({
   markers: h.texts(transcript, '.marker'),
   findingCards: h.attrs(document.getElementById('findings'), '.card.finding', 'data-finding-id'),
   cardsInTranscript: transcript.querySelectorAll('.card.finding').length,
+  groupsInResults: results.contains(document.getElementById('findings-by-type'))
+    && h.rendered(document.getElementById('findings-by-type')),
+  groupsInTranscript: document.getElementById('transcript-view').querySelectorAll('.type-group').length,
   followupRendered: h.rendered(document.getElementById('followup'))
 });";
 

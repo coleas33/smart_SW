@@ -12,12 +12,16 @@ namespace SwReview.AddIn.Tests;
 /// section 3).
 ///
 /// A component id is how the package names a part - `cmp:0003` - and it is how the Start-here
-/// rows and the not-loaded warning named parts until now: correct, and unreadable to anyone who
-/// did not write the extractor. The backend sends the names beside the ids (`summary
-/// .component_names`, `not_examined.headline`); the Review tab prints the name where there is
-/// one and the id where there is not, and keeps every id one fold away. The check tabs are handed
-/// no names and keep printing ids - their subject lists are about ids (research R4) - so the
-/// shared row prints names only when the caller passes them.
+/// rows and the not-loaded warning named parts until feature 009: correct, and unreadable to
+/// anyone who did not write the extractor. The backend sends the names beside the ids
+/// (`not_examined.headline`); the Review tab prints the name where there is one and the id where
+/// there is not, and keeps every id one fold away. The check tabs are handed no names and keep
+/// printing ids - their subject lists are about ids (research R4) - so the shared row prints names
+/// only when the caller passes them.
+///
+/// Feature 013 T053 removed the two tests of the Review tab's Start-here meta line: the tab has no
+/// Start here, and a grouped row prints the backend's display title - which names the parts - and
+/// its `reach_text`, never a list of components (contracts/grouped-list.md section 3).
 /// </summary>
 public sealed class ReviewPageNamesTests
 {
@@ -30,32 +34,6 @@ public sealed class ReviewPageNamesTests
         + "(lightweight), Plate-1 cmp:0003 (suppressed). Interference, fit and the feature-tree rules cannot see them.";
 
     private static readonly Lazy<Run> Scripted = new Lazy<Run>(Drive);
-
-    /// <summary>
-    /// The Review tab's Start-here meta prints the name of every part that has one and the id of
-    /// every part that does not, in the row's own order.
-    /// </summary>
-    [Fact]
-    public void AStartHereRowPrintsThePartsNamesAndTheIdWhereNoNameIsGiven()
-    {
-        string[] metas = ReviewPageDriver.Strings(Scripted.Value.Named, "metas");
-
-        Assert.Equal("demonstrated · medium · Pin-A-1, Plate-1", metas[0]);
-        Assert.Equal("demonstrated · medium · Pin-B-1, cmp:0005", metas[1]);
-        Assert.Equal("demonstrated · medium · Base-1, Pin-A-1", metas[2]);
-    }
-
-    /// <summary>
-    /// A component id that names something on `Object.prototype` is printed as itself - the map
-    /// lookup is guarded as `stripeOf`'s is, so `__proto__` never prints an object.
-    /// </summary>
-    [Fact]
-    public void AnIdThatNamesSomethingOnTheObjectPrototypePrintsAsItself()
-    {
-        string[] metas = ReviewPageDriver.Strings(Scripted.Value.Named, "metas");
-
-        Assert.Equal("demonstrated · medium · __proto__, toString, constructor", metas[4]);
-    }
 
     /// <summary>
     /// The not-loaded warning leads with the backend's names-only headline, and the instances'
@@ -123,9 +101,7 @@ public sealed class ReviewPageNamesTests
             },
             async driver =>
             {
-                JsonObject ranking = SummarySample.Ranking();
-                ranking["rows"]![4]!["component_ids"] = JsonNode.Parse(@"[""__proto__"", ""toString"", ""constructor""]");
-                await driver.RouteAttention("chat-1", ranking.ToJsonString());
+                await driver.RouteAttention("chat-1", SummarySample.Json());
                 await driver.StartReview();
                 await driver.EndSession("chat-1");
                 run.Named = await driver.Read(ReadNames);
@@ -160,7 +136,6 @@ var warning = document.getElementById('not-examined');
 var fold = warning.querySelector('details');
 return JSON.stringify({
   ok: true,
-  metas: h.texts(document, '#attention-panel .attention-row .attention-meta'),
   headline: h.text(warning, '.not-examined-headline'),
   fold: fold ? (fold.open ? 'open' : 'shut') : 'none',
   instances: fold ? h.texts(fold, 'li') : [],

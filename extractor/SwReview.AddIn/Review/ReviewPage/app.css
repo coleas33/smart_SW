@@ -14,10 +14,10 @@
 
   THREE TIERS OF INK, and the whole layout is that idea:
 
-    tier 1  the summary, the questions and the Start here panel - numbered cards, a bold
-            headline, and a stripe that restates a field the backend already sent (the
-            consequence class, or the judgement key).
-    tier 2  every finding as one line and a fold.
+    tier 1  the summary, the questions and the group headings of the findings by type (feature
+            013) - a bold headline, and on each row a stripe that restates a field the backend
+            already sent (the consequence class, or the judgement key).
+    tier 2  every issue as one line, every finding as a headline and a fold.
     tier 3  what is there when it is wanted: the coverage list, the contacts, and the whole
             Transcript view - the tool calls, the prose and the counts (feature 009 User Story 5).
 */
@@ -293,8 +293,8 @@ fieldset.field {
 }
 
 /*
-  The previous review's results, hidden while another document is open: Start here, the
-  not-examined warning, the coverage fold and every finding and evidence card. A class on the
+  The previous review's results, hidden while another document is open: the grouped findings,
+  the not-examined warning, the coverage fold and every finding and evidence card. A class on the
   body rather than a property on each, so a card that streams in meanwhile is hidden too and
   every one of them comes back when the reviewed document does.
 */
@@ -304,12 +304,11 @@ body.results-stale #summary,
 body.results-stale #questions,
 body.results-stale #findings-head,
 body.results-stale #answers,
-body.results-stale #attention-panel,
+body.results-stale #findings-by-type,
 body.results-stale #not-examined,
 body.results-stale #coverage-panel,
 body.results-stale #contacts,
 body.results-stale .card.finding,
-body.results-stale .finding-group,
 body.results-stale .card.evidence {
   display: none;
 }
@@ -317,12 +316,10 @@ body.results-stale .card.evidence {
 /* ---- tier 1: the review in ten seconds (feature 009 User Story 3) ------------------------- */
 
 /*
-  The summary: the headline, Decide / Fix / Verify, the questions, the parts not loaded and one
-  line per check goal, every number and word of it the backend's. Compact on purpose - on the
-  big assembly the headline, the three groups and every goal that was not reached must be on
-  screen in a 300 by 600 pane before anything is scrolled (SC-001). The hues restate what the
-  backend already said: `group-<kind>` and `goal-<state>` are class names the page interpolated,
-  never compared (contracts/review-summary.md section 5).
+  The summary: the headline, the tally, the questions, the parts not loaded, the drawings, the
+  bought parts and the goals not reached, every number and word of it the backend's. Compact on
+  purpose - on the big assembly the headline, the tally and the not-reached line must be on screen
+  in a 300 by 600 pane before anything is scrolled (SC-001 as feature 013 amends it).
 */
 .summary-panel {
   padding-top: 8px;
@@ -342,75 +339,20 @@ body.results-stale .card.evidence {
   line-height: 1.3;
 }
 
-.summary-groups,
-.summary-goals {
-  display: grid;
-  gap: 1px;
+/* Decide, Fix and Verify in one line: the backend's words, in the second tier of ink. */
+.summary-tally {
   margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.summary-group {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0 8px;
-  padding: 1px 0 1px 8px;
-  border-left: 3px solid var(--quiet);
-}
-
-.group-label {
-  min-width: 4.2em;
-  font-family: var(--display);
-  font-size: var(--text-lead);
-  font-weight: 600;
-  line-height: 1.3;
-}
-
-.group-text {
   color: var(--ink-2);
-}
-
-.group-goals {
-  flex-basis: 100%;
-  color: var(--muted);
   font-size: var(--text-small);
-  line-height: 1.3;
+  font-weight: 600;
 }
 
-.summary-group.group-decide {
-  border-left-color: var(--judge);
-}
-
-.summary-group.group-decide .group-label {
-  color: var(--judge);
-}
-
-.summary-group.group-fix {
-  border-left-color: var(--critical);
-}
-
-.summary-group.group-fix .group-label {
-  color: var(--critical);
-}
-
-.summary-group.group-verify {
-  border-left-color: var(--warn);
-}
-
-.summary-group.group-verify .group-label {
+/* What the review did not reach, in the hue the goal lines give "not reached". */
+.summary-not-reached {
+  margin: 0;
   color: var(--warn);
-}
-
-.summary-group.group-decided,
-.summary-group.group-within_scope {
-  border-left-color: var(--good);
-}
-
-.summary-group.group-decided .group-label,
-.summary-group.group-within_scope .group-label {
-  color: var(--good);
+  font-size: var(--text-small);
+  overflow-wrap: anywhere;
 }
 
 .summary-questions,
@@ -628,27 +570,153 @@ body.results-stale .card.evidence {
   color: var(--critical);
 }
 
-/* ---- tier 1: what to start with ---------------------------------------------------------- */
+/* ---- tier 1: the findings, grouped by type (feature 013) ---------------------------------- */
 
 /*
-  The ranked rows, pinned above the transcript. Nothing here ranks: the order is the backend's
-  and the stripe restates a field it sent - `consequence_class`, or the judgement key that says
-  only an engineer can settle this row. The class names are the two check tabs' - see
-  web/shared/check-page.css - so the same block reads the same way on all three tabs.
+  One fold per group in the backend's order, one line per row, the checked fold last
+  (contracts/grouped-list.md section 5). Nothing here ranks or counts: every word is the
+  backend's, a group's open state is its `open`, and a row's stripe restates a field it sent,
+  through the stripe map the check tabs share (`attention.stripeOf`).
 */
-/*
-  The rank counter belongs to the whole panel rather than to the Start-here list, so the rows
-  behind "Show all" go on counting from where the five stopped (U12) - numbered by the
-  stylesheet, in the order they arrived, with no number computed by the page.
-*/
-#attention-panel .attention {
-  counter-reset: rank;
+.findings-by-type {
+  padding: 0 12px 6px;
 }
 
-.attention-rows {
+.type-groups {
   display: grid;
   gap: 6px;
-  margin: 0;
+}
+
+.type-group {
+  border: 1px solid var(--hair);
+  border-radius: var(--radius);
+  background: var(--pane);
+}
+
+.type-group > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 8px;
+  padding: 6px 8px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.type-group > summary::-webkit-details-marker {
+  display: none;
+}
+
+.type-group > summary::before {
+  content: "\25b8";
+  color: var(--muted);
+  font-size: var(--text-label);
+}
+
+.type-group[open] > summary::before {
+  content: "\25be";
+}
+
+.type-group-title {
+  color: var(--ink);
+  font-family: var(--display);
+  font-size: var(--text-lead);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.type-group-text {
+  color: var(--muted);
+  font-size: var(--text-small);
+}
+
+/* The passes: the checked hue restates what the fold holds. */
+.checked-fold .type-group-title {
+  color: var(--good);
+}
+
+.type-group-body {
+  display: grid;
+  gap: 2px;
+  padding: 0 8px 8px;
+}
+
+.type-row {
+  border-left: 3px solid var(--quiet);
+}
+
+.type-row > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 6px;
+  font-size: var(--text-small);
+  list-style: none;
+  cursor: pointer;
+}
+
+.type-row > summary::-webkit-details-marker {
+  display: none;
+}
+
+.type-row > summary:hover {
+  background: var(--accent-bg);
+}
+
+/* One line: the title gives way first when it is long, and is whole on the card inside. */
+.type-row-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.type-row-tail,
+.type-row-reach {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: var(--text-label);
+}
+
+/* A row the model wrote carries the backend's source word. */
+.chip.type-row-chip {
+  flex: 0 0 auto;
+  background: var(--open-bg);
+  color: var(--open);
+}
+
+.type-row-body {
+  padding: 2px 0 4px 6px;
+}
+
+.type-row.stripe-judge {
+  border-left-color: var(--judge);
+}
+
+.type-row.stripe-critical {
+  border-left-color: var(--critical);
+}
+
+.type-row.stripe-warn {
+  border-left-color: var(--warn);
+}
+
+.type-row.stripe-quiet {
+  border-left-color: var(--quiet);
+}
+
+/* A single-member row's card would repeat the row's own title (`hide_card_title`). */
+.type-row.hide-card-title .card.finding .card-head .title {
+  display: none;
+}
+
+/* The goal lines of the goals mapped to a group, after its rows. */
+.type-group-goals {
+  display: grid;
+  gap: 1px;
+  margin: 4px 0 0;
   padding: 0;
   list-style: none;
 }
@@ -680,209 +748,9 @@ body.results-stale .card.evidence {
   color: var(--ink-2);
 }
 
-.attention-row {
-  display: grid;
-  grid-template-columns: 18px auto 1fr;
-  gap: 2px 6px;
-  align-items: baseline;
-  padding: 8px 10px 8px 8px;
-  border: 1px solid var(--hair);
-  border-left: 4px solid var(--quiet);
-  border-radius: var(--radius);
-  background: var(--pane);
-  cursor: pointer;
-}
-
-/* Only the three hairlines light up on hover: the left edge is the row's own statement. */
-.attention-row:hover {
-  border-top-color: var(--accent);
-  border-right-color: var(--accent);
-  border-bottom-color: var(--accent);
-}
-
-.attention-row::before {
-  grid-column: 1;
-  grid-row: 1;
-  counter-increment: rank;
-  content: counter(rank);
-  color: var(--muted);
-  font-family: var(--mono);
-  font-size: var(--text-label);
-}
-
-.attention-id {
-  grid-column: 2;
-  grid-row: 1;
-  color: var(--ink-2);
-  font-family: var(--mono);
-  font-size: var(--text-label);
-  font-weight: 600;
-}
-
-.attention-reason {
-  grid-column: 3;
-  grid-row: 1;
-  justify-self: start;
-}
-
-.attention-title {
-  grid-column: 2 / -1;
-  grid-row: 2;
-  font-weight: 600;
-  line-height: 1.35;
-}
-
-/* The check travels as `data-check` and is shown nowhere (feature 009 FR-025): the meta line
-   follows the title directly. */
-.attention-meta {
-  grid-column: 2 / -1;
-  grid-row: 3;
-  color: var(--muted);
-  font-size: var(--text-small);
-}
-
-.attention-empty {
-  margin: 0;
-  color: var(--muted);
-}
-
-.attention-row.stripe-judge,
-.attention-line.stripe-judge {
-  border-left-color: var(--judge);
-}
-
-.attention-row.stripe-critical,
-.attention-line.stripe-critical {
-  border-left-color: var(--critical);
-}
-
-.attention-row.stripe-warn,
-.attention-line.stripe-warn {
-  border-left-color: var(--warn);
-}
-
-.attention-row.stripe-quiet,
-.attention-line.stripe-quiet {
-  border-left-color: var(--quiet);
-}
-
-/* ---- every other row, behind Show all (U12) --------------------------------------------- */
-
-/* The backend's numbers, each with its unit, under the heading. */
-.attention-count {
-  margin: 0 0 6px;
-  color: var(--muted);
-  font-size: var(--text-small);
-}
-
-.attention-more {
-  margin-top: 8px;
-}
-
-.attention-more > summary {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  color: var(--accent);
-  font-size: var(--text-small);
-  list-style: none;
-  cursor: pointer;
-}
-
-.attention-more > summary::-webkit-details-marker {
-  display: none;
-}
-
-.attention-more > summary::after {
-  content: "\25b8";
-  color: var(--muted);
-  font-size: var(--text-label);
-}
-
-.attention-more[open] > summary::after {
-  content: "\25be";
-}
-
-.attention-index {
-  display: grid;
-  gap: 2px;
-  margin: 6px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-/* One line per row: the number, the id and the title, which gives way first when it is long. */
-.attention-line {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  padding: 3px 6px;
-  border-left: 3px solid var(--quiet);
-  font-size: var(--text-small);
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.attention-line:hover {
-  background: var(--accent-bg);
-}
-
-.attention-line::before {
-  flex: 0 0 auto;
-  counter-increment: rank;
-  content: counter(rank);
-  color: var(--muted);
-  font-family: var(--mono);
-  font-size: var(--text-label);
-}
-
-.line-id {
-  flex: 0 0 auto;
-  color: var(--ink-2);
-  font-family: var(--mono);
-  font-size: var(--text-label);
-}
-
-.line-title {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--ink);
-  text-overflow: ellipsis;
-}
-
-.line-members,
-.line-reach {
-  flex: 0 0 auto;
-  color: var(--muted);
-  font-size: var(--text-label);
-}
-
-/* The reason chip restates the stripe rather than adding a second colour beside it. */
-.stripe-judge .attention-reason {
-  background: var(--judge-bg);
-  color: var(--judge);
-}
-
-.stripe-critical .attention-reason {
-  background: var(--critical-bg);
-  color: var(--critical);
-}
-
-.stripe-warn .attention-reason {
-  background: var(--warn-bg);
-  color: var(--warn);
-}
-
-.stripe-quiet .attention-reason {
-  background: var(--quiet-bg);
-  color: var(--quiet);
-}
-
 /* ---- chips ------------------------------------------------------------------------------- */
 
-.chip,
-.attention-reason {
+.chip {
   display: inline-block;
   padding: 1px 7px;
   border-radius: 3px;
@@ -894,7 +762,7 @@ body.results-stale .card.evidence {
   line-height: 1.5;
 }
 
-/* A status word is short; a policy's reason sentence is not, so only the chip refuses to wrap. */
+/* A status word is short, so the chip refuses to wrap. */
 .chip {
   white-space: nowrap;
 }
@@ -1218,11 +1086,6 @@ body.view-transcript #results {
   word-break: break-word;
 }
 
-/* Where a ranked row lands when it is followed into the transcript. */
-.card.flash {
-  background: var(--accent-bg);
-}
-
 .card-line {
   display: flex;
   flex-wrap: wrap;
@@ -1291,43 +1154,6 @@ body.view-transcript #results {
 
 .card.finding.severity-info {
   border-left-color: var(--quiet);
-}
-
-/*
-  The modelling-practice findings, one fold (FR-010): the backend's line as its head, the cards
-  inside it exactly as they are anywhere else. The quiet hue - the owner folded these away so
-  the decisions and the fixes read first.
-*/
-.finding-group {
-  border-left: 3px solid var(--quiet);
-  border-bottom: 1px solid var(--hair-2);
-}
-
-.finding-group > summary {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  padding: 7px 4px 7px 10px;
-  color: var(--ink-2);
-  font-size: var(--text-small);
-  font-weight: 600;
-  list-style: none;
-  cursor: pointer;
-}
-
-.finding-group > summary::-webkit-details-marker {
-  display: none;
-}
-
-.finding-group > summary::after {
-  content: "\25b8";
-  margin-left: auto;
-  color: var(--muted);
-  font-size: var(--text-label);
-}
-
-.finding-group[open] > summary::after {
-  content: "\25be";
 }
 
 /* ---- the fold of a finding ------------------------------------------------------------------ */

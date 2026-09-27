@@ -1,133 +1,140 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Threading.Tasks;
 using Xunit;
 
 namespace SwReview.AddIn.Tests;
 
 /// <summary>
-/// Feature 009 T026: the modelling-practice findings are one collapsed group (FR-010, the
-/// owner's decision of 2026-09-22, contracts/review-summary.md section 5).
+/// Feature 013 T053: the finding cards move into the grouped rows (contracts/grouped-list.md
+/// section 5, `applyRanking`'s move). Until feature 013 this class pinned feature 009's one
+/// modelling-practice group (T026), which the grouped list generalises and replaces: the group is
+/// the fold now, for every type.
 ///
-/// On the big assembly, 51 of the 56 findings "to fix" were modelling practice - sketches not fully
-/// defined, features in no folder - and they stood one headline each between the engineer and
-/// the six interferences. The backend names the family's findings (`summary.modelling_practice
-/// .finding_ids`, from feature 008's family row); once the ranking arrives the page moves those
-/// cards, in the order they arrived, into one shut fold placed where the first of them was. It
-/// decides nothing about which cards those are: the list is the backend's, and the order is the
-/// order the cards are already in.
-///
-/// The sample's `finding_ids` are deliberately not in arrival order, so a page that followed the
-/// list's order rather than the cards' fails; the members arrive after thirty other findings, so
-/// following a Start-here row to one is a scroll the click has to make.
+/// While a turn runs the cards arrive in a holding list, one headline each, in arrival order. When
+/// a ranking arrives the page returns every card to the holding list in arrival order, then moves
+/// each into its row's body in the row's `member_finding_ids` order. It decides nothing about
+/// which card goes where or in what order: <see cref="GroupsSample"/>'s F-009 row lists F-009,
+/// F-010, F-011 while the stream delivers F-011 first, and <see cref="GroupsSample.UnnamedCard"/>
+/// is a card no row names, which stays in the holding list and is never dropped.
 /// </summary>
 public sealed class ReviewPageFindingGroupTests
 {
     private static readonly Lazy<Run> Scripted = new Lazy<Run>(Drive);
 
-    private const string Title = "Modelling practice: 3 findings across 3 rules";
-
-    /// <summary>The family's findings as the backend lists them - not the order they arrived in.</summary>
-    private static readonly string[] Members = { "F-009", "F-002", "F-004" };
-
-    /// <summary>The same three in the order their cards arrived.</summary>
-    private static readonly string[] MembersInArrivalOrder = { "F-002", "F-004", "F-009" };
-
-    private const int Fillers = 30;
-
+    /// <summary>Each group holds its rows' cards, each row's members in the row's order - not the order they arrived in.</summary>
     [Fact]
-    public void TheFamilysCardsSitInArrivalOrderInsideOneShutGroupNamedByTheBackend()
+    public void EachRowHoldsItsMembersCardsInTheRowsOrder()
     {
         JsonElement grouped = Scripted.Value.Grouped;
 
-        Assert.Equal(1, grouped.GetProperty("groups").GetInt32());
-        Assert.Equal("DETAILS", grouped.GetProperty("tag").GetString());
-        Assert.False(grouped.GetProperty("open").GetBoolean(), "the group arrived open.");
-        Assert.Equal(Title, grouped.GetProperty("title").GetString());
-        Assert.Equal(MembersInArrivalOrder, ReviewPageDriver.Strings(grouped, "inside"));
+        Assert.Equal(
+            GroupsSample.GroupCardIds.Select(cards => string.Join("|", cards)).Concat(new[] { string.Join("|", GroupsSample.CheckedRowIds) }).ToArray(),
+            ReviewPageDriver.Strings(grouped, "groupCards"));
+        Assert.Equal(GroupsSample.FoldedMembers, ReviewPageDriver.Strings(grouped, "foldedRowCards"));
     }
 
-    /// <summary>
-    /// The group stands where its first member stood, and every other card keeps its place and
-    /// is the same card it was - not rebuilt, not reordered.
-    /// </summary>
+    /// <summary>A card is moved, never rebuilt: the one the stream delivered is the one in the row.</summary>
     [Fact]
-    public void TheGroupIsPlacedWhereTheFirstMemberWasAndEveryOtherCardIsUntouched()
+    public void AMovedCardIsTheCardTheStreamDelivered()
+    {
+        Assert.Equal("kept", Scripted.Value.Grouped.GetProperty("probe").GetString());
+    }
+
+    /// <summary>A card no row names stays in the holding list - on the page, never dropped.</summary>
+    [Fact]
+    public void ACardNoRowNamesStaysInTheHoldingList()
     {
         JsonElement grouped = Scripted.Value.Grouped;
 
-        var expected = new List<string> { "F-007" };
-        expected.AddRange(Enumerable.Range(0, Fillers).Select(index => "F-" + (100 + index)));
-        expected.AddRange(new[] { "GROUP", "F-008", "F-003" });
-
-        Assert.Equal(expected.ToArray(), ReviewPageDriver.Strings(grouped, "order"));
-        Assert.Equal("kept", grouped.GetProperty("probe").GetString());
+        Assert.Equal(new[] { GroupsSample.UnnamedCard }, ReviewPageDriver.Strings(grouped, "holdingIds"));
+        Assert.True(grouped.GetProperty("unnamedRendered").GetBoolean(), "the card no row names is not on screen.");
+        Assert.Equal(GroupsSample.ArrivalOrder.Length, grouped.GetProperty("cards").GetInt32());
     }
 
     /// <summary>
-    /// A Start-here row naming a member opens the group, scrolls the card's head into view and
-    /// lights the card - the card's own fold stays shut, as for any other row (U10).
-    /// </summary>
-    [Fact]
-    public void AStartHereRowNamingAMemberOpensTheGroupScrollsToTheCardAndFlashesIt()
-    {
-        JsonElement clicked = Scripted.Value.RowClick;
-
-        Assert.False(clicked.GetProperty("openBefore").GetBoolean(), "the group was already open.");
-        Assert.False(clicked.GetProperty("inViewBefore").GetBoolean(), "the card was already in view.");
-        Assert.True(clicked.GetProperty("openAfter").GetBoolean(), "the row did not open the group.");
-        Assert.True(clicked.GetProperty("inViewAfter").GetBoolean(), "the row did not scroll to the card.");
-        Assert.True(clicked.GetProperty("flashed").GetBoolean(), "the card was not lit.");
-        Assert.True(clicked.GetProperty("foldShut").GetBoolean(), "the row opened the card's own fold.");
-    }
-
-    [Fact]
-    public void AShowAllLineNamingAMemberOpensTheGroupScrollsToTheCardAndFlashesIt()
-    {
-        JsonElement clicked = Scripted.Value.LineClick;
-
-        Assert.False(clicked.GetProperty("openBefore").GetBoolean(), "the group was already open.");
-        Assert.True(clicked.GetProperty("openAfter").GetBoolean(), "the line did not open the group.");
-        Assert.True(clicked.GetProperty("inViewAfter").GetBoolean(), "the line did not scroll to the card.");
-        Assert.True(clicked.GetProperty("flashed").GetBoolean(), "the card was not lit.");
-    }
-
-    [Fact]
-    public void CollapseAllShutsTheCardsInsideTheGroup()
-    {
-        JsonElement collapsed = Scripted.Value.Collapsed;
-
-        Assert.Equal(2, collapsed.GetProperty("openBefore").GetInt32());
-        Assert.Equal(0, collapsed.GetProperty("openAfter").GetInt32());
-        Assert.All(ReviewPageDriver.Strings(collapsed, "labels"), label => Assert.Equal("Details", label));
-    }
-
-    /// <summary>
-    /// A second ranking - the end of a follow-up turn - regroups: still one group, still the
-    /// three members in arrival order, and no card twice anywhere on the page.
+    /// A second ranking - the end of a follow-up turn - regroups: the same cards in the same rows,
+    /// and no card twice anywhere on the page.
     /// </summary>
     [Fact]
     public void ASecondRankingRegroupsWithoutDuplicatingACard()
     {
         JsonElement again = Scripted.Value.Regrouped;
 
-        Assert.Equal(1, again.GetProperty("groups").GetInt32());
-        Assert.Equal(MembersInArrivalOrder, ReviewPageDriver.Strings(again, "inside"));
-        Assert.Equal(Fillers + 6, again.GetProperty("cards").GetInt32());
+        Assert.Equal(ReviewPageDriver.Strings(Scripted.Value.Grouped, "groupCards"), ReviewPageDriver.Strings(again, "groupCards"));
+        Assert.Equal(GroupsSample.ArrivalOrder.Length, again.GetProperty("cards").GetInt32());
         Assert.Equal(again.GetProperty("cards").GetInt32(), again.GetProperty("distinct").GetInt32());
+        Assert.Equal("kept", again.GetProperty("probe").GetString());
     }
 
-    /// <summary>A summary with no family moves nothing: the cards stay in the order they arrived.</summary>
+    /// <summary>
+    /// A ranking whose rows no longer name some cards returns them to the holding list, in the
+    /// order they arrived - here Modelling practice's six, when a ranking carries no such group.
+    /// </summary>
     [Fact]
-    public void ARankingWithNoModellingPracticeMovesNothing()
+    public void ACardARankingNoLongerNamesReturnsToTheHoldingListInArrivalOrder()
     {
-        JsonElement none = Scripted.Value.NoFamily;
+        JsonElement fewer = Scripted.Value.Fewer;
+        string[] modelling = GroupsSample.GroupCardIds[Array.IndexOf(GroupsSample.GroupIds, "modelling_practice")];
 
-        Assert.Equal(0, none.GetProperty("groups").GetInt32());
-        Assert.Equal(new[] { "F-002", "F-004", "F-009", "F-007" }, ReviewPageDriver.Strings(none, "order"));
+        Assert.Equal(
+            GroupsSample.ArrivalOrder.Where(id => modelling.Contains(id) || id == GroupsSample.UnnamedCard).ToArray(),
+            ReviewPageDriver.Strings(fewer, "holdingIds"));
+        Assert.Equal(GroupsSample.ArrivalOrder.Length, fewer.GetProperty("distinct").GetInt32());
+    }
+
+    /// <summary>
+    /// A single-member row hides its card's title, which would repeat the row's own; a row of
+    /// several shows each card's; and a card back in the holding list shows its title again.
+    /// </summary>
+    [Fact]
+    public void ARowThatHidesItsCardsTitleHidesItAndOnlyThere()
+    {
+        JsonElement titles = Scripted.Value.Grouped.GetProperty("titleShown");
+        JsonElement back = Scripted.Value.Fewer.GetProperty("titleShown");
+
+        Assert.False(titles.GetProperty("F-008").GetBoolean(), "a single-member row's card repeats the row's title.");
+        Assert.True(titles.GetProperty("F-009").GetBoolean(), "a card of a row of several lost its title.");
+        Assert.True(titles.GetProperty("F-010").GetBoolean(), "a card of a row of several lost its title.");
+        Assert.True(titles.GetProperty(GroupsSample.UnnamedCard).GetBoolean(), "a card in the holding list lost its title.");
+        Assert.True(back.GetProperty("F-003").GetBoolean(), "a card back in the holding list still hides its title.");
+    }
+
+    /// <summary>
+    /// SC-006 (feature 009, amended): a card in an open group is one click from the top of Results
+    /// - its row - and a card in a collapsed group two: the group, then the row.
+    /// </summary>
+    [Fact]
+    public void ARowOpensItsCardsOneClickInAnOpenGroupTwoInACollapsedOne()
+    {
+        JsonElement open = Scripted.Value.OpenGroupRow;
+        JsonElement collapsed = Scripted.Value.CollapsedGroupRow;
+
+        Assert.False(open.GetProperty("visibleBefore").GetBoolean(), "a card in a shut row was already on screen.");
+        Assert.True(open.GetProperty("visibleAfterOne").GetBoolean(), "one click on its row did not show the card.");
+
+        Assert.False(collapsed.GetProperty("visibleBefore").GetBoolean(), "a card in a collapsed group was already on screen.");
+        Assert.False(collapsed.GetProperty("visibleAfterOne").GetBoolean(), "opening the group alone showed a card of a shut row.");
+        Assert.True(collapsed.GetProperty("visibleAfterTwo").GetBoolean(), "the group and then the row did not show the card.");
+        Assert.Equal(GroupsSample.FoldedMembers, ReviewPageDriver.Strings(collapsed, "visibleCards"));
+    }
+
+    /// <summary>Collapse all shuts every open row and every card's fold, and leaves the groups as they were.</summary>
+    [Fact]
+    public void CollapseAllShutsRowsAndCardFoldsButNotGroups()
+    {
+        JsonElement collapsed = Scripted.Value.Collapsed;
+
+        Assert.True(collapsed.GetProperty("openRowsBefore").GetInt32() >= 2, "too few rows open to prove 'all'.");
+        Assert.Equal(2, collapsed.GetProperty("openFoldsBefore").GetInt32());
+        Assert.Equal(0, collapsed.GetProperty("openRowsAfter").GetInt32());
+        Assert.Equal(0, collapsed.GetProperty("openFoldsAfter").GetInt32());
+        Assert.All(ReviewPageDriver.Strings(collapsed, "labels"), label => Assert.Equal("Details", label));
+        Assert.Equal(
+            collapsed.GetProperty("groupsBefore").EnumerateArray().Select(value => value.GetBoolean()).ToArray(),
+            collapsed.GetProperty("groupsAfter").EnumerateArray().Select(value => value.GetBoolean()).ToArray());
+        Assert.True(collapsed.GetProperty("overTheGroups").GetBoolean(), "Collapse all is not in Results over the grouped findings.");
     }
 
     // ---- driving the page ---------------------------------------------------------------------
@@ -140,150 +147,132 @@ public sealed class ReviewPageFindingGroupTests
             null,
             async driver =>
             {
-                await driver.RouteAttention("chat-1", WithFamily());
+                await driver.RouteAttention("chat-1", SummarySample.Json());
                 await driver.StartReview();
 
                 int seq = 0;
-                await driver.Push("chat-1", ++seq, "finding", Finding("F-007", "interference.static"));
-                for (int filler = 0; filler < Fillers; filler++)
+                foreach (string id in GroupsSample.ArrivalOrder)
                 {
-                    await driver.Push("chat-1", ++seq, "finding", Finding("F-" + (100 + filler), "interference.static"));
+                    await driver.Push("chat-1", ++seq, "finding", GroupsSample.Finding(id));
                 }
 
-                await driver.Push("chat-1", ++seq, "finding", Finding("F-002", "rms.sketches.fully_defined"));
-                await driver.Push("chat-1", ++seq, "finding", Finding("F-008", "interference.static"));
-                await driver.Push("chat-1", ++seq, "finding", Finding("F-004", "rms.grouping.all_features_in_a_group"));
-                await driver.Push("chat-1", ++seq, "finding", Finding("F-003", "rms.assembly.mates_to_reference_geometry"));
-                await driver.Push("chat-1", ++seq, "finding", Finding("F-009", "rms.folders.present"));
                 await driver.Settle();
                 await driver.Read("document.querySelector('.card.finding[data-finding-id=\"F-008\"]').setAttribute('data-probe', 'kept'); return JSON.stringify({ok: true});");
 
                 await driver.EndSession("chat-1");
                 run.Grouped = await driver.Read(ReadGroups);
-                run.RowClick = await driver.Read(Follow("#attention-panel .attention-row[data-finding-id=\"F-002\"]", "F-002"));
-                await driver.Read("document.querySelector('.finding-group').open = false; return JSON.stringify({ok: true});");
-                run.LineClick = await driver.Read(
-                    "document.querySelector('#attention-panel .attention-more').open = true;"
-                    + Follow("#attention-panel .attention-index [data-finding-id=\"F-009\"]", "F-009"));
+                run.OpenGroupRow = await driver.Read(OpenRow("interference_fit", "F-008"));
+                run.CollapsedGroupRow = await driver.Read(OpenRow("modelling_practice", GroupsSample.FoldedRow));
                 run.Collapsed = await driver.Read(CollapseAll);
 
                 await driver.EndSession("chat-1");
                 run.Regrouped = await driver.Read(ReadGroups);
 
-                await driver.StartReview();
-                await driver.RouteAttention("chat-2", SummarySample.Json());
-                await driver.Push("chat-2", 1, "finding", Finding("F-002", "rms.sketches.fully_defined"));
-                await driver.Push("chat-2", 2, "finding", Finding("F-004", "rms.grouping.all_features_in_a_group"));
-                await driver.Push("chat-2", 3, "finding", Finding("F-009", "rms.folders.present"));
-                await driver.Push("chat-2", 4, "finding", Finding("F-007", "interference.static"));
-                await driver.EndSession("chat-2");
-                run.NoFamily = await driver.Read(ReadGroups);
+                await driver.RouteAttention("chat-1", WithoutModellingPractice());
+                await driver.EndSession("chat-1");
+                run.Fewer = await driver.Read(ReadGroups);
             });
 
         return run;
     }
 
-    /// <summary>The summary with the modelling-practice line feature 008's family row gives it.</summary>
-    private static string WithFamily() => SummarySample.Json(summary =>
-        summary["modelling_practice"] = JsonNode.Parse(JsonSerializer.Serialize(new
-        {
-            title = Title,
-            findings = 3,
-            rules = 3,
-            finding_ids = Members,
-        })));
-
-    private static string Finding(string id, string check) => JsonSerializer.Serialize(new
+    /// <summary>The sample's ranking with its Modelling practice group taken out.</summary>
+    private static string WithoutModellingPractice()
     {
-        id,
-        check,
-        title = "Finding " + id,
-        status = "demonstrated",
-        severity = "low",
-        component_ids = new[] { "cmp:0002" },
-        observed = "Observed for " + id + ".",
-    });
+        JsonObject ranking = SummarySample.Ranking();
+        JsonArray groups = ranking["groups"]!["groups"]!.AsArray();
+        groups.RemoveAt(Array.IndexOf(GroupsSample.GroupIds, "modelling_practice"));
+        return ranking.ToJsonString();
+    }
 
-    /// <summary>
-    /// Every finding card and group in the findings list, in document order: the list is
-    /// `#findings` once Results and Transcript are two views, `#transcript` before that.
-    /// </summary>
+    /// <summary>Every group's cards, the holding list, and the facts about the cards the tests read.</summary>
     private const string ReadGroups = @"
-var list = document.getElementById('findings') || document.getElementById('transcript');
-var order = [];
-for (var i = 0; i < list.children.length; i++) {
-  var node = list.children[i];
-  if (node.classList.contains('finding-group')) { order.push('GROUP'); }
-  else if (node.classList.contains('finding')) { order.push(node.getAttribute('data-finding-id')); }
-}
-var groups = document.querySelectorAll('.finding-group');
-var group = groups[0] || null;
-var cards = h.attrs(document, '.card.finding', 'data-finding-id');
+var section = document.getElementById('findings-by-type');
+var groups = section.querySelectorAll('details.type-group');
+var groupCards = [];
+for (var g = 0; g < groups.length; g++) { groupCards.push(h.attrs(groups[g], '.card.finding', 'data-finding-id').join('|')); }
+var cards = h.attrs(document.getElementById('results'), '.card.finding', 'data-finding-id');
 var distinct = {};
 for (var c = 0; c < cards.length; c++) { distinct[cards[c]] = true; }
-var probe = document.querySelector('.card.finding[data-finding-id=""F-008""]');
+var cardOf = function (id) { return document.querySelector('.card.finding[data-finding-id=""' + id + '""]'); };
+var titleShown = function (id) {
+  var card = cardOf(id);
+  return !!card && getComputedStyle(card.querySelector('.card-head .title')).display !== 'none';
+};
+var folded = section.querySelector('details.type-row[data-finding-id=""F-009""]');
+var probe = cardOf('F-008');
+var unnamed = cardOf('F-099');
 return JSON.stringify({
   ok: true,
-  groups: groups.length,
-  tag: group ? group.tagName : null,
-  open: group ? group.open : null,
-  title: group ? h.text(group, ':scope > summary') : null,
-  inside: group ? h.attrs(group, '.card.finding', 'data-finding-id') : [],
-  order: order,
-  probe: probe ? probe.getAttribute('data-probe') : null,
+  groupCards: groupCards,
+  foldedRowCards: h.attrs(folded, '.card.finding', 'data-finding-id'),
+  holdingIds: h.attrs(document.getElementById('findings'), ':scope > .card.finding', 'data-finding-id'),
   cards: cards.length,
-  distinct: Object.keys(distinct).length
+  distinct: Object.keys(distinct).length,
+  probe: probe ? probe.getAttribute('data-probe') : null,
+  unnamedRendered: !!unnamed && unnamed.querySelector('.card-head').checkVisibility(),
+  titleShown: { 'F-003': titleShown('F-003'), 'F-008': titleShown('F-008'), 'F-009': titleShown('F-009'), 'F-010': titleShown('F-010'), 'F-099': titleShown('F-099') }
 });";
 
     /// <summary>
-    /// Scrolls everything to the top, clicks <paramref name="selector"/> and reports where the
-    /// card went - in one evaluation, because the flash is a class the page takes off again.
+    /// With Results at its top, clicks the group's summary when the group is shut, then the row's
+    /// summary, and reports after each click whether the row's first card is on screen.
     /// </summary>
-    private static string Follow(string selector, string findingId) => @"
-var target = document.querySelector('" + selector.Replace("'", "\\'") + @"');
-if (!target) { return JSON.stringify({ ok: false, error: 'nothing to click for " + findingId + @"' }); }
-var card = document.querySelector('.card.finding[data-finding-id=""" + findingId + @"""]');
-var group = card.closest('.finding-group');
+    private static string OpenRow(string group, string row) => @"
 h.resetScroll();
-var openBefore = !!(group && group.open);
-var inViewBefore = h.inView(card.querySelector('.card-head'));
-target.click();
-return JSON.stringify({
-  ok: true,
-  openBefore: openBefore,
-  inViewBefore: inViewBefore,
-  openAfter: !!(group && group.open),
-  inViewAfter: h.inView(card.querySelector('.card-head')),
-  flashed: /(^|\s)flash(\s|$)/.test(card.className),
-  foldShut: card.querySelector('.details').hidden
-});";
+var groupNode = document.querySelector('#findings-by-type details.type-group[data-group=""" + group + @"""]');
+var rowNode = groupNode.querySelector('details.type-row[data-finding-id=""" + row + @"""]');
+var card = rowNode.querySelector('.card.finding');
+var visible = function () { return card.querySelector('.card-head').checkVisibility(); };
+var visibleBefore = visible();
+if (!groupNode.open) { groupNode.querySelector(':scope > summary').click(); } else { rowNode.querySelector(':scope > summary').click(); }
+var visibleAfterOne = visible();
+if (!rowNode.open) { rowNode.querySelector(':scope > summary').click(); }
+var shown = [];
+var inRow = rowNode.querySelectorAll('.card.finding');
+for (var i = 0; i < inRow.length; i++) { if (inRow[i].querySelector('.card-head').checkVisibility()) { shown.push(inRow[i].getAttribute('data-finding-id')); } }
+return JSON.stringify({ ok: true, visibleBefore: visibleBefore, visibleAfterOne: visibleAfterOne, visibleAfterTwo: visible(), visibleCards: shown });";
 
+    /// <summary>Opens two cards' folds with their own Details buttons, presses Collapse all, and reports rows, folds and groups.</summary>
     private const string CollapseAll = @"
-var inside = document.querySelectorAll('.finding-group .card.finding');
-inside[0].querySelector('[data-action=""expand""]').click();
-inside[1].querySelector('[data-action=""expand""]').click();
-var open = function () { return document.querySelectorAll('.finding-group .card.finding .details:not([hidden])').length; };
-var openBefore = open();
-document.getElementById('collapse-findings').click();
+var section = document.getElementById('findings-by-type');
+document.querySelector('.card.finding[data-finding-id=""F-008""] [data-action=""expand""]').click();
+document.querySelector('.card.finding[data-finding-id=""F-009""] [data-action=""expand""]').click();
+var openRows = function () { return section.querySelectorAll('details.type-row[open]').length; };
+var openFolds = function () { return document.querySelectorAll('#results .card.finding .details:not([hidden])').length; };
+var groupStates = function () {
+  var out = [];
+  var groups = section.querySelectorAll('details.type-group');
+  for (var i = 0; i < groups.length; i++) { out.push(!!groups[i].open); }
+  return out;
+};
+var openRowsBefore = openRows(), openFoldsBefore = openFolds(), groupsBefore = groupStates();
+var button = document.getElementById('collapse-findings');
+button.click();
 return JSON.stringify({
   ok: true,
-  openBefore: openBefore,
-  openAfter: open(),
-  labels: h.texts(document, '.finding-group .card.finding [data-action=""expand""]')
+  openRowsBefore: openRowsBefore,
+  openFoldsBefore: openFoldsBefore,
+  openRowsAfter: openRows(),
+  openFoldsAfter: openFolds(),
+  labels: h.texts(document.getElementById('results'), '.card.finding [data-action=""expand""]'),
+  groupsBefore: groupsBefore,
+  groupsAfter: groupStates(),
+  overTheGroups: document.getElementById('results').contains(button) && h.before(button, section)
 });";
 
     private sealed class Run
     {
         public JsonElement Grouped { get; set; }
 
-        public JsonElement RowClick { get; set; }
+        public JsonElement OpenGroupRow { get; set; }
 
-        public JsonElement LineClick { get; set; }
+        public JsonElement CollapsedGroupRow { get; set; }
 
         public JsonElement Collapsed { get; set; }
 
         public JsonElement Regrouped { get; set; }
 
-        public JsonElement NoFamily { get; set; }
+        public JsonElement Fewer { get; set; }
     }
 }

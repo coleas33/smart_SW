@@ -13,8 +13,9 @@ namespace SwReview.AddIn.Tests;
 /// contacts were findings - interference at zero volume, one headline each. Feature 010 records
 /// them as contacts instead (`ReviewSession.contacts`) and the summary maps each to the names of
 /// its two parts, its kind in words and its configuration. The page prints that list in one shut
-/// fold after the findings, and nowhere else: not in a finding card, not in Start here, not in
-/// the modelling-practice group. Until feature 010 lands the summary's `contacts` is null, so
+/// fold after the findings, and nowhere else: not in a finding card and not in the grouped
+/// findings (feature 013, which replaced Start here and the modelling-practice group with them).
+/// Until feature 010 lands the summary's `contacts` is null, so
 /// the list is proven here on the sample's hand-added contacts (research R5).
 /// </summary>
 public sealed class ReviewPageContactsTests
@@ -51,14 +52,13 @@ public sealed class ReviewPageContactsTests
     }
 
     [Fact]
-    public void NoContactIsInAFindingCardInStartHereOrInTheModellingPracticeGroup()
+    public void NoContactIsInAFindingCardOrInTheGroupedFindings()
     {
         JsonElement listed = Scripted.Value.Listed;
 
         Assert.Equal(0, listed.GetProperty("inCards").GetInt32());
-        Assert.Equal(0, listed.GetProperty("inStartHere").GetInt32());
-        Assert.Equal(0, listed.GetProperty("inGroup").GetInt32());
-        Assert.Equal(1, listed.GetProperty("groups").GetInt32());
+        Assert.Equal(0, listed.GetProperty("inGroups").GetInt32());
+        Assert.Equal(GroupsSample.GroupIds.Length + 1, listed.GetProperty("groups").GetInt32());
     }
 
     [Fact]
@@ -88,12 +88,7 @@ public sealed class ReviewPageContactsTests
             null,
             async driver =>
             {
-                await driver.RouteAttention("chat-1", SummarySample.Json(summary =>
-                {
-                    summary["contacts"] = SummarySample.Contacts(HostileName);
-                    summary["modelling_practice"] = JsonNode.Parse(
-                        @"{""title"":""Modelling practice: 1 finding across 1 rule"",""findings"":1,""rules"":1,""finding_ids"":[""F-002""]}");
-                }));
+                await driver.RouteAttention("chat-1", SummarySample.Json(summary => summary["contacts"] = SummarySample.Contacts(HostileName)));
                 await driver.StartReview();
                 await driver.Push("chat-1", 1, "finding", Finding("F-007"));
                 await driver.Push("chat-1", 2, "finding", Finding("F-002"));
@@ -148,9 +143,8 @@ return JSON.stringify({
   ids: ids,
   lineFolds: lineFolds,
   inCards: document.querySelectorAll('.card.finding .contact').length,
-  inStartHere: document.querySelectorAll('#attention-panel .contact').length,
-  inGroup: document.querySelectorAll('.finding-group .contact').length,
-  groups: document.querySelectorAll('.finding-group').length,
+  inGroups: document.querySelectorAll('#findings-by-type .contact').length,
+  groups: document.querySelectorAll('#findings-by-type details.type-group').length,
   text: fold ? fold.textContent : '',
   injected: h.injected(fold),
   rendered: h.rendered(section)
