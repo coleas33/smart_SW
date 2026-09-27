@@ -925,10 +925,12 @@
 
   /**
    * A persisted explanation of a finding, as the first line inside its card's fold (U5, U10): the
-   * backend's text as sent, never derived here (feature 013 sources.md section 4).
+   * model's source word ("AI guidance", `labels.source`), then the backend's text as sent - never
+   * derived here, and nothing stands in for a missing one (feature 013 sources.md section 4).
    */
-  function findingExplanation(text) {
+  function findingExplanation(text, labels) {
     var line = el('p', 'finding-explanation');
+    append(line, [sourceChip(labels, MODEL)]);
     line.appendChild(el('span', 'explanation-text', text));
     return line;
   }

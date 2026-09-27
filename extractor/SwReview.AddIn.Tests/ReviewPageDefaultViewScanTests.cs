@@ -173,6 +173,18 @@ public sealed class ReviewPageDefaultViewScanTests
         Assert.DoesNotContain("model", chips);
     }
 
+    /// <summary>
+    /// Feature 013 T114 (contracts/sources.md section 4): nothing stands in for a missing
+    /// explanation - the legacy "No model explanation was generated" line is rendered nowhere in
+    /// Results, not even inside a shut fold, though the committed fixture's rows still carry it
+    /// as evidence of the legacy line (`rank()` skips it from 013 T112).
+    /// </summary>
+    [Fact]
+    public void TheLegacyExplanationFallbackIsRenderedNowhere()
+    {
+        Assert.DoesNotContain("No model explanation", Titles.Value.GetProperty("resultsText").GetString());
+    }
+
     [Fact]
     public void NoErrorClassNameIsVisible()
     {
@@ -243,6 +255,7 @@ return JSON.stringify({
   rowIds: h.attrs(groups, 'details.type-row', 'data-finding-id'),
   rowTitles: h.texts(groups, 'details.type-row > summary .type-row-title'),
   chips: h.texts(results, '.chip'),
+  resultsText: results.textContent,
   groupHeads: heads
 });";
 }
