@@ -769,6 +769,72 @@ def test_the_root_is_graded_with_a_label_when_it_looks_bought() -> None:
     assert roles.bought() == ()
 
 
+def looks_bought_root() -> Document:
+    return document("doc:1", "fict-drive.SLDASM", kind="assembly", properties={VENDOR: "fict"})
+
+
+ROOT_CLAUSE = (
+    "fict-drive.SLDASM looks bought (a vendor property); graded because it is the document under "
+    "review"
+)
+
+
+def test_the_bought_parts_line_says_the_root_looks_bought_and_why_it_is_graded() -> None:
+    """The review of 2026-09-27 (FR-008, US1 scenario 6): the root's label was computed and
+    reached no surface, and `bought()` leaves the graded root out, so the bought-parts line could
+    not name it. The line carries it: the one sentence the digest, the coverage row, the summary
+    and the report all print."""
+    subject = package(root=looks_bought_root())
+
+    roles = classify_parts(subject, profile_a())
+
+    assert roles.bought() == ()
+    assert bought_parts_sentence(roles, subject) == ROOT_CLAUSE
+
+
+def test_the_root_clause_follows_the_parts_not_graded_and_precedes_what_was_withdrawn() -> None:
+    pin = document(
+        "doc:3",
+        "fict-pin.SLDPRT",
+        path=f"{BOUGHT_FOLDER}fict-pin.SLDPRT",
+        properties={DETAIL: ""},
+    )
+    subject = package(pin, root=looks_bought_root())
+    roles = classify_parts(subject, profile_a())
+
+    assert [role.document_id for role in roles.bought()] == ["doc:3"]
+    assert bought_parts_sentence(roles, subject) == (
+        "1 part not graded for modelling practice or hygiene (bought): fict-pin.SLDPRT (a "
+        f"bought-parts folder); {ROOT_CLAUSE}"
+    )
+    assert bought_parts_sentence(roles, subject, withdrawn=("F-004",)) == (
+        "1 part not graded for modelling practice or hygiene (bought): fict-pin.SLDPRT (a "
+        f"bought-parts folder); {ROOT_CLAUSE}; withdrew F-004"
+    )
+
+
+def test_a_root_the_rules_do_not_call_bought_adds_nothing() -> None:
+    subject = package()
+
+    roles = classify_parts(subject, profile_a())
+
+    assert all(role.label is None for role in roles.by_document.values())
+    assert bought_parts_sentence(roles, subject) is None
+
+
+def test_a_toolbox_root_with_no_profile_is_named_beside_the_state() -> None:
+    root = document("doc:1", "fict-screw.SLDPRT")
+    subject = package(root=root, components=[instance("cmp:0001", "doc:1", toolbox=True)])
+
+    roles = classify_parts(subject, None)
+
+    assert roles.by_document["doc:1"].label == ROOT_LABEL.format(reason="a Toolbox part")
+    assert bought_parts_sentence(roles, subject) == (
+        "Bought parts were not told apart: no standards profile is attached; fict-screw.SLDPRT "
+        "looks bought (a Toolbox part); graded because it is the document under review"
+    )
+
+
 def test_an_unknown_document_id_is_graded() -> None:
     roles = classify_parts(package(), profile_a())
 

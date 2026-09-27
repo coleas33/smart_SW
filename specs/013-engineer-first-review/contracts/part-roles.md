@@ -141,6 +141,17 @@ The review's root document is always graded. When it is decided bought, its role
 bought-parts line's wording, `graded` is true, and its label is "looks bought ({reason}); graded
 because it is the document under review".
 
+*Amended 2026-09-27 (the review of that day, FR-008):* the label reaches the engineer and the model
+through the bought-parts line (section 7): `bought_parts_sentence` appends "{file} looks bought
+({reason}); graded because it is the document under review" after the parts not graded, joined by
+"; " (before a regrade's "; withdrew ..." tail), and writes the row with that clause alone when the
+root is the only document the rules call bought. The row's `scope.document_ids` stay the parts not
+graded, so the summary counts none for the root; the digest line, `session.json`, the summary's
+`bought_parts.text` and `report.md`'s "Bought parts" section print it. The Model check tab grades
+its open part always - it attaches no roles, so nothing is exempt - but does not print the label:
+its route (`POST /checks/rms`) takes no standards profile to classify with, which is a
+`model-check.md` interface change left for the owner (see the review's deferrals).
+
 ### The zero-match guard
 
 In `configured`: when no document of the package, the root included, is decided custom or bought by
