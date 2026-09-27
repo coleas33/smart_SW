@@ -249,7 +249,7 @@ while ($true) { Start-Sleep -Seconds 3600 }
     public int ReadGrandchildProcessId() =>
         int.Parse(ReadWhenWritten(GrandchildPath).Trim(), CultureInfo.InvariantCulture);
 
-    public string ReadLog() => File.Exists(LogPath) ? ReadShared(LogPath) : string.Empty;
+    public string ReadLog() => File.Exists(LogPath) ? LiveFile.ReadAllText(LogPath) : string.Empty;
 
     /// <summary>Waits for a file the child writes; the child is a real process, so every
     /// assertion about what it did has to allow for its start-up.</summary>
@@ -291,15 +291,6 @@ while ($true) { Start-Sleep -Seconds 3600 }
             throw new IOException($"the stub backend never wrote {path}");
         }
 
-        return ReadShared(path);
-    }
-
-    private static string ReadShared(string path)
-    {
-        using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
-        using (var reader = new StreamReader(stream))
-        {
-            return reader.ReadToEnd();
-        }
+        return LiveFile.ReadAllText(path);
     }
 }

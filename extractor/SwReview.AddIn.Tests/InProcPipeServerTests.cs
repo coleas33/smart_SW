@@ -793,6 +793,27 @@ public sealed class InProcPipeServerTests
         }
     }
 
+    /// <summary>
+    /// The accept loop hands a connection to its own thread outside the lock Dispose closes
+    /// connections under, so Dispose can close the pipe before that thread has wrapped it - found
+    /// by running this class under load, where the thread's first line threw on a closed pipe.
+    /// An exception on that thread ends the process, and the process is SOLIDWORKS: the
+    /// connection must end quietly instead.
+    /// </summary>
+    [Fact]
+    public void AConnectionClosedBeforeItsThreadWrapsThePipeEndsWithoutThrowing()
+    {
+        using (var app = new FakeAppThread())
+        using (InProcPipeServer server = Server(new RecordingDispatcher(), app))
+        {
+            var closed = new NamedPipeServerStream(
+                PipeNames.NewToolServiceName(), PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+            closed.Dispose();
+
+            server.ServeClient(closed);
+        }
+    }
+
     [Fact]
     public void DisposeIsIdempotent()
     {
