@@ -57,6 +57,7 @@ from uuid import UUID
 
 from swreview.agent.checklist import load_checklist
 from swreview.agent.settings import EfficiencySettings
+from swreview.checks.part_roles import PartRoles
 from swreview.checks.rms.part import INDIVIDUALLY_SUPPRESSIBLE
 from swreview.checks.rms.registry import RULES_VERSION
 from swreview.exceptions import (
@@ -74,6 +75,7 @@ from swreview.report.session import (
     load_session,
     was_cut_short,
 )
+from swreview.tools.checks_mechanical import review_roles
 from swreview.tools.context import ToolContext
 
 __all__ = [
@@ -279,7 +281,11 @@ def carryable(finding: Finding) -> bool:
 
 
 def _may_carry(
-    finding: Finding, *, failed: frozenset[str], flagged: frozenset[str]
+    finding: Finding,
+    *,
+    failed: frozenset[str],
+    flagged: frozenset[str],
+    roles: PartRoles | None = None,
 ) -> bool:
     """The per-finding half of the guards. The session-wide half is in `select_carry_over`."""
     return (
@@ -288,7 +294,20 @@ def _may_carry(
         and finding.disposition is None  # guard 3
         and not set(finding.component_ids) & flagged  # guard 4
         and finding.carried_over_from is None  # guard 6, MAX_CARRY_OVER_RUNS == 1
+        and not (roles is not None and _on_bought_documents(finding, roles))
     )
+
+
+def _on_bought_documents(finding: Finding, roles: PartRoles) -> bool:
+    """Every document the finding cites is a bought part this review does not grade.
+
+    Feature 013 (`contracts/part-roles.md` section 6): the RMS tools no longer grade a bought
+    part, so a verdict about one computed by an earlier run must not stand in this one. A
+    finding that also cites a graded document - an assembly rule naming a custom part and a
+    bought one - is carried or re-run by the guards above, as any other.
+    """
+    documents = {entry.document_id for entry in finding.provenance}
+    return bool(documents) and not any(roles.graded(document) for document in documents)
 
 
 def select_carry_over(
@@ -297,12 +316,17 @@ def select_carry_over(
     *,
     exceptions: ExceptionStore | None = None,
     at: datetime,
+    roles: PartRoles | None = None,
 ) -> CarryOverDecision:
     """Partition `previous`'s findings into the ones that may stand and the ones to re-run.
 
     `at` is not read here - it is the caller's carry time, taken as an argument so the
     selector and the writer agree on one clock - but a selection made at a different time
     is a different decision, and taking it keeps that visible at every call site.
+
+    `roles` are this review's part roles (feature 013): a finding every one of whose
+    documents is a bought part this review does not grade is re-run - which grades nothing -
+    rather than carried. `None` keeps the rule it had before part roles existed.
 
     Guard 5 is the comparison this whole module exists for: the key `previous` left on the
     finding, against the key the same finding produces over *this* package and this build.
@@ -332,7 +356,7 @@ def select_carry_over(
     carried: list[Carried] = []
     re_run: list[Finding] = []
     for finding in previous.findings:
-        if not _may_carry(finding, failed=failed, flagged=flagged):
+        if not _may_carry(finding, failed=failed, flagged=flagged, roles=roles):
             re_run.append(finding)
             continue
         try:
@@ -456,7 +480,11 @@ def carry_over_findings(
     previous = load_session(previous_session)
     carried_at = at if at is not None else datetime.now(UTC)
     decision = select_carry_over(
-        package, previous, exceptions=context.exception_store(), at=carried_at
+        package,
+        previous,
+        exceptions=context.exception_store(),
+        at=carried_at,
+        roles=review_roles(context),
     )
 
     for carried in decision.carried:

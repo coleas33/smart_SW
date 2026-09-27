@@ -25,16 +25,21 @@ from __future__ import annotations
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import pytest
 
+from swreview.checks.part_roles import classify_parts
 from swreview.checks.rms import RULES
 from swreview.checks.rms.report import SUMMARY_CHECK
+from swreview.checks.standards.profile import load_profile
 from swreview.exceptions import ExceptionStore, ReviewException
+from swreview.ir.loader import load_package
 from swreview.ir.models import EvidencePackage
 from swreview.report.session import CoverageItem, ReviewSession
 from swreview.tools import rms_checks
+from swreview.tools.checks_mechanical import attach_part_roles
 from swreview.tools.context import ToolContext, context_for, use_context
 from swreview.tools.registry import RecordedTool, ToolRegistry
 from tests.support.features import (
@@ -1052,3 +1057,128 @@ def test_a_second_assembly_call_replaces_the_aggregated_coverage(
 
     for bucket in BUCKETS:
         assert sorted(second[bucket]) == sorted(first[bucket]), bucket
+
+
+# --- feature 013 T023: graded documents only (contracts/part-roles.md section 6) -------------
+
+SITTING = Path(__file__).resolve().parents[1] / "fixtures" / "sitting" / "small-assembly"
+PROFILE_A = Path(__file__).resolve().parents[1] / "fixtures" / "standards" / "profile-a.yaml"
+PIN_INSTANCES = {"cmp:0003", "cmp:0004"}
+SPACER_INSTANCE = "cmp:0005"
+PLATE_INSTANCE = "cmp:0002"
+
+
+def sitting_context(*, roles: bool = True, asked: bool = False) -> ToolContext:
+    """The sitting-shaped fixture with the roles profile A gives it attached, as
+    `start_review` attaches them (lane S, T022), or none."""
+    package = load_package(SITTING).package
+    context = context_for(package)
+    if roles:
+        classified = classify_parts(package, load_profile(PROFILE_A))
+        attach_part_roles(context, classified.asking("ER-001") if asked else classified)
+    return context
+
+
+def run_tool(context: ToolContext, name: str, *args: Any) -> dict[str, Any]:
+    with use_context(context):
+        return getattr(rms_checks, name)(*args)
+
+
+@pytest.mark.parametrize("tool", ["check_rms_part", "check_rms_equations"])
+def test_the_bought_parts_leave_the_null_selection(tool: str) -> None:
+    context = sitting_context()
+
+    result = run_tool(context, tool)
+
+    assert result["documents"] == ["doc:2", "doc:4"]
+    on_bought = [
+        finding.id
+        for finding in session_of(context).findings
+        if set(finding.component_ids) & PIN_INSTANCES
+    ]
+    assert on_bought == []
+
+
+@pytest.mark.parametrize("tool", ["check_rms_part", "check_rms_equations"])
+def test_without_roles_every_part_document_is_graded(tool: str) -> None:
+    result = run_tool(sitting_context(roles=False), tool)
+
+    assert result["documents"] == ["doc:2", "doc:3", "doc:4", "doc:6"]
+
+
+@pytest.mark.parametrize("tool", ["check_rms_part", "check_rms_equations"])
+@pytest.mark.parametrize("document_id", ["doc:3", "doc:6"], ids=["folder", "inherited"])
+def test_an_explicit_bought_id_is_an_error_naming_the_reason(tool: str, document_id: str) -> None:
+    context = sitting_context()
+
+    result = run_tool(context, tool, document_id)
+
+    assert "error" in result
+    error = str(result["error"])
+    assert f"document {document_id!r} is a bought part: not graded for modelling practice" in error
+    reason = classify_parts(context.ir, load_profile(PROFILE_A)).by_document[document_id].reason
+    assert f"({reason})" in error
+    assert session_of(context).findings == []
+
+
+def test_an_explicit_graded_id_is_graded_as_before() -> None:
+    result = run_tool(sitting_context(), "check_rms_part", "doc:4")
+
+    assert result["documents"] == ["doc:4"]
+
+
+def test_the_part_documents_an_assembly_id_error_offers_are_the_graded_ones() -> None:
+    result = run_tool(sitting_context(), "check_rms_part", "doc:1")
+
+    assert "error" in result
+    assert "['doc:2', 'doc:4']" in str(result["error"])
+
+
+def test_an_unclear_documents_findings_carry_the_note_while_the_question_is_open() -> None:
+    context = sitting_context(asked=True)
+
+    run_tool(context, "check_rms_part")
+    run_tool(context, "check_rms_equations")
+
+    findings = session_of(context).findings
+    spacer = [finding for finding in findings if SPACER_INSTANCE in finding.component_ids]
+    plate = [finding for finding in findings if PLATE_INSTANCE in finding.component_ids]
+    note = (
+        "may be a bought part: too little evidence: only marked made here by its make-or-buy "
+        "property; asked in ER-001"
+    )
+    assert spacer and plate
+    assert all(note in finding.coverage_limits for finding in spacer)
+    assert not any(note in finding.coverage_limits for finding in plate)
+
+
+def test_no_note_before_the_question_is_asked() -> None:
+    context = sitting_context()
+
+    run_tool(context, "check_rms_part")
+
+    assert not any(
+        limit.startswith("may be a bought part")
+        for finding in session_of(context).findings
+        for limit in finding.coverage_limits
+    )
+
+
+def test_a_root_part_that_looks_bought_is_still_graded() -> None:
+    """The Model check tab's open part is the root: always graded (section 2, the root rule)."""
+    package = rms_package(
+        parts=[
+            PartSpec(
+                document_id="doc:1",
+                name="fict-bought-block",
+                features=[sketch_feature("Sketch1", raw_status=2)],
+                instances=[InstanceSpec("fict-bought-block-1", is_toolbox=True)],
+            )
+        ]
+    )
+    context = context_for(package)
+    roles = classify_parts(package, load_profile(PROFILE_A))
+    assert roles.by_document["doc:1"].role == "bought"
+    attach_part_roles(context, roles)
+
+    assert run_tool(context, "check_rms_part")["documents"] == ["doc:1"]

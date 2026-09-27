@@ -36,7 +36,9 @@ call evaluates. Three rules govern it (constitution Principle I):
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import replace
 
+from swreview.checks.part_roles import BOUGHT_REFUSAL, note_unclear
 from swreview.checks.rms.assembly import assembly_rules_unresolved, evaluate_assembly
 from swreview.checks.rms.equations import evaluate_equations
 from swreview.checks.rms.groups import assign_groups
@@ -44,6 +46,7 @@ from swreview.checks.rms.part import evaluate_part
 from swreview.checks.rms.report import report_results
 from swreview.checks.rms.results import RuleResult
 from swreview.checks.rms_types import load_table
+from swreview.tools.checks_mechanical import review_roles
 from swreview.tools.context import ToolContext, current_context, error_result, unknown_id
 from swreview.tools.query import ToolResult
 
@@ -124,7 +127,7 @@ def run_part_checks(
         rows = [row for row in context.ir.features if row.document_id == part]
         results.extend(evaluate_part(part, rows, table, assign_groups(rows, table), context.ir))
 
-    return _reported(context, results, documents)
+    return _reported(context, _noted(context, results), documents)
 
 
 def check_rms_assembly() -> ToolResult:
@@ -230,7 +233,28 @@ def run_equation_checks(
         rows = [row for row in context.ir.equations if row.document_id == part]
         results.extend(evaluate_equations(part, rows, context.ir))
 
-    return _reported(context, results, documents)
+    return _reported(context, _noted(context, results), documents)
+
+
+NOTED_OUTCOMES: frozenset[str] = frozenset({"fail", "warn"})
+"""The outcomes whose finding says the part may be bought (feature 013 `contracts/part-roles.md`
+section 6): what the engineer reads as a finding, never a pass or a coverage row."""
+
+
+def _noted(context: ToolContext, results: Sequence[RuleResult]) -> list[RuleResult]:
+    """`results`, each fail and warn on an unclear document carrying the note that it may be
+    bought while the part-roles question is open (`PartRoles.note_for`); unchanged when no
+    roles are attached."""
+    roles = review_roles(context)
+    if roles is None:
+        return list(results)
+    noted: list[RuleResult] = []
+    for result in results:
+        note = roles.note_for(result.document_id)
+        if note is not None and result.outcome in NOTED_OUTCOMES and result.result is not None:
+            result = replace(result, result=note_unclear(result.result, note))
+        noted.append(result)
+    return noted
 
 
 def _reported(
@@ -259,11 +283,17 @@ def part_documents(
     every coverage item written from it - sees the documents in the order the package
     lists them rather than in whatever order the feature rows happen to arrive in. With
     ids, the caller's own order, because the caller named them.
+
+    Only **graded** documents (feature 013 `contracts/part-roles.md` section 6): with part
+    roles attached, a bought part leaves the null selection and a bought id is an error
+    result naming why; the root is always graded, and an unknown role is graded. With no
+    roles attached every part document is, as before.
     """
+    roles = review_roles(context)
     parts = [
         document.document_id
         for document in context.ir.documents
-        if document.kind == PART_KIND
+        if document.kind == PART_KIND and (roles is None or roles.graded(document.document_id))
     ]
     if document_ids is None:
         return parts
@@ -276,6 +306,11 @@ def part_documents(
             return error_result(
                 f"document {document_id!r} is a {document.kind} document; the part rules "
                 f"grade part documents, and the part documents here are {parts}"
+            )
+        if roles is not None and not roles.graded(document_id):
+            return error_result(
+                f"document {document_id!r} is {BOUGHT_REFUSAL} "
+                f"({roles.by_document[document_id].reason})"
             )
         if document_id not in selected:
             selected.append(document_id)
