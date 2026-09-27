@@ -79,12 +79,15 @@ from swreview.report.unexamined import not_examined
 
 if TYPE_CHECKING:  # pragma: no cover - imported for annotations only, never at run time
     from swreview.agent.events import UsageLedger
-    from swreview.report.session import EvidenceRequest, ReviewSession
+    from swreview.report.session import CoverageItem, EvidenceRequest, ReviewSession
 
 __all__ = [
+    "BOUGHT_PARTS_CHECK",
     "COVERAGE_BUCKETS",
     "DRAWINGS_NAMED",
+    "MAYBE_BOUGHT_CHECK",
     "WORDS_FILE",
+    "BoughtParts",
     "ContactList",
     "ContactView",
     "DrawingsLine",
@@ -101,6 +104,8 @@ __all__ = [
     "SummaryGroup",
     "Tally",
     "Words",
+    "bought_parts_of",
+    "bought_rows",
     "contacts_of",
     "drawings_of",
     "goal_lines",
@@ -125,8 +130,19 @@ candidate question's bound (`checks/drawing_context.CANDIDATES_NAMED`), copied b
 module reaches the session module (see the module docstring); `tests/unit/test_review_summary.py`
 asserts the two are one number."""
 
-DRAWINGS_SEPARATOR = ". "
-"""What joins the drawings line's two parts, each a sentence of its own."""
+SENTENCE_SEPARATOR = ". "
+"""What joins two sentences of one summary line: the drawings line's two parts, and the
+bought-parts line's two rows (feature 013)."""
+
+BOUGHT_PARTS_CHECK = "coverage.prerun.bought_parts"
+MAYBE_BOUGHT_CHECK = "coverage.prerun.maybe_bought"
+"""The two pre-run rows feature 013's part roles write (its `contracts/part-roles.md` section 7):
+the bought documents not graded, skipped, and the unclear ones graded with a note, unresolved.
+Copied rather than imported, because `checks/part_roles.py`, which names them, reaches the
+session module and through it the provider port (see the module docstring);
+`tests/unit/test_review_summary.py` asserts the copies are the classifier's. The summary reads
+these rows and never classifies a part again."""
+
 
 EvidenceStatus = Literal["open", "answered"]
 ContactKind = Literal["zero_volume", "possible_only", "thread_model"]
@@ -175,6 +191,19 @@ class NotLoadedWords(ReviewModel):
     text: str
 
 
+class QuestionWords(CountWords):
+    """The questions line, and the placeholder of the text box a question that allows text
+    draws beside its buttons (feature 013)."""
+
+    text_placeholder: str
+
+
+class BoughtPartsWords(ReviewModel):
+    """The report's "Bought parts" heading (feature 013); the sentences are the rows'."""
+
+    heading: str
+
+
 class DrawingsWords(ReviewModel):
     """The drawings line's words (decision 10A): a sentence for one name and for several, per
     part, and the tail that counts the names past the bound."""
@@ -204,7 +233,7 @@ class DrawingsWords(ReviewModel):
             )
             if names
         ]
-        return DRAWINGS_SEPARATOR.join(parts)
+        return SENTENCE_SEPARATOR.join(parts)
 
 
 class TallyWords(ReviewModel):
@@ -249,8 +278,9 @@ class Words(ReviewModel):
     groups: dict[GroupKind, GroupWords]
     tally: TallyWords
     not_reached: str
-    questions: CountWords
+    questions: QuestionWords
     not_loaded: NotLoadedWords
+    bought_parts: BoughtPartsWords
     drawings: DrawingsWords
     contacts: CountWords
     resume: ResumeWords
@@ -322,6 +352,9 @@ class QuestionView(ReviewModel):
     id: str
     question: str
     options: list[str]
+    allow_text: bool
+    """Whether the question takes typed words beside its options (feature 013): the page then
+    draws its buttons and a text box, whose placeholder is the list's `text_placeholder`."""
     blocks: str | None
     blocks_title: str | None
     what: str
@@ -332,6 +365,9 @@ class QuestionView(ReviewModel):
 class QuestionList(ReviewModel):
     count: int
     text: str | None
+    text_placeholder: str
+    """The words file's `questions.text_placeholder`, printed in every text box a question with
+    `allow_text` draws; the page words nothing itself."""
     items: list[QuestionView]
 
 
@@ -347,6 +383,17 @@ class DrawingsLine(ReviewModel):
 
     read: list[str]
     candidates: list[str]
+    text: str
+
+
+class BoughtParts(ReviewModel):
+    """The documents not graded because bought, and those graded that may be bought, by file
+    name, with the rows' own sentences (feature 013, its `contracts/part-roles.md` section 7)."""
+
+    count: int
+    names: list[str]
+    maybe_count: int
+    maybe_names: list[str]
     text: str
 
 
@@ -377,6 +424,7 @@ class ReviewSummary(ReviewModel):
     questions: QuestionList
     not_loaded: NotLoaded | None
     drawings: DrawingsLine | None
+    bought_parts: BoughtParts | None
     not_reached: NotReached | None
     contacts: ContactList | None
     component_names: dict[str, str]
@@ -462,6 +510,7 @@ def review_summary(
         questions=_questions(session.evidence_requests, words, names, package),
         not_loaded=_not_loaded(package, words),
         drawings=drawings_of(package),
+        bought_parts=bought_parts_of(session, package),
         not_reached=_not_reached(goal_lines(session, words), words),
         contacts=contacts_of(session, names),
         component_names=names,
@@ -582,6 +631,9 @@ def _questions(
             id=request.id,
             question=request.question if request.question is not None else request.what,
             options=list(request.options),
+            # `allow_text` is feature 013's optional field (its T007): read so a request of an
+            # older session, and of a build before that field, takes no text.
+            allow_text=getattr(request, "allow_text", False),
             blocks=request.blocks,
             blocks_title=_blocks_title(request.blocks, words.goals),
             what=request.what,
@@ -597,6 +649,7 @@ def _questions(
     return QuestionList(
         count=len(items),
         text=words.questions.of(len(items)) if items else None,
+        text_placeholder=words.questions.text_placeholder,
         items=items,
     )
 
@@ -650,6 +703,54 @@ def drawings_of(package: EvidencePackage | None) -> DrawingsLine | None:
         return None
     return DrawingsLine(
         read=read, candidates=candidates, text=load_words().drawings.of(read, candidates)
+    )
+
+
+def bought_rows(session: ReviewSession) -> tuple[CoverageItem, ...]:
+    """The bought-parts row, then the maybe-bought row, each the last of its check, those present.
+
+    Read from whichever bucket holds them - the pre-run writes the first skipped and the second
+    unresolved - and the last row of each check wins, because a regrade restates the row after the
+    one it replaces (013 `contracts/part-roles.md` section 9).
+    """
+    checks = (BOUGHT_PARTS_CHECK, MAYBE_BOUGHT_CHECK)
+    found: dict[str, CoverageItem] = {}
+    for bucket in COVERAGE_BUCKETS:
+        for item in getattr(session.coverage, bucket):
+            if item.check in checks:
+                found[item.check] = item
+    return tuple(found[check] for check in checks if check in found)
+
+
+def bought_parts_of(session: ReviewSession, package: EvidencePackage | None) -> BoughtParts | None:
+    """The bought-parts line, read from the persisted rows and never classified again, or `None`
+    when neither row is there (013 `contracts/part-roles.md` section 7).
+
+    The routes that build the summary have no profile and no roles, so the rows are what makes
+    the live review, the disk route and the re-render say the same line. Each document is named by
+    its file name, its id where `package` has no row for it or there is no package. Counted in no
+    group, goal or headline.
+    """
+    rows = {row.check: row for row in bought_rows(session)}
+    if not rows:
+        return None
+    files = (
+        {document.document_id: document.file_name for document in package.documents}
+        if package is not None
+        else {}
+    )
+
+    def names(check: str) -> list[str]:
+        row = rows.get(check)
+        return [] if row is None else [files.get(one, one) for one in row.scope.document_ids]
+
+    bought, maybe = names(BOUGHT_PARTS_CHECK), names(MAYBE_BOUGHT_CHECK)
+    return BoughtParts(
+        count=len(bought),
+        names=bought,
+        maybe_count=len(maybe),
+        maybe_names=maybe,
+        text=SENTENCE_SEPARATOR.join(row.reason for row in rows.values()),
     )
 
 
