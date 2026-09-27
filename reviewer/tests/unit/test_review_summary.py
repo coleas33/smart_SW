@@ -49,6 +49,7 @@ from swreview.report.session import (
     load_session,
 )
 from swreview.report.summary import (
+    BOUGHT_PARTS_CHECK,
     COVERAGE_BUCKETS,
     DRAWINGS_NAMED,
     DrawingsLine,
@@ -1203,6 +1204,126 @@ def test_a_read_drawing_whose_row_mixes_separators_still_hides_its_candidate_row
 
     assert line is not None
     assert line.candidates == []
+
+
+# --- 9c. the offer follows the seat (feature 013 T092, its drawing-capability.md section 4) --
+
+
+def with_mode(session: ReviewSession, mode: str | None) -> ReviewSession:
+    """`session` as recorded with the seat's drawing-read mode (lane S's 013 T077 records it as
+    the optional `ReviewSession.drawing_read`, which T007 adds; set here on a copy)."""
+    return session.model_copy(update={"drawing_read": mode})
+
+
+def root_name(package: EvidencePackage) -> str:
+    root = package.design.root_assembly_document_id
+    return next(row.file_name for row in package.documents if row.document_id == root)
+
+
+@pytest.mark.parametrize("mode", ["none", "open_only"])
+def test_while_the_seat_cannot_open_a_drawing_the_line_says_how_to_include_one(mode: str) -> None:
+    package = candidates_package(1)
+    session = with_mode(session_of(f"instruct-{mode}", []), mode)
+
+    drawings = summary_of(session, package).drawings
+
+    assert drawings is not None
+    assert drawings.candidates == kalo(1)
+    assert drawings.text == (
+        f"Open FICT-KALO-8001.SLDDRW in SOLIDWORKS, then press Review again with "
+        f"{root_name(package)} active"
+    )
+
+
+def test_several_candidate_files_are_named_as_a_sentence_names_them() -> None:
+    package = candidates_package(3)
+    session = with_mode(session_of("instruct-many", []), "open_only")
+
+    drawings = summary_of(session, package).drawings
+
+    assert drawings is not None
+    assert drawings.text == (
+        "Open FICT-KALO-8001.SLDDRW, FICT-KALO-8002.SLDDRW and FICT-KALO-8003.SLDDRW in "
+        f"SOLIDWORKS, then press Review again with {root_name(package)} active"
+    )
+
+
+def test_past_ten_candidate_files_the_instruction_counts_the_rest() -> None:
+    package = candidates_package(DRAWINGS_NAMED + 2)
+    session = with_mode(session_of("instruct-past-ten", []), "none")
+
+    drawings = summary_of(session, package).drawings
+
+    assert drawings is not None
+    names = kalo(DRAWINGS_NAMED + 2)
+    assert drawings.text.startswith(f"Open {', '.join(names[:DRAWINGS_NAMED])} and 2 more in ")
+
+
+def test_when_the_seat_opens_closed_drawings_the_line_says_not_open_as_before() -> None:
+    package = candidates_package(1)
+    session = with_mode(session_of("opens-closed", []), "opens_closed")
+
+    drawings = summary_of(session, package).drawings
+
+    assert drawings is not None
+    assert drawings.text == "Same-name drawing found but not open: FICT-KALO-8001.SLDDRW"
+
+
+def test_a_session_that_never_asked_the_seat_says_not_open_as_before() -> None:
+    """No `drawing_read` - a review before feature 013, or one with no candidate to ask about -
+    keeps today's words, so a re-rendered run folder says what it said."""
+    package = candidates_package(1)
+
+    drawings = summary_of(session_of("no-mode", []), package).drawings
+
+    assert drawings is not None
+    assert drawings.text == "Same-name drawing found but not open: FICT-KALO-8001.SLDDRW"
+
+
+def test_the_read_part_is_kept_before_the_instruction() -> None:
+    plate = drawing_fixture("plate-drawing")
+    session = with_mode(session_of("read-and-instruct", []), "open_only")
+
+    drawings = summary_of(session, plate).drawings
+
+    assert drawings is not None
+    assert drawings.text == (
+        "Drawings read: FICT-TULMKALO-3001.SLDDRW and FICT-TULMKALO-3001-B.SLDDRW. "
+        f"Open {PLATE_CANDIDATE} in SOLIDWORKS, then press Review again with "
+        f"{root_name(plate)} active"
+    )
+
+
+def test_a_bought_documents_candidate_is_not_named() -> None:
+    """013 drawing-capability.md section 3: candidate rows of bought documents are ignored; the
+    summary knows the bought documents from the persisted bought-parts row, as its line does."""
+    package = candidates_package(2)
+    [first, second] = package.drawing_candidates
+    bought = CoverageRow(
+        check=BOUGHT_PARTS_CHECK,
+        reason="1 parts not graded for modelling practice or hygiene (bought): FICT",
+        document_ids=(first.document_id,),
+    )
+    session = with_mode(
+        session_of("bought-candidate", [], CoverageSpec(skipped=[bought])), "open_only"
+    )
+
+    drawings = summary_of(session, package).drawings
+
+    assert drawings is not None
+    assert drawings.candidates == ["FICT-KALO-8002.SLDDRW"]
+    assert second.document_id != first.document_id
+
+
+def test_every_candidate_bought_leaves_no_candidate_part() -> None:
+    package = candidates_package(1)
+    [only] = package.drawing_candidates
+    bought = CoverageRow(
+        check=BOUGHT_PARTS_CHECK, reason="bought", document_ids=(only.document_id,)
+    )
+    session = with_mode(session_of("all-bought", [], CoverageSpec(skipped=[bought])), "none")
+
+    assert summary_of(session, package).drawings is None
 
 
 def test_the_drawings_line_moves_nothing_else_in_the_summary() -> None:
