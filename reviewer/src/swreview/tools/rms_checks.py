@@ -38,6 +38,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import replace
 
+from swreview.checks.feature_nodes import tree_nodes
 from swreview.checks.part_roles import BOUGHT_REFUSAL, note_unclear
 from swreview.checks.rms.assembly import assembly_rules_unresolved, evaluate_assembly
 from swreview.checks.rms.equations import evaluate_equations
@@ -45,7 +46,10 @@ from swreview.checks.rms.groups import assign_groups
 from swreview.checks.rms.part import evaluate_part
 from swreview.checks.rms.report import report_results
 from swreview.checks.rms.results import RuleResult
-from swreview.checks.rms_types import load_table
+from swreview.checks.rms_types import RmsTypeTable, load_table
+from swreview.checks.rules.report import scope_over
+from swreview.report.names import plural
+from swreview.report.session import CoverageItem
 from swreview.tools.checks_mechanical import review_roles
 from swreview.tools.context import ToolContext, current_context, error_result, unknown_id
 from swreview.tools.query import ToolResult
@@ -127,7 +131,54 @@ def run_part_checks(
         rows = [row for row in context.ir.features if row.document_id == part]
         results.extend(evaluate_part(part, rows, table, assign_groups(rows, table), context.ir))
 
-    return _reported(context, _noted(context, results), documents)
+    reported = _reported(context, _noted(context, results), documents)
+    if "error" not in reported:
+        _record_tree_reading(context, documents, table)
+    return reported
+
+
+TREE_READING_CHECK = "rms.tree.folded_rows"
+"""Not a rule: what the one tree reading folded, said so counts never drop without a word
+(feature 013 `contracts/readings.md` section 3), beside `rms.types.unknown`."""
+
+
+def _record_tree_reading(
+    context: ToolContext, documents: Sequence[str], table: RmsTypeTable
+) -> None:
+    """One `checked` item over the documents this call graded whose tree the reading folded:
+    per part, the second listings merged and the carried sub-features read with their feature.
+
+    Written the way `rms.types.unknown` is - the item over this call's documents, replaced on
+    each call - and not at all when nothing was folded, so a tree with neither shape reads as
+    it did before.
+    """
+    clauses: list[str] = []
+    folded: list[str] = []
+    names = {document.document_id: document.file_name for document in context.ir.documents}
+    for part in documents:
+        rows = [row for row in context.ir.features if row.document_id == part]
+        nodes = tree_nodes(rows, table)
+        if not nodes.merged and not nodes.carried:
+            continue
+        carried = len(nodes.carried)
+        clauses.append(
+            f"{names.get(part, part)}: {plural(len(nodes.merged), 'second listing')} merged, "
+            f"{plural(carried, 'carried sub-feature')} read with "
+            f"{'its' if carried == 1 else 'their'} feature"
+        )
+        folded.append(part)
+    if not clauses:
+        return
+    context.replace_coverage(
+        TREE_READING_CHECK,
+        "checked",
+        CoverageItem(
+            check=TREE_READING_CHECK,
+            scope=scope_over(context, folded),
+            reason="; ".join(clauses),
+            error=None,
+        ),
+    )
 
 
 def check_rms_assembly() -> ToolResult:

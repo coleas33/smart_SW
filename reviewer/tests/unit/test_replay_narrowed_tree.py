@@ -26,14 +26,18 @@ every check that reads the shared tree reading: the `rms.*` rules and, named by 
 clause is the tree reading's alone - decision 23A's type-table clause never removes one of its
 locations - and every other Standards check is never narrowed.
 
-The recordings here are made by today's code, whose reading still names every row, on the
-planner's fictional real-shape package (`tests/support/remodel.py`); the current side is the keys
-one node per feature position gives, written out by name.
+The recordings here are made on the planner's fictional real-shape package
+(`tests/support/remodel.py`). Since T133 lands (T134) today's code reads one node per position, so
+a recording made before it is today's finding with each second listing's occurrence and the
+carried row put back, as the part check named every row the dump lists (`before_the_reading`);
+the current side is today's own finding, or the keys one node per feature position gives, written
+out by name.
 """
 
 from __future__ import annotations
 
 import json
+import shutil
 from collections import Counter
 from collections.abc import Sequence
 from pathlib import Path
@@ -53,7 +57,7 @@ from swreview.benchmark.replay import (
 from swreview.checks.rms_types import load_table
 from swreview.checks.standards.registry import RULES as STANDARDS_RULES
 from swreview.findings import Finding, finding_subject_key
-from swreview.ir.loader import PACKAGE_FILE_NAME, load_package
+from swreview.ir.loader import PACKAGE_FILE_NAME
 from swreview.ir.models import EvidencePackage, Feature, SourceRef
 from tests.support import mechanical
 from tests.support.narrowed import LOOSE, loose_findings, part_package, record
@@ -126,14 +130,49 @@ def saved(tmp_path: Path, package: EvidencePackage) -> Path:
 
 
 @pytest.fixture(scope="module")
-def recorded(tmp_path_factory: pytest.TempPathFactory) -> Finding:
-    """Today's loose-feature finding on the real shape: it names every second listing and the
-    carried row, each with its own location."""
-    run = record(tmp_path_factory.mktemp("tree") / "run", real_shape())
+def today(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """A recording of today's loose-feature finding on the real shape: since T133 it names each
+    absorbed sketch once, at its depth-0 row, and never the carried row."""
+    run = record(tmp_path_factory.mktemp("tree") / "today", real_shape())
+    [finding] = loose_findings(run)
+    names = located_names(real_shape(), finding)
+    assert names[ABSORBED[0]] == 1 and CARRIED not in names
+    return run
+
+
+@pytest.fixture(scope="module")
+def recorded(today: Path, tmp_path_factory: pytest.TempPathFactory) -> Finding:
+    """The loose-feature finding a recording made before T133 holds on the real shape: it names
+    every second listing and the carried row, each with its own location."""
+    run = tmp_path_factory.mktemp("tree") / "before"
+    shutil.copytree(today, run)
+    before_the_reading(run)
     [finding] = loose_findings(run)
     names = located_names(real_shape(), finding)
     assert names[ABSORBED[0]] == 2 and names[CARRIED] == 1
     return finding
+
+
+def before_the_reading(run: Path, check: str = LOOSE) -> None:
+    """Each `check` finding of `run` (the loose one by default) as a recording made before T133
+    names it: each absorbed sketch's location once more, for its second listing, and the carried
+    row's location - what the part check named when it read every row the dump lists."""
+    package = real_shape()
+    absorbed = {(at(package, name).document_id, at(package, name).persist_ref) for name in ABSORBED}
+    carried = at(package, CARRIED).model_dump(mode="json")
+
+    def unfolded(session: dict[str, Any]) -> None:
+        for finding in session["findings"]:
+            if finding["check"] != check:
+                continue
+            locations = []
+            for location in finding["drawing_locations"]:
+                locations.append(location)
+                if (location["document_id"], location.get("persist_ref")) in absorbed:
+                    locations.append(dict(location))
+            finding["drawing_locations"] = [*locations, carried]
+
+    rewrite_session(run, unfolded)
 
 
 def located_names(package: EvidencePackage, finding: Finding) -> Counter[str]:
@@ -227,17 +266,19 @@ def test_the_locations_in_another_order_narrow_the_same(recorded: Finding, tmp_p
 
 
 def test_the_real_recording_shape_narrows_onto_the_readings_finding(
-    recorded: Finding, tmp_path: Path
+    recorded: Finding, today: Path, tmp_path: Path
 ) -> None:
-    """Today's whole loose finding against the same finding with every second listing and the
-    carried row taken out - what one node per position gives."""
+    """The whole loose finding recorded before T133 against the one today's code records, one
+    node per position: every second listing's occurrence and the carried row removed."""
     package = real_shape()
+    [current] = loose_findings(today)
     names = located_names(package, recorded)
     one_node = [name for name in names if name != CARRIED]
     comparison = compare_finding_keys(
-        [recorded], [key_of(recorded, package, one_node)], saved(tmp_path, package)
+        [recorded], [finding_subject_key(current)], saved(tmp_path, package)
     )
 
+    assert finding_subject_key(current) == key_of(recorded, package, one_node)
     assert outcome(comparison) == ((), ((0, len(ABSORBED) + 1),), 0)
 
 
@@ -706,33 +747,11 @@ def relabelled(run: Path, check: str) -> None:
     rewrite_session(run, relabel)
 
 
-def one_node_per_position(run: Path, check: str = LOOSE) -> None:
-    """Each `check` finding of `run` (the loose one by default) as the reading gives it: every
-    location repeated for a second listing named once, and the carried row's location gone."""
-    package = load_package(run).package
-    carried = only(package, CARRIED)
-    carried_at = (carried.persist_ref_scope, carried.persist_ref)
-
-    def folded(session: dict[str, Any]) -> None:
-        for finding in session["findings"]:
-            if finding["check"] != check:
-                continue
-            seen: set[tuple[str, str]] = set()
-            kept = []
-            for location in finding["drawing_locations"]:
-                where = (location["document_id"], location.get("persist_ref"))
-                if where == carried_at or where in seen:
-                    continue
-                seen.add(where)
-                kept.append(location)
-            finding["drawing_locations"] = kept
-
-    rewrite_session(run, folded)
-
-
 def test_the_generators_finding_check_narrows_through_the_same_function(
     tmp_path: Path,
 ) -> None:
+    """The fixture is today's code on the scrambled package, one node per position; the recording
+    was made before T133, naming every second listing and the carried row."""
     generator = mechanical.load_generator(GENERATOR)
     recording = record(tmp_path / "recording", real_shape())
     raw = json.loads((recording / PACKAGE_FILE_NAME).read_text(encoding="utf-8"))
@@ -741,7 +760,7 @@ def test_the_generators_finding_check_narrows_through_the_same_function(
     unchanged = generator.finding_problems(
         read_recording(recording), read_recording(fixture), fmap
     )
-    one_node_per_position(fixture)
+    before_the_reading(recording)
 
     checked = generator.finding_problems(read_recording(recording), read_recording(fixture), fmap)
 
@@ -764,8 +783,9 @@ def test_the_generator_reads_the_standards_sketch_check_through_the_same_functio
     tmp_path: Path, check: str, expected: tuple[list[str], int, int]
 ) -> None:
     """T134-Q2's default in the generator's finding check, which compares every recorded finding,
-    standards included: the same subjects folded one node per position narrow under the sketch
-    check and refuse the fixture under any other Standards check."""
+    standards included: a recording made before T133, against today's fixture one node per
+    position, narrows under the sketch check and refuses the fixture under any other Standards
+    check."""
     generator = mechanical.load_generator(GENERATOR)
     recording = record(tmp_path / "recording", real_shape())
     raw = json.loads((recording / PACKAGE_FILE_NAME).read_text(encoding="utf-8"))
@@ -776,7 +796,7 @@ def test_the_generator_reads_the_standards_sketch_check_through_the_same_functio
     unchanged = generator.finding_problems(
         read_recording(recording), read_recording(fixture), fmap
     )
-    one_node_per_position(fixture, check)
+    before_the_reading(recording, check)
 
     checked = generator.finding_problems(read_recording(recording), read_recording(fixture), fmap)
 

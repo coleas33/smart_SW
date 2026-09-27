@@ -52,7 +52,6 @@ SC-006 is about."""
 CHECKS_FIRST = EfficiencySettings(prerun_checks=True)
 """Checks first alone, model view off: the arm that isolates what the pre-run adds."""
 
-
 @pytest.fixture(scope="module", params=NAMES)
 def passes(
     request: pytest.FixtureRequest, tmp_path_factory: pytest.TempPathFactory

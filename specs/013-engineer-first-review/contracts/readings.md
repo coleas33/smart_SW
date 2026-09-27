@@ -61,6 +61,8 @@ without a word. Finding counts and observed text change (the custom plate's loos
 the 22 an engineer moves); feature 008's carried-finding comparisons (T128, T129) are re-read against
 the regenerated fixtures.
 
+*Landed as (T130 to T133):* `checks/feature_nodes.py` also exports `carried_rows(rows, nodes)`, the carried rows read under the row they fold into, because a carried sketch is still a sketch with a status: the RMS sketch rules and `standards.part.sketches_fully_defined` grade it once, as its owner's, and only the grouping and content rules leave it out. The note is one `checked` item, `rms.tree.folded_rows`, written by `check_rms_part` (`tools/rms_checks.py`) over the documents a call graded, replaced on each call like `rms.types.unknown`, and absent when nothing was folded. No golden moved: only the planner's fixtures carry the two shapes, and the planner is unchanged. The recorded replay fixtures do move; the replay tests that compare them are marked strict xfail naming T134 until lane G regenerates them.
+
 ## 4. The probe 1 watchdog
 
 ```csharp

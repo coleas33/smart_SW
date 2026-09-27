@@ -24,8 +24,10 @@ GOLDEN = Path(__file__).resolve().parents[1] / "golden" / "fixtures" / "remodel-
 
 
 def test_the_reading_lives_in_checks() -> None:
-    assert tuple(sorted(feature_nodes.__all__)) == NAMES
-    for name in NAMES:
+    # Edited deliberately by T133: the checks read the carried rows too (`carried_rows`),
+    # which the planner does not, so only the planner's four names are re-exported.
+    assert tuple(sorted(feature_nodes.__all__)) == (*NAMES[:3], "carried_rows", NAMES[3])
+    for name in (*NAMES, "carried_rows"):
         assert getattr(feature_nodes, name).__module__ == "swreview.checks.feature_nodes"
 
 
@@ -63,3 +65,24 @@ def test_every_remodel_fixture_reads_the_same_through_either_name() -> None:
         for document in {row.document_id for row in package.features}:
             rows = [row for row in package.features if row.document_id == document]
             assert feature_nodes.tree_nodes(rows, table) == remodel_nodes.tree_nodes(rows, table)
+
+
+def test_the_carried_rows_are_read_once_under_the_row_they_fold_into() -> None:
+    """Feature 013 T133: a check grades the Hole Wizard's profile sketch as its hole's."""
+    table = load_table()
+    package = load_package(GOLDEN / "remodel-absorbed-sketches").package
+    rows = list(package.features)
+
+    carried = feature_nodes.carried_rows(rows, feature_nodes.tree_nodes(rows, table))
+
+    assert [(row.id, row.name, row.folder_id) for row in carried] == [
+        ("feat:0012", "Sketch9", "feat:0010")
+    ]
+
+
+def test_a_tree_with_nothing_carried_has_no_carried_rows() -> None:
+    table = load_table()
+    package = load_package(GOLDEN / "remodel-ordered").package
+    rows = list(package.features)
+
+    assert feature_nodes.carried_rows(rows, feature_nodes.tree_nodes(rows, table)) == ()

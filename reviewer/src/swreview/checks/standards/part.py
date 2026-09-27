@@ -31,6 +31,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from swreview.checks.feature_nodes import carried_rows, tree_nodes
 from swreview.checks.rms_types import load_table
 from swreview.checks.standards.library import PrefixMatch, PrefixMatcher
 from swreview.checks.standards.profile import StandardsProfile
@@ -124,6 +125,11 @@ class Part:
     row: Document
     package: EvidencePackage
     features: tuple[Feature, ...]
+    """The document's features, each once, in `index` order: an absorbed sketch the dump listed
+    a second time under its feature is its depth-0 row alone, and a carried sub-feature (the
+    Hole Wizard's profile sketch) is read under its owner (`checks/feature_nodes.py`, feature 013
+    `contracts/readings.md` section 3), so a sketch finding names one location."""
+
     cut_list: tuple[CutListItem, ...]
     profile: StandardsProfile
     match: PrefixMatch
@@ -218,8 +224,10 @@ def part_scope(
             f"{SCOPE} document"
         )
     row = next(item for item in package.documents if item.document_id == document.document_id)
+    rows = [item for item in package.features if item.document_id == document.document_id]
+    nodes = tree_nodes(rows, load_table())
     features = tuple(
-        item for item in package.features if item.document_id == document.document_id
+        sorted((*nodes.rows, *carried_rows(rows, nodes)), key=lambda item: item.index)
     )
     return Part(
         document=document,
