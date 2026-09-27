@@ -29,7 +29,7 @@ from pydantic import (
 
 from swreview.agent.providers import EffortMapping, TokenUsage, TurnEndReason
 from swreview.agent.settings import EfficiencySettings, ModelViewSettings
-from swreview.findings import Finding, ReviewModel
+from swreview.findings import Finding, ReviewModel, Source, omit_at_default
 from swreview.ids import SequentialIdAllocator
 from swreview.ir.models import omit_when_null
 
@@ -111,6 +111,14 @@ class EvidenceRequest(ReviewModel):
         Len(max_length=MAX_OPTIONS),
     ] = Field(default_factory=list)
     blocks: str | None = None
+    allow_text: bool = False
+    """Whether the pane offers a text box beside the options (feature 013,
+    `contracts/part-roles.md` section 8): the part-roles question's answer may name the bought
+    parts. Omitted when false."""
+    source: Source = "model"
+    """Who asked (feature 013, `contracts/sources.md` section 1): `model` through
+    `request_evidence`, `code` for the drawing check's and the part-roles questions. Omitted
+    when `model`, so `request_evidence`'s result keeps its bytes."""
 
     @field_validator("options")
     @classmethod
@@ -129,7 +137,7 @@ class EvidenceRequest(ReviewModel):
             data.pop("options", None)
         if self.blocks is None:
             data.pop("blocks", None)
-        return data
+        return omit_at_default(data, self, "allow_text", "source")
 
 
 class EvidenceRequestIdAllocator(SequentialIdAllocator):
@@ -186,6 +194,14 @@ class CoverageItem(ReviewModel):
     scope: CoverageScope
     reason: str
     error: str | None
+    source: Source = "code"
+    """Who wrote the item (feature 013): `code` for every check and the runner, `model` for
+    `mark_coverage`. Omitted when `code`, so every item written before the field keeps its
+    bytes."""
+
+    @model_serializer(mode="wrap")
+    def _omit_the_default_source(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        return omit_at_default(handler(self), self, "source")
 
 
 class Coverage(ReviewModel):
@@ -482,6 +498,11 @@ class ReviewSession(ReviewModel):
     not silently re-fold (research R2.21). Omitted when empty, so every older session keeps
     its bytes; check folders never fold.
     """
+    drawing_read: Literal["none", "open_only", "opens_closed"] | None = None
+    """What the SOLIDWORKS host said it can do with a closed drawing (feature 013,
+    `contracts/drawing-capability.md` section 2), read once, lazily, when a custom document
+    has a drawing candidate; recorded so a summary re-rendered later says the same. `None`
+    when it was never asked, and omitted then, so older sessions keep their bytes."""
     coverage: Coverage = Field(default_factory=Coverage)
     timing: Timing
 
@@ -502,6 +523,8 @@ class ReviewSession(ReviewModel):
             data.pop("folded_families", None)
         if self.model_view is None:
             data.pop("model_view", None)
+        if self.drawing_read is None:
+            data.pop("drawing_read", None)
         efficiency = data.get("efficiency")
         if isinstance(efficiency, dict) and not efficiency.get("withhold_prerun_tools"):
             # Lever 13 (feature 008 amendment, 2026-09-23) is written only when on, so a

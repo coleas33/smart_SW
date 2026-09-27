@@ -11,12 +11,27 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal, get_args
 
 import yaml
 
 from swreview.report.session import ReviewSession
 
 CHECKLIST_FILE = Path(__file__).parent / "checklist_v1.yaml"
+
+Owner = Literal["model", "code"]
+"""Who closes an item (feature 013, `contracts/re-ask-guard.md` section 1).
+
+A `model` item is the model's to close with a finding or `mark_coverage`. A `code` item is
+closed by the review itself - `provenance` at setup, `coverage.closeout` at finalization - and
+the model is told never to ask about it or mark it; `mark_coverage` and `request_evidence`
+answer it `closed_by_code`. Items default to `model`, so a checklist file without the key reads
+as it always did, and the version stays 1: it is in the carry-over key.
+"""
+OWNERS: tuple[str, ...] = get_args(Owner)
+
+CODE_OWNED_LINE = "Closed by code before your first turn; never ask about it or mark it."
+"""What a code-owned item renders in place of the two lines that name its closures."""
 
 COVERAGE_BUCKETS: tuple[str, ...] = ("checked", "skipped", "unresolved", "out_of_scope")
 """Coverage buckets an item may be closed out in, in the order they are searched.
@@ -38,6 +53,7 @@ class ChecklistItem:
     title: str
     check_prefix: str
     description: str
+    owner: Owner = "model"
 
 
 @dataclass(frozen=True)
@@ -68,9 +84,21 @@ class Checklist:
             for item in self.items
         ]
 
-    def open_items(self, session: ReviewSession) -> list[ChecklistItem]:
-        """The items neither a finding nor a coverage entry has closed out."""
-        return [item for item in self.items if self.bucket_of(item, session) == OPEN_BUCKET]
+    def open_items(
+        self, session: ReviewSession, *, owner: Owner | None = None
+    ) -> list[ChecklistItem]:
+        """The items neither a finding nor a coverage entry has closed out.
+
+        Every item, whoever owns it, unless `owner` asks for one owner's: finalization closes
+        out whatever is open, and the model is told only of the items it owns (`open_items` on
+        a coverage result, `contracts/tokens.md` section 2).
+        """
+        return [
+            item
+            for item in self.items
+            if (owner is None or item.owner == owner)
+            and self.bucket_of(item, session) == OPEN_BUCKET
+        ]
 
     def render(self) -> str:
         """The checklist as prompt text, one block per item."""
@@ -78,8 +106,11 @@ class Checklist:
         for item in self.items:
             lines.append("")
             lines.append(f"- `{item.id}` - {item.title}")
-            lines.append(f"  Closed by a finding whose check starts with `{item.check_prefix}`")
-            lines.append(f"  or by `mark_coverage(check=\"{item.id}\", ...)`.")
+            if item.owner == "code":
+                lines.append(f"  {CODE_OWNED_LINE}")
+            else:
+                lines.append(f"  Closed by a finding whose check starts with `{item.check_prefix}`")
+                lines.append(f"  or by `mark_coverage(check=\"{item.id}\", ...)`.")
             lines.append(f"  {item.description}")
         return "\n".join(lines)
 
@@ -92,12 +123,18 @@ def load_checklist(path: Path | str = CHECKLIST_FILE) -> Checklist:
         missing = [key for key in ("id", "title", "check_prefix", "description") if key not in raw]
         if missing:
             raise ValueError(f"checklist item {raw.get('id', raw)!r} is missing {missing}")
+        owner = raw.get("owner", "model")
+        if owner not in OWNERS:
+            raise ValueError(
+                f"checklist item {raw['id']!r} has owner {owner!r}; use one of {list(OWNERS)}"
+            )
         items.append(
             ChecklistItem(
                 id=raw["id"],
                 title=raw["title"],
                 check_prefix=raw["check_prefix"],
                 description=" ".join(raw["description"].split()),
+                owner=owner,
             )
         )
     return Checklist(version=int(document["version"]), items=tuple(items))
