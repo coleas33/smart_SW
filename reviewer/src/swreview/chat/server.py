@@ -792,7 +792,7 @@ def check_result(check_dir: Path, run: RmsCheckRun) -> dict[str, Any]:
     package = load_package(check_dir).package
     exceptions = _exceptions_by_id(check_dir, run.findings)
     carried = run.exceptions_carried_forward
-    return {
+    result = {
         "check_id": check_dir.name,
         "run_dir": str(check_dir),
         "document": _checked_document(package, run.documents),
@@ -811,6 +811,11 @@ def check_result(check_dir: Path, run: RmsCheckRun) -> dict[str, Any]:
         "not_examined": to_jsonable_python(not_examined(package)),
         "rule_statements": rule_statements(run.findings, run.coverage),
     }
+    if run.standards_profile is not None:
+        # Only when the page relayed a profile (feature 013 T148): a body without it is the one
+        # every page before it read.
+        result["bought_parts"] = run.bought_parts
+    return result
 
 
 def check_attention(session: ReviewSession, package: EvidencePackage) -> dict[str, Any]:
@@ -1520,8 +1525,15 @@ class ChatServer:
         document_id = body.get("document_id")
         if document_id is not None and not isinstance(document_id, str):
             raise ChatError("document_id is one part document id, or null for every part document")
+        standards_profile = self._optional_path(body, "standards_profile")
         result = await run_in_threadpool(
-            partial(self._check, run_dir, scope=scope, document_id=document_id or None)
+            partial(
+                self._check,
+                run_dir,
+                scope=scope,
+                document_id=document_id or None,
+                standards_profile=standards_profile,
+            )
         )
         return JSONResponse(result, status_code=201)
 
@@ -1683,7 +1695,12 @@ class ChatServer:
         return str(record.get("family", RMS_FAMILY.check_file_family))
 
     def _check(
-        self, package_dir: Path, *, scope: RmsScope, document_id: list[str] | str | None
+        self,
+        package_dir: Path,
+        *,
+        scope: RmsScope,
+        document_id: list[str] | str | None,
+        standards_profile: str | None = None,
     ) -> dict[str, Any]:
         """One evaluation of the package in `package_dir`, as the contract's `CheckResult`.
 
@@ -1696,6 +1713,10 @@ class ChatServer:
         uncalibrated assembly rules are refused by name, so they are not run under the
         `all` alias either), and the run root the carry-forward may copy an earlier
         `exceptions.json` from, which is this server's own `--run-root`.
+
+        `standards_profile` is the path the page relays from `init` - the Review tab's own
+        setting - so the body can say its part looks bought and why it is graded anyway
+        (feature 013 T148); with none the body is the one it always was.
         """
         offered = _offered_scopes(scope)
         try:
@@ -1705,6 +1726,7 @@ class ChatServer:
                 document_id=document_id,
                 scopes=offered,
                 run_root=self.run_root,
+                standards_profile=standards_profile,
             )
         except RmsRunError as exc:
             raise CheckRefused(exc) from exc
@@ -1851,7 +1873,12 @@ class ChatServer:
                 check_dir, self._recorded_standards_check(check_dir).profile.path
             )
         record = self._recorded_check(check_dir)
-        return self._check(check_dir, scope=record.scope, document_id=record.documents or None)
+        return self._check(
+            check_dir,
+            scope=record.scope,
+            document_id=record.documents or None,
+            standards_profile=record.standards_profile,
+        )
 
     def _accept_exception(
         self, check_dir: Path, finding_id: str, *, note: str, by: str, family: str

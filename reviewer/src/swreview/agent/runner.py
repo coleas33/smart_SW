@@ -443,7 +443,7 @@ def profile_refusal_of(loaded: Any) -> str | None:
     classifier's `absent` state says (`contracts/part-roles.md` section 1). Its `reason`, never
     `str()`: the message names the profile's path, a local user folder, and this sentence rides
     the bought-parts line into the digest, the row, the summary and the report (013 T155)."""
-    return None if loaded.refusal is None else loaded.refusal.reason
+    return loaded.refusal_reason
 
 
 def classify_part_roles(

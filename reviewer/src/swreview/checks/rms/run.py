@@ -215,6 +215,17 @@ class RmsCheckRun:
     check_file: Path
     """`check.json`: what a reader of the folder needs and the session does not hold."""
 
+    standards_profile: str | None = None
+    """The standards profile the part roles were classified with, as a path, or `None` when the
+    caller gave none (feature 013 T148). Recorded, as a standards check records its profile, so
+    an Accept re-grades against the profile this check was graded with."""
+
+    bought_parts: str | None = None
+    """The part-roles sentence (`checks/part_roles.bought_parts_sentence`) when
+    `standards_profile` is set - the root rule's clause, "{file} looks bought ({reason}); graded
+    because it is the document under review", when the rules call the open part bought - or
+    `None` when there is nothing to say (FR-008, US1 scenario 6)."""
+
 
 def run_rms_check(
     package_dir: Path | str,
@@ -225,6 +236,7 @@ def run_rms_check(
     scopes: Sequence[RmsScope] | None = None,
     run_root: Path | str | None = None,
     exceptions: ExceptionStore | None = None,
+    standards_profile: Path | str | None = None,
 ) -> RmsCheckRun:
     """Grade the package in `package_dir` against the Resilient Modeling rules.
 
@@ -265,6 +277,11 @@ def run_rms_check(
             is **not** refreshed, because the caller has already refreshed it against the
             dump it chose. `None`, the default, is every other caller - carry forward
             under `run_root`, load what is beside the package, refresh it here.
+        standards_profile: A standards profile to classify the package's documents with, as
+            the Review tab does (feature 013 T148): the run then records the path and the
+            part-roles sentence (`RmsCheckRun.bought_parts`). The rules and the grade do not
+            move - the check's part is its document under review, always graded - so `None`,
+            the default, writes the record it always wrote.
 
     Returns:
         Everything the run produced, with `session.json`, `report.md` and `check.json`
@@ -352,9 +369,32 @@ def run_rms_check(
         session_file=save_session(session, out / SESSION_FILE_NAME),
         report_file=write_report(out, session, package),
         check_file=out / CHECK_FILE_NAME,
+        standards_profile=None if standards_profile is None else str(standards_profile),
+        bought_parts=(
+            None if standards_profile is None else _bought_parts(package, standards_profile)
+        ),
     )
     _write_check_record(run)
     return run
+
+
+def _bought_parts(package: EvidencePackage, standards_profile: Path | str) -> str | None:
+    """The part-roles sentence for `package` under the profile at `standards_profile`, or `None`
+    with nothing to say (feature 013 T148; FR-008, US1 scenario 6).
+
+    Through the review's own loader and classifier, so the Model check and the Review tab cannot
+    say two different things about one part: `load_review_profile` never raises, and a refused
+    profile's reason names no path (T155). For a check's one part - the package's root, the
+    document under review - the sentence is the root rule's clause when the rules call it bought.
+    """
+    # Deferred: `checks/standards/profile.py` reaches the rules runners, as `agent/runner.py`
+    # says of the same import.
+    from swreview.checks.part_roles import bought_parts_sentence, classify_parts
+    from swreview.checks.standards.profile import load_review_profile
+
+    loaded = load_review_profile(standards_profile)
+    roles = classify_parts(package, loaded.profile, profile_refusal=loaded.refusal_reason)
+    return bought_parts_sentence(roles, package)
 
 
 # --- 1. what is graded ------------------------------------------------------------
@@ -467,23 +507,25 @@ def _write_check_record(run: RmsCheckRun) -> Path:
     answer a read of it.
     """
     carried = run.exceptions_carried_forward
-    return write_check_record(
-        run.check_file,
-        RMS_FAMILY,
-        {
-            "session_id": str(run.session.session_id),
-            "scope": run.scope.value,
-            "documents": run.documents,
-            "assembly_document": run.assembly_document,
-            "subjects": run.subjects,
-            "exceptions_carried_forward": {
-                "from_run": carried.from_run,
-                "count": carried.count,
-                "reason": carried.reason,
-            },
-            "unavailable_scopes": run.unavailable_scopes,
+    record: dict[str, Any] = {
+        "session_id": str(run.session.session_id),
+        "scope": run.scope.value,
+        "documents": run.documents,
+        "assembly_document": run.assembly_document,
+        "subjects": run.subjects,
+        "exceptions_carried_forward": {
+            "from_run": carried.from_run,
+            "count": carried.count,
+            "reason": carried.reason,
         },
-    )
+        "unavailable_scopes": run.unavailable_scopes,
+    }
+    if run.standards_profile is not None:
+        # Only when classified (feature 013 T148): a check run without a profile writes the
+        # record it always wrote.
+        record["standards_profile"] = run.standards_profile
+        record["bought_parts"] = run.bought_parts
+    return write_check_record(run.check_file, RMS_FAMILY, record)
 
 
 def read_rms_check(check_dir: Path | str) -> RmsCheckRun:
@@ -521,6 +563,8 @@ def read_rms_check(check_dir: Path | str) -> RmsCheckRun:
             session_file=directory / SESSION_FILE_NAME,
             report_file=directory / REPORT_FILE_NAME,
             check_file=directory / CHECK_FILE_NAME,
+            standards_profile=record.get("standards_profile"),
+            bought_parts=record.get("bought_parts"),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise NotACheckError(

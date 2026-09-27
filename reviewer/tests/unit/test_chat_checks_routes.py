@@ -1183,3 +1183,219 @@ def test_the_error_body_is_the_contract_s(client: TestClient, tmp_path: Path) ->
     body = json.loads(response.text)
     assert set(body) == {"error_class", "message", "retryable"}
     assert body["retryable"] is False
+
+
+# --- the open part looks bought: the root rule's label (feature 013 T147-T148, FR-008) --------
+
+PROFILE_A = Path(__file__).resolve().parents[1] / "fixtures" / "standards" / "profile-a.yaml"
+"""Fictional profile A, version 4, whose `part_roles` section decides by a vendor property."""
+
+OPEN_PART = "doc:1"
+"""The Model check's one part: the document under review, and so the package's root."""
+
+OPEN_PART_FILE = "bracket.SLDPRT"
+BOUGHT_CHECK_ID = "20260927-101532-bracket-check"
+ROOT_CLAUSE = (
+    f"{OPEN_PART_FILE} looks bought (a vendor property); graded because it is the document under "
+    "review"
+)
+"""`checks/part_roles.bought_parts_sentence`'s root-rule clause for the open part: the words the
+review's digest, row, summary and report already print (013 T030)."""
+
+
+def vendor_property() -> str:
+    """Profile A's first vendor property, read from the fictional file itself."""
+    import yaml
+
+    roles = yaml.safe_load(PROFILE_A.read_text(encoding="utf-8"))["part_roles"]
+    return str(roles["vendor_properties"][0])
+
+
+def open_part_package(*, looks_bought: bool) -> EvidencePackage:
+    """A Model check dump of one part: undescribed core features (a `fail` rule's finding), and,
+    when `looks_bought`, a vendor property profile A reads as bought."""
+    package = rms_package(
+        parts=[
+            PartSpec(
+                document_id=OPEN_PART,
+                name="bracket",
+                features=(folder("3-Core", feature("Boss-Extrude1", "Extrusion", description="")),),
+            )
+        ]
+    )
+    properties = {vendor_property(): "fict"} if looks_bought else {}
+    return package.model_copy(
+        update={
+            "extractor": package.extractor.model_copy(update={"profile": "model_check"}),
+            "documents": [
+                document.model_copy(update={"custom_properties": properties})
+                for document in package.documents
+            ],
+        }
+    )
+
+
+def open_part_dir(
+    run_root: Path, name: str = BOUGHT_CHECK_ID, *, looks_bought: bool = True
+) -> Path:
+    directory = run_root / name
+    save_package(open_part_package(looks_bought=looks_bought), directory)
+    return directory
+
+
+def check_open_part(client: TestClient, run_dir: Path, **overrides: Any) -> dict[str, Any]:
+    return start_check(client, run_dir, document_id=None, **overrides)
+
+
+def broken_profile(tmp_path: Path) -> Path:
+    folder_ = tmp_path / "private-owner-folder"
+    folder_.mkdir()
+    path = folder_ / "standards.yaml"
+    path.write_text("version: 99\n", encoding="utf-8")
+    return path
+
+
+class TestBoughtPartsLine:
+    def test_with_a_profile_the_body_says_the_open_part_looks_bought_and_why_it_is_graded(
+        self, client: TestClient, run_root: Path
+    ) -> None:
+        result = check_open_part(
+            client, open_part_dir(run_root), standards_profile=str(PROFILE_A)
+        )
+
+        assert result["bought_parts"] == ROOT_CLAUSE
+
+    def test_the_grade_and_the_findings_are_the_same_with_and_without_the_profile(
+        self, client: TestClient, run_root: Path
+    ) -> None:
+        """The open part is the document under review, so it is always graded (FR-008)."""
+        with_profile = check_open_part(
+            client, open_part_dir(run_root), standards_profile=str(PROFILE_A)
+        )
+        without = check_open_part(client, open_part_dir(run_root, "20260927-101533-bracket-check"))
+
+        assert with_profile["grade"] == without["grade"]
+        assert rows_by_rule(with_profile).keys() == rows_by_rule(without).keys() != set()
+        assert FAIL_RULE in rows_by_rule(with_profile)
+        assert with_profile["coverage"] == without["coverage"]
+
+    @pytest.mark.parametrize("given", ["absent", None, "", "   "])
+    def test_without_a_profile_the_body_is_todays(
+        self, client: TestClient, run_root: Path, given: Any
+    ) -> None:
+        """No `bought_parts` key at all: the strict key set of the first test holds."""
+        overrides = {} if given == "absent" else {"standards_profile": given}
+
+        result = check_open_part(client, open_part_dir(run_root), **overrides)
+
+        assert "bought_parts" not in result
+
+    def test_with_nothing_to_say_the_line_is_null(self, client: TestClient, run_root: Path) -> None:
+        result = check_open_part(
+            client,
+            open_part_dir(run_root, looks_bought=False),
+            standards_profile=str(PROFILE_A),
+        )
+
+        assert "bought_parts" in result
+        assert result["bought_parts"] is None
+
+    def test_a_refused_profile_says_why_and_names_no_path(
+        self, client: TestClient, run_root: Path, tmp_path: Path
+    ) -> None:
+        broken = broken_profile(tmp_path)
+
+        response = client.post(
+            "/checks/rms",
+            json=check_body(
+                open_part_dir(run_root), document_id=None, standards_profile=str(broken)
+            ),
+        )
+
+        assert response.status_code == 201, response.text
+        line = response.json()["bought_parts"]
+        assert line.startswith(
+            "Bought parts were not told apart: the standards profile was refused ("
+        )
+        assert "version 99" in line
+        for where in (str(broken), broken.name, "private-owner-folder"):
+            assert where not in response.text, where
+
+    def test_a_profile_that_is_not_there_is_refused_the_same_way(
+        self, client: TestClient, run_root: Path, tmp_path: Path
+    ) -> None:
+        missing = tmp_path / "private-owner-folder" / "standards.yaml"
+
+        result = check_open_part(client, open_part_dir(run_root), standards_profile=str(missing))
+
+        assert "no file at the configured path" in result["bought_parts"]
+        assert "private-owner-folder" not in result["bought_parts"]
+
+    def test_a_field_that_is_not_a_path_string_is_refused(
+        self, client: TestClient, run_root: Path
+    ) -> None:
+        response = client.post(
+            "/checks/rms",
+            json=check_body(open_part_dir(run_root), document_id=None, standards_profile=42),
+        )
+
+        assert response.status_code == 400
+        assert "standards_profile" in error_of(response)["message"]
+
+    def test_the_body_carries_the_line_and_no_profile_value_or_path(
+        self, client: TestClient, run_root: Path
+    ) -> None:
+        response = client.post(
+            "/checks/rms",
+            json=check_body(
+                open_part_dir(run_root), document_id=None, standards_profile=str(PROFILE_A)
+            ),
+        )
+
+        assert response.status_code == 201, response.text
+        assert str(PROFILE_A) not in response.text
+        assert vendor_property() not in response.text
+
+    def test_the_read_answers_what_the_post_answered(
+        self, client: TestClient, run_root: Path
+    ) -> None:
+        posted = check_open_part(client, open_part_dir(run_root), standards_profile=str(PROFILE_A))
+
+        got = client.get(f"/checks/{BOUGHT_CHECK_ID}").json()
+
+        assert got["bought_parts"] == posted["bought_parts"] == ROOT_CLAUSE
+
+    def test_the_read_of_a_check_run_without_a_profile_carries_no_line(
+        self, client: TestClient, run_root: Path
+    ) -> None:
+        check_open_part(client, open_part_dir(run_root))
+
+        got = client.get(f"/checks/{BOUGHT_CHECK_ID}").json()
+
+        assert "bought_parts" not in got
+
+    def test_the_record_names_the_profile_only_when_one_was_given(
+        self, client: TestClient, run_root: Path
+    ) -> None:
+        """`check.json` keeps the path - the folder's own record, as a standards check keeps
+        its profile's - so an Accept re-grades against the profile the check was graded with;
+        a check run without one writes the record it always wrote."""
+        with_profile = open_part_dir(run_root)
+        without = open_part_dir(run_root, "20260927-101533-bracket-check")
+        check_open_part(client, with_profile, standards_profile=str(PROFILE_A))
+        check_open_part(client, without)
+
+        recorded = json.loads((with_profile / CHECK_FILE).read_text(encoding="utf-8"))
+        plain = json.loads((without / CHECK_FILE).read_text(encoding="utf-8"))
+
+        assert recorded["standards_profile"] == str(PROFILE_A)
+        assert recorded["bought_parts"] == ROOT_CLAUSE
+        assert "standards_profile" not in plain and "bought_parts" not in plain
+
+    def test_accepting_a_finding_keeps_the_line(self, client: TestClient, run_root: Path) -> None:
+        posted = check_open_part(client, open_part_dir(run_root), standards_profile=str(PROFILE_A))
+
+        response = accept(client, BOUGHT_CHECK_ID, finding_id_of(posted, FAIL_RULE))
+
+        assert response.status_code == 200, response.text
+        assert client.get(f"/checks/{BOUGHT_CHECK_ID}").json()["bought_parts"] == ROOT_CLAUSE
