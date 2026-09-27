@@ -167,12 +167,14 @@ note in the quickstart saying which members moved. It is never a test that updat
 
 The production seat adapter (T153 to T155, the 004 build order's lane B) calls members the first
 generation did not record: the routes to members already recorded, the reads the bridge's seams
-leave to the adapter, and the copy's open request. Nineteen rows were added, none allowlisted,
+leave to the adapter, and the copy's open request. Twenty rows were added, none allowlisted,
 each read by the same metadata-only reflection over the installed `SolidWorks.Interop.sldworks`
 32.5.0.48 on the development machine (SOLIDWORKS not started) and checked there by test B. Nothing
 that was recorded moved, so `generated_at` stays the first generation's and `generated_by` names
 the additions. `RemodelInteropManifestTests.EveryMemberTheSeatAdapterAddsHasARowAndIsNotAllowlisted`
-pins the list by value.
+pins the list by value. Nineteen were derived ahead of lane B; the twentieth,
+`IFeatureFolder.GetFeatureCount`, was found by the cross-check of lane B's calls, interface by
+interface, when its files merged, and lane B calls all twenty.
 
 | Member | Why the adapter calls it | `used_by` |
 |---|---|---|
@@ -183,7 +185,7 @@ pins the list by value.
 | `IModelDocExtension.GetPersistReference3` | `IRemodelDocument.GetPersistReference` and a folder's member refs, encoded by `PersistRefCodec` | the tree walks |
 | `IFeatureManager.GetFeatures` | `GetFeatures(true)`: `IRemodelDocument.GetFeaturesInOrder` and the scope-signal reader's walk | the tree walks |
 | `IModelDoc2.get_ConfigurationManager`, `IConfigurationManager.get_ActiveConfiguration`, `IConfiguration.get_Name` | the active configuration `IGeometrySource.GetMaterialName` reads the material for, by the path `Dump/PropertyDumper.cs` reads it | `remodel.geometry` |
-| `IFeature.GetSpecificFeature2`, `IFeatureFolder.GetFeatures` | an `FtrFolder`'s members for the `rms_named_folders` signal (research R3.1) | `remodel.probe_scope`, `remodel.open` |
+| `IFeature.GetSpecificFeature2`, `IFeatureFolder.GetFeatures`, `IFeatureFolder.GetFeatureCount` | an `FtrFolder`'s members for the `rms_named_folders` signal (research R3.1), read only when their number equals the folder's count, else the whole listing is null | `remodel.probe_scope`, `remodel.open` |
 | `ISldWorks.GetOpenDocSpec`; `IDocumentSpecification.set_DocumentType`, `set_Silent`, `set_LoadModel`, `set_ReadOnly`, `set_ViewOnly`, `get_Error`, `get_Warning` | the copy's open request, built by the one open-options helper the add-in's `remodel.open_copy` shares: `OpenDoc7` takes the request, so `Silent \| LoadModel = 17` is written as its members, `ReadOnly` and `ViewOnly` always false; property sets on a throwaway request, never gated and not allowlisted (`guard-allowlist.md`, decision 17A's "Left open" row) | `remodel.open`, `remodel.open_copy` |
 
 "The tree walks" are `remodel.probe_scope`, `remodel.open`, `remodel.snapshot`, `remodel.reorder`,
@@ -191,17 +193,31 @@ pins the list by value.
 under bare keys with no row: `GetFeatures`, `GetPersistReference3` and `GetUnits`. Where T153 to
 T155 leave the path open (the active configuration, a folder's members, the open request's error
 bits), the rows follow the repository's existing reads (*default taken 2026-09-27, the owner may
-revise*); a row lane B does not call is removed when its files merge. `set_ReadOnly` and the
-parameter name `LoadModel` match feature 011's refused `IDimension`/`INote.set_ReadOnly` and
-`IView.LoadModel` by name only, so they are two of `DrawingFamilyReadAuditTests`' named literals.
+revise*); a row lane B does not call is removed when its files merge, and when they merged there
+was none. `set_ReadOnly` and the parameter name `LoadModel` match feature 011's refused
+`IDimension`/`INote.set_ReadOnly` and `IView.LoadModel` by name only, so they are two of
+`DrawingFamilyReadAuditTests`' named literals.
+
+The enums block gained the constants the adapter writes by their swconst names, each read by the
+same metadata-only reflection over the installed `SolidWorks.Interop.swconst` 32.5.0.48 (*default
+taken 2026-09-27, the owner may revise*): `swBodyType_e.swAllBodies = -1`, the body type the mesh
+and graphics rows ask `GetBodies2` for; the new `swPersistReferencedObjectStates_e` with
+`swPersistReferencedObject_Invalid = 1`, what a persist ref that does not decode answers without
+asking SOLIDWORKS; and the new `swLengthUnit_e` with all eleven members, `swMM = 0` to `swUIN = 10`,
+the keys of `RemodelLengthUnits`' table. A constant written by name is what the block pins as an
+integer; `EveryConstantTheSeatAdapterComposesHasAnEnumRow` pins the three by value and reads the
+length-unit table through the manifest's integers, and test B holds each to the installed swconst.
 
 ## The seat adapter audit (T152): pure, runs everywhere
 
 Test A compares the fixture with a hand-written table, so a member the adapter called directly and
 nobody added to the table would pass it. The audit reads the adapter's source instead:
 `RemodelInteropManifestTests.EveryInteropMemberTheSeatAdapterSourceNamesHasARow`, over the files
-under `extractor/SwReview.AddIn/Remodel/Seat/` and lane A's shared `Rms/SwEquationManager.cs` and
-`Rms/SwMassProperty.cs`, found by the product-source scan `DrawingFamilyReadAuditTests` runs.
+under `extractor/SwReview.AddIn/Remodel/Seat/`, lane A's shared `Rms/SwEquationManager.cs` and
+`Rms/SwMassProperty.cs`, and lane B's extractor-side `Rms/SwRemodelToggleHost.cs`,
+`Rms/RemodelWhatsWrong.cs` and `Rms/RemodelLengthUnits.cs` (*default taken 2026-09-27, the owner
+may revise*: the pure table included, so an interop call added to it later is audited too), found
+by the product-source scan `DrawingFamilyReadAuditTests` runs.
 
 - It takes every member access outside comments (strings are kept, since an interpolated string
   holds code): a read is the member or its `get_` accessor, an assignment its `set_` accessor, a
@@ -210,8 +226,11 @@ under `extractor/SwReview.AddIn/Remodel/Seat/` and lane A's shared `Rms/SwEquati
   declares and that no row records, on any interface.
 - It cannot see which interface a name is called on, so a name recorded on one interface passes on
   another, and an indexed property set (`x.Member[i] = v`) is read as a get. A name that is not a
-  SOLIDWORKS call but matches one (`Array.Length`) is a named exception with its reason, and a
-  staleness case fails an exception that is no longer needed.
+  SOLIDWORKS call but matches one is a named exception with its reason, and a staleness case
+  fails an exception that is no longer needed. There are five: `Length` (`Array.Length`), and
+  lane B's four, found when its files merged (*defaults taken 2026-09-27, the owner may revise*):
+  `Add` (`List<T>.Add`), `Features` (the adapter's own `SwRemodelReads.Features`), `GetBodyCount`
+  (the product's `IScopeSignalSource.GetBodyCount`) and `Message` (`Exception.Message`).
 - A floor keeps it from passing on nothing: the shared classes are read and their interop calls
   found, and a product file declaring one of the build order's adapter classes (`SwScopeSignalReader`,
   `SwRemodelCopyDocument`, `SwRemodelProbeSource`, `SwRemodelBridgeSeat`, `CopyOpenSpecification`)
