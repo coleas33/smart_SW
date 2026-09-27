@@ -255,5 +255,8 @@ with `Silent|LoadModel = 17` and never carries `ReadOnly(2)` or `ViewOnly(4)`; t
 `Silent = 1` and never carries `Copy(2)`, `SaveReferenced(4)` or `AvoidRebuildOnSave(8)`. The
 frozen interop-surface manifest matches the code's argument builders (pure test, always run)
 and matches the installed interop DLL (workstation test, skipped when the DLL is absent), so a
-SOLIDWORKS upgrade becomes a red build rather than a runtime surprise. `ReviewHostTests` and
+SOLIDWORKS upgrade becomes a red build rather than a runtime surprise. The fixture is written by
+`swreview-extract probe interop --emit-manifest <path> --force` from the builder table and the
+installed interop's metadata, and a pure test holds it to what that command writes (T181), so no
+row is typed by hand. `ReviewHostTests` and
 the feature 003 Model check tests stay green with no edits.

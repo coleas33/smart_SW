@@ -20,7 +20,8 @@ everywhere in this document, not only in R12, and its consequences are named whe
 *Added 2026-09-26:* the defaults taken on 2026-09-26, when the owner asked to proceed without
 questions unless blocked, are recorded in R13. They are not owner decisions: each is a default
 the owner may revise, and none is written as the owner's words. *Added 2026-09-27:* so are the
-defaults the review of the seat adapter's integration took, in R14.
+defaults the review of the seat adapter's integration took, in R14, and those of T181 and T179,
+in R15.
 
 ---
 
@@ -1558,3 +1559,129 @@ the request's `gated=` line and counts toward the breaker, and `SwRemodelCopyDoc
 - **The pane seat's direct COM calls are not a defect** (the review said so itself): the pane's UI
   actions are the add-in's and have no bridge command by design; what is owed is their record in the
   manifest and the audit, T181.
+
+## R15. Defaults taken 2026-09-27: the manifest's regeneration and the teardown's answers (T181, T179)
+
+**Sources.** `tasks.md` T181 and T179, deferred by the review of 2026-09-27 (R14.5). The owner asked
+on 2026-09-26 to proceed without questions unless blocked, so each item below is settled by a
+default. **Each is a default taken 2026-09-27, the owner may revise; none is the owner's own words,
+and none is an R12 decision.** SOLIDWORKS was not started: the reflection below is metadata-only,
+over the interop assemblies installed on the development machine (32.5.0.48), and what the
+teardown's reads answer on a seat stays a seat item until a sitting checks it.
+
+### R15.1 The rows are regenerated from committed code (T181)
+
+**Decision**: the manifest's *selection* is committed code, in `Rms/RemodelInteropSurface.cs`:
+which members, in order, and each one's `used_by`, `allowlisted` and `note` (`Calls`, each call
+carrying its `UsedBy` and `Note`); which enum constants, in order (`Constants`); and the absences
+with their consequences (`Absences`). `swreview-extract probe interop --emit-manifest <path>
+[--force]` reflects the installed `SolidWorks.Interop.sldworks` and `SolidWorks.Interop.swconst`
+from the seat's `api\redist` folder - metadata only: types and methods are read, no COM object is
+created, and SOLIDWORKS is neither attached to nor started - and writes, beside the selection,
+every field reflection answers: each row's `kind` (a `get_` or `set_` special name is a property's
+accessor, anything else a method), `arity`, ordered `parameters` with `by_ref`, and `returns`; each
+constant's integer; and the two assembly versions. `product` is read from the assembly version,
+`SOLIDWORKS {1992 + major} SP{minor}` (32.5 is 2024 SP5; the interop assemblies carry no product
+name); `generated_at` is the UTC second the command ran; `generated_by` is the command. The file is
+written in the fixture's existing format - two-space indentation, the existing key order, `by_ref`
+only when true, a note only when there is one, UTF-8 without a byte-order mark, LF line ends and a
+final newline - so a regeneration's diff is only what moved.
+
+It **writes nothing and exits 1**, naming every problem at once, when a selected interface or
+member is missing from the installed assembly, a member has more than one overload (the row's one
+signature would no longer identify it), a recorded absence is present, an enum or a constant is
+missing, or a row has no `used_by`; and when the path exists and `--force` was not given, the path
+is a folder, or no redist folder holds both assemblies. It takes no `--doc` and no `--allow-start`,
+because it addresses no document and no session. On success it prints the path, the member,
+constant and absence counts, and the assembly version and folder it read.
+
+Two tests hold the fixture to the command: `TheFixtureIsWhatTheCommandWrites` (pure, always run)
+regenerates from the interop the product is built against with the committed selection and compares
+the text with the fixture, `generated_at` aside - so a row typed into the fixture by hand, or a
+selection changed without regenerating, fails; and `InstalledAssemblyMatchesManifest` (test B)
+still compares every row and constant with the installed interop, now through the command's own
+reflection, so the two cannot spell a signature differently. The first regeneration is to leave the
+fixture unchanged but for its header; the one row the builder table holds out of the fixture's
+order, `IFeatureFolder.GetFeatureCount` (added last at lane B's integration), moves in the table to
+the fixture's place.
+
+**Why**: test B could compare every row with reflection but could not produce one, and `used_by`
+and `note` were read against nothing; with the selection in code, "regenerated, never typed" is a
+test rather than a practice, and a new row is one line of the builder table and one run of the
+command. **Alternatives weighed**: regenerate in place from the fixture's own selection (not
+taken: a new row would still be typed into the file by hand before the command filled it); a
+second committed selection file (not taken: a second list of the keys the builder table already
+holds); derive `product` from `SLDWORKS.exe`'s version information (not taken: the command reads
+the interop assemblies and nothing else).
+
+### R15.2 The pane seat's rows, and the audit's receivers (T181)
+
+**Decision**:
+
+- **Rows.** `ISldWorks.ActivateDoc3`, `ISldWorks.get_ActiveDoc` and `IModelDoc2.GetTitle` join, none
+  allowlisted: the pane's own seat (`SwRemodelSeat`) calls them outside the bridge and its guard, by
+  design (R14.6), and a row records a member, it never permits one - `ActivateDoc3` stays on the
+  read-only guard's denylist. `used_by` names the pane's commands: `remodel.open_copy` for the
+  activation or the reopen, and `remodel.plan` and `remodel.start` for T159's activation before each
+  dump. `OpenDoc7` gains `remodel.open_copy`; `GetOpenDocumentByName` and `GetPathName` gain
+  `remodel.open_copy`, `remodel.plan` and `remodel.start`.
+- **Constants.** `swCustomInfoDeleteResult_e`, all three (`OK = 0`, `NotPresent = 1`,
+  `LinkedProp = 2`), because the teardown names each answer (R15.3); and
+  `swRebuildOnActivation_e.swDontRebuildActiveDoc = 1`, the constant the pane seat composes, since
+  the block carries the constants the code composes.
+- **The audit reads the pane seat.** `SwReview.AddIn/Remodel/SwRemodelSeat.cs` joins the files the
+  seat adapter audit reads, and `SwRemodelSeat` the classes whose declaring file it must read. A new
+  case holds every `sw*_e.member` those files name outside comments to an enum row.
+- **The audit checks the interface where the source says it.** A member access's receiver is read
+  back from the dot, and its interop interface is known when the receiver is: an identifier every
+  declaration of which in the file names the same interop interface (a field, a parameter, a local,
+  a pattern or `out` variable, or `var x = ... as T` and `var x = (T)...`); a call to a method the
+  file declares with an interop return type; a chain through interop members, each link typed by
+  the member's declared return type; or a parenthesized cast, `(T)x` or `x as T`. Its row must then
+  be on that interface or one it inherits (the coclass interfaces, `Feature` and the like, inherit
+  their `I` interface), and a missing one is reported as `Interface.member`. A receiver it cannot
+  read - an identifier declared with two types or none, `var` from anything else, an indexer, a
+  generic call - keeps the name-only rule, and an indexed property set is still read as a get.
+
+**Why**: the review recorded the pane seat's members as owed (R14.5, R14.6), and the audit's
+blind spot, a name recorded on one interface passing when called on another, is closed wherever the
+file itself says the type, which in the seat's own files is nearly everywhere. **Alternatives
+weighed**: a C# parser (not taken: the product references none, and the audit's scanner is the one
+`DrawingFamilyReadAuditTests` shares); reject any receiver the scan cannot type (not taken: it
+would fail on `List<T>.Add` and the adapter's own helpers, which the named exceptions already
+answer for).
+
+### R15.3 The teardown judges the tag and the close by what SOLIDWORKS answered (T179)
+
+**Decision**:
+
+- **The tag.** `tag_removed` is true only when `ICustomPropertyManager.Delete2` answered
+  `swCustomInfoDeleteResult_OK` (0). `NotPresent`, `LinkedProp` or any other integer leaves it false
+  and adds one failure sentence naming the answer by its swconst name, or as not a
+  `swCustomInfoDeleteResult_e` value. So such an answer makes `remodel.close` answer
+  `close_incomplete`; the page still does not word the tag, since the unsaved close takes it with a
+  closed copy and a copy not closed is already said.
+- **The close.** `copy_closed` is true only when `CloseDoc` returned **and** a read that follows it
+  says SOLIDWORKS has no document open at the copy's path: a new seat member,
+  `IRemodelSeat.IsDocumentOpen(copyPath)` (`ISldWorks.GetOpenDocumentByName` answered a document),
+  asked only about a copy's path, by `RemodelCopy.RunDirectoryOf`'s rule, as the open and the close
+  are. The read is a clean-up read: the guard asked under the bare key `GetOpenDocumentByName` and
+  the observer told, not counted against the breaker, as the clean-up's writes are, so an open
+  circuit cannot make every teardown report the copy open. A copy still open is false with a
+  sentence that SOLIDWORKS still has it open; a read that throws is unknown, and unknown is not
+  closed, with a sentence that it could not be read.
+- **The failed open's unwind** (T177) shares the close helper, so its `copy_closed` is confirmed the
+  same way, and is still true when no document was opened.
+- **The words.** The outcome's fields are unchanged: the teardown line and `remodel.close`'s
+  `detail` carry `tag_removed` and `copy_closed` as judged, and the failure sentences carry the
+  answers. `remodel.close`'s message says "The copy may still be open" where it said "The copy was
+  not closed", which a copy nobody could read might not be. The page's words for a copy not closed
+  ("may still be open ... close it without saving") are true of a copy still open and of one nobody
+  could read, and are unchanged.
+
+**Why**: a `Delete2` that answered `NotPresent` and a `CloseDoc` that did nothing were reported as
+done, and the page stayed quiet about a copy that was still open (R14.5). **Alternatives weighed**:
+a new three-valued field for the close (not taken: `remodel.close`'s `detail` and the page's
+three-fact seam read a boolean, and unknown is not closed); confirm the close through the copy's own
+`GetOpenDocumentIdentity` (not taken: it is `VerifyTarget`'s ungated read on a document that has
+just been closed, where the seat's read is gated and asks the application).

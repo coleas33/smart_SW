@@ -83,6 +83,15 @@ public static class Program
     internal static readonly string[] DrawingsProbeOptionNames = { "doc", "probe", "out" };
 
     /// <summary>
+    /// Feature 004 T181 (default taken 2026-09-27, the owner may revise; research R15.1). <c>probe
+    /// interop</c> writes the frozen interop manifest from the installed assemblies' metadata: the
+    /// file it writes and whether it may write over one. It addresses no document and no session, so
+    /// it takes no <c>--doc</c>, and it is parsed without <c>--allow-start</c>, which would be a
+    /// promise about a session it never asks for.
+    /// </summary>
+    internal static readonly string[] InteropProbeOptionNames = { "emit-manifest", "force" };
+
+    /// <summary>
     /// T055. The one mutating command (contracts/cli.md). <c>--doc</c> is required rather
     /// than defaulting to the active document: this command suppresses features, and
     /// "whatever happens to be on screen" is not a model anyone chose to have modified.
@@ -132,13 +141,19 @@ public static class Program
     private const string DrawingsProbeSubject = "drawings";
 
     /// <summary>
+    /// The feature 004 manifest subject (tasks.md T181): writes
+    /// <c>remodel-interop-manifest.json</c> from the installed interop assemblies, metadata only.
+    /// </summary>
+    private const string InteropProbeSubject = "interop";
+
+    /// <summary>
     /// The subjects <c>probe</c> accepts (contracts/cli.md). <see cref="RunProbe"/> validates
     /// against THIS list and names it in the usage error, so a subject the switch handles and
     /// the list does not - or the reverse - is a failing test rather than an "Unknown probe"
     /// discovered at the workstation.
     /// </summary>
     internal static readonly string[] ProbeSubjects =
-        { RmsProbe, StandardsProbe, RemodelProbeSubject, DrawingsProbeSubject };
+        { RmsProbe, StandardsProbe, RemodelProbeSubject, DrawingsProbeSubject, InteropProbeSubject };
 
     /// <summary>
     /// The interop members <c>probe rms</c> reads per feature, by the name each is gated
@@ -1253,7 +1268,8 @@ public static class Program
                     "probe needs a subject: probe "
                     + string.Join("|", ProbeSubjects) + " --doc <document> (rms, standards), "
                     + "probe drawings --out <dir> [--doc <document>] [--probe D1,...], "
-                    + "or probe remodel --out <dir>.");
+                    + "probe remodel --out <dir>, "
+                    + "or probe interop --emit-manifest <path> [--force].");
             }
 
             subject = args[1];
@@ -1261,6 +1277,20 @@ public static class Program
             {
                 throw new UsageError(
                     $"Unknown probe '{subject}'; the probes are {string.Join(", ", ProbeSubjects)}.");
+            }
+
+            // probe interop (feature 004 T181) reads assemblies, never a session: its options are
+            // its own and carry no --allow-start.
+            if (string.Equals(subject, InteropProbeSubject, StringComparison.Ordinal))
+            {
+                CommandLine interop = CommandLine.Parse(args, 2, InteropProbeOptionNames);
+                return InteropManifestProbe.Run(
+                    interop.Value("emit-manifest"),
+                    interop.Flag("force"),
+                    InteropResolver.RedistFolder,
+                    DateTime.UtcNow,
+                    Out,
+                    Error);
             }
 
             // probe remodel is the one mutating probe (tasks.md T031) and takes none of
@@ -3539,6 +3569,13 @@ public static class Program
         writer.WriteLine("                capabilities/remodel-<sw-version>.yaml with one verdict per probe");
         writer.WriteLine("                (verified, refuted or unresolved) and deletes the throwaway part");
         writer.WriteLine("                afterwards unless --keep-part is given.");
+        writer.WriteLine("  probe interop --emit-manifest <path> [--force]");
+        writer.WriteLine("                Write the re-modeler's frozen interop manifest from the installed");
+        writer.WriteLine("                SolidWorks.Interop assemblies' metadata and the rows the code");
+        writer.WriteLine("                records. Addresses no document and no session: SOLIDWORKS is not");
+        writer.WriteLine("                attached to or started. Refuses to write over an existing file");
+        writer.WriteLine("                without --force, and writes nothing when a recorded member, constant");
+        writer.WriteLine("                or absence no longer matches the installed assembly.");
         writer.WriteLine("  suppress-test --doc <part> --plan <suppress-plan.json> --acknowledge-rebuild");
         writer.WriteLine("                --out <package dir> [--limit <n>] [--timeout-seconds <n>]");
         writer.WriteLine("                Suppress each planned Detail feature in turn, rebuild, record");

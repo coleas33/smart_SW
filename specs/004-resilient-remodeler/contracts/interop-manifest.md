@@ -162,6 +162,9 @@ the same reflection dump that produced it and diffs:
 
 Regenerating the manifest is a deliberate, reviewed commit: the new file, the version bump, and a
 note in the quickstart saying which members moved. It is never a test that updates its own fixture.
+*Amended 2026-09-27 (T181):* the regeneration is the manifest command's own reflection
+(`RemodelInteropManifest`, "Generation" below), read for the fixture's rows, constants and
+absences, and the kind of each row is compared too.
 
 ## The seat adapter's additions (T156, 2026-09-27)
 
@@ -263,3 +266,35 @@ assembly. It is the same reflection dump used to establish the VERIFIED column t
 contracts, so the manifest and the contracts cannot disagree about what was checked. The probe
 prints the member count and the assembly version it read, and refuses to write over an existing
 file without `--force`, for the same reason the re-modeler's copy refuses to overwrite.
+
+*Built 2026-09-27 (`tasks.md` T181; defaults taken 2026-09-27, the owner may revise; research
+R15.1).* The command exists and writes the fixture. The **selection** is committed code in
+`Rms/RemodelInteropSurface.cs`: the rows, in order, each with its `used_by`, `allowlisted` and
+`note` (`Calls`, each call's `UsedBy` and `Note`); the enum constants, in order (`Constants`); and
+the absences with their consequences (`Absences`). **Reflection** over the installed
+`SolidWorks.Interop.sldworks` and `SolidWorks.Interop.swconst` in the seat's `api\redist` folder -
+metadata only: types and methods are read, no COM object is created, and SOLIDWORKS is neither
+attached to nor started (`Rms/RemodelInteropManifest.cs`) - writes every other field: each row's
+`kind` (a `get_` or `set_` special name is a property's accessor, anything else a method), `arity`,
+ordered `parameters` with `by_ref`, and `returns`; each constant's integer; the two versions; and
+`product`, read from the members' version as `SOLIDWORKS {1992 + major} SP{minor}`, since the
+interop assemblies carry no product name. `generated_at` is the UTC second the command ran and
+`generated_by` is the command. The file keeps this format exactly - two-space indentation, the key
+order above, `by_ref` only when true, a note only when there is one, UTF-8 without a byte-order
+mark, LF line ends and a final newline - so a regeneration's diff is only what moved.
+
+It **writes nothing and exits 1**, naming every problem, when a selected interface or member is
+missing, a member has more than one overload, a recorded absence is present, an enum or a constant
+is missing, or a row has no `used_by`; and when the path exists without `--force`, is a folder, or
+no redist folder holds both assemblies. It takes no `--doc` and no `--allow-start`: it addresses no
+document and no session. `RemodelInteropManifestTests.TheFixtureIsWhatTheCommandWrites` (pure,
+always run) regenerates from the interop the product is built against and compares the text with
+the fixture, `generated_at` aside, so a row typed into the fixture by hand, or a selection changed
+without regenerating, fails; test B reads the fixture's own rows through the command's reflection,
+so the two cannot spell a signature differently. The first regeneration changed `generated_at` and
+`generated_by` and nothing else. Adding a row is now its builder row in `RemodelInteropSurface`,
+with its `used_by` and note, then:
+
+```
+swreview-extract probe interop --emit-manifest extractor/SwReview.Extractor.Tests/Fixtures/InteropSurface/remodel-interop-manifest.json --force
+```
