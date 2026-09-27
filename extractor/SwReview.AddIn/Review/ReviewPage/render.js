@@ -210,8 +210,24 @@
    */
   function findingMarker(finding) {
     var body = finding || {};
-    var block = textBlock('system marker', String(body.id || '') + ' recorded: ' + String(body.title || ''));
-    block.setAttribute('data-finding-id', String(body.id || ''));
+    return marker(String(body.id || ''), ' recorded: ' + String(body.title || ''));
+  }
+
+  /**
+   * Where a finding left the session, as one line in the Transcript: "F-003 withdrawn: <reason>"
+   * (feature 013, contracts/part-roles.md section 9). An answer regraded the review and no check
+   * produces the finding any more; the line that recorded it stays, and this one says why it went,
+   * in the backend's words.
+   */
+  function withdrawalMarker(withdrawal) {
+    var body = withdrawal || {};
+    return marker(String(body.finding_id || ''), ' withdrawn: ' + String(body.reason || ''));
+  }
+
+  /** One Transcript line about one finding: its id, then what happened to it. */
+  function marker(findingId, words) {
+    var block = textBlock('system marker', findingId + words);
+    block.setAttribute('data-finding-id', findingId);
     return block;
   }
 
@@ -1243,6 +1259,7 @@
     list: list,
     textBlock: textBlock,
     findingMarker: findingMarker,
+    withdrawalMarker: withdrawalMarker,
     pinnedAnswer: pinnedAnswer,
     toolCard: toolCard,
     findingCard: findingCard,

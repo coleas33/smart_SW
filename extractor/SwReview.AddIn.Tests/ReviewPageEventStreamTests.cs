@@ -271,6 +271,160 @@ public sealed class ReviewPageEventStreamTests
         Assert.True(pinned.GetProperty("inTranscript").GetBoolean(), "the answer is not a prose block in the Transcript.");
     }
 
+    // ---- a finding withdrawn (feature 013 T039, contracts/part-roles.md section 9) --------------
+
+    /// <summary>
+    /// Why the tests below are skipped. The page names every event type it handles as a dotted
+    /// literal, and <see cref="ReviewPageContractTests.EveryMessageTypeThePageNamesIsDocumented"/>
+    /// refuses one that `chat-events.schema.json` does not carry; `finding.withdrawn` joins the
+    /// schema with 013 T038 (lane S), together with its Python producer, which the Python event
+    /// tests require of every type in it. Until then the page cannot name it, so T040's two case
+    /// lines wait with these tests (`withdrawFinding` and `render.withdrawalMarker` are in place).
+    /// </summary>
+    private const string WaitsForT038 =
+        "013 T040 waits for 013 T038: finding.withdrawn joins chat-events.schema.json (lane S); "
+        + "integrator: wire the two case lines in app.js, then remove this Skip.";
+
+    private static readonly Lazy<Withdrawal> Withdrawn = new Lazy<Withdrawal>(DriveWithdrawal);
+
+    /// <summary>
+    /// A regrade withdraws a finding (the first time one leaves a session, research R2.11): its
+    /// card leaves Results, the Transcript says so beside the line that recorded it, and the page
+    /// reads the ranking again, so the summary and the groups are the session's as it now stands.
+    /// </summary>
+    [Fact(Skip = WaitsForT038)]
+    public void AWithdrawnFindingLeavesResultsAndThePageReadsTheRankingAgain()
+    {
+        Withdrawal run = Withdrawn.Value;
+
+        Assert.Equal(new[] { "F-007", "F-008", "F-003" }, ReviewPageDriver.Strings(run.Before, "cards"));
+        Assert.Equal(new[] { "F-007", "F-008" }, ReviewPageDriver.Strings(run.After, "cards"));
+        Assert.Equal(run.Before.GetProperty("attentionReads").GetInt32() + 1, run.After.GetProperty("attentionReads").GetInt32());
+        Assert.Equal(RegradedHeadline, run.After.GetProperty("headline").GetString());
+        Assert.Contains("F-003 withdrawn: " + WithdrawnReason, ReviewPageDriver.Strings(run.After, "markers"));
+        Assert.Contains("F-003 recorded: Finding F-003", ReviewPageDriver.Strings(run.After, "markers"));
+    }
+
+    /// <summary>An id the page holds no card for is ignored: nothing leaves, and nothing is read again.</summary>
+    [Fact(Skip = WaitsForT038)]
+    public void AWithdrawalOfAnUnknownIdIsIgnored()
+    {
+        Withdrawal run = Withdrawn.Value;
+
+        Assert.Equal(ReviewPageDriver.Strings(run.After, "cards"), ReviewPageDriver.Strings(run.AfterUnknown, "cards"));
+        Assert.Equal(run.After.GetProperty("attentionReads").GetInt32(), run.AfterUnknown.GetProperty("attentionReads").GetInt32());
+        Assert.Equal(run.After.GetProperty("markers").GetArrayLength(), run.AfterUnknown.GetProperty("markers").GetArrayLength());
+    }
+
+    /// <summary>A withdrawal for another chat belongs to a review that is not on screen, and is discarded.</summary>
+    [Fact(Skip = WaitsForT038)]
+    public void AWithdrawalForAnotherChatIsDiscarded()
+    {
+        Withdrawal run = Withdrawn.Value;
+
+        Assert.Equal(ReviewPageDriver.Strings(run.After, "cards"), ReviewPageDriver.Strings(run.AfterOtherChat, "cards"));
+        Assert.Equal(run.After.GetProperty("attentionReads").GetInt32(), run.AfterOtherChat.GetProperty("attentionReads").GetInt32());
+    }
+
+    /// <summary>The withdrawal's reason is backend text, and the Transcript's line is characters (FR-029).</summary>
+    [Fact(Skip = WaitsForT038)]
+    public void AHostileWithdrawalReasonIsLiteralText()
+    {
+        JsonElement hostile = Withdrawn.Value.Hostile;
+
+        Assert.Contains("F-008 withdrawn: " + HostileReason, ReviewPageDriver.Strings(hostile, "markers"));
+        Assert.Equal(0, hostile.GetProperty("injected").GetInt32());
+    }
+
+    private const string WithdrawnReason = "bought part (your answer to ER-001)";
+
+    private const string HostileReason = "<img src=x onerror=alert(8)></p><script>alert(9)</script>";
+
+    private const string RegradedHeadline = "2 findings in 2 issues";
+
+    private static Withdrawal DriveWithdrawal()
+    {
+        var run = new Withdrawal();
+
+        ReviewPageDriver.Run(
+            null,
+            async driver =>
+            {
+                await driver.RouteAttention(ChatId, SummarySample.Json());
+                await driver.StartReview();
+                int seq = 0;
+                foreach (string id in new[] { "F-007", "F-008", "F-003" })
+                {
+                    await driver.Push(ChatId, ++seq, "finding", WithdrawnSubject(id));
+                }
+
+                await driver.EndSession(ChatId);
+                run.Before = await driver.Read(ReadWithdrawal);
+
+                await driver.RouteAttention(ChatId, SummarySample.Json(summary => summary["headline"] = RegradedHeadline));
+                await driver.Push(ChatId, ++seq, "finding.withdrawn", Body("F-003", WithdrawnReason));
+                await driver.Settle();
+                run.After = await driver.Read(ReadWithdrawal);
+
+                await driver.Push(ChatId, ++seq, "finding.withdrawn", Body("F-999", WithdrawnReason));
+                await driver.Settle();
+                run.AfterUnknown = await driver.Read(ReadWithdrawal);
+
+                await driver.Push("chat-9", ++seq, "finding.withdrawn", Body("F-007", WithdrawnReason));
+                await driver.Settle();
+                run.AfterOtherChat = await driver.Read(ReadWithdrawal);
+
+                await driver.Push(ChatId, ++seq, "finding.withdrawn", Body("F-008", HostileReason));
+                await driver.Settle();
+                run.Hostile = await driver.Read(ReadWithdrawal);
+            });
+
+        return run;
+    }
+
+    private static string WithdrawnSubject(string id) => JsonSerializer.Serialize(new
+    {
+        id,
+        check = "rms.sketches.fully_defined",
+        title = "Finding " + id,
+        status = "demonstrated",
+        severity = "low",
+        component_ids = new[] { "cmp:0002" },
+        observed = "Observed for " + id + ".",
+    });
+
+    private static string Body(string findingId, string reason) =>
+        JsonSerializer.Serialize(new { finding_id = findingId, reason });
+
+    private const string ReadWithdrawal = @"
+var transcript = document.getElementById('transcript');
+var attentionReads = 0;
+for (var i = 0; i < window.__fetch.calls.length; i++) {
+  var call = window.__fetch.calls[i];
+  if (call.method === 'GET' && /\/attention$/.test(call.path)) { attentionReads++; }
+}
+return JSON.stringify({
+  ok: true,
+  cards: h.attrs(document.getElementById('results'), '.card.finding', 'data-finding-id'),
+  attentionReads: attentionReads,
+  headline: h.text(document.getElementById('summary'), '.summary-headline'),
+  markers: h.texts(transcript, '.block.marker'),
+  injected: h.injected(transcript)
+});";
+
+    private sealed class Withdrawal
+    {
+        public JsonElement Before { get; set; }
+
+        public JsonElement After { get; set; }
+
+        public JsonElement AfterUnknown { get; set; }
+
+        public JsonElement AfterOtherChat { get; set; }
+
+        public JsonElement Hostile { get; set; }
+    }
+
     /// <summary>
     /// Loads the page, answers `ready`, `models.list` and `review.start` the way the add-in
     /// does, presses Review, and then plays the host's side of the stream at the page.
