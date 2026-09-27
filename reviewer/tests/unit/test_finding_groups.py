@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import random
 from collections.abc import Sequence
+from pathlib import Path
 from uuid import UUID, uuid5
 
 import pytest
@@ -528,3 +529,37 @@ def test_the_module_loads_no_provider_settings_or_network_module() -> None:
     loaded = modules_loaded_by("swreview.report.finding_groups")
     forbidden = ("swreview.agent.providers", "swreview.agent.settings", "httpx", "openai", "google")
     assert [name for name in loaded if name.startswith(forbidden)] == []
+
+
+# --- feature 013 T047: the sitting-shaped fixture after User Story 1 ----------------------------
+
+
+def test_the_sitting_after_part_roles_groups_nothing_on_the_bought_parts(tmp_path: Path) -> None:
+    """spec.md User Story 2's independent test on the sitting-shaped fixture, after User Story 1:
+    the modelling-practice and hygiene groups hold no row on the bought pin (hygiene's lightweight
+    check still reads every document, and names the vendor sub-assembly's unread child), the plate's
+    finding leads Modelling practice, the unclear spacer is graded beside it, and bought parts stay
+    in mass and material, which reads every part."""
+    from tests.support.sitting_review import DOCUMENTS, documents_of, sitting_review
+
+    run = sitting_review(tmp_path)
+    view = findings_by_type(run.session, run.context.ir, load_words(), load_policy())
+    groups = {group.id: group for group in view.groups}
+
+    assert [group.id for group in view.groups if group.rows] == [
+        "modelling_practice",
+        "hygiene",
+        "mass_material",
+    ]
+    rows = {name: groups[name].rows for name in ("modelling_practice", "hygiene")}
+    touched = {
+        name: documents_of(run, [m for row in group_rows for m in row.member_finding_ids])
+        for name, group_rows in rows.items()
+    }
+    assert DOCUMENTS["pin"] not in touched["modelling_practice"] | touched["hygiene"]
+    assert {DOCUMENTS["plate"], DOCUMENTS["spacer"]} <= touched["modelling_practice"]
+    assert DOCUMENTS["plate"] in documents_of(run, [rows["modelling_practice"][0].finding_id])
+    lightweight = [row for row in rows["hygiene"] if row.check == "hygiene.component_not_resolved"]
+    assert [documents_of(run, [row.finding_id]) for row in lightweight] == [{DOCUMENTS["shaft"]}]
+    every = [m for group in view.groups for row in group.rows for m in row.member_finding_ids]
+    assert sorted(every) == sorted(finding.id for finding in run.session.findings)

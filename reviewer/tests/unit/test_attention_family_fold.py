@@ -291,3 +291,32 @@ def test_no_percent_sign_anywhere_in_a_folded_ranking() -> None:
 
     assert "%" not in ranking.model_dump_json()
     assert "%" not in "\n".join(start_here_lines(ranking))
+
+
+# --- feature 013 T041: the sitting's representative, after part roles --------------------------
+
+
+def test_after_classification_the_familys_representative_is_a_graded_documents(
+    tmp_path: Path,
+) -> None:
+    """013 `contracts/part-roles.md` section 6: no ranking key reads roles, and the fold still
+    stops the pin standing for the family. Before part roles every part was graded, and the pin's
+    two instances made its sketch finding the modelling-practice family's representative - the
+    Start-here row the sitting's engineer read first; with profile A the pin is bought and not
+    graded, so the representative is a graded document's (the root assembly's mates finding, on
+    its custom side)."""
+    from tests.support.sitting_review import DOCUMENTS, documents_of, sitting_review
+
+    pin = DOCUMENTS["pin"]
+    before = sitting_review(tmp_path / "before", profile=None)
+    after = sitting_review(tmp_path / "after")
+
+    [row_before] = family_rows(rank(before.session))
+    [row_after] = family_rows(rank(after.session))
+
+    assert documents_of(before, [row_before.finding_id]) == {pin}
+    represented = documents_of(after, [row_after.finding_id])
+    roles = after.context.part_roles
+    assert pin not in represented
+    assert represented and all(roles.graded(document) for document in represented)
+    assert pin not in documents_of(after, row_after.member_finding_ids)
