@@ -189,12 +189,18 @@ def test_the_big_assembly_carries_one_presentation_round() -> None:
     assert [r.kind for r in report.rounds].count("presentation") == 1
 
 
-BIG_RECORDED_TOTAL = 11_732_561
+BIG_RECORDED_TOTAL = 11_733_321
 """The big fixture's recorded input. The recording's bill is 12.4M, and the fixture was within 1%
 of it until feature 003's decision 20A (2026-09-25): the fixtures follow the code (decision 3A),
 and the part check the recorded review made no longer names the 106 system rows the eleven
 tolerated types cover, so each of the 31 rounds that carry its result records 21,928 input
-tokens fewer - 679,768 in all, from 12,412,329.
+tokens fewer - 679,768 in all, from 12,412,329, to 11,732,561.
+
+Feature 013's User Story 1 gate (T042, 2026-09-27) moves it by +760 to 11,733,321: each of the
+two `get_review_checklist` answers is 26 tokens larger (the modelling and hygiene items say
+"Custom parts only; bought parts are listed once, not graded."), carried by every later round,
+and the one `check_standards` result is 10 tokens smaller (the version 4 example profile's
+sha256, which each of its five findings carries, tokenizes 2 tokens shorter).
 
 Pinned exactly, not within 1% (the review of decision 23A, 008 T127): the figure is the sum of
 the fixture's recorded usage, so nothing but a regeneration moves it, and `contracts/replay.md`
@@ -458,11 +464,13 @@ REGROUPED_TARGET = 300_000
 """SC-003 as amended (research R2.43, R4): each small fixture's regrouped estimate."""
 FOLLOW_UP_TARGET = 30_000
 """SC-004: the big fixture's follow-up question, against 405k recorded."""
-BIG_FOLLOW_UP_RECORDED = 383_392
+BIG_FOLLOW_UP_RECORDED = 383_434
 """The big fixture's follow-up round's recorded input. The recording's follow-up carried 405k
 (405,320 on the fixtures before decision 20A); since 003 T092 the part check it carries is 21,928
-tokens smaller. Pinned exactly, as `BIG_RECORDED_TOTAL` is and for the same reason (008 T127): it
-was held above a floor of 400,000, then 380,000, which a regeneration could cross or not unseen."""
+tokens smaller (383,392), and since 013 T042 it is 42 larger: it carries both checklist
+answers, 26 tokens larger each, and the standards result, 10 smaller. Pinned exactly, as
+`BIG_RECORDED_TOTAL` is and for the same reason (008 T127): it was held above a floor of
+400,000, then 380,000, which a regeneration could cross or not unseen."""
 
 
 def openai_pane_request(prune_after: int = 2) -> Requested:

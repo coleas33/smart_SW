@@ -3,7 +3,7 @@
   "read_only": false,
   "read_only_reason": null,
   "chat_state": "ended",
-  "last_seq": 360,
+  "last_seq": 361,
   "document": {
     "path": "C:\\FictionalVault\\3_GERU\\2072_PASIM\\DUBINUN ZABORAL\\M5 Bidetof\\TODOVUBID, LI\\596-11251.SLDASM",
     "configuration": "Kamibat"
@@ -12570,7 +12570,7 @@
         11
       ],
       "coverage_limits": [
-        "profile:..\\config\\standards.example.yaml sha256:79e8256acafc6580506efd91cb4a66b2e5c9d9917f82c87c09c591f9d9c9f3bb",
+        "profile:..\\config\\standards.example.yaml sha256:a4e6ec47d8e3b4e877f3a04c634d02bff40bfcba5369118799a419b0a5297eec",
         "configuration Kamibat"
       ],
       "recommended_action": "Add the relations or dimensions the sketch needs, so it is fully defined.",
@@ -12653,7 +12653,7 @@
         11
       ],
       "coverage_limits": [
-        "profile:..\\config\\standards.example.yaml sha256:79e8256acafc6580506efd91cb4a66b2e5c9d9917f82c87c09c591f9d9c9f3bb",
+        "profile:..\\config\\standards.example.yaml sha256:a4e6ec47d8e3b4e877f3a04c634d02bff40bfcba5369118799a419b0a5297eec",
         "configuration Kamibat"
       ],
       "recommended_action": "Add the relations or dimensions the sketch needs, so it is fully defined.",
@@ -12716,7 +12716,7 @@
         11
       ],
       "coverage_limits": [
-        "profile:..\\config\\standards.example.yaml sha256:79e8256acafc6580506efd91cb4a66b2e5c9d9917f82c87c09c591f9d9c9f3bb",
+        "profile:..\\config\\standards.example.yaml sha256:a4e6ec47d8e3b4e877f3a04c634d02bff40bfcba5369118799a419b0a5297eec",
         "configuration Kamibat",
         "feat:0611 Bounding-Box2: suppressed in Kamibat"
       ],
@@ -12770,7 +12770,7 @@
         11
       ],
       "coverage_limits": [
-        "profile:..\\config\\standards.example.yaml sha256:79e8256acafc6580506efd91cb4a66b2e5c9d9917f82c87c09c591f9d9c9f3bb",
+        "profile:..\\config\\standards.example.yaml sha256:a4e6ec47d8e3b4e877f3a04c634d02bff40bfcba5369118799a419b0a5297eec",
         "configuration Kamibat"
       ],
       "recommended_action": "Tick Exclude from cut list on the item, so the released cut list carries only what is cut.",
@@ -12833,7 +12833,7 @@
         11
       ],
       "coverage_limits": [
-        "profile:..\\config\\standards.example.yaml sha256:79e8256acafc6580506efd91cb4a66b2e5c9d9917f82c87c09c591f9d9c9f3bb",
+        "profile:..\\config\\standards.example.yaml sha256:a4e6ec47d8e3b4e877f3a04c634d02bff40bfcba5369118799a419b0a5297eec",
         "configuration Kamibat"
       ],
       "recommended_action": "Add the relations or dimensions the sketch needs, so it is fully defined.",
@@ -14461,6 +14461,21 @@
           ]
         },
         "reason": "19 document(s): doc:792f2ea287a0: the part records no cut-list items, which is not the same as every item being excluded (difference aa); doc:8a412bc4633c: the part records no cut-list items, which is not the same as every item being excluded (difference aa); doc:8b5228d54fc8: the part records no cut-list items, which is not the same as every item being excluded (difference aa); doc:9c7425f72c64: the part records no cut-list items, which is not the same as every item being excluded (difference aa); doc:ad861218f8f0: the part records no cut-list items, which is not the same as every item being excluded (difference aa); doc:bea71039d48c: the part records no cut-list items, which is not the same as every item being excluded (difference aa); doc:cfb91d5bb128: the part records no cut-list items, which is not the same as every item being excluded (difference aa); doc:d0db1a7c9db4: the part records no cut-list items, which is not the same as every item being excluded (difference aa); doc:14430b03daa0: the part records no cut-list items, which is not the same as every item being excluded (difference aa); doc:25550924b73c: the part records no cut-list items, which is not the same as every item being excluded (difference aa); doc:3676f64593c8: the part records no cut-list items, which is not the same as every item being excluded (difference aa); doc:4788f3676f64: the part records no cut-list items, which is not the same as every item being excluded (difference aa); doc:7befe7ecd1b4: the part records no cut-list items, which is not the same as every item being excluded (difference aa); doc:8c00e50ebd40: the part records no cut-list items, which is not the same as every item being excluded (difference aa); doc:9d12e22f99ed: the part records no cut-list items, which is not the same as every item being excluded (difference aa); doc:ae34ef307679: the part records no cut-list items, which is not the same as every item being excluded (difference aa); doc:bf46ec524205: the part records no cut-list items, which is not the same as every item being excluded (difference aa); doc:f21001d02278: the part records no cut-list items, which is not the same as every item being excluded (difference aa); doc:03210ef10e04: the part records no cut-list items, which is not the same as every item being excluded (difference aa)",
+        "error": null
+      }
+    },
+    {
+      "bucket": "unresolved",
+      "item": {
+        "check": "coverage.prerun.part_roles",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "no part-role rule decided any of the 26 documents; check the profile's part_roles section",
         "error": null
       }
     },
@@ -16984,7 +16999,7 @@
     "coverage": {
       "checked": 17,
       "skipped": 16,
-      "unresolved": 49,
+      "unresolved": 50,
       "failed": 1,
       "out_of_scope": 21,
       "not_closed": [
@@ -17011,7 +17026,7 @@
       ],
       "open_evidence_requests": 4,
       "rules": {
-        "unresolved": 34,
+        "unresolved": 35,
         "skipped": 16
       }
     },
@@ -17485,8 +17500,8 @@
         "cmp:0088": "VUKO MIL BELIKAB, TIL-LAMAMOSU VURUNURA, SAS MIL GOSO, DAS, 29'64 PO FIDA, 8764 VURUNURA, DIS, 6926R326-4",
         "cmp:0089": "GEM_M3-0.5X8_PE8_NA-15"
       },
-      "resume_input_tokens": 383392,
-      "resume_text": "Sending resumes the review once. Its last round sent 383,392 input tokens."
+      "resume_input_tokens": 383434,
+      "resume_text": "Sending resumes the review once. Its last round sent 383,434 input tokens."
     }
   },
   "not_examined": {
