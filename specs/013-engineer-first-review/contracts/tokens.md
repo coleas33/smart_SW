@@ -72,6 +72,16 @@ class EfficiencySettings(BaseModel):
   carries in that round's input. The figure is an estimate and is reported as one.
 - **Interaction**: none with lever 3 beyond a prefix break at each turn boundary, which pruning already
   causes; recorded in `levers.md`'s interaction matrix.
+- **The fallback** (*amended 2026-09-27, T151-T152; default taken 2026-09-27, the owner may revise;
+  research R2.44*): when the endpoint refuses a request that left earlier reasoning out with an
+  invalid-request error (`400`) about a missing reasoning item, an item not found or a linked item,
+  the OpenAI adapter sends that same request again at once with every reasoning item kept, turns the
+  lever off for the rest of that adapter's session, and logs one plain line (the key redacted); the
+  refused request emits no `error` event. Any other refusal, a refusal of a request that left nothing
+  out, a server or connection error, and a refusal of the resent request are raised as before.
+  `session.efficiency` keeps the lever as requested. The key-gated live test fails when the adapter
+  fell back, and the next sitting runs it with the key the pane stores (T153, test-plan step 2.7).
+  005 `contracts/levers.md`, lever 14.
 
 ## 5. The replay gate
 

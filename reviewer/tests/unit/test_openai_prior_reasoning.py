@@ -10,21 +10,30 @@ today's. Gemini sends no reasoning items: the lever is inert there, recorded as 
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
+import httpx
+import pytest
 import respx
 
 from swreview.agent.providers import PriorReasoningAware
 from swreview.agent.providers.fake import FakeProvider, ScriptedTurn
-from swreview.agent.providers.openai_provider import OpenAIProvider, _encode_history
+from swreview.agent.providers.openai_provider import (
+    OpenAIProvider,
+    OpenAIProviderError,
+    _encode_history,
+)
 from swreview.agent.runner import start_review
 from swreview.agent.settings import EfficiencySettings
 from tests.unit.test_openai_provider import (
     CEILING,
+    KEY,
     MODEL,
     RESPONSES_URL,
     FakeTool,
+    Sink,
     completed,
     function_call_item,
     item_done,
@@ -295,3 +304,249 @@ def test_a_provider_without_the_lever_records_it_as_set(
 
     assert run_.session.efficiency is not None
     assert run_.session.efficiency.drop_prior_reasoning is True
+
+
+# --- lever 14 falls back once when the endpoint refuses its request (013 T151-T152) -----------
+
+REFUSED_WITHOUT_REASONING = (
+    "Item 'fc_turn1' of type 'function_call' was provided without its required 'reasoning' "
+    "item: 'rs_turn1'."
+)
+"""The Responses API's words for a stored item sent back without the reasoning item before it."""
+
+LEVER_14_REFUSALS = (
+    REFUSED_WITHOUT_REASONING,
+    "Item 'msg_1' of type 'message' was provided without its required 'reasoning' item: 'rs_1'.",
+    "Item with id 'rs_turn1' not found.",
+    "The input item 'fc_turn1' is linked to an item that was not provided.",
+)
+"""Refusals about a missing reasoning item or a linked item: the ones the adapter falls back on."""
+
+OTHER_REFUSALS = (
+    "invalid schema for function 'get_component'",
+    "Unsupported value: 'reasoning.effort' does not support 'xhigh' with this model.",
+)
+"""Refusals of another kind, the second naming reasoning but no item: raised as today."""
+
+
+def refused(message: str, status: int = 400) -> httpx.Response:
+    return httpx.Response(
+        status,
+        json={"error": {"message": message, "type": "invalid_request_error", "param": "input",
+                        "code": None}},
+    )
+
+
+def turn_1_then(*turn_2: Any) -> list[Any]:
+    """Turn 1 thinks, calls a tool and answers; then turn 2's responses, as given."""
+    return [tool_round("rs_turn1", "call_1"), answer_round("first answer", "rs_turn1_end"), *turn_2]
+
+
+def run_two_turns(
+    provider: OpenAIProvider, responses: list[Any], sink: Sink | None = None
+) -> tuple[respx.Route, Any, Any]:
+    route = respx.post(RESPONSES_URL).mock(side_effect=responses)
+    first, _ = run(provider, tools=[FakeTool(name="get_component")])
+    second, _ = run(
+        provider,
+        tools=[FakeTool(name="get_component")],
+        messages=[*first.messages, {"role": "user", "content": "and the other one?"}],
+        sink=sink,
+    )
+    return route, first, second
+
+
+@respx.mock
+@pytest.mark.parametrize("message", LEVER_14_REFUSALS)
+def test_a_refused_request_is_sent_again_with_the_earlier_reasoning_kept(message: str) -> None:
+    provider = dropping_provider()
+
+    route, _, second = run_two_turns(
+        provider,
+        turn_1_then(refused(message), tool_round("rs_turn2", "call_2"), answer_round("second")),
+    )
+
+    bodies = request_bodies(route)
+    refused_body, resent = bodies[2], bodies[3]
+    assert reasoning_ids(refused_body) == []
+    assert reasoning_ids(resent) == ["rs_turn1", "rs_turn1_end"]
+    assert {k: v for k, v in resent.items() if k != "input"} == {
+        k: v for k, v in refused_body.items() if k != "input"
+    }
+    assert second.reason == "end" and second.text == "second"
+
+
+@respx.mock
+def test_the_resent_request_is_the_one_the_lever_off_sends() -> None:
+    """Byte for byte what every review sent before lever 14: the history encoded with no item
+    left out."""
+    provider = dropping_provider()
+
+    route, first, _ = run_two_turns(
+        provider,
+        turn_1_then(
+            refused(REFUSED_WITHOUT_REASONING), tool_round("rs_turn2", "call_2"),
+            answer_round("second"),
+        ),
+    )
+
+    history = [*first.messages, {"role": "user", "content": "and the other one?"}]
+    assert request_bodies(route)[3]["input"] == _encode_history(history)
+
+
+@respx.mock
+def test_after_the_fallback_the_lever_is_off_for_the_rest_of_the_session() -> None:
+    provider = dropping_provider()
+    route, _, second = run_two_turns(
+        provider,
+        turn_1_then(
+            refused(REFUSED_WITHOUT_REASONING), tool_round("rs_turn2", "call_2"),
+            answer_round("second", "rs_turn2_end"),
+            answer_round("third"),
+        ),
+    )
+
+    run(provider, messages=[*second.messages, {"role": "user", "content": "and then?"}])
+
+    assert provider.drops_prior_reasoning is False
+    turn_3 = request_bodies(route)[-1]
+    assert reasoning_ids(turn_3) == ["rs_turn1", "rs_turn1_end", "rs_turn2", "rs_turn2_end"]
+    assert len(request_bodies(route)) == 6, "no request of turn 3 was refused or sent twice"
+
+
+@respx.mock
+def test_the_fallback_logs_one_plain_line_and_emits_no_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    sink = Sink()
+    caplog.set_level(logging.WARNING, logger="swreview.providers.openai")
+
+    run_two_turns(
+        dropping_provider(),
+        turn_1_then(
+            refused(f"{REFUSED_WITHOUT_REASONING} (key {KEY})"), tool_round("rs_turn2", "call_2"),
+            answer_round("second"),
+        ),
+        sink=sink,
+    )
+
+    [record] = [r for r in caplog.records if r.name == "swreview.providers.openai"]
+    line = record.getMessage()
+    assert "lever 14" in line and "sent again with that reasoning kept" in line
+    assert "\n" not in line
+    assert KEY not in line
+    assert "error" not in sink.types, "the refused request was answered, not a failure"
+
+
+@respx.mock
+@pytest.mark.parametrize("message", OTHER_REFUSALS)
+def test_a_refusal_of_another_kind_is_raised_and_the_lever_stays_on(message: str) -> None:
+    provider = dropping_provider()
+
+    with pytest.raises(OpenAIProviderError) as caught:
+        run_two_turns(provider, turn_1_then(refused(message)))
+
+    assert caught.value.error_class == "BadRequestError"
+    assert provider.drops_prior_reasoning is True
+    assert len(respx.calls) == 3, "nothing was sent again"
+
+
+@respx.mock
+def test_a_refusal_of_a_request_that_left_nothing_out_is_raised() -> None:
+    """Turn 1's first request carries no earlier turn: the lever left nothing out, so the refusal
+    is about something else and sending the same bytes again would change nothing."""
+    provider = dropping_provider()
+    respx.post(RESPONSES_URL).mock(side_effect=[refused(REFUSED_WITHOUT_REASONING)])
+
+    with pytest.raises(OpenAIProviderError):
+        run(provider, tools=[FakeTool(name="get_component")])
+
+    assert provider.drops_prior_reasoning is True
+    assert len(respx.calls) == 1
+
+
+@respx.mock
+def test_with_the_lever_off_a_refusal_is_raised_as_today() -> None:
+    provider = make_provider()
+
+    with pytest.raises(OpenAIProviderError):
+        run_two_turns(provider, turn_1_then(refused(REFUSED_WITHOUT_REASONING)))
+
+    assert len(respx.calls) == 3
+
+
+@respx.mock
+@pytest.mark.parametrize(
+    "failure",
+    [
+        pytest.param(httpx.Response(500, json={"error": {"message": "reasoning item store down"}}),
+                     id="a-server-error"),
+        pytest.param(httpx.ConnectError("reasoning item unreachable"), id="a-connection-error"),
+    ],
+)
+def test_a_server_or_connection_failure_is_raised_and_the_lever_stays_on(failure: Any) -> None:
+    provider = dropping_provider()
+
+    with pytest.raises(OpenAIProviderError) as caught:
+        run_two_turns(provider, turn_1_then(failure))
+
+    assert caught.value.retryable is True
+    assert provider.drops_prior_reasoning is True
+    assert len(respx.calls) == 3
+
+
+@respx.mock
+def test_a_refusal_of_the_resent_request_is_raised_once() -> None:
+    provider = dropping_provider()
+    sink = Sink()
+
+    with pytest.raises(OpenAIProviderError) as caught:
+        run_two_turns(
+            provider,
+            turn_1_then(refused(REFUSED_WITHOUT_REASONING), refused("invalid schema for 'x'")),
+            sink=sink,
+        )
+
+    assert "invalid schema" in caught.value.message
+    assert len(respx.calls) == 4, "sent once, then once again, and no more"
+    assert len(sink.bodies("error")) == 1
+    assert provider.drops_prior_reasoning is False
+
+
+@respx.mock
+def test_the_stored_history_keeps_every_reasoning_item_after_the_fallback() -> None:
+    _, _, second = run_two_turns(
+        dropping_provider(),
+        turn_1_then(
+            refused(REFUSED_WITHOUT_REASONING), tool_round("rs_turn2", "call_2"),
+            answer_round("second"),
+        ),
+    )
+
+    kept = [
+        item["id"]
+        for message in second.messages
+        if message.get("role") == "assistant"
+        for item in message.get("openai", {}).get("output", [])
+        if item["type"] == "reasoning"
+    ]
+    assert kept == ["rs_turn1", "rs_turn1_end", "rs_turn2"]
+
+
+@respx.mock
+def test_the_session_still_records_the_lever_as_requested(
+    tmp_package_dir: Path, tmp_path: Path
+) -> None:
+    """`session.efficiency` is what the review asked for, the A/B arm it belongs to; the fallback
+    is the adapter's and its log line says so."""
+    provider = OpenAIProvider(model=MODEL, max_output_tokens=CEILING, client=make_client())
+    respx.post(RESPONSES_URL).mock(side_effect=[answer_round("done", "rs_1")])
+
+    review = start_review(
+        tmp_package_dir, tmp_path / "on", provider=provider,
+        efficiency=EfficiencySettings(drop_prior_reasoning=True),
+    )
+    provider.drops_prior_reasoning = False  # as the fallback leaves it
+
+    assert review.session.efficiency is not None
+    assert review.session.efficiency.drop_prior_reasoning is True
