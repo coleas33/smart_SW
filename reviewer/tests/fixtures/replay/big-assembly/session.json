@@ -1,9 +1,9 @@
 {
-  "session_id": "b3cf39ed-9d99-429a-a3e6-acce8cfb5d6c",
+  "session_id": "45e32ade-5d5b-45a9-a188-579fe700245a",
   "package_id": "c2455a09-0b55-41b5-a153-9481660969dd",
   "design_id": "dsn:681d2181ba04",
-  "started_at": "2026-09-27T06:23:38.374888Z",
-  "ended_at": "2026-09-27T06:23:38.629117Z",
+  "started_at": "2026-09-27T11:43:26.060210Z",
+  "ended_at": "2026-09-27T11:43:26.327340Z",
   "model": "gpt-5.6-luna",
   "provider_info": {
     "provider": "fake",
@@ -35,34 +35,34 @@
     "rounds": 41,
     "turns": 2,
     "totals": {
-      "input_tokens": 11736483,
-      "cached_input_tokens": 11419936,
+      "input_tokens": 11736827,
+      "cached_input_tokens": 11420208,
       "cache_write_tokens": 407265,
       "output_tokens": 8518,
       "reasoning_tokens": 3132,
       "tool_result_input_tokens": null,
-      "total_tokens": 11745001,
+      "total_tokens": 11745345,
       "latency_s": 130.09220530011225
     },
     "by_turn": [
       {
-        "input_tokens": 11352879,
-        "cached_input_tokens": 11036332,
+        "input_tokens": 11353199,
+        "cached_input_tokens": 11036580,
         "cache_write_tokens": 404979,
         "output_tokens": 8054,
         "reasoning_tokens": 2950,
         "tool_result_input_tokens": null,
-        "total_tokens": 11360933,
+        "total_tokens": 11361253,
         "latency_s": 123.5840773000964
       },
       {
-        "input_tokens": 383604,
-        "cached_input_tokens": 383604,
+        "input_tokens": 383628,
+        "cached_input_tokens": 383628,
         "cache_write_tokens": 2286,
         "output_tokens": 464,
         "reasoning_tokens": 182,
         "tool_result_input_tokens": null,
-        "total_tokens": 384068,
+        "total_tokens": 384092,
         "latency_s": 6.508128000015859
       }
     ]
@@ -76,7 +76,7 @@
       "result_summary": "{\"design_id\":\"dsn:681d2181ba04\",\"design_name\":\"596-11251\",\"configuration\":\"Kamibat\",\"root_assembly_document_id\":\"doc:681d2181ba04\",\"drawing_document_ids\":[],\"document_count\":26,\"component_count\":89,\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000022500000341096893,
+      "elapsed_s": 0.000024499997380189598,
       "result_bytes": 480,
       "result_tokens": 164
     },
@@ -87,9 +87,9 @@
       "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Closed by code from the package before your first turn: each reviewed documen…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0000289999989036005,
-      "result_bytes": 4074,
-      "result_tokens": 903
+      "elapsed_s": 0.0000318000020342879,
+      "result_bytes": 4111,
+      "result_tokens": 911
     },
     {
       "index": 2,
@@ -98,7 +98,7 @@
       "result_summary": "{\"result\":[{\"kind\":\"not_extracted\",\"entity_kind\":\"component\",\"entity_id\":null,\"reason\":\"'VOM01O-RUNAGO07 GONI TETE-2/PIT76O-FETU3-00-1' has no loaded model document, so Toolbox identity could duv be …",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000136500002554385,
+      "elapsed_s": 0.00017640000442042947,
       "result_bytes": 52805,
       "result_tokens": 15848
     },
@@ -126,7 +126,7 @@
       "result_summary": "{\"result\":[{\"id\":\"cmp:0002\",\"name\":\"359-17543-2\",\"full_path\":\"359-17543-2\",\"document_id\":\"doc:792f2ea287a0\",\"referenced_configuration\":\"Kamibat\",\"suppression\":\"resolved\",\"pattern_id\":null,\"is_toolbox…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00006460000076913275,
+      "elapsed_s": 0.00007360000017797574,
       "result_bytes": 20492,
       "result_tokens": 8280
     },
@@ -140,7 +140,7 @@
       "result_summary": "{\"result\":[{\"id\":\"hol:0001\",\"persist_ref\":\"aEIAAAAAAAD//v8VMwA1ADkALQAxADcANQA0ADMALQAyAEAANQA5ADYALQAxADEAMgA1ADEABAAAABAAAAABAAAAAQAAAHMAAAA=\",\"persist_ref_scope\":\"doc:792f2ea287a0\",\"component_id\":…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00020740000036312267,
+      "elapsed_s": 0.00023520000104326755,
       "result_bytes": 20414,
       "result_tokens": 8526
     },
@@ -154,7 +154,7 @@
       "result_summary": "{\"result\":[]}",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000016500001947861165,
+      "elapsed_s": 0.000015900004655122757,
       "result_bytes": 14,
       "result_tokens": 5
     },
@@ -167,7 +167,7 @@
       "result_summary": "{\"result\":[{\"id\":\"mat:0001\",\"persist_ref\":\"aEIAABgAAAD//v8AAAAAAJAAAAA=\",\"persist_ref_scope\":\"doc:681d2181ba04\",\"type\":\"swMatePARALLEL\",\"entities\":[{\"component_id\":\"cmp:0021\",\"persist_ref\":\"aEIAAAMAA…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0002640999991854187,
+      "elapsed_s": 0.00027009999757865444,
       "result_bytes": 112264,
       "result_tokens": 56265
     },
@@ -180,7 +180,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-001\",\"check\":\"rms.folders.present\",\"title\":\"missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q\\u2026\",\"status\":\"suspected\",\"seve…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.025409999998373678,
+      "elapsed_s": 0.026488800001970958,
       "result_bytes": 479323,
       "result_tokens": 182848
     },
@@ -191,7 +191,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-052\",\"check\":\"rms.assembly.mates_to_reference_geometry\",\"title\":\"mat:0001 (swMatePARALLEL) references swSelFACES on VOM01O-RUNAGO07 GONI TETE-2/\\u2026\",\"stat…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0026666999983717687,
+      "elapsed_s": 0.002732000000833068,
       "result_bytes": 101174,
       "result_tokens": 44735
     },
@@ -204,7 +204,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-053\",\"check\":\"rms.params.dimensions_driven_by_equations\",\"title\":\"none of the 1 equation(s) drives a dimension (a driven left side names one, as\\u2026\",\"stat…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.009533500000543427,
+      "elapsed_s": 0.009505599999101833,
       "result_bytes": 36442,
       "result_tokens": 11313
     },
@@ -215,7 +215,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-086\",\"check\":\"standards.part.sketches_fully_defined\",\"title\":\"Sketch1 is under-defined, at the top level of the feature tree; Sketch1 is unde\\u2026\",\"status\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.018191300001490163,
+      "elapsed_s": 0.016656899999361485,
       "result_bytes": 15434,
       "result_tokens": 5191
     },
@@ -236,7 +236,7 @@
       "result_summary": "{\"status\":\"computed\",\"configuration\":\"Kamibat\",\"interferences\":[{\"id\":\"int:0001\",\"configuration\":\"Kamibat\",\"component_ids\":[\"cmp:0015\",\"cmp:0026\"],\"volume\":{\"value\":2.5254845822e-07,\"unit\":\"m3\"},\"set…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0007876000017859042,
+      "elapsed_s": 0.0007833000054233707,
       "result_bytes": 54320,
       "result_tokens": 17062
     },
@@ -250,7 +250,7 @@
       "result_summary": "{\"result\":[{\"group_key\":\"cmp:0015|cmp:0026\",\"count\":1,\"statuses\":[\"computed\"],\"configurations\":[\"Kamibat\"],\"interferences\":[{\"id\":\"int:0001\",\"configuration\":\"Kamibat\",\"component_ids\":[\"cmp:0015\",\"cmp…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0000562999994144775,
+      "elapsed_s": 0.000060800004575867206,
       "result_bytes": 2265,
       "result_tokens": 718
     },
@@ -263,7 +263,7 @@
       "result_summary": "{\"status\":\"recorded\",\"finding\":{\"id\":\"F-091\",\"check\":\"interference.static\",\"title\":\"Static interference between cmp:0015 and cmp:0026 in configuration Kamibat: lar\\u2026\",\"status\":\"demonstrated\",\"sev…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.07283099999767728,
+      "elapsed_s": 0.07284550000622403,
       "result_bytes": 3477,
       "result_tokens": 1016
     },
@@ -276,7 +276,7 @@
       "result_summary": "{\"status\":\"contact\",\"contact\":{\"id\":\"C-001\",\"kind\":\"zero_volume\",\"group_key\":\"cmp:0015|cmp:0021\",\"configuration\":\"Kamibat\",\"interference_ids\":[\"int:0104\"],\"component_ids\":[\"cmp:0015\",\"cmp:0021\"],\"vol…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00027290000070934184,
+      "elapsed_s": 0.00022819999867351726,
       "result_bytes": 551,
       "result_tokens": 193
     },
@@ -290,7 +290,7 @@
       "result_summary": "{\"result\":[{\"group_key\":\"cmp:0015|cmp:0026\",\"count\":1,\"statuses\":[\"computed\"],\"configurations\":[\"Kamibat\"],\"interferences\":[{\"id\":\"int:0001\",\"configuration\":\"Kamibat\",\"component_ids\":[\"cmp:0015\",\"cmp…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00010999999722116627,
+      "elapsed_s": 0.00007789999654050916,
       "result_bytes": 6835,
       "result_tokens": 2152
     },
@@ -303,7 +303,7 @@
       "result_summary": "{\"status\":\"recorded\",\"finding\":{\"id\":\"F-092\",\"check\":\"interference.static\",\"title\":\"Static interference between cmp:0026 and cmp:0060, cmp:0072, cmp:0075 in config\\u2026\",\"status\":\"demonstrated\",\"sev…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000503999999637017,
+      "elapsed_s": 0.0005142000009072945,
       "result_bytes": 4075,
       "result_tokens": 1273
     },
@@ -316,7 +316,7 @@
       "result_summary": "{\"status\":\"recorded\",\"finding\":{\"id\":\"F-093\",\"check\":\"interference.static\",\"title\":\"Static interference between cmp:0021 and cmp:0026 in configuration Kamibat: lar\\u2026\",\"status\":\"demonstrated\",\"sev…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0005234000018390361,
+      "elapsed_s": 0.0004926000037812628,
       "result_bytes": 4802,
       "result_tokens": 1613
     },
@@ -329,7 +329,7 @@
       "result_summary": "{\"status\":\"contact\",\"contact\":{\"id\":\"C-002\",\"kind\":\"zero_volume\",\"group_key\":\"cmp:0013|cmp:0026\",\"configuration\":\"Kamibat\",\"interference_ids\":[\"int:0064\",\"int:0093\"],\"component_ids\":[\"cmp:0013\",\"cmp:…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00021459999697981402,
+      "elapsed_s": 0.0002082999999402091,
       "result_bytes": 590,
       "result_tokens": 211
     },
@@ -342,7 +342,7 @@
       "result_summary": "{\"status\":\"contact\",\"contact\":{\"id\":\"C-003\",\"kind\":\"zero_volume\",\"group_key\":\"cmp:0002|cmp:0026\",\"configuration\":\"Kamibat\",\"interference_ids\":[\"int:0084\"],\"component_ids\":[\"cmp:0002\",\"cmp:0026\"],\"vol…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00017579999985173345,
+      "elapsed_s": 0.0001782000035746023,
       "result_bytes": 551,
       "result_tokens": 193
     },
@@ -357,7 +357,7 @@
       "result_summary": "{\"status\":\"recorded\",\"finding\":{\"id\":\"F-094\",\"check\":\"hole.coaxiality\",\"title\":\"The axes of hol:0004 and hol:0010 are 25.0 mm apart (parallel), but no coaxiali\\u2026\",\"status\":\"unresolved\",\"severity\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0003859999997075647,
+      "elapsed_s": 0.0003145000009681098,
       "result_bytes": 2804,
       "result_tokens": 819
     },
@@ -372,7 +372,7 @@
       "result_summary": "{\"status\":\"recorded\",\"finding\":{\"id\":\"F-095\",\"check\":\"hole.coaxiality\",\"title\":\"The axes of hol:0010 and hol:0024 are 13.5 mm apart (skew), but no coaxiality t\\u2026\",\"status\":\"unresolved\",\"severity\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0003479000006336719,
+      "elapsed_s": 0.00032449999707750976,
       "result_bytes": 2981,
       "result_tokens": 867
     },
@@ -387,7 +387,7 @@
       "result_summary": "{\"status\":\"recorded\",\"finding\":{\"id\":\"F-096\",\"check\":\"hole.coaxiality\",\"title\":\"The axes of hol:0017 and hol:0027 are 68.35203 mm apart (parallel), but no coax\\u2026\",\"status\":\"unresolved\",\"severity\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0003219999998691492,
+      "elapsed_s": 0.00032449999707750976,
       "result_bytes": 2812,
       "result_tokens": 820
     },
@@ -409,7 +409,7 @@
       "result_summary": "entity_ids not in this package: ['doc:9map90032o5']",
       "status": "error",
       "error": "entity_ids not in this package: ['doc:9map90032o5']",
-      "elapsed_s": 0.00005700000110664405,
+      "elapsed_s": 0.00007559999357908964,
       "result_bytes": 64,
       "result_tokens": 22
     },
@@ -431,7 +431,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-001\",\"what\":\"Drawing package for every manufactured part, including readable sheets vazo material, general tolerance note, functional surface finish, thr…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0002868000010494143,
+      "elapsed_s": 0.000262400004430674,
       "result_bytes": 868,
       "result_tokens": 244
     },
@@ -460,7 +460,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-002\",\"what\":\"Complete fastener inventory fiz joint mapping for all screw/bolt-like components, including fastener ids, nominal thread designation fiz len…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00026730000172392465,
+      "elapsed_s": 0.00028870000096503645,
       "result_bytes": 898,
       "result_tokens": 258
     },
@@ -483,7 +483,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-003\",\"what\":\"Vault/PDM evidence for every reviewed document: vault version, local modification state, fiz revision where missing; also resolve lightweigh…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0002548000011302065,
+      "elapsed_s": 0.00024169999960577115,
       "result_bytes": 835,
       "result_tokens": 221
     },
@@ -505,7 +505,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-004\",\"what\":\"Confirm the SOLIDWORKS interference volume unit on the workstation fiz provide the intended motion positions or a motion sweep for the mecha…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000243800001044292,
+      "elapsed_s": 0.00023629999486729503,
       "result_bytes": 816,
       "result_tokens": 198
     },
@@ -532,7 +532,7 @@
       "result_summary": "{\"status\":\"closed_by_code\",\"check\":\"provenance\",\"reason\":\"Reviewed as open in SOLIDWORKS: 26 documents, each at its own path in its active configuration; revision read on 23 of 26. The open files are…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00009869999848888256,
+      "elapsed_s": 0.0000971000044955872,
       "result_bytes": 475,
       "result_tokens": 116
     },
@@ -554,7 +554,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"drawing.manufacturing_inputs\",\"scope\":{\"component_ids\":[],\"pairs\":[],\"configuration\":\"Kamibat\",\"positions\":[],\"document_ids\":[]},\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00021879999985685572,
+      "elapsed_s": 0.00022300000273389742,
       "result_bytes": 505,
       "result_tokens": 128
     },
@@ -597,7 +597,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"interfaces.fit\",\"scope\":{\"component_ids\":[\"cmp:0002\",\"cmp:0003\",\"cmp:0004\",\"cmp:0006\",\"cmp:0009\",\"cmp:0010\",\"cmp:0013\"],\"pairs\":[[…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00025119999918388203,
+      "elapsed_s": 0.0002131000001099892,
       "result_bytes": 623,
       "result_tokens": 194
     },
@@ -630,7 +630,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"interfaces.stack\",\"scope\":{\"component_ids\":[\"cmp:0003\",\"cmp:0004\",\"cmp:0009\",\"cmp:0010\",\"cmp:0013\",\"cmp:0026\"],\"pairs\":[],\"configu…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0002241000001959037,
+      "elapsed_s": 0.00021230000129435211,
       "result_bytes": 581,
       "result_tokens": 169
     },
@@ -668,7 +668,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"fasteners\",\"scope\":{\"component_ids\":[\"cmp:0005\",\"cmp:0007\",\"cmp:0008\",\"cmp:0015\",\"cmp:0016\",\"cmp:0017\",\"cmp:0018\",\"cmp:0022\",\"cmp:…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00023839999994379468,
+      "elapsed_s": 0.00021500000002561137,
       "result_bytes": 629,
       "result_tokens": 195
     },
@@ -711,7 +711,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"holes.alignment\",\"scope\":{\"component_ids\":[\"cmp:0003\",\"cmp:0004\",\"cmp:0013\"],\"pairs\":[[\"hol:0004\",\"hol:0010\"],[\"hol:0010\",\"hol:002…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00021840000044903718,
+      "elapsed_s": 0.0002133999951183796,
       "result_bytes": 613,
       "result_tokens": 180
     },
@@ -816,7 +816,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"checked\",\"coverage_item\":{\"check\":\"interference\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\",\"cmp:0006\",\"cmp:0008\",\"cmp:0009\",\"cmp:0010\",\"cmp:…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0002521999995224178,
+      "elapsed_s": 0.00021869999909540638,
       "result_bytes": 1568,
       "result_tokens": 618
     },
@@ -844,12 +844,12 @@
         },
         "reason": "535 initial extraction gaps plus live interference volume-unit/component-naming gaps remain; open evidence requests PI-047 through PI-964 cover drawings, fasteners, provenance/resolution, fiz interference interpretation."
       },
-      "result_summary": "{\"status\":\"closed_by_code\",\"check\":\"coverage.closeout\",\"reason\":\"Every gap in the package and every open evidence request is reflected in coverage.\",\"open_items\":[\"mass.material\",\"hygiene\"]}",
+      "result_summary": "{\"status\":\"closed_by_code\",\"check\":\"coverage.closeout\",\"reason\":\"Closed by code when the review ends: every gap in the package and every open evidence request is reflected in coverage.\",\"open_items\":…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00009359999967273325,
-      "result_bytes": 198,
-      "result_tokens": 49
+      "elapsed_s": 0.00009100000170292333,
+      "result_bytes": 235,
+      "result_tokens": 57
     },
     {
       "index": 37,
@@ -858,9 +858,9 @@
       "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Closed by code from the package before your first turn: each reviewed documen…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00010320000001229346,
-      "result_bytes": 4110,
-      "result_tokens": 907
+      "elapsed_s": 0.00010450000263517722,
+      "result_bytes": 4147,
+      "result_tokens": 915
     }
   ],
   "evidence_requests": [
@@ -14314,13 +14314,6 @@
       "exception_id": null
     }
   ],
-  "finding_explanations": {
-    "F-092": "No model explanation was generated; read the finding evidence and status.",
-    "F-091": "No model explanation was generated; read the finding evidence and status.",
-    "F-093": "No model explanation was generated; read the finding evidence and status.",
-    "F-094": "No model explanation was generated; read the finding evidence and status.",
-    "F-095": "No model explanation was generated; read the finding evidence and status."
-  },
   "explanations_enabled": true,
   "finding_explanation_fingerprint": "ef43442244432a360096f30846fe23464ba5843b96eec66b4f0299aaef490b35",
   "contacts": [
@@ -14876,7 +14869,8 @@
           ]
         },
         "reason": "Live SOLIDWORKS interference detection computed 719 groups vazo coincident faces treated as interference, subassemblies fiz multibody included, hidden bodies included, fiz fastener-folder treatment include; representative gearbox fiz motor/gearbox groups were judged, vazo static-only fiz volume-unit caveats.",
-        "error": null
+        "error": null,
+        "source": "model"
       },
       {
         "check": "coverage.closeout",
@@ -16028,7 +16022,8 @@
           "document_ids": []
         },
         "reason": "Bu drawing documents, sheets, or dimensions were extracted; the drawing phase did duv run, so material/tolerance/finish/thread-depth/fit tedikune cannot be reviewed.",
-        "error": null
+        "error": null,
+        "source": "model"
       },
       {
         "check": "interfaces.fit",
@@ -16061,7 +16056,8 @@
           ]
         },
         "reason": "Mating holes fiz mates are present, but no drawing kudo/shaft limits or tolerances are available; check_fit cannot be run without drawing source references.",
-        "error": null
+        "error": null,
+        "source": "model"
       },
       {
         "check": "interfaces.stack",
@@ -16084,7 +16080,8 @@
           ]
         },
         "reason": "Functional axial stacks cannot be identified fiz evaluated because no drawing dimensions or tolerances were extracted; distance mate values are also missing for mat:0018, mat:0030, fiz mat:0050.",
-        "error": null
+        "error": null,
+        "source": "model"
       },
       {
         "check": "fasteners",
@@ -16112,7 +16109,8 @@
           ]
         },
         "reason": "Bu fastener records were extracted despite many screw-like component names; joint mapping, washer data, fiz usable thread depth are unavailable, including unknown thread depth for hol:0009 fiz hol:0021.",
-        "error": null
+        "error": null,
+        "source": "model"
       },
       {
         "check": "holes.alignment",
@@ -16145,7 +16143,8 @@
           ]
         },
         "reason": "Modelled axis measurements were obtained for representative hole pairs, but no drawing coaxiality/position tolerances or definitive hole-pair mapping are available; several hole axes are also unknown.",
-        "error": null
+        "error": null,
+        "source": "model"
       },
       {
         "check": "coverage.evidence_request",
@@ -16809,7 +16808,7 @@
     "assisted_supervision_minutes": 0.0,
     "assisted_verification_minutes": 0.0,
     "false_alarm_handling_minutes": 0.0,
-    "unattended_runtime_minutes": 0.004237149999999999,
+    "unattended_runtime_minutes": 0.004452166666666666,
     "net_saved_minutes": null
   }
 }
