@@ -40,7 +40,12 @@ from swreview.prerun import (
 from swreview.report.summary import review_ranking
 from swreview.tools import checks_mechanical, registry
 from swreview.tools.context import ToolContext, context_for, use_context
-from swreview.tools.drawings import DRAWINGS_TOOL, check_drawings, drawing_evidence
+from swreview.tools.drawings import (
+    DRAWINGS_TOOL,
+    PART_ROLES_ATTRIBUTE,
+    check_drawings,
+    drawing_evidence,
+)
 from swreview.tools.registry import (
     TOOL_FUNCTIONS,
     ToolDispatch,
@@ -49,6 +54,7 @@ from swreview.tools.registry import (
     drawing_tools,
 )
 from swreview.tools.standards_checks import StandardsRun, attach_standards_run
+from tests.support.fake_part_roles import FakePartRoles
 from tests.support.prerun import ON, STANDARDS_PROFILE, prerun_package
 from tests.unit.test_mcp_server import contract_enabled_tools
 
@@ -59,8 +65,31 @@ def fixture(name: str) -> EvidencePackage:
     return load_package(FIXTURES / name).package
 
 
-def recorded(package: EvidencePackage) -> tuple[ToolContext, dict[str, Any]]:
+class ModeHost:
+    """A bridge as the drawing check asks it: what its `drawing.read` can do, as
+    `BridgeClient.drawing_read_mode` answers (013 T074), counting each time it is asked."""
+
+    def __init__(self, mode: str = "opens_closed") -> None:
+        self.mode = mode
+        self.asked = 0
+
+    def drawing_read_mode(self) -> str:
+        self.asked += 1
+        return self.mode
+
+    def close(self) -> None:
+        pass
+
+
+def recorded(
+    package: EvidencePackage, *, host: ModeHost | None = None, roles: Any = None
+) -> tuple[ToolContext, dict[str, Any]]:
+    """`check_drawings` over `package`, with `host` as the bridge and `roles` attached where
+    `start_review` attaches them (013 `contracts/part-roles.md` section 5)."""
     context = context_for(package)
+    context.bridge = host
+    if roles is not None:
+        setattr(context, PART_ROLES_ATTRIBUTE, roles)
     with use_context(context):
         return context, check_drawings()
 
@@ -69,15 +98,22 @@ def names(functions: Any) -> list[str]:
     return [function.__name__ for function in functions]
 
 
-def played(tmp_path: Path, name: str, efficiency: EfficiencySettings = ON) -> Any:
-    """A scripted review of a committed drawing fixture, its pre-run played."""
+def played(
+    tmp_path: Path, name: str, efficiency: EfficiencySettings = ON, host: ModeHost | None = None
+) -> Any:
+    """A scripted review of a committed drawing fixture, its pre-run played, with `host` as its
+    bridge when one is given."""
     folder = tmp_path / name
     shutil.copytree(FIXTURES / name, folder)
+    bridged: dict[str, Any] = (
+        {} if host is None else {"bridge": True, "bridge_factory": lambda pipe, secret: host}
+    )
     run = start_review(
         folder,
         folder,
         provider=FakeProvider(script=[ScriptedTurn(text="done")], model="fake-scripted"),
         efficiency=efficiency,
+        **bridged,
     )
     run.start()
     return run
@@ -92,17 +128,21 @@ def test_check_drawings_takes_no_argument() -> None:
 
 
 def test_check_drawings_returns_the_counts() -> None:
+    """*Edited deliberately by 013 T079:* with no bridge the candidate question is not asked (the
+    host can open nothing), and the four documents no drawing shows are `unresolved`."""
     _, result = recorded(fixture("plate-drawing"))
+    _, offered = recorded(fixture("plate-drawing"), host=ModeHost("opens_closed"))
 
     assert result == {
         "status": "recorded",
         "drawings": 2,
         "candidates": 1,
-        "questions": 1,
+        "questions": 0,
         "findings": 0,
         "finding_ids": [],
-        "coverage": {"checked": 1, "skipped": 4, "unresolved": 0},
+        "coverage": {"checked": 1, "skipped": 0, "unresolved": 4},
     }
+    assert offered == {**result, "questions": 1}
 
 
 def test_it_records_one_drawing_context_item_per_reviewed_document() -> None:
@@ -110,15 +150,16 @@ def test_it_records_one_drawing_context_item_per_reviewed_document() -> None:
     coverage = context.require_session().coverage
 
     checked = [item for item in coverage.checked if item.check == "drawing.context"]
-    skipped = [item for item in coverage.skipped if item.check == "drawing.context"]
+    unresolved = [item for item in coverage.unresolved if item.check == "drawing.context"]
     assert [item.scope.document_ids for item in checked] == [["doc:0002"]]
-    assert [item.scope.document_ids[0] for item in skipped] == [
+    assert [item.scope.document_ids[0] for item in unresolved] == [
         "doc:0001", "doc:0003", "doc:0004", "doc:0005"
-    ]
+    ], "013 T079: no drawing shows them, which is unresolved, not skipped"
+    assert [item for item in coverage.skipped if item.check == "drawing.context"] == []
 
 
 def test_the_questions_are_evidence_requests_the_summary_shows() -> None:
-    context, _ = recorded(fixture("plate-drawing"))
+    context, _ = recorded(fixture("plate-drawing"), host=ModeHost("opens_closed"))
     session = context.require_session()
 
     [request] = session.evidence_requests
@@ -143,7 +184,7 @@ def test_the_governing_question_reaches_the_session_on_the_assembly_fixture() ->
 
 def test_calling_it_again_asks_nothing_twice_and_restates_the_coverage() -> None:
     """Even with no re-call guard in front of it (checks first off)."""
-    context, first = recorded(fixture("plate-drawing"))
+    context, first = recorded(fixture("plate-drawing"), host=ModeHost("opens_closed"))
     with use_context(context):
         second = check_drawings()
     session = context.require_session()
@@ -295,13 +336,23 @@ def test_its_digest_line_counts_drawings_candidates_and_questions() -> None:
 
 
 def test_the_pre_run_calls_it_and_the_digest_says_so(tmp_path: Path) -> None:
-    run = played(tmp_path, "plate-drawing")
+    run = played(tmp_path, "plate-drawing", host=ModeHost("opens_closed"))
 
     opening = run.messages[0]["content"]
     assert "  check_drawings() -> ok, 2 drawings, 1 candidate, 1 question" in opening
     [step] = [step for step in run.session.steps if step.tool == DRAWINGS_TOOL]
     assert step.status == "ok"
     assert len(run.session.evidence_requests) == 1
+
+
+def test_without_a_bridge_the_pre_run_asks_no_candidate_question(tmp_path: Path) -> None:
+    """013 T079: the digest counts no question when the host can open nothing."""
+    run = played(tmp_path / "bare", "plate-drawing")
+
+    assert "  check_drawings() -> ok, 2 drawings, 1 candidate, 0 questions" in (
+        run.messages[0]["content"]
+    )
+    assert run.session.evidence_requests == []
 
 
 def test_a_repeat_after_the_pre_run_records_one_step_and_adds_nothing(tmp_path: Path) -> None:
@@ -348,3 +399,96 @@ def test_without_drawing_evidence_the_plan_array_and_digest_equal_a_tree_without
     assert planned_calls(context, ToolRegistry().dispatch(context)) == plan
     assert [tool.spec.schema for tool in ToolRegistry().dispatch(context)] == array
     assert with_family.messages[0]["content"] == without_family.messages[0]["content"]
+
+
+# --- 5. the offer follows the host, for custom documents only (013 T079) --------------------------
+#
+# 013 `contracts/drawing-capability.md` sections 2 to 4. The check reads the review's part roles
+# where `start_review` attaches them and asks the host what its `drawing.read` can do - only when
+# a custom or unclear document has a candidate, so a package without one never pings.
+
+
+def test_the_host_is_asked_only_when_a_custom_or_unclear_document_has_a_candidate() -> None:
+    plate = fixture("plate-drawing")  # one candidate, beside doc:0003
+    hosts = {
+        "no candidate": ModeHost(),
+        "a bought document's only": ModeHost(),
+        "a custom document's": ModeHost(),
+        "an unclear document's": ModeHost(),
+    }
+
+    recorded(fixture("assembly-drawings"), host=hosts["no candidate"])
+    recorded(plate, host=hosts["a bought document's only"],
+             roles=FakePartRoles(roles={"doc:0003": "bought"}, root="doc:0001"))
+    recorded(plate, host=hosts["a custom document's"])
+    recorded(plate, host=hosts["an unclear document's"],
+             roles=FakePartRoles(roles={"doc:0003": "unclear"}, root="doc:0001"))
+
+    assert {case: host.asked for case, host in hosts.items()} == {
+        "no candidate": 0,
+        "a bought document's only": 0,
+        "a custom document's": 1,
+        "an unclear document's": 1,
+    }
+
+
+@pytest.mark.parametrize("mode", ["none", "open_only"])
+def test_while_the_host_cannot_open_a_closed_drawing_the_candidate_gets_the_instruction(
+    mode: str,
+) -> None:
+    context, result = recorded(fixture("plate-drawing"), host=ModeHost(mode))
+
+    assert result["questions"] == 0
+    assert context.require_session().evidence_requests == []
+    [item] = [
+        item for item in context.require_session().coverage.unresolved
+        if item.check == "drawing.context" and item.scope.document_ids == ["doc:0003"]
+    ]
+    assert item.reason == (
+        "Open FICT-TULMSORN-3002.SLDDRW in SOLIDWORKS, then press Review again with "
+        "FICT-TULMVEN-0000.SLDASM active"
+    )
+
+
+def test_a_bought_document_is_no_drawing_subject_and_its_candidate_is_not_offered() -> None:
+    roles = FakePartRoles(roles={"doc:0003": "bought", "doc:0004": "bought"}, root="doc:0001")
+
+    context, result = recorded(fixture("plate-drawing"), host=ModeHost(), roles=roles)
+
+    subjects = [
+        item.scope.document_ids[0]
+        for bucket in ("checked", "skipped", "unresolved")
+        for item in getattr(context.require_session().coverage, bucket)
+        if item.check == "drawing.context"
+    ]
+    assert sorted(subjects) == ["doc:0001", "doc:0002", "doc:0005"]
+    assert result["questions"] == 0
+    assert context.require_session().evidence_requests == []
+
+
+def test_the_drawing_check_reads_the_roles_where_start_review_attaches_them() -> None:
+    """The stand-in attribute name is the registry's once 013 T022 (lane S) defines it."""
+    if not hasattr(registry, "PART_ROLES_ATTRIBUTE"):
+        pytest.xfail(
+            "013 T022 (lane S) adds tools/registry.PART_ROLES_ATTRIBUTE; "
+            "tools/drawings.PART_ROLES_ATTRIBUTE stands in for it until then"
+        )
+    assert PART_ROLES_ATTRIBUTE == registry.PART_ROLES_ATTRIBUTE
+
+
+def test_the_drawing_check_asks_the_context_for_the_mode_once_it_can_say(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """013 T077 (lane S) gives `ToolContext.drawing_read_mode()`, lazy, cached and recorded on
+    the session; the check must then ask it rather than the bridge. Here the context says
+    `opens_closed` with no bridge at all, so only a check that asks the context offers."""
+    if not hasattr(ToolContext, "drawing_read_mode"):
+        pytest.xfail(
+            "013 T077 (lane S) adds ToolContext.drawing_read_mode(); tools/drawings._read_mode "
+            "asks the bridge until then"
+        )
+    monkeypatch.setattr(ToolContext, "drawing_read_mode", lambda self: "opens_closed")
+
+    _, result = recorded(fixture("plate-drawing"))
+
+    assert result["questions"] == 1

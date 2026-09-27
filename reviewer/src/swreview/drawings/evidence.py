@@ -31,6 +31,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 from swreview.ir.models import (
+    Document,
     DrawingCandidate,
     DrawingRecord,
     DrawingSheetRecord,
@@ -172,6 +173,10 @@ class DrawingIndex:
     _configurations: Mapping[str, tuple[str, ...]] = field(repr=False)
     """What the review read for each document: its instances' configurations, else its own."""
     _component_configurations: Mapping[str, str] = field(repr=False)
+    documents: Mapping[str, Document] = field(repr=False)
+    """Every document of the package by its id: the drawing states (013) name files by it."""
+    root_document_id: str = field(repr=False)
+    """The design's root document, a drawing or not: the model the instruction line names."""
 
     @classmethod
     def for_package(cls, package: EvidencePackage) -> DrawingIndex:
@@ -234,7 +239,25 @@ class DrawingIndex:
                 component.id: component.referenced_configuration
                 for component in package.components
             },
+            documents=documents,
+            root_document_id=root,
         )
+
+    def subjects(self) -> tuple[Document, ...]:
+        """The part and assembly documents the package reviews, in traversal (id) order: the
+        documents a drawing can show. A drawing root's own document is a drawing, so never one."""
+        return tuple(
+            sorted(
+                (item for item in self.documents.values() if item.kind in ("part", "assembly")),
+                key=lambda item: id_order(item.document_id),
+            )
+        )
+
+    def file_name_of(self, document_id: str) -> str:
+        """What a sentence calls a document: its file name, or its id when the package holds no
+        row for it."""
+        document = self.documents.get(document_id)
+        return document.file_name if document is not None else document_id
 
     def views_of(self, document_id: str) -> tuple[ViewEvidence, ...]:
         """Every view that shows `document_id`, usable or not, in the fixed order."""
