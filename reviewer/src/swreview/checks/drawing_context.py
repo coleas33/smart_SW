@@ -4,13 +4,27 @@
 what this module computes. Everything here is a pure reading of the package (and, from User
 Story 7, the profile): the same package gives the same coverage and the same questions.
 
-**Coverage**, one `drawing.context` item per part or assembly document the package reviews, in
-traversal (id) order:
+**Drawing states** (feature 013, `specs/013-engineer-first-review/contracts/drawing-capability.md`
+sections 3 and 4). Drawings exist for custom parts and custom assemblies: the same-name `.SLDDRW`
+in the same folder (research R2.26). Each reviewed part or assembly document is, in this order:
+
+- `bought` - its part role is bought (013 `contracts/part-roles.md`): no drawing is expected, none
+  is asked for, and it has no coverage item, since the bought-parts line names it once;
+- `attached` - a view of an attached or root drawing shows it;
+- `candidate` - a same-name drawing file sits beside it, not open;
+- `absent` - none does: unresolved coverage naming the file it lacks, never a finding.
+
+An unclear document is treated as custom, and while the part-roles question is open its reason
+ends "(may be a bought part)". With no roles at all - a context that never classified - every part
+and assembly is a subject, as before feature 013.
+
+**Coverage**, one `drawing.context` item per reviewed document that is not bought, in traversal
+(id) order:
 
 - `checked` - a usable view (`drawings/evidence.py`) of a drawing shows it: which drawings,
   how many views are usable, and every unusable view's reason;
-- `unresolved` - drawings show it and none of their views is usable: each view's reason;
-- `skipped` - no drawing shows it, and whether a same-name drawing sits beside it.
+- `unresolved` - drawings show it and none of their views is usable: each view's reason; or no
+  drawing shows it (013): the candidate's reason or the missing drawing's.
 
 A drawing root's own document is not a subject (feature 006 grades it); its references are.
 `drawing.context` is a coverage item's `check`, never a finding's and never a checklist item's
@@ -18,26 +32,35 @@ id, so it closes nothing.
 
 **Questions**, at most four, each an ordinary `EvidenceRequest` specification:
 
-- one about every drawing candidate - a same-name file beside a reviewed document, not open -
-  whose first option, `CANDIDATE_CONFIRM`, is the one answer that has the product open it
-  read-only (owner, 2026-09-23, research R5 Q2; `contracts/confirmed-open.md` section 1);
-- one per document that two or more drawings show **in a usable view**, three at most: which one
-  governs it. A drawing that shows the document only in another configuration or an out-of-date
-  view does not compete with it - that is coverage, and an answer could not change what was
-  extracted.
+- one about every candidate drawing file - a same-name file beside a reviewed document, not open,
+  named once however many documents it sits beside - whose first option, `CANDIDATE_CONFIRM`, is
+  the one answer that has the product open it read-only (owner, 2026-09-23, research R5 Q2;
+  `contracts/confirmed-open.md` section 1). Asked only when the host opens closed drawings
+  (013: `mode` `opens_closed`); otherwise each candidate's reason is the instruction line;
+- one per document that two or more drawings show **in a usable view**, three at most, never a
+  bought one: which one governs it. A drawing that shows the document only in another
+  configuration or an out-of-date view does not compete with it - that is coverage, and an answer
+  could not change what was extracted.
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
 from swreview.checks.questions import QuestionSpec
 from swreview.checks.result import CheckResult, DocumentResult
 from swreview.checks.tolerances import profile_name
-from swreview.drawings.evidence import DrawingIndex, file_name, id_order
+from swreview.drawings.evidence import DrawingIndex, file_key, file_name, id_order
 from swreview.drawings.native import LENGTH_UNITS
-from swreview.ir.models import Document, DrawingRecord, DrawingSheetRecord, EvidencePackage
+from swreview.ir.models import (
+    Document,
+    DrawingCandidate,
+    DrawingRecord,
+    DrawingSheetRecord,
+    EvidencePackage,
+)
 from swreview.report.names import and_list, plural
 from swreview.report.session import (
     MAX_OPTIONS,
@@ -49,26 +72,40 @@ from swreview.report.session import (
 )
 
 if TYPE_CHECKING:  # the standards package reaches the runner; only the types are needed here
+    from swreview.bridge.client import DrawingReadMode
+    from swreview.checks.part_roles import PartRoles  # 013 T018, lane P
     from swreview.checks.standards.profile import DrawingSection, StandardsProfile
 
 __all__ = [
+    "ABSENT_REASON",
+    "BOUGHT_REASON",
     "CANDIDATES_WHY",
     "CANDIDATE_CONFIRM",
     "CANDIDATE_OPTIONS",
+    "CANDIDATE_REASON",
     "COMPARED_SETTINGS",
     "CONFORMANCE_CHECK",
     "CONTEXT_CHECK",
+    "DRAWING_STATES",
     "GOVERNING_LIMIT",
     "GOVERNING_WHY",
+    "MAYBE_BOUGHT",
     "NO_DRAWING_SECTION",
+    "OPEN_THEN_REVIEW",
+    "SAME_NAME_READ_REASON",
+    "CandidateFile",
     "ConformanceRun",
     "CoverageStatus",
     "DocumentDrawingCoverage",
+    "DocumentDrawingState",
     "DrawingConformance",
     "DrawingContextResult",
+    "DrawingState",
     "QuestionSpec",
+    "candidate_files",
     "candidate_question",
     "compare_with_profile",
+    "drawing_states",
     "run_drawing_context",
 ]
 
@@ -104,10 +141,58 @@ CANDIDATES_NAMED = 10
 
 CoverageStatus = Literal["checked", "skipped", "unresolved"]
 
+# --- the drawing states (013 `contracts/drawing-capability.md` sections 3 and 4) ----------------
+
+DrawingState = Literal["attached", "candidate", "absent", "bought"]
+DRAWING_STATES: tuple[DrawingState, ...] = ("attached", "candidate", "absent", "bought")
+"""Every state, in the order `check_drawings`' payload counts them (section 7)."""
+
+BOUGHT_REASON = "a bought part: no drawing is expected, and none is asked for"
+CANDIDATE_REASON = "a drawing with its name sits beside it (candidate)"
+"""A candidate's reason when the host opens closed drawings, so the candidate question asks."""
+OPEN_THEN_REVIEW = "Open {drawing} in SOLIDWORKS, then press Review again with {model} active"
+"""A candidate's reason when the host cannot open a closed drawing (research R2.25): `{drawing}`
+the candidate file, `{model}` the root document's file name - Review refuses a drawing as the
+active document, so an engineer who pressed it with the drawing active would meet that refusal
+first. The summary's words file carries the same line for the pane (`open_then_review_one`)."""
+ABSENT_REASON = "no drawing named {stem}.SLDDRW sits beside it"
+SAME_NAME_READ_REASON = "its same-name drawing {drawing} was read, and no view of it shows it"
+"""An absent document whose same-name drawing is attached but shows it in no view, where the
+absent reason would say no drawing of its name sits beside it, which is not so."""
+MAYBE_BOUGHT = "(may be a bought part)"
+"""Ends an unclear document's reason while the part-roles question is open."""
+
+
+@dataclass(frozen=True)
+class DocumentDrawingState:
+    """One reviewed document's drawing state (013 `data-model.md` section 9)."""
+
+    document_id: str
+    state: DrawingState
+    reason: str
+    maybe_bought: bool
+    """Unclear while the part-roles question is open: a candidate's or a missing drawing's reason
+    then says the document may be bought."""
+
+
+@dataclass(frozen=True)
+class CandidateFile:
+    """One same-name drawing file beside one or more reviewed documents (013 section 3): a part
+    and an assembly of one stem in one folder share one."""
+
+    key: str
+    """`drawings/evidence.file_key` of its path: one file however the rows spell it."""
+    file_name: str
+    """As the first row spells it."""
+    document_ids: tuple[str, ...]
+    """Every custom or unclear document it sits beside, in id order; the confirmed read names
+    the first."""
+
 
 @dataclass(frozen=True)
 class DocumentDrawingCoverage:
-    """What the drawings say about one reviewed document (`data-model.md` section 5)."""
+    """What the drawings say about one reviewed document that is not bought (`data-model.md`
+    section 5; 013 section 3)."""
 
     document_id: str
     read: tuple[str, ...]
@@ -119,23 +204,8 @@ class DocumentDrawingCoverage:
     candidate: str | None
     """The same-name drawing file beside the document, when the extraction recorded one."""
     status: CoverageStatus
-
-    @property
-    def reason(self) -> str:
-        """The coverage item's reason (`contracts/questions.md` section 3)."""
-        reasons = [why for _, why in self.unusable]
-        if self.status == "skipped":
-            text = "no open drawing shows it"
-            if self.candidate is not None:
-                text += "; a drawing with its name sits beside it (candidate)"
-            return text
-        if self.status == "unresolved":
-            return "; ".join(reasons)
-        head = (
-            f"read from {and_list(list(self.read_names))}; "
-            f"{plural(self.usable_views, 'view')} usable"
-        )
-        return "; ".join([head, *reasons])
+    reason: str
+    """The coverage item's reason: the document's drawing state's (013 section 3)."""
 
     def coverage_item(self) -> CoverageItem:
         return CoverageItem(
@@ -178,47 +248,163 @@ class DrawingContextResult:
     questions: tuple[QuestionSpec, ...]
     conformance: ConformanceRun = field(default_factory=ConformanceRun)
     """The drawing standard's comparison (User Story 7)."""
+    states: Mapping[str, DocumentDrawingState] = field(default_factory=dict)
+    """Each reviewed document's drawing state, in traversal order (013 section 3)."""
 
 
-def _subjects(package: EvidencePackage) -> list[Document]:
-    """The part and assembly documents the package reviews, in traversal (id) order."""
-    return sorted(
-        (document for document in package.documents if document.kind in ("part", "assembly")),
-        key=lambda document: id_order(document.document_id),
-    )
+def _is_bought(roles: PartRoles | None, document_id: str) -> bool:
+    """Whether the document is bought, and so no drawing subject: the roles do not grade it.
 
-
-def _coverage(
-    index: DrawingIndex, names: dict[str, str], document: Document
-) -> DocumentDrawingCoverage:
-    views = index.views_of(document.document_id)
-    usable = [view for view in views if view.usable]
-    unusable = tuple((view.view.id, view.why or "") for view in views if not view.usable)
-    candidate = index.candidate_of(document.document_id)
-    read = index.drawings_of(document.document_id)
-    status: CoverageStatus = "checked" if usable else ("unresolved" if views else "skipped")
-    return DocumentDrawingCoverage(
-        document_id=document.document_id,
-        read=read,
-        read_names=tuple(names.get(drawing, drawing) for drawing in read),
-        usable_views=len(usable),
-        unusable=unusable,
-        candidate=None if candidate is None else candidate.path,
-        status=status,
-    )
-
-
-def candidate_question(index: DrawingIndex) -> QuestionSpec | None:
-    """The one question about every drawing candidate, or `None` when there is none.
-
-    Also what `tools/drawings.read_confirmed_candidates` compares an answered request with, so
-    the question the product acts on is exactly the one it asked (`contracts/confirmed-open.md`
-    section 1).
+    With no roles - a context that never classified - nothing is bought, as before 013; an id the
+    roles do not hold is graded (`PartRoles.graded`: errors fail toward grading), and the review's
+    root is always graded, so it is never bought here.
     """
-    candidates = list(index.candidates)
-    if not candidates:
+    return roles is not None and not roles.graded(document_id)
+
+
+def _stem(document: Document) -> str:
+    return document.file_name.rsplit(".", 1)[0]
+
+
+def _same_name_path(path: str) -> str:
+    """The same-name drawing beside `path`: its folder, its stem, `.SLDDRW` - discovery's rule
+    (`OpenDrawingDiscovery.CandidatePath`), whichever separator the path was written with."""
+    folder, _, name = path.replace("/", "\\").rpartition("\\")
+    drawing = f"{name.rsplit('.', 1)[0]}.SLDDRW"
+    return f"{folder}\\{drawing}" if folder else drawing
+
+
+def _same_name_drawing_read(index: DrawingIndex, document: Document) -> str | None:
+    """The file name of an attached or root drawing that is `document`'s same-name drawing, or
+    `None`: the drawing whose views, had any shown the document, would have made it attached."""
+    wanted = file_key(_same_name_path(document.path))
+    for drawing_id in index.records:
+        drawing = index.documents.get(drawing_id)
+        if drawing is not None and file_key(drawing.path) == wanted:
+            return drawing.file_name
+    return None
+
+
+def candidate_files(index: DrawingIndex, roles: PartRoles | None) -> tuple[CandidateFile, ...]:
+    """The candidate rows grouped by drawing file (013 section 3, research R2.28), in the id order
+    of each file's first document. A bought document's row is ignored: no drawing is expected of
+    it. Pure, like everything here."""
+    grouped: dict[str, list[DrawingCandidate]] = {}
+    for candidate in index.candidates:  # in document-id order
+        if not _is_bought(roles, candidate.document_id):
+            grouped.setdefault(file_key(candidate.path), []).append(candidate)
+    return tuple(
+        CandidateFile(
+            key=key,
+            file_name=file_name(rows[0].path),
+            document_ids=tuple(dict.fromkeys(row.document_id for row in rows)),
+        )
+        for key, rows in grouped.items()
+    )
+
+
+def _attached_reason(index: DrawingIndex, document_id: str) -> str:
+    """An attached document's reason (`contracts/questions.md` section 3): the drawings it was
+    read from and how many views are usable, then every unusable view's reason - or only those
+    reasons, when no view is usable."""
+    views = index.views_of(document_id)
+    usable = sum(1 for view in views if view.usable)
+    reasons = [view.why or "" for view in views if not view.usable]
+    if not usable:
+        return "; ".join(reasons)
+    names = [index.file_name_of(drawing) for drawing in index.drawings_of(document_id)]
+    return "; ".join([f"read from {and_list(names)}; {plural(usable, 'view')} usable", *reasons])
+
+
+def _state(
+    index: DrawingIndex,
+    roles: PartRoles | None,
+    mode: DrawingReadMode,
+    candidate: CandidateFile | None,
+    document: Document,
+) -> DocumentDrawingState:
+    document_id = document.document_id
+    if _is_bought(roles, document_id):
+        return DocumentDrawingState(document_id, "bought", BOUGHT_REASON, maybe_bought=False)
+    maybe_bought = roles is not None and roles.note_for(document_id) is not None
+    if index.views_of(document_id):
+        reason = _attached_reason(index, document_id)
+        return DocumentDrawingState(document_id, "attached", reason, maybe_bought)
+    state: DrawingState
+    if candidate is not None:
+        state = "candidate"
+        reason = (
+            CANDIDATE_REASON
+            if mode == "opens_closed"
+            else OPEN_THEN_REVIEW.format(
+                drawing=candidate.file_name, model=index.file_name_of(index.root_document_id)
+            )
+        )
+    else:
+        state = "absent"
+        read = _same_name_drawing_read(index, document)
+        reason = (
+            ABSENT_REASON.format(stem=_stem(document))
+            if read is None
+            else SAME_NAME_READ_REASON.format(drawing=read)
+        )
+    if maybe_bought:
+        reason = f"{reason} {MAYBE_BOUGHT}"
+    return DocumentDrawingState(document_id, state, reason, maybe_bought)
+
+
+def drawing_states(
+    index: DrawingIndex, roles: PartRoles | None, mode: DrawingReadMode
+) -> dict[str, DocumentDrawingState]:
+    """Each reviewed part or assembly document's drawing state, in traversal (id) order (013
+    `contracts/drawing-capability.md` section 3): `bought` first, then `attached`, `candidate` or
+    `absent`. `mode` - what the host's `drawing.read` can do - words a candidate's reason only: the
+    instruction line unless the host opens closed drawings. Pure: nothing is recorded here."""
+    files = {
+        document_id: file
+        for file in candidate_files(index, roles)
+        for document_id in file.document_ids
+    }
+    return {
+        document.document_id: _state(index, roles, mode, files.get(document.document_id), document)
+        for document in index.subjects()
+    }
+
+
+def _coverage(index: DrawingIndex, state: DocumentDrawingState) -> DocumentDrawingCoverage:
+    views = index.views_of(state.document_id)
+    usable = [view for view in views if view.usable]
+    candidate = index.candidate_of(state.document_id)
+    read = index.drawings_of(state.document_id)
+    return DocumentDrawingCoverage(
+        document_id=state.document_id,
+        read=read,
+        read_names=tuple(index.file_name_of(drawing) for drawing in read),
+        usable_views=len(usable),
+        unusable=tuple((view.view.id, view.why or "") for view in views if not view.usable),
+        candidate=None if candidate is None else candidate.path,
+        status="checked" if usable else "unresolved",
+        reason=state.reason,
+    )
+
+
+def candidate_question(
+    index: DrawingIndex, roles: PartRoles | None, mode: DrawingReadMode
+) -> QuestionSpec | None:
+    """The one question about every candidate drawing file, or `None` when there is none or the
+    host cannot open a closed drawing (013 section 4: asked only on `opens_closed`).
+
+    Each file is named once and counted once; `entity_ids` are every custom or unclear document of
+    the files, in id order. Also what `tools/drawings.read_confirmed_candidates` compares an
+    answered request with, rebuilt with the same roles and mode, so the question the product acts
+    on is exactly the one it asked (`contracts/confirmed-open.md` section 1).
+    """
+    if mode != "opens_closed":
         return None
-    names = [file_name(candidate.path) for candidate in candidates]
+    files = candidate_files(index, roles)
+    if not files:
+        return None
+    names = [file.file_name for file in files]
     shown = ", ".join(names[:CANDIDATES_NAMED])
     rest = len(names) - CANDIDATES_NAMED
     if rest > 0:
@@ -232,9 +418,11 @@ def candidate_question(index: DrawingIndex) -> QuestionSpec | None:
         key="candidates",
         what=what,
         why=CANDIDATES_WHY,
-        entity_ids=tuple(candidate.document_id for candidate in candidates),
+        entity_ids=tuple(
+            sorted({document for file in files for document in file.document_ids}, key=id_order)
+        ),
         question=(
-            f"A drawing with the same name sits beside {len(candidates)} reviewed file(s) but "
+            f"A drawing with the same name sits beside {len(files)} reviewed file(s) but "
             "is not open. Should the review read it?"
         ),
         options=CANDIDATE_OPTIONS,
@@ -243,14 +431,14 @@ def candidate_question(index: DrawingIndex) -> QuestionSpec | None:
 
 
 def _governing_question(
-    document: Document, drawings: tuple[str, ...], names: dict[str, str]
+    index: DrawingIndex, document: Document, drawings: tuple[str, ...]
 ) -> QuestionSpec:
-    stem = document.file_name.rsplit(".", 1)[0]
+    stem = _stem(document)
     template = f"{len(drawings)} open drawings show {{stem}}. Which one governs it?"
     room = QUESTION_MAX_LENGTH - len(template.format(stem=""))
     if len(stem) > room:
         stem = f"{stem[: room - 1]}…"
-    files = [names.get(drawing, drawing) for drawing in drawings]
+    files = [index.file_name_of(drawing) for drawing in drawings]
     offer = (
         len(files) <= MAX_OPTIONS - 1
         and len(set(files)) == len(files)
@@ -260,7 +448,7 @@ def _governing_question(
         key=f"governing:{document.document_id}",
         what=(
             f"Which of {len(drawings)} open drawings governs {document.file_name}: "
-            + ", ".join(f"{drawing} {names.get(drawing, drawing)}" for drawing in drawings)
+            + ", ".join(f"{drawing} {index.file_name_of(drawing)}" for drawing in drawings)
         ),
         why=GOVERNING_WHY,
         entity_ids=(document.document_id, *drawings),
@@ -527,20 +715,31 @@ def run_drawing_context(
     package: EvidencePackage,
     profile: StandardsProfile | None = None,
     index: DrawingIndex | None = None,
+    roles: PartRoles | None = None,
+    mode: DrawingReadMode = "none",
 ) -> DrawingContextResult:
-    """The drawing check's coverage, questions and drawing-standard comparison over `package`
-    (sections 3 and 4, and `contracts/profile.md` section 2)."""
+    """The drawing check's states, coverage, questions and drawing-standard comparison over
+    `package` (sections 3 and 4, 013 `contracts/drawing-capability.md` sections 3 and 4, and
+    `contracts/profile.md` section 2).
+
+    `roles` are the review's part roles (013 `contracts/part-roles.md`), `None` on a context that
+    never classified; `mode` is what the host's `drawing.read` can do, `none` - it offers nothing -
+    unless the caller asked the host (absent means unable, research R2.24).
+    """
     index = index or DrawingIndex.for_package(package)
-    names = {document.document_id: document.file_name for document in package.documents}
-    subjects = _subjects(package)
-    coverage = tuple(_coverage(index, names, document) for document in subjects)
+    states = drawing_states(index, roles, mode)
+    coverage = tuple(
+        _coverage(index, state) for state in states.values() if state.state != "bought"
+    )
 
     questions: list[QuestionSpec] = []
-    candidates = candidate_question(index)
+    candidates = candidate_question(index, roles, mode)
     if candidates is not None:
         questions.append(candidates)
     governing = 0
-    for document in subjects:
+    for document in index.subjects():
+        if _is_bought(roles, document.document_id):
+            continue
         competing = tuple(
             dict.fromkeys(
                 view.drawing_id for view in index.views_of(document.document_id) if view.usable
@@ -550,10 +749,11 @@ def run_drawing_context(
             continue
         if governing == GOVERNING_LIMIT:
             break
-        questions.append(_governing_question(document, competing, names))
+        questions.append(_governing_question(index, document, competing))
         governing += 1
     return DrawingContextResult(
         coverage=coverage,
         questions=tuple(questions),
         conformance=compare_with_profile(package, profile),
+        states=states,
     )

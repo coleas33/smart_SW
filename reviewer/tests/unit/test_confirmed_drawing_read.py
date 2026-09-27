@@ -30,7 +30,7 @@ import pytest
 from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
 from swreview.agent.runner import ReviewRun, answers_message, start_review
 from swreview.agent.settings import EfficiencySettings
-from swreview.bridge.client import BridgeClient, BridgeError
+from swreview.bridge.client import BridgeClient, BridgeError, DrawingReadMode
 from swreview.checks.drawing_context import (
     CANDIDATE_CONFIRM,
     CANDIDATE_OPTIONS,
@@ -39,6 +39,7 @@ from swreview.checks.drawing_context import (
 )
 from swreview.ir.loader import load_package, save_package
 from swreview.ir.models import EvidencePackage, Gap
+from swreview.report.session import EvidenceRequest
 from swreview.tools.drawings import (
     CONFIRMED_OPEN_CHECK,
     DRAWINGS_TOOL,
@@ -79,14 +80,26 @@ NO_DRAWING_GAP = Gap(
 
 
 class FakeHost:
-    """The bridge as the add-in answers `drawing.read`: one scripted answer per document."""
+    """The bridge as the add-in answers `drawing.read`: one scripted answer per document.
 
-    def __init__(self, folder: Path, answers: dict[str, Answer]) -> None:
+    It says what it can do as `BridgeClient.drawing_read_mode` does (013 T074): `opens_closed` by
+    default, the one mode under which the candidate question is asked (013
+    `contracts/drawing-capability.md` section 4), and counts how often it was asked."""
+
+    def __init__(
+        self, folder: Path, answers: dict[str, Answer], mode: DrawingReadMode = "opens_closed"
+    ) -> None:
         self.folder = folder
         self.answers = answers
+        self.mode = mode
+        self.modes_asked = 0
         self.calls: list[tuple[str, str]] = []
         self.user_messages_at_call: list[int] = []
         self.run: ReviewRun | None = None
+
+    def drawing_read_mode(self) -> DrawingReadMode:
+        self.modes_asked += 1
+        return self.mode
 
     def drawing_read(self, run_id: str, document_id: str) -> dict[str, Any]:
         self.calls.append((run_id, document_id))
@@ -410,12 +423,35 @@ def test_a_look_alike_request_calls_nothing(tmp_path: Path) -> None:
     assert confirmed(run) == {}
 
 
-def test_a_review_with_no_bridge_calls_nothing_and_says_why(tmp_path: Path) -> None:
+def test_a_review_with_no_bridge_asks_nothing_and_says_how_to_include_the_drawing(
+    tmp_path: Path,
+) -> None:
+    """*Edited deliberately by 013 T079:* with no bridge the host can open nothing, so the
+    candidate question is not asked - its answer could not act - and the candidate's coverage
+    reason is the instruction line; were such a question answered anyway, nothing happens and no
+    confirmed-open item is written (013 `contracts/drawing-capability.md` section 4). Before 013
+    the question was asked and its confirmation recorded `NO_CONNECTION`."""
     run, _, _ = reviewed(tmp_path, None, None, bridge=False)
 
-    run.answer_evidence_batch([(question_id(run), CANDIDATE_CONFIRM)])
-
-    assert confirmed(run) == {"doc:0003": ("unresolved", NO_CONNECTION)}
+    assert [request for request in run.session.evidence_requests if request.options] == []
+    [candidate] = [
+        item for item in run.session.coverage.unresolved
+        if item.check == CONTEXT_CHECK and item.scope.document_ids == ["doc:0003"]
+    ]
+    assert candidate.reason == (
+        "Open FICT-TULMSORN-3002.SLDDRW in SOLIDWORKS, then press Review again with "
+        "FICT-TULMVEN-0000.SLDASM active"
+    )
+    asked_elsewhere = EvidenceRequest(
+        id="ER-090", what="The same-name drawing FICT-TULMSORN-3002.SLDDRW, beside a reviewed "
+        "file and not open", why="w", entity_ids=["doc:0003"], status="answered",
+        answer=CANDIDATE_CONFIRM, answered_at=None,
+        question="A drawing with the same name sits beside 1 reviewed file(s) but is not open. "
+        "Should the review read it?", options=list(CANDIDATE_OPTIONS),
+        blocks="drawing.manufacturing_inputs",
+    )
+    assert read_confirmed_candidates(run.context, [asked_elsewhere], run.out_dir) == []
+    assert confirmed(run) == {}
     assert NO_CONNECTION == (
         "no SOLIDWORKS connection in this review, so the drawing was not opened; open it and "
         "review again"
@@ -517,7 +553,7 @@ def test_with_checks_first_the_drawing_check_is_restated_over_the_drawing_just_r
     run, _ = prerun_reviewed(tmp_path, lambda folder: {"doc:0003": merged(folder, "doc:0003")})
     [prerun_step] = [step for step in run.session.steps if step.tool == DRAWINGS_TOOL]
     before = context_items(run, CONTEXT_CHECK)
-    assert ("skipped", ("doc:0003",)) in [(bucket, ids) for bucket, ids, _ in before]
+    assert ("unresolved", ("doc:0003",)) in [(bucket, ids) for bucket, ids, _ in before]
 
     run.answer_evidence_batch([(question_id(run), CANDIDATE_CONFIRM)])
 
@@ -570,31 +606,31 @@ def test_without_checks_first_the_drawing_check_is_restated_too(tmp_path: Path) 
     assert plate_block[0] == "checked"
 
 
-@pytest.mark.parametrize(
-    "answer",
-    [BridgeError(f"the bridge returned status 'error': {NOT_VALIDATED_BY_THE_HOST}"), None],
-    ids=["refused", "no-bridge"],
-)
-def test_nothing_is_restated_when_nothing_was_read(tmp_path: Path, answer: Answer | None) -> None:
-    run, _, _ = reviewed(
-        tmp_path,
-        None,
-        None if answer is None else (lambda folder: {"doc:0003": answer}),
-        bridge=answer is not None,
-    )
+def test_nothing_is_restated_when_nothing_was_read(tmp_path: Path) -> None:
+    """A refused read reloads nothing, so nothing is restated. *Edited deliberately by 013 T079:*
+    the no-bridge case is gone from here - with no bridge the question is never asked
+    (`test_a_review_with_no_bridge_asks_nothing_and_says_how_to_include_the_drawing`) - and the
+    candidate's item is `unresolved`, not `skipped`."""
+    refused = BridgeError(f"the bridge returned status 'error': {NOT_VALIDATED_BY_THE_HOST}")
+    run, _, _ = reviewed(tmp_path, None, lambda folder: {"doc:0003": refused})
     steps = len(run.session.steps)
 
     run.answer_evidence_batch([(question_id(run), CANDIDATE_CONFIRM)])
 
     assert len(run.session.steps) == steps
-    assert ("skipped", ("doc:0003",)) in [
+    assert ("unresolved", ("doc:0003",)) in [
         (bucket, ids) for bucket, ids, _ in context_items(run, CONTEXT_CHECK)
     ]
 
 
+PING_OPENS_CLOSED = {"pong": True, "protocol": "1.4", "drawing_read": "opens_closed"}
+"""A 1.4 host's ping that says it opens closed drawings (013 T073), so the question is asked."""
+
+
 class RefusingHost:
-    """The add-in's pipe as the shipped state answers it: every `drawing.read` refused with the
-    not-validated sentence (`DrawingOpenScope.SeatValidated` is false), every `ping` answered."""
+    """The add-in's pipe answering every `drawing.read` with the not-validated sentence, every
+    `ping` with `opens_closed` - a host whose seam refuses although ping said it would open,
+    the worst case for the breaker (`DrawingOpenScope.SeatValidated`)."""
 
     def __init__(self) -> None:
         self.commands: list[str] = []
@@ -605,7 +641,7 @@ class RefusingHost:
         if request["command"] == "drawing.read":
             return json.dumps({"id": request["id"], "status": "error", "result": None,
                                "error": NOT_VALIDATED_BY_THE_HOST, "elapsed_ms": 1})
-        return json.dumps({"id": request["id"], "status": "ok", "result": {"pong": True},
+        return json.dumps({"id": request["id"], "status": "ok", "result": PING_OPENS_CLOSED,
                            "error": None, "elapsed_ms": 1})
 
     def close(self) -> None:
@@ -639,12 +675,12 @@ def test_refused_candidates_leave_the_real_bridge_client_working(tmp_path: Path)
 
     run.answer_evidence_batch([(question_id(run), CANDIDATE_CONFIRM)])
 
-    assert host.commands == ["drawing.read"] * 4
+    assert host.commands == ["ping", *["drawing.read"] * 4], "one ping for the capability"
     reasons = confirmed(run)
     assert [reasons[part][0] for part in parts] == ["unresolved"] * 4
     assert all(NOT_VALIDATED_BY_THE_HOST in reasons[part][1] for part in parts)
     assert not client.circuit_open
-    assert client.ping() == {"pong": True}
+    assert client.ping() == PING_OPENS_CLOSED
 
 
 def test_the_function_acts_only_on_the_confirmed_candidate_question(tmp_path: Path) -> None:

@@ -223,8 +223,13 @@ def test_a_second_check_drawings_withdraws_its_two_checks_and_the_stream_follows
 
     tools.call("check_drawings", {})
 
+    # Edited deliberately by 013 T079: a document no drawing shows is `unresolved` (a candidate,
+    # or no drawing of its name), no longer `skipped`, so the withdrawal names all three buckets.
     assert withdrawals(events) == [
-        {"checks": [CONTEXT_CHECK, CONFORMANCE_CHECK], "buckets": ["checked", "skipped"]}
+        {
+            "checks": [CONTEXT_CHECK, CONFORMANCE_CHECK],
+            "buckets": ["checked", "skipped", "unresolved"],
+        }
     ]
     assert mirror(events) == held(context.require_session()) == first
 

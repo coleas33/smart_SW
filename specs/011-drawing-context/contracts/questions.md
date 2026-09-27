@@ -52,6 +52,21 @@ coverage item per part or assembly document the package reviews, in traversal or
 A drawing root's own document is not a subject of this coverage (it is graded by feature 006); its
 referenced documents are.
 
+*Amended 2026-09-26 by feature 013 T079 (013 `contracts/drawing-capability.md` section 3):*
+`run_drawing_context(package, profile=None, index=None, roles=None, mode="none")` first gives each
+reviewed part or assembly document a drawing state (`drawing_states(index, roles, mode)`), in this
+order: `bought` (its part role is bought: no item at all - the bought-parts line names it once;
+reason "a bought part: no drawing is expected, and none is asked for"), `attached` (a view of an
+attached or root drawing shows it: `checked` or `unresolved` as in the table above), `candidate` (a
+same-name drawing file sits beside it: `unresolved`, reason "a drawing with its name sits beside it
+(candidate)" when the host opens closed drawings, otherwise "Open {drawing} in SOLIDWORKS, then press
+Review again with {model} active", `{model}` the root document's file name) or `absent` (none does:
+`unresolved`, "no drawing named {stem}.SLDDRW sits beside it", or, when that drawing is attached but
+shows the document in no view, "its same-name drawing {drawing} was read, and no view of it shows
+it"). The `skipped` row above is gone: a document no drawing shows is unresolved, never a finding.
+An unclear document's candidate and absent reasons end "(may be a bought part)" while the part-roles
+question is open. With no roles - a context that never classified - nothing is bought, as before.
+
 ## 4. The questions
 
 Written through `tools/session.record_evidence_request(context, what, why, entity_ids,
@@ -82,6 +97,16 @@ the drawing check and the part-roles question alike. It stays exact, because a c
 trigger an action (`_is_confirmed_candidate`). The model's re-ask guard (`already_answered`,
 `already_asked`, 013 `contracts/re-ask-guard.md` section 3) reads model-written requests only: a
 code-written question covers only itself and never makes a model question a repeat.
+
+*Amended 2026-09-26 by feature 013 T079 (013 `contracts/drawing-capability.md` section 4):* the
+`candidates` question is asked only when the host's `ping` says `drawing_read: "opens_closed"`
+(`candidate_question(index, roles, mode)` answers `None` otherwise, and the candidate's coverage
+reason is the instruction line instead). It is asked once per candidate **file**
+(`candidate_files(index, roles)`, grouped by `drawings/evidence.file_key`, so a part and an assembly
+of one stem share one): `what` names each file once, `{n}` counts files, and `entity_ids` are every
+custom or unclear document of the files in id order. Candidate rows of bought documents are ignored,
+and a governing question is never asked about a bought document. `tools/drawings.check_drawings`
+asks the host for its mode only when a custom or unclear document has a candidate.
 
 ## 5. The payload and the digest line
 

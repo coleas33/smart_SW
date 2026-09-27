@@ -17,14 +17,15 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from swreview.bridge.client import BridgeError
+from swreview.bridge.client import BridgeError, DrawingReadMode
 from swreview.checks.drawing_context import (
     CANDIDATE_CONFIRM,
     CONFORMANCE_CHECK,
     CONTEXT_CHECK,
     QuestionSpec,
+    candidate_files,
     candidate_question,
     run_drawing_context,
 )
@@ -42,10 +43,14 @@ from swreview.tools.query import ToolResult
 from swreview.tools.recording import record_result
 from swreview.tools.session import record_evidence_request
 
+if TYPE_CHECKING:
+    from swreview.checks.part_roles import PartRoles  # 013 T018, lane P
+
 __all__ = [
     "CONFIRMED_OPEN_CHECK",
     "DRAWINGS_TOOL",
     "NO_CONNECTION",
+    "PART_ROLES_ATTRIBUTE",
     "TEN_DRAWINGS",
     "check_drawings",
     "drawing_evidence",
@@ -59,11 +64,50 @@ DRAWINGS_TOOL = "check_drawings"
 COVERAGE_BUCKETS: tuple[str, ...] = ("checked", "skipped", "unresolved")
 """The buckets a `drawing.context` item lands in."""
 
+PART_ROLES_ATTRIBUTE = "part_roles"
+"""The context attribute `start_review` attaches the review's part roles under (013
+`contracts/part-roles.md` section 5), beside the standards run's.
+
+**A stand-in, for the integrator.** 013 T022 (lane S) defines it as
+`tools/registry.PART_ROLES_ATTRIBUTE`, which this lane does not edit; until then no review
+attaches roles and every part and assembly is a drawing subject, as before 013.
+`test_tools_check_drawings.py` asserts the two names equal once T022 lands; then this constant
+should give way to the registry's, imported where it is read (the registry imports this module,
+so a module-level import would be circular)."""
+
 
 def drawing_evidence(package: EvidencePackage) -> bool:
     """Whether the package carries drawing evidence: the one condition the family is offered
     and planned on."""
     return bool(package.drawing_records or package.drawing_candidates)
+
+
+def _review_roles(context: ToolContext) -> PartRoles | None:
+    """The part roles attached to the review, or `None` on a context that never classified - a
+    test, a golden case, the command line - where every part and assembly is a drawing subject.
+    Read, never computed: the roles are classified once, at `start_review` (013 `part-roles.md`
+    section 5)."""
+    return getattr(context, PART_ROLES_ATTRIBUTE, None)
+
+
+def _read_mode(
+    context: ToolContext, index: DrawingIndex, roles: PartRoles | None
+) -> DrawingReadMode:
+    """What the host's `drawing.read` can do (013 `contracts/drawing-capability.md` section 2).
+
+    Asked only when a custom or unclear document has a candidate, so a package without one - the
+    replay fixtures, a review with no drawing beside a custom part - never pings; `none` with no
+    bridge. The bridge pings once and caches (`BridgeClient.drawing_read_mode`).
+
+    **A stand-in, for the integrator.** 013 T077 (lane S) gives `ToolContext.drawing_read_mode()`,
+    lazy, cached and recorded on the session as `drawing_read`; this then becomes
+    `context.drawing_read_mode()` behind the same candidate test. `test_tools_check_drawings.py`
+    fails once T077 lands and this still asks the bridge itself.
+    """
+    if not candidate_files(index, roles) or context.bridge is None:
+        return "none"
+    mode: DrawingReadMode = context.bridge.drawing_read_mode()
+    return mode
 
 
 def _record(context: ToolContext) -> dict[str, Any]:
@@ -74,7 +118,15 @@ def _record(context: ToolContext) -> dict[str, Any]:
     twice - even with no re-call guard in front of the tool (FR-035, SC-008).
     """
     session = context.require_session()
-    result = run_drawing_context(context.ir, profile=review_profile(context))
+    index = DrawingIndex.for_package(context.ir)
+    roles = _review_roles(context)
+    result = run_drawing_context(
+        context.ir,
+        profile=review_profile(context),
+        index=index,
+        roles=roles,
+        mode=_read_mode(context, index, roles),
+    )
     context.withdraw_coverage((CONTEXT_CHECK, CONFORMANCE_CHECK), COVERAGE_BUCKETS)
     counts = dict.fromkeys(COVERAGE_BUCKETS, 0)
     for coverage in result.coverage:
@@ -244,7 +296,9 @@ def read_confirmed_candidates(
     reloads `run_dir/package.json` into `context` when a read succeeded. Returns the items
     recorded, in the question's order; nothing else in the session changes.
     """
-    spec = candidate_question(DrawingIndex.for_package(context.ir))
+    index = DrawingIndex.for_package(context.ir)
+    roles = _review_roles(context)
+    spec = candidate_question(index, roles, _read_mode(context, index, roles))
     if not any(_is_confirmed_candidate(request, spec) for request in answered):
         return []
     assert spec is not None
