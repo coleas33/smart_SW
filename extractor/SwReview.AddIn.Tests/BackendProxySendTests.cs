@@ -152,30 +152,20 @@ public sealed class BackendProxySendTests
     [Fact]
     public void ABackendThatIsNotListeningAnswersAsBackendUnavailable()
     {
-        var handler = new BackendProxyHandler(
-            () => new BackendEndpoint(FreePort(), "0FAKEtoken"),
-            BackendProxyHandler.Send);
-
-        ProxiedResponse? response = handler.TryServe(Prefix + "/health", "GET", null, null);
-
-        Assert.Equal(502, response!.Status);
-        string body = Encoding.UTF8.GetString(response.Content);
-        Assert.Contains("\"error_class\":\"BackendUnavailable\"", body, StringComparison.Ordinal);
-        Assert.Contains("\"retryable\":true", body, StringComparison.Ordinal);
-    }
-
-    /// <summary>A port the operating system has just confirmed is free, so nothing answers on it.</summary>
-    private static int FreePort()
-    {
-        var probe = new TcpListener(IPAddress.Loopback, 0);
-        probe.Start();
-        try
+        // The port is held by a bound socket that never listens, so a connect is refused and no
+        // other listener can take the port while the test runs (LoopbackPort).
+        using (LoopbackPort.ReserveRefusingPort(out int port))
         {
-            return ((IPEndPoint)probe.LocalEndpoint).Port;
-        }
-        finally
-        {
-            probe.Stop();
+            var handler = new BackendProxyHandler(
+                () => new BackendEndpoint(port, "0FAKEtoken"),
+                BackendProxyHandler.Send);
+
+            ProxiedResponse? response = handler.TryServe(Prefix + "/health", "GET", null, null);
+
+            Assert.Equal(502, response!.Status);
+            string body = Encoding.UTF8.GetString(response.Content);
+            Assert.Contains("\"error_class\":\"BackendUnavailable\"", body, StringComparison.Ordinal);
+            Assert.Contains("\"retryable\":true", body, StringComparison.Ordinal);
         }
     }
 
@@ -207,7 +197,7 @@ public sealed class BackendProxySendTests
     /// </summary>
     private sealed class FakeBackend : IDisposable
     {
-        private readonly HttpListener _listener = new HttpListener();
+        private readonly HttpListener _listener;
         private readonly Thread _thread;
         private readonly List<RecordedCall> _requests = new List<RecordedCall>();
         private readonly object _gate = new object();
@@ -217,9 +207,7 @@ public sealed class BackendProxySendTests
 
         public FakeBackend()
         {
-            int port = FreePort();
-            _listener.Prefixes.Add("http://127.0.0.1:" + port + "/");
-            _listener.Start();
+            _listener = LoopbackPort.StartListener(out int port);
             Endpoint = new BackendEndpoint(port, "0FAKEtoken");
             _thread = new Thread(Serve) { IsBackground = true, Name = "fake-proxy-backend" };
             _thread.Start();
