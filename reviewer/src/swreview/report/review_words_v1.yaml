@@ -90,6 +90,15 @@ resume:
   with_tokens: "Sending resumes the review once. Its last round sent {tokens} input tokens."
   without: "Sending resumes the review once."
 
+# The first line of every model answer, computed from the answer turn's steps and never from
+# the model's text (feature 013): how many results it read, and - when the review read no
+# drawing - that no drawing was read, appended after `none`, `one` or `many`.
+answer_basis:
+  none: "No evidence was read for this answer: this is general guidance."
+  one: "Based on 1 result read for this answer."
+  many: "Based on {n} results read for this answer."
+  no_drawing: " No drawing was read in this review."
+
 read_only: "The backend restarted, so this review is shown from its run folder. Follow-ups, decisions and answers are off."
 
 goal_states:

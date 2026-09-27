@@ -65,6 +65,7 @@ PLACEHOLDERS: dict[str, set[str]] = {
     "contacts.one": set(),
     "contacts.many": {"n"},
     "resume.with_tokens": {"tokens"},
+    "answer_basis.many": {"n"},
     "resume.without": set(),
     "finding_group_text.one": set(),
     "finding_group_text.many": {"n"},
@@ -139,6 +140,7 @@ def test_the_words_are_loaded_once() -> None:
         ("tally",),
         ("questions",),
         ("bought_parts",),
+        ("answer_basis",),
     ],
 )
 def test_an_extra_key_anywhere_is_refused(path: tuple[object, ...]) -> None:

@@ -238,6 +238,15 @@ class DrawingsWords(ReviewModel):
         return SENTENCE_SEPARATOR.join(parts)
 
 
+class AnswerBasisWords(ReviewModel):
+    """The first line of every model answer (feature 013, its `contracts/sources.md` 3)."""
+
+    none: str
+    one: str
+    many: str
+    no_drawing: str
+
+
 class TallyWords(ReviewModel):
     """The tally's one line (feature 013): each owner group's label and count, then Decided."""
 
@@ -287,6 +296,7 @@ class Words(ReviewModel):
     drawings: DrawingsWords
     contacts: CountWords
     resume: ResumeWords
+    answer_basis: AnswerBasisWords
     read_only: str
     goal_states: dict[GoalState, str]
     goal_reasons: dict[GoalReason, str]
