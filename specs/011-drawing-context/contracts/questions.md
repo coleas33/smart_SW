@@ -75,6 +75,14 @@ the drawings' ids.
 No other question is raised by this feature. A configuration mismatch or an out-of-date view is
 coverage, not a question: an answer cannot change what was extracted.
 
+*Amended by feature 013 (T005, T064):* the duplicate test - a question already on the session with
+the same `question`, `what` and `entity_ids` in order is not asked again - is the shared exact test
+`checks/questions.already_asked`, over the shared shape `checks/questions.QuestionSpec`, used by
+the drawing check and the part-roles question alike. It stays exact, because a code question can
+trigger an action (`_is_confirmed_candidate`). The model's re-ask guard (`already_answered`,
+`already_asked`, 013 `contracts/re-ask-guard.md` section 3) reads model-written requests only: a
+code-written question covers only itself and never makes a model question a repeat.
+
 ## 5. The payload and the digest line
 
 ```json

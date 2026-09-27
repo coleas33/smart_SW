@@ -618,12 +618,22 @@ def test_answering_a_request_twice_is_refused(
 # --- several answers, one resumed turn (feature 008 T082, FR-025, SC-005) ----------------------
 
 
-def ask(what: str) -> ScriptedToolCall:
-    """One evidence request; each `what` is its own request."""
-    return call("request_evidence", **{**EVIDENCE_ARGUMENTS, "what": what})
+def ask(what: str, entity_ids: list[str] | None = None) -> ScriptedToolCall:
+    """One evidence request; each `what`, about its own entity, is its own request.
+
+    Edited deliberately by feature 013 T064: each ask names its own entity, since the re-ask guard
+    answers a model question naming the same parts with no checklist item from the earlier one
+    (contracts/re-ask-guard.md section 3).
+    """
+    ids = EVIDENCE_ARGUMENTS["entity_ids"] if entity_ids is None else entity_ids
+    return call("request_evidence", **{**EVIDENCE_ARGUMENTS, "what": what, "entity_ids": ids})
 
 
-THREE_ASKS = (ask("the thread depth"), ask("the washer grade"), ask("the drawing revision"))
+THREE_ASKS = (
+    ask("the thread depth"),
+    ask("the washer grade", ["fst:1"]),
+    ask("the drawing revision", ["cmp:0002"]),
+)
 
 
 class SpyProvider(FakeProvider):

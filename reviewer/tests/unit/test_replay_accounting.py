@@ -659,10 +659,13 @@ def test_an_estimated_result_past_the_prune_age_is_priced_as_the_stub_the_replay
 
 ASKS = tuple(
     ScriptedToolCall(
-        "request_evidence", {"what": what, "why": "fit check", "entity_ids": ["cmp:0002"]}
+        "request_evidence", {"what": what, "why": "fit check", "entity_ids": [component]}
     )
-    for what in ("the drawing", "the drawing revision")
+    for what, component in (("the drawing", "cmp:0002"), ("the drawing revision", "cmp:0001"))
 )
+"""Edited deliberately by feature 013 T064: each ask names its own entity, since the re-ask
+guard answers a model question naming the same parts with no checklist item from the earlier one
+(contracts/re-ask-guard.md section 3)."""
 BATCH = (("ER-002", "It is rev B."), ("ER-001", "The drawing is attached."))
 
 

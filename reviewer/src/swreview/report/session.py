@@ -10,11 +10,11 @@ plain dictionaries by the tools and the runner, so ISO strings are accepted for
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from datetime import datetime
 from itertools import pairwise
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, NamedTuple
 from uuid import UUID
 
 from annotated_types import Len
@@ -138,6 +138,71 @@ class EvidenceRequest(ReviewModel):
         if self.blocks is None:
             data.pop("blocks", None)
         return omit_at_default(data, self, "allow_text", "source")
+
+
+def latest_answered(requests: Iterable[EvidenceRequest]) -> EvidenceRequest | None:
+    """The most recently answered of `requests`, or `None` when none is answered.
+
+    By `answered_at`, and by session order where two answers carry the same time or none: the
+    one rule for "the most recent answer wins" that the re-ask guard and finalization share
+    (feature 013, `contracts/re-ask-guard.md` section 3).
+    """
+    answered = [
+        (index, request)
+        for index, request in enumerate(requests)
+        if request.status == "answered"
+    ]
+    if not answered:
+        return None
+    _, latest = max(
+        answered,
+        key=lambda pair: (
+            pair[1].answered_at.timestamp() if pair[1].answered_at is not None else float("-inf"),
+            pair[0],
+        ),
+    )
+    return latest
+
+
+class CoveringRequests(NamedTuple):
+    """The model-written requests a new model question repeats (feature 013)."""
+
+    answered: EvidenceRequest | None
+    """The most recently answered one, which the guard cites: `already_answered`."""
+    open: EvidenceRequest | None
+    """The latest one still open: `already_asked`, when none is answered."""
+
+
+def covering_requests(
+    session: ReviewSession, blocks: str | None, entity_ids: Sequence[str]
+) -> CoveringRequests:
+    """The earlier model-written requests that already ask a new model question.
+
+    `contracts/re-ask-guard.md` section 3. A request R covers the question when `R.blocks ==
+    blocks` (null equals null) and either the question's ids are non-empty and a subset of R's,
+    or both are empty and `blocks` names a checklist item. Ids are compared raw: an instance is
+    never turned into its document, which would merge two instances of one screw.
+
+    Two exclusions. A question with no checklist item and no ids is never covered: nothing says
+    two such questions are the same one. And a code-written request (`source` `code`) covers
+    only itself - the part-roles question names the unclear parts and has no checklist item, and
+    would otherwise answer any later question about one of them - so only `model` requests are
+    read here; code questions keep the exact test of `checks/questions.already_asked`.
+    """
+    wanted = set(entity_ids)
+    if not wanted and blocks is None:
+        return CoveringRequests(answered=None, open=None)
+    covering = [
+        request
+        for request in session.evidence_requests
+        if request.source == "model"
+        and request.blocks == blocks
+        and (wanted <= set(request.entity_ids) if wanted else not request.entity_ids)
+    ]
+    still_open = [request for request in covering if request.status == "open"]
+    return CoveringRequests(
+        answered=latest_answered(covering), open=still_open[-1] if still_open else None
+    )
 
 
 class EvidenceRequestIdAllocator(SequentialIdAllocator):

@@ -164,7 +164,12 @@ bucket it asks for, and `request_evidence(blocks=<code-owned item>)`, after its 
 answer `{"status": "closed_by_code", "check": ..., "reason": ...}` - the reason code recorded, or
 the item's description before code has written its row - and record nothing: no coverage row, no
 failed row, no event, no request id (013 `contracts/re-ask-guard.md` section 1). Provenance is
-closed by code at setup (section 2).
+closed by code at setup (section 2). *Also by T064:* a model question an earlier model-written
+request already asks - the same `blocks`, and ids a non-empty subset of its ids or both empty
+with a checklist item - answers `already_answered` (citing the most recent answer) or
+`already_asked` (citing the open request), with a note, and records nothing; at finalization an
+item still open after its blocking request was answered is unresolved quoting the answer
+(section 3).
 
 ### Reading one finding in full: `get_finding` (feature 008, conditional)
 

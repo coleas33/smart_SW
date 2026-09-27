@@ -39,8 +39,11 @@ ASK = ScriptedToolCall(
 )
 ASK_AGAIN = ScriptedToolCall(
     "request_evidence",
-    {"what": "the drawing revision", "why": "fit check", "entity_ids": ["cmp:0002"]},
+    {"what": "the drawing revision", "why": "fit check", "entity_ids": ["cmp:0001"]},
 )
+"""Edited deliberately by feature 013 T064: each ask names its own entity, since the re-ask
+guard answers a model question naming the same parts with no checklist item from the earlier one
+(contracts/re-ask-guard.md section 3)."""
 PRESENTATION = TokenUsage(
     input_tokens=1_874,
     cached_input_tokens=0,

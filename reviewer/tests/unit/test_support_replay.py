@@ -416,11 +416,14 @@ def test_answers_sent_together_resume_one_turn_on_the_runners_batch_message(
 ) -> None:
     """Feature 008 T086: a batch of answers is one resumed turn, in the history and in the
     recorded usage alike - both through `runner.answers_message`."""
+    # Edited deliberately by feature 013 T064: each ask names its own entity, since the re-ask
+    # guard answers a model question naming the same parts with no checklist item from the
+    # earlier one (contracts/re-ask-guard.md section 3).
     asks = tuple(
         ScriptedToolCall(
-            "request_evidence", {"what": what, "why": "fit check", "entity_ids": ["cmp:0002"]}
+            "request_evidence", {"what": what, "why": "fit check", "entity_ids": [component]}
         )
-        for what in ("the drawing", "the drawing revision")
+        for what, component in (("the drawing", "cmp:0002"), ("the drawing revision", "cmp:0001"))
     )
     answers = (("ER-002", "Rev B."), ("ER-001", "Attached."))
     turns = [
