@@ -814,6 +814,124 @@ suite, not the lambda. Flag-set first means a message box left open by the flag-
 spoil the reading that matters. A host throw also lost its message ("One or more errors occurred.",
 `RemodelProbe.cs:833-837`).
 
+### Follow-ups (defaults taken 2026-09-27)
+
+What the integration and the review of 2026-09-27 left for a default (tasks T145 to T158).
+
+#### R2.42 The replay reads a finding the tree reading narrowed (T134-Q1)
+
+**Decision**: decision 23A's `narrowed` outcome (feature 008 `contracts/replay.md` section 5,
+`benchmark/replay.compare_finding_keys`, which the fixture generator imports) is extended for
+`rms.*` findings. Over the recording's own package, read by `checks/feature_nodes.tree_nodes` one
+document at a time under the current type table, a location may also be removed:
+
+- every occurrence of a location whose `(scope, persist_ref)` names only rows the reading carries
+  as a sub-feature, merges as a second listing, or the table does not count as content - 23A's
+  clause widened by the reading's two shapes;
+- of a location naming a depth-0 row the reading keeps together with the second listing merged into
+  it, the occurrences beyond the number of rows the reading keeps there, at most one per second
+  listing: the second listing's own occurrence goes and the depth-0 row's stays.
+
+Everything else stays exact: the family, the one-to-one matching in recorded order onto a finding
+nothing else matched, the remaining locations compared reference by reference (decision 25A), the
+carried-finding comparison (008 T129), and a narrowed finding listed with the locations removed.
+
+**Default taken 2026-09-27, the owner may revise.** It answers T134-Q1 as the question put it, for
+`rms.*` findings.
+
+**Why**: with T133's reading the real recordings' replay lost 25, 3 and 2 `rms.*` findings, and
+the scratch measurement of 2026-09-27 shows the shape exactly: every one comes back as one added
+finding on the same part, configuration, components and inputs, its locations a sub-multiset of
+the recorded ones, and every location it dropped is one of three kinds - a reference naming only
+rows the table does not count (on the recordings, system rows carried under a feature: 101, 10 and
+5 occurrences), a reference naming only carried content rows (29, 4 and 4), or a reference naming
+one depth-0 row and its one second listing, recorded twice and named once now (148, 15 and 12;
+never both occurrences dropped). A second listing is not a second feature: SOLIDWORKS lists an
+absorbed sketch in both walks with one persistent reference, and the reading that grades it once
+is the one the planner already uses (R2.38).
+
+**How it stays strict**: the de-duplication is counted, never assumed - a recorded location named
+once is kept, so a finding whose depth-0 row is no longer named at all is lost, as a real subject
+dropped must be; a reference any kept content row carries is never removed wholesale; a tree with
+neither shape folds nothing, so every decision 23A case reads as before.
+
+**Alternatives**: a new outcome beside `narrowed` (a second list with the same meaning); removing
+every occurrence of a merged pair's reference (it would hide the depth-0 row dropped); a hand list of
+the 30 findings (it drifts); regenerating the fixtures with T133 and accepting the recordings' loss
+(the rule that no recorded finding is lost is absolute).
+
+#### R2.43 The Model check says its open part looks bought (FR-008, US1 scenario 6)
+
+**Decision**: `POST /checks/rms` takes an optional `standards_profile` path, the same setting the
+Review tab uses (`UserSettings.StandardsProfilePath`), which `ModelCheckHost` passes to the page in
+`init` and the page relays in its request. With it the backend loads the profile through the
+review's own loader (`load_review_profile`), classifies the dump's documents with the one classifier
+(`classify_parts`), and the `CheckResult` carries `bought_parts`: the part-roles sentence
+(`bought_parts_sentence`), whose root-rule clause reads "{file} looks bought ({reason}); graded
+because it is the document under review" when the rules call the open part bought, or null when
+there is nothing to say. Without it the body is unchanged, with no `bought_parts` key. The page prints
+the line verbatim. The rules and the grade are the same either way: the Model check's part is its
+document under review, always graded.
+
+**Default taken 2026-09-27, the owner may revise.**
+
+**Why**: 013 T030 put the root rule's label on the review's surfaces and deferred the Model check's
+half because its route took no profile; the spec says the Model check tab behaves the same for its
+open part.
+
+**Alternatives**: the host reading the profile and sending roles (the reasoning side owns the file,
+feature 006 FR-002); a words-file sentence of the page's own (a second author of the label).
+
+#### R2.44 Lever 14 falls back once when the real endpoint refuses its request
+
+**Decision**: the OpenAI adapter sends a request that left earlier turns' reasoning out; if the
+endpoint refuses it with an invalid-request error (`400`) about a missing reasoning item or a
+linked item, it sends that same request again at once with every reasoning item kept, turns lever 14
+off for the rest of that adapter's session, and logs one plain line. Any other refusal, a request
+that left nothing out, and a refusal of the resent request are raised as before. `session.efficiency`
+keeps the lever as requested; the log line says it fell back. The key-gated live test fails when the
+adapter fell back, so the seat's run of it (T153, test-plan step 2.7) says whether the endpoint
+accepts the request.
+
+**Default taken 2026-09-27, the owner may revise.**
+
+**Why**: the real endpoint has not seen lever 14's request shape, the development machine has no
+key, and lever 14 is a pane default (T125): a refusal would stop every review's second turn. The
+resent request is the one every review sent before lever 14, so the fallback costs one refused
+request, once.
+
+**Alternatives**: turning lever 14 off until the seat proves it (loses the measured cut); retrying
+without turning it off (a refused request every turn); failing the turn (stops the review).
+
+#### R2.45 A refused profile's reason names no path
+
+**Decision**: the classifier's `absent` state quotes a refusal's kind and cause - the field the
+profile got wrong, or that the file is missing or unreadable - and never the profile's path, its
+folder or its file name. `ProfileError` carries its message without the path beside the message
+with it; `profile_refusal_of` reads the first.
+
+**Default taken 2026-09-27, the owner may revise.**
+
+**Why**: `profile_refusal_of` was `str(ProfileError)`, and every loader message begins with the path,
+a local user folder, which then rode the bought-parts line into the digest, the coverage row, the
+summary and the report.
+
+#### R2.46 The checklist says only what is true of every code-owned item
+
+**Decision**: a code-owned item renders "Closed by code; never ask about it or mark it." in place
+of "Closed by code before your first turn; never ask about it or mark it.". Each item's own
+description says when: `provenance` "from the package before your first turn", `coverage.closeout`
+when the review ends (its row, "Closed by code when the review ended: ...").
+
+**Default taken 2026-09-27, the owner may revise.**
+
+**Why**: `coverage.closeout` is written at finalization (`contracts/tokens.md` section 1), so the
+shared line told the model something false of it. The line moves the checklist the model reads, so
+the replay gate runs (T158).
+
+**Alternatives**: a line per item naming its moment (a second field for one word); writing a
+close-out row at setup (a row that says nothing true yet).
+
 ---
 
 ## R3. Design choices of this plan

@@ -53,7 +53,7 @@ first (section 1 below), because it must run the build that carries feature 013;
 its update notes, and the rows of the steps above keep 2026-09-26's results unless the update or a
 health check fails.
 
-Feature 013's four seat tasks (`specs/013-engineer-first-review/tasks.md`, phase W) join this list
+Feature 013's five seat tasks (`specs/013-engineer-first-review/tasks.md`, phase W) join this list
 where they meet it, each at the test plan's step named:
 
 - **013 T141, the profile's version 4** (step 2.6), after step 1's validation: `swreview profile
@@ -81,6 +81,11 @@ where they meet it, each at the test plan's step named:
   table" claim (SC-009); then the export-control check on two drawings whose title blocks the
   engineer knows, S-1 with the statement and S-2 without, before its result on real title blocks
   is trusted.
+- **013 T153, lever 14 against the real endpoint** (step 2.7), right after the key and the
+  profile's version 4: the key-gated live test, run with the key the pane stores, read for that one
+  command and never shown. `1 passed` says the endpoint accepts lever 14's request; a failure says
+  the pane's fallback (013 T152) is needed, which sends the refused request again with the reasoning
+  kept and turns the lever off for that review - the reviews go on either way.
 
 Two more the owner asked for on 2026-09-27, with step 20:
 

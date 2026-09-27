@@ -51,6 +51,7 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 | 2.5 | the OpenAI key saved, the model and effort chosen | | | |
 | 2.6 | 013 T141: the proposal written, no profile value printed | | | |
 | 2.6 | 013 T141: `part_roles` filled in by the owner, the file valid, `version: 4` where the pane reads it | | | |
+| 2.7 | 013 T153: the live lever 14 test with the key the pane stores - pass, fail or blocked, and the model | | | |
 | 3.1 | 010 T103: mass overrides read on A and B | | | |
 | 3.1 | 010 T104: Hole Wizard holes (provisional) | | | |
 | 3.1 | 010 T105: model dimensions and annotations | | | |
