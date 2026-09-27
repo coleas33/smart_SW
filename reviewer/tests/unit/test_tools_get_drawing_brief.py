@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from swreview.checks.part_roles import PART_ROLES_ATTRIBUTE
 from swreview.checks.standards import profile as profile_module
 from swreview.checks.standards.profile import load_profile
 from swreview.checks.standards.traversal import graded_documents
@@ -25,7 +26,7 @@ from swreview.drawings.brief import build_brief
 from swreview.ir.loader import load_package
 from swreview.report.session import load_session, save_session
 from swreview.tools.context import ToolContext, context_for, use_context
-from swreview.tools.drawings import PART_ROLES_ATTRIBUTE, get_drawing_brief
+from swreview.tools.drawings import get_drawing_brief
 from swreview.tools.registry import ToolRegistry, drawing_tools
 from swreview.tools.session import request_evidence
 from swreview.tools.standards_checks import StandardsRun, attach_standards_run

@@ -41,7 +41,7 @@ from swreview.drawings.evidence import DrawingIndex
 from swreview.ir.loader import load_package
 from swreview.ir.models import EvidencePackage
 from swreview.report.session import CoverageItem, CoverageScope, EvidenceRequest
-from swreview.tools.checks_mechanical import review_profile
+from swreview.tools.checks_mechanical import review_profile, review_roles
 from swreview.tools.context import ToolContext, current_context, error_result
 from swreview.tools.joint_context import joint_analysis
 from swreview.tools.query import ToolResult
@@ -55,7 +55,6 @@ __all__ = [
     "CONFIRMED_OPEN_CHECK",
     "DRAWINGS_TOOL",
     "NO_CONNECTION",
-    "PART_ROLES_ATTRIBUTE",
     "TEN_DRAWINGS",
     "ConfirmedRead",
     "check_drawings",
@@ -70,30 +69,10 @@ DRAWINGS_TOOL = "check_drawings"
 COVERAGE_BUCKETS: tuple[str, ...] = ("checked", "skipped", "unresolved")
 """The buckets a `drawing.context` item lands in."""
 
-PART_ROLES_ATTRIBUTE = "part_roles"
-"""The context attribute `start_review` attaches the review's part roles under (013
-`contracts/part-roles.md` section 5), beside the standards run's.
-
-**A stand-in, for the integrator.** 013 T022 (lane S) defines it as
-`tools/registry.PART_ROLES_ATTRIBUTE`, which this lane does not edit; until then no review
-attaches roles and every part and assembly is a drawing subject, as before 013.
-`test_tools_check_drawings.py` asserts the two names equal once T022 lands; then this constant
-should give way to the registry's, imported where it is read (the registry imports this module,
-so a module-level import would be circular)."""
-
-
 def drawing_evidence(package: EvidencePackage) -> bool:
     """Whether the package carries drawing evidence: the one condition the family is offered
     and planned on."""
     return bool(package.drawing_records or package.drawing_candidates)
-
-
-def _review_roles(context: ToolContext) -> PartRoles | None:
-    """The part roles attached to the review, or `None` on a context that never classified - a
-    test, a golden case, the command line - where every part and assembly is a drawing subject.
-    Read, never computed: the roles are classified once, at `start_review` (013 `part-roles.md`
-    section 5)."""
-    return getattr(context, PART_ROLES_ATTRIBUTE, None)
 
 
 def _read_mode(
@@ -146,7 +125,7 @@ def _record(context: ToolContext) -> dict[str, Any]:
     """
     context.require_session()  # first, so a sessionless context refuses before anything else
     index = DrawingIndex.for_package(context.ir)
-    roles = _review_roles(context)
+    roles = review_roles(context)
     result = run_drawing_context(
         context.ir,
         profile=review_profile(context),
@@ -243,7 +222,7 @@ def get_drawing_brief(document_id: str) -> ToolResult:
         document_id: A part or assembly document id.
     """
     context = current_context()
-    roles = _review_roles(context)
+    roles = review_roles(context)
     try:
         brief = build_brief(
             context.ir,
@@ -346,7 +325,7 @@ def read_confirmed_candidates(
     changes.
     """
     index = DrawingIndex.for_package(context.ir)
-    roles = _review_roles(context)
+    roles = review_roles(context)
     spec = candidate_question(index, roles, _read_mode(context, index, roles))
     if not any(_is_confirmed_candidate(request, spec) for request in answered):
         return []
