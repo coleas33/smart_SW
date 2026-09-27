@@ -6,7 +6,7 @@ field rules, the validation's known versions, the prefix and pattern semantics) 
 R2.2, R2.4, R3 C2, C3, C11.
 
 *Amended 2026-09-26, before any code, from the owner's guidance of the same day ("the custom
-properties should also hint at whether the part is custom or COTS; the purchased vs built switch
+properties should also hint at whether the part is custom or [bought off the shelf]; the purchased vs built switch
 can be flipped by the user; also look for part numbers, vendors, etc.; custom parts usually have
 little detail: the custom-prefix file name or the custom-prefix part number") and the local census
 of that day (research R2.4, "Revised"): the section names every signal of `part-roles.md` section

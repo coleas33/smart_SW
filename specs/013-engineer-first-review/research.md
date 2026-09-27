@@ -155,7 +155,7 @@ carrying a company number, which the sitting's pin does).
 
 **Revised 2026-09-26, before any code: votes with strengths replace the first-match table.** From
 the owner's guidance of the same day - "The custom properties should also hint at whether the part is
-custom or COTS; the purchased vs built switch can be flipped by the user; also look for part numbers,
+custom or [bought off the shelf]; the purchased vs built switch can be flipped by the user; also look for part numbers,
 vendors, etc. Custom parts usually have little detail: the custom-prefix file name or the
 custom-prefix part number." - and a census of every recorded package on the development machine
 (33 part and assembly documents after de-duplication by path, 14 carrying the custom prefix; the
