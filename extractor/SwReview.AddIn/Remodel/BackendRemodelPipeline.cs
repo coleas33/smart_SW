@@ -89,8 +89,15 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
             { "saving", "Saving the copy..." },
         };
 
+    /// <summary>
+    /// The class of 004 T159's refusal: the copy could not be made the active document before a
+    /// dump (`contracts/pane-remodel-messages.md`, refusal classes).
+    /// </summary>
+    private const string CopyNotActiveClass = "CopyNotActive";
+
     private readonly Func<BackendEndpoint?> _endpoint;
     private readonly Func<BridgeConfig?> _remodelBridge;
+    private readonly Func<string, bool> _bindRun;
     private readonly Func<PageDocument?> _currentDocument;
     private readonly IReviewDump _dump;
     private readonly IRemodelSeat _seat;
@@ -109,16 +116,22 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
     /// child on a new port.</param>
     /// <param name="remodelBridge">`{pipe, secret}` for the remodel half of the tool service, or
     /// null before it is listening.</param>
+    /// <param name="bindRun">Hands a run folder to the tool service for the next
+    /// `remodel.open`, and answers whether it took it (004 T158): the bridge's run root is used
+    /// up by the open, so every open is bound first, with the folder the host made. The add-in
+    /// answers it through its gate's tool service.</param>
     /// <param name="currentDocument">The active document, asked for fresh; SOLIDWORKS owns the
     /// answer. Read by <see cref="ProbeScope"/> and by nothing after it.</param>
     /// <param name="dump">The in-process extractor, for the two ModelCheck dumps.</param>
-    /// <param name="seat">`remodel.open_copy`, on the application thread.</param>
+    /// <param name="seat">The copy put in front: `remodel.open_copy`, and the activation both
+    /// dumps make, on the application thread.</param>
     /// <param name="backend">The loopback routes.</param>
     /// <param name="pollDelay">How long between two `GET`s of the run. Injected so the tests
     /// are not slow; defaults to half a second.</param>
     public BackendRemodelPipeline(
         Func<BackendEndpoint?> endpoint,
         Func<BridgeConfig?> remodelBridge,
+        Func<string, bool> bindRun,
         Func<PageDocument?> currentDocument,
         IReviewDump dump,
         IRemodelSeat seat,
@@ -127,6 +140,7 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
     {
         _endpoint = endpoint ?? throw new ArgumentNullException(nameof(endpoint));
         _remodelBridge = remodelBridge ?? throw new ArgumentNullException(nameof(remodelBridge));
+        _bindRun = bindRun ?? throw new ArgumentNullException(nameof(bindRun));
         _currentDocument = currentDocument ?? throw new ArgumentNullException(nameof(currentDocument));
         _dump = dump ?? throw new ArgumentNullException(nameof(dump));
         _seat = seat ?? throw new ArgumentNullException(nameof(seat));
@@ -171,6 +185,12 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
 
         RequireBackend();
         BridgeConfig bridge = RequireBridge();
+
+        // 004 T158: the folder the host made, and no other, becomes the bridge's run root for
+        // this one open. Before the copying status, because a copy that cannot happen is not one
+        // to announce, and before the open, which would otherwise be refused for want of a root.
+        BindRunFolder(request.RunDirectory);
+
         reporter.Status(
             "copying",
             $"Copying {Path.GetFileName(request.SourcePath)} into the run folder...");
@@ -491,14 +511,18 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
     /// it would be a plan for that other reading.
     ///
     /// <b>And so is the document it read.</b> The dump attaches to whatever document
-    /// SOLIDWORKS has active; nothing here selects one, and the engineer's own source is still
-    /// open in another tab throughout - including minutes later, at the after-dump. Which
-    /// document was read is knowable only from the file that was written, so it is read out of
-    /// it and refused unless it is the copy this run made.
+    /// SOLIDWORKS has active, and the engineer's own source is still open in another tab
+    /// throughout - including minutes later, at the after-dump. So the copy is made the active
+    /// document first, activate only (<see cref="MakeTheCopyActive"/>, 004 T159); but the
+    /// engineer can still click away between that and the dump, and which document was read is
+    /// knowable only from the file that was written, so it is read out of it and refused unless
+    /// it is the copy this run made. The activation is the pre-check, this the post-check.
     /// </summary>
     private string DumpInto(
         string runDirectory, string fileName, string stage, IRemodelRunReporter reporter)
     {
+        MakeTheCopyActive(runDirectory, fileName);
+
         DumpSummary summary = _dump.Run(
             runDirectory, line => reporter.Status(stage, line), DumpProfile.ModelCheck);
 
@@ -530,6 +554,62 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
         File.Move(written, target);
         return target;
     }
+
+    /// <summary>
+    /// Makes this run's copy the active document before a dump (004 T159; research R13.8, D6):
+    /// the copy found as `remodel.open_copy` finds it, the one part in the run folder's `copy/`,
+    /// handed to <see cref="IRemodelSeat.ActivateOpenCopy"/>, which only ever activates - a dump
+    /// that could open a document would be a second way to open one.
+    ///
+    /// The seat answers what SOLIDWORKS has active afterwards and decides nothing; this does. An
+    /// answer that is not the copy by path - none, because SOLIDWORKS does not have the copy open
+    /// or would not activate it; the engineer's part; another run's copy; a bare name - a seat
+    /// whose call threw, and a run folder with no copy left in it to activate (each kept as the
+    /// cause) are all `CopyNotActive`, in the host's words for the dump that was about to be
+    /// taken, and nothing is dumped. `remodel.open_copy`'s own words for a missing copy speak of
+    /// a plan and a report that a plan-time dump does not have yet, so they are not used here.
+    /// </summary>
+    private void MakeTheCopyActive(string runDirectory, string fileName)
+    {
+        string copy;
+        try
+        {
+            copy = CopyIn(runDirectory);
+        }
+        catch (RemodelRefusal gone)
+        {
+            throw CopyNotActive(fileName, gone);
+        }
+
+        string? active;
+        try
+        {
+            active = _seat.ActivateOpenCopy(copy);
+        }
+        catch (Exception failure)
+        {
+            throw CopyNotActive(fileName, failure);
+        }
+
+        // One rule for "the same document" in the product: full paths, ordinal ignoring case, and
+        // a path that is not rooted names nothing.
+        if (!OpenDrawingDiscovery.SamePath(active, copy))
+        {
+            throw CopyNotActive(fileName, null);
+        }
+    }
+
+    /// <summary>
+    /// `CopyNotActive` in the words for the dump it stopped: before the plan it is retryable,
+    /// since planning again makes a new copy; after the changes it is not, since that run can no
+    /// longer be checked and its copy is never saved.
+    /// </summary>
+    private static RemodelRefusal CopyNotActive(string fileName, Exception? cause) =>
+        string.Equals(fileName, PackageAfterName, StringComparison.Ordinal)
+            ? new RemodelRefusal(
+                CopyNotActiveClass, RemodelHost.CopyNotActiveAfterChangesMessage, retryable: false, cause)
+            : new RemodelRefusal(
+                CopyNotActiveClass, RemodelHost.CopyNotActiveBeforePlanMessage, retryable: true, cause);
 
     /// <summary>
     /// Refuses a dump that is not a reading of this run's copy, before it can be renamed into a
@@ -698,6 +778,33 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
             "the add-in's tool service is not listening yet, so the re-modeler cannot reach "
             + "SOLIDWORKS. Open the part, wait a moment and press Remodel again.",
             retryable: true);
+
+    /// <summary>
+    /// 004 T158's host half: the run folder handed to the tool service before the open. A bind
+    /// that answers false, or that throws (kept as the cause), is `BridgeUnavailable` in the
+    /// host's words - nothing is copied and no open is sent, and pressing the button again can
+    /// work, since the tool service may simply have been re-attaching.
+    /// </summary>
+    private void BindRunFolder(string runDirectory)
+    {
+        bool bound;
+        try
+        {
+            bound = _bindRun(runDirectory);
+        }
+        catch (Exception failure)
+        {
+            throw RunNotBound(failure);
+        }
+
+        if (!bound)
+        {
+            throw RunNotBound(null);
+        }
+    }
+
+    private static RemodelRefusal RunNotBound(Exception? cause) =>
+        new RemodelRefusal("BridgeUnavailable", RemodelHost.RunNotBoundMessage, retryable: true, cause);
 
     /// <summary>
     /// The backend's named refusal, as the page's named refusal. The class and the sentence are

@@ -67,7 +67,7 @@ issued, and the host resolves it against its own run record.
 | `StartNotValidated` | *Added 2026-09-26 (default taken 2026-09-26, the owner may revise; T172, landed 2026-09-27).* Start is switched off in this build until the workstation probes that decide whether it is safe have verdicts. Raised by `remodel.start` only, before anything is called or written; `message` is `RemodelHost.StartNotValidatedMessage`, in plain words with no command, no path and no probe number, saying that Plan and Discard work and that nothing was changed |
 | `SourceIsRemodelCopy` | *Added 2026-09-26 (default taken 2026-09-26, the owner may revise; T173, landed 2026-09-27).* The active document lies in a run folder's `copy/` under `run_root`: it is one of the re-modeler's own copies, not the engineer's part. Raised by `remodel.plan` before any bridge call; `message` names no path and sends the engineer back to their own part |
 | `BridgeUnavailable` | *Named here 2026-09-27; the class was already answered.* The add-in's tool service is not listening yet, so the re-modeler cannot reach SOLIDWORKS; or (T158's host half, default taken 2026-09-27, the owner may revise) the run folder the host just made could not be handed to the tool service before `remodel.open` - the hand-over answered false or threw - so nothing was copied and no open was sent, and `message` is `RemodelHost.RunNotBoundMessage`, in plain words. Retryable. The backend answers the same class when the bridge does not answer one of its routes (`backend-remodel.md`) |
-| `CopyNotActive` | *Added 2026-09-27 (default taken 2026-09-27, the owner may revise; T159).* Before either dump the host makes the copy the active document - activate only, never an open - and SOLIDWORKS could not: it does not have the copy open, would not activate it, or another document was active afterwards. Nothing is dumped, renamed or posted. `message` is `RemodelHost.CopyNotActiveBeforePlanMessage` before the plan (retryable: plan again) and `RemodelHost.CopyNotActiveAfterChangesMessage` after the changes (not retryable: the run cannot be checked and the copy is not saved), in plain words. Raised after the copy exists, like `PreexistingRebuildErrors`, but it deletes nothing: the run folder and the copy stay as the evidence |
+| `CopyNotActive` | *Added 2026-09-27 (default taken 2026-09-27, the owner may revise; T159).* Before either dump the host makes the copy the active document - activate only, never an open - and SOLIDWORKS could not: it does not have the copy open, would not activate it, or another document was active afterwards; or no copy is left in `copy/` to activate. Nothing is dumped, renamed or posted. `message` is `RemodelHost.CopyNotActiveBeforePlanMessage` before the plan (retryable: plan again) and `RemodelHost.CopyNotActiveAfterChangesMessage` after the changes (not retryable: the run cannot be checked and the copy is not saved), in plain words. Raised after the copy exists, like `PreexistingRebuildErrors`, but it deletes nothing: the run folder and the copy stay as the evidence |
 | `RemodelUnavailable` | The attached bridge has no remodel seat, or seat availability is still being checked; `message` says in plain words that Remodel is not in this build yet and that the tab will not change the open part, or asks the engineer to wait for attachment. It names no console command: the standalone probe belongs in the workstation handover, not the Task Pane (U13, 2026-09-22) |
 
 A refusal costs nothing. A half-rebuilt sheet-metal part costs the engineer their afternoon. Per
@@ -240,11 +240,15 @@ installed, a new plan starts as today. The bridge refuses the change commands to
 
 *The host's half landed 2026-09-27 (lane E; defaults taken 2026-09-27, the owner may revise).*
 The switch is `RemodelStart.SeatValidated` in `SwReview.Extractor/Rms/RemodelStart.cs`, the one
-member the bridge's backstop reads too. `RemodelHostOptions.SeatValidated` defaults to it and is
-read at each Start, so a plan made while it is off starts once it is on; nothing in the add-in
-sets the option. `StartNotValidated` is not retryable, and `RemodelHost.StartNotValidatedMessage`
-names the two buttons that work, Remodel a copy and Discard copy, by the labels the page gives
-them.
+member the bridge's backstop reads too. `StartNotValidated` is not retryable, and
+`RemodelHost.StartNotValidatedMessage` names the two buttons that work, Remodel a copy and Discard
+copy, by the labels the page gives them. *Integrated with lane D 2026-09-27:* the host takes the
+switch as a constructor argument, as T172 says and as lane D built it (`RemodelHost(options)`
+passes `RemodelStart.SeatValidated`, and `RemodelHost.StartValidated` reads it back), rather than
+as the option lane E recorded; nothing in the add-in passes or assigns a switch
+(`RemodelWiringTests`). A plan made while it is off is the plan that starts once it is on, shown as
+the same plan made by a host built either way. The sentence is lane D's, which says the plan stays
+in its run folder, the page's own words for where it lives.
 
 ### Planning again while a plan waits (T173)
 
@@ -403,10 +407,10 @@ Two buttons and what they must say. **Open copy** activates the copy in SOLIDWOR
   document first, activate only and never an open, and each way that fails is `CopyNotActive` in
   that dump's words with nothing dumped, renamed or posted. `SwRemodelSeatTests`:
   `ActivateOpenCopy`'s calls and arguments over the recording stand-ins, on the application thread,
-  with no open in any case. `RemodelHostTests`: the switch's pin and the option's default;
-  `StartNotValidated`'s words, its place in the order and that nothing is called or written; a
-  plan made while the switch is off starting once it is on; and T167's words for each thing that
+  with no open in any case. `RemodelHostTests`: `StartNotValidated`'s words, its place in the
+  order and that nothing is called or written (with lane D's pin and constructor cases); and T167's words for each thing that
   can be left, alone and together, and silence when nothing was. `RemodelPageContractTests`: each
   new sentence reaching the banner verbatim over the real transport, naming the buttons by their
   labels. `RemodelWiringTests`: the add-in's one pipeline is built with its bind, and nothing in the
-  add-in sets the switch.
+  add-in sets the switch: its one host and its one dispatcher are built through the shipped
+  constructors, which pass `RemodelStart.SeatValidated`.
