@@ -42,6 +42,9 @@ PLACEHOLDERS: dict[str, set[str]] = {
     "headline.findings_many": {"n"},
     "headline.issues_one": set(),
     "headline.issues_many": {"n"},
+    "headline.checked": {"n"},
+    "tally.item": {"label", "n"},
+    "not_reached": {"titles"},
     **{
         f"groups.{kind}.{form}": {"n"}
         for kind in ("decide", "fix", "verify", "decided", "within_scope")
@@ -133,6 +136,7 @@ def test_the_words_are_loaded_once() -> None:
         ("finding_group_other",),
         ("finding_group_checked",),
         ("finding_group_text",),
+        ("tally",),
     ],
 )
 def test_an_extra_key_anywhere_is_refused(path: tuple[object, ...]) -> None:
@@ -165,6 +169,16 @@ def test_every_template_the_summary_formats_is_in_the_file() -> None:
 
 
 # --- the owner's words --------------------------------------------------------------------
+
+
+def test_a_pass_is_checked_no_issue_in_the_groups_the_fold_and_the_goal_states() -> None:
+    """013 research R3 C8: one word for the tally's passes, the fold and a checked goal."""
+    words = load_words()
+    assert words.groups["within_scope"].label == words.finding_group_checked.title
+    assert words.groups["within_scope"].label == "Checked, no issue"
+    assert words.groups["within_scope"].of(2) == "2 checked, no issue"
+    assert words.headline.checked.format(n=2) == "2 checked, no issue"
+    assert words.goal_states["checked"] == "checked, no issue"
 
 
 def test_the_three_owner_labels_are_decide_fix_verify() -> None:

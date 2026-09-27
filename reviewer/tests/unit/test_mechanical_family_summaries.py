@@ -39,9 +39,8 @@ from swreview.checks.standards.profile import load_profile
 from swreview.checks.standards.traversal import graded_documents
 from swreview.ir.loader import load_package
 from swreview.ir.models import EvidencePackage
-from swreview.report.attention import rank
 from swreview.report.session import CoverageItem, CoverageScope
-from swreview.report.summary import GoalLine, load_words, review_summary
+from swreview.report.summary import GoalLine, goal_lines, load_words
 from swreview.tools import checks_mechanical
 from swreview.tools.checks_mechanical import check_hygiene, check_mass_material
 from swreview.tools.context import ToolContext, build_context, context_for, use_context
@@ -142,8 +141,7 @@ def expected_reason(result: dict[str, Any]) -> str:
 def goal_line(context: ToolContext, family: Family) -> GoalLine:
     """The family's goal line on the Review summary of the session the tool wrote."""
     session = context.require_session()
-    summary = review_summary(rank(session), session, context.ir)
-    return next(line for line in summary.goals if line.goal == family.goal)
+    return next(line for line in goal_lines(session, WORDS) if line.goal == family.goal)
 
 
 def goal_state(line: GoalLine) -> tuple[str, str | None, str | None]:

@@ -19,10 +19,11 @@ import pytest
 
 from swreview.ir.loader import load_package
 from swreview.ir.models import EvidencePackage
-from swreview.report.attention import rank
+from swreview.report.attention import load_policy
+from swreview.report.finding_groups import findings_by_type
 from swreview.report.session import ReviewSession, load_session
-from swreview.report.summary import GoalLine, ReviewSummary, review_summary
-from tests.unit.test_review_summary import BIG_ASSEMBLY
+from swreview.report.summary import GoalLine, ReviewSummary, goal_lines, load_words, review_summary
+from tests.unit.test_review_summary import BIG_ASSEMBLY, BIG_ASSEMBLY_HEADLINE
 
 FASTENERS_CLOSEOUT = (
     "Bu fastener records were extracted despite many screw-like component names; joint "
@@ -62,34 +63,68 @@ def package() -> EvidencePackage:
 
 @pytest.fixture(scope="module")
 def summary(session: ReviewSession, package: EvidencePackage) -> ReviewSummary:
-    return review_summary(rank(session), session, package)
+    groups = findings_by_type(session, package, load_words(), load_policy())
+    return review_summary(groups, session, package)
 
 
-def goal(summary: ReviewSummary, goal_id: str) -> GoalLine:
-    return next(line for line in summary.goals if line.goal == goal_id)
+@pytest.fixture(scope="module")
+def lines(session: ReviewSession) -> list[GoalLine]:
+    return goal_lines(session, load_words())
+
+
+def goal(lines: list[GoalLine], goal_id: str) -> GoalLine:
+    return next(line for line in lines if line.goal == goal_id)
 
 
 def test_the_headline(summary: ReviewSummary) -> None:
-    # The three touching groups are contacts, counted in no group, goal or headline.
-    assert summary.headline == "96 findings in 15 issues"
+    # The three touching groups are contacts, counted in no group, goal or headline. No
+    # finding is a pass, so all 96 are in issues: since feature 013 an issue is a row of the
+    # grouped view, the modelling-practice family unfolded (`test_the_issues_by_group`).
+    assert summary.headline == BIG_ASSEMBLY_HEADLINE == "96 findings in 15 issues"
     assert summary.contacts is not None
     assert summary.contacts.count == 3
 
 
-def test_the_three_groups_with_their_goals(summary: ReviewSummary) -> None:
+def test_the_issues_by_group(session: ReviewSession, package: EvidencePackage) -> None:
+    # Interference and fit: 3 interference.static and 3 hole.coaxiality, needs-judgement
+    # checks that never fold, 6 rows. Standards: 1 cut_list_excluded and 4
+    # sketches_fully_defined (demonstrated, medium), each check one row, 2 rows. Modelling
+    # practice: the 85 rms.* findings under 7 check, status and severity keys, each folding
+    # its disjoint subjects into one row - 20 folders.present (suspected, low), 20
+    # grouping.all_features_in_a_group, 19 params.global_variables_present, 7
+    # sketches.one_sketch_per_feature, 4 sketches.fully_defined, 1
+    # assembly.mates_to_reference_geometry (demonstrated, medium) and 14
+    # params.dimensions_driven_by_equations (suspected, low): 7 rows. 6 + 2 + 7 = 15.
+    view = findings_by_type(session, package, load_words(), load_policy())
+
+    assert {group.id: (len(group.rows), group.findings) for group in view.groups if group.rows} == {
+        "interference_fit": (6, 6),
+        "standards": (2, 5),
+        "modelling_practice": (7, 85),
+    }
+
+
+def test_the_three_groups_and_the_tally(summary: ReviewSummary) -> None:
     # Decide: 3 interference.static (demonstrated) and 3 hole.coaxiality (unresolved), both
     # needs-judgement families. Fix: 51 demonstrated rms.* and 5 demonstrated
     # standards.part.* (1 cut_list_excluded, 4 sketches_fully_defined). Verify: 20
     # rms.folders.present and 14 rms.params.dimensions_driven_by_equations, all suspected.
     # No finding is within scope or decided, so only the owner's three groups are listed.
-    assert [
-        (group.label, group.text, [(one.title, one.count) for one in group.by_goal])
-        for group in summary.groups
-    ] == [
-        ("Decide", "6 need your decision", [("Interference", 3), ("Hole alignment", 3)]),
-        ("Fix", "56 to fix", [("Standards", 5), ("Modelling practice", 51)]),
-        ("Verify", "34 to verify", [("Modelling practice", 34)]),
+    assert [(group.label, group.text) for group in summary.groups] == [
+        ("Decide", "6 need your decision"),
+        ("Fix", "56 to fix"),
+        ("Verify", "34 to verify"),
     ]
+    assert summary.tally.text == "Decide 6 · Fix 56 · Verify 34"
+
+
+def test_the_goals_not_reached(summary: ReviewSummary) -> None:
+    # Every goal whose line below reads "not reached", in goal order.
+    assert summary.not_reached is not None
+    assert summary.not_reached.text == (
+        "Not reached: Fasteners, Fits and stacks, Tool access, Mass and material, Hygiene "
+        "and Drawings"
+    )
 
 
 def test_the_questions_and_the_parts_not_loaded(summary: ReviewSummary) -> None:
@@ -101,10 +136,9 @@ def test_the_questions_and_the_parts_not_loaded(summary: ReviewSummary) -> None:
     assert summary.not_loaded.text == "3 of 89 parts not loaded"
 
 
-def test_every_goal_line(summary: ReviewSummary, session: ReviewSession) -> None:
-    lines = {
-        line.goal: (line.state_label, line.findings, line.reason, line.detail)
-        for line in summary.goals
+def test_every_goal_line(lines: list[GoalLine], session: ReviewSession) -> None:
+    lines = {  # type: ignore[assignment]
+        line.goal: (line.state_label, line.findings, line.reason, line.detail) for line in lines
     }
     material_row = next(
         item.reason
@@ -167,7 +201,7 @@ def test_every_goal_line(summary: ReviewSummary, session: ReviewSession) -> None
     assert lines["modelling_practice"] == ("issues found", 85, None, None)
 
 
-def test_no_state_is_computed_from_severity_or_left_empty(summary: ReviewSummary) -> None:
-    assert {line.state for line in summary.goals} == {"issues", "not_reached"}
-    assert all(line.state_label for line in summary.goals)
-    assert goal(summary, "tool_access").detail is None
+def test_no_state_is_computed_from_severity_or_left_empty(lines: list[GoalLine]) -> None:
+    assert {line.state for line in lines} == {"issues", "not_reached"}
+    assert all(line.state_label for line in lines)
+    assert goal(lines, "tool_access").detail is None

@@ -21,10 +21,10 @@ from __future__ import annotations
 
 import pytest
 
-from swreview.report.summary import GoalLine, goal_of, load_words
+from swreview.report.summary import GoalLine, goal_lines, goal_of, load_words
 from tests.support.attention import CoverageRow, CoverageSpec
 from tests.unit.test_attention import spec
-from tests.unit.test_review_summary import session_of, summary_of
+from tests.unit.test_review_summary import session_of
 
 GOAL_IDS = [goal.id for goal in load_words().goals]
 
@@ -37,13 +37,18 @@ LONG_REASON = (
 )
 
 
-def line(summary: object, goal: str) -> GoalLine:
-    return next(one for one in summary.goals if one.goal == goal)  # type: ignore[attr-defined]
+def lines_of(session: object) -> list[GoalLine]:
+    """The goal lines of `session`: since feature 013 the grouped view's, not the summary's."""
+    return goal_lines(session, load_words())  # type: ignore[arg-type]
+
+
+def line(lines: list[GoalLine], goal: str) -> GoalLine:
+    return next(one for one in lines if one.goal == goal)
 
 
 def goal_line(name: str, goal: str, specs: list | None = None, **buckets: object) -> GoalLine:
     session = session_of(name, specs or [], CoverageSpec(**buckets))  # type: ignore[arg-type]
-    return line(summary_of(session), goal)
+    return line(lines_of(session), goal)
 
 
 def row(check: str, reason: str | None = None) -> CoverageRow:
@@ -300,7 +305,7 @@ def test_a_coverage_row_counts_for_its_one_goal_only() -> None:
         [],
         CoverageSpec(out_of_scope=[row("standards.drawing.revision_matches", "no drawing.")]),
     )
-    summary = summary_of(session)
+    summary = lines_of(session)
 
     assert line(summary, "drawings").state == "not_applicable"
     for goal in ("standards", "hygiene"):
@@ -322,7 +327,7 @@ def test_standards_findings_and_the_release_row_speak_for_standards_not_hygiene(
         specs,
         CoverageSpec(unresolved=[row("standards.release", "no standards profile is attached.")]),
     )
-    summary = summary_of(session)
+    summary = lines_of(session)
 
     assert (line(summary, "standards").state, line(summary, "standards").findings) == (
         "issues",
@@ -337,9 +342,9 @@ def test_standards_findings_and_the_release_row_speak_for_standards_not_hygiene(
 
 
 def test_the_goal_lines_come_in_table_order_with_the_words_files_labels() -> None:
-    summary = summary_of(session_of("order", []))
+    lines = lines_of(session_of("order", []))
     states = load_words().goal_states
 
-    assert [one.goal for one in summary.goals] == GOAL_IDS
-    assert [one.title for one in summary.goals] == [goal.title for goal in load_words().goals]
-    assert all(one.state_label == states[one.state] for one in summary.goals)
+    assert [one.goal for one in lines] == GOAL_IDS
+    assert [one.title for one in lines] == [goal.title for goal in load_words().goals]
+    assert all(one.state_label == states[one.state] for one in lines)
