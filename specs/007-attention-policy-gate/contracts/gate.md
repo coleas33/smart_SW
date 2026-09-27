@@ -1,6 +1,6 @@
 # Contract: The Procedural Gate
 
-*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), pending implementation:* the report no longer renders a Start here section or a not-amplified line (it renders "Findings by type", every row listed), so section 3's `Start here:` lines and not-amplified line are the brief's own, still rendered from the same `Ranking` object, and `top_n` never counts a pass; section 3's anti-drift test becomes the parity rule: each of the brief's finding ids appears in the report's "Findings by type", in the same order within its group; see 013 `contracts/grouped-list.md` sections 1 and 6 (lands with 013 T052).
+*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed by 2026-09-27 (013 T051, T052):* the report no longer renders a Start here section or a not-amplified line (it renders "Findings by type", every row listed), so section 3's `Start here:` lines and not-amplified line are the brief's own, still rendered from the same `Ranking` object, and `top_n` never counts a pass; section 3's anti-drift test becomes the parity rule: each of the brief's finding ids appears in the report's "Findings by type", in the same order within its group; see 013 `contracts/grouped-list.md` sections 1 and 6 (lands with 013 T052).
 
 Normative for lever 11, the brief, the standards half of the pre-run, the checklist item, the
 number guard, and the adoption rule.

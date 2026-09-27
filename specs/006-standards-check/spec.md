@@ -187,7 +187,7 @@ An engineer accepts a deliberate deviation once, with a note, and it stays accep
 
 ### Functional Requirements
 
-*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), pending implementation:* FR-024 (the drawing phase reads each sheet's own view, with a named fallback; 013 T127) and FR-020's acceptance scenario 4 (no "no revision table" warning over a revision-table read gap; 013 T129) change; see 013 `contracts/readings.md` sections 1 and 2.
+*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed by 2026-09-27 (013 T127, T129):* FR-024 (the drawing phase reads each sheet's own view, with a named fallback; 013 T127) and FR-020's acceptance scenario 4 (no "no revision table" warning over a revision-table read gap; 013 T129) change; see 013 `contracts/readings.md` sections 1 and 2.
 
 **The standards profile**
 

@@ -1,6 +1,6 @@
 # Contract: The Drawing Brief
 
-*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), pending implementation:* the drawing section carries each document's drawing state, deduplicated candidates and any confirmed-open outcome; see 013 `contracts/drawing-capability.md` sections 3 and 6.
+*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed by 2026-09-27 (013 T091):* the drawing section carries each document's drawing state, deduplicated candidates and any confirmed-open outcome; see 013 `contracts/drawing-capability.md` sections 3 and 6.
 
 Normative for FR-038 to FR-043, User Story 6 and SC-006.
 

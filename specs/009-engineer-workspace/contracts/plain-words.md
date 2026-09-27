@@ -1,6 +1,6 @@
 # Contract: Plain Words Everywhere the Engineer Looks
 
-*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), pending implementation:* `labels.source` ("Checked by code", "AI guidance"); rows are one-line headlines; the default-view scan covers group headings and rows; see 013 `contracts/sources.md` section 2 and `contracts/grouped-list.md` section 5.
+*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed by 2026-09-27 (013 T054, T101):* `labels.source` ("Checked by code", "AI guidance"); rows are one-line headlines; the default-view scan covers group headings and rows; see 013 `contracts/sources.md` section 2 and `contracts/grouped-list.md` section 5.
 
 Normative for FR-012 (titles), FR-024 to FR-029 and SC-003.
 

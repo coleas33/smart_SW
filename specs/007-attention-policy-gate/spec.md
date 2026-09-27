@@ -153,7 +153,7 @@ Written beside the policy are the preconditions for ever adding an agentic triag
 
 ### Functional Requirements
 
-*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), pending implementation:* FR-013, FR-031, SC-004, SC-006 and SC-009 (the report's Start here becomes "Findings by type"; parity is each gate id in the report's index, in order within its group; 013 T052) and FR-023 (the Review tab renders the grouped list, not a Start here panel; 013 T054) change; see 013 `contracts/grouped-list.md`.
+*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed by 2026-09-27 (013 T052, T054):* FR-013, FR-031, SC-004, SC-006 and SC-009 (the report's Start here becomes "Findings by type"; parity is each gate id in the report's index, in order within its group; 013 T052) and FR-023 (the Review tab renders the grouped list, not a Start here panel; 013 T054) change; see 013 `contracts/grouped-list.md`.
 
 **Timing (User Story 1)**
 

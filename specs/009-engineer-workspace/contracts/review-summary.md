@@ -1,6 +1,6 @@
 # Contract: The Review Summary
 
-*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), pending implementation:* ten goals, each naming a finding group (Standards split from Hygiene); the summary block keeps the headline, a tally, the questions, the parts not loaded, the drawings and bought-parts lines and a not-reached line, while the goal lines move under their groups; `ReviewRanking` gains `groups`; see 013 `contracts/grouped-list.md`.
+*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed by 2026-09-27 (013 T034, T046, T050, T093):* ten goals, each naming a finding group (Standards split from Hygiene); the summary block keeps the headline, a tally, the questions, the parts not loaded, the drawings and bought-parts lines and a not-reached line, while the goal lines move under their groups; `ReviewRanking` gains `groups`; see 013 `contracts/grouped-list.md`.
 
 Normative for FR-007 to FR-012, SC-001 and SC-002's backend half.
 

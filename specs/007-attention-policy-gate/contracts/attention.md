@@ -1,6 +1,6 @@
 # Contract: The Attention Policy
 
-*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), pending implementation:* `top_n` is at most the number of unsuppressed rows, so no surface amplifies a pass; the Review tab renders the grouped list instead of Start here and Show all; the report's Start here becomes Findings by type; the explanation fallback is dropped and explanations are labelled AI guidance; see 013 `contracts/grouped-list.md` and `contracts/sources.md`.
+*Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed by 2026-09-27 (013 T044, T052, T054, T101, T112):* `top_n` is at most the number of unsuppressed rows, so no surface amplifies a pass; the Review tab renders the grouped list instead of Start here and Show all; the report's Start here becomes Findings by type; the explanation fallback is dropped and explanations are labelled AI guidance; see 013 `contracts/grouped-list.md` and `contracts/sources.md`.
 
 Normative for `report/attention.py`, the "Start here" section, `attention.json`, the
 `attention` key on the two check result bodies and `GET /sessions/{chat_id}/attention`.
