@@ -42,14 +42,16 @@ def test_the_two_guarded_files_exist() -> None:
     assert PANE_SETTINGS_WRITER.is_file()
 
 
-def test_there_are_thirteen_levers_to_guard() -> None:
+def test_there_are_fourteen_levers_to_guard() -> None:
     """The count is pinned as well as the names: a parametrized scan over an empty tuple
     would pass by reading nothing, and lever 11 is the pane's newest temptation (FR-026).
     Thirteen since the owner's lever 13 of 2026-09-23 (feature 008 research R2.53), which is
-    a pane default in code and, like lever 5, never a pane setting."""
-    assert len(LEVER_NAMES) == 13
+    a pane default in code and, like lever 5, never a pane setting; fourteen since feature
+    013's lever 14 (T121), which is adopted, if at all, in code by its own commit."""
+    assert len(LEVER_NAMES) == 14
     assert "procedural_gate" in LEVER_NAMES
     assert "withhold_prerun_tools" in LEVER_NAMES
+    assert "drop_prior_reasoning" in LEVER_NAMES
 
 
 @pytest.mark.parametrize("lever", LEVER_NAMES)

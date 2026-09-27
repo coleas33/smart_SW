@@ -521,6 +521,22 @@ class ModelViewAware(Protocol):
 
 
 @runtime_checkable
+class PriorReasoningAware(Protocol):
+    """An adapter whose requests can leave earlier turns' reasoning out (feature 013, lever 14).
+
+    An **optional** extension of the port, like `PromptCacheAware`: only OpenAI echoes
+    reasoning items back, so only it implements this; Gemini sends none and the lever is
+    inert there, recorded as set. `start_review` calls it once when the session's
+    `drop_prior_reasoning` is on (`contracts/tokens.md` section 4).
+    """
+
+    def drop_prior_reasoning(self) -> None:
+        """Leave earlier turns' reasoning items out of every request from now on. Called
+        once, at `start_review`; the history itself keeps them."""
+        ...
+
+
+@runtime_checkable
 class WithdrawableTools(Protocol):
     """A `ToolSet` that can ask for the next round to go out with no tool call allowed.
 

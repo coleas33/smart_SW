@@ -32,6 +32,7 @@ class EfficiencySettings(BaseModel):
     procedural_gate: bool = False          # lever 11
     compact_queries: bool = False          # experimental bounded discovery pages
     withhold_prerun_tools: bool = False    # lever 13 (feature 008 amendment, 2026-09-23)
+    drop_prior_reasoning: bool = False     # lever 14 (feature 013, 2026-09-26)
 ```
 
 **Threading**: one keyword argument through `start_review` (`agent/runner.py:595-651`), held on
@@ -77,6 +78,7 @@ own numbers unreadable, and an adopted lever becomes a default in code, not a ch
 | 11 | `procedural_gate` | `False` | Provider-neutral; the pre-run and the first user message (feature 007, `contracts/gate.md`) | `start_review`; implies lever 5, and never shares an arm with lever 5 or lever 7 | Tokens, round trips and seconds to first finding; **gated on the per-run `check_fit` and `check_axial_stack` call counts not falling** |
 | 12 | `compact_queries` | `False` | Provider-neutral; optional bounded package discovery tool surface | `ToolRegistry` build/dispatch when explicitly enabled | Compact discovery page size and follow-up detail retrieval; gated on complete pagination and unchanged default tool schemas |
 | 13 | `withhold_prerun_tools` | `False` (pane default since 2026-09-23) | Provider-neutral; the tool array after the pre-run | `start_review`, after the pre-run; needs lever 5 or 11 | Tool array bytes per request (`test_tool_payload.py`), and the replay of the recorded runs with no finding lost |
+| 14 | `drop_prior_reasoning` | `False`, off pending the replay (feature 013 T125) | OpenAI; the request view at each turn boundary; inert on Gemini | `start_review`, once, through `PriorReasoningAware` | Requested input per round after the first turn, priced by the replay as an estimate (feature 013 T123); gated on no recorded finding lost |
 
 ## 3. The interaction matrix
 
@@ -93,6 +95,7 @@ column because of this table.
 | 6 and 5 | Lever 5 removes the round trips lever 6 would have saved. Measured together, 6 looks worthless | **Measure 6 first, against the lever-5-off baseline**, and record it |
 | 6 and 7 | With batching on, the round that closes the last checklist item may also contain three more calls; the stop withdraws tools for the **next** round, so those three still run | Correct and intended. Stated here so the measured saving is not read as a bug |
 | 4 and 5 | If a tier withholds RMS tools because the package has no feature rows, lever 5 has nothing to pre-run for RMS either, and both write coverage saying so | **One function decides "this package cannot be graded for RMS, and here is the sentence saying why."** One reason, one writer |
+| 14 and 3 | Leaving earlier turns' reasoning items out changes the request's prefix at each turn boundary, so the OpenAI prefix breaks there | None beyond what history pruning (feature 008) already causes at the same boundary; recorded so the cache figures of an arm with lever 14 are read against it |
 | 9 and 3 | A Gemini explicit cache cannot be keyed to a package today because `PackageId = Guid.NewGuid()` on every dump (VERIFIED, `Dump/PackageWriter.cs:136`). If lever 9 introduces a content key, lever 3 gets cross-session cache reuse for free | Cross-referenced, not a reason to do 9 early |
 
 ## 4. Tier 1
@@ -489,6 +492,32 @@ OpenAI (29,552 on Gemini), **6,983 bytes and about 1,496 o200k tokens less on ev
 (6,668 and 1,435 on Gemini); with a bridge, which keeps `check_interference_group`, 33 tools and
 34,145 bytes, 5,753 bytes and about 1,230 tokens less. Lever 13 is a thirteenth lever: the
 lever-count pins move to thirteen, and no pane control exists (`test_no_lever_in_pane_settings.py`).
+
+### Lever 14: earlier turns' reasoning leaves the request view (feature 013)
+
+**Flag**: `drop_prior_reasoning`. **Default**: off in the class, on the command line, in
+`benchmark run` and in the pane, **pending the replay** (feature 013 `contracts/tokens.md`
+section 4). **Read**: once at `start_review`, which calls `PriorReasoningAware.drop_prior_reasoning`
+on an adapter that has it - the OpenAI adapter only; Gemini sends no reasoning items, so the lever
+is inert there and the session records it as set.
+
+A turn is the span between two user messages of the runner's history. With the lever on, the
+request the OpenAI adapter builds (`_encode_history`) leaves out the raw `reasoning` items of every
+assistant message before the current turn's user message; every other item, and every item of
+the current turn, is sent byte for byte. The runner's history and `session.json` keep every item.
+Off, every request is byte-identical to the one before the lever existed. Written into
+`session.json` only when on, as lever 13 is; the lever-count pins move to fourteen.
+
+**Pricing** (feature 013 research R3 C13): the replay has no reasoning items, only the recorded
+usage; with lever 14 on, each round of a turn after the first is priced lower by the sum of the
+recorded reasoning output tokens of every earlier turn's rounds, reported as an estimate
+(`benchmark replay --lever drop_prior_reasoning`).
+
+**Adoption** (default taken 2026-09-26, the owner may revise): when the replay of every fixture
+shows no recorded finding lost and a fall in requested input, a commit of its own adds it to
+`pane_efficiency` and records the ledger row here; otherwise it stays off and the figures and
+the reason are recorded here (feature 013 T125, after the US6 replay gate T124). *Not yet
+decided.*
 
 ### The array ceiling: what it is asserted on (owner decision 9A, 2026-09-23)
 

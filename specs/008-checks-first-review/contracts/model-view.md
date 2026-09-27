@@ -114,6 +114,11 @@ The stub is deterministic in `(name, arguments, content)`. Because the runner's 
 append-only and each turn's first request is built from it, pruning applies between turns with no
 further code, and a follow-up carries stubs, not payloads.
 
+*Amended by feature 013 (T121).* Lever 14, `drop_prior_reasoning` (005 `contracts/levers.md`),
+works beside pruning on OpenAI: after the pruned history is taken, `_encode_history` leaves out
+the `reasoning` items of the turns before the current one. Like pruning it touches only the
+request, never the history, and both break the cacheable prefix at the same turn boundary.
+
 ## 8. The stored results (FR-021, SC-008)
 
 `SessionSink.record` writes `<out>/tool-results/step-<index>.json` - `{session_id, step, tool,

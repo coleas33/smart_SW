@@ -63,6 +63,7 @@ from swreview.agent.providers import (
     AgentProvider,
     EffortLevel,
     ModelViewAware,
+    PriorReasoningAware,
     PromptCacheAware,
     ProviderTool,
     ToolCallResult,
@@ -1597,6 +1598,10 @@ def start_review(
             # made up, because the pane restarts the backend on a settings save and
             # resumes this same run folder (contracts/levers.md, lever 3).
             provider.use_prompt_cache(str(session.session_id))
+        if session.efficiency.drop_prior_reasoning and isinstance(provider, PriorReasoningAware):
+            # Lever 14 (feature 013), read once here like lever 3: earlier turns' reasoning
+            # leaves each request; the history keeps it. Inert on an adapter without it.
+            provider.drop_prior_reasoning()
         # The stream opens before anything is written to it. Everything below this line
         # emits - partial evidence writes coverage, lever 11a writes carried findings, and
         # lever 5's pre-run writes a tool call, two findings and coverage of its own - and

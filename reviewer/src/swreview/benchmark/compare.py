@@ -131,6 +131,7 @@ LEVER_COUNTERS: dict[str, str] = {
     "procedural_gate": GATE_COUNTER,
     "compact_queries": "distinct tool names called (compact discovery and full detail)",
     "withhold_prerun_tools": "tool array per request, and calls answered already_run",
+    "drop_prior_reasoning": "requested input per round after the first turn (replay estimate)",
     NO_LEVER: "none: a baseline study has no lever to counter",
 }
 """The number **this** lever's gate needs and no other's (ab-harness section 6).

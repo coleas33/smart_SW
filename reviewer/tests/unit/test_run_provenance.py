@@ -166,12 +166,15 @@ def test_the_record_agrees_with_the_session_the_runner_wrote(
 
     assert result.exit_code == 0, result.stdout + result.stderr
     session = json.loads((out / "cover" / "session.json").read_text(encoding="utf-8"))
-    # The record names all thirteen levers; the session writes lever 13 only when it is on
-    # (feature 008 amendment), so an off arm's session carries the other twelve, equal.
+    # The record names all fourteen levers; the session writes levers 13 and 14 only when on
+    # (feature 008 amendment; feature 013 T121, edited deliberately), so an off arm's session
+    # carries the other twelve, equal.
     assert "withhold_prerun_tools" not in session["efficiency"]
+    assert "drop_prior_reasoning" not in session["efficiency"]
     assert read_record(out)["efficiency"] == {
         **session["efficiency"],
         "withhold_prerun_tools": False,
+        "drop_prior_reasoning": False,
     }
 
 

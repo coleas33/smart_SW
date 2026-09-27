@@ -287,6 +287,9 @@ class OpenAIProvider:
         Set once, by `use_model_view`."""
         self._compact = False
         """Payload slimming's compact JSON for every `function_call_output` (FR-017)."""
+        self.drops_prior_reasoning = False
+        """Lever 14 (feature 013): whether each request leaves earlier turns' reasoning items
+        out. Off - the default - sends every item. Set once, by `drop_prior_reasoning`."""
         self.round_usage: list[TokenUsage] = []
         """This turn's round trips, one record each, in the order they were made.
 
@@ -346,6 +349,12 @@ class OpenAIProvider:
         """
         self._prune_after = settings.prune_after_rounds if settings.history_pruning else None
         self._compact = settings.payload_slimming
+
+    def drop_prior_reasoning(self) -> None:
+        """`PriorReasoningAware`: from now on each request leaves out the reasoning items of
+        every turn before the current one (lever 14, `contracts/tokens.md` section 4). The
+        history keeps them, so `session.json` and a resumed session are unchanged."""
+        self.drops_prior_reasoning = True
 
     def _visible(
         self, history: Sequence[Mapping[str, Any]], offered: Collection[str]
@@ -503,7 +512,11 @@ class OpenAIProvider:
         request: dict[str, Any] = {
             "model": self.model,
             "instructions": system,
-            "input": _encode_history(self._visible(history, offered), compact=self._compact),
+            "input": _encode_history(
+                self._visible(history, offered),
+                compact=self._compact,
+                drop_prior_reasoning=self.drops_prior_reasoning,
+            ),
             "reasoning": {"effort": effort_value},
             "max_output_tokens": self.max_output_tokens,
             "parallel_tool_calls": self.parallel_tool_calls,
@@ -664,7 +677,10 @@ class OpenAIProvider:
 
 
 def _encode_history(
-    messages: Sequence[Mapping[str, Any]], *, compact: bool = False
+    messages: Sequence[Mapping[str, Any]],
+    *,
+    compact: bool = False,
+    drop_prior_reasoning: bool = False,
 ) -> list[dict[str, Any]]:
     """The runner's neutral history as a Responses `input` list.
 
@@ -673,14 +689,23 @@ def _encode_history(
     and `tool_calls`, so a session can be resumed on a provider it did not start on.
     `compact` is payload slimming's compact JSON for each tool result (feature 008),
     through the one serialization `tool_result_text`.
+
+    `drop_prior_reasoning` is lever 14 (feature 013, `contracts/tokens.md` section 4): the
+    `reasoning` items of every assistant message before the last user message - the turns
+    before the current one - are left out, and every other item is sent byte for byte. Off,
+    the list is exactly what it was before the lever existed.
     """
+    current = _current_turn_start(messages) if drop_prior_reasoning else 0
     items: list[dict[str, Any]] = []
-    for message in messages:
+    for index, message in enumerate(messages):
         role = message.get("role")
         if role == "user":
             items.append({"role": "user", "content": message.get("content", "")})
         elif role == "assistant":
-            items.extend(_encode_assistant(message))
+            encoded = _encode_assistant(message)
+            if index < current:
+                encoded = [item for item in encoded if item.get("type") != "reasoning"]
+            items.extend(encoded)
         elif role == "tool":
             items.append(
                 {
@@ -692,6 +717,15 @@ def _encode_history(
         else:
             raise ValueError(f"history message with unknown role {role!r}")
     return items
+
+
+def _current_turn_start(messages: Sequence[Mapping[str, Any]]) -> int:
+    """The index of the last user message: where the current turn starts, or 0 with none."""
+    return next(
+        (index for index in range(len(messages) - 1, -1, -1)
+         if messages[index].get("role") == "user"),
+        0,
+    )
 
 
 def _encode_assistant(message: Mapping[str, Any]) -> list[dict[str, Any]]:
