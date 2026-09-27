@@ -60,15 +60,6 @@ public sealed class ReviewPageLabelsTests
         Assert.Equal(0, read.GetProperty("injected").GetInt32());
     }
 
-    /// <summary>The Review tab's Start-here meta prints the labels; the check tabs are handed none and print the raw words.</summary>
-    [Fact]
-    public void TheReviewTabsStartHereMetaPrintsTheLabels()
-    {
-        JsonElement read = Labelled.Value.Read;
-
-        Assert.Equal("demonstrated · medium severity · Pin-A-1, Plate-1", ReviewPageDriver.Strings(read, "metas")[0]);
-    }
-
     /// <summary>A token that names something on `Object.prototype` is printed as itself, not as whatever the prototype holds.</summary>
     [Fact]
     public void ATokenNamingSomethingOnTheObjectPrototypePrintsAsItself()
@@ -90,7 +81,6 @@ public sealed class ReviewPageLabelsTests
         Assert.Equal(new[] { "checked_within_scope", "medium" }, ReviewPageDriver.Strings(read, "withinChips"));
         Assert.Equal("1 unresolved · 1 out of scope", read.GetProperty("coverageCounts").GetString());
         Assert.Equal("open", read.GetProperty("evidenceChip").GetString());
-        Assert.Equal("demonstrated · medium · Pin-A-1, Plate-1", ReviewPageDriver.Strings(read, "metas")[0]);
         Assert.Equal(new[] { "toString", "__proto__" }, ReviewPageDriver.Strings(read, "oddChips"));
     }
 
@@ -155,8 +145,7 @@ return JSON.stringify({
   coverageCounts: h.text(document.getElementById('coverage-panel'), 'summary .fold-count'),
   bucketNames: h.texts(document.getElementById('coverage-panel'), '.bucket-name'),
   evidenceChip: evidence ? evidence.textContent : null,
-  injected: h.injected(document.querySelector('.card.evidence')),
-  metas: h.texts(document, '#attention-panel .attention-row .attention-meta')
+  injected: h.injected(document.querySelector('.card.evidence'))
 });";
 
     private sealed class Run

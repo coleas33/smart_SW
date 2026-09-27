@@ -23,8 +23,9 @@ namespace SwReview.AddIn.Tests;
 ///
 /// Feature 009 User Story 5 moved the findings out of the one container they shared with the
 /// transcript and into Results (contracts/views.md section 2), so the fold is measured against
-/// `#results`, the view that scrolls it, and the card is found in `#findings`. The floor is
-/// unchanged.
+/// `#results`, the view that scrolls it. Feature 013 T053 replaced Start here with the grouped
+/// findings: the test opens the finding's grouped row - the press that shows its card - proves the
+/// card's own fold stayed shut, then presses Details and measures that. The floor is unchanged.
 /// </summary>
 public sealed class ReviewPageNarrowLayoutTests
 {
@@ -37,7 +38,7 @@ public sealed class ReviewPageNarrowLayoutTests
 
         Assert.True(
             geometry.GetProperty("hiddenAfterRowClick").GetBoolean(),
-            "following the ranked row opened the finding's fold.");
+            "opening the grouped row opened the finding's own fold.");
         Assert.True(
             geometry.GetProperty("detailsVisibleHeight").GetDouble() >= 80,
             "the opened finding details are clipped below a usable height: " + geometry);
@@ -52,7 +53,7 @@ public sealed class ReviewPageNarrowLayoutTests
             "the full not-examined warning is not visible at the narrow pane size.");
         Assert.Contains("cmp:0004 (lightweight)", geometry.GetProperty("warningText").GetString());
         Assert.True(geometry.GetProperty("explanationMatches").GetBoolean(),
-            "Start here and its matching finding must show the same persisted explanation.");
+            "the finding must show the persisted explanation its grouped row carries, verbatim.");
         Assert.False(geometry.GetProperty("explanationMarkup").GetBoolean(),
             "The explanation must remain text, including hostile markup.");
     }
@@ -149,11 +150,11 @@ public sealed class ReviewPageNarrowLayoutTests
     private static async Task<JsonElement> Measure(CoreWebView2 page)
     {
         string raw = await page.ExecuteScriptAsync(@"(function () {
-  var row = document.querySelector('#attention-panel .attention-row');
-  if (!row) { return JSON.stringify({error:'no attention row'}); }
-  var card = document.querySelector('#findings .card.finding[data-finding-id=""F-007""]');
-  if (!card) { return JSON.stringify({error:'no finding card'}); }
-  row.click();
+  var row = document.querySelector('#findings-by-type details.type-row[data-finding-id=""F-007""]');
+  if (!row) { return JSON.stringify({error:'no grouped row'}); }
+  var card = row.querySelector('.card.finding[data-finding-id=""F-007""]');
+  if (!card) { return JSON.stringify({error:'no finding card in its row'}); }
+  row.querySelector(':scope > summary').click();
   var details = card.querySelector('.details');
   var hiddenAfterRowClick = details.hidden;
   card.querySelector('[data-action=""expand""]').click();
@@ -172,9 +173,8 @@ public sealed class ReviewPageNarrowLayoutTests
     warningVisible: !document.getElementById('not-examined').hidden
       && document.getElementById('not-examined').getBoundingClientRect().height > 0,
     warningText: document.getElementById('not-examined').textContent,
-    explanationMatches: !!row.querySelector('.finding-explanation')
-      && !!card.querySelector('.finding-explanation')
-      && row.querySelector('.finding-explanation').textContent === card.querySelector('.finding-explanation').textContent,
+    explanationMatches: !!card.querySelector('.finding-explanation')
+      && card.querySelector('.finding-explanation .explanation-text').textContent === " + JsonSerializer.Serialize(Explanation) + @",
     explanationMarkup: !!document.querySelector('.finding-explanation img'),
     viewport: [window.innerWidth, viewportHeight]
   });
@@ -189,9 +189,16 @@ public sealed class ReviewPageNarrowLayoutTests
     private static string Reply(string type, string id, object payload) =>
         JsonSerializer.Serialize(new { type, id, payload });
 
-    private static string WithExplanation() => new Regex("\"finding_id\"\\s*:\\s*\"F-007\"")
-        .Replace(AttentionSample.Json(), "\"finding_id\":\"F-007\",\"explanation\":"
-            + JsonSerializer.Serialize("These faces locate the pin; editing them may break the mate. <img src=x onerror=alert(1)>"), 1);
+    /// <summary>The persisted explanation, with markup in it: model text, which stays characters.</summary>
+    private const string Explanation = "These faces locate the pin; editing them may break the mate. <img src=x onerror=alert(1)>";
+
+    /// <summary>The sample's ranking with the explanation on F-007's grouped row, where the page reads it.</summary>
+    private static string WithExplanation()
+    {
+        System.Text.Json.Nodes.JsonObject ranking = SummarySample.Ranking();
+        ranking["groups"]!["groups"]![0]!["rows"]![1]!["explanation"] = Explanation;
+        return ranking.ToJsonString();
+    }
 
     private static object Init() => new
     {

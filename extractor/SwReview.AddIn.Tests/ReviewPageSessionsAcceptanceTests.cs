@@ -47,7 +47,7 @@ public sealed class ReviewPageSessionsAcceptanceTests
         // 96 and 15 since the fixture follows the code: three touching groups are contacts (ReviewFixture).
         Assert.Equal(96, ReviewPageDriver.Strings(run.Live, "cards").Length);
         Assert.Equal(ReviewPageDriver.Strings(run.Live, "cards"), ReviewPageDriver.Strings(run.Restored, "cards"));
-        Assert.Equal(ReviewPageDriver.Strings(run.Live, "startHere"), ReviewPageDriver.Strings(run.Restored, "startHere"));
+        Assert.Equal(ReviewPageDriver.Strings(run.Live, "groupRows"), ReviewPageDriver.Strings(run.Restored, "groupRows"));
         Assert.Equal(run.Live.GetProperty("summary").GetString(), run.Restored.GetProperty("summary").GetString());
         Assert.StartsWith("96 findings in 15 issues", run.Restored.GetProperty("summary").GetString());
     }
@@ -162,15 +162,15 @@ public sealed class ReviewPageSessionsAcceptanceTests
     }
 
     private const string ReadState = @"
-var decisions = document.querySelectorAll('#findings [data-action=""accept""], #findings [data-action=""reject""], #findings [data-action=""defer""], #findings input.note');
+var decisions = document.querySelectorAll('#results .card.finding [data-action=""accept""], #results .card.finding [data-action=""reject""], #results .card.finding [data-action=""defer""], #results .card.finding input.note');
 var decisionsDisabled = decisions.length > 0;
 for (var i = 0; i < decisions.length; i++) { if (!decisions[i].disabled) { decisionsDisabled = false; } }
 var readOnly = document.getElementById('read-only');
 return JSON.stringify({
   ok: true,
   chipTexts: h.texts(document, '#review-chips [data-action=""review-chip""]'),
-  cards: h.attrs(document.getElementById('findings'), '.card.finding', 'data-finding-id'),
-  startHere: h.attrs(document.getElementById('attention-panel'), '.attention-row', 'data-finding-id'),
+  cards: h.attrs(document.getElementById('results'), '.card.finding', 'data-finding-id'),
+  groupRows: h.attrs(document.getElementById('findings-by-type'), 'details.type-row', 'data-finding-id'),
   summary: document.getElementById('summary').textContent,
   summaryRendered: h.rendered(document.getElementById('summary')),
   staleHidden: !!document.getElementById('stale-review').hidden,

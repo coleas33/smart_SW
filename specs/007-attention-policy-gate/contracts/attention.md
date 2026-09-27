@@ -334,3 +334,16 @@ the no-percent-label rule above still applies to the deterministic attention wor
   script, comments stripped, for `.sort(`, `localeCompare`, a severity literal list, or a
   numeric comparison on `severity`/`status`, with an allowlist of the existing bucket display
   orders.
+- **The Review tab renders the findings grouped by type, not Start here** (amended 2026-09-26,
+  feature 013 T054; 013 `contracts/grouped-list.md` section 5). The Review route's body also
+  carries `groups` (`FindingsByType`, 013 section 3), which the page renders through
+  `render.typeGroups` into `<section id="findings-by-type">` in place of `#attention-panel`: one
+  fold per group in the supplied order, open as its `open` says; one line per row - the display
+  title, then the backend's `tail_text`, `reach_text` and `chip`, each printed only when sent; a
+  group's goal lines after its rows; the checked fold last. The finding cards move into their rows
+  in each row's member order, and a card no row names stays in the holding list. The panel, its
+  count line, "Show all" and its one-line rows are gone from the Review tab, and the page counts
+  and pluralises nothing; a row's stripe is still `web/shared/attention.js`'s `stripeOf`. The page
+  still fetches the route in `endSession`, drops a response for a chat it moved on from, and
+  clears the section in `resetTranscript`. The check tabs keep their `rows[0..top_n)` preview
+  unchanged (013 research R2.17); the scan above still holds, with no new allowlist entry.

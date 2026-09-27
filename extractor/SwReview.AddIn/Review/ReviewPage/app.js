@@ -53,13 +53,6 @@
   var RECONNECT_MAX = 15000;
 
   /**
-   * How long a finding card stays lit after a ranked row was followed into the transcript.
-   * Long enough to find with the eye after the scroll, short enough that the transcript is not
-   * left with a permanently highlighted row nobody asked about any more.
-   */
-  var FLASH_MS = 2000;
-
-  /**
    * The separator between the facts that share the transcript header's one line. An escape
    * rather than the character itself, so this file stays ASCII like every other page file in
    * the pane.
@@ -110,6 +103,11 @@
     // turn is still running (feature 005 T016a, contracts/usage.md section 6).
     usage: [],
     findings: Object.create(null),
+
+    // The finding ids in the order their cards first arrived (feature 013). The holding list is
+    // rebuilt in this order before every ranking moves the cards into their rows, so a card no
+    // row names any more goes back where it came, and nothing on this page decides an order.
+    arrival: [],
     evidence: Object.create(null),
     tools: Object.create(null),
 
@@ -834,6 +832,7 @@
     } else {
       ui.findings.appendChild(card);
       ui.findingsHead.hidden = false;
+      state.arrival.push(String(body.id));
     }
     state.findings[body.id] = { body: body, card: card };
   }
@@ -858,6 +857,10 @@
     }
     entry.card.parentNode.removeChild(entry.card);
     delete state.findings[id];
+    var arrived = state.arrival.indexOf(id);
+    if (arrived >= 0) {
+      state.arrival.splice(arrived, 1);
+    }
     appendCard(render.withdrawalMarker(body));
     loadAttention();
   }
@@ -1088,27 +1091,23 @@
         applyRanking(ranking);
       },
       function () {
-        // Nothing new: the panel stays as it is, which for a review that has just ended is
-        // hidden.
+        // Nothing new: Results stay as they are - for a review that has just ended, its cards
+        // in the holding list and no grouped section.
       });
   }
 
   /**
-   * A ranking and its summary into Results: Start here, the explanations, the summary, the
-   * questions, the modelling-practice group, the contacts and the status line. One path for the
-   * end of a live turn and for a restored review (contracts/sessions.md section 5), so the two
-   * cannot render the same review differently.
+   * A ranking and its summary into Results: the summary, the questions, the findings grouped by
+   * type with their explanations, the contacts and the status line. One path for the end of a
+   * live turn and for a restored review (contracts/sessions.md section 5), so the two cannot
+   * render the same review differently.
    */
   function applyRanking(ranking) {
-    render.clear(ui.attention);
-    ui.attention.appendChild(render.attentionPanel(ranking, state.labels));
-    syncFindingExplanations(ranking);
-    ui.attention.hidden = false;
-
     state.summary = ranking.summary || null;
     renderSummary();
     renderQuestions();
-    groupModellingPractice(state.summary && state.summary.modelling_practice);
+    renderGroups(ranking.groups || null);
+    syncFindingExplanations(ranking.groups || null);
     renderContacts();
     renderResultsState();
     syncReadOnlyControls();
@@ -1116,7 +1115,7 @@
 
   /**
    * The summary block, rebuilt whole from `state.summary` (contracts/review-summary.md section
-   * 5). Rebuilt rather than appended to, like Start here, so a second ranking - the end of a
+   * 5). Rebuilt rather than appended to, like the groups, so a second ranking - the end of a
    * follow-up turn - replaces the block. No summary, no block: a backend that sends none leaves
    * the section hidden and empty (FR-030).
    */
@@ -1129,45 +1128,66 @@
   }
 
   /**
-   * The modelling-practice findings as one collapsed group (FR-010, contracts/review-summary.md
-   * section 5): the cards the summary names move, in the order they arrived, into one shut fold
-   * placed where the first of them was.
+   * The findings, grouped by type (feature 013, contracts/grouped-list.md section 5), from the
+   * ranking's `groups`: every card back to the holding list in the order it arrived, the groups
+   * rebuilt whole, then each card moved into its row's body in the row's `member_finding_ids`
+   * order. A card no row names stays in the holding list, never dropped; a second ranking
+   * regroups rather than nesting or duplicating a card; and a ranking with no groups - a body
+   * shaped like attention.json - shows no section and leaves every card where it arrived.
    *
-   * Which cards is the backend's answer (`modelling_practice.finding_ids`, from feature 008's
-   * family row), read as a set; their order is the order they already stand in, which is the
-   * order they arrived. Nothing here decides membership or order. Any group a previous ranking
-   * made is taken apart first, so the end of a follow-up turn regroups rather than nesting or
-   * duplicating a card - and a ranking with no family leaves every card where it arrived.
+   * The page moves cards and never orders them: the groups, the rows and the members are the
+   * backend's lists, walked in the order given (research R2.19).
    */
-  function groupModellingPractice(practice) {
-    ungroupFindings();
-    var ids = (practice && practice.finding_ids) || [];
-    if (!ids.length) {
+  function renderGroups(byType) {
+    returnCardsToHolding();
+    render.clear(ui.groups);
+    ui.groups.hidden = !byType;
+    if (!byType) {
       return;
     }
+    ui.groups.appendChild(render.typeGroups(byType, state.labels));
 
-    var named = Object.create(null);
-    for (var index = 0; index < ids.length; index++) {
-      named[String(ids[index])] = true;
+    var bodies = Object.create(null);
+    var rowNodes = ui.groups.querySelectorAll('details.type-row');
+    for (var node = 0; node < rowNodes.length; node++) {
+      bodies[rowNodes[node].getAttribute('data-finding-id')] = rowNodes[node].querySelector('.type-row-body');
     }
 
-    var members = [];
-    var cards = ui.findings.querySelectorAll('.card.finding');
-    for (var card = 0; card < cards.length; card++) {
-      if (named[cards[card].getAttribute('data-finding-id')] === true) {
-        members.push(cards[card]);
+    var rows = groupRows(byType);
+    for (var index = 0; index < rows.length; index++) {
+      var row = rows[index] || {};
+      var body = bodies[String(row.finding_id || '')];
+      var members = row.member_finding_ids || [];
+      for (var member = 0; member < members.length; member++) {
+        var entry = state.findings[String(members[member])];
+        if (body && entry) {
+          body.appendChild(entry.card);
+        }
       }
     }
-    if (!members.length) {
-      return;
-    }
+  }
 
-    var group = render.findingGroup(practice.title);
-    members[0].parentNode.insertBefore(group, members[0]);
-    var body = group.querySelector('.finding-group-body');
-    for (var member = 0; member < members.length; member++) {
-      body.appendChild(members[member]);
+  /** Every card back to the holding list, in the order the cards first arrived. */
+  function returnCardsToHolding() {
+    for (var index = 0; index < state.arrival.length; index++) {
+      var entry = state.findings[state.arrival[index]];
+      if (entry) {
+        ui.findings.appendChild(entry.card);
+      }
     }
+  }
+
+  /** Every row of the grouped findings - each group's, then the checked fold's - in the order supplied. */
+  function groupRows(byType) {
+    var rows = [];
+    var groups = byType.groups || [];
+    for (var index = 0; index < groups.length; index++) {
+      rows = rows.concat((groups[index] || {}).rows || []);
+    }
+    if (byType.checked) {
+      rows = rows.concat(byType.checked.rows || []);
+    }
+    return rows;
   }
 
   /**
@@ -1182,19 +1202,6 @@
       ui.contacts.appendChild(render.contactList(contacts));
     }
     ui.contacts.hidden = !contacts;
-  }
-
-  /** Every group back to loose cards, in their order, where the group stood. */
-  function ungroupFindings() {
-    var groups = ui.findings.querySelectorAll('.finding-group');
-    for (var index = 0; index < groups.length; index++) {
-      var group = groups[index];
-      var cards = group.querySelectorAll('.card.finding');
-      for (var card = 0; card < cards.length; card++) {
-        group.parentNode.insertBefore(cards[card], group);
-      }
-      group.parentNode.removeChild(group);
-    }
   }
 
   // ---- the backend's words (feature 009 User Story 7) --------------------------------------
@@ -1452,8 +1459,10 @@
    */
   function syncReadOnlyControls() {
     var locked = state.readOnly !== null;
-    var controls = ui.findings.querySelectorAll(
-      '[data-action="accept"], [data-action="reject"], [data-action="defer"], .card-tools input.note');
+    // Every card of the review, wherever it stands: in the holding list or moved into its row.
+    var controls = ui.results.querySelectorAll(
+      '.card.finding [data-action="accept"], .card.finding [data-action="reject"], '
+        + '.card.finding [data-action="defer"], .card.finding .card-tools input.note');
     for (var index = 0; index < controls.length; index++) {
       controls[index].disabled = locked;
     }
@@ -1529,28 +1538,34 @@
     renderStartReview();
   }
 
-  function syncFindingExplanations(ranking) {
+  /**
+   * The persisted explanations onto their findings' cards, from the grouped rows that carry them
+   * (explanations attach by finding id, contracts/grouped-list.md section 3): each row's text on
+   * every member's card, as the first line inside its fold (U10), the headline staying one line.
+   * Any a previous ranking placed are taken off first, so a second ranking never adds a second.
+   */
+  function syncFindingExplanations(byType) {
     // Text is persisted by the backend and repeated verbatim on both surfaces. Never derive
-    // an explanation, a verdict, or an order from the finding on the page. On the card it is
-    // the first line inside the fold (U10): the headline stays one line, and the sentence that
-    // explains the finding reads before the evidence it explains.
-    var previous = ui.findings.querySelectorAll('.finding-explanation');
+    // an explanation, a verdict, or an order from the finding on the page.
+    var previous = ui.results.querySelectorAll('.finding-explanation');
     for (var index = 0; index < previous.length; index++) {
       previous[index].parentNode.removeChild(previous[index]);
     }
-    if (ranking.empty_reason) {
+    if (!byType) {
       return;
     }
-    var rows = ranking.rows || [];
-    var count = typeof ranking.top_n === 'number' ? ranking.top_n : rows.length;
-    for (var rowIndex = 0; rowIndex < rows.length && rowIndex < count; rowIndex++) {
-      var row = rows[rowIndex];
-      var members = row.member_finding_ids || [row.finding_id];
+    var rows = groupRows(byType);
+    for (var rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+      var row = rows[rowIndex] || {};
+      if (typeof row.explanation !== 'string' || !row.explanation) {
+        continue;
+      }
+      var members = row.member_finding_ids || [];
       for (var memberIndex = 0; memberIndex < members.length; memberIndex++) {
-        var entry = state.findings[members[memberIndex]];
-        if (entry && typeof row.explanation === 'string' && row.explanation) {
+        var entry = state.findings[String(members[memberIndex])];
+        if (entry) {
           var fold = entry.card.querySelector('.details');
-          fold.insertBefore(render.el('p', 'finding-explanation', row.explanation), fold.firstChild);
+          fold.insertBefore(render.findingExplanation(row.explanation), fold.firstChild);
         }
       }
     }
@@ -1738,12 +1753,13 @@
     render.clear(ui.transcript);
     render.clear(ui.findings);
     ui.findingsHead.hidden = true;
+    render.clear(ui.groups);
+    ui.groups.hidden = true;
+    state.arrival = [];
     render.clear(ui.errors);
     render.clear(ui.answers);
     render.clear(ui.coverage);
     ui.coverage.hidden = true;
-    render.clear(ui.attention);
-    ui.attention.hidden = true;
     state.summary = null;
     state.questionIndex = 0;
     state.questionNote = null;
@@ -1898,70 +1914,18 @@
   }
 
   /**
-   * A ranked row is a way into the transcript.
-   *
-   * The Start here panel amplifies findings that are already below it; until now the rows were
-   * inert, so an engineer read "F-007, interference.static, needs your judgement" and then went
-   * looking for F-007 by eye through a whole review's transcript. One listener on the panel,
-   * matching `render.js`'s one listener on the transcript, so a rebuilt panel keeps working.
-   * A Start-here card and a one-line row behind "Show all" are both a finding id to follow
-   * (U12); the "Show all" control itself carries none, and folds natively.
-   *
-   * Nothing here ranks, filters or reorders: it scrolls to a card that is already on screen.
+   * Collapse all: every finding back to its headline, every button back to "Details", and every
+   * grouped row shut - the groups stay as they are, so the list goes back to one line per issue
+   * under the headings the engineer left open (contracts/grouped-list.md section 5).
    */
-  function onAttentionClick(event) {
-    var target = event.target;
-    var row = (target && target.closest) ? target.closest('[data-finding-id]') : null;
-    if (!row) {
-      return;
-    }
-    revealFinding(row.getAttribute('data-finding-id'));
-  }
-
-  /**
-   * Scrolls a finding's headline into view and lights the card up. The fold stays as it was.
-   *
-   * Until U10 this opened the fold as well, so every ranked row followed left one more finding
-   * open at full length and the next click opened another (docs/pane-findings-2026-09-20-
-   * review-gui.md section 3). A row leads to a headline; opening it is the engineer's press.
-   *
-   * A row whose finding is not in the transcript does nothing rather than scrolling somewhere
-   * arbitrary: a ranking is read once the session ends and the transcript holds every finding
-   * of that session, but a reconnect that missed a `finding` event is exactly the case where
-   * the page must not pretend.
-   */
-  function revealFinding(findingId) {
-    var entry = findingId ? state.findings[findingId] : null;
-    var card = entry ? entry.card : null;
-    if (!card) {
-      return;
-    }
-
-    // A card inside the modelling-practice group is behind that group's fold: open it first,
-    // or the scroll lands on a card with no box (FR-010).
-    var group = card.closest('.finding-group');
-    if (group) {
-      group.open = true;
-    }
-
-    card.querySelector('.card-head').scrollIntoView({ block: 'start' });
-    flash(card);
-  }
-
-  /** Collapse all: every finding back to its headline, every button back to "Details". */
   function collapseFindings() {
     for (var findingId in state.findings) {
       setDetails(state.findings[findingId].card, false);
     }
-  }
-
-  /** Lights a card for a moment, then puts its classes back exactly as they were. */
-  function flash(card) {
-    var settled = card.className.replace(/\s*\bflash\b/g, '');
-    card.className = settled + ' flash';
-    window.setTimeout(function () {
-      card.className = settled;
-    }, FLASH_MS);
+    var rows = ui.groups.querySelectorAll('details.type-row');
+    for (var index = 0; index < rows.length; index++) {
+      rows[index].open = false;
+    }
   }
 
   function cardStatus(card, message, bad) {
@@ -2616,7 +2580,7 @@
     ui.runDir = document.getElementById('run-dir');
     ui.streamState = document.getElementById('stream-state');
     ui.usage = document.getElementById('usage-line');
-    ui.attention = document.getElementById('attention-panel');
+    ui.groups = document.getElementById('findings-by-type');
     ui.summary = document.getElementById('summary');
     ui.questions = document.getElementById('questions');
     ui.contacts = document.getElementById('contacts');
@@ -2710,7 +2674,6 @@
       setView('transcript');
     });
     ui.collapseFindings.addEventListener('click', collapseFindings);
-    ui.attention.addEventListener('click', onAttentionClick);
     ui.questions.addEventListener('click', onQuestionsClick);
     ui.questions.addEventListener('input', onQuestionsInput);
 

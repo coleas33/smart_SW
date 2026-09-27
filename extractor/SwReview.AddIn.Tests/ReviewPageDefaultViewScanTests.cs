@@ -20,6 +20,11 @@ namespace SwReview.AddIn.Tests;
 /// while the recorded title the model read named parts by id in six of the fixture's titles
 /// (eight parts). The page builds no title: every title it prints is the fixture's string,
 /// verbatim.
+///
+/// Feature 013 T053 moved the findings into groups (contracts/grouped-list.md section 5): the scan
+/// no longer looks for Start here, a card's title is checked wherever the card stands, and the
+/// group headings and the rows' titles are checked against the fixture's own groups once 013 T056
+/// has regenerated it with them (<see cref="ReviewFixture.WaitsForT056"/>).
 /// </summary>
 public sealed class ReviewPageDefaultViewScanTests
 {
@@ -42,9 +47,7 @@ public sealed class ReviewPageDefaultViewScanTests
     {
         string text = Visible.Value;
 
-        // 96 and 15 since the fixture follows the code: three touching groups are contacts (ReviewFixture).
-        Assert.Contains("96 findings in 15 issues", text);
-        Assert.Contains("Start here", text);
+        Assert.Contains(ReviewFixture.Value.Summary.GetProperty("headline").GetString()!, text);
         Assert.True(text.Length > 2000, "the default view read nearly nothing: " + text.Length + " characters.");
     }
 
@@ -94,28 +97,64 @@ public sealed class ReviewPageDefaultViewScanTests
     }
 
     /// <summary>
-    /// The page prints the backend's title and builds none: every finding card, every Start-here
-    /// row and every line behind "Show all" holds the fixture's `title` for that finding, character
-    /// for character - whole, where the recorded title was cut at 80.
+    /// The page prints the backend's title and builds none: every finding card, wherever it stands
+    /// - in its row or in the holding list - holds the fixture's `title` for that finding, character
+    /// for character, whole where the recorded title was cut at 80; and every card is there once.
     /// </summary>
     [Fact]
-    public void EveryTitleIsTheBackendsStringVerbatim()
+    public void EveryCardTitleIsTheBackendsStringVerbatim()
     {
         JsonElement read = Titles.Value;
         ReviewFixture fixture = ReviewFixture.Value;
-        string[] findingTitles = fixture.Findings.Select(finding => finding.GetProperty("title").GetString()!).ToArray();
-        Dictionary<string, string> rowTitles = fixture.Root.GetProperty("ranking").GetProperty("rows").EnumerateArray()
-            .ToDictionary(row => row.GetProperty("finding_id").GetString()!, row => row.GetProperty("title").GetString()!);
-        string[] startIds = ReviewPageDriver.Strings(read, "startIds");
-        string[] lineIds = ReviewPageDriver.Strings(read, "lineIds");
+        Dictionary<string, string> findingTitles = fixture.Findings
+            .ToDictionary(finding => finding.GetProperty("id").GetString()!, finding => finding.GetProperty("title").GetString()!);
+        string[] cardIds = ReviewPageDriver.Strings(read, "cardIds");
 
-        Assert.Equal(findingTitles, ReviewPageDriver.Strings(read, "cardTitles"));
-        Assert.Equal(5, startIds.Length);
-        Assert.Equal(startIds.Select(id => rowTitles[id]).ToArray(), ReviewPageDriver.Strings(read, "startTitles"));
-        Assert.Equal(rowTitles.Count - startIds.Length, lineIds.Length);
-        Assert.Equal(lineIds.Select(id => rowTitles[id]).ToArray(), ReviewPageDriver.Strings(read, "lineTitles"));
-        Assert.Contains(findingTitles, title => title.Length > RecordedTitleLength);
-        Assert.DoesNotContain(findingTitles, title => title.Contains(Ellipsis));
+        Assert.Equal(findingTitles.Count, cardIds.Length);
+        Assert.Equal(cardIds.Select(id => findingTitles[id]).ToArray(), ReviewPageDriver.Strings(read, "cardTitles"));
+        Assert.Contains(findingTitles.Values, title => title.Length > RecordedTitleLength);
+        Assert.DoesNotContain(findingTitles.Values, title => title.Contains(Ellipsis));
+    }
+
+    /// <summary>
+    /// Every grouped row holds the fixture's row title verbatim, in the fixture's order, and every
+    /// group heading is the fixture's title and words (contracts/grouped-list.md section 3).
+    /// </summary>
+    [Fact(Skip = ReviewFixture.WaitsForT056)]
+    public void EveryRowTitleAndGroupHeadingIsTheBackendsStringVerbatim()
+    {
+        JsonElement read = Titles.Value;
+        (JsonElement Group, JsonElement[] Rows)[] groups = ReviewFixture.Value.GroupsWithRows();
+
+        Assert.Equal(
+            groups.SelectMany(group => group.Rows).Select(row => row.GetProperty("finding_id").GetString()!).ToArray(),
+            ReviewPageDriver.Strings(read, "rowIds"));
+        Assert.Equal(
+            groups.SelectMany(group => group.Rows).Select(row => row.GetProperty("title").GetString()!).ToArray(),
+            ReviewPageDriver.Strings(read, "rowTitles"));
+        Assert.Equal(
+            groups.Select(group => group.Group.GetProperty("title").GetString() + "|" + group.Group.GetProperty("text").GetString()).ToArray(),
+            ReviewPageDriver.Strings(read, "groupHeads"));
+    }
+
+    /// <summary>
+    /// The default view shows the group headings and the one-line rows of every open group -
+    /// words, with no check id and no raw token among them (the scans above read the same text).
+    /// </summary>
+    [Fact(Skip = ReviewFixture.WaitsForT056)]
+    public void TheDefaultViewShowsTheGroupHeadingsAndTheRowsOfEveryOpenGroup()
+    {
+        string text = Visible.Value;
+        (JsonElement Group, JsonElement[] Rows)[] groups = ReviewFixture.Value.GroupsWithRows();
+
+        foreach ((JsonElement group, JsonElement[] rows) in groups)
+        {
+            Assert.Contains(group.GetProperty("title").GetString()!, text);
+            if (group.GetProperty("open").GetBoolean())
+            {
+                Assert.All(rows, row => Assert.Contains(row.GetProperty("title").GetString()!, text));
+            }
+        }
     }
 
     [Fact]
@@ -174,14 +213,19 @@ public sealed class ReviewPageDefaultViewScanTests
     }
 
     private const string ReadTitles = @"
-var findings = document.getElementById('findings');
-var panel = document.getElementById('attention-panel');
+var results = document.getElementById('results');
+var groups = document.getElementById('findings-by-type');
+var heads = [];
+var groupNodes = groups.querySelectorAll('details.type-group');
+for (var g = 0; g < groupNodes.length; g++) {
+  heads.push(h.text(groupNodes[g], ':scope > summary .type-group-title') + '|' + h.text(groupNodes[g], ':scope > summary .type-group-text'));
+}
 return JSON.stringify({
   ok: true,
-  cardTitles: h.texts(findings, '.card.finding h3.title'),
-  startIds: h.attrs(panel, '.attention-row', 'data-finding-id'),
-  startTitles: h.texts(panel, '.attention-row .attention-title'),
-  lineIds: h.attrs(panel, '.attention-line', 'data-finding-id'),
-  lineTitles: h.texts(panel, '.attention-line .line-title')
+  cardIds: h.attrs(results, '.card.finding', 'data-finding-id'),
+  cardTitles: h.texts(results, '.card.finding h3.title'),
+  rowIds: h.attrs(groups, 'details.type-row', 'data-finding-id'),
+  rowTitles: h.texts(groups, 'details.type-row > summary .type-row-title'),
+  groupHeads: heads
 });";
 }

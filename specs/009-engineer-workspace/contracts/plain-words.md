@@ -66,6 +66,11 @@ Every surface a person reads calls `display_title`, through one of two helpers o
 | both check bodies' `attention` rows (`check_result`, `standards_result`), which the check tabs' Start here prints | `with_display_titles` |
 | `report.md`: each finding's heading and Start here's titled rows (`render_report`, every caller; `swreview report` passes the package beside the session through `report/rerender.render_folder_report`, corrected 2026-09-23 on review) | `display_title`, and `with_display_titles` on the ranking it is given |
 
+*Amended 2026-09-26 by feature 013 T054:* the Review tab prints no Start here or "Show all"; its
+grouped rows (`ReviewRanking.groups`, 013 `contracts/grouped-list.md` section 3) carry the display
+titles, which the page prints verbatim under a one-line clamp - the row's only length limit, the
+card inside keeping its two-line clamp.
+
 `with_display_titles` replaces the title of every row with its survivor's (`row.finding_id`)
 display title; a folded family's row keeps its family title, and a row whose finding is not among
 `findings` keeps its title. Order, keys, reasons and every other field are the ranking's own, and
@@ -163,3 +168,10 @@ snapshot or heading of `report.md` names a named part by id or is cut, where the
 did both. `EveryTitleIsTheBackendsStringVerbatim` adds that every card, Start-here row and line
 behind "Show all" prints the fixture's `title` character for character - the page builds no
 title.
+
+*Amended 2026-09-26 by feature 013 T054:* the Review tab has no Start here, so the scan looks for
+none. `EveryCardTitleIsTheBackendsStringVerbatim` checks every card's title wherever the card
+stands - its row or the holding list; `EveryRowTitleAndGroupHeadingIsTheBackendsStringVerbatim`
+and `TheDefaultViewShowsTheGroupHeadingsAndTheRowsOfEveryOpenGroup` check the grouped rows' titles
+and the group headings against the fixture's own groups, and are skipped until 013 T056
+regenerates the fixture with them.

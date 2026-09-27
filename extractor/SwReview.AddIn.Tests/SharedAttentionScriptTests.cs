@@ -20,11 +20,12 @@ namespace SwReview.AddIn.Tests;
 /// a span of their own. U10 and U12 both change the rows, so every change would have been made
 /// twice. Now each is defined once and both surfaces render the same row.
 ///
-/// <b>What stays where.</b> Each page keeps its own panel - the Review page wraps the rows in a
-/// section of its own and adds the count line and "Show all"; a check page appends to the
-/// section its `index.html` already has - because those differ. `renderAttention` stays in
-/// `check-page.js`, so <see cref="SharedCheckPageTests.SharedFunctions"/> is unchanged: none of
-/// the functions it pins moved.
+/// <b>What stays where.</b> Each check page appends the rows to the section its `index.html`
+/// already has. `renderAttention` stays in `check-page.js`, so
+/// <see cref="SharedCheckPageTests.SharedFunctions"/> is unchanged: none of the functions it pins
+/// moved. Since feature 013 the Review tab shows no Start here - its grouped findings replaced it
+/// (contracts/grouped-list.md section 5) - and takes only the stripe map, the label lookup and
+/// the separator from this script, for its grouped rows.
 /// </summary>
 public sealed class SharedAttentionScriptTests
 {
@@ -141,19 +142,31 @@ public sealed class SharedAttentionScriptTests
     }
 
     /// <summary>
-    /// The point of the move, asserted on the rendered pages: the Review tab's Start-here rows
-    /// and the Model check tab's are the same markup, built by the same function from the same
-    /// ranking - not two renderers someone matched by eye.
+    /// Feature 013 T055 (the Review tab's half, with T054): the Review tab renders no Start-here
+    /// row. Its one grouped section replaced Start here, "Show all" and the flat list
+    /// (contracts/grouped-list.md section 5), so after a ranking arrives there is no ranked row
+    /// and no Start-here renderer on the tab - only the groups - while the check tabs keep their
+    /// preview built by this script (research R2.17). Until feature 013 this asserted that the
+    /// Review tab's Start-here rows and the Model check tab's were the same markup.
     /// </summary>
     [Fact]
-    public void TheReviewTabAndTheCheckTabsRenderTheSameStartHereRows()
+    public void TheReviewTabRendersNoStartHereRows()
     {
-        JsonElement review = OffscreenReviewPage.Evaluate(
-            "var panel = render('attentionPanel', " + AttentionSample.Json() + ");"
-            + "var rows = panel.querySelectorAll('.attention-rows .attention-row');"
-            + "var out = [];"
-            + "for (var i = 0; i < rows.length; i++) { out.push(rows[i].outerHTML); }"
-            + "return JSON.stringify({ok: true, rows: out});");
+        JsonElement review = default;
+        ReviewPageDriver.Run(
+            null,
+            async driver =>
+            {
+                await driver.RouteAttention("chat-1", SummarySample.Json());
+                await driver.StartReview();
+                await driver.Push("chat-1", 1, "finding", GroupsSample.Finding("F-007"));
+                await driver.EndSession("chat-1");
+                review = await driver.Read(
+                    "return JSON.stringify({ok: true,"
+                    + " rows: document.querySelectorAll('.attention-row, .attention-rows, .attention-line').length,"
+                    + " groups: document.querySelectorAll('#findings-by-type details.type-group').length,"
+                    + " panel: typeof window.SwReviewRender.attentionPanel});");
+            });
 
         JsonElement check = OffscreenModelCheckPage.Evaluate(
             "check(" + CheckResultSample.Json() + ");"
@@ -162,12 +175,12 @@ public sealed class SharedAttentionScriptTests
             + "for (var i = 0; i < rows.length; i++) { out.push(rows[i].outerHTML); }"
             + "return JSON.stringify({ok: true, rows: out});");
 
-        Assert.True(review.GetProperty("ok").GetBoolean(), review.ToString());
-        Assert.True(check.GetProperty("ok").GetBoolean(), check.ToString());
+        Assert.Equal(0, review.GetProperty("rows").GetInt32());
+        Assert.Equal("undefined", review.GetProperty("panel").GetString());
+        Assert.Equal(GroupsSample.GroupIds.Length + 1, review.GetProperty("groups").GetInt32());
 
-        string[] reviewRows = Rows(review);
-        Assert.Equal(AttentionSample.ShownFindingIds.Length, reviewRows.Length);
-        Assert.Equal(reviewRows, Rows(check));
+        Assert.True(check.GetProperty("ok").GetBoolean(), check.ToString());
+        Assert.Equal(AttentionSample.ShownFindingIds.Length, Rows(check).Length);
     }
 
     // ---- reading the files -----------------------------------------------------------------------

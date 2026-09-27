@@ -11,88 +11,101 @@ namespace SwReview.AddIn.Tests;
 /// passing with no further production code: the big-assembly review as the backend produces it
 /// (<see cref="ReviewFixture"/>), played into the real page in a docked pane's 300 by 600.
 ///
-/// <b>The Independent Test</b>: the summary reads, in order, the finding and issue counts, the
-/// three groups, the questions, the parts not loaded and one line per goal with its state - every
-/// word the backend's, checked against the fixture's own summary and, for the numbers an engineer
-/// reads first, against the literals the backend acceptance (T022) derived by hand.
-///
-/// <b>SC-001</b>: with Results at its top, the headline, the three groups and every goal line
-/// whose state is not reached are inside the viewport - the ten-second read needs no scroll.
+/// Feature 013 T053 amends it with the summary block (contracts/grouped-list.md section 4): the
+/// headline, one tally line, the questions, the parts not loaded and one not-reached line, the goal
+/// lines living under their groups. SC-001 is amended with it: with Results at its top, the
+/// headline, the tally and the not-reached line are inside the viewport. The committed fixture
+/// predates feature 013, so the assertions that read its tally, its not-reached line or its groups
+/// wait for 013 T056's regeneration (<see cref="ReviewFixture.WaitsForT056"/>); the rest hold on
+/// the fixture as it is and as it will be.
 /// </summary>
 public sealed class ReviewPageSummaryAcceptanceTests
 {
     private static readonly Lazy<JsonElement> Scripted = new Lazy<JsonElement>(Drive);
 
+    /// <summary>The headline, the questions and the parts not loaded are the backend's words, and the summary comes before the groups.</summary>
     [Fact]
+    public void TheSummaryPrintsTheBackendsHeadlineQuestionsAndPartsNotLoaded()
+    {
+        JsonElement read = Scripted.Value;
+
+        Assert.Equal(ReviewFixture.Value.Summary.GetProperty("headline").GetString(), read.GetProperty("headline").GetString());
+        Assert.Equal("4 questions for you", read.GetProperty("questions").GetString());
+        Assert.Equal("3 of 89 parts not loaded", read.GetProperty("notLoaded").GetString());
+        Assert.True(read.GetProperty("beforeGroups").GetBoolean(), "the summary must come before the grouped findings.");
+        Assert.Equal(0, read.GetProperty("goalLines").GetInt32());
+    }
+
+    /// <summary>The block reads in the order of the Independent Test as feature 013 amends it.</summary>
+    [Fact(Skip = ReviewFixture.WaitsForT056)]
     public void TheSummaryReadsInTheOrderOfTheIndependentTest()
     {
         JsonElement read = Scripted.Value;
 
         Assert.Equal(
-            new[] { "summary-headline", "summary-groups", "summary-questions", "summary-not-loaded", "summary-goals" },
+            new[] { "summary-headline", "summary-tally", "summary-questions", "summary-not-loaded", "summary-not-reached" },
             ReviewPageDriver.Strings(read, "children"));
-        // 96 and 15 since the fixture follows the code: three touching groups are contacts (ReviewFixture).
-        Assert.Equal("96 findings in 15 issues", read.GetProperty("headline").GetString());
-        Assert.Equal("4 questions for you", read.GetProperty("questions").GetString());
-        Assert.Equal("3 of 89 parts not loaded", read.GetProperty("notLoaded").GetString());
-        Assert.True(read.GetProperty("beforePanel").GetBoolean(), "the summary must come before Start here.");
+        Assert.Equal(ReviewFixture.Value.Summary.GetProperty("tally").GetProperty("text").GetString(), read.GetProperty("tally").GetString());
+        Assert.Equal(
+            ReviewFixture.Value.Summary.GetProperty("not_reached").GetProperty("text").GetString(),
+            read.GetProperty("notReached").GetString());
     }
 
-    [Fact]
-    public void TheThreeGroupsAreTheBackendsDecideFixVerifyWithTheirGoals()
+    /// <summary>
+    /// Every goal line of the backend is printed under its group with its state and reason, in the
+    /// backend's order - the lines the summary listed until feature 013.
+    /// </summary>
+    [Fact(Skip = ReviewFixture.WaitsForT056)]
+    public void EveryGoalLinePrintsTheBackendsStateAndReasonUnderItsGroup()
     {
         JsonElement read = Scripted.Value;
+        JsonElement[] goals = ReviewFixture.Value.GroupsWithRows()
+            .Where(group => group.Group.TryGetProperty("goals", out _))
+            .SelectMany(group => group.Group.GetProperty("goals").EnumerateArray())
+            .ToArray();
 
-        Assert.Equal(new[] { "Decide", "Fix", "Verify" }, ReviewPageDriver.Strings(read, "groupLabels"));
-        // Interference 3, not 6, since the fixture follows the code: three touching groups are contacts (ReviewFixture).
+        Assert.NotEmpty(goals);
+        Assert.Equal(goals.Select(goal => goal.GetProperty("title").GetString()).ToArray(), ReviewPageDriver.Strings(read, "goalTitles"));
+        Assert.Equal(goals.Select(goal => goal.GetProperty("state_label").GetString()).ToArray(), ReviewPageDriver.Strings(read, "goalStates"));
         Assert.Equal(
-            new[] { "6 need your decision", "56 to fix", "34 to verify" },
-            ReviewPageDriver.Strings(read, "groupTexts"));
-        Assert.Equal(
-            new[] { "Interference 3|Hole alignment 3", "Hygiene 5|Modelling practice 51", "Modelling practice 34" },
-            ReviewPageDriver.Strings(read, "groupGoals"));
+            goals.Select(goal => goal.GetProperty("reason").ValueKind == JsonValueKind.Null ? string.Empty : goal.GetProperty("reason").GetString()).ToArray(),
+            ReviewPageDriver.Strings(read, "goalReasons"));
     }
 
+    /// <summary>
+    /// Every finding the stream delivered has exactly one card in Results - in its row, or in the
+    /// holding list when no row names it - and no card is there twice.
+    /// </summary>
     [Fact]
-    public void EveryGoalLinePrintsTheBackendsStateAndReason()
+    public void EveryFindingOfTheReviewHasOneCardInResults()
     {
         JsonElement read = Scripted.Value;
-        ReviewFixture fixture = ReviewFixture.Value;
+        string[] cards = ReviewPageDriver.Strings(read, "cardIds");
 
-        Assert.Equal(fixture.SummaryStrings("goals", "title"), ReviewPageDriver.Strings(read, "goalTitles"));
-        Assert.Equal(fixture.SummaryStrings("goals", "state_label"), ReviewPageDriver.Strings(read, "goalStates"));
-        Assert.Equal(fixture.SummaryStrings("goals", "reason"), ReviewPageDriver.Strings(read, "goalReasons"));
         Assert.Equal(
-            fixture.SummaryStrings("goals", "state").Select(state => "summary-goal goal-" + state).ToArray(),
-            ReviewPageDriver.Strings(read, "goalClasses"));
-        Assert.Equal(
-            new[] { "issues found", "not reached", "issues found", "not reached", "not reached", "not reached", "issues found", "not reached", "issues found" },
-            ReviewPageDriver.Strings(read, "goalStates"));
+            ReviewFixture.Value.Findings.Select(finding => finding.GetProperty("id").GetString()).OrderBy(id => id, StringComparer.Ordinal).ToArray(),
+            cards.OrderBy(id => id, StringComparer.Ordinal).ToArray());
+        Assert.Equal(cards.Length, cards.Distinct().Count());
     }
 
-    /// <summary>Every finding the stream delivered has its card in Results, in arrival order.</summary>
+    /// <summary>SC-001: the ten-second read starts on the first screen of a docked pane.</summary>
     [Fact]
-    public void EveryFindingOfTheReviewHasItsCardInResults()
-    {
-        JsonElement read = Scripted.Value;
-
-        Assert.Equal(
-            ReviewFixture.Value.Findings.Select(finding => finding.GetProperty("id").GetString()).ToArray(),
-            ReviewPageDriver.Strings(read, "cardIds"));
-    }
-
-    /// <summary>SC-001: the ten-second read is on the first screen of a docked pane.</summary>
-    [Fact]
-    public void TheHeadlineTheThreeGroupsAndEveryNotReachedGoalAreInsideThe300By600Viewport()
+    public void TheHeadlineIsInsideThe300By600Viewport()
     {
         JsonElement read = Scripted.Value;
 
         Assert.True(read.GetProperty("headlineInView").GetBoolean(), "the headline is below the fold: " + read.GetProperty("geometry"));
-        Assert.Equal(new[] { true, true, true }, read.GetProperty("groupsInView").EnumerateArray().Select(value => value.GetBoolean()).ToArray());
-        Assert.Equal(5, read.GetProperty("notReachedInView").GetArrayLength());
-        Assert.All(
-            read.GetProperty("notReachedInView").EnumerateArray(),
-            value => Assert.True(value.GetBoolean(), "a not-reached goal line is below the fold: " + read.GetProperty("geometry")));
+    }
+
+    /// <summary>SC-001 as feature 013 amends it: the headline, the tally and the not-reached line are on the first screen.</summary>
+    [Fact(Skip = ReviewFixture.WaitsForT056)]
+    public void TheHeadlineTheTallyAndTheNotReachedLineAreInsideThe300By600Viewport()
+    {
+        JsonElement read = Scripted.Value;
+
+        Assert.True(read.GetProperty("headlineInView").GetBoolean(), "the headline is below the fold: " + read.GetProperty("geometry"));
+        Assert.True(read.GetProperty("tallyInView").GetBoolean(), "the tally is below the fold: " + read.GetProperty("geometry"));
+        Assert.True(read.GetProperty("notReachedInView").GetBoolean(), "the not-reached line is below the fold: " + read.GetProperty("geometry"));
     }
 
     // ---- driving the page ---------------------------------------------------------------------
@@ -127,40 +140,28 @@ public sealed class ReviewPageSummaryAcceptanceTests
 h.resetScroll();
 var section = document.getElementById('summary');
 var block = section.querySelector('.summary');
-var groups = section.querySelectorAll('.summary-group');
-var goals = section.querySelectorAll('.summary-goal');
-
-var groupGoals = [], groupsInView = [];
-for (var i = 0; i < groups.length; i++) {
-  groupGoals.push(h.texts(groups[i], '.group-goal').join('|'));
-  groupsInView.push(h.inView(groups[i]));
-}
-
-var goalReasons = [], notReachedInView = [];
-for (var j = 0; j < goals.length; j++) {
-  goalReasons.push(h.text(goals[j], '.goal-reason') || '');
-  if (goals[j].classList.contains('goal-not_reached')) { notReachedInView.push(h.inView(goals[j])); }
-}
-
-var last = goals.length ? goals[goals.length - 1].getBoundingClientRect() : null;
+var groups = document.getElementById('findings-by-type');
+var goals = groups.querySelectorAll('.summary-goal');
+var goalReasons = [];
+for (var j = 0; j < goals.length; j++) { goalReasons.push(h.text(goals[j], '.goal-reason') || ''); }
+var notReached = section.querySelector('.summary-not-reached');
 return JSON.stringify({
   ok: true,
   children: h.children(block),
-  beforePanel: h.before(section, document.getElementById('attention-panel')),
+  beforeGroups: h.before(section, groups),
   headline: h.text(section, '.summary-headline'),
   headlineInView: h.inView(section.querySelector('.summary-headline')),
-  groupLabels: h.texts(section, '.summary-group .group-label'),
-  groupTexts: h.texts(section, '.summary-group .group-text'),
-  groupGoals: groupGoals,
-  groupsInView: groupsInView,
+  tally: h.text(section, '.summary-tally'),
+  tallyInView: h.inView(section.querySelector('.summary-tally')),
   questions: h.text(section, '.summary-questions'),
   notLoaded: h.text(section, '.summary-not-loaded'),
-  goalClasses: Array.prototype.map.call(goals, function (g) { return g.className; }),
-  goalTitles: h.texts(section, '.summary-goal .goal-title'),
-  goalStates: h.texts(section, '.summary-goal .goal-state'),
+  notReached: notReached ? notReached.textContent : null,
+  notReachedInView: h.inView(notReached),
+  goalLines: section.querySelectorAll('.summary-goal').length,
+  goalTitles: h.texts(groups, '.summary-goal .goal-title'),
+  goalStates: h.texts(groups, '.summary-goal .goal-state'),
   goalReasons: goalReasons,
-  notReachedInView: notReachedInView,
-  cardIds: h.attrs(document.getElementById('findings'), '.card.finding', 'data-finding-id'),
-  geometry: { innerHeight: window.innerHeight, summaryTop: section.getBoundingClientRect().top, lastGoalBottom: last ? last.bottom : null }
+  cardIds: h.attrs(document.getElementById('results'), '.card.finding', 'data-finding-id'),
+  geometry: { innerHeight: window.innerHeight, summaryTop: section.getBoundingClientRect().top }
 });";
 }

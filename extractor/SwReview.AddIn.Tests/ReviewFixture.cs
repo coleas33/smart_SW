@@ -35,6 +35,16 @@ internal sealed class ReviewFixture
 {
     public const string FileName = "review-big-assembly.json";
 
+    /// <summary>
+    /// Why an acceptance assertion of feature 013's grouped list is skipped: the committed fixture
+    /// was generated before 013, so its ranking carries no `groups` and its summary no tally or
+    /// not-reached line, and only lane G regenerates it - 013 T056, after the backend's T048 and
+    /// T050 (tasks.md). The assertion is written against the shape the regeneration brings.
+    /// </summary>
+    public const string WaitsForT056 =
+        "013 T056 regenerates the pane fixture with its groups and the 013 summary (lane G); "
+        + "integrator: remove this Skip in that regeneration's commit.";
+
     /// <summary>The chat the driver's first Review press is given.</summary>
     public const string ChatId = "chat-1";
 
@@ -63,6 +73,28 @@ internal sealed class ReviewFixture
     public JsonElement Root { get; }
 
     public JsonElement Summary => Root.GetProperty("ranking").GetProperty("summary");
+
+    /// <summary>
+    /// The ranking's grouped findings (`ReviewRanking.groups`, feature 013 contracts/grouped-list.md
+    /// section 3), as the backend wrote them into the fixture. Present once 013 T056 has regenerated
+    /// it (<see cref="WaitsForT056"/>).
+    /// </summary>
+    public JsonElement Groups => Root.GetProperty("ranking").GetProperty("groups");
+
+    /// <summary>Every group of <see cref="Groups"/>, the checked fold last when there is one, as `(group, rows)`.</summary>
+    public (JsonElement Group, JsonElement[] Rows)[] GroupsWithRows()
+    {
+        var all = Groups.GetProperty("groups").EnumerateArray()
+            .Select(group => (group, group.GetProperty("rows").EnumerateArray().ToArray()))
+            .ToList();
+        JsonElement fold = Groups.GetProperty("checked");
+        if (fold.ValueKind == JsonValueKind.Object)
+        {
+            all.Add((fold, fold.GetProperty("rows").EnumerateArray().ToArray()));
+        }
+
+        return all.ToArray();
+    }
 
     public string RunId => Root.GetProperty("run_id").GetString()!;
 

@@ -345,191 +345,87 @@ public sealed class ReviewPageInjectionTests
     }
 
     /// <summary>
-    /// A ranked row says what the finding is, not only that it exists. The backend sends ten
-    /// fields per row (contracts/attention.md section 4) and the panel that is meant to be read
-    /// first used to print three of them, so it said less about a finding than the finding's own
-    /// card did.
+    /// Feature 013 T053: a grouped row is one line of the backend's words - the display title,
+    /// then `tail_text`, `reach_text` and `chip`, each only when sent - and its body is where the
+    /// page moves the row's finding cards, empty as the renderer builds it
+    /// (contracts/grouped-list.md section 5). Until feature 013 this pinned the Start-here row,
+    /// which printed the status, the severity and the components itself.
     /// </summary>
     [Fact]
-    public void ARankedRowCarriesTheTitleAndTheStateTheRankingSent()
+    public void AGroupRowIsOneLineOfTheBackendsWordsAndAnEmptyBody()
     {
-        JsonElement start = Shapes.Value.GetProperty("start");
+        JsonElement groups = Shapes.Value.GetProperty("groups");
 
-        Assert.Equal("eyebrow attention-heading", start.GetProperty("headingClass").GetString());
-        Assert.Equal(AttentionSample.Heading, start.GetProperty("headingText").GetString());
-
-        string[] titles = Strings(start, "titles");
-        Assert.Equal(AttentionSample.ShownFindingIds.Length, titles.Length);
-        Assert.Equal("The pin interferes with the bore it is pressed into", titles[0]);
-        Assert.All(titles, title => Assert.False(string.IsNullOrWhiteSpace(title)));
-
-        // Status and severity as the words the ranking sent, and the components it reaches in
-        // the face an id is read in.
         Assert.Equal(
-            "demonstrated · medium · cmp:0002, cmp:0003",
-            Strings(start, "metas")[0]);
-        Assert.Equal("cmp:0002, cmp:0003", Strings(start, "monos")[0]);
-
-        // The reasons the panel always showed are untouched. The checks are carried on each row
-        // as `data-check` and shown nowhere since feature 009 (FR-025, research R2.21): a check id
-        // is developer vocabulary, and it is one click away on the finding card's "Rule" row.
-        Assert.Equal(AttentionSample.ShownChecks, Strings(start, "checks"));
-        Assert.Equal(0, start.GetProperty("visibleChecks").GetInt32());
-        Assert.All(AttentionSample.ShownChecks, check => Assert.DoesNotContain(check, start.GetProperty("text").GetString()!));
-        Assert.Equal(AttentionSample.ShownReasons, Strings(start, "reasons"));
+            new[] { "type-row-title", "type-row-tail", "type-row-reach" },
+            Strings(groups.GetProperty("folded"), "headChildren"));
+        Assert.Equal(
+            new[] { GroupsSample.TitleOf(GroupsSample.FoldedRow), GroupsSample.FoldedTail, "reaches 1 component" },
+            Strings(groups.GetProperty("folded"), "headTexts"));
+        Assert.Equal(new[] { "type-row-title", "chip type-row-chip" }, Strings(groups.GetProperty("model"), "headChildren"));
+        Assert.Equal(new[] { "type-row-title" }, Strings(groups.GetProperty("bare"), "headChildren"));
+        Assert.Equal(0, groups.GetProperty("bodyChildren").GetInt32());
+        Assert.Equal(GroupsSample.EveryRowId(), Strings(groups, "rowIds"));
     }
 
     /// <summary>
-    /// The stripe restates a field the backend already sent and invents nothing: the judgement
-    /// key when the policy said only an engineer can settle the row (F-007 and F-008 carry
-    /// `key.judgement` 0), otherwise the consequence class through a map. The rows this fixture
-    /// carries run interface, interface, rebuild_breaker, rebuild_breaker, discipline - so a map
-    /// keyed off the consequence class alone would colour the first two red rather than purple.
+    /// The stripe restates a field the backend already sent and invents nothing, from the one map
+    /// every tab shares (`attention.stripeOf`): the judgement key first (F-008 and F-007 carry
+    /// `key.judgement` 0), then the consequence class - so a map keyed off the consequence class
+    /// alone would colour the first two by their `interface` class rather than purple.
     /// </summary>
     [Fact]
-    public void TheStripeOnARankedRowComesFromTheJudgementKeyThenTheConsequenceClass()
+    public void TheStripeOnAGroupRowComesFromTheJudgementKeyThenTheConsequenceClass()
     {
         Assert.Equal(
             new[]
             {
-                "attention-row stripe-judge",
-                "attention-row stripe-judge",
-                "attention-row stripe-critical",
-                "attention-row stripe-critical",
-                "attention-row stripe-warn",
+                "type-row stripe-judge hide-card-title",
+                "type-row stripe-judge hide-card-title",
+                "type-row stripe-critical hide-card-title",
+                "type-row stripe-critical hide-card-title",
+                "type-row stripe-critical hide-card-title",
+                "type-row stripe-warn hide-card-title",
+                "type-row stripe-quiet",
+                "type-row stripe-quiet",
+                "type-row stripe-quiet hide-card-title",
+                "type-row stripe-judge hide-card-title",
+                "type-row stripe-judge hide-card-title",
             },
-            Strings(Shapes.Value.GetProperty("start"), "rowClasses"));
+            Strings(Shapes.Value.GetProperty("groups"), "rowClasses"));
     }
 
-    // ---- every row, behind Show all (U12) ------------------------------------------------------
-
     /// <summary>
-    /// The panel with every row of <see cref="AttentionSample"/> - the sixth row's title made
-    /// hostile - and four variations on the numbers the backend sends, rendered once in one page.
-    /// </summary>
-    private static readonly Lazy<JsonElement> Index = new Lazy<JsonElement>(() => OffscreenReviewPage.Evaluate(
-        ShapeHelpers
-        + IndexHelpers
-        + "var sample = " + AttentionSample.Json().Replace(
-            "\"title\":\"" + AttentionSample.BeyondTopNTitle + "\"",
-            "\"title\":" + JsonSerializer.Serialize(HostileTitle)) + ";"
-        + "return JSON.stringify({ok: true,"
-        + "full: indexShape(mutate(sample, function (r) {})),"
-        + "fits: indexShape(mutate(sample, function (r) { r.rows = r.rows.slice(0, 3); r.not_amplified.beyond_top_n = 0; })),"
-        + "one: indexShape(mutate(sample, function (r) { r.rows = r.rows.slice(0, 1); r.not_amplified.beyond_top_n = 1; })),"
-        + "noCounts: indexShape(mutate(sample, function (r) { delete r.not_amplified; })),"
-        + "noTopN: indexShape(mutate(sample, function (r) { delete r.top_n; }))"
-        + "});"));
-
-    /// <summary>
-    /// The rows beyond `top_n` are one line each: which finding, its title, how many findings
-    /// the row folds when it folds more than one, and how many components it reaches - with
-    /// the stripe of its consequence class, from the same shared map as Start here. Under
-    /// Start here, in the order supplied, behind one control that names both units.
+    /// A group is a `&lt;details&gt;` whose head is the backend's title and `text`, open as it
+    /// says; the checked fold is last and shut; the goal lines follow the rows.
     /// </summary>
     [Fact]
-    public void ARowBeyondTopNIsOneLineBehindAControlAfterTheFive()
+    public void AGroupIsAFoldHeadedByTheBackendsTitleAndWordsWithItsGoalLinesAfterItsRows()
     {
-        JsonElement full = Index.Value.GetProperty("full");
+        JsonElement groups = Shapes.Value.GetProperty("groups");
 
-        Assert.Equal(AttentionSample.ShownFindingIds, Strings(full, "startIds"));
-        Assert.Equal(new[] { AttentionSample.BeyondTopN }, Strings(full, "indexIds"));
-        Assert.Equal("Show all 6 issues (8 findings)", full.GetProperty("more").GetString());
-        Assert.Equal("attention-line stripe-quiet", full.GetProperty("lineClass").GetString());
+        Assert.Equal(GroupsSample.GroupIds.Concat(new[] { "checked" }).ToArray(), Strings(groups, "groupIds"));
         Assert.Equal(
-            new[] { "line-id", "line-title", "line-members", "line-reach" },
-            Strings(full, "lineChildren"));
+            GroupsSample.GroupTitles.Zip(GroupsSample.GroupTexts, (title, text) => title + "|" + text)
+                .Concat(new[] { GroupsSample.CheckedTitle + "|" + GroupsSample.CheckedText }).ToArray(),
+            Strings(groups, "heads"));
         Assert.Equal(
-            new[] { AttentionSample.BeyondTopN, HostileTitle, "×3", "1 component" },
-            Strings(full, "lineTexts"));
-        Assert.False(full.GetProperty("moreOpen").GetBoolean(), "Show all arrived open.");
+            GroupsSample.GroupOpen.Concat(new[] { false }).ToArray(),
+            groups.GetProperty("open").EnumerateArray().Select(value => value.GetBoolean()).ToArray());
+        Assert.Equal("type-group checked-fold", groups.GetProperty("checkedClass").GetString());
+        Assert.True(groups.GetProperty("goalsAfterRows").GetBoolean(), "a group's goal lines are not after its rows.");
     }
 
-    /// <summary>A title that carries markup is characters on a one-line row too (FR-029).</summary>
+    /// <summary>A row title that carries markup is characters, in the renderer as on the page (FR-029).</summary>
     [Fact]
-    public void AHostileTitleOnARowBeyondTopNRendersAsLiteralText()
+    public void AHostileRowTitleRendersAsLiteralTextInTheRenderer()
     {
-        JsonElement full = Index.Value.GetProperty("full");
+        JsonElement groups = Shapes.Value.GetProperty("groups");
 
-        Assert.Contains(HostileTitle, full.GetProperty("text").GetString()!);
-        Assert.Equal(0, full.GetProperty("injected").GetInt32());
-        Assert.Equal(0, full.GetProperty("handlers").GetInt32());
+        Assert.Contains(GroupsSample.HostileTitle, groups.GetProperty("text").GetString()!);
+        Assert.Equal(0, groups.GetProperty("injected").GetInt32());
+        Assert.Equal(0, groups.GetProperty("handlers").GetInt32());
     }
-
-    /// <summary>
-    /// The count line prints the backend's numbers and says what each counts, in the singular
-    /// when it is one, and a ranking whose rows all fit under Start here offers no control.
-    /// </summary>
-    [Fact]
-    public void TheCountLinePrintsTheBackendsNumbersAndAFittingRankingOffersNoControl()
-    {
-        JsonElement full = Index.Value.GetProperty("full");
-        JsonElement fits = Index.Value.GetProperty("fits");
-        JsonElement one = Index.Value.GetProperty("one");
-
-        Assert.Equal("Start here: 5 of 6 issues · 3 findings not in Start here", full.GetProperty("count").GetString());
-        Assert.Equal("Start here: 3 of 3 issues · 0 findings not in Start here", fits.GetProperty("count").GetString());
-        Assert.Equal("Start here: 1 of 1 issue · 1 finding not in Start here", one.GetProperty("count").GetString());
-
-        Assert.Equal(JsonValueKind.Null, fits.GetProperty("more").ValueKind);
-        Assert.Empty(Strings(fits, "indexIds"));
-        Assert.Equal(JsonValueKind.Null, one.GetProperty("more").ValueKind);
-    }
-
-    /// <summary>
-    /// A ranking without `not_amplified` prints the issues and no findings figure rather than a
-    /// made-up one; a ranking without a usable `top_n` shows every row under Start here, as
-    /// `amplified` always has, and so has nothing to put behind a control.
-    /// </summary>
-    [Fact]
-    public void AMissingCountIsLeftOutAndAMissingTopNShowsEveryRowUnderStartHere()
-    {
-        JsonElement noCounts = Index.Value.GetProperty("noCounts");
-        JsonElement noTopN = Index.Value.GetProperty("noTopN");
-
-        Assert.Equal("Start here: 5 of 6 issues", noCounts.GetProperty("count").GetString());
-        Assert.Equal("Show all 6 issues (8 findings)", noCounts.GetProperty("more").GetString());
-
-        Assert.Equal("Start here: 6 of 6 issues · 3 findings not in Start here", noTopN.GetProperty("count").GetString());
-        Assert.Equal(6, Strings(noTopN, "startIds").Length);
-        Assert.Equal(JsonValueKind.Null, noTopN.GetProperty("more").ValueKind);
-    }
-
-    private const string IndexHelpers = @"
-var attrsOf = function (root, selector, name) {
-  var found = root.querySelectorAll(selector);
-  var out = [];
-  for (var i = 0; i < found.length; i++) { out.push(found[i].getAttribute(name)); }
-  return out;
-};
-
-var mutate = function (ranking, change) {
-  var copy = JSON.parse(JSON.stringify(ranking));
-  change(copy);
-  return copy;
-};
-
-var indexShape = function (value) {
-  var got = one('attentionPanel', value, 'section.attention');
-  var panel = got.node;
-  var seen = describe(got.host);
-  var line = panel.querySelector('.attention-index .attention-line');
-  var more = panel.querySelector('.attention-more');
-  return {
-    count: textOf(panel, '.attention-count'),
-    more: more ? textOf(more, 'summary') : null,
-    moreOpen: more ? !!more.open : false,
-    startIds: attrsOf(panel, '.attention-rows .attention-row', 'data-finding-id'),
-    indexIds: attrsOf(panel, '.attention-index [data-finding-id]', 'data-finding-id'),
-    lineClass: line ? line.className : '',
-    lineChildren: childClasses(line),
-    lineTexts: line ? textsOf(line, 'span') : [],
-    text: seen.text,
-    injected: seen.injected,
-    handlers: seen.handlers
-  };
-};
-";
 
     /// <summary>
     /// The coverage panel is a fold that is shut when it arrives, and its one line says how much
@@ -574,7 +470,7 @@ var indexShape = function (value) {
     [Fact]
     public void NothingTheReworkedCardsBuildIsAnElementTheInjectionFenceRefuses()
     {
-        foreach (string card in new[] { "carried", "computed", "tool", "start", "coverage" })
+        foreach (string card in new[] { "carried", "computed", "tool", "groups", "coverage" })
         {
             JsonElement shape = Shapes.Value.GetProperty(card);
             Assert.Equal(0, shape.GetProperty("injected").GetInt32());
@@ -646,7 +542,7 @@ var indexShape = function (value) {
         + "carried: findingShape(" + Json(CarriedFinding()) + "),"
         + "computed: findingShape(" + Json(ComputedFinding()) + "),"
         + "tool: toolShape(" + Json(SampleTool()) + "),"
-        + "start: startShape(" + AttentionSample.Json() + "),"
+        + "groups: groupsShape(" + GroupsSample.Groups().ToJsonString() + "),"
         + "coverage: coverageShape(" + Json(CoverageEntries()) + ")"
         + "});");
 
@@ -877,28 +773,50 @@ var toolShape = function (value) {
   };
 };
 
-var startShape = function (value) {
-  var got = one('attentionPanel', value, 'section.attention');
-  var panel = got.node;
+var groupsShape = function (value) {
+  var got = one('typeGroups', value, '.type-groups');
+  var root = got.node;
   var seen = describe(got.host);
-  var heading = panel.querySelector('.attention-heading');
+  var rowOf = function (id) { return root.querySelector('details.type-row[data-finding-id=""' + id + '""]'); };
+  var headOf = function (id) {
+    var head = rowOf(id).querySelector(':scope > summary');
+    return { headChildren: childClasses(head), headTexts: textsOf(head, ':scope > span') };
+  };
+  var groups = root.querySelectorAll('details.type-group');
+  var heads = [], open = [];
+  for (var i = 0; i < groups.length; i++) {
+    heads.push(textOf(groups[i], ':scope > summary .type-group-title') + '|' + textOf(groups[i], ':scope > summary .type-group-text'));
+    open.push(!!groups[i].open);
+  }
+  var interference = root.querySelector('details.type-group[data-group=""interference_fit""]');
+  var rows = interference.querySelectorAll('details.type-row');
+  var goal = interference.querySelector('.summary-goal');
+  var bodies = root.querySelectorAll('.type-row-body');
+  var bodyChildren = 0;
+  for (var b = 0; b < bodies.length; b++) { bodyChildren += bodies[b].children.length; }
   return {
-    headingClass: heading ? heading.className : '',
-    headingText: heading ? heading.textContent : '',
-    rowClasses: classesOf(panel, '.attention-row'),
-    ids: textsOf(panel, '.attention-id'),
-    titles: textsOf(panel, '.attention-title'),
-    metas: textsOf(panel, '.attention-meta'),
-    monos: textsOf(panel, '.attention-meta .mono'),
-    checks: (function () {
-      var rows = panel.querySelectorAll('.attention-row');
+    groupIds: (function () {
       var out = [];
-      for (var i = 0; i < rows.length; i++) { out.push(rows[i].getAttribute('data-check')); }
+      for (var g = 0; g < groups.length; g++) { out.push(groups[g].getAttribute('data-group')); }
       return out;
     }()),
-    visibleChecks: panel.querySelectorAll('.attention-check').length,
-    text: panel.textContent,
-    reasons: textsOf(panel, '.attention-reason'),
+    heads: heads,
+    open: open,
+    checkedClass: groups.length ? groups[groups.length - 1].className : '',
+    rowIds: (function () {
+      var all = root.querySelectorAll('details.type-row');
+      var out = [];
+      for (var r = 0; r < all.length; r++) { out.push(all[r].getAttribute('data-finding-id')); }
+      return out;
+    }()),
+    rowClasses: classesOf(root, 'details.type-row'),
+    folded: headOf('F-009'),
+    model: headOf('F-017'),
+    bare: headOf('F-014'),
+    bodyChildren: bodyChildren,
+    goalsAfterRows: !!goal && rows.length > 0
+      && !!(rows[rows.length - 1].compareDocumentPosition(goal) & Node.DOCUMENT_POSITION_FOLLOWING),
+    text: root.textContent,
     injected: seen.injected,
     handlers: seen.handlers
   };
