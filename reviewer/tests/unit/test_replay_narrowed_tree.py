@@ -26,6 +26,14 @@ every check that reads the shared tree reading: the `rms.*` rules and, named by 
 clause is the tree reading's alone - decision 23A's type-table clause never removes one of its
 locations - and every other Standards check is never narrowed.
 
+By the defaults taken 2026-09-27 on review (013 T159, research R2.48, 008 research R2.61), the
+clause removes only what each check can no longer name: `standards.part.rebuild_errors` reads the
+same `Part.features` since T133 and is named beside the sketch check; a carried row is a place for
+every check that still grades it as its owner's - the three RMS sketch rules and both Standards
+checks - so a carried sketch or sub-feature their finding drops is lost; and a Standards check's
+places are counted without the type table. The checks that name a carried row on the planner's
+absorbed-sketches fixture are pinned to exactly those families.
+
 The recordings here are made on the planner's fictional real-shape package
 (`tests/support/remodel.py`). Since T133 lands (T134) today's code reads one node per position, so
 a recording made before it is today's finding with each second listing's occurrence and the
@@ -54,10 +62,15 @@ from swreview.benchmark.replay import (
     narrowed_key,
     not_content_locations,
 )
+from swreview.checks.rms.groups import assign_groups
+from swreview.checks.rms.part import evaluate_part as rms_evaluate_part
 from swreview.checks.rms_types import load_table
+from swreview.checks.standards.part import evaluate_part as standards_evaluate_part
+from swreview.checks.standards.profile import load_profile
 from swreview.checks.standards.registry import RULES as STANDARDS_RULES
+from swreview.checks.standards.traversal import graded_documents
 from swreview.findings import Finding, finding_subject_key
-from swreview.ir.loader import PACKAGE_FILE_NAME
+from swreview.ir.loader import PACKAGE_FILE_NAME, load_package
 from swreview.ir.models import EvidencePackage, Feature, SourceRef
 from tests.support import mechanical
 from tests.support.narrowed import LOOSE, loose_findings, part_package, record
@@ -78,8 +91,28 @@ CARRIED = "Sketch9"
 BOSS = "Boss-Extrude1"
 CUT = "Cut-Extrude1"
 STANDARDS_SKETCHES = "standards.part.sketches_fully_defined"
-OTHER_STANDARDS_CHECKS = tuple(sorted(set(STANDARDS_RULES) - {STANDARDS_SKETCHES}))
-"""Every Standards check but the sketch check: none reads the shared tree reading."""
+STANDARDS_REBUILD_ERRORS = "standards.part.rebuild_errors"
+STANDARDS_TREE_READERS = (STANDARDS_SKETCHES, STANDARDS_REBUILD_ERRORS)
+"""The Standards checks that read `Part.features`, the shared tree reading, since T133 (T159)."""
+OTHER_STANDARDS_CHECKS = tuple(sorted(set(STANDARDS_RULES) - set(STANDARDS_TREE_READERS)))
+"""Every other Standards check: none reads the shared tree reading."""
+DESCRIBED = "rms.intent.every_feature_described"
+"""An RMS rule that reads `PartTree.content`, where a carried row holds no place."""
+ONE_SKETCH = "rms.sketches.one_sketch_per_feature"
+RMS_SKETCH_RULES = ("rms.sketches.fully_defined", "rms.sketches.not_over_defined", ONE_SKETCH)
+"""The RMS rules that grade every sketch once, a carried sketch included, as its owner's."""
+CARRIED_GRADERS = (*RMS_SKETCH_RULES, *STANDARDS_TREE_READERS)
+"""Every check that still grades a carried row: for each it is a place, never removed (T159)."""
+ABSORBED_FIXTURE = (
+    Path(__file__).resolve().parents[1] / "golden" / "fixtures" / "remodel-plan"
+    / "remodel-absorbed-sketches"
+)
+"""The planner's fixture of the two shapes: three absorbed sketches each listed twice, and the Hole
+Wizard's profile sketch `feat:0012` listed only under its hole `feat:0010`."""
+CARRIED_ID = "feat:0012"
+STANDARDS_PROFILE = (
+    Path(__file__).resolve().parents[1] / "fixtures" / "standards" / "profile-a.yaml"
+)
 GENERATOR = Path(__file__).resolve().parents[1] / "fixtures" / "replay" / "generate_fixtures.py"
 SCRIPT_TOOLS = ("get_package_summary", "check_rms_part")
 
@@ -153,13 +186,15 @@ def recorded(today: Path, tmp_path_factory: pytest.TempPathFactory) -> Finding:
     return finding
 
 
-def before_the_reading(run: Path, check: str = LOOSE) -> None:
+def before_the_reading(run: Path, check: str = LOOSE, *, carried: bool = True) -> None:
     """Each `check` finding of `run` (the loose one by default) as a recording made before T133
-    names it: each absorbed sketch's location once more, for its second listing, and the carried
-    row's location - what the part check named when it read every row the dump lists."""
+    names it: each absorbed sketch's location once more, for its second listing, and - with
+    `carried` - the carried row's location, what the part check named when it read every row the
+    dump lists. A check that still grades the carried row named it before T133 as it does today,
+    so its recording gains the second listings alone (`carried=False`)."""
     package = real_shape()
     absorbed = {(at(package, name).document_id, at(package, name).persist_ref) for name in ABSORBED}
-    carried = at(package, CARRIED).model_dump(mode="json")
+    carried_row = at(package, CARRIED).model_dump(mode="json")
 
     def unfolded(session: dict[str, Any]) -> None:
         for finding in session["findings"]:
@@ -170,7 +205,7 @@ def before_the_reading(run: Path, check: str = LOOSE) -> None:
                 locations.append(location)
                 if (location["document_id"], location.get("persist_ref")) in absorbed:
                     locations.append(dict(location))
-            finding["drawing_locations"] = [*locations, carried]
+            finding["drawing_locations"] = [*locations, *([carried_row] if carried else [])]
 
     rewrite_session(run, unfolded)
 
@@ -422,38 +457,40 @@ def test_a_finding_that_also_gained_a_subject_is_lost(recorded: Finding, tmp_pat
     assert outcome(comparison) == ((0,), (), 1)
 
 
-# --- the Standards sketch check (T134-Q2) ---------------------------------------------------
+# --- the Standards checks that read the tree (T134-Q2, T159) --------------------------------
 
 
-def test_a_standards_sketch_finding_that_lost_only_a_second_listing_narrows(
-    recorded: Finding, tmp_path: Path
+@pytest.mark.parametrize("check", STANDARDS_TREE_READERS)
+def test_a_standards_finding_that_lost_only_a_second_listing_narrows(
+    recorded: Finding, tmp_path: Path, check: str
 ) -> None:
-    """The Standards sketch check reads the same tree since T133 and names an absorbed sketch once
-    where the recording named its depth-0 row and its second listing: by T134-Q2's default the
-    tree-reading clause reads it, one location removed, neither lost nor added."""
+    """The Standards sketch check and the rebuild-error check read the same tree since T133 and
+    name an absorbed sketch once where the recording named its depth-0 row and its second listing:
+    by T134-Q2's default, and T159's for the rebuild-error check, the tree-reading clause reads it,
+    one location removed, neither lost nor added."""
     comparison = compared(
         tmp_path,
         recorded,
         ["Sketch1", "Sketch1", "Sketch2"],
         ["Sketch1", "Sketch2"],
-        check=STANDARDS_SKETCHES,
+        check=check,
     )
 
     assert outcome(comparison) == ((), ((0, 1),), 0)
 
 
-def test_a_standards_sketch_finding_still_naming_its_carried_sketch_narrows_by_the_listing(
-    recorded: Finding, tmp_path: Path
+@pytest.mark.parametrize("check", CARRIED_GRADERS)
+def test_a_finding_still_naming_its_carried_row_narrows_by_the_listing_alone(
+    recorded: Finding, tmp_path: Path, check: str
 ) -> None:
-    """T133's Standards check still grades the hole's carried profile sketch under its hole, so its
-    current finding keeps it: the carried row *may* be removed, and the finding narrows by the
-    second listing's occurrence alone."""
+    """Every check that still grades the hole's carried profile sketch, as its hole's, names it
+    today as before T133: the finding narrows by the second listing's occurrence alone."""
     comparison = compared(
         tmp_path,
         recorded,
         ["Sketch1", "Sketch1", CARRIED],
         ["Sketch1", CARRIED],
-        check=STANDARDS_SKETCHES,
+        check=check,
     )
 
     assert outcome(comparison) == ((), ((0, 1),), 0)
@@ -477,29 +514,30 @@ def test_a_standards_sketch_finding_still_naming_its_carried_sketch_narrows_by_t
         ),
     ],
 )
-def test_a_real_sketch_subject_lost_from_a_standards_sketch_finding_stays_lost(
+@pytest.mark.parametrize("check", STANDARDS_TREE_READERS)
+def test_a_real_subject_lost_from_a_standards_finding_stays_lost(
     recorded: Finding,
     tmp_path: Path,
     recorded_names: list[str],
     current_names: list[str],
+    check: str,
 ) -> None:
     """The depth-0 row is a real position the reading never drops: a sketch the current finding
     no longer names, one swapped for another, one gained, or a pair de-duplicated beyond its one
     second listing is lost and the current finding added, as for `rms.*`."""
-    comparison = compared(
-        tmp_path, recorded, recorded_names, current_names, check=STANDARDS_SKETCHES
-    )
+    comparison = compared(tmp_path, recorded, recorded_names, current_names, check=check)
 
     assert outcome(comparison) == ((0,), (), 1)
 
 
-def test_the_type_tables_clause_never_narrows_a_standards_sketch_finding(
-    recorded: Finding, tmp_path: Path
+@pytest.mark.parametrize("check", STANDARDS_TREE_READERS)
+def test_the_type_tables_clause_never_narrows_a_standards_finding(
+    recorded: Finding, tmp_path: Path, check: str
 ) -> None:
     """A location naming only rows the table does not count, and no row the reading folds, is
     decision 23A's to remove; the type table decides the RMS rules' subjects, not what a
     Standards check names. The same two findings narrow under an `rms.*` check and are lost
-    under the Standards sketch check."""
+    under a Standards check that reads the tree."""
     package = real_shape()
     table = load_table()
     plane = at(package, "Front Plane")
@@ -512,25 +550,27 @@ def test_the_type_tables_clause_never_narrows_a_standards_sketch_finding(
         recorded,
         ["Front Plane", "Sketch1"],
         ["Sketch1"],
-        check=STANDARDS_SKETCHES,
+        check=check,
     )
 
     assert outcome(rms) == ((), ((0, 1),), 0)
     assert outcome(standards) == ((0,), (), 1)
 
 
-def test_narrowed_key_reads_a_standards_sketch_finding_by_the_readings_clause_alone(
-    recorded: Finding,
+@pytest.mark.parametrize("check", STANDARDS_TREE_READERS)
+def test_narrowed_key_reads_a_standards_finding_by_the_readings_merged_half_alone(
+    recorded: Finding, check: str
 ) -> None:
-    """The second listing's occurrence and the carried row go; the row the table does not count
-    stays, although it is in the type table's set."""
+    """The second listing's occurrence goes; the carried row, a place for a check that still
+    grades it (T159), and the row the table does not count, although it is in the type table's
+    set, stay."""
     package = real_shape()
     table = load_table()
     finding = naming(
         recorded,
         package,
         ["Front Plane", "Sketch1", "Sketch1", CARRIED],
-        check=STANDARDS_SKETCHES,
+        check=check,
     )
 
     narrowed = narrowed_key(
@@ -538,15 +578,16 @@ def test_narrowed_key_reads_a_standards_sketch_finding_by_the_readings_clause_al
     )
 
     assert narrowed is not None
-    assert narrowed.removed_locations == 2
+    assert narrowed.removed_locations == 1
     assert narrowed.key == key_of(
-        recorded, package, ["Front Plane", "Sketch1"], check=STANDARDS_SKETCHES
+        recorded, package, ["Front Plane", "Sketch1", CARRIED], check=check
     )
 
 
 def test_every_other_standards_check_is_listed() -> None:
     """The cases below run over the catalogue itself, so a Standards check added later is held."""
-    assert len(OTHER_STANDARDS_CHECKS) == len(STANDARDS_RULES) - 1
+    assert set(STANDARDS_TREE_READERS) <= set(STANDARDS_RULES)
+    assert len(OTHER_STANDARDS_CHECKS) == len(STANDARDS_RULES) - len(STANDARDS_TREE_READERS)
     assert all(check.startswith("standards.") for check in OTHER_STANDARDS_CHECKS)
 
 
@@ -554,8 +595,9 @@ def test_every_other_standards_check_is_listed() -> None:
 def test_any_other_standards_check_is_never_narrowed(
     recorded: Finding, tmp_path: Path, check: str
 ) -> None:
-    """Only the sketch check reads the shared tree reading; every other Standards check reads the
-    rows as dumped, so a subject it no longer names is a real one: lost, never narrowed."""
+    """Only the sketch check and the rebuild-error check read the shared tree reading; no other
+    Standards check reads a part's tree, so a subject it no longer names is a real one: lost,
+    never narrowed."""
     package = real_shape()
     table = load_table()
     names = ["Sketch1", "Sketch1", CARRIED]
@@ -573,22 +615,184 @@ def test_any_other_standards_check_is_never_narrowed(
     assert outcome(comparison) == ((0,), (), 1)
 
 
+# --- what each check can still name (T159) ---------------------------------------------------
+
+
+@pytest.mark.parametrize("check", CARRIED_GRADERS)
+def test_a_carried_row_a_check_still_grades_is_lost_when_its_finding_drops_it(
+    recorded: Finding, tmp_path: Path, check: str
+) -> None:
+    """The RMS sketch rules and the Standards checks that read the tree still grade the Hole
+    Wizard's carried profile sketch, as its hole's: a finding that no longer names it lost a real
+    subject, alone or beside a second listing's occurrence the reading did fold."""
+    alone = compared(tmp_path / "alone", recorded, ["Sketch1", CARRIED], ["Sketch1"], check=check)
+    with_a_listing = compared(
+        tmp_path / "listing", recorded, ["Sketch1", "Sketch1", CARRIED], ["Sketch1"], check=check
+    )
+
+    assert outcome(alone) == ((0,), (), 1)
+    assert outcome(with_a_listing) == ((0,), (), 1)
+
+
+@pytest.mark.parametrize("check", [LOOSE, DESCRIBED])
+def test_a_carried_row_a_rule_gives_no_place_still_narrows(
+    recorded: Finding, tmp_path: Path, check: str
+) -> None:
+    """The other `rms.*` rules read `PartTree.content`, where a carried row holds no place: it
+    goes, as T134-Q1's default says."""
+    comparison = compared(tmp_path, recorded, [BOSS, CARRIED], [BOSS], check=check)
+
+    assert outcome(comparison) == ((), ((0, 1),), 0)
+
+
+def test_the_type_tables_clause_still_reads_the_rms_sketch_rules(
+    recorded: Finding, tmp_path: Path
+) -> None:
+    """A carried sketch is a place for the RMS sketch rules; a row the table does not count is
+    still decision 23A's to remove (`one_sketch_per_feature` names such consumers, research R5)."""
+    comparison = compared(
+        tmp_path,
+        recorded,
+        ["Front Plane", "Sketch1", "Sketch1", CARRIED],
+        ["Sketch1", CARRIED],
+        check=ONE_SKETCH,
+    )
+
+    assert outcome(comparison) == ((), ((0, 2),), 0)
+
+
+def origin_pair() -> EvidencePackage:
+    """The real shape with both listings of `Sketch2` named `Origin`, a name the type table
+    excludes: a merged pair none of whose rows the table counts."""
+    package = real_shape()
+    return package.model_copy(
+        update={
+            "features": [
+                row.model_copy(update={"name": "Origin"}) if row.name == "Sketch2" else row
+                for row in package.features
+            ]
+        }
+    )
+
+
+@pytest.mark.parametrize("check", STANDARDS_TREE_READERS)
+def test_a_standards_checks_places_are_counted_without_the_type_table(
+    recorded: Finding, tmp_path: Path, check: str
+) -> None:
+    """The type table decides the RMS rules' subjects, not what a Standards check names: the
+    depth-0 row of a merged pair the table does not count is still a place, so dropping it is a
+    loss, and only the second listing's occurrence may go."""
+    package = origin_pair()
+    origin = at(package, "Origin")
+    assert (origin.document_id, origin.persist_ref) in not_content_locations(package, load_table())
+
+    dropped = compared(
+        tmp_path / "dropped", recorded, ["Origin", "Sketch1"], ["Sketch1"],
+        package=package, check=check,
+    )
+    de_duplicated = compared(
+        tmp_path / "de-duplicated", recorded, ["Origin", "Origin", "Sketch1"],
+        ["Origin", "Sketch1"], package=package, check=check,
+    )
+
+    assert outcome(dropped) == ((0,), (), 1)
+    assert outcome(de_duplicated) == ((), ((0, 1),), 0)
+
+
+def absorbed_fixture(**changes: dict[str, Any]) -> EvidencePackage:
+    """The planner's absorbed-sketches package with `feat:0012`-style keys' fields replaced
+    (`feat_0012={"raw_status": 2}`; `raw_status`, `consumer_ids` and `text_segment_count` are the
+    sketch's)."""
+    package = load_package(ABSORBED_FIXTURE).package
+    rows = []
+    for row in package.features:
+        change = dict(changes.get(row.id.replace(":", "_"), {}))
+        sketch_fields = {
+            key: change.pop(key)
+            for key in ("raw_status", "consumer_ids", "text_segment_count")
+            if key in change
+        }
+        if sketch_fields:
+            assert row.sketch is not None
+            change["sketch"] = row.sketch.model_copy(update=sketch_fields)
+        rows.append(row.model_copy(update=change))
+    return package.model_copy(update={"features": rows})
+
+
+def test_the_rms_rules_that_name_a_carried_sketch_are_the_ones_it_is_a_place_for() -> None:
+    """The Hole Wizard's carried profile sketch made every kind of bad an RMS rule grades - under-
+    defined, then over-defined, consumed by two features both times - so every rule that grades
+    it names it; those rules are exactly `CARRIED_SKETCH_RMS_CHECKS`, and for every other rule it
+    holds no place."""
+    table = load_table()
+    naming_it: set[str] = set()
+    for status in (2, 4):
+        package = absorbed_fixture(
+            feat_0012={"raw_status": status, "consumer_ids": ["feat:0010", "feat:0008"]}
+        )
+        rows = list(package.features)
+        for result in rms_evaluate_part("doc:1", rows, table, assign_groups(rows, table), package):
+            if result.outcome == "fail" and CARRIED_ID in [row.id for row in result.subject_rows]:
+                naming_it.add(result.rule_id)
+
+    assert naming_it == set(RMS_SKETCH_RULES)
+    assert replay_module.CARRIED_SKETCH_RMS_CHECKS == frozenset(RMS_SKETCH_RULES)
+
+
+def test_the_standards_checks_that_name_a_carried_row_are_the_ones_that_read_the_tree() -> None:
+    """The carried profile sketch under-defined and carrying a rebuild error: the Standards checks
+    that name it are exactly `TREE_READING_STANDARDS_CHECKS`, which read `Part.features`."""
+    profile = load_profile(STANDARDS_PROFILE)
+    package = absorbed_fixture(
+        feat_0012={"raw_status": 2, "text_segment_count": 0, "error_code": 1}
+    )
+    [document] = [
+        checked for checked in graded_documents(package, profile) if checked.document_id == "doc:1"
+    ]
+
+    naming_it = {
+        result.rule_id
+        for result in standards_evaluate_part(document, package, profile)
+        if result.outcome == "fail" and CARRIED_ID in result.subjects
+    }
+
+    assert naming_it == set(STANDARDS_TREE_READERS)
+    assert replay_module.TREE_READING_STANDARDS_CHECKS == frozenset(STANDARDS_TREE_READERS)
+
+
 # --- the rule's parts ------------------------------------------------------------------------
 
 
 def test_the_reading_folds_the_merged_pairs_and_the_carried_row() -> None:
+    """Each merged pair: one depth-0 row, a place for every family, and one second listing. The
+    carried row: a place only for the checks that still grade it (T159)."""
     package = real_shape()
     folded = folded_locations(package, load_table())
 
     expected = {
         (at(package, name).document_id, at(package, name).persist_ref): FoldedLocation(
-            positions=1, listings=1
+            positions=1, carried=0, features=1, listings=1
         )
         for name in ABSORBED
     }
     carried = at(package, CARRIED)
-    expected[(carried.document_id, carried.persist_ref)] = FoldedLocation(positions=0, listings=0)
+    expected[(carried.document_id, carried.persist_ref)] = FoldedLocation(
+        positions=0, carried=1, features=1, listings=0
+    )
     assert folded == expected
+
+
+def test_a_merged_pair_the_table_does_not_count_is_a_place_for_the_standards_checks_alone() -> None:
+    """Named `Origin`, the pair holds no position the table counts (`positions`), but the reading
+    still keeps its depth-0 row as a feature (`features`)."""
+    package = origin_pair()
+    origin = at(package, "Origin")
+
+    folded = folded_locations(package, load_table())
+
+    assert folded[(origin.document_id, origin.persist_ref)] == FoldedLocation(
+        positions=0, carried=0, features=1, listings=1
+    )
 
 
 @pytest.mark.parametrize(
@@ -768,24 +972,35 @@ def test_the_generators_finding_check_narrows_through_the_same_function(
     assert checked == ([], 0, 1)
 
 
+REFUSED = (["the finding keys differ: 1 recorded keys are missing and 1 are new"], 0, 0)
+
+
 @pytest.mark.parametrize(
-    ("check", "expected"),
+    ("check", "carried", "expected"),
     [
-        pytest.param(STANDARDS_SKETCHES, ([], 0, 1), id="the-standards-sketch-check-narrows"),
         pytest.param(
-            OTHER_STANDARDS_CHECKS[0],
-            (["the finding keys differ: 1 recorded keys are missing and 1 are new"], 0, 0),
-            id="another-standards-check-refuses",
+            STANDARDS_SKETCHES, False, ([], 0, 1), id="the-standards-sketch-check-narrows"
+        ),
+        pytest.param(
+            STANDARDS_REBUILD_ERRORS, False, ([], 0, 1), id="the-rebuild-error-check-narrows"
+        ),
+        pytest.param(STANDARDS_SKETCHES, True, REFUSED, id="a-carried-sketch-dropped-refuses"),
+        pytest.param(
+            STANDARDS_REBUILD_ERRORS, True, REFUSED, id="a-carried-sub-feature-dropped-refuses"
+        ),
+        pytest.param(
+            OTHER_STANDARDS_CHECKS[0], False, REFUSED, id="another-standards-check-refuses"
         ),
     ],
 )
-def test_the_generator_reads_the_standards_sketch_check_through_the_same_function(
-    tmp_path: Path, check: str, expected: tuple[list[str], int, int]
+def test_the_generator_reads_the_standards_tree_readers_through_the_same_function(
+    tmp_path: Path, check: str, carried: bool, expected: tuple[list[str], int, int]
 ) -> None:
-    """T134-Q2's default in the generator's finding check, which compares every recorded finding,
-    standards included: a recording made before T133, against today's fixture one node per
-    position, narrows under the sketch check and refuses the fixture under any other Standards
-    check."""
+    """T134-Q2's and T159's defaults in the generator's finding check, which compares every
+    recorded finding, standards included: a recording made before T133, against today's fixture
+    one node per position, narrows by its second listings under either Standards check that reads
+    the tree, refuses the fixture when the recording also named the carried row the fixture does
+    not - a place for both checks - and refuses it under any other Standards check."""
     generator = mechanical.load_generator(GENERATOR)
     recording = record(tmp_path / "recording", real_shape())
     raw = json.loads((recording / PACKAGE_FILE_NAME).read_text(encoding="utf-8"))
@@ -796,7 +1011,7 @@ def test_the_generator_reads_the_standards_sketch_check_through_the_same_functio
     unchanged = generator.finding_problems(
         read_recording(recording), read_recording(fixture), fmap
     )
-    before_the_reading(recording, check)
+    before_the_reading(recording, check, carried=carried)
 
     checked = generator.finding_problems(read_recording(recording), read_recording(fixture), fmap)
 

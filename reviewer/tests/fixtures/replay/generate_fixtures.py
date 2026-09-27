@@ -66,10 +66,11 @@ recording's (through the same map) - less each recorded `interference.static` fi
 contact of the fixture reclassifies, by the replay's own rule (`reclassifying_contacts` over
 `judged_group`, imported, never copied; owner decision 3A of 2026-09-23), since feature 010's
 code records a touching group as a contact, and with each recorded `rms.*` finding the current
-type table or the shared tree reading narrowed, and each recorded Standards sketch finding the
-tree reading narrowed, matched to the fixture finding it narrows onto, one to one, by the replay's
-own comparison (`compare_finding_keys`, imported; owner decision 23A of 2026-09-25, and feature
-013's defaults for T134-Q1 and T134-Q2 of 2026-09-27) - every
+type table or the shared tree reading narrowed, and each recorded finding of a Standards check
+that reads the tree (the sketch check and the rebuild-error check) the tree reading narrowed,
+matched to the fixture finding it narrows onto, one to one, by the replay's own comparison
+(`compare_finding_keys`, imported; owner decision 23A of 2026-09-25, and feature 013's defaults
+for T134-Q1, T134-Q2 and T159 of 2026-09-27) - every
 result of 5,000 tokens or more on the raw recorded package, as the current code returns it, is
 within 5% of the same call's result on the fixture (the bar measures the scramble, not a change
 to the code) - and the live call's fixture result, whose raw result is its own fictional rows, is
