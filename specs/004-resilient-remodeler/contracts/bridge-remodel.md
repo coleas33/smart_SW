@@ -517,7 +517,17 @@ ends it: `remodel.close`, a tool-service re-attach, or an add-in unload.
    answered `run_in_progress` by a session that is already over.
 
 It returns an outcome: whether the settings were restored and how many, whether the copy was
-closed, and every failure. It **never saves** - `remodel.save` stays the one save - and a
+closed, and every failure. *Amended 2026-09-27 (defaults taken 2026-09-27, the owner may revise;
+`tasks.md`, lane D's note):* after a verification that passes, the untag and the close are each
+attempted whatever the other did, since the close is unsaved and a tag the untag could not remove
+goes with the document; a verification that throws anything closes nothing; and with no session the
+routine calls nothing and only clears a bound run root. `remodel.close` answers `ok` as before when
+the routine did all of it, `target_mismatch` when the verification failed, and `close_incomplete`
+when the verification passed and the rest did not; `detail` carries `reason`, `verified`,
+`failed_check`, `tag_removed`, `copy_closed`, `settings_restored` (of four), `settings_outstanding`
+and `copy_deleted`. Every ending of a session that existed - `remodel.close`'s included - is told
+to `BridgeServices.RemodelSessionEnded`, on the application thread, so the pane's one failure
+status has one source. It **never saves** - `remodel.save` stays the one save - and a
 re-attach or an unload **never deletes**: the copy stays in `copy/` as the byte copy it was, the run
 folder stays whole, and `plan.json` is untouched (still `planned`; the pane already treats the plan
 as lost, decision 24A). A run in progress when the add-in unloads ends the same way: its changes go
@@ -535,6 +545,11 @@ Remodel page's one status error (`pane-remodel-messages.md`).
 **The run root is used up at open** (`tasks.md` T158, a design choice of 2026-09-26, not yet
 built): the host binds the run's folder before `remodel.open`, `remodel.open` reads it and clears
 it, and so every run needs a fresh bind and a second run can never inherit the first one's folder.
+*Amended 2026-09-27 (defaults taken 2026-09-27, the owner may revise):* `remodel.open` takes the
+root as it starts, so an open refused or failed at any step uses it up too (a missing root is
+still refused at step 4, so the refusal order is unchanged); a bind of a blank, relative or missing
+folder is refused and clears any earlier binding; and `remodel.close`, a teardown or a refused bind
+all leave nothing bound.
 
 ### The Start switch
 
@@ -546,7 +561,10 @@ While it is false the six change commands - `remodel.rename`, `remodel.reorder`,
 `VerifyTarget` and before any write, and the commands Plan and Discard use (`remodel.probe_scope`,
 `remodel.open`, `remodel.snapshot`, `remodel.rebuild`, `remodel.geometry` and `remodel.close`) are
 unchanged. The pane refuses Start first (`StartNotValidated`), so this answer is the backstop: a
-clause checked only by the caller is a clause the caller can skip.
+clause checked only by the caller is a clause the caller can skip. *Amended 2026-09-27 (default
+taken 2026-09-27, the owner may revise):* it is a change command's first answer, before its
+parameters are read and before the session check, because it is a fact about the build rather
+than about the request.
 
 ## Error codes
 
@@ -583,6 +601,7 @@ stays unknown and is never guessed into the nearest class.
 | `save_failed` | `Save3` returned a non-zero error | `RemodelSaveError` | Failed run |
 | `not_in_v1` | A reserved stage-2 operation was requested | `RemodelNotInV1Error` | Refused |
 | `start_not_validated` | A change command while `RemodelStart.SeatValidated` is false ("The Start switch"; T172, added 2026-09-26, not yet built) | `RemodelContractError` | Refused before any write; the pane refuses Start first, so this is a bug in the caller |
+| `close_incomplete` | `remodel.close`'s verification passed, but the untag, the close or a setting's restore did not ("Ending a session"; T167, added 2026-09-27 as a default the owner may revise) | `RemodelTargetError` | The session is over either way; `detail` names what was left: whether the copy was closed and which settings still hold the run's value |
 | `run_in_progress` | A second run was started on the same host | `RemodelRunInProgress` | Refused |
 | `bad_request` | The request cannot be honoured as sent: a missing or empty parameter, `folder` `rename` aimed at a feature that is not an `FtrFolder`, a `describe` whose previous text will not read and therefore has no inverse, or a command in the table with no handler in this build | `RemodelContractError` | Refused; the change never lands. A bug in the caller, not a condition of the part, which is why it is a contract error and not a change error |
 
