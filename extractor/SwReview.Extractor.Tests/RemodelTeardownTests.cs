@@ -434,8 +434,8 @@ public sealed class RemodelTeardownTests : IDisposable
         Assert.True(outcome.CopyClosed);
         Assert.Equal(4, outcome.SettingsRestored);
         Assert.Equal(
-            "untag: Delete2 answered " + named + ", so the session tag was not removed; the copy's close is "
-            + "unsaved, so a closed copy does not keep it",
+            "untag: Delete2 answered " + named + ", so the session tag was not removed from the open copy; "
+            + "the ending never saves, so the copy on disk carries the tag only if remodel.save saved it there",
             Assert.Single(outcome.Failures));
 
         // The close is attempted whatever the untag answered, and the session is over.

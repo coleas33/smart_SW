@@ -614,8 +614,9 @@ public sealed class RemodelHost : IDisposable
     /// <c>CommandInProgress</c> apart, and a name none of the run's toggles has as a setting with
     /// no label, still said - and whether the copy was closed. Null, and an ending of no session
     /// (which set nothing and opened nothing), are null. A tag the routine could not remove is not
-    /// worded: the close is unsaved, so a closed copy took its tag with it, and a copy left open is
-    /// already said.
+    /// worded: the untag reaches only the open document - an unsaved close discards the tag there, and
+    /// a copy remodel.save saved keeps on disk the tag it was saved with, whatever the untag answered
+    /// (004 T183) - so a failed untag changes nothing on disk, and a copy left open is already said.
     /// </summary>
     public static string? SessionEndedMessage(RemodelSessionEnd? outcome)
     {

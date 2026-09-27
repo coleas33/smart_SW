@@ -1052,9 +1052,11 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
             // but not counted by the breaker, so a circuit this failing open opened cannot stop
             // it (CleanUpCall). The close, the delete and the put-back are each attempted
             // whatever the others did, and none of their failures replaces the reason the open
-            // stopped, which is what is thrown below.
+            // stopped, which is what is thrown below. 004 T183: with no handle back the close
+            // asks SOLIDWORKS first, since OpenDoc7 may have opened the copy anyway.
             var failures = new List<string>();
-            bool copyClosed = document == null || CloseCopyUnsaved(_remodelGate, seat, copy, failures);
+            bool copyClosed = CloseAfterAFailedOpen(
+                _remodelGate, seat, copy, copyCreated, document != null, failures);
 
             if (copyCreated)
             {
@@ -2200,12 +2202,16 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
             return false;
         }
 
+        // 004 T183 (default taken 2026-09-27, the owner may revise; research R15.5): the untag
+        // reaches only the open document, and a copy remodel.save saved keeps on disk the tag it
+        // was saved with, so the sentence says only what is true whether or not the run saved and
+        // whether or not the close that follows succeeds.
         return RemodelCopy.TagCameOff(answer)
             || Failed(
                 failures,
                 "untag: Delete2 answered " + RemodelCopy.DescribeUntagAnswer(answer)
-                + ", so the session tag was not removed; the copy's close is unsaved, so a closed copy "
-                + "does not keep it");
+                + ", so the session tag was not removed from the open copy; the ending never saves, "
+                + "so the copy on disk carries the tag only if remodel.save saved it there");
     }
 
     /// <summary>
@@ -2242,6 +2248,43 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
 
         return !stillOpen
             || Failed(failures, "close: CloseDoc returned, but SOLIDWORKS still has the copy open");
+    }
+
+    /// <summary>
+    /// The close a failed open's unwind makes, judged by what SOLIDWORKS answered however far the
+    /// open got (004 T183; default taken 2026-09-27, the owner may revise; research R15.4). A copy
+    /// never made was never opened: closed, and nothing is asked. A handle that came back is closed
+    /// by <see cref="CloseCopyUnsaved"/>. A copy made with no handle back - <c>OpenDoc7</c> answered
+    /// null, it or the document's wrapper threw, or the gate refused it - may still have been opened,
+    /// so the seat is asked first, by the same clean-up read under <c>GetOpenDocumentByName</c>:
+    /// nothing open is closed; a document open there is closed the same way and confirmed; a read that
+    /// cannot answer is not closed, with a sentence in <paramref name="failures"/>.
+    /// </summary>
+    private static bool CloseAfterAFailedOpen(
+        SwGate gate, IRemodelSeat seat, string copy, bool copyCreated, bool handle, List<string> failures)
+    {
+        if (!copyCreated)
+        {
+            return true;
+        }
+
+        if (handle)
+        {
+            return CloseCopyUnsaved(gate, seat, copy, failures);
+        }
+
+        if (!CleanUpCall(
+                gate,
+                OpenDocumentKey,
+                () => seat.IsDocumentOpen(copy),
+                "close: whether SOLIDWORKS opened the copy could not be read, so it is not counted as closed",
+                failures,
+                out bool opened))
+        {
+            return false;
+        }
+
+        return !opened || CloseCopyUnsaved(gate, seat, copy, failures);
     }
 
     /// <summary>
