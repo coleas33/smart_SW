@@ -10,22 +10,34 @@ feature load and round-trip to their own bytes. Values below are fictional.
 `checks/standards/profile.py`. `PROFILE_VERSION = 4`, `KNOWN_VERSIONS = (1, 2, 3, 4)`,
 `VERSION_4_SECTIONS = ("part_roles",)`, `SECTIONS_BY_VERSION[4] = v3 + ("part_roles",)`.
 
-**PartRolesSection** (frozen, `extra="forbid"`)
+*Amended 2026-09-26, before any code, from the owner's guidance and the local census (research R2.4,
+"Revised"): one field per part-role signal, where there were three bought rules.*
+
+**PartRolesSection** (frozen, `extra="forbid"`; every key required, an empty value turning its
+signal off)
 
 | Field | Type | Validation |
 |---|---|---|
 | `bought_prefixes` | `list[str]` | no blank entry (by position); library prefix semantics |
-| `purchased_property` | `str` | may be empty; non-empty requires `purchased_values` |
-| `purchased_values` | `list[str]` | no blank entry; no value twice ignoring case; non-empty requires `purchased_property` |
-| `bought_name_patterns` | `list[str]` | no blank entry; not made only of `*`, `?` and `@` |
+| `bought_folder_names` | `list[str]` | no blank entry; no path separator; no name twice ignoring case |
+| `switch` | `SwitchSection {property: str, bought_values: list[str], custom_values: list[str]}` | an empty property with empty values means unused; a property needs a value and a value needs the property; no blank value; no value twice ignoring case, within or across the lists |
+| `vendor_properties` | `list[str]` | no blank entry; no name twice ignoring case and spaces |
+| `distributor_block` | `DistributorBlock {properties: list[str], min_valued: int}` | properties as above; `min_valued` 0 exactly when there are none, else 1 to their count |
+| `catalogue_numbers` | `CatalogueNumbers {shapes: list[str], properties: list[str]}` | no blank shape; no shape made only of `*`, `?` and `@`; properties as above and only with a shape |
+| `custom_prefixes` | `list[str]` | no blank entry; no prefix twice; none overlapping a `bought_number_prefixes` entry |
+| `bought_number_prefixes` | `list[str]` | as `custom_prefixes` |
+| `detail_properties` | `list[str]` | no blank entry; no name twice ignoring case and spaces |
 
 `StandardsProfile.part_roles: PartRolesSection | None` - required at version 4, refused at 1 to 3.
+`ReviewProfile {path: str | None, profile: StandardsProfile | None, refusal: ProfileError | None}`
+and `load_review_profile(path)`, which never raises: what `start_review` loads once.
 Contract: `contracts/part-roles-profile.md`.
 
 **Shared matchers** (`checks/standards/library.py`, `traversal.py`): `PrefixList.from_entries(entries,
 root)` with `.matches(path)` and `.longest(path)`; `PrefixMatcher` holds four of them (no behaviour
-change). `name_matches(pattern, file_name, *, wildcards: bool) -> bool`; `part_number_matches` calls it
-with `wildcards=False`.
+change). `name_matches(pattern, text, *, wildcards: bool) -> bool`; `part_number_matches` calls it
+with `wildcards=False`. `property_key(name) -> str`: the name folded and every space removed, the one
+comparison of property names (the classifier, the hygiene checks).
 
 ## 2. Part roles
 
@@ -35,20 +47,26 @@ with `wildcards=False`.
 |---|---|
 | `Role` | `"custom" \| "bought" \| "unclear"` |
 | `State` | `"configured" \| "convention_only" \| "absent"` |
-| `PartRole` | `document_id`, `role`, `rule` (`"A"`..`"J"`), `reason` (words, no profile value), `graded: bool`, `label: str \| None` |
-| `PartRoles` | `state`, `state_reason: str \| None`, `by_document: Mapping[str, PartRole]`, `guard_fired: bool`; `graded(id)` (True for an unknown id), `bought()`, `unclear()`, `note_for(id)` |
-| `RolesQuestionSpec` | the `QuestionSpec` of `part-roles.md` section 8 (`checks/questions.py`) |
+| `Strength` | `"strong" \| "medium" \| "weak"` |
+| `Signal` | `toolbox`, `bought_path`, `switch`, `vendor_property`, `distributor_block`, `catalogue_number`, `bought_number`, `custom_prefix`, `sparse`, `same_name_drawing` |
+| `Vote` | `signal`, `role` (`custom` or `bought`), `strength` |
+| `Decision` | `answer`, `strong`, `agreement`, `inherited`, `conflict`, `too_little`, `no_evidence`, `toolbox`, `convention`, `not_told_apart` |
+| `PartRole` | `document_id`, `role`, `decision`, `votes: tuple[Vote, ...]`, `properties_read: bool`, `reason` (words, no profile value), `graded: bool`, `label: str \| None` |
+| `PartRoles` | `state`, `state_reason: str \| None`, `by_document: Mapping[str, PartRole]`, `guard_fired: bool`, `asked_in: str \| None`; `graded(id)` (True for an unknown id), `bought()`, `unclear()`, `asking(er_id)`, `note_for(id)` |
+| `PART_ROLES_ATTRIBUTE` | the context attribute the roles ride on; defined here, re-exported by `tools/registry.py` (lane S) |
+| `RolesQuestionSpec` | the `QuestionSpec` of `part-roles.md` section 8 (`checks/questions.py`), built by `roles_question` |
 
 State transitions of one document within a session: `unclear` → `custom` or `bought` by the answer
-(rule A); no other transition. In a live review the roles are computed at `start_review` from the
-package, the profile and any answered request, and again after an answer; nothing about them is
-stored except the question, its answer and the coverage rows of `contracts/part-roles.md` section 7,
-which every reader outside a live review (the disk route, the re-render) reads instead of
-classifying again.
+(the `answer` decision); no other transition. In a live review the roles are computed at
+`start_review` from the package, the profile and any answered request, and again after an answer;
+nothing about them is stored except the question, its answer and the coverage rows of
+`contracts/part-roles.md` section 7, which every reader outside a live review (the disk route, the
+re-render) reads instead of classifying again.
 
 **Invariants**: the root's `graded` is true; `graded` is false exactly for bought documents other than
 the root; no reason contains a profile value (a test scans every reason against the profile's
-distinctive values).
+distinctive values); `votes` is empty outside the `configured` state; a document whose properties
+were not read carries no property-signal vote.
 
 ## 3. Session records (`report/session.py`, `findings.py`)
 

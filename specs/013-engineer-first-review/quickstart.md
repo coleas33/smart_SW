@@ -48,7 +48,7 @@ uv run swreview review tests/fixtures/sitting/small-assembly --provider fake --p
 ```
 
 Expected in the run folder's `session.json` and `report.md`: no `rms.*` or `hygiene.*` finding on the
-vendor pin; `coverage.prerun.bought_parts` names it once, reason "a bought-parts folder"; one open
+vendor pin; `coverage.prerun.bought_parts` names it once, its reason naming "a bought-parts folder" among its signals; one open
 request with `allow_text: true` and `source: code` listing the unclear part; the unclear part's RMS
 and hygiene findings carry "may be a bought part"; the report's "Bought parts" section
 (`contracts/part-roles.md` sections 6 to 8). With `--standards-profile` omitted: only Toolbox skipped,
