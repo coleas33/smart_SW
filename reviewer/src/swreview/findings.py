@@ -39,9 +39,32 @@ Severity = Literal["high", "medium", "low", "info"]
 NUMERIC_STATUSES: tuple[FindingStatus, ...] = ("demonstrated", "checked_within_scope")
 NON_NUMERIC_STATUSES: tuple[FindingStatus, ...] = ("suspected", "unresolved")
 
+Source = Literal["code", "model"]
+"""Who wrote a finding, an evidence request or a coverage item (feature 013,
+`contracts/sources.md` section 1): a deterministic check (`code`) or the model (`model`).
+
+Each record kind defaults to its usual author and omits the field there, so every session
+written before the field keeps its bytes and no tool result that carries a record at its
+kind's default moves: a finding and a coverage item default to `code`, a request to `model`.
+"""
+
 
 class ReviewModel(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid")
+
+
+def omit_at_default(data: dict[str, Any], model: BaseModel, *names: str) -> dict[str, Any]:
+    """Drop each named field from `model`'s dump `data` while it holds its declared default.
+
+    Feature 013's additive fields (`data-model.md` section 3) are optional and omitted at
+    their default, which for `source` is a value rather than a null: the absent key is the
+    default's spelling, so an older session and a newer one at the default are the same bytes.
+    """
+    fields = type(model).model_fields
+    for name in names:
+        if getattr(model, name) == fields[name].default:
+            data.pop(name, None)
+    return data
 
 
 class Calculation(ReviewModel):
@@ -112,20 +135,27 @@ class Finding(ReviewModel):
     """The key that justified the carry, stored so the decision is reproducible by hand
     against the package (`carry_over.carry_over_key`)."""
 
+    source: Source = "code"
+    """Who wrote the finding (feature 013): `code` for every check, `model` for
+    `record_drawing_finding`, the one tool whose finding is the model's reading. Omitted when
+    `code`, so every finding written before the field keeps its bytes."""
+
     @model_serializer(mode="wrap")
     def _omit_null_carry_over_fields(
         self, handler: SerializerFunctionWrapHandler
     ) -> dict[str, Any]:
-        """Leave the three lever 11a fields out when they are null (`omit_when_null`).
+        """Leave the three lever 11a fields out when they are null (`omit_when_null`), and
+        `source` out at its default (`omit_at_default`).
 
         Every run with `carry_over_rms` off computes every finding it reports, so all three
         are null on that arm and the finding serializes to the bytes it did before the
         lever existed - in `session.json`, in the `finding` event and in the tool payload
         the model is charged for.
         """
-        return omit_when_null(
+        data = omit_when_null(
             handler, self, "carried_over_from", "carried_over_at", "carry_over_key"
         )
+        return omit_at_default(data, self, "source")
 
 
 def carried_count(findings: Iterable[Finding]) -> int:

@@ -47,6 +47,7 @@ from swreview.agent.checklist import (
     FINDING_BUCKET,
     OPEN_BUCKET,
     Checklist,
+    ChecklistItem,
     load_checklist,
 )
 from swreview.checks import hygiene, mass
@@ -476,3 +477,116 @@ def test_the_standards_material_rule_closes_the_standards_item_not_the_mass_item
     assert buckets[STANDARDS_ITEM_ID] == FINDING_BUCKET
     assert buckets[MASS_ITEM_ID] == OPEN_BUCKET
     assert buckets[HYGIENE_ITEM_ID] == OPEN_BUCKET
+
+
+# --- 5. who owns an item (feature 013 T008, contracts/re-ask-guard.md section 1) -------------
+
+CODE_OWNED_LINE = "Closed by code before your first turn; never ask about it or mark it."
+
+
+def checklist_of(*items: ChecklistItem, version: int = 1) -> Checklist:
+    return Checklist(version=version, items=items)
+
+
+def an_item(item_id: str, owner: str = "model") -> ChecklistItem:
+    return ChecklistItem(
+        id=item_id,
+        title=f"{item_id} title",
+        check_prefix=f"{item_id}.",
+        description=f"{item_id} description.",
+        owner=owner,  # type: ignore[arg-type]
+    )
+
+
+def test_an_item_is_model_owned_unless_it_says_otherwise() -> None:
+    item = ChecklistItem(id="x", title="X", check_prefix="x.", description="d")
+
+    assert item.owner == "model"
+
+
+def test_a_code_owned_item_renders_the_code_line_in_place_of_the_mark_coverage_line() -> None:
+    rendered = checklist_of(an_item("alpha", owner="code")).render()
+
+    assert rendered.splitlines() == [
+        "Review checklist version 1. Every item must be closed out.",
+        "",
+        "- `alpha` - alpha title",
+        f"  {CODE_OWNED_LINE}",
+        "  alpha description.",
+    ]
+    assert "mark_coverage" not in rendered
+
+
+def test_a_model_owned_item_renders_exactly_as_before_the_owner_existed() -> None:
+    rendered = checklist_of(an_item("beta")).render()
+
+    assert rendered.splitlines() == [
+        "Review checklist version 1. Every item must be closed out.",
+        "",
+        "- `beta` - beta title",
+        "  Closed by a finding whose check starts with `beta.`",
+        '  or by `mark_coverage(check="beta", ...)`.',
+        "  beta description.",
+    ]
+
+
+def test_open_items_answers_every_owner_unless_asked_for_one() -> None:
+    checklist = checklist_of(an_item("alpha", owner="code"), an_item("beta"), an_item("gamma"))
+    session = empty_session()
+
+    assert [item.id for item in checklist.open_items(session)] == ["alpha", "beta", "gamma"]
+    assert [item.id for item in checklist.open_items(session, owner="model")] == ["beta", "gamma"]
+    assert [item.id for item in checklist.open_items(session, owner="code")] == ["alpha"]
+
+
+def test_a_closed_item_is_not_open_for_either_owner() -> None:
+    checklist = checklist_of(an_item("alpha", owner="code"), an_item("beta"))
+    session = empty_session()
+    session.coverage.checked.extend([coverage_item("alpha"), coverage_item("beta")])
+
+    assert checklist.open_items(session) == []
+    assert checklist.open_items(session, owner="model") == []
+
+
+def test_the_owner_does_not_reach_the_checklist_tool_payload() -> None:
+    """`get_review_checklist` returns `buckets()`; its bytes do not move with the field."""
+    payload = checklist_of(an_item("alpha", owner="code")).buckets(empty_session())
+
+    assert set(payload[0]) == {"id", "title", "check_prefix", "description", "bucket"}
+
+
+def test_the_loader_reads_an_owner_and_defaults_it(tmp_path: Any) -> None:
+    path = tmp_path / "checklist.yaml"
+    path.write_text(
+        "version: 1\n"
+        "items:\n"
+        "  - {id: a, title: A, check_prefix: a., description: d, owner: code}\n"
+        "  - {id: b, title: B, check_prefix: b., description: d}\n",
+        encoding="utf-8",
+    )
+
+    assert [item.owner for item in load_checklist(path).items] == ["code", "model"]
+
+
+def test_the_loader_refuses_an_unknown_owner_by_item(tmp_path: Any) -> None:
+    path = tmp_path / "checklist.yaml"
+    path.write_text(
+        "version: 1\n"
+        "items:\n"
+        "  - {id: a, title: A, check_prefix: a., description: d, owner: engineer}\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="'a'.*owner.*'engineer'"):
+        load_checklist(path)
+
+
+def test_the_withheld_rewording_keeps_each_items_owner() -> None:
+    from swreview.agent.withheld_wording import reworded_checklist
+
+    checklist = checklist_of(an_item("alpha", owner="code"), an_item("beta"))
+
+    assert [item.owner for item in reworded_checklist(checklist, ["check_rms_part"]).items] == [
+        "code",
+        "model",
+    ]

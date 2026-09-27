@@ -28,6 +28,7 @@ from swreview.checks.drawing_context import (
     candidate_question,
     run_drawing_context,
 )
+from swreview.checks.questions import already_asked
 from swreview.checks.result import DocumentResult
 from swreview.drawings.brief import BriefRefused, build_brief
 from swreview.drawings.evidence import DrawingIndex
@@ -65,15 +66,6 @@ def drawing_evidence(package: EvidencePackage) -> bool:
     return bool(package.drawing_records or package.drawing_candidates)
 
 
-def _already_asked(requests: list[EvidenceRequest], spec: QuestionSpec) -> bool:
-    return any(
-        request.question == spec.question
-        and request.what == spec.what
-        and tuple(request.entity_ids) == spec.entity_ids
-        for request in requests
-    )
-
-
 def _record(context: ToolContext) -> dict[str, Any]:
     """Record the drawing context into `context`'s session and count what it recorded.
 
@@ -94,7 +86,7 @@ def _record(context: ToolContext) -> dict[str, Any]:
     if isinstance(finding_ids, dict):
         return finding_ids
     for spec in result.questions:
-        if _already_asked(session.evidence_requests, spec):
+        if already_asked(session.evidence_requests, spec):
             continue
         record_evidence_request(
             context,

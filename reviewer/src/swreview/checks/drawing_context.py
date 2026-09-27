@@ -32,6 +32,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
+from swreview.checks.questions import QuestionSpec
 from swreview.checks.result import CheckResult, DocumentResult
 from swreview.checks.tolerances import profile_name
 from swreview.drawings.evidence import DrawingIndex, file_name, id_order
@@ -143,20 +144,6 @@ class DocumentDrawingCoverage:
             reason=self.reason,
             error=None,
         )
-
-
-@dataclass(frozen=True)
-class QuestionSpec:
-    """One question `check_drawings` writes through `tools/session.record_evidence_request`."""
-
-    key: str
-    """`candidates` or `governing:<document id>`."""
-    what: str
-    why: str
-    entity_ids: tuple[str, ...]
-    question: str
-    options: tuple[str, ...]
-    blocks: str | None
 
 
 @dataclass(frozen=True)
