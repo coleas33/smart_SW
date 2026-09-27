@@ -71,9 +71,9 @@ def test_part_number_matches_is_the_convention() -> None:
         ("FICT@###", "FICTz123", True),
         ("FICT@###", "FICT1123", False),
         ("FICT@###", "FICT-123", False),
-        ("#####@###", "12345A678", True),
-        ("#####@###", "12345A67", False),
-        ("#####@###", "12345AB678", False),
+        ("###@####", "123A5678", True),
+        ("###@####", "123A567", False),
+        ("###@####", "123AB5678", False),
     ],
 )
 def test_at_is_one_letter_and_never_a_digit(pattern: str, text: str, expected: bool) -> None:
