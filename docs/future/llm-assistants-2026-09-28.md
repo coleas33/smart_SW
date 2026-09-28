@@ -14,17 +14,37 @@ lists the recommended option first.
   the seat.
 - **How to resume.**
   1. Re-read this file and check what changed after a8a8a09: 004's seat probes, the 008-013
-     sitting results, and any owner answers.
-  2. Answer the open questions at the end.
-  3. If the scope changes, amend the constitution first (`/speckit-constitution`, amendment
-     1.1.0 to 1.2.0; see sections 1.7 and 2.7).
-  4. Run `/speckit-specify` with the chosen part of this file as the description. The next free
+     sitting results, and any owner answers. Also re-check the outside facts dated 2026-09-28:
+     OpenAI prices and which tier the plain `gpt-5.6` id maps to, Gemini 3.5 Flash pricing, LEO's
+     requirements, and the benchmark tables in 1.3 and 2.8.
+  2. Re-challenge Part 2's estimates with a skeptic pass, as Part 1's were, before relying on
+     them (see "How to read the estimates" below).
+  3. Answer the open questions at the end.
+  4. Either idea needs the MINOR scope amendment 1.1.0 to 1.2.0 first (`/speckit-constitution`;
+     sections 1.7 and 2.7). Write-path work needs the separate sandbox-authoring amendment.
+  5. Run `/speckit-specify` with the chosen part of this file as the description. The next free
      feature number is **014**; 012 stays reserved for drawing creation. Whichever idea starts
      first takes 014, and the other takes 015.
-  5. Then run `/speckit-clarify`, `/speckit-plan`, `/speckit-tasks` and `/speckit-analyze` before
+  6. Then run `/speckit-clarify`, `/speckit-plan`, `/speckit-tasks` and `/speckit-analyze` before
      `/speckit-implement`.
 - **This file:** `docs/future/llm-assistants-2026-09-28.md`, linked from
   `docs/roadmap-2026-09-22.md` under "Later: researched ideas".
+- **File references.** Python paths are relative to `reviewer/src/swreview/`. C# paths are
+  relative to `extractor/SwReview.Extractor/` (`Dump/`) or `extractor/SwReview.AddIn/`
+  (`SwReviewAddIn.cs`, `TaskPaneControl.cs`, `Review/`). `constitution.md` is
+  `.specify/memory/constitution.md`. Paths that start with `docs/`, `specs/` or `extractor/` are
+  from the repository root.
+
+**The headlines** (the units are defined just below; details and sources are in the sections
+named):
+
+| Idea | Effort | Seat sittings | Confidence |
+|---|---|---|---|
+| Tier 1: grounded ideation, read-only (1.5, option 1) | 6-9 engineer-weeks; about 9-14 waves (inferred) | 1-2 | Medium (inferred) |
+| Tier 2: template copy-and-drive (1.5, option 2) | 4-8 engineer-weeks; about 5-10 waves (inferred) | 1-2, beyond 004's | Medium-low (inferred) |
+| Native concept parts plus placement (1.5, option 3) | 24-40 engineer-weeks | 6-10, after 004's | Low |
+| Hand-calc MVP, read-only (2.9, Phase 1) | 18-28 waves; 18-28 engineer-weeks | 2-3 | Medium; not skeptic-checked |
+| The biggest schedule lever: a licensed SOLIDWORKS seat on the development machine (1.6) | Not priced; perhaps a few thousand dollars a year | Turns the 3-6 month seat calendar into weeks | Inferred |
 
 **How to read the estimates.**
 
@@ -38,6 +58,11 @@ Waves and sittings are the agent-assisted pace this repo has shown: 493 commits 
 packages between 2026-09-12 and 2026-09-27. That pace shortens coding time. It does not shorten
 seat time or owner decisions. Every range carries a confidence. "Inferred" marks a judgement that
 no source verified.
+
+Part 1's estimates are a skeptic's adjusted figures. Part 2's estimates come from a single
+research track (2026-09-28) and were not challenged by a skeptic pass. In Part 1 the skeptic found
+18 of 37 single-track estimates optimistic (and 1 pessimistic), so treat Part 2's ranges as the
+optimistic side and re-challenge them before `/speckit-specify`.
 
 ## Contents
 
@@ -100,8 +125,8 @@ this part are the skeptic's adjusted figures** unless a row says otherwise.
 | Onshape AI Advisor; Adam for Onshape | The Advisor gives help. Agents that edit geometry are on the roadmap only (2026-03-19). Adam (open beta, 2026-03-04) cleans up feature trees, the same job as 004 stage 1. | Onshape only. Adam's planned SOLIDWORKS support is not verified. | onshape.com blog (2026-03-19, 2026-03-04) |
 | Siemens Solid Edge 2026 | The Design Copilot is a support chatbot. Magnetic Snap auto-constrains a part dragged into an assembly. Automated drawings. | Makes no 3D geometry. | engineering.com (2026-06-24) |
 | Zoo (ML-ephant, Zookeeper) | Generates B-rep plus KCL code. Zookeeper (2026-02-05) edits existing KCL models and checks each change with four-view snapshots. $0-99 a month. | Its own kernel and language, not SOLIDWORKS. | zoo.dev/blog/announcing-zookeeper (2026-02-05) |
-| Third-party SOLIDWORKS tools | LAD turns prompts into sketches, features and macros; users reported spatial mistakes. MecAgent sells automations, part generation and a standards checker ($0, $84 or $417 a month, or enterprise on-prem). SolidPilot is an open-source MCP server (AGPL-3.0, early alpha, "edit-fragile" reference resolver). hjbaard/SolidWorks-MCP has 54 typed tools that return measured volume, mass and box (MIT). Leo AI does part search and calculations; a Xometry test found its concept output was a 2D PNG. | LAD and MecAgent drive SOLIDWORKS through macros, which the constitution bans for this product. The MCP servers target SOLIDWORKS 2026 and are design references, not libraries to link. | news.ycombinator.com/item?id=46591100 (about 2026-01); mecagent.com/pricing-copilot (2026-09-28); github.com/eyfel/mcp-server-solidworks; github.com/hjbaard/SolidWorks-MCP; xometry.pro (2025-08-26) |
-| DriveWorksXpress, design tables, Smart Components, library features | Rule-based variants of parts, assemblies and drawings. No LLM. DriveWorksXpress ships with every SOLIDWORKS licence. | The **non-LLM baseline**. The assistant's value must be measured against these, and against "the engineer plus ChatGPT with screenshots", not against nothing. | solidworks.com/partner-product/driveworksxpress |
+| Third-party SOLIDWORKS tools | LAD turns prompts into sketches, features and macros; users reported spatial mistakes. MecAgent sells automations, part generation and a standards checker ($0, $84 or $417 a month, or enterprise on-prem). SolidPilot is an open-source MCP server (AGPL-3.0, early alpha, "edit-fragile" reference resolver). hjbaard/SolidWorks-MCP has 54 typed tools that return measured volume, mass and box (MIT). Leo AI does part search and calculations; a Xometry test found its concept output was a 2D PNG. | LAD and MecAgent drive SOLIDWORKS through macros, which the constitution bans for this product. The MCP servers target SOLIDWORKS 2026 and are design references, not libraries to link. | news.ycombinator.com/item?id=46591100 (about 2026-01); mecagent.com/pricing-copilot (2026-09-28); github.com/eyfel/mcp-server-solidworks (read 2026-09-28); github.com/hjbaard/SolidWorks-MCP (read 2026-09-28); xometry.pro (2025-08-26) |
+| DriveWorksXpress, design tables, Smart Components, library features | Rule-based variants of parts, assemblies and drawings. No LLM. DriveWorksXpress ships with every SOLIDWORKS licence. | The **non-LLM baseline**. The assistant's value must be measured against these, and against "the engineer plus ChatGPT with screenshots", not against nothing. | solidworks.com/partner-product/driveworksxpress (read 2026-09-28) |
 
 **No shipped product designs a new part that mates to existing geometry with a verified fit**
 (inferred from the sources above). Today, "working with an existing design" means one of:
@@ -114,7 +139,9 @@ this part are the skeptic's adjusted figures** unless a row says otherwise.
 
 #### Measured benchmarks (2026)
 
-The skeptic re-read these figures. Only the figures that agreed across readings are quoted.
+The skeptic re-read two of these sources, CADEngBench and Parametric CAD Bench V3, and only the
+figures that agreed are quoted for those two. The other rows are a single reading by the research
+tracks.
 
 | Benchmark | What it measures | Figures |
 |---|---|---|
@@ -207,7 +234,7 @@ prerequisite, not an option.**
 - **A "use the current selection" read.** The add-in reads the selection only as a component.
 - **Placing a part with mates.** AddComponent5, AddMate5 and GetCorrespondingEntity are never
   called. Which document owns a face's persistent reference inside a component is unverified
-  (research R12).
+  (feature 001 research R12, `specs/001-agentic-design-review/research.md`).
 - **Previews, undo and versions.** EditUndo2 is excluded on purpose, and the inverse of a create
   is a delete, which is denied. So versions should be rebuilt from the plan.
 - **Images for the model.** Captures exist but never reach a provider.
@@ -228,8 +255,8 @@ prerequisite, not an option.**
 
 | # | Option | What it is | Writes a SOLIDWORKS file? | Effort | Seat sittings | Cost per session | Confidence |
 |---|---|---|---|---|---|---|---|
-| 1 | **Grounded ideation plus past-design retrieval** (Tier 1) | The engineer picks faces or components and states the goal ("mount a 400 W servo and a 10:1 gearbox to this plate, 30 kg at 200 mm"). The assistant returns an interface card, 2-4 approaches with trade-offs, sizing estimates from tested calculations, candidates from the owner's catalogue, and similar parts from recorded past designs. It creates no geometry. | No. It needs only a scope amendment. | 8-12 waves (2-4 weeks at this repo's pace); 6-9 engineer-weeks; plus 2-4 owner days for the catalogue and tasks | 1-2 | About $0.9-2.7 on gpt-5.6-terra, $1.6-4.8 on sol; more on the big assembly | Medium |
-| 2 | **Template copy-and-drive** (Tier 2) | The owner authors 2-3 master parts (an adapter plate, an L-bracket) with global variables and Hole Wizard holes. Code copies one with 004's refuse-overwrite copy, derives each variable from the interface card and the catalogue, and drives it through 004's allowlisted equation keys. 004's geometry gate then checks the result. The engineer places the part: the product writes no assembly. | Yes, a copy in the run folder only. It extends exception 2 and needs no feature-creation member. | 4-8 engineer-weeks (about 5-10 waves, inferred from the engineer-weeks) | 1-2, beyond 004's own 3-4 | Not priced. Expected at or below option 3's range, since code derives the values (inferred). | Medium-low (it rides on 004's probes) |
+| 1 | **Grounded ideation plus past-design retrieval** (Tier 1) | The engineer picks faces or components and states the goal ("mount a 400 W servo and a 10:1 gearbox to this plate, 30 kg at 200 mm"). The assistant returns an interface card, 2-4 approaches with trade-offs, sizing estimates from tested calculations, candidates from the owner's catalogue, and similar parts from recorded past designs. It creates no geometry. | No. It needs only a scope amendment. | 6-9 engineer-weeks; 2-4 weeks at this repo's pace; 8-12 waves (the mvp track's figure, not re-estimated; scaled to the skeptic's 6-9 engineer-weeks it is about 9-14 waves, inferred, which Part 3 uses); plus 2-4 owner days for the catalogue and tasks | 1-2 | About $0.9-2.7 on gpt-5.6-terra, $1.6-4.8 on sol; more on the big assembly | Medium (inferred; track: medium-high; lowered because the skeptic called it edging optimistic) |
+| 2 | **Template copy-and-drive** (Tier 2) | The owner authors 2-3 master parts (an adapter plate, an L-bracket) with global variables and Hole Wizard holes. Code copies one with 004's refuse-overwrite copy, derives each variable from the interface card and the catalogue, and drives it through 004's allowlisted equation keys. 004's geometry gate then checks the result. The engineer places the part: the product writes no assembly. | Yes, a copy in the run folder only. It extends exception 2 and needs no feature-creation member. | 4-8 engineer-weeks (about 5-10 waves, inferred from the engineer-weeks) | 1-2, beyond 004's own 3-4 | Not priced. Expected at or below option 3's range, since code derives the values (inferred). | Medium-low (inferred; it rides on 004's probes) |
 | 3 | **Native concept parts plus placement** | A typed-operation C# executor builds native features (sketch, extrude, Hole Wizard, so thread data survives) into a new part in the run folder. It inserts the part into a new wrapper assembly that references the engineer's assembly and mates it to picked faces. It verifies with rebuild, mate status and interference. | Yes. It needs a sandbox-authoring amendment and a new allowlist guard. | 24-40 engineer-weeks. The native part and wrapper alone are 12-18 waves (track figure) and 12-20 engineer-weeks. Plan for 30-50% rework after the first seat contact. | 6-10, after 004's. That is 4-7 months of calendar at today's seat access, or 2-3 months with a development-seat licence. | About $2.6-4.5 on terra, $4.5-8 on sol, plus 5-20 minutes of seat time per concept | Low (the placement half) |
 | 4 | **Variant explorer** (on top of 2 or 3) | Code sweeps template parameters offline (thickness, bent versus machined, bolt count, gearbox ratio) and scores clearance, mass, a cost proxy and calculation margins. The model reads a Pareto digest and explains it. Only the 2-3 chosen variants become configurations on the concept part. | Only on the concept part | +6-10 waves; +4-8 engineer-weeks once the owner's cost rates exist | 1-2 | About $4-7 on terra, $7-12 on sol (track figure, not re-checked) | Medium-low; blocked on cost data |
 | 5 | **Full design partner** | Multi-part concept sub-assemblies, sheet metal, weldment frames, drawings through 012, motion clearance. | Several new write paths | 40-80+ waves; 6-12+ engineer-months, which is a floor | 12-25 | About $10-25 on terra, $20-50 on sol (track figure, not re-checked) | Low; research-grade |
@@ -240,7 +267,7 @@ prerequisite, not an option.**
   | Tier | Input | Cached input | Output |
   |---|---|---|---|
   | gpt-5.6-terra | $2 | $0.20 | $12 |
-  | gpt-5.6-sol (promotional) | $4 | $0.40 | $20 |
+  | gpt-5.6-sol (promotional, at least until 2026-11-21) | $4 | $0.40 | $20 |
 
 - Output tokens dominate the bill.
 - Nobody knows which tier the plain `gpt-5.6` id maps to, and Gemini 3.5 Flash was not priced.
@@ -251,13 +278,15 @@ prerequisite, not an option.**
 **Dropped or deferred, with the reasons.**
 - **An offline CadQuery or build123d builder** (5-8 engineer-weeks). Its output is a dumb STEP
   body the engineer must redraw. It adds a second kernel that must agree with SOLIDWORKS. It goes
-  against the owner's native-first direction of 2026-09-19. ADR-001 allows OCP only for auxiliary
-  check geometry, never as a host. None of these libraries is installed.
+  against the owner's native-first direction of 2026-09-19 (SOLIDWORKS files first, STEP on the
+  back burner; recorded outside the repo). ADR-001 allows OCP only for auxiliary check geometry,
+  never as a host. None of these libraries is installed.
 - **Temporary-body previews in the engineer's live document** (4-6 engineer-weeks plus 2-3
   sittings). The preview draws inside the engineer's document. The IModeler family is unguarded,
   and nobody knows whether Display3 marks the document dirty. An offline envelope check on the GLB
   meshes (trimesh and embree, both installed) gives most of the value with no seat.
-- **FeatureWorks recognition.** Zero effort until the owner reopens STEP (decision 19A).
+- **FeatureWorks recognition.** Zero effort until the owner reopens STEP. The owner parked STEP
+  and FeatureWorks recognition on 2026-09-19 (recorded outside the repo).
 - **Free-form, general-purpose geometry from open prompts.** Research-grade: months to years,
   with uncertain quality.
 
@@ -292,7 +321,7 @@ prerequisite, not an option.**
 | # | Decision | Options |
 |---|---|---|
 | 1 | The scope amendment for Tier 1 | **(A) One MINOR amendment: ideas and estimates are proposals, never findings or approval.** (B) No amendment, treating option cards as findings (not recommended). The current scope line says "the pilot produces review findings", and sizing numbers come close to "structural approval", which that line puts out of scope. |
-| 2 | Where the chat lives | **(A) A mode of the Review tab, or a native chat page on the existing loopback chat server, which already runs sessionless multi-turn chat.** (B) A new purpose-named tab, which the owner must approve under the four-tab rule. (C) Un-hide the Ask terminal. Not recommended: it is hidden (`TaskPaneControl.cs:353`, `AskTabShown = false`), and the engineers are not command-line users. |
+| 2 | Where the chat lives | **(A) A mode of the Review tab, or a native chat page on the existing loopback chat server, which already runs sessionless multi-turn chat.** (B) A new purpose-named tab. The owner's rule is that the pane keeps its current purpose-named tabs and a new tab needs his approval (recorded outside the repo). (C) Un-hide the Ask terminal. Not recommended: it is hidden (`TaskPaneControl.cs:353`, `AskTabShown = false`), and the engineers are not command-line users. |
 | 3 | Governance for any write | **(A) One "sandbox authoring" amendment, written once and shared by 012 drawing creation, template copy-and-drive, and Part 2's Simulation study on a copy.** (B) A separate exception per feature, which multiplies guard surfaces. |
 | 4 | How creation touches the assembly | **(A) Tier 2 writes the concept part alone, and the engineer places it.** (B) A wrapper assembly that references the engineer's assembly, only if the probes pass. (C) A prefixed Pack and Go copy. |
 | 5 | Vendor data | **(A) Only from the owner's catalogue; unknown stays unknown.** (B) The model may cite general knowledge, labelled unverified. |
@@ -312,9 +341,10 @@ prerequisite, not an option.**
 - **Data egress.** Interface geometry, loads, meshes and later images would go to OpenAI or
   Gemini.
   - Gemini's unpaid-tier terms let Google use prompts and responses, with human review and no
-    retention limit.
+    retention limit (ai.google.dev/gemini-api/terms, read 2026-09-28).
   - The OpenAI adapter leaves the Responses API's `store` at its default
-    (`openai_provider.py:795-797`), so responses are probably stored server-side (inferred).
+    (`agent/providers/openai_provider.py:795-797`), so responses are probably stored server-side
+    (inferred).
   - The rule has to come first: paid tiers only, a decision on `store` and retention, and only
     ids and numbers sent. No meshes, paths or profile values leave the machine; that is the
     `part_roles` pattern.
@@ -338,8 +368,8 @@ prerequisite, not an option.**
   - The constitution already says a mutation is a proposal, never an engineering result
     (`constitution.md:182-184`). That extends to concepts and to sizing numbers.
 - **Model fit.** The product's defaults (gpt-5.6, whose pricing tier is unlisted, and
-  gemini-3.5-flash; `settings.py:103-105`) are not the benchmarked models. The benchmarks measure
-  an architecture the product forbids. The first evaluation has to create the evidence.
+  gemini-3.5-flash; `agent/settings.py:103-105`) are not the benchmarked models. The benchmarks
+  measure an architecture the product forbids. The first evaluation has to create the evidence.
 - **LLM spatial weakness.** If the model chooses positions or sizes, the concepts will be subtly
   wrong, and that would also breach Principle II. Code must resolve every position, mate and
   dimension. The model chooses topology, part family and intent.
@@ -453,7 +483,8 @@ failures) and the saturated seat queue. The rework risk is far lower than for a 
 **Where it lives** (owner decision, recommended first):
 - **(A) A "Loads" mode inside the Review tab.** It reuses the review's package, session,
   questions panel and labels, so no fifth tab is added.
-- (B) A fifth purpose-named tab, "Estimate", which the owner must approve under the four-tab rule.
+- (B) A fifth purpose-named tab, "Estimate". The owner's rule is that the pane keeps its current
+  purpose-named tabs and a new tab needs his approval (recorded outside the repo).
 - (C) The command line and the report only, at first.
 
 The hidden Ask terminal is not an option.
@@ -543,7 +574,7 @@ direction.
 | Fastener and hole data | Hole type, standard, size, thread, usable thread depth, hole depth, diameter, axis and faces. Fit and thread class. Drill, counterbore and countersink sizes. Fastener kind, thread, length, head, drive and axis. `parse_thread` gives nominal diameter and pitch. Per-instance axes give bolt-group centroids and radii. | `ir/models.py:578-720`; `checks/fastener.py:125-207` |
 | Thread engagement | The owner's rule: at least 1.5d into steel and aluminium. Protrusion and usable thread are read off the geometry. It is a policy check; a stripping calculation would complement it, not replace it. | `checks/engagement_rules.yaml`; `checks/fastener.py:411-512, :752-883` |
 | Mass and centre of mass | Mass, volume and centre of mass per document (CreateMassProperty2, system units), plus a row-major 4x4 transform per component in metres, so code can sum groups in the assembly frame. The mass checks flag no material, the 1000 kg/m³ default, and overrides. **Not in the IR:** moments of inertia. Only the re-modeler's gate reads principal moments. | `ir/models.py:301-386`; `Dump/PropertyDumper.cs:469-520`; `checks/mass.py` |
-| Materials | The material name per part and its configuration. A class and density range only (`material_classes.yaml`). **Strengths and modulus are not in the IR**, and the extractor discards the database name. They can be read offline from the SOLIDWORKS material database, an XML file. This machine's 2024 install has 259 materials: 220 with a modulus, 219 with a tensile strength, 167 with a yield strength, and only 3 with an S-N curve. The DIN database has 207, all with yield. The seat may use a company database, so it needs a check. | `ir/models.py:317-351`; `PropertyDumper.cs:452-465`; `checks/material_classes.yaml`; the install's `sldmaterials` folder (parsed read-only 2026-09-28) |
+| Materials | The material name per part and its configuration. A class and density range only (`material_classes.yaml`). **Strengths and modulus are not in the IR**, and the extractor discards the database name. They can be read offline from the SOLIDWORKS material database, an XML file. This machine's 2024 install has 259 materials: 220 with a modulus, 219 with a tensile strength, 167 with a yield strength, and only 3 with an S-N curve. The DIN database has 207, all with yield. The seat may use a company database, so it needs a check. | `ir/models.py:317-351`; `Dump/PropertyDumper.cs:452-465`; `checks/material_classes.yaml`; the install's `sldmaterials` folder (parsed read-only 2026-09-28) |
 | Section geometry | Cylinder and plane parameters, a bounding box and an area, in assembly space, but only for faces another dumper asked for. Clamped thickness is the Thickness property, else the bounding-box extent along the fastener axis (labelled derived), else unknown. Nothing identifies the face pair that sets a thickness. GLB meshes load in metres. trimesh 5.1.0 and embreex are installed. shapely, scipy and sectionproperties are not. | `ir/models.py:722-765`; `Dump/FaceDumper.cs:12-17`; `tools/checks_fastener.py:8-22`; `tools/measure.py`; `geometry/mesh.py` |
 | Selection read for pick-to-load | The capture command reads the selection, whether face, edge or component, turns it into a scoped persistent reference and appends it to the package. The resolver reads the selection only as a component. No command returns the selection as an IR entity to use as a load point. | `SwReviewAddIn.cs:1432-1496`; `Review/SwEntityResolver.cs:265-275` |
 | Part roles | Every document is labelled custom, bought or unclear, with a reason in words. No profile value is ever sent to the model. Bought parts are the ones whose ratings and masses must come from a catalogue. | `checks/part_roles.py` |
@@ -695,9 +726,11 @@ This is Principle II. SINTEF puts it as "let AI orchestrate, not calculate".
 
 | Outcome | Status |
 |---|---|
-| A shortfall. It depends on the idealisation, so it is never "demonstrated". | suspected |
-| Meets the target | checked-within-scope |
-| A missing input | unresolved |
+| A shortfall. It depends on the idealisation, so it is never `demonstrated`. | `suspected` |
+| Meets the target | `checked_within_scope` |
+| A missing input | `unresolved` |
+
+These are the existing `FindingStatus` literals (`findings.py:37`).
 
 ### 2.7 Constitution and scope
 
@@ -777,7 +810,7 @@ This is Principle II. SINTEF puts it as "let AI orchestrate, not calculate".
 | eFatigue | Web fatigue calculators with material data and stress-concentration factors | No assembly context | efatigue.com (2026-09-28) |
 | SOLIDWORKS SimulationXpress | Ships with SOLIDWORKS. A single solid body; fixed fixtures only; forces and pressures only; static and uniform loads. | Too narrow for joint loads in an assembly | blogs.solidworks.com; solidsolutions.co.uk (2026-09-28) |
 | SOLIDWORKS Simulation (Professional, Premium) and its API | The full study workflow, with bolt, pin and bearing connectors and load-case combinations. Validated by 52 NAFEMS benchmarks and shipped verification problems. | The study lives in the model file, so automating it is a write. The seat's licence is unknown. | cati.com; help.solidworks.com 2024 API (2026-09-28) |
-| SOLIDWORKS LEO and AURA | LEO sets up linear static studies, predicts results with surrogate models and reports factor of safety. | Needs 2026 SP1 or later connected to 3DEXPERIENCE. Not on the 2024 SP5 seat. | hawkridgesys.com (2026-02-23, updated 2026-09-02) |
+| SOLIDWORKS LEO and AURA | LEO sets up linear static studies, predicts results with surrogate models and reports factor of safety. | Needs SOLIDWORKS 2026 connected to 3DEXPERIENCE (SP1 or later per a reseller, SP3 per Dassault; see 1.3). Not on the 2024 SP5 seat. | hawkridgesys.com (2026-02-23, updated 2026-09-02) |
 | Mathcad Prime, SMath Studio, Excel sheets | Calculation sheets with native units, validated by checker sign-off. Mathcad Prime 12 ships no native AI; a community MCP server exists. | None reads a CAD assembly | ptc.com; smath.com (2026-09-28) |
 | Calcs.com (formerly ClearCalcs) | Calculators aligned to structural codes, each with dozens of test cases, automated regression and outside professional-engineer verification. Calcs AI (beta) calls verified calculators rather than inventing math. | **The closest commercial analogue to this design**, but it covers buildings, not machines, and has no CAD context | calcs.com (2025-09-09, 2026-09-22) |
 | SkyCiv | Structural analysis with an AI assistant that flags ambiguous prompts. Public "AI skills" teach agents to call 150+ calculators through the API instead of computing. | Civil and structural work | skyciv.com; github.com/skyciv/skyciv-ai-skills (2026-09-28) |
@@ -797,21 +830,32 @@ the gap.
 
 ### 2.9 Phases and estimates
 
+Part 2's estimates come from a single research track (2026-09-28) and were not challenged by a
+skeptic pass. In Part 1 the skeptic found 18 of 37 single-track estimates optimistic, so treat
+these ranges as the optimistic side and re-challenge them before `/speckit-specify`.
+
 | Phase | Scope | Waves | Seat sittings | Engineer-weeks | Confidence |
 |---|---|---|---|---|---|
-| **0: decisions, amendment, data** | The owner decides: where it lives, the record shape, the status rules, the default-assumptions table (bolt class, friction, tightening factor, target safety factors, dynamic factors), the material source, and the egress rule. Draft amendment 1.2.0 and a spec skeleton. The owner gathers 6-10 past designs, at least 3 with known field failures or redesigns. A 15-minute seat check rides on the next queued sitting: which material database the seat uses, and whether Simulation is licensed. | 0.5-1, plus 2-4 owner days | 0 of its own | 1-2, plus owner days | High |
-| **1: MVP**, static estimates on bolted, pinned and bracketed joints (gravity and stated loads) | Waves per item: load model, units, load-case store with carry-forward and staleness (2-3); selection-read bridge command and bounded face read (1-2); material-database parser, override table, IR database-name field, fastener class (1-2); idealised sections and a face-pair thickness finder (1-2); load-path graph, determinacy, 6-DOF statics, rigid-plate bolt groups, indeterminacy questions (3-4); the 14 calculations with their validation tests (5-7); model layer: tools, prompt, what-if, records, labels, questions (2-3); pane load-case panel, confirm cards, ranked results, report section (2-3); golden estimates, replay pricing, gate harness (1-2) | 18-26 (about 4-7 calendar weeks of offline code) | 2-3: a 30-45 minute probe of the selection read, the face read and the database name; a 2-hour owner session on 2-3 real designs; a fix-up re-run if needed. All queue behind 008-013 and 004. | 18-28 (library 6-9, load path and statics 3-4, UI and report 2-3, model layer 2-3, the rest 5-9) | Medium. Read-only, so much lower rework risk than 004's write path. |
+| **0: decisions, amendment, data** | The owner decides: where it lives, the record shape, the status rules, the default-assumptions table (bolt class, friction, tightening factor, target safety factors, dynamic factors), the material source, and the egress rule. Draft amendment 1.2.0 and a spec skeleton. The owner gathers 6-10 past designs, at least 3 with known field failures or redesigns. A 15-minute seat check rides on the next queued sitting: which material database the seat uses, and whether Simulation is licensed. | 0.5-1, plus 2-4 owner days | 0 of its own | 1-2, plus owner days | High (inferred) |
+| **1: MVP**, static estimates on bolted, pinned and bracketed joints (gravity and stated loads) | Waves per item: load model, units, load-case store with carry-forward and staleness (2-3); selection-read bridge command and bounded face read (1-2); material-database parser, override table, IR database-name field, fastener class (1-2); idealised sections and a face-pair thickness finder (1-2); load-path graph, determinacy, 6-DOF statics, rigid-plate bolt groups, indeterminacy questions (3-4); the 14 calculations with their validation tests (5-7); model layer: tools, prompt, what-if, records, labels, questions (2-3); pane load-case panel, confirm cards, ranked results, report section (2-3); golden estimates, replay pricing, gate harness (1-2) | 18-28, the sum of the items (about 4-7 calendar weeks of offline code). The research stated 18-26, which its own items do not add up to. | 2-3: a 30-45 minute probe of the selection read, the face read and the database name; a 2-hour owner session on 2-3 real designs; a fix-up re-run if needed. All queue behind 008-013 and 004. | 18-28 (library 6-9, load path and statics 3-4, UI and report 2-3, model layer 2-3, the rest 5-9) | Medium. Read-only, so much lower rework risk than 004's write path. |
 | **2: dynamics, fatigue, bearings, drives** | Inertia-tensor read (schema 1.7.0) plus a mesh cross-check (1-2); motion profiles, inertial load cases, RMS over a duty cycle (2-3); drive sizing with an owner catalogue schema (3-4); bearing L10 (1-2); shafts and keys (1-2); fatigue and bolt fatigue (2-3); duty-cycle entry and a drive-sizing view (2-3); evaluation (1) | 13-20, plus 3-5 owner days for a licence-clean catalogue | 1-2: an inertia-read probe and a duty-cycle session on a real axis | 15-24 | Medium-low. Fatigue inputs are mostly estimated, and the catalogue is owner time. |
-| **3a: read-only hand-off to Simulation** | A load-case sheet per load case: each load's magnitude and direction in the assembly frame, the target face with its persistent reference and a capture, fixtures, bolt and pin connectors with Phase 1 preloads, and the hand-calc reactions and stresses to compare. The engineer builds the study by hand, and a comparison check reads the results the engineer enters. | 3-5 | 0-1 | 2-4 | Medium. No amendment. |
+| **3a: read-only hand-off to Simulation** | A load-case sheet per load case: each load's magnitude and direction in the assembly frame, the target face with its persistent reference and a capture, fixtures, bolt and pin connectors with Phase 1 preloads, and the hand-calc reactions and stresses to compare. The engineer builds the study by hand, and a comparison check reads the results the engineer enters. | 3-5 | 0-1 | 2-4 | Medium (inferred). No amendment. |
 | **3b: automated study on a copy** | A copy (Pack and Go into the run folder; behaviour unverified); a Simulation executor (create study, forces, gravity, restraints, connectors, load cases, mesh, run, read results); hand calculation and FEA side by side. Needs a Simulation licence on the seat, a write amendment, a cosworks allowlist guard with generated tables and reflection tests, attestation of the engineer's files, and 004's probes first. | 12-20 | 4-8, after 004's write probes: 3-6 months calendar at current seat access, or weeks with a licensed development seat | 10-18 | Low |
 
 **Totals.**
 
-| Scope | Waves | Engineer-weeks |
-|---|---|---|
-| MVP alone | 18-26 | 18-28 |
-| MVP plus Phase 2 | 31-46 | 33-52 |
-| Everything, including 3b | 49-76 | 45-78 |
+| Scope | Waves | Engineer-weeks | Confidence |
+|---|---|---|---|
+| MVP alone (Phase 1) | 18-28 | 18-28 | Medium |
+| MVP plus Phase 2 | 31-48 | 33-52 | Medium-low |
+| Everything (Phases 1, 2, 3a and 3b) | 46-73 | 45-74 | Low |
+
+- Each row sums the phase rows above and takes the lowest confidence among them.
+- Phase 0 is in no row. Add its 0.5-1 waves and 1-2 engineer-weeks, plus 2-4 owner days, to any
+  row.
+- The research's own totals do not add up: its "everything" row said 49-76 waves and 45-78
+  engineer-weeks, and its MVP said 18-26 waves. These were arithmetic slips; the figures above are
+  recomputed from the phase rows.
 
 The biggest schedule lever is again a licensed SOLIDWORKS seat on the development machine.
 
@@ -835,8 +879,8 @@ The biggest schedule lever is again a licensed SOLIDWORKS seat on the developmen
   say "lb" or "kgf".
   - Mitigations: one pint registry, unit-mismatch tests per calculation, and the model never
     converts.
-  - A 2026 study found that LLM-only structural pipelines mishandle units and load combinations
-    and violate equilibrium.
+  - A 2026 Scientific Reports study (PMC13287573, 2026-04; see 2.8) found that LLM-only
+    structural pipelines mishandle units and load combinations and violate equilibrium.
 - **Wrong masses.** Parts with no material, overridden masses, and simplified or empty vendor
   models give wrong gravity and inertial loads. The existing mass checks gate derived loads, and
   bought parts take catalogue masses.
@@ -894,8 +938,8 @@ Nothing ships to real use until all four gates pass. Phase 2 starts only after t
    To pass:
    - each known failure appears in the top 3 weak points with the right failure mode. If the tool
      says it cannot model the case, that counts as a miss;
-   - no known-good design gets a shortfall at the owner's accepted margin (at most 1 false alarm
-     per design);
+   - each known-good design gets at most 1 false-alarm shortfall at the owner's accepted margin
+     (whether the limit is zero or one is open question 8);
    - where original hand calculations or a Simulation study exist, stresses and deflections agree
      within a tolerance the owner sets (proposed 15% and 20%) on at least 3 cases where the
      idealisation applies.
@@ -927,10 +971,11 @@ Phase 2 calculation.
 | **Scope amendment** | "Ideas and concept proposals" | "Engineering estimates" | **One MINOR amendment (1.2.0) that covers both**, rather than two in a row |
 | **Sandbox-authoring amendment** | Template copy-and-drive; later, native concept parts | Phase 3b, the Simulation study on a copy | One write-path amendment, shared with 012 drawing creation |
 
-A rough, inferred figure for the saving: building both read-only MVPs together costs perhaps 23-34
-waves rather than 26-38. The face read, the catalogue loader, the units extension, the chat
-surface and the evaluation harness are built once, and Tier 1's sizing calculations come from Part
-2's library.
+A rough, inferred figure for the saving: building both read-only MVPs together costs perhaps 24-38
+waves rather than 27-42 built apart (Tier 1's 9-14, scaled in 1.5, plus the hand-calc MVP's
+18-28), a saving of about 3-4 waves. The face read, the catalogue loader, the units extension, the
+chat surface and the evaluation harness are built once, and Tier 1's sizing calculations come from
+Part 2's library.
 
 ### 3.2 A suggested order
 
@@ -986,7 +1031,9 @@ grounded ideation.
 7. **Materials.** Which material database does the seat use, and should there be an owner
    override table?
 8. **Past designs.** 6-10 for the hand-calc gate (at least 3 known failures, at least 3 known-good
-   designs) and 8-12 concept tasks. Can one set serve both?
+   designs) and 8-12 concept tasks. Can one set serve both? And how many false-alarm shortfalls
+   may a known-good design get at the accepted margin: zero or one? Owner to decide; section 2.11
+   says at most one until then.
 9. **The catalogue.** Which bought motors, gearboxes, bearings, guides and fasteners go in first,
    and from which licence-clean sources?
 10. **References.** Which editions of Shigley, Roark's and Machinery's Handbook does the owner
