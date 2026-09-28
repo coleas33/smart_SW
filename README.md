@@ -31,6 +31,9 @@ installation, live checks, and comparable efficiency experiments. A local test r
 `swreview handoff <run-dir> --out <new-archive.zip>`; the archive includes a manifest of
 missing artifacts and retains design paths, so inspect it before sharing.
 
+Ideas researched but not yet planned, with their estimates, are listed at the end of
+[the roadmap](docs/roadmap-2026-09-22.md#later-researched-ideas).
+
 ## Layout
 
 ```text
