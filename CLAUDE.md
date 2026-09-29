@@ -129,3 +129,11 @@ For multi-step tasks, state a brief plan:
 3. [Step] → verify: [check]
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+
+## 5. Model Routing for Subagents (ultracode)
+
+Pick each subagent's model by how hard its task is. This applies to every Agent tool call and every workflow `agent()` call (set `model` explicitly on each; never Fable).
+
+- **Simple tasks go to Sonnet** (`model: 'sonnet'`): mechanical, well-specified work with a clear recipe and a check that proves it done. Examples: moving or renaming files and updating their references, small doc edits, a single-file fix whose cause is already known, running the gates and reporting the counts, regenerating pins or fixtures with an existing command, scans and census jobs over files, formatting.
+- **Everything else goes to Opus** (`model: 'opus'`): design and spec writing, multi-file features, integrating several lanes, debugging an unknown cause, crash or safety analysis, code review and adversarial verification, anything touching the constitution, the guard or the engineer's files, and anything where a wrong call is expensive.
+- **When unsure, use Opus.** A Sonnet agent that reports a blocker or an unexpected result hands the task back for an Opus agent to continue.
