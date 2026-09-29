@@ -20,6 +20,9 @@ its own `pane-findings-2026-09-26.md`), and the next sitting starts at step 2.4 
 and write the update itself in the header and in step 1's notes below. Documents N, Q and S are
 lettered like the rest (section 0.2); A-pin is written by its letter in the bought-parts line.
 
+Since 2026-09-28 the next sitting runs the retest of U25 to U27 first (the plan's section "First:
+the retest"): steps 4.9 and 5.3, right after step 1, and their rows are filled in then.
+
 | | |
 |---|---|
 | Days of the sitting | |
@@ -105,6 +108,10 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 | 4.8 | 013 T143: the whole review's input tokens, at most 400,000, and the answers' turn's calls (SC-008) | | | |
 | 4.8 | 013 T143: lever 14 on, and the follow-up answered | | | |
 | 4.8 | Q, optional: the bought-parts counts on a design with bought parts outside the library | | | |
+| 4.9 | 011 T110: J's drawing on its own: the host's line naming J, Review greyed out | | | |
+| 4.9 | 011 T110: J's drawing after J's review: whose review it is and the drawing's line, no Review invitation, Retry starts nothing | | | |
+| 4.9 | 011 T110: back on J, its review shown again | | | |
+| 4.9 | 011 T110: C on its own: its model named, or one named and the others counted; no `could not be read` line today | | | |
 | 5.1 | Model check on J | | | |
 | 5.1 | 007 T059: Start here above the chips on Model check, against `report.md`'s | | | |
 | 5.1 | 004 T003: Model check packages of the owner's parts P-1 to P-5 | | | |
@@ -114,6 +121,10 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 | 5.2 | 013 T144: A-plate's drawing, the revision table and the bill of materials read, no "no revision table" (SC-009) | | | |
 | 5.2 | 013 T144: the export-control check on S-1 and S-2 | | | |
 | 5.3 | Remodel: Plan on a copy (one `-RMS` copy, the settings back before Start, the seconds it took), Start refused by the switch, Discard; J and the three settings unchanged | | | |
+| 5.3 | 004 T185: crash capture set, or `no administrator rights` (item A) | | | |
+| 5.3 | 004 T185: the box planned; the phases end `open_record.written`, the last two `stage=` lines and the count (item B) | | | |
+| 5.3 | 004 T185: if SOLIDWORKS closed: item C's six answers, and what was kept | | | |
+| 5.3 | 004 T186: J checked in: planned with the read-only option not ticked, or refused naming it with the option ticked; `IsReadOnly` unchanged | | | |
 | 5.4 | 008 T106: the live Gemini test | | | |
 | 5.5 | 009 T082: Show before and after the fix | | | |
 | 5.6 | 004 T033: PROBE-1, the "Cannot reorder" box with the flag clear and set | | | |
@@ -157,7 +168,11 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 
 ### 4.8 A again, with the version 4 profile, and Q
 
+### 4.9 A drawing active (the retest of U25)
+
 ### 5. The other tabs, the Gemini test, the older build
+
+### 5.3 Remodel: the retest of U26 and U27, the box, and J
 
 ### 5.6 The re-modeler probes
 
