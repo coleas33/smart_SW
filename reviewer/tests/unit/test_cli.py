@@ -51,6 +51,7 @@ from swreview.report.names import component_names
 from swreview.report.rerender import REPORT_FILE_NAME as REPORT_FILE
 from swreview.report.rerender import rerender_run_folder
 from swreview.report.session import load_session
+from tests.support.console import plain_one_line
 from tests.unit.test_rerender import (
     NAMED_COMPONENT,
     PLACEHOLDER,
@@ -2656,7 +2657,7 @@ def test_prune_after_without_pruning_is_a_usage_error_naming_both_flags(
     )
 
     assert result.exit_code == 2
-    output = result.stdout + result.stderr
+    output = plain_one_line(result.stdout + result.stderr)
     assert "--prune-after" in output and "--history-pruning" in output
 
 

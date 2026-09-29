@@ -103,6 +103,10 @@ not included by that exporter. Keep real-design packets local and inspect before
   test-output files.
 - The complete testing packet was rechecked against the ZIP after moving it outside
   the checkout; all 110 files match. The company-profile census passed unchanged.
+- CI exposed existing CLI assertions that compared ANSI-colored output directly.
+  The affected message assertions and child-pytest result parser now use the existing
+  console-text helper; error text and exit-code checks remain. All 354 tests across
+  those four modules passed with color-forcing environment variables set locally.
 
 No live provider calls or native SOLIDWORKS retest were made during this validation.
 The native crash remains unverified until the focused workstation retest above.
