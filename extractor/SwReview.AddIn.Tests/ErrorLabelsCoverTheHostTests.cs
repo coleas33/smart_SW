@@ -34,7 +34,7 @@ public sealed class ErrorLabelsCoverTheHostTests
 
         foreach (string expected in new[]
                  {
-                     "NoDocument", "NotAttached", "BackendUnavailable", "TurnRunning", "PreparationExpired",
+                     "NoDocument", "DrawingActive", "NotAttached", "BackendUnavailable", "TurnRunning", "PreparationExpired",
                      "PreparationFailed", "RunFolderFailed", "ExtractionFailed", "InvalidSettings", "UnknownModel",
                      "FakeProviderNotAllowed", "InvalidRequest", "UnknownMessage", "HostError", "PathRefused",
                      "NotFound", "OpenFailed", "UnknownChat", "UnknownCheck", "HttpError",

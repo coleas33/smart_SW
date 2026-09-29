@@ -120,7 +120,7 @@ public sealed class ReviewHostTests
 
         JsonElement error = world.Reply("error", "p1");
         string message = error.GetProperty("message").GetString()!;
-        Assert.Equal("NoDocument", error.GetProperty("error_class").GetString());
+        Assert.Equal("DrawingActive", error.GetProperty("error_class").GetString());
         Assert.EndsWith(DrawingClause, message, StringComparison.Ordinal);
         Assert.Contains("plate.SLDDRW", message, StringComparison.Ordinal);
         Assert.Equal(0, reads);
@@ -140,7 +140,7 @@ public sealed class ReviewHostTests
         world.Receive("review.start", "r1", new { });
 
         JsonElement error = world.Reply("error", "r1");
-        Assert.Equal("NoDocument", error.GetProperty("error_class").GetString());
+        Assert.Equal("DrawingActive", error.GetProperty("error_class").GetString());
         Assert.EndsWith(DrawingClause, error.GetProperty("message").GetString()!, StringComparison.Ordinal);
         Assert.Equal(0, world.Dump.Runs);
         Assert.Empty(world.Backend.Created);

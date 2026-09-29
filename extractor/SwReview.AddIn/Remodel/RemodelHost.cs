@@ -1320,17 +1320,6 @@ public sealed class RemodelHost : IDisposable
             return false;
         }
 
-        if (signals.ReadOnly == true)
-        {
-            _actions.SendError(
-                id,
-                "DocumentReadOnly",
-                "the part is open read-only, so its state cannot be attested before the copy is "
-                + "made.",
-                retryable: true);
-            return false;
-        }
-
         if (signals.ExternalReferenceCount > 0)
         {
             _actions.SendError(

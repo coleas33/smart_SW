@@ -359,18 +359,30 @@ public class RemodelCopyTests : IDisposable
         string source = WriteSource();
         File.SetAttributes(source, FileAttributes.ReadOnly);
         string copy = RemodelCopy.CopyPathFor(RunDirectory, source);
+        byte[] sourceBytes = File.ReadAllBytes(source);
+        DateTime sourceWriteTime = File.GetLastWriteTimeUtc(source);
 
         try
         {
+            SourceAttestation before = RemodelCopy.RecordSource(
+                source, copy, DateTime.UtcNow, null, null);
             RemodelCopy.CreateCopy(source, copy);
+            SourceAttestation after = RemodelCopy.RecordSource(
+                source, copy, DateTime.UtcNow, null, null);
+
+            Assert.Equal(before.LengthBytes, after.LengthBytes);
+            Assert.Equal(before.LastWriteUtc, after.LastWriteUtc);
+            Assert.Equal(before.Sha256, after.Sha256);
+            Assert.Equal(sourceBytes, File.ReadAllBytes(source));
+            Assert.Equal(sourceWriteTime, File.GetLastWriteTimeUtc(source));
+            Assert.True(File.GetAttributes(source).HasFlag(FileAttributes.ReadOnly));
+            Assert.False(File.GetAttributes(copy).HasFlag(FileAttributes.ReadOnly),
+                "the copy inherited the source's read-only attribute and the seat could not save it");
         }
         finally
         {
             File.SetAttributes(source, FileAttributes.Normal);
         }
-
-        Assert.False(File.GetAttributes(copy).HasFlag(FileAttributes.ReadOnly),
-            "the copy inherited the source's read-only attribute and the seat could not save it");
     }
 
     /// <summary>

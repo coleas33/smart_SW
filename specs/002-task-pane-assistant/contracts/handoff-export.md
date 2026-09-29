@@ -1,13 +1,14 @@
 # Local review handoff export
 
 `swreview handoff <run-dir> --out <archive.zip>` creates one local ZIP for an engineer to
-inspect or attach manually. The command accepts exactly one review run folder and refuses
+inspect or attach manually. The command accepts one review or partial Remodel run folder and refuses
 to overwrite an existing archive or place the archive inside that folder.
 
 The archive contains `handoff-manifest.json` and an allowlist of run records:
 `package.json`, `session.json`, `attention.json`, `report.md`, and `events.jsonl` when
 present. It may also contain the recorded `run-provenance.json`, `check.json`,
-`chat-log.jsonl`, and named extraction/check log files. Missing required records are listed
+`chat-log.jsonl`, named extraction/check log files, and `remodel.log`, `remodel-open.jsonl`,
+`open.json`, and `source-attestation.json`. Missing required records are listed
 in the manifest so an incomplete run remains useful. Arbitrary recursive files, native CAD
 documents, machine settings, environment files, and credentials are never discovered.
 

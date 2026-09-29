@@ -40,10 +40,12 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import threading
 from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -115,6 +117,24 @@ logger = logging.getLogger("swreview.chat.remodel")
 
 OPEN_FILE_NAME = "open.json"
 """What `remodel.open` recorded, so the two routes after it need no memory of the call."""
+
+OPEN_DIAGNOSTICS_FILE = "remodel-open.jsonl"
+"""Flushed phase boundaries, including the baseline read before HTTP Open can answer."""
+
+
+def _open_phase(run_dir: Path, phase: str) -> None:
+    """Keep the last entered phase after a native crash, without recording request data.
+
+    This is diagnostic evidence, never a recovery record or permission to resume a run.
+    A full disk must not replace the original failure or prevent session cleanup.
+    """
+    try:
+        with (run_dir / OPEN_DIAGNOSTICS_FILE).open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps({"at": datetime.now(UTC).isoformat(), "phase": phase}) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+    except OSError as exc:
+        logger.warning("remodel open diagnostic could not be written (%s)", type(exc).__name__)
 
 PACKAGE_AFTER = "package-after.json"
 """The after-dump's name in the run folder (`contracts/run-artifacts.md`)."""
@@ -709,12 +729,14 @@ class RemodelServer:
         configuration: str | None,
     ) -> dict[str, Any]:
         copy_path = copy_path_for(run_dir, source_path)
+        _open_phase(run_dir, "copy_open.begin")
         try:
             reply = _answered(
                 client.open(source_path, str(copy_path), run_dir.name, probe_id),
                 "remodel.open",
             )
         except RemodelError as exc:
+            _open_phase(run_dir, "copy_open.refused")
             if exc.error_code == PREEXISTING_REBUILD_ERRORS:
                 # The one refusal raised after a copy exists, and the one whose handler has
                 # already deleted it. The host has its own path for it and needs the count,
@@ -726,8 +748,10 @@ class RemodelServer:
                 }
             raise _refusal(exc) from exc
         except BridgeError as exc:
+            _open_phase(run_dir, "copy_open.failed")
             raise _unavailable("remodel.open", str(exc)) from exc
 
+        _open_phase(run_dir, "copy_open.returned")
         try:
             return self._record_open(
                 client, run_dir, copy_path, reply, probe_id, configuration
@@ -737,7 +761,11 @@ class RemodelServer:
             # bridge's open answered, so it holds a session - the copy open and tagged, the four
             # settings changed - that this route's failure would otherwise leave behind, and
             # every later open on that bridge would be refused `run_in_progress`.
+            _open_phase(run_dir, "open_record.failed")
+            _open_phase(run_dir, "cleanup.begin")
             self._close_after_failed_open(client)
+            # The helper reports close failures separately; returned does not assert closed.
+            _open_phase(run_dir, "cleanup.returned")
             raise
 
     def _record_open(
@@ -762,7 +790,10 @@ class RemodelServer:
             ) from exc
         write_attestation(run_dir, attestation)
 
+        _open_phase(run_dir, "attestation.written")
+        _open_phase(run_dir, "baseline_geometry.begin")
         geometry = _call("remodel.geometry", client.geometry)
+        _open_phase(run_dir, "baseline_geometry.returned")
         try:
             reading_from_reply(geometry)
         except (ValidationError, ValueError, TypeError) as exc:
@@ -785,6 +816,7 @@ class RemodelServer:
         (run_dir / OPEN_FILE_NAME).write_text(
             json.dumps(record, indent=2, sort_keys=False) + "\n", encoding="utf-8"
         )
+        _open_phase(run_dir, "open_record.written")
         return {
             "copy_path": str(copy_path),
             "rebuild_error_count": 0,

@@ -54,6 +54,17 @@ public sealed class ReviewPageErrorsTests
         AssertPlain(run.SaveRefused, LabelsSample.InvalidSettings, "InvalidSettings", SaveMessage);
     }
 
+    [Fact]
+    public void DrawingRefusalLeadsWithItsSpecificRoute()
+    {
+        JsonElement card = Labelled.Value.DrawingRefused;
+
+        Assert.Contains("Review cannot start from a drawing", card.GetProperty("visible").GetString()!);
+        Assert.Contains(LabelsSample.DrawingActive, card.GetProperty("visible").GetString()!);
+        Assert.DoesNotContain("NoDocument", card.GetProperty("visible").GetString()!);
+        Assert.Contains("DrawingActive", card.GetProperty("fold").GetString()!);
+    }
+
     /// <summary>The sentence leads the visible text; the class and the message are in the fold and not beside it.</summary>
     private static void AssertPlain(JsonElement status, string label, string errorClass, string message)
     {
@@ -142,6 +153,15 @@ public sealed class ReviewPageErrorsTests
                 driver.ReviewStartError = new { error_class = "NoDocument", message = NoDocumentMessage, retryable = true };
                 await driver.StartReview();
                 run.StartRefused = await driver.Read(LastErrorCard);
+
+                driver.ReviewStartError = new
+                {
+                    error_class = "DrawingActive",
+                    message = "The Review tab reviews a part or assembly; keep the drawing open.",
+                    retryable = true,
+                };
+                await driver.StartReview();
+                run.DrawingRefused = await driver.Read(LastErrorCard);
             });
 
         return run;
@@ -194,5 +214,7 @@ return JSON.stringify({
         public JsonElement SaveRefused { get; set; }
 
         public JsonElement StartRefused { get; set; }
+
+        public JsonElement DrawingRefused { get; set; }
     }
 }

@@ -806,6 +806,14 @@ public sealed class ToolServiceHost : IToolService
             attached.Services,
             new ScopedSecretPolicy(reviewSecret, generalChatSecret, remodelSecret));
 
+        // A native crash inside a geometry COM call never returns through RequestChain, so its
+        // per-request line cannot be written. These fixed member markers are appended before
+        // and after each call, one file append per marker, to survive process termination.
+        var geometryLog = new RemodelRunLog(() => dispatcher.RemodelRunDirectory);
+        attached.Services.RemodelGeometryStage = marker => geometryLog.Write(
+            "[" + DateTimeOffset.Now.ToString("O", CultureInfo.InvariantCulture) + "] "
+            + "command=remodel.geometry stage=" + marker + System.Environment.NewLine);
+
         remodelGate.Observer = new RemodelGateRecorder(recorder, () => dispatcher.RemodelTargetPath);
 
         // 004 T167: every ending of a remodel session on this service reaches the add-in, from the

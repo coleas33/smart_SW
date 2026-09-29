@@ -358,16 +358,63 @@ public sealed class RemodelHostTests
     }
 
     [Fact]
-    public void PlanIsRefusedWhenTheSourceIsOpenReadOnly()
+    public void SavedReadOnlySourceCanBePlannedWithoutChangingTheSource()
+    {
+        using (var world = new RemodelWorld())
+        {
+            string source = world.CreateSourceFile();
+            File.SetAttributes(source, File.GetAttributes(source) | FileAttributes.ReadOnly);
+            byte[] before = File.ReadAllBytes(source);
+            DateTime writeTime = File.GetLastWriteTimeUtc(source);
+            world.Open();
+            world.Pipeline.Signals.ReadOnly = true;
+
+            try
+            {
+                world.Receive("remodel.plan", "p1", new { });
+
+                Assert.Equal(1, world.Pipeline.Count("copy"));
+                Assert.Equal(1, world.Pipeline.Count("plan"));
+                Assert.DoesNotContain(source, world.Pipeline.Opened);
+                Assert.Equal(before, File.ReadAllBytes(source));
+                Assert.Equal(writeTime, File.GetLastWriteTimeUtc(source));
+                Assert.True(File.GetAttributes(source).HasFlag(FileAttributes.ReadOnly));
+            }
+            finally
+            {
+                File.SetAttributes(source, FileAttributes.Normal);
+            }
+        }
+    }
+
+    [Fact]
+    public void ReadOnlySourceWithUnsavedChangesIsStillRefusedBeforeTheCopy()
     {
         using (var world = new RemodelWorld())
         {
             world.Open();
             world.Pipeline.Signals.ReadOnly = true;
+            world.Pipeline.Signals.SaveFlagDirty = true;
 
             world.Receive("remodel.plan", "p1", new { });
 
-            Assert.Equal("DocumentReadOnly", world.ErrorClass("p1"));
+            Assert.Equal("DocumentDirty", world.ErrorClass("p1"));
+            world.AssertNothingWasCopied();
+        }
+    }
+
+    [Fact]
+    public void ReadOnlySourceWithExternalReferencesIsStillRefusedBeforeTheCopy()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Pipeline.Signals.ReadOnly = true;
+            world.Pipeline.Signals.ExternalReferenceCount = 1;
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            Assert.Equal("ExternalReferences", world.ErrorClass("p1"));
             world.AssertNothingWasCopied();
         }
     }

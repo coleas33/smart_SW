@@ -1588,6 +1588,9 @@
   }
 
   function prepareReview(retryOf) {
+    if (isDrawing(state.documentInfo)) {
+      return;
+    }
     if (!state.preparationAvailable) {
       startReview(retryOf);
       return;
@@ -1637,7 +1640,7 @@
   }
 
   function startReview(retryOf, preparationId) {
-    if (state.startPending || state.turnRunning) {
+    if (state.startPending || state.turnRunning || isDrawing(state.documentInfo)) {
       return;
     }
 
@@ -1689,7 +1692,8 @@
    * pressable again (FR-030).
    */
   function renderStartReview() {
-    ui.startReview.disabled = state.startPending || state.turnRunning || !state.documentInfo;
+    ui.startReview.disabled = state.startPending || state.turnRunning || !state.documentInfo
+      || isDrawing(state.documentInfo);
     var followupDisabled = state.startPending || state.turnRunning || !!state.preparation
       || !state.chatId || state.resultsStale || state.readOnly !== null;
     ui.followupText.disabled = followupDisabled;
@@ -1747,22 +1751,36 @@
     document.body.classList.toggle('results-stale', state.resultsStale);
 
     render.clear(ui.staleReview);
-    if (state.resultsStale) {
-      render.write(ui.staleReview, staleSentence());
+    var drawingActive = isDrawing(state.documentInfo);
+    if (state.resultsStale || drawingActive) {
+      render.write(ui.staleReview, state.resultsStale ? staleSentence() : drawingSentence());
     }
-    ui.staleReview.hidden = !state.resultsStale;
+    ui.staleReview.hidden = !state.resultsStale && !drawingActive;
 
     renderSession();
     renderStartReview();
     renderResultsState();
   }
 
-  /** The one line a hidden review leaves: whose review it is, and what to press instead. */
+  /** The line for a hidden review: whose review it is and the next valid Review action. */
   function staleSentence() {
     var sentence = 'This review is of ' + (docs.label(state.reviewed) || 'another document') + '.';
+    if (isDrawing(state.documentInfo)) {
+      return sentence + ' ' + drawingSentence();
+    }
     return state.documentInfo
       ? sentence + ' Press Review to review ' + docs.label(state.documentInfo) + '.'
       : sentence + ' No document is open.';
+  }
+
+  function isDrawing(info) {
+    return !!(info && /\.slddrw$/i.test(docs.fileName(info.path)));
+  }
+
+  function drawingSentence() {
+    return docs.fileName(state.documentInfo.path) + ' is a drawing. Keep it open in SOLIDWORKS '
+      + 'and activate the part or assembly it documents. Press Review with that model active; '
+      + 'Review reads open drawings whose views show the model.';
   }
 
   function resetTranscript() {

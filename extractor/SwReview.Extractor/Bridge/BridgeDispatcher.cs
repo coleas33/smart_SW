@@ -334,6 +334,13 @@ public sealed class BridgeServices
     public Action<RemodelSessionEnd>? RemodelSessionEnded { get; set; }
 
     /// <summary>
+    /// Flushed, bounded markers around the COM calls in remodel.geometry. A native process
+    /// crash cannot be caught by Dispatch, so its ordinary completed-request log has no line
+    /// for the call that crashed. Null on hosts without a run log.
+    /// </summary>
+    public Action<string>? RemodelGeometryStage { get; set; }
+
+    /// <summary>
     /// Feature 011, protocol 1.3. The source <c>drawing.read</c> reads a confirmed candidate
     /// through, or null on a bridge that reads none - the console host above all, which keeps no
     /// review records. Null is the default, so a host hands the command a source deliberately.
@@ -1789,14 +1796,22 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
         string subject = session.BaselineGeometryTaken
             ? RemodelGeometrySubjects.CopyAtEnd
             : RemodelGeometrySubjects.CopyAtOpen;
-        session.GeometryReadings++;
-
-        return RemodelGeometry.Read(
+        GeometryReading reading = RemodelGeometry.Read(
             session.Gate,
             session.Document,
             subject,
             session.Attestation.Sha256,
-            DateTime.UtcNow);
+            DateTime.UtcNow,
+            _services.RemodelGeometryStage);
+        // A returned reading can still report that mass properties were unavailable. It is
+        // evidence of an attempted measurement, but cannot be a baseline or one of the two
+        // readings a passing save verdict must rest on. A retry keeps copy_at_open until a
+        // usable baseline exists.
+        if (reading.Status == RemodelGeometry.StatusOk && reading.Recalculated)
+        {
+            session.GeometryReadings++;
+        }
+        return reading;
     }
 
     /// <summary>

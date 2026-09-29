@@ -737,7 +737,8 @@
     if (!labels) {
       head.appendChild(el('span', 'chip error-class', body.error_class || 'Error'));
     }
-    head.appendChild(el('h3', 'title', 'The review stopped'));
+    head.appendChild(el('h3', 'title', body.error_class === 'DrawingActive'
+      ? 'Review cannot start from a drawing' : 'The review stopped'));
     card.appendChild(head);
 
     card.appendChild(labels

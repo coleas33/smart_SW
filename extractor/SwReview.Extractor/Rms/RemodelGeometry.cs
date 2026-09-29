@@ -182,7 +182,8 @@ public static class RemodelGeometry
         IRemodelDocument document,
         string subject,
         string sourceSha256,
-        DateTime at)
+        DateTime at,
+        Action<string>? stage = null)
     {
         if (gate == null)
         {
@@ -194,8 +195,8 @@ public static class RemodelGeometry
             throw new ArgumentNullException(nameof(document));
         }
 
-        IReadOnlyList<object> solids = Bodies(gate, document, SolidBody);
-        IReadOnlyList<object> sheets = Bodies(gate, document, SheetBody);
+        IReadOnlyList<object> solids = Bodies(gate, document, SolidBody, stage);
+        IReadOnlyList<object> sheets = Bodies(gate, document, SheetBody, stage);
 
         var reading = new GeometryReading
         {
@@ -208,7 +209,7 @@ public static class RemodelGeometry
 
             // Read whatever the mass properties do: the material is not geometry, and a
             // mass-only difference is reported as a material change and never as a moved part.
-            MaterialName = gate.Call(MaterialMember, document.GetMaterialName),
+            MaterialName = Call(gate, MaterialMember, document.GetMaterialName, stage),
         };
 
         if (solids.Count == 0)
@@ -219,24 +220,24 @@ public static class RemodelGeometry
             return reading;
         }
 
-        reading.FaceCount = Sum(gate, document, solids, FaceCountMember, isFaces: true);
-        reading.EdgeCount = Sum(gate, document, solids, EdgeCountMember, isFaces: false);
+        reading.FaceCount = Sum(gate, document, solids, FaceCountMember, isFaces: true, stage: stage);
+        reading.EdgeCount = Sum(gate, document, solids, EdgeCountMember, isFaces: false, stage: stage);
 
-        IMassPropertyReading? properties = gate.Call(CreateMember, document.CreateMassProperty);
+        IMassPropertyReading? properties = Call(gate, CreateMember, document.CreateMassProperty, stage);
         if (properties == null)
         {
             reading.Status = StatusUnknownError;
             return reading;
         }
 
-        gate.Call(AccuracyMember, () => properties.SetAccuracyLevel(HigherAccuracy));
-        gate.Call(SelectedItemsMember, () => properties.SetSelectedItems(solids));
+        Call(gate, AccuracyMember, () => properties.SetAccuracyLevel(HigherAccuracy), stage);
+        Call(gate, SelectedItemsMember, () => properties.SetSelectedItems(solids), stage);
 
         // Before Recalculate, never after: the numbers are computed in whatever units are in
         // force when it runs, and this record's fields are named for metres and kilograms.
-        gate.Call(UseSystemUnitsMember, () => properties.SetUseSystemUnits(true));
+        Call(gate, UseSystemUnitsMember, () => properties.SetUseSystemUnits(true), stage);
 
-        reading.Recalculated = gate.Call(RecalculateMember, properties.Recalculate);
+        reading.Recalculated = Call(gate, RecalculateMember, properties.Recalculate, stage);
         if (!reading.Recalculated)
         {
             // Nothing is read: the values still in there are the previous body's.
@@ -245,23 +246,26 @@ public static class RemodelGeometry
         }
 
         reading.Status = StatusOk;
-        reading.VolumeM3 = gate.Call(VolumeMember, properties.GetVolume);
-        reading.SurfaceAreaM2 = gate.Call(SurfaceAreaMember, properties.GetSurfaceArea);
+        reading.VolumeM3 = Call(gate, VolumeMember, properties.GetVolume, stage);
+        reading.SurfaceAreaM2 = Call(gate, SurfaceAreaMember, properties.GetSurfaceArea, stage);
         reading.CenterOfMassM = Triple3(
-            gate.Call(CenterOfMassMember, properties.GetCenterOfMass), sorted: false);
+            Call(gate, CenterOfMassMember, properties.GetCenterOfMass, stage), sorted: false);
         reading.PrincipalMoments = Triple3(
-            gate.Call(PrincipalMomentsMember, properties.GetPrincipalMomentsOfInertia),
+            Call(gate, PrincipalMomentsMember, properties.GetPrincipalMomentsOfInertia, stage),
             sorted: true);
-        reading.MassKg = gate.Call(MassMember, properties.GetMass);
-        reading.Density = gate.Call(DensityMember, properties.GetDensity);
+        reading.MassKg = Call(gate, MassMember, properties.GetMass, stage);
+        reading.Density = Call(gate, DensityMember, properties.GetDensity, stage);
 
         return reading;
     }
 
-    private static IReadOnlyList<object> Bodies(SwGate gate, IRemodelDocument document, int bodyType)
+    private static IReadOnlyList<object> Bodies(
+        SwGate gate, IRemodelDocument document, int bodyType, Action<string>? stage)
     {
-        IReadOnlyList<object>? bodies = gate.Call(
-            BodiesMember, () => document.GetBodies(bodyType));
+        // Body type disambiguates two consecutive calls with the same interop member.
+        IReadOnlyList<object>? bodies = Call(
+            gate, BodiesMember, () => document.GetBodies(bodyType), stage,
+            bodyType == SolidBody ? "solid" : "sheet");
 
         // GetBodies2 answers null for a part with no body of that type; that is a count of
         // zero and not an unreadable one.
@@ -278,15 +282,18 @@ public static class RemodelGeometry
         IRemodelDocument document,
         IReadOnlyList<object> bodies,
         string member,
-        bool isFaces)
+        bool isFaces,
+        Action<string>? stage)
     {
         int total = 0;
         foreach (object body in bodies)
         {
             object one = body;
-            int? count = gate.Call(
+            int? count = Call(
+                gate,
                 member,
-                () => isFaces ? document.GetFaceCount(one) : document.GetEdgeCount(one));
+                () => isFaces ? document.GetFaceCount(one) : document.GetEdgeCount(one),
+                stage);
 
             if (count == null)
             {
@@ -297,6 +304,42 @@ public static class RemodelGeometry
         }
 
         return total;
+    }
+
+    private static T Call<T>(
+        SwGate gate, string member, Func<T> read, Action<string>? stage, string? detail = null)
+    {
+        string name = detail == null ? member : member + ":" + detail;
+        Trace(stage, "before " + name);
+        try
+        {
+            T answer = gate.Call(member, read);
+            Trace(stage, "after " + name);
+            return answer;
+        }
+        catch (Exception)
+        {
+            Trace(stage, "failed " + name);
+            throw;
+        }
+    }
+
+    private static void Call(
+        SwGate gate, string member, Action read, Action<string>? stage)
+    {
+        Call<object?>(gate, member, () => { read(); return null; }, stage);
+    }
+
+    private static void Trace(Action<string>? stage, string marker)
+    {
+        try
+        {
+            stage?.Invoke(marker);
+        }
+        catch (Exception)
+        {
+            // A diagnostic file is never a reason to alter the geometry reading.
+        }
     }
 
     /// <summary>

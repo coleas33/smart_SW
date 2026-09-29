@@ -1083,7 +1083,7 @@ public sealed class ReviewHost : IDisposable
         PageDocument? document = _options.CurrentDocument();
         if (document != null && document.Kind == "drawing")
         {
-            SendError(id, "NoDocument", DrawingRefusal(document), true);
+            SendError(id, "DrawingActive", DrawingRefusal(document), true);
             return;
         }
 
@@ -1149,7 +1149,7 @@ public sealed class ReviewHost : IDisposable
         // as the design under review (contracts/attach.md section 3).
         if (document.Kind == "drawing")
         {
-            SendError(id, "NoDocument", DrawingRefusal(document), retryable: true);
+            SendError(id, "DrawingActive", DrawingRefusal(document), retryable: true);
             return;
         }
 

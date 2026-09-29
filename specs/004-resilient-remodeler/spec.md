@@ -116,6 +116,7 @@ The engineer's file is the thing that must not be lost. The re-modeler records t
 
 - The source is not a part (an assembly, a drawing): refused before anything is copied.
 - The source is open in SOLIDWORKS with unsaved changes: refused; the message says to save or close it first, because the copy on disk would not be the model the engineer is looking at.
+- The source is saved and open read-only (including a checked-in vault part): allowed when it can be read and attested. Only the new run copy has its inherited read-only file attribute cleared; the source keeps its bytes, timestamp and attributes.
 - The source has external file references: refused; an in-context or derived part cannot be reorganized in isolation.
 - More than one solid body: refused; the geometry gate cannot pair bodies within one reading unambiguously.
 - Weldment, a sheet-metal folder present, a mesh or graphics body, or a 3D Interconnect feature: refused, each with its own reason, because the six groups do not model bends, K-factor, or flat patterns, a mesh body has no boundary representation to compare, and editing a 3D Interconnect part fights the live link.

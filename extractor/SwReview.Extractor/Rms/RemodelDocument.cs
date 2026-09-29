@@ -268,7 +268,9 @@ public sealed class RemodelSession
     public string? LengthUnit { get; set; }
 
     /// <summary>
-    /// How many geometry readings this run has taken. It stamps
+    /// How many geometry readings returned with status OK and Recalculate true. Failed
+    /// measurements are still returned to the caller as unknown evidence, but do not
+    /// establish the baseline or satisfy the save gate. The count stamps
     /// <c>GeometryReading.subject</c> - the first reading of a run is <c>copy_at_open</c> and
     /// every later one is <c>copy_at_end</c>, so the phase is the run's own and the caller
     /// cannot ask for a reading of anything else - and it is what <c>remodel.save</c> checks
