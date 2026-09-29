@@ -4,7 +4,7 @@
   "assembly_version": "32.5.0.48",
   "swconst_version": "32.5.0.48",
   "product": "SOLIDWORKS 2024 SP5",
-  "generated_at": "2026-09-27T17:09:41Z",
+  "generated_at": "2026-09-29T01:38:14Z",
   "generated_by": "swreview-extract probe interop --emit-manifest",
   "members": [
     {
@@ -293,10 +293,11 @@
       ],
       "returns": "System.Void",
       "used_by": [
-        "remodel.folder"
+        "remodel.folder",
+        "remodel.geometry"
       ],
       "allowlisted": true,
-      "note": "around every selection-based operation"
+      "note": "around every selection-based operation, and before the whole-part geometry reading, which includes pre-selected bodies (U27)"
     },
     {
       "interface": "IModelDoc2",
@@ -540,10 +541,11 @@
       ],
       "returns": "System.Boolean",
       "used_by": [
+        "remodel.probe_scope",
         "remodel.open"
       ],
       "allowlisted": false,
-      "note": "records each toggle's original value; a value that cannot be read refuses the start"
+      "note": "records each toggle's original value; a value that cannot be read refuses the start; U26: reads swExtRefNoPromptOrSave, which decides whether a read-only source's GetSaveFlag can be believed"
     },
     {
       "interface": "ISldWorks",
@@ -589,6 +591,20 @@
       ],
       "allowlisted": false,
       "note": "the source must not be dirty; after the save it must read false"
+    },
+    {
+      "interface": "IModelDoc2",
+      "member": "IsOpenedReadOnly",
+      "kind": "method",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.Boolean",
+      "used_by": [
+        "remodel.probe_scope",
+        "remodel.open"
+      ],
+      "allowlisted": false,
+      "note": "U26: a source open read-only reports its unsaved changes through GetSaveFlag only while swExtRefNoPromptOrSave is off"
     },
     {
       "interface": "IModelDoc2",
@@ -1111,10 +1127,10 @@
       ],
       "returns": "System.Void",
       "used_by": [
-        "remodel.geometry"
+        "PROBE-8"
       ],
       "allowlisted": false,
-      "note": "swMassPropertyAccuracyLevel_Higher = 2"
+      "note": "swMassPropertyAccuracyLevel_Higher = 2; not set by remodel.geometry since U27"
     },
     {
       "interface": "IMassProperty2",
@@ -1129,10 +1145,10 @@
       ],
       "returns": "System.Void",
       "used_by": [
-        "remodel.geometry"
+        "PROBE-8"
       ],
       "allowlisted": false,
-      "note": "the body the reading is taken over"
+      "note": "the body PROBE-8 measures, as a DispatchWrapper array; remodel.geometry reads the whole part since U27"
     },
     {
       "interface": "IMassProperty2",
@@ -1709,7 +1725,8 @@
       "values": {
         "swInputDimValOnCreate": 10,
         "swShowErrorsEveryRebuild": 77,
-        "swWarnSaveUpdateErrors": 329
+        "swWarnSaveUpdateErrors": 329,
+        "swExtRefNoPromptOrSave": 15
       }
     },
     {

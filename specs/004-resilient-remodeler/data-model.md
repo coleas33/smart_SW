@@ -325,8 +325,8 @@ record, and never interpreted there.
 | `at` | ISO 8601 | |
 | `source_sha256` | str | The attested hash of the source the copy was made from; identical on both readings |
 | `subject` | `"copy_at_open" \| "copy_at_end"` | Both readings are of the run's own copy. `copy_at_open` is taken after the baseline rollback and rebuild and before the first change; `copy_at_end` after the last one. **The source is never opened, in any mode** (FR-037): the copy is a byte-for-byte filesystem copy whose SHA-256 is recorded before any document handle exists, so `copy_at_open` is a reading of the source's geometry with no handle to the source and no reference body inserted into any tree. `GeometryReading` carries `source_sha256` so the artifact says on its face which file the baseline stands for |
-| `status` | int | `swMassPropertiesStatus_e`; anything but `OK(0)` makes the gate `unresolved`, never `fail` |
-| `accuracy_level` | int | `swMassPropertyAccuracyLevel_Higher = 2` on every reading |
+| `status` | int | `swMassPropertiesStatus_e`; anything but `OK(0)` makes the gate `unresolved`, never `fail`. *Amended 2026-09-28 (U27; default taken 2026-09-28, the owner may revise; research R16.1):* the reading is of the whole part, so `UnknownError(1)` also when the part has other than one solid body (counted, not measured) or the volume read back is not positive and finite (nothing recorded) |
+| `accuracy_level` | int \| null | `swMassPropertyAccuracyLevel_Higher = 2` on every reading. *Amended 2026-09-28 (U27):* `null` - the reading sets no accuracy, and SOLIDWORKS's default applies - until PROBE-8 has run `set_AccuracyLevel` on a seat (T187). Recorded, never compared |
 | `recalculated` | bool | `IMassProperty2.Recalculate()`'s return, checked **before** anything is read |
 | `volume_m3` | float \| null | |
 | `surface_area_m2` | float \| null | |
@@ -419,8 +419,8 @@ by side on a `Refusal` (section 4.2) cannot be mistaken for each other.
 | `rms_named_folders` | list[{`name`: str, `member_persist_refs`: list[str]}] \| null | folders where `GetTypeName2() == "FtrFolder"`, with each folder's members. This row is what makes `rms_named_folder_wrong_members` decidable in `scope.py` from `ScopeSignals` alone, which is what puts FR-007's refusal ahead of the copy |
 | `feature_type_names` | list[str] \| null | every feature's `IFeature.GetTypeName2()`, verbatim, in the scope reader's walk order, repeats kept; null when the walk or any feature's type cannot be read. A measurement: `scope.py` refuses a part whose walk carries a `derived_base` type with `derived_part`, before the copy (added 2026-09-27, T161, below) |
 | `external_reference_count` | int | `ListExternalFileReferencesCount2()` |
-| `save_flag_dirty` | bool | `GetSaveFlag()` on the source, when it is open |
-| `read_only` | bool | Source file attribute. `true` is allowed for a saved, readable source; `null` is unresolved and blocks the run. The copy is opened writable. |
+| `save_flag_dirty` | bool | `GetSaveFlag()` on the source, when it is open. *Amended 2026-09-28 (U26; default taken 2026-09-28, the owner may revise; research R16.3):* `false` only where `GetSaveFlag` can report the source's edits - a source open for writing from a writable file, or one whose "Don't prompt to save read-only referenced documents" option (`swExtRefNoPromptOrSave`) reads off; otherwise `null`, unresolved, and the run is refused |
+| `read_only` | bool | Source file attribute. `true` is allowed for a saved, readable source; `null` is unresolved and blocks the run. The copy is opened writable. *Qualified 2026-09-28 (U26):* "saved" is as far as `save_flag_dirty` can tell (the row above); the attestation is recorded at open and re-checked when a run reaches phase D, or else when the copy is closed (T186) |
 | `rebuild_error_count` | int | `GetWhatsWrongCount()` after the baseline rollback and rebuild |
 | `vault` | `{path, revision}` \| null | EPDM; recorded, never a refusal reason. Null means **not read by this build**, never "not in a vault" (amended 2026-09-26, below) |
 

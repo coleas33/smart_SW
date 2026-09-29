@@ -1339,7 +1339,15 @@ public sealed class RemodelHost : IDisposable
         // an underscore is a refusal that maps to no class on the Python side.
         if (signals.SaveFlagDirty == null)
         {
-            refusals.Add("signal_unresolved: save_flag_dirty could not be read");
+            // U26 (default taken 2026-09-28, the owner may revise): the probe answers null when
+            // the source is read-only and SOLIDWORKS would not report its unsaved changes, so the
+            // refusal says which option hides them and the two ways past it.
+            refusals.Add(
+                "signal_unresolved: save_flag_dirty could not be read or cannot be trusted - SOLIDWORKS "
+                + "does not report unsaved changes to a part open read-only while \"Don't prompt to "
+                + "save read-only referenced documents\" is selected (Tools > Options > System Options "
+                + "> External References); turn that option off, or check the part out, then press "
+                + "Remodel again");
         }
 
         if (signals.ReadOnly == null)

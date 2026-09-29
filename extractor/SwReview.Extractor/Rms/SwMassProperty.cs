@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
+using System.Runtime.InteropServices;
 using SolidWorks.Interop.sldworks;
 
 namespace SwReview.Extractor.Rms;
@@ -9,8 +9,9 @@ namespace SwReview.Extractor.Rms;
 /// <see cref="IMassPropertyReading"/> over a real <c>IMassProperty2</c>: one interop member per
 /// interface member, and nothing else (feature 004, T153's amendment; build order lane A). The
 /// copy's geometry reading (<see cref="RemodelGeometry.Read"/>, through
-/// <see cref="IGeometrySource.CreateMassProperty"/>) and PROBE-8 measure with this one mapping, so
-/// the probe calibrates exactly the member sequence the gate relies on, not a probe-only shortcut.
+/// <see cref="IGeometrySource.CreateMassProperty"/>) and PROBE-8 measure with this one mapping.
+/// Since U27 (2026-09-28) the copy's reading uses only its whole-part members - no selection and
+/// no accuracy of its own - while PROBE-8 still sets both on its throwaway part.
 ///
 /// <b>Ungated on purpose.</b> Every caller gates it from outside: <see cref="RemodelGeometry.Read"/>
 /// gates each member under its bare read key, and the probe host wraps it in
@@ -37,8 +38,19 @@ public sealed class SwMassProperty : IMassPropertyReading
             throw new ArgumentNullException(nameof(bodies));
         }
 
-        // The setter takes a SAFEARRAY: an object[] of its own, in the caller's order.
-        _massProperty.SelectedItems = bodies.ToArray();
+        // A fresh array of its own, in the caller's order, and of DispatchWrapper rather than of
+        // the bodies themselves (U27, default taken 2026-09-28, the owner may revise): the
+        // setter's parameter is a VARIANT, and a plain object[] of COM objects marshals as a
+        // SAFEARRAY of VARIANT where the SOLIDWORKS programming guide ("IDispatch Object Arrays
+        // as Input in .NET") requires a SAFEARRAY of IDispatch for an input array of its objects.
+        // PROBE-8 is the one caller: the copy's reading measures the whole part and selects none.
+        var wrapped = new DispatchWrapper[bodies.Count];
+        for (int i = 0; i < wrapped.Length; i++)
+        {
+            wrapped[i] = new DispatchWrapper(bodies[i]);
+        }
+
+        _massProperty.SelectedItems = wrapped;
     }
 
     /// <inheritdoc />

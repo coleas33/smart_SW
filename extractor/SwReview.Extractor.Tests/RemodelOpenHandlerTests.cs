@@ -60,6 +60,10 @@ public class RemodelOpenHandlerTests : IDisposable
         "GetImportedFileName",
         "GetConfigurationNames",
         "GetTypeName2",
+
+        // U26 (2026-09-28): whether GetSaveFlag's false can be believed for a read-only source.
+        "IsOpenedReadOnly",
+        "GetUserPreferenceToggle",
     };
 
     private const string RunId = "20260916-142201-bracket-remodel";
@@ -143,6 +147,10 @@ public class RemodelOpenHandlerTests : IDisposable
                 nameof(FakeProbeSource.GetConfigurationNames),
                 nameof(FakeProbeSource.GetFolders),
                 nameof(FakeProbeSource.GetFeatureTypeNames),
+
+                // U26: whether the save flag can be believed. The source is open for writing
+                // from a writable file here, so the option itself is not read.
+                nameof(FakeProbeSource.IsOpenedReadOnly),
             },
             seat.Probe.Members);
     }
@@ -151,7 +159,8 @@ public class RemodelOpenHandlerTests : IDisposable
     /// Every signal row is gated under the production member that reads it, in the table's
     /// order, repeats included. T161's <c>feature_type_names</c> is read with
     /// <c>GetTypeName2</c> over the same walk as the folder row, so it is gated under that key
-    /// and the probe's surface keeps its thirteen members (lane F's default 1).
+    /// and the probe's surface kept its thirteen members (lane F's default 1); U26 (2026-09-28)
+    /// adds the two save-flag reads, which are not signal rows, for fifteen.
     /// </summary>
     [Fact]
     public void ReadSignals_GatesEachRowUnderItsMember_TheFeatureTypeNamesUnderGetTypeName2()
@@ -179,7 +188,7 @@ public class RemodelOpenHandlerTests : IDisposable
             },
             log.Keys);
         Assert.Empty(log.Refusals);
-        Assert.Equal(13, RemodelScopeProbe.ProbeSurface.Count);
+        Assert.Equal(15, RemodelScopeProbe.ProbeSurface.Count);
     }
 
     /// <summary>
@@ -313,6 +322,178 @@ public class RemodelOpenHandlerTests : IDisposable
 
         Assert.Equal(
             RemodelErrorCodes.SourceDirty, Refusal(Dispatcher(seat).Dispatch(ProbeRequest())));
+    }
+
+    // ---- U26: a read-only source, and whether its save flag can be believed ----------------
+
+    /// <summary>
+    /// U26 (default taken 2026-09-28, the owner may revise). The API help for
+    /// <c>IModelDoc2.GetSaveFlag</c>: it reports a model opened read-only as dirty only while the
+    /// system option "Don't prompt to save read-only referenced documents"
+    /// (<c>swExtRefNoPromptOrSave</c>) is off. With it on, a checked-in part with unsaved edits
+    /// reads clean, and the copy would be taken from the file on disk rather than the model on
+    /// screen. So for a source open read-only the option is read too, and with it on the probe's
+    /// <c>save_flag_dirty</c> is unresolved - null, which the host refuses - rather than false.
+    /// </summary>
+    [Fact]
+    public void ProbeScope_ASourceOpenedReadOnlyWhileSolidworksDiscardsReadOnlyChanges_LeavesTheSaveFlagUnresolved()
+    {
+        FakeRemodelSeat seat = Seat();
+        seat.Probe.OpenedReadOnly = true;
+        seat.Probe.DiscardsReadOnlyChanges = true;
+
+        var result = Ok<RemodelProbeScopeResult>(Dispatcher(seat).Dispatch(ProbeRequest()));
+
+        Assert.Null(result.ScopeSignals!.SaveFlagDirty);
+        Assert.Contains(nameof(FakeProbeSource.IsOpenedReadOnly), seat.Probe.Members);
+        Assert.Contains(nameof(FakeProbeSource.GetDiscardsReadOnlyChanges), seat.Probe.Members);
+        Assert.Contains("IsOpenedReadOnly", _observer.Members);
+        Assert.Contains("GetUserPreferenceToggle", _observer.Members);
+    }
+
+    /// <summary>The file's own read-only attribute counts the same as a read-only open.</summary>
+    [Fact]
+    public void ProbeScope_AReadOnlyFileWhileSolidworksDiscardsReadOnlyChanges_LeavesTheSaveFlagUnresolved()
+    {
+        FakeRemodelSeat seat = Seat();
+        seat.Probe.DiscardsReadOnlyChanges = true;
+        File.SetAttributes(_sourcePath, FileAttributes.ReadOnly);
+        try
+        {
+            var result = Ok<RemodelProbeScopeResult>(Dispatcher(seat).Dispatch(ProbeRequest()));
+
+            Assert.True(result.ScopeSignals!.ReadOnly);
+            Assert.Null(result.ScopeSignals.SaveFlagDirty);
+        }
+        finally
+        {
+            File.SetAttributes(_sourcePath, FileAttributes.Normal);
+        }
+    }
+
+    /// <summary>With the option off, GetSaveFlag reports a read-only model's edits, so its false is believed.</summary>
+    [Fact]
+    public void ProbeScope_AReadOnlySourceWithTheOptionOff_ReadsClean()
+    {
+        FakeRemodelSeat seat = Seat();
+        seat.Probe.OpenedReadOnly = true;
+        seat.Probe.DiscardsReadOnlyChanges = false;
+
+        var result = Ok<RemodelProbeScopeResult>(Dispatcher(seat).Dispatch(ProbeRequest()));
+
+        Assert.False(result.ScopeSignals!.SaveFlagDirty);
+    }
+
+    /// <summary>A source open for writing, from a writable file: the option is not asked about at all.</summary>
+    [Fact]
+    public void ProbeScope_AWritableSourceOpenForWriting_ReadsCleanWithoutAskingAboutTheOption()
+    {
+        FakeRemodelSeat seat = Seat();
+        seat.Probe.DiscardsReadOnlyChanges = true;
+
+        var result = Ok<RemodelProbeScopeResult>(Dispatcher(seat).Dispatch(ProbeRequest()));
+
+        Assert.False(result.ScopeSignals!.SaveFlagDirty);
+        Assert.Contains(nameof(FakeProbeSource.IsOpenedReadOnly), seat.Probe.Members);
+        Assert.DoesNotContain(nameof(FakeProbeSource.GetDiscardsReadOnlyChanges), seat.Probe.Members);
+    }
+
+    /// <summary>
+    /// Could not check is never clean: a read-only state or an option SOLIDWORKS will not answer
+    /// leaves the save flag unresolved, unless the option is read as off.
+    /// </summary>
+    [Theory]
+    [InlineData("read-only state unreadable, option on", true, false, true, null)]
+    [InlineData("read-only state unreadable, option off", true, false, false, false)]
+    [InlineData("opened read-only, option unreadable", false, true, false, null)]
+    public void ProbeScope_WhatCannotBeReadLeavesTheSaveFlagUnresolved(
+        string what, bool stateFails, bool optionFails, bool optionOn, bool? expected)
+    {
+        FakeRemodelSeat seat = Seat();
+        seat.Probe.OpenedReadOnly = true;
+        seat.Probe.DiscardsReadOnlyChanges = optionOn;
+        if (stateFails)
+        {
+            seat.Probe.OpenedReadOnlyFailure = new System.Runtime.InteropServices.COMException(what);
+        }
+
+        if (optionFails)
+        {
+            seat.Probe.DiscardsReadOnlyChangesFailure = new System.Runtime.InteropServices.COMException(what);
+        }
+
+        var result = Ok<RemodelProbeScopeResult>(Dispatcher(seat).Dispatch(ProbeRequest()));
+
+        Assert.Equal(expected, result.ScopeSignals!.SaveFlagDirty);
+    }
+
+    /// <summary>A dirty source is still refused first, whatever the option: a true save flag is always believed.</summary>
+    [Fact]
+    public void ProbeScope_ADirtyReadOnlySource_IsStillSourceDirty()
+    {
+        FakeRemodelSeat seat = Seat();
+        seat.Probe.OpenedReadOnly = true;
+        seat.Probe.DiscardsReadOnlyChanges = true;
+        seat.Probe.SaveFlag = true;
+
+        Assert.Equal(RemodelErrorCodes.SourceDirty, Refusal(Dispatcher(seat).Dispatch(ProbeRequest())));
+    }
+
+    /// <summary>
+    /// The option turned on between the probe and the run: the open re-reads it with the save
+    /// flag, and refuses before anything is copied.
+    /// </summary>
+    [Fact]
+    public void Open_AReadOnlySourceWhoseSaveFlagStoppedBeingTrustworthyAfterTheProbe_IsScopeChangedBeforeTheCopy()
+    {
+        FakeRemodelSeat seat = Seat();
+        seat.Probe.OpenedReadOnly = true;
+        SwBridgeDispatcher dispatcher = Dispatcher(seat);
+        string probeId = Probe(dispatcher);
+
+        seat.Probe.DiscardsReadOnlyChanges = true;
+
+        Assert.Equal(RemodelErrorCodes.ScopeChanged, Refusal(dispatcher.Dispatch(OpenRequest(probeId))));
+        Assert.False(File.Exists(_copyPath));
+        Assert.Empty(seat.ToggleWrites);
+    }
+
+    /// <summary>
+    /// U26 end to end, over the real copy code: a source whose file is read-only - as a
+    /// checked-in vault part is - is probed as read-only, opened, and copied; the copy is
+    /// writable, and the source's bytes, write time and every attribute are what they were.
+    /// </summary>
+    [Fact]
+    public void ProbeAndOpen_OnAReadOnlySourceFile_MakeAWritableCopyAndLeaveTheSourceExactlyAsItWas()
+    {
+        File.SetAttributes(_sourcePath, FileAttributes.ReadOnly | FileAttributes.Archive);
+        FileAttributes attributes = File.GetAttributes(_sourcePath);
+        byte[] bytes = File.ReadAllBytes(_sourcePath);
+        DateTime written = File.GetLastWriteTimeUtc(_sourcePath);
+        try
+        {
+            FakeRemodelSeat seat = Seat();
+            seat.Probe.OpenedReadOnly = true;
+            SwBridgeDispatcher dispatcher = Dispatcher(seat);
+
+            var probe = Ok<RemodelProbeScopeResult>(dispatcher.Dispatch(ProbeRequest()));
+            Assert.True(probe.ScopeSignals!.ReadOnly);
+            Assert.False(probe.ScopeSignals.SaveFlagDirty);
+
+            var opened = Ok<RemodelOpenResult>(dispatcher.Dispatch(OpenRequest(probe.ProbeId)));
+
+            Assert.Equal(Path.GetFullPath(_copyPath), opened.DocumentPath);
+            Assert.True(File.Exists(_copyPath));
+            Assert.False(File.GetAttributes(_copyPath).HasFlag(FileAttributes.ReadOnly));
+            Assert.Equal(bytes, File.ReadAllBytes(_sourcePath));
+            Assert.Equal(written, File.GetLastWriteTimeUtc(_sourcePath));
+            Assert.Equal(attributes, File.GetAttributes(_sourcePath));
+            Assert.DoesNotContain(Path.GetFullPath(_sourcePath), seat.Opened, StringComparer.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            File.SetAttributes(_sourcePath, FileAttributes.Normal);
+        }
     }
 
     [Fact]
@@ -968,16 +1149,24 @@ public class RemodelOpenHandlerTests : IDisposable
         Assert.Empty(seat.ToggleWrites);
     }
 
+    /// <summary>
+    /// U27 (default taken 2026-09-28, the owner may revise; research R5.6's amendment): the three
+    /// dialog toggles hold for the session, and <c>CommandInProgress</c> is true only while
+    /// <c>remodel.open</c> runs its own sequence of calls. The API help says to set it before a
+    /// sequence and back after it, and that it affects only out-of-process applications; it was
+    /// left true for the whole session when SOLIDWORKS exited during the first baseline reading.
+    /// </summary>
     [Fact]
-    public void Open_SetsTheThreeTogglesAndTheCommandFlag()
+    public void Open_SetsTheThreeTogglesAndTheCommandFlag_AndPutsTheFlagBackBeforeItReturns()
     {
         FakeRemodelSeat seat = Seat();
         SwBridgeDispatcher dispatcher = Dispatcher(seat);
-        dispatcher.Dispatch(OpenRequest(Probe(dispatcher)));
+        Ok<RemodelOpenResult>(dispatcher.Dispatch(OpenRequest(Probe(dispatcher))));
 
         Assert.Equal(
-            new[] { "10=False", "77=False", "329=False", "CommandInProgress=True" },
+            new[] { "10=False", "77=False", "329=False", "CommandInProgress=True", "CommandInProgress=False" },
             seat.ToggleWrites);
+        Assert.False(seat.CommandInProgress);
 
         // They are writes to the engineer's application-wide settings, so they are on the
         // audited gated= set under their own two allowlist keys, exactly like every other
@@ -985,6 +1174,137 @@ public class RemodelOpenHandlerTests : IDisposable
         // the four nothing records.
         Assert.Contains(RemodelSystemToggles.ToggleMember, _observer.Members);
         Assert.Contains(RemodelSystemToggles.CommandInProgressMember, _observer.Members);
+    }
+
+    /// <summary>The flag goes back to whatever the engineer had, true included.</summary>
+    [Fact]
+    public void Open_PutsBackACommandFlagThatWasAlreadyTrue()
+    {
+        FakeRemodelSeat seat = Seat();
+        seat.CommandInProgress = true;
+        SwBridgeDispatcher dispatcher = Dispatcher(seat);
+        Ok<RemodelOpenResult>(dispatcher.Dispatch(OpenRequest(Probe(dispatcher))));
+
+        Assert.Equal("CommandInProgress=True", seat.ToggleWrites.Last());
+        Assert.True(seat.CommandInProgress);
+    }
+
+    /// <summary>
+    /// With the flag put back at open, the session's end restores the three toggles and writes
+    /// the flag no second time: nothing is outstanding for it.
+    /// </summary>
+    [Fact]
+    public void Close_AfterAnOpen_RestoresTheThreeTogglesAndLeavesTheCommandFlagAlone()
+    {
+        FakeRemodelSeat seat = Seat();
+        SwBridgeDispatcher dispatcher = Opened(seat);
+        seat.ToggleWrites.Clear();
+
+        RemodelSessionEnd outcome = dispatcher.EndRemodelSession(RemodelSessionEnd.ReasonToolServiceStopped);
+
+        Assert.Equal(new[] { "10=False", "77=False", "329=False" }, seat.ToggleWrites);
+        Assert.Empty(outcome.SettingsOutstanding);
+    }
+
+    /// <summary>
+    /// A flag that will not go back at the end of the open fails the open, which unwinds as
+    /// every failed open does: the copy is closed and deleted, the put-back is tried again, and
+    /// the ending names the flag as still holding the run's value.
+    /// </summary>
+    [Fact]
+    public void Open_WhoseCommandFlagWillNotGoBack_FailsAndUnwindsNamingTheFlag()
+    {
+        FakeRemodelSeat seat = Seat();
+        seat.FailingWrites.Add("CommandInProgress=False");
+        var told = new List<RemodelSessionEnd>();
+        BridgeServices services = Services(seat, _runDirectory);
+        services.RemodelSessionEnded = told.Add;
+        var dispatcher = new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+
+        BridgeResponse response = dispatcher.Dispatch(OpenRequest(Probe(dispatcher)));
+
+        Assert.Equal(BridgeStatus.Error, response.Status);
+        Assert.False(File.Exists(_copyPath));
+        Assert.Null(dispatcher.RemodelTargetPath);
+        RemodelSessionEnd outcome = Assert.Single(told);
+        Assert.Equal(RemodelSessionEnd.ReasonOpenFailed, outcome.Reason);
+        Assert.Equal(new[] { RemodelSystemToggles.CommandInProgressSetting }, outcome.SettingsOutstanding);
+    }
+
+    /// <summary>
+    /// U27: every native step of <c>remodel.open</c> - and the file work between them - has a
+    /// <c>before</c> marker written ahead of it and an <c>after</c> marker once it returns, in the
+    /// exact order the open makes them. The marker for <c>OpenDoc7</c> is asserted from inside
+    /// the seat's open, the only moment that proves it was written first.
+    /// </summary>
+    [Fact]
+    public void Open_WritesABeforeMarkerAheadOfEveryStepAndAnAfterMarkerOnceItReturns()
+    {
+        FakeRemodelSeat seat = Seat();
+        BridgeServices services = Services(seat, _runDirectory);
+        var markers = new List<string>();
+        services.RemodelStage = (command, marker) =>
+        {
+            Assert.Equal(RemodelCommands.Open, command);
+            markers.Add(marker);
+        };
+        seat.DuringCall = _ => Assert.Equal("before OpenDoc7", markers.Last());
+        var dispatcher = new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+        string probeId = Probe(dispatcher);
+        Assert.Empty(markers);
+
+        Ok<RemodelOpenResult>(dispatcher.Dispatch(OpenRequest(probeId)));
+
+        Assert.Equal(
+            new[]
+            {
+                "GetOpenDocumentByName",
+                "GetSaveFlag",
+                "CanTrustSaveFlag",
+                "ListExternalFileReferencesCount2",
+                "RecordSource",
+                "RemodelSystemToggles.Apply",
+                "File.Copy",
+                "OpenDoc7",
+                "AssertOpenedAtCopy",
+                "ICustomPropertyManager.Add3",
+                "IFeatureManager.EditRollback",
+                "GetFeatures",
+                "IsRolledBack",
+                "IModelDoc2.ForceRebuild3",
+                "GetWhatsWrongCount",
+                "ReadSignals",
+                "GetSaveFlag",
+                "GetUnits",
+                "ISldWorks.set_CommandInProgress",
+            }.SelectMany(step => new[] { "before " + step, "after " + step }),
+            markers);
+    }
+
+    /// <summary>A step that throws leaves <c>failed</c> in place of its <c>after</c>, and the open's unwind follows.</summary>
+    [Fact]
+    public void Open_AStepThatThrowsLeavesAFailedMarkerInPlaceOfItsAfterMarker()
+    {
+        FakeRemodelSeat seat = Seat();
+        seat.OpenFailure = new InvalidOperationException("OpenDoc7 failed");
+        BridgeServices services = Services(seat, _runDirectory);
+        var markers = new List<string>();
+        services.RemodelStage = (_, marker) => markers.Add(marker);
+        var dispatcher = new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+
+        Assert.Equal(BridgeStatus.Error, dispatcher.Dispatch(OpenRequest(Probe(dispatcher))).Status);
+
+        int failed = markers.IndexOf("failed OpenDoc7");
+        Assert.True(failed > 0, "no failed marker for OpenDoc7.");
+        Assert.Equal("before OpenDoc7", markers[failed - 1]);
+        Assert.DoesNotContain("after OpenDoc7", markers);
+
+        // The unwind's own steps are marked too, after the failure, so a crash inside the
+        // clean-up is attributable as well.
+        Assert.Equal(
+            new[] { "before unwind.CloseDoc", "after unwind.CloseDoc", "before unwind.DeleteCopy",
+                "after unwind.DeleteCopy", "before unwind.PutBackSettings", "after unwind.PutBackSettings" },
+            markers.Skip(failed + 1));
     }
 
     [Fact]

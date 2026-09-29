@@ -357,33 +357,54 @@ public sealed class RemodelHostTests
         }
     }
 
+    /// <summary>
+    /// U26: the host no longer refuses a read-only source whose save flag the probe believed.
+    /// What happens to the source file itself is asserted where the real copy code runs, not over
+    /// this fake pipeline, which never touches it: <c>RemodelOpenHandlerTests</c>'
+    /// <c>ProbeAndOpen_OnAReadOnlySourceFile_MakeAWritableCopyAndLeaveTheSourceExactlyAsItWas</c>
+    /// and <c>RemodelCopyTests.AReadOnlySourceIsCopiedAndTheCopyIsWritable</c>.
+    /// </summary>
     [Fact]
-    public void SavedReadOnlySourceCanBePlannedWithoutChangingTheSource()
+    public void ACleanReadOnlySourceIsNotRefusedByTheHost()
     {
         using (var world = new RemodelWorld())
         {
-            string source = world.CreateSourceFile();
-            File.SetAttributes(source, File.GetAttributes(source) | FileAttributes.ReadOnly);
-            byte[] before = File.ReadAllBytes(source);
-            DateTime writeTime = File.GetLastWriteTimeUtc(source);
             world.Open();
             world.Pipeline.Signals.ReadOnly = true;
+            world.Pipeline.Signals.SaveFlagDirty = false;
 
-            try
-            {
-                world.Receive("remodel.plan", "p1", new { });
+            world.Receive("remodel.plan", "p1", new { });
 
-                Assert.Equal(1, world.Pipeline.Count("copy"));
-                Assert.Equal(1, world.Pipeline.Count("plan"));
-                Assert.DoesNotContain(source, world.Pipeline.Opened);
-                Assert.Equal(before, File.ReadAllBytes(source));
-                Assert.Equal(writeTime, File.GetLastWriteTimeUtc(source));
-                Assert.True(File.GetAttributes(source).HasFlag(FileAttributes.ReadOnly));
-            }
-            finally
-            {
-                File.SetAttributes(source, FileAttributes.Normal);
-            }
+            Assert.Equal(1, world.Pipeline.Count("copy"));
+            Assert.Equal(1, world.Pipeline.Count("plan"));
+        }
+    }
+
+    /// <summary>
+    /// U26 (default taken 2026-09-28, the owner may revise): a read-only source whose save flag
+    /// the probe could not believe - SOLIDWORKS set to discard changes to read-only documents
+    /// without asking, so unsaved edits read as clean - is refused before any copy, and the
+    /// refusal names the option and the two ways past it.
+    /// </summary>
+    [Fact]
+    public void AReadOnlySourceWhoseUnsavedChangesCannotBeSeenIsRefusedNamingTheOption()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Pipeline.Signals.ReadOnly = true;
+            world.Pipeline.Signals.SaveFlagDirty = null;
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            JsonElement error = world.Reply("error", "p1");
+            Assert.Equal("ScopeRefused", error.GetProperty("error_class").GetString());
+            string message = error.GetProperty("message").GetString()!;
+            Assert.Contains("signal_unresolved: save_flag_dirty", message);
+            Assert.Contains("Don't prompt to save read-only referenced documents", message);
+            Assert.Contains("turn that option off", message);
+            Assert.Contains("check the part out", message);
+            world.AssertNothingWasCopied();
         }
     }
 

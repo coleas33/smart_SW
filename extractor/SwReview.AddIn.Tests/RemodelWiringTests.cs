@@ -95,6 +95,44 @@ public sealed class RemodelWiringTests
     }
 
     /// <summary>
+    /// U27 (2026-09-28): while a remodel plan or run is in flight - when <c>OpenDoc7</c> on the copy
+    /// raises the active-document event inside the bridge's open - the fan-out is bracketed by a
+    /// begin and an end line in <c>addin.log</c>, so a native exit inside it is attributable. The
+    /// begin line is written before the fan-out starts and the end line even when it throws; a
+    /// log that fails changes nothing; and outside a run nothing is written.
+    /// </summary>
+    [Fact]
+    public void ADocumentChangeDuringARemodelRunIsBracketedInTheAddInLogAndOtherwiseNot()
+    {
+        var lines = new List<string>();
+        var seen = new List<string>();
+
+        SwReviewAddIn.TraceFanOutDuringARemodelRun(true, lines.Add, () => seen.AddRange(lines));
+        Assert.Equal(new[] { "active document changed during a remodel run: fan-out begin" }, seen);
+        Assert.Equal(
+            new[]
+            {
+                "active document changed during a remodel run: fan-out begin",
+                "active document changed during a remodel run: fan-out end",
+            },
+            lines);
+
+        lines.Clear();
+        Assert.Throws<InvalidOperationException>(() => SwReviewAddIn.TraceFanOutDuringARemodelRun(
+            true, lines.Add, () => throw new InvalidOperationException("a tab failed")));
+        Assert.Equal(2, lines.Count);
+
+        int ran = 0;
+        SwReviewAddIn.TraceFanOutDuringARemodelRun(true, _ => throw new IOException("log unavailable"), () => ran++);
+        Assert.Equal(1, ran);
+
+        lines.Clear();
+        SwReviewAddIn.TraceFanOutDuringARemodelRun(false, lines.Add, () => ran++);
+        Assert.Equal(2, ran);
+        Assert.Empty(lines);
+    }
+
+    /// <summary>
     /// 004 T167, lanes D and E integrated: every ending of a remodel session the tool service
     /// reports - <c>remodel.close</c>'s, and the teardown a re-attach or an unload runs - is handed
     /// to the Remodel host as the routine reported it, read through the field per call (the host

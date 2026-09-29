@@ -74,11 +74,13 @@ from swreview.ir.models import EvidencePackage
 from swreview.remodel.apply_log import ChangeRecord, changes_path
 from swreview.remodel.artifacts import NOT_MODEL_CHECK, carry_forward_exceptions
 from swreview.remodel.attestation import (
+    ATTESTATION_FILE_NAME,
     attestation_from_open,
     read_attestation,
+    recheck,
     write_attestation,
 )
-from swreview.remodel.geometry import reading_from_reply
+from swreview.remodel.geometry import MASS_PROPERTIES_STATUS_OK, reading_from_reply
 from swreview.remodel.plan import (
     PACKAGE_BEFORE,
     RemodelPlan,
@@ -703,10 +705,12 @@ class RemodelServer:
     async def close_copy(self, request: Request) -> Response:
         """`POST /remodel/close`: close the copy's document; discard it only if asked."""
         body = await _json(request)
-        resolve_run_dir(body.get("run_dir"), self.run_root)
+        run_dir = resolve_run_dir(body.get("run_dir"), self.run_root)
         discard = bool(body.get("discard_copy"))
         client = self._client(body)
-        return JSONResponse(await run_in_threadpool(partial(self._close, client, discard)))
+        return JSONResponse(
+            await run_in_threadpool(partial(self._close, client, discard, run_dir))
+        )
 
     # --- the work ---------------------------------------------------------------------
 
@@ -766,6 +770,7 @@ class RemodelServer:
             self._close_after_failed_open(client)
             # The helper reports close failures separately; returned does not assert closed.
             _open_phase(run_dir, "cleanup.returned")
+            self._recheck_unverified_attestation(run_dir)
             raise
 
     def _record_open(
@@ -795,12 +800,24 @@ class RemodelServer:
         geometry = _call("remodel.geometry", client.geometry)
         _open_phase(run_dir, "baseline_geometry.returned")
         try:
-            reading_from_reply(geometry)
+            baseline = reading_from_reply(geometry)
         except (ValidationError, ValueError, TypeError) as exc:
             raise RunFolderFailed(
                 f"remodel.geometry answered a reading this build cannot read, so the run "
                 f"has no baseline to compare against: {exc}"
             ) from exc
+        if baseline.status != MASS_PROPERTIES_STATUS_OK or not baseline.recalculated:
+            # U27 (default taken 2026-09-28, the owner may revise): a reading the bridge took
+            # but could not use is not a baseline. The bridge keeps stamping `copy_at_open`
+            # until a usable one exists, so a run filed on this one could only end in the
+            # gate refusing its final reading as a subject mismatch. It stops here instead,
+            # and `_open` ends the session, before `open.json` exists.
+            raise RunFolderFailed(
+                f"remodel.geometry measured the copy but the reading is not usable (status "
+                f"{baseline.status}, Recalculate {'true' if baseline.recalculated else 'false'}),"
+                f" so the run has no usable baseline to compare against; the copy was closed "
+                f"and nothing was planned"
+            )
 
         record = {
             "copy_path": str(copy_path),
@@ -1004,18 +1021,48 @@ class RemodelServer:
             )
         job.deliver(_package(expected, PackageAfterRefused, PackageAfterRefused))
 
-    def _close(self, client: Any, discard_copy: bool) -> dict[str, Any]:
+    def _close(self, client: Any, discard_copy: bool, run_dir: Path) -> dict[str, Any]:
         try:
             _answered(client.close_document(discard_copy), "remodel.close")
         except BridgeDocumentClosedError:
             # A copy that is not open is a no-op: Discard after a refusal that already
             # closed the document is the same request, and it has already been honoured.
-            return {"closed": True}
+            pass
         except RemodelError as exc:
             raise _refusal(exc) from exc
         except BridgeError as exc:
             raise _unavailable("remodel.close", str(exc)) from exc
+        if not any(job.run_dir == run_dir and job.live for job in self.jobs.values()):
+            self._recheck_unverified_attestation(run_dir)
         return {"closed": True}
+
+    def _recheck_unverified_attestation(self, run_dir: Path) -> None:
+        """Re-check an attestation nothing has re-checked yet, and file the verdict.
+
+        U26 (default taken 2026-09-28, the owner may revise): the re-check used to happen only
+        in phase D, which no run reaches while Start is switched off, so a plan-only run - and
+        an open that failed after the attestation was written - left `rechecked_at` and
+        `matches` null. Closing the copy is the natural moment: a hash compare, the source only
+        read, the recorded half carried across word for word. A verdict already filed - phase
+        D's - is the run's and is never overwritten; a run still in flight re-checks itself.
+        This never raises: the close already has its answer, and a verdict that could not be
+        written is logged, the key redacted, and leaves the record as it was.
+        """
+        if not (run_dir / ATTESTATION_FILE_NAME).is_file():
+            return
+        try:
+            attestation = read_attestation(run_dir)
+            if attestation.rechecked_at is not None:
+                return
+            write_attestation(run_dir, recheck(attestation, at=datetime.now(UTC)).attestation)
+        except (OSError, ValueError, TypeError, KeyError) as exc:
+            logger.warning(
+                "%s",
+                self.redact(
+                    f"the source attestation in {run_dir.name} could not be re-checked at close: "
+                    f"{type(exc).__name__}"
+                ),
+            )
 
     # --- the bridge, the job and the worker ------------------------------------------
 

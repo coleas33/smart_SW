@@ -1182,8 +1182,12 @@ public sealed class ToolServiceWiringTests
 
     // ---- remodel.log (T070) ---------------------------------------------------------------------
 
+    /// <summary>
+    /// A begin line ahead of the command (U27, 2026-09-28) and one redacted completed line after
+    /// it, both in the run folder's <c>remodel.log</c>.
+    /// </summary>
     [Fact]
-    public void EveryRemodelRequestGetsOneRedactedLineInTheRunFoldersRemodelLog()
+    public void EveryRemodelRequestGetsABeginLineAndOneRedactedLineInTheRunFoldersRemodelLog()
     {
         using (var run = new TempRunFolder())
         {
@@ -1192,7 +1196,8 @@ public sealed class ToolServiceWiringTests
             service.Dispatch(RemodelCommands.Rename, RemodelReads, RemodelWrites);
 
             string written = File.ReadAllText(run.RemodelLogPath);
-            Assert.Equal(1, Occurrences(written, "\n"));
+            Assert.Equal(2, Occurrences(written, "\n"));
+            Assert.EndsWith("command=" + RemodelCommands.Rename + " begin", File.ReadAllLines(run.RemodelLogPath)[0], StringComparison.Ordinal);
             Assert.Contains("command=" + RemodelCommands.Rename, written, StringComparison.Ordinal);
             Assert.Contains("elapsed_ms=", written, StringComparison.Ordinal);
             Assert.Contains("gated=", written, StringComparison.Ordinal);
@@ -1797,21 +1802,60 @@ public sealed class ToolServiceWiringTests
     // `ToolServiceOptions.RemodelSessionEnded`. Over the real host, the real dispatcher behind
     // the real pipe server, the bridge's fake seat and copy, and a fake application thread.
 
+    /// <summary>
+    /// U27 (2026-09-28), over the real host and its real log writers: every call
+    /// <c>remodel.geometry</c> makes on the copy finds its own <c>before</c> marker already the
+    /// last line of the run's <c>remodel.log</c> on disk when it starts - read from the file inside
+    /// the fake call - and the request's begin line comes before the first marker and its
+    /// completed line after the last. No secret reaches the file.
+    /// </summary>
     [Fact]
-    public void GeometryWritesCallBoundaryMarkersBeforeItsCompletedRequestLine()
+    public void EachGeometryCallFindsItsBeforeMarkerOnDiskWhenItStarts()
     {
         using (var world = new SeatedHostWorld())
         {
             world.PlanOnTheSeat();
+            string remodelLog = Path.Combine(world.RunDirectory, RemodelRunLog.FileName);
+            var seen = new List<string>();
+            Action<string> inside = member => seen.Add(member + " | " + LiveFile.ReadAllLines(remodelLog).Last());
+            world.Copy.DuringCall = inside;
+            world.Copy.MassProperty!.DuringCall = inside;
 
             Assert.Equal(BridgeStatus.Ok, world.Remodel(RemodelCommands.Geometry, new { }).Status);
 
-            string[] lines = File.ReadAllLines(Path.Combine(world.RunDirectory, RemodelRunLog.FileName));
-            int before = Array.FindIndex(lines, line => line.Contains("stage=before GetBodies2:solid"));
-            int after = Array.FindIndex(lines, line => line.Contains("stage=after GetBodies2:solid"));
+            Assert.NotEmpty(seen);
+            Assert.All(seen, entry => Assert.Contains("command=remodel.geometry stage=before ", entry));
+
+            string[] lines = LiveFile.ReadAllLines(remodelLog);
+            int begin = Array.FindIndex(lines, line => line.EndsWith("command=remodel.geometry begin", StringComparison.Ordinal));
+            int first = Array.FindIndex(lines, line => line.Contains("command=remodel.geometry stage=before "));
+            int last = Array.FindLastIndex(lines, line => line.Contains("command=remodel.geometry stage=after "));
             int completed = Array.FindIndex(lines, line => line.Contains("command=remodel.geometry status=ok"));
-            Assert.True(0 <= before && before < after && after < completed);
+            Assert.True(0 <= begin && begin < first && first < last && last < completed);
             Assert.DoesNotContain(world.Host.RemodelSecret, string.Join("\n", lines), StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// The same for <c>remodel.open</c>, before any run exists: its markers go to the folder the
+    /// host bound for it, and <c>OpenDoc7</c> finds its <c>before</c> marker on disk when it starts.
+    /// </summary>
+    [Fact]
+    public void OpenDoc7FindsItsBeforeMarkerOnDiskInTheBoundRunFolderWhenItStarts()
+    {
+        using (var world = new SeatedHostWorld())
+        {
+            string remodelLog = Path.Combine(world.RunDirectory, RemodelRunLog.FileName);
+            string? lastLine = null;
+            world.Seat.DuringCall = _ => lastLine = LiveFile.ReadAllLines(remodelLog).Last();
+
+            world.PlanOnTheSeat();
+
+            Assert.NotNull(lastLine);
+            Assert.EndsWith("command=remodel.open stage=before OpenDoc7", lastLine!);
+            string[] lines = LiveFile.ReadAllLines(remodelLog);
+            Assert.Contains(lines, line => line.EndsWith("command=remodel.open stage=after ISldWorks.set_CommandInProgress", StringComparison.Ordinal));
+            Assert.Contains(lines, line => line.Contains("command=remodel.open status=ok"));
         }
     }
 
@@ -1830,10 +1874,11 @@ public sealed class ToolServiceWiringTests
             Assert.Equal(world.App.ThreadId, ending.ThreadId);
             Assert.False(ending.PipeHadStopped, "the teardown ran after the pipe server was disposed");
 
-            // The copy closed unsaved, the four settings back, CommandInProgress last.
+            // The copy closed unsaved and the three toggles back; CommandInProgress went back at
+            // the open already (U27), so the teardown does not write it.
             Assert.Equal(world.CopyPath, Assert.Single(world.Seat.Closed));
             Assert.DoesNotContain(nameof(RemodelFakes.FakeRemodelDocument.Save), world.Copy.Members);
-            Assert.Equal("CommandInProgress=False", world.Seat.ToggleWrites.Last());
+            Assert.Equal(new[] { "10=False", "77=False", "329=False" }, world.Seat.ToggleWrites);
             Assert.True(File.Exists(world.CopyPath));
 
             string teardown = Assert.Single(world.LogLines, line => line.Contains("remodel teardown"));
@@ -1877,7 +1922,7 @@ public sealed class ToolServiceWiringTests
             // The close's confirmation (004 T179) is in the set, straight after the close.
             Assert.Contains(
                 " gated=ICustomPropertyManager.Delete2,ISldWorks.CloseDoc,GetOpenDocumentByName,"
-                + "ISldWorks.SetUserPreferenceToggle,ISldWorks.set_CommandInProgress",
+                + "ISldWorks.SetUserPreferenceToggle ",
                 teardown,
                 StringComparison.Ordinal);
             Assert.Contains(" target=" + world.CopyPath, teardown, StringComparison.Ordinal);
@@ -1898,18 +1943,18 @@ public sealed class ToolServiceWiringTests
         {
             world.PlanOnTheSeat();
             world.Seat.CloseFailure = new System.Runtime.InteropServices.COMException("CloseDoc refused");
-            world.Seat.FailingWrites.Add("CommandInProgress=False");
+            world.Seat.FailingWrites.Add("329=False");
 
             world.Host.Dispose();
 
             RemodelSessionEnd outcome = Assert.Single(world.Told).Outcome;
             Assert.False(outcome.Succeeded);
             Assert.False(outcome.CopyClosed);
-            Assert.Equal(new[] { RemodelSystemToggles.CommandInProgressSetting }, outcome.SettingsOutstanding);
+            Assert.Equal(new[] { "swWarnSaveUpdateErrors" }, outcome.SettingsOutstanding);
 
             string teardown = Assert.Single(world.LogLines, line => line.Contains("remodel teardown"));
             Assert.Contains(" copy_closed=false ", teardown, StringComparison.Ordinal);
-            Assert.Contains(" settings_restored=3 settings_outstanding=CommandInProgress ", teardown, StringComparison.Ordinal);
+            Assert.Contains(" settings_restored=3 settings_outstanding=swWarnSaveUpdateErrors ", teardown, StringComparison.Ordinal);
             Assert.Contains("failures=\"close: COMException: CloseDoc refused", teardown, StringComparison.Ordinal);
             Assert.True(world.PipeStopped, "the pipe server was not disposed");
         }
@@ -2670,11 +2715,17 @@ public sealed class ToolServiceWiringTests
 
         public int ApplicationThreadId => _app.ThreadId;
 
-        /// <summary>The tool-service log as written: one line per request.</summary>
+        /// <summary>
+        /// The tool-service log as written: a begin line ahead of each request (U27) and its
+        /// completed line after it.
+        /// </summary>
         public string Log => _log.ToString();
 
+        /// <summary>The completed lines, one per request: the begin lines are left out.</summary>
         public string[] LogLines =>
-            Log.Split(new[] { System.Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
+            Log.Split(new[] { System.Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries)
+                .Where(line => !line.EndsWith(" begin", StringComparison.Ordinal))
+                .ToArray();
 
         /// <summary>Every run id the review host's lookup was asked about, in order.</summary>
         public IReadOnlyList<string> LookupRunIds

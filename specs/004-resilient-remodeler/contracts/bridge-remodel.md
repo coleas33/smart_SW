@@ -111,6 +111,20 @@ Sequence:
 5. Read the scope signals, one VERIFIED call per row of the table below, and return them with a
    `probe_id` this bridge session mints and keeps beside the canonicalized `source_path`.
 
+*Amended 2026-09-28 (U26; default taken 2026-09-28, the owner may revise; `tasks.md` T186,
+research R16.3):* a false save flag is returned as `save_flag_dirty: false` only where it can be
+believed. The API help's remark on `IModelDoc2::GetSaveFlag`: a model opened read-only is reported
+dirty only while the system option "Don't prompt to save read-only referenced documents (discard
+changes)" (`swUserPreferenceToggle_e.swExtRefNoPromptOrSave`, VERIFIED value 15) is off. So after
+step 5 the probe reads `IModelDoc2.IsOpenedReadOnly()` (VERIFIED) and, when the source is open
+read-only, its file is read-only (a checked-in vault part), or either is unknown, also
+`ISldWorks.GetUserPreferenceToggle(15)`. Unless that option reads off, `save_flag_dirty` is `null`
+(unresolved) - never `false` - and the host refuses the run before any copy, naming the option and
+the two ways past it (turn it off, or check the part out). A read SOLIDWORKS will not answer is
+unknown, never clean. The probe's read-only surface is fifteen members: the thirteen and these two,
+both reads, the option gated under the bare key the system toggles are read under
+(`GetUserPreferenceToggle`).
+
 **The verdict is not made here.** The pure `remodel/scope.py` decides it in Python from the
 signals, so the refusal table is table-testable with no seat, and the host refuses the run without
 ever calling `remodel.open`. The v1 RMS-named-folder refusal (`rms_named_folder_wrong_members`) is
@@ -166,7 +180,10 @@ Sequence, in order, with the call that performs each step:
 3. `IModelDoc2.GetSaveFlag()` (VERIFIED) is false and
    `ListExternalFileReferencesCount2()` (VERIFIED) is 0, re-read on the still-open source, because
    the engineer may have edited it between the probe and the run. Otherwise `source_dirty` or
-   `external_refs`.
+   `external_refs`. *Amended 2026-09-28 (U26, T186):* the false save flag must still be believable
+   by the probe's rule - a source open read-only, or read-only on disk, whose "Don't prompt to save
+   read-only referenced documents" option was turned on since the probe is refused
+   `scope_changed`, before the copy.
 4. `copy_path` passes `AssertSaveTarget` (`guard-allowlist.md`): inside this run's folder,
    canonicalized, `.SLDPRT`, not the source, not another run's copy.
 5. Record the source attestation: absolute path, length, `LastWriteTimeUtc`, SHA-256, and, when
@@ -182,13 +199,24 @@ Sequence, in order, with the call that performs each step:
    (**UNVERIFIED that it suppresses the "Cannot reorder" message box; PROBE-1, blocking**),
    recording each previous value for the `finally` restore. Four writes, two allowlist keys
    (`guard-allowlist.md`): `CommandInProgress` is a property and is not covered by the toggle
-   member.
+   member. *Amended 2026-09-28 (U27; default taken 2026-09-28, the owner may revise; `tasks.md`
+   T185, research R16.2):* `CommandInProgress` is true only while this command runs its own
+   sequence of calls: once step 12 has read the copy it is put back to its original value, before
+   the session exists - a put-back that fails fails the open, whose unwind tries it again and names
+   it - and only the three dialog toggles hold for the session. The API help says to set it before
+   a sequence of calls and back after it, and that it affects only out-of-process applications; it
+   was held true for the whole session when SOLIDWORKS exited during the first baseline reading. A
+   change command that needs it once PROBE-1 has answered sets it around itself (T180).
 7. `File.Copy(source, copy_path, overwrite: false)`. On a sharing violation, fall back to
    `new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)` copied into a
    destination opened `FileMode.CreateNew`, so refuse-to-overwrite survives the fallback
    (PROBE-13). When `File.Copy` carries a source's read-only attribute across, clear it on the
    newly created run copy only. The source's attributes are unchanged. Failure is `copy_failed`;
-   an existing destination is `copy_exists`.
+   an existing destination is `copy_exists`. *Amended 2026-09-28 (U26, T186):* clearing the
+   attribute is a step of its own, outside the copy's error handling: when it fails the answer is
+   `copy_failed` ("was made but could not be made writable"), never `copy_exists`, and the
+   read-only copy is deleted - its attribute cleared first, since a read-only file will not delete
+   - or, if even that fails, the sentence says where it was left.
 8. `OpenDoc7` with `Silent | LoadModel = 17` exactly, and **never** `ReadOnly(2)` or
    `ViewOnly(4)` (VERIFIED values; asserted as an integer in a unit test). Then assert
    `GetPathName()` equals `copy_path` and does not equal `source_path`.
@@ -221,6 +249,14 @@ copy deleted whatever the close did, and all four settings restored - each step 
 the others did, and none of their failures replaces the error the open answers. The ending is then
 told to `BridgeServices.RemodelSessionEnded` with the reason `remodel.open`, `copy_closed` true when
 no document was opened, and `verified` and `tag_removed` false.
+
+*Amended 2026-09-28 (U27; default taken 2026-09-28, the owner may revise; `tasks.md` T185,
+research R16.1):* each step above that calls SOLIDWORKS, and the file work between them, is marked
+in the bound run folder's `remodel.log` before it starts and after it returns
+(`command=remodel.open stage=before <step>`, `after`, or `failed` on a managed exception;
+`run-artifacts.md`), and so are the unwind's close, delete and put-back (`unwind.CloseDoc`,
+`unwind.DeleteCopy`, `unwind.PutBackSettings`). A native exit leaves the step that was running as
+the last `before` marker with no `after`.
 
 The returned `scope_signals` are the copy's, measured at step 12, and are what the plan records:
 the plan should describe the document the run actually changed. The probe's signals are what the
@@ -385,7 +421,12 @@ treats it as a limit hit, so the run finalizes as `truncated` rather than hangin
 is the scope's copy, and the gate compares that copy against itself: `subject: "copy_at_open"` is
 the reading taken immediately after `remodel.open` returns and before the first change,
 `subject: "copy_at_end"` the one taken after the last change. The C# side stamps the `subject`
-from the run's own phase, so the caller cannot ask for a reading of anything else.
+from the run's own phase, so the caller cannot ask for a reading of anything else. *Amended
+2026-09-28 (U27; default taken 2026-09-28, the owner may revise; research R16.1):* the phase is
+counted in **usable** readings - status `OK` and `Recalculate()` true - so a reading that failed
+leaves the next one `copy_at_open`, and only usable readings count toward `remodel.save`'s two.
+`POST /remodel/open` refuses a baseline that is not usable (`backend-remodel.md`), so a run never
+goes on from one to a later reading.
 
 FR-037 says the source is never opened for this comparison, in any mode, and that no reference
 body is inserted into any tree, so `IPartDoc.InsertPart3` appears nowhere in stage 1. The baseline
@@ -399,6 +440,25 @@ Measured in C# because the measurement calls take ByRef out-parameters that the 
 cannot marshal; **decided in Python**, because the verdict must be table-testable with no seat.
 `remodel/geometry.py::evaluate(before, after, tolerances) -> GateResult` has **no COM in its
 signature**.
+
+*Superseded 2026-09-28 for the copy's reading (U27; default taken 2026-09-28, the owner may
+revise; `tasks.md` T185, research R16.1):* the reading is of the **whole part**, the sequence the
+review dump's `PropertyDumper` makes on every part and the one sequence proven on the seat - the
+copy's selection cleared first through the allowlisted `IModelDoc2.ClearSelection2(true)` behind
+`VerifyTarget` (pre-selected bodies are included in a whole-part mass property), then
+`IPartDoc.GetBodies2` for the solid and sheet counts, the material, the face and edge counts,
+`CreateMassProperty2()`, `UseSystemUnits = true`, `Recalculate()` and the getters - with **no
+`set_AccuracyLevel` and no `set_SelectedItems`**, the two calls no seat had run when SOLIDWORKS
+exited during the first baseline reading; `set_SelectedItems` was handed a plain `object[]`, which
+the SOLIDWORKS programming guide ("IDispatch Object Arrays as Input in .NET") says must be a
+`DispatchWrapper` array, and PROBE-8, the one caller left, now wraps it. `accuracy_level` is
+`null`: the reading set none, and SOLIDWORKS's default applied. The guards a whole-part reading
+needs fail closed: a part with other than one solid body is counted and not measured (status
+`UnknownError`, `recalculated` false); a volume that is not positive and finite ends the reading
+with status `UnknownError` and nothing recorded; `Recalculate()` false is unchanged. Every call is
+marked in `remodel.log` before it starts and after it answers (`command=remodel.geometry
+stage=before <member>`). A mass, centre-of-mass or moment override is **not** yet detected (R16.5,
+T187). The original sequence, kept for the record, follows.
 
 The reading uses the typed interface, not the raw `Object` from `GetMassProperties2`, whose flat
 `double[]` index layout is not discoverable by reflection and has changed across API generations:
@@ -421,7 +481,7 @@ swMassPropertyAccuracyLevel_Higher = 2` (VERIFIED value), `SelectedItems` set to
   "edge_count": 642,
   "mass_kg": 3.21,                     // recorded and compared SEPARATELY, never as geometry
   "material_name": "1060 Alloy",       // IPartDoc.GetMaterialPropertyName2 (VERIFIED)
-  "accuracy_level": 2
+  "accuracy_level": null             // null since U27 (2026-09-28): the reading sets none
   // abridged: `at`, `source_sha256`, `subject`, `recalculated`, `density` and `residual` are
   // part of the record too; data-model.md section 3.1 is the field list.
 }
@@ -442,7 +502,9 @@ Rules this shape encodes, each with a test:
 
 Tolerance profiles, in one pure function, neither of which ships until **PROBE-8** has measured
 the attained error against a part of exactly known analytic volume (a box and a cylinder) at
-`swMassPropertyAccuracyLevel_Higher` and recorded it: a tolerance that has never been compared
+`swMassPropertyAccuracyLevel_Higher` and recorded it (*amended 2026-09-28, U27:* the copy's
+reading now sets no accuracy, so when PROBE-8 has run, either the reading sets
+`swMassPropertyAccuracyLevel_Higher` again or PROBE-8 calibrates at the default; T187 decides): a tolerance that has never been compared
 against a known answer does not ship.
 
 | Profile | volume_rel | area_rel | com_rel | moment_rel | face_count | body_count | Used by |
@@ -543,6 +605,9 @@ ends it: `remodel.close`, a tool-service re-attach, or an add-in unload.
    `RemodelSystemToggles.PutBack` already follows, so an open circuit cannot stop the clean-up.
    When the verification fails, nothing is closed, and the outcome names the check that failed.
 3. In a `finally`, restore all four settings - the three toggles, then `CommandInProgress` last.
+   *Amended 2026-09-28 (U27, T185):* `remodel.open` has already put `CommandInProgress` back, so
+   at the end of a session it is not written and counts as restored; only a toggle still holding
+   the run's value is written or named.
    A restore is safe to run twice.
 4. In an outer `finally`, clear the session and the run root, so the next `remodel.open` is never
    answered `run_in_progress` by a session that is already over.

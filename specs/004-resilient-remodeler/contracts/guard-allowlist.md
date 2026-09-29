@@ -441,13 +441,13 @@ records (`interop-manifest.md`); VERIFIED never means the call behaves.
 | `IEquationMgr.set_Equation` | `SetEquationVerified`'s first attempt: repair an existing global in place (FR-029, `remodel.equation` `op: "set"`) |
 | `IEquationMgr.SetEquationAndConfigurationOption` | `SetEquationVerified`'s fallback for the same job |
 | `IModelDoc2.ForceRebuild3` | the one rebuild call |
-| `IModelDoc2.ClearSelection2` | before and after every selection-based operation |
+| `IModelDoc2.ClearSelection2` | before and after every selection-based operation; *since 2026-09-28 (U27, T185)* also before `remodel.geometry`'s whole-part reading, which includes pre-selected bodies |
 | `IModelDoc2.Save3` | the single save, no filename, behind `AssertSaveTarget` |
 | `IModelDocExtension.SelectByID2` | selection where `Select2` is not enough |
 | `ICustomPropertyManager.Add3` | write the session tag |
 | `ICustomPropertyManager.Delete2` | remove the session tag at close |
 | `ISldWorks.SetUserPreferenceToggle` | the three user-preference toggles (10, 77, 329), restored in a `finally` |
-| `ISldWorks.set_CommandInProgress` | the modal-suppression flag set for the run and restored in the same `finally` (PROBE-1). It is a property, not a `swUserPreferenceToggle_e` value, so it needs its own key |
+| `ISldWorks.set_CommandInProgress` | the modal-suppression flag set for the run and restored in the same `finally` (PROBE-1). It is a property, not a `swUserPreferenceToggle_e` value, so it needs its own key. *Since 2026-09-28 (U27, T185):* set for `remodel.open`'s own calls and put back as its last step |
 | `ISldWorks.CloseDoc` | close the tagged copy |
 
 **`remodel.probe_scope` adds nothing to this list.** The preflight probe that reads the scope

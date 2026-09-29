@@ -74,6 +74,30 @@ public class SwRemodelProbeSourceTests
         Assert.Equal(new[] { "IModelDoc2.GetSaveFlag", "IModelDoc2.ListExternalFileReferencesCount2" }, _source.AllMembers());
     }
 
+    /// <summary>
+    /// U26 (2026-09-28): the two reads that decide whether the save flag can be believed - the
+    /// bound document's <c>IsOpenedReadOnly</c>, and the application's
+    /// <c>GetUserPreferenceToggle(swExtRefNoPromptOrSave = 15)</c> - each exactly once, asking
+    /// nothing else. The option is asked about only once a source is bound, like every read here.
+    /// </summary>
+    [Fact]
+    public void TheReadOnlyStateIsTheBoundDocumentsAndTheOptionIsTheApplicationsToggle15()
+    {
+        _application.Answer("GetOpenDocumentByName", _source.Instance).Answer("GetUserPreferenceToggle", true);
+        _source.Document.Answer("IsOpenedReadOnly", true);
+        var probe = new SwRemodelProbeSource(_application.Instance);
+        probe.IsOpen(SourcePath);
+
+        Assert.True(probe.IsOpenedReadOnly());
+        Assert.True(probe.GetDiscardsReadOnlyChanges());
+
+        Assert.Equal(new[] { "IModelDoc2.IsOpenedReadOnly" }, _source.AllMembers());
+        (string member, object?[] arguments) = _application.Calls.Last();
+        Assert.Equal("GetUserPreferenceToggle", member);
+        Assert.Equal(new object?[] { 15 }, arguments);
+        Assert.Equal(RemodelScopeProbe.DiscardReadOnlyChangesToggle, 15);
+    }
+
     [Fact]
     public void TheSignalsAreTheSharedReadersReadingOfTheBoundSource()
     {
@@ -96,6 +120,8 @@ public class SwRemodelProbeSourceTests
     public static IEnumerable<object[]> BoundReads() => new[]
     {
         new object[] { "GetSaveFlag" },
+        new object[] { "IsOpenedReadOnly" },
+        new object[] { "GetDiscardsReadOnlyChanges" },
         new object[] { "GetExternalReferenceCount" },
         new object[] { "GetDocumentType" },
         new object[] { "GetBodyCount" },
@@ -179,6 +205,12 @@ public class SwRemodelProbeSourceTests
         {
             case "GetSaveFlag":
                 probe.GetSaveFlag();
+                break;
+            case "IsOpenedReadOnly":
+                probe.IsOpenedReadOnly();
+                break;
+            case "GetDiscardsReadOnlyChanges":
+                probe.GetDiscardsReadOnlyChanges();
                 break;
             case "GetExternalReferenceCount":
                 probe.GetExternalReferenceCount();

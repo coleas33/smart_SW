@@ -295,8 +295,22 @@ public static class RemodelCopy
     /// <c>FileMode.CreateNew</c> - <b>never</b> <c>Create</c> - so refuse-to-overwrite survives
     /// the fallback (PROBE-13).
     /// </summary>
-    public static RemodelCopyRoute CreateCopy(string sourcePath, string copyPath)
+    public static RemodelCopyRoute CreateCopy(string sourcePath, string copyPath) =>
+        CreateCopy(sourcePath, copyPath, File.SetAttributes);
+
+    /// <summary>
+    /// <see cref="CreateCopy(string, string)"/> with the write that makes the copy writable given:
+    /// <c>File.SetAttributes</c> in the product, and one that fails in the test of that failure,
+    /// which no real file produces on demand.
+    /// </summary>
+    public static RemodelCopyRoute CreateCopy(
+        string sourcePath, string copyPath, Action<string, FileAttributes> setAttributes)
     {
+        if (setAttributes == null)
+        {
+            throw new ArgumentNullException(nameof(setAttributes));
+        }
+
         string source = Required(sourcePath, nameof(sourcePath));
         string copy = Required(copyPath, nameof(copyPath));
 
@@ -317,8 +331,6 @@ public static class RemodelCopy
         try
         {
             File.Copy(source, copy, overwrite: false);
-            ClearReadOnly(copy);
-            return RemodelCopyRoute.FileCopy;
         }
         catch (IOException primary)
         {
@@ -343,6 +355,12 @@ public static class RemodelCopy
             throw new RemodelCopyError(
                 "copy_failed", $"'{source}' could not be copied to '{copy}': {primary.Message}");
         }
+
+        // Outside the copy's catch (U26 follow-up, default taken 2026-09-28, the owner may
+        // revise): a failure here is not a copy that "appeared", and must not be answered as
+        // copy_exists with a read-only file left where no clean-up could delete it.
+        MakeWritable(copy, setAttributes);
+        return RemodelCopyRoute.FileCopy;
     }
 
     /// <summary>
@@ -505,13 +523,43 @@ public static class RemodelCopy
     /// <c>File.Copy</c> carries the source's attributes across, so a checked-in, read-only vault
     /// part would produce a read-only copy the seat could not save at the end of the run. The
     /// engineer's file keeps its attributes; the run's copy is the one that gets written.
+    ///
+    /// Since U26 (2026-09-28) a checked-in source reaches this, so its failure has an answer of its
+    /// own: <c>copy_failed</c>, naming the step, after the copy is deleted - its read-only
+    /// attribute cleared with <c>File.SetAttributes</c> first, since a read-only file will not
+    /// delete - or, if even that fails, naming where the read-only copy was left.
     /// </summary>
-    private static void ClearReadOnly(string copy)
+    private static void MakeWritable(string copy, Action<string, FileAttributes> setAttributes)
     {
-        FileAttributes attributes = File.GetAttributes(copy);
-        if ((attributes & FileAttributes.ReadOnly) == FileAttributes.ReadOnly)
+        try
         {
-            File.SetAttributes(copy, attributes & ~FileAttributes.ReadOnly);
+            FileAttributes attributes = File.GetAttributes(copy);
+            if ((attributes & FileAttributes.ReadOnly) == FileAttributes.ReadOnly)
+            {
+                setAttributes(copy, attributes & ~FileAttributes.ReadOnly);
+            }
+        }
+        catch (Exception failure) when (failure is IOException || failure is UnauthorizedAccessException)
+        {
+            throw new RemodelCopyError(
+                "copy_failed",
+                $"'{copy}' was made but could not be made writable, so the run could never save it: "
+                + failure.Message + " " + RemoveUnwritableCopy(copy));
+        }
+    }
+
+    /// <summary>The copy <see cref="MakeWritable"/> could not make writable, deleted, and what happened said.</summary>
+    private static string RemoveUnwritableCopy(string copy)
+    {
+        try
+        {
+            File.SetAttributes(copy, FileAttributes.Normal);
+            File.Delete(copy);
+            return "The copy was deleted.";
+        }
+        catch (Exception failure) when (failure is IOException || failure is UnauthorizedAccessException)
+        {
+            return $"The read-only copy is still at '{copy}' and could not be deleted: {failure.Message}";
         }
     }
 
@@ -569,7 +617,7 @@ public static class RemodelCopy
                 + $"The FileShare.ReadWrite read said: {fallback.Message}");
         }
 
-        // No ClearReadOnly here: this route creates a new file and writes bytes into it, so it
+        // No MakeWritable here: this route creates a new file and writes bytes into it, so it
         // never carries the source's attributes across the way File.Copy does.
     }
 

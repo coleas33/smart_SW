@@ -508,7 +508,7 @@ public class RemodelInteropManifestTests
         string[] gated = RemodelScopeProbe.ProbeSurface
             .Concat(new[] { RemodelSession.ResolveMember, RemodelSession.NameMember })
             .ToArray();
-        Assert.Equal(15, gated.Length);
+        Assert.Equal(17, gated.Length);
 
         HashSet<string> recorded = RecordedMembers;
         string[] unrecorded = gated
@@ -1350,6 +1350,10 @@ public class RemodelInteropManifestTests
             {
                 ["Length"] = "SwMassProperty.cs: System.Array.Length, the length of the SAFEARRAY a triple is "
                     + "read from; no interop property named Length is read",
+
+                // U27 (default taken 2026-09-28, the owner may revise).
+                ["Count"] = "SwMassProperty.cs: IReadOnlyList<T>.Count, the number of bodies wrapped in "
+                    + "DispatchWrapper for set_SelectedItems, which has its row; no interop Count is read",
 
                 // Lane B's, found when its files merged (defaults taken 2026-09-27, the owner may revise).
                 ["Add"] = "SwScopeSignalReader.cs, SwRemodelReads.cs and RemodelWhatsWrong.cs: List<T>.Add, "

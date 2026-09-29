@@ -1279,9 +1279,14 @@ public sealed class GeometryReading
     [JsonPropertyName("status")]
     public int Status { get; set; }
 
-    /// <summary><c>swMassPropertyAccuracyLevel_Higher = 2</c> on every reading.</summary>
+    /// <summary>
+    /// The <c>swMassPropertyAccuracyLevel_e</c> the reading set, or null when it set none and
+    /// SOLIDWORKS's default applied - which is every reading since U27 (default taken 2026-09-28,
+    /// the owner may revise): the copy is measured the review dump's way, with no
+    /// <c>set_AccuracyLevel</c>, until PROBE-8 has run that call on a seat.
+    /// </summary>
     [JsonPropertyName("accuracy_level")]
-    public int AccuracyLevel { get; set; }
+    public int? AccuracyLevel { get; set; }
 
     /// <summary><c>IMassProperty2.Recalculate()</c>'s answer, checked <b>before</b> anything was read.</summary>
     [JsonPropertyName("recalculated")]

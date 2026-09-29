@@ -214,6 +214,20 @@ public interface IRemodelProbeSource : IScopeSignalSource
     /// <summary><c>IModelDoc2.GetSaveFlag()</c>: true is <c>source_dirty</c>.</summary>
     bool GetSaveFlag();
 
+    /// <summary>
+    /// <c>IModelDoc2.IsOpenedReadOnly()</c> (U26): whether SOLIDWORKS has the source open
+    /// read-only, which is when <see cref="GetSaveFlag"/>'s false depends on a system option.
+    /// </summary>
+    bool IsOpenedReadOnly();
+
+    /// <summary>
+    /// <c>ISldWorks.GetUserPreferenceToggle(swExtRefNoPromptOrSave)</c> (U26): the system option
+    /// "Don't prompt to save read-only referenced documents (discard changes)". While it is on,
+    /// <see cref="GetSaveFlag"/> does not report a read-only model's unsaved changes (the API
+    /// help's remark on <c>GetSaveFlag</c>).
+    /// </summary>
+    bool GetDiscardsReadOnlyChanges();
+
     /// <summary><c>IModelDoc2.ListExternalFileReferencesCount2()</c>: non-zero is a refusal.</summary>
     int GetExternalReferenceCount();
 }
@@ -288,6 +302,17 @@ public sealed class RemodelScopeProbe
     private const string GetConfigurationNames = "GetConfigurationNames";
     private const string GetTypeName2 = "GetTypeName2";
 
+    // U26: the two reads that decide whether GetSaveFlag's false can be believed. The option is
+    // gated under the bare read key the system toggles are read under.
+    private const string IsOpenedReadOnlyMember = "IsOpenedReadOnly";
+    private const string GetUserPreferenceToggle = RemodelSystemToggles.ReadToggleMember;
+
+    /// <summary>
+    /// <c>swUserPreferenceToggle_e.swExtRefNoPromptOrSave</c> (VERIFIED value 15, swconst
+    /// reflection): "Don't prompt to save read-only referenced documents (discard changes)".
+    /// </summary>
+    public const int DiscardReadOnlyChangesToggle = (int)swUserPreferenceToggle_e.swExtRefNoPromptOrSave;
+
     private static readonly string[] ProbeSurfaceArray =
     {
         GetOpenDocumentByName,
@@ -303,11 +328,14 @@ public sealed class RemodelScopeProbe
         GetImportedFileName,
         GetConfigurationNames,
         GetTypeName2,
+        IsOpenedReadOnlyMember,
+        GetUserPreferenceToggle,
     };
 
     /// <summary>
     /// Every member <c>remodel.probe_scope</c> can gate: the <c>scope_signals</c> table plus
-    /// the four protocol reads. All thirteen are reads, so they take
+    /// the four protocol reads, and since U26 (2026-09-28) the two that decide whether the save
+    /// flag can be believed. All fifteen are reads, so they take
     /// <see cref="RemodelGuard"/>'s delegation branch to <see cref="ReadOnlyGuard"/> and touch
     /// no allowlist entry. A member added to the probe has to be added here and to the
     /// contract's table, which is the point.
@@ -386,9 +414,12 @@ public sealed class RemodelScopeProbe
         }
 
         ScopeSignals signals = ReadSignals(_gate, source);
-        signals.SaveFlagDirty = dirty;
         signals.ExternalReferenceCount = externalReferences;
-        signals.ReadOnly = IsReadOnly(path);
+        signals.ReadOnly = ReadOnlyAttribute(path);
+
+        // U26: a false save flag stands only where it can be believed; otherwise it is unknown,
+        // which the host refuses, naming the option and how to change it.
+        signals.SaveFlagDirty = CanTrustSaveFlag(_gate, source, signals.ReadOnly) ? false : (bool?)null;
         signals.Vault = vault;
 
         var record = new ProbeRecord(
@@ -603,11 +634,60 @@ public sealed class RemodelScopeProbe
         folder.MemberPersistRefs == null ? (int?)null : folder.MemberPersistRefs.Count;
 
     /// <summary>
+    /// U26 (default taken 2026-09-28, the owner may revise): whether a <c>GetSaveFlag()</c> that
+    /// answered false can be believed for the source <paramref name="source"/> has bound. The API
+    /// help's remark on <c>IModelDoc2.GetSaveFlag</c>: a model opened read-only is reported dirty
+    /// only while "Don't prompt to save read-only referenced documents" is off. So:
+    ///
+    ///   * a source open for writing (<c>IsOpenedReadOnly()</c> false) from a writable file: yes,
+    ///     and the option is not read;
+    ///   * otherwise - open read-only, a read-only file (a checked-in vault part), or either one
+    ///     unknown - only when the option reads off.
+    ///
+    /// Could not check is never clean: a read SOLIDWORKS will not answer counts as unknown, and
+    /// an unknown option is not off. A guard refusal or an open circuit is not a read that failed,
+    /// and goes on its way. Used by the probe and by <c>remodel.open</c>'s re-check of the source,
+    /// so the two decide the same way.
+    /// </summary>
+    public static bool CanTrustSaveFlag(SwGate gate, IRemodelProbeSource source, bool? fileReadOnly)
+    {
+        if (gate == null)
+        {
+            throw new ArgumentNullException(nameof(gate));
+        }
+
+        if (source == null)
+        {
+            throw new ArgumentNullException(nameof(source));
+        }
+
+        bool? openedReadOnly = ReadOrUnknown(gate, IsOpenedReadOnlyMember, source.IsOpenedReadOnly);
+        if (openedReadOnly == false && fileReadOnly == false)
+        {
+            return true;
+        }
+
+        return ReadOrUnknown(gate, GetUserPreferenceToggle, source.GetDiscardsReadOnlyChanges) == false;
+    }
+
+    private static bool? ReadOrUnknown(SwGate gate, string member, Func<bool> read)
+    {
+        try
+        {
+            return gate.Call(member, read);
+        }
+        catch (Exception error) when (!(error is MutatingCallError) && !(error is CircuitOpenError))
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
     /// The read-only attribute of the file, read from the filesystem rather than from the seat:
     /// it is a property of the file and gating a call for it would put a member in the probe's
-    /// recorded surface that the contract's table does not name.
+    /// recorded surface that the contract's table does not name. Null when it cannot be read.
     /// </summary>
-    private static bool? IsReadOnly(string path)
+    public static bool? ReadOnlyAttribute(string path)
     {
         try
         {

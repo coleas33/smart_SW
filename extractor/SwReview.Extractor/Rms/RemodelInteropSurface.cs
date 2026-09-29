@@ -282,8 +282,9 @@ public static class RemodelInteropSurface
             .WithUsedBy("remodel.open", "remodel.rebuild")
             .WithNote("one rebuild call, one meaning; EditRebuild3 is excluded"),
         Call("IModelDoc2", "ClearSelection2", Method, "System.Void", true, "All")
-            .WithUsedBy("remodel.folder")
-            .WithNote("around every selection-based operation"),
+            .WithUsedBy("remodel.folder", "remodel.geometry")
+            .WithNote("around every selection-based operation, and before the whole-part geometry "
+                + "reading, which includes pre-selected bodies (U27)"),
         Call("IModelDoc2", "Save3", Method, "System.Boolean", true, "Options", "Errors", "Warnings")
             .WithUsedBy("remodel.save")
             .WithNote("takes no filename; this is the structural reason it cannot reach the source"),
@@ -345,9 +346,10 @@ public static class RemodelInteropSurface
                 + "closed through the same open request"),
         Call("ISldWorks", "GetUserPreferenceToggle", Method, "System.Boolean", false,
             "UserPreferenceToggle")
-            .WithUsedBy("remodel.open")
+            .WithUsedBy("remodel.probe_scope", "remodel.open")
             .WithNote("records each toggle's original value; a value that cannot be read refuses the "
-                + "start"),
+                + "start; U26: reads swExtRefNoPromptOrSave, which decides whether a read-only "
+                + "source's GetSaveFlag can be believed"),
         Call("ISldWorks", "get_CommandInProgress", PropertyGet, "System.Boolean", false)
             .WithUsedBy("remodel.open")
             .WithNote("records the flag's original value for the finally restore"),
@@ -360,6 +362,10 @@ public static class RemodelInteropSurface
         Call("IModelDoc2", "GetSaveFlag", Method, "System.Boolean", false)
             .WithUsedBy("remodel.probe_scope", "remodel.open", "remodel.save")
             .WithNote("the source must not be dirty; after the save it must read false"),
+        Call("IModelDoc2", "IsOpenedReadOnly", Method, "System.Boolean", false)
+            .WithUsedBy("remodel.probe_scope", "remodel.open")
+            .WithNote("U26: a source open read-only reports its unsaved changes through GetSaveFlag "
+                + "only while swExtRefNoPromptOrSave is off"),
         Call("IModelDoc2", "ListExternalFileReferencesCount2", Method, "System.Int32", false)
             .WithUsedBy("remodel.probe_scope", "remodel.open")
             .WithNote("zero, or the run is refused with external_refs"),
@@ -477,11 +483,12 @@ public static class RemodelInteropSurface
             .WithUsedBy("remodel.geometry")
             .WithNote("its Boolean is checked before anything is read"),
         Call("IMassProperty2", "set_AccuracyLevel", PropertySet, "System.Void", false, "Retval")
-            .WithUsedBy("remodel.geometry")
-            .WithNote("swMassPropertyAccuracyLevel_Higher = 2"),
+            .WithUsedBy("PROBE-8")
+            .WithNote("swMassPropertyAccuracyLevel_Higher = 2; not set by remodel.geometry since U27"),
         Call("IMassProperty2", "set_SelectedItems", PropertySet, "System.Void", false, "Retval")
-            .WithUsedBy("remodel.geometry")
-            .WithNote("the body the reading is taken over"),
+            .WithUsedBy("PROBE-8")
+            .WithNote("the body PROBE-8 measures, as a DispatchWrapper array; remodel.geometry reads "
+                + "the whole part since U27"),
 
         // Set before Recalculate, or the numbers come back in the document's display units
         // and the reading's own field names (volume_m3, mass_kg) are wrong (research R12).
@@ -698,7 +705,7 @@ public static class RemodelInteropSurface
             "swSaveAsOptions_SaveReferenced", "swSaveAsOptions_AvoidRebuildOnSave"),
         new RemodelInteropConstants(
             "swUserPreferenceToggle_e", "swInputDimValOnCreate", "swShowErrorsEveryRebuild",
-            "swWarnSaveUpdateErrors"),
+            "swWarnSaveUpdateErrors", "swExtRefNoPromptOrSave"),
         new RemodelInteropConstants("swCustomInfoType_e", "swCustomInfoText"),
         new RemodelInteropConstants(
             "swCustomPropertyAddOption_e", "swCustomPropertyOnlyIfNew", "swCustomPropertyDeleteAndAdd",
