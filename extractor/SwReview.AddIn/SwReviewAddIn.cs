@@ -455,6 +455,7 @@ public class SwReviewAddIn : ISwAddin
             _pane.ReviewChannel, _backend, UserSettings.DefaultPath)
         {
             CurrentDocument = CurrentDocument,
+            DrawingModels = DrawingModels,
             Dump = reviewDump,
             PrepareReview = reviewDump.Prepare,
             EntityResolver = new SwEntityResolver(
@@ -1075,6 +1076,49 @@ public class SwReviewAddIn : ISwAddin
         {
             // A pane whose handle is gone, or a SOLIDWORKS that will not answer: the page is
             // told there is no document, which is the refusal it would get from the host anyway.
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// U25 (default taken 2026-09-28, the owner may revise): the models the open drawing at
+    /// <paramref name="drawingPath"/> shows, once each in sheet-then-view order, for the Review
+    /// tab's sentence naming the model a drawing documents - or null when that cannot be read.
+    ///
+    /// Asked by <see cref="ReviewHost"/> only for a document whose kind is a drawing, never from
+    /// <see cref="CurrentDocument"/> (which runs several times per document switch). Every read goes
+    /// through a gate of its own with the read-only guard - <c>GetOpenDocumentByName</c>,
+    /// <c>GetViews</c> and one <c>GetReferencedModelName</c> per view, the walk open-drawing discovery
+    /// already makes (<see cref="SwOpenDrawingReader.ViewPaths"/>) - on the application thread. Nothing
+    /// is activated, opened or selected, and anything that throws names no model.
+    /// </summary>
+    private IReadOnlyList<string>? DrawingModels(string drawingPath)
+    {
+        ISldWorks? app = _swApp;
+        IApplicationThread? thread = _applicationThread;
+        if (app == null || thread == null || string.IsNullOrWhiteSpace(drawingPath))
+        {
+            return null;
+        }
+
+        try
+        {
+            return thread.Invoke<IReadOnlyList<string>?>(() =>
+            {
+                var gate = new SwGate();
+                if (!(gate.Call("GetOpenDocumentByName", () => app.GetOpenDocumentByName(drawingPath)) is IModelDoc2 drawing))
+                {
+                    return null;
+                }
+
+                return OpenDrawingDiscovery.ModelsShown(SwOpenDrawingReader.ViewPaths(drawing, gate));
+            });
+        }
+        catch (Exception failure)
+        {
+            // Guidance, not a result: a drawing whose views will not answer gets the sentence that
+            // names no model, and the reason goes to the add-in log.
+            Log("The models a drawing shows could not be read: " + failure.GetType().Name);
             return null;
         }
     }

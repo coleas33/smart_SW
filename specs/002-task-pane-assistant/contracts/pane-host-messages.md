@@ -77,7 +77,7 @@ cancels any URL outside `https://swreview.invalid/`.
 
 | type | payload | host action |
 |------|---------|-------------|
-| `ready` | `{}` | Reply `init` with `{backend: {port, origin}, token, settings (no key), run_root, document: {path, configuration} \| null, review_preparation: boolean}`. |
+| `ready` | `{}` | Reply `init` with `{backend: {port, origin}, token, settings (no key), run_root, document: {path, configuration, kind, drawing_guidance?} \| null, review_preparation: boolean}`. *Amended 2026-09-28 (U25; default taken 2026-09-28, the owner may revise; feature 011 `contracts/attach.md` section 5):* `document` is the check tabs' shape, `kind` included, and a drawing's carries `drawing_guidance`, the one sentence the host composes for it (below). |
 | `review.prepare` | `{}` | Read the active component tree without writing a run folder, resolving components, or contacting a model. Reply `review.prepared {preparation_id, document, component_count, unread_count, gap_count, instances, omitted_instances, requires_attention, standards_configured}`. At most 30 unread instances, strings capped at 200 characters. |
 | `review.start` | `{preparation_id?, retry_of?}` | Refuse if no document is open (`error`). A host advertising `review_preparation: true` in `init` requires the single-use id from its latest preparation and the same active document/configuration; otherwise `PreparationExpired`. Create the run folder, run the in-process dump, then `POST /sessions`; reply `review.started {chat_id, run_dir, not_examined, document}` where `not_examined` is the backend's `{sentence, instances}` warning or `null`, and `document` is `{path, configuration}` of the document the dump extracted (captured before the dump, in the shape `init` and `document.changed` carry). The page binds the results on screen to `document`: when `document.changed` names another path (ignoring case) or configuration, or no document, it hides the previous results and disables what acts on them until that document is open again. Progress via `status` messages. |
 | `settings.save` | `{provider, model, effort, api_key \| null, base_url, gemini_enterprise}` | Refuse with `error {error_class: "TurnRunning"}` while any chat has a running turn. Otherwise encrypt the key with DPAPI, write settings, restart the backend with the new environment; reply `settings.saved {settings (no key), key_source}`. A release build refuses `provider: "fake"` (FR-027). |
@@ -119,7 +119,7 @@ of those, and it would invite the next change to remove the redaction as a contr
 | type | payload |
 |------|---------|
 | `status` | `{stage: "extracting" \| "backend_starting" \| "ready" \| "error", message}` |
-| `document.changed` | `{path, configuration} \| null` when the active document changes - and, since feature 009 (FR-022), when the active document's configuration changes: the add-in follows the active part's or assembly's `ActiveConfigChangePostNotify` and runs the same fan-out, so every host posts this with the new configuration |
+| `document.changed` | `{path, configuration, kind, drawing_guidance?} \| null` when the active document changes - and, since feature 009 (FR-022), when the active document's configuration changes: the add-in follows the active part's or assembly's `ActiveConfigChangePostNotify` and runs the same fan-out, so every host posts this with the new configuration. *`kind` and a drawing's `drawing_guidance` added 2026-09-28 (U25), as `init`'s* |
 | `backend.stopped` | `{exit_code, log_path}` |
 | `events.frame` | `{chat_id, frame}` — one raw SSE frame, the text between blank lines, redacted of every configured secret and with its line endings normalised to `\n`; unparsed otherwise |
 | `events.closed` | `{chat_id, reason}` — the backend closed the stream or the read failed; the page decides whether to reopen, and with which `last_event_id` |
@@ -188,6 +188,8 @@ The check run folder is `<run_root>/<yyyyMMdd-HHmmss>-<doc>-check`, named throug
 | `status` | `{stage: "extracting" \| "backend_starting" \| "ready" \| "error", message}` |
 | `document.changed` | `{path, configuration, kind} \| null` when the active document changes |
 | `backend.stopped` | `{exit_code, log_path}` |
+
+*Amended 2026-09-28 (U25; default taken 2026-09-28, the owner may revise):* the Review page decides with `kind` too, since it disables Review for a drawing rather than letting the engineer press a button the host will refuse, so its rows carry `kind` - from the same `CheckPaneHost.DocumentPayload`, so the pages cannot disagree - and it never reads a drawing from the path's extension. A drawing's payload also carries `drawing_guidance`: the sentence `ReviewHost.DrawingSentence` composes, naming the model the drawing's views show when they say which (the first, in sheet-then-view order, by file name; the rest counted), which the page prints as sent in its banner and on a Retry it will not send, and which the host's `DrawingActive` refusal carries too. The paragraph below is kept for the record.
 
 `kind` is on this page's row and not on the Review page's because this page decides with it:
 the Model check reads a part's feature tree, so the tab says whether a check can run at all

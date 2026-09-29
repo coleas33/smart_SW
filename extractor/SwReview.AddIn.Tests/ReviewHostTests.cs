@@ -97,21 +97,32 @@ public sealed class ReviewHostTests
 
     // ---- a drawing (feature 011 T015, contracts/attach.md section 5) --------------------------
 
-    /// <summary>
-    /// The clause the Review tab's refusal of a drawing gains: the drawing is not reviewed on its
-    /// own, and it is read with the part or assembly it documents while it stays open (feature
-    /// 011's open-drawing discovery).
-    /// </summary>
-    private const string DrawingClause =
-        "; open the part or assembly it documents - this drawing is read with it while it stays open.";
-
     private const string DrawingPath = @"C:\Fictional\plate\plate.SLDDRW";
 
+    private const string PlatePath = @"C:\Fictional\plate\plate.SLDPRT";
+
+    /// <summary>
+    /// U25 (default taken 2026-09-28, the owner may revise; feature 011 `contracts/attach.md`
+    /// section 5): the one sentence for a drawing, composed by the host once - the Review page's
+    /// banner prints it and the refusal carries it - naming the model the drawing's views show.
+    /// </summary>
+    private const string OneModelGuidance =
+        "plate.SLDDRW is a drawing of plate.SLDPRT. Keep the drawing open in SOLIDWORKS, open or "
+        + "switch to plate.SLDPRT, then press Review with it active; Review reads open drawings "
+        + "whose views show the model.";
+
+    /// <summary>The same sentence when the model cannot be named: nothing read, or nothing shown.</summary>
+    private const string UnnamedModelGuidance =
+        "plate.SLDDRW is a drawing. Keep it open in SOLIDWORKS and activate the part or assembly it "
+        + "documents, then press Review with that model active; Review reads open drawings whose "
+        + "views show the model.";
+
     [Fact]
-    public void PreparationOfADrawingIsRefusedWithTheClauseThatItIsReadWithItsModel()
+    public void PreparationOfADrawingIsRefusedWithTheDrawingsGuidanceNamingItsModel()
     {
         using var world = new ReviewWorld();
         world.Document = new PageDocument(DrawingPath, null);
+        world.DrawingModels = _ => new[] { PlatePath };
         int reads = 0;
         world.Prepare = () => { reads++; return Preparation(world.Document); };
         world.Open();
@@ -119,12 +130,109 @@ public sealed class ReviewHostTests
         world.Receive("review.prepare", "p1", new { });
 
         JsonElement error = world.Reply("error", "p1");
-        string message = error.GetProperty("message").GetString()!;
         Assert.Equal("DrawingActive", error.GetProperty("error_class").GetString());
-        Assert.EndsWith(DrawingClause, message, StringComparison.Ordinal);
-        Assert.Contains("plate.SLDDRW", message, StringComparison.Ordinal);
+        Assert.Equal(OneModelGuidance, error.GetProperty("message").GetString());
         Assert.Equal(0, reads);
         Assert.Equal(0, world.Dump.Runs);
+    }
+
+    /// <summary>
+    /// U25: `init` and `document.changed` carry `kind`, the host's one reading of what a path is,
+    /// so the Review page decides "drawing" from it rather than from an extension table of its
+    /// own; and a drawing's payload carries the guidance sentence the page prints as sent.
+    /// </summary>
+    [Fact]
+    public void TheDocumentPayloadCarriesTheKindAndADrawingsGuidance()
+    {
+        using var world = new ReviewWorld();
+        world.Document = new PageDocument(@"C:\Fictional\plate\frame.SLDASM", "Default");
+        var asked = new List<string>();
+        world.DrawingModels = path => { asked.Add(path); return new[] { PlatePath }; };
+        world.Open();
+
+        world.Receive("ready", "i1", new { });
+        JsonElement init = world.Reply("init", "i1").GetProperty("document");
+        Assert.Equal("assembly", init.GetProperty("kind").GetString());
+        Assert.False(init.TryGetProperty("drawing_guidance", out _));
+        Assert.Empty(asked);
+
+        world.Document = new PageDocument(DrawingPath, null);
+        world.Host.DocumentChanged();
+        JsonElement changed = world.LastPosted("document.changed");
+        Assert.Equal(DrawingPath, changed.GetProperty("path").GetString());
+        Assert.Equal("drawing", changed.GetProperty("kind").GetString());
+        Assert.Equal(OneModelGuidance, changed.GetProperty("drawing_guidance").GetString());
+        Assert.Equal(new[] { DrawingPath }, asked);
+
+        world.Document = new PageDocument(PlatePath, "Default");
+        world.Host.DocumentChanged();
+        changed = world.LastPosted("document.changed");
+        Assert.Equal("part", changed.GetProperty("kind").GetString());
+        Assert.False(changed.TryGetProperty("drawing_guidance", out _));
+        Assert.Single(asked);
+    }
+
+    /// <summary>
+    /// A drawing showing several models: the first view's model is named - the order is the
+    /// sheets', then each sheet's views - and the rest are counted, never guessed between.
+    /// </summary>
+    [Theory]
+    [InlineData(2, "1 other model")]
+    [InlineData(3, "2 other models")]
+    public void ADrawingOfSeveralModelsNamesTheFirstAndCountsTheRest(int models, string rest)
+    {
+        using var world = new ReviewWorld();
+        world.Document = new PageDocument(DrawingPath, null);
+        world.DrawingModels = _ => Enumerable.Range(0, models)
+            .Select(index => index == 0 ? PlatePath : $@"C:\Fictional\plate\bracket{index}.SLDPRT")
+            .ToArray();
+        world.Open();
+
+        world.Host.DocumentChanged();
+
+        Assert.Equal(
+            "plate.SLDDRW is a drawing of plate.SLDPRT and " + rest + ". Keep the drawing open in "
+            + "SOLIDWORKS, open or switch to plate.SLDPRT or another model it shows, then press Review "
+            + "with that model active; Review reads open drawings whose views show the model.",
+            world.LastPosted("document.changed").GetProperty("drawing_guidance").GetString());
+    }
+
+    /// <summary>
+    /// Could not name is never a guess: no reader wired, a reader that answers nothing or null,
+    /// and a reader that throws each give the sentence with no model named, and none of them
+    /// reaches the page as a failure.
+    /// </summary>
+    [Theory]
+    [InlineData("no reader")]
+    [InlineData("none shown")]
+    [InlineData("unknown")]
+    [InlineData("throws")]
+    public void ADrawingWhoseModelCannotBeNamedGetsTheUnnamedSentence(string how)
+    {
+        using var world = new ReviewWorld();
+        world.Document = new PageDocument(DrawingPath, null);
+        switch (how)
+        {
+            case "none shown":
+                world.DrawingModels = _ => new string[0];
+                break;
+            case "unknown":
+                world.DrawingModels = _ => null;
+                break;
+            case "throws":
+                world.DrawingModels = _ => throw new InvalidOperationException("the drawing would not answer");
+                break;
+        }
+
+        world.Open();
+
+        world.Host.DocumentChanged();
+        world.Receive("review.start", "r1", new { });
+
+        Assert.Equal(
+            UnnamedModelGuidance,
+            world.LastPosted("document.changed").GetProperty("drawing_guidance").GetString());
+        Assert.Equal(UnnamedModelGuidance, world.Reply("error", "r1").GetProperty("message").GetString());
     }
 
     [Fact]
@@ -141,7 +249,7 @@ public sealed class ReviewHostTests
 
         JsonElement error = world.Reply("error", "r1");
         Assert.Equal("DrawingActive", error.GetProperty("error_class").GetString());
-        Assert.EndsWith(DrawingClause, error.GetProperty("message").GetString()!, StringComparison.Ordinal);
+        Assert.Equal(UnnamedModelGuidance, error.GetProperty("message").GetString());
         Assert.Equal(0, world.Dump.Runs);
         Assert.Empty(world.Backend.Created);
         Assert.Empty(world.Host.Sessions);
@@ -1711,6 +1819,9 @@ public sealed class ReviewHostTests
 
         public Func<ReviewPreparation>? Prepare { get; set; }
 
+        /// <summary>What the host is told a drawing's views show (U25), or null for no reader.</summary>
+        public Func<string, IReadOnlyList<string>?>? DrawingModels { get; set; }
+
         public DateTime Now { get; set; } = Stamp;
 
         public BridgeConfig? Bridge { get; set; }
@@ -1739,6 +1850,7 @@ public sealed class ReviewHostTests
                 LogFolder = LogFolder,
                 CurrentDocument = () => Document,
                 PrepareReview = Prepare,
+                DrawingModels = DrawingModels,
                 Environment = _ => null,
                 Dump = Dump,
                 EntityResolver = UseResolver ? (ResolverOverride ?? Resolver) : null,

@@ -39,6 +39,7 @@
   var bridge = (window.chrome && window.chrome.webview) ? window.chrome.webview : null;
   var render = window.SwReviewRender;
   var docs = window.SwReviewDocument;
+  var attention = window.SwReviewAttention;
 
   /**
    * How many chat events are kept in memory (T041). The transcript on screen is built as the
@@ -1751,11 +1752,11 @@
     document.body.classList.toggle('results-stale', state.resultsStale);
 
     render.clear(ui.staleReview);
-    var drawingActive = isDrawing(state.documentInfo);
-    if (state.resultsStale || drawingActive) {
-      render.write(ui.staleReview, state.resultsStale ? staleSentence() : drawingSentence());
+    var line = state.resultsStale ? staleSentence() : drawingSentence();
+    if (line) {
+      render.write(ui.staleReview, line);
     }
-    ui.staleReview.hidden = !state.resultsStale && !drawingActive;
+    ui.staleReview.hidden = !line;
 
     renderSession();
     renderStartReview();
@@ -1766,21 +1767,50 @@
   function staleSentence() {
     var sentence = 'This review is of ' + (docs.label(state.reviewed) || 'another document') + '.';
     if (isDrawing(state.documentInfo)) {
-      return sentence + ' ' + drawingSentence();
+      var drawing = drawingSentence();
+      return drawing ? sentence + ' ' + drawing : sentence;
     }
     return state.documentInfo
       ? sentence + ' Press Review to review ' + docs.label(state.documentInfo) + '.'
       : sentence + ' No document is open.';
   }
 
+  /**
+   * Whether the active document is a drawing, by the host's `kind` - its one reading of what a
+   * path is (`PageDocument.Kind`) - and never by an extension table of the page's own (U25,
+   * default taken 2026-09-28, the owner may revise).
+   */
   function isDrawing(info) {
-    return !!(info && /\.slddrw$/i.test(docs.fileName(info.path)));
+    return !!(info && info.kind === 'drawing');
   }
 
+  /**
+   * The line for an active drawing, or '' when none is active: the sentence the host composed
+   * for it (`ReviewHost.DrawingSentence`, naming the model its views show), printed as sent -
+   * the page words nothing about a drawing itself. A drawing that came with no sentence, from
+   * an older host, falls back to the backend's label for the refusal it would get.
+   */
   function drawingSentence() {
-    return docs.fileName(state.documentInfo.path) + ' is a drawing. Keep it open in SOLIDWORKS '
-      + 'and activate the part or assembly it documents. Press Review with that model active; '
-      + 'Review reads open drawings whose views show the model.';
+    var info = state.documentInfo;
+    if (!isDrawing(info)) {
+      return '';
+    }
+    return (typeof info.drawing_guidance === 'string' && info.drawing_guidance)
+      || attention.labelOf(state.labels, 'errors', 'DrawingActive', '');
+  }
+
+  /**
+   * A line on a card's status, in the card's hue: why a press did nothing. The words are the
+   * host's (a drawing's sentence), printed as text.
+   */
+  function cardNote(card, text) {
+    var status = card ? card.querySelector('.card-status') : null;
+    if (!status) {
+      return;
+    }
+    status.className = 'card-status bad';
+    render.clear(status);
+    render.write(status, text);
   }
 
   function resetTranscript() {
@@ -1931,6 +1961,12 @@
         decide(card, 'deferred');
         return;
       case 'retry':
+        if (isDrawing(state.documentInfo)) {
+          // Nothing is sent: the host would refuse a drawing. Say why on the card rather than
+          // leave a press that does nothing (U25).
+          cardNote(card, drawingSentence());
+          return;
+        }
         prepareReview(state.chatId);
         return;
       case 'settings':

@@ -170,6 +170,15 @@ public sealed class ReviewHostOptions
     public Func<ReviewPreparation>? PrepareReview { get; set; }
 
     /// <summary>
+    /// U25 (default taken 2026-09-28, the owner may revise): the models the open drawing at the
+    /// given path shows, once each, in sheet-then-view order - read-only, through a gate, on the
+    /// application thread - or null when they cannot be read. Asked only for a drawing, and only
+    /// to name its model in the one sentence the Review tab gives a drawing
+    /// (<see cref="ReviewHost.DrawingSentence"/>). Null: no reader, and the sentence names none.
+    /// </summary>
+    public Func<string, IReadOnlyList<string>?>? DrawingModels { get; set; }
+
+    /// <summary>
     /// The in-process extractor. Null until the add-in is attached to a SOLIDWORKS session,
     /// which is a state the pane really has: the Task Pane exists before the first document.
     /// </summary>
@@ -1066,15 +1075,71 @@ public sealed class ReviewHost : IDisposable
     // ---- review preparation and start ---------------------------------------------------
 
     /// <summary>
-    /// The Review tab's refusal of a drawing (feature 011, contracts/attach.md section 5): a
-    /// drawing is not reviewed on its own, and it is read with the part or assembly it documents
-    /// for as long as it stays open in SOLIDWORKS (open-drawing discovery). One sentence for the
-    /// preparation and the start, so the engineer reads the same words at either step.
+    /// The Review tab's one sentence for a drawing (feature 011, contracts/attach.md section 5; U25,
+    /// default taken 2026-09-28, the owner may revise): a drawing is not reviewed on its own, it
+    /// is read with the part or assembly it documents for as long as it stays open in SOLIDWORKS
+    /// (open-drawing discovery), and so the engineer keeps it open and activates that model. The
+    /// host composes it once and it is used everywhere: the page's banner prints it as sent, and
+    /// the preparation's and the start's refusal carry it, so the engineer reads the same words
+    /// at every step.
+    ///
+    /// It names the model when the drawing's views say which: the first one, in sheet-then-view
+    /// order, by file name - discovery matches a drawing to a model by path, never by
+    /// configuration - with the others counted rather than chosen between. "Open or switch to",
+    /// because a drawing opened on its own has its model loaded but no window of its own. With
+    /// no model known the sentence names none.
     /// </summary>
-    internal static string DrawingRefusal(PageDocument document) =>
-        $"The Review tab reviews a part or an assembly, and '{System.IO.Path.GetFileName(document.Path)}' "
-        + "is a drawing; open the part or assembly it documents - this drawing is read with it "
-        + "while it stays open.";
+    public static string DrawingSentence(string drawingPath, IReadOnlyList<string>? models)
+    {
+        if (drawingPath == null)
+        {
+            throw new ArgumentNullException(nameof(drawingPath));
+        }
+
+        string drawing = System.IO.Path.GetFileName(drawingPath);
+        List<string> named = (models ?? Array.Empty<string>())
+            .Where(model => !string.IsNullOrWhiteSpace(model))
+            .Select(model => System.IO.Path.GetFileName(model.Trim()))
+            .ToList();
+        const string Reads = "Review reads open drawings whose views show the model.";
+
+        if (named.Count == 0)
+        {
+            return $"{drawing} is a drawing. Keep it open in SOLIDWORKS and activate the part or "
+                + $"assembly it documents, then press Review with that model active; {Reads}";
+        }
+
+        if (named.Count == 1)
+        {
+            return $"{drawing} is a drawing of {named[0]}. Keep the drawing open in SOLIDWORKS, open "
+                + $"or switch to {named[0]}, then press Review with it active; {Reads}";
+        }
+
+        int others = named.Count - 1;
+        return $"{drawing} is a drawing of {named[0]} and {others} other model{(others == 1 ? string.Empty : "s")}. "
+            + $"Keep the drawing open in SOLIDWORKS, open or switch to {named[0]} or another model it "
+            + $"shows, then press Review with that model active; {Reads}";
+    }
+
+    /// <summary>
+    /// <see cref="DrawingSentence"/> for the drawing <paramref name="drawing"/>, with the models
+    /// its views show as <see cref="ReviewHostOptions.DrawingModels"/> reads them. A reader that
+    /// throws names no model: the sentence is guidance, and guidance never fails the page.
+    /// </summary>
+    private string DrawingGuidance(PageDocument drawing)
+    {
+        IReadOnlyList<string>? models;
+        try
+        {
+            models = _options.DrawingModels?.Invoke(drawing.Path);
+        }
+        catch (Exception)
+        {
+            models = null;
+        }
+
+        return DrawingSentence(drawing.Path, models);
+    }
 
     private void PrepareReview(string? id)
     {
@@ -1083,7 +1148,7 @@ public sealed class ReviewHost : IDisposable
         PageDocument? document = _options.CurrentDocument();
         if (document != null && document.Kind == "drawing")
         {
-            SendError(id, "DrawingActive", DrawingRefusal(document), true);
+            SendError(id, "DrawingActive", DrawingGuidance(document), true);
             return;
         }
 
@@ -1149,7 +1214,7 @@ public sealed class ReviewHost : IDisposable
         // as the design under review (contracts/attach.md section 3).
         if (document.Kind == "drawing")
         {
-            SendError(id, "DrawingActive", DrawingRefusal(document), retryable: true);
+            SendError(id, "DrawingActive", DrawingGuidance(document), retryable: true);
             return;
         }
 
@@ -1291,14 +1356,23 @@ public sealed class ReviewHost : IDisposable
         return gaps == 0 ? $"{message}." : $"{message} ({gaps} gaps).";
     }
 
-    private static Dictionary<string, object?>? DocumentPayload(PageDocument? document) =>
-        document == null
-            ? null
-            : new Dictionary<string, object?>
-            {
-                { "path", document.Path },
-                { "configuration", document.Configuration },
-            };
+    /// <summary>
+    /// The document as `init`, `document.changed` and `review.started` carry it: the check tabs'
+    /// shape, `kind` included, so every page reads one - and, for a drawing, the sentence the page
+    /// prints for it (U25, default taken 2026-09-28, the owner may revise). `kind` is the host's
+    /// one reading of what a path is (<see cref="PageDocument.Kind"/>), so the page decides
+    /// "drawing" from it rather than from an extension table of its own.
+    /// </summary>
+    private Dictionary<string, object?>? DocumentPayload(PageDocument? document)
+    {
+        Dictionary<string, object?>? payload = CheckPaneHost.DocumentPayload(document);
+        if (payload != null && document!.Kind == "drawing")
+        {
+            payload["drawing_guidance"] = DrawingGuidance(document);
+        }
+
+        return payload;
+    }
 
     /// <summary>
     /// The settings as the page may see them: an explicit allow-list, so no field added to the

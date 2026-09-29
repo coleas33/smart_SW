@@ -824,3 +824,45 @@ requirement or task moves for it.
   `contracts/tolerances.md` section 6 gains the decision record (T002).
 - **012**: 011's guard hardening is the default-deny 012's creator will allowlist against; 011's
   brief is the input 012's drawing plan will extend; 011 creates nothing.
+
+## R7. Defaults taken 2026-09-28: the Review tab and an active drawing (U25)
+
+**Sources.** The sitting of 2026-09-28 (the handoff packet's U25: after an assembly review the
+engineer activated its drawing, and the pane said "Press Review to review {drawing}", which the host
+then refused), the follow-up on `codex/testing-feedback-2026-09-28` (`63fc360`), and the drawing
+lens's review of it the same day. **Each item is a default taken 2026-09-28, the owner may revise;
+none is the owner's own words.** SOLIDWORKS was not started; the guard's denied set and the local API
+help were read.
+
+### R7.1 The host decides "drawing", composes the sentence once, and names the model
+
+**Decision**: the Review page's `init` and `document.changed` carry `kind` (the check tabs' payload,
+`CheckPaneHost.DocumentPayload`) and, for a drawing, `drawing_guidance`, the sentence
+`ReviewHost.DrawingSentence` composes. The page decides "drawing" from `kind` only and prints the
+sentence as sent - in its banner, and on an error card's status line when Retry is pressed with a
+drawing active - and sends nothing for either press. The host's `DrawingActive` refusal from
+`review.prepare` and `review.start` carries the same sentence. The sentence names the model the
+drawing's views show when they say which: the first, in sheet-then-view order, by file name, the
+others counted; "open or switch to" it. The models come from the walk open-drawing discovery makes
+(`SwOpenDrawingReader.ViewPaths`, made public and static, and `OpenDrawingDiscovery.ModelsShown`,
+matching by discovery's path key), read only for a drawing, through a gate with the read-only guard,
+on the application thread, and never from `CurrentDocument`; any failure names no model.
+
+**Why**: the follow-up fixed the misleading invitation with a page-written sentence and a `.slddrw`
+regex - a second extension table beside `PageDocument.Kind`, contradicting 002's contract, which said
+the Review page gets no `kind` because it decides nothing with it - and re-typed the backend's
+`DrawingActive` label with nothing tying the two. The engineer's report asked to review from the
+drawing; the product cannot switch documents (`ActivateDoc`, `ActivateDoc2`, `ActivateDoc3` are
+denied), but the review's own report already says "Open {drawing}, then press Review again with
+{model} active". Naming the model closes that gap with reads the guard already allows.
+
+**Alternatives weighed**: keep the regex and amend the contract (not taken: two tables); build the
+banner from the backend's label on the page (not taken: the label cannot name the model, and the
+page would still word the drawing itself); name the model only from the review's candidate pairs
+(not taken: no help for a drawing opened first, or with no review).
+
+### R7.2 Recorded for the seat
+
+The view walk now runs inside the active-document event for a drawing. The next sitting checks it on
+a drawing opened on its own, one opened after its model, and a multi-sheet drawing, with no refused
+member in the add-in log (`docs/testing-feedback-2026-09-28.md`, retest step 1).
