@@ -978,7 +978,131 @@ public sealed class InProcPipeServerTests
         Assert.Contains("gated=GetOpenDocumentByName,ShowNamedView2", written);
         Assert.DoesNotContain("refused=", written);
         Assert.DoesNotContain(ReviewSecret, written);
-        Assert.Equal(1, written.Count(c => c == '\n'));
+
+        // Two lines: the begin line written before the command ran (U27), then the completed one.
+        string[] lines = written.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(2, lines.Length);
+        Assert.EndsWith("id=7 command=capture begin", lines[0].TrimEnd('\r'));
+        Assert.Contains("status=ok", lines[1]);
+    }
+
+    /// <summary>
+    /// U27 (2026-09-28): a request's begin line is on disk - in the tool-service log, and for a
+    /// remodel command in the run's <c>remodel.log</c> - before the dispatcher runs, so a native
+    /// exit inside the command still leaves a line naming it. The completed line follows as
+    /// before. Read from the files themselves, inside the dispatch.
+    /// </summary>
+    [Fact]
+    public void TheBeginLineIsOnDiskBeforeTheCommandRuns()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "swreview-begin", Guid.NewGuid().ToString("N"));
+        string runDirectory = Path.Combine(root, "run");
+        Directory.CreateDirectory(runDirectory);
+        try
+        {
+            var log = new ToolServiceLog(Path.Combine(root, "tool-service.log"));
+            var runLog = new RemodelRunLog(() => runDirectory);
+            string remodelLog = Path.Combine(runDirectory, RemodelRunLog.FileName);
+            var seen = new List<string>();
+            var inner = new RecordingDispatcher
+            {
+                Before = () =>
+                {
+                    seen.Add(File.ReadAllText(log.Path));
+                    seen.Add(File.ReadAllText(remodelLog));
+                },
+            };
+
+            var logger = new ToolServiceRequestLogger(inner, new SwGateRecorder(), log.Write, remodelLog: runLog.Write);
+            logger.Dispatch(BridgeCodec.ReadRequest(Line("3", "remodel.geometry", RemodelSecret)));
+
+            Assert.All(seen, text => Assert.Contains("id=3 command=remodel.geometry begin", text));
+            Assert.All(seen, text => Assert.DoesNotContain("status=", text));
+            foreach (string path in new[] { log.Path, remodelLog })
+            {
+                string[] lines = File.ReadAllLines(path);
+                Assert.Equal(2, lines.Length);
+                Assert.EndsWith("id=3 command=remodel.geometry begin", lines[0]);
+                Assert.Contains("command=remodel.geometry status=ok", lines[1]);
+                Assert.DoesNotContain(RemodelSecret, string.Join("\n", lines));
+            }
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    /// <summary>A review command's begin line goes to the tool-service log only, as its completed line does.</summary>
+    [Fact]
+    public void AReviewCommandsBeginLineGoesToTheToolServiceLogOnly()
+    {
+        var log = new StringWriter();
+        var remodel = new StringWriter();
+        var logger = new ToolServiceRequestLogger(
+            new RecordingDispatcher(), new SwGateRecorder(), log.Write, remodelLog: remodel.Write);
+
+        logger.Dispatch(BridgeCodec.ReadRequest(Line("4", "capture", ReviewSecret)));
+
+        Assert.Contains("id=4 command=capture begin", log.ToString());
+        Assert.Equal(string.Empty, remodel.ToString());
+    }
+
+    /// <summary>A client-supplied id or command cannot forge a second begin record with a newline.</summary>
+    [Fact]
+    public void TheBeginLineKeepsAClientSuppliedFieldOnOneLine()
+    {
+        var request = new BridgeRequest { Id = "5\nid=6", Command = "ping" };
+
+        string line = ToolServiceRequestLogger.BeginLine(DateTimeOffset.Now, request);
+
+        Assert.DoesNotContain("\n", line);
+        Assert.EndsWith("id=5 id=6 command=ping begin", line);
+    }
+
+    /// <summary>
+    /// A request line the codec cannot even read - here, a lone UTF-16 surrogate in a field -
+    /// is answered with an error line, and the connection and the server go on serving: nothing
+    /// may escape a pipe thread, because the process is SOLIDWORKS (U27 crash hunt).
+    /// </summary>
+    [Fact]
+    public void ALineTheCodecCannotReadIsAnsweredAndTheServerGoesOn()
+    {
+        using (var app = new FakeAppThread())
+        {
+            var dispatcher = new RecordingDispatcher();
+            using (InProcPipeServer server = Server(dispatcher, app))
+            {
+                server.Start();
+                BridgeResponse direct = server.Answer("{\"id\":\"1\",\"command\":\"ping\",\"params\":{\"x\":\"\uD800\"}}");
+                Assert.Equal(BridgeStatus.Error, direct.Status);
+
+                using (var client = new PipeClient(server.PipeName))
+                {
+                    client.Send(Line("2", "ping", ReviewSecret));
+                    Assert.Equal("2", client.Receive().Id);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// The last line of defence on a pipe thread: whatever the answer throws becomes an error
+    /// response with an empty id and the exception's type, and is logged, rather than reaching
+    /// the thread's top and ending SOLIDWORKS.
+    /// </summary>
+    [Fact]
+    public void AnAnswerThatThrowsBecomesAnErrorResponseAndALogLine()
+    {
+        var logged = new List<string>();
+
+        BridgeResponse response = InProcPipeServer.AnswerSafely(
+            "{}", _ => throw new NotSupportedException("the codec had a bad day"), logged.Add);
+
+        Assert.Equal(BridgeStatus.Error, response.Status);
+        Assert.Equal(string.Empty, response.Id);
+        Assert.Contains(nameof(NotSupportedException), response.Error);
+        Assert.Contains(nameof(NotSupportedException), Assert.Single(logged));
     }
 
     [Fact]

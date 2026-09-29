@@ -18,10 +18,17 @@ namespace SwReview.Extractor.Rms;
 /// </summary>
 public interface IMassPropertyReading
 {
-    /// <summary><c>IMassProperty2.set_AccuracyLevel</c>; always <c>Higher = 2</c>.</summary>
+    /// <summary>
+    /// <c>IMassProperty2.set_AccuracyLevel</c>; always <c>Higher = 2</c>. PROBE-8 sets it; the
+    /// copy's reading does not (U27, default taken 2026-09-28, the owner may revise), until
+    /// PROBE-8 has run it on a seat.
+    /// </summary>
     void SetAccuracyLevel(int accuracyLevel);
 
-    /// <summary><c>IMassProperty2.set_SelectedItems</c>: the solid bodies, and nothing else.</summary>
+    /// <summary>
+    /// <c>IMassProperty2.set_SelectedItems</c>: the solid bodies, and nothing else. PROBE-8 sets
+    /// it on its throwaway part; the copy's reading measures the whole part instead (U27).
+    /// </summary>
     void SetSelectedItems(IReadOnlyList<object> bodies);
 
     /// <summary>
@@ -102,6 +109,18 @@ public interface IGeometrySource
 /// Python bridge cannot marshal; the verdict has to be table-testable with no seat. So nothing
 /// in this file compares two readings, and nothing in it knows what a tolerance is.
 ///
+/// <b>The whole part, the proven way</b> (U27, default taken 2026-09-28, the owner may revise).
+/// SOLIDWORKS exited during the first baseline reading on a seat, after the two calls no seat had
+/// run: <c>set_AccuracyLevel</c> and <c>set_SelectedItems</c> - the latter handed a plain
+/// <c>object[]</c>, which the programming guide says must be a <c>DispatchWrapper</c> array. The
+/// reading now makes the sequence the review dump makes on every part
+/// (<c>Dump/PropertyDumper.cs</c>): <c>CreateMassProperty2</c>, <c>UseSystemUnits</c>,
+/// <c>Recalculate</c>, the getters, and no selection and no accuracy of its own. A whole-part
+/// reading needs guards a selected-body one did not, and each fails closed: more than one solid
+/// body is not measured at all; the caller clears the copy's selection first, because
+/// pre-selected bodies are included; and a volume that is not positive and finite is not a
+/// reading.
+///
 /// Three rules the shape encodes, each with its own test:
 ///
 ///   * <b><c>Recalculate()</c> first.</b> Its Boolean is checked before any value is read, and
@@ -111,10 +130,16 @@ public interface IGeometrySource
 ///     unsorted triples would call them different.
 ///   * <b>A status other than <c>OK</c> is reported.</b> Unknown stays unknown: a defaulted zero
 ///     volume is a number the gate would compare and pass.
+///
+/// Every call is marked before it starts and after it answers
+/// (<see cref="RemodelStageMarkers"/>), so a native exit names the call it happened in.
 /// </summary>
 public static class RemodelGeometry
 {
-    /// <summary><c>swMassPropertyAccuracyLevel_e.swMassPropertyAccuracyLevel_Higher</c> (VERIFIED value 2).</summary>
+    /// <summary>
+    /// <c>swMassPropertyAccuracyLevel_e.swMassPropertyAccuracyLevel_Higher</c> (VERIFIED value 2):
+    /// what PROBE-8 measures at. The copy's reading sets no accuracy (U27).
+    /// </summary>
     public const int HigherAccuracy =
         (int)swMassPropertyAccuracyLevel_e.swMassPropertyAccuracyLevel_Higher;
 
@@ -123,7 +148,8 @@ public static class RemodelGeometry
 
     /// <summary>
     /// <c>swMassPropertiesStatus_e.swMassPropertiesStatus_UnknownError</c> (VERIFIED value 1):
-    /// the mass property could not be built, or <c>Recalculate()</c> answered false. The typed
+    /// the mass property could not be built, <c>Recalculate()</c> answered false, the part has
+    /// more than one solid body, or the volume read back was not positive and finite. The typed
     /// interface carries no status member of its own (VERIFIED absence on 32.5.0.48), so the
     /// status is read off what the calls answered rather than out of a field that is not there.
     /// </summary>
@@ -153,8 +179,6 @@ public static class RemodelGeometry
     private const string EdgeCountMember = "GetEdgeCount";
     private const string MaterialMember = "GetMaterialPropertyName2";
     private const string CreateMember = "CreateMassProperty2";
-    private const string AccuracyMember = "set_AccuracyLevel";
-    private const string SelectedItemsMember = "set_SelectedItems";
     private const string UseSystemUnitsMember = "set_UseSystemUnits";
     private const string RecalculateMember = "Recalculate";
     private const string VolumeMember = "get_Volume";
@@ -177,6 +201,7 @@ public static class RemodelGeometry
     /// The attested hash of the file the copy was made from, so the artifact says on its face
     /// which file the baseline stands for (FR-037). The source is never opened.
     /// </param>
+    /// <param name="stage">Where each call's markers go, or null for none.</param>
     public static GeometryReading Read(
         SwGate gate,
         IRemodelDocument document,
@@ -203,7 +228,9 @@ public static class RemodelGeometry
             At = at,
             Subject = subject,
             SourceSha256 = sourceSha256,
-            AccuracyLevel = HigherAccuracy,
+
+            // Null: this reading sets no accuracy of its own, so SOLIDWORKS's default applies.
+            AccuracyLevel = null,
             SolidBodyCount = solids.Count,
             SheetBodyCount = sheets.Count,
 
@@ -223,15 +250,21 @@ public static class RemodelGeometry
         reading.FaceCount = Sum(gate, document, solids, FaceCountMember, isFaces: true, stage: stage);
         reading.EdgeCount = Sum(gate, document, solids, EdgeCountMember, isFaces: false, stage: stage);
 
+        if (solids.Count != 1)
+        {
+            // A whole-part reading of two bodies measures both at once, and no pairing can
+            // compare it; the scope gate refuses such a part, so this is a change that split one.
+            // Counted and reported, never measured.
+            reading.Status = StatusUnknownError;
+            return reading;
+        }
+
         IMassPropertyReading? properties = Call(gate, CreateMember, document.CreateMassProperty, stage);
         if (properties == null)
         {
             reading.Status = StatusUnknownError;
             return reading;
         }
-
-        Call(gate, AccuracyMember, () => properties.SetAccuracyLevel(HigherAccuracy), stage);
-        Call(gate, SelectedItemsMember, () => properties.SetSelectedItems(solids), stage);
 
         // Before Recalculate, never after: the numbers are computed in whatever units are in
         // force when it runs, and this record's fields are named for metres and kilograms.
@@ -245,8 +278,17 @@ public static class RemodelGeometry
             return reading;
         }
 
+        double volume = Call(gate, VolumeMember, properties.GetVolume, stage);
+        if (!(volume > 0) || double.IsInfinity(volume))
+        {
+            // Not a solid's volume (zero, negative, NaN or infinite): nothing else is read, and
+            // nothing is recorded that the gate could compare.
+            reading.Status = StatusUnknownError;
+            return reading;
+        }
+
         reading.Status = StatusOk;
-        reading.VolumeM3 = Call(gate, VolumeMember, properties.GetVolume, stage);
+        reading.VolumeM3 = volume;
         reading.SurfaceAreaM2 = Call(gate, SurfaceAreaMember, properties.GetSurfaceArea, stage);
         reading.CenterOfMassM = Triple3(
             Call(gate, CenterOfMassMember, properties.GetCenterOfMass, stage), sorted: false);
@@ -307,39 +349,14 @@ public static class RemodelGeometry
     }
 
     private static T Call<T>(
-        SwGate gate, string member, Func<T> read, Action<string>? stage, string? detail = null)
-    {
-        string name = detail == null ? member : member + ":" + detail;
-        Trace(stage, "before " + name);
-        try
-        {
-            T answer = gate.Call(member, read);
-            Trace(stage, "after " + name);
-            return answer;
-        }
-        catch (Exception)
-        {
-            Trace(stage, "failed " + name);
-            throw;
-        }
-    }
+        SwGate gate, string member, Func<T> read, Action<string>? stage, string? detail = null) =>
+        RemodelStageMarkers.Around(
+            stage, detail == null ? member : member + ":" + detail, () => gate.Call(member, read));
 
     private static void Call(
         SwGate gate, string member, Action read, Action<string>? stage)
     {
         Call<object?>(gate, member, () => { read(); return null; }, stage);
-    }
-
-    private static void Trace(Action<string>? stage, string marker)
-    {
-        try
-        {
-            stage?.Invoke(marker);
-        }
-        catch (Exception)
-        {
-            // A diagnostic file is never a reason to alter the geometry reading.
-        }
     }
 
     /// <summary>

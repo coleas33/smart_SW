@@ -1085,9 +1085,49 @@ public class SwReviewAddIn : ISwAddin
     /// </summary>
     private int OnActiveDocumentChanged()
     {
-        FollowActiveConfiguration();
-        TellEveryTabTheDocumentChanged("The pane could not be told the active document changed.");
+        TraceFanOutDuringARemodelRun(_remodelHost?.RunInProgress == true, Log, () =>
+        {
+            FollowActiveConfiguration();
+            TellEveryTabTheDocumentChanged("The pane could not be told the active document changed.");
+        });
         return 0;
+    }
+
+    /// <summary>
+    /// U27 (2026-09-28): <paramref name="fanOut"/>, with a line to <c>addin.log</c> before and after
+    /// it while a remodel plan or run is in flight - which is when <c>OpenDoc7</c> on the copy
+    /// raises this event re-entrantly, inside the bridge's open. A native exit during the fan-out
+    /// then leaves a begin line with no end line. Outside a run nothing is written: a document
+    /// switch is too common to log. A log that cannot be written changes nothing.
+    /// </summary>
+    internal static void TraceFanOutDuringARemodelRun(bool remodelRunInProgress, Action<string> log, Action fanOut)
+    {
+        if (!remodelRunInProgress)
+        {
+            fanOut();
+            return;
+        }
+
+        Write(log, "active document changed during a remodel run: fan-out begin");
+        try
+        {
+            fanOut();
+        }
+        finally
+        {
+            Write(log, "active document changed during a remodel run: fan-out end");
+        }
+
+        static void Write(Action<string> log, string line)
+        {
+            try
+            {
+                log(line);
+            }
+            catch (Exception)
+            {
+            }
+        }
     }
 
     /// <summary>

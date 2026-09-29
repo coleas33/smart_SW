@@ -481,8 +481,18 @@ public class SharedRemodelInteropTests
 
         (string called, object?[] arguments) = Assert.Single(interop.Calls);
         Assert.Equal(ProbeWrapperCases.MassPropertyKey(member), called);
-        Assert.Equal(ProbeWrapperCases.MassPropertyArguments(member), arguments);
+        Assert.Equal(ProbeWrapperCases.MassPropertyArguments(member), arguments.Select(Unwrapped).ToArray());
     }
+
+    /// <summary>
+    /// A <see cref="DispatchWrapper"/> array compared by what it wraps: the wrapper changes how the
+    /// array is marshalled and nothing about what SOLIDWORKS is handed (U27; the wrapping itself is
+    /// asserted by <c>TheSelectedBodiesAreHandedOverAsDispatchWrappersInOrder</c>).
+    /// </summary>
+    private static object? Unwrapped(object? argument) =>
+        argument is DispatchWrapper[] wrapped
+            ? wrapped.Select(wrapper => wrapper.WrappedObject).ToArray()
+            : argument;
 
     [Fact]
     public void EachEquationAnswerIsTheInteropMembersAnswer()
@@ -532,11 +542,15 @@ public class SharedRemodelInteropTests
     }
 
     /// <summary>
-    /// The bodies are handed to SOLIDWORKS as a fresh <c>object[]</c> in the caller's order: the
-    /// interop setter takes a SAFEARRAY, never the caller's own list.
+    /// U27 (default taken 2026-09-28, the owner may revise): the bodies are handed to SOLIDWORKS
+    /// as a fresh <see cref="DispatchWrapper"/> array in the caller's order, each wrapping the
+    /// caller's own body. The SOLIDWORKS programming guide's "IDispatch Object Arrays as Input in
+    /// .NET" says an input array of SOLIDWORKS objects must be marshalled explicitly this way; a
+    /// plain <c>object[]</c> reaches the setter as a SAFEARRAY of VARIANT, not of IDispatch
+    /// (the next test). PROBE-8 is the one caller left: the copy's reading sets no selection.
     /// </summary>
     [Fact]
-    public void TheSelectedBodiesAreHandedOverAsAFreshArrayInOrder()
+    public void TheSelectedBodiesAreHandedOverAsDispatchWrappersInOrder()
     {
         var interop = new InteropRecorder<IMassProperty2>();
         var bodies = new List<object> { new object(), new object(), new object() };
@@ -544,10 +558,55 @@ public class SharedRemodelInteropTests
         new SwMassProperty(interop.Instance).SetSelectedItems(bodies);
 
         object handed = Assert.Single(Assert.Single(interop.Calls).Arguments)!;
-        object[] array = Assert.IsType<object[]>(handed);
-        Assert.Equal(bodies, array);
-        Assert.NotSame(bodies, handed);
+        DispatchWrapper[] array = Assert.IsType<DispatchWrapper[]>(handed);
+        Assert.Equal(bodies.Count, array.Length);
+        for (int i = 0; i < bodies.Count; i++)
+        {
+            Assert.Same(bodies[i], array[i].WrappedObject);
+        }
     }
+
+    /// <summary>
+    /// What the wrapping changes on the wire, measured with the marshaller the interop call uses:
+    /// a <see cref="DispatchWrapper"/> array becomes <c>VT_ARRAY | VT_DISPATCH</c> (0x2009), while a
+    /// plain <c>object[]</c> of the same objects becomes <c>VT_ARRAY | VT_VARIANT</c> (0x200C). Pure
+    /// .NET, no SOLIDWORKS.
+    /// </summary>
+    [Fact]
+    public void ADispatchWrapperArrayMarshalsAsASafeArrayOfIDispatchWhereAPlainArrayDoesNot()
+    {
+        const short ArrayOfDispatch = 0x2009;
+        const short ArrayOfVariant = 0x200C;
+        object body = new object();
+
+        Assert.Equal(ArrayOfDispatch, VariantTypeOf(new[] { new DispatchWrapper(body) }));
+        Assert.Equal(ArrayOfVariant, VariantTypeOf(new object[] { body }));
+    }
+
+    private static short VariantTypeOf(object value)
+    {
+        // A VARIANT is 24 bytes on x64; its first two bytes are the VARTYPE.
+        IntPtr variant = Marshal.AllocCoTaskMem(24);
+        try
+        {
+            Marshal.GetNativeVariantForObject(value, variant);
+            try
+            {
+                return Marshal.ReadInt16(variant);
+            }
+            finally
+            {
+                VariantClear(variant);
+            }
+        }
+        finally
+        {
+            Marshal.FreeCoTaskMem(variant);
+        }
+    }
+
+    [DllImport("oleaut32.dll")]
+    private static extern int VariantClear(IntPtr variant);
 
     [Fact]
     public void MissingBodiesAreRefusedBeforeSolidWorksIsAsked()

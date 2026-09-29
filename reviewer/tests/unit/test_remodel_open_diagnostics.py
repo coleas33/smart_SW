@@ -4,12 +4,23 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-from swreview.chat.remodel import OPEN_DIAGNOSTICS_FILE, OPEN_FILE_NAME, RemodelServer
+from swreview.bridge.client import BridgeError
+from swreview.bridge.remodel_client import RemodelError
+from swreview.chat.remodel import (
+    OPEN_DIAGNOSTICS_FILE,
+    OPEN_FILE_NAME,
+    PREEXISTING_REBUILD_ERRORS,
+    RemodelServer,
+    RunFolderFailed,
+    ScopeRefused,
+)
 from swreview.handoff import export_handoff
-from tests.unit.test_chat_remodel_routes import PACKAGE, ProbingBridge, seat
+from swreview.remodel.attestation import read_attestation
+from tests.unit.test_chat_remodel_routes import PACKAGE, ProbingBridge, reading, seat
 from tests.unit.test_handoff import read_zip
 
 
@@ -18,7 +29,9 @@ def phases(run_dir: Path) -> list[str]:
     return [json.loads(line)["phase"] for line in records]
 
 
-def setup_run(tmp_path: Path) -> tuple[RemodelServer, ProbingBridge, Path, Path]:
+def setup_run(
+    tmp_path: Path, **bridge_options: Any,
+) -> tuple[RemodelServer, ProbingBridge, Path, Path]:
     source = tmp_path / "fictional-source.SLDPRT"
     source.write_bytes(b"fictional native part")
     run_dir = tmp_path / "run"
@@ -26,6 +39,7 @@ def setup_run(tmp_path: Path) -> tuple[RemodelServer, ProbingBridge, Path, Path]
     bridge = ProbingBridge(
         seat(PACKAGE), source=source,
         copy_path=str(run_dir / "copy" / "fictional-source-RMS.SLDPRT"),
+        **bridge_options,
     )
     server = RemodelServer(
         run_root=tmp_path, redact=lambda text: text,
@@ -73,6 +87,99 @@ def test_baseline_failure_records_cleanup_without_claiming_open_or_leaking_detai
     assert "private failure detail" not in text
     assert source.name not in text
     assert source.read_bytes() == b"fictional native part"
+
+
+@pytest.mark.parametrize(
+    ("failure", "overrides"),
+    [
+        ("status", {"status": 1, "volume_m3": None}),
+        ("no body", {"status": 2, "recalculated": False, "volume_m3": None}),
+        ("recalculate", {"recalculated": False, "volume_m3": None}),
+    ],
+)
+def test_a_baseline_that_is_not_a_usable_reading_refuses_open_and_ends_the_session(
+    tmp_path: Path, failure: str, overrides: dict[str, Any],
+) -> None:
+    """U27 (default taken 2026-09-28, the owner may revise): a baseline the bridge measured
+    but could not use - a status other than OK, or Recalculate false - is not a baseline.
+    Open refuses before `open.json` exists and ends the bridge's session, instead of filing a
+    run whose later reading the gate could only refuse as a subject mismatch."""
+    server, bridge, run_dir, source = setup_run(tmp_path)
+    bridge.readings[0] = reading(**overrides)
+
+    with pytest.raises(RunFolderFailed, match="no usable baseline"):
+        server._open(bridge, run_dir, str(source), "probe:1", "Default")
+
+    assert not (run_dir / OPEN_FILE_NAME).exists()
+    assert "remodel.close" in bridge.commands
+    assert phases(run_dir)[-4:] == [
+        "baseline_geometry.returned", "open_record.failed", "cleanup.begin", "cleanup.returned",
+    ]
+    assert source.read_bytes() == b"fictional native part"
+
+    # U26: the attestation written before the baseline is re-checked once the session ended.
+    checked = read_attestation(run_dir)
+    assert checked.rechecked_at is not None
+    assert checked.matches is True
+
+
+def test_a_baseline_that_set_no_accuracy_is_accepted(tmp_path: Path) -> None:
+    """Since U27 the copy is read the review dump's way and sets no accuracy of its own, so
+    its reading carries `accuracy_level: null`; that is a usable baseline."""
+    server, bridge, run_dir, source = setup_run(tmp_path)
+    bridge.readings[0] = reading(accuracy_level=None)
+
+    result = server._open(bridge, run_dir, str(source), "probe:1", "Default")
+
+    assert result["copy_present"] is True
+    record = json.loads((run_dir / OPEN_FILE_NAME).read_text(encoding="utf-8"))
+    assert record["geometry_before"]["accuracy_level"] is None
+
+
+def test_a_bridge_refusal_records_the_refused_phase_and_answers_the_refusal(
+    tmp_path: Path,
+) -> None:
+    server, bridge, run_dir, source = setup_run(
+        tmp_path, open_raises=RemodelError("the copy differs", "scope_changed"),
+    )
+
+    with pytest.raises(ScopeRefused):
+        server._open(bridge, run_dir, str(source), "probe:1", "Default")
+
+    assert phases(run_dir) == ["copy_open.begin", "copy_open.refused"]
+    assert "remodel.close" not in bridge.commands
+
+
+def test_preexisting_rebuild_errors_are_an_answer_after_the_refused_phase(
+    tmp_path: Path,
+) -> None:
+    server, bridge, run_dir, source = setup_run(
+        tmp_path,
+        open_raises=RemodelError(
+            "two errors", PREEXISTING_REBUILD_ERRORS, {"rebuild_error_count": 2},
+        ),
+    )
+
+    result = server._open(bridge, run_dir, str(source), "probe:1", "Default")
+
+    assert result == {
+        "copy_path": str(run_dir / "copy" / "fictional-source-RMS.SLDPRT"),
+        "rebuild_error_count": 2,
+        "copy_present": False,
+    }
+    assert phases(run_dir) == ["copy_open.begin", "copy_open.refused"]
+    assert not (run_dir / OPEN_FILE_NAME).exists()
+
+
+def test_a_bridge_that_fails_records_the_failed_phase(tmp_path: Path) -> None:
+    server, bridge, run_dir, source = setup_run(
+        tmp_path, open_raises=BridgeError("the pipe closed"),
+    )
+
+    with pytest.raises(Exception, match="remodel.open"):
+        server._open(bridge, run_dir, str(source), "probe:1", "Default")
+
+    assert phases(run_dir) == ["copy_open.begin", "copy_open.failed"]
 
 
 def test_unwritable_diagnostics_do_not_prevent_session_cleanup(

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using SwReview.Extractor.Capture;
@@ -334,11 +335,15 @@ public sealed class BridgeServices
     public Action<RemodelSessionEnd>? RemodelSessionEnded { get; set; }
 
     /// <summary>
-    /// Flushed, bounded markers around the COM calls in remodel.geometry. A native process
-    /// crash cannot be caught by Dispatch, so its ordinary completed-request log has no line
-    /// for the call that crashed. Null on hosts without a run log.
+    /// U27 (2026-09-28): where the before, after and failed markers around each native step of
+    /// <c>remodel.open</c> and <c>remodel.geometry</c> go, as <c>(command, marker)</c>
+    /// (<see cref="RemodelStageMarkers"/>). A native process crash cannot be caught by Dispatch,
+    /// so the request's completed line is never written; the host appends each marker to the run
+    /// folder's <c>remodel.log</c> with one file append, before the step starts. The folder is
+    /// <see cref="SwBridgeDispatcher.RemodelStageDirectory"/>. Null on hosts without a run log;
+    /// a writer that throws is ignored.
     /// </summary>
-    public Action<string>? RemodelGeometryStage { get; set; }
+    public Action<string, string>? RemodelStage { get; set; }
 
     /// <summary>
     /// Feature 011, protocol 1.3. The source <c>drawing.read</c> reads a confirmed candidate
@@ -404,6 +409,9 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     /// </summary>
     private RemodelSession? _session;
 
+    /// <summary>The folder bound for the <c>remodel.open</c> in progress, and null outside one (U27).</summary>
+    private string? _openingRunDirectory;
+
     /// <summary>
     /// 004 T172: whether Start may run in this build. While false the six change commands
     /// (<see cref="RemodelStart.ChangeCommands"/>) are refused before anything else.
@@ -464,6 +472,15 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
 
     /// <summary>This run's folder, where `remodel.log` is written, or null when no run is open.</summary>
     public string? RemodelRunDirectory => _session?.Scope.RunDirectory;
+
+    /// <summary>
+    /// Where <see cref="BridgeServices.RemodelStage"/>'s markers go (U27): the open run's folder,
+    /// or - while <c>remodel.open</c> is still running, before a run exists - the folder the host
+    /// bound for it, so the open's own steps are marked in the file its run will keep. Null
+    /// otherwise. <see cref="RemodelRunDirectory"/> is unchanged: a failed open's request line
+    /// still goes to the tool-service log only.
+    /// </summary>
+    public string? RemodelStageDirectory => _session?.Scope.RunDirectory ?? _openingRunDirectory;
 
     public BridgeResponse Dispatch(BridgeRequest request)
     {
@@ -803,6 +820,29 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
 
     private const string RebuildKey = "IModelDoc2.ForceRebuild3";
 
+    /// <summary><c>IModelDoc2.ListExternalFileReferencesCount2</c>, as the gate is told about it.</summary>
+    private const string ExternalReferencesMember = "ListExternalFileReferencesCount2";
+
+    // The names of the steps of remodel.open that are not one gated member each (U27): marked
+    // around the file work and the helpers that make several calls, by the name a reader of
+    // remodel.log looks up in this file.
+    private const string RecordSourceStep = "RecordSource";
+    private const string ApplyTogglesStep = "RemodelSystemToggles.Apply";
+    private const string CopyStep = "File.Copy";
+    private const string AssertOpenedStep = "AssertOpenedAtCopy";
+    private const string ReadSignalsStep = "ReadSignals";
+    private const string TrustSaveFlagStep = "CanTrustSaveFlag";
+    private const string UnwindCloseStep = "unwind.CloseDoc";
+    private const string UnwindDeleteStep = "unwind.DeleteCopy";
+    private const string UnwindSettingsStep = "unwind.PutBackSettings";
+
+    /// <summary>
+    /// The marker writer for one remodel command: <see cref="BridgeServices.RemodelStage"/> with
+    /// the command's name bound in, or a writer that writes nothing on a host without one.
+    /// </summary>
+    private Action<string> Stage(string command) =>
+        marker => _services.RemodelStage?.Invoke(command, marker);
+
     private BridgeResponse Remodel(BridgeRequest request)
     {
         // 004 T172, the backstop: the pane refuses Start first, and a clause checked only by the
@@ -898,6 +938,11 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     /// close not counted by the breaker, the open's own refusal the answer - and the ending told
     /// to <see cref="BridgeServices.RemodelSessionEnded"/> with the reason
     /// <see cref="RemodelSessionEnd.ReasonOpenFailed"/>.
+    ///
+    /// U27 (2026-09-28): every native step, and the file work between them, is marked before it
+    /// starts and after it returns (<see cref="RemodelStageMarkers"/>) in the bound run folder's
+    /// <c>remodel.log</c>, and so is the unwind's; <c>CommandInProgress</c> goes back to the
+    /// engineer's value as the open's last step, the three dialog toggles staying for the session.
     /// </summary>
     private RemodelOpenResult Open(BridgeRequest request)
     {
@@ -905,7 +950,20 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
         // so an open refused or failed at any step leaves nothing bound and the next run needs a
         // fresh bind. Whether there was one is still step 4's refusal, so the order is unchanged.
         string? boundRunRoot = TakeRunRoot();
+        _openingRunDirectory = string.IsNullOrWhiteSpace(boundRunRoot) ? null : boundRunRoot;
+        try
+        {
+            return OpenIn(request, boundRunRoot, Stage(RemodelCommands.Open));
+        }
+        finally
+        {
+            _openingRunDirectory = null;
+        }
+    }
 
+    /// <summary><see cref="Open"/>, with the root it took and its markers' writer.</summary>
+    private RemodelOpenResult OpenIn(BridgeRequest request, string? boundRunRoot, Action<string> stage)
+    {
         RemodelOpenParams parameters = RemodelOpenParams.Read(request);
         IRemodelSeat seat = Seat();
 
@@ -924,7 +982,7 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
 
         // 2 and 3. Re-read on the still-open source: the engineer may have edited it between
         // the probe and the run.
-        RecheckSource(seat, source);
+        RecheckSource(seat, source, stage);
 
         // 4. The save target, before a byte is written. The run folder is the HOST's - see
         // BridgeServices.RemodelRunRoot - and never one derived from the request, or both of
@@ -946,25 +1004,30 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
 
         // 5. The attestation, recorded before the copy and re-checked at report time.
         VaultReference? vault = seat.GetVault(source);
-        SourceAttestation attestation = RemodelCopy.RecordSource(
-            source, copy, DateTime.UtcNow, vault?.Path, vault?.Revision);
+        SourceAttestation attestation = RemodelStageMarkers.Around(
+            stage,
+            RecordSourceStep,
+            () => RemodelCopy.RecordSource(source, copy, DateTime.UtcNow, vault?.Path, vault?.Revision));
 
         // 6. The four settings that would otherwise open a modal on the thread the run holds.
         // They are writes to the engineer's application-wide settings, so they go through the
         // same gate every other write does, under their own two allowlist keys.
-        RemodelSystemToggles toggles = RemodelSystemToggles.Apply(seat, _remodelGate);
+        RemodelSystemToggles toggles = RemodelStageMarkers.Around(
+            stage, ApplyTogglesStep, () => RemodelSystemToggles.Apply(seat, _remodelGate));
 
         bool copyCreated = false;
         IRemodelDocument? document = null;
         try
         {
             // 7. The bytewise copy, refusing to overwrite.
-            RemodelCopy.CreateCopy(source, copy);
+            RemodelStageMarkers.Around(stage, CopyStep, () => RemodelCopy.CreateCopy(source, copy));
             copyCreated = true;
 
             // 8. Silent | LoadModel = 17 exactly, then the two-sided assertion.
-            document = _remodelGate.Call(
-                OpenDocMember, () => seat.OpenDocument(copy, RemodelCopy.OpenOptions));
+            document = RemodelStageMarkers.Around(
+                stage,
+                OpenDocMember,
+                () => _remodelGate.Call(OpenDocMember, () => seat.OpenDocument(copy, RemodelCopy.OpenOptions)));
             if (document == null)
             {
                 throw new RemodelCopyError(
@@ -972,36 +1035,46 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
                     $"SOLIDWORKS opened no document at '{copy}'.");
             }
 
-            RemodelCopy.AssertOpenedAtCopy(document, copy, source);
+            IRemodelDocument tagged = document;
+            RemodelStageMarkers.Around(
+                stage, AssertOpenedStep, () => RemodelCopy.AssertOpenedAtCopy(tagged, copy, source));
 
             // 9. The tag, written before a scope can exist, because it is one of
             // VerifyTarget's four checks.
-            IRemodelDocument tagged = document;
-            _remodelGate.Call(TagMember, () => RemodelCopy.Tag(tagged, parameters.RunId));
+            RemodelStageMarkers.Around(
+                stage, TagMember, () => _remodelGate.Call(TagMember, () => RemodelCopy.Tag(tagged, parameters.RunId)));
 
             var scope = new RemodelScope(
                 document, _remodelGate, parameters.RunId, copy, runDirectory);
 
             // 10. Roll the bar to the end, then assert nothing is still rolled back.
-            scope.Write(RollbackKey, () => tagged.EditRollbackToEnd());
+            RemodelStageMarkers.Around(
+                stage, RollbackKey, () => scope.Write(RollbackKey, () => tagged.EditRollbackToEnd()));
 
-            IReadOnlyList<object> features = _remodelGate.Call(
-                FeaturesMember, tagged.GetFeaturesInOrder);
-            foreach (object feature in features)
+            IReadOnlyList<object> features = RemodelStageMarkers.Around(
+                stage, FeaturesMember, () => _remodelGate.Call(FeaturesMember, tagged.GetFeaturesInOrder));
+
+            // One marker pair for the whole walk: a feature count's worth of lines would bury the
+            // steps around it, and the walk is one question - is any feature still rolled back.
+            bool anyRolledBack = RemodelStageMarkers.Around(
+                stage,
+                IsRolledBackMember,
+                () => features.Any(feature => _remodelGate.Call(IsRolledBackMember, () => tagged.IsRolledBack(feature))));
+            if (anyRolledBack)
             {
-                if (_remodelGate.Call(IsRolledBackMember, () => tagged.IsRolledBack(feature)))
-                {
-                    throw new RemodelCopyError(
-                        RemodelErrorCodes.OpenFailed,
-                        "a feature still reports IsRolledBack() after EditRollback to the end, "
-                        + "so the tree the run would measure is not the whole tree.");
-                }
+                throw new RemodelCopyError(
+                    RemodelErrorCodes.OpenFailed,
+                    "a feature still reports IsRolledBack() after EditRollback to the end, "
+                    + "so the tree the run would measure is not the whole tree.");
             }
 
             // 11. The one refusal that happens after a copy exists.
-            scope.Write(RebuildKey, () => tagged.ForceRebuild(false));
-            int rebuildErrors = _remodelGate.Call(
-                WhatsWrongCountMember, tagged.GetWhatsWrongCount);
+            RemodelStageMarkers.Around(
+                stage, RebuildKey, () => scope.Write(RebuildKey, () => tagged.ForceRebuild(false)));
+            int rebuildErrors = RemodelStageMarkers.Around(
+                stage,
+                WhatsWrongCountMember,
+                () => _remodelGate.Call(WhatsWrongCountMember, tagged.GetWhatsWrongCount));
             if (rebuildErrors != 0)
             {
                 throw new RemodelCommandError(
@@ -1012,7 +1085,8 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
             }
 
             // 12. The probe's rows, re-read on the copy, compared field for field.
-            ScopeSignals signals = RemodelScopeProbe.ReadSignals(_remodelGate, tagged);
+            ScopeSignals signals = RemodelStageMarkers.Around(
+                stage, ReadSignalsStep, () => RemodelScopeProbe.ReadSignals(_remodelGate, tagged));
             IReadOnlyList<string> differences =
                 RemodelScopeProbe.ModelSignalDifferences(probe.Signals, signals);
             if (differences.Count > 0)
@@ -1025,14 +1099,23 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
             }
 
             signals.RebuildErrorCount = rebuildErrors;
-            signals.SaveFlagDirty = _remodelGate.Call("GetSaveFlag", tagged.GetSaveFlag);
+            signals.SaveFlagDirty = RemodelStageMarkers.Around(
+                stage, SaveFlagMember, () => _remodelGate.Call(SaveFlagMember, tagged.GetSaveFlag));
+            string? lengthUnit = RemodelStageMarkers.Around(
+                stage, LengthUnitMember, () => _remodelGate.Call(LengthUnitMember, tagged.GetLengthUnit));
+
+            // The open's own sequence of calls is done, so CommandInProgress goes back now (U27,
+            // default taken 2026-09-28, the owner may revise), before a session exists: a
+            // put-back that throws fails this open, whose unwind tries it again and names it.
+            RemodelStageMarkers.Around(
+                stage, RemodelSystemToggles.CommandInProgressMember, toggles.RestoreCommandInProgress);
 
             var session = new RemodelSession(
                 scope, document, _remodelGate, source, attestation, toggles)
             {
                 Signals = signals,
                 BaselineRebuildErrors = rebuildErrors,
-                LengthUnit = _remodelGate.Call(LengthUnitMember, tagged.GetLengthUnit),
+                LengthUnit = lengthUnit,
                 Configurations = signals.ConfigurationNames ?? new string[0],
             };
 
@@ -1062,15 +1145,17 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
             // stopped, which is what is thrown below. 004 T183: with no handle back the close
             // asks SOLIDWORKS first, since OpenDoc7 may have opened the copy anyway.
             var failures = new List<string>();
-            bool copyClosed = CloseAfterAFailedOpen(
-                _remodelGate, seat, copy, copyCreated, document != null, failures);
+            bool copyClosed = RemodelStageMarkers.Around(
+                stage,
+                UnwindCloseStep,
+                () => CloseAfterAFailedOpen(_remodelGate, seat, copy, copyCreated, document != null, failures));
 
             if (copyCreated)
             {
-                DeleteCopy(copy);
+                RemodelStageMarkers.Around(stage, UnwindDeleteStep, () => DeleteCopy(copy));
             }
 
-            PutBackSettings(toggles, failures);
+            RemodelStageMarkers.Around(stage, UnwindSettingsStep, () => PutBackSettings(toggles, failures));
 
             // The settings were changed and a copy may have been opened, so this is an ending of a
             // session in the making: told as every other ending is, so what it left reaches the
@@ -1094,7 +1179,7 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     /// <c>remodel.open</c> steps 2 and 3, on the source SOLIDWORKS still has open. The source
     /// is read here and nowhere else in this command, and it is never opened.
     /// </summary>
-    private void RecheckSource(IRemodelSeat seat, string source)
+    private void RecheckSource(IRemodelSeat seat, string source, Action<string> stage)
     {
         if (!System.IO.File.Exists(source))
         {
@@ -1103,7 +1188,8 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
         }
 
         IRemodelProbeSource reader = seat.ProbeSource;
-        if (!_remodelGate.Call(OpenDocumentKey, () => reader.IsOpen(source)))
+        if (!RemodelStageMarkers.Around(
+            stage, OpenDocumentKey, () => _remodelGate.Call(OpenDocumentKey, () => reader.IsOpen(source))))
         {
             throw new RemodelCommandError(
                 RemodelErrorCodes.SourceNotOpen,
@@ -1111,15 +1197,35 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
                 + "before the copy is made.");
         }
 
-        if (_remodelGate.Call("GetSaveFlag", reader.GetSaveFlag))
+        if (RemodelStageMarkers.Around(
+            stage, SaveFlagMember, () => _remodelGate.Call(SaveFlagMember, reader.GetSaveFlag)))
         {
             throw new RemodelCommandError(
                 RemodelErrorCodes.SourceDirty,
                 $"'{source}' has been edited since the probe and has unsaved changes.");
         }
 
-        int externalReferences = _remodelGate.Call(
-            "ListExternalFileReferencesCount2", reader.GetExternalReferenceCount);
+        // U26 (default taken 2026-09-28, the owner may revise): the probe believed that false
+        // save flag, or the host would have refused; it must still be believable now. A source
+        // open read-only whose "Don't prompt to save read-only referenced documents" option was
+        // turned on since the probe is a part whose unsaved changes can no longer be seen.
+        if (!RemodelStageMarkers.Around(
+            stage,
+            TrustSaveFlagStep,
+            () => RemodelScopeProbe.CanTrustSaveFlag(
+                _remodelGate, reader, RemodelScopeProbe.ReadOnlyAttribute(source))))
+        {
+            throw new RemodelCommandError(
+                RemodelErrorCodes.ScopeChanged,
+                $"'{source}' is open read-only and SOLIDWORKS now discards changes to read-only "
+                + "documents without asking, so whether it has unsaved changes can no longer be read "
+                + "before the copy is made.");
+        }
+
+        int externalReferences = RemodelStageMarkers.Around(
+            stage,
+            ExternalReferencesMember,
+            () => _remodelGate.Call(ExternalReferencesMember, reader.GetExternalReferenceCount));
         if (externalReferences != 0)
         {
             throw new RemodelCommandError(
@@ -1796,21 +1902,36 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
         string subject = session.BaselineGeometryTaken
             ? RemodelGeometrySubjects.CopyAtEnd
             : RemodelGeometrySubjects.CopyAtOpen;
+        Action<string> stage = Stage(RemodelCommands.Geometry);
+
+        // U27 (default taken 2026-09-28, the owner may revise): the reading is of the whole part,
+        // and CreateMassProperty2 includes whatever bodies are pre-selected, so the copy's
+        // selection is cleared first - the allowlisted clear every selection-based operation
+        // makes, behind VerifyTarget - and what a folder change or a stray click last selected
+        // cannot narrow what is measured.
+        RemodelStageMarkers.Around(
+            stage,
+            ClearSelectionKey,
+            () => session.Scope.Write(ClearSelectionKey, session.Document.ClearSelection));
+
         GeometryReading reading = RemodelGeometry.Read(
             session.Gate,
             session.Document,
             subject,
             session.Attestation.Sha256,
             DateTime.UtcNow,
-            _services.RemodelGeometryStage);
+            stage);
+
         // A returned reading can still report that mass properties were unavailable. It is
         // evidence of an attempted measurement, but cannot be a baseline or one of the two
         // readings a passing save verdict must rest on. A retry keeps copy_at_open until a
-        // usable baseline exists.
+        // usable baseline exists; POST /remodel/open refuses a baseline that is not usable, so a
+        // run never goes on to a later reading from one (U27, default taken 2026-09-28).
         if (reading.Status == RemodelGeometry.StatusOk && reading.Recalculated)
         {
             session.GeometryReadings++;
         }
+
         return reading;
     }
 

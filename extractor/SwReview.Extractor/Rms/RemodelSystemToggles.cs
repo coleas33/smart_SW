@@ -47,7 +47,9 @@ public interface IRemodelToggleHost
 ///   - <c>CommandInProgress = true</c>: PROBE-1's modal suppression for a refused
 ///     <c>ReorderFeature</c>, which returns a bare <c>false</c> with no code and may raise
 ///     "Cannot reorder" on the STA thread. <b>UNVERIFIED that it suppresses that box, and that
-///     is blocking</b>; if PROBE-1 fails, stage 1 cannot run unattended.
+///     is blocking</b>; if PROBE-1 fails, stage 1 cannot run unattended. Since U27 (2026-09-28)
+///     it is true only while <c>remodel.open</c> runs (<see cref="RestoreCommandInProgress"/>);
+///     a change command that needs it once PROBE-1 has answered sets it around itself.
 ///
 /// <b>All four are read before any of them is set.</b> A value that could not be read refuses
 /// the start rather than being guessed: a guessed "restore" leaves the engineer's SOLIDWORKS in
@@ -308,6 +310,29 @@ public sealed class RemodelSystemToggles
                 + "still holding the run's value, and the next Restore() retries them.",
                 failures);
         }
+    }
+
+    /// <summary>
+    /// Puts <c>CommandInProgress</c> alone back to its original value, leaving the three dialog
+    /// toggles holding the run's value for the rest of the session (U27, default taken
+    /// 2026-09-28, the owner may revise; research R5.6's amendment). <c>remodel.open</c> calls it
+    /// once its own sequence of calls is done: the API help says to set the flag before a
+    /// sequence and back after it, and that it affects only out-of-process applications, so a
+    /// flag left true between commands was never doing the job it was set for.
+    ///
+    /// The same put-back as <see cref="Restore"/> - the guard and the observer, not the breaker -
+    /// and the same bookkeeping: the flag leaves <see cref="Outstanding"/> only once it is back,
+    /// so a put-back that throws is retried by the session's <see cref="Restore"/>.
+    /// </summary>
+    public void RestoreCommandInProgress()
+    {
+        if (!_pendingCommandInProgress)
+        {
+            return;
+        }
+
+        PutBack(CommandInProgressMember, () => _host.SetCommandInProgress(_originalCommandInProgress));
+        _pendingCommandInProgress = false;
     }
 
     /// <summary>

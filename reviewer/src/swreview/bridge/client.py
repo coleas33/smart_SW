@@ -236,6 +236,14 @@ class NamedPipeTransport:
 
     The pipe is opened on the first request, not in `__init__`, so constructing a client
     never blocks and a run that ends up making no bridge call never touches SOLIDWORKS.
+
+    `timeout_s` is recorded and **not enforced** here: the read below blocks on a synchronous
+    pipe handle, and a Python-side deadline would need a reader thread plus cancelled I/O to
+    unblock it. The bound a stuck call actually meets is the host's: the add-in answers every
+    request within `InProcPipeServerOptions.InvokeTimeout` (120 s by default) whether or not
+    the application thread did; the console host's `serve` has no bound of its own (U27 crash
+    hunt, 2026-09-28; recorded rather than enforced, default taken 2026-09-28, the owner may
+    revise). A caller that needs a shorter bound, as the pane's 30 s does, keeps it itself.
     """
 
     def __init__(

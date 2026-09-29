@@ -136,10 +136,14 @@ public sealed class RemodelSeatBridgeTests : IDisposable
         Assert.Null(_solidworks.Tag);
         Assert.DoesNotContain("Save3", _solidworks.Copy.Document.Members);
 
-        // The four settings were set and put back, CommandInProgress last each time.
+        // The four settings were set and put back: CommandInProgress true during the open and back
+        // at its end (U27, default taken 2026-09-28), the three toggles back at the close.
         List<object?[]> commandInProgress = _solidworks.Application.Calls.Where(call => call.Member == "set_CommandInProgress").Select(call => call.Arguments).ToList();
         Assert.Equal(new[] { new object?[] { true }, new object?[] { false } }, commandInProgress);
-        Assert.Equal("set_CommandInProgress", _solidworks.Application.Calls.Last(call => call.Member.StartsWith("Set", StringComparison.Ordinal) || call.Member.StartsWith("set_", StringComparison.Ordinal)).Member);
+        int flagBack = _solidworks.Application.Calls.FindLastIndex(call => call.Member == "set_CommandInProgress");
+        int closed = _solidworks.Application.Calls.FindIndex(call => call.Member == "CloseDoc");
+        Assert.True(flagBack < closed, "CommandInProgress was still true when the copy was closed.");
+        Assert.Equal("SetUserPreferenceToggle", _solidworks.Application.Calls.Last(call => call.Member.StartsWith("Set", StringComparison.Ordinal) || call.Member.StartsWith("set_", StringComparison.Ordinal)).Member);
     }
 
     /// <summary>A source SOLIDWORKS does not have open is refused, and the seat does not open it to answer.</summary>

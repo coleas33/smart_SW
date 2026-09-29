@@ -56,7 +56,11 @@ from swreview.exceptions import EXCEPTIONS_FILE_NAME
 from swreview.ir.models import EvidencePackage
 from swreview.remodel.apply_log import CHANGES_FILE_NAME, read_changes
 from swreview.remodel.artifacts import PACKAGE_AFTER
-from swreview.remodel.attestation import ATTESTATION_FILE_NAME, read_attestation
+from swreview.remodel.attestation import (
+    ATTESTATION_FILE_NAME,
+    read_attestation,
+    write_attestation,
+)
 from swreview.remodel.plan import PACKAGE_BEFORE, Limits, RemodelPlan, plan_path
 from swreview.remodel.scope import ScopeSignals
 from swreview.remodel.tolerances import IDENTITY
@@ -1503,6 +1507,54 @@ class TestClose:
 
         assert bridge.discards == 1
         assert bridge.copy_exists is False
+
+    def test_closing_a_plan_only_run_rechecks_its_attestation(
+        self, client: TestClient, run_dir: Path, source: Path, bridge: ProbingBridge
+    ) -> None:
+        """U26 (default taken 2026-09-28, the owner may revise): Start is switched off, so no run
+        reaches phase D, where the attestation used to be re-checked. Closing the copy re-checks
+        it instead - a hash compare, the source only read - and files the verdict, so a
+        plan-only run's record says whether the engineer's file is still what was copied."""
+        assert open_copy(client, run_dir, source).status_code == 200
+        assert read_attestation(run_dir).rechecked_at is None
+
+        assert close(client, run_dir).json() == {"closed": True}
+
+        checked = read_attestation(run_dir)
+        assert checked.rechecked_at is not None
+        assert checked.matches is True
+        assert source.read_bytes() == SOURCE_CONTENT
+
+    def test_a_source_changed_before_the_close_is_recorded_as_not_matching(
+        self, client: TestClient, run_dir: Path, source: Path, bridge: ProbingBridge
+    ) -> None:
+        assert open_copy(client, run_dir, source).status_code == 200
+        source.write_bytes(SOURCE_CONTENT + b" edited")
+
+        assert close(client, run_dir).json() == {"closed": True}
+
+        assert read_attestation(run_dir).matches is False
+
+    def test_an_attestation_already_rechecked_is_left_as_it_was(
+        self, client: TestClient, run_dir: Path, source: Path, bridge: ProbingBridge
+    ) -> None:
+        """Phase D's re-check is the run's verdict and is never overwritten by a later close."""
+        assert open_copy(client, run_dir, source).status_code == 200
+        first = read_attestation(run_dir)
+        rechecked = first.model_copy(update={"rechecked_at": AT, "matches": True})
+        write_attestation(run_dir, rechecked)
+        source.write_bytes(SOURCE_CONTENT + b" edited later")
+
+        assert close(client, run_dir).json() == {"closed": True}
+
+        assert read_attestation(run_dir) == rechecked
+
+    def test_a_close_with_no_attestation_rechecks_nothing(
+        self, client: TestClient, run_dir: Path, bridge: ProbingBridge
+    ) -> None:
+        assert close(client, run_dir).json() == {"closed": True}
+
+        assert not (run_dir / "source-attestation.json").exists()
 
     def test_a_copy_that_is_not_open_is_a_no_op(
         self, client: TestClient, run_dir: Path, bridge: ProbingBridge

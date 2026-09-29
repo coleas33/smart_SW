@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using SwReview.Extractor.Bridge;
 using SwReview.Extractor.Rms;
@@ -56,22 +57,67 @@ public class RemodelGeometryTests : IDisposable
 
     // ---- how the reading is taken ------------------------------------------------------
 
+    /// <summary>
+    /// U27 (default taken 2026-09-28, the owner may revise): the copy is measured as a whole
+    /// part, the way the review dump's <c>PropertyDumper</c> measures every part on the seat -
+    /// <c>CreateMassProperty2</c>, <c>UseSystemUnits</c>, <c>Recalculate</c>, the getters - and
+    /// never with <c>set_SelectedItems</c> or <c>set_AccuracyLevel</c>, the two calls no seat had
+    /// run when SOLIDWORKS exited during the first baseline reading. The scope gate refuses a
+    /// part with more than one solid body, so the whole part is that one body.
+    /// </summary>
     [Fact]
-    public void BuildsTheMassPropertyAtHigherAccuracyOverTheSolidBodies()
+    public void ReadsTheWholePartWithNoSelectionAndNoAccuracySettingAsTheReviewDumpDoes()
     {
+        int alreadySeen = _harness.Observer.Members.Count;
+
         GeometryReading reading = Read();
 
-        // The integer, not the name: swMassPropertyAccuracyLevel_Higher = 2 (VERIFIED value).
-        Assert.Equal(2, MassProperty.AccuracyLevel);
-        Assert.Equal(2, reading.AccuracyLevel);
-
-        // SelectedItems is the solid bodies, so the reading is of the part rather than of
-        // whatever the engineer last clicked.
         Assert.Equal(
-            _harness.Copy.SolidBodies.Cast<object>().ToArray(),
-            MassProperty.SelectedItems!.ToArray());
+            new[]
+            {
+                nameof(FakeMassProperty.SetUseSystemUnits),
+                nameof(FakeMassProperty.Recalculate),
+                nameof(FakeMassProperty.GetVolume),
+                nameof(FakeMassProperty.GetSurfaceArea),
+                nameof(FakeMassProperty.GetCenterOfMass),
+                nameof(FakeMassProperty.GetPrincipalMomentsOfInertia),
+                nameof(FakeMassProperty.GetMass),
+                nameof(FakeMassProperty.GetDensity),
+            },
+            MassProperty.Members);
+        Assert.Null(MassProperty.SelectedItems);
+        Assert.Equal(-1, MassProperty.AccuracyLevel);
 
-        Assert.Contains("CreateMassProperty2", _harness.Observer.Members);
+        // Null says the reading set no accuracy of its own: SOLIDWORKS's default was used.
+        Assert.Null(reading.AccuracyLevel);
+
+        string[] gated = _harness.Observer.Members.Skip(alreadySeen).ToArray();
+        Assert.Contains("CreateMassProperty2", gated);
+        Assert.DoesNotContain("set_SelectedItems", gated);
+        Assert.DoesNotContain("set_AccuracyLevel", gated);
+        Assert.Empty(_harness.Observer.Refusals);
+    }
+
+    /// <summary>
+    /// <c>CreateMassProperty2</c>'s remarks: pre-selected bodies are included. A whole-part
+    /// reading therefore starts from an empty selection - cleared through the allowlisted
+    /// <c>IModelDoc2.ClearSelection2</c> on the copy, behind <c>VerifyTarget</c> - so what the
+    /// engineer or a folder change last selected cannot narrow what is measured.
+    /// </summary>
+    [Fact]
+    public void ClearsTheCopysSelectionBeforeTheMassPropertyIsBuilt()
+    {
+        _harness.Copy.Selected.Add(_harness.Copy.Features[0]);
+        int alreadySeen = _harness.Observer.Members.Count;
+
+        Read();
+
+        int cleared = _harness.Copy.Members.IndexOf(nameof(FakeRemodelDocument.ClearSelection));
+        int created = _harness.Copy.Members.IndexOf(nameof(FakeRemodelDocument.CreateMassProperty));
+        Assert.True(cleared >= 0, "the copy's selection was never cleared.");
+        Assert.True(cleared < created, "the selection was cleared after the mass property was built.");
+        Assert.Empty(_harness.Copy.Selected);
+        Assert.Contains("IModelDoc2.ClearSelection2", _harness.Observer.Members.Skip(alreadySeen));
         Assert.Empty(_harness.Observer.Refusals);
     }
 
@@ -134,17 +180,19 @@ public class RemodelGeometryTests : IDisposable
 
         // And every member this reading brought with it is on that frozen surface, so an
         // upgrade that moves one of these signatures is a red build rather than a wrong number.
+        // A read is gated by its bare member name and a write - the selection clear before the
+        // reading (U27) - by its interface-qualified key.
         foreach (string member in _harness.Observer.Members.Skip(alreadySeen))
         {
-            Assert.Contains(RemodelInteropSurface.Calls, call => call.Member == member);
+            Assert.Contains(RemodelInteropSurface.Calls, call => call.Member == member || call.Key == member);
         }
 
         // The typed members, by name, so a rewrite through the raw object fails here.
         foreach (string member in new[]
         {
-            "CreateMassProperty2", "set_AccuracyLevel", "set_SelectedItems", "Recalculate",
-            "get_Volume", "get_SurfaceArea", "get_CenterOfMass", "get_PrincipalMomentsOfInertia",
-            "get_Mass", "get_Density",
+            "CreateMassProperty2", "set_UseSystemUnits", "Recalculate", "get_Volume",
+            "get_SurfaceArea", "get_CenterOfMass", "get_PrincipalMomentsOfInertia", "get_Mass",
+            "get_Density",
         })
         {
             Assert.Contains(member, _harness.Observer.Members);
@@ -178,16 +226,59 @@ public class RemodelGeometryTests : IDisposable
         Assert.Null(reading.Residual);
     }
 
+    /// <summary>
+    /// A whole-part reading of two solid bodies is a reading of both at once, which no body
+    /// pairing can compare, so it is not taken: the counts are still walked and reported, and
+    /// nothing is measured (U27; the scope gate refuses such a part, and the final reading of a
+    /// change that split the body says so here rather than passing as a whole).
+    /// </summary>
     [Fact]
-    public void SumsTheFaceAndEdgeCountsOverEverySolidBody()
+    public void APartWithMoreThanOneSolidBodyIsCountedButNotMeasuredAsAWhole()
     {
         _harness.Copy.SolidBodies.Add(new FakeBody(faceCount: 10, edgeCount: 15));
 
         GeometryReading reading = Read();
 
+        Assert.Equal(RemodelGeometry.StatusUnknownError, reading.Status);
+        Assert.False(reading.Recalculated);
         Assert.Equal(2, reading.SolidBodyCount);
         Assert.Equal(16, reading.FaceCount);
         Assert.Equal(27, reading.EdgeCount);
+        AssertNothingMeasured(reading);
+        Assert.DoesNotContain(nameof(FakeRemodelDocument.CreateMassProperty), _harness.Copy.Members);
+        Assert.Empty(MassProperty.Members);
+    }
+
+    /// <summary>
+    /// A solid body has a positive, finite volume. Anything else - zero, negative, not a number,
+    /// infinite - is a reading nobody can compare, so it stops there, is reported as not OK and
+    /// is never counted as a baseline (U27).
+    /// </summary>
+    [Theory]
+    [InlineData(0.0)]
+    [InlineData(-1e-9)]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    public void AVolumeThatIsNotPositiveAndFiniteIsNotAUsableReading(double volume)
+    {
+        MassProperty.Volume = volume;
+
+        GeometryReading reading = Read();
+
+        Assert.Equal(RemodelGeometry.StatusUnknownError, reading.Status);
+        Assert.True(reading.Recalculated);
+        AssertNothingMeasured(reading);
+        Assert.Equal(
+            new[]
+            {
+                nameof(FakeMassProperty.SetUseSystemUnits),
+                nameof(FakeMassProperty.Recalculate),
+                nameof(FakeMassProperty.GetVolume),
+            },
+            MassProperty.Members);
+
+        // Not a baseline: the next reading is still the one taken before any change.
+        Assert.Equal(RemodelGeometrySubjects.CopyAtOpen, Read().Subject);
     }
 
     [Fact]
@@ -329,32 +420,66 @@ public class RemodelGeometryTests : IDisposable
         Assert.True(reading.At >= before && reading.At <= DateTime.UtcNow.AddSeconds(1));
     }
 
+    /// <summary>
+    /// U27: every call the reading makes has a <c>before</c> marker handed to the host's writer
+    /// before the call starts - asserted from inside each fake call, the only moment that proves
+    /// it - and an <c>after</c> marker once it answers, pair by pair, in the exact order the
+    /// reading makes them. A call that throws leaves <c>failed</c> in place of <c>after</c>.
+    /// </summary>
     [Fact]
-    public void EveryGeometryInteropCallHasFlushedBoundaryMarkersIncludingTheOneThatFails()
+    public void EveryGeometryCallHasABeforeMarkerWrittenBeforeItStartsAndAnAfterMarkerOnceItAnswers()
     {
-        var markers = new System.Collections.Generic.List<string>();
-        _harness.Services.RemodelGeometryStage = markers.Add;
+        var markers = new List<string>();
+        _harness.Services.RemodelStage = (command, marker) =>
+        {
+            Assert.Equal(RemodelCommands.Geometry, command);
+            markers.Add(marker);
+        };
+        Action<string> inside = member => Assert.True(
+            markers.Count > 0 && markers[markers.Count - 1].StartsWith("before ", StringComparison.Ordinal),
+            member + " ran before its before-marker was written.");
+        _harness.Copy.DuringCall = inside;
+        MassProperty.DuringCall = inside;
 
         Read();
 
-        Assert.Equal("before GetBodies2:solid", markers[0]);
-        Assert.Equal("after GetBodies2:solid", markers[1]);
-        Assert.Contains("before CreateMassProperty2", markers);
-        Assert.Contains("after CreateMassProperty2", markers);
-        Assert.Contains("before Recalculate", markers);
-        Assert.Contains("after Recalculate", markers);
-        Assert.Equal("after get_Density", markers[markers.Count - 1]);
+        Assert.Equal(
+            Paired(
+                "IModelDoc2.ClearSelection2",
+                "GetBodies2:solid",
+                "GetBodies2:sheet",
+                "GetMaterialPropertyName2",
+                "GetFaceCount",
+                "GetEdgeCount",
+                "CreateMassProperty2",
+                "set_UseSystemUnits",
+                "Recalculate",
+                "get_Volume",
+                "get_SurfaceArea",
+                "get_CenterOfMass",
+                "get_PrincipalMomentsOfInertia",
+                "get_Mass",
+                "get_Density"),
+            markers);
 
         markers.Clear();
         _harness.Copy.GetBodiesFailure = new InvalidOperationException("unreadable bodies");
         Assert.Equal("error", _harness.Dispatch(RemodelCommands.Geometry, "{}").Status);
-        Assert.Equal(new[] { "before GetBodies2:solid", "failed GetBodies2:solid" }, markers);
+        Assert.Equal(
+            new[]
+            {
+                "before IModelDoc2.ClearSelection2",
+                "after IModelDoc2.ClearSelection2",
+                "before GetBodies2:solid",
+                "failed GetBodies2:solid",
+            },
+            markers);
     }
 
     [Fact]
     public void DiagnosticWriterFailureDoesNotChangeTheMeasurement()
     {
-        _harness.Services.RemodelGeometryStage = _ => throw new System.IO.IOException("log unavailable");
+        _harness.Services.RemodelStage = (_, _) => throw new System.IO.IOException("log unavailable");
 
         Assert.Equal(RemodelGeometry.StatusOk, Read().Status);
     }
@@ -424,6 +549,9 @@ public class RemodelGeometryTests : IDisposable
     }
 
     // ---- helpers -------------------------------------------------------------------------
+
+    private static string[] Paired(params string[] calls) =>
+        calls.SelectMany(call => new[] { "before " + call, "after " + call }).ToArray();
 
     private static void AssertNothingMeasured(GeometryReading reading)
     {

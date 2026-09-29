@@ -239,6 +239,11 @@ public sealed class ToolServiceRequestLogger : IBridgeDispatcher
         // a false record of what that request did.
         _recorder.Drain();
 
+        // U27 (2026-09-28): the begin line goes out before the command runs, one append per file,
+        // so a native exit inside it still leaves a record naming the request that was running.
+        // The completed line below is written only once the command returns.
+        WriteBegin(request);
+
         BridgeResponse response;
         try
         {
@@ -254,6 +259,24 @@ public sealed class ToolServiceRequestLogger : IBridgeDispatcher
 
         Write(request, response);
         return response;
+    }
+
+    /// <summary>
+    /// The begin line, without its trailing newline (U27): the time, the request's id and command,
+    /// and <c>begin</c>. Built from the same two request fields the completed line starts with,
+    /// and sanitized the same way, so it carries no secret and cannot forge a record.
+    /// </summary>
+    public static string BeginLine(DateTimeOffset at, BridgeRequest request)
+    {
+        if (request == null)
+        {
+            throw new ArgumentNullException(nameof(request));
+        }
+
+        return ToolServiceLog.Stamp(at)
+            + "id=" + Field(request.Id)
+            + " command=" + Field(request.Command)
+            + " begin";
     }
 
     /// <summary>The line, without its trailing newline. Public so the format has one owner.</summary>
@@ -276,7 +299,7 @@ public sealed class ToolServiceRequestLogger : IBridgeDispatcher
         }
 
         var line = new StringBuilder(160);
-        line.Append('[').Append(at.ToString("O", CultureInfo.InvariantCulture)).Append("] ");
+        line.Append(ToolServiceLog.Stamp(at));
         line.Append("id=").Append(Field(request.Id));
         line.Append(" command=").Append(Field(request.Command));
         line.Append(" status=").Append(Field(response.Status));
@@ -306,10 +329,21 @@ public sealed class ToolServiceRequestLogger : IBridgeDispatcher
     private void Write(BridgeRequest request, BridgeResponse response)
     {
         SwGateActivity activity = _recorder.Drain();
+        Emit(request, () => Format(_now(), request, response, activity));
+    }
+
+    private void WriteBegin(BridgeRequest request) => Emit(request, () => BeginLine(_now(), request));
+
+    /// <summary>
+    /// One line to the tool-service log, and to `remodel.log` as well for a remodel command -
+    /// the begin line and the completed line alike, built once so the two files cannot disagree.
+    /// </summary>
+    private void Emit(BridgeRequest request, Func<string> build)
+    {
         string line;
         try
         {
-            line = Format(_now(), request, response, activity) + System.Environment.NewLine;
+            line = build() + System.Environment.NewLine;
             _write(line);
         }
         catch (Exception)
@@ -488,9 +522,19 @@ public sealed class ToolServiceLog
     }
 
     /// <summary>A line, for the server's own lifecycle and failure messages.</summary>
-    public void WriteLine(string message) => Write(
-        "[" + DateTimeOffset.Now.ToString("O", CultureInfo.InvariantCulture) + "] "
-        + message + System.Environment.NewLine);
+    public void WriteLine(string message) => Write(Line(message));
+
+    /// <summary>
+    /// The prefix every line in these logs starts with: the time in round-trip form, bracketed,
+    /// and a space. One spelling, here, for the request lines, the teardown line, the server's
+    /// own lines and the remodel markers alike.
+    /// </summary>
+    public static string Stamp(DateTimeOffset at) =>
+        "[" + at.ToString("O", CultureInfo.InvariantCulture) + "] ";
+
+    /// <summary>A whole line: stamped now, with its line ending.</summary>
+    public static string Line(string message) =>
+        Stamp(DateTimeOffset.Now) + message + System.Environment.NewLine;
 }
 
 /// <summary>
@@ -549,6 +593,9 @@ public sealed class RemodelRunLog
 
         _log.Write(text);
     }
+
+    /// <summary>A line stamped now, as <see cref="ToolServiceLog.WriteLine"/> writes one.</summary>
+    public void WriteLine(string message) => Write(ToolServiceLog.Line(message));
 }
 
 /// <summary>Everything <see cref="ToolServiceHost"/> is given.</summary>
@@ -806,13 +853,14 @@ public sealed class ToolServiceHost : IToolService
             attached.Services,
             new ScopedSecretPolicy(reviewSecret, generalChatSecret, remodelSecret));
 
-        // A native crash inside a geometry COM call never returns through RequestChain, so its
-        // per-request line cannot be written. These fixed member markers are appended before
-        // and after each call, one file append per marker, to survive process termination.
-        var geometryLog = new RemodelRunLog(() => dispatcher.RemodelRunDirectory);
-        attached.Services.RemodelGeometryStage = marker => geometryLog.Write(
-            "[" + DateTimeOffset.Now.ToString("O", CultureInfo.InvariantCulture) + "] "
-            + "command=remodel.geometry stage=" + marker + System.Environment.NewLine);
+        // U27: a native crash inside a COM call never returns through RequestChain, so its
+        // completed line cannot be written. The fixed markers around each native step of
+        // remodel.open and remodel.geometry are appended before and after the step, one file
+        // append per marker, to survive process termination - in the open run's folder, or the
+        // folder bound for the open still in progress.
+        var stageLog = new RemodelRunLog(() => dispatcher.RemodelStageDirectory);
+        attached.Services.RemodelStage = (command, marker) =>
+            stageLog.WriteLine("command=" + command + " stage=" + marker);
 
         remodelGate.Observer = new RemodelGateRecorder(recorder, () => dispatcher.RemodelTargetPath);
 
@@ -1048,7 +1096,7 @@ public sealed class ToolServiceHost : IToolService
         }
 
         var line = new StringBuilder(200);
-        line.Append('[').Append(at.ToString("O", CultureInfo.InvariantCulture)).Append("] ");
+        line.Append(ToolServiceLog.Stamp(at));
         line.Append("remodel teardown thread=").Append(thread);
 
         if (!outcome.HadSession)

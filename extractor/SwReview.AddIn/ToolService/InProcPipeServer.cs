@@ -347,7 +347,9 @@ public sealed class InProcPipeServerOptions
     /// The default is deliberately longer than the Python client's own 60s
     /// (reviewer/src/swreview/bridge/client.py, DEFAULT_TIMEOUT_S), so the two sides cannot
     /// disagree about whether a call is still running, and long enough that a real
-    /// interference run is never cut off (research R6).
+    /// interference run is never cut off (research R6). The Python transport records that 60 s
+    /// and does not enforce it (U27 crash hunt, 2026-09-28), so this is the bound a stuck call
+    /// actually meets.
     /// </summary>
     public TimeSpan InvokeTimeout { get; set; } = InProcPipeServer.DefaultInvokeTimeout;
 
@@ -569,6 +571,36 @@ public sealed class InProcPipeServer : IDisposable
     }
 
     /// <summary>
+    /// The pipe thread's last line of defence (U27 crash hunt, 2026-09-28): <paramref name="answer"/>
+    /// for <paramref name="line"/>, or - if anything at all escapes it - an error response with an
+    /// empty id and the exception's type, and one line to <paramref name="log"/>. An exception that
+    /// reaches the top of a pipe thread ends the process, and the process is SOLIDWORKS. The type
+    /// and not the message: the message of an exception from parsing may quote the line, and the
+    /// line carries the secret.
+    /// </summary>
+    internal static BridgeResponse AnswerSafely(
+        string line, Func<string, BridgeResponse> answer, Action<string> log)
+    {
+        try
+        {
+            return answer(line);
+        }
+        catch (Exception error)
+        {
+            try
+            {
+                log("a request line could not be answered: " + error.GetType().Name);
+            }
+            catch (Exception)
+            {
+            }
+
+            return BridgeResponse.Failed(
+                string.Empty, "the tool service could not answer this line: " + error.GetType().Name);
+        }
+    }
+
+    /// <summary>
     /// Parses one request line, runs it on the application thread, and returns the response
     /// to write back. Public because it is the whole request path: the pipe below only moves
     /// bytes, and everything worth asserting is assertable without one.
@@ -585,6 +617,17 @@ public sealed class InProcPipeServer : IDisposable
             // No id was parsed, so the response carries an empty one and the client matches
             // on the error (feature 001 PROTOCOL.md).
             return BridgeResponse.Failed(string.Empty, error.Message);
+        }
+        catch (Exception error) when (error is ArgumentException
+            || error is InvalidOperationException
+            || error is NotSupportedException)
+        {
+            // What the serializer raises for a line it cannot even transcode - a lone UTF-16
+            // surrogate among them - is not a JsonException, so the codec lets it through. It is
+            // a line that is not a request all the same, answered the same way; named by its
+            // type only, because the message may quote the line and the line carries the secret.
+            return BridgeResponse.Failed(
+                string.Empty, "The request line could not be read: " + error.GetType().Name + ".");
         }
 
         var work = new WorkItem(request);
@@ -831,7 +874,7 @@ public sealed class InProcPipeServer : IDisposable
                     continue;
                 }
 
-                BridgeResponse response = Answer(line);
+                BridgeResponse response = AnswerSafely(line, Answer, Log);
 
                 try
                 {

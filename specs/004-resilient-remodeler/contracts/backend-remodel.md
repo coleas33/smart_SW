@@ -30,7 +30,7 @@ nothing else.
 | `GET /remodel/runs/{job_id}/events` | | `replay_events(<run_dir>/events.jsonl, after)`, with `after` a query parameter | `200 {events, next}` |
 | `POST /remodel/runs/{job_id}/package-after` | `{path}` | Hands the run the dump the add-in just wrote, ending the `dump_after` rendezvous | `200 {ok}` |
 | `POST /remodel/runs/{job_id}/stop` | `{}` | Sets the run's stop flag. Idempotent | `200 {stopping}` |
-| `POST /remodel/close` | `{run_dir, bridge, discard_copy}` | `client.close_document(discard_copy)`. A copy that is not open is a no-op | `200 {closed}` |
+| `POST /remodel/close` | `{run_dir, bridge, discard_copy}` | `client.close_document(discard_copy)`. A copy that is not open is a no-op. *Amended 2026-09-28 (U26, T186):* then, unless a run is in flight for that folder, re-checks a source attestation nothing has re-checked yet and files the verdict | `200 {closed}` |
 
 Before phase B starts, the worker performs a deterministic run-entry preflight. The plan must
 still be `planned`, its scope verdict must be `ok`, and it must carry the attested copy tuple
@@ -81,6 +81,23 @@ lets the pane answer after a restart and what keeps the pipeline stateless:
   `client.geometry()` reply taken at open - the `copy_at_open` reading the geometry gate compares
   against, because the source is never opened for the comparison in any mode (FR-037).
   `scope_signals` are the **copy's**, measured at step 12, which is what the plan records.
+
+*Amended 2026-09-28 (U27; default taken 2026-09-28, the owner may revise; `tasks.md` T185,
+research R16.1):* a baseline that is not a usable reading - a status other than `OK` or
+`Recalculate()` false - is not a baseline: the route answers `RunFolderFailed` ("no usable baseline
+to compare against"), ends the session by T175's close, and writes no `open.json`. The bridge keeps
+stamping `copy_at_open` until a usable reading exists, so a run filed on an unusable one could only
+end in the gate refusing its final reading as a subject mismatch. `accuracy_level: null` is usable:
+the copy's reading sets no accuracy since U27.
+
+*Amended 2026-09-28 (U26; default taken 2026-09-28, the owner may revise; `tasks.md` T186,
+research R16.4):* the source attestation is re-checked - a hash compare, the source only read, the
+recorded half carried across word for word - and its verdict filed in `source-attestation.json`
+(`rechecked_at`, `matches`) at the first of: phase D (as before); the end of a failed open, after
+T175's close; or `POST /remodel/close`. While Start is switched off no run reaches phase D, so a
+plan-only run's record is completed at the close. A verdict already filed is never overwritten, a
+run in flight re-checks itself, and a re-check that cannot be written is logged and changes nothing
+else.
 
 ### `GET /remodel/runs/{job_id}`
 

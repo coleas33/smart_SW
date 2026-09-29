@@ -68,6 +68,13 @@ public sealed class FakeMassProperty : IMassPropertyReading
     /// <summary>Every seam member called, in order.</summary>
     public List<string> Members { get; } = new List<string>();
 
+    /// <summary>
+    /// Run as each member is called, with its name, before it answers: a test reads the run's
+    /// markers from inside the call, which is the only moment that proves a marker was written
+    /// before the call it names (U27).
+    /// </summary>
+    public Action<string>? DuringCall { get; set; }
+
     /// <summary>The integer <c>set_AccuracyLevel</c> was handed, asserted exactly.</summary>
     public int AccuracyLevel { get; private set; } = -1;
 
@@ -91,13 +98,13 @@ public sealed class FakeMassProperty : IMassPropertyReading
 
     public void SetAccuracyLevel(int accuracyLevel)
     {
-        Members.Add(nameof(SetAccuracyLevel));
+        Called(nameof(SetAccuracyLevel));
         AccuracyLevel = accuracyLevel;
     }
 
     public void SetSelectedItems(IReadOnlyList<object> bodies)
     {
-        Members.Add(nameof(SetSelectedItems));
+        Called(nameof(SetSelectedItems));
         SelectedItems = bodies;
     }
 
@@ -106,50 +113,56 @@ public sealed class FakeMassProperty : IMassPropertyReading
 
     public void SetUseSystemUnits(bool useSystemUnits)
     {
-        Members.Add(nameof(SetUseSystemUnits));
+        Called(nameof(SetUseSystemUnits));
         UseSystemUnits = useSystemUnits;
     }
 
     public bool Recalculate()
     {
-        Members.Add(nameof(Recalculate));
+        Called(nameof(Recalculate));
         return RecalculateAnswer;
     }
 
     public double GetVolume()
     {
-        Members.Add(nameof(GetVolume));
+        Called(nameof(GetVolume));
         return Volume;
     }
 
     public double GetSurfaceArea()
     {
-        Members.Add(nameof(GetSurfaceArea));
+        Called(nameof(GetSurfaceArea));
         return SurfaceArea;
     }
 
     public IReadOnlyList<double>? GetCenterOfMass()
     {
-        Members.Add(nameof(GetCenterOfMass));
+        Called(nameof(GetCenterOfMass));
         return CenterOfMass;
     }
 
     public IReadOnlyList<double>? GetPrincipalMomentsOfInertia()
     {
-        Members.Add(nameof(GetPrincipalMomentsOfInertia));
+        Called(nameof(GetPrincipalMomentsOfInertia));
         return PrincipalMoments;
     }
 
     public double GetMass()
     {
-        Members.Add(nameof(GetMass));
+        Called(nameof(GetMass));
         return Mass;
     }
 
     public double GetDensity()
     {
-        Members.Add(nameof(GetDensity));
+        Called(nameof(GetDensity));
         return Density;
+    }
+
+    private void Called(string member)
+    {
+        Members.Add(member);
+        DuringCall?.Invoke(member);
     }
 }
 
@@ -309,6 +322,40 @@ public sealed class FakeProbeSource : IRemodelProbeSource
     {
         Members.Add(nameof(GetSaveFlag));
         return SaveFlag;
+    }
+
+    /// <summary><c>IModelDoc2.IsOpenedReadOnly()</c>'s answer (U26).</summary>
+    public bool OpenedReadOnly { get; set; }
+
+    /// <summary>What <see cref="IsOpenedReadOnly"/> throws: a read-only state SOLIDWORKS will not answer.</summary>
+    public Exception? OpenedReadOnlyFailure { get; set; }
+
+    /// <summary>The <c>swExtRefNoPromptOrSave</c> system option's value (U26).</summary>
+    public bool DiscardsReadOnlyChanges { get; set; }
+
+    /// <summary>What <see cref="GetDiscardsReadOnlyChanges"/> throws: an option SOLIDWORKS will not answer.</summary>
+    public Exception? DiscardsReadOnlyChangesFailure { get; set; }
+
+    public bool IsOpenedReadOnly()
+    {
+        Members.Add(nameof(IsOpenedReadOnly));
+        if (OpenedReadOnlyFailure != null)
+        {
+            throw OpenedReadOnlyFailure;
+        }
+
+        return OpenedReadOnly;
+    }
+
+    public bool GetDiscardsReadOnlyChanges()
+    {
+        Members.Add(nameof(GetDiscardsReadOnlyChanges));
+        if (DiscardsReadOnlyChangesFailure != null)
+        {
+            throw DiscardsReadOnlyChangesFailure;
+        }
+
+        return DiscardsReadOnlyChanges;
     }
 
     public int GetExternalReferenceCount()
@@ -734,6 +781,7 @@ public sealed class FakeRemodelDocument : IRemodelDocument
     public void ClearSelection()
     {
         Members.Add(nameof(ClearSelection));
+        DuringCall?.Invoke(nameof(ClearSelection));
         Selected.Clear();
     }
 
@@ -791,15 +839,24 @@ public sealed class FakeRemodelDocument : IRemodelDocument
 
     public Exception? GetBodiesFailure { get; set; }
 
+    /// <summary>
+    /// Run as each call <c>remodel.geometry</c> makes on the copy is made, with the member's
+    /// name, before it answers - <see cref="FakeMassProperty.DuringCall"/>'s twin for the copy's
+    /// own reads and the selection clear (U27).
+    /// </summary>
+    public Action<string>? DuringCall { get; set; }
+
     public IMassPropertyReading? CreateMassProperty()
     {
         Members.Add(nameof(CreateMassProperty));
+        DuringCall?.Invoke(nameof(CreateMassProperty));
         return MassProperty;
     }
 
     public IReadOnlyList<object>? GetBodies(int bodyType)
     {
         Members.Add(nameof(GetBodies));
+        DuringCall?.Invoke(nameof(GetBodies));
         if (GetBodiesFailure != null)
         {
             throw GetBodiesFailure;
@@ -811,18 +868,21 @@ public sealed class FakeRemodelDocument : IRemodelDocument
     public int? GetFaceCount(object body)
     {
         Members.Add(nameof(GetFaceCount));
+        DuringCall?.Invoke(nameof(GetFaceCount));
         return ((FakeBody)body).FaceCount;
     }
 
     public int? GetEdgeCount(object body)
     {
         Members.Add(nameof(GetEdgeCount));
+        DuringCall?.Invoke(nameof(GetEdgeCount));
         return ((FakeBody)body).EdgeCount;
     }
 
     public string? GetMaterialName()
     {
         Members.Add(nameof(GetMaterialName));
+        DuringCall?.Invoke(nameof(GetMaterialName));
         return MaterialName;
     }
 
@@ -960,8 +1020,15 @@ public sealed class FakeRemodelSeat : IRemodelSeat
 
     public IRemodelProbeSource ProbeSource => Probe;
 
+    /// <summary>
+    /// Run as <see cref="OpenDocument"/> is called, before it answers, so a test can read the
+    /// markers <c>remodel.open</c> wrote before <c>OpenDoc7</c> started (U27).
+    /// </summary>
+    public Action<string>? DuringCall { get; set; }
+
     public IRemodelDocument? OpenDocument(string documentPath, int options)
     {
+        DuringCall?.Invoke(nameof(OpenDocument));
         Opened.Add(documentPath);
         OpenOptions.Add(options);
         if (Copy != null)

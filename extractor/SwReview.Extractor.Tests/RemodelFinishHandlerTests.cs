@@ -321,7 +321,7 @@ public class RemodelFinishHandlerTests : IDisposable
         _harness.Dispatch(RemodelCommands.Close, "{}");
 
         Assert.Equal(
-            new[] { "10=False", "77=False", "329=False", "CommandInProgress=False" },
+            new[] { "10=False", "77=False", "329=False" },
             _harness.Seat.ToggleWrites);
     }
 
@@ -375,7 +375,7 @@ public class RemodelFinishHandlerTests : IDisposable
 
         Assert.Empty(_harness.Seat.Closed);
         Assert.Equal(
-            new[] { "10=False", "77=False", "329=False", "CommandInProgress=False" },
+            new[] { "10=False", "77=False", "329=False" },
             _harness.Seat.ToggleWrites);
         AssertTheSessionIsOverAndTheNextOpenGoesThrough();
     }
@@ -461,14 +461,14 @@ public class RemodelFinishHandlerTests : IDisposable
     [Fact]
     public void Close_WhoseRestoreFailsPartWay_IsCloseIncomplete_NamingTheSettingStillSet()
     {
-        _harness.Seat.FailingWrites.Add("CommandInProgress=False");
+        // A toggle, since CommandInProgress went back at the open (U27).
+        _harness.Seat.FailingWrites.Add("77=False");
 
         BridgeResponse response = _harness.Dispatch(RemodelCommands.Close, "{}");
 
         Assert.Equal(RemodelErrorCodes.CloseIncomplete, RemodelHarness.Refusal(response));
         Assert.Equal("3", Detail(response)["settings_restored"]);
-        Assert.Equal(
-            RemodelSystemToggles.CommandInProgressSetting, Detail(response)["settings_outstanding"]);
+        Assert.Equal("swShowErrorsEveryRebuild", Detail(response)["settings_outstanding"]);
         Assert.Equal("true", Detail(response)["copy_closed"]);
         _harness.Seat.FailingWrites.Clear();
         AssertTheSessionIsOverAndTheNextOpenGoesThrough();
@@ -496,7 +496,7 @@ public class RemodelFinishHandlerTests : IDisposable
         Assert.True(result.Closed);
         Assert.Equal(_harness.CopyPath, Assert.Single(_harness.Seat.Closed));
         Assert.Equal(
-            new[] { "10=False", "77=False", "329=False", "CommandInProgress=False" },
+            new[] { "10=False", "77=False", "329=False" },
             _harness.Seat.ToggleWrites);
     }
 

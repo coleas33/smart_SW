@@ -150,6 +150,39 @@ public class RemodelCopyTests : IDisposable
         Assert.Equal("an earlier artifact", File.ReadAllText(copy));
     }
 
+    /// <summary>
+    /// U26 follow-up (default taken 2026-09-28, the owner may revise): the copy was made but the
+    /// write that makes it writable failed. That is <c>copy_failed</c> - not <c>copy_exists</c>,
+    /// which a failure inside the old catch was misreported as - and the read-only copy is
+    /// deleted rather than left where no clean-up could delete it. The source is untouched.
+    /// </summary>
+    [Fact]
+    public void ACopyThatCannotBeMadeWritableIsCopyFailedAndIsDeleted()
+    {
+        string source = WriteSource();
+        File.SetAttributes(source, FileAttributes.ReadOnly);
+        string copy = RemodelCopy.CopyPathFor(RunDirectory, source);
+        FileAttributes sourceAttributes = File.GetAttributes(source);
+        byte[] sourceBytes = File.ReadAllBytes(source);
+
+        try
+        {
+            var error = Assert.Throws<RemodelCopyError>(() => RemodelCopy.CreateCopy(
+                source, copy, (_, _) => throw new IOException("the attribute write was refused")));
+
+            Assert.Equal("copy_failed", error.ErrorCode);
+            Assert.Contains("could not be made writable", error.Message, StringComparison.Ordinal);
+            Assert.Contains("The copy was deleted", error.Message, StringComparison.Ordinal);
+            Assert.False(File.Exists(copy), "a read-only copy was left behind");
+            Assert.Equal(sourceAttributes, File.GetAttributes(source));
+            Assert.Equal(sourceBytes, File.ReadAllBytes(source));
+        }
+        finally
+        {
+            File.SetAttributes(source, FileAttributes.Normal);
+        }
+    }
+
     [Fact]
     public void AMissingSourceIsRefusedAndNothingIsWritten()
     {
@@ -357,18 +390,24 @@ public class RemodelCopyTests : IDisposable
     public void AReadOnlySourceIsCopiedAndTheCopyIsWritable()
     {
         string source = WriteSource();
-        File.SetAttributes(source, FileAttributes.ReadOnly);
+        File.SetAttributes(source, FileAttributes.ReadOnly | FileAttributes.Archive);
         string copy = RemodelCopy.CopyPathFor(RunDirectory, source);
         byte[] sourceBytes = File.ReadAllBytes(source);
         DateTime sourceWriteTime = File.GetLastWriteTimeUtc(source);
+        FileAttributes sourceAttributes = File.GetAttributes(source);
 
         try
         {
             SourceAttestation before = RemodelCopy.RecordSource(
                 source, copy, DateTime.UtcNow, null, null);
-            RemodelCopy.CreateCopy(source, copy);
+            RemodelCopyRoute route = RemodelCopy.CreateCopy(source, copy);
             SourceAttestation after = RemodelCopy.RecordSource(
                 source, copy, DateTime.UtcNow, null, null);
+
+            // The route whose copy carries the attributes across, and so the one that has to
+            // clear read-only on the copy; and the source's attributes, all of them, as they were.
+            Assert.Equal(RemodelCopyRoute.FileCopy, route);
+            Assert.Equal(sourceAttributes, File.GetAttributes(source));
 
             Assert.Equal(before.LengthBytes, after.LengthBytes);
             Assert.Equal(before.LastWriteUtc, after.LastWriteUtc);

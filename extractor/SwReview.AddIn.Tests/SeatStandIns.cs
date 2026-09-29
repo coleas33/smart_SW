@@ -118,6 +118,7 @@ internal sealed class StandInSolidworks
     public static readonly IReadOnlyCollection<string> SourceReads = new HashSet<string>(StringComparer.Ordinal)
     {
         "IModelDoc2.GetType", "IModelDoc2.GetSaveFlag", "IModelDoc2.ListExternalFileReferencesCount2",
+        "IModelDoc2.IsOpenedReadOnly",
         "IModelDoc2.GetBodies2", "IModelDoc2.IsWeldment", "IModelDoc2.get_FeatureManager", "IModelDoc2.GetConfigurationNames",
         "IModelDoc2.get_Extension", "IFeatureManager.GetSheetMetalFolder", "IFeatureManager.GetFeatures",
         "IModelDocExtension.GetPersistReference3",

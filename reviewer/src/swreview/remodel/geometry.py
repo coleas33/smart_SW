@@ -160,7 +160,12 @@ class GeometryReading(BaseModel):
     source_sha256: str
     subject: Subject
     status: int
-    accuracy_level: int
+    accuracy_level: int | None
+    """The `swMassPropertyAccuracyLevel_e` the reading set, or `None` when it set none and the
+    SOLIDWORKS default applied: every reading since U27 (default taken 2026-09-28, the owner
+    may revise), which measures the copy the review dump's way until PROBE-8 has run
+    `set_AccuracyLevel` on a seat. Recorded, never compared: both readings of a run are taken
+    the same way."""
     recalculated: bool
     volume_m3: float | None
     surface_area_m2: float | None

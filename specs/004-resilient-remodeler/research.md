@@ -591,6 +591,10 @@ with `ForceRebuild3` is itself UNVERIFIED.
 
 ### R5.6 Three system toggles plus one application flag
 
+*Amended 2026-09-28 (U27; default taken 2026-09-28, the owner may revise; R16.2, `tasks.md` T185):*
+`CommandInProgress` is set with the toggles and put back as `remodel.open`'s last step; only the
+three dialog toggles hold for the session.
+
 The first three rows are `swUserPreferenceToggle_e` constants, all VERIFIED values, all **system**
 (not document) settings. The fourth is not one of them: `ISldWorks.CommandInProgress` is a plain
 property, which is why its Value column reads `n/a` and why it carries its own allowlist key,
@@ -1028,7 +1032,7 @@ existing pages. `RemodelHost` owns only `ready` and `remodel.*`; everything else
 | type | payload | host action |
 |---|---|---|
 | `ready` | `{}` | reply `init` `{backend:{port,origin}, token, run_root, document:{path,configuration,kind}\|null, limits}` |
-| `remodel.plan` | `{}` | probe the active document's scope signals (`remodel.probe_scope`, read members only) and refuse (`error`) if there is no document, it is not a part, it is dirty (`GetSaveFlag()`), it is read-only, it has external references, or it fails the scope gate, **all before anything is copied**. Otherwise create the run folder, `File.Copy`, open and tag, roll and rebuild (a non-zero error count refuses and deletes the copy), dump, plan. Reply `remodel.planned {run_dir, plan_summary}` |
+| `remodel.plan` | `{}` | probe the active document's scope signals (`remodel.probe_scope`, read members only) and refuse (`error`) if there is no document, it is not a part, it is dirty (`GetSaveFlag()`), it is read-only (*amended 2026-09-28, U26: read-only sources are allowed; a read-only source whose save flag cannot be believed is refused instead, R16.3*), it has external references, or it fails the scope gate, **all before anything is copied**. Otherwise create the run folder, `File.Copy`, open and tag, roll and rebuild (a non-zero error count refuses and deletes the copy), dump, plan. Reply `remodel.planned {run_dir, plan_summary}` |
 | `remodel.start` | `{run_dir}` | run phases B to D to completion; progress through `status`; reply `remodel.started {chat_id}` |
 | `remodel.stop` | `{}` | set the stop flag; the executor finishes the change in flight, rolls it back if it failed, finalizes; reply `remodel.stopped {changes_applied}` |
 | `remodel.result` | `{run_dir}` | reply `{changes[], grade_before, grade_after, geometry, rebuild_list[]}` read from the run folder |
@@ -1744,3 +1748,152 @@ The new words are true whether or not the run saved and whether or not the close
 (not taken: new state for one sentence, and the one sentence true in every case says as much);
 drop the clause (not taken: an engineer reading "the tag was not removed" should know whether the
 file on disk carries it).
+
+## R16. Defaults taken 2026-09-28: the seat packet's U26 and U27, and the review of the follow-up
+
+**Sources.** The sitting of 2026-09-28 (the handoff packet's findings U26 and U27), the follow-up
+on `codex/testing-feedback-2026-09-28` (commits `63fc360` and `2aed3d5`), and the four reviews of
+that follow-up the same day: a read-only-source lens, a crash hunt over the packet's logs and the
+2024 API help installed on the development machine, and a general gates lens (the fourth, the
+drawing lens, is feature 011's and 013's). The engineer asked for the follow-up to be checked, and
+the workflow that checked it settles each finding by a default. **Each item below is a default
+taken 2026-09-28, the owner may revise; none is the owner's own words, and none is an R12
+decision.** SOLIDWORKS was not started: the API help was read from the installed help files and the
+interop metadata was reflected, and what each item says a seat does stays a seat item until the
+next sitting checks it (the retest in `docs/testing-feedback-2026-09-28.md`).
+
+### R16.1 The copy is measured as a whole part, the proven way (U27, T185)
+
+**Decision**: `remodel.geometry` reads the copy the way the review dump's `PropertyDumper` reads
+every part: the copy's selection cleared (`IModelDoc2.ClearSelection2(true)`, allowlisted, behind
+`VerifyTarget`), `GetBodies2` for both body counts, the material, the face and edge counts,
+`CreateMassProperty2()`, `UseSystemUnits = true`, `Recalculate()` and the getters - and no
+`set_AccuracyLevel` and no `set_SelectedItems`. Three guards fail closed: other than one solid body
+is counted and not measured (`UnknownError`, `recalculated` false); a volume that is not positive
+and finite ends the reading (`UnknownError`, nothing recorded); `Recalculate()` false is unchanged.
+`accuracy_level` is `null`. PROBE-8, which still sets both on its throwaway part, hands
+`set_SelectedItems` a `DispatchWrapper` array. The phase stamp counts usable readings (status `OK`
+and `Recalculate()` true), and `POST /remodel/open` refuses a baseline that is not usable, so a run
+never goes on from one.
+
+**Why**: SOLIDWORKS exited after `remodel.open` answered ok and while the backend waited on the
+baseline `remodel.geometry` (the packet's logs; the crash hunt's timeline). Of the calls that
+reading makes, the whole-part sequence had run on this seat the same sitting (the Model check and
+Standards dumps carry the plate's mass and volume), and two had never run on any seat:
+`set_AccuracyLevel`, and `set_SelectedItems` - handed a plain `object[]`, which .NET marshals as a
+SAFEARRAY of VARIANT (VT 0x200C, measured) where the SOLIDWORKS programming guide ("IDispatch Object
+Arrays as Input in .NET") requires `DispatchWrapper`, a SAFEARRAY of IDispatch (0x2009). The cause is
+not proven; removing the two unproven calls from the path under investigation, and wrapping the one
+that stays, is what the evidence supports. The scope gate already refuses a part with more than one
+solid body and the geometry compare already requires a one-body baseline, so the whole part is that
+body; the guards keep a whole-part reading from ever standing for anything else. `CreateMassProperty2`'s
+remarks say pre-selected bodies are included, and a folder change leaves a selection, hence the
+clear. A failed baseline accepted at open would only have surfaced at the end of a run as a subject
+mismatch, so it is refused where it happens.
+
+**Alternatives weighed**: keep the selected-body design and only wrap `SelectedItems` (not taken as
+the whole answer: the wrapped call is still unproven on a seat, and the whole-part read is proven);
+read the selection count and refuse a non-empty one instead of clearing it (not taken: a folder
+change legitimately leaves a selection, and clearing is the allowlisted, proven call); split the
+reading counter into attempts and usable readings (not needed once open refuses an unusable baseline;
+the subject contract is amended instead).
+
+### R16.2 `CommandInProgress` is put back at the end of `remodel.open` (U27, T185; R5.6 amended)
+
+**Decision**: `CommandInProgress` is set with the three dialog toggles at step 6 and put back to its
+original value as `remodel.open`'s last step, before the session exists; the three toggles hold for
+the session as before. A put-back that fails fails the open, whose unwind tries it again and names
+it; the session's end writes it no second time. A change command that needs the flag once PROBE-1
+has answered sets it around itself (T180).
+
+**Why**: the API help for `ISldWorks::CommandInProgress`: set it true before a sequence of API calls
+and false after, and it affects only out-of-process applications. It was held true for the whole
+session - between commands, while SOLIDWORKS processed the copy it had just opened, and through the
+baseline reading - and its one stated purpose, PROBE-1's reorder modal, belongs to the change
+commands, which Start keeps switched off. T180 already proposed putting settings back at the end of
+the open.
+
+**Alternatives weighed**: keep R5.6's session-wide flag (not taken: against the help, and in the
+crash window); drop the flag from the open altogether (not taken: the open's own sequence is the
+documented use, and dropping it would change the four-setting record every ending reports).
+
+### R16.3 A read-only source's save flag is believed only when SOLIDWORKS can report its edits (U26, T186)
+
+**Decision**: the probe returns `save_flag_dirty: false` only for a source open for writing from a
+writable file, or one whose "Don't prompt to save read-only referenced documents" option
+(`swExtRefNoPromptOrSave = 15`) reads off; otherwise `null`, and the host refuses before any copy
+with `ScopeRefused`, naming the option and the two ways past it (turn it off, or check the part
+out). The probe reads `IModelDoc2.IsOpenedReadOnly()` and, when needed,
+`ISldWorks.GetUserPreferenceToggle(15)`; a read SOLIDWORKS will not answer is unknown. `remodel.open`
+re-checks the same rule with the save flag and refuses `scope_changed` when the flag stopped being
+believable. `true` is believed as before.
+
+**Why**: the API help's remark on `IModelDoc2::GetSaveFlag`: it returns true for a model opened
+read-only only when that option is not selected (and the model is dirty and visible). Removing the
+`DocumentReadOnly` refusal (U26) left `GetSaveFlag` as the only check that the file on disk is the
+model on screen (spec.md's edge case), so a checked-in part with unsaved edits could be copied from
+disk while that option is on. The seat's setting is not in the packet.
+
+**Alternatives weighed**: restore the `DocumentReadOnly` refusal (not taken: it refuses the seat's
+normal case, which is what U26 reported); write the limitation down and allow it (not taken: a
+silent copy of the wrong model is the class of wrong answer this feature exists to prevent); a new
+error class with its own label (not taken for now: `ScopeRefused` already carries a sentence per
+refusal, and the sentence names the fix).
+
+### R16.4 The attestation is re-checked when the copy is closed; the writable copy has its own failure (U26, T186)
+
+**Decision**: `POST /remodel/close`, unless a run is in flight for the folder, and the end of a
+failed open re-check a source attestation nothing has re-checked yet and file the verdict; phase D's
+verdict is never overwritten. Separately, clearing the copy's read-only attribute is a step of its
+own after `File.Copy`: its failure is `copy_failed` ("was made but could not be made writable"), and
+the copy is deleted (its attribute cleared first) or the sentence says where it was left.
+
+**Why**: the re-check lived only in phase D, which Start keeps switched off, so every run's
+`rechecked_at` and `matches` stayed null - including the crashed run's - and U26's "the source is
+unchanged" was never checked at run time. And the attribute clear sat inside the copy's
+`IOException` handler, so its failure answered `copy_exists` with a read-only copy left where no
+clean-up could delete it; unreachable from the add-in until U26 let read-only sources through.
+
+**Alternatives weighed**: record the source's read-only attribute in the attestation (deferred,
+T188: a change to the record both artifacts carry; the seat plan's step 5.3 and the retest read the
+attribute before and after instead); re-check at plan time (not taken: the close is the last moment
+the run touches the seat, and a plan that waits would re-check too early).
+
+### R16.5 The open's steps, every request, and the document-change fan-out are marked (U27, T185)
+
+**Decision**: every step of `remodel.open` that calls SOLIDWORKS or does file work, and the unwind's
+close, delete and put-back, is marked before it starts and after it returns in the bound run folder's
+`remodel.log`, through the one helper `remodel.geometry` uses (`RemodelStageMarkers`); every request
+gets a begin line before it runs, in the tool-service log and, for a remodel command with a run, in
+`remodel.log`; while a remodel plan or run is in flight the add-in's document-change fan-out is
+bracketed in `addin.log`. A pipe thread answers anything that escapes a request's answer with an
+error line, and a request line the codec cannot even transcode is answered as a line that is not a
+request. Each marker is one file append, written before the call it names.
+
+**Why**: the packet could place the exit only between two request boundaries: the build wrote a
+request's line after it completed, marked only the geometry calls, and wrote nothing for the fan-out
+that ran inside `OpenDoc7`. The tests prove each marker is on disk before its call by reading the
+file from inside the fake call. The catch-all closes the one path the crash hunt found where a
+managed exception could reach the top of a thread in the SOLIDWORKS process.
+
+### R16.6 Recorded and deferred
+
+- **T187 - overrides and accuracy after PROBE-8.** A whole-part reading honours a mass,
+  centre-of-mass or moment override (inferred from the help), which would make those deltas
+  meaningless; detecting one adds `GetOverrideOptions` and its casts - never run on a seat in this
+  path - to the path under investigation, so it waits for PROBE-8 on a throwaway part with and
+  without an override. When PROBE-8 has run, either the reading sets
+  `swMassPropertyAccuracyLevel_Higher` again or PROBE-8 calibrates at the default.
+- **T188 - smaller follow-ups.** The source's read-only attribute in the attestation (R16.4); the
+  fan-out deferring `ActiveConfigurationWatch.Follow` onto a remodel copy while a plan opens it (the
+  fan-out finished cleanly in the packet, and it is now logged); a read deadline in the Python named
+  pipe transport, which records its 60 s and does not enforce it (documented; the add-in's 120 s
+  `InvokeTimeout` is the bound a stuck call meets).
+- **T180** gains R16.2's other half: set `CommandInProgress` around the change commands once
+  PROBE-1 has answered.
+
+### R16.7 Refuted
+
+- None of the three lenses' findings is refuted. One recommendation is not taken as written: the
+  general lens's option A, splitting the reading counter, is not needed once `POST /remodel/open`
+  refuses an unusable baseline (R16.1).

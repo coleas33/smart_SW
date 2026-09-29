@@ -20,9 +20,11 @@ namespace SwReview.Extractor.Tests;
 ///
 /// In order: <c>VerifyTarget</c>; when it passes, the tag off and the copy closed
 /// <b>unsaved</b>, each write judged by the guard and recorded but not counted against the
-/// circuit breaker; in a <c>finally</c>, all four settings put back, <c>CommandInProgress</c>
-/// last; in an outer <c>finally</c>, the session and the run root cleared. It never saves and
-/// never deletes, and it tells the host every ending of a session that existed.
+/// circuit breaker; in a <c>finally</c>, every setting still holding the run's value put back -
+/// the three dialog toggles, since <c>remodel.open</c> puts <c>CommandInProgress</c> back as its
+/// own last step (U27, default taken 2026-09-28, the owner may revise); in an outer
+/// <c>finally</c>, the session and the run root cleared. It never saves and never deletes, and it
+/// tells the host every ending of a session that existed.
 ///
 /// The seat's originals are set to the opposite of what a run writes - the three toggles on,
 /// <c>CommandInProgress</c> off - so a restore that wrote the run's values back would be seen.
@@ -31,10 +33,13 @@ public sealed class RemodelTeardownTests : IDisposable
 {
     private const string Reason = RemodelSessionEnd.ReasonToolServiceStopped;
 
-    /// <summary>What a whole restore writes, in order: the originals, CommandInProgress last.</summary>
+    /// <summary>
+    /// What a whole restore at the end of a session writes, in order: the three toggles'
+    /// originals. <c>CommandInProgress</c> is not among them: the open already put it back (U27).
+    /// </summary>
     private static readonly string[] WholeRestore =
     {
-        "10=True", "77=True", "329=True", "CommandInProgress=False",
+        "10=True", "77=True", "329=True",
     };
 
     private readonly RemodelHarness _harness;
@@ -322,23 +327,32 @@ public sealed class RemodelTeardownTests : IDisposable
         Assert.Equal(3, outcome.SettingsRestored);
         Assert.Equal(new[] { "swShowErrorsEveryRebuild" }, outcome.SettingsOutstanding);
 
-        // Every one was attempted, CommandInProgress last, and the session is over anyway.
+        // Every one was attempted, and the session is over anyway.
         Assert.Equal(WholeRestore, _harness.Seat.ToggleWrites);
         Assert.False(_harness.Seat.CommandInProgress);
         Assert.Null(_harness.Dispatcher.RemodelTargetPath);
         OpenAgain();
     }
 
+    /// <summary>
+    /// U27: the open put <c>CommandInProgress</c> back, so the end of the session neither writes
+    /// it nor names it - even on a seat that would now refuse the write. (A flag that will not go
+    /// back at the open fails the open, and its unwind names it: <c>RemodelOpenHandlerTests</c>.)
+    /// </summary>
     [Fact]
-    public void ACommandInProgressThatWillNotGoBackIsNamed()
+    public void ACommandFlagTheOpenPutBackIsNeitherWrittenNorNamedAtTheEnd()
     {
         _harness.Open();
         _harness.Seat.FailingWrites.Add("CommandInProgress=False");
+        _harness.Seat.ToggleWrites.Clear();
 
         RemodelSessionEnd outcome = _harness.Dispatcher.EndRemodelSession(Reason);
 
-        Assert.Equal(new[] { RemodelSystemToggles.CommandInProgressSetting }, outcome.SettingsOutstanding);
-        Assert.True(_harness.Seat.CommandInProgress);
+        Assert.True(outcome.Succeeded);
+        Assert.Empty(outcome.SettingsOutstanding);
+        Assert.Equal(RemodelSystemToggles.SettingCount, outcome.SettingsRestored);
+        Assert.DoesNotContain(_harness.Seat.ToggleWrites, write => write.StartsWith("CommandInProgress", StringComparison.Ordinal));
+        Assert.False(_harness.Seat.CommandInProgress);
     }
 
     [Fact]
@@ -356,10 +370,8 @@ public sealed class RemodelTeardownTests : IDisposable
         Assert.Contains("untag", outcome.Failures[0], StringComparison.Ordinal);
         Assert.Contains("close", outcome.Failures[1], StringComparison.Ordinal);
         Assert.Contains("settings", outcome.Failures[2], StringComparison.Ordinal);
-        Assert.Equal(2, outcome.SettingsRestored);
-        Assert.Equal(
-            new[] { "swInputDimValOnCreate", RemodelSystemToggles.CommandInProgressSetting },
-            outcome.SettingsOutstanding);
+        Assert.Equal(3, outcome.SettingsRestored);
+        Assert.Equal(new[] { "swInputDimValOnCreate" }, outcome.SettingsOutstanding);
         Assert.Null(_harness.Dispatcher.RemodelTargetPath);
     }
 
@@ -403,7 +415,6 @@ public sealed class RemodelTeardownTests : IDisposable
                 "ISldWorks.CloseDoc",
                 "GetOpenDocumentByName",
                 RemodelSystemToggles.ToggleMember,
-                RemodelSystemToggles.CommandInProgressMember,
             },
             observer.Members);
         Assert.Empty(observer.Refusals);
