@@ -61,6 +61,7 @@ from swreview.report.rerender import rerender_run_folder
 from swreview.report.session import load_session
 from swreview.report.summary import load_words
 from swreview.tools.checks_interference import groups_of
+from tests.support.console import plain_one_line
 from tests.support.seat_tasks import (
     PACKAGES,
     REPO,
@@ -1573,7 +1574,7 @@ def test_the_timing_line_passes_the_four_inputs_swreview_timing_takes(
     refused = CliRunner().invoke(app, ["timing", str(run), "--baseline", "<baseline minutes>"])
 
     assert refused.exit_code == 2
-    assert "Invalid value for '--baseline'" in refused.output
+    assert "Invalid value for '--baseline'" in plain_one_line(refused.output)
     assert "Invalid value for '--baseline'" in step(plan, "4.5")
     assert (run / "session.json").read_bytes() == before
 

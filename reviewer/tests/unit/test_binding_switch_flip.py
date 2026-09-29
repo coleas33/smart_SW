@@ -21,6 +21,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from tests.support.console import plain
+
 REVIEWER = Path(__file__).resolve().parents[2]
 UNIT = REVIEWER / "tests" / "unit"
 
@@ -66,8 +68,9 @@ def test_with_the_switch_flipped_only_the_pin_fails() -> None:
         timeout=600,
         check=False,
     )
-    failed = sorted(set(re.findall(r"^FAILED (\S+?)(?: - |$)", completed.stdout, re.MULTILINE)))
-    errors = re.findall(r"^ERROR (\S+)", completed.stdout, re.MULTILINE)
+    output = plain(completed.stdout)
+    failed = sorted(set(re.findall(r"^FAILED (\S+?)(?: - |$)", output, re.MULTILINE)))
+    errors = re.findall(r"^ERROR (\S+)", output, re.MULTILINE)
 
     assert errors == [], completed.stdout[-4000:]
     assert failed == [THE_PIN], completed.stdout[-4000:]

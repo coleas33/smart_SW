@@ -32,6 +32,7 @@ from swreview.agent.settings import (
 )
 from swreview.benchmark.replay import ReplayReport, TurnPlan
 from swreview.ir.loader import save_package
+from tests.support.console import plain_one_line
 from tests.support.prerun import prerun_package, standards_prerun_package
 from tests.support.replay import record_scripted_review
 from tests.unit.test_cli import invoke, payload
@@ -164,7 +165,7 @@ def test_a_prune_age_that_cannot_apply_is_a_usage_error(
     result = invoke("benchmark", "replay", str(run), *switches)
 
     assert result.exit_code == 2
-    assert named in result.output
+    assert named in plain_one_line(result.output)
 
 
 def test_every_switch_goes_through_the_shared_resolver(
