@@ -86,10 +86,15 @@ deliberately in the same task (T015).
 the generic "Open a saved part or assembly to prepare a review." - so there was no test to edit; the
 sentence is written whole, `ReviewHost.DrawingRefusal`: "The Review tab reviews a part or an
 assembly, and '{file name}' is a drawing; open the part or assembly it documents - this drawing is
-read with it while it stays open.", error class `NoDocument`, and three `ReviewHostTests` are new.
-It is sent by `review.prepare` **and** by `review.start` before the dump: now that the extraction's
-attach accepts a drawing, the start refuses one itself rather than relying on the preparation
-token. A document of no known kind keeps the generic sentence.
+read with it while it stays open." It is sent by `review.prepare` **and** by `review.start` before
+the dump: now that the extraction's attach accepts a drawing, the start refuses one itself rather
+than relying on the preparation token. A document of no known kind keeps the generic sentence.
+
+*Amended after U25 (2026-09-28)*: both drawing refusals use `DrawingActive` so the Review page shows
+the drawing route ahead of Details instead of the generic `NoDocument` sentence. With a drawing
+active, Review is disabled and the page says to leave the drawing open, activate the part or
+assembly it documents, and press Review with that model active. The prior model review remains
+bound to its original document and is restored when that document is active again.
 
 ## 6. What SC-001 checks at the seat
 

@@ -420,7 +420,7 @@ by side on a `Refusal` (section 4.2) cannot be mistaken for each other.
 | `feature_type_names` | list[str] \| null | every feature's `IFeature.GetTypeName2()`, verbatim, in the scope reader's walk order, repeats kept; null when the walk or any feature's type cannot be read. A measurement: `scope.py` refuses a part whose walk carries a `derived_base` type with `derived_part`, before the copy (added 2026-09-27, T161, below) |
 | `external_reference_count` | int | `ListExternalFileReferencesCount2()` |
 | `save_flag_dirty` | bool | `GetSaveFlag()` on the source, when it is open |
-| `read_only` | bool | |
+| `read_only` | bool | Source file attribute. `true` is allowed for a saved, readable source; `null` is unresolved and blocks the run. The copy is opened writable. |
 | `rebuild_error_count` | int | `GetWhatsWrongCount()` after the baseline rollback and rebuild |
 | `vault` | `{path, revision}` \| null | EPDM; recorded, never a refusal reason. Null means **not read by this build**, never "not in a vault" (amended 2026-09-26, below) |
 

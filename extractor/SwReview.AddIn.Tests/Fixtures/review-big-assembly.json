@@ -16871,6 +16871,7 @@
       "BackendUnavailable": "The review backend is not running. Save Settings to start it again, then retry.",
       "BridgeUnavailable": "SOLIDWORKS could not be reached. Check that the add-in is loaded, then try again.",
       "DocumentDirty": "Save the part first. Remodel never saves the open document for you.",
+      "DrawingActive": "Keep the drawing open in SOLIDWORKS and activate the part or assembly it documents. Press Review with that model active; Review reads open drawings whose views show the model.",
       "EmptyNote": "Say why the condition is accepted. An exception needs a reason.",
       "ExternalReferences": "This part references other files. Remodel works only on a part with no external references.",
       "ExtractionFailed": "The model could not be read. Check that it rebuilds and is fully loaded, then press Review again.",

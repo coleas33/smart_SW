@@ -31,6 +31,8 @@ internal static class LabelsSample
 
     public const string NoDocument = "Open the part or assembly you want reviewed, then press Review.";
 
+    public const string DrawingActive = "Keep the drawing open in SOLIDWORKS and activate the part or assembly it documents. Press Review with that model active; Review reads open drawings whose views show the model.";
+
     public const string AlreadyAnswered = "That finding was decided in another window. Reload the review to see it.";
 
     public const string InvalidSettings = "Check the provider, the model and the effort, then save again.";
@@ -96,6 +98,7 @@ internal static class LabelsSample
             {
                 { "TurnRunning", TurnRunning },
                 { "NoDocument", NoDocument },
+                { "DrawingActive", DrawingActive },
                 { "AlreadyAnswered", AlreadyAnswered },
                 { "InvalidSettings", InvalidSettings },
             }

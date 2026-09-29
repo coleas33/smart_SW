@@ -186,7 +186,9 @@ Sequence, in order, with the call that performs each step:
 7. `File.Copy(source, copy_path, overwrite: false)`. On a sharing violation, fall back to
    `new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)` copied into a
    destination opened `FileMode.CreateNew`, so refuse-to-overwrite survives the fallback
-   (PROBE-13). Failure is `copy_failed`; an existing destination is `copy_exists`.
+   (PROBE-13). When `File.Copy` carries a source's read-only attribute across, clear it on the
+   newly created run copy only. The source's attributes are unchanged. Failure is `copy_failed`;
+   an existing destination is `copy_exists`.
 8. `OpenDoc7` with `Silent | LoadModel = 17` exactly, and **never** `ReadOnly(2)` or
    `ViewOnly(4)` (VERIFIED values; asserted as an integer in a unit test). Then assert
    `GetPathName()` equals `copy_path` and does not equal `source_path`.

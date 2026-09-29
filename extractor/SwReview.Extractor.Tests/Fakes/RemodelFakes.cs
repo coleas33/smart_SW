@@ -789,6 +789,8 @@ public sealed class FakeRemodelDocument : IRemodelDocument
 
     // ---- the geometry reading ----------------------------------------------------------
 
+    public Exception? GetBodiesFailure { get; set; }
+
     public IMassPropertyReading? CreateMassProperty()
     {
         Members.Add(nameof(CreateMassProperty));
@@ -798,6 +800,10 @@ public sealed class FakeRemodelDocument : IRemodelDocument
     public IReadOnlyList<object>? GetBodies(int bodyType)
     {
         Members.Add(nameof(GetBodies));
+        if (GetBodiesFailure != null)
+        {
+            throw GetBodiesFailure;
+        }
         List<FakeBody> bodies = bodyType == 0 ? SolidBodies : SheetBodies;
         return bodies.Count == 0 ? null : bodies.Cast<object>().ToList();
     }

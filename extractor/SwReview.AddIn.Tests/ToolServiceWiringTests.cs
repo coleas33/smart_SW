@@ -1798,6 +1798,24 @@ public sealed class ToolServiceWiringTests
     // the real pipe server, the bridge's fake seat and copy, and a fake application thread.
 
     [Fact]
+    public void GeometryWritesCallBoundaryMarkersBeforeItsCompletedRequestLine()
+    {
+        using (var world = new SeatedHostWorld())
+        {
+            world.PlanOnTheSeat();
+
+            Assert.Equal(BridgeStatus.Ok, world.Remodel(RemodelCommands.Geometry, new { }).Status);
+
+            string[] lines = File.ReadAllLines(Path.Combine(world.RunDirectory, RemodelRunLog.FileName));
+            int before = Array.FindIndex(lines, line => line.Contains("stage=before GetBodies2:solid"));
+            int after = Array.FindIndex(lines, line => line.Contains("stage=after GetBodies2:solid"));
+            int completed = Array.FindIndex(lines, line => line.Contains("command=remodel.geometry status=ok"));
+            Assert.True(0 <= before && before < after && after < completed);
+            Assert.DoesNotContain(world.Host.RemodelSecret, string.Join("\n", lines), StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
     public void DisposedOnTheApplicationThreadTheTeardownRunsInlineThereBeforeThePipeCloses()
     {
         using (var world = new SeatedHostWorld())

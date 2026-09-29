@@ -36,6 +36,8 @@ public sealed class ReviewPageDocumentBindingTests
 
     private const string OtherPath = @"C:\parts\other.SLDPRT";
 
+    private const string DrawingPath = @"C:\parts\bracket.SLDDRW";
+
     // ---- the header -------------------------------------------------------------------------
 
     /// <summary>
@@ -90,6 +92,36 @@ public sealed class ReviewPageDocumentBindingTests
         Assert.False(Flag(state, "reviewDisabled"), "Review was disabled for the open document.");
         Assert.True(Flag(state, "stopDisabled"), "Stop is enabled with no turn running.");
         Assert.False(Flag(state, "clearDisabled"), "Clear review is refused with no turn running.");
+    }
+
+    [Fact]
+    public void ActiveDrawingKeepsTheModelReviewButGivesAnActionableDrawingRoute()
+    {
+        JsonElement state = Scripted.Value.DrawingElsewhere;
+
+        Assert.Equal("bracket.SLDDRW", Text(state, "header"));
+        Assert.Equal(
+            "This review is of bracket.sldasm [Default]. bracket.SLDDRW is a drawing. "
+            + "Keep it open in SOLIDWORKS and activate the part or assembly it documents. "
+            + "Press Review with that model active; Review reads open drawings whose views show the model.",
+            Text(state, "staleText"));
+        AssertResultsHidden(state);
+        Assert.True(Flag(state, "reviewDisabled"), "Review invites a refused drawing start.");
+        Assert.Equal(1, state.GetProperty("findingCards").GetInt32());
+    }
+
+    [Fact]
+    public void ActiveDrawingWithoutAReviewStillShowsTheRouteAndDisablesReview()
+    {
+        JsonElement state = Scripted.Value.DrawingWithoutReview;
+
+        Assert.False(state.GetProperty("staleHidden").GetBoolean());
+        Assert.Equal(
+            "bracket.SLDDRW is a drawing. Keep it open in SOLIDWORKS and activate the part or assembly "
+            + "it documents. Press Review with that model active; Review reads open drawings whose views show the model.",
+            Text(state, "staleText"));
+        Assert.True(Flag(state, "reviewDisabled"));
+        Assert.True(Flag(state, "clearDisabled"));
     }
 
     /// <summary>
@@ -410,6 +442,9 @@ public sealed class ReviewPageDocumentBindingTests
                 await DocumentChanged(page, new { path = OtherPath, configuration = "Machined" });
                 run.Elsewhere = await Read(page);
 
+                await DocumentChanged(page, new { path = DrawingPath, configuration = (string?)null });
+                run.DrawingElsewhere = await Read(page);
+
                 // 3. The reviewed one again, its path in another case.
                 await DocumentChanged(page, new { path = @"C:\PARTS\BRACKET.SLDASM", configuration = "Default" });
                 run.Back = await Read(page);
@@ -426,6 +461,10 @@ public sealed class ReviewPageDocumentBindingTests
                 await DocumentChanged(page, new { path = ReviewedPath, configuration = "Default" });
                 await Click(page, "clear-review");
                 run.Cleared = await Read(page);
+
+                await DocumentChanged(page, new { path = DrawingPath, configuration = (string?)null });
+                run.DrawingWithoutReview = await Read(page);
+                await DocumentChanged(page, new { path = ReviewedPath, configuration = "Default" });
 
                 // 7. A second review whose turn is still running, then another document, then a
                 //    finding while it is open, then a Clear review forced past its disabled
@@ -612,6 +651,10 @@ public sealed class ReviewPageDocumentBindingTests
         public JsonElement Bound { get; set; }
 
         public JsonElement Elsewhere { get; set; }
+
+        public JsonElement DrawingElsewhere { get; set; }
+
+        public JsonElement DrawingWithoutReview { get; set; }
 
         public JsonElement Back { get; set; }
 

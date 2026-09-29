@@ -62,6 +62,10 @@ OPTIONAL_ARTIFACTS: tuple[str, ...] = (
     "checks.log",
     "extractor.jsonl",
     "check.jsonl",
+    "remodel.log",
+    "remodel-open.jsonl",
+    "open.json",
+    "source-attestation.json",
 )
 """Known supplementary records; arbitrary files and recursive folders are excluded."""
 

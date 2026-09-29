@@ -37,6 +37,21 @@ source: one bad path join beside a source inside an EPDM vault writes into the v
 | `session.json` | the recorded `ToolRegistry` steps | feature 001 session schema | So `tool_result_ids` reference steps that exist |
 | `remodel.log` | `BridgeDispatcher` | one line per request | Command, elapsed, gated members, and the **target path** of every mutating call. *Added 2026-09-26 (default taken 2026-09-26, the owner may revise; `tasks.md` T167, landed 2026-09-27):* plus one teardown line when a session ends without `remodel.close` - a tool-service re-attach or an add-in unload - carrying the gated set of the clean-up and its outcome (settings restored, copy closed, each failure); the same line goes to the tool-service log. A teardown writes no other file: `plan.json` stays `planned`, and `copy/` keeps the unsaved byte copy |
 
+Added 2026-09-28 after U27: `remodel.log` also carries timestamped
+`command=remodel.geometry stage=before <member>`, `stage=after <member>`, and (on a managed
+exception) `stage=failed <member>` lines, appended and flushed around each geometry
+operation. Markers use fixed member names only. Adapter accessors may run within that
+operation. A native exit can leave a before line without its after line; this identifies
+the operation in progress, not the root cause. Existing completed-request lines remain.
+
+The backend also writes `remodel-open.jsonl`, a diagnostic JSON-lines file with `at` (UTC)
+and `phase`. Its fixed phases cover copy open, attestation written, baseline geometry,
+open record written, and cleanup after a failed open. Each line is flushed to disk;
+logging failure does not prevent cleanup. `cleanup.returned` records the helper returning,
+not a successful close. These are not recovery records and never allow automatic resume.
+The baseline call happens before `open.json` is written or HTTP Open returns, so a
+successful bridge open alone does not establish readiness for planning.
+
 `report.md` is the product, and its section order is fixed, because Principle VI fixes the first
 three and FR-056 fixes the last:
 

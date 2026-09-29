@@ -330,6 +330,89 @@ public class RemodelGeometryTests : IDisposable
     }
 
     [Fact]
+    public void EveryGeometryInteropCallHasFlushedBoundaryMarkersIncludingTheOneThatFails()
+    {
+        var markers = new System.Collections.Generic.List<string>();
+        _harness.Services.RemodelGeometryStage = markers.Add;
+
+        Read();
+
+        Assert.Equal("before GetBodies2:solid", markers[0]);
+        Assert.Equal("after GetBodies2:solid", markers[1]);
+        Assert.Contains("before CreateMassProperty2", markers);
+        Assert.Contains("after CreateMassProperty2", markers);
+        Assert.Contains("before Recalculate", markers);
+        Assert.Contains("after Recalculate", markers);
+        Assert.Equal("after get_Density", markers[markers.Count - 1]);
+
+        markers.Clear();
+        _harness.Copy.GetBodiesFailure = new InvalidOperationException("unreadable bodies");
+        Assert.Equal("error", _harness.Dispatch(RemodelCommands.Geometry, "{}").Status);
+        Assert.Equal(new[] { "before GetBodies2:solid", "failed GetBodies2:solid" }, markers);
+    }
+
+    [Fact]
+    public void DiagnosticWriterFailureDoesNotChangeTheMeasurement()
+    {
+        _harness.Services.RemodelGeometryStage = _ => throw new System.IO.IOException("log unavailable");
+
+        Assert.Equal(RemodelGeometry.StatusOk, Read().Status);
+    }
+
+    [Fact]
+    public void FailedGeometryAttemptsDoNotCountAsReadingsThatPermitSave()
+    {
+        _harness.Copy.GetBodiesFailure = new InvalidOperationException("unreadable bodies");
+        _harness.Dispatch(RemodelCommands.Geometry, "{}");
+        _harness.Dispatch(RemodelCommands.Geometry, "{}");
+        _harness.Copy.GetBodiesFailure = null;
+
+        Assert.Equal(RemodelErrorCodes.GateNotPassed,
+            RemodelHarness.Refusal(_harness.Dispatch(
+                RemodelCommands.Save, RemodelHarness.SaveParams(RemodelGateVerdicts.Pass))));
+    }
+
+    [Theory]
+    [InlineData("recalculate false")]
+    [InlineData("no mass property")]
+    [InlineData("no solid body")]
+    public void ReturnedFailedMeasurementKeepsTheBaselineSubjectAndCannotPermitSave(string failure)
+    {
+        if (failure == "recalculate false")
+        {
+            MassProperty.RecalculateAnswer = false;
+        }
+        else if (failure == "no mass property")
+        {
+            _harness.Copy.MassProperty = null;
+        }
+        else
+        {
+            _harness.Copy.SolidBodies.Clear();
+        }
+
+        GeometryReading first = Read();
+        GeometryReading second = Read();
+        Assert.Equal(RemodelGeometrySubjects.CopyAtOpen, first.Subject);
+        Assert.Equal(RemodelGeometrySubjects.CopyAtOpen, second.Subject);
+        Assert.NotEqual(RemodelGeometry.StatusOk, second.Status);
+
+        BridgeResponse save = _harness.Dispatch(
+            RemodelCommands.Save, RemodelHarness.SaveParams(RemodelGateVerdicts.Pass));
+        Assert.Equal(RemodelErrorCodes.GateNotPassed, RemodelHarness.Refusal(save));
+        Assert.Equal("0", Assert.IsType<RemodelErrorResult>(save.Result).Detail!["geometry_readings"]);
+        Assert.DoesNotContain(nameof(FakeRemodelDocument.Save), _harness.Copy.Members);
+
+        if (_harness.Copy.SolidBodies.Count == 0)
+        {
+            _harness.Copy.SolidBodies.Add(new FakeBody(faceCount: 6, edgeCount: 12));
+        }
+        _harness.Copy.MassProperty = new FakeMassProperty();
+        Assert.Equal(RemodelGeometrySubjects.CopyAtOpen, Read().Subject);
+        Assert.Equal(RemodelGeometrySubjects.CopyAtEnd, Read().Subject);
+    }
+
+    [Fact]
     public void BeforeOpenThereIsNoCopyToMeasureAndTheCommandIsRefused()
     {
         using (var fresh = new RemodelHarness(new FakeFeature("ref:boss", "Boss-Extrude1")))
