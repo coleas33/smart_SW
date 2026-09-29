@@ -51,13 +51,36 @@ What feature 013 (`specs/013-engineer-first-review/tasks.md`) adds, each in its 
 Since feature 013, steps 4.6 and 4.7 ask no same-name drawing question while that switch is off:
 each says what to record instead.
 
+## First: the retest of 2026-09-28's findings U25 to U27
+
+*Added 2026-09-28.* The sitting of 2026-09-28 ran the build of that day and its handover packet
+reported three findings: **U25**, the Review tab invited a Review of an active drawing, which the
+add-in then refused; **U26**, Remodel a copy refused a checked-in (read-only) part; and **U27**,
+SOLIDWORKS closed while Remodel a copy was measuring its copy. The build under test fixes U25 and
+U26, changes the measurement U27 stopped in, and marks every SOLIDWORKS call of Remodel a copy in
+the run folder before the call starts, so that a second close says where it happened
+(`docs/testing-feedback-2026-09-28.md`, which lists what the development machine changed).
+
+**The next sitting runs this retest first**, right after step 1's update and health checks, and
+before step 2.4, in this order:
+
+1. step 4.9: a drawing active, with and without a review (U25; 011 T110);
+2. step 5.3's retest items A to C: crash capture, then Remodel a copy on a throwaway box, and what to
+   keep if SOLIDWORKS closes (U27; 004 T185);
+3. step 5.3's items 1 to 6 on part J, which is the checked-in part (U26; 004 T186), only once item B
+   planned the box.
+
+Then it continues from step 2.4 as before, and step 5.3 is not repeated when step 5 comes. If
+SOLIDWORKS closes during step 5.3, follow its item C before anything else, and go on to step 2.4.
+
 ## The rules for the whole sitting
 
 1. **Save nothing in SOLIDWORKS.** When SOLIDWORKS asks whether to save, choose **Don't Save**. The
    product only reads your files, and this sitting proves it, so nothing else may change them
    either. The one write of the sitting from your files is step 3.5's Pack and Go copy into a
    scratch folder under `%TEMP%`, which step 6.0 deletes; step 5.6's probe builds, saves and
-   deletes throwaway parts of its own inside `$H\probes`, never a file of yours. **Check nothing
+   deletes throwaway parts of its own inside `$H\probes`, never a file of yours; step 5.3's item B
+   saves one new throwaway box of the sitting's own into `$H\scratch`. **Check nothing
    out of the vault** during the sitting: a file
    you have not checked out is read-only on disk, so a wrong Save cannot reach it. Steps 3.1, 3.5
    and 6.0 fingerprint your files and show whether anything changed.
@@ -139,15 +162,17 @@ the running SOLIDWORKS directly and need neither the add-in nor the pane.
 
 ## How long it takes
 
-About **12 hours 50 minutes at the seat**, best planned as two days: day 1 steps 1 to 3, day 2
+About **13 hours 25 minutes at the seat**, best planned as two days: day 1 steps 1 to 3, day 2
 steps 4 to 6. The four earlier tasks the owner added (decision 15A) take about 25 minutes of it,
 inside steps 3.1, 4.1, 4.5, 5.1 and 5.2; feature 004's three items (decision 18A) about 40
 minutes more: the FeatureWorks record at step 1.7 (5 minutes), the owner's parts at step 5.1 (10
 minutes) and the re-modeler probes at step 5.6 (25 minutes), the last step of day 2 before the
 handoff; feature 013's seat tasks and the census about 1 hour 35 minutes more: the profile's
 version 4 at step 2.6 (15 minutes), lever 14's live test at step 2.7 (5 minutes), A's two reviews of step 4.8 (40 minutes, 10 more with Q), the
-census's four Model checks at step 5.1 (10 minutes) and 013 T144 at step 5.2 (10 minutes). The
-next sitting, which starts at step 2.4 after its update, needs about 12 hours 20 minutes. Keep
+census's four Model checks at step 5.1 (10 minutes) and 013 T144 at step 5.2 (10 minutes); the
+retest of 2026-09-28's U25 to U27 about 35 minutes more: step 4.9 (15 minutes) and step 5.3's items A
+to C and the read-only option (20 minutes). The next sitting, which runs the retest first and then
+starts at step 2.4 after its update, needs about 12 hours 55 minutes. Keep
 SOLIDWORKS open from step 4.1 to step 4.5 on day 2:
 the review chips of steps 4.4 and 4.5 live only as long as the SOLIDWORKS session. Before the
 sitting, allow **half a day** to find and note documents C to N, Q and S, and the components of
@@ -159,8 +184,8 @@ A and B step 3.1 asks about (section 0.2), while the owner names the parts P; a 
 | 1 | Update, gates, health checks (registration only on a new machine), the FeatureWorks record | 55 min |
 | 2 | Profile and key, the profile's version 4, and lever 14's live test | 40 min |
 | 3 | Dumps and the Standards probe of A and B, probes D1 to D14 and one pane review, with the fingerprints | 3 h 55 min |
-| 4 | The pane reviews, with the findings by type, the timing of A's review, and A again with the version 4 profile | 4 h |
-| 5.1 to 5.4 | Model check on J, on the owner's parts and on the census's parts, Standards (each with its Start here block) and on A-plate's drawing, Remodel, the Gemini test | 1 h 5 min |
+| 4 | The pane reviews, with the findings by type, the timing of A's review, A again with the version 4 profile, and a drawing active | 4 h 15 min |
+| 5.1 to 5.4 | Model check on J, on the owner's parts and on the census's parts, Standards (each with its Start here block) and on A-plate's drawing, Remodel (the retest's box and crash capture first), the Gemini test | 1 h 25 min |
 | 5.5 | The older build and back: two builds, two SOLIDWORKS restarts, two reviews of A | 1 h |
 | 5.6 | The re-modeler probes: three runs with no document open, and the three options checked | 25 min |
 | 6 | Handoff | 45 min |
@@ -1831,7 +1856,42 @@ Record: both run folders' stamps and letters, the facts, the drawings lines with
 names, the bought-parts line with A-pin's letter in place of its file name, each pass or fail, the
 tokens, the answers' turn's calls, lever 14's state, and Q's counts.
 
-## Step 5. The other tabs, the live Gemini test, and the older build
+### 4.9 A drawing active, with and without a review [011 T110]
+
+*Added 2026-09-28: U25's retest, run first (section "First: the retest").* After a review, the
+engineer made the reviewed model's drawing the active document, and the pane invited a Review of the
+drawing, which the add-in refused. In this build the host decides that a document is a drawing,
+the pane's line names the model the drawing's views show, and Review stays greyed out while a
+drawing is active. The line is the host's: it reads `<drawing> is a drawing of <model>. ... Review
+reads open drawings whose views show the model.`, and it never says
+`Press Review to review <drawing>`.
+
+1. **A drawing opened on its own.** Close every document. Open J's drawing on its own (File >
+   Open), and open the **Review** tab. Pass: the line above the Results names J's drawing and then
+   ` is a drawing of ` and J; it tells you to keep the drawing open, open or switch to J, and it ends
+   `Review reads open drawings whose views show the model.`; **Review** is greyed out.
+2. **The model, and a review.** Open J (File > Open) and make it active: the line goes and Review
+   can be pressed. Press Review (step 4's box) and wait for `The review has finished.` or
+   `Waiting for your answers.`; answer any question `Review without it` or skip it.
+3. **The drawing again, after the review.** Make J's drawing active with the Window menu. Pass: the
+   line reads `This review is of <J> ...`, then J's drawing's sentence of item 1; the review's
+   results are hidden, **Review** is greyed out, and no line says `Press Review to review` J's
+   drawing. Press **Retry** on any card that has it: nothing starts, and the card's own status line
+   shows the drawing's sentence.
+4. **Back to J.** Make J active with the Window menu. Pass: the line goes and J's review is shown
+   again, as it was.
+5. **A multi-sheet drawing.** Close every document and open C on its own (File > Open). Pass: the
+   line names C's model, or names one and counts the others (`and <n> other models`). Then:
+
+   ```powershell
+   Select-String -Path "$env:LOCALAPPDATA\SwReview\logs\addin.log" -SimpleMatch 'The models a drawing shows could not be read: ' | Select-Object -Last 3 | ForEach-Object { $_.Line }
+   ```
+
+   Pass: nothing printed, or no line dated today; a line dated today means a drawing's views would
+   not answer, and the pane's line named no model: record the line's last word, the error's type.
+
+Record: each pass or fail; for items 1 and 5 the line with letters in place of names (J, J's
+drawing, C); the review's run folder stamp and letter.
 
 ### 5.1 Model check, on J and on the owner's parts [007 T059; 004 T003]
 
@@ -1922,7 +1982,7 @@ not found on S-2, as you know them to be. Record: A-plate's drawing's printed li
 and for S-1 and S-2 the export-control check's bucket; never the statement's text or anything
 else of a title block.
 
-### 5.3 Remodel
+### 5.3 Remodel [004 T185; 004 T186]
 
 This build gives the Remodel tab its seat (feature 004's seat adapter, 004 T152 to T160, and its
 teardown, 004 T167): **Remodel a copy plans on a copy** the tab makes in its own run folder, never
@@ -1931,20 +1991,92 @@ step 5.6 have their verdicts, so Start is refused by name and changes nothing. B
 off, a plan lets go of its copy as soon as it is made (004 T176): SOLIDWORKS closes the copy
 without saving and puts the three settings below back before the tab says it planned.
 
-With part J open:
+**The retest of U27 and U26, first (section "First: the retest"; 004 T185 and 004 T186).** On
+2026-09-28 SOLIDWORKS closed while Remodel a copy measured its copy, just after the copy opened
+(U27), and a checked-in part was refused (U26). This build measures the copy the way Model check
+measures every part, writes a line to the run folder's `remodel.log` before each SOLIDWORKS call of
+Remodel a copy starts and after it returns (`stage=before ...`, `stage=after ...`), and allows a
+checked-in part whose unsaved changes SOLIDWORKS can report. Save and close every document you have
+open before item A, so that nothing of yours is open if SOLIDWORKS closes.
+
+A. **Crash capture.** Only in a PowerShell window run as administrator, with the setup block pasted
+   in it; without administrator rights, skip this item and write `no administrator rights`:
+
+   ```powershell
+   New-Item -ItemType Directory -Force "$H\scratch", "$H\crash" | Out-Null
+   $wer = 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\SLDWORKS.exe'
+   New-Item -Path $wer -Force | Out-Null
+   New-ItemProperty -Path $wer -Name DumpFolder -PropertyType ExpandString -Value "$H\crash" -Force | Out-Null
+   New-ItemProperty -Path $wer -Name DumpType -PropertyType DWord -Value 2 -Force | Out-Null
+   ```
+
+   Windows then keeps a full dump in `$H\crash` if SOLIDWORKS closes on its own. Leave it set for the
+   sitting; after step 6.5, in the same window: `Remove-Item -Path $wer -Recurse`.
+B. **A throwaway box, before any real part.** In the ordinary window:
+   `New-Item -ItemType Directory -Force "$H\scratch" | Out-Null`. In SOLIDWORKS: File > New > Part,
+   a rectangle sketched on the Front Plane, extruded to any depth; File > Save As into `$H\scratch`
+   as `box.SLDPRT`. With the box the only document open, open the **Remodel** tab and press
+   **Remodel a copy**. Pass: it ends with `Planned. Press Start to apply the plan to the copy.` Then:
+
+   ```powershell
+   $run = Get-ChildItem $runs -Directory | Where-Object { $_.Name -like '*-remodel' } | Sort-Object CreationTime | Select-Object -Last 1
+   Get-Content -LiteralPath (Join-Path $run.FullName 'remodel-open.jsonl') | ForEach-Object { ($_ | ConvertFrom-Json).phase }
+   Select-String -LiteralPath (Join-Path $run.FullName 'remodel.log') -SimpleMatch 'stage=' | Select-Object -Last 2 | ForEach-Object { $_.Line }
+   (Select-String -LiteralPath (Join-Path $run.FullName 'remodel.log') -SimpleMatch 'stage=').Count
+   ```
+
+   Pass: the phases end with `open_record.written`; the last two lines end
+   `stage=before get_Density` and `stage=after get_Density`; the count is 60 or more. Then use
+   **Discard copy**, close the box without saving, and go on to item 1 below with part J.
+C. **If SOLIDWORKS closes, freezes or shows its own error report** at item B or at any item below:
+   stop the step, and before you restart SOLIDWORKS:
+   1. write down the time on the clock, and whether SOLIDWORKS froze first, vanished at once, or
+      showed its own error-report window (photograph that window; nothing with a path in it);
+   2. paste the block of item B again, and record the last phase and the last two `stage=` lines:
+      the call running when SOLIDWORKS closed is the last `stage=before` line with no
+      `stage=after` of the same call after it; if there is no geometry line and the phases end with
+      `baseline_geometry.begin`, write that down, because the close was outside the measurement;
+   3. keep everything, before any restart:
+
+      ```powershell
+      Copy-Item -LiteralPath $run.FullName -Destination "$H\kept" -Recurse
+      Copy-Item -Path "$env:LOCALAPPDATA\SwReview\logs\*" -Destination "$H\kept" -Force
+      Get-ChildItem -Path "$env:APPDATA\SolidWorks" -Recurse -Filter 'swxJRNL*' -ErrorAction SilentlyContinue | Copy-Item -Destination "$H\kept" -Force
+      wevtutil epl Application "$H\kept\application.evtx"
+      wevtutil epl System "$H\kept\system.evtx"
+      Get-ChildItem -Path "$H\crash" -ErrorAction SilentlyContinue | Select-Object Name, Length
+      ```
+
+      and any SOLIDWORKS error report it saved (a `wevtutil` line that says access is denied is
+      written down, not a fail);
+   4. after restarting SOLIDWORKS, open the three settings of item 1 and write down each as it is
+      now, whether or not it matches what you noted: a close before Remodel a copy finished can
+      leave them as the plan set them;
+   5. write down whether you selected or clicked anything in the copy's window;
+   6. rehash the part: `Get-SeatHash $f`, against the `sha256` of the run folder's
+      `source-attestation.json` (`(Get-Content -LiteralPath (Join-Path $run.FullName 'source-attestation.json') -Raw | ConvertFrom-Json).sha256`).
+   Write the rest of this step `blocked by 5.3: SOLIDWORKS closed`, and go on to step 2.4.
+
+With part J open (the checked-in part of U26, if J is checked in):
 
 ```powershell
 $f = "<full path of part J>"
-Get-SeatHash $f; Get-Item -LiteralPath $f | Select-Object Length, LastWriteTime
+Get-SeatHash $f; Get-Item -LiteralPath $f | Select-Object Length, LastWriteTime, IsReadOnly
 ```
 
 1. Open Tools > Options > System Options, General page, note in `notes\documents.txt` whether
    **Input dimension value**, **Show errors every rebuild** and **Warn before saving documents
-   with update errors** are ticked (`not found` for one you cannot find), and press **Cancel**.
+   with update errors** are ticked (`not found` for one you cannot find); then, on the External
+   References page, whether **Don't prompt to save read-only referenced documents (discard
+   changes)** is ticked; and press **Cancel**.
 2. Open the **Remodel** tab and press **Remodel a copy**, and time it from the press to the last
    line on the tab (a watch is enough). Pass: it ends with
    `Planned. Press Start to apply the plan to the copy.`, or with a refusal that says why this part
    is not reorganized (write the refusal down; it is not a fail, and items 3 to 5 are then skipped).
+   For J checked in (`IsReadOnly` `True` above; 004 T186): with that last option not ticked, the
+   pass is the plan; with it ticked, the pass is a refusal that names
+   `Don't prompt to save read-only referenced documents`, because SOLIDWORKS then hides a read-only
+   part's unsaved changes. A refusal saying the part is open read-only is a fail.
    A line beginning `Not everything the plan changed in SOLIDWORKS could be put back` is a fail:
    write it down whole (it names no path) and still do item 6.
 3. If it planned, check that it planned on a copy:
@@ -1964,11 +2096,14 @@ Get-SeatHash $f; Get-Item -LiteralPath $f | Select-Object Length, LastWriteTime
    block of item 3 pasted again prints `copies in it: 0`.
 6. Open the three settings again and press **Cancel**. Pass: each is as you noted it. Then, in
    PowerShell, run the second line of the first block again. Pass: the hash, size and time are
-   unchanged.
+   unchanged, and so is `IsReadOnly`.
 
 Record: pass or fail; the refusal if Remodel a copy was refused; how long the plan took, in seconds
 (004 T182 sets the add-in's wait on the copy's open from it); and any line saying not everything
-could be put back. No part name, run folder name or path goes in the findings document.
+could be put back. For the retest: item A done or `no administrator rights`; item B's last phase,
+last two `stage=` lines and count; J's `IsReadOnly` and the read-only option as noted; and, if
+SOLIDWORKS closed, item C's six answers. No part name, run folder name or path goes in the findings
+document.
 
 **What the Start switch waits on.** The development machine sets it (`RemodelStart.SeatValidated`,
 in a commit of its own) only once a sitting has proved, in this order: first step 5.6's blocking

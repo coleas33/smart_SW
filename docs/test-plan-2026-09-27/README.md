@@ -25,6 +25,11 @@ do not follow them.
 - **This sitting still runs step 1 first**, so the update brings the new build and the gates run. It
   then **continues from step 2.4**. The handover's section "Where the 2026-09-26 sitting stopped"
   says which earlier results carry over.
+- *Added 2026-09-28:* **after step 1 and before step 2.4, the retest of the 2026-09-28 sitting's
+  findings U25 to U27 comes first**: the plan's step 4.9 (a drawing active) and step 5.3 (crash
+  capture, Remodel a copy on a throwaway box, then part J checked in). The plan's section "First:
+  the retest" gives the order and what to keep if SOLIDWORKS closes;
+  [`../testing-feedback-2026-09-28.md`](../testing-feedback-2026-09-28.md) says what changed.
 - New in this build:
   - bought (COTS) parts are told apart from custom parts;
   - findings are grouped by type;

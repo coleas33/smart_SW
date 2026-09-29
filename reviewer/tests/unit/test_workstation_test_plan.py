@@ -295,6 +295,19 @@ QUOTED: tuple[tuple[str, str], ...] = (
      "reviewer/src/swreview/report/review_words_v1.yaml"),
     (" No drawing was read in this review.", "reviewer/src/swreview/report/review_words_v1.yaml"),
     ("no revision table was found", "reviewer/src/swreview/checks/standards/drawing.py"),
+    # The retest of 2026-09-28's U25 to U27, which steps 4.9 and 5.3 read first (011 T110;
+    # 004 T185 and T186).
+    ("Review reads open drawings whose views show the model.",
+     "extractor/SwReview.AddIn/Review/ReviewHost.cs"),
+    (" is a drawing of ", "extractor/SwReview.AddIn/Review/ReviewHost.cs"),
+    ("Press Review to review", "extractor/SwReview.AddIn/Review/ReviewPage/app.js"),
+    ("The models a drawing shows could not be read: ", "extractor/SwReview.AddIn/SwReviewAddIn.cs"),
+    ("Don't prompt to save read-only referenced documents",
+     "extractor/SwReview.AddIn/Remodel/RemodelHost.cs"),
+    ("open_record.written", "reviewer/src/swreview/chat/remodel.py"),
+    ("baseline_geometry.begin", "reviewer/src/swreview/chat/remodel.py"),
+    ("stage=", "extractor/SwReview.AddIn/ToolService/ToolServiceHost.cs"),
+    ("get_Density", "extractor/SwReview.Extractor/Rms/RemodelGeometry.cs"),
 )
 """Every product sentence the plan quotes, with the file that says it."""
 
@@ -1679,6 +1692,10 @@ TIME = re.compile(r"(?:(\d+) h)?\s*(?:(\d+) min)?")
 FEATURE_013_IN_STEP_5 = 20
 """The census's four Model checks (step 5.1) and 013 T144 (step 5.2), 10 minutes each."""
 
+RETEST_2026_09_28_IN_STEP_5 = 20
+"""Step 5.3's retest items A to C and the read-only option (2026-09-28): crash capture, the box
+and its markers, 20 minutes."""
+
 
 def minutes(estimate: str) -> int:
     """`3 h 55 min`, `3 h` or `50 min` as minutes."""
@@ -1694,7 +1711,9 @@ def test_the_time_estimate_is_the_sum_of_its_steps(plan: str) -> None:
     adds about 40: step 1 and step 5.1's row grow, and step 5.6 has a row of its own. Feature 013
     (2026-09-27, edited deliberately) adds about 95 more: step 2's row by 20 minutes (013 T153's
     live test at step 2.7 is 5 of them, edited deliberately with its follow-ups), step 4's by 50
-    and step 5.1 to 5.4's by `FEATURE_013_IN_STEP_5`, which the decision 18A range leaves out."""
+    and step 5.1 to 5.4's by `FEATURE_013_IN_STEP_5`, which the decision 18A range leaves out.
+    The retest of 2026-09-28's U25 to U27 (edited deliberately) adds about 35 more: step 4's row by
+    15 minutes (step 4.9) and step 5.1 to 5.4's by `RETEST_2026_09_28_IN_STEP_5`."""
     section = plan[plan.index("## How long it takes") : plan.index("## 0. Before the sitting")]
     rows = re.findall(r"^\| ([^|]+) \| [^|]+ \| ([^|]+) \|$", section, re.MULTILINE)[1:]
     [(hours, mins)] = re.findall(r"About \*\*(\d+) hours(?: (\d+) minutes)? at the seat", section)
@@ -1702,10 +1721,12 @@ def test_the_time_estimate_is_the_sum_of_its_steps(plan: str) -> None:
 
     assert len(rows) == 8
     assert abs(sum(estimates.values()) - (int(hours) * 60 + int(mins or 0))) <= 7
-    assert estimates["5.6"] == 25 and estimates["1"] == 55 and estimates["5.1 to 5.4"] == 65
-    decision_18a_in_step_5 = estimates["5.1 to 5.4"] - 35 - FEATURE_013_IN_STEP_5
+    assert estimates["5.6"] == 25 and estimates["1"] == 55 and estimates["5.1 to 5.4"] == 85
+    decision_18a_in_step_5 = (
+        estimates["5.1 to 5.4"] - 35 - FEATURE_013_IN_STEP_5 - RETEST_2026_09_28_IN_STEP_5
+    )
     assert 30 <= estimates["5.6"] + (estimates["1"] - 50) + decision_18a_in_step_5 <= 45
-    assert (estimates["2"], estimates["4"]) == (40, 240)
+    assert (estimates["2"], estimates["4"]) == (40, 255)
 
 
 def powershell_parse_errors(sources: dict[str, str], folder: Path) -> str:

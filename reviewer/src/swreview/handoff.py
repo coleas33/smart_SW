@@ -1,9 +1,14 @@
-"""Export a bounded, local handoff bundle for one review run.
+"""Export a bounded, local handoff bundle for one review, check or Remodel run.
 
 The exporter is deliberately an allowlist rather than a folder copier.  A run folder may
 sit beside native CAD files, credentials, screenshots, or temporary SDK state; none of
-those become part of a handoff by discovery.  The package and report can still contain
-paths to the real design, so the manifest says that those references remain external.
+those become part of a handoff by discovery.  The package and report - and a Remodel run's
+open record, attestation, plan and log - can still contain paths to the real design, so the
+manifest says that those references remain external.
+
+A Remodel run folder is judged by a Remodel run's records (``REMODEL_REQUIRED_ARTIFACTS``),
+so its missing list says what the run did not reach rather than naming review files it
+never writes; the manifest's ``run_kind`` says which list applied.
 
 The secret scan is a safety net, not a proof that a bundle is secret-free.  Configured
 secret values are redacted with the product redactor and the provider-key shapes used by
@@ -37,6 +42,8 @@ __all__ = [
     "MAX_ARTIFACT_BYTES",
     "MAX_TOTAL_BYTES",
     "OPTIONAL_ARTIFACTS",
+    "REMODEL_OPTIONAL_ARTIFACTS",
+    "REMODEL_REQUIRED_ARTIFACTS",
     "REQUIRED_ARTIFACTS",
     "export_handoff",
 ]
@@ -69,6 +76,45 @@ OPTIONAL_ARTIFACTS: tuple[str, ...] = (
 )
 """Known supplementary records; arbitrary files and recursive folders are excluded."""
 
+REMODEL_REQUIRED_ARTIFACTS: tuple[str, ...] = (
+    "remodel-open.jsonl",
+    "remodel.log",
+    "source-attestation.json",
+    "open.json",
+    "package-before.json",
+    "plan.json",
+)
+"""What a Remodel run that reached its plan leaves (004 `contracts/run-artifacts.md`): the open's
+phases and log, the attestation, the open record, the baseline package and the plan. Added
+2026-09-28 on review (default taken 2026-09-28, the owner may revise): a missing one is what
+the run did not reach."""
+
+REMODEL_OPTIONAL_ARTIFACTS: tuple[str, ...] = (
+    "exceptions.json",
+    "changes.jsonl",
+    "geometry.json",
+    "grades.json",
+    "package-after.json",
+    "rms-before.json",
+    "rms-after.json",
+    "report.md",
+    "events.jsonl",
+    "session.json",
+    "run-provenance.json",
+)
+"""A Remodel run's later records, present only once a run went further than its plan. The
+native copy under ``copy/`` is never among them."""
+
+_REMODEL_MARKERS: tuple[str, ...] = ("remodel-open.jsonl", "source-attestation.json", "open.json")
+"""Files only a Remodel run writes: any one of them, or a folder named ``...-remodel`` as
+``RunFolders.CreateForRemodel`` names one, makes the run a Remodel run."""
+
+_SOURCE_REFERENCE_POLICY = (
+    "package and report may contain real-design paths, and so may a remodel run's open.json, "
+    "source-attestation.json, plan.json, packages and remodel.log; native CAD files, machine "
+    "settings, credentials and arbitrary neighboring files are excluded"
+)
+
 MAX_ARTIFACT_BYTES = 16 * 1024 * 1024
 MAX_TOTAL_BYTES = 64 * 1024 * 1024
 
@@ -100,11 +146,18 @@ def export_handoff(
     target = _checked_output(out_zip, source)
     timestamp = (exported_at or datetime.now(UTC)).astimezone(UTC)
     secret_values = tuple(secrets)
-    files, missing, excluded, scan = _collect(source, secret_values)
+    run_kind = "remodel" if _is_remodel_run(source) else "review"
+    required, optional = (
+        (REMODEL_REQUIRED_ARTIFACTS, REMODEL_OPTIONAL_ARTIFACTS)
+        if run_kind == "remodel"
+        else (REQUIRED_ARTIFACTS, OPTIONAL_ARTIFACTS)
+    )
+    files, missing, excluded, scan = _collect(source, secret_values, required, optional)
 
     manifest = _manifest(
         source,
         files,
+        run_kind=run_kind,
         missing=missing,
         excluded=excluded,
         scan=scan,
@@ -131,6 +184,14 @@ def _checked_run_dir(run_dir: Path | str) -> Path:
     return source
 
 
+def _is_remodel_run(source: Path) -> bool:
+    """Whether ``source`` is a Remodel run folder: named as one, or holding a record only a
+    Remodel run writes."""
+    return source.name.endswith("-remodel") or any(
+        (source / name).is_file() for name in _REMODEL_MARKERS
+    )
+
+
 def _checked_output(out_zip: Path | str, source: Path) -> Path:
     target = Path(out_zip)
     if target.is_symlink() or target.exists():
@@ -147,14 +208,17 @@ def _checked_output(out_zip: Path | str, source: Path) -> Path:
 
 
 def _collect(
-    source: Path, secrets: Iterable[str | SecretStr | None]
+    source: Path,
+    secrets: Iterable[str | SecretStr | None],
+    required: tuple[str, ...] = REQUIRED_ARTIFACTS,
+    optional: tuple[str, ...] = OPTIONAL_ARTIFACTS,
 ) -> tuple[
     list[tuple[str, bytes, int, bool]],
     list[str],
     list[dict[str, str]],
     dict[str, Any],
 ]:
-    selected = (*REQUIRED_ARTIFACTS, *OPTIONAL_ARTIFACTS)
+    selected = (*required, *optional)
     files: list[tuple[str, bytes, int, bool]] = []
     missing: list[str] = []
     excluded: list[dict[str, str]] = []
@@ -166,7 +230,7 @@ def _collect(
         if path.is_symlink():
             raise HandoffExportError(f"allowlisted artifact must not be a symlink: {relative}")
         if not path.exists() or not path.is_file():
-            if relative in REQUIRED_ARTIFACTS:
+            if relative in required:
                 missing.append(relative)
             continue
         resolved = path.resolve()
@@ -175,13 +239,13 @@ def _collect(
         try:
             size = path.stat().st_size
         except OSError as exc:
-            if relative in REQUIRED_ARTIFACTS:
+            if relative in required:
                 missing.append(relative)
             else:
                 excluded.append({"path": relative, "reason": f"unreadable: {type(exc).__name__}"})
             continue
         if size > MAX_ARTIFACT_BYTES:
-            if relative in REQUIRED_ARTIFACTS:
+            if relative in required:
                 raise HandoffExportError(
                     f"required artifact {relative} exceeds {MAX_ARTIFACT_BYTES} bytes"
                 )
@@ -191,7 +255,7 @@ def _collect(
             with path.open("rb") as handle:
                 raw = handle.read(MAX_ARTIFACT_BYTES + 1)
             if len(raw) > MAX_ARTIFACT_BYTES:
-                if relative in REQUIRED_ARTIFACTS:
+                if relative in required:
                     raise HandoffExportError(
                         f"required artifact {relative} exceeds {MAX_ARTIFACT_BYTES} bytes"
                     )
@@ -201,7 +265,7 @@ def _collect(
         except HandoffExportError:
             raise
         except (OSError, UnicodeDecodeError) as exc:
-            if relative in REQUIRED_ARTIFACTS:
+            if relative in required:
                 missing.append(relative)
             else:
                 excluded.append({"path": relative, "reason": f"unreadable: {type(exc).__name__}"})
@@ -215,7 +279,7 @@ def _collect(
             redacted_files.append(relative)
         data = safe.encode("utf-8")
         if total + len(data) > MAX_TOTAL_BYTES:
-            if relative in REQUIRED_ARTIFACTS:
+            if relative in required:
                 raise HandoffExportError(
                     f"selected required artifacts exceed {MAX_TOTAL_BYTES} bytes"
                 )
@@ -254,6 +318,7 @@ def _manifest(
     timestamp: datetime,
     repo_dir: Path,
     artifact_data: Mapping[str, bytes],
+    run_kind: str = "review",
 ) -> dict[str, Any]:
     records = [
         {
@@ -270,10 +335,8 @@ def _manifest(
         "schema": HANDOFF_SCHEMA,
         "exported_at": timestamp.isoformat(),
         "source_run": str(source),
-        "source_reference_policy": (
-            "package and report may contain real-design paths; native CAD files, machine "
-            "settings, credentials and arbitrary neighboring files are excluded"
-        ),
+        "run_kind": run_kind,
+        "source_reference_policy": _SOURCE_REFERENCE_POLICY,
         "build_identity": {**_git_identity(repo_dir), "captured_at": timestamp.isoformat()},
         "artifacts": records,
         "missing_artifacts": sorted(missing),

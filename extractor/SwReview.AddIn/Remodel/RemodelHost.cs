@@ -1344,10 +1344,10 @@ public sealed class RemodelHost : IDisposable
             // refusal says which option hides them and the two ways past it.
             refusals.Add(
                 "signal_unresolved: save_flag_dirty could not be read or cannot be trusted - SOLIDWORKS "
-                + "does not report unsaved changes to a part open read-only while \"Don't prompt to "
-                + "save read-only referenced documents\" is selected (Tools > Options > System Options "
-                + "> External References); turn that option off, or check the part out, then press "
-                + "Remodel again");
+                + "does not report unsaved changes to a part open read-only while "
+                + "\"Don't prompt to save read-only referenced documents\" is selected (Tools > Options > "
+                + "System Options > External References); turn that option off, or check the part out, "
+                + "then press Remodel again");
         }
 
         if (signals.ReadOnly == null)

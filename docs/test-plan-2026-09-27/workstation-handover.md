@@ -112,6 +112,34 @@ Two more the owner asked for on 2026-09-27, with step 20:
 - **Optionally, one design from another job with bought parts outside the library** (Q, the test
   plan's step 4.8), reviewed once with the version 4 profile; counts only.
 
+## First: the retest of 2026-09-28's U25 to U27
+
+*Added 2026-09-28.* The sitting of 2026-09-28 reported three findings in its handover packet, and
+the build under test answers them (`docs/testing-feedback-2026-09-28.md`). The next sitting runs
+the test plan's retest **first**, right after section 1's update and checks and before the test
+plan's step 2.4 (its section "First: the retest of 2026-09-28's findings U25 to U27"):
+
+- **U25, a drawing active** (the test plan's step 4.9; 011 T110): J's drawing opened on its own,
+  then after J's review, then back on J, then C on its own. The pane's line is the host's sentence
+  naming the model the drawing's views show, Review stays greyed out, and Retry starts nothing; the
+  add-in log has no line saying a drawing's views could not be read.
+- **U27, the close while Remodel a copy measured its copy** (step 5.3's items A to C; 004 T185):
+  crash capture where the seat has administrator rights, then Remodel a copy on a throwaway box
+  saved into the handover folder before any real part - its open phases must end with
+  `open_record.written` and its `remodel.log` must carry the before and after markers - and, if
+  SOLIDWORKS closes, the six things step 5.3's item C keeps before any restart: the time and how it
+  closed, the last marker and phase, the run folder, logs, journal, event logs and dump, the three
+  options as they are after the restart, whether anything was clicked in the copy, and the part
+  rehashed against its attestation.
+- **U26, a checked-in part** (step 5.3's items 1 to 6 on part J; 004 T186), only once the box
+  planned, with every other document saved and closed: J's read-only attribute and the External
+  References option "Don't prompt to save read-only referenced documents" noted first. With the
+  option off, J plans on a copy; with it on, the refusal names the option. J's hash, size, time and
+  read-only attribute are unchanged at the end.
+
+If SOLIDWORKS closes, the retest stops there and the sitting goes on at step 2.4; step 5.3 is not
+repeated when step 5 comes.
+
 ## 0. Before the sitting: what the owner brings
 
 1. **The real standards profile at version 3** (placed on 2026-09-26; for the next sitting, also

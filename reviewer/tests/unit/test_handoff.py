@@ -141,6 +141,74 @@ def test_incomplete_run_remains_exportable_and_lists_missing_required_artifacts(
     assert "package.json" in {item["path"] for item in manifest["artifacts"]}
 
 
+def write_remodel_run(run_dir: Path, *, planned: bool) -> None:
+    """A Remodel run folder as a Plan leaves it, or as an open that stopped at the baseline does."""
+    run_dir.mkdir()
+    (run_dir / "remodel-open.jsonl").write_text('{"phase": "copy_open.begin"}\n', encoding="utf-8")
+    (run_dir / "remodel.log").write_text("id=1 command=remodel.open begin\n", encoding="utf-8")
+    (run_dir / "source-attestation.json").write_text(
+        json.dumps({"path": r"C:\Designs\bracket.SLDPRT", "copy_path": r"C:\runs\x\copy\b.SLDPRT"}),
+        encoding="utf-8",
+    )
+    copy = run_dir / "copy"
+    copy.mkdir()
+    (copy / "bracket-RMS.SLDPRT").write_bytes(b"native copy must not be copied")
+    if planned:
+        (run_dir / "open.json").write_text('{"copy_path": "x"}', encoding="utf-8")
+        (run_dir / "package-before.json").write_text('{"design_id": "d"}', encoding="utf-8")
+        (run_dir / "plan.json").write_text('{"state": "planned"}', encoding="utf-8")
+        (run_dir / "exceptions.json").write_text("{}", encoding="utf-8")
+
+
+def test_a_remodel_run_is_exported_with_its_own_records_and_missing_list(
+    tmp_path: Path,
+) -> None:
+    """General review of 2026-09-28 (default taken 2026-09-28, the owner may revise): a Remodel
+    run folder is judged by a Remodel run's records - the open, the attestation, the baseline
+    package and the plan - so its missing list says what the run did not reach, not which
+    review files a Remodel run never writes. The native copy is never included."""
+    run_dir = tmp_path / "20260928-181400-plate-remodel"
+    write_remodel_run(run_dir, planned=True)
+
+    archive = export_handoff(run_dir, tmp_path / "handoff.zip", exported_at=STAMP)
+    entries = read_zip(archive)
+    manifest = json.loads(entries["handoff-manifest.json"])
+
+    assert manifest["run_kind"] == "remodel"
+    assert manifest["missing_artifacts"] == []
+    assert {
+        "remodel-open.jsonl", "remodel.log", "source-attestation.json", "open.json",
+        "package-before.json", "plan.json", "exceptions.json",
+    } <= set(entries)
+    assert not any(name.lower().endswith(".sldprt") for name in entries)
+    assert b"native copy" not in b"".join(entries.values())
+    assert "remodel" in manifest["source_reference_policy"]
+    assert "open.json" in manifest["source_reference_policy"]
+
+
+def test_a_remodel_run_that_stopped_at_the_baseline_names_what_it_did_not_reach(
+    tmp_path: Path,
+) -> None:
+    run_dir = tmp_path / "20260928-181400-plate-remodel"
+    write_remodel_run(run_dir, planned=False)
+
+    archive = export_handoff(run_dir, tmp_path / "handoff.zip", exported_at=STAMP)
+    manifest = json.loads(read_zip(archive)["handoff-manifest.json"])
+
+    assert manifest["run_kind"] == "remodel"
+    assert manifest["missing_artifacts"] == ["open.json", "package-before.json", "plan.json"]
+
+
+def test_a_review_run_keeps_the_review_shape(tmp_path: Path) -> None:
+    run_dir = tmp_path / "run"
+    write_run(run_dir)
+
+    archive = export_handoff(run_dir, tmp_path / "handoff.zip", exported_at=STAMP)
+    manifest = json.loads(read_zip(archive)["handoff-manifest.json"])
+
+    assert manifest["run_kind"] == "review"
+
+
 def test_export_is_reproducible_with_a_fixed_timestamp_and_refuses_overwrite(
     tmp_path: Path,
 ) -> None:

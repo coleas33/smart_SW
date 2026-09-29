@@ -2660,7 +2660,9 @@ def mcp_server(
 
 @app.command()
 def handoff(
-    run_dir: Annotated[Path, typer.Argument(help="One review run directory to export.")],
+    run_dir: Annotated[
+        Path, typer.Argument(help="One review, check or Remodel run directory to export.")
+    ],
     out: Annotated[Path, typer.Option("--out", help="New local ZIP outside the run folder.")],
     bridge_secret_env: Annotated[
         str | None,
@@ -2668,7 +2670,12 @@ def handoff(
     ] = None,
     json_output: JsonFlag = False,
 ) -> None:
-    """Export run evidence and a manifest; includes design paths, excludes machine settings."""
+    """Export run evidence and a manifest; includes design paths, excludes machine settings.
+
+    A Remodel run's records (the open's phases and log, the attestation, the open record, the
+    baseline package and the plan) carry the source's and the copy's paths as well; the native
+    copy is never included.
+    """
     from swreview.benchmark.runner import REPO_ROOT
     from swreview.handoff import export_handoff
 

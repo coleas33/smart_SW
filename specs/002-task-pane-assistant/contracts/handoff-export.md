@@ -12,11 +12,22 @@ present. It may also contain the recorded `run-provenance.json`, `check.json`,
 in the manifest so an incomplete run remains useful. Arbitrary recursive files, native CAD
 documents, machine settings, environment files, and credentials are never discovered.
 
+*Amended 2026-09-28 on review (default taken 2026-09-28, the owner may revise; feature 004
+research R16):* a Remodel run folder - named `...-remodel`, or holding `remodel-open.jsonl`,
+`source-attestation.json` or `open.json` - is exported with a Remodel run's records: required
+`remodel-open.jsonl`, `remodel.log`, `source-attestation.json`, `open.json`,
+`package-before.json` and `plan.json`; optional `exceptions.json`, `changes.jsonl`,
+`geometry.json`, `grades.json`, `package-after.json`, `rms-before.json`, `rms-after.json`,
+`report.md`, `events.jsonl`, `session.json` and `run-provenance.json`. Its missing list then says
+what the run did not reach, and the manifest's `run_kind` (`review` or `remodel`) says which list
+applied. The native copy under `copy/` is never included.
+
 The manifest records export-time Git revision and dirty state, recorded run provenance when
 present, safe session/provider/efficiency/explanation settings, coverage and usage summary,
 each included artifact's byte count and SHA-256, and missing or excluded artifacts. The
-package and report may retain real-design paths as engineering evidence; those paths are
-references only and their native targets are not copied.
+package and report may retain real-design paths as engineering evidence, and so may a Remodel
+run's `open.json`, `source-attestation.json`, `plan.json`, packages and `remodel.log` (the source's
+and the copy's paths); those paths are references only and their native targets are not copied.
 
 Configured secret values are redacted with the product redactor, and the known provider-key
 shapes are masked in text artifacts. This is a best-effort detector and never proves that

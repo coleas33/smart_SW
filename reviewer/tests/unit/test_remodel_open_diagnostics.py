@@ -213,4 +213,7 @@ def test_partial_remodel_handoff_keeps_diagnostics_and_excludes_the_native_copy(
     } <= entries.keys()
     assert not any(name.lower().endswith(".sldprt") for name in entries)
     manifest = json.loads(entries["handoff-manifest.json"])
-    assert "package.json" in manifest["missing_artifacts"]
+    # A Remodel run's own records decide what is missing: an open that returned leaves the
+    # baseline package and the plan to come (the general review of 2026-09-28).
+    assert manifest["run_kind"] == "remodel"
+    assert manifest["missing_artifacts"] == ["package-before.json", "plan.json"]
