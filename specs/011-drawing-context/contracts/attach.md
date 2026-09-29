@@ -96,6 +96,27 @@ active, Review is disabled and the page says to leave the drawing open, activate
 assembly it documents, and press Review with that model active. The prior model review remains
 bound to its original document and is restored when that document is active again.
 
+*Amended 2026-09-28 on review (U25; defaults taken 2026-09-28, the owner may revise; `tasks.md`
+T110, research R7):* the drawing's sentence is composed **once, by the host**, and names the model:
+`ReviewHost.DrawingSentence` - "{drawing} is a drawing of {model}. Keep the drawing open in
+SOLIDWORKS, open or switch to {model}, then press Review with it active; Review reads open drawings
+whose views show the model." With several models it names the first, in sheet-then-view order, and
+counts the rest ("and 2 other models ... open or switch to {model} or another model it shows"); with
+none known it names none ("... activate the part or assembly it documents ..."). The models are read
+only for a drawing, through a gate of its own with the read-only guard, on the application thread -
+`GetOpenDocumentByName`, `GetViews`, one `GetReferencedModelName` per view, the walk discovery makes
+(`SwOpenDrawingReader.ViewPaths`, `OpenDrawingDiscovery.ModelsShown`, matched by discovery's path
+key, by file name, never by configuration) - and a read that fails names none. Nothing is activated
+or opened: `ActivateDoc*` stay denied, and "open or switch to" says so because a drawing opened on
+its own has its model loaded without a window. The sentence is the `DrawingActive` refusal's message
+from `review.prepare` and `review.start`, replacing `DrawingRefusal`'s, and it travels to the page as
+`drawing_guidance` on `init` and `document.changed` beside `kind` (002 `pane-host-messages.md`). The
+page decides "drawing" from `kind` - no extension table of its own - prints the sentence as sent in
+its banner, writes it on an error card's status line when Retry is pressed with a drawing active
+(sending nothing), and sends nothing on a Review press forced past the disabled button. The error
+card's visible sentence stays the backend's `labels.errors.DrawingActive`, and its page-written title
+"Review cannot start from a drawing" is kept.
+
 ## 6. What SC-001 checks at the seat
 
 Pressing Standards on a multi-sheet drawing grades it; the gate log of that extraction holds no

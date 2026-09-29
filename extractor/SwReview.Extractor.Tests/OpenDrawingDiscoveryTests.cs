@@ -28,6 +28,40 @@ public class OpenDrawingDiscoveryTests
 
     private readonly GapCollector _gaps = new GapCollector();
 
+    // ---- U25: the models an open drawing shows, as the Review tab names them ---------------
+
+    /// <summary>
+    /// U25 (default taken 2026-09-28, the owner may revise): the models a drawing's views show,
+    /// once each, in the order the views were read - sheet by sheet, the sheet's own blank view
+    /// first - matched as discovery matches a path, so another spelling of one file is one model
+    /// and a path discovery would not match (blank, or not rooted) names nothing.
+    /// </summary>
+    [Fact]
+    public void ModelsShown_OnceEachInViewOrderMatchedAsDiscoveryMatchesAPath()
+    {
+        IReadOnlyList<string> shown = OpenDrawingDiscovery.ModelsShown(new[]
+        {
+            string.Empty,
+            HousingPath,
+            HousingPath.ToUpperInvariant(),
+            null,
+            "   ",
+            PinPath,
+            "relative\\cover.SLDPRT",
+            HousingPath.Replace('\\', '/'),
+            CoverPath,
+        });
+
+        Assert.Equal(new[] { HousingPath, PinPath, CoverPath }, shown);
+    }
+
+    [Fact]
+    public void ModelsShown_NothingReadIsNoModel()
+    {
+        Assert.Empty(OpenDrawingDiscovery.ModelsShown(null));
+        Assert.Empty(OpenDrawingDiscovery.ModelsShown(new string?[] { string.Empty, null }));
+    }
+
     // ---- section 1: when discovery runs -------------------------------------------------
 
     [Theory]

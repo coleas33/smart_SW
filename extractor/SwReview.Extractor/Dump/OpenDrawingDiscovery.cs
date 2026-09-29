@@ -228,6 +228,30 @@ public static class OpenDrawingDiscovery
     }
 
     /// <summary>
+    /// U25 (default taken 2026-09-28, the owner may revise): the models an open drawing's views
+    /// show, once each, in the order the views were read - sheet by sheet, view by view - as the
+    /// Review tab names the model a drawing documents. Paths are matched by <see cref="Key"/>,
+    /// case aside, exactly as discovery matches a drawing to a model, so the model named is one
+    /// discovery would read the drawing with; a blank or unrooted path, which discovery never
+    /// matches, names nothing. Each model keeps the spelling it was first read in.
+    /// </summary>
+    public static IReadOnlyList<string> ModelsShown(IEnumerable<string?>? viewPaths)
+    {
+        var models = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string? path in viewPaths ?? Array.Empty<string?>())
+        {
+            string? key = Key(path);
+            if (key != null && seen.Add(key))
+            {
+                models.Add(path!.Trim());
+            }
+        }
+
+        return models;
+    }
+
+    /// <summary>
     /// The comparison key of a path: its full path, or null when it is blank or not rooted. A
     /// path <see cref="Path.GetFullPath(string)"/> refuses (a character the file system does not
     /// allow) is compared as written rather than dropped.

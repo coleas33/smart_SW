@@ -44,7 +44,7 @@ public sealed class SwOpenDrawingReader : IOpenDrawingSource
                 document,
                 () => SwSession.KindOf(document, _gate),
                 () => _gate.Call("GetPathName", () => document.GetPathName()),
-                () => ReferencedPaths(document)));
+                () => ViewPaths(document, _gate)));
         }
 
         return documents;
@@ -58,19 +58,34 @@ public sealed class SwOpenDrawingReader : IOpenDrawingSource
     /// answers a blank name - kept, because discovery ignores a blank path by rule rather than by
     /// position. The arrays are read by <see cref="SwDrawingReader.PerSheetViews"/>, the one reading
     /// the drawing phase uses too (feature 013).
+    ///
+    /// Public and static since U25 (2026-09-28): the Review tab names the model an active drawing
+    /// documents from this same walk (<see cref="OpenDrawingDiscovery.ModelsShown"/>), through a
+    /// gate of its own, rather than from a second copy of it. Two reads per view and one per
+    /// drawing, all reads; nothing is activated, opened or selected.
     /// </summary>
-    private IReadOnlyList<string> ReferencedPaths(IModelDoc2 document)
+    public static IReadOnlyList<string> ViewPaths(IModelDoc2 document, SwGate gate)
     {
+        if (document == null)
+        {
+            throw new ArgumentNullException(nameof(document));
+        }
+
+        if (gate == null)
+        {
+            throw new ArgumentNullException(nameof(gate));
+        }
+
         IDrawingDoc drawing = SwSession.DrawingOf(document)
             ?? throw new InvalidOperationException(
                 "The document reported itself a drawing and did not answer as one.");
 
         var paths = new List<string>();
-        foreach (IReadOnlyList<IView> sheet in SwDrawingReader.PerSheetViews(_gate.Call("GetViews", () => drawing.GetViews())))
+        foreach (IReadOnlyList<IView> sheet in SwDrawingReader.PerSheetViews(gate.Call("GetViews", () => drawing.GetViews())))
         {
             foreach (IView view in sheet)
             {
-                paths.Add(_gate.Call(
+                paths.Add(gate.Call(
                     "GetReferencedModelName", () => view.GetReferencedModelName()) ?? string.Empty);
             }
         }

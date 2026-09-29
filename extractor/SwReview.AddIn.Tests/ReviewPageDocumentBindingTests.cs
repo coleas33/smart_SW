@@ -38,6 +38,27 @@ public sealed class ReviewPageDocumentBindingTests
 
     private const string DrawingPath = @"C:\parts\bracket.SLDDRW";
 
+    private const string SecondDrawingPath = @"C:\parts\plate.SLDDRW";
+
+    /// <summary>
+    /// The sentence the host composes for a drawing (U25, `ReviewHost.DrawingSentence`), as the
+    /// page is handed it on `document.changed` and `init`. The page prints it as sent, so these
+    /// are the host's words standing in for any: the page must not add to them or build its own.
+    /// </summary>
+    private const string DrawingGuidance =
+        "bracket.SLDDRW is a drawing of bracket.sldasm. Keep the drawing open in SOLIDWORKS, open "
+        + "or switch to bracket.sldasm, then press Review with it active; Review reads open drawings "
+        + "whose views show the model.";
+
+    /// <summary>A second drawing's sentence, carrying markup that must reach the screen as text.</summary>
+    private const string SecondDrawingGuidance =
+        "plate.SLDDRW is a drawing of <b>plate</b>.SLDPRT. Keep the drawing open in SOLIDWORKS, open "
+        + "or switch to <b>plate</b>.SLDPRT, then press Review with it active; Review reads open "
+        + "drawings whose views show the model.";
+
+    private static object Drawing(string path, string guidance) =>
+        new { path, configuration = (string?)null, kind = "drawing", drawing_guidance = guidance };
+
     // ---- the header -------------------------------------------------------------------------
 
     /// <summary>
@@ -100,11 +121,7 @@ public sealed class ReviewPageDocumentBindingTests
         JsonElement state = Scripted.Value.DrawingElsewhere;
 
         Assert.Equal("bracket.SLDDRW", Text(state, "header"));
-        Assert.Equal(
-            "This review is of bracket.sldasm [Default]. bracket.SLDDRW is a drawing. "
-            + "Keep it open in SOLIDWORKS and activate the part or assembly it documents. "
-            + "Press Review with that model active; Review reads open drawings whose views show the model.",
-            Text(state, "staleText"));
+        Assert.Equal("This review is of bracket.sldasm [Default]. " + DrawingGuidance, Text(state, "staleText"));
         AssertResultsHidden(state);
         Assert.True(Flag(state, "reviewDisabled"), "Review invites a refused drawing start.");
         Assert.Equal(1, state.GetProperty("findingCards").GetInt32());
@@ -116,12 +133,92 @@ public sealed class ReviewPageDocumentBindingTests
         JsonElement state = Scripted.Value.DrawingWithoutReview;
 
         Assert.False(state.GetProperty("staleHidden").GetBoolean());
-        Assert.Equal(
-            "bracket.SLDDRW is a drawing. Keep it open in SOLIDWORKS and activate the part or assembly "
-            + "it documents. Press Review with that model active; Review reads open drawings whose views show the model.",
-            Text(state, "staleText"));
+        Assert.Equal(DrawingGuidance, Text(state, "staleText"));
         Assert.True(Flag(state, "reviewDisabled"));
         Assert.True(Flag(state, "clearDisabled"));
+    }
+
+    // ---- U25: a drawing, decided by the host's kind and worded by the host -------------------
+
+    /// <summary>
+    /// U25 (default taken 2026-09-28, the owner may revise): "drawing" is the host's `kind`, not
+    /// the page's reading of an extension. A document the host calls a drawing is one, whatever
+    /// its path says; a path ending in .SLDDRW that the host sends with another kind - or none,
+    /// from an older host - is not treated as one by the page, and the host still refuses it.
+    /// </summary>
+    [Fact]
+    public void ADrawingIsWhatTheHostsKindSaysAndNotWhatTheExtensionSays()
+    {
+        Conversation run = Scripted.Value;
+
+        Assert.True(Flag(run.KindDrawingOddPath, "reviewDisabled"), "a document the host calls a drawing was reviewable.");
+        Assert.Equal("This review is of bracket.sldasm [Default]. " + DrawingGuidance, Text(run.KindDrawingOddPath, "staleText"));
+        Assert.False(Flag(run.ExtensionWithoutKind, "reviewDisabled"), "the page read the extension itself.");
+    }
+
+    /// <summary>
+    /// A drawing already active when the pane opens: `init` carries it, the banner prints the
+    /// host's sentence as sent, the header names the drawing, and Review is disabled.
+    /// </summary>
+    [Fact]
+    public void ADrawingActiveWhenThePaneOpensShowsTheHostsSentenceAndDisablesReview()
+    {
+        JsonElement state = DrawingFirst.Value.AtInit;
+
+        Assert.Equal("bracket.SLDDRW", Text(state, "header"));
+        Assert.False(state.GetProperty("staleHidden").GetBoolean());
+        Assert.Equal(DrawingGuidance, Text(state, "staleText"));
+        Assert.True(Flag(state, "reviewDisabled"));
+    }
+
+    /// <summary>
+    /// A Review press forced past the disabled button while a drawing is active sends nothing:
+    /// no preparation and no start reach the host, whose refusal is the backstop.
+    /// </summary>
+    [Fact]
+    public void AReviewPressForcedPastTheDisabledButtonOnADrawingSendsNothing()
+    {
+        DrawingFirstRun run = DrawingFirst.Value;
+
+        Assert.DoesNotContain("review.start", run.SentAfterForcedPress);
+        Assert.DoesNotContain("review.prepare", run.SentAfterForcedPress);
+    }
+
+    /// <summary>
+    /// Another drawing: its own sentence, printed as text - markup in it is not markup.
+    /// </summary>
+    [Fact]
+    public void ASecondDrawingGetsItsOwnSentencePrintedAsText()
+    {
+        JsonElement state = DrawingFirst.Value.SecondDrawing;
+
+        Assert.Equal("plate.SLDDRW", Text(state, "header"));
+        Assert.Equal(SecondDrawingGuidance, Text(state, "staleText"));
+        Assert.Equal(0, state.GetProperty("staleElements").GetInt32());
+    }
+
+    /// <summary>
+    /// Retry on an error card while a drawing is active says why it did nothing: the host's
+    /// drawing sentence on the card's status line, and nothing sent.
+    /// </summary>
+    [Fact]
+    public void RetryOnAnErrorCardWhileADrawingIsActiveSaysWhyAndSendsNothing()
+    {
+        DrawingFirstRun run = DrawingFirst.Value;
+
+        Assert.Equal(SecondDrawingGuidance, run.RetryStatus);
+        Assert.DoesNotContain("review.start", run.SentAfterRetry);
+        Assert.DoesNotContain("review.prepare", run.SentAfterRetry);
+    }
+
+    /// <summary>Back on a model, the banner goes and Review comes back.</summary>
+    [Fact]
+    public void BackOnAModelTheDrawingSentenceGoesAndReviewComesBack()
+    {
+        JsonElement state = DrawingFirst.Value.OnAModel;
+
+        Assert.True(state.GetProperty("staleHidden").GetBoolean());
+        Assert.False(Flag(state, "reviewDisabled"));
     }
 
     /// <summary>
@@ -378,6 +475,109 @@ public sealed class ReviewPageDocumentBindingTests
 
     // ---- driving the real page ----------------------------------------------------------------
 
+    private static readonly Lazy<DrawingFirstRun> DrawingFirst = new Lazy<DrawingFirstRun>(DriveDrawingFirst);
+
+    /// <summary>
+    /// A second boot, with a drawing active when the pane opens (U25): the banner at `init`, a
+    /// Review press forced past the disabled button, another drawing, a model and a refused start
+    /// that leaves an error card, then a drawing again and that card's Retry. Every message the
+    /// page sends the host is recorded, so "sent nothing" is read from what arrived.
+    /// </summary>
+    private static DrawingFirstRun DriveDrawingFirst()
+    {
+        var run = new DrawingFirstRun();
+        var sent = new List<string>();
+
+        OffscreenReviewPage.WithPage(
+            page =>
+            {
+                page.WebMessageReceived += (sender, args) =>
+                {
+                    JsonElement message = JsonDocument.Parse(args.WebMessageAsJson).RootElement;
+                    string type = message.GetProperty("type").GetString() ?? string.Empty;
+                    string id = message.TryGetProperty("id", out JsonElement value)
+                        && value.ValueKind == JsonValueKind.String
+                            ? value.GetString() ?? string.Empty
+                            : string.Empty;
+                    lock (sent)
+                    {
+                        sent.Add(type);
+                    }
+
+                    switch (type)
+                    {
+                        case "ready":
+                            page.PostWebMessageAsJson(Reply("init", id, Init(Drawing(DrawingPath, DrawingGuidance))));
+                            return;
+                        case "models.list":
+                            page.PostWebMessageAsJson(Reply(
+                                "models", id, new { provider = "openai", models = new object[0] }));
+                            return;
+                        case "review.start":
+                            page.PostWebMessageAsJson(JsonSerializer.Serialize(new
+                            {
+                                type = "error",
+                                id,
+                                payload = new { error_class = "NoDocument", message = "the model closed", retryable = true },
+                            }));
+                            return;
+                        default:
+                            return;
+                    }
+                };
+            },
+            async page =>
+            {
+                await OffscreenReviewPage.Settled(page);
+                await page.ExecuteScriptAsync(FetchStub);
+                run.AtInit = await Read(page);
+
+                int before = Count(sent);
+                await page.ExecuteScriptAsync(
+                    "var start = document.getElementById('start-review'); start.disabled = false; start.click();0");
+                await OffscreenReviewPage.Settled(page);
+                run.SentAfterForcedPress = Since(sent, before);
+
+                await DocumentChanged(page, Drawing(SecondDrawingPath, SecondDrawingGuidance));
+                run.SecondDrawing = await Read(page);
+
+                await DocumentChanged(page, new { path = ReviewedPath, configuration = "Default", kind = "assembly" });
+                run.OnAModel = await Read(page);
+                await Click(page, "start-review");
+
+                await DocumentChanged(page, Drawing(SecondDrawingPath, SecondDrawingGuidance));
+                before = Count(sent);
+                string status = await page.ExecuteScriptAsync(@"
+(function () {
+  var cards = document.querySelectorAll('.card.error');
+  var card = cards[cards.length - 1];
+  card.querySelector('button.retry').click();
+  return card.querySelector('.card-status').textContent;
+}())");
+                await OffscreenReviewPage.Settled(page);
+                run.SentAfterRetry = Since(sent, before);
+                run.RetryStatus = JsonDocument.Parse(status).RootElement.GetString() ?? string.Empty;
+            });
+
+        return run;
+    }
+
+    private static int Count(List<string> sent)
+    {
+        lock (sent)
+        {
+            return sent.Count;
+        }
+    }
+
+    private static string[] Since(List<string> sent, int from)
+    {
+        lock (sent)
+        {
+            return sent.Skip(from).ToArray();
+        }
+    }
+
     private static Conversation Drive()
     {
         var run = new Conversation();
@@ -442,8 +642,20 @@ public sealed class ReviewPageDocumentBindingTests
                 await DocumentChanged(page, new { path = OtherPath, configuration = "Machined" });
                 run.Elsewhere = await Read(page);
 
-                await DocumentChanged(page, new { path = DrawingPath, configuration = (string?)null });
+                await DocumentChanged(page, Drawing(DrawingPath, DrawingGuidance));
                 run.DrawingElsewhere = await Read(page);
+
+                // The host's kind decides, not the extension (U25).
+                await DocumentChanged(page, new
+                {
+                    path = @"C:\parts\bracket.dwgview",
+                    configuration = (string?)null,
+                    kind = "drawing",
+                    drawing_guidance = DrawingGuidance,
+                });
+                run.KindDrawingOddPath = await Read(page);
+                await DocumentChanged(page, new { path = DrawingPath, configuration = (string?)null });
+                run.ExtensionWithoutKind = await Read(page);
 
                 // 3. The reviewed one again, its path in another case.
                 await DocumentChanged(page, new { path = @"C:\PARTS\BRACKET.SLDASM", configuration = "Default" });
@@ -462,7 +674,7 @@ public sealed class ReviewPageDocumentBindingTests
                 await Click(page, "clear-review");
                 run.Cleared = await Read(page);
 
-                await DocumentChanged(page, new { path = DrawingPath, configuration = (string?)null });
+                await DocumentChanged(page, Drawing(DrawingPath, DrawingGuidance));
                 run.DrawingWithoutReview = await Read(page);
                 await DocumentChanged(page, new { path = ReviewedPath, configuration = "Default" });
 
@@ -598,6 +810,7 @@ public sealed class ReviewPageDocumentBindingTests
       headerTitle: byId('document-name').getAttribute('title'),
       staleHidden: !!line.hidden,
       staleText: line.textContent,
+      staleElements: line.children.length,
       groups: rendered(byId('findings-by-type')),
       notExamined: rendered(byId('not-examined')),
       coverage: rendered(byId('coverage-panel')),
@@ -623,7 +836,9 @@ public sealed class ReviewPageDocumentBindingTests
     private static string Reply(string type, string id, object payload) =>
         JsonSerializer.Serialize(new { type, id, payload });
 
-    private static object Init() => new
+    private static object Init() => Init(new { path = ReviewedPath, configuration = "Default", kind = "assembly" });
+
+    private static object Init(object document) => new
     {
         backend = new { port = 51999, origin = "http://127.0.0.1:51999" },
         token = "0FAKEtoken-for-the-page-tests",
@@ -642,8 +857,24 @@ public sealed class ReviewPageDocumentBindingTests
         key_source = "settings",
         run_root = @"C:\SwReviewRuns",
         providers = new[] { "openai", "gemini" },
-        document = new { path = ReviewedPath, configuration = "Default" },
+        document,
     };
+
+    /// <summary>What the drawing-first boot saw.</summary>
+    private sealed class DrawingFirstRun
+    {
+        public JsonElement AtInit { get; set; }
+
+        public string[] SentAfterForcedPress { get; set; } = new string[0];
+
+        public JsonElement SecondDrawing { get; set; }
+
+        public JsonElement OnAModel { get; set; }
+
+        public string RetryStatus { get; set; } = string.Empty;
+
+        public string[] SentAfterRetry { get; set; } = new string[0];
+    }
 
     /// <summary>What the scripted run saw, one snapshot per phase.</summary>
     private sealed class Conversation
@@ -655,6 +886,10 @@ public sealed class ReviewPageDocumentBindingTests
         public JsonElement DrawingElsewhere { get; set; }
 
         public JsonElement DrawingWithoutReview { get; set; }
+
+        public JsonElement KindDrawingOddPath { get; set; }
+
+        public JsonElement ExtensionWithoutKind { get; set; }
 
         public JsonElement Back { get; set; }
 
