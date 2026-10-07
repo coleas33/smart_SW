@@ -6,17 +6,27 @@ the screw on its thread and contributes nothing - which is the fixed-fastener re
 screw into a tapped hole and the floating one for a pin or bolt through clearance holes
 (research R2.6). The allowed offset doubled is the position budget, reported as the callout
 the drawing should carry (FR-008). A fastener that cannot pass a hole at all is a negative
-term, demonstrated with both numbers (R2.4).
+term, demonstrated with both numbers (R2.4). An instance of unknown role leaves both alignment
+checks unresolved, naming every instance of its joint in `inputs` and only the unknown ones in
+its words (feature 014 FR-061, owner decision 19A).
 """
 
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 
 import pytest
 
-from swreview.checks.joint_alignment import CHECK_NOMINAL, check_nominal_alignment
+from swreview.checks.joint_alignment import (
+    CHECK_NOMINAL,
+    CHECK_STACK,
+    check_nominal_alignment,
+    check_position_stack,
+)
 from swreview.checks.joints import Joint, build_joint_map, fold_by_pattern, folded_result
+from swreview.checks.result import CheckResult
+from swreview.checks.tolerances import NoSources
 from swreview.ir.models import EvidencePackage, Quantity
 from tests.support.mechanical import Face, Instance, PackageBuilder
 
@@ -256,6 +266,77 @@ def test_a_hole_of_unknown_type_leaves_its_size_unresolved() -> None:
 
     assert result.status == "unresolved"
     assert "hol:0002" in result.observed
+
+
+def unknown_role_joint() -> PackageBuilder:
+    """A screw joint through a spacer whose hole type the extractor could not read: the tapped
+    plate's `hol:0001`, the spacer's `hol:0002` of unknown type and the cover's clearance
+    `hol:0003`, one instance each, stacked on one axis."""
+    builder = parts(3)
+    builder.hole(
+        "cmp:0001",
+        hole_type="tapped",
+        size="M3x0.5",
+        thread="M3x0.5",
+        end_condition="blind",
+        instances=at((0.0, 0.0, 0.0), Face(2.5, -8.0, 0.0)),
+    )
+    builder.hole(
+        "cmp:0002",
+        hole_type="unknown",
+        size="M3",
+        end_condition="through",  # type: ignore[arg-type]
+        instances=at((0.0, 0.0, 0.0), Face(3.4, 0.0, 2.0)),
+    )
+    builder.hole(
+        "cmp:0003",
+        hole_type="clearance",
+        size="M3",
+        end_condition="through",
+        instances=at((0.0, 0.0, 0.0), Face(3.4, 2.0, 4.5)),
+    )
+    return builder
+
+
+UNKNOWN_ROLE_INSTANCES = ["hol:0001#1", "hol:0002#1", "hol:0003#1"]
+
+
+@pytest.mark.parametrize(
+    ("check", "judge"),
+    [
+        pytest.param(CHECK_NOMINAL, check_nominal_alignment, id=CHECK_NOMINAL),
+        pytest.param(
+            CHECK_STACK,
+            lambda joint, package: check_position_stack(joint, package, NoSources()),
+            id=CHECK_STACK,
+        ),
+    ],
+)
+def test_an_unknown_role_result_names_every_instance_and_says_which_hole_is_unknown(
+    check: str, judge: Callable[[Joint, EvidencePackage], CheckResult | None]
+) -> None:
+    """19A (FR-061): the joint's references are all its instances, so a finding names the joint
+    it judges, while its words name the hole whose type is unknown and no other, as before."""
+    joint, package = only_joint(unknown_role_joint())
+
+    result = judge(joint, package)
+
+    assert [item.id for item in joint.instances] == UNKNOWN_ROLE_INSTANCES
+    assert result is not None
+    assert (result.check, result.status) == (check, "unresolved")
+    assert result.inputs == UNKNOWN_ROLE_INSTANCES
+    assert result.observed == (
+        "the role of hol:0002 (its hole type is unknown), so its clearance is unknown; the "
+        "check did not run"
+    )
+    assert result.recommended_action == (
+        "Record the hole type of hol:0002 in the model's Hole Wizard feature so the joint can "
+        "be judged."
+    )
+    assert result.coverage_limits == [
+        f"{check} not evaluated: the role of hol:0002 (its hole type is unknown), so its "
+        "clearance is unknown"
+    ]
 
 
 def test_a_joint_with_no_clearance_hole_has_no_alignment_to_judge() -> None:

@@ -15,8 +15,9 @@ A finding **matches** an answer-key entry when three things hold, and nothing el
 Findings on checks and targets are built as data (`make_finding`); "real" findings are recorded
 by the tool that writes them (research §2 d2-model-finding-unmatchable), and the references of
 test 4 are read off results the real checks return. The overlap test of `answer-key.md` 5 is
-the same primitives (test 6). The joint kind on 19A's results and the unknown-role case are
-T025's; forbidden entries are US3's (T083). Every id and description is fictional.
+the same primitives (test 6). The joint kind, the unknown-role case and US1-17 read the results
+owner decision 19A gives every path (T025); forbidden entries are US3's (T083). Every id and
+description is fictional.
 """
 
 from __future__ import annotations
@@ -29,12 +30,14 @@ import pytest
 
 from swreview.benchmark import answer_key_model, matching
 from swreview.benchmark.answer_key_model import CorrectCondition, KnownDefect, ReferenceKind
+from swreview.checks.fastener import CHECK_BOTTOMING, check_fastener_joint
 from swreview.checks.standards.profile import load_profile
 from swreview.findings import MODEL_FINDING_CHECK, Calculation, Finding
 from swreview.ir.loader import load_package
 from swreview.ir.models import SourceRef
 from swreview.tools import checks_fastener, checks_fit
 from swreview.tools.context import ToolContext, context_for, use_context
+from swreview.tools.recording import result_to_finding
 from tests.golden.test_golden import FIXTURES_DIR
 from tests.support.packages import build_package
 from tests.unit.test_answer_key import (
@@ -44,6 +47,7 @@ from tests.unit.test_answer_key import (
     condition,
     defect,
 )
+from tests.unit.test_checks_fastener import layer, mm, screw, tapped_hole
 from tests.unit.test_drawing_finding_number_guard import (
     FIRST,
     INGESTED,
@@ -51,7 +55,12 @@ from tests.unit.test_drawing_finding_number_guard import (
     guarded_package,
     record,
 )
-from tests.unit.test_joint_alignment import dowel_joint, pattern_of
+from tests.unit.test_joint_alignment import (
+    UNKNOWN_ROLE_INSTANCES,
+    dowel_joint,
+    pattern_of,
+    unknown_role_joint,
+)
 from tests.unit.test_scorecard import make_finding
 from tests.unit.test_tool_access import screw_over_plate
 from tests.unit.test_tools_check_joints import PROFILE_A, run, with_profile
@@ -368,6 +377,40 @@ def test_covered_items_are_each_element_as_the_set_of_its_references() -> None:
     assert matching.covered_items(known_defect()) == []
 
 
+@pytest.mark.parametrize(
+    ("hole", "status"),
+    [("hole:tapped", "checked_within_scope"), ("hole:unknown-depth", "unresolved")],
+    ids=["resolved", "unresolved"],
+)
+def test_a_joint_matches_its_bottoming_result_on_either_path_and_no_other_screw(
+    hole: str, status: str
+) -> None:
+    """19A: `fastener.bottoming` leads its inputs with the fastener and hole ids on every path,
+    so the joint kind reads them off a resolved and an unresolved result alike. `fst:no-length`
+    is another screw between the same two parts, `hole:far` another hole of the joint's parts."""
+    context = context_for(joint_package(build_package))
+    with use_context(context):
+        checks_fastener.check_fastener_joint("fst:screw", hole, ["cmp:0003"])
+    [bottoming] = [
+        finding
+        for finding in context.require_session().findings
+        if finding.check == CHECK_BOTTOMING
+    ]
+
+    def keyed(fastener: str, keyed_hole: str) -> KnownDefect:
+        return known_defect(
+            check=CHECK_BOTTOMING,
+            component_ids=["cmp:0001", "cmp:0004"],
+            references=[{"fastener": fastener, "hole": keyed_hole}],
+        )
+
+    assert bottoming.status == status
+    assert matching.finding_references(bottoming, "joint") == {"fst:screw", hole}
+    assert matching.matches(bottoming, keyed("fst:screw", hole))
+    assert not matching.matches(bottoming, keyed("fst:no-length", hole))
+    assert not matching.matches(bottoming, keyed("fst:screw", "hole:far"))
+
+
 def test_a_recess_matches_through_its_hole_instance_and_never_the_screw_s_component() -> None:
     """`fastener.head_fit` writes the recess instance beside the screw's component
     (`checks/tool_access.py:409`); the recess kind reads the `#` instance alone."""
@@ -455,6 +498,30 @@ def test_joint_instances_match_the_missing_tolerance_result_and_not_the_other_jo
     assert not matching.matches(stack, keyed("hol:0001#1", "hol:0003#1"))
 
 
+def test_joint_instances_match_the_unknown_role_result_through_every_instance() -> None:
+    """19A: the unknown-role result names every instance of its joint, not only the one whose
+    hole type is unknown, so an entry on the whole joint matches it and an entry naming that
+    instance alone is another set."""
+    package = unknown_role_joint().build().package
+    [alignment] = joint_map_findings(context_for(package), "hole.nominal_alignment")
+
+    def keyed(*instances: str) -> KnownDefect:
+        return known_defect(
+            check="hole.nominal_alignment",
+            component_ids=["cmp:0001", "cmp:0002", "cmp:0003"],
+            references=[{"hole_instances": list(instances)}],
+            expected_status="unresolved",
+        )
+
+    assert alignment.status == "unresolved"
+    assert "the role of hol:0002 (its hole type is unknown)" in alignment.observed
+    assert matching.finding_references(alignment, "joint instances") == set(
+        UNKNOWN_ROLE_INSTANCES
+    )
+    assert matching.matches(alignment, keyed(*reversed(UNKNOWN_ROLE_INSTANCES)))
+    assert not matching.matches(alignment, keyed("hol:0002#1"))
+
+
 def test_a_fit_matches_its_pair_either_way_round_and_never_the_bore_against_itself() -> None:
     """Roles are not compared: a fit called with bore and shaft swapped names the same pair. The
     bore against itself, and another fit on the sheet sharing the bore, name other sets (the
@@ -503,6 +570,52 @@ def test_a_stack_matches_its_contributors_and_target_exactly() -> None:
     assert not matching.matches(one_short, keyed(contributors))
     assert not matching.matches(whole, keyed(contributors[:-1]))
     assert matching.matches(one_short, keyed(contributors[:-1]))
+
+
+def test_us1_17_one_joint_s_unresolved_bottoming_matches_its_own_entry_and_no_other() -> None:
+    """US1-17 at the matcher: four screws in one plate, each joint's `fastener.bottoming` keyed
+    as its own known defect, expected unresolved, and the third joint's thread depth missing.
+    Each joint's finding, built through the real `check_fastener_joint` and `build_finding`
+    (`tools/recording.result_to_finding`), matches its own joint's entry and no other; the third
+    is the one unresolved (the scored half is T036's)."""
+    context = context_for(build_package())
+    entries = [
+        known_defect(
+            id=f"D-{number}",
+            check=CHECK_BOTTOMING,
+            component_ids=["cmp:0001", "cmp:0002"],
+            references=[joint],
+            expected_status="unresolved",
+        )
+        for number, joint in enumerate(FOUR_SCREWS, start=1)
+    ]
+
+    findings = []
+    for number, joint in enumerate(FOUR_SCREWS, start=1):
+        fastener = screw().model_copy(update={"id": joint["fastener"]})
+        hole = tapped_hole(thread_depth=None if number == 3 else mm(12.0)).model_copy(
+            update={"id": joint["hole"]}
+        )
+        [bottoming] = [
+            result
+            for result in check_fastener_joint(
+                fastener, hole, [layer(mm(3.0))], hole_material="6061-T6"
+            )
+            if result.check == CHECK_BOTTOMING
+        ]
+        findings.append(
+            result_to_finding(context, bottoming, component_ids=["cmp:0001", "cmp:0002"])
+        )
+
+    assert [finding.status for finding in findings] == [
+        "demonstrated",
+        "demonstrated",
+        "unresolved",
+        "demonstrated",
+    ]
+    assert "the usable thread depth of hole hol:0003" in findings[2].observed
+    for finding, own in zip(findings, entries, strict=True):
+        assert [entry.id for entry in entries if matching.matches(finding, entry)] == [own.id]
 
 
 # --- 5. a folded joint-map finding (2.3; `checks/joints.py:1185-1226`) ---------------------

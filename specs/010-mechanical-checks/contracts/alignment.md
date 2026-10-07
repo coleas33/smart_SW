@@ -1,6 +1,6 @@
 # Contract: Alignment and the Stack-Up
 
-*Amended 2026-09-29 by feature 014 (`specs/014-design-review-eval/`), in scoring.md section 10 (19A); the amendment text lands with the 014 task that changes the code:* references on every path of the alignment check.
+*Amended 2026-09-29 by feature 014 (`specs/014-design-review-eval/`), in scoring.md section 10 (19A), landed 2026-10-07 (014 T026):* references on every path of the alignment check (section 1, last paragraph).
 
 Normative for FR-007 to FR-010 and User Story 3. `checks/joint_alignment.py`; the zone rule in
 `checks/result.py`.
@@ -26,6 +26,11 @@ from `data-model.md` section 4 and research R2.5:
 `position_budget_mm = 2 * allowed`, `callout`. `inputs` cite every `H` and `F` with its source.
 A line-to-line joint (`allowed == 0`) that passes adds the coverage limit
 `"<joint> has no clearance: the fit is line to line and any position error prevents assembly"`.
+
+Every result of `hole.nominal_alignment` and `hole.position_stack` names every instance of its
+joint in `inputs`, on every path. A joint holding an instance whose hole type is unknown is
+unresolved in both checks, its words naming the holes of unknown role and its `inputs` every
+instance of the joint, its references (feature 014 FR-061, owner decision 19A).
 
 ## 2. The callout (FR-008)
 

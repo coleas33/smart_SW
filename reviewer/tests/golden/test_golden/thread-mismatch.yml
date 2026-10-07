@@ -42,6 +42,8 @@ result:
   check: fastener.bottoming
   coverage_limits: []
   inputs:
+  - fst:1
+  - hole:1
   - unit: mm
     value: 12.0
   - unit: mm
@@ -107,6 +109,8 @@ result:
   check: fastener.engagement
   coverage_limits: []
   inputs:
+  - fst:1
+  - hole:1
   - unit: mm
     value: 12.0
   - unit: mm
@@ -166,6 +170,8 @@ result:
   check: fastener.thread_match
   coverage_limits: []
   inputs:
+  - fst:1
+  - hole:1
   - unit: mm
     value: 12.0
   - unit: mm
@@ -184,6 +190,8 @@ result:
   - 'fastener.head_clearance not evaluated: the tool envelope around the head of fst:1
     is unknown'
   inputs:
+  - fst:1
+  - hole:1
   - unit: mm
     value: 12.0
   - unit: mm
