@@ -50,7 +50,7 @@ from swreview.benchmark.scorecard import (
 )
 from swreview.benchmark.sets import BenchmarkPackageRef, BenchmarkSet
 from swreview.checks.fastener import CHECK_BOTTOMING, check_fastener_joint
-from swreview.findings import Finding, build_finding
+from swreview.findings import Finding
 from swreview.ir.loader import save_package
 from swreview.ir.models import EvidencePackage
 from swreview.report.session import ReviewSession, Timing, save_session
@@ -59,6 +59,7 @@ from swreview.tools.recording import result_to_finding
 from swreview.tools.refs import resolve_dimension
 from tests.support.answer_keys import write_key
 from tests.support.contracts import load_contract
+from tests.support.findings import make_finding
 from tests.support.packages import build_package, persist_ref
 from tests.unit.test_checks_fastener import layer, mm, screw, tapped_hole
 from tests.unit.test_drawing_finding_number_guard import (
@@ -91,24 +92,6 @@ carry one dimension each, and a native one (`doc:4`)."""
 
 BORE = {"document_id": INGESTED, "sheet": FIRST, "annotation": "DIM-1"}
 SHAFT = {"document_id": INGESTED, "sheet": SECOND, "annotation": "DIM-2"}
-
-
-def make_finding(**overrides: object) -> Finding:
-    fields: dict[str, object] = {
-        "finding_id": "F-001",
-        "check": "fastener.bottoming",
-        "title": "t",
-        "status": "suspected",
-        "severity": "medium",
-        "package": PACKAGE,
-        "configuration": "Default",
-        "observed": "o",
-        "requirement": "r",
-        "recommended_action": "a",
-        "component_ids": ["cmp:0001"],
-    }
-    fields.update(overrides)
-    return build_finding(**fields)  # type: ignore[arg-type]
 
 
 def finding_with(status: str, finding_id: str = "F-001", **overrides: object) -> Finding:

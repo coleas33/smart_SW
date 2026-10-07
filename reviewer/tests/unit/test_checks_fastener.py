@@ -699,9 +699,9 @@ def every_path(
     sweep: Callable[[EnvelopeResult], object],
     no_sweep: object,
 ) -> list[object]:
-    """The thirteen paths of the four rules (`checks/fastener.py`'s thirteen results) through
-    `entry_point`, each as `(results, check, the status the path ends in, the sources after
-    the two ids)`.
+    """The fourteen paths of the four rules, through `checks/fastener.py`'s thirteen result
+    sites (engagement's two unresolved paths share one), by `entry_point`, each as `(results,
+    check, the status the path ends in, the sources after the two ids)`.
 
     `resolved` is the default joint's bottoming and engagement verdicts, `missing` what leaves
     the joint without a length it needs, `sweep` wraps an envelope the way the entry point
@@ -831,7 +831,7 @@ EVERY_PATH = [
 def test_every_result_of_the_four_rules_leads_its_inputs_with_the_fastener_and_the_hole(
     results: Results, check: str, status: str, sources: list[Quantity | str]
 ) -> None:
-    """19A, on each of the thirteen paths of the four rules, through both entry points:
+    """19A, on each of the fourteen paths of the four rules, through both entry points:
     unresolved and resolved alike, the two ids lead, and what `inputs` held before follows
     them unchanged."""
     result = results()[check]
@@ -842,8 +842,9 @@ def test_every_result_of_the_four_rules_leads_its_inputs_with_the_fastener_and_t
 
 def test_the_calculation_inputs_are_what_they_were() -> None:
     """19A writes the ids into `inputs` only: the calculation still names them once, by name,
-    beside every length as read and in millimetres."""
+    beside every length as read and in millimetres, through both entry points."""
     calculation = clamped_joint()[CHECK_BOTTOMING].calculation
+    placed = placed_screw()[CHECK_BOTTOMING].calculation
 
     assert calculation is not None
     assert calculation.inputs == {
@@ -855,6 +856,14 @@ def test_the_calculation_inputs_are_what_they_were() -> None:
         "usable_thread_depth_mm": mm(12.0),
         "clamped_0_cmp:0003": LAYER_1_5,
         "clamped_0_cmp:0003_mm": mm(1.5),
+    }
+    assert placed is not None
+    assert placed.inputs == {
+        "fastener_id": "fst:1",
+        "hole_id": "hole:1",
+        "protrusion_mm": PROTRUSION_6,
+        "usable_thread_depth_mm": USABLE_10,
+        "usable_thread_source": "the Hole Wizard thread depth",
     }
 
 
