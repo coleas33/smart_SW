@@ -22,17 +22,23 @@ lever combination. The parity-slice bullet (the stamp against a run's `prompt_di
 from __future__ import annotations
 
 import hashlib
+import json
 from collections.abc import Callable, Iterable
 from itertools import product
+from pathlib import Path
 from typing import Any
 
 import pytest
 from pydantic import BaseModel
+from typer.testing import CliRunner
 
+from swreview import cli
 from swreview.agent.checklist import CHECKLIST_FILE, SYSTEM_PROMPT_FILE
 from swreview.agent.settings import EfficiencySettings, ModelViewSettings
 from swreview.benchmark import answer_key, digest
 from swreview.benchmark.answer_key_model import KnownDefect, Stamp
+from swreview.benchmark.runner import PROVENANCE_FILE
+from swreview.ir.loader import save_package
 from swreview.tools import registry, session
 from swreview.tools.context import context_for
 from swreview.tools.drawings import drawing_evidence
@@ -216,3 +222,37 @@ def test_no_lever_combination_offers_a_review_a_tool_outside_the_digested_set() 
         dispatch = ToolRegistry().dispatch(context, efficiency=efficiency, model_view=model_view)
         for tool in dispatch:
             assert tool.schema == digested[tool.name]["schema"], tool.name
+
+
+# --- the stamp and a run's record are one number (the parity slice, US2's T046) ----------------
+
+
+def test_a_runs_prompt_and_checklist_digests_are_the_stamps(tmp_path: Path) -> None:
+    """`cases.md` 5 and 9 (INT-3; FR-031): a scripted `benchmark run` records `prompt_digest` and
+    `checklist_digest` equal to `current_stamp()`'s `prompt` and `checklist` for the same
+    checkout, both `digest.sha256_of` over the files' raw bytes."""
+    package_dir = tmp_path / "package"
+    save_package(build_package(), package_dir)
+    set_path = tmp_path / "sets" / "stamp.json"
+    set_path.parent.mkdir()
+    set_path.write_text(
+        json.dumps(
+            {
+                "name": "stamp",
+                "packages": [{"package_id": "cover", "path": str(package_dir), "held_out": True}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    out = tmp_path / "run"
+
+    result = CliRunner().invoke(
+        cli.app,
+        ["benchmark", "run", "--set", str(set_path), "--out", str(out), "--provider", "fake"],
+    )
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    record = json.loads((out / PROVENANCE_FILE).read_text(encoding="utf-8"))
+    stamp = answer_key.current_stamp()
+    assert record["prompt_digest"] == stamp.prompt == digest.sha256_of(SYSTEM_PROMPT_FILE)
+    assert record["checklist_digest"] == stamp.checklist == digest.sha256_of(CHECKLIST_FILE)

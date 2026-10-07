@@ -123,6 +123,7 @@ def test_run_benchmark_never_passes_an_answer_key_path(tmp_path: Path) -> None:
         model: str,
         effort: str,
         efficiency: object,
+        attempt: object,
     ) -> None:
         calls.append((package_path, session_out_dir, provider, model, effort))
 

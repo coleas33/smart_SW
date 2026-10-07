@@ -44,6 +44,7 @@ from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, Script
 from swreview.agent.runner import start_review
 from swreview.agent.settings import (
     LEVER_NAMES,
+    MODEL_VIEW_OFF,
     NO_STUDY,
     PANE_STUDY,
     PRIVATE_PANE_STUDY,
@@ -54,7 +55,7 @@ from swreview.agent.settings import (
     efficiency_from_levers,
     pane_efficiency,
 )
-from swreview.benchmark.runner import run_benchmark
+from swreview.benchmark.runner import AttemptRequest, run_benchmark
 from swreview.report.session import ReviewSession, load_session
 
 runner = CliRunner()
@@ -639,6 +640,7 @@ def test_run_benchmark_passes_the_settings_to_every_package(
         model: str,
         effort: str,
         efficiency: EfficiencySettings | None,
+        attempt: AttemptRequest,
     ) -> None:
         seen.append(efficiency)
 
@@ -673,6 +675,7 @@ def test_cli_review_fn_passes_the_settings_through(
         model="fake-scripted",
         effort="high",
         efficiency=efficiency,
+        attempt=AttemptRequest(model_view=MODEL_VIEW_OFF, standards_profile=None),
     )
 
     assert seen == [efficiency]

@@ -22,6 +22,13 @@ the settings it resolved; `swreview.cli` writes this record from the `--lever`,
 `--study`, `--arm` and `--rep` options actually typed, and `swreview benchmark compare`
 refuses a run whose two records disagree. One writer can only agree with itself, which is
 why the shape lives here beside the runner and the values come from the command line.
+
+Feature 014 (`specs/014-design-review-eval/contracts/provenance.md` 1; data-model section 7)
+adds schema 2, written before any review rather than after the set: what the run was started
+with (the pane-defaults marker, the model view, the profile's digest, whether it is the
+checkout's example, the live tools, the inert settings, the prompt's digest, whether the
+tracked tree was dirty), and never a path. A field a record older than that lacks reads as
+"not recorded".
 """
 
 from __future__ import annotations
@@ -29,13 +36,15 @@ from __future__ import annotations
 import subprocess
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
 from pydantic import Field
 
-from swreview.agent.settings import EfficiencySettings
+from swreview import atomic
+from swreview.agent.settings import MODEL_VIEW_OFF, EfficiencySettings, ModelViewSettings
 from swreview.benchmark.digest import sha256_of as sha256_of
 from swreview.benchmark.sets import REPO_ROOT, BenchmarkSet, load_set
 from swreview.findings import ReviewModel
@@ -48,6 +57,14 @@ PROVENANCE_FILE = "run-provenance.json"
 """Where the provenance record sits: beside the `benchmark-set.json` the run already
 saves, at the root of the run directory rather than inside a package folder, because it
 describes the whole invocation."""
+
+PROVENANCE_SCHEMA = 2
+"""The schema `benchmark run` writes (feature 014 `contracts/provenance.md` 1). A record
+without the field predates it and reads as 1."""
+
+EXAMPLE_PROFILE = Path("config") / "standards.example.yaml"
+"""The fictional example profile every checkout ships, relative to the checkout's root: the
+profile every committed case is keyed against (feature 014 FR-027)."""
 
 
 class RunProvenance(ReviewModel):
@@ -92,6 +109,62 @@ class RunProvenance(ReviewModel):
     explanations_enabled: bool = False
     """Presentation setting independent of efficiency flags; old runs did not enable it."""
 
+    provenance_schema: int = 1
+    """`PROVENANCE_SCHEMA` (2) when `benchmark run` wrote the record; absent, it predates
+    feature 014's fields and reads 1."""
+
+    pane_defaults: bool = False
+    """Whether `--pane-defaults` was typed: the marker a pane study's arms are read by
+    (PP-3). Absent reads false, since the option did not exist."""
+
+    model_view: ModelViewSettings | None = None
+    """The model view the run resolved; `None`, "not recorded", in an older record."""
+
+    profile_digest: str | None = None
+    """The sha256 of the standards profile every review graded against, the digest each
+    standards finding stamps; `None` with no profile. Never the profile's path."""
+
+    profile_is_example: bool | None = None
+    """Whether the profile's bytes equal the checkout's `config/standards.example.yaml` at
+    run time, recorded because the example may change after the study ran; `None` with no
+    profile."""
+
+    live_tools: bool | None = None
+    """Whether the live SOLIDWORKS tools were offered: false from `benchmark run`, always.
+    Recorded and shown, never must-match (PP-9)."""
+
+    inert_settings: tuple[str, ...] | None = None
+    """`agent.settings.INERT_SETTINGS[provider]`: the recorded settings that do not act on
+    this provider (FR-052)."""
+
+    prompt_digest: str | None = None
+    """The sha256 of the system prompt's raw bytes, beside the checklist's."""
+
+    tree_dirty: bool | None = None
+    """Whether the checkout's tracked files differed from `commit`; `None` when git cannot
+    answer."""
+
+
+def _git(cwd: Path | str, *args: str) -> str | None:
+    """`git <args>`'s standard output in `cwd`, or `None` whenever git cannot answer.
+
+    No repository, no git on the path, a timeout: `None` rather than a placeholder, because
+    a fact about the tree we do not know renders as unknown, and a guess is worse than an
+    absent value (Principle I).
+    """
+    try:
+        proc = subprocess.run(
+            ["git", *args],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=10,
+            cwd=str(cwd),
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return proc.stdout if proc.returncode == 0 else None
+
 
 def current_commit(cwd: Path | str | None = None) -> str | None:
     """The short sha of `HEAD` in `cwd` (default: this checkout), or `None`.
@@ -100,26 +173,43 @@ def current_commit(cwd: Path | str | None = None) -> str | None:
     on the path, a timeout: a commit we do not know renders as unknown in the ledger, and
     a guessed sha is worse than an absent one (Principle I).
     """
-    try:
-        proc = subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=10,
-            cwd=str(cwd) if cwd is not None else str(REPO_ROOT),
-        )
-    except (OSError, subprocess.SubprocessError):
+    output = _git(cwd if cwd is not None else REPO_ROOT, "rev-parse", "--short", "HEAD")
+    return (output.strip() or None) if output is not None else None
+
+
+def tree_dirty(root: Path | str) -> bool | None:
+    """Whether the checkout at `root` holds a tracked change, or `None` when git cannot say.
+
+    `git status --porcelain --untracked-files=no`: a modified or staged tracked file is a
+    change to the code a run measured, an untracked file is not (feature 014
+    `contracts/provenance.md` 1). `None` by `current_commit`'s rule.
+    """
+    output = _git(root, "status", "--porcelain", "--untracked-files=no")
+    return bool(output.strip()) if output is not None else None
+
+
+def profile_is_example(profile_path: Path | str | None, *, root: Path) -> bool | None:
+    """Whether the profile's bytes equal `root`'s `config/standards.example.yaml`.
+
+    Byte for byte: the profile's file name and folder play no part. `None` with no profile;
+    false when `root` ships no example, since then no profile can be it.
+    """
+    if profile_path is None:
         return None
-    return proc.stdout.strip() or None if proc.returncode == 0 else None
+    example = root / EXAMPLE_PROFILE
+    return example.is_file() and Path(profile_path).read_bytes() == example.read_bytes()
 
 
 def write_provenance(run_dir: Path | str, provenance: RunProvenance) -> Path:
-    """Write the record into `run_dir`, returning where it landed."""
+    """Write the record into `run_dir`, returning where it landed.
+
+    UTF-8 bytes with `\\n` line endings through the one atomic writer, so the record is the
+    same bytes on every platform and a reader never sees half of it.
+    """
     target = Path(run_dir)
     target.mkdir(parents=True, exist_ok=True)
     path = target / PROVENANCE_FILE
-    path.write_text(provenance.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    atomic.write_atomic(path, (provenance.model_dump_json(indent=2) + "\n").encode("utf-8"))
     return path
 
 
@@ -137,6 +227,25 @@ def load_provenance(run_dir: Path | str) -> RunProvenance | None:
     return RunProvenance.model_validate_json(path.read_bytes())
 
 
+@dataclass(frozen=True)
+class AttemptRequest:
+    """What one attempt needs that the review function's other keywords do not carry.
+
+    `run_benchmark` hands it to the review function as its one keyword `attempt`, beside
+    `provider`, `model`, `effort`, `efficiency` and `explain_findings` (feature 014 plan
+    decision RF-44; `contracts/benchmark-run.md` 5.1). One value rather than one keyword per
+    input, so an injected review function needs one keyword more whatever the values, and
+    the keywords it receives never vary with them. Later slices add the case file and the
+    answer-turn bound (lane A3) and the attempt's stop (lane B6).
+    """
+
+    model_view: ModelViewSettings
+    """What the model reads of each tool result, as the run resolved it."""
+
+    standards_profile: Path | None
+    """The standards profile every review grades against; `None` grades none."""
+
+
 def _default_review_fn(
     package_dir: Path,
     session_out_dir: Path,
@@ -144,6 +253,7 @@ def _default_review_fn(
     provider: str,
     model: str,
     effort: str,
+    attempt: AttemptRequest,
     efficiency: EfficiencySettings | None = None,
     explain_findings: bool = False,
 ) -> Any:
@@ -166,6 +276,7 @@ def _default_review_fn(
         effort=effort,
         efficiency=efficiency,
         explain_findings=explain_findings,
+        attempt=attempt,
     )
 
 
@@ -199,13 +310,19 @@ def run_benchmark(
     efficiency: EfficiencySettings | None = None,
     explain_findings: bool = False,
     root: Path = REPO_ROOT,
+    *,
+    model_view: ModelViewSettings = MODEL_VIEW_OFF,
+    standards_profile: Path | None = None,
 ) -> list[Path]:
     """Review every package of the benchmark set at `set_path` into `out_dir`.
 
     Calls `review_fn(package_dir, out_dir/package_id, provider=provider, model=model,
-    effort=effort, efficiency=efficiency)` per package (default: `_default_review_fn`),
-    then records unattended runtime for that package. Returns the list of per-package
-    output directories, in benchmark-set order.
+    effort=effort, efficiency=efficiency, attempt=AttemptRequest(...))` per package
+    (default: `_default_review_fn`), then records unattended runtime for that package.
+    Returns the list of per-package output directories, in benchmark-set order.
+
+    `attempt` carries what the call's other keywords do not: `model_view` and
+    `standards_profile`, the same for every package (feature 014 RF-44).
 
     `explain_findings=True` adds the pane's presentation request, including its usage and
     runtime. The keyword is forwarded to injected review functions only when enabled,
@@ -243,6 +360,7 @@ def run_benchmark(
             effort=effort,
             efficiency=efficiency,
             **({"explain_findings": True} if explain_findings else {}),
+            attempt=AttemptRequest(model_view=model_view, standards_profile=standards_profile),
         )
         elapsed_minutes = (time.perf_counter() - started) / 60.0
 

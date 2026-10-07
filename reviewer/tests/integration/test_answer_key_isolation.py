@@ -52,6 +52,7 @@ def test_run_benchmark_on_the_real_pilot_set_never_passes_an_answer_key_path(
         model: str,
         effort: str,
         efficiency: object,
+        attempt: object,
     ) -> None:
         calls.append(package_dir)
 

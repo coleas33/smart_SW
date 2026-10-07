@@ -1,6 +1,6 @@
 # Contract: the A/B harness and the results ledger
 
-*Amended 2026-09-29 by feature 014 (`specs/014-design-review-eval/`), in provenance.md sections 1 to 5 and 6.1, benchmark-run.md sections 3, 4 and 14, scoring.md sections 7 and 8, verdict.md sections 5 and 7; the amendment text lands with the 014 task that changes the code, sections 4's and 9's scorer half landed 2026-10-07 (014 T038):* sections 2, 3, 4, 5, 7, 9, 10.1, 10.2 and 10.5 change (the provenance record, the must-match rule, the saved set's form, the ledger's columns, the pane study's route, compare's version refusal).
+*Amended 2026-09-29 by feature 014 (`specs/014-design-review-eval/`), in provenance.md sections 1 to 5 and 6.1, benchmark-run.md sections 3, 4 and 14, scoring.md sections 7 and 8, verdict.md sections 5 and 7; the amendment text lands with the 014 task that changes the code, sections 4's and 9's scorer half landed 2026-10-07 (014 T038), sections 2, 10.1 and 10.2 landed 2026-10-07 (014 T051):* sections 2, 3, 4, 5, 7, 9, 10.1, 10.2 and 10.5 change (the provenance record, the must-match rule, the saved set's form, the ledger's columns, the pane study's route, compare's version refusal).
 
 The A/B protocol, the runs it produces, and `swreview benchmark compare`, the one reader that
 validates those runs and renders the ledger.
@@ -137,6 +137,28 @@ would carry both shas as `commit_off` and `commit_on` and would never be present
 **Human timing is recorded once per package per arm, not per repetition.** `swreview benchmark
 time` is unchanged. A human baseline does not change between repetitions, and pretending to
 re-measure it would put noise into `net_saved_minutes`.
+
+*Amended 2026-10-07 by feature 014 (T051; its `contracts/benchmark-run.md` 2 and 3,
+`contracts/provenance.md` 3):* `benchmark run` resolves its switches through `cli._review_settings`,
+the one resolver `review` and `benchmark replay` share, with `allow_workstation_levers=False` and
+the typed study and arm, so every refusal above still holds. It takes `--pane-defaults`,
+`--payload-slimming`, `--history-pruning`, `--prune-after N`, `--standards-profile PATH` and a
+tri-state `--explain-findings/--no-explain-findings` (a typed value wins; untyped, it follows
+`--pane-defaults`, else off). Two pane studies join the lever studies, `--study pane_defaults` and
+`--study pane_defaults_private`, each with the arms `on` (exactly `--pane-defaults`) and `off`
+(every change off) and the explanation setting typed in both; and two baselines, the plain
+`--study none --arm baseline` (every lever off, and now no model-view switch either) and the pane
+baseline, `--study none --arm baseline --pane-defaults` and nothing else (014
+`contracts/provenance.md` 3.1 to 3.3). `--pane-defaults`, `--payload-slimming` and
+`--history-pruning` declare a study for P-3 as `--lever` does; `--standards-profile` alone does
+not. After the usage errors and before any review, the run refuses, each on one line with exit 1
+and nothing written, in this order: an `--out` that exists and holds anything ("{out} is not empty;
+choose a new folder"); a standards profile that cannot be loaded (`ProfileUnreadable` or
+`ProfileInvalid`, with its message), which `review` still records and goes on past; a provider
+whose adapter cannot be built or whose model does not offer the effort (one adapter is built and
+its effort mapped, sending nothing, and that adapter serves the first package's review); then the
+set loader's refusals, then P-3. The pane studies' run-time file rules (014 `contracts/provenance.md`
+3.2's second table) take their place between the set and P-3 with 014 T054.
 
 ## 3. What `compare` validates, and it is the point of the command (RK-20)
 
@@ -496,11 +518,38 @@ presentation setting, not an efficiency lever. The session and provenance indepe
 record it, the raw ledger displays it, and its provider usage/runtime remain in the
 session totals. A comparison with inconsistent presentation settings is refused.
 
+*Amended 2026-10-07 by feature 014 (T050, T051; its `contracts/provenance.md` 1):* the record is
+written **before any review**, right after the saved set and before the first package's review,
+rather than after the set, so a run that stops part way is still attributable; as UTF-8 bytes with
+`\n` line endings through the one atomic writer, `swreview.atomic.write_atomic`. Beside the fields
+above it carries `provenance_schema` (2; a record without it reads 1), `pane_defaults` (as typed;
+absent reads false), `model_view` (the resolved model view), `profile_digest`
+(`load_profile(path).identity.sha256`, the digest every standards finding stamps),
+`profile_is_example` (whether the profile's bytes equal the checkout's
+`config/standards.example.yaml` at run time), `live_tools` (false from `benchmark run`),
+`inert_settings` (`agent.settings.INERT_SETTINGS[provider]`), `prompt_digest` (the sha256 of the
+system prompt's raw bytes) and `tree_dirty` (whether `git status --porcelain --untracked-files=no`
+lists anything; null when git cannot answer). `explanations_enabled` is the resolved value. A field
+an older record lacks reads as not recorded, and the record names **no path**: not the profile's,
+nor its folder, the set file's, a package's or the output folder's. Which of these fields must match
+across a study is 014 `contracts/provenance.md` section 4, with compare's cross-checks.
+
 ### 10.2 `set_digest` is the digest of the saved copy
 
 The sha256 of the `benchmark-set.json` the run saved, **not** of the file `--set` named.
 Two consequences, both wanted: the cross-check of section 3 can be run entirely inside the
 run directory, and two set files that differ only in whitespace are one set.
+
+*Amended 2026-10-07 by feature 014 (T051, T052; its `contracts/provenance.md` 6.1):* the saved copy
+is `BenchmarkSet.saved_form(root=...)` and is location-free: every path inside the checkout relative
+to its root with `/` separators, a private one absolute; UTF-8 JSON, indent 2, LF, one final
+newline, written through `write_atomic` before any review. `set_digest` is the sha256 of those
+bytes, so two checkouts of one tree at two locations, on any platform, record one digest (014
+US2-11), where a copy of resolved absolute paths written with `write_text` carried the checkout's
+location and moved with it. `benchmark score` reads the saved copy through
+`sets.load_saved_set(path, root=...)`, resolving its relative entries against the reader's
+checkout, never against the run folder's grandparent; a copy saved before feature 014, every entry
+absolute, still loads.
 
 ### 10.3 The checklist digest is checked across a study, not against the session
 
