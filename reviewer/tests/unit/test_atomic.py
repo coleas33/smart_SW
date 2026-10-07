@@ -12,7 +12,8 @@ the rule move onto it (plan decisions RF-31, RF-88; owner decision 34A; `benchma
    record's tests keep their glob when T011 moves it here), and `os.replace` puts the
    finished file in place: a reader sees the previous file or the new one, never a part.
 3. **No debris.** When the write or the replace fails, the target keeps its old bytes (or
-   stays absent), the temporary is removed, and the error reaches the caller.
+   stays absent), the temporary is removed, and the error reaches the caller, even when
+   the removal fails as well.
 
 `os.replace` is patched through `swreview.atomic.os`, the module's own `import os`, which is
 how the writers' failure tests reach it once they move here (T011).
@@ -140,6 +141,31 @@ def test_a_failed_replace_keeps_the_old_bytes_removes_the_temporary_and_raises(
     assert target.read_bytes() == b'{"previous": true}\n'
     assert not _temporaries(tmp_path, target.name)
     assert sorted(path.name for path in tmp_path.iterdir()) == ["run-provenance.json"]
+
+
+def test_a_clean_up_that_fails_too_never_hides_the_replace_s_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The temporary is removed while the replace's error is in flight; when the removal
+    raises as well (a scanner holding the file open on Windows), the caller is still told
+    why the write failed, not why its temporary could not be removed."""
+    target = tmp_path / "event-streams.json"
+    target.write_bytes(b'{"previous": true}\n')
+    unlinked: list[Path] = []
+
+    def fail_unlink(self: Path, missing_ok: bool = False) -> None:
+        unlinked.append(self)
+        raise PermissionError(f"cannot unlink {self}")
+
+    monkeypatch.setattr(atomic.os, "replace", _fail_replace)
+    monkeypatch.setattr(Path, "unlink", fail_unlink)
+    with pytest.raises(OSError, match="cannot replace"):
+        write_atomic(target, b'{"previous": false}\n')
+
+    assert target.read_bytes() == b'{"previous": true}\n'
+    assert _temporaries(tmp_path, target.name) == unlinked, (
+        "the removal was tried once, on the temporary, which is all that is left beside it"
+    )
 
 
 def test_a_failed_replace_over_no_file_leaves_the_folder_empty(

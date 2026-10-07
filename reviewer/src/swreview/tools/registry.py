@@ -471,10 +471,11 @@ def read_stored_result(
     The file is this call's result only when it is an envelope with a payload object naming
     this session, this step and, when given, this tool and these arguments. Anything else is
     `Unstored`, naming why: `missing`, no file (a step nothing was stored for, or a session
-    recorded before feature 008); `unreadable`, not UTF-8 JSON, not an object, or a payload
-    that is not an object; `other_session`, a stale file from an earlier review in a reused
-    folder, which is what `session_id` is written for, and named before any other mismatch;
-    `other_call`, another step, tool or arguments. What is on disk never makes it raise.
+    recorded before feature 008); `unreadable`, not UTF-8 JSON (or nested too deep to
+    parse), not an object, a payload that is not an object, or a status that is not a
+    string; `other_session`, a stale file from an earlier review in a reused folder, which
+    is what `session_id` is written for, and named before any other mismatch; `other_call`,
+    another step, tool or arguments. What is on disk never makes it raise.
     """
     path = run_dir / TOOL_RESULTS_DIR_NAME / f"step-{step}.json"
     try:
@@ -487,9 +488,15 @@ def read_stored_result(
         # The bytes decoded rather than `read_text`, so `text` keeps the file's line endings.
         text = raw.decode("utf-8")
         envelope = json.loads(text)
-    except ValueError:  # `UnicodeDecodeError` and `json.JSONDecodeError` are both one
+    except (ValueError, RecursionError):
+        # `UnicodeDecodeError` and `json.JSONDecodeError` are both a `ValueError`; a nesting
+        # past the interpreter's limit is a `RecursionError` instead.
         return Unstored("unreadable")
-    if not isinstance(envelope, dict) or not isinstance(envelope.get("payload"), dict):
+    if (
+        not isinstance(envelope, dict)
+        or not isinstance(envelope.get("payload"), dict)
+        or not isinstance(envelope.get("status"), str)
+    ):
         return Unstored("unreadable")
     if envelope.get("session_id") != str(session_id):
         return Unstored("other_session")
@@ -499,7 +506,7 @@ def read_stored_result(
         or (arguments is not None and envelope.get("arguments") != dict(arguments))
     ):
         return Unstored("other_call")
-    return StoredResult(payload=envelope["payload"], status=envelope.get("status"), text=text)
+    return StoredResult(payload=envelope["payload"], status=envelope["status"], text=text)
 
 
 # --- one recorded tool ----------------------------------------------------------------

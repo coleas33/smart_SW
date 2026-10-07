@@ -13,6 +13,7 @@ a digest, so the caller encodes and the bytes land as given.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import tempfile
 from pathlib import Path
@@ -22,7 +23,8 @@ def write_atomic(path: Path, data: bytes) -> None:
     """Write `data` to `path` through a temporary in `path.parent`, then `os.replace`.
 
     The folder must exist: the caller makes it. Any error, from the write or the
-    replace, reaches the caller after the temporary is removed.
+    replace, reaches the caller after the temporary is removed; a removal that fails as
+    well is swallowed, so it never masks that error.
     """
     temporary: Path | None = None
     try:
@@ -36,4 +38,5 @@ def write_atomic(path: Path, data: bytes) -> None:
         temporary = None
     finally:
         if temporary is not None:
-            temporary.unlink(missing_ok=True)
+            with contextlib.suppress(OSError):
+                temporary.unlink(missing_ok=True)

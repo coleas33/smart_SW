@@ -7,10 +7,10 @@ it promises is pinned here, as `questions.md` 9 lists it for this file:
 
 1. **A file `_store` wrote reads back** as `StoredResult`: its payload, its status and the
    file's raw text, written through a real registry call with `tool_results_dir` set.
-2. **Anything else is `Unstored`, naming why**: `missing`; `unreadable` (not JSON, not an
-   object, a payload that is not an object); `other_session` (another `session_id`, a stale file
-   from an earlier review in a reused folder); `other_call` (another step; another tool or other
-   arguments, when given).
+2. **Anything else is `Unstored`, naming why**: `missing`; `unreadable` (not JSON, nested too
+   deep to parse, not an object, a payload that is not an object, a status that is not a
+   string); `other_session` (another `session_id`, a stale file from an earlier review in a
+   reused folder); `other_call` (another step; another tool or other arguments, when given).
 3. **The replay's classification is unchanged**: `benchmark/replay._stored_result` calls the
    reader once per call it classifies, with the recorded session's id and the call's step, tool
    and arguments, and a call is `stored` exactly when the reader found its result and
@@ -49,7 +49,7 @@ from swreview.tools.registry import (
 )
 from tests.support.prerun import FIRST_INSTANCE, SECOND_INSTANCE, prerun_package
 from tests.support.replay import ALL_OFF, record_scripted_review, without_stored_results
-from tests.unit.test_replay_accounting import COMPONENTS, LIVE, with_bridge
+from tests.unit.test_replay_accounting import COMPONENTS, LIVE, stored_file, with_bridge
 
 Envelope = dict[str, Any]
 
@@ -66,10 +66,6 @@ def called(context: ToolContext, tool: str, arguments: Mapping[str, Any]) -> Inv
     """Call `tool` through the real dispatch and return the step it recorded."""
     ToolRegistry().dispatch(context).call(tool, arguments)
     return context.require_session().steps[-1]
-
-
-def stored_file(run_dir: Path, step: int) -> Path:
-    return run_dir / TOOL_RESULTS_DIR_NAME / f"step-{step}.json"
 
 
 def rewrite_envelope(path: Path, change: Callable[[Envelope], None]) -> None:
@@ -152,6 +148,8 @@ def test_a_step_with_no_stored_file_is_missing(
         "not an object",
         "a payload that is not an object",
         "no payload",
+        "no status",
+        "a status that is not a string",
         "a folder in the file's place",
     ],
 )
@@ -171,9 +169,35 @@ def test_a_stored_file_that_is_no_envelope_is_unreadable(
         rewrite_envelope(path, lambda envelope: envelope.update(payload=["not", "an", "object"]))
     elif damage == "no payload":
         rewrite_envelope(path, lambda envelope: envelope.pop("payload"))
+    elif damage == "no status":
+        rewrite_envelope(path, lambda envelope: envelope.pop("status"))
+    elif damage == "a status that is not a string":
+        rewrite_envelope(path, lambda envelope: envelope.update(status=["ok"]))
     else:
         path.unlink()
         path.mkdir()
+
+    assert read_stored_result(
+        tmp_path, session_id, step.index, tool=step.tool, arguments=step.arguments
+    ) == Unstored("unreadable")
+
+
+def test_a_stored_file_nested_too_deep_to_parse_is_unreadable(
+    tmp_path: Path, component_step: tuple[UUID, InvestigationStep]
+) -> None:
+    """`json.loads` raises `RecursionError`, not a `ValueError`, past the interpreter's nesting
+    limit. The file is this call's envelope in every other respect, its payload nested that
+    deep, so only the parse refuses it."""
+    session_id, step = component_step
+    path = stored_file(tmp_path, step.index)
+    envelope = json.loads(path.read_text(encoding="utf-8"))
+    envelope["payload"] = {"deep": None}
+    nested = "[" * 100_000 + "]" * 100_000
+    text = json.dumps(envelope).replace('{"deep": null}', '{"deep": ' + nested + "}")
+    assert nested in text
+    with pytest.raises(RecursionError):
+        json.loads(text)
+    path.write_text(text, encoding="utf-8")
 
     assert read_stored_result(
         tmp_path, session_id, step.index, tool=step.tool, arguments=step.arguments

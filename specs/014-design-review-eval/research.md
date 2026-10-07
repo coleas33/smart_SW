@@ -1645,3 +1645,13 @@ Corrections with no decision of their own, made in the same pass:
 - RF-31's and RF-74's line ranges, `report/attention_record.py:126-140` and `ir/loader.py:179-192`, read `:126-145` and `:177-195` at `be01974`, each the whole block from the temporary's declaration to its clean-up; the plan, `benchmark-run.md` 4 and tasks.md cite the corrected ranges.
 - `cases.md` 6.1 calls `benchmarks/sets/pilot.json` the lever studies' smoke set; P0's set is named `pane-smoke.json` so that the two cannot be confused.
 - FR-047 and SC-012 except the paid review calls; the seat task is one, a paid review of the pane itself on the licensed seat, so neither changes, and the plan's "SOLIDWORKS is never started" now reads "by the eval or its tests".
+
+#### Implementation follow-ups (2026-10-07)
+
+Found by the verification of Phase 2's new and moved code. Each refines its task within that task's own contract, test first, and moves no byte that a review, `benchmark run`, `score` or `compare` writes.
+
+- `atomic.write_atomic` (T009): the temporary's removal in its `finally` runs under `contextlib.suppress(OSError)`, so a removal that fails beside a failing `os.replace` never masks the replace's error (`test_atomic.py::test_a_clean_up_that_fails_too_never_hides_the_replace_s_error`).
+- `agent.events.replay_events` (T013): the stream is read as bytes and each line decoded on its own, so a line cut inside a multibyte UTF-8 character (a truncated write of non-ASCII text such as a tolerance sign) ends the replay at that line and is reported through `on_unreadable` with its number, as a line that is not JSON is, in the plain and the packed form, never raising `UnicodeDecodeError` and never losing an earlier line that shares its read; `test_event_lines.py` pins both forms, a later event appended to the cut line, and a damaged packed stream read with `on_unreadable=None` returning its prefix without raising.
+- `tools.registry.read_stored_result` (T015): a file nested past the interpreter's limit (`json.loads` raising `RecursionError`) and an envelope whose `status` is missing or not a string are `Unstored("unreadable")`, so `StoredResult.status` is always a string; `_store` has written `status` since feature 008, so the replay classes every recorded call as before (`test_stored_result.py`).
+- `test_stored_result.py` imports `stored_file` from `test_replay_accounting.py` beside the names it already imports, in place of its own copy.
+- `agent/events.py`'s docstrings put the benchmark's callers in the future tense: the benchmark's readers move onto `replay_events` in US3, US6 and US7, and `swreview benchmark pack` is US7's.
