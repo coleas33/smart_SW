@@ -82,6 +82,7 @@ __all__ = [
     "PACKAGE_VERBATIM_KEYS",
     "SYLLABLES",
     "DENYLIST_FOLDER_PREFIX",
+    "WINDOWS_ANCHOR",
     "FictionalMap",
     "decoded_runs",
     "denylist_path",
@@ -296,7 +297,9 @@ _CAMEL_PART = re.compile(r"[A-Z]+(?![a-z])|[A-Z]?[a-z]+")
 _NUMBER = re.compile(r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?")
 _DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}(?:[T ][0-9:.+\-Z]*)?")
 _FRACTION = re.compile(r"[0-9]+/[0-9]+")
-_WINDOWS_ANCHOR = re.compile(r"(?:[A-Za-z]:\\|\\\\)")
+WINDOWS_ANCHOR = re.compile(r"(?:[A-Za-z]:\\|\\\\)")
+"""A Windows path's anchor: a drive letter and a backslash, or a UNC path's two backslashes.
+Public for the committable-path scanner, which reuses it (`tests/support/local_paths.py`)."""
 _FULL_HEX = re.compile(r"[0-9a-f]{16,}")
 _UTF16_RUN = re.compile(rb"(?:[\x20-\x7e]\x00){3,}")
 _ASCII_RUN = re.compile(rb"[\x20-\x7e]{4,}")
@@ -408,12 +411,12 @@ def path_values(node: Any) -> Iterator[str]:
         if is_path_key(key) or key == "file_name":
             yield value
         elif key == "persist_ref":
-            yield from (run for run in decoded_runs(value) if _WINDOWS_ANCHOR.match(run))
+            yield from (run for run in decoded_runs(value) if WINDOWS_ANCHOR.match(run))
 
 
 def folders_of(path: str) -> list[str]:
     """A Windows path's folder segments after its anchor, root included, file excluded."""
-    anchor = _WINDOWS_ANCHOR.match(path)
+    anchor = WINDOWS_ANCHOR.match(path)
     if anchor is None:
         return []
     return path[anchor.end() :].split("\\")[:-1]
@@ -439,7 +442,7 @@ def strict_tokens(*nodes: Any) -> set[str]:
                 continue
             texts = [value] if _is_strict_field(key, parent) else []
             if key == "persist_ref":
-                texts = [run for run in decoded_runs(value) if _WINDOWS_ANCHOR.match(run)]
+                texts = [run for run in decoded_runs(value) if WINDOWS_ANCHOR.match(run)]
             for text in texts:
                 stem, _ = split_extension(text)
                 found.update(token for token in tokens_of(stem) if not is_generic_shape(token))
@@ -754,7 +757,7 @@ class FictionalMap:
             return value
         if is_plain_number(value):
             return value
-        if _WINDOWS_ANCHOR.match(value):
+        if WINDOWS_ANCHOR.match(value):
             return self.path(value)
         return self.text(value)
 
@@ -766,7 +769,7 @@ class FictionalMap:
         file is scrambled as a strict name (`file_name`) with its extension kept. A path of one
         segment keeps that segment, as a file, under the root.
         """
-        anchor = _WINDOWS_ANCHOR.match(value)
+        anchor = WINDOWS_ANCHOR.match(value)
         if anchor is None:
             return self.name(value)
         segments = value[anchor.end() :].split("\\")
@@ -836,7 +839,7 @@ class FictionalMap:
         """
         if _ENTITY_ID.fullmatch(value) or is_plain_number(value):
             return value
-        if _WINDOWS_ANCHOR.match(value):
+        if WINDOWS_ANCHOR.match(value):
             return self.path(value)
         return "".join(
             piece if kept else self._scrambled(piece, self._property_token)
@@ -894,7 +897,7 @@ class FictionalMap:
         if key == "reuse_key":
             return self.full_hex(node)
         if is_path_key(key):
-            return self.path(node) if _WINDOWS_ANCHOR.match(node) else self.name(node)
+            return self.path(node) if WINDOWS_ANCHOR.match(node) else self.name(node)
         if key == "file_name":
             return self.file_name(node)
         if _is_strict_field(key, parent):
