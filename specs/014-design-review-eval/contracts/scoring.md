@@ -246,6 +246,18 @@ item; the on arm's skipped pre-run row or finalization's unresolved row reads wi
 **Model origin** is `model` and `configured_check` (17A, 20A); `MODEL_ORIGINS` names them once.
 Every other value but `unknown` is code origin.
 
+*Amended 2026-10-07 (owner decision 40A; research SP-3): every finding writer that cites no step.*
+At `be01974` `check_interference_group` was one (`tools/checks_interference.py:120`), although its
+contacts cite their step (`:161`), so a pre-run interference finding would have read
+`configured_check` by 5.3's rule 5. It now cites its step on every finding, as on every contact: a
+pre-run interference finding reads `prerun`, a model-called one `code_only_call`. After it, a finding
+citing no step is written by one of: `check_fastener_joint` and `check_hole_alignment`
+(`tools/checks_fastener.py:283, 373`) and `check_fit` and `check_axial_stack`
+(`tools/checks_fit.py:67, 109`), the four argument-taking check tools (`configured_check`);
+`record_drawing_finding` (`tools/session.py:512`; `model`, by its `source`); or the provenance set-up
+records (`agent/runner.py:414`; `setup`). A carried finding keeps its earlier review's ids (`carried`,
+by rule 1). Every other finding writer cites the step in flight.
+
 ### 5.2 The step mark and the session record (the product change of SP-2)
 
 ```python
