@@ -145,15 +145,11 @@ class RunProvenance(ReviewModel):
     answer."""
 
 
-def _git(cwd: Path | str, *args: str) -> str | None:
-    """`git <args>`'s standard output in `cwd`, or `None` whenever git cannot answer.
-
-    No repository, no git on the path, a timeout: `None` rather than a placeholder, because
-    a fact about the tree we do not know renders as unknown, and a guess is worse than an
-    absent value (Principle I).
-    """
+def _git_process(cwd: Path | str, *args: str) -> subprocess.CompletedProcess[str] | None:
+    """`git <args>` run in `cwd`, or `None` when git could not be run at all: no git on the
+    path, a folder that is gone, a timeout."""
     try:
-        proc = subprocess.run(
+        return subprocess.run(
             ["git", *args],
             capture_output=True,
             text=True,
@@ -163,7 +159,17 @@ def _git(cwd: Path | str, *args: str) -> str | None:
         )
     except (OSError, subprocess.SubprocessError):
         return None
-    return proc.stdout if proc.returncode == 0 else None
+
+
+def _git(cwd: Path | str, *args: str) -> str | None:
+    """`git <args>`'s standard output in `cwd`, or `None` whenever git cannot answer.
+
+    No repository, no git on the path, a timeout: `None` rather than a placeholder, because
+    a fact about the tree we do not know renders as unknown, and a guess is worse than an
+    absent value (Principle I).
+    """
+    proc = _git_process(cwd, *args)
+    return proc.stdout if proc is not None and proc.returncode == 0 else None
 
 
 def current_commit(cwd: Path | str | None = None) -> str | None:
@@ -186,6 +192,26 @@ def tree_dirty(root: Path | str) -> bool | None:
     """
     output = _git(root, "status", "--porcelain", "--untracked-files=no")
     return bool(output.strip()) if output is not None else None
+
+
+def committable(path: Path | str, *, root: Path = REPO_ROOT) -> bool:
+    """Whether the repository at `root` could commit `path`: it lies inside `root` and git
+    does not report it ignored (feature 014 `contracts/provenance.md` 6.4).
+
+    `git check-ignore -q` exits 0 for an ignored path and 1 for one git would track; any other
+    exit, or no git at all, is git that cannot answer, and inside `root` that counts as
+    committable: the side that refuses. A folder not made yet that only a directory pattern
+    (`runs/`) ignores reads as committable for the same reason, since git cannot tell that a
+    name it has never seen is a folder; one inside an ignored folder reads ignored. The one
+    reading `benchmark run`'s row 5 and compare's ledger guard share.
+    """
+    checkout = Path(root).resolve()
+    target = Path(path).resolve()
+    if not target.is_relative_to(checkout):
+        return False
+    proc = _git_process(checkout, "check-ignore", "-q", str(target))
+    ignored = proc is not None and proc.returncode == 0
+    return not ignored
 
 
 def profile_is_example(profile_path: Path | str | None, *, root: Path) -> bool | None:
