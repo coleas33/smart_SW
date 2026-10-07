@@ -26,7 +26,6 @@ why the shape lives here beside the runner and the values come from the command 
 
 from __future__ import annotations
 
-import hashlib
 import subprocess
 import time
 from collections.abc import Callable
@@ -37,6 +36,7 @@ from typing import Annotated, Any, Literal
 from pydantic import Field
 
 from swreview.agent.settings import EfficiencySettings
+from swreview.benchmark.digest import sha256_of as sha256_of
 from swreview.benchmark.sets import BenchmarkSet, load_set
 from swreview.findings import ReviewModel
 from swreview.ir.loader import reject_answer_key_path
@@ -95,11 +95,6 @@ class RunProvenance(ReviewModel):
     efficiency: EfficiencySettings
     explanations_enabled: bool = False
     """Presentation setting independent of efficiency flags; old runs did not enable it."""
-
-
-def sha256_of(path: Path | str) -> str:
-    """The sha256 of a file's bytes, for the set-file and checklist digests."""
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
 def current_commit(cwd: Path | str | None = None) -> str | None:
