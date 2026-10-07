@@ -94,6 +94,8 @@ from swreview.tools.registry import (
     REMODEL_TOOL_FUNCTIONS,
     TOOL_FUNCTIONS,
     TOOL_RESULTS_DIR_NAME,
+    Unstored,
+    read_stored_result,
     standards_tools,
 )
 
@@ -1012,28 +1014,21 @@ def _classify(recording: Recording, first: PlayedReview, with_profile: bool) -> 
 def _stored_result(recording: Recording, call: RecordedCall) -> _Stored | None:
     """The call's stored full result, when the recorded review wrote one for this call.
 
-    Taken only when the file names this recording's session, this step, this tool and these
-    arguments, and carries a payload: a stale file from an earlier review in a reused
-    folder, or one a hand edit broke, is not this call's result and is ignored, leaving the
-    call estimated.
+    Read through `tools.registry.read_stored_result`, the one reader beside its writer, with
+    this recording's session and this call's step, tool and arguments: a stale file from an
+    earlier review in a reused folder, or one a hand edit broke, is not this call's result
+    (any `Unstored`) and is ignored, leaving the call estimated.
     """
-    path = recording.run_dir / TOOL_RESULTS_DIR_NAME / f"step-{call.step}.json"
-    try:
-        envelope = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    stored = read_stored_result(
+        recording.run_dir,
+        recording.session.session_id,
+        call.step,
+        tool=call.tool,
+        arguments=call.arguments,
+    )
+    if isinstance(stored, Unstored):
         return None
-    if not isinstance(envelope, dict):
-        return None
-    payload = envelope.get("payload")
-    if (
-        envelope.get("session_id") != str(recording.session.session_id)
-        or envelope.get("step") != call.step
-        or envelope.get("tool") != call.tool
-        or envelope.get("arguments") != call.arguments
-        or not isinstance(payload, dict)
-    ):
-        return None
-    return _Stored(payload=payload, is_error=envelope.get("status") == "error")
+    return _Stored(payload=stored.payload, is_error=stored.status == "error")
 
 
 def _class_of(
