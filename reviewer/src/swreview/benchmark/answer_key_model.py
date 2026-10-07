@@ -15,6 +15,10 @@ model's rows, so a key the generator builds, with no loader there to name the en
 same as one the loader reads. This slice carries known defects and correct conditions: a key
 holding one of section 2.1's four other lists is refused as an unknown field until US3 adds
 their models here (T080).
+
+An explicit JSON `null` for an optional field: `key_only`'s is refused naming the field (section
+2.1: optional, `true` only), while `references`' on a check that is not reference-keyed and
+`held_out_against`'s on a tuned-on entry read as absent, each field holding `None` either way.
 """
 
 from __future__ import annotations
@@ -467,8 +471,10 @@ class AnswerKey(ReviewModel):
     @field_validator("key_only")
     @classmethod
     def _key_only_is_true(cls, value: bool | None) -> bool | None:
-        """`true` or absent (section 6). A strict `bool`, since `Literal[True]` takes `1`."""
-        if value is False:
+        """`true` or absent (section 6): `false` and an explicit `null` are refused, the
+        validator running only on a value the key states. A strict `bool`, since
+        `Literal[True]` takes `1`."""
+        if value is not True:
             raise ValueError("key_only is true or absent (answer-key.md 6)")
         return value
 

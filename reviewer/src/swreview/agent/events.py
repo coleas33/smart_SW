@@ -147,7 +147,9 @@ class EventSink:
 
 _NOT_UTF8 = re.compile("[\udc80-\udcff]")
 """What `_open_stream` decodes each byte that is not UTF-8 to: a lone surrogate
-(`errors="surrogateescape"`), which no UTF-8 text decodes to."""
+(`errors="surrogateescape"`), which no UTF-8 text decodes to. Pydantic would refuse such a line
+too (`model_validate_json` raises a `ValidationError` on a lone surrogate), so the check is there
+for clarity: it names the cut character as the reason a line is unreadable."""
 
 
 def replay_events(

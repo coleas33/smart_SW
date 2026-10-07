@@ -48,23 +48,24 @@ def write_key(
     position in its list, `component_ids` and `document_ids` empty, `tag` `tuned_on`, a fictional
     description, and for a known defect `producer` `model` and `expected_status` `suspected`.
     The key is built through `AnswerKey`, so a key the model refuses raises here, and written as
-    UTF-8 JSON with `\\n` line endings, absent optional fields omitted.
+    UTF-8 JSON with `\\n` line endings, absent optional fields omitted. `key_only` is stated only
+    when the test states it, since the model refuses an explicit `null` there.
     """
-    key = AnswerKey.model_validate(
-        {
-            "key_format": KEY_FORMAT,
-            "package_id": package_id,
-            "key_only": key_only,
-            "known_defects": [
-                _entry("D-", number, fields, producer="model", expected_status="suspected")
-                for number, fields in enumerate(known_defects, start=1)
-            ],
-            "correct_conditions": [
-                _entry("C-", number, fields)
-                for number, fields in enumerate(correct_conditions, start=1)
-            ],
-        }
-    )
+    payload: dict[str, Any] = {
+        "key_format": KEY_FORMAT,
+        "package_id": package_id,
+        "known_defects": [
+            _entry("D-", number, fields, producer="model", expected_status="suspected")
+            for number, fields in enumerate(known_defects, start=1)
+        ],
+        "correct_conditions": [
+            _entry("C-", number, fields)
+            for number, fields in enumerate(correct_conditions, start=1)
+        ],
+    }
+    if key_only is not None:
+        payload["key_only"] = key_only
+    key = AnswerKey.model_validate(payload)
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f"{package_id}.json"
     path.write_bytes((key.model_dump_json(indent=2, exclude_none=True) + "\n").encode("utf-8"))

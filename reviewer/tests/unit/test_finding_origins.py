@@ -80,6 +80,7 @@ from swreview.tools.context import new_session
 from swreview.tools.registry import TOOL_RESULTS_DIR_NAME, check_tools, standards_tools
 from tests.support.attention import REVIEW_FOLDER
 from tests.support.contracts import contract_validator
+from tests.support.findings import make_finding
 from tests.support.packages import build_package
 from tests.support.prerun import (
     CHECKS_FIRST,
@@ -95,7 +96,6 @@ from tests.support.roles_review import PIN_ID, PLATE_ID
 from tests.unit import test_answer_batch_roles as roles
 from tests.unit import test_chat_server as chat
 from tests.unit.test_provenance_closure import with_discrepancies
-from tests.unit.test_scorecard import make_finding
 
 app = chat.app
 client = chat.client
@@ -368,11 +368,13 @@ def test_steps_are_found_by_their_index_not_their_position() -> None:
         (lambda: finding(0, check=SETUP_CHECK), "prerun"),
         (lambda: finding(3, check=SETUP_CHECK), "configured_check"),
         (lambda: finding(check="hygiene.provenance"), "configured_check"),
+        (lambda: finding(check="hygiene.provenance.x"), "configured_check"),
         (lambda: finding(check="provenance"), "configured_check"),
     ],
     ids=["carried-before-model", "model-before-its-step", "model-before-a-missing-step",
          "a-cited-step-before-the-prefix", "a-cited-tool-before-the-prefix",
-         "provenance-not-a-prefix", "provenance-without-the-dot"],
+         "provenance-not-a-prefix", "provenance-dot-inside-not-at-the-start",
+         "provenance-without-the-dot"],
 )
 def test_the_first_rule_wins(build: Callable[[], Finding], expected: Origin) -> None:
     assert finding_origin(build(), session_with()) == expected

@@ -245,11 +245,15 @@ def test_a_key_format_other_than_2_is_refused_naming_the_field(value: object) ->
     assert FORMAT_1_SENTENCE not in message
 
 
-def test_an_unknown_field_at_the_key_is_refused_naming_it() -> None:
-    message = refusal(key(answers=[]))
+@pytest.mark.parametrize(
+    "field", ["forbidden", "expected_coverage", "unanswerable_requests", "question_counts"]
+)
+def test_an_unknown_field_at_the_key_is_refused_naming_it(field: str) -> None:
+    """Section 2.1's four other lists are unknown fields until US3 adds their models (T080), so
+    the task that adds them changes this test on purpose."""
+    message = refusal(key(**{field: []}))
 
-    assert "answers" in message
-    assert "Extra inputs are not permitted" in message
+    assert f"{field}: Extra inputs are not permitted" in message
 
 
 def test_an_unknown_field_at_an_entry_is_refused_naming_the_entry_and_the_field() -> None:
@@ -268,6 +272,21 @@ def test_key_only_true_is_accepted_and_absent_is_none() -> None:
 @pytest.mark.parametrize("value", [False, 1, "true"])
 def test_key_only_other_than_true_is_refused_naming_the_field(value: object) -> None:
     assert "key_only" in refusal(key(key_only=value))
+
+
+def test_an_explicit_null_key_only_is_refused_naming_the_field() -> None:
+    """Section 2.1: optional, `true` only. An explicit JSON `null` is not absent."""
+    message = refusal(json.loads('{"key_format": 2, "package_id": "fict-key-a", "key_only": null}'))
+
+    assert message.startswith("key_only: "), message
+
+
+def test_an_explicit_null_references_or_held_out_against_reads_as_absent() -> None:
+    """The model's docstring: on a check that is not reference-keyed, `references: null` is no
+    references, and on a tuned-on entry, `held_out_against: null` is no stamp."""
+    explicit = AnswerKey.model_validate(key([defect(references=None, held_out_against=None)]))
+
+    assert explicit == AnswerKey.model_validate(key([defect()]))
 
 
 def test_a_key_with_known_defects_and_correct_conditions_builds() -> None:
@@ -1178,6 +1197,33 @@ def test_a_file_that_is_not_json_is_refused(tmp_path: Path) -> None:
     path.write_text('{"key_format": 2,', encoding="utf-8")
 
     assert load_refusal(path).startswith("answer key fict-key-a.json: not JSON")
+
+
+def test_a_missing_key_file_is_refused(tmp_path: Path) -> None:
+    path = tmp_path / "fict-key-a.json"
+
+    message = load_refusal(path)
+
+    assert message.startswith("answer key fict-key-a.json: cannot be read (")
+    assert "No such file or directory" in message
+
+
+def test_a_key_file_that_cannot_be_read_is_refused(tmp_path: Path) -> None:
+    """A folder where the file should be: reading it raises an `OSError` on every platform
+    (`IsADirectoryError`, or `PermissionError` on Windows)."""
+    path = tmp_path / "fict-key-a.json"
+    path.mkdir()
+
+    assert load_refusal(path).startswith("answer key fict-key-a.json: cannot be read (")
+
+
+def test_a_key_file_that_is_not_utf_8_is_refused(tmp_path: Path) -> None:
+    """A key saved in a legacy code page: the tolerance sign is one byte that is not UTF-8."""
+    path = tmp_path / "fict-key-a.json"
+    payload = key([defect(description="The fictional bore is drawn 40 ±0.01.")])
+    path.write_bytes(json.dumps(payload, ensure_ascii=False).encode("cp1252"))
+
+    assert load_refusal(path).startswith("answer key fict-key-a.json: not UTF-8 (")
 
 
 def test_a_model_row_s_refusal_is_re_raised_naming_the_entry(tmp_path: Path) -> None:

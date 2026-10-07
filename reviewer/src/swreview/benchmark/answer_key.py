@@ -143,11 +143,18 @@ def load_answer_key(
     `package` is the package the set names, or `None` when it is not on disk (section 6).
     `checklist` builds the context row 13 reads ids through; the coverage rows of the
     key-extensions slice read its items. `words` is `report.summary.load_words()`, whose goals
-    the typo guard reads.
+    the typo guard reads. A file that is missing, cannot be read or is not UTF-8 is refused
+    like one that is not JSON, before any row runs.
     """
     path = Path(path)
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        text = path.read_text(encoding="utf-8")
+    except OSError as error:
+        raise AnswerKeyError(f"answer key {path.name}: cannot be read ({error})") from None
+    except UnicodeDecodeError as error:
+        raise AnswerKeyError(f"answer key {path.name}: not UTF-8 ({error})") from None
+    try:
+        payload = json.loads(text)
     except json.JSONDecodeError as error:
         raise AnswerKeyError(f"answer key {path.name}: not JSON ({error})") from None
     try:

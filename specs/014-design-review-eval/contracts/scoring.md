@@ -660,8 +660,13 @@ the entity-id shape. In the same commit (plan decision RF-2):
   `tool-envelope.yml`;
 - **one check golden is added**, `joint-unknown-role`: a fictional package in
   `reviewer/tests/golden/fixtures/joint-unknown-role/` with one joint, one of whose instances has a
-  hole type the map cannot classify, and a tolerance source, so `hole.nominal_alignment` and
-  `hole.position_stack` both return the unknown-role result. No check golden pins a joint-map
+  hole type the map cannot classify, and no tolerance source (owner decision 39A): its
+  `schema_version` is one the golden corpus allows, 1.0.0 to 1.3.0, and every source the joint
+  map's resolver reads is a 1.4.0 or 1.5.0 member. The golden pins `hole.nominal_alignment`'s
+  unknown-role result, naming every instance of the joint, and the stack check's "no tolerance
+  source" skipped coverage row, as `alignment_case` returns them; `hole.position_stack`'s
+  unknown-role result, the same `_unknown_role`, is pinned by the unit test
+  (`test_joint_alignment.py`). No check golden pins a joint-map
   alignment result today (the joint map's regression file,
   `reviewer/tests/unit/test_joint_map_acceptance/big-assembly.yml`, pins the map, not check results), and Principle III asks a changed check for one;
 - **the replay fixtures are regenerated only to assert they are byte-identical**, by
@@ -685,7 +690,8 @@ tool does).
 `reviewer/tests/unit/test_benchmark_matching.py`:
 1. check matching: US1-1's sibling `fastener.thread_match` on one of four keyed screws matches
    nothing, and the defect is missed; `rms.folders.present` does not match `rms.folders.ordered`;
-   a family at depth; `fastener.*` against `fastener` and `fasteners.x` (US1-1, US1-2, SC-002);
+   a family at depth; `fastener.*` against `fastener` and `fasteners.x` (refined: research section
+   1, 37A) (US1-1, US1-2, SC-002);
 2. targets: parts; drawing locations; provenance documents only with no parts and no locations; a
    component finding's provenance not read (US1-7, FR-003);
 3. real: `record_drawing_finding` on a drawing document matches an entry keyed to that document and

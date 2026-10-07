@@ -39,7 +39,8 @@ from swreview.tools import checks_fastener, checks_fit
 from swreview.tools.context import ToolContext, context_for, use_context
 from swreview.tools.recording import result_to_finding
 from tests.golden.test_golden import FIXTURES_DIR
-from tests.support.packages import build_package
+from tests.support.findings import make_finding
+from tests.support.packages import build_package, persist_ref
 from tests.unit.test_answer_key import (
     OTHER_DIMENSION,
     SHEET_DIMENSION,
@@ -61,7 +62,6 @@ from tests.unit.test_joint_alignment import (
     pattern_of,
     unknown_role_joint,
 )
-from tests.unit.test_scorecard import make_finding
 from tests.unit.test_tool_access import screw_over_plate
 from tests.unit.test_tools_check_joints import PROFILE_A, run, with_profile
 from tests.unit.test_tools_checks_fastener import (
@@ -76,8 +76,6 @@ DRAWINGS = guarded_package(build_package)
 two drawings beside it: `INGESTED` (`doc:3`) and `NATIVE` (`doc:4`)."""
 
 PART_DOCUMENT = "doc:2"
-
-Entry = KnownDefect | CorrectCondition
 
 FOUR_SCREWS = [{"fastener": f"fst:000{n}", "hole": f"hol:000{n}"} for n in range(1, 5)]
 """Four screw joints in one plate, each a joint element (`answer-key.md` 2.5)."""
@@ -572,6 +570,44 @@ def test_a_stack_matches_its_contributors_and_target_exactly() -> None:
     assert matching.matches(one_short, keyed(contributors[:-1]))
 
 
+def test_a_stack_contributor_with_no_sheet_or_annotation_is_never_dropped_from_its_set() -> None:
+    """`matching._dimensions` reads a contributor whose source has no sheet or annotation (a
+    model dimension, located by its persistent reference) as `(document_id, None, None)`, which
+    no key's triple equals: it stays in the stack's set, so an entry naming the other
+    contributors is another set, never one this stack matches by dropping it."""
+    placed = [
+        TOLERANCE_DIMENSION.model_copy(
+            update={"source": SourceRef(document_id=DRAWING, sheet=SHEET, annotation=annotation)}
+        )
+        for annotation in ("dim-1-1", "dim-1-2")
+    ]
+    unplaced = TOLERANCE_DIMENSION.model_copy(
+        update={"source": SourceRef(document_id=DRAWING, persist_ref=persist_ref("dim-model"))}
+    )
+    entry = known_defect(
+        check="stack.worst_case",
+        document_ids=[DRAWING],
+        references=[
+            {
+                "contributors": [
+                    {"document_id": DRAWING, "sheet": SHEET, "annotation": "dim-1-1"},
+                    {"document_id": DRAWING, "sheet": SHEET, "annotation": "dim-1-2"},
+                ]
+            }
+        ],
+    )
+    with_the_unplaced = make_finding(check="stack.worst_case", inputs=[*placed, unplaced])
+    without_it = make_finding(check="stack.worst_case", inputs=placed)
+
+    assert matching.finding_references(with_the_unplaced, "stack") == {
+        (DRAWING, SHEET, "dim-1-1"),
+        (DRAWING, SHEET, "dim-1-2"),
+        (DRAWING, None, None),
+    }
+    assert not matching.matches(with_the_unplaced, entry)
+    assert matching.matches(without_it, entry)
+
+
 def test_us1_17_one_joint_s_unresolved_bottoming_matches_its_own_entry_and_no_other() -> None:
     """US1-17 at the matcher: four screws in one plate, each joint's `fastener.bottoming` keyed
     as its own known defect, expected unresolved, and the third joint's thread depth missing.
@@ -645,7 +681,7 @@ def test_a_folded_joint_map_finding_matches_through_its_first_joint() -> None:
 # --- 6. `answer-key.md` 5's overlap table, through the matcher alone -----------------------
 
 
-def assert_overlap(first: Entry, second: Entry, overlap: bool) -> None:
+def assert_overlap(first: matching.Entry, second: matching.Entry, overlap: bool) -> None:
     """Overlap is symmetric: one finding could match both, whichever is named first."""
     assert matching.entries_overlap(first, second) is overlap
     assert matching.entries_overlap(second, first) is overlap
@@ -737,7 +773,9 @@ def test_a_fit_defect_and_a_fit_condition_on_one_sheet_overlap_only_on_one_pair(
     """Different dimension pairs on one sheet do not overlap; the same pair named either way
     round does, since a fit's roles are not compared."""
 
-    def fit(entry: Callable[..., Entry], bore: dict[str, str], shaft: dict[str, str]) -> Entry:
+    def fit(
+        entry: Callable[..., matching.Entry], bore: dict[str, str], shaft: dict[str, str]
+    ) -> matching.Entry:
         return entry(
             check="fit.size_only",
             component_ids=[],
