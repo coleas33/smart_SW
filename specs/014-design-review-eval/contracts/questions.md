@@ -330,8 +330,8 @@ a test says it runs the tool.
 `reviewer/tests/unit/test_stored_result.py` (the one stored-result reader, RF-30):
 - `read_stored_result` returns the payload, the status and the file's raw text for a file `_store`
   wrote; `Unstored` with `missing`, `unreadable` (not JSON; not an object; a payload that is not an
-  object), `other_session`, and `other_call` (another step; another tool or other arguments when
-  given), one test each;
+  object) (refined: research 9.14, implementation follow-ups), `other_session`, and `other_call`
+  (another step; another tool or other arguments when given), one test each;
 - the replay's classification is unchanged: every call the replay tests classify as `stored` or
   `estimated` at `be01974` reads the same through the extracted reader
   (`tests/unit/test_cli_benchmark_replay.py` and the replay tests pass unchanged);

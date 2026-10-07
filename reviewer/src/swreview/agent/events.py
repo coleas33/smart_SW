@@ -39,12 +39,12 @@ not review-shaped despite the module it lives in (`report/session.py`).
 from __future__ import annotations
 
 import gzip
-import io
+import re
 import zlib
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
 from pydantic import ValidationError
 
@@ -145,6 +145,11 @@ class EventSink:
         self._listeners.append(listener)
 
 
+_NOT_UTF8 = re.compile("[\udc80-\udcff]")
+"""What `_open_stream` decodes each byte that is not UTF-8 to: a lone surrogate
+(`errors="surrogateescape"`), which no UTF-8 text decodes to."""
+
+
 def replay_events(
     path: Path | str,
     after: int = 0,
@@ -161,8 +166,10 @@ def replay_events(
     rather than raising - the one way a line is malformed is a backend killed mid-write,
     and what the pane needs then is everything that survived, followed by the live stream.
     A write cut inside a multibyte character (a tolerance sign, say) leaves a line that is
-    not UTF-8, and that line ends the replay the same way: the stream is read as bytes and
-    each line decoded on its own, so the damage is its own line's and no earlier line's.
+    not UTF-8, and that line ends the replay the same way: each byte that is not UTF-8
+    decodes to a lone surrogate in the line that holds it, so the damage is its own line's
+    and no earlier line's. Lines end where text mode ends them, at a newline, a carriage
+    return and newline, or a lone carriage return, as at `be01974` (owner decision 38A).
 
     A path whose name ends `.gz` is a packed stream (`PACKED_EVENTS_FILE_NAME`) and reads
     as its plain form. A truncated or corrupt archive ends the replay as a malformed line
@@ -182,12 +189,15 @@ def replay_events(
     try:
         with _open_stream(file) as handle:
             for read, line in enumerate(handle, start=1):
+                text = line.strip()
+                if not text:
+                    continue
+                if _NOT_UTF8.search(text):
+                    unreadable = read
+                    break
                 try:
-                    text = line.decode("utf-8").strip()
-                    if not text:
-                        continue
                     event = AgentEvent.model_validate_json(text)
-                except (UnicodeDecodeError, ValidationError):
+                except ValidationError:
                     unreadable = read
                     break
                 if event.seq > after:
@@ -198,11 +208,16 @@ def replay_events(
         on_unreadable(unreadable)
 
 
-def _open_stream(file: Path) -> io.BufferedIOBase:
-    """The stream's lines as bytes, decompressed when it is packed."""
+def _open_stream(file: Path) -> TextIO:
+    """The stream's lines as text, decompressed when it is packed.
+
+    Text mode with universal newlines, as at `be01974` (owner decision 38A). A byte that is
+    not UTF-8 reads as a lone surrogate (`_NOT_UTF8`) instead of raising out of a read that
+    holds earlier lines too.
+    """
     if file.name.endswith(".gz"):
-        return gzip.open(file, "rb")
-    return file.open("rb")
+        return gzip.open(file, "rt", encoding="utf-8", errors="surrogateescape")
+    return file.open(encoding="utf-8", errors="surrogateescape")
 
 
 def event_stream(folder: Path | str) -> Path:

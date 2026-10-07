@@ -9,10 +9,12 @@ pinned here, as `scoring.md` 11's `test_event_lines.py` numbers it:
 1. **Where it stops, and that it says so.** It yields every event of a well-formed log and
    stops at the first line that is not JSON, not UTF-8 (a write cut inside a multibyte
    character, in either form, section 5) or not an `AgentEvent`, calling `on_unreadable`
-   with that line's 1-based number in the file, blank lines counted. Without the hook it
-   behaves as at `be01974`: a missing file is an empty stream, `after` filters by `seq`, and
-   the pane's reconnect and remodel tests (`test_chat_sessions.py`, the chat-server
-   reconnect tests, `tests/integration/test_remodel_flow.py`) pass unchanged.
+   with that line's 1-based number in the file, blank lines counted. A line ends at `\\n`,
+   `\\r\\n` or a lone `\\r`, as text mode ends it at `be01974` (owner decision 38A, section
+   5). Without the hook it behaves as at `be01974`: a missing file is an empty stream,
+   `after` filters by `seq`, and the pane's reconnect and remodel tests
+   (`test_chat_sessions.py`, the chat-server reconnect tests,
+   `tests/integration/test_remodel_flow.py`) pass unchanged.
 2. **One reader.** `chat.sessions.replay_events` is the object `agent/events.py` defines,
    not a copy.
 3. **Every committed replay fixture reads whole**, with an `on_unreadable` that fails.
@@ -277,6 +279,31 @@ def test_a_cut_character_with_later_events_after_it_stops_at_the_cut_line(
 
     assert _replay(path) == (written, [4])
     assert list(replay_events(path)) == written
+
+
+@pytest.mark.parametrize("form", FORMS)
+def test_a_lone_carriage_return_ends_a_line_as_at_be01974(tmp_path: Path, form: str) -> None:
+    """Lines end where text mode ends them, at `\\n`, `\\r\\n` or a lone `\\r` (universal
+    newlines, as at `be01974`; owner decision 38A), in either form."""
+    written = [_event(1), _event(2), _event(3)]
+    first, second, third = (event.model_dump_json().encode() for event in written)
+    path = FORMS[form](tmp_path, first + b"\r\n" + second + b"\r" + third + b"\r\n")
+
+    assert _replay(path) == (written, [])
+    assert [event.seq for event in replay_events(path)] == [1, 2, 3]
+
+
+@pytest.mark.parametrize("form", FORMS)
+def test_a_lone_carriage_return_is_a_line_end_in_the_number(tmp_path: Path, form: str) -> None:
+    """Two lone carriage returns after the second event end its line and a blank one, both
+    counted, so the broken line after them is line 4."""
+    first, second = _event(1), _event(2)
+    data = b"\r".join(
+        [first.model_dump_json().encode(), second.model_dump_json().encode(), b"", b"{broken\n"]
+    )
+    path = FORMS[form](tmp_path, data + _line(_event(3)).encode())
+
+    assert _replay(path) == ([first, second], [4])
 
 
 def test_a_packed_stream_that_does_not_exist_is_an_empty_stream(tmp_path: Path) -> None:
