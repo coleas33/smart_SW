@@ -1,5 +1,7 @@
 # Contract: the A/B harness and the results ledger
 
+*Amended 2026-09-29 by feature 014 (`specs/014-design-review-eval/`), in provenance.md sections 1 to 5 and 6.1, benchmark-run.md sections 3, 4 and 14, scoring.md sections 7 and 8, verdict.md sections 5 and 7; the amendment text lands with the 014 task that changes the code:* sections 2, 3, 4, 5, 7, 9, 10.1, 10.2 and 10.5 change (the provenance record, the must-match rule, the saved set's form, the ledger's columns, the pane study's route, compare's version refusal).
+
 The A/B protocol, the runs it produces, and `swreview benchmark compare`, the one reader that
 validates those runs and renders the ledger.
 

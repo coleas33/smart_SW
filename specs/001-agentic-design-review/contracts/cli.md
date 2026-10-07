@@ -1,5 +1,7 @@
 # Command-Line Contracts
 
+*Amended 2026-09-29 by feature 014 (`specs/014-design-review-eval/`), in benchmark-run.md section 2; the amendment text lands with the 014 task that changes the code:* `--pane-defaults` includes the explanation pass.
+
 *Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed by 2026-09-27 (013 T052):* `report.md` no longer has a "Start here" section (it has "Findings by type"), so `swreview attention`'s amplified rows and coverage block no longer mirror a report section; feature 007 `contracts/cli.md` stays normative for the command; see 013 `contracts/grouped-list.md` section 6 (lands with 013 T052).
 
 ## `swreview` (Python, `reviewer/`)

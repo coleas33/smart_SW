@@ -1,5 +1,7 @@
 # Command-Line Additions
 
+*Amended 2026-09-29 by feature 014 (`specs/014-design-review-eval/`), in benchmark-run.md section 2; the amendment text lands with the 014 task that changes the code:* `--pane-defaults` includes the explanation pass.
+
 ## `swreview` (Python)
 
 | Command | Arguments | Effect |

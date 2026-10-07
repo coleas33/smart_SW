@@ -1,5 +1,7 @@
 # Data Model: SOLIDWORKS Agentic Design Review Pilot
 
+*Amended 2026-09-29 by feature 014 (`specs/014-design-review-eval/`), in answer-key.md and scoring.md section 7; the amendment text lands with the 014 task that changes the code:* section 3 (the answer key and the scorecard) changes to key format 2 and the 014 scorecard.
+
 **Feature**: `001-agentic-design-review` | **Date**: 2026-09-12 | **Spec**: [spec.md](spec.md)
 
 Two families of data exist. The **Intermediate Representation (IR)** is what extraction

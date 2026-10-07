@@ -23,6 +23,8 @@ are at `be01974`.
 | [report.md](report.md) | `benchmark report`: static HTML from run folders; finding packages through the saved set; the page's columns; transcripts walked from the log; the output folder; performance | FR-034, FR-035, FR-057 (the page) | SC-009; US6-1 to US6-3 | 5, 6 |
 | [verdict.md](verdict.md) | The package-level interval; the rules and their order; shown measures; verdict refusals; the ledger's pane block; the simulator, its levels and sizes; the noise floor, simulated once and stored; the smoke run before the pilot (35A); the pilot, its measurement, the study's projected wall clock (36A) and the approval; the private row | FR-016, FR-032 (compare half: the floor and the approved size), FR-044 to FR-046, FR-052 (naming), FR-055, FR-056 (compare half), FR-058, FR-059 | SC-005, SC-010; US5-5, US5-13, US5-14, US8-1 to US8-15 | 7, 8 |
 
+Each contract's failing-first tests are tasks in [tasks.md](../tasks.md), in the phase of the slice the contract marks.
+
 Every FR from FR-001 to FR-061 is served by at least one contract above. Amendments to earlier
 features' contracts (001, 002, 005, 006, 008, 010) are listed at the top of the contract that makes them
 and land with the task that changes the code.

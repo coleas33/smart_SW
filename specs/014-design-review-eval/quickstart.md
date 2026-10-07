@@ -1,6 +1,6 @@
 # Quickstart: Validating the Design-Review Eval
 
-**Feature**: `014-design-review-eval` | **Plan**: [plan.md](plan.md) | **Contracts**: [contracts/](contracts/README.md)
+**Feature**: `014-design-review-eval` | **Plan**: [plan.md](plan.md) | **Tasks**: [tasks.md](tasks.md) | **Contracts**: [contracts/](contracts/README.md)
 
 Runnable scenarios, offline first, then the paid pilot and the cost gate. Each names what it proves
 and the outcome to expect. Commands run from `reviewer/` unless they say otherwise. Offline means no
