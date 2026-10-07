@@ -34,7 +34,7 @@ from tests.support.drawings import (
     Attach,
     DrawingBuilder,
 )
-from tests.support.mechanical import FICTIONAL_ROOT, PackageBuilder, load_generator
+from tests.support.mechanical import FICTIONAL_ROOT, PackageBuilder, as_committed, load_generator
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "drawings"
 MECHANICAL = Path(__file__).resolve().parents[1] / "fixtures" / "mechanical"
@@ -248,12 +248,6 @@ def test_the_drawing_vocabulary_refuses_a_word_it_does_not_know() -> None:
 
 
 # --- 2. the generator reproduces every committed byte ------------------------------------
-
-
-def as_committed(path: Path) -> bytes:
-    """A fixture file's bytes as git stores them: JSON is text (LF in the blob), a GLB is not."""
-    content = path.read_bytes()
-    return content if path.suffix == ".glb" else content.replace(b"\r\n", b"\n")
 
 
 def test_re_running_the_generator_reproduces_every_committed_fixture_byte_for_byte() -> None:

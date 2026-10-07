@@ -1044,3 +1044,14 @@ def load_generator(path: Path) -> ModuleType:
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def as_committed(path: Path) -> bytes:
+    """A fixture file's bytes as git stores them.
+
+    `.gitattributes` marks `*.json` as text, so a Windows checkout with `core.autocrlf` may
+    hand the file back with CRLF endings; the generator writes LF, which is what the blob
+    holds. A GLB is binary and compared untouched.
+    """
+    content = path.read_bytes()
+    return content if path.suffix == ".glb" else content.replace(b"\r\n", b"\n")
