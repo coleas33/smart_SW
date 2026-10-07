@@ -42,6 +42,7 @@ import sys
 import zipfile
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
@@ -388,6 +389,10 @@ def _efficiency(
     study: str = NO_STUDY,
     arm: str | None = None,
     allow_workstation_levers: bool = True,
+    pane_defaults: bool = False,
+    typed_levers: Sequence[str] = (),
+    model_view_typed: bool = False,
+    explanations_typed: bool = False,
 ) -> EfficiencySettings:
     """What `--lever`, `--study` and `--arm` resolve to for one run, or a usage error.
 
@@ -396,6 +401,10 @@ def _efficiency(
     or a package is read. That is the whole reason the study refusals live on the command
     that chooses the lever rather than on `benchmark compare`: a refusal after six paid
     runs is worthless (contracts/ab-harness.md section 2).
+
+    `pane_defaults`, `typed_levers`, `model_view_typed` and `explanations_typed` are the
+    typed markers `check_study_arm` reads for the pane study and the baselines (feature 014
+    RF-19), which `_review_settings` derives; each defaults to nothing typed.
     """
     try:
         efficiency = efficiency_from_levers(
@@ -403,10 +412,31 @@ def _efficiency(
             provider=provider,
             allow_workstation_levers=allow_workstation_levers,
         )
-        check_study_arm(study=study, arm=arm, efficiency=efficiency)
+        check_study_arm(
+            study=study,
+            arm=arm,
+            efficiency=efficiency,
+            pane_defaults=pane_defaults,
+            levers=typed_levers,
+            model_view_typed=model_view_typed,
+            explanations_typed=explanations_typed,
+        )
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from exc
     return efficiency
+
+
+@dataclass(frozen=True)
+class ResolvedReview:
+    """What one review's switches resolve to (feature 014 `contracts/benchmark-run.md` 2).
+
+    Frozen, as `PaneDefaults` is: a statement about the run, read by the command that starts
+    it, never adjusted after the resolver has spoken.
+    """
+
+    efficiency: EfficiencySettings
+    model_view: ModelViewSettings
+    explain_findings: bool
 
 
 def _review_settings(
@@ -417,29 +447,51 @@ def _review_settings(
     payload_slimming: bool,
     history_pruning: bool,
     prune_after: int | None,
-) -> tuple[EfficiencySettings, ModelViewSettings]:
-    """What one review's switches resolve to: its levers and its model view (feature 008).
+    explain_findings: bool | None = None,
+    study: str = NO_STUDY,
+    arm: str | None = None,
+    allow_workstation_levers: bool = True,
+) -> ResolvedReview:
+    """What one review's switches resolve to: its levers, model view and explanations.
 
     The one resolver `swreview review` and `swreview benchmark replay` share, so the two
     commands cannot read the same flags differently (`specs/008-checks-first-review/
-    contracts/cli.md`):
+    contracts/cli.md`; feature 014 `contracts/benchmark-run.md` section 2):
 
-    1. start from `pane_defaults(provider)` when `--pane-defaults` is given, else every
-       change off;
+    1. start from `pane_defaults(provider)` when `--pane-defaults` is given (the
+       explanation pass on), else every change off (the explanation pass off);
     2. add the named levers through `efficiency_from_levers`, the pane's own included, so
        every existing refusal applies (`--pane-defaults --lever coverage_stop` is
        `GATED_ALONE`'s);
     3. turn on `--payload-slimming` and `--history-pruning` when given;
     4. `--prune-after N` sets the prune age, and is a usage error when N is below 1 or when
-       pruning is not on, naming the flags.
+       pruning is not on, naming the flags;
+    5. a typed `--explain-findings` or `--no-explain-findings` wins over the base's
+       explanations (PP-1); `None` is neither typed.
+
+    `study`, `arm` and `allow_workstation_levers` reach `check_study_arm` and
+    `efficiency_from_levers` through `_efficiency` with the markers of what was typed - the
+    `--lever` names as typed, never the pane's own - so a run keeps its study checks and its
+    workstation-lever refusal through this one resolver (RF-19). Their defaults are what
+    `review` and `benchmark replay` always had.
     """
     base = (
         pane_defaults_for(provider)
         if pane_defaults
-        else PaneDefaults(EfficiencySettings(), MODEL_VIEW_OFF)
+        else PaneDefaults(EfficiencySettings(), MODEL_VIEW_OFF, explain_findings=False)
     )
     pane_levers = [name for name, on in base.efficiency.model_dump().items() if on]
-    efficiency = _efficiency([*pane_levers, *(lever or ())], provider=provider)
+    efficiency = _efficiency(
+        [*pane_levers, *(lever or ())],
+        provider=provider,
+        study=study,
+        arm=arm,
+        allow_workstation_levers=allow_workstation_levers,
+        pane_defaults=pane_defaults,
+        typed_levers=lever or (),
+        model_view_typed=payload_slimming or history_pruning or prune_after is not None,
+        explanations_typed=explain_findings is not None,
+    )
     slimming = base.model_view.payload_slimming or payload_slimming
     pruning = base.model_view.history_pruning or history_pruning
     age = base.model_view.prune_after_rounds
@@ -452,8 +504,12 @@ def _review_settings(
                 "--history-pruning or --pane-defaults"
             )
         age = prune_after
-    return efficiency, ModelViewSettings(
-        payload_slimming=slimming, history_pruning=pruning, prune_after_rounds=age
+    return ResolvedReview(
+        efficiency,
+        ModelViewSettings(
+            payload_slimming=slimming, history_pruning=pruning, prune_after_rounds=age
+        ),
+        base.explain_findings if explain_findings is None else explain_findings,
     )
 
 
@@ -463,7 +519,8 @@ PaneDefaultsOption = Annotated[
         "--pane-defaults",
         help="Run with exactly the settings a pane review runs with (checks first and the "
         "tools it ran leaving the array, parallel calls on OpenAI, payload slimming, history "
-        "pruning after two rounds).",
+        "pruning after two rounds, and the finding explanations unless "
+        "--no-explain-findings).",
     ),
 ]
 ReplayPaneDefaultsOption = Annotated[
@@ -712,23 +769,25 @@ def review(
     history_pruning: HistoryPruningOption = False,
     prune_after: PruneAfterOption = None,
     explain_findings: Annotated[
-        bool,
+        bool | None,
         typer.Option(
             "--explain-findings/--no-explain-findings",
-            help="Include the pane's bounded finding explanations and their usage.",
+            help="Include the pane's bounded finding explanations and their usage; default: "
+            "on with --pane-defaults, else off.",
             rich_help_panel="Presentation",
         ),
-    ] = False,
+    ] = None,
     json_output: JsonFlag = False,
 ) -> None:
     """Run the agent loop over a package; write session.json and report.md."""
-    efficiency, model_view = _review_settings(
+    resolved = _review_settings(
         provider,
         pane_defaults=pane_defaults,
         lever=lever,
         payload_slimming=payload_slimming,
         history_pruning=history_pruning,
         prune_after=prune_after,
+        explain_findings=explain_findings,
     )
     with _errors_as_exit_1():
         settings = _provider_settings(provider, model, effort)
@@ -736,15 +795,15 @@ def review(
             session = run_review(
                 package_dir,
                 out,
-                provider=provider_factory(settings, efficiency),
+                provider=provider_factory(settings, resolved.efficiency),
                 model=settings.model,
                 effort=settings.effort,
                 key_source=settings.key_source,
                 max_steps=max_steps,
-                efficiency=efficiency,
-                model_view=model_view,
+                efficiency=resolved.efficiency,
+                model_view=resolved.model_view,
                 standards_profile=standards_profile,
-                explain_findings=explain_findings,
+                explain_findings=resolved.explain_findings,
                 fail_tool=tuple(fail_tool or ()),
                 bridge=bridge,
                 redact=redactor,
@@ -2490,7 +2549,7 @@ def benchmark_replay(
         provider = ProviderName(recording.provider)
     except ValueError:
         provider = ProviderName.FAKE
-    requested = _review_settings(
+    resolved = _review_settings(
         provider,
         pane_defaults=pane_defaults,
         lever=lever,
@@ -2500,7 +2559,9 @@ def benchmark_replay(
     )
     with _errors_as_exit_1(RecordingRefused, TokenizerUnavailable):
         report = replay_recording(
-            recording, requested=requested, standards_profile=standards_profile
+            recording,
+            requested=(resolved.efficiency, resolved.model_view),
+            standards_profile=standards_profile,
         )
     _emit(report.model_dump(mode="json", by_alias=True), render_replay_lines(report), json_output)
     if report.findings.lost:

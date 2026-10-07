@@ -29,10 +29,12 @@ No network: the only commands run here either refuse before any adapter is built
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
 import pytest
+import typer
 from pydantic import ValidationError
 from typer.testing import CliRunner
 
@@ -42,6 +44,9 @@ from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, Script
 from swreview.agent.runner import start_review
 from swreview.agent.settings import (
     LEVER_NAMES,
+    NO_STUDY,
+    PANE_STUDY,
+    PRIVATE_PANE_STUDY,
     WORKSTATION_LEVERS,
     EfficiencySettings,
     check_study_arm,
@@ -268,6 +273,270 @@ def test_the_consistent_combinations_pass() -> None:
         arm="off",
         efficiency=EfficiencySettings(prompt_cache_key=True),
     )
+
+
+# --- the pane study and the two baselines (feature 014 T043) ------------------------------
+#
+# `specs/014-design-review-eval/contracts/provenance.md` sections 3.1 to 3.3: the pane study
+# and its private twin have an `on` arm that is exactly `--pane-defaults` and an `off` arm with
+# every change off, both with the explanation setting typed; a baseline's study is none, and
+# the pane baseline is exactly `--pane-defaults`. What was typed reaches `check_study_arm` as
+# markers, because the resolved settings cannot tell the pane's levers from typed ones.
+
+PANE_STUDIES: tuple[str, ...] = (PANE_STUDY, PRIVATE_PANE_STUDY)
+
+MODEL_VIEW_SWITCHES: tuple[str, ...] = ("--payload-slimming", "--history-pruning", "--prune-after")
+"""`model_view_typed` says a model-view switch was typed, not which, so a refusal names all
+three."""
+
+
+def study_arm(
+    study: str,
+    arm: str | None,
+    *,
+    pane_defaults: bool = False,
+    levers: Sequence[str] = (),
+    model_view_typed: bool = False,
+    explanations_typed: bool = False,
+) -> None:
+    """`check_study_arm` over what one command line typed and the levers it resolves to: the
+    pane's under `--pane-defaults`, plus the ones named."""
+    pane = pane_efficiency(ProviderName.FAKE)
+    pane_levers = [name for name in LEVER_NAMES if getattr(pane, name)] if pane_defaults else []
+    check_study_arm(
+        study=study,
+        arm=arm,
+        efficiency=efficiency_from_levers([*pane_levers, *levers]),
+        pane_defaults=pane_defaults,
+        levers=levers,
+        model_view_typed=model_view_typed,
+        explanations_typed=explanations_typed,
+    )
+
+
+def refusal(study: str, arm: str | None, **typed: Any) -> str:
+    """The message of the `ValueError` `study_arm` raises."""
+    with pytest.raises(ValueError) as caught:
+        study_arm(study, arm, **typed)
+    return str(caught.value)
+
+
+def review_settings(
+    *,
+    study: str,
+    arm: str | None,
+    pane_defaults: bool = False,
+    lever: list[str] | None = None,
+    payload_slimming: bool = False,
+    history_pruning: bool = False,
+    prune_after: int | None = None,
+    explain_findings: bool | None = None,
+) -> Any:
+    """`cli._review_settings` with a study and an arm and no workstation lever, as `benchmark
+    run` resolves through it from T051 (RF-19), so the markers are the ones it derives."""
+    return cli._review_settings(
+        ProviderName.FAKE,
+        pane_defaults=pane_defaults,
+        lever=lever,
+        payload_slimming=payload_slimming,
+        history_pruning=history_pruning,
+        prune_after=prune_after,
+        explain_findings=explain_findings,
+        study=study,
+        arm=arm,
+        allow_workstation_levers=False,
+    )
+
+
+def test_the_pane_study_names_are_the_contracts() -> None:
+    assert PANE_STUDY == "pane_defaults"
+    assert PRIVATE_PANE_STUDY == "pane_defaults_private"
+
+
+def test_an_unknown_study_name_also_names_the_pane_studies() -> None:
+    message = refusal("pane_default", "on", pane_defaults=True, explanations_typed=True)
+
+    assert "unknown --study 'pane_default'" in message
+    assert PANE_STUDY in message and PRIVATE_PANE_STUDY in message
+
+
+@pytest.mark.parametrize("study", PANE_STUDIES)
+def test_a_pane_study_accepts_the_arms_that_follow_its_rules(study: str) -> None:
+    study_arm(study, "on", pane_defaults=True, explanations_typed=True)
+    study_arm(study, "off", explanations_typed=True)
+
+    # Through the resolver: the pane's own levers are not typed levers, and a typed
+    # `--no-explain-findings` is an explanation setting typed.
+    on = review_settings(study=study, arm="on", pane_defaults=True, explain_findings=True)
+    off = review_settings(study=study, arm="off", explain_findings=False)
+
+    assert on.efficiency == pane_efficiency(ProviderName.FAKE)
+    assert off.efficiency == EfficiencySettings()
+
+
+@pytest.mark.parametrize("study", PANE_STUDIES)
+def test_a_pane_study_with_no_arm_is_refused(study: str) -> None:
+    message = refusal(study, None, pane_defaults=True, explanations_typed=True)
+
+    assert f"--study {study}" in message and "--arm" in message
+    assert "name the arm: on or off" in message
+
+
+@pytest.mark.parametrize("study", PANE_STUDIES)
+def test_a_pane_study_refuses_an_unknown_arm(study: str) -> None:
+    message = refusal(study, "sideways", pane_defaults=True, explanations_typed=True)
+
+    assert "unknown --arm 'sideways'" in message
+
+
+@pytest.mark.parametrize("study", PANE_STUDIES)
+def test_a_pane_study_refuses_the_baseline_arm(study: str) -> None:
+    message = refusal(study, "baseline", pane_defaults=True, explanations_typed=True)
+
+    assert "--arm baseline" in message and f"--study {study}" in message
+    assert "a baseline's study is none" in message
+
+
+@pytest.mark.parametrize("study", PANE_STUDIES)
+@pytest.mark.parametrize(("arm", "pane_defaults"), [("on", True), ("off", False)])
+def test_a_pane_study_refuses_an_explanation_setting_left_untyped(
+    study: str, arm: str, pane_defaults: bool
+) -> None:
+    """PP-2, US2-4: both arms state the explanation setting, so compare can hold it equal."""
+    message = refusal(study, arm, pane_defaults=pane_defaults)
+
+    assert "--explain-findings" in message and "--no-explain-findings" in message
+    assert (
+        "type the explanation setting in both arms; the pane study holds it equal and stated"
+        in message
+    )
+    with pytest.raises(typer.BadParameter, match="type the explanation setting"):
+        review_settings(study=study, arm=arm, pane_defaults=pane_defaults)
+
+
+@pytest.mark.parametrize("study", PANE_STUDIES)
+@pytest.mark.parametrize(
+    ("typed", "named"),
+    [
+        pytest.param({}, ("without --pane-defaults",), id="no-pane-defaults"),
+        pytest.param({"levers": ("tool_tiers",)}, ("--lever tool_tiers",), id="a-lever-alone"),
+        pytest.param(
+            {"pane_defaults": True, "levers": ("tool_tiers",)},
+            ("--lever tool_tiers",),
+            id="pane-defaults-and-a-lever",
+        ),
+        pytest.param(
+            {"pane_defaults": True, "model_view_typed": True},
+            MODEL_VIEW_SWITCHES,
+            id="pane-defaults-and-a-model-view-switch",
+        ),
+    ],
+)
+def test_the_pane_studys_on_arm_is_exactly_pane_defaults(
+    study: str, typed: dict[str, Any], named: tuple[str, ...]
+) -> None:
+    message = refusal(study, "on", explanations_typed=True, **typed)
+
+    assert f"--study {study}" in message and "--arm on" in message
+    assert "the on arm is exactly --pane-defaults" in message
+    for flag in named:
+        assert flag in message
+
+
+@pytest.mark.parametrize("study", PANE_STUDIES)
+@pytest.mark.parametrize(
+    ("typed", "named"),
+    [
+        pytest.param({"pane_defaults": True}, ("--pane-defaults",), id="pane-defaults"),
+        pytest.param({"levers": ("tool_tiers",)}, ("--lever tool_tiers",), id="a-lever"),
+        pytest.param({"model_view_typed": True}, MODEL_VIEW_SWITCHES, id="a-model-view-switch"),
+    ],
+)
+def test_the_pane_studys_off_arm_has_every_change_off(
+    study: str, typed: dict[str, Any], named: tuple[str, ...]
+) -> None:
+    message = refusal(study, "off", explanations_typed=True, **typed)
+
+    assert f"--study {study}" in message and "--arm off" in message
+    assert "the off arm has every change off" in message
+    for flag in named:
+        assert flag in message
+
+
+@pytest.mark.parametrize("explanations_typed", [False, True])
+def test_the_pane_baseline_is_exactly_pane_defaults(explanations_typed: bool) -> None:
+    """PP-4: `--study none --arm baseline --pane-defaults` tracks the shipped configuration.
+    Its resolved levers are on, which a plain baseline refuses, and its explanations may be
+    left untyped, to run as the pane runs them."""
+    study_arm(NO_STUDY, "baseline", pane_defaults=True, explanations_typed=explanations_typed)
+
+    for typed, named in (
+        ({"levers": ("tool_tiers",)}, ("--lever tool_tiers",)),
+        ({"model_view_typed": True}, MODEL_VIEW_SWITCHES),
+    ):
+        message = refusal(
+            NO_STUDY,
+            "baseline",
+            pane_defaults=True,
+            explanations_typed=explanations_typed,
+            **typed,
+        )
+        assert "--arm baseline" in message and "--pane-defaults" in message
+        assert "the pane baseline is exactly --pane-defaults" in message
+        for flag in named:
+            assert flag in message
+
+    explain_findings = True if explanations_typed else None
+    resolved = review_settings(
+        study=NO_STUDY, arm="baseline", pane_defaults=True, explain_findings=explain_findings
+    )
+    assert resolved.efficiency == pane_efficiency(ProviderName.FAKE)
+    with pytest.raises(typer.BadParameter, match="--lever tool_tiers"):
+        review_settings(study=NO_STUDY, arm="baseline", pane_defaults=True, lever=["tool_tiers"])
+
+
+@pytest.mark.parametrize(
+    ("switches", "named"),
+    [
+        ({"payload_slimming": True}, "--payload-slimming"),
+        ({"history_pruning": True}, "--history-pruning"),
+        ({"history_pruning": True, "prune_after": 3}, "--prune-after"),
+        ({"prune_after": 3}, "--prune-after"),
+    ],
+)
+def test_a_plain_baseline_refuses_a_model_view_switch(
+    switches: dict[str, Any], named: str
+) -> None:
+    """PP-4: `agent/settings.py:756-766` named `--lever` only, so a plain baseline with the
+    model view on rendered as a baseline with every change off."""
+    message = refusal(NO_STUDY, "baseline", model_view_typed=True)
+
+    assert "--arm baseline" in message
+    assert "a baseline run has every change off" in message
+    for flag in MODEL_VIEW_SWITCHES:
+        assert flag in message
+
+    with pytest.raises(typer.BadParameter) as caught:
+        review_settings(study=NO_STUDY, arm="baseline", **switches)
+    assert named in str(caught.value)
+    assert "a baseline run has every change off" in str(caught.value)
+
+
+def test_the_resolver_refuses_a_workstation_lever_only_when_asked() -> None:
+    """RF-19: `benchmark run` keeps its workstation-lever refusal through `_review_settings`,
+    and `review` and `benchmark replay`, which leave the parameter at its default, do not."""
+    with pytest.raises(typer.BadParameter, match="workstation harness"):
+        review_settings(study=NO_STUDY, arm=None, lever=["lazy_meshes"])
+
+    resolved = cli._review_settings(
+        ProviderName.FAKE,
+        pane_defaults=False,
+        lever=["lazy_meshes"],
+        payload_slimming=False,
+        history_pruning=False,
+        prune_after=None,
+    )
+    assert resolved.efficiency == EfficiencySettings(lazy_meshes=True)
 
 
 # --- the session records the configuration ---------------------------------------
