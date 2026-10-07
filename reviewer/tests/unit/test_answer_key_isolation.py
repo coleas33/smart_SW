@@ -45,7 +45,7 @@ def test_load_set_reads_ordinary_packages(tmp_path: Path) -> None:
         ],
     )
 
-    benchmark_set = load_set(set_path)
+    benchmark_set = load_set(set_path, root=tmp_path)
 
     assert benchmark_set.name == "pilot"
     assert benchmark_set.packages[0].package_id == "cover-blind-tap"
@@ -68,7 +68,7 @@ def test_load_set_refuses_a_package_path_under_answer_keys(tmp_path: Path) -> No
     )
 
     with pytest.raises(AnswerKeyAccessError):
-        load_set(set_path)
+        load_set(set_path, root=tmp_path)
 
 
 def test_load_set_refuses_a_junction_that_points_into_answer_keys(tmp_path: Path) -> None:
@@ -102,7 +102,7 @@ def test_load_set_refuses_a_junction_that_points_into_answer_keys(tmp_path: Path
     )
 
     with pytest.raises(AnswerKeyAccessError):
-        load_set(set_path)
+        load_set(set_path, root=tmp_path)
 
 
 def test_run_benchmark_never_passes_an_answer_key_path(tmp_path: Path) -> None:
@@ -134,6 +134,7 @@ def test_run_benchmark_never_passes_an_answer_key_path(tmp_path: Path) -> None:
         model="gpt-5.6",
         effort="high",
         review_fn=fake_review_fn,
+        root=tmp_path,
     )
 
     assert len(calls) == 1
@@ -163,7 +164,7 @@ def test_run_benchmark_refuses_an_answer_key_path_even_if_the_set_object_smuggle
             )
         ],
     )
-    monkeypatch.setattr("swreview.benchmark.runner.load_set", lambda _path: smuggled)
+    monkeypatch.setattr("swreview.benchmark.runner.load_set", lambda _path, **_: smuggled)
     calls: list[object] = []
 
     with pytest.raises(AnswerKeyAccessError):

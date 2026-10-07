@@ -37,7 +37,7 @@ from pydantic import Field
 
 from swreview.agent.settings import EfficiencySettings
 from swreview.benchmark.digest import sha256_of as sha256_of
-from swreview.benchmark.sets import BenchmarkSet, load_set
+from swreview.benchmark.sets import REPO_ROOT, BenchmarkSet, load_set
 from swreview.findings import ReviewModel
 from swreview.ir.loader import reject_answer_key_path
 from swreview.report.session import load_session, save_session
@@ -48,10 +48,6 @@ PROVENANCE_FILE = "run-provenance.json"
 """Where the provenance record sits: beside the `benchmark-set.json` the run already
 saves, at the root of the run directory rather than inside a package folder, because it
 describes the whole invocation."""
-
-REPO_ROOT = Path(__file__).resolve().parents[4]
-"""The tree `current_commit` asks git about, when this package is running from a
-checkout. An installed copy has no repository above it and records no commit."""
 
 
 class RunProvenance(ReviewModel):
@@ -202,6 +198,7 @@ def run_benchmark(
     review_fn: ReviewFn | None = None,
     efficiency: EfficiencySettings | None = None,
     explain_findings: bool = False,
+    root: Path = REPO_ROOT,
 ) -> list[Path]:
     """Review every package of the benchmark set at `set_path` into `out_dir`.
 
@@ -222,8 +219,11 @@ def run_benchmark(
     `provider` and `model` are passed through unresolved - the review function decides
     what a name means (FR-016), so scoring a set on OpenAI and on Gemini differs by one
     argument and nothing else.
+
+    `root` is the checkout the set's relative entries resolve against, forwarded to
+    `load_set` (default: the running checkout; a test passes a temporary one).
     """
-    benchmark_set: BenchmarkSet = load_set(set_path)
+    benchmark_set: BenchmarkSet = load_set(set_path, root=root)
     active_review_fn = review_fn if review_fn is not None else _default_review_fn
     out_dir = Path(out_dir)
 
