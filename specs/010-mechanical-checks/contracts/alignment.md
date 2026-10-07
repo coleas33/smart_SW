@@ -1,5 +1,7 @@
 # Contract: Alignment and the Stack-Up
 
+*Amended 2026-09-29 by feature 014 (`specs/014-design-review-eval/`), in scoring.md section 10 (19A); the amendment text lands with the 014 task that changes the code:* references on every path of the alignment check.
+
 Normative for FR-007 to FR-010 and User Story 3. `checks/joint_alignment.py`; the zone rule in
 `checks/result.py`.
 

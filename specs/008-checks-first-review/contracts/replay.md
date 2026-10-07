@@ -1,5 +1,7 @@
 # Contract: The Replay
 
+*Amended 2026-09-29 by feature 014 (`specs/014-design-review-eval/`), in scoring.md sections 5 and 10, provenance.md section 6; the amendment text lands with the 014 task that changes the code:* the replay fixtures regenerate for 19A's check, the origin marks and D12.
+
 *Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed for User Stories 1 to 6 (013 T042, T058, T069, T095, T115, T124; section 9's rows "Feature 013 US1" to "Feature 013 US2") the follow-ups (013 T158, the row "Feature 013 follow-ups") and User Story 7 (013 T134, the row "Feature 013 US7"; its question T134-Q1 answered by a default taken 2026-09-27, section 5's tree-reading clause, built by 013 T145-T146; its question T134-Q2, the Standards sketch check's findings, answered by a default taken 2026-09-27, section 5's clause read for every check that reads the tree):* every change of feature 013 that moves what the model reads passes the replay gate and records a re-measured section 9 row; see 013 `contracts/tokens.md` section 5.
 
 Normative for `swreview benchmark replay`, `benchmark/recording.py`, `benchmark/replay.py`, the

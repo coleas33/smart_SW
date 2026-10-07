@@ -1,5 +1,7 @@
 # The Standards Profile
 
+*Amended 2026-09-29 by feature 014 (`specs/014-design-review-eval/`), in provenance.md section 6.2 (D12); the amendment text lands with the 014 task that changes the code:* the stamp on a standards finding names the profile's file and digest, never its folder.
+
 *Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed with 013 T014:* profile version 4 adds the `part_roles` section - one entry per part-role signal (bought prefixes and folder names, the make-or-buy switch, vendor properties, a distributor block, catalogue shapes, custom and bought number prefixes, detail properties), each refused by position when blank - and extends the name-pattern vocabulary with `@` (one letter) and `*` (any run) for the catalogue shapes only; `part_number.pattern` keeps `#` and `?`. The known versions are 1 to 4, a version 1 to 3 file carrying `part_roles` is refused naming it, and property names are compared ignoring case and every space. The block below is the example, version 4; the field rules are 013 `contracts/part-roles-profile.md` section 3.
 
 The company's configuration for the sixteen checks. **This file is not committed to this

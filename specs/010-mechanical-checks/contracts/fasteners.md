@@ -1,5 +1,7 @@
 # Contract: Fasteners
 
+*Amended 2026-09-29 by feature 014 (`specs/014-design-review-eval/`), in scoring.md section 10 (19A); the amendment text lands with the 014 task that changes the code:* references on every path of the fastener check.
+
 Normative for FR-011 to FR-013, User Story 4 and SC-002, SC-004.
 
 ## 1. The name grammar (`checks/fastener_names.py`)

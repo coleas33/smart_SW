@@ -1,6 +1,6 @@
 # Implementation Plan: Design-Review Eval
 
-**Branch**: `014-design-review-eval` (from `main` at `be01974`) | **Date**: 2026-09-29 | **Spec**: [spec.md](spec.md)
+**Branch**: `014-design-review-eval` (from `main` at `be01974`) | **Date**: 2026-09-29 | **Spec**: [spec.md](spec.md) | **Tasks**: [tasks.md](tasks.md)
 
 **Input**: the spec (FR-001 to FR-061; owner decisions 1A to 36A; defaults D1 to D17), [research.md](research.md)
 §1 to §8, and five area designs, integrated here. Every plan-level decision, the areas', the
