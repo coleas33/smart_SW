@@ -29,13 +29,17 @@ Principle VI and FR-025 are untouched.
 
 What is refused, and what is merely null:
 
+- A scorecard scored under other scoring rules, or malformed: **refused** by
+  `scorecard.read_scorecard` before anything else is read, with the command that re-scores it
+  (feature 014 `scoring.md` 8).
 - No `efficiency` on a session at all: **refused** - the run predates the flag carrier
   and cannot be attributed to an arm.
 - The two records disagreeing, on the settings, the provider, the model, the effort, the
   saved set copy, or the arm against the studied lever's flag: **refused**, naming it.
 - Two runs of one study differing in commit, effort, set file or checklist: **refused**,
   naming the field. There is no declared exception; lever 2's off arm is its flag off,
-  not an earlier commit.
+  not an earlier commit. Two runs scored against two versions of one package's answer key
+  (`Scorecard.key_sha256`): **refused**, naming the package (feature 014 INT-16).
 - No provenance record at all: **not** refused. The row renders with `lever`, `arm`,
   `rep` and `commit` null, because a run made before the convention existed is still a
   real run.
@@ -68,14 +72,19 @@ from swreview.benchmark.adoption import (
     off_on,
 )
 from swreview.benchmark.runner import REPO_ROOT, RunProvenance, load_provenance, sha256_of
-from swreview.benchmark.scorecard import UNKNOWN, PackageScore, Scorecard
+from swreview.benchmark.scorecard import (
+    SCORECARD_FILE,
+    UNKNOWN,
+    PackageScore,
+    Scorecard,
+    read_scorecard,
+)
 from swreview.findings import ReviewModel
 from swreview.report.session import ReviewSession, load_session
 
 LEDGER_SCHEMA = "1.0"
 LEDGER_JSON = "ledger.json"
 LEDGER_MD = "ledger.md"
-SCORECARD_FILE = "scorecard.json"
 SAVED_SET_FILE = "benchmark-set.json"
 
 LEDGER_BEGIN = "<!-- ledger:begin -->"
@@ -304,7 +313,9 @@ def _load_run(run_dir: Path) -> _LoadedRun:
             f"{run_dir}: no {SCORECARD_FILE}; run `swreview benchmark score` on this run "
             f"before comparing it"
         )
-    scorecard = Scorecard.model_validate_json(scorecard_path.read_bytes())
+    # Before any session or parity check (feature 014 `scoring.md` 8): a folder scored under
+    # other rules meets the re-score line, never a refusal its old fields happen to trigger.
+    scorecard = read_scorecard(run_dir)
     provenance = load_provenance(run_dir)
 
     sessions: dict[str, ReviewSession] = {}
@@ -507,7 +518,24 @@ def _check_one_study(runs: Sequence[_LoadedRun]) -> None:
                     f"comparison: {field} differs "
                     f"({getattr(first, field)!r} against {getattr(other, field)!r})"
                 )
+    _check_key_digests(runs)
     _check_repetitions(runs)
+
+
+def _check_key_digests(runs: Sequence[_LoadedRun]) -> None:
+    """One key per package across a study (feature 014 INT-16): an arm scored against an
+    edited key measures the edit, and a private key is not pinned by the commit."""
+    seen: dict[str, tuple[str, Path]] = {}
+    for run in runs:
+        for package_id, digest in run.scorecard.key_sha256.items():
+            first_digest, first_run = seen.setdefault(package_id, (digest, run.run_dir))
+            if digest != first_digest:
+                raise CompareError(
+                    f"{first_run} and {run.run_dir} cannot be placed in one comparison: they "
+                    f"were scored against two versions of {package_id}'s answer key "
+                    f"(key_sha256 {first_digest} against {digest}); re-score both against one "
+                    "key"
+                )
 
 
 def _check_repetitions(runs: Sequence[_LoadedRun]) -> None:

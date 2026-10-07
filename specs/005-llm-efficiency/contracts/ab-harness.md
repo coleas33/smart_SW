@@ -1,6 +1,6 @@
 # Contract: the A/B harness and the results ledger
 
-*Amended 2026-09-29 by feature 014 (`specs/014-design-review-eval/`), in provenance.md sections 1 to 5 and 6.1, benchmark-run.md sections 3, 4 and 14, scoring.md sections 7 and 8, verdict.md sections 5 and 7; the amendment text lands with the 014 task that changes the code:* sections 2, 3, 4, 5, 7, 9, 10.1, 10.2 and 10.5 change (the provenance record, the must-match rule, the saved set's form, the ledger's columns, the pane study's route, compare's version refusal).
+*Amended 2026-09-29 by feature 014 (`specs/014-design-review-eval/`), in provenance.md sections 1 to 5 and 6.1, benchmark-run.md sections 3, 4 and 14, scoring.md sections 7 and 8, verdict.md sections 5 and 7; the amendment text lands with the 014 task that changes the code, sections 4's and 9's scorer half landed 2026-10-07 (014 T038):* sections 2, 3, 4, 5, 7, 9, 10.1, 10.2 and 10.5 change (the provenance record, the must-match rule, the saved set's form, the ledger's columns, the pane study's route, compare's version refusal).
 
 The A/B protocol, the runs it produces, and `swreview benchmark compare`, the one reader that
 validates those runs and renders the ledger.
@@ -228,6 +228,17 @@ Every field has **exactly one source and no field is computed twice**.
 | `other_levers_on` | `session.efficiency`: every flag true other than the studied lever |
 | `lever_counter` | the lever's own gate number; section 6 |
 
+*Amended 2026-10-07 by feature 014 (T038; its `contracts/scoring.md` 3 and 8):* `compare` reads
+each `scorecard.json` through `scorecard.read_scorecard`, which reads `scoring_rules_version` before
+it validates anything, so a folder scored under other rules is refused with the command that
+re-scores it before any session is loaded or any record cross-checked. The `PackageScore` counts a
+row reads keep their fields, scored by 014's rules through its one matcher: `valid_findings` the
+demonstrated or suspected findings that credit a known defect, `missed_known_defects` the defects no
+finding matched, `false_alarms` every demonstrated or suspected finding that credits none, one
+contradicting a correct condition included, and `matched_defect_ids`, which the adoption rule reads,
+the detected defects. A study whose runs were scored against two versions of one package's key is
+refused, naming the package. The ledger's 014 columns are 014 `provenance.md` section 5's.
+
 **Null is null.** A token field whose session total is null is `null` in the ledger, never `0` and
 never omitted (RK-1). A median over a column containing nulls is computed over the non-null values
 **and the row count is stated beside it**; a worst case over a column containing nulls is `null`.
@@ -444,6 +455,12 @@ All of these run with no key and no seat, because every input is a file.
 18. `worst_case_defects_lost` is `null`, and its cell reads `unknown`, for an unstable control arm,
     for either refused precondition and for a baseline row; it is `0` only where the comparison
     ran and found nothing.
+19. (feature 014 T036) `compare` refuses a scorecard scored under another scoring-rules version, a
+    lower one with the line naming the command that re-scores it and a higher one naming the newer
+    build, before it loads a session or runs a parity check, and a malformed one naming the folder
+    and the field, never as a bare validation error (`tests/unit/test_scoring_rules_version.py`).
+20. (feature 014 T036, INT-16) `compare` refuses two runs of one study whose scorecards name two
+    `key_sha256` digests for one package's key, naming the package.
 
 ## 10. What the implementation settled (T037-T045)
 

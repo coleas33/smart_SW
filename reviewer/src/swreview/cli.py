@@ -96,7 +96,12 @@ from swreview.benchmark.runner import (
     sha256_of,
     write_provenance,
 )
-from swreview.benchmark.scorecard import render_scorecard_md, score_run
+from swreview.benchmark.scorecard import (
+    known_defect_count,
+    of_model_origin,
+    render_scorecard_md,
+    score_run,
+)
 from swreview.benchmark.sets import BenchmarkSet, load_set
 from swreview.benchmark.timing import record_timing, record_timing_at
 from swreview.chat import DEFAULT_ALLOW_ORIGIN, DEFAULT_RUN_ROOT
@@ -2391,9 +2396,13 @@ def benchmark_score(
         "aggregate": to_jsonable_python(aggregate),
     }
     lines = [
-        f"scored {aggregate.packages} packages of set {scorecard.benchmark_set}",
-        f"valid findings: {aggregate.valid_findings}, missed: {aggregate.missed_known_defects}, "
-        f"false alarms: {aggregate.false_alarms}, unresolved: {aggregate.unresolved_count}",
+        f"scored {aggregate.packages} packages of set {scorecard.benchmark_set} "
+        f"(scoring rules version {scorecard.scoring_rules_version})",
+        f"detected: {aggregate.detected} of {known_defect_count(scorecard)} "
+        f"(flagged {aggregate.flagged}; below expected {aggregate.flagged_below_expected}), "
+        f"cleared: {aggregate.cleared}, false alarms: {aggregate.false_alarms} "
+        f"({of_model_origin(aggregate.false_alarms_by_origin)} of model origin), "
+        f"unresolved: {aggregate.unresolved_count}",
         f"wrote {scorecard_json} and {scorecard_md}",
     ]
     _emit(payload, lines, json_output)

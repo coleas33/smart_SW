@@ -25,6 +25,7 @@ from typing import Annotated, Any, ClassVar, Literal, Self
 
 from pydantic import (
     Field,
+    PrivateAttr,
     StringConstraints,
     ValidationError,
     ValidatorFunctionWrapHandler,
@@ -448,6 +449,20 @@ class AnswerKey(ReviewModel):
     key_only: bool | None = None
     known_defects: list[KnownDefect] = Field(default_factory=list)
     correct_conditions: list[CorrectCondition] = Field(default_factory=list)
+
+    _ids_unchecked: str | None = PrivateAttr(default=None)
+
+    @property
+    def ids_unchecked(self) -> str | None:
+        """Why this key's ids were not resolved against a package, naming the package, or
+        `None` when they were (section 6). Set only by the key loader, through
+        `mark_ids_unchecked`, for a key-only key read with no package; never read from a file,
+        where `ids_unchecked` is an unknown field."""
+        return self._ids_unchecked
+
+    def mark_ids_unchecked(self, reason: str) -> None:
+        """Record why this key's ids were not checked (the loader's row 12)."""
+        self._ids_unchecked = reason
 
     @field_validator("key_only")
     @classmethod

@@ -5,19 +5,21 @@
   "description": "Result of running the reviewer over a benchmark set and scoring against withheld answer keys. Field rules: data-model.md section 3.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["run_id", "benchmark_set", "scored_at", "per_package", "aggregate", "distribution"],
+  "required": ["scoring_rules_version", "run_id", "benchmark_set", "scored_at", "per_package", "aggregate", "distribution", "key_sha256"],
   "properties": {
+    "scoring_rules_version": { "type": "integer", "minimum": 1, "description": "The scoring rules the scorecard was scored under (feature 014 scoring.md 8); read before the rest is validated, and a scorecard of another version is refused with the command that re-scores it. A scorecard without the field was scored under version 1" },
     "run_id": { "type": "string" },
     "benchmark_set": { "type": "string" },
     "scored_at": { "type": "string", "format": "date-time" },
     "per_package": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/PackageScore" } },
     "aggregate": { "$ref": "#/$defs/Aggregate" },
-    "distribution": { "type": "array", "items": { "type": ["number", "null"] }, "description": "net_saved_minutes per package, same order as per_package" }
+    "distribution": { "type": "array", "items": { "type": ["number", "null"] }, "description": "net_saved_minutes per package, same order as per_package" },
+    "key_sha256": { "type": "object", "additionalProperties": { "type": "string", "pattern": "^[0-9a-f]{64}$" }, "description": "Package id to the sha256 of its answer key file's raw bytes; compare refuses a study whose runs name two digests for one package's key (feature 014 INT-16)" }
   },
   "$defs": {
     "PackageScore": {
       "type": "object", "additionalProperties": false,
-      "required": ["package_id", "held_out", "session_id", "valid_findings", "missed_known_defects", "false_alarms", "unresolved_count", "baseline_minutes", "assisted_minutes", "unattended_runtime_minutes", "net_saved_minutes", "usage", "round_trips", "cached_input_share", "wall_clock_s", "seconds_to_first_finding", "carried_findings", "unresolved_because_withheld", "unresolved_other", "coverage_bucket_mix", "tool_calls_by_name", "matched_defect_ids", "missed_defect_ids", "false_alarm_finding_ids"],
+      "required": ["package_id", "held_out", "session_id", "valid_findings", "missed_known_defects", "false_alarms", "unresolved_count", "baseline_minutes", "assisted_minutes", "unattended_runtime_minutes", "net_saved_minutes", "usage", "round_trips", "cached_input_share", "wall_clock_s", "seconds_to_first_finding", "carried_findings", "unresolved_because_withheld", "unresolved_other", "coverage_bucket_mix", "tool_calls_by_name", "matched_defect_ids", "flagged_defect_ids", "status_mismatch_defect_ids", "flagged_below_expected_defect_ids", "cleared_defect_ids", "missed_defect_ids", "contradicted_condition_ids", "confirmed_condition_ids", "false_alarm_finding_ids", "finding_origins", "graded_items", "not_assessed"],
       "properties": {
         "package_id": { "type": "string" }, "held_out": { "type": "boolean" }, "session_id": { "type": "string" },
         "valid_findings": { "type": "integer", "minimum": 0 },
@@ -38,19 +40,51 @@
         "unresolved_other": { "type": "integer", "minimum": 0, "description": "Every other unresolved coverage item. Lever 4's gate is that this one must not rise. With unresolved_because_withheld it sums to coverage_bucket_mix.unresolved, never to unresolved_count, which counts findings (feature 005, FR-054)" },
         "coverage_bucket_mix": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 0 }, "description": "Coverage bucket to the number of items this run closed out in it; all five buckets are always present, zeros included, so two arms line up column for column. Lever 7 cannot be gated without it: a run that closed the checklist with skipped items looks efficient in every other column (feature 005, FR-074)" },
         "tool_calls_by_name": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 0 }, "description": "Tool name to the number of times this run called it, most called first; empty when the run called nothing. Read from session.steps, failed calls included, because the question is which tool the model picked (feature 005, T057)" },
-        "matched_defect_ids": { "type": "array", "items": { "type": "string" } },
-        "missed_defect_ids": { "type": "array", "items": { "type": "string" } },
-        "false_alarm_finding_ids": { "type": "array", "items": { "type": "string" } }
+        "matched_defect_ids": { "type": "array", "items": { "type": "string" }, "description": "Detected known defects, credited or flagged, in key order (feature 014 scoring.md 3.1)" },
+        "flagged_defect_ids": { "type": "array", "items": { "type": "string" }, "description": "Detected through an unresolved finding only, the defect expected unresolved; within matched_defect_ids" },
+        "status_mismatch_defect_ids": { "type": "array", "items": { "type": "string" }, "description": "Credited by a demonstrated or suspected finding while expected unresolved; within matched_defect_ids, outside flagged_defect_ids" },
+        "flagged_below_expected_defect_ids": { "type": "array", "items": { "type": "string" }, "description": "Met by an unresolved finding only while expected demonstrated or suspected: not detected, in no recall figure and never a false alarm (owner decision 13A)" },
+        "cleared_defect_ids": { "type": "array", "items": { "type": "string" }, "description": "Matched by a checked_within_scope finding, whatever else matched" },
+        "missed_defect_ids": { "type": "array", "items": { "type": "string" }, "description": "Known defects no finding matched at all" },
+        "contradicted_condition_ids": { "type": ["array", "null"], "items": { "type": "string" }, "description": "Correct conditions a demonstrated or suspected finding matched, in key order; null when the key holds none, its reason in not_assessed (feature 014 scoring.md 3.2)" },
+        "confirmed_condition_ids": { "type": ["array", "null"], "items": { "type": "string" }, "description": "Correct conditions a checked_within_scope finding matched; null when the key holds none" },
+        "false_alarm_finding_ids": { "type": "array", "items": { "type": "string" }, "description": "Demonstrated or suspected findings of the final state that credit no known defect, a contradicted condition's included, in session order" },
+        "finding_origins": { "type": "object", "additionalProperties": { "$ref": "#/$defs/Origin" }, "description": "Every final-state finding's origin, by finding id (feature 014 scoring.md 5.5)" },
+        "graded_items": { "type": "array", "items": { "$ref": "#/$defs/GradedItem" }, "description": "Every answer-key entry, in key order, as compare and the verdict read the key (feature 014 scoring.md 6)" },
+        "not_assessed": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Column name to why it is null, for every null column above and no other; never 0 (FR-021)" }
+      }
+    },
+    "Origin": {
+      "description": "Who decided a finding was worth recording, derived from the session (feature 014 scoring.md 5.1)",
+      "enum": ["prerun", "regrade", "code_only_call", "configured_check", "model", "carried", "setup", "unknown"]
+    },
+    "GradedItem": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "kind", "tag", "producer", "expected_status"],
+      "properties": {
+        "id": { "type": "string" },
+        "kind": { "enum": ["known_defect", "correct_condition"] },
+        "tag": { "enum": ["held_out", "tuned_on"] },
+        "producer": { "enum": ["code", "model", null], "description": "A known defect's; null for a correct condition" },
+        "expected_status": { "enum": ["demonstrated", "suspected", "unresolved", null], "description": "A known defect's; null for a correct condition" }
+      }
+    },
+    "RecallByTag": {
+      "type": "object", "additionalProperties": false,
+      "required": ["held_out", "tuned_on"],
+      "properties": {
+        "held_out": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "tuned_on": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
       }
     },
     "Aggregate": {
       "type": "object", "additionalProperties": false,
-      "required": ["packages", "held_out_packages", "valid_findings", "missed_known_defects", "false_alarms", "unresolved_count", "recall", "false_alarm_rate", "median_net_saved_minutes", "packages_with_timing", "input_tokens", "cached_input_tokens", "output_tokens", "reasoning_tokens", "total_tokens", "round_trips", "median_seconds_to_first_finding", "packages_with_usage"],
+      "required": ["packages", "held_out_packages", "valid_findings", "missed_known_defects", "false_alarms", "unresolved_count", "recall", "false_alarm_rate", "median_net_saved_minutes", "packages_with_timing", "input_tokens", "cached_input_tokens", "output_tokens", "reasoning_tokens", "total_tokens", "round_trips", "median_seconds_to_first_finding", "packages_with_usage", "detected", "flagged", "status_mismatches", "flagged_below_expected", "cleared", "contradictions", "confirmations", "findings_by_origin", "false_alarms_by_origin", "recall_by_producer", "held_out_model_defects"],
       "properties": {
         "packages": { "type": "integer", "minimum": 1 }, "held_out_packages": { "type": "integer", "minimum": 0 },
         "valid_findings": { "type": "integer", "minimum": 0 }, "missed_known_defects": { "type": "integer", "minimum": 0 },
         "false_alarms": { "type": "integer", "minimum": 0 }, "unresolved_count": { "type": "integer", "minimum": 0 },
-        "recall": { "type": ["number", "null"], "minimum": 0, "maximum": 1, "description": "matched / (matched + missed) over held-out packages; null if no known defects" },
+        "recall": { "type": ["number", "null"], "minimum": 0, "maximum": 1, "description": "Detected over all held-out known defects of both producers, read from the answer keys' item tags, never from the set's package flag (feature 014 scoring.md 6); null with no held-out known defect" },
         "false_alarm_rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1, "description": "false_alarms / (valid_findings + false_alarms); null if no findings" },
         "median_net_saved_minutes": { "type": ["number", "null"] },
         "packages_with_timing": { "type": "integer", "minimum": 0 },
@@ -61,7 +95,23 @@
         "total_tokens": { "type": ["integer", "null"], "minimum": 0, "description": "Summed over packages; null if any package contributed null, because a partial sum silently understates (feature 005)" },
         "round_trips": { "type": ["integer", "null"], "minimum": 0 },
         "median_seconds_to_first_finding": { "type": ["number", "null"], "minimum": 0 },
-        "packages_with_usage": { "type": "integer", "minimum": 0, "description": "How many packages contributed usage, mirroring packages_with_timing" }
+        "packages_with_usage": { "type": "integer", "minimum": 0, "description": "How many packages contributed usage, mirroring packages_with_timing" },
+        "detected": { "type": "integer", "minimum": 0 },
+        "flagged": { "type": "integer", "minimum": 0 },
+        "status_mismatches": { "type": "integer", "minimum": 0 },
+        "flagged_below_expected": { "type": "integer", "minimum": 0 },
+        "cleared": { "type": "integer", "minimum": 0, "description": "The per-package defect lists' lengths, summed (feature 014 scoring.md 7)" },
+        "contradictions": { "type": ["integer", "null"], "minimum": 0 },
+        "confirmations": { "type": ["integer", "null"], "minimum": 0, "description": "Summed over the packages whose key holds a correct condition; null when none does" },
+        "findings_by_origin": { "type": "object", "propertyNames": { "$ref": "#/$defs/Origin" }, "additionalProperties": { "type": "integer", "minimum": 0 } },
+        "false_alarms_by_origin": { "type": "object", "propertyNames": { "$ref": "#/$defs/Origin" }, "additionalProperties": { "type": "integer", "minimum": 0 }, "description": "Every origin, zeros included" },
+        "recall_by_producer": {
+          "type": "object", "additionalProperties": false,
+          "required": ["model", "code"],
+          "properties": { "model": { "$ref": "#/$defs/RecallByTag" }, "code": { "$ref": "#/$defs/RecallByTag" } },
+          "description": "Recall per producer and tag; a group with no known defect is null (feature 014 scoring.md 6)"
+        },
+        "held_out_model_defects": { "type": "integer", "minimum": 0, "description": "The held-out model-produced known defects every package's key names" }
       }
     },
     "TokenUsage": {

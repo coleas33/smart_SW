@@ -1,8 +1,8 @@
-"""The answer key's format 2, built in memory through its data-only model (T020, for T021).
+"""The answer key's format 2: its data-only model (T020, for T021) and its loader (T034, for T037).
 
 `benchmark/answer_key_model.py` is the format's one definition (`answer-key.md` 1 to 5; plan
-decisions RF-1, RF-67). These tests build `AnswerKey` from Python values with no loader
-imported, the generator's path, and pin the model's own rows of section 4:
+decisions RF-1, RF-67). The model's tests build `AnswerKey` from Python values, the generator's
+path, never through the loader, and pin the model's own rows of section 4:
 
 1. **Format and fields** (row 1). `key_format` is 2: a key without it was written before this
    feature and is refused with section 2.1's sentence; any other value is refused naming the
@@ -17,13 +17,19 @@ imported, the generator's path, and pin the model's own rows of section 4:
 4. **The two derivations** (`answer-key.md` 9's test 15): `holds_held_out()` and
    `held_out_model_defect_ids()`, the only ones there are.
 
-The loader's rows (2, 6's typo guard, 8 to 14) are T034's, in this file once the loader
-exists. Every id and description is fictional.
+The loader's tests (T034, at the end of the file) read key files through
+`answer_key.load_answer_key(path, *, package, checklist, words)`, the one reader (`answer-key.md` 1,
+4 and 6): every refusal an `AnswerKeyError` starting "answer key {file name}:" and naming the entry;
+the model's rows first, then row 2 (the stem), row 6's typo guard (every check under a report goal),
+row 8 (overlaps, through `benchmark/matching.py`), row 12 (key-only), and with the package row 13
+(ids resolve) and row 14 (references owned by the entry's parts and documents). Every id and
+description is fictional.
 """
 
 from __future__ import annotations
 
 import ast
+import json
 import sys
 from pathlib import Path
 from typing import Any, get_args
@@ -32,7 +38,8 @@ import pytest
 from pydantic import ValidationError
 
 from swreview import findings
-from swreview.benchmark import answer_key_model
+from swreview.agent.checklist import load_checklist
+from swreview.benchmark import answer_key, answer_key_model
 from swreview.benchmark.answer_key_model import (
     KEY_FORMAT,
     REFERENCE_KEYED_CHECKS,
@@ -50,6 +57,12 @@ from swreview.benchmark.answer_key_model import (
     is_family,
     pattern_covers,
 )
+from swreview.drawings import binding
+from swreview.ir.loader import load_package
+from swreview.ir.models import EvidencePackage
+from swreview.report.summary import load_words
+from swreview.tools.refs import resolve_dimension
+from tests.support.answer_keys import write_key
 
 FORMAT_1_SENTENCE = (
     "written in key format 1; rewrite it in format 2 "
@@ -1020,3 +1033,703 @@ def test_held_out_model_defect_ids_lists_held_out_model_defects_in_key_order() -
 
     assert built.holds_held_out() is True
     assert built.held_out_model_defect_ids() == ["D-4", "D-1"]
+
+
+# --- the loader (T034, for T037): `answer-key.md` 1, 4 and 6 -------------------------------------
+
+TESTS = Path(__file__).resolve().parents[1]
+
+SHAFT_BORE = load_package(TESTS / "golden" / "fixtures" / "shaft-bore").package
+"""`build_package`'s assembly with a drawing beside it: the housing `cmp:0001` holding the tapped
+hole `hole:1`, the cover `cmp:0002` holding the screw `fst:1`, and the drawing `doc:3`, whose
+Sheet1 carries two PDF-ingested dimensions, `DIM-BORE` and `DIM-SHAFT`."""
+
+PLATE = load_package(TESTS / "fixtures" / "drawings" / "plate-drawing").package
+"""A natively dumped drawing, `doc:0006`, whose Sheet1 holds the display dimensions `ddm:0001`
+and `ddm:0002`: native references, which resolve only once the seat validation is recorded."""
+
+CHECKLIST = load_checklist()
+WORDS = load_words()
+
+BORE = {"document_id": "doc:3", "sheet": "Sheet1", "annotation": "DIM-BORE"}
+SHAFT = {"document_id": "doc:3", "sheet": "Sheet1", "annotation": "DIM-SHAFT"}
+JOINT = {"fastener": "fst:1", "hole": "hole:1"}
+BOTH_PARTS = ["cmp:0001", "cmp:0002"]
+FOURTH_DIMENSION = {"document_id": "doc:0004", "sheet": "Sheet1", "annotation": "D6"}
+
+FORMAT_1_KEY: dict[str, Any] = {
+    "package_id": "cover-blind-tap",
+    "known_defects": [
+        {
+            "id": "D-1",
+            "check": "fastener.bottoming",
+            "component_ids": ["cmp:0003", "cmp:0004", "cmp:0005", "cmp:0006"],
+            "description": (
+                "M6 x 20 screws into holes drilled 14 deep with a 1.5 mm clamped stack: bottoming "
+                "risk. Expected pilot outcome: unresolved with an evidence request for usable "
+                "thread depth (not cleared, not demonstrated)."
+            ),
+        },
+        {
+            "id": "D-2",
+            "check": "drawing.manufacturing_inputs",
+            "component_ids": ["cmp:0001"],
+            "description": (
+                "Housing drawing specifies drill depth only for the tapped holes; usable thread "
+                "depth missing."
+            ),
+        },
+    ],
+    "correct_conditions": [
+        {
+            "check": "fit.size_only",
+            "component_ids": ["cmp:0001", "cmp:0002"],
+            "description": (
+                "Cover-to-housing locating spigot Ø40 H7/g6 is a correct clearance fit."
+            ),
+        }
+    ],
+}
+"""`benchmarks/answer_keys/cover-blind-tap.json` as committed at `be01974`, a key in format 1:
+copied here rather than read from the tree, which T040 rewrites in format 2."""
+
+
+def load(path: Path, package: EvidencePackage | None = SHAFT_BORE) -> AnswerKey:
+    """`path` read through the loader against `package`, with the checklist and the words."""
+    return answer_key.load_answer_key(path, package=package, checklist=CHECKLIST, words=WORDS)
+
+
+def load_refusal(path: Path, package: EvidencePackage | None = SHAFT_BORE) -> str:
+    """The loader's refusal of `path`: an `AnswerKeyError` starting with the file's name."""
+    with pytest.raises(answer_key.AnswerKeyError) as caught:
+        load(path, package)
+    message = str(caught.value)
+    assert message.startswith(f"answer key {path.name}: "), message
+    return message
+
+
+def written(directory: Path, payload: dict[str, Any], name: str | None = None) -> Path:
+    """`payload` written as it is, for a key `write_key` cannot build: one the model refuses."""
+    path = directory / f"{name or payload['package_id']}.json"
+    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    return path
+
+
+def resolve_refusal(package: EvidencePackage, reference: dict[str, str]) -> str:
+    """What `tools/refs.resolve_dimension` says when it refuses `reference` in `package`."""
+    with pytest.raises(LookupError) as caught:
+        resolve_dimension(package, reference)
+    return str(caught.value)
+
+
+def fit_condition(bore: dict[str, str], shaft: dict[str, str], **fields: Any) -> dict[str, Any]:
+    """A `fit.size_only` correct condition on the housing, keyed to `bore` and `shaft`."""
+    return {
+        "check": "fit.size_only",
+        "component_ids": ["cmp:0001"],
+        "document_ids": [bore["document_id"]],
+        "references": [{"bore": bore, "shaft": shaft}],
+        **fields,
+    }
+
+
+# --- row 1: the file, the format and the model's rows ----------------------------------------
+
+
+def test_an_answer_key_error_is_a_value_error() -> None:
+    """The command line turns a `ValueError` into one line and exit 1 (`cli.py:260-269`)."""
+    assert issubclass(answer_key.AnswerKeyError, ValueError)
+
+
+def test_a_key_in_format_1_is_refused_with_section_2_1_s_sentence(tmp_path: Path) -> None:
+    path = written(tmp_path, FORMAT_1_KEY)
+
+    assert load_refusal(path, None) == f"answer key cover-blind-tap.json: {FORMAT_1_SENTENCE}"
+
+
+def test_a_format_2_key_with_defects_and_conditions_loads_against_its_package(
+    tmp_path: Path,
+) -> None:
+    path = write_key(
+        tmp_path,
+        "fict-key-a",
+        known_defects=[
+            {
+                "check": "fastener.bottoming",
+                "component_ids": BOTH_PARTS,
+                "references": [JOINT],
+                "expected_status": "unresolved",
+            },
+            {"check": "drawing.manufacturing_inputs", "document_ids": ["doc:3"]},
+        ],
+        correct_conditions=[fit_condition(BORE, SHAFT)],
+    )
+
+    loaded = load(path)
+
+    assert [defect.id for defect in loaded.known_defects] == ["D-1", "D-2"]
+    assert [condition.id for condition in loaded.correct_conditions] == ["C-1"]
+    assert loaded.known_defects[0].references == [JointReference(**JOINT)]
+    assert loaded.ids_unchecked is None
+
+
+def test_a_file_that_is_not_json_is_refused(tmp_path: Path) -> None:
+    path = tmp_path / "fict-key-a.json"
+    path.write_text('{"key_format": 2,', encoding="utf-8")
+
+    assert load_refusal(path).startswith("answer key fict-key-a.json: not JSON")
+
+
+def test_a_model_row_s_refusal_is_re_raised_naming_the_entry(tmp_path: Path) -> None:
+    path = written(tmp_path, key([without(defect(id="D-3"), "expected_status")]))
+
+    assert load_refusal(path) == "answer key fict-key-a.json: D-3 states no expected_status"
+
+
+def test_the_loader_refuses_an_unknown_field_at_the_key_naming_it(tmp_path: Path) -> None:
+    path = written(tmp_path, key(surplus=True))
+
+    assert load_refusal(path) == (
+        "answer key fict-key-a.json: surplus: Extra inputs are not permitted"
+    )
+
+
+# --- row 2: the stem (its set half is slice 4's, T118 and T120) ------------------------------
+
+
+def test_a_package_id_that_differs_from_the_file_s_stem_is_refused_naming_both(
+    tmp_path: Path,
+) -> None:
+    path = write_key(tmp_path, "fict-key-a").rename(tmp_path / "fict-key-b.json")
+
+    assert load_refusal(path) == (
+        "answer key fict-key-b.json: package_id fict-key-a differs from the file's stem "
+        "fict-key-b"
+    )
+
+
+def test_the_model_s_rows_run_before_row_2(tmp_path: Path) -> None:
+    """Test 14's order (RF-1): a repeated id and a mismatched stem, named by the repeated id."""
+    path = written(
+        tmp_path,
+        key([defect(id="D-3"), defect(id="D-3", component_ids=["cmp:0002"])]),
+        name="fict-key-b",
+    )
+
+    assert load_refusal(path) == (
+        "answer key fict-key-b.json: D-3 names two entries; an id is unique across the key"
+    )
+
+
+# --- row 6: the typo guard (AK-6) ------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "pattern",
+    [
+        "hygeine.*",
+        "hygeine.revision_present",
+        "rms_.*",
+        # A family's id is read with its trailing dot: `fasteners` is a goal's item, while
+        # `fasteners.` starts with no goal's prefix.
+        "fasteners.*",
+    ],
+)
+@pytest.mark.parametrize("entries", ["known_defects", "correct_conditions"])
+def test_a_check_under_no_report_goal_is_refused_naming_the_entry_and_the_pattern(
+    tmp_path: Path, pattern: str, entries: str
+) -> None:
+    path = write_key(
+        tmp_path, "fict-key-a", **{entries: [{"check": pattern, "component_ids": ["cmp:0001"]}]}
+    )
+    named = "D-1" if entries == "known_defects" else "C-1"
+
+    assert load_refusal(path) == (
+        f"answer key fict-key-a.json: {named} checks {pattern}, which falls under no goal of the "
+        "report's words file, so it would grade nothing: a typo? (answer-key.md 3)"
+    )
+
+
+@pytest.mark.parametrize(
+    "pattern",
+    [
+        "hygiene.*",
+        "hygiene.revision_present",
+        "rms.sketches.*",
+        "fastener.head.*",
+        "drawing.manufacturing_inputs",
+        "fasteners",
+    ],
+)
+def test_a_check_under_a_report_goal_loads(tmp_path: Path, pattern: str) -> None:
+    path = write_key(
+        tmp_path,
+        "fict-key-a",
+        known_defects=[{"check": pattern, "component_ids": ["cmp:0001"]}],
+        correct_conditions=[{"check": pattern, "component_ids": ["cmp:0002"]}],
+    )
+
+    assert load(path).known_defects[0].check == pattern
+
+
+# --- row 8: overlaps, through the matcher's primitives (US1-15, SC-002) ----------------------
+#
+# Key-only keys read with no package, so rows 13 and 14 do not run: an overlap is a property of
+# two entries, whatever package they are keyed to.
+
+FIRST_SCREW = {"fastener": "fst:0001", "hole": "hol:0001"}
+SECOND_SCREW = {"fastener": "fst:0002", "hole": "hol:0002"}
+
+
+@pytest.mark.parametrize(
+    ("known_defects", "correct_conditions", "first", "second"),
+    [
+        pytest.param(
+            [{"check": "hygiene.*", "component_ids": BOTH_PARTS}],
+            [{"check": "hygiene.revision_present", "component_ids": ["cmp:0002"]}],
+            "D-1",
+            "C-1",
+            id="a hygiene.* defect and a hygiene.revision_present condition on one part",
+        ),
+        pytest.param(
+            [
+                {
+                    "check": "fastener.bottoming",
+                    "component_ids": BOTH_PARTS,
+                    "references": [FIRST_SCREW],
+                },
+                {
+                    "check": "fastener.bottoming",
+                    "component_ids": BOTH_PARTS,
+                    "references": [SECOND_SCREW, FIRST_SCREW],
+                },
+            ],
+            [],
+            "D-1",
+            "D-2",
+            id="two bottoming defects covering one joint",
+        ),
+        pytest.param(
+            [
+                {"check": "rms.*", "component_ids": ["cmp:0001"]},
+                {"check": "rms.sketches.*", "component_ids": ["cmp:0001"]},
+            ],
+            [],
+            "D-1",
+            "D-2",
+            id="rms.* and rms.sketches.* defects on one part",
+        ),
+        pytest.param(
+            [{"check": "hygiene.revision_present", "component_ids": ["cmp:0001"]}],
+            [{"check": "hygiene.*", "component_ids": ["cmp:0001"]}],
+            "D-1",
+            "C-1",
+            id="a family condition against an exact defect it covers",
+        ),
+        pytest.param(
+            [
+                {
+                    "check": "hygiene.revision_present",
+                    "component_ids": ["cmp:0001"],
+                    "document_ids": ["doc:2"],
+                },
+                {
+                    "check": "hygiene.revision_present",
+                    "component_ids": ["cmp:0002"],
+                    "document_ids": ["doc:2"],
+                },
+            ],
+            [],
+            "D-1",
+            "D-2",
+            id="two entries sharing only a document",
+        ),
+    ],
+)
+def test_two_entries_that_overlap_are_refused_naming_both(
+    tmp_path: Path,
+    known_defects: list[dict[str, Any]],
+    correct_conditions: list[dict[str, Any]],
+    first: str,
+    second: str,
+) -> None:
+    path = write_key(
+        tmp_path,
+        "fict-key-a",
+        known_defects=known_defects,
+        correct_conditions=correct_conditions,
+        key_only=True,
+    )
+
+    assert load_refusal(path, None) == (
+        f"answer key fict-key-a.json: {first} and {second} overlap: one finding could match "
+        "both (answer-key.md 5)"
+    )
+
+
+@pytest.mark.parametrize(
+    ("known_defects", "correct_conditions"),
+    [
+        pytest.param(
+            [
+                {
+                    "check": "fastener.thread_match",
+                    "component_ids": BOTH_PARTS,
+                    "references": [FIRST_SCREW],
+                },
+                {
+                    "check": "fastener.thread_match",
+                    "component_ids": BOTH_PARTS,
+                    "references": [SECOND_SCREW],
+                },
+            ],
+            [],
+            id="two thread-match defects on different pairs between the same parts",
+        ),
+        pytest.param(
+            [
+                {
+                    "check": "fit.size_only",
+                    "document_ids": ["doc:0004"],
+                    "references": [{"bore": SHEET_DIMENSION, "shaft": OTHER_DIMENSION}],
+                },
+            ],
+            [
+                {
+                    "check": "fit.size_only",
+                    "document_ids": ["doc:0004"],
+                    "references": [{"bore": THIRD_DIMENSION, "shaft": FOURTH_DIMENSION}],
+                },
+            ],
+            id="a fit defect and a fit condition on one sheet with different dimension pairs",
+        ),
+        pytest.param(
+            [
+                {"check": "fastener.head", "component_ids": ["cmp:0001"]},
+                {"check": "fastener.head.*", "component_ids": ["cmp:0001"]},
+            ],
+            [],
+            id="fastener.head beside the family fastener.head.*",
+        ),
+        pytest.param(
+            [{"check": "hygiene.revision_present", "component_ids": ["cmp:0001"]}],
+            [{"check": "hygiene.revision_present", "component_ids": ["cmp:0002"]}],
+            id="one check on two parts",
+        ),
+    ],
+)
+def test_entries_that_do_not_overlap_load(
+    tmp_path: Path,
+    known_defects: list[dict[str, Any]],
+    correct_conditions: list[dict[str, Any]],
+) -> None:
+    path = write_key(
+        tmp_path,
+        "fict-key-a",
+        known_defects=known_defects,
+        correct_conditions=correct_conditions,
+        key_only=True,
+    )
+
+    assert len(load(path, None).known_defects) == len(known_defects)
+
+
+# --- row 12: key-only keys (section 6; US1-16, AK-3) -----------------------------------------
+
+RMS_PART_SHAPED: dict[str, Any] = {
+    "known_defects": [
+        {
+            "check": "rms.grouping.all_features_in_a_group",
+            "component_ids": ["cmp:0002"],
+            "producer": "code",
+            "expected_status": "suspected",
+        },
+        {
+            "check": "rms.core.shell_last",
+            "component_ids": ["cmp:0007"],
+            "producer": "code",
+            "expected_status": "demonstrated",
+        },
+    ],
+    "correct_conditions": [{"check": "rms.folders.present", "component_ids": ["cmp:0009"]}],
+}
+"""A key shaped as `rms-part`'s: code-produced RMS defects and conditions on parts, its ids
+naming parts no package on disk holds."""
+
+
+def test_a_key_only_key_with_no_package_loads_with_its_ids_unchecked_naming_the_package(
+    tmp_path: Path,
+) -> None:
+    path = write_key(tmp_path, "fict-rms-part", key_only=True, **RMS_PART_SHAPED)
+
+    loaded = load(path, None)
+
+    assert loaded.key_only is True
+    assert loaded.ids_unchecked == (
+        "the package fict-rms-part is not built, so this key's ids were not checked against "
+        "it (answer-key.md 6)"
+    )
+
+
+def test_ids_unchecked_is_never_read_from_the_file(tmp_path: Path) -> None:
+    path = written(tmp_path, key(key_only=True, ids_unchecked="nothing to check"))
+
+    assert "ids_unchecked: Extra inputs are not permitted" in load_refusal(path, None)
+
+
+def test_a_key_only_key_whose_package_now_exists_is_refused(tmp_path: Path) -> None:
+    path = write_key(tmp_path, "fict-rms-part", key_only=True, **RMS_PART_SHAPED)
+
+    assert load_refusal(path) == (
+        "answer key fict-rms-part.json: the package now exists; remove key_only so its ids "
+        "are checked"
+    )
+
+
+def test_a_key_without_the_marker_whose_package_is_missing_is_refused_naming_it(
+    tmp_path: Path,
+) -> None:
+    path = write_key(tmp_path, "fict-rms-part", **RMS_PART_SHAPED)
+
+    assert load_refusal(path, None) == (
+        "answer key fict-rms-part.json: the package fict-rms-part is missing, and the key is "
+        'not marked "key_only": true; a missing package is never read as an unbuilt one '
+        "(answer-key.md 6)"
+    )
+
+
+# --- row 13: ids resolve against the package (FR-009) ----------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("entry", "reason"),
+    [
+        pytest.param(
+            {"check": "hygiene.revision_present", "component_ids": ["cmp:0009"]},
+            "D-1 names the component cmp:0009, which is not in the package",
+            id="an unknown component",
+        ),
+        pytest.param(
+            {
+                "check": "hygiene.revision_present",
+                "component_ids": ["cmp:0001"],
+                "document_ids": ["doc:9"],
+            },
+            "D-1 names the document doc:9, which is not in the package",
+            id="an unknown document",
+        ),
+        pytest.param(
+            # A document id is not a component id, as `ToolContext.entity_kind` reads it.
+            {"check": "hygiene.revision_present", "component_ids": ["doc:2"]},
+            "D-1 names the component doc:2, which is not in the package",
+            id="a document named as a component",
+        ),
+        pytest.param(
+            {
+                "check": "fastener.bottoming",
+                "component_ids": BOTH_PARTS,
+                "references": [{"fastener": "fst:1", "hole": "hole:9"}],
+            },
+            "D-1 names the hole hole:9, which is not in the package",
+            id="an unknown hole",
+        ),
+        pytest.param(
+            {
+                "check": "fastener.bottoming",
+                "component_ids": BOTH_PARTS,
+                "references": [{"fastener": "fst:9", "hole": "hole:1"}],
+            },
+            "D-1 names the fastener fst:9, which is not in the package",
+            id="an unknown fastener",
+        ),
+        pytest.param(
+            {
+                "check": "hole.coaxiality",
+                "component_ids": BOTH_PARTS,
+                "references": [{"holes": ["hole:1", "fst:1"]}],
+            },
+            "D-1 names the hole fst:1, which is not in the package",
+            id="a fastener named as a hole",
+        ),
+        pytest.param(
+            {
+                "check": "fastener.head_fit",
+                "component_ids": ["cmp:0001"],
+                "references": [{"recess": "hole:9#1"}],
+            },
+            "D-1 names the hole instance hole:9#1, whose hole hole:9 is not in the package",
+            id="a hole instance with an unknown hole id",
+        ),
+        pytest.param(
+            {
+                "check": "hole.nominal_alignment",
+                "component_ids": ["cmp:0001"],
+                "references": [{"hole_instances": ["hole:1#0"]}],
+            },
+            "D-1 names the hole instance hole:1#0, which is not <hole id>#<n> with n a whole "
+            "number from 1",
+            id="a hole instance with the suffix #0",
+        ),
+        pytest.param(
+            {
+                "check": "fastener.head_fit",
+                "component_ids": ["cmp:0001"],
+                "references": [{"recess": "hole:1"}],
+            },
+            "D-1 names the hole instance hole:1, which is not <hole id>#<n> with n a whole "
+            "number from 1",
+            id="a hole instance with no suffix",
+        ),
+    ],
+)
+def test_an_id_the_package_does_not_hold_is_refused_naming_the_entry_and_the_id(
+    tmp_path: Path, entry: dict[str, Any], reason: str
+) -> None:
+    path = write_key(tmp_path, "fict-key-a", known_defects=[entry])
+
+    assert load_refusal(path) == f"answer key fict-key-a.json: {reason}"
+
+
+def test_a_dimension_reference_naming_nothing_is_refused_with_resolve_dimension_s_message(
+    tmp_path: Path,
+) -> None:
+    nothing = {**BORE, "annotation": "DIM-NONE"}
+    path = write_key(tmp_path, "fict-key-a", correct_conditions=[fit_condition(nothing, SHAFT)])
+
+    message = load_refusal(path)
+
+    assert message.startswith("answer key fict-key-a.json: C-1 ")
+    assert message.endswith(resolve_refusal(SHAFT_BORE, nothing))
+
+
+def test_a_dimension_reference_naming_two_dimensions_is_refused_with_its_message(
+    tmp_path: Path,
+) -> None:
+    doubled = SHAFT_BORE.model_copy(update={"drawings": [*SHAFT_BORE.drawings] * 2})
+    path = write_key(tmp_path, "fict-key-a", correct_conditions=[fit_condition(BORE, SHAFT)])
+
+    message = load_refusal(path, doubled)
+
+    assert message.startswith("answer key fict-key-a.json: C-1 ")
+    assert message.endswith(resolve_refusal(doubled, BORE))
+    assert "ambiguous" in message
+
+
+def test_a_native_dimension_reference_is_refused_while_the_seat_validation_is_not_recorded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(binding, "DRAWING_BINDING_VALIDATED", False)
+    bore = {"document_id": "doc:0006", "sheet": "Sheet1", "annotation": "ddm:0001"}
+    shaft = {"document_id": "doc:0006", "sheet": "Sheet1", "annotation": "ddm:0002"}
+    path = write_key(tmp_path, "fict-key-a", correct_conditions=[fit_condition(bore, shaft)])
+
+    message = load_refusal(path, PLATE)
+
+    assert message.startswith("answer key fict-key-a.json: C-1 ")
+    assert message.endswith(resolve_refusal(PLATE, bore))
+    assert binding.NOT_VALIDATED in message
+
+
+# --- row 14: references owned by the entry's parts and documents (FR-003) --------------------
+
+
+@pytest.mark.parametrize(
+    ("entry", "reason"),
+    [
+        pytest.param(
+            {"check": "fastener.bottoming", "component_ids": ["cmp:0002"], "references": [JOINT]},
+            "D-1 references the hole hole:1, whose component cmp:0001 it does not name in "
+            "component_ids",
+            id="a hole whose component the entry does not name",
+        ),
+        pytest.param(
+            {"check": "fastener.bottoming", "component_ids": ["cmp:0001"], "references": [JOINT]},
+            "D-1 references the fastener fst:1, whose component cmp:0002 it does not name in "
+            "component_ids",
+            id="a fastener whose component the entry does not name",
+        ),
+        pytest.param(
+            {
+                "check": "fastener.head_fit",
+                "component_ids": ["cmp:0002"],
+                "references": [{"recess": "hole:1#1"}],
+            },
+            "D-1 references the hole instance hole:1#1, whose component cmp:0001 it does not "
+            "name in component_ids",
+            id="a hole instance whose component the entry does not name",
+        ),
+        pytest.param(
+            {
+                "check": "fit.size_only",
+                "component_ids": ["cmp:0001"],
+                "document_ids": ["doc:2"],
+                "references": [{"bore": BORE, "shaft": SHAFT}],
+            },
+            "D-1 references the dimension doc:3 Sheet1 DIM-BORE, whose document doc:3 it does "
+            "not name in document_ids",
+            id="a dimension on a document the entry does not name",
+        ),
+    ],
+)
+def test_a_reference_whose_owner_the_entry_does_not_name_is_refused(
+    tmp_path: Path, entry: dict[str, Any], reason: str
+) -> None:
+    path = write_key(tmp_path, "fict-key-a", known_defects=[entry])
+
+    assert load_refusal(path) == f"answer key fict-key-a.json: {reason}"
+
+
+# --- the order of the loader's rows: the first failing row ends the load ---------------------
+
+
+def test_the_stem_is_named_before_a_typo(tmp_path: Path) -> None:
+    path = write_key(
+        tmp_path,
+        "fict-key-a",
+        known_defects=[{"check": "hygeine.*", "component_ids": ["cmp:0001"]}],
+    ).rename(tmp_path / "fict-key-b.json")
+
+    assert "differs from the file's stem" in load_refusal(path)
+
+
+def test_a_typo_is_named_before_an_overlap(tmp_path: Path) -> None:
+    path = write_key(
+        tmp_path,
+        "fict-key-a",
+        known_defects=[
+            {"check": "hygiene.*", "component_ids": ["cmp:0001"]},
+            {"check": "hygiene.revision_present", "component_ids": ["cmp:0001"]},
+            {"check": "hygeine.*", "component_ids": ["cmp:0002"]},
+        ],
+    )
+
+    assert "D-3 checks hygeine.*" in load_refusal(path)
+
+
+def test_an_overlap_is_named_before_the_package_s_rows(tmp_path: Path) -> None:
+    path = write_key(
+        tmp_path,
+        "fict-key-a",
+        known_defects=[
+            {"check": "hygiene.*", "component_ids": ["cmp:0009"]},
+            {"check": "hygiene.revision_present", "component_ids": ["cmp:0009"]},
+        ],
+    )
+
+    assert "D-1 and D-2 overlap" in load_refusal(path)
+
+
+def test_an_unknown_id_is_named_before_an_unowned_reference(tmp_path: Path) -> None:
+    path = write_key(
+        tmp_path,
+        "fict-key-a",
+        known_defects=[
+            {"check": "fastener.bottoming", "component_ids": ["cmp:0002"], "references": [JOINT]},
+            {"check": "hygiene.revision_present", "component_ids": ["cmp:0009"]},
+        ],
+    )
+
+    assert load_refusal(path) == (
+        "answer key fict-key-a.json: D-2 names the component cmp:0009, which is not in the "
+        "package"
+    )
