@@ -85,7 +85,7 @@ from swreview.report.attention import (
     start_here_lines,
 )
 from swreview.report.names import plural
-from swreview.report.session import Contact, CoverageItem, CoverageScope
+from swreview.report.session import Contact, CoverageItem, CoverageScope, StepMark
 from swreview.tools import checks_mechanical
 from swreview.tools.checks_interference import groups_of
 from swreview.tools.context import ToolContext
@@ -1194,8 +1194,10 @@ def _prerun_call(
     arguments: Mapping[str, Any],
     number: int,
 ) -> PrerunCall:
-    """One pre-run call: `recorded_call` under the pre-run's own call id."""
-    return recorded_call(context, tools, name, arguments, call_id=f"prerun_{number + 1}")
+    """One pre-run call: `recorded_call` under the pre-run's own call id and mark."""
+    return recorded_call(
+        context, tools, name, arguments, call_id=f"prerun_{number + 1}", mark="prerun"
+    )
 
 
 def recorded_call(
@@ -1205,6 +1207,7 @@ def recorded_call(
     arguments: Mapping[str, Any],
     *,
     call_id: str,
+    mark: StepMark,
 ) -> PrerunCall:
     """One call through the dispatch, with the events around it, as the session recorded it.
 
@@ -1213,6 +1216,11 @@ def recorded_call(
     reloaded (`agent/runner.ReviewRun.answer_evidence_batch`). Either way the call is one real
     step - its events, its findings' `tool_result_ids` and its tool-results file all the
     session's - numbered from the session's own step count.
+
+    `mark` says which code made the call: `prerun` from `_prerun_call`, `regrade` from
+    `ReviewRun._restate` (feature 014, `contracts/scoring.md` section 5.2). After the call
+    returns, each step it appended is replaced by a copy carrying the mark, so the events and
+    the stored result, written during the call, are unchanged; only `session.json` carries it.
     """
     session = context.require_session()
     before = len(session.findings)
@@ -1225,6 +1233,9 @@ def recorded_call(
         step_index=step_index,
         clock=perf_counter,
     )
+    session.steps[step_index:] = [
+        step.model_copy(update={"origin_mark": mark}) for step in session.steps[step_index:]
+    ]
     return PrerunCall(
         tool=name,
         arguments=dict(arguments),

@@ -1,6 +1,6 @@
 # Contract: The Replay
 
-*Amended 2026-09-29 by feature 014 (`specs/014-design-review-eval/`), in scoring.md sections 5 and 10, provenance.md section 6; the amendment text lands with the 014 task that changes the code:* the replay fixtures regenerate for 19A's check, the origin marks and D12.
+*Amended 2026-09-29 by feature 014 (`specs/014-design-review-eval/`), in scoring.md sections 5 and 10, provenance.md section 6; the amendment text lands with the 014 task that changes the code, 19A's and the origin marks' landed 2026-10-07 (014 T028, T031; section 8, last paragraph):* the replay fixtures regenerate for 19A's check, the origin marks and D12.
 
 *Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed for User Stories 1 to 6 (013 T042, T058, T069, T095, T115, T124; section 9's rows "Feature 013 US1" to "Feature 013 US2") the follow-ups (013 T158, the row "Feature 013 follow-ups") and User Story 7 (013 T134, the row "Feature 013 US7"; its question T134-Q1 answered by a default taken 2026-09-27, section 5's tree-reading clause, built by 013 T145-T146; its question T134-Q2, the Standards sketch check's findings, answered by a default taken 2026-09-27, section 5's clause read for every check that reads the tree):* every change of feature 013 that moves what the model reads passes the replay gate and records a re-measured section 9 row; see 013 `contracts/tokens.md` section 5.
 
@@ -710,6 +710,22 @@ never narrowed. *Amended 2026-09-27 (013 T134-Q2; default taken 2026-09-27, the 
 but for `standards.part.sketches_fully_defined`, the one Standards check that reads the shared tree,
 which narrows by the tree-reading clause alone (section 5), through the same `compare_finding_keys`,
 and is counted in the same `N`; every other `standards.*` finding is still never narrowed.
+
+*Amended 2026-10-07 by feature 014 (014 T028 and T031; 014 `contracts/scoring.md` sections 5.2
+and 10, plan decision RF-27): 19A's check, then the origin marks.* Reading "byte-identical" as
+013 T159 read it, with the session ids, timestamps and elapsed times each generation mints set
+aside: 19A's references on every fastener and alignment result moved no fixture byte, since the
+three recordings call no fastener rule and no joint map, only `list_fasteners` and
+`check_hole_alignment`; the generator, run with the three commands above, wrote the committed
+fixtures again and they were restored, so 19A committed none (014 T028). The origin marks then
+regenerated them, because `start_review` writes `"origin_marks": 1` on every new session: the only
+difference is that one member in each `session.json`, every `package.json` and `events.jsonl`
+is otherwise unchanged, and no step is marked, since none of the three recordings runs the
+pre-run or answers a question (014 T031, which commits the generator's output as written). The
+pane fixture is `review_snapshot`, which carries no session-level field, so it is not
+regenerated and `test_pane_fixture.py` passes unchanged. Neither change moves what the model
+reads, so neither takes a freeze or adds a section 9 row: the generator printed 3, 2 and 0
+reclassified as contacts and 29, 4 and 3 narrowed, as in the row "Feature 013 US7".
 
 ## 9. The acceptance each story cites
 

@@ -1,6 +1,6 @@
 # Contracts: SOLIDWORKS Agentic Design Review Pilot
 
-*Amended 2026-09-29 by feature 014 (`specs/014-design-review-eval/`), in scoring.md sections 5 and 7; the amendment text lands with the 014 task that changes the code:* `review-session.schema.json` gains `origin_mark` on `InvestigationStep` and `origin_marks` on `ReviewSession`; `scorecard.schema.json` gains the 014 scorecard fields (the JSON carries no note).
+*Amended 2026-09-29 by feature 014 (`specs/014-design-review-eval/`), in scoring.md sections 5 and 7; the amendment text lands with the 014 task that changes the code, the session schema's landed 2026-10-07 (014 T030):* `review-session.schema.json` gains `origin_mark` on `InvestigationStep` (`prerun` or `regrade`, omitted on a step the model asked for) and `origin_marks` on `ReviewSession` (1, written on every new session), both optional, left out of `required` and omitted when absent, so older sessions still validate and keep their bytes; `scorecard.schema.json` gains the 014 scorecard fields (the JSON carries no note).
 
 *Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed by 2026-09-27 (013 T007, T077):* `review-session.schema.json` gains optional `allow_text` and `source` on `EvidenceRequest`, `source` on `Finding` and `CoverageItem`, and `drawing_read` on the session, each omitted at its default; see 013 `contracts/sources.md` and `data-model.md` section 3.
 

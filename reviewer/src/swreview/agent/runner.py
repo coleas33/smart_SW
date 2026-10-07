@@ -116,6 +116,7 @@ from swreview.report.explanations import (
 from swreview.report.names import plural
 from swreview.report.session import (
     CLOSEOUT_CHECK,
+    ORIGIN_MARKS_VERSION,
     CoverageBucket,
     CoverageItem,
     CoverageScope,
@@ -1233,12 +1234,12 @@ class ReviewRun:
         dispatch holds it and the session already ran it: restating supersedes the call it
         restates, and a check nobody ran has nothing to supersede.
 
-        Each is one recorded step through the registry's dispatch - exactly as the pre-run
-        calls it, its coverage restated rather than added to and its findings citing this step
-        (feature 011 found this for the drawing check after a confirmed read, 2026-09-23). The
-        pre-run's guard answers a repeat from it, and the adapter numbers the resumed turn's
-        calls after it. Then `_reconcile_restated` folds and withdraws. Returns every
-        withdrawn finding's `(id, reason)`, in session order.
+        Each is one recorded step through the registry's dispatch, marked `regrade` (feature
+        014) - exactly as the pre-run calls it, its coverage restated rather than added to and
+        its findings citing this step (feature 011 found this for the drawing check after a
+        confirmed read, 2026-09-23). The pre-run's guard answers a repeat from it, and the
+        adapter numbers the resumed turn's calls after it. Then `_reconcile_restated` folds and
+        withdraws. Returns every withdrawn finding's `(id, reason)`, in session order.
         """
         dispatch = self._dispatch
         if dispatch is None or not reasons:
@@ -1256,7 +1257,9 @@ class ReviewRun:
         restated_steps = {step.index: step.tool for step in session.steps if step.tool in tools}
         calls = []
         for name in tools:
-            call = recorded_call(self.context, dispatch, name, {}, call_id=f"restated_{name}")
+            call = recorded_call(
+                self.context, dispatch, name, {}, call_id=f"restated_{name}", mark="regrade"
+            )
             if self._prerun_guard is not None:
                 self._prerun_guard.answer_repeats_with(call)
             calls.append(call)
@@ -1619,6 +1622,9 @@ def start_review(
         )
         session.retry_of = UUID(str(retry_of)) if retry_of is not None else None
         session.efficiency = efficiency if efficiency is not None else EfficiencySettings()
+        # Feature 014 (`contracts/scoring.md` section 5.2): every new session says its steps
+        # carry their origin marks, whatever the levers; a session without it predates them.
+        session.origin_marks = ORIGIN_MARKS_VERSION
         session.model_view = model_view if model_view is not None else MODEL_VIEW_OFF
         if isinstance(provider, ModelViewAware):
             # Feature 008, read once, here, like lever 3's cache key: the settings the
