@@ -18,6 +18,7 @@ fictional strings, so this module pins three things:
 
 from __future__ import annotations
 
+import ast
 import math
 import sys
 from collections import Counter
@@ -37,6 +38,7 @@ from tests.support.mechanical import (
     Face,
     Instance,
     PackageBuilder,
+    as_committed,
     screw_description,
     screw_file_name,
 )
@@ -263,15 +265,39 @@ def test_re_running_the_generator_reproduces_every_committed_fixture_byte_for_by
     assert drifted == [], "regenerate with generate_fixtures.py; never edit a fixture by hand"
 
 
-def as_committed(path: Path) -> bytes:
-    """A fixture file's bytes as git stores them.
+@pytest.mark.parametrize("name", ["package.json", "joint-ok.yml"])
+def test_as_committed_reads_a_text_files_crlf_as_lf_and_keeps_every_other_byte(
+    tmp_path: Path, name: str
+) -> None:
+    """A Windows checkout under `core.autocrlf` hands a text file back with CRLF where git stores
+    LF. Only the pair is folded: an LF already there and a lone CR stay, as git keeps them."""
+    path = tmp_path / name
+    path.write_bytes(b"first\r\nsecond\nthird\rfourth\r\n")
 
-    `.gitattributes` marks `*.json` as text, so a Windows checkout with `core.autocrlf` may
-    hand the file back with CRLF endings; the generator writes LF, which is what the blob
-    holds. A GLB is binary and compared untouched.
-    """
-    content = path.read_bytes()
-    return content if path.suffix == ".glb" else content.replace(b"\r\n", b"\n")
+    assert mechanical.as_committed(path) == b"first\nsecond\nthird\rfourth\n"
+
+
+def test_as_committed_hands_a_glb_back_untouched(tmp_path: Path) -> None:
+    """A GLB is binary: a CRLF inside its buffer is data, never a line ending."""
+    content = b"glTF\x02\x00\x00\x00\r\n\x00\x01\r\n"
+    path = tmp_path / "body.glb"
+    path.write_bytes(content)
+
+    assert mechanical.as_committed(path) == content
+
+
+def test_as_committed_is_defined_once_under_tests_in_the_support_module() -> None:
+    """The fixture regeneration tests, the case generator's and the golden digest read files
+    through one definition (plan decision RF-55): a second copy could drift from it."""
+    tests_root = Path(__file__).resolve().parents[1]
+    defined = [
+        path.relative_to(tests_root).as_posix()
+        for path in sorted(tests_root.rglob("*.py"))
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"), filename=str(path)))
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.name == "as_committed"
+    ]
+
+    assert defined == ["support/mechanical.py"]
 
 
 # --- 3. the big fixture: the counts of contracts/fixtures.md section 2 --------------------
