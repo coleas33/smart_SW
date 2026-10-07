@@ -27,7 +27,7 @@ from typing import Any
 
 import pytest
 
-from swreview.ir import loader
+from swreview import atomic
 from swreview.ir.loader import (
     PACKAGE_FILE_NAME,
     PackageAppendError,
@@ -187,7 +187,7 @@ def test_a_failed_replace_leaves_every_file_byte_identical_and_no_temporary_file
     def refuse(*_: Any, **__: Any) -> None:
         raise PermissionError("the add-in holds package.json open")
 
-    monkeypatch.setattr(loader.os, "replace", refuse)
+    monkeypatch.setattr(atomic.os, "replace", refuse)
     with pytest.raises(PermissionError):
         append_interference_run(
             package_dir,
@@ -198,6 +198,51 @@ def test_a_failed_replace_leaves_every_file_byte_identical_and_no_temporary_file
         )
 
     assert snapshot(package_dir) == before
+
+
+def test_the_merged_package_is_written_through_the_one_atomic_writer(
+    package_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Owner decision 34A: the merge lands through `atomic.write_atomic`, the product's one
+    atomic writer, as the bytes it always wrote - the raw merge dumped with `indent=2`,
+    `ensure_ascii=False` and one trailing newline, UTF-8 with `\\n` line endings; a failed
+    replace leaves every file byte-identical and no temporary, and a successful one replaces
+    the previous `package.json` whole."""
+    rows = new_rows(load_package(package_dir).package)
+    merged = raw(package_dir)
+    merged["interferences"] = [
+        *(row for row in merged["interferences"] if row["configuration"] != "Default"),
+        *(row.model_dump(mode="json") for row in rows),
+    ]
+    merged["gaps"] = [*merged["gaps"], NEW_GAP.model_dump(mode="json")]
+    expected = (json.dumps(merged, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+    before = snapshot(package_dir)
+    assert before[PACKAGE_FILE_NAME] != expected
+
+    def refuse(*_: Any, **__: Any) -> None:
+        raise PermissionError("the add-in holds package.json open")
+
+    with monkeypatch.context() as patched:
+        patched.setattr(atomic.os, "replace", refuse)
+        with pytest.raises(PermissionError):
+            append_interference_run(package_dir, package_dir, "Default", rows, [NEW_GAP])
+
+    assert snapshot(package_dir) == before
+
+    real_write_atomic = atomic.write_atomic
+    calls: list[tuple[Path, bytes]] = []
+
+    def spy(path: Path, data: bytes) -> None:
+        calls.append((path, data))
+        real_write_atomic(path, data)
+
+    monkeypatch.setattr(atomic, "write_atomic", spy)
+    written = append_interference_run(package_dir, package_dir, "Default", rows, [NEW_GAP])
+
+    assert calls == [(package_dir / PACKAGE_FILE_NAME, expected)]
+    assert written.read_bytes() == expected
+    assert b"\r" not in written.read_bytes()
+    assert snapshot(package_dir) == {PACKAGE_FILE_NAME: expected}
 
 
 def test_a_row_that_fails_validation_raises_the_named_error_and_writes_nothing(

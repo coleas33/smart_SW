@@ -7,16 +7,14 @@ construction, not by convention (benchmarks/README.md, FR of US6).
 
 from __future__ import annotations
 
-import contextlib
 import json
-import os
-import tempfile
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 from pydantic import ValidationError
 
+from swreview import atomic
 from swreview.ir.models import EvidencePackage, Gap, Interference
 
 PACKAGE_FILE_NAME = "package.json"
@@ -174,23 +172,5 @@ def append_interference_run(
         )
 
     target.mkdir(parents=True, exist_ok=True)
-    temporary: str | None = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            newline="\n",
-            dir=target,
-            prefix=f".{PACKAGE_FILE_NAME}.",
-            suffix=".tmp",
-            delete=False,
-        ) as handle:
-            temporary = handle.name
-            handle.write(merged_text)
-        os.replace(temporary, target / PACKAGE_FILE_NAME)
-        temporary = None
-    finally:
-        if temporary is not None:
-            with contextlib.suppress(OSError):
-                os.unlink(temporary)
+    atomic.write_atomic(target / PACKAGE_FILE_NAME, merged_text.encode("utf-8"))
     return target / PACKAGE_FILE_NAME
