@@ -54,8 +54,9 @@ from pydantic import ValidationError
 from pydantic_core import to_jsonable_python
 
 from swreview import atomic
+from swreview.agent import checklist as agent_checklist
 from swreview.agent import providers
-from swreview.agent.checklist import CHECKLIST_FILE, SYSTEM_PROMPT_FILE, load_checklist
+from swreview.agent.checklist import load_checklist
 from swreview.agent.providers import AgentProvider, EffortLevel, ProviderName
 from swreview.agent.providers.fake import ScriptedToolCall, ScriptedTurn
 from swreview.agent.runner import (
@@ -71,6 +72,8 @@ from swreview.agent.settings import (
     LEVER_NAMES,
     MODEL_VIEW_OFF,
     NO_STUDY,
+    PANE_STUDY,
+    PRIVATE_PANE_STUDY,
     EfficiencySettings,
     ModelViewSettings,
     PaneDefaults,
@@ -95,9 +98,11 @@ from swreview.benchmark.compare import (
 from swreview.benchmark.recording import RecordingRefused, read_recording
 from swreview.benchmark.replay import render_replay_lines, replay_recording
 from swreview.benchmark.runner import (
+    EXAMPLE_PROFILE,
     PROVENANCE_SCHEMA,
     AttemptRequest,
     RunProvenance,
+    committable,
     current_commit,
     profile_is_example,
     run_benchmark,
@@ -2345,6 +2350,126 @@ def _refuse_a_folder_in_use(out: Path) -> None:
         raise FileExistsError(f"{out} is not empty; choose a new folder")
 
 
+def _private_packages(benchmark_set: BenchmarkSet, *, root: Path) -> list[str]:
+    """The ids of the set's private entries: each package whose resolved path lies outside
+    `root`, the rule `BenchmarkSet.saved_form` writes them absolute by (feature 014
+    `contracts/cases.md` 4.2)."""
+    checkout = root.resolve()
+    return [
+        ref.package_id for ref in benchmark_set.packages if not ref.path.is_relative_to(checkout)
+    ]
+
+
+def _refuse_a_committable_folder_over_private_data(
+    out: Path, benchmark_set: BenchmarkSet, is_example: bool | None, *, root: Path
+) -> None:
+    """Section 3 row 5 (feature 014 `contracts/provenance.md` 6.4; PROV-09): a run folder the
+    repository could commit holds no private data.
+
+    Committable is `runner.committable`'s reading: inside the checkout and not ignored by git,
+    or inside it where git cannot answer. Such an `--out` is refused for a set naming a package
+    outside the checkout, which the saved set and the sessions would carry, and for a profile
+    other than the fictional example, whose values the findings would carry; for any run, since
+    a run need not declare a study to be committed. A run with no profile graded against none
+    and is not refused for it.
+    """
+    private = _private_packages(benchmark_set, root=root)
+    if private:
+        what = f"names private package {private[0]}"
+    elif is_example is False:
+        what = "grades against a profile other than the fictional example"
+    else:
+        return
+    if committable(out, root=root):
+        raise ValueError(
+            f"{out} is inside the repository, where it may be committed; this run {what}: "
+            "write it outside the repository"
+        )
+
+
+def _refuse_a_pane_study_breaking_its_file_rules(
+    study: str,
+    *,
+    standards_profile: Path | None,
+    is_example: bool | None,
+    benchmark_set: BenchmarkSet,
+    commit: str | None,
+    dirty: bool | None,
+    digested: Sequence[Path | None],
+    root: Path,
+) -> None:
+    """Section 3 row 6 (feature 014 `contracts/provenance.md` 3.2's run-time table; PROV-05,
+    INT-3): what a pane study's record must be able to name, in the table's order.
+
+    - `pane_defaults` grades against the fictional example, since every committed case is keyed
+      against it (FR-027) and one study has one profile (D5), over committed cases only: the
+      private slice is its own study (FR-056).
+    - Both pane studies name the code they measured: a commit git names and a tracked tree git
+      reports clean. Two unknown commits would pass the must-match rule as equal, and a tree git
+      cannot vouch for is treated as a dirty one.
+    - Both refuse a digested input inside the repository (`digested`, in order: the prompt, the
+      checklist, the profile or `None`, the set file) whose bytes hold a carriage return. A
+      working copy checked out before section 6.5's `eol=lf` keeps them and would record digests
+      another machine's runs do not share, which compare would refuse only after the study was
+      paid for. A file outside the repository, a private profile, is never read for it.
+    - `pane_defaults_private` grades against the real profile; its `--out` inside the repository
+      is row 5's to refuse.
+
+    The price row is lane B6's (RF-79).
+    """
+    if study not in (PANE_STUDY, PRIVATE_PANE_STUDY):
+        return
+    flag = f"--study {study}"
+    if study == PANE_STUDY:
+        if standards_profile is None:
+            raise ValueError(
+                f"{flag}: no --standards-profile; every committed case is keyed against the "
+                f"fictional example: pass --standards-profile {EXAMPLE_PROFILE.as_posix()}"
+            )
+        if is_example is not True:
+            raise ValueError(
+                f"{flag}: --standards-profile names a profile other than the fictional example; "
+                "every committed case is keyed against the example, and one study has one profile"
+            )
+        private = _private_packages(benchmark_set, root=root)
+        if private:
+            raise ValueError(
+                f"{flag}: the set names private package {private[0]}, outside the repository; a "
+                "pane study's set holds committed cases only; the private slice is its own study, "
+                f"`{PRIVATE_PANE_STUDY}`"
+            )
+    if commit is None:
+        raise ValueError(
+            f"{flag}: git cannot name this checkout's commit; a paid study must name the code it "
+            "measured"
+        )
+    if dirty is True:
+        raise ValueError(
+            f"{flag}: the checkout's tracked files differ from commit {commit}; a paid study must "
+            "name the code it measured: commit the change or set it aside first"
+        )
+    if dirty is None:
+        raise ValueError(
+            f"{flag}: git cannot say whether the checkout's tracked files match commit {commit}; "
+            "a paid study must name the code it measured"
+        )
+    checkout = root.resolve()
+    for path in digested:
+        if path is None:
+            continue
+        resolved = Path(path).resolve()
+        if resolved.is_relative_to(checkout) and b"\r" in resolved.read_bytes():
+            raise ValueError(
+                f"check {resolved.relative_to(checkout).as_posix()} out again: section 6.5's "
+                "`eol=lf` has not reached this working copy"
+            )
+    if study == PRIVATE_PANE_STUDY and standards_profile is None:
+        raise ValueError(
+            f"{flag}: no --standards-profile; the private slice grades against the real profile: "
+            "pass it with --standards-profile"
+        )
+
+
 def _refuse_a_set_too_small_to_gate(benchmark_set: BenchmarkSet, override: bool) -> None:
     """Precondition P-3: a study gated on a set with no held-out package decides nothing.
 
@@ -2453,8 +2578,29 @@ def benchmark_run(
             adapter.effort_mapping(settings.effort)
             run_start = RunStartAdapter(adapter)
             benchmark_set = sets.load_set(set_file, root=root)
-            # Rows 5 and 6, a committable folder over private data and the pane study's file
-            # rules, land with feature 014 T054. Row 7, P-3:
+            # What rows 5 and 6 read is read once, and the record says what they read: the
+            # profile's likeness to the example, the commit, the tracked tree, and the prompt
+            # and checklist `agent.checklist` names at call time.
+            is_example = profile_is_example(standards_profile, root=root)
+            commit, dirty = current_commit(root), tree_dirty(root)
+            prompt_file = agent_checklist.SYSTEM_PROMPT_FILE
+            checklist_file = agent_checklist.CHECKLIST_FILE
+            # Row 5, a committable folder over private data.
+            _refuse_a_committable_folder_over_private_data(
+                out, benchmark_set, is_example, root=root
+            )
+            # Row 6, the pane study's file rules.
+            _refuse_a_pane_study_breaking_its_file_rules(
+                study,
+                standards_profile=standards_profile,
+                is_example=is_example,
+                benchmark_set=benchmark_set,
+                commit=commit,
+                dirty=dirty,
+                digested=(prompt_file, checklist_file, standards_profile, set_file),
+                root=root,
+            )
+            # Row 7, P-3.
             if declares_a_study:
                 _refuse_a_set_too_small_to_gate(benchmark_set, set_too_small_override)
 
@@ -2467,7 +2613,7 @@ def benchmark_run(
             provenance_file = write_provenance(
                 run_dir,
                 RunProvenance(
-                    commit=current_commit(root),
+                    commit=commit,
                     lever=study,
                     arm=arm,
                     rep=rep,
@@ -2475,7 +2621,7 @@ def benchmark_run(
                     model=settings.model,
                     effort=settings.effort,
                     max_steps=DEFAULT_MAX_STEPS,
-                    checklist_digest=sha256_of(CHECKLIST_FILE),
+                    checklist_digest=sha256_of(checklist_file),
                     set_digest=sha256_of(saved_set),
                     started_at=started_at,
                     set_too_small_override=set_too_small_override,
@@ -2485,11 +2631,11 @@ def benchmark_run(
                     pane_defaults=pane_defaults,
                     model_view=resolved.model_view,
                     profile_digest=profile.identity.sha256 if profile is not None else None,
-                    profile_is_example=profile_is_example(standards_profile, root=root),
+                    profile_is_example=is_example,
                     live_tools=False,
                     inert_settings=INERT_SETTINGS[provider],
-                    prompt_digest=sha256_of(SYSTEM_PROMPT_FILE),
-                    tree_dirty=tree_dirty(root),
+                    prompt_digest=sha256_of(prompt_file),
+                    tree_dirty=dirty,
                 ),
             )
             package_dirs = run_benchmark(
