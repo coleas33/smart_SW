@@ -20,7 +20,8 @@ review's turns and rounds from `events.jsonl`, using only the markers the log ca
   scripted;
 - each finding belongs to the call whose `tool.started`/`tool.finished` bracket its first
   `finding` event falls in; `tool_result_ids` cannot tie them, because live-bridge findings
-  carry none.
+  carry none, though interference findings recorded after feature 014's owner decision 40A
+  cite their step.
 
 A folder that is not a review is refused with one sentence naming what is missing. Reading
 writes nothing.
