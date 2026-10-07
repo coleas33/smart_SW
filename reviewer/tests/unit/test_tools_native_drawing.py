@@ -65,6 +65,9 @@ TODAY: dict[str, str] = {
     "golden/fixtures/cover-blind-tap": "5f8828844f3d8cf3",
     "golden/fixtures/joint-bottoming": "49126b32cbbb2628",
     "golden/fixtures/joint-ok": "49126b32cbbb2628",
+    # Feature 014 T026, owner decision 19A: new with the unknown-role golden, pinned from its
+    # own output.
+    "golden/fixtures/joint-unknown-role": "b14a26ba6eee3acb",
     "golden/fixtures/joint-unsupported": "49126b32cbbb2628",
     "golden/fixtures/mixed-units": "e0c95d9d1db0b529",
     "golden/fixtures/plate-stack": "b073c80e46fe3789",

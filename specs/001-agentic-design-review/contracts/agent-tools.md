@@ -1,6 +1,6 @@
 # Curated Agent Tools
 
-*Amended 2026-09-29 by feature 014 (`specs/014-design-review-eval/`), in scoring.md section 10; the amendment text lands with the 014 task that changes the code:* the `check_fastener_joint` result carries references on every path (19A).
+*Amended 2026-09-29 by feature 014 (`specs/014-design-review-eval/`), in scoring.md section 10, landed 2026-10-07 (014 T026):* every `check_fastener_joint` finding leads its `inputs` with its fastener's and its hole's ids on every path, unresolved included, and the out-of-scope result of a joint kind the pilot does not model names the hole too (owner decision 19A, 014 FR-061); `calculation.inputs` and the findings' words do not change.
 
 *Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed by 2026-09-27 (013 T060, T062, T064, T066, T087, T097, T117, T119):* `request_evidence` and `mark_coverage` gain non-error answers (`closed_by_code`, `already_answered`, `already_asked`) and `open_items`, and `request_evidence` accepts joint, feature and drawing entity ids, with no signature or docstring change; see 013 `contracts/re-ask-guard.md` and `contracts/tokens.md` section 2.
 
@@ -98,7 +98,7 @@ typed by the model.
 |------|-----------|----------|
 | `check_fit` | `bore_dimension_ref: SourceRef`, `shaft_dimension_ref: SourceRef` | `fit.size_only` finding: min/max clearance or interference |
 | `check_axial_stack` | `dimension_refs: list[SourceRef]`, `signs: list[+1 \| -1]`, `target_gap: SourceRef \| null` | `stack.worst_case` finding; `unresolved` if any tolerance kind is `none` |
-| `check_fastener_joint` | `fastener_id: str`, `hole_id: str`, `clamped_component_ids: list[str]` | `fastener.bottoming`, `fastener.engagement`, `fastener.thread_match`, `fastener.head_clearance` findings; `unresolved` when `thread_depth` is null |
+| `check_fastener_joint` | `fastener_id: str`, `hole_id: str`, `clamped_component_ids: list[str]` | `fastener.bottoming`, `fastener.engagement`, `fastener.thread_match`, `fastener.head_clearance` findings, each naming `fastener_id` and `hole_id` first in its `inputs` (014, 19A); `unresolved` when `thread_depth` is null |
 | `check_hole_alignment` | `hole_id_a: str`, `hole_id_b: str`, `tolerance: SourceRef \| null` | `hole.coaxiality` finding |
 | `check_interference_group` | `group_key: str` | grouped `interference.static` finding, honoring exceptions |
 | `check_rms_part` | `document_id: str \| null` | Resilient Modeling part-scope findings and aggregated coverage for one part document, or for every part document (null) including the ones whose tree was not read |

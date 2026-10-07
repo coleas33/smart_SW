@@ -50,6 +50,7 @@
 | 36A | 2026-10-06 | The cost gate prints the approved study's projected wall clock, from the smoke run's and the pilot's review times, at the chosen concurrency. `benchmark run --jobs N` (default 1) reviews up to N packages at once, each in its own folder, the run's shared records never interleaved; N is recorded and is not a must-match field, since it changes nothing that is measured. |
 | 37A | 2026-10-07 | The matcher's family rows that slice 1 tests (tasks.md T022) read on `fastener.head.*`, a family a known defect or a correct condition may hold, since AK-4 refuses `fastener.*` on both; the contract's own `fastener.*` rows are tested on a forbidden entry, where that family may stand (T083). |
 | 38A | 2026-10-07 | The one event-line reader ends a line where text mode ends it, a lone carriage return included, exactly as at `be01974`, while a line cut inside a multibyte character still ends the replay at that line and is reported, never raised. |
+| 39A | 2026-10-07 | The `joint-unknown-role` check golden stays at schema 1.3.0 inside the golden gate, which is not widened, so it carries no tolerance source (every source is a 1.5.0 member): it pins `hole.nominal_alignment`'s unknown-role result naming every instance of the joint and the stack check's "no tolerance source" skipped row, and `hole.position_stack`'s unknown-role result is pinned by a unit test. |
 
 Refinements of earlier rows:
 - 13A completes 4A's status rule; 15A replaces the first draft's per-case held-out rule; D9 extends 11A's five origin buckets to seven.

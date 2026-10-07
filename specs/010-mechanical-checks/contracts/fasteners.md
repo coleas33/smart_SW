@@ -1,6 +1,6 @@
 # Contract: Fasteners
 
-*Amended 2026-09-29 by feature 014 (`specs/014-design-review-eval/`), in scoring.md section 10 (19A); the amendment text lands with the 014 task that changes the code:* references on every path of the fastener check.
+*Amended 2026-09-29 by feature 014 (`specs/014-design-review-eval/`), in scoring.md section 10 (19A), landed 2026-10-07 (014 T026):* references on every path of the fastener check (section 4, last paragraph).
 
 Normative for FR-011 to FR-013, User Story 4 and SC-002, SC-004.
 
@@ -91,6 +91,13 @@ fastener_group`), not by pattern group: one screw part mis-threaded into one par
 unrelated holes is one condition and one finding (SC-002). A screw placed in a joint with no
 tapped instance is one skipped `fastener.engagement` coverage item for all such joints, and
 with no tool envelope swept head clearance is one skipped `fastener.head_clearance` item.
+
+Every result of the four rules, from `check_placed_screw` and `check_fastener_joint` alike and on
+every path, unresolved included, leads its `inputs` with the fastener's and the hole's ids, then
+the lengths it was judged on as read; `fastener.unsupported` names the fastener and the hole its
+call names. The ids are the joint's references, which a finding reports and the eval's scorer
+matches (feature 014 FR-061, owner decision 19A); `Calculation.inputs` and the words do not
+change.
 
 ## 5. The engagement rule
 

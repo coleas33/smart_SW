@@ -1,0 +1,37 @@
+result:
+  results:
+  - joint: jnt:0001
+    result:
+      calculation: null
+      check: hole.nominal_alignment
+      coverage_limits:
+      - 'hole.nominal_alignment not evaluated: the role of hol:0002 (its hole type
+        is unknown), so its clearance is unknown'
+      inputs:
+      - hol:0001#1
+      - hol:0002#1
+      - hol:0003#1
+      observed: the role of hol:0002 (its hole type is unknown), so its clearance
+        is unknown; the check did not run
+      recommended_action: Record the hole type of hol:0002 in the model's Hole Wizard
+        feature so the joint can be judged.
+      requirement: 'the members of a joint line up within the clearance its fastener
+        leaves: half of each clearance hole''s diameter less the fastener''s, summed
+        over the joint (the fixed- and floating-fastener relations of ASME Y14.5 at
+        nominal size)'
+      severity: medium
+      status: unresolved
+  skipped:
+  - check: hole.position_stack
+    error: null
+    reason: 'no tolerance source is read for this package; searched: drawing callout,
+      model annotation, model dimension, Hole Wizard class, general tolerance'
+    scope:
+      component_ids:
+      - cmp:0001
+      - cmp:0002
+      - cmp:0003
+      configuration: null
+      document_ids: []
+      pairs: []
+      positions: []

@@ -5,6 +5,7 @@ result:
   - 'out_of_scope: pin'
   inputs:
   - fst:1
+  - hole:1
   observed: fst:1 is a pin; this phase models screw and bolt joints into a tapped
     hole only.
   recommended_action: Review the pin joint at fst:1 by hand.
