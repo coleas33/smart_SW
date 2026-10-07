@@ -17,7 +17,7 @@ benchmarks/
 │   ├── exceptions.json     # accepted exceptions bound to geometry or to the feature tree
 │   └── notes.md            # what was seeded, baseline time, results
 ├── native/<name>/          # SOLIDWORKS files used to produce native packages on the workstation
-├── answer_keys/<name>.json # known defects and correct conditions
+├── answer_keys/<name>.json # known defects and correct conditions, key format 2 (specs/014-design-review-eval/contracts/answer-key.md)
 └── sets/pilot.json         # which packages belong to a run and which are held out
 ```
 
