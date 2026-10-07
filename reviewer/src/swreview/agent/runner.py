@@ -6,7 +6,9 @@ turn - streaming text, dispatching tool calls, mapping its own errors - and hand
 business:
 
 - the system prompt: the versioned commitments in `prompts/system_v1.md`, the mandatory
-  checklist rendered as text, and the package census, so the model starts oriented;
+  checklist rendered as text, and the package census, so the model starts oriented. The
+  prompt's file is named in `agent/checklist.py`, beside the checklist's, and imported here,
+  so the benchmark names both files without importing this module (feature 014 RF-1);
 - a **per-turn** step budget. `max_steps` bounds the tool calls of one turn, not of the
   session (data-model section 3, rule 4): a resumed turn never no-ops because an earlier
   turn spent the budget. The cumulative count is kept separately, on the run;
@@ -47,7 +49,7 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-from swreview.agent.checklist import FINDING_BUCKET, Checklist, load_checklist
+from swreview.agent.checklist import FINDING_BUCKET, SYSTEM_PROMPT_FILE, Checklist, load_checklist
 from swreview.agent.events import (
     DEFAULT_MAX_STEPS,
     EVENTS_FILE_NAME,
@@ -140,7 +142,6 @@ from swreview.tools.registry import (
 )
 from swreview.tools.session import record_question
 
-SYSTEM_PROMPT_FILE = Path(__file__).parent / "prompts" / "system_v1.md"
 SESSION_FILE_NAME = "session.json"
 
 EVIDENCE_CHECK = "coverage.evidence_request"

@@ -30,18 +30,27 @@ coverage rows the two tools write (`mass.material_assigned`, `mass.coverage`,
 `hygiene.revision_present`, `hygiene.coverage`, ...) close nothing: the checklist matches a
 coverage entry by id, never by prefix. Like `standards.release`, neither item names its tool:
 lever 13 withholds both once checks first has run them (008 FR-030).
+
+The system prompt's file is named in this module's file too (feature 014 T006, RF-1):
+`SYSTEM_PROMPT_FILE` sits beside `CHECKLIST_FILE` and the runner imports it from there, so the
+benchmark's stamp names the prompt and the checklist without loading the runner and, through
+it, the tools.
 """
 
 from __future__ import annotations
 
+import ast
 from collections.abc import Iterable
 from datetime import UTC, datetime
+from pathlib import Path
 from types import ModuleType
 from typing import Any, NamedTuple
 from uuid import UUID
 
 import pytest
 
+import swreview.agent.checklist as checklist_module
+from swreview.agent import runner
 from swreview.agent.checklist import (
     COVERAGE_BUCKETS,
     FINDING_BUCKET,
@@ -688,3 +697,65 @@ def test_every_code_owned_item_renders_the_one_line_and_no_other_claim_of_when()
     assert code_owned == ["provenance", "coverage.closeout"]
     for item_id in code_owned:
         assert item_block(rendered, item_id)[1] == f"  {CODE_OWNED_LINE}", item_id
+
+
+# --- the system prompt file, named beside the checklist (feature 014 T006, RF-1) -------------
+
+
+def imported_names(module: ModuleType) -> set[str]:
+    """Every dotted name an import statement of `module` names, at any depth, read with `ast`.
+
+    `from a import b` names both `a` and `a.b`, because `b` may be a module (`from
+    swreview.agent import runner`); a relative import is resolved against the module's package.
+    """
+    path = Path(str(module.__file__))
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    package = str(module.__package__).split(".")
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            names.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            anchor = package[: len(package) - node.level + 1] if node.level else []
+            base = ".".join([*anchor, node.module] if node.module else anchor)
+            names.add(base)
+            names.update(f"{base}.{alias.name}" for alias in node.names)
+    return names
+
+
+def under(name: str, module: str) -> bool:
+    """`name` is `module` or one of its submodules (or a name inside one)."""
+    return name == module or name.startswith(f"{module}.")
+
+
+def test_the_system_prompt_file_sits_beside_the_checklist_file() -> None:
+    prompt_file = checklist_module.SYSTEM_PROMPT_FILE
+
+    assert prompt_file == checklist_module.CHECKLIST_FILE.parent / "prompts" / "system_v1.md"
+    assert prompt_file.is_file()
+
+
+def test_the_runner_imports_the_one_system_prompt_file_not_a_copy() -> None:
+    assert runner.SYSTEM_PROMPT_FILE is checklist_module.SYSTEM_PROMPT_FILE
+
+
+def test_the_checklist_module_imports_neither_the_tools_nor_the_runner() -> None:
+    """The benchmark's stamp reads both file names off this module (RF-1), so none of its own
+    import statements may name the runner or a tool module."""
+    names = sorted(imported_names(checklist_module))
+    tool_modules = [name for name in names if under(name, "swreview.tools")]
+    the_runner = [name for name in names if under(name, "swreview.agent.runner")]
+
+    assert tool_modules == [], "agent/checklist.py imports a tool module"
+    assert the_runner == [], "agent/checklist.py imports the runner"
+
+
+def test_the_import_reading_finds_what_it_refuses_where_it_is() -> None:
+    """The reading above is not vacuous: over the runner it finds both the tools it imports and
+    the checklist module, and a `from <package> import <module>` names the module
+    (`from swreview.checks import part_roles`)."""
+    names = imported_names(runner)
+
+    assert "swreview.tools.context" in names
+    assert "swreview.agent.checklist" in names
+    assert "swreview.checks.part_roles" in names
