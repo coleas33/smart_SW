@@ -21,14 +21,24 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from statistics import median
-from typing import Any
+from typing import Any, get_args
 from uuid import NAMESPACE_URL, uuid5
 
 from swreview.agent.providers import EffortMapping, TokenUsage
 from swreview.agent.settings import EfficiencySettings
 from swreview.benchmark.adoption import ArmRun
+from swreview.benchmark.origins import Origin
 from swreview.benchmark.runner import RunProvenance, sha256_of, write_provenance
-from swreview.benchmark.scorecard import Aggregate, PackageScore, Scorecard
+from swreview.benchmark.scorecard import (
+    NO_CORRECT_CONDITION,
+    SCORING_RULES_VERSION,
+    Aggregate,
+    GradedItem,
+    PackageScore,
+    RecallByProducer,
+    RecallByTag,
+    Scorecard,
+)
 from swreview.report.session import (
     Coverage,
     CoverageItem,
@@ -50,11 +60,18 @@ COMMIT = "5733efd"
 CHECKLIST_DIGEST = "c" * 64
 SET_DIGEST = "5" * 64
 SET_NAME = "study"
+KEY_SHA256 = "e" * 64
 
 
 @dataclass(frozen=True)
 class PackageSpec:
-    """One package of one run: what it cost and what it found."""
+    """One package of one run: what it cost and what it found.
+
+    Its known defects, `matched` and `missed`, are graded as model-produced items tagged by
+    `held_out`, which is what the scorer requires the flag to be derived from (feature 014), and
+    its key holds no correct condition. Its false alarms read `unknown`: the session written
+    beside it holds no finding and no origin-marks record.
+    """
 
     package_id: str = "rms-part"
     held_out: bool = True
@@ -136,6 +153,9 @@ class RunSpec:
     """`None` means "the digest of the saved set copy", which is what the CLI records."""
     set_too_small_override: bool = False
     other_levers: tuple[str, ...] = ()
+    key_sha256: str = KEY_SHA256
+    """The digest of the key every package of this run was scored against, as the scorecard
+    records it per package (feature 014 INT-16)."""
 
     def settings(self) -> EfficiencySettings:
         """What the runner would have resolved, unless the spec overrode it."""
@@ -181,6 +201,8 @@ def _sum_or_none(values: Iterable[int | None]) -> int | None:
 def package_score(spec: PackageSpec) -> PackageScore:
     usage = spec.usage()
     timing = spec.timing()
+    tag = "held_out" if spec.held_out else "tuned_on"
+    false_alarm_ids = [f"F-{index:03d}" for index in range(spec.false_alarms)]
     return PackageScore(
         package_id=spec.package_id,
         held_out=spec.held_out,
@@ -204,17 +226,44 @@ def package_score(spec: PackageSpec) -> PackageScore:
             sorted(Counter(step_tools(spec)).items(), key=lambda item: (-item[1], item[0]))
         ),
         matched_defect_ids=list(spec.matched),
+        flagged_defect_ids=[],
+        status_mismatch_defect_ids=[],
+        flagged_below_expected_defect_ids=[],
+        cleared_defect_ids=[],
         missed_defect_ids=list(spec.missed),
-        false_alarm_finding_ids=[f"F-{index:03d}" for index in range(spec.false_alarms)],
+        contradicted_condition_ids=None,
+        confirmed_condition_ids=None,
+        false_alarm_finding_ids=false_alarm_ids,
+        finding_origins=dict.fromkeys(false_alarm_ids, "unknown"),
+        graded_items=[
+            GradedItem(
+                id=defect_id,
+                kind="known_defect",
+                tag=tag,
+                producer="model",
+                expected_status="suspected",
+            )
+            for defect_id in (*spec.matched, *spec.missed)
+        ],
+        not_assessed={
+            "contradicted_condition_ids": NO_CORRECT_CONDITION,
+            "confirmed_condition_ids": NO_CORRECT_CONDITION,
+        },
     )
+
+
+def _recall(scores: Sequence[PackageScore]) -> float | None:
+    """Detected over all, over these packages' known defects; `None` with none."""
+    matched = sum(len(score.matched_defect_ids) for score in scores)
+    known = matched + sum(len(score.missed_defect_ids) for score in scores)
+    return matched / known if known else None
 
 
 def scorecard(spec: RunSpec) -> Scorecard:
     """The `scorecard.json` `benchmark score` would have written for this run."""
     per_package = [package_score(package) for package in spec.packages]
     held_out = [score for score in per_package if score.held_out]
-    matched = sum(len(score.matched_defect_ids) for score in held_out)
-    known = matched + sum(len(score.missed_defect_ids) for score in held_out)
+    tuned_on = [score for score in per_package if not score.held_out]
     valid = sum(score.valid_findings for score in per_package)
     false_alarms = sum(score.false_alarms for score in per_package)
     timed = [
@@ -222,7 +271,9 @@ def scorecard(spec: RunSpec) -> Scorecard:
         for score in per_package
         if score.net_saved_minutes is not None
     ]
+    by_origin = {origin: 0 for origin in get_args(Origin)} | {"unknown": false_alarms}
     return Scorecard(
+        scoring_rules_version=SCORING_RULES_VERSION,
         run_id=spec.run,
         benchmark_set=SET_NAME,
         scored_at=SCORED_AT,
@@ -234,7 +285,7 @@ def scorecard(spec: RunSpec) -> Scorecard:
             missed_known_defects=sum(score.missed_known_defects for score in per_package),
             false_alarms=false_alarms,
             unresolved_count=sum(score.unresolved_count for score in per_package),
-            recall=(matched / known) if known else None,
+            recall=_recall(held_out),
             false_alarm_rate=(
                 false_alarms / (valid + false_alarms) if (valid + false_alarms) else None
             ),
@@ -250,8 +301,25 @@ def scorecard(spec: RunSpec) -> Scorecard:
             round_trips=_sum_or_none(package.rounds for package in spec.packages),
             median_seconds_to_first_finding=None,
             packages_with_usage=sum(1 for score in per_package if score.usage is not None),
+            detected=sum(len(score.matched_defect_ids) for score in per_package),
+            flagged=0,
+            status_mismatches=0,
+            flagged_below_expected=0,
+            cleared=0,
+            contradictions=None,
+            confirmations=None,
+            findings_by_origin=by_origin,
+            false_alarms_by_origin=by_origin,
+            recall_by_producer=RecallByProducer(
+                model=RecallByTag(held_out=_recall(held_out), tuned_on=_recall(tuned_on)),
+                code=RecallByTag(held_out=None, tuned_on=None),
+            ),
+            held_out_model_defects=sum(
+                len(score.matched_defect_ids) + len(score.missed_defect_ids) for score in held_out
+            ),
         ),
         distribution=[score.net_saved_minutes for score in per_package],
+        key_sha256={package.package_id: spec.key_sha256 for package in spec.packages},
     )
 
 

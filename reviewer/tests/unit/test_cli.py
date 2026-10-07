@@ -51,6 +51,7 @@ from swreview.report.names import component_names
 from swreview.report.rerender import REPORT_FILE_NAME as REPORT_FILE
 from swreview.report.rerender import rerender_run_folder
 from swreview.report.session import load_session
+from tests.support.answer_keys import write_key
 from tests.support.console import plain_one_line
 from tests.unit.test_rerender import (
     NAMED_COMPONENT,
@@ -2395,24 +2396,22 @@ def benchmark_set(tmp_path: Path, tmp_package_dir: Path) -> Path:
 
 @pytest.fixture
 def answer_keys(tmp_path: Path) -> Path:
+    """Edited deliberately by feature 014 T038 (SR-23): the key is format 2, written through
+    `write_key`, its drawing defect keyed to `doc:1`, a document the support package holds, and
+    held out against the current stamp, since the set marks `cover` held out and `score` refuses
+    a flag its key does not back. The fixture tests the command's wiring, not the check."""
     directory = tmp_path / "answer_keys"
-    directory.mkdir()
-    (directory / "cover.json").write_text(
-        json.dumps(
+    write_key(
+        directory,
+        "cover",
+        known_defects=[
             {
-                "package_id": "cover",
-                "known_defects": [
-                    {
-                        "id": "D-1",
-                        "check": "drawing.manufacturing_inputs",
-                        "component_ids": [],
-                        "description": "The tapped hole callout omits the thread depth",
-                    }
-                ],
-                "correct_conditions": [],
+                "check": "drawing.manufacturing_inputs",
+                "document_ids": ["doc:1"],
+                "tag": "held_out",
+                "description": "The tapped hole callout omits the thread depth",
             }
-        ),
-        encoding="utf-8",
+        ],
     )
     return directory
 
@@ -2511,6 +2510,24 @@ def test_benchmark_score_writes_a_scorecard(benchmark_run_dir: Path, answer_keys
     assert scorecard["aggregate"]["packages"] == 1
     assert (benchmark_run_dir / "scorecard.md").is_file()
     assert body["aggregate"]["packages"] == 1
+
+
+def test_benchmark_score_prints_its_three_summary_lines(
+    benchmark_run_dir: Path, answer_keys: Path
+) -> None:
+    """Feature 014 `scoring.md` 7's summary (T036, `test_scorecard.py` 13). The scripted review
+    records one drawing finding, the model's, on `doc:2`; the key's one defect is on `doc:1`,
+    so the defect is missed and the finding is a false alarm of model origin."""
+    result = invoke("benchmark", "score", str(benchmark_run_dir), "--answer-keys", str(answer_keys))
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    run_dir = benchmark_run_dir.resolve()
+    assert result.stdout.splitlines() == [
+        "scored 1 packages of set pilot (scoring rules version 2)",
+        "detected: 0 of 1 (flagged 0; below expected 0), cleared: 0, false alarms: 1 "
+        "(1 of model origin), unresolved: 0",
+        f"wrote {run_dir / 'scorecard.json'} and {run_dir / 'scorecard.md'}",
+    ]
 
 
 def test_benchmark_score_without_a_set_to_score_against_exits_1(

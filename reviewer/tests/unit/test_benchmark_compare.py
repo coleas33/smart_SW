@@ -430,6 +430,31 @@ def test_two_runs_of_one_study_that_differ_are_refused_naming_the_field(
     assert field in str(excinfo.value)
 
 
+def test_two_runs_of_one_study_scored_against_two_versions_of_a_key_are_refused(
+    tmp_path: Path,
+) -> None:
+    """Feature 014 INT-16 (`scoring.md` 11's test 15): an arm scored against an edited key
+    measures the edit, so the refusal names the package whose key moved."""
+    write_run(tmp_path, RunSpec(run="off-1", arm="off", rep=1))
+    write_run(tmp_path, RunSpec(run="on-1", arm="on", rep=1, key_sha256="f" * 64))
+
+    with pytest.raises(CompareError) as excinfo:
+        compare_runs([tmp_path / "off-1", tmp_path / "on-1"])
+
+    message = str(excinfo.value)
+    assert "rms-part" in message
+    assert "key_sha256" in message
+
+
+def test_two_runs_of_one_study_scored_against_one_key_are_accepted(tmp_path: Path) -> None:
+    write_run(tmp_path, RunSpec(run="off-1", arm="off", rep=1, key_sha256="f" * 64))
+    write_run(tmp_path, RunSpec(run="on-1", arm="on", rep=1, key_sha256="f" * 64))
+
+    ledger = compare_runs([tmp_path / "off-1", tmp_path / "on-1"])
+
+    assert len(ledger.levers) == 1
+
+
 def test_a_run_with_no_scorecard_is_refused(tmp_path: Path) -> None:
     run_dir = write_run(tmp_path, RunSpec(run="off-1"))
     (run_dir / "scorecard.json").unlink()

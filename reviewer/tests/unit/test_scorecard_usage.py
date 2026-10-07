@@ -40,7 +40,6 @@ import pytest
 from jsonschema import Draft202012Validator
 
 from swreview.agent.providers import TokenUsage
-from swreview.benchmark.answer_key import AnswerKey, KnownDefect
 from swreview.benchmark.scorecard import (
     Scorecard,
     render_scorecard_md,
@@ -49,6 +48,7 @@ from swreview.benchmark.scorecard import (
 )
 from swreview.benchmark.sets import BenchmarkPackageRef, BenchmarkSet
 from swreview.findings import build_finding
+from swreview.ir.loader import save_package
 from swreview.report.session import (
     Coverage,
     InvestigationStep,
@@ -57,6 +57,7 @@ from swreview.report.session import (
     Timing,
     save_session,
 )
+from tests.support.answer_keys import write_key
 from tests.support.contracts import load_contract
 from tests.support.packages import build_package
 
@@ -132,22 +133,27 @@ def write_package(
     coverage: Coverage | None = None,
     withheld_checks: Sequence[str] = (),
 ) -> BenchmarkPackageRef:
-    """One scored package: its answer key, its `session.json` and its `events.jsonl`."""
-    answer_key = AnswerKey(
-        package_id=package_id,
+    """One scored package: its answer key, its `session.json` and its `events.jsonl`.
+
+    Edited deliberately by feature 014 T038 (RF-49), what every test of this file asserts
+    unchanged: the key is format 2, written through `write_key`, its one defect `D-1` keyed to
+    the support package's joint, which `F-001` names in its `inputs`, every item tuned on under
+    a set flag of false; and the package is saved at its set entry's path, since the key loader
+    refuses a key whose package is missing.
+    """
+    write_key(
+        answer_keys_dir,
+        package_id,
         known_defects=[
-            KnownDefect(
-                id=f"{package_id}-D-1",
-                check="fastener.bottoming",
-                component_ids=["cmp:0001"],
-                description="d1",
-            )
+            {
+                "check": "fastener.bottoming",
+                "component_ids": ["cmp:0001", "cmp:0002"],
+                "references": [{"fastener": "fst:1", "hole": "hole:1"}],
+            }
         ],
-        correct_conditions=[],
     )
-    (answer_keys_dir / f"{package_id}.json").write_text(
-        answer_key.model_dump_json(), encoding="utf-8"
-    )
+    package_path = run_dir.parent / "packages" / package_id
+    save_package(PACKAGE, package_path)
 
     findings = (
         [
@@ -163,6 +169,7 @@ def write_package(
                 requirement="r",
                 recommended_action="a",
                 component_ids=["cmp:0001"],
+                inputs=["fst:1", "hole:1"],
                 tool_result_ids=[0],
             )
         ]
@@ -196,7 +203,7 @@ def write_package(
             package_dir,
             first_finding_after_s=first_finding_after_s if with_findings else None,
         )
-    return BenchmarkPackageRef(package_id=package_id, path=Path("unused"), held_out=True)
+    return BenchmarkPackageRef(package_id=package_id, path=package_path, held_out=False)
 
 
 def build_run(tmp_path: Path, **kwargs: object) -> tuple[Path, Path, BenchmarkSet]:

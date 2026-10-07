@@ -1,6 +1,6 @@
 # Data Model: SOLIDWORKS Agentic Design Review Pilot
 
-*Amended 2026-09-29 by feature 014 (`specs/014-design-review-eval/`), in answer-key.md and scoring.md section 7; the amendment text lands with the 014 task that changes the code:* section 3 (the answer key and the scorecard) changes to key format 2 and the 014 scorecard.
+*Amended 2026-09-29 by feature 014 (`specs/014-design-review-eval/`), in answer-key.md and scoring.md section 7, landed 2026-10-07 (014 T037, T038):* section 3 (the answer key and the scorecard) changes to key format 2 and the 014 scorecard of its scorer slice; the key's four further lists and the scorecard's forbidden, coverage, question and run columns land with 014's later slices.
 
 **Feature**: `001-agentic-design-review` | **Date**: 2026-09-12 | **Spec**: [spec.md](spec.md)
 
@@ -245,9 +245,9 @@ Validation: a finding with `status == "checked_within_scope"` or `"demonstrated"
 
 `BenchmarkPackage`: `package_id`, `held_out: bool`, `answer_key_path` (a path the reviewer process cannot read; enforced by directory permissions and by the loader refusing paths under `benchmarks/answer_keys/`).
 
-`AnswerKey`: `known_defects: list[{id, check, component_ids, description}]`, `correct_conditions: list[{check, component_ids}]`.
+`AnswerKey` (feature 014 `contracts/answer-key.md`, key format 2; a key without `key_format` is format 1 and refused): `key_format: 2`, `package_id` (the file's stem), optional `key_only: true` (its package not built: loads with its ids unchecked, and is never scored), `known_defects: list[{id: D-<n>, check (exact or x.*), component_ids, document_ids (one non-empty), references (exactly on the eleven reference-keyed checks), producer (code or model), expected_status (demonstrated, suspected or unresolved), tag (held_out or tuned_on), held_out_against {prompt, checklist, tools} (exactly when held out), description}]`, `correct_conditions: list[{id: C-<n>, ... as a defect less producer and status}]`. Its one definition is `benchmark/answer_key_model.py`; its one reader `benchmark/answer_key.load_answer_key`, which refuses a key at load naming the entry.
 
-`Scorecard`: `run_id`, `per_package: list[{package_id, valid_findings, missed_known_defects, false_alarms, unresolved_count, net_saved_minutes}]`, `aggregate: {…same counts…, median_net_saved_minutes, recall, false_alarm_rate}`, `distribution: list[net_saved_minutes]`.
+`Scorecard`: `scoring_rules_version` (feature 014: read first, a scorecard of another version refused with the command that re-scores it), `run_id`, `per_package: list[{package_id, valid_findings, missed_known_defects, false_alarms, unresolved_count, net_saved_minutes, matched_defect_ids (detected), flagged_defect_ids, status_mismatch_defect_ids, flagged_below_expected_defect_ids, cleared_defect_ids, missed_defect_ids, contradicted_condition_ids, confirmed_condition_ids (null with no condition), false_alarm_finding_ids, finding_origins, graded_items, not_assessed}]`, `aggregate: {…same counts…, median_net_saved_minutes, recall (held-out items of both producers, from the key's tags), false_alarm_rate, the outcome sums, findings and false alarms by origin, recall_by_producer, held_out_model_defects}`, `distribution: list[net_saved_minutes]`, `key_sha256: {package id: hex}` (feature 014 `contracts/scoring.md` 3 to 8).
 
 ## 4. Relationships
 
