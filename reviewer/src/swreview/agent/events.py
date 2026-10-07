@@ -12,9 +12,9 @@ same in both, and this module is that everything:
   file the pane replays from either (`002/contracts/chat-events.schema.json` is
   authoritative for both).
 - **`replay_events`**, the one reader of that file, beside its writer: the pane's reconnect
-  and remodel replay through it, and so does every benchmark reader (feature 014 plan
-  decision RF-29); **`event_stream`** finds a benchmark run's stream, plain or packed
-  (owner decision 28A, plan decision RF-83).
+  and remodel replay through it, and the benchmark's readers move onto it in US3, US6 and
+  US7 (feature 014 plan decision RF-29); **`event_stream`** finds a benchmark run's stream,
+  plain or packed (owner decision 28A, plan decision RF-83).
 - **`UsageLedger`**, which rides on that stream as a listener and is therefore shared by
   construction: it reads `usage` and `turn.ended` events and knows nothing about what run
   produced them.
@@ -39,11 +39,12 @@ not review-shaped despite the module it lives in (`report/session.py`).
 from __future__ import annotations
 
 import gzip
+import io
 import zlib
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, TextIO
+from typing import Any
 
 from pydantic import ValidationError
 
@@ -59,8 +60,9 @@ from swreview.report.session import SessionUsage
 EVENTS_FILE_NAME = "events.jsonl"
 
 PACKED_EVENTS_FILE_NAME = "events.jsonl.gz"
-"""A benchmark run's stream once `swreview benchmark pack` has packed it (owner decision
-28A). Recordings and live sessions are never packed, so the pane only reads the plain name."""
+"""A benchmark run's stream once `swreview benchmark pack`, which US7 adds, has packed it
+(owner decision 28A). Recordings and live sessions are never packed, so the pane only reads
+the plain name."""
 
 DEFAULT_MAX_STEPS = 200
 """Tool calls one turn may make. A session of many turns may make many times this."""
@@ -158,6 +160,9 @@ def replay_events(
     stream before the first event is written. A line that does not parse ends the replay
     rather than raising - the one way a line is malformed is a backend killed mid-write,
     and what the pane needs then is everything that survived, followed by the live stream.
+    A write cut inside a multibyte character (a tolerance sign, say) leaves a line that is
+    not UTF-8, and that line ends the replay the same way: the stream is read as bytes and
+    each line decoded on its own, so the damage is its own line's and no earlier line's.
 
     A path whose name ends `.gz` is a packed stream (`PACKED_EVENTS_FILE_NAME`) and reads
     as its plain form. A truncated or corrupt archive ends the replay as a malformed line
@@ -166,7 +171,8 @@ def replay_events(
     `on_unreadable` is told where a replay stopped short: the 1-based number of that line
     in the file, blank lines counted. It is not called for a missing or empty file, nor
     for a log read to its end - a reader that must not mistake a damaged log for a
-    complete one (the benchmark's scorer, report and attempt reader) passes it.
+    complete one passes it, as the benchmark's scorer, report and attempt reader will when
+    they move onto it in US3, US6 and US7.
     """
     file = Path(path)
     if not file.is_file():
@@ -176,12 +182,12 @@ def replay_events(
     try:
         with _open_stream(file) as handle:
             for read, line in enumerate(handle, start=1):
-                text = line.strip()
-                if not text:
-                    continue
                 try:
+                    text = line.decode("utf-8").strip()
+                    if not text:
+                        continue
                     event = AgentEvent.model_validate_json(text)
-                except ValidationError:
+                except (UnicodeDecodeError, ValidationError):
                     unreadable = read
                     break
                 if event.seq > after:
@@ -192,20 +198,20 @@ def replay_events(
         on_unreadable(unreadable)
 
 
-def _open_stream(file: Path) -> TextIO:
-    """The stream's lines as text, decompressed when it is packed."""
+def _open_stream(file: Path) -> io.BufferedIOBase:
+    """The stream's lines as bytes, decompressed when it is packed."""
     if file.name.endswith(".gz"):
-        return gzip.open(file, "rt", encoding="utf-8")
-    return file.open(encoding="utf-8")
+        return gzip.open(file, "rb")
+    return file.open("rb")
 
 
 def event_stream(folder: Path | str) -> Path:
     """Where a benchmark run folder's stream is: plain, else packed, else the plain path.
 
     The plain path when neither exists, which `replay_events` reads as an empty stream, as
-    it does today. A folder holding both is a pack that did not finish (the pack writes and
-    verifies the packed stream before it deletes the plain one) and is refused rather than
-    read as either.
+    it does today. A folder holding both is a pack that did not finish (the pack, which US7
+    adds, will write and verify the packed stream before it deletes the plain one) and is
+    refused rather than read as either.
     """
     folder = Path(folder)
     plain = folder / EVENTS_FILE_NAME

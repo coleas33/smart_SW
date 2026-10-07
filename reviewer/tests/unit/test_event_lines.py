@@ -7,7 +7,8 @@ there (plan decision RF-29), and a run's stream is found, plain or packed, throu
 pinned here, as `scoring.md` 11's `test_event_lines.py` numbers it:
 
 1. **Where it stops, and that it says so.** It yields every event of a well-formed log and
-   stops at the first line that is not JSON or not an `AgentEvent`, calling `on_unreadable`
+   stops at the first line that is not JSON, not UTF-8 (a write cut inside a multibyte
+   character, in either form, section 5) or not an `AgentEvent`, calling `on_unreadable`
    with that line's 1-based number in the file, blank lines counted. Without the hook it
    behaves as at `be01974`: a missing file is an empty stream, `after` filters by `seq`, and
    the pane's reconnect and remodel tests (`test_chat_sessions.py`, the chat-server
@@ -236,6 +237,48 @@ def test_a_packed_stream_names_a_malformed_line_as_its_plain_form_does(
     assert _replay(packed) == _replay(plain) == (written, [5])
 
 
+FORMS = {"plain": _plain, "packed": _packed}
+
+
+def _cut_inside_a_character(event: AgentEvent) -> bytes:
+    """`event`'s line as a write cut short in non-ASCII text leaves it: every byte up to and
+    including the first of its first `±` (a tolerance sign, two bytes in UTF-8), so the
+    line ends in half a character and has no newline."""
+    line = _line(event).encode()
+    sign = "±".encode()
+    assert len(sign) == 2 and sign in line
+    return line[: line.index(sign) + 1]
+
+
+@pytest.mark.parametrize("form", FORMS)
+def test_a_last_line_cut_inside_a_multibyte_character_stops_the_replay_and_is_named(
+    tmp_path: Path, form: str
+) -> None:
+    """A line that is not UTF-8 ends the replay as a line that is not JSON does, in either
+    form; a reader without the hook (the pane) gets the same prefix and no exception."""
+    written, data = _log(3)
+    path = FORMS[form](tmp_path, data + _cut_inside_a_character(_event(4, "10 ± 0.02")))
+
+    assert _replay(path) == (written, [4])
+    assert list(replay_events(path)) == written
+
+
+@pytest.mark.parametrize("form", FORMS)
+def test_a_cut_character_with_later_events_after_it_stops_at_the_cut_line(
+    tmp_path: Path, form: str
+) -> None:
+    """A session continued after the cut appends its next event to the cut line, which had
+    no newline: that line is not UTF-8, the replay stops at it, and the lines before it are
+    yielded although one read holds them and the damage."""
+    written, data = _log(3)
+    cut = _cut_inside_a_character(_event(4, "10 ± 0.02"))
+    later = _line(_event(5)).encode() + _line(_event(6)).encode()
+    path = FORMS[form](tmp_path, data + cut + later)
+
+    assert _replay(path) == (written, [4])
+    assert list(replay_events(path)) == written
+
+
 def test_a_packed_stream_that_does_not_exist_is_an_empty_stream(tmp_path: Path) -> None:
     assert _replay(tmp_path / PACKED_EVENTS_FILE_NAME) == ([], [])
 
@@ -263,6 +306,7 @@ def test_a_packed_stream_truncated_mid_archive_yields_what_precedes_the_cut(
 
     assert 0 < len(replayed) < len(written)
     _assert_stopped_at_the_line_being_read(replayed, numbers, written)
+    assert list(replay_events(path)) == replayed, "without the hook: the prefix, no raise"
 
 
 def test_a_packed_stream_whose_header_is_not_gzip_stops_at_line_one(
