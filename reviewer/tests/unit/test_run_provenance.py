@@ -21,13 +21,20 @@ Three things this module pins.
    `None` rather than raising, because a run made before the convention existed renders
    as a row with those columns null (T041), not as an error.
 
-No network: every command here runs `--provider fake`.
+Feature 014 (T045; `specs/014-design-review-eval/contracts/provenance.md` 1 and 8, data-model
+section 7) adds schema 2, written before any review: the pane-defaults marker, the resolved model
+view, the profile's digest and whether it is the checkout's example, the live tools, the inert
+settings, the prompt's digest and whether the tracked tree was dirty. A record older than that
+reads each new field as not recorded, and no record holds a path.
+
+No network: every command here runs the scripted provider.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -36,20 +43,37 @@ import pytest
 from typer.testing import CliRunner
 
 from swreview import cli
-from swreview.agent.checklist import CHECKLIST_FILE
+from swreview.agent.checklist import CHECKLIST_FILE, SYSTEM_PROMPT_FILE
 from swreview.agent.providers import ProviderName
+from swreview.agent.providers.fake import FakeProvider, ScriptedTurn
 from swreview.agent.runner import DEFAULT_MAX_STEPS
-from swreview.agent.settings import LEVER_NAMES, EfficiencySettings, default_model
+from swreview.agent.settings import (
+    INERT_SETTINGS,
+    LEVER_NAMES,
+    MODEL_VIEW_PANE,
+    EfficiencySettings,
+    ProviderSettings,
+    default_model,
+    pane_defaults,
+)
+from swreview.benchmark import digest
 from swreview.benchmark.runner import (
     PROVENANCE_FILE,
     RunProvenance,
     current_commit,
     load_provenance,
+    profile_is_example,
     sha256_of,
+    tree_dirty,
     write_provenance,
 )
+from swreview.checks.standards.profile import load_profile
+from tests.unit.test_cli import PROVIDER_ENV
 
 runner = CliRunner()
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+EXAMPLE_PROFILE = REPO_ROOT / "config" / "standards.example.yaml"
 
 FAKE_MODEL = default_model(ProviderName.FAKE)
 
@@ -364,3 +388,269 @@ def test_current_commit_is_none_outside_a_git_tree(
     outside.mkdir()
     monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path))
     assert current_commit(outside) is None
+
+
+# --- schema 2, written before any review (feature 014 T045) ----------------------
+
+
+def example_profile_copy(folder: Path) -> Path:
+    """The checkout's example profile, its bytes copied under another name into `folder`."""
+    folder.mkdir(parents=True, exist_ok=True)
+    copy = folder / "standards-under-test.yaml"
+    copy.write_bytes(EXAMPLE_PROFILE.read_bytes())
+    return copy
+
+
+def slice_2_run(tmp_path: Path) -> tuple[list[str], dict[str, Any]]:
+    """The parity slice's options, and every field it adds with the value it writes
+    (`provenance.md` 1; data-model section 7)."""
+    profile = example_profile_copy(tmp_path / "profiles")
+    options = ["--pane-defaults", "--standards-profile", str(profile)]
+    expected = {
+        "provenance_schema": 2,
+        "pane_defaults": True,
+        "model_view": pane_defaults(ProviderName.FAKE).model_view.model_dump(mode="json"),
+        "profile_digest": load_profile(profile).identity.sha256,
+        "profile_is_example": True,
+        "live_tools": False,
+        "inert_settings": list(INERT_SETTINGS[ProviderName.FAKE]),
+        "prompt_digest": digest.sha256_of(SYSTEM_PROMPT_FILE),
+        "tree_dirty": tree_dirty(REPO_ROOT),
+    }
+    return options, expected
+
+
+SLICE_RUNS = {2: slice_2_run}
+"""Each slice's run and the fields it lands, by slice number. Lane A3 adds slice 3 (T095) and
+lane B6 slice 6 (T201); each asserts its own fields and nothing about another slice's."""
+
+
+@pytest.mark.parametrize("slice_number", sorted(SLICE_RUNS))
+def test_provenance_records_every_field_its_slice_adds(
+    slice_number: int, tmp_path: Path, tmp_package_dir: Path
+) -> None:
+    """FR-013, FR-052, US2-3: every field a slice adds is in the record, with its value."""
+    options, expected = SLICE_RUNS[slice_number](tmp_path)
+    set_path = one_package_set(tmp_path, tmp_package_dir)
+    out = tmp_path / "runs" / f"slice-{slice_number}"
+
+    result = run_arm(set_path, out, *options)
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    record = read_record(out)
+    assert {name: record[name] for name in expected} == expected
+
+
+def spellings(path: Path) -> set[str]:
+    """Every way a record could hold `path`: either separator, raw and JSON-escaped."""
+    native = str(path)
+    forms = {native, native.replace("\\", "/"), native.replace("/", "\\")}
+    return forms | {json.dumps(form)[1:-1] for form in forms}
+
+
+def test_provenance_holds_no_path(tmp_path: Path, tmp_package_dir: Path) -> None:
+    """FR-013, FR-051: neither the profile's path nor its folder, the set file's, a package's
+    nor the output folder's - a run folder is committed, and a path names a user's machine."""
+    profile = example_profile_copy(tmp_path / "profiles")
+    set_path = one_package_set(tmp_path, tmp_package_dir)
+    out = tmp_path / "runs" / "no-path"
+
+    result = run_arm(set_path, out, "--pane-defaults", "--standards-profile", str(profile))
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    text = (out / PROVENANCE_FILE).read_text(encoding="utf-8")
+    for path in (profile, profile.parent, set_path, tmp_package_dir, out):
+        for form in spellings(path) | spellings(path.resolve()):
+            assert form not in text, f"the record names {form}"
+
+
+SCHEMA_2_FIELDS: dict[str, Any] = {
+    "provenance_schema": 2,
+    "pane_defaults": True,
+    "model_view": MODEL_VIEW_PANE,
+    "profile_digest": "c" * 64,
+    "profile_is_example": True,
+    "live_tools": False,
+    "inert_settings": ("parallel_tool_calls", "drop_prior_reasoning"),
+    "prompt_digest": "d" * 64,
+    "tree_dirty": False,
+}
+"""Every field schema 2 adds, each with a value other than its "not recorded" default."""
+
+NOT_RECORDED: tuple[str, ...] = (
+    "model_view",
+    "profile_digest",
+    "profile_is_example",
+    "live_tools",
+    "inert_settings",
+    "prompt_digest",
+    "tree_dirty",
+)
+"""The new fields a record older than feature 014 reads as `None`, "not recorded"."""
+
+
+def test_a_record_older_than_this_feature_reads_the_new_fields_not_recorded(
+    tmp_path: Path,
+) -> None:
+    """A record exactly as `be01974` wrote it: schema 1, no pane-defaults marker, and every
+    other new field not recorded rather than guessed."""
+    written_before = {
+        "commit": "5733efd",
+        "lever": "parallel_tool_calls",
+        "arm": "on",
+        "rep": 2,
+        "provider": "openai",
+        "model": "gpt-5.6",
+        "effort": "high",
+        "max_steps": DEFAULT_MAX_STEPS,
+        "checklist_digest": "a" * 64,
+        "set_digest": "b" * 64,
+        "started_at": "2026-09-16T09:00:00Z",
+        "set_too_small_override": False,
+        "efficiency": EfficiencySettings(parallel_tool_calls=True).model_dump(mode="json"),
+        "explanations_enabled": False,
+    }
+    (tmp_path / PROVENANCE_FILE).write_text(json.dumps(written_before, indent=2), encoding="utf-8")
+
+    record = load_provenance(tmp_path)
+
+    assert record is not None
+    assert record.provenance_schema == 1
+    assert record.pane_defaults is False
+    assert {name: getattr(record, name) for name in NOT_RECORDED} == dict.fromkeys(NOT_RECORDED)
+
+
+def test_an_unknown_field_still_fails_loudly(tmp_path: Path) -> None:
+    """A schema-2 record reads back whole, and one field more than this build knows fails it,
+    as before (`benchmark/runner.py`'s strict model)."""
+    record = a_record(**SCHEMA_2_FIELDS)
+    write_provenance(tmp_path, record)
+    assert load_provenance(tmp_path) == record
+
+    path = tmp_path / PROVENANCE_FILE
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["profile_path"] = "standards.yaml"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError):
+        load_provenance(tmp_path)
+
+
+def test_the_record_is_utf8_with_lf_line_endings(tmp_path: Path) -> None:
+    """Written as bytes through the one atomic writer, so a record is the same bytes on every
+    platform (`benchmark-run.md` section 4)."""
+    write_provenance(tmp_path, a_record(**SCHEMA_2_FIELDS))
+
+    written = (tmp_path / PROVENANCE_FILE).read_bytes()
+    assert b"\r" not in written
+    assert written.endswith(b"}\n")
+
+
+def test_profile_is_example_is_true_only_for_the_checkouts_example_bytes(tmp_path: Path) -> None:
+    """Compared against the `config/standards.example.yaml` of the root given, byte for byte;
+    the profile's file name and folder play no part."""
+    checkout = tmp_path / "checkout"
+    example = checkout / "config" / "standards.example.yaml"
+    example.parent.mkdir(parents=True)
+    example_bytes = EXAMPLE_PROFILE.read_bytes() + b"# this checkout's own example\n"
+    example.write_bytes(example_bytes)
+    profiles = tmp_path / "profiles"
+    profiles.mkdir()
+    renamed = profiles / "renamed.yaml"
+    renamed.write_bytes(example_bytes)
+    one_byte_changed = profiles / "one-byte.yaml"
+    one_byte_changed.write_bytes(example_bytes[:-2] + b"!\n")
+
+    assert profile_is_example(renamed, root=checkout) is True
+    assert profile_is_example(one_byte_changed, root=checkout) is False
+    assert profile_is_example(EXAMPLE_PROFILE, root=checkout) is False
+    assert profile_is_example(renamed, root=tmp_path / "no-example-here") is False
+    assert profile_is_example(None, root=checkout) is None
+
+
+def git(cwd: Path, *args: str) -> None:
+    subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, timeout=30)
+
+
+def test_tree_dirty_reads_tracked_changes_only_and_is_null_without_git(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`git status --porcelain --untracked-files=no`: an untracked file is not a change to the
+    code a run measured, a modified tracked file is, and git that cannot answer is `None`."""
+    if shutil.which("git") is None:
+        pytest.skip("git is not on the path")
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    git(repository, "init", "-q")
+    tracked = repository / "tracked.txt"
+    tracked.write_bytes(b"one\n")
+    git(repository, "add", "tracked.txt")
+    git(
+        repository,
+        "-c",
+        "user.name=Fictional Tester",
+        "-c",
+        "user.email=tester@example.invalid",
+        "-c",
+        "commit.gpgsign=false",
+        "commit",
+        "-q",
+        "-m",
+        "first",
+    )
+
+    assert tree_dirty(repository) is False
+    (repository / "untracked.txt").write_bytes(b"new\n")
+    assert tree_dirty(repository) is False
+    tracked.write_bytes(b"two\n")
+    assert tree_dirty(repository) is True
+
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path))
+    assert tree_dirty(outside) is None
+
+    def no_git(*_args: Any, **_kwargs: Any) -> Any:
+        raise OSError("git is not on the path")
+
+    monkeypatch.setattr("swreview.benchmark.runner.subprocess.run", no_git)
+    assert tree_dirty(repository) is None
+
+
+def test_inert_settings_name_parallel_calls_and_dropped_reasoning_on_gemini_only(
+    tmp_path: Path, tmp_package_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """FR-052: Gemini makes parallel calls whatever the flag and sends no reasoning items for
+    lever 14 to drop; OpenAI's and the scripted provider's lists are empty. Each run records
+    its own provider's list, here over a scripted adapter standing in for every provider."""
+    assert INERT_SETTINGS[ProviderName.GEMINI] == ("parallel_tool_calls", "drop_prior_reasoning")
+    assert INERT_SETTINGS[ProviderName.OPENAI] == ()
+    assert INERT_SETTINGS[ProviderName.FAKE] == ()
+    assert set(INERT_SETTINGS) == set(ProviderName)
+
+    for name in PROVIDER_ENV:
+        monkeypatch.delenv(name, raising=False)
+
+    def scripted(
+        settings: ProviderSettings, efficiency: EfficiencySettings | None = None
+    ) -> FakeProvider:
+        return FakeProvider(script=[ScriptedTurn(text="done")], model=settings.model)
+
+    monkeypatch.setattr(cli, "provider_factory", scripted)
+    set_path = one_package_set(tmp_path, tmp_package_dir)
+
+    for provider in ProviderName:
+        out = tmp_path / "runs" / provider.value
+        result = invoke(
+            "benchmark",
+            "run",
+            "--set",
+            str(set_path),
+            "--out",
+            str(out),
+            "--provider",
+            provider.value,
+        )
+
+        assert result.exit_code == 0, result.stdout + result.stderr
+        assert read_record(out)["inert_settings"] == list(INERT_SETTINGS[provider]), provider

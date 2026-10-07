@@ -45,6 +45,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
+from functools import partial
 from pathlib import Path
 from typing import Annotated, Any, get_args
 
@@ -52,8 +53,9 @@ import typer
 from pydantic import ValidationError
 from pydantic_core import to_jsonable_python
 
+from swreview import atomic
 from swreview.agent import providers
-from swreview.agent.checklist import CHECKLIST_FILE, load_checklist
+from swreview.agent.checklist import CHECKLIST_FILE, SYSTEM_PROMPT_FILE, load_checklist
 from swreview.agent.providers import AgentProvider, EffortLevel, ProviderName
 from swreview.agent.providers.fake import ScriptedToolCall, ScriptedTurn
 from swreview.agent.runner import (
@@ -65,6 +67,7 @@ from swreview.agent.runner import (
 from swreview.agent.settings import (
     DEFAULT_EFFORT,
     DEFAULT_PROVIDER,
+    INERT_SETTINGS,
     LEVER_NAMES,
     MODEL_VIEW_OFF,
     NO_STUDY,
@@ -79,6 +82,7 @@ from swreview.agent.settings import (
     redact,
 )
 from swreview.agent.settings import pane_defaults as pane_defaults_for
+from swreview.benchmark import sets
 from swreview.benchmark.compare import (
     carry_sign_offs,
     committed_sign_off_sources,
@@ -91,10 +95,14 @@ from swreview.benchmark.compare import (
 from swreview.benchmark.recording import RecordingRefused, read_recording
 from swreview.benchmark.replay import render_replay_lines, replay_recording
 from swreview.benchmark.runner import (
+    PROVENANCE_SCHEMA,
+    AttemptRequest,
     RunProvenance,
     current_commit,
+    profile_is_example,
     run_benchmark,
     sha256_of,
+    tree_dirty,
     write_provenance,
 )
 from swreview.benchmark.scorecard import (
@@ -103,7 +111,7 @@ from swreview.benchmark.scorecard import (
     render_scorecard_md,
     score_run,
 )
-from swreview.benchmark.sets import BenchmarkSet, load_set
+from swreview.benchmark.sets import BenchmarkSet
 from swreview.benchmark.timing import record_timing, record_timing_at
 from swreview.chat import DEFAULT_ALLOW_ORIGIN, DEFAULT_RUN_ROOT
 from swreview.checks.golden_interference import interference_case
@@ -118,6 +126,8 @@ from swreview.checks.standards.profile import (
     DEFAULT_PATH,
     SETTING_NAME,
     ProfileError,
+    ProfileInvalid,
+    ProfileUnreadable,
     ProfileUpgradeRefused,
     load_profile,
     propose_version_4,
@@ -552,6 +562,17 @@ PruneAfterOption = Annotated[
         help="The prune age in rounds (default 2); needs history pruning on.",
     ),
 ]
+ExplainFindingsOption = Annotated[
+    bool | None,
+    typer.Option(
+        "--explain-findings/--no-explain-findings",
+        help="Include the pane's bounded finding explanations and their usage; default: "
+        "on with --pane-defaults, else off.",
+        rich_help_panel="Presentation",
+    ),
+]
+"""Tri-state (feature 014 PP-1): a typed value wins over the base `_review_settings` starts
+from, and `None` is neither typed."""
 
 
 @contextmanager
@@ -768,15 +789,7 @@ def review(
     payload_slimming: PayloadSlimmingOption = False,
     history_pruning: HistoryPruningOption = False,
     prune_after: PruneAfterOption = None,
-    explain_findings: Annotated[
-        bool | None,
-        typer.Option(
-            "--explain-findings/--no-explain-findings",
-            help="Include the pane's bounded finding explanations and their usage; default: "
-            "on with --pane-defaults, else off.",
-            rich_help_panel="Presentation",
-        ),
-    ] = None,
+    explain_findings: ExplainFindingsOption = None,
     json_output: JsonFlag = False,
 ) -> None:
     """Run the agent loop over a package; write session.json and report.md."""
@@ -2253,6 +2266,25 @@ def exceptions_list(
 # --- benchmark -------------------------------------------------------------------
 
 
+class RunStartAdapter:
+    """The adapter `benchmark run` built before any review, held for the run's first attempt.
+
+    The run-start check builds one adapter and maps the effort, so a missing key or an
+    effort the model does not offer is refused once rather than on every package (feature
+    014 `contracts/benchmark-run.md` 3 row 3). An adapter that has served no turn holds no
+    per-turn state, so it is handed to the first attempt instead of thrown away, and a run
+    still builds exactly one adapter per attempt (plan decision RF-60).
+    """
+
+    def __init__(self, adapter: AgentProvider) -> None:
+        self._adapter: AgentProvider | None = adapter
+
+    def take(self) -> AgentProvider | None:
+        """The adapter, the first time; `None` after, so every later attempt builds its own."""
+        adapter, self._adapter = self._adapter, None
+        return adapter
+
+
 def _review_fn(
     package_dir: Path,
     session_out_dir: Path,
@@ -2260,31 +2292,57 @@ def _review_fn(
     provider: str,
     model: str,
     effort: str,
+    attempt: AttemptRequest,
     efficiency: EfficiencySettings | None = None,
     explain_findings: bool = False,
+    run_start: RunStartAdapter | None = None,
 ) -> Any:
     """One package of a benchmark set, reviewed through the same hooks as `review`.
 
     A fresh adapter per package on purpose: adapters carry per-turn state (step indices,
-    a client), and a set of twenty packages sharing one would interleave their traces.
+    a client), and a set of twenty packages sharing one would interleave their traces. The
+    one exception is no exception: the first attempt takes `run_start`'s adapter, which has
+    served no turn.
+
+    `attempt` carries the run's model view and standards profile, passed to the review as
+    the pane passes its own; the live tools are never offered to a benchmark review
+    (feature 014 RF-44, `contracts/benchmark-run.md` 5.1).
 
     The redaction is per package too, rather than left to `benchmark_run`: a library
     caller that reaches this through `benchmark.runner`'s default `review_fn` gets the
     same guarantee as one that came through the command line (FR-015).
     """
     settings = ProviderSettings.from_env(provider=provider, model=model, effort=effort)
+    adapter = run_start.take() if run_start is not None else None
     with _redacting(settings) as redactor:
         return run_review(
             package_dir,
             session_out_dir,
-            provider=provider_factory(settings, efficiency),
+            provider=adapter if adapter is not None else provider_factory(settings, efficiency),
             model=settings.model,
             effort=settings.effort,
             key_source=settings.key_source,
             efficiency=efficiency,
+            model_view=attempt.model_view,
+            standards_profile=attempt.standards_profile,
             explain_findings=explain_findings,
+            bridge=False,
             redact=redactor,
         )
+
+
+def _refuse_a_folder_in_use(out: Path) -> None:
+    """Section 3 row 1 (feature 014 `contracts/benchmark-run.md`): `--out` is a new folder or
+    an empty one.
+
+    A second run into one folder would append a second session with duplicate sequence
+    numbers to every package's stream, so anything already there - a file in the folder, or
+    a file where the folder would be - is refused before any review. The message names no
+    command: `benchmark resume`, which the robustness slice adds with its pointer, does not
+    exist yet.
+    """
+    if out.exists() and (not out.is_dir() or any(out.iterdir())):
+        raise FileExistsError(f"{out} is not empty; choose a new folder")
 
 
 def _refuse_a_set_too_small_to_gate(benchmark_set: BenchmarkSet, override: bool) -> None:
@@ -2297,8 +2355,11 @@ def _refuse_a_set_too_small_to_gate(benchmark_set: BenchmarkSet, override: bool)
     never be read as a gate.
 
     It applies to a run that declares itself part of a study - one that typed `--lever`,
-    `--study` or `--arm`. A plain `benchmark run` over a small set is a smoke test and is
-    not held to a gate's precondition; it produces no arm and gates nothing.
+    `--study` or `--arm`, and since feature 014 (PP-6) `--pane-defaults`,
+    `--payload-slimming` or `--history-pruning`, which change what a review runs with as a
+    lever does. A plain `benchmark run` over a small set is a smoke test and is not held to
+    a gate's precondition, and neither is one that only names a standards profile: it
+    produces no arm and gates nothing.
     """
     if override or any(ref.held_out for ref in benchmark_set.packages):
         return
@@ -2319,14 +2380,19 @@ def benchmark_run(
     model: ModelOption = None,
     effort: EffortOption = DEFAULT_EFFORT_CHOICE,
     lever: LeverOption = None,
-    explain_findings: Annotated[
-        bool,
+    pane_defaults: PaneDefaultsOption = False,
+    payload_slimming: PayloadSlimmingOption = False,
+    history_pruning: HistoryPruningOption = False,
+    prune_after: PruneAfterOption = None,
+    explain_findings: ExplainFindingsOption = None,
+    standards_profile: Annotated[
+        Path | None,
         typer.Option(
-            "--explain-findings/--no-explain-findings",
-            help="Match pane presentation; include explanation usage in both study arms.",
-            rich_help_panel="Presentation",
+            "--standards-profile",
+            help="Grade the release standards checks in every review, against this profile; "
+            "a profile that cannot be loaded stops the run before any review.",
         ),
-    ] = False,
+    ] = None,
     study: Annotated[
         str,
         typer.Option("--study", help="The lever this run is an arm of, or none."),
@@ -2349,52 +2415,96 @@ def benchmark_run(
     json_output: JsonFlag = False,
 ) -> None:
     """Review every package in the set, with answer keys unreadable."""
-    declares_a_study = bool(lever) or study != NO_STUDY or arm is not None
-    efficiency = _efficiency(
-        lever,
-        provider=provider,
+    # The one root every path rule reads, once, at call time (feature 014 RF-4), so a test
+    # points the command at a temporary checkout by patching `sets.REPO_ROOT`.
+    root = sets.REPO_ROOT
+    declares_a_study = (
+        bool(lever)
+        or pane_defaults
+        or payload_slimming
+        or history_pruning
+        or study != NO_STUDY
+        or arm is not None
+    )
+    resolved = _review_settings(
+        provider,
+        pane_defaults=pane_defaults,
+        lever=lever,
+        payload_slimming=payload_slimming,
+        history_pruning=history_pruning,
+        prune_after=prune_after,
+        explain_findings=explain_findings,
         study=study,
         arm=arm,
         allow_workstation_levers=False,
     )
-    with _errors_as_exit_1():
-        benchmark_set = load_set(set_file)
-        if declares_a_study:
-            _refuse_a_set_too_small_to_gate(benchmark_set, set_too_small_override)
+    run_dir = Path(out).resolve()
+    with _errors_as_exit_1(ProfileUnreadable, ProfileInvalid):
+        # Feature 014 `contracts/benchmark-run.md` section 3, in its order, each before any
+        # review and with nothing written. Row 1: a new folder or an empty one.
+        _refuse_a_folder_in_use(out)
+        # Row 2: loaded here and never in the shared resolver, so `review` and the pane keep
+        # recording a refusal and going on.
+        profile = load_profile(standards_profile) if standards_profile is not None else None
+        # Row 3: one adapter, its effort mapped, sending nothing; the first attempt's.
         settings = _provider_settings(provider, model, effort)
-        started_at = datetime.now(UTC)
         with _redacting(settings):
+            adapter = provider_factory(settings, resolved.efficiency)
+            adapter.effort_mapping(settings.effort)
+            run_start = RunStartAdapter(adapter)
+            benchmark_set = sets.load_set(set_file, root=root)
+            # Rows 5 and 6, a committable folder over private data and the pane study's file
+            # rules, land with feature 014 T054. Row 7, P-3:
+            if declares_a_study:
+                _refuse_a_set_too_small_to_gate(benchmark_set, set_too_small_override)
+
+            # Before any review, so a run that stops part way is still attributable: the
+            # location-free saved set, then the record that digests it.
+            started_at = datetime.now(UTC)
+            run_dir.mkdir(parents=True, exist_ok=True)
+            saved_set = run_dir / SAVED_SET_FILE
+            atomic.write_atomic(saved_set, benchmark_set.saved_form(root=root))
+            provenance_file = write_provenance(
+                run_dir,
+                RunProvenance(
+                    commit=current_commit(root),
+                    lever=study,
+                    arm=arm,
+                    rep=rep,
+                    provider=settings.provider.value,
+                    model=settings.model,
+                    effort=settings.effort,
+                    max_steps=DEFAULT_MAX_STEPS,
+                    checklist_digest=sha256_of(CHECKLIST_FILE),
+                    set_digest=sha256_of(saved_set),
+                    started_at=started_at,
+                    set_too_small_override=set_too_small_override,
+                    efficiency=resolved.efficiency,
+                    explanations_enabled=resolved.explain_findings,
+                    provenance_schema=PROVENANCE_SCHEMA,
+                    pane_defaults=pane_defaults,
+                    model_view=resolved.model_view,
+                    profile_digest=profile.identity.sha256 if profile is not None else None,
+                    profile_is_example=profile_is_example(standards_profile, root=root),
+                    live_tools=False,
+                    inert_settings=INERT_SETTINGS[provider],
+                    prompt_digest=sha256_of(SYSTEM_PROMPT_FILE),
+                    tree_dirty=tree_dirty(root),
+                ),
+            )
             package_dirs = run_benchmark(
                 set_file,
                 out,
                 provider=settings.provider.value,
                 model=settings.model,
                 effort=settings.effort,
-                review_fn=_review_fn,
-                efficiency=efficiency,
-                explain_findings=explain_findings,
+                review_fn=partial(_review_fn, run_start=run_start),
+                efficiency=resolved.efficiency,
+                explain_findings=resolved.explain_findings,
+                root=root,
+                model_view=resolved.model_view,
+                standards_profile=standards_profile,
             )
-        saved_set = Path(out).resolve() / SAVED_SET_FILE
-        saved_set.write_text(benchmark_set.model_dump_json(indent=2) + "\n", encoding="utf-8")
-        provenance_file = write_provenance(
-            Path(out).resolve(),
-            RunProvenance(
-                commit=current_commit(),
-                lever=study,
-                arm=arm,
-                rep=rep,
-                provider=settings.provider.value,
-                model=settings.model,
-                effort=settings.effort,
-                max_steps=DEFAULT_MAX_STEPS,
-                checklist_digest=sha256_of(CHECKLIST_FILE),
-                set_digest=sha256_of(saved_set),
-                started_at=started_at,
-                set_too_small_override=set_too_small_override,
-                efficiency=efficiency,
-                explanations_enabled=explain_findings,
-            ),
-        )
 
     payload = {
         "set": str(Path(set_file).resolve()),
@@ -2414,15 +2524,23 @@ def benchmark_run(
     _emit(payload, lines, json_output)
 
 
-def _benchmark_set_for(run_dir: Path, set_file: Path | None) -> BenchmarkSet:
-    """The set a run was made from: `--set` if given, else the copy the run saved."""
+def _benchmark_set_for(run_dir: Path, set_file: Path | None, *, root: Path) -> BenchmarkSet:
+    """The set a run was made from: `--set` if given, else the copy the run saved.
+
+    An explicit `--set` is a set file, read by `load_set`; the saved copy by
+    `load_saved_set`, whose relative entries resolve against `root`, the reader's checkout,
+    wherever the run folder lies (feature 014 `contracts/provenance.md` 6.1). `load_set`
+    would refuse them: a run folder is no `benchmarks/sets/`.
+    """
     path = Path(set_file) if set_file is not None else Path(run_dir) / SAVED_SET_FILE
     if not path.is_file():
         raise FileNotFoundError(
             f"no benchmark set to score against at {path}: pass --set, or score a run made "
             f"by `swreview benchmark run`, which saves {SAVED_SET_FILE} in the run directory"
         )
-    return load_set(path)
+    if set_file is not None:
+        return sets.load_set(path, root=root)
+    return sets.load_saved_set(path, root=root)
 
 
 @benchmark_app.command("score")
@@ -2438,8 +2556,9 @@ def benchmark_score(
     json_output: JsonFlag = False,
 ) -> None:
     """Score a run against its answer keys; write scorecard.json and scorecard.md."""
+    root = sets.REPO_ROOT  # read at call time, as `benchmark run` reads it
     with _errors_as_exit_1():
-        benchmark_set = _benchmark_set_for(run_dir, set_file)
+        benchmark_set = _benchmark_set_for(run_dir, set_file, root=root)
         scorecard = score_run(run_dir, answer_keys, benchmark_set)
         scorecard_json = Path(run_dir).resolve() / "scorecard.json"
         scorecard_md = Path(run_dir).resolve() / "scorecard.md"

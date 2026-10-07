@@ -2484,12 +2484,83 @@ def test_benchmark_run_without_a_model_takes_the_providers_default(
     assert [provider.settings.model for provider in built] == ["gemini-3.5-flash"]
 
 
-def test_benchmark_run_on_a_missing_set_exits_1(tmp_path: Path) -> None:
+def test_the_run_start_adapter_is_the_first_attempts(
+    tmp_path: Path,
+    tmp_package_dir: Path,
+    fake_provider: Callable[..., list[RecordingProvider]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Feature 014 RF-60 (`benchmark-run.md` 3 row 3): the adapter `benchmark run` builds to
+    check the provider and the effort, before any folder is written, is the first package's,
+    and every later package builds its own - one adapter per attempt, as before. Its resume
+    half is lane B6's (T203)."""
+    built = fake_provider()
+    scripted = cli.provider_factory
+    out = tmp_path / "runs" / "two-packages"
+    folder_written_at_build: list[bool] = []
+
+    def watched_factory(
+        settings: ProviderSettings, efficiency: EfficiencySettings | None = None
+    ) -> RecordingProvider:
+        folder_written_at_build.append(out.exists())
+        return scripted(settings, efficiency)
+
+    monkeypatch.setattr(cli, "provider_factory", watched_factory)
+    review = cli.run_review
+    served: list[Any] = []
+
+    def recording_review(package_dir: Path, out_dir: Path, **options: Any) -> Any:
+        served.append(options["provider"])
+        return review(package_dir, out_dir, **options)
+
+    monkeypatch.setattr(cli, "run_review", recording_review)
+    second = tmp_path / "second-package"
+    shutil.copytree(tmp_package_dir, second)
+    set_path = tmp_path / "sets" / "two.json"
+    set_path.parent.mkdir()
+    set_path.write_text(
+        json.dumps(
+            {
+                "name": "two",
+                "packages": [
+                    {"package_id": "cover", "path": str(tmp_package_dir), "held_out": True},
+                    {"package_id": "cover-copy", "path": str(second), "held_out": True},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
     result = invoke(
-        "benchmark", "run", "--set", str(tmp_path / "nowhere.json"), "--out", str(tmp_path / "o")
+        "benchmark", "run", "--set", str(set_path), "--out", str(out), "--provider", "fake"
+    )
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert len(built) == 2
+    assert folder_written_at_build == [False, True]
+    assert len(served) == 2
+    assert all(used is made for used, made in zip(served, built, strict=True))
+
+
+def test_benchmark_run_on_a_missing_set_exits_1(tmp_path: Path) -> None:
+    """Moved by feature 014 (T048, `benchmark-run.md` 15): the provider is resolved before the
+    set is read (section 3 row 3), so this passes `--provider fake` - the default, OpenAI, would
+    stop at row 3 on a machine without a key and pin nothing about the set - and asserts that
+    the one line names the missing set file."""
+    result = invoke(
+        "benchmark",
+        "run",
+        "--set",
+        str(tmp_path / "nowhere.json"),
+        "--out",
+        str(tmp_path / "o"),
+        "--provider",
+        "fake",
     )
 
     assert result.exit_code == 1
+    assert result.stderr.strip().count("\n") == 0
+    assert "nowhere.json" in result.stderr
 
 
 def test_benchmark_score_writes_a_scorecard(benchmark_run_dir: Path, answer_keys: Path) -> None:
