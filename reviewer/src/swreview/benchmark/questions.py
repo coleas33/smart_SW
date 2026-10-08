@@ -17,6 +17,9 @@ there is no second matcher (FR-053).
 - **The one relation** (section 3): `asks_within` is the product's `report.session.covers`,
   asked of ids resolved to instances, plus one branch, an item asked again with no ids. It holds
   no second copy of `covers`.
+- **Scripted answers** (section 3's third use): `scripted_answer_for`, the one decision the
+  answer driver makes for an open request, a delivery of the one case-file entry it asks within
+  or unscripted with its reason.
 - **The part-roles question** (section 4): matched by its identity alone.
 - **The columns** (section 6): re-asks, repeats of open questions, unanswerable and unmatched
   requests, question counts, unscripted questions and whether the answer-turn bound was
@@ -24,10 +27,11 @@ there is no second matcher (FR-053).
   assessed.
 
 The key's question entries are refused at load by `question_entry_refusals` (section 5.3), the
-key loader's row 11. This module imports `benchmark/answer_key_model.py` and
-`benchmark/answers.py` only for annotations: the scorer passes it the key's entries and the
-parsed answer log, so the driver, which imports this module, loads no key module and no import
-cycle forms (`scripted-answers.md` 6; FR-032).
+key loader's row 11. This module imports `benchmark/answer_key_model.py`,
+`benchmark/answers.py` and `benchmark/case_file.py` only for annotations: the scorer passes it
+the key's entries and the parsed answer log, and the driver the case file's entries, so the
+driver, which imports this module, loads no key module and no import cycle forms
+(`scripted-answers.md` 6; FR-032).
 """
 
 from __future__ import annotations
@@ -59,7 +63,8 @@ if TYPE_CHECKING:
         QuestionCount,
         UnanswerableRequest,
     )
-    from swreview.benchmark.answers import AnswerLog, UnscriptedRequest
+    from swreview.benchmark.answers import AnswerLog, UnscriptedReason, UnscriptedRequest
+    from swreview.benchmark.case_file import ScriptedAnswer
 
 REQUEST_TOOL = "request_evidence"
 """The one tool a question is asked with; every call of it is a request call (section 1)."""
@@ -237,6 +242,58 @@ def is_part_roles_question(request: EvidenceRequest) -> bool:
         and tuple(request.options) == (part_roles.OPTION_ALL, part_roles.OPTION_NONE)
         and request.blocks is None
     )
+
+
+# --- section 3's third use: a scripted answer ----------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Delivery:
+    """An open request answered at a point by the one case-file entry it asks within."""
+
+    entry_id: str
+
+
+@dataclass(frozen=True)
+class Unscripted:
+    """An open request given nothing at a point, and why: no entry asks within it, several do,
+    or it names no item and no id."""
+
+    reason: UnscriptedReason
+    entries: tuple[str, ...] = ()
+    """The entries an `ambiguous` request matched, in file order; empty for the other reasons."""
+
+
+def scripted_answer_for(
+    request: EvidenceRequest, answers: Sequence[ScriptedAnswer], *, ids: QuestionIds
+) -> Delivery | Unscripted:
+    """The case-file entry that answers the open `request`, or why none does (section 3's third
+    use; FR-053, QA-13, QA-14): the one decision the answer driver makes for each request.
+
+    The part-roles question is answered by the `part_roles` entry alone, matched by its identity
+    and never by ids (section 4). Any other request, model- or code-written, is matched against
+    every entry that is not `part_roles` through `asks_within`, the request as the later one:
+    exactly one match is a delivery; several are `ambiguous`, naming them in file order (the case
+    file's row 8 leaves only a request naming an item and no ids able to match two); none is
+    `no_answer`, or `names_nothing` when the request names no item and no id, which asks within
+    nothing.
+    """
+    if is_part_roles_question(request):
+        entry_id = next((answer.id for answer in answers if answer.part_roles), None)
+        return Delivery(entry_id) if entry_id is not None else Unscripted("no_answer")
+    matched = tuple(
+        answer.id
+        for answer in answers
+        if not answer.part_roles
+        and asks_within(request.blocks, request.entity_ids, answer.item, answer.ids, ids=ids)
+    )
+    if len(matched) == 1:
+        return Delivery(matched[0])
+    if matched:
+        return Unscripted("ambiguous", matched)
+    if _names_nothing(request.blocks, request.entity_ids):
+        return Unscripted("names_nothing")
+    return Unscripted("no_answer")
 
 
 # --- section 5.3: the key's question entries, refused at load ------------------------------------
@@ -457,7 +514,9 @@ def question_columns(
         not_assessed["unmatched_requests"] = unreadable_reason
     else:
         unmatched = [
-            CallRow.model_validate(_row_fields(call)) for call in readable if _names_nothing(call)
+            CallRow.model_validate(_row_fields(call))
+            for call in readable
+            if _names_nothing(call.item, call.ids)
         ]
 
     unanswerable_rows: list[UnanswerableRow] | None = None
@@ -554,9 +613,10 @@ def _unreadable_reason(unreadable: Sequence[UnreadableCall]) -> str | None:
     )
 
 
-def _names_nothing(call: RequestCall) -> bool:
-    """An unmatched call (FR-053, US3-7): no item and no id; in no other column."""
-    return call.item is None and not call.ids
+def _names_nothing(item: str | None, entity_ids: Collection[str]) -> bool:
+    """A call or request naming no item and no id (FR-053), which asks within nothing: an
+    unmatched call (US3-7), in no other column, and an unscripted request `names_nothing`."""
+    return item is None and not entity_ids
 
 
 def _repeats(
@@ -574,7 +634,7 @@ def _repeats(
     re_asks: list[RepeatRow] = []
     open_repeats: list[RepeatRow] = []
     for call in calls:
-        if _names_nothing(call):
+        if _names_nothing(call.item, call.ids):
             continue
         earlier = [
             question
@@ -621,7 +681,7 @@ def _count(
     return sum(
         1
         for call in calls
-        if not _names_nothing(call)
+        if not _names_nothing(call.item, call.ids)
         and (
             asks_within(call.item, call.ids, rule.item, rule.ids, ids=ids)
             if rule.ids
