@@ -116,7 +116,7 @@ clean form over the same places, and its correct call names the same references 
 | `fit_interference_unintended` | `fit.size_only` | model, suspected | `tolerance_source`, `drawing_only` | limits wholly interfering where a slip fit is meant | clearance limits | as above | as above |
 | `fit_limit_missing` | `fit.size_only` | model, unresolved | `tolerance_source`, `drawing_only` | one side drawn with no tolerance (`checks/fit.py:85-100`) | both sides toleranced for clearance | as above | as above |
 | `stack_out_of_gap` | `stack.worst_case` | model, demonstrated | `tolerance_source`, `drawing_only` | three or four drawn contributors whose worst-case band leaves the drawn target gap | tolerances tightened inside it | `check_axial_stack(contributors, signs, target)` | the stack with one contributor left out |
-| `callout_drill_only` | `drawing.manufacturing_inputs` | model, unresolved | `drawing_only` | the part drawing's tapped-hole callout states the drill depth only; the model hole carries a thread depth | the callout states the thread depth | `record_drawing_finding(drawing, sheet, observed, requirement, [callout], "unresolved", action)` | none: the entry is document-level |
+| `callout_drill_only` | `drawing.manufacturing_inputs` | model, unresolved | `drawing_only` | the part drawing's tapped-hole callout states the drill depth only (the plant reads the model hole's thread, count and drill depth; a core design's hole carries the thread depth its clean form states, while `cover-blind-tap`'s row carries none, `cases.md` 6.4; corrected 2026-10-08, research §9.14) | the callout states the thread depth | `record_drawing_finding(drawing, sheet, observed, requirement, [callout], "unresolved", action)` | none: the entry is document-level |
 | `callout_thread_differs` | `drawing.manufacturing_inputs` | model, suspected | `drawing_only` | the callout's thread differs from the model hole's Hole Wizard thread | equal | as above, `"suspected"` | none |
 | `callout_count_differs` | `drawing.manufacturing_inputs` | model, suspected | `drawing_only` | the callout's instance count differs from the model hole's instances | equal | as above, `"suspected"` | none |
 
@@ -146,7 +146,7 @@ check id, never a family (`answer-key.md` 3, AK-4); families appear only on forb
 | Value | The package holds | So |
 |---|---|---|
 | `joint_placement` | the screw or pin on no extracted hole axis, none of its faces a hole's member face | the joint map leaves it unplaced (`checks/joints.py:976-1062`); its fastener row still lets `check_fastener_joint` address it |
-| `joint_absent` | nothing in the holes | the joint map forms no joint for the pair |
+| `joint_absent` | nothing in the holes, and the two holes' faces more than the joint rules' 1 mm adjacency apart along their axis (`checks/joint_rules.yaml` `adjacency_gap_mm`) | the joint map forms no joint for the pair. Empty holes alone do not keep it out: the joint map pairs two adjacent coaxial holes whether or not anything sits in them, and judges an empty pair's alignment with the fastener size their Hole Wizard size names (`checks/joint_alignment.py` `fastener_size`), so an offset adjacent pair would be a code-produced `hole.nominal_alignment`. `check_hole_alignment` reads the two holes' axes and needs no adjacency (corrected 2026-10-08, research §9.14) |
 | `tolerance_source` | no toleranced model dimension, model position tolerance, ISO 286 Hole Wizard class or validated drawing binding **anywhere in the package** (`checks/tolerances.py:1007-1030`) | the joint map's stack, which runs on every joint once any source is held (`checks/joint_alignment.py:698-712`), stays off, and the limits live only on an ingested sheet |
 | `drawing_only` | the evidence only on an ingested sheet | no argument-free check reads it for this rule |
 
@@ -163,8 +163,13 @@ need the check logic it may not import.
 - the key: each seed becomes a correct condition, in seed order `C-1`, `C-2`: the kind's check, the
   seed's parts, documents and references, the seed's tag (a held-out seed's condition is held out
   with the same stamp), and the description "clean twin of <case> D-<n>: <the clean form>";
-- the correct call: the kind's, on the same references, for every kind but the drawing kinds (a
-  correct reviewer records nothing on a complete drawing, so a drawing condition has none);
+- the correct call: the kind's, on the same references, for every kind whose call confirms its
+  clean form (`SeedKind.confirms_clean`). Two have none: the drawing kinds (a correct reviewer
+  records nothing on a complete drawing) and `coaxiality_undrawn` (with no tolerance drawn,
+  `check_hole_alignment` writes unresolved on aligned holes too, `checks/hole_alignment.py:98-101`;
+  owner decision 55A). Such a condition carries no correct call, so the validation's leg (b) rule 4
+  (`cases.md` 7) never asks it to confirm, and it still catches a false alarm: a finding that
+  contradicts it;
 - the set entry: `twin_of` the source case, the same `design`, `held_out` derived.
 
 A twin is never written by hand: a spec that names a `-twin` id is refused (section 10, row 1).
@@ -329,12 +334,16 @@ class SheetBuilder:
 
 - **The vocabulary.** `CASE_VOCABULARY` is `DRAWING_VOCABULARY` (`tests/support/drawings.py:96`),
   plus every token of the example profile's string values, read from the loaded profile so the list
-  cannot drift from it (research §8.14), plus three short committed lists: generic part nouns
+  cannot drift from it (research §8.14), plus four short committed lists: generic part nouns
   (plate, pin, dowel, cover, housing, bracket, base, shaft, bushing, spacer, flange, clevis,
   carriage, rail, shim, clamp, block, mount, gear, bearing, assy, blind, tap), callout words (drill,
-  thread, deep, thru, fixture, value) and case-id words (twin, fit, clean, contact, positive,
-  lightweight, empty, sitting, groups, committed, pilot, pane, smoke). A thread or fit class token (`6H`, `H7`,
-  `g6`) passes as a size. Plan decision GN-6.
+  thread, deep, thru, fixture, value), case-id words (twin, fit, clean, contact, positive,
+  lightweight, empty, sitting, groups, committed, pilot, pane, smoke) and the Resilient Modeling
+  group words (ref, construction, core, detail, modify, quarantine: the words of the six group
+  folders' names `1-Ref` to `6-Quarantine`, which every compliant tree (5.3) and R-7 lay and RMS
+  matches exactly; owner decision 54A; `test_benchmark_case_generator.py` holds the list equal to
+  `checks/rms_types.yaml`'s `groups`, which the generator may not import, section 9). A thread or
+  fit class token (`6H`, `H7`, `g6`) passes as a size. Plan decision GN-6.
 - **Names** are held to it with `fictional_offences(text, CASE_VOCABULARY)`
   (`tests/support/mechanical.py:173`): file, component, configuration and feature names, property
   names and values, package, case, design and set names, every path. **Sentences** are the author's
@@ -441,6 +450,11 @@ Each fails before its behaviour exists (constitution III).
 7. **Seed kinds**: each kind's family is `family_of(check)`; withheld non-empty exactly when the
    producer is model; no kind's check is a family; planted and clean forms of each kind yield the
    same check and references.
+8. **Owner decisions 54A to 56A**: `RMS_GROUP_WORDS` equals the words of `checks/rms_types.yaml`'s
+   `groups`, and a case with a tree on its custom parts, and its twin, pass the names check; the
+   kinds whose call cannot confirm their clean form are exactly the drawing kinds and
+   `coaxiality_undrawn`, whose twin condition carries no correct call; an as-written nominal
+   renders `kalo-fit-1`'s sheet texts as `cases.md` 6.3 writes them.
 
 `reviewer/tests/unit/test_benchmark_generator_imports.py`: section 9 (SC-006, FR-027), with a
 planted import of `swreview.tools.checks_fit`, of `swreview.benchmark.answer_key` and of

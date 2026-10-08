@@ -171,11 +171,17 @@ DRAWING_VOCABULARY: frozenset[str] = VOCABULARY | frozenset(
 _WORD_NUMBER = re.compile(r"(?<=[A-Za-z])(?=[0-9])|(?<=[0-9])(?=[A-Za-z])")
 
 
-def drawing_fictional_offences(text: str) -> list[str]:
+def drawing_fictional_offences(
+    text: str, vocabulary: frozenset[str] = DRAWING_VOCABULARY
+) -> list[str]:
     """Feature 010's vocabulary check, over the drawing vocabulary, with a word and the number
     run into it read apart: SOLIDWORKS names a drawing's things that way (`Sheet1`,
-    `Drawing View2`, `GTol1`), and a fit class (`H7`) is a letter and a number."""
-    return fictional_offences(_WORD_NUMBER.sub(" ", text), DRAWING_VOCABULARY)
+    `Drawing View2`, `GTol1`), and a fit class (`H7`) is a letter and a number.
+
+    `vocabulary` is the drawing vocabulary unless a caller extends it, as feature 014's case
+    generator does (`tests/benchmark_cases/vocabulary.py`), so the one word-and-number rule
+    serves both."""
+    return fictional_offences(_WORD_NUMBER.sub(" ", text), vocabulary)
 
 
 @dataclass(frozen=True)
