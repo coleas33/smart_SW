@@ -30,6 +30,16 @@ denylist when it is on the machine.
 The schema version is pinned to `DRAWING_FIXTURE_SCHEMA_VERSION`, never `SCHEMA_VERSION`: these
 are 1.6.0 packages, and a later IR minor must load them unchanged (FR-048) rather than rewrite
 them under the regeneration test.
+
+**Feature 014 adds `SheetBuilder`** (`specs/014-design-review-eval/contracts/generator.md`
+section 6, GN-7): PDF-ingested sheets (`package.drawings`), the only drawing dimensions
+`check_fit`, `check_axial_stack` and a toleranced `check_hole_alignment` read while the native
+binding is unvalidated (`tools/refs.resolve_dimension`). Its shapes are the PDF ingest's
+(`ingest/pdf_drawing.py`): a drawing document with configuration `Default` and a `pdf` manifest
+entry, written by `write_drawing_document`, the one function `DrawingBuilder` writes its drawing
+documents with too; sheets in mm at 1:1; dimensions and notes annotated `dim-<page>-<n>` and
+`note-<page>-<n>` in call order; a page with no text layer a `no_text` sheet that states nothing,
+with the ingest's gap. It leaves the base's schema version alone: the case generator pins its own.
 """
 
 from __future__ import annotations
@@ -43,12 +53,14 @@ from uuid import UUID
 from swreview.ir.models import (
     AttachedFace,
     BomRow,
+    Dimension,
     DisplayDimensionRecord,
     Document,
     DrawingAnnotation,
     DrawingCandidate,
     DrawingNote,
     DrawingRecord,
+    DrawingSheet,
     DrawingSheetRecord,
     DrawingTable,
     DrawingView,
@@ -57,6 +69,7 @@ from swreview.ir.models import (
     Gap,
     GtolFrame,
     ManifestEntry,
+    Note,
     Quantity,
     RevisionTable,
     RevisionTableRow,
@@ -72,7 +85,11 @@ __all__ = [
     "FULL_PHASES",
     "Attach",
     "DrawingBuilder",
+    "Limits",
+    "NoteKind",
+    "SheetBuilder",
     "drawing_fictional_offences",
+    "write_drawing_document",
 ]
 
 DRAWING_FIXTURE_SCHEMA_VERSION = "1.6.0"
@@ -179,6 +196,52 @@ records no value (feature 006's difference p)."""
 ANGULAR_TYPES: frozenset[int] = frozenset({3, 16})
 
 
+def write_drawing_document(
+    documents: list[Document],
+    entries: list[ManifestEntry],
+    stem: str,
+    *,
+    properties: Mapping[str, str] | None,
+    configuration: str,
+    export_method: Literal["native", "pdf"],
+) -> str:
+    """Append a drawing document, the next `doc:NNNN`, to `documents` and its manifest entry to
+    `entries`; return its id. The path is `<stem>.SLDDRW` in the fictional vault.
+
+    The one writer of a drawing document, which `DrawingBuilder` and `SheetBuilder` both call,
+    so the two cannot disagree about what one is (feature 014 GN-7). `configuration` is `""`
+    for a native drawing, which has none (`contracts/attach.md` section 2), and `"Default"` for
+    a PDF-ingested one, as the ingest writes it."""
+    document_id = f"doc:{len(documents) + 1:04d}"
+    path = f"{FICTIONAL_ROOT}Vault\\{stem}.SLDDRW"
+    documents.append(
+        Document(
+            document_id=document_id,
+            kind="drawing",
+            file_name=f"{stem}.SLDDRW",
+            path=path,
+            configurations=[configuration] if configuration else [],
+            active_configuration=configuration,
+            custom_properties=dict(properties or {}),
+            config_properties={},
+            material=None,
+            mass=None,
+        )
+    )
+    entries.append(
+        ManifestEntry(
+            document_id=document_id,
+            vault_path=path,
+            vault_version=1,
+            revision=None,
+            configuration=configuration,
+            local_modified=False,
+            export_method=export_method,
+        )
+    )
+    return document_id
+
+
 class DrawingBuilder:
     """Adds drawings to `base`, allocating every drawing id from one package-wide sequence."""
 
@@ -211,32 +274,13 @@ class DrawingBuilder:
 
     def drawing_document(self, stem: str, *, properties: Mapping[str, str] | None = None) -> str:
         """A drawing document beside the base's documents, with no configuration."""
-        document_id = f"doc:{len(self._documents) + 1:04d}"
-        path = f"{FICTIONAL_ROOT}Vault\\{stem}.SLDDRW"
-        self._documents.append(
-            Document(
-                document_id=document_id,
-                kind="drawing",
-                file_name=f"{stem}.SLDDRW",
-                path=path,
-                configurations=[],
-                active_configuration="",
-                custom_properties=dict(properties or {}),
-                config_properties={},
-                material=None,
-                mass=None,
-            )
-        )
-        self._entries.append(
-            ManifestEntry(
-                document_id=document_id,
-                vault_path=path,
-                vault_version=1,
-                revision=None,
-                configuration="",
-                local_modified=False,
-                export_method="native",
-            )
+        document_id = write_drawing_document(
+            self._documents,
+            self._entries,
+            stem,
+            properties=properties,
+            configuration="",
+            export_method="native",
         )
         self._drawing_ids.append(document_id)
         return document_id
@@ -608,5 +652,180 @@ class DrawingBuilder:
                 "drawing_records": kept + self._records,
                 "drawing_candidates": self._candidates,
                 "gaps": self._gaps,
+            }
+        )
+
+
+# --- PDF-ingested sheets (feature 014, generator.md section 6) ---------------------------------
+
+Limits = tuple[Literal["bilateral"], float, float] | tuple[Literal["symmetric"], float] | None
+"""A drawn tolerance in mm: `("bilateral", upper, lower)`, the signed deviations from nominal;
+`("symmetric", half_width)`; or `None`, a dimension drawn with no tolerance."""
+
+NoteKind = Literal["general_tolerance", "material", "finish", "other"]
+"""What a general note on an ingested sheet states (`Note.kind`)."""
+
+INGESTED_PARSER = "pdf-text"
+"""The parser an ingested sheet names: the fictional standards goldens' (`standards-drawings`),
+never the ingest's own `pymupdf/<version>`, which would move with the installed library."""
+
+
+def _mm(value: float) -> Quantity:
+    return Quantity(value=value, unit="mm")
+
+
+def _tolerance(limits: Limits, source: SourceRef) -> Tolerance:
+    """`limits` as the `Tolerance` the dimension grammar writes, in mm: a symmetric half-width
+    is the signed deviations either side (`ingest/dimension_grammar.py`)."""
+    if limits is None:
+        return Tolerance(kind="none", upper=None, lower=None, source=source)
+    if limits[0] == "bilateral":
+        _, upper, lower = limits
+        if upper < lower:
+            raise ValueError(f"limits {limits!r}: the upper deviation is below the lower")
+        return Tolerance(kind="bilateral", upper=_mm(upper), lower=_mm(lower), source=source)
+    if limits[0] == "symmetric":
+        _, half_width = limits
+        if half_width <= 0:
+            raise ValueError(f"limits {limits!r}: a symmetric half-width must be above zero")
+        return Tolerance(
+            kind="symmetric", upper=_mm(half_width), lower=_mm(-half_width), source=source
+        )
+    raise ValueError(f"limits {limits!r} is not a Limits form")
+
+
+class SheetBuilder:
+    """Adds PDF-ingested drawing sheets on top of `base`; never changes a base row."""
+
+    def __init__(self, base: EvidencePackage) -> None:
+        self._base = base
+        self._documents: list[Document] = list(base.documents)
+        self._entries: list[ManifestEntry] = list(base.manifest.entries)
+        self._drawing_ids: list[str] = list(base.design.drawing_document_ids)
+        # The drawings this builder wrote, the only ones it adds sheets to.
+        self._drawings: set[str] = set()
+        # Each sheet by its drawing and name, in call order.
+        self._sheets: dict[tuple[str, str], DrawingSheet] = {}
+        self._gaps: list[Gap] = []
+
+    def _check_drawing(self, drawing_id: str) -> None:
+        if drawing_id not in self._drawings:
+            raise ValueError(f"drawing_id {drawing_id!r} is not a drawing this builder wrote")
+
+    def drawing(self, stem: str, *, properties: Mapping[str, str] | None = None) -> str:
+        """A drawing document as the PDF ingest writes one: configuration `Default` and a `pdf`
+        manifest entry."""
+        document_id = write_drawing_document(
+            self._documents,
+            self._entries,
+            stem,
+            properties=properties,
+            configuration="Default",
+            export_method="pdf",
+        )
+        self._drawing_ids.append(document_id)
+        self._drawings.add(document_id)
+        return document_id
+
+    def sheet(
+        self,
+        drawing_id: str,
+        name: str = "Sheet1",
+        *,
+        page: int,
+        readable: bool = True,
+        notes: Sequence[tuple[str, NoteKind]] = (),
+    ) -> None:
+        """One sheet in mm at 1:1, its notes annotated `note-<page>-<n>` in the order given.
+        `readable=False` is a page with no text layer: the ingest's `no_text` sheet, which
+        states no unit, scale, note or dimension, and its gap."""
+        self._check_drawing(drawing_id)
+        if (drawing_id, name) in self._sheets:
+            raise ValueError(f"name {name!r} is already a sheet of {drawing_id}")
+        if notes and not readable:
+            raise ValueError(f"notes on {name!r}: an unreadable sheet has no text, so no notes")
+        self._sheets[(drawing_id, name)] = DrawingSheet(
+            document_id=drawing_id,
+            sheet_name=name,
+            page=page,
+            scale="1:1" if readable else None,
+            units="mm" if readable else "unknown",
+            general_notes=[
+                Note(
+                    text=text,
+                    source=SourceRef(
+                        document_id=drawing_id, sheet=name, annotation=f"note-{page}-{number}"
+                    ),
+                    kind=kind,
+                )
+                for number, (text, kind) in enumerate(notes, start=1)
+            ],
+            dimensions=[],
+            views=[],
+            parse_status="text" if readable else "no_text",
+            parser=INGESTED_PARSER,
+            source="pdf_ingest",
+        )
+        if not readable:
+            self._gaps.append(
+                Gap(
+                    kind="no_text",
+                    entity_kind="drawing_sheet",
+                    entity_id=f"{drawing_id}:{page}",
+                    reason=(
+                        f"page {page} of {drawing_id} has no text layer; it was exported "
+                        "flattened and nothing on it could be read"
+                    ),
+                    error=None,
+                )
+            )
+
+    def dimension(
+        self, drawing_id: str, sheet: str, nominal_mm: float, *, limits: Limits, text: str
+    ) -> SourceRef:
+        """One dimension on `sheet`, annotated `dim-<page>-<n>` in call order as the parser
+        numbers them, `text` as read. Returns the document, sheet and annotation triple
+        `resolve_dimension` matches, which is the dimension's source and its tolerance's."""
+        self._check_drawing(drawing_id)
+        written = self._sheets.get((drawing_id, sheet))
+        if written is None:
+            raise ValueError(f"sheet {sheet!r} is not a sheet of {drawing_id}")
+        if written.parse_status != "text":
+            raise ValueError(
+                f"sheet {sheet!r} of {drawing_id} is unreadable ({written.parse_status}) and "
+                "carries no dimension"
+            )
+        source = SourceRef(
+            document_id=drawing_id,
+            sheet=sheet,
+            annotation=f"dim-{written.page}-{len(written.dimensions) + 1}",
+        )
+        tolerance = _tolerance(limits, source)
+        written.dimensions.append(
+            Dimension(
+                nominal=_mm(nominal_mm), tolerance=tolerance, source=source, text_as_read=text
+            )
+        )
+        return source
+
+    def build(self) -> EvidencePackage:
+        """The base with the drawing documents appended to `documents` and the design's drawing
+        list, their entries to the manifest, the sheets to `drawings` and the gaps to `gaps`;
+        nothing else changes. Every list is a copy, so the builder going on changes no package
+        it built."""
+        return self._base.model_copy(
+            update={
+                "manifest": self._base.manifest.model_copy(
+                    update={"entries": list(self._entries)}
+                ),
+                "design": self._base.design.model_copy(
+                    update={"drawing_document_ids": list(self._drawing_ids)}
+                ),
+                "documents": list(self._documents),
+                "drawings": [
+                    *self._base.drawings,
+                    *(sheet.model_copy(deep=True) for sheet in self._sheets.values()),
+                ],
+                "gaps": [*self._base.gaps, *self._gaps],
             }
         )
