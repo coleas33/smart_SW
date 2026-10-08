@@ -1,8 +1,9 @@
 """Read and write evidence packages on disk.
 
 Every path is resolved before use so a symlink or junction cannot smuggle the reviewer
-into `benchmarks/answer_keys/`: answer keys are withheld from the reviewer by
-construction, not by convention (benchmarks/README.md, FR of US6).
+into `benchmarks/answer_keys/` or `benchmarks/case_files/`: answer keys and case files are
+withheld from the reviewer by construction, not by convention (benchmarks/README.md, FR of
+US6; feature 014 `contracts/scripted-answers.md` 6).
 """
 
 from __future__ import annotations
@@ -18,11 +19,14 @@ from swreview import atomic
 from swreview.ir.models import EvidencePackage, Gap, Interference
 
 PACKAGE_FILE_NAME = "package.json"
-ANSWER_KEY_SEGMENTS = ("benchmarks", "answer_keys")
+WITHHELD_SEGMENTS = (("benchmarks", "answer_keys"), ("benchmarks", "case_files"))
+"""The committed folders withheld from the reviewer: the answer keys and the case files of
+scripted answers (feature 014 `contracts/scripted-answers.md` 6; plan decision QA-6)."""
 
 
 class AnswerKeyAccessError(RuntimeError):
-    """The reviewer tried to read or write inside `benchmarks/answer_keys/`."""
+    """The reviewer tried to read or write inside `benchmarks/answer_keys/` or
+    `benchmarks/case_files/`."""
 
 
 class PackageAppendError(ValueError):
@@ -42,21 +46,22 @@ class LoadedPackage:
 
 
 def reject_answer_key_path(path: Path | str, reason: str) -> Path:
-    """`path` resolved, unless it lies under `benchmarks/answer_keys/`.
+    """`path` resolved, unless it lies under one of `WITHHELD_SEGMENTS`:
+    `benchmarks/answer_keys/` or `benchmarks/case_files/`.
 
     The one place the answer-key rule is expressed. Every layer that handles a path on
     the reviewer's behalf - the package loader here, `swreview.benchmark.sets` and
     `swreview.benchmark.runner` - calls this with the `reason` its own caller needs to
     read, so the three layers cannot drift apart on what counts as an answer key.
-    Resolution happens first, so a symlink or junction is caught too.
+    Resolution happens first, so a symlink or junction is caught too. The refusal names
+    the segment it met.
     """
     resolved = Path(path).resolve()
     parts = resolved.parts
     for index in range(len(parts) - 1):
-        if (parts[index].lower(), parts[index + 1].lower()) == ANSWER_KEY_SEGMENTS:
-            raise AnswerKeyAccessError(
-                f"{resolved} is inside benchmarks/answer_keys; {reason}"
-            )
+        segment = (parts[index].lower(), parts[index + 1].lower())
+        if segment in WITHHELD_SEGMENTS:
+            raise AnswerKeyAccessError(f"{resolved} is inside {'/'.join(segment)}; {reason}")
     return resolved
 
 

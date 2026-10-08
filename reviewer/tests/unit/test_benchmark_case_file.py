@@ -23,8 +23,9 @@ version 3 profile under which the pin is unclear and the part-roles question is 
 hole and fastener are the questions reader's package's (`questions_package()`), the same ids plus
 the plate's hole `hol:0001` and the pin's screw `fst:0001`, which the roles package has not.
 
-The set-load bullet (a case file inside a package folder the set names) is T093's, and the
-before-any-review bullet (every refusal before the first review) T095's.
+The set-load bullet (a case file inside a package folder the set names, refused at set load) is
+T093's, at the end of this file, and the before-any-review bullet (every refusal before the first
+review) T095's.
 """
 
 from __future__ import annotations
@@ -796,3 +797,49 @@ def test_the_first_failing_row_ends_the_load(
 
     assert named in message, message
     assert unnamed not in message, message
+
+
+# --- outside the package: refused at set load (FR-022; T093) ---------------------------------
+
+
+@pytest.mark.parametrize(
+    "folder",
+    [f"benchmarks/packages/{PACKAGE_ID}", f"benchmarks/packages/{PACKAGE_ID}/answers"],
+    ids=["in-the-package-folder", "below-it"],
+)
+def test_a_case_file_inside_a_package_folder_the_set_names_is_refused_at_set_load(
+    folder: str, tmp_path: Path
+) -> None:
+    """`scripted-answers.md` 2.1: a case file that resolves inside any package folder the set
+    names is refused as the set loads (`cases.md` 4.3 row 5), before `load_case_file` is ever
+    asked, though the file itself would load (FR-022, "outside the package")."""
+    checkout = tmp_path / "checkout"
+    write_package(checkout / "benchmarks" / "packages" / PACKAGE_ID)
+    case_path = write_case(checkout / folder, case(item_answer()))
+    set_path = checkout / "benchmarks" / "sets" / "fict.json"
+    set_path.parent.mkdir(parents=True)
+    set_path.write_text(
+        json.dumps(
+            {
+                "name": "fict",
+                "packages": [
+                    {
+                        "package_id": PACKAGE_ID,
+                        "path": f"benchmarks/packages/{PACKAGE_ID}",
+                        "case_file": f"{folder}/{CASE_NAME}",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(sets.SetError) as refused:
+        sets.load_set(set_path, root=checkout)
+
+    message = str(refused.value)
+    assert message.startswith("benchmark set fict.json:"), message
+    assert str(case_path.resolve()) in message
+    assert message.endswith(
+        "the reviewer reads the package folder; keep keys and case files outside it"
+    )
