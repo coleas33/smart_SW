@@ -41,6 +41,7 @@ from swreview import cli
 from swreview.agent.checklist import load_checklist
 from swreview.agent.providers import EffortLevel, ProviderName
 from swreview.agent.providers.fake import FakeProvider, ScriptedTurn
+from swreview.agent.runner import ReviewRun, start_review
 from swreview.agent.settings import (
     MODEL_VIEW_OFF,
     MODEL_VIEW_PANE,
@@ -50,6 +51,7 @@ from swreview.agent.settings import (
     ProviderSettings,
     pane_defaults,
 )
+from swreview.benchmark import answers
 from swreview.benchmark.case_file import CaseFile
 from swreview.benchmark.runner import PROVENANCE_FILE, AttemptRequest, preflight_set, run_benchmark
 from swreview.checks.standards.profile import ProfileInvalid, ProfileUnreadable, load_profile
@@ -508,7 +510,10 @@ def test_run_benchmark_hands_the_review_function_the_model_view_and_the_profile(
     true; and `cli._review_fn` passes the attempt's model view and profile to the review, with
     the live tools off. Grown by the scripted-answers slice (T095, RF-44): `attempt.case_file` is
     the `CaseFile` `preflight_set` loaded for an entry naming one and `None` for an entry naming
-    none, and `attempt.max_answer_turns` the bound `run_benchmark` was given, 3 by default."""
+    none, and `attempt.max_answer_turns` the bound `run_benchmark` was given, 3 by default. Moved
+    by T101 (RF-49): `_review_fn` passes the model view and the profile to `start_review`, looked
+    up as `swreview.cli.start_review`, and the case file and the bound to
+    `swreview.benchmark.answers.drive_review`."""
     payload = case(item_answer())
     no_case_file = {"package_id": "cover", "path": str(tmp_package_dir), "held_out": True}
     preflighted = preflight_set(
@@ -576,11 +581,25 @@ def test_run_benchmark_hands_the_review_function_the_model_view_and_the_profile(
     assert calls[0]["attempt"].case_file is preflighted.case_files[PACKAGE_ID]
 
     received: list[dict[str, Any]] = []
+    driven: list[tuple[ReviewRun, CaseFile | None, int]] = []
 
-    def recording_run_review(package_dir: Path, out_dir: Path, **options: Any) -> None:
+    def recording_start_review(package_dir: Path, out_dir: Path, **options: Any) -> ReviewRun:
         received.append(options)
+        return start_review(package_dir, out_dir, **options)
 
-    monkeypatch.setattr(cli, "run_review", recording_run_review)
+    def recording_drive_review(
+        run: ReviewRun, case_file: CaseFile | None, *, max_answer_turns: int
+    ) -> None:
+        driven.append((run, case_file, max_answer_turns))
+
+    monkeypatch.setattr(cli, "start_review", recording_start_review)
+    monkeypatch.setattr(answers, "drive_review", recording_drive_review)
+    attempt = AttemptRequest(
+        model_view=MODEL_VIEW_PANE,
+        standards_profile=profile,
+        case_file=loaded,
+        max_answer_turns=1,
+    )
 
     cli._review_fn(
         tmp_package_dir,
@@ -589,12 +608,7 @@ def test_run_benchmark_hands_the_review_function_the_model_view_and_the_profile(
         model="fake-1",
         effort="high",
         efficiency=efficiency,
-        attempt=AttemptRequest(
-            model_view=MODEL_VIEW_PANE,
-            standards_profile=profile,
-            case_file=None,
-            max_answer_turns=0,
-        ),
+        attempt=attempt,
     )
 
     [options] = received
@@ -602,6 +616,9 @@ def test_run_benchmark_hands_the_review_function_the_model_view_and_the_profile(
     assert options["standards_profile"] == profile
     assert options["bridge"] is False
     assert options["efficiency"] == efficiency
+    [(_, case_file, max_answer_turns)] = driven
+    assert case_file is attempt.case_file
+    assert max_answer_turns == attempt.max_answer_turns
 
 
 # --- 6. a case file under row 6's carriage-return rule (`provenance.md` 3.2) ------------------

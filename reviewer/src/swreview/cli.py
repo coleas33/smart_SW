@@ -64,6 +64,7 @@ from swreview.agent.runner import (
     SESSION_FILE_NAME,
     load_exceptions,
     run_review,
+    start_review,
 )
 from swreview.agent.settings import (
     DEFAULT_EFFORT,
@@ -85,7 +86,7 @@ from swreview.agent.settings import (
     redact,
 )
 from swreview.agent.settings import pane_defaults as pane_defaults_for
-from swreview.benchmark import sets
+from swreview.benchmark import answers, sets
 from swreview.benchmark.answers import DEFAULT_MAX_ANSWER_TURNS
 from swreview.benchmark.compare import (
     carry_sign_offs,
@@ -2313,8 +2314,13 @@ def _review_fn(
 
     `attempt` carries the run's model view and standards profile, passed to the review as
     the pane passes its own; the live tools are never offered to a benchmark review
-    (feature 014 RF-44, `contracts/benchmark-run.md` 5.1). Its case file and answer-turn bound
-    are the scripted-answers driver's, which T101 puts here.
+    (feature 014 RF-44, `contracts/benchmark-run.md` 5.1). The review is held open with
+    `start_review` and played by the scripted-answers driver, `answers.drive_review`, with
+    the attempt's case file and answer-turn bound: the opening turn, then each question the
+    case file answers sent back through the method the pane's Send reaches, and the package's
+    `answer-log.json` written, with or without a case file (`contracts/scripted-answers.md`
+    3; QA-1). The run is closed in a `finally`, as `run_review` closes it, and the final
+    session returned. `run_review` stays the `review` command's one-turn form.
 
     The redaction is per package too, rather than left to `benchmark_run`: a library
     caller that reaches this through `benchmark.runner`'s default `review_fn` gets the
@@ -2323,7 +2329,7 @@ def _review_fn(
     settings = ProviderSettings.from_env(provider=provider, model=model, effort=effort)
     adapter = run_start.take() if run_start is not None else None
     with _redacting(settings) as redactor:
-        return run_review(
+        run = start_review(
             package_dir,
             session_out_dir,
             provider=adapter if adapter is not None else provider_factory(settings, efficiency),
@@ -2337,6 +2343,13 @@ def _review_fn(
             bridge=False,
             redact=redactor,
         )
+        try:
+            answers.drive_review(
+                run, attempt.case_file, max_answer_turns=attempt.max_answer_turns
+            )
+        finally:
+            run.close()
+        return run.session
 
 
 def _refuse_a_folder_in_use(out: Path) -> None:
