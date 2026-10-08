@@ -20,7 +20,9 @@ from swreview.ingest.manifest import DISCREPANCY_SEVERITY, find_discrepancies, r
 from swreview.ir.models import Discrepancy, EvidencePackage, Manifest, ManifestEntry
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-BENCHMARK_MANIFEST = REPO_ROOT / "benchmarks" / "packages" / "cover-blind-tap" / "manifest.json"
+BENCHMARK_MANIFEST = (
+    REPO_ROOT / "reviewer" / "tests" / "fixtures" / "ingest" / "cover-blind-tap" / "manifest.json"
+)
 
 
 def entry_dict(**overrides: Any) -> dict[str, Any]:

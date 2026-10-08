@@ -19,8 +19,10 @@ from swreview.ir.models import Gap
 
 BENCHMARK_DRAWINGS = (
     Path(__file__).resolve().parents[3]
-    / "benchmarks"
-    / "packages"
+    / "reviewer"
+    / "tests"
+    / "fixtures"
+    / "ingest"
     / "cover-blind-tap"
     / "drawings"
 )
