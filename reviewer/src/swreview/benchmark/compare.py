@@ -108,6 +108,7 @@ from swreview.benchmark.scorecard import (
     Scorecard,
     by_origin,
     false_alarm_origins,
+    final_state_origins,
     fmt_assessed,
     fmt_origins,
     length_or_none,
@@ -849,7 +850,7 @@ def _row(run: _LoadedRun, score: PackageScore) -> RunRow:
             bucket: len(getattr(coverage, bucket))
             for bucket in ("checked", "skipped", "unresolved", "failed", "out_of_scope")
         },
-        findings_by_origin=by_origin(score.finding_origins.values()),
+        findings_by_origin=by_origin(final_state_origins(score)),
         false_alarms_by_origin=by_origin(false_alarm_origins(score)),
         set_too_small_override=(
             provenance.set_too_small_override if provenance is not None else False

@@ -2,9 +2,10 @@
 
 `contracts/scoring.md` 8 (FR-008, SP-11, D14.2; plan decisions SR-18, INT-11). Any change to
 matching or counting, and any new required scorecard field, bumps
-`benchmark/scorecard.SCORING_RULES_VERSION`; the scorer slice writes 2, pinned here by value until
-the validation slice's version record exists. A scorecard without the field was scored under
-version 1.
+`benchmark/scorecard.SCORING_RULES_VERSION`; the scorer slice wrote 2 and the key-extensions slice
+writes 3 (edited deliberately by T086, INT-11: a scorecard scored at slice 1 now meets the re-score
+line), pinned here by value until the validation slice's version record exists. A scorecard
+without the field was scored under version 1.
 
 `read_scorecard(run_dir)` is the one reader. It reads the version **before** validating, so a
 folder scored before this feature meets the re-score line rather than a validation error naming a
@@ -95,7 +96,7 @@ def re_score_line(run_dir: Path) -> str:
     """`scoring.md` 8's refusal of a scorecard scored under version 1, as fixed text."""
     return (
         f"{run_dir}: scorecard.json was scored under scoring rules version 1; this build scores "
-        f"under 2. Re-score it: swreview benchmark score {run_dir} (add --answer-keys <dir> when "
+        f"under 3. Re-score it: swreview benchmark score {run_dir} (add --answer-keys <dir> when "
         "its set names no keys; it reads the saved session; nothing is re-run)"
     )
 
@@ -136,13 +137,14 @@ def refusal(run_dir: Path) -> ValueError:
 # --- 1. score_run writes the version ---------------------------------------------------------
 
 
-def test_the_scoring_rules_version_is_2_and_score_run_writes_it(tmp_path: Path) -> None:
-    """Pinned by value until the version record exists (INT-11)."""
-    assert scorecard_module.SCORING_RULES_VERSION == 2
+def test_the_scoring_rules_version_is_3_and_score_run_writes_it(tmp_path: Path) -> None:
+    """Pinned by value until the version record exists (INT-11); 3 is the key-extensions
+    slice's, which adds the forbidden, coverage and question columns."""
+    assert scorecard_module.SCORING_RULES_VERSION == 3
 
     scorecard = score_run(*build_scoring_fixture(tmp_path))
 
-    assert scorecard.scoring_rules_version == 2
+    assert scorecard.scoring_rules_version == 3
 
 
 # --- 2. an old scorecard meets the re-score line, before any session or parity check ---------
@@ -180,15 +182,24 @@ def test_a_scorecard_stating_version_1_meets_the_same_line(tmp_path: Path) -> No
     assert str(refusal(run_dir)) == re_score_line(run_dir)
 
 
+def test_a_scorecard_scored_at_the_scorer_slice_meets_the_re_score_line(tmp_path: Path) -> None:
+    """INT-11: version 2, the scorer slice's, is an earlier slice's now."""
+    run_dir = write_run(tmp_path, RunSpec(run="off-1"))
+    rewrite_scorecard(run_dir, with_fields(scoring_rules_version=2))
+
+    assert str(refusal(run_dir)) == re_score_line(run_dir).replace("version 1;", "version 2;")
+
+
 # --- 3. a newer version --------------------------------------------------------------------
 
 
 def test_compare_refuses_a_scorecard_of_a_newer_version(tmp_path: Path) -> None:
+    """Moved from version 3 to 4 with the bump (T086): 3 is this build's now."""
     run_dir = write_run(tmp_path, RunSpec(run="off-1"))
-    rewrite_scorecard(run_dir, with_fields(scoring_rules_version=3))
+    rewrite_scorecard(run_dir, with_fields(scoring_rules_version=4))
 
     assert str(refusal(run_dir)) == (
-        f"{run_dir}: scorecard.json was scored by a newer build (version 3); compare it with "
+        f"{run_dir}: scorecard.json was scored by a newer build (version 4); compare it with "
         "that build, or re-score it with this one"
     )
 
@@ -264,7 +275,7 @@ def test_re_scoring_an_old_folder_writes_the_current_version_and_compare_accepts
 
     assert rescored.exit_code == 0, rescored.stdout + rescored.stderr
     payload = json.loads((run_dir / "scorecard.json").read_text(encoding="utf-8"))
-    assert payload["scoring_rules_version"] == 2
+    assert payload["scoring_rules_version"] == 3
     assert [row.package_id for row in compare_runs([run_dir]).runs] == ["pkg-a"]
     origins = payload["per_package"][0]["finding_origins"]
     assert origins

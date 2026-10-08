@@ -12,13 +12,16 @@ checklist, the report's goals or the package. Nothing under `tools/`, `agent/`, 
 
 Every refusal names its entry ("D-3 states no expected_status"), pydantic's own as well as the
 model's rows, so a key the generator builds, with no loader there to name the entry, reads the
-same as one the loader reads. This slice carries known defects and correct conditions: a key
-holding one of section 2.1's four other lists is refused as an unknown field until US3 adds
-their models here (T080).
+same as one the loader reads. The key holds section 2.1's six lists: known defects and correct
+conditions, and US3's forbidden entries, expected coverage, unanswerable requests and
+question-count rules (T080). The question entries' combinations `questions.md` 5.3 refuses (a
+rule with both `part_roles` and `item`, a `min` of 2, an empty `documents`) build here: they are
+the loader's row 11, run through `benchmark/questions.py`, and never restated in the model.
 
 An explicit JSON `null` for an optional field: `key_only`'s is refused naming the field (section
-2.1: optional, `true` only), while `references`' on a check that is not reference-keyed and
-`held_out_against`'s on a tuned-on entry read as absent, each field holding `None` either way.
+2.1: optional, `true` only), while `references`' on a check that is not reference-keyed,
+`held_out_against`'s on a tuned-on entry, and an unanswerable request's or a count rule's
+`item`, `part_roles` or `max` read as absent, each field holding `None` either way.
 """
 
 from __future__ import annotations
@@ -30,10 +33,12 @@ from typing import Annotated, Any, ClassVar, Literal, Self
 from pydantic import (
     Field,
     PrivateAttr,
+    SerializerFunctionWrapHandler,
     StringConstraints,
     ValidationError,
     ValidatorFunctionWrapHandler,
     field_validator,
+    model_serializer,
     model_validator,
 )
 
@@ -63,6 +68,11 @@ Tag = Literal["held_out", "tuned_on"]
 
 ReferenceKind = Literal["joint", "recess", "hole pair", "joint instances", "fit", "stack"]
 """The kinds of covered item a reference-keyed check names, as section 2.5's table names them."""
+
+ExpectedReading = Literal["checked", "unresolved", "skipped", "out_of_scope"]
+"""The four readings of the report's goal line an expected-coverage entry may list (section 2.6;
+`scoring.md` 4). "Not reported" is never listable: a goal with no row and no finding is always a
+mismatch."""
 
 Sha256 = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
 """A sha256 digest as `benchmark/digest.py` writes it: lower-case hex of 64 characters."""
@@ -99,6 +109,14 @@ def _is_check_pattern(pattern: str) -> bool:
     """Section 3's grammar: an exact id, or an exact id followed by `.*`. So `*`, `x*`, `x.`,
     a `*` anywhere but a final `.*`, and an upper-case letter are no pattern."""
     return _CHECK_ID.fullmatch(pattern.removesuffix(_FAMILY_SUFFIX)) is not None
+
+
+def _grammar_refusal(pattern: str) -> str | None:
+    """Row 6's grammar over one pattern, the reason it refuses the entry naming the pattern, or
+    `None`: a known defect's or a correct condition's `check` and every forbidden pattern."""
+    if not _is_check_pattern(pattern):
+        return f"checks {pattern!r}, neither a check id nor a family x.* (answer-key.md 3)"
+    return None
 
 
 def pattern_covers(pattern: str, check: str) -> bool:
@@ -350,22 +368,17 @@ class _CheckedEntry(_Entry):
 
     def _refusals(self) -> Iterator[str | None]:
         yield from super()._refusals()
-        yield self._target_refusal()
+        yield _target_refusal(self.component_ids, self.document_ids)
         yield self._check_refusal()
         yield self._references_refusal()
-
-    def _target_refusal(self) -> str | None:
-        """Row 5 (FR-003): one of the two lists is non-empty."""
-        if not self.component_ids and not self.document_ids:
-            return "names no parts and no documents: component_ids and document_ids are both empty"
-        return None
 
     def _check_refusal(self) -> str | None:
         """Row 6's grammar (section 3), and AK-4: a family over a reference-keyed check would
         put a joint's pass on one rule and its defect on another under one entry, so a pass
         would clear the defect, the sibling credit owner decision 19A removed."""
-        if not _is_check_pattern(self.check):
-            return f"checks {self.check!r}, neither a check id nor a family x.* (answer-key.md 3)"
+        grammar = _grammar_refusal(self.check)
+        if grammar is not None:
+            return grammar
         if is_family(self.check):
             covered = [
                 keyed for keyed in REFERENCE_KEYED_CHECKS if pattern_covers(self.check, keyed)
@@ -429,6 +442,115 @@ class CorrectCondition(_CheckedEntry):
     NOUN: ClassVar[str] = "correct condition"
 
 
+def _target_refusal(component_ids: list[str], document_ids: list[str]) -> str | None:
+    """Row 5 (FR-003): one of the two lists is non-empty, on a known defect, a correct condition
+    and a forbidden entry alike."""
+    if not component_ids and not document_ids:
+        return "names no parts and no documents: component_ids and document_ids are both empty"
+    return None
+
+
+# --- section 2.4, 2.6 and 2.7: US3's four lists ----------------------------------------------
+
+
+class ForbiddenEntry(_Entry):
+    """Findings the review must not raise on some parts or documents (section 2.4; US3-1): a
+    non-empty list of exact ids and `x.*` families. It never names references: it stays on parts
+    or documents (FR-003), so its strict model refuses a `references` field, and a forbidden
+    `hole.*` on a plate covers every joint of the plate. The families AK-4 refuses on a known
+    defect or a correct condition (`fastener.*`, `hole.*`, `fit.*`, `stack.*`) are allowed
+    here."""
+
+    ID_PREFIX: ClassVar[str] = "FB-"
+    NOUN: ClassVar[str] = "forbidden entry"
+
+    checks: list[str]
+    component_ids: list[str]
+    document_ids: list[str]
+
+    def _refusals(self) -> Iterator[str | None]:
+        yield from super()._refusals()
+        yield _target_refusal(self.component_ids, self.document_ids)
+        yield self._checks_refusal()
+        yield from (_grammar_refusal(pattern) for pattern in self.checks)
+
+    def _checks_refusal(self) -> str | None:
+        """Section 2.4: at least one pattern."""
+        if not self.checks:
+            return "names no checks: checks is empty"
+        return None
+
+
+class ExpectedCoverage(_Entry):
+    """What the report's goal line for a checklist item is expected to read (section 2.6;
+    `scoring.md` 4). That `item` is a checklist item, read by a goal, one entry per goal, is the
+    loader's row 9; that a goal also holding a known defect expects `checked` is its row 10."""
+
+    ID_PREFIX: ClassVar[str] = "CV-"
+    NOUN: ClassVar[str] = "expected-coverage entry"
+
+    item: str
+    statuses: list[ExpectedReading]
+
+    def _refusals(self) -> Iterator[str | None]:
+        yield from super()._refusals()
+        yield self._statuses_refusal()
+
+    def _statuses_refusal(self) -> str | None:
+        """Section 2.6: a non-empty set, no value twice."""
+        if not self.statuses:
+            return "expects no reading: statuses is empty"
+        repeated = sorted({status for status in self.statuses if self.statuses.count(status) > 1})
+        if repeated:
+            return f"names {', '.join(repeated)} twice in statuses"
+        return None
+
+
+class UnanswerableRequest(_Entry):
+    """A request no engineer could answer (`questions.md` 5.1): a call naming one of
+    `documents`, by `tools/session.documents_named` of its ids, on `item` or on any item when
+    `item` is `null`, is counted, whatever its outcome."""
+
+    ID_PREFIX: ClassVar[str] = "U-"
+    NOUN: ClassVar[str] = "unanswerable request"
+
+    documents: list[str]
+    item: str | None = None
+
+
+class QuestionCount(_Entry):
+    """How many times a question may be asked (`questions.md` 5.2): the part-roles question
+    (`part_roles: true`), or the request calls on `item`, asked within its `ids` when it names
+    some; a count below `min` or above `max` is one miss. Which combinations are a rule is the
+    loader's row 11 (`questions.md` 5.3), never restated here."""
+
+    ID_PREFIX: ClassVar[str] = "Q-"
+    NOUN: ClassVar[str] = "question-count rule"
+
+    part_roles: bool | None = None
+    """`true` or absent: a strict `bool` refused unless `True`, since `Literal[True]` takes `1`,
+    as `AnswerKey.key_only` reads it; an explicit `null` reads as absent."""
+    item: str | None = None
+    ids: list[str] = Field(default_factory=list)
+    """Omitted from the dump when empty, as the contract writes a rule that names none."""
+    min: int = 0
+    max: int | None = None
+
+    @field_validator("part_roles")
+    @classmethod
+    def _part_roles_is_true(cls, value: bool | None) -> bool | None:
+        if value is not None and value is not True:
+            raise ValueError("part_roles is true or absent (questions.md 5.2)")
+        return value
+
+    @model_serializer(mode="wrap")
+    def _omit_empty_ids(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        if not self.ids:
+            data.pop("ids", None)
+        return data
+
+
 def _field_refusals(error: ValidationError) -> str:
     """Pydantic's refusals inside one entry as one clause: a missing field as `states no
     <field>` (row 4's wording), any other as `<field>: <message>`, joined by `; `."""
@@ -453,6 +575,12 @@ class AnswerKey(ReviewModel):
     key_only: bool | None = None
     known_defects: list[KnownDefect] = Field(default_factory=list)
     correct_conditions: list[CorrectCondition] = Field(default_factory=list)
+    forbidden: list[ForbiddenEntry] = Field(default_factory=list)
+    expected_coverage: list[ExpectedCoverage] = Field(default_factory=list)
+    unanswerable_requests: list[UnanswerableRequest] = Field(default_factory=list)
+    question_counts: list[QuestionCount] = Field(default_factory=list)
+    """Section 2.1's six lists, each optional, default empty: a key with no entry of a list
+    does not grade that list's columns, which read not assessed (FR-021)."""
 
     _ids_unchecked: str | None = PrivateAttr(default=None)
 
@@ -520,4 +648,12 @@ class AnswerKey(ReviewModel):
         ]
 
     def _entries(self) -> list[_Entry]:
-        return [*self.known_defects, *self.correct_conditions]
+        """Every entry of the six lists, in section 2.1's order."""
+        return [
+            *self.known_defects,
+            *self.correct_conditions,
+            *self.forbidden,
+            *self.expected_coverage,
+            *self.unanswerable_requests,
+            *self.question_counts,
+        ]

@@ -40,6 +40,11 @@ from swreview.agent.settings import (
 )
 from swreview.benchmark.adoption import ArmRun
 from swreview.benchmark.origins import Origin
+from swreview.benchmark.questions import (
+    NO_ANSWER_LOG,
+    NO_QUESTION_COUNT_RULE,
+    NO_UNANSWERABLE_REQUEST,
+)
 from swreview.benchmark.runner import (
     PROVENANCE_SCHEMA,
     RunProvenance,
@@ -48,6 +53,8 @@ from swreview.benchmark.runner import (
 )
 from swreview.benchmark.scorecard import (
     NO_CORRECT_CONDITION,
+    NO_EXPECTED_COVERAGE,
+    NO_FORBIDDEN_ENTRY,
     SCORING_RULES_VERSION,
     Aggregate,
     GradedItem,
@@ -104,7 +111,9 @@ class PackageSpec:
 
     Its known defects, `matched` and `missed`, are graded as model-produced items tagged by
     `held_out`, which is what the scorer requires the flag to be derived from (feature 014), and
-    its key holds no correct condition. Its false alarms read `unknown`: the session written
+    its key holds no correct condition and none of the four extension lists, so every column they
+    grade reads not assessed, as does every answer-log column, with no answer log beside it; its
+    request calls read, there being none. Its false alarms read `unknown`: the session written
     beside it holds no finding and no origin-marks record.
     """
 
@@ -398,6 +407,10 @@ def package_score(spec: PackageSpec) -> PackageScore:
         contradicted_condition_ids=None,
         confirmed_condition_ids=None,
         false_alarm_finding_ids=false_alarm_ids,
+        forbidden_hit_finding_ids=None,
+        withdrawn_forbidden_hit_finding_ids=None,
+        tuned_on_false_alarm_finding_ids=[],
+        coverage_mismatches=None,
         finding_origins=dict.fromkeys(false_alarm_ids, "unknown"),
         graded_items=[
             GradedItem(
@@ -409,9 +422,23 @@ def package_score(spec: PackageSpec) -> PackageScore:
             )
             for defect_id in (*spec.matched, *spec.missed)
         ],
+        re_asks=[],
+        open_repeats=[],
+        unanswerable_requests=None,
+        unmatched_requests=[],
+        question_counts=None,
+        unscripted_questions=None,
+        bound_reached=None,
         not_assessed={
             "contradicted_condition_ids": NO_CORRECT_CONDITION,
             "confirmed_condition_ids": NO_CORRECT_CONDITION,
+            "forbidden_hit_finding_ids": NO_FORBIDDEN_ENTRY,
+            "withdrawn_forbidden_hit_finding_ids": NO_FORBIDDEN_ENTRY,
+            "coverage_mismatches": NO_EXPECTED_COVERAGE,
+            "unanswerable_requests": NO_UNANSWERABLE_REQUEST,
+            "question_counts": NO_QUESTION_COUNT_RULE,
+            "unscripted_questions": NO_ANSWER_LOG,
+            "bound_reached": NO_ANSWER_LOG,
         },
     )
 
@@ -472,6 +499,10 @@ def scorecard(spec: RunSpec) -> Scorecard:
             cleared=0,
             contradictions=None,
             confirmations=None,
+            forbidden_hits=None,
+            withdrawn_forbidden_hits=None,
+            tuned_on_false_alarms=0,
+            coverage_mismatches=None,
             findings_by_origin=by_origin,
             false_alarms_by_origin=by_origin,
             recall_by_producer=RecallByProducer(
@@ -481,6 +512,13 @@ def scorecard(spec: RunSpec) -> Scorecard:
             held_out_model_defects=sum(
                 len(score.matched_defect_ids) + len(score.missed_defect_ids) for score in held_out
             ),
+            re_asks=0,
+            open_repeats=0,
+            unanswerable_requests=None,
+            unmatched_requests=0,
+            unscripted_questions=None,
+            question_count_misses=None,
+            bound_reached=None,
         ),
         distribution=[score.net_saved_minutes for score in per_package],
         key_sha256={package.package_id: spec.key_sha256 for package in spec.packages},

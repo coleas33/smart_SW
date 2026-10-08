@@ -17,12 +17,16 @@ from typing import Any
 
 import pytest
 
+from swreview.agent.checklist import load_checklist
 from swreview.agent.events import EVENTS_FILE_NAME
 from swreview.agent.runner import SESSION_FILE_NAME
-from swreview.benchmark.answer_key import current_stamp
+from swreview.benchmark.answer_key import current_stamp, load_answer_key
 from swreview.benchmark.answer_key_model import AnswerKey
+from swreview.benchmark.questions import CountRow
 from swreview.report.session import ORIGIN_MARKS_VERSION, load_session
+from swreview.report.summary import load_words
 from swreview.tools.refs import resolve_dimension
+from tests.support.answer_keys import write_key
 from tests.support.packages import build_package
 from tests.support.scoring_probes import (
     assert_oracle_and_null,
@@ -128,6 +132,54 @@ def test_the_stand_in_holds_each_named_component_once_and_each_named_document_wi
     assert "doc:9" in [document.document_id for document in stand_in.documents]
     assert "doc:9" in [entry.document_id for entry in stand_in.manifest.entries]
     assert (stand_in.holes, stand_in.fasteners, stand_in.gaps) == ([], [], [])
+
+
+def key_only_with_every_extension(folder: Path) -> AnswerKey:
+    """A key-only key, read as `test_committed_answer_keys.py` reads one, holding a known defect,
+    a forbidden entry on a part and a document, an unanswerable request on another document, and
+    a question-count rule with `min` 1 naming a part and that document on another item, so its
+    oracle question matches no unanswerable request."""
+    path = write_key(
+        folder,
+        "fict-key-only",
+        known_defects=[{"check": "hygiene.revision_present", "component_ids": ["cmp:0007"]}],
+        forbidden=[{"checks": ["rms.*"], "component_ids": ["cmp:0008"], "document_ids": ["doc:9"]}],
+        unanswerable_requests=[{"documents": ["doc:10"], "item": "interference"}],
+        question_counts=[
+            {"item": "interfaces.fit", "ids": ["cmp:0011", "doc:10"], "min": 1, "max": 1}
+        ],
+        key_only=True,
+    )
+    return load_answer_key(path, package=None, checklist=load_checklist(), words=load_words())
+
+
+def test_the_stand_in_also_holds_every_id_the_extension_lists_name(tmp_path: Path) -> None:
+    """A forbidden entry's parts and documents, an unanswerable request's documents, and a
+    question-count rule's ids: a rule's id is a document where the key names it one, and a
+    component instance otherwise."""
+    stand_in = stand_in_package(key_only_with_every_extension(tmp_path))
+
+    assert [component.id for component in stand_in.components] == [
+        "cmp:0007",
+        "cmp:0008",
+        "cmp:0011",
+    ]
+    documents = [document.document_id for document in stand_in.documents]
+    assert documents[-2:] == ["doc:9", "doc:10"]
+    assert [entry.document_id for entry in stand_in.manifest.entries][-2:] == ["doc:9", "doc:10"]
+
+
+def test_a_key_only_key_s_question_rule_naming_ids_gets_an_oracle_that_asks_it(
+    tmp_path: Path,
+) -> None:
+    """The oracle's one `request_evidence` call names the rule's ids, which the stand-in holds, so
+    the call is recorded and counted and SC-001 holds on every column the key grades."""
+    key = key_only_with_every_extension(tmp_path / "answer_keys")
+
+    oracle, null = assert_oracle_and_null(key, stand_in_package(key), tmp_path / "reviews")
+
+    assert oracle.question_counts == [CountRow(entry="Q-1", count=1, min=1, max=1)]
+    assert null.question_counts == [CountRow(entry="Q-1", count=0, min=1, max=1)]
 
 
 # --- the oracle ------------------------------------------------------------------------------

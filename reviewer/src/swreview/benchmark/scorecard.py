@@ -12,9 +12,11 @@ Feature 005 adds the usage columns beside the quality ones, because every adopti
 decision reads both: a lever that halves the token bill and loses a known defect is not
 adopted. The counts are **copied** from `session.usage`, never re-summed, and the one
 derivation, `cached_input_share`, is `TokenUsage`'s own property. `seconds_to_first_finding`
-is read from the `events.jsonl` beside the `session.json` - one more file read per package
-and still no answer-key contact. A session that carries no usage scores to nulls; a null
-in any package makes that aggregate total null rather than a partial sum.
+is read from the package's event stream beside the `session.json`, plain or packed, found by
+`agent/events.event_stream` and read in the one pass that also reads the withdrawn findings
+(`read_stream`, through the product's one event-line reader, `replay_events`; plan decisions
+RF-29, RF-83). A session that carries no usage scores to nulls; a null in any package makes that
+aggregate total null rather than a partial sum.
 
 ## What a finding credits (feature 014 `contracts/scoring.md` 3)
 
@@ -37,7 +39,21 @@ findings only (FR-026):
   assesses neither column: each is `null`, its reason in `not_assessed`, never 0 (FR-021).
 - **A false alarm**: a demonstrated or suspected finding that credits no known defect, one at most
   per finding. The key's overlap refusal means a finding contradicting a condition credits no
-  defect, so it is a false alarm too.
+  defect, so it is a false alarm too. A false alarm matching a forbidden entry is also a
+  **forbidden hit**, still one false alarm; one matching a tuned-on forbidden entry or tuned-on
+  correct condition is **tuned-on**, which the verdict leaves out of its deciding figure (D15).
+- **A withdrawn forbidden hit** (`scoring.md` 3.3): a finding that left the session before the
+  end and, as last announced in the event stream, was demonstrated or suspected and matched a
+  forbidden entry. It is no false alarm; unknown, never 0, when the stream is missing or cannot be
+  read to its end.
+- **Expected coverage** (`scoring.md` 4): each entry's goal, read through the report's own state
+  decision (`finding_groups.goal_readings`), by section 4's table; a reading outside the entry's
+  statuses is a mismatch.
+- **The question columns** (`questions.md` 6): `benchmark/questions.py`'s, from the session, its
+  stored request results and its answer log, checked against the session first.
+
+A column a key gives nothing to grade, or one that cannot be read, is `null`, its reason in the
+one `not_assessed` map (FR-021).
 
 Recall is read from the key's item tags, by producer and tag (FR-006, FR-031), never from the
 set's package flag, which must equal what the key derives. Every finding's origin is
@@ -56,31 +72,50 @@ import json
 import statistics
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated, Literal, get_args
+from typing import Annotated, Any, Literal, get_args
 
 from pydantic import Field, ValidationError
 
+from swreview.agent import events
 from swreview.agent.checklist import load_checklist
 from swreview.agent.providers import CACHED_SHARE_PUBLISHABLE, TokenUsage
-from swreview.agent.runner import EVENTS_FILE_NAME, SESSION_FILE_NAME
-from swreview.benchmark import matching
+from swreview.agent.runner import SESSION_FILE_NAME
+from swreview.benchmark import answers, matching, questions
 from swreview.benchmark.answer_key import load_answer_key
-from swreview.benchmark.answer_key_model import AnswerKey, ExpectedStatus, Producer, Tag
+from swreview.benchmark.answer_key_model import (
+    AnswerKey,
+    ExpectedCoverage,
+    ExpectedReading,
+    ExpectedStatus,
+    Producer,
+    Tag,
+)
+from swreview.benchmark.answers import UnscriptedRequest
 from swreview.benchmark.digest import sha256_of
 from swreview.benchmark.origins import MODEL_ORIGINS, Origin, finding_origin
+from swreview.benchmark.questions import CallRow, CountRow, QuestionIds, RepeatRow, UnanswerableRow
 from swreview.benchmark.sets import BenchmarkSet
 from swreview.findings import Finding, ReviewModel, carried_count
 from swreview.ir.loader import PACKAGE_FILE_NAME, load_package
 from swreview.ir.models import EvidencePackage
+from swreview.report.finding_groups import (
+    GoalReading,
+    GoalReason,
+    GoalState,
+    goal_of,
+    goal_readings,
+)
 from swreview.report.session import Coverage, ReviewSession, load_session
-from swreview.report.summary import load_words
+from swreview.report.summary import Words, load_words
 
-SCORING_RULES_VERSION = 2
-"""The rules this build scores by (`scoring.md` 8): 2 is feature 014's scorer slice, exact and
-family matching, references, 13A's statuses, conditions, origins and recall by tag. A scorecard
-without the field was scored under version 1. Pinned by value in
+SCORING_RULES_VERSION = 3
+"""The rules this build scores by (`scoring.md` 8): 2 was feature 014's scorer slice, exact and
+family matching, references, 13A's statuses, conditions, origins and recall by tag; 3 is its
+key-extensions slice, adding forbidden, withdrawn and tuned-on hits, expected coverage and the
+question columns. A scorecard without the field was scored under version 1. Pinned by value in
 `tests/unit/test_scoring_rules_version.py` until the validation slice's version record exists
 (plan decision INT-11)."""
 
@@ -93,6 +128,21 @@ column reads is no measurement of it, never 0 (FR-021)."""
 
 NO_CORRECT_CONDITION = "the key holds no correct condition"
 """`not_assessed`'s reason for the two condition columns of a key without one."""
+
+NO_FORBIDDEN_ENTRY = "the key holds no forbidden entry"
+"""`not_assessed`'s reason for the two forbidden columns of a key without one."""
+
+NO_EXPECTED_COVERAGE = "the key holds no expected coverage"
+"""`not_assessed`'s reason for `coverage_mismatches` of a key without an entry."""
+
+NO_EVENT_STREAM = (
+    f"the package has no event stream ({events.EVENTS_FILE_NAME} or "
+    f"{events.PACKED_EVENTS_FILE_NAME}), so no withdrawal can be read"
+)
+"""`not_assessed`'s reason for the withdrawn column of a package whose stream is missing."""
+
+WITHDRAWN_COLUMN = "withdrawn_forbidden_hit_finding_ids"
+"""The one column that reads `unknown`, not `not assessed`, when its stream cannot be read."""
 
 CREDITING_STATUSES: tuple[str, ...] = ("demonstrated", "suspected")
 """The statuses that credit a known defect, contradict a correct condition, and, crediting
@@ -161,8 +211,27 @@ def unresolved_split(session: ReviewSession) -> tuple[int, int]:
     return because, len(items) - because
 
 
-GradedKind = Literal["known_defect", "correct_condition"]
-"""Which list of the key a graded item came from."""
+GradedKind = Literal[
+    "known_defect",
+    "correct_condition",
+    "forbidden_entry",
+    "expected_coverage",
+    "unanswerable_request",
+    "question_count",
+]
+"""Which list of the key a graded item came from (`scoring.md` 6): one kind per list."""
+
+CoverageRead = ExpectedReading | Literal["not_reported"]
+"""How the scorer reads a goal (`scoring.md` 4): the four readings a key may expect, and not
+reported, which no key may list."""
+
+
+class CoverageMismatch(ReviewModel):
+    """An expected-coverage entry whose goal reads outside its statuses (`scoring.md` 4)."""
+
+    entry: str
+    item: str
+    read: CoverageRead
 
 
 class GradedItem(ReviewModel):
@@ -173,10 +242,10 @@ class GradedItem(ReviewModel):
     kind: GradedKind
     tag: Tag
     producer: Producer | None
-    """A known defect's, `null` for a correct condition."""
+    """A known defect's, `null` for any other entry."""
 
     expected_status: ExpectedStatus | None
-    """A known defect's, `null` for a correct condition."""
+    """A known defect's, `null` for any other entry."""
 
 
 class RecallByTag(ReviewModel):
@@ -288,11 +357,40 @@ class PackageScore(ReviewModel):
     false_alarm_finding_ids: list[str] = Field(default_factory=list)
     """Demonstrated or suspected findings that credit no known defect, in session order."""
 
+    forbidden_hit_finding_ids: list[str] | None
+    """The false alarms that match a forbidden entry, in session order; `null` when the key holds
+    none (`scoring.md` 3.3)."""
+
+    withdrawn_forbidden_hit_finding_ids: list[str] | None
+    """Findings withdrawn before the end that, as last announced, were demonstrated or suspected
+    and matched a forbidden entry, in the order they were withdrawn; never false alarms. `null`
+    when the key holds no forbidden entry, the stream is missing, or it cannot be read to its
+    end."""
+
+    tuned_on_false_alarm_finding_ids: list[str]
+    """The false alarms that match a tuned-on forbidden entry or tuned-on correct condition, a
+    hit on a tuned-on and a held-out item included (D15, SR-10)."""
+
+    coverage_mismatches: list[CoverageMismatch] | None
+    """Expected-coverage entries whose goal reads outside their statuses, in key order; `null`
+    when the key holds none (`scoring.md` 4)."""
+
     finding_origins: dict[str, Origin]
-    """Every final-state finding's origin, by finding id, in session order (`scoring.md` 5.5)."""
+    """Every final-state finding's origin, by finding id, in session order, then every withdrawn
+    forbidden hit's, read off its last announced body (`scoring.md` 5.5)."""
 
     graded_items: list[GradedItem]
-    """Every key entry, in key order: known defects, then correct conditions."""
+    """Every key entry, in key order: known defects, correct conditions, then the four extension
+    lists."""
+
+    re_asks: list[RepeatRow] | None
+    open_repeats: list[RepeatRow] | None
+    unanswerable_requests: list[UnanswerableRow] | None
+    unmatched_requests: list[CallRow] | None
+    question_counts: list[CountRow] | None
+    unscripted_questions: list[UnscriptedRequest] | None
+    bound_reached: bool | None
+    """The question columns (`questions.md` 6), each `null` where it cannot be assessed."""
 
     not_assessed: dict[str, str]
     """The reason for every `null` column above, and for none other."""
@@ -337,14 +435,34 @@ class Aggregate(ReviewModel):
     confirmations: Annotated[int, Field(ge=0)] | None
     """Summed over the packages whose key holds a correct condition; `null` when none does."""
 
+    forbidden_hits: Annotated[int, Field(ge=0)] | None
+    withdrawn_forbidden_hits: Annotated[int, Field(ge=0)] | None
+    tuned_on_false_alarms: int = Field(ge=0)
+    coverage_mismatches: Annotated[int, Field(ge=0)] | None
+    """Each per-package list's length, summed over the packages that assess it; `null` when none
+    does (`scoring.md` 7)."""
+
     findings_by_origin: dict[Origin, int]
     false_alarms_by_origin: dict[Origin, int]
-    """Every origin, zeros included, so two arms line up origin for origin."""
+    """Every origin, zeros included, so two arms line up origin for origin; the final state's
+    findings only, never a withdrawn one."""
 
     recall_by_producer: RecallByProducer
     held_out_model_defects: int = Field(ge=0)
     """The held-out model-produced defects every package's key names
     (`AnswerKey.held_out_model_defect_ids()`)."""
+
+    re_asks: Annotated[int, Field(ge=0)] | None
+    open_repeats: Annotated[int, Field(ge=0)] | None
+    unanswerable_requests: Annotated[int, Field(ge=0)] | None
+    unmatched_requests: Annotated[int, Field(ge=0)] | None
+    unscripted_questions: Annotated[int, Field(ge=0)] | None
+    question_count_misses: Annotated[int, Field(ge=0)] | None
+    bound_reached: Annotated[int, Field(ge=0)] | None
+    """The question columns (`questions.md` 6), each summed over the packages that assess it,
+    `null` when none does: `question_count_misses` the rules whose count falls outside their
+    bounds, `bound_reached` the packages whose answer log says the answer-turn bound was
+    reached."""
 
 
 class Scorecard(ReviewModel):
@@ -364,7 +482,15 @@ class Scorecard(ReviewModel):
 
 
 def _graded_items(answer_key: AnswerKey) -> list[GradedItem]:
-    """Every entry of the key as the scorecard copies it, known defects then conditions."""
+    """Every entry of the key as the scorecard copies it, in section 2.1's order of the lists:
+    a known defect with its producer and expected status, any other entry with neither."""
+    others: list[tuple[GradedKind, Sequence[Any]]] = [
+        ("correct_condition", answer_key.correct_conditions),
+        ("forbidden_entry", answer_key.forbidden),
+        ("expected_coverage", answer_key.expected_coverage),
+        ("unanswerable_request", answer_key.unanswerable_requests),
+        ("question_count", answer_key.question_counts),
+    ]
     return [
         *(
             GradedItem(
@@ -377,14 +503,9 @@ def _graded_items(answer_key: AnswerKey) -> list[GradedItem]:
             for defect in answer_key.known_defects
         ),
         *(
-            GradedItem(
-                id=condition.id,
-                kind="correct_condition",
-                tag=condition.tag,
-                producer=None,
-                expected_status=None,
-            )
-            for condition in answer_key.correct_conditions
+            GradedItem(id=entry.id, kind=kind, tag=entry.tag, producer=None, expected_status=None)
+            for kind, entries in others
+            for entry in entries
         ),
     ]
 
@@ -393,10 +514,14 @@ def _matches_by_entry(
     findings: Sequence[Finding], answer_key: AnswerKey
 ) -> dict[str, list[Finding]]:
     """Each entry's matching findings, in session order: the one pass through the matcher every
-    outcome below is read from."""
+    outcome below is read from, forbidden entries included."""
     return {
         entry.id: [finding for finding in findings if matching.matches(finding, entry)]
-        for entry in [*answer_key.known_defects, *answer_key.correct_conditions]
+        for entry in [
+            *answer_key.known_defects,
+            *answer_key.correct_conditions,
+            *answer_key.forbidden,
+        ]
     }
 
 
@@ -474,49 +599,138 @@ def _crediting_finding_ids(
     }
 
 
-def seconds_to_first_finding(events_path: Path) -> float | None:
-    """How long the run took to find something itself, from the stream it already writes.
+@dataclass(frozen=True)
+class StreamRead:
+    """What the scorer reads of one package's event stream, in its one pass (`scoring.md` 1 and
+    3.3; plan decision RF-29)."""
 
-    Both stamps are already there: `session.started` and every `finding` event carry an
-    `at` (VERIFIED, `EventSink.emit`), so this needs no new recording and, crucially, no
-    answer key - `score_run` reads one more file per package and Principle VI and FR-025
-    are untouched.
+    present: bool
+    """Whether the stream exists, plain or packed."""
+    seconds_to_first_finding: float | None
+    """The first computed finding's `at` less `session.started`'s, before any unreadable line."""
+    withdrawn: dict[str, dict[str, Any]]
+    """Each id a `finding.withdrawn` event names, in the order of its first withdrawal, with the
+    last `finding` body announced for it before its latest withdrawal."""
+    unreadable_line: int | None
+    """The 1-based line `replay_events` stopped at, or `None` when it read to the end."""
 
-    **A carried finding does not start the clock.** Lever 11a writes its carried findings
-    during `start_review` setup, before the first turn (`carry_over.carry_over_findings`),
-    so a stream that counted them would report a second or two for the on-arm of the A/B and
-    call it speed - timing the carry rather than the review. A lever that "improves" a
-    number by remembering is not an improvement (FR-104), and the scorecard's job is to show
-    that rather than bury it, so this reads the first finding whose `carried_over_from` is
-    absent or null. `carried_findings` beside it is what counts the rest.
 
-    `None` rather than an error whenever the number cannot be had: no stream (a run made
-    before the convention is still a real run), no finding, no `session.started`, or a
-    stream truncated by a process that died mid-write. The scorer's job is to score the
-    session; an unreadable auxiliary file makes one column unknown, not the run unscored.
+def read_stream(events_path: Path) -> StreamRead:
+    """One pass over a package's event stream through the product's one event-line reader,
+    `agent/events.replay_events`, whose `on_unreadable` hook names the line where it stops.
+
+    **Time to first finding.** Both stamps are already there: `session.started` and every
+    `finding` event carry an `at` (`EventSink.emit`), so this needs no new recording and no
+    answer key. **A carried finding does not start the clock.** Lever 11a writes its carried
+    findings during `start_review` setup, before the first turn (`carry_over.carry_over_findings`),
+    so a stream that counted them would time the carry rather than the review (FR-104): the
+    first finding whose `carried_over_from` is absent or null starts it. `None` whenever the
+    number cannot be had: no stream (a run made before the convention is still a real run), no
+    finding, no `session.started`, or a line that cannot be read before the first finding.
+
+    **Withdrawn findings.** The session holds none (`tools/context.py:316-335`), so each
+    `finding.withdrawn` is read here with the last `finding` body announced before it; whether
+    it is still withdrawn at the end, and what it hit, is `_score_package`'s.
     """
-    try:
-        lines = events_path.read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return None
-
+    if not events_path.is_file():
+        return StreamRead(
+            present=False, seconds_to_first_finding=None, withdrawn={}, unreadable_line=None
+        )
+    unreadable: list[int] = []
     started_at: datetime | None = None
-    for line in lines:
-        if not line.strip():
+    first: float | None = None
+    announced: dict[str, dict[str, Any]] = {}
+    withdrawn: dict[str, dict[str, Any]] = {}
+    for event in events.replay_events(events_path, on_unreadable=unreadable.append):
+        if event.type == "session.started" and started_at is None:
+            started_at = event.at
+        elif event.type == "finding":
+            body = event.body
+            if first is None and started_at is not None and body.get("carried_over_from") is None:
+                first = (event.at - started_at).total_seconds()
+            if isinstance(body.get("id"), str):
+                announced[body["id"]] = body
+        elif event.type == "finding.withdrawn":
+            finding_id = event.body.get("finding_id")
+            if isinstance(finding_id, str) and finding_id in announced:
+                withdrawn[finding_id] = announced[finding_id]
+    return StreamRead(
+        present=True,
+        seconds_to_first_finding=first,
+        withdrawn=withdrawn,
+        unreadable_line=unreadable[0] if unreadable else None,
+    )
+
+
+def seconds_to_first_finding(events_path: Path) -> float | None:
+    """How long the run took to find something itself: `read_stream`'s, the one pass."""
+    return read_stream(events_path).seconds_to_first_finding
+
+
+def _withdrawn_forbidden_hits(
+    stream: StreamRead, answer_key: AnswerKey, session: ReviewSession
+) -> tuple[dict[str, Finding] | None, str | None]:
+    """`scoring.md` 3.3's withdrawn forbidden hits, by id, in the order they were withdrawn, or
+    `None` and the reason they cannot be assessed: no forbidden entry, no stream, or a line the
+    stream cannot be read past, after which a withdrawal could lie (unknown is never 0)."""
+    if not answer_key.forbidden:
+        return None, NO_FORBIDDEN_ENTRY
+    if not stream.present:
+        return None, NO_EVENT_STREAM
+    if stream.unreadable_line is not None:
+        return None, (
+            f"the event stream cannot be read from line {stream.unreadable_line}, and a "
+            "withdrawal could lie after it"
+        )
+    final = {finding.id for finding in session.findings}
+    hits: dict[str, Finding] = {}
+    for finding_id, body in stream.withdrawn.items():
+        if finding_id in final:
             continue
         try:
-            event = json.loads(line)
-        except json.JSONDecodeError:
-            return None
-        if event.get("type") == "session.started" and started_at is None:
-            started_at = datetime.fromisoformat(event["at"])
-        elif (
-            event.get("type") == "finding"
-            and started_at is not None
-            and event.get("body", {}).get("carried_over_from") is None
+            finding = Finding.model_validate(body)
+        except ValidationError:
+            continue
+        if finding.status in CREDITING_STATUSES and any(
+            matching.matches(finding, entry) for entry in answer_key.forbidden
         ):
-            return (datetime.fromisoformat(event["at"]) - started_at).total_seconds()
-    return None
+            hits[finding_id] = finding
+    return hits, None
+
+
+_READ_AS: dict[tuple[GoalState, GoalReason | None], CoverageRead] = {
+    ("issues", None): "checked",
+    ("checked", None): "checked",
+    ("not_reached", "unresolved"): "unresolved",
+    ("not_reached", "failed"): "unresolved",
+    ("not_reached", "skipped"): "skipped",
+    ("not_reached", "no_check"): "not_reported",
+    ("not_applicable", "out_of_scope"): "out_of_scope",
+}
+"""`scoring.md` 4's table: a goal reading's state and `GoalReason` key to how a key reads it.
+`issues` reads `checked`, the item having been examined (SR-11)."""
+
+
+def coverage_read(reading: GoalReading) -> CoverageRead:
+    """How a key reads one goal (`scoring.md` 4), from the report's own state decision."""
+    return _READ_AS[(reading.state, reading.reason)]
+
+
+def coverage_mismatches(
+    session: ReviewSession, entries: Sequence[ExpectedCoverage], words: Words
+) -> list[CoverageMismatch]:
+    """Each entry whose goal (`goal_of` its item) reads outside its statuses, in key order,
+    through `finding_groups.goal_readings`, the decision the report's goal lines are built from
+    (plan decision RF-23): no second reader, and no change to which rows a goal reads."""
+    readings = {reading.goal.id: reading for reading in goal_readings(session, words)}
+    mismatches: list[CoverageMismatch] = []
+    for entry in entries:
+        goal = goal_of(entry.item, words.goals)
+        assert goal is not None  # the key loader's row 9: a goal reads every entry's item
+        read = coverage_read(readings[goal.id])
+        if read not in entry.statuses:
+            mismatches.append(CoverageMismatch(entry=entry.id, item=entry.item, read=read))
+    return mismatches
 
 
 def _wall_clock_s(session: ReviewSession) -> float | None:
@@ -532,11 +746,24 @@ def _score_package(
     package_id: str,
     held_out: bool,
     answer_key: AnswerKey,
+    package: EvidencePackage,
+    words: Words,
 ) -> PackageScore:
-    """Score one package folder as a run leaves it, `session.json` and `events.jsonl`, against
-    its loaded key: what `score_run` does per package, and what the oracle and null reviews of
-    the validation are scored through, since `score_run` refuses a key-only key."""
+    """Score one package folder as a run leaves it, `session.json`, its event stream, its stored
+    request results and its answer log, against its loaded key and its package: what `score_run`
+    does per package, and what the oracle and null reviews of the validation are scored through,
+    since `score_run` refuses a key-only key. `words` are the ones the caller loaded once, which
+    the coverage reading takes. The answer log is checked against the session before any column
+    is scored (`questions.md` 6)."""
     session = load_session(package_dir / SESSION_FILE_NAME)
+    asked = questions.question_columns(
+        session,
+        run_dir=package_dir,
+        ids=QuestionIds(package),
+        answer_log=answers.read_answer_log(package_dir),
+        unanswerable=answer_key.unanswerable_requests,
+        count_rules=answer_key.question_counts,
+    )
     findings = session.findings
     matches = _matches_by_entry(findings, answer_key)
     defects = _defect_outcomes(answer_key, matches)
@@ -547,14 +774,26 @@ def _score_package(
         for finding in findings
         if finding.status in CREDITING_STATUSES and finding.id not in crediting
     ]
-    not_assessed = (
-        {}
-        if contradicted is not None
-        else {
-            "contradicted_condition_ids": NO_CORRECT_CONDITION,
-            "confirmed_condition_ids": NO_CORRECT_CONDITION,
-        }
-    )
+    forbidden = {finding.id for entry in answer_key.forbidden for finding in matches[entry.id]}
+    tuned_on = {
+        finding.id
+        for entry in [*answer_key.forbidden, *answer_key.correct_conditions]
+        if entry.tag == "tuned_on"
+        for finding in matches[entry.id]
+    }
+    stream = read_stream(events.event_stream(package_dir))
+    withdrawn, withdrawn_reason = _withdrawn_forbidden_hits(stream, answer_key, session)
+    not_assessed: dict[str, str] = {}
+    if contradicted is None:
+        not_assessed["contradicted_condition_ids"] = NO_CORRECT_CONDITION
+        not_assessed["confirmed_condition_ids"] = NO_CORRECT_CONDITION
+    if not answer_key.forbidden:
+        not_assessed["forbidden_hit_finding_ids"] = NO_FORBIDDEN_ENTRY
+    if withdrawn_reason is not None:
+        not_assessed[WITHDRAWN_COLUMN] = withdrawn_reason
+    if not answer_key.expected_coverage:
+        not_assessed["coverage_mismatches"] = NO_EXPECTED_COVERAGE
+    not_assessed.update(asked.not_assessed)
     timing = session.timing
     assisted_minutes = (
         timing.assisted_supervision_minutes
@@ -579,7 +818,7 @@ def _score_package(
         round_trips=usage.rounds if usage is not None else None,
         cached_input_share=usage.totals.cached_input_share if usage is not None else None,
         wall_clock_s=_wall_clock_s(session),
-        seconds_to_first_finding=seconds_to_first_finding(package_dir / EVENTS_FILE_NAME),
+        seconds_to_first_finding=stream.seconds_to_first_finding,
         carried_findings=carried_count(findings),
         unresolved_because_withheld=because_withheld,
         unresolved_other=unresolved_other,
@@ -594,8 +833,35 @@ def _score_package(
         contradicted_condition_ids=contradicted,
         confirmed_condition_ids=confirmed,
         false_alarm_finding_ids=false_alarm_ids,
-        finding_origins={finding.id: finding_origin(finding, session) for finding in findings},
+        forbidden_hit_finding_ids=(
+            [finding_id for finding_id in false_alarm_ids if finding_id in forbidden]
+            if answer_key.forbidden
+            else None
+        ),
+        withdrawn_forbidden_hit_finding_ids=None if withdrawn is None else list(withdrawn),
+        tuned_on_false_alarm_finding_ids=[
+            finding_id for finding_id in false_alarm_ids if finding_id in tuned_on
+        ],
+        coverage_mismatches=(
+            coverage_mismatches(session, answer_key.expected_coverage, words)
+            if answer_key.expected_coverage
+            else None
+        ),
+        finding_origins={
+            **{finding.id: finding_origin(finding, session) for finding in findings},
+            **{
+                finding_id: finding_origin(finding, session)
+                for finding_id, finding in (withdrawn or {}).items()
+            },
+        },
         graded_items=_graded_items(answer_key),
+        re_asks=asked.re_asks,
+        open_repeats=asked.open_repeats,
+        unanswerable_requests=asked.unanswerable_requests,
+        unmatched_requests=asked.unmatched_requests,
+        question_counts=asked.question_counts,
+        unscripted_questions=asked.unscripted_questions,
+        bound_reached=asked.bound_reached,
         not_assessed=not_assessed,
     )
 
@@ -630,10 +896,29 @@ def _sum_assessed(values: Iterable[int | None]) -> int | None:
     return sum(assessed) if assessed else None
 
 
-def length_or_none(values: Sequence[str] | None) -> int | None:
-    """How many ids a list some key may give nothing to grade holds, `None` for no list: the
+def length_or_none(values: Sequence[object] | None) -> int | None:
+    """How many entries a list some key may give nothing to grade holds, `None` for no list: the
     scorecard's sums and the ledger's per-package cells read it alike."""
     return None if values is None else len(values)
+
+
+def question_count_misses(score: PackageScore) -> int | None:
+    """How many of the package's question-count rules count outside their bounds, `None` when
+    its key holds none (`questions.md` 5.2)."""
+    if score.question_counts is None:
+        return None
+    return sum(1 for row in score.question_counts if row.missed)
+
+
+def final_state_origins(score: PackageScore) -> list[Origin]:
+    """The origin of each of the final state's findings: `finding_origins` less the withdrawn
+    forbidden hits it also names (`scoring.md` 5.5)."""
+    withdrawn = set(score.withdrawn_forbidden_hit_finding_ids or ())
+    return [
+        origin
+        for finding_id, origin in score.finding_origins.items()
+        if finding_id not in withdrawn
+    ]
 
 
 def _graded_defects(per_package: Sequence[PackageScore]) -> list[tuple[GradedItem, bool]]:
@@ -748,8 +1033,20 @@ def _aggregate(per_package: Sequence[PackageScore], answer_keys: Sequence[Answer
         confirmations=_sum_assessed(
             length_or_none(score.confirmed_condition_ids) for score in per_package
         ),
+        forbidden_hits=_sum_assessed(
+            length_or_none(score.forbidden_hit_finding_ids) for score in per_package
+        ),
+        withdrawn_forbidden_hits=_sum_assessed(
+            length_or_none(score.withdrawn_forbidden_hit_finding_ids) for score in per_package
+        ),
+        tuned_on_false_alarms=sum(
+            len(score.tuned_on_false_alarm_finding_ids) for score in per_package
+        ),
+        coverage_mismatches=_sum_assessed(
+            length_or_none(score.coverage_mismatches) for score in per_package
+        ),
         findings_by_origin=by_origin(
-            origin for score in per_package for origin in score.finding_origins.values()
+            origin for score in per_package for origin in final_state_origins(score)
         ),
         false_alarms_by_origin=by_origin(
             origin for score in per_package for origin in false_alarm_origins(score)
@@ -758,6 +1055,22 @@ def _aggregate(per_package: Sequence[PackageScore], answer_keys: Sequence[Answer
             model=_recall_by_tag(defects, "model"), code=_recall_by_tag(defects, "code")
         ),
         held_out_model_defects=sum(len(key.held_out_model_defect_ids()) for key in answer_keys),
+        re_asks=_sum_assessed(length_or_none(score.re_asks) for score in per_package),
+        open_repeats=_sum_assessed(length_or_none(score.open_repeats) for score in per_package),
+        unanswerable_requests=_sum_assessed(
+            length_or_none(score.unanswerable_requests) for score in per_package
+        ),
+        unmatched_requests=_sum_assessed(
+            length_or_none(score.unmatched_requests) for score in per_package
+        ),
+        unscripted_questions=_sum_assessed(
+            length_or_none(score.unscripted_questions) for score in per_package
+        ),
+        question_count_misses=_sum_assessed(question_count_misses(score) for score in per_package),
+        bound_reached=_sum_assessed(
+            None if score.bound_reached is None else int(score.bound_reached)
+            for score in per_package
+        ),
     )
 
 
@@ -801,13 +1114,15 @@ def score_run(
     key_sha256: dict[str, str] = {}
     for ref in benchmark_set.packages:
         key_path = Path(answer_keys_dir) / f"{ref.package_id}.json"
+        package = _package_on_disk(ref.path)
         answer_key = load_answer_key(
-            key_path, package=_package_on_disk(ref.path), checklist=checklist, words=words
+            key_path, package=package, checklist=checklist, words=words
         )
         if answer_key.key_only:
             raise ValueError(
                 f"{ref.package_id}: its key is key-only (package not built); it cannot be scored"
             )
+        assert package is not None  # the loader refuses a missing package not marked key-only
         flag_error = held_out_flag_error(ref.package_id, ref.held_out, answer_key)
         if flag_error is not None:
             raise ValueError(flag_error)
@@ -819,6 +1134,8 @@ def score_run(
                 package_id=ref.package_id,
                 held_out=ref.held_out,
                 answer_key=answer_key,
+                package=package,
+                words=words,
             )
         )
 
@@ -906,6 +1223,26 @@ def _fmt_assessed_total(value: int | None, assessed: int, packages: int) -> str:
     return f"{value} ({assessed} of {packages} packages)"
 
 
+def _assessing(per_package: Sequence[PackageScore], column: str) -> int:
+    """How many packages assess `column`: those whose value of it is not `null`."""
+    return sum(1 for score in per_package if getattr(score, column) is not None)
+
+
+def _fmt_withdrawn(scorecard: Scorecard) -> str:
+    """The withdrawn forbidden hits' total: `unknown`, never 0 and never `not assessed`, when no
+    package assesses it and some package's key forbids while its stream cannot be read
+    (`scoring.md` 7); otherwise as every other column some key may give nothing to grade."""
+    per_package = scorecard.per_package
+    total = scorecard.aggregate.withdrawn_forbidden_hits
+    unread = any(
+        score.not_assessed.get(WITHDRAWN_COLUMN) not in (None, NO_FORBIDDEN_ENTRY)
+        for score in per_package
+    )
+    if total is None and unread:
+        return UNKNOWN
+    return _fmt_assessed_total(total, _assessing(per_package, WITHDRAWN_COLUMN), len(per_package))
+
+
 def fmt_origins(counts: Mapping[Origin, int], *, separator: str) -> str:
     """Each origin with a count, in `Origin`'s order, joined by `separator`, or `none` when every
     one is zero, so a cell is never blank. The scorecard's line (`, `) and the ledger's cells
@@ -920,7 +1257,10 @@ def render_scorecard_md(scorecard: Scorecard) -> str:
     The table gains **three** usage columns and not seven: the markdown is a scan, and
     `scorecard.json` holds every count the ledger renders. Feature 014 adds the outcome columns
     before them (`scoring.md` 7): detected, flagged, below expected, cleared, the false alarms of
-    model origin and contradictions, a column the key does not grade reading `not assessed`.
+    model origin, contradictions, forbidden hits and coverage mismatches, a column the key does
+    not grade reading `not assessed`; and to the aggregate the forbidden, withdrawn and tuned-on
+    hits, the coverage mismatches and each question column, re-asks split into seen (recorded)
+    and refused, each saying how many packages assess it.
     """
     lines = [
         f"# Scorecard: {scorecard.benchmark_set} ({scorecard.run_id})",
@@ -929,30 +1269,39 @@ def render_scorecard_md(scorecard: Scorecard) -> str:
         f"{scorecard.scoring_rules_version}.",
         "",
         "| package | held out | valid | detected | flagged | below expected | cleared | missed "
-        "| false alarms | of model origin | contradictions | unresolved | net saved (min) "
-        "| total tokens | cached share | round trips |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+        "| false alarms | of model origin | contradictions | forbidden hits | coverage mismatches "
+        "| unresolved | net saved (min) | total tokens | cached share | round trips |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for score in scorecard.per_package:
         net_saved = "-" if score.net_saved_minutes is None else f"{score.net_saved_minutes:.1f}"
         total_tokens = _fmt_count(score.usage.total_tokens if score.usage is not None else None)
         model_false_alarms = of_model_origin(Counter(false_alarm_origins(score)))
         contradictions = fmt_assessed(length_or_none(score.contradicted_condition_ids))
+        forbidden_hits = fmt_assessed(length_or_none(score.forbidden_hit_finding_ids))
+        mismatches = fmt_assessed(length_or_none(score.coverage_mismatches))
         lines.append(
             f"| {score.package_id} | {score.held_out} | {score.valid_findings} | "
             f"{len(score.matched_defect_ids)} | {len(score.flagged_defect_ids)} | "
             f"{len(score.flagged_below_expected_defect_ids)} | {len(score.cleared_defect_ids)} | "
             f"{score.missed_known_defects} | {score.false_alarms} | {model_false_alarms} | "
-            f"{contradictions} | {score.unresolved_count} | "
+            f"{contradictions} | {forbidden_hits} | {mismatches} | {score.unresolved_count} | "
             f"{net_saved} | {total_tokens} | {_fmt_cached_share(score.cached_input_share)} "
             f"| {_fmt_count(score.round_trips)} |"
         )
 
     aggregate = scorecard.aggregate
-    packages = len(scorecard.per_package)
-    assessed = sum(
-        1 for score in scorecard.per_package if score.contradicted_condition_ids is not None
-    )
+    per_package = scorecard.per_package
+    packages = len(per_package)
+
+    def total(value: int | None, column: str) -> str:
+        return _fmt_assessed_total(value, _assessing(per_package, column), packages)
+
+    re_asked = [row for score in per_package for row in score.re_asks or []]
+    seen = sum(1 for row in re_asked if row.outcome == "recorded")
+    re_asks = total(aggregate.re_asks, "re_asks")
+    if aggregate.re_asks is not None:
+        re_asks += f", seen {seen}, refused {len(re_asked) - seen}"
     by_producer = aggregate.recall_by_producer
     false_alarm_rate = (
         "-" if aggregate.false_alarm_rate is None else f"{aggregate.false_alarm_rate:.0%}"
@@ -981,8 +1330,12 @@ def render_scorecard_md(scorecard: Scorecard) -> str:
         f"- missed known defects: {aggregate.missed_known_defects}",
         f"- false alarms: {aggregate.false_alarms}",
         f"- false alarms by origin: {false_alarms_by_origin}",
-        f"- contradictions: {_fmt_assessed_total(aggregate.contradictions, assessed, packages)}",
-        f"- confirmations: {_fmt_assessed_total(aggregate.confirmations, assessed, packages)}",
+        f"- contradictions: {total(aggregate.contradictions, 'contradicted_condition_ids')}",
+        f"- confirmations: {total(aggregate.confirmations, 'confirmed_condition_ids')}",
+        f"- forbidden hits: {total(aggregate.forbidden_hits, 'forbidden_hit_finding_ids')}",
+        f"- withdrawn forbidden hits: {_fmt_withdrawn(scorecard)}",
+        f"- tuned-on false alarms: {aggregate.tuned_on_false_alarms}",
+        f"- coverage mismatches: {total(aggregate.coverage_mismatches, 'coverage_mismatches')}",
         f"- unresolved: {aggregate.unresolved_count}",
         f"- recall (held-out): {_fmt_recall(aggregate.recall)}",
         f"- recall by producer and tag: model held out {_fmt_recall(by_producer.model.held_out)}, "
@@ -990,6 +1343,16 @@ def render_scorecard_md(scorecard: Scorecard) -> str:
         f"code held out {_fmt_recall(by_producer.code.held_out)}, "
         f"code tuned on {_fmt_recall(by_producer.code.tuned_on)}",
         f"- held-out model-produced defects: {aggregate.held_out_model_defects}",
+        f"- re-asks: {re_asks}",
+        f"- repeats of open questions: {total(aggregate.open_repeats, 'open_repeats')}",
+        "- unanswerable requests: "
+        f"{total(aggregate.unanswerable_requests, 'unanswerable_requests')}",
+        f"- unmatched requests: {total(aggregate.unmatched_requests, 'unmatched_requests')}",
+        "- question-count misses: "
+        f"{total(aggregate.question_count_misses, 'question_counts')}",
+        "- unscripted questions: "
+        f"{total(aggregate.unscripted_questions, 'unscripted_questions')}",
+        f"- answer-turn bound reached: {total(aggregate.bound_reached, 'bound_reached')}",
         f"- false-alarm rate: {false_alarm_rate}",
         f"- median net saved minutes ({aggregate.packages_with_timing} packages with timing): "
         f"{median_net_saved}",
