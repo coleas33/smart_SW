@@ -32,7 +32,7 @@ import pytest
 from swreview.agent.checklist import load_checklist
 from swreview.benchmark.runner import PreflightedSet, preflight_set, run_benchmark
 from swreview.benchmark.sets import BenchmarkPackageRef, BenchmarkSet, SetError, load_set
-from swreview.ir.loader import AnswerKeyAccessError, load_package
+from swreview.ir.loader import AnswerKeyAccessError, load_package, save_package
 from tests.support.packages import build_package
 
 
@@ -121,6 +121,7 @@ def test_load_set_refuses_a_junction_that_points_into_answer_keys(tmp_path: Path
 def test_run_benchmark_never_passes_an_answer_key_path(tmp_path: Path) -> None:
     package_dir = tmp_path / "benchmarks" / "packages" / "pkg-1"
     package_dir.mkdir(parents=True)
+    save_package(build_package(), package_dir)
     set_path = write_set(
         tmp_path,
         "custom",

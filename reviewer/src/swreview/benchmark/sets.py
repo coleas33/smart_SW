@@ -139,21 +139,22 @@ class BenchmarkSet(ReviewModel):
 
 def _entry_form(ref: BenchmarkPackageRef, root: Path, *, saved: bool) -> dict[str, Any]:
     """One entry as both written forms hold it: each path it names (`SET_PATH_FIELDS`, its
-    package folder, key and case file) through `_path_form`, its other fields as given, an
+    package folder, key and case file) through `path_form`, its other fields as given, an
     absent optional field omitted rather than written as null, and its `case_file_sha256` in
     the saved form only."""
     entry = ref.model_dump(mode="json", exclude_none=True)
     for field in SET_PATH_FIELDS:
         named = getattr(ref, field)
         if named is not None:
-            entry[field] = _path_form(named, root)
+            entry[field] = path_form(named, root)
     if not saved:
         entry.pop(CASE_FILE_SHA256, None)
     return entry
 
 
-def _path_form(path: Path, root: Path) -> str:
-    """`path` relative to `root` when it lies inside it, else as it is; `/` either way."""
+def path_form(path: Path, root: Path) -> str:
+    """`path` relative to `root` when it lies inside it, else as it is; `/` either way: how a
+    set's entry names a path, which `benchmark.runner.preflight_set`'s refusals name too."""
     relative = checkout_relative(path, root=root)
     return relative.as_posix() if relative is not None else path.as_posix()
 
