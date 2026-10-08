@@ -4,14 +4,29 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 import swreview.handoff as handoff
+from swreview.agent.providers import ProviderName
+from swreview.agent.settings import pane_defaults
+from swreview.benchmark.runner import PROVENANCE_FILE, RunProvenance
+from swreview.checks.standards.profile import load_profile
 from swreview.handoff import HandoffExportError, export_handoff
+from tests.support.local_paths import scan_file
+from tests.unit.test_benchmark_run_options import SAVED_SET_FILE, two_package_set
+from tests.unit.test_run_provenance import (
+    example_profile_copy,
+    one_package_set,
+    read_record,
+    run_arm,
+    spellings,
+)
 
 STAMP = datetime(2026, 9, 20, 14, 30, tzinfo=UTC)
 SECRET = "session-secret-123"
@@ -316,3 +331,145 @@ def test_a_legacy_fallback_sentence_is_not_counted_as_an_explanation(tmp_path: P
 
     manifest = json.loads(read_zip(archive)["handoff-manifest.json"])
     assert manifest["session_summary"]["explanations"]["count"] == 1
+
+
+# --- a benchmark package export (feature 014 T070) ---------------------------------
+#
+# `specs/014-design-review-eval/contracts/provenance.md` 7 and 8 (PROV-13, RF-42; US2-9): a
+# benchmark run keeps its record at the run root, which holds no session, and each package's
+# session and events in `<run>/<package>/`, which holds no record. Each test exports
+# `<run>/<package>` of a folder a scripted `benchmark run --provider fake` wrote.
+
+
+def pane_defaults_run(tmp_path: Path, set_path: Path) -> tuple[Path, Path]:
+    """A scripted `benchmark run --pane-defaults` of `set_path` with a copy of the example
+    profile kept in a folder of its own beside the runs: the run root and the profile's path."""
+    profile = example_profile_copy(tmp_path / "profiles")
+    run_root = tmp_path / "runs" / "pane"
+    result = run_arm(set_path, run_root, "--pane-defaults", "--standards-profile", str(profile))
+    assert result.exit_code == 0, result.stdout + result.stderr
+    return run_root, profile
+
+
+def manifest_of(entries: dict[str, bytes]) -> dict[str, Any]:
+    manifest: dict[str, Any] = json.loads(entries["handoff-manifest.json"])
+    return manifest
+
+
+def test_a_pane_defaults_benchmark_run_exports_its_provenance_fields_and_never_the_profile_path(
+    tmp_path: Path, tmp_package_dir: Path
+) -> None:
+    """US2-9: the record the bundle carries is the run root's, read beside the package's own
+    records; the profile travels as its digest, never as where it lives."""
+    run_root, profile = pane_defaults_run(tmp_path, one_package_set(tmp_path, tmp_package_dir))
+
+    entries = read_zip(
+        export_handoff(run_root / "cover", tmp_path / "handoff.zip", exported_at=STAMP)
+    )
+
+    assert entries[PROVENANCE_FILE] == (run_root / PROVENANCE_FILE).read_bytes()
+    provenance = manifest_of(entries)["recorded_run_provenance"]
+    assert provenance["model_view"] == pane_defaults(ProviderName.FAKE).model_view.model_dump(
+        mode="json"
+    )
+    assert provenance["profile_digest"] == load_profile(profile).identity.sha256
+    assert provenance["pane_defaults"] is True
+    assert provenance["live_tools"] is False
+    for name, data in entries.items():
+        text = data.decode("utf-8")
+        for path in (profile, profile.parent):
+            for form in spellings(path) | spellings(path.resolve()):
+                assert form not in text, f"{name} names {form}"
+
+
+def test_the_session_summary_carries_the_model_view(
+    tmp_path: Path, tmp_package_dir: Path
+) -> None:
+    """The model view the session already holds, the one `compare` cross-checks against the
+    record (PP-3); a session that predates the model view holds none and reads `None`."""
+    run_root, _ = pane_defaults_run(tmp_path, one_package_set(tmp_path, tmp_package_dir))
+    session = json.loads((run_root / "cover" / "session.json").read_text(encoding="utf-8"))
+
+    entries = read_zip(
+        export_handoff(run_root / "cover", tmp_path / "pane.zip", exported_at=STAMP)
+    )
+
+    summary = manifest_of(entries)["session_summary"]
+    assert summary["model_view"] == session["model_view"]
+    assert summary["model_view"] == pane_defaults(ProviderName.FAKE).model_view.model_dump(
+        mode="json"
+    )
+
+    older = tmp_path / "older"
+    write_run(older)
+    entries = read_zip(export_handoff(older, tmp_path / "older.zip", exported_at=STAMP))
+    assert manifest_of(entries)["session_summary"]["model_view"] is None
+
+
+def test_the_handoff_allowlist_names_every_provenance_field(
+    tmp_path: Path, tmp_package_dir: Path
+) -> None:
+    """RF-42: the allowlist stays a literal tuple, the guard that keeps a later field out until
+    it is named, held equal to the record's fields at every slice so that no recorded field
+    silently misses the bundle; and no value a scripted run records is a path (FR-013, FR-051)."""
+    assert sorted(handoff._PROVENANCE_FIELDS) == sorted(RunProvenance.model_fields)
+
+    run_root, _ = pane_defaults_run(tmp_path, one_package_set(tmp_path, tmp_package_dir))
+    entries = read_zip(
+        export_handoff(run_root / "cover", tmp_path / "handoff.zip", exported_at=STAMP)
+    )
+
+    carried = manifest_of(entries)["recorded_run_provenance"]
+    assert carried == read_record(run_root)
+    carried_file = tmp_path / "carried-provenance.json"
+    carried_file.write_text(json.dumps(carried), encoding="utf-8")
+    assert scan_file(carried_file) == []
+
+
+def test_a_package_export_reads_only_the_run_roots_provenance_and_status(
+    tmp_path: Path, tmp_package_dir: Path
+) -> None:
+    """The parity half (the robustness slice adds `run-status.json`): from the run root only
+    `run-provenance.json` is read, and from no parent that is not a run root; nothing else of the
+    run root or of another package reaches the archive, which lies outside the run root as well
+    as outside the package folder."""
+    run_root, _ = pane_defaults_run(tmp_path, two_package_set(tmp_path, tmp_package_dir))
+    package, other = run_root / "cover", run_root / "cover-copy"
+    root_marker, other_marker = "only-in-the-run-root", "only-in-another-package"
+    (run_root / "check.log").write_text(root_marker, encoding="utf-8")
+    (other / "check.log").write_text(other_marker, encoding="utf-8")
+    package_files = {
+        name
+        for name in (*handoff.REQUIRED_ARTIFACTS, *handoff.OPTIONAL_ARTIFACTS)
+        if (package / name).is_file()
+    }
+
+    entries = read_zip(export_handoff(package, tmp_path / "handoff.zip", exported_at=STAMP))
+
+    assert set(entries) == package_files | {PROVENANCE_FILE, "handoff-manifest.json"}
+    assert entries[PROVENANCE_FILE] == (run_root / PROVENANCE_FILE).read_bytes()
+    assert all(entries[name] == (package / name).read_bytes() for name in package_files)
+    joined = b"".join(entries.values())
+    assert root_marker.encode() not in joined
+    assert other_marker.encode() not in joined
+    assert (run_root / SAVED_SET_FILE).read_bytes() not in joined
+    assert (other / "session.json").read_bytes() not in joined
+
+    for kept in (PROVENANCE_FILE, SAVED_SET_FILE):
+        parent = tmp_path / f"parent-holding-{kept}-alone"
+        shutil.copytree(package, parent / "cover")
+        shutil.copyfile(run_root / kept, parent / kept)
+        (parent / "check.log").write_text(root_marker, encoding="utf-8")
+
+        alone = read_zip(
+            export_handoff(parent / "cover", tmp_path / f"{kept}.zip", exported_at=STAMP)
+        )
+
+        assert set(alone) == package_files | {"handoff-manifest.json"}
+        assert manifest_of(alone)["recorded_run_provenance"] is None
+        assert root_marker.encode() not in b"".join(alone.values())
+
+    for inside in (run_root / "inside.zip", other / "inside.zip", package / "inside.zip"):
+        with pytest.raises(HandoffExportError, match="outside"):
+            export_handoff(package, inside, exported_at=STAMP)
+        assert not inside.exists()
