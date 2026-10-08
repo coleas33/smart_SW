@@ -630,7 +630,9 @@ def _sum_assessed(values: Iterable[int | None]) -> int | None:
     return sum(assessed) if assessed else None
 
 
-def _length_or_none(values: Sequence[str] | None) -> int | None:
+def length_or_none(values: Sequence[str] | None) -> int | None:
+    """How many ids a list some key may give nothing to grade holds, `None` for no list: the
+    scorecard's sums and the ledger's per-package cells read it alike."""
     return None if values is None else len(values)
 
 
@@ -666,13 +668,15 @@ def _recall_by_tag(defects: Sequence[tuple[GradedItem, bool]], producer: Produce
     return RecallByTag(held_out=of("held_out"), tuned_on=of("tuned_on"))
 
 
-def _by_origin(origins: Iterable[Origin]) -> dict[Origin, int]:
-    """A count per origin, every origin named in `Origin`'s order, zeros included."""
+def by_origin(origins: Iterable[Origin]) -> dict[Origin, int]:
+    """A count per origin, every origin named in `Origin`'s order, zeros included: the
+    aggregate's and the ledger's per-package counts alike."""
     counts = Counter(origins)
     return {origin: counts[origin] for origin in get_args(Origin)}
 
 
-def _false_alarm_origins(score: PackageScore) -> list[Origin]:
+def false_alarm_origins(score: PackageScore) -> list[Origin]:
+    """The origin of each of this package's false alarms, in session order."""
     return [score.finding_origins[finding_id] for finding_id in score.false_alarm_finding_ids]
 
 
@@ -739,16 +743,16 @@ def _aggregate(per_package: Sequence[PackageScore], answer_keys: Sequence[Answer
         ),
         cleared=sum(len(score.cleared_defect_ids) for score in per_package),
         contradictions=_sum_assessed(
-            _length_or_none(score.contradicted_condition_ids) for score in per_package
+            length_or_none(score.contradicted_condition_ids) for score in per_package
         ),
         confirmations=_sum_assessed(
-            _length_or_none(score.confirmed_condition_ids) for score in per_package
+            length_or_none(score.confirmed_condition_ids) for score in per_package
         ),
-        findings_by_origin=_by_origin(
+        findings_by_origin=by_origin(
             origin for score in per_package for origin in score.finding_origins.values()
         ),
-        false_alarms_by_origin=_by_origin(
-            origin for score in per_package for origin in _false_alarm_origins(score)
+        false_alarms_by_origin=by_origin(
+            origin for score in per_package for origin in false_alarm_origins(score)
         ),
         recall_by_producer=RecallByProducer(
             model=_recall_by_tag(defects, "model"), code=_recall_by_tag(defects, "code")
@@ -889,8 +893,9 @@ def _fmt_recall(value: float | None) -> str:
     return "-" if value is None else f"{value:.0%}"
 
 
-def _fmt_assessed(value: int | None) -> str:
-    """A count some key may give nothing to grade: `not assessed` then, never 0."""
+def fmt_assessed(value: int | None) -> str:
+    """A count some key may give nothing to grade: `not assessed` then, never 0. The scorecard's
+    and the ledger's cells alike."""
     return NOT_ASSESSED if value is None else str(value)
 
 
@@ -929,8 +934,8 @@ def render_scorecard_md(scorecard: Scorecard) -> str:
     for score in scorecard.per_package:
         net_saved = "-" if score.net_saved_minutes is None else f"{score.net_saved_minutes:.1f}"
         total_tokens = _fmt_count(score.usage.total_tokens if score.usage is not None else None)
-        model_false_alarms = of_model_origin(Counter(_false_alarm_origins(score)))
-        contradictions = _fmt_assessed(_length_or_none(score.contradicted_condition_ids))
+        model_false_alarms = of_model_origin(Counter(false_alarm_origins(score)))
+        contradictions = fmt_assessed(length_or_none(score.contradicted_condition_ids))
         lines.append(
             f"| {score.package_id} | {score.held_out} | {score.valid_findings} | "
             f"{len(score.matched_defect_ids)} | {len(score.flagged_defect_ids)} | "

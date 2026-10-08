@@ -1,6 +1,6 @@
 # Contract: the A/B harness and the results ledger
 
-*Amended 2026-09-29 by feature 014 (`specs/014-design-review-eval/`), in provenance.md sections 1 to 5 and 6.1, benchmark-run.md sections 3, 4 and 14, scoring.md sections 7 and 8, verdict.md sections 5 and 7; the amendment text lands with the 014 task that changes the code, sections 4's and 9's scorer half landed 2026-10-07 (014 T038), sections 2, 10.1 and 10.2 landed 2026-10-07 (014 T051), sections 3 and 10.5 landed 2026-10-07 (014 T065):* sections 2, 3, 4, 5, 7, 9, 10.1, 10.2 and 10.5 change (the provenance record, the must-match rule, the saved set's form, the ledger's columns, the pane study's route, compare's version refusal).
+*Amended 2026-09-29 by feature 014 (`specs/014-design-review-eval/`), in provenance.md sections 1 to 5 and 6.1, benchmark-run.md sections 3, 4 and 14, scoring.md sections 7 and 8, verdict.md sections 5 and 7; the amendment text lands with the 014 task that changes the code, sections 4's and 9's scorer half landed 2026-10-07 (014 T038), sections 2, 10.1 and 10.2 landed 2026-10-07 (014 T051), sections 3 and 10.5 landed 2026-10-07 (014 T065), section 4's ledger 1.1 landed 2026-10-07 (014 T068):* sections 2, 3, 4, 5, 7, 9, 10.1, 10.2 and 10.5 change (the provenance record, the must-match rule, the saved set's form, the ledger's columns, the pane study's route, compare's version refusal).
 
 The A/B protocol, the runs it produces, and `swreview benchmark compare`, the one reader that
 validates those runs and renders the ledger.
@@ -291,6 +291,34 @@ finding matched, `false_alarms` every demonstrated or suspected finding that cre
 contradicting a correct condition included, and `matched_defect_ids`, which the adoption rule reads,
 the detected defects. A study whose runs were scored against two versions of one package's key is
 refused, naming the package. The ledger's 014 columns are 014 `provenance.md` section 5's.
+
+*Amended 2026-10-07 by feature 014 (T066 to T069; its `contracts/provenance.md` 5, 6.3 and 6.4;
+plan decision INT-10):* `ledger_schema` is `"1.1"`, one bump for the feature, with the columns in
+their final order and the committed header regenerated once. The 1.1 record also names
+`pane_studies`, a key omitted when no pane study was compared and filled from 014's verdict slice,
+which moves neither the version nor the header. Each run object gains `model_view` (the session's;
+`MODEL_VIEW_OFF` for a session written before feature 008), `profile_recorded`, `profile_digest`,
+`live_tools` and `pane_defaults` (the record's), and the scorer's per-package outcome counts:
+`flagged`, `flagged_below_expected`, `status_mismatches`, `cleared`, `contradictions` and
+`confirmations` (null, rendered `not assessed`, when the key holds no correct condition), and
+`findings_by_origin` and `false_alarms_by_origin`, every origin with zeros. The run table reads:
+run, commit, lever, arm, rep, provider, model, effort, explanations, model view, profile, live
+tools, package, input, cached in, uncached in, output, reasoning/thoughts, tool-result in, total,
+rounds, tool calls, cached share, wall clock s, s to 1st finding, valid, missed, flagged, below
+expected, status mismatch, cleared, false alarms, contradicted, confirmed, unresolved, unresolved
+withheld, unresolved other, coverage bucket mix, findings by origin, false alarms by origin. The
+model view reads `off`, `pane`, or its switches (`slimming`, `pruning after N`, or both); the profile
+reads the digest's 12-character display, `none` with no profile and `unknown` where the record does
+not say; live tools reads `yes`, `no` or `unknown`; the origin cells are mixes with zero origins
+left out, `none` when every one is zero. There is no run-status column. The decision table gains
+`Recall by producer (held out) off -> on` after `Recall (held out) off -> on`, each producer's
+held-out recall, reported and never gated on; nothing else moves. `tool calls` stays
+`len(session.steps)`, the pre-run's and the regrade's steps included, and the ledger's closing notes
+say so. `run_dir` and a decision row's `run_dirs` name a folder inside the checkout relative to its
+root with `/`, one outside as typed. A ledger written where the repository may commit it (`--out` or
+`--into` inside the checkout and not ignored by git, `--check` included) refuses a run graded
+against another profile than the fictional example, one whose saved set names an absolute path,
+and one whose folder the repository does not hold.
 
 **Null is null.** A token field whose session total is null is `null` in the ledger, never `0` and
 never omitted (RK-1). A median over a column containing nulls is computed over the non-null values

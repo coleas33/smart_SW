@@ -167,21 +167,23 @@ repetitions per provider. Each lever row must be compared against its matching b
 
 ### Runs
 
-| run | commit | lever | arm | rep | provider | model | effort | explanations | package | input | cached in | uncached in | output | reasoning/thoughts | tool-result in | total | rounds | tool calls | cached share | wall clock s | s to 1st finding | valid | missed | false alarms | unresolved | unresolved withheld | unresolved other | coverage bucket mix |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| run | commit | lever | arm | rep | provider | model | effort | explanations | model view | profile | live tools | package | input | cached in | uncached in | output | reasoning/thoughts | tool-result in | total | rounds | tool calls | cached share | wall clock s | s to 1st finding | valid | missed | flagged | below expected | status mismatch | cleared | false alarms | contradicted | confirmed | unresolved | unresolved withheld | unresolved other | coverage bucket mix | findings by origin | false alarms by origin |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 
 No runs: no run directories were compared.
 
 ### Decisions
 
-| Lever | Provider and model | Commit | Reps | Other levers on | Input tokens off -> on (median, min-max) | Cached input off -> on | Output off -> on | Reasoning or thoughts off -> on | Total tokens off -> on | Round trips off -> on | Tool calls off -> on | Wall clock off -> on | Dump wall clock off -> on | Valid / missed / false alarms / unresolved off -> on | Recall (held out) off -> on | Median net saved minutes off -> on | Worst-case defects lost | Lever-specific counter | Decision | Owner signed off | Owner signed off at | Decision reason | Link to run dirs |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Lever | Provider and model | Commit | Reps | Other levers on | Input tokens off -> on (median, min-max) | Cached input off -> on | Output off -> on | Reasoning or thoughts off -> on | Total tokens off -> on | Round trips off -> on | Tool calls off -> on | Wall clock off -> on | Dump wall clock off -> on | Valid / missed / false alarms / unresolved off -> on | Recall (held out) off -> on | Recall by producer (held out) off -> on | Median net saved minutes off -> on | Worst-case defects lost | Lever-specific counter | Decision | Owner signed off | Owner signed off at | Decision reason | Link to run dirs |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 
 No decisions: no run directories were compared.
 
 `Decision` is computed by the adoption rule and is never typed; `Owner signed off` and `Owner signed off at` are the owner's separate act, written by hand into the committed table once the row has been read and carried forward verbatim by every later regeneration. No flag default changes until they are written.
 
 `wall clock s` is the session's own `started_at` to `ended_at`, **not** `unattended_runtime_minutes`, which the benchmark runner overwrites with a span that also covers package load and adapter construction.
+
+`tool calls` is `len(session.steps)`, every step of the review: the pre-run's and the regrade's steps are counted with the model's, not split by the step mark.
 
 <!-- ledger:end -->
 
@@ -191,7 +193,9 @@ Rows the generated ledger cannot carry: every run below was made on the one-pack
 set with `--i-know-the-set-is-too-small`, so `compare` computes no decision and the study
 folders stay outside `benchmarks/studies/` (a committed override row fails the check test).
 They are evidence, not gates; the pane default changes nothing on their account. Recorded
-from the workstation packet of 2026-09-19 (`docs/pane-findings-2026-09-19.md`).
+from the workstation packet of 2026-09-19 (`docs/pane-findings-2026-09-19.md`). Their quality
+figures (valid, missed and false alarms) were scored under scoring rules version 1, before
+feature 014's scorer.
 
 **Token baseline, pilot workstation, 2026-09-19.** One review of the small assembly, the
 dowel-pin one, with every lever off, openai `gpt-5.6-luna` at high effort: 1,215,720 tokens, of

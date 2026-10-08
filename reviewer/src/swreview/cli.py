@@ -2866,11 +2866,20 @@ def benchmark_compare(
     The owner's `Owner signed off` and `Owner signed off at` cells are read back off the
     ledger this invocation is about to overwrite and re-rendered unchanged, so a
     hand-written sign-off survives regeneration and does not read as drift (FR-027).
+
+    An `--out` or `--into` the repository may commit (`runner.committable`), `--check` or not,
+    makes the ledger the committed one, which refuses a run graded against another profile than
+    the fictional example, over a private package, or from a folder the repository does not hold
+    (feature 014 `contracts/provenance.md` 6.4; FR-051).
     """
     root = sets.REPO_ROOT  # read at call time, as `benchmark run` reads it
     with _errors_as_exit_1():
+        committed = any(
+            committable(path, root=root) for path in (out, into) if path is not None
+        )
         ledger = carry_sign_offs(
-            compare_runs(run_dirs or [], root=root), *committed_sign_off_sources(out, into)
+            compare_runs(run_dirs or [], root=root, committed_ledger=committed),
+            *committed_sign_off_sources(out, into),
         )
         rendered = render_ledger_md(ledger)
         written: list[str] = []
