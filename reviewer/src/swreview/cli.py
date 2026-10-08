@@ -2867,9 +2867,10 @@ def benchmark_compare(
     ledger this invocation is about to overwrite and re-rendered unchanged, so a
     hand-written sign-off survives regeneration and does not read as drift (FR-027).
     """
+    root = sets.REPO_ROOT  # read at call time, as `benchmark run` reads it
     with _errors_as_exit_1():
         ledger = carry_sign_offs(
-            compare_runs(run_dirs or []), *committed_sign_off_sources(out, into)
+            compare_runs(run_dirs or [], root=root), *committed_sign_off_sources(out, into)
         )
         rendered = render_ledger_md(ledger)
         written: list[str] = []

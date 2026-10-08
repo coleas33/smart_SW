@@ -277,6 +277,12 @@ Decisions 1A to 12A were taken in the eval interview of 2026-09-28, 13A to 16A o
 - **Options**: A: the off arm supplies it: the checks-first review asserts `prerun` and `configured_check` and that the guarded `check_hygiene` repeat adds nothing; the end-to-end `code_only_call` comes from the same package's off arm, where the model's scripted `check_rms_part` and `check_mass_material` write findings that read `code_only_call`; T032's text amended. B: a new hygiene-defect variant: keep the wording, and add a variant package with a hygiene defect so that an off-arm `check_hygiene` writes a finding. C: data-built sessions only: drop `code_only_call` from test (5), which tests (1) and (2) cover.
 - **Chosen**: A. In test (5) the checks-first review's findings read `prerun` and `configured_check` (the scripted `check_hole_alignment` on `hole:1` and `hole:2`), and the model's scripted `check_hygiene` repeat is answered `already_run` by the pre-run guard and adds no finding; the end-to-end `code_only_call` findings come from the same package's off arm (every lever off), where the model's scripted `check_rms_part` and `check_mass_material` write them. Applied in tasks.md T032's test (5), whose text is amended with T032.
 
+### 44A. The too-small-set override must match across a study (2026-10-07)
+
+- **Question** (implementation, issue 44; tasks.md T064, T065; `provenance.md` 4, D5; data-model section 7): the must-match loop holds `set_too_small_override` equal across a study's runs, so the existing `test_benchmark_compare.py` test `test_a_study_carrying_the_too_small_override_gets_no_decision_row`, whose on arm alone carries the override, would be refused at the study before any decision row is computed. Move the test, or exempt the field?
+- **Options**: A: both arms: the test's study carries the override on both arms (`study_specs(off={set_too_small_override: True}, on={set_too_small_override: True, **CHEAPER})`), its three assertions unchanged (decision `None`, `SET TOO SMALL` in the reason, `on-1` named in it); the one-arm case becomes the study-level refusal T064's must-match test pins. B: exempt the field by name from the must-match loop, so one arm may carry it and the decision row is still refused for it.
+- **Chosen**: A. `provenance.md` 4 names `set_too_small_override` must-match (D5), and a study whose arms differ in whether the set was declared too small has arms run under two declarations; B would add an exemption the contract does not name. Applied in tasks.md T064 and T065.
+
 ---
 
 ## §2 The 2026-09-28 audit

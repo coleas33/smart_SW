@@ -24,11 +24,28 @@ from statistics import median
 from typing import Any, get_args
 from uuid import NAMESPACE_URL, uuid5
 
-from swreview.agent.providers import EffortMapping, TokenUsage
-from swreview.agent.settings import EfficiencySettings
+from swreview.agent.providers import EffortMapping, ProviderName, TokenUsage
+from swreview.agent.settings import (
+    DEFAULT_MODELS,
+    INERT_SETTINGS,
+    LEVER_NAMES,
+    MODEL_VIEW_OFF,
+    MODEL_VIEW_PANE,
+    NO_STUDY,
+    PANE_STUDY,
+    PRIVATE_PANE_STUDY,
+    EfficiencySettings,
+    ModelViewSettings,
+    pane_efficiency,
+)
 from swreview.benchmark.adoption import ArmRun
 from swreview.benchmark.origins import Origin
-from swreview.benchmark.runner import RunProvenance, sha256_of, write_provenance
+from swreview.benchmark.runner import (
+    PROVENANCE_SCHEMA,
+    RunProvenance,
+    sha256_of,
+    write_provenance,
+)
 from swreview.benchmark.scorecard import (
     NO_CORRECT_CONDITION,
     SCORING_RULES_VERSION,
@@ -39,6 +56,8 @@ from swreview.benchmark.scorecard import (
     RecallByTag,
     Scorecard,
 )
+from swreview.checks.standards.document import DATA_CARD_COMPLETE
+from swreview.checks.standards.report import PROFILE_LIMIT
 from swreview.report.session import (
     Coverage,
     CoverageItem,
@@ -50,6 +69,7 @@ from swreview.report.session import (
     Timing,
     save_session,
 )
+from tests.support.findings import make_finding
 from tests.support.packages import build_package
 
 PACKAGE = build_package()
@@ -58,9 +78,24 @@ STARTED_AT = datetime(2026, 9, 16, 9, 0, tzinfo=UTC)
 SCORED_AT = datetime(2026, 9, 16, 10, 0, tzinfo=UTC)
 COMMIT = "5733efd"
 CHECKLIST_DIGEST = "c" * 64
+PROMPT_DIGEST = "d" * 64
 SET_DIGEST = "5" * 64
 SET_NAME = "study"
 KEY_SHA256 = "e" * 64
+
+EXAMPLE_PROFILE_DIGEST = "b" * 64
+"""The digest a run graded against the checkout's example profile records, as a `pane_defaults`
+run must (feature 014 `contracts/provenance.md` 3.2)."""
+
+PRIVATE_PROFILE_DIGEST = "a" * 64
+"""A real profile's digest, the private pane study's."""
+
+PANE_PROFILES: dict[str, tuple[str, bool]] = {
+    PANE_STUDY: (EXAMPLE_PROFILE_DIGEST, True),
+    PRIVATE_PANE_STUDY: (PRIVATE_PROFILE_DIGEST, False),
+}
+"""Each pane study's `profile_digest` and `profile_is_example`: the example profile for the
+committed study, a real one for the private study (owner decision 23A)."""
 
 
 @dataclass(frozen=True)
@@ -136,11 +171,17 @@ class PackageSpec:
 
 @dataclass(frozen=True)
 class RunSpec:
-    """One run folder of one arm."""
+    """One run folder of one arm.
+
+    Its record is what `benchmark run` writes (feature 014 `contracts/provenance.md` 1): schema
+    2, every lever and the model view as resolved, no profile, no live tools, a clean tree. The
+    session beside it carries the same efficiency, model view and explanation setting, so the
+    two writers agree unless a test makes them disagree.
+    """
 
     run: str
-    arm: str = "off"
-    rep: int = 1
+    arm: str | None = "off"
+    rep: int | None = 1
     lever: str = "parallel_tool_calls"
     packages: tuple[PackageSpec, ...] = (PackageSpec(),)
     efficiency: EfficiencySettings | None = None
@@ -156,13 +197,29 @@ class RunSpec:
     key_sha256: str = KEY_SHA256
     """The digest of the key every package of this run was scored against, as the scorecard
     records it per package (feature 014 INT-16)."""
+    max_steps: int = 200
+    started_at: datetime = STARTED_AT
+    """The record's; every session starts at `STARTED_AT` whatever this says."""
+    explanations_enabled: bool = False
+    provenance_schema: int = PROVENANCE_SCHEMA
+    pane_defaults: bool = False
+    model_view: ModelViewSettings | None = MODEL_VIEW_OFF
+    profile_digest: str | None = None
+    profile_is_example: bool | None = None
+    live_tools: bool | None = False
+    inert_settings: tuple[str, ...] | None = ()
+    prompt_digest: str | None = PROMPT_DIGEST
+    tree_dirty: bool | None = False
+    standards_stamps: tuple[str, ...] = ()
+    """The profile stamps this run's standards findings carry (`profile_stamp`): one
+    `standards.*` finding per stamp in every package's session."""
 
     def settings(self) -> EfficiencySettings:
         """What the runner would have resolved, unless the spec overrode it."""
         if self.efficiency is not None:
             return self.efficiency
         on = {name: True for name in self.other_levers}
-        if self.arm == "on" and self.lever != "none":
+        if self.arm == "on" and self.lever in LEVER_NAMES:
             on[self.lever] = True
         return EfficiencySettings(**on)
 
@@ -170,18 +227,125 @@ class RunSpec:
         return RunProvenance(
             commit=self.commit,
             lever=self.lever,
-            arm=self.arm,
+            arm=self.arm,  # type: ignore[arg-type]
             rep=self.rep,
             provider=self.provider,
             model=self.model,
             effort=self.effort,
-            max_steps=200,
+            max_steps=self.max_steps,
             checklist_digest=self.checklist_digest,
             set_digest=self.set_digest or SET_DIGEST,
-            started_at=STARTED_AT,
+            started_at=self.started_at,
             set_too_small_override=self.set_too_small_override,
             efficiency=self.settings(),
+            explanations_enabled=self.explanations_enabled,
+            provenance_schema=self.provenance_schema,
+            pane_defaults=self.pane_defaults,
+            model_view=self.model_view,
+            profile_digest=self.profile_digest,
+            profile_is_example=self.profile_is_example,
+            live_tools=self.live_tools,
+            inert_settings=self.inert_settings,
+            prompt_digest=self.prompt_digest,
+            tree_dirty=self.tree_dirty,
         )
+
+
+OLD_FORM_PROFILE = "..\\config\\standards.example.yaml"
+"""The profile as the path-bearing stamp named it before feature 014's D12: the folder too."""
+
+
+def profile_stamp(digest: str, *, old_form: bool = False) -> str:
+    """A standards finding's profile stamp of `digest`: the file-name form `PROFILE_LIMIT`
+    writes, or, with `old_form`, the path-bearing one findings carried before D12, which
+    `stamped_profile_digest` still reads (`contracts/provenance.md` 6.2)."""
+    if old_form:
+        return f"profile:{OLD_FORM_PROFILE} sha256:{digest}"
+    return PROFILE_LIMIT.format(name="standards.example.yaml", sha256=digest)
+
+
+def _provider_fields(provider: str) -> dict[str, Any]:
+    """The provider, its default model and the settings it records inert (FR-052)."""
+    name = ProviderName(provider)
+    return {
+        "provider": provider,
+        "model": DEFAULT_MODELS[name],
+        "inert_settings": INERT_SETTINGS[name],
+    }
+
+
+def _pane_settings(provider: str) -> dict[str, Any]:
+    """Exactly `--pane-defaults`: the marker, and the pane's levers and model view."""
+    return {
+        "pane_defaults": True,
+        "efficiency": pane_efficiency(ProviderName(provider)),
+        "model_view": MODEL_VIEW_PANE,
+    }
+
+
+def pane_run_spec(
+    run: str,
+    arm: str,
+    rep: int,
+    *,
+    study: str = PANE_STUDY,
+    provider: str = "openai",
+    explanations: bool = True,
+    **overrides: Any,
+) -> RunSpec:
+    """One run of a pane study, as `benchmark run --study <study>` writes it.
+
+    The on arm is exactly `--pane-defaults`, the off arm every change off; the explanation
+    setting is typed, and equal in both unless a test says otherwise; the profile is the one the
+    study requires (`PANE_PROFILES`), and the inert settings the provider's.
+    """
+    profile_digest, profile_is_example = PANE_PROFILES[study]
+    fields: dict[str, Any] = {
+        "lever": study,
+        "explanations_enabled": explanations,
+        "profile_digest": profile_digest,
+        "profile_is_example": profile_is_example,
+        **_provider_fields(provider),
+        **(_pane_settings(provider) if arm == "on" else {}),
+        **overrides,
+    }
+    return RunSpec(run=run, arm=arm, rep=rep, **fields)
+
+
+def pane_study_specs(
+    *,
+    study: str = PANE_STUDY,
+    provider: str = "openai",
+    reps: int = 3,
+    off: dict[str, Any] | None = None,
+    on: dict[str, Any] | None = None,
+) -> list[RunSpec]:
+    """A pane study's off and on runs, alternated, with per-arm overrides: `study_specs`'s
+    shape for `pane_run_spec`."""
+    specs: list[RunSpec] = []
+    for rep in range(1, reps + 1):
+        for arm, overrides in (("off", off), ("on", on)):
+            specs.append(
+                pane_run_spec(
+                    f"{arm}-{rep}", arm, rep, study=study, provider=provider, **(overrides or {})
+                )
+            )
+    return specs
+
+
+def pane_baseline_spec(
+    run: str, rep: int, *, provider: str = "openai", **overrides: Any
+) -> RunSpec:
+    """`--study none --arm baseline --pane-defaults` and nothing else (PP-4): the pane's levers,
+    model view and explanations, the marker set, any profile."""
+    fields: dict[str, Any] = {
+        "lever": NO_STUDY,
+        "explanations_enabled": True,
+        **_provider_fields(provider),
+        **_pane_settings(provider),
+        **overrides,
+    }
+    return RunSpec(run=run, arm="baseline", rep=rep, **fields)
 
 
 def step_tools(spec: PackageSpec) -> list[str]:
@@ -376,6 +540,14 @@ def session_of(spec: RunSpec, package: PackageSpec) -> ReviewSession:
             key_source="env",
         ),
         efficiency=spec.settings(),
+        explanations_enabled=spec.explanations_enabled,
+        model_view=spec.model_view,
+        findings=[
+            make_finding(
+                finding_id=f"F-{index:03d}", check=DATA_CARD_COMPLETE, coverage_limits=[stamp]
+            )
+            for index, stamp in enumerate(spec.standards_stamps, start=1)
+        ],
         usage=(
             SessionUsage(
                 rounds=package.rounds,
@@ -431,6 +603,20 @@ def write_events(package_dir: Path, package: PackageSpec) -> None:
     )
 
 
+def saved_set_entries(spec: RunSpec) -> list[dict[str, Any]]:
+    """The saved set's entries `benchmark run` would have written for this run: one per package,
+    its id, a repository-relative path, and the `held_out` flag its graded items derive, true
+    exactly when one is tagged held out (feature 014 `contracts/provenance.md` 2, 6.1)."""
+    return [
+        {
+            "package_id": package.package_id,
+            "path": f"benchmarks/packages/{package.package_id}",
+            "held_out": any(item.tag == "held_out" for item in package_score(package).graded_items),
+        }
+        for package in spec.packages
+    ]
+
+
 def write_run(
     root: Path,
     spec: RunSpec,
@@ -438,12 +624,15 @@ def write_run(
     with_provenance: bool = True,
     with_saved_set: bool = True,
     session_edit: dict[str, Any] | None = None,
+    saved_packages: Sequence[dict[str, Any]] | None = None,
 ) -> Path:
     """One complete run directory, of the shape `benchmark run` and `score` leave behind.
 
     `session_edit` patches the written `session.json` **after** it was serialized, which
     is how a run whose two records disagree is built: nothing in the runner can produce
-    one, and the disagreement is exactly what `compare` exists to catch.
+    one, and the disagreement is exactly what `compare` exists to catch. `saved_packages`
+    replaces the saved set's entries (`saved_set_entries`) the same way, the record's
+    `set_digest` still taken over the bytes written.
     """
     run_dir = root / spec.run
     for package in spec.packages:
@@ -468,8 +657,10 @@ def write_run(
     recorded = spec
     if with_saved_set:
         saved = run_dir / "benchmark-set.json"
+        packages = saved_set_entries(spec) if saved_packages is None else list(saved_packages)
         saved.write_text(
-            json.dumps({"name": SET_NAME, "packages": []}, indent=2) + "\n", encoding="utf-8"
+            json.dumps({"name": SET_NAME, "packages": packages}, indent=2) + "\n",
+            encoding="utf-8",
         )
         if spec.set_digest is None:
             recorded = replace(spec, set_digest=sha256_of(saved))
