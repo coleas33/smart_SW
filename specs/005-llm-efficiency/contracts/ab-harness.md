@@ -1,6 +1,6 @@
 # Contract: the A/B harness and the results ledger
 
-*Amended 2026-09-29 by feature 014 (`specs/014-design-review-eval/`), in provenance.md sections 1 to 5 and 6.1, benchmark-run.md sections 3, 4 and 14, scoring.md sections 7 and 8, verdict.md sections 5 and 7; the amendment text lands with the 014 task that changes the code, sections 4's and 9's scorer half landed 2026-10-07 (014 T038), sections 2, 10.1 and 10.2 landed 2026-10-07 (014 T051):* sections 2, 3, 4, 5, 7, 9, 10.1, 10.2 and 10.5 change (the provenance record, the must-match rule, the saved set's form, the ledger's columns, the pane study's route, compare's version refusal).
+*Amended 2026-09-29 by feature 014 (`specs/014-design-review-eval/`), in provenance.md sections 1 to 5 and 6.1, benchmark-run.md sections 3, 4 and 14, scoring.md sections 7 and 8, verdict.md sections 5 and 7; the amendment text lands with the 014 task that changes the code, sections 4's and 9's scorer half landed 2026-10-07 (014 T038), sections 2, 10.1 and 10.2 landed 2026-10-07 (014 T051), sections 3 and 10.5 landed 2026-10-07 (014 T065):* sections 2, 3, 4, 5, 7, 9, 10.1, 10.2 and 10.5 change (the provenance record, the must-match rule, the saved set's form, the ledger's columns, the pane study's route, compare's version refusal).
 
 The A/B protocol, the runs it produces, and `swreview benchmark compare`, the one reader that
 validates those runs and renders the ledger.
@@ -208,6 +208,37 @@ produced. Principle VI and FR-025 are untouched.
 `compare` is idempotent over the same folders: re-running it regenerates `ledger.json` and
 `ledger.md` from the run directories, which are the only source. There is no append-only state to
 drift.
+
+*Amended 2026-10-07 by feature 014 (T064, T065; its `contracts/provenance.md` 2 to 4; owner
+decision 44A):* what `compare` validates grows in four places. **The cross-checks**: against a
+record of schema 2, the session's `model_view` equals the record's (a session with none is
+refused), and every `standards.*` finding's profile stamp, read through
+`checks.standards.report.stamped_profile_digest` in the old path-bearing form or the file-name
+form, equals the record's `profile_digest` (a stamp on a run that recorded no profile is refused);
+an older record recorded neither and is held to neither. **The arm against its settings**: the
+baseline clause applies to `arm: "baseline"` only, so a run with no arm is a raw row whatever it
+switched on; the plain baseline is every flag false and `MODEL_VIEW_OFF`; the pane baseline
+(`pane_defaults: true`) has settings that are not all off, and is its own study, labelled
+`none (pane defaults)`, with its own sign-off. A pane study's off arm has every lever off,
+`MODEL_VIEW_OFF` and `pane_defaults: false`; its on arm has `pane_defaults: true` and settings
+that are not all off, or it is refused as mislabelled; both are checked against those constants,
+never re-derived from today's `pane_defaults()`. A run of either pane study with no arm, and a
+`pane_defaults` run whose `profile_is_example` is not true, are run-level refusals. Both pane
+studies render raw rows under their own study keys and no decision row. **The set flags**: where
+the saved copy is there, read through `sets.load_saved_set(path, root=...)` (`root` a keyword of
+`compare_runs` and the command, `sets.REPO_ROOT` read at call time), each scored package's saved
+`held_out` must equal whether some `graded_items` entry of its `PackageScore` is tagged
+`held_out`, and a scored package the saved copy does not hold is refused, each naming the run
+and the package. **Across the set**, the must-match rule above becomes one loop over
+`RunProvenance.model_fields` less named exemptions (`compare.RUN_IDENTITY`, `RECORD_ONLY`,
+`STUDY_KEY_FIELDS`, `ACROSS_ARMS` and `ACROSS_PANE_ARMS`; every other field is
+`compare.MUST_MATCH`, a field added later included until it is exempted by name). Each run is
+held against the first run of its own arm, and the first run of each arm against the study's
+first: `arm` is exempt across the arms, a pane study's `efficiency`, `model_view` and
+`pane_defaults` across its two arms, and a lever study's studied flag across its arms, with
+`efficiency` compared flag by flag. The refusal names the first differing field and both values.
+`set_too_small_override` is one of those fields, so both arms of a study carry it or neither does
+(owner decision 44A).
 
 ## 4. `ledger.json`, the raw ledger
 
@@ -573,6 +604,11 @@ an OpenAI study and a Gemini study renders two rows as section 5 asks. Within on
 four fields that must be equal are `commit`, `effort`, `set_digest` and `checklist_digest`,
 and the refusal names the one that differed. There is still no declared exception, lever 2
 included.
+
+*Amended 2026-10-07 by feature 014 (T065; its `contracts/provenance.md` 4):* the same-commit
+refusal is the must-match loop's `commit` (section 3's amendment), applied within a study as
+before. The four fields are now every field of the record but the named exemptions, and the
+refusal names the first that differed, `efficiency.<lever>` for a lever's flag.
 
 ### 10.6 Two exits, which are not the same thing
 
