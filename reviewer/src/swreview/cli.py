@@ -86,7 +86,7 @@ from swreview.agent.settings import (
     redact,
 )
 from swreview.agent.settings import pane_defaults as pane_defaults_for
-from swreview.benchmark import answers, sets
+from swreview.benchmark import answers, set_summary, sets
 from swreview.benchmark.answers import DEFAULT_MAX_ANSWER_TURNS
 from swreview.benchmark.compare import (
     carry_sign_offs,
@@ -2762,6 +2762,49 @@ def benchmark_score(
         f"wrote {scorecard_json} and {scorecard_md}",
     ]
     _emit(payload, lines, json_output)
+
+
+@benchmark_app.command("set-summary")
+def benchmark_set_summary(
+    set_file: Annotated[Path, typer.Argument(help="Benchmark set JSON.")],
+    answer_keys: Annotated[
+        Path | None,
+        typer.Option(
+            "--answer-keys", help="Directory of answer keys, for a set that names none."
+        ),
+    ] = None,
+) -> None:
+    """Print a set's held-out, twinned, code-produced, tuned-on and anchor counts per family.
+
+    Then the held-out model-produced total against the floor of 34, the largest design's share
+    and the held-out items whose stamp is stale (feature 014 `contracts/cases.md` 8). Reads the
+    set, its packages and its keys, never a case file or a provider. Exit 1 when the set, a key
+    or a package cannot be read, a key names another package or a held_out flag disagrees with
+    its key; exit 2 for a set that names no keys given no --answer-keys. A count below the floor
+    is printed, not refused.
+    """
+    root = sets.REPO_ROOT  # read at call time, as `benchmark score` reads it
+    # The set is read here first, so a missing --answer-keys is told apart as a usage error
+    # before `summarize`, which reads it again, refuses anything else with exit 1.
+    with _errors_as_exit_1():
+        benchmark_set = sets.load_set(set_file, root=root)
+    _require_answer_keys_for_a_keyless_set(benchmark_set, answer_keys)
+    with _errors_as_exit_1():
+        summary = set_summary.summarize(set_file, root=root, answer_keys=answer_keys)
+    typer.echo(set_summary.render_summary(summary))
+
+
+def _require_answer_keys_for_a_keyless_set(
+    benchmark_set: BenchmarkSet, answer_keys: Path | None
+) -> None:
+    """A keyless set, as every set written before feature 014 is, reads its keys from
+    --answer-keys (plan decision RF-4): without it, a usage error (exit 2) naming the option.
+    `sets.key_path` is the one rule for where an entry's key lives, and its refusal the line."""
+    try:
+        for entry in benchmark_set.packages:
+            sets.key_path(entry, answer_keys)
+    except sets.SetError as refusal:
+        raise typer.BadParameter(str(refusal), param_hint="'--answer-keys'") from None
 
 
 @benchmark_app.command("time")

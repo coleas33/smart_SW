@@ -44,7 +44,7 @@ from swreview.agent.settings import (
     ProviderSettings,
     pane_defaults,
 )
-from swreview.benchmark import answers
+from swreview.benchmark import answers, sets
 from swreview.benchmark.answers import ANSWER_LOG_VERSION, AnswerLog, read_answer_log
 from swreview.benchmark.case_file import CaseFile
 from swreview.benchmark.runner import EXAMPLE_PROFILE, AttemptRequest
@@ -60,6 +60,12 @@ from swreview.report.rerender import rerender_run_folder
 from swreview.report.session import load_session
 from tests.support.answer_keys import write_key
 from tests.support.console import plain_one_line
+from tests.unit.test_benchmark_set_summary import (
+    SYNTHETIC_BLOCK,
+    checkout_of,
+    keyless_set,
+    synthetic_set,
+)
 from tests.unit.test_rerender import (
     NAMED_COMPONENT,
     PLACEHOLDER,
@@ -2985,6 +2991,58 @@ def test_benchmark_time_for_an_unknown_package_exits_1(benchmark_run_dir: Path) 
     result = invoke("benchmark", "time", str(benchmark_run_dir), "nope", "--baseline", "10")
 
     assert result.exit_code == 1
+
+
+# --- benchmark set-summary (feature 014 T118) ------------------------------------------------
+
+
+def test_benchmark_set_summary_prints_its_block_line_for_line(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`cases.md` 8, over `test_benchmark_set_summary.py`'s synthetic set: the set's line, one
+    line per family in `FAMILY_LABELS` order, the floor, the largest design share and one line
+    per stale item. It reads no case file (kalo-fit-1 names one that is no case file, and the
+    case file's one reader refuses to be called) and contacts no provider (the factory every
+    review builds its adapter through refuses to be called). The root is read at call time, as
+    `benchmark score` reads it."""
+
+    def no_provider(*_: object, **__: object) -> None:
+        raise AssertionError("benchmark set-summary built a provider")
+
+    def no_case_file(*_: object, **__: object) -> None:
+        raise AssertionError("benchmark set-summary read a case file")
+
+    set_file = synthetic_set(tmp_path)
+    monkeypatch.setattr(cli, "provider_factory", no_provider)
+    monkeypatch.setattr(answers, "load_case_file", no_case_file)
+    monkeypatch.setattr(sets, "REPO_ROOT", checkout_of(tmp_path))
+
+    result = invoke("benchmark", "set-summary", str(set_file))
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert result.stdout.splitlines() == SYNTHETIC_BLOCK
+    assert result.stderr == ""
+
+
+def test_benchmark_set_summary_over_a_keyless_set_without_answer_keys_is_a_usage_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """T115's `key_path` rule, as `benchmark score`'s (RF-4): a keyless set, as every set
+    written before feature 014 is, reads its keys from `--answer-keys`, so without it the command
+    is a usage error naming the option; with it the summary prints."""
+    set_file, keys = keyless_set(tmp_path)
+    monkeypatch.setattr(sets, "REPO_ROOT", checkout_of(tmp_path))
+
+    refused = invoke("benchmark", "set-summary", str(set_file))
+    printed = invoke("benchmark", "set-summary", str(set_file), "--answer-keys", str(keys))
+
+    assert refused.exit_code == 2
+    assert refused.stdout == ""
+    assert "--answer-keys" in plain_one_line(refused.stderr)
+    assert printed.exit_code == 0, printed.stdout + printed.stderr
+    assert printed.stdout.splitlines()[0] == (
+        "benchmark set keyless: 1 packages (1 held out, 0 private), 1 designs"
+    )
 
 
 # --- the command surface ---------------------------------------------------------
