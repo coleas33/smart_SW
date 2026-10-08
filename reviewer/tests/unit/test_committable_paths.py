@@ -136,6 +136,25 @@ def test_committable_is_inside_the_root_and_not_reported_ignored(
     assert runner.committable(tmp_path / "elsewhere", root=root) is False
 
 
+@pytest.mark.parametrize("folder", ["-x", "--stdin"])
+def test_a_folder_named_like_an_option_is_asked_about_as_a_path(
+    folder: str, tmp_path: Path
+) -> None:
+    """`git check-ignore` is handed the path after `--`, so a folder whose name starts with `-`
+    is read as a path, never as an option: one the checkout ignores reads not committable, where
+    `-x` would make git refuse the command and `--stdin` wait on standard input."""
+    if shutil.which("git") is None:
+        pytest.skip("git is not on the path")
+    root = tmp_path / "checkout"
+    checkout(root)
+    with (root / ".gitignore").open("a", encoding="utf-8") as ignore:
+        ignore.write(f"/{folder}/\n")
+    (root / folder / "run").mkdir(parents=True)
+
+    assert runner.committable(root / folder / "run", root=root) is False
+    assert runner.committable(root / "runs" / folder, root=root) is True
+
+
 # --- the committable-path scanner (T055, for T056; provenance.md 6.6) ---------------------
 
 
@@ -308,6 +327,16 @@ def test_a_drive_path_glued_to_a_word_character_is_flagged(tmp_path: Path) -> No
     assert reasons(written(tmp_path / "fictional.md", fictional)) == []
     anchors = "https://example.com/a and native\\\\cover-assy.SLDASM\n"
     assert reasons(written(tmp_path / "anchors.md", anchors)) == []
+
+
+def test_text_like_an_escape_after_a_colon_reads_as_a_glued_drive_path(tmp_path: Path) -> None:
+    """By decision (research 9.14, slice 3 follow-ups): since a drive letter and its backslash
+    start a path wherever they stand, plain text such as `regex:\\d+` reads as the drive path
+    `x:\\d+`. A false alarm on the refusing side, kept: a rule narrow enough to pass it would also
+    pass a path typed against a word, which the test above flags."""
+    text = "split it with regex:\\d+ first\n"
+
+    assert offences(written(tmp_path / "regex.md", text)) == [(local_paths.DRIVE_PATH, "x:\\d+")]
 
 
 def test_a_json_lines_file_and_a_packed_stream_are_read_line_by_line(tmp_path: Path) -> None:

@@ -10,7 +10,8 @@ model reads.
   after the extraction.
 - `tools.session.documents_named` is the drawing guard's document rule made public
   (`questions.md` 2): a document names itself, a component instance its document, a hole and a
-  fastener their component's document, and any other id nothing, first-named first.
+  fastener their component's document, and any other id nothing, first-named first; read over
+  `questions_package()`, the one package this file reviews.
 
 The rest (T081, for T082; QA-10 to QA-18, RF-6, RF-30) is `benchmark/questions.py`, the one
 question matcher, over `questions_package()`, a fictional package with `questions.md` 7's ids:
@@ -210,81 +211,17 @@ def test_covering_requests_asks_nothing_for_a_question_with_no_item_and_no_id(
     assert covering == report_session.CoveringRequests(answered=None, open=None)
 
 
-# --- documents_named: the drawing guard's document rule, public (questions.md 2; QA-11) -----------
-
-ROOT = "doc:1"
-PLATE = "doc:2"
-PLATE_1 = "cmp:0001"
-HOLE = "hole:1"
-SCREW = "fst:1"
-
-
-def plate_package() -> EvidencePackage:
-    """`build_package`'s fictional package cut to one part instance: its part `doc:2`, the plate
-    here, has the one instance `cmp:0001`, holding the hole `hole:1` and, moved onto it, the
-    fastener `fst:1`; the root assembly `doc:1` has no instance."""
-    base = build_package()
-    plate_1 = base.components[0]
-    return build_package(
-        components=[plate_1],
-        fasteners=[base.fasteners[0].model_copy(update={"component_id": plate_1.id})],
-    )
-
-
-def test_documents_named_is_public_and_the_private_name_is_gone() -> None:
-    assert callable(tools_session.documents_named)
-    assert not hasattr(tools_session, "_documents_named")
-
-
-@pytest.mark.parametrize(
-    ("entity_ids", "documents"),
-    [
-        ([PLATE], [PLATE]),
-        ([ROOT], [ROOT]),
-        ([PLATE_1], [PLATE]),
-        ([HOLE], [PLATE]),
-        ([SCREW], [PLATE]),
-        (["fea:0001"], []),
-        (["dsn:1"], []),
-        ([], []),
-    ],
-    ids=["document", "root-document", "instance", "hole", "fastener", "feature", "design", "none"],
-)
-def test_documents_named_names_each_id_s_document_as_the_drawing_guard_reads_it(
-    entity_ids: list[str], documents: list[str]
-) -> None:
-    """`tools/session.py:280-298`: a document is itself, a component its document, a hole or a
-    fastener its component's document; any other id names none."""
-    context = context_for(plate_package())
-
-    assert context.hole(HOLE) is not None and context.fastener(SCREW) is not None
-    assert tools_session.documents_named(context, entity_ids) == documents
-
-
-def test_documents_named_names_each_document_once_first_named_first() -> None:
-    context = context_for(plate_package())
-
-    named = tools_session.documents_named(
-        context, [HOLE, "fea:0001", ROOT, SCREW, PLATE_1, PLATE, ROOT]
-    )
-
-    assert named == [PLATE, ROOT]
-
-
-# --- the questions reader: questions_package() and a review played call by call (T081) -----------
+# --- questions_package(): questions.md 7's ids, the one package this file reviews ----------------
 
 ASSEMBLY = "doc:0001"
 PLATE_DOC = "doc:0002"
+PLATE_1 = "cmp:0001"
 PLATE_HOLE = "hol:0001"
 PIN_DOC = "doc:0003"
 PIN_1 = "cmp:0002"
 PIN_2 = "cmp:0003"
 PIN_SCREW = "fst:0001"
-"""`questions.md` 7's ids; the plate's instance is `PLATE_1`, `cmp:0001`, as above."""
-
-FIT = "interfaces.fit"
-DRAWING = "drawing.manufacturing_inputs"
-ANSWERED_AT = datetime(2026, 9, 26, 10, 0, tzinfo=UTC)
+"""`questions.md` 7's ids."""
 
 
 def questions_package() -> EvidencePackage:
@@ -328,6 +265,67 @@ def questions_package() -> EvidencePackage:
 
 
 PACKAGE = questions_package()
+
+
+# --- documents_named: the drawing guard's document rule, public (questions.md 2; QA-11) -----------
+
+
+def test_documents_named_is_public_and_the_private_name_is_gone() -> None:
+    assert callable(tools_session.documents_named)
+    assert not hasattr(tools_session, "_documents_named")
+
+
+@pytest.mark.parametrize(
+    ("entity_ids", "documents"),
+    [
+        ([PLATE_DOC], [PLATE_DOC]),
+        ([ASSEMBLY], [ASSEMBLY]),
+        ([PLATE_1], [PLATE_DOC]),
+        ([PIN_2], [PIN_DOC]),
+        ([PLATE_HOLE], [PLATE_DOC]),
+        ([PIN_SCREW], [PIN_DOC]),
+        (["fea:0001"], []),
+        (["dsn:1"], []),
+        ([], []),
+    ],
+    ids=[
+        "document",
+        "root-document",
+        "instance",
+        "second-instance",
+        "hole",
+        "fastener",
+        "unknown",
+        "design",
+        "none",
+    ],
+)
+def test_documents_named_names_each_id_s_document_as_the_drawing_guard_reads_it(
+    entity_ids: list[str], documents: list[str]
+) -> None:
+    """`tools/session.py:280-298`: a document is itself, a component its document, a hole or a
+    fastener its component's document; any other id names none, one the package does not hold
+    (`fea:0001`, `dsn:1`) included."""
+    context = context_for(PACKAGE)
+
+    assert context.hole(PLATE_HOLE) is not None and context.fastener(PIN_SCREW) is not None
+    assert tools_session.documents_named(context, entity_ids) == documents
+
+
+def test_documents_named_names_each_document_once_first_named_first() -> None:
+    context = context_for(PACKAGE)
+
+    named = tools_session.documents_named(
+        context, [PLATE_HOLE, "fea:0001", ASSEMBLY, PIN_SCREW, PLATE_1, PLATE_DOC, ASSEMBLY]
+    )
+
+    assert named == [PLATE_DOC, ASSEMBLY, PIN_DOC]
+
+
+# --- the questions reader: a review of questions_package() played call by call (T081) ------------
+
+DRAWING = "drawing.manufacturing_inputs"
+ANSWERED_AT = datetime(2026, 9, 26, 10, 0, tzinfo=UTC)
 
 PART_ROLES_SPEC = QuestionSpec(
     key=part_roles.QUESTION_KEY,
@@ -818,6 +816,22 @@ def test_r_3_against_a_key_with_q_2_is_also_one_question_count_miss(tmp_path: Pa
     assert columns.question_counts == [counted("Q-2", 2, 0, 1)]
 
 
+def test_r_3_refused_against_a_key_with_q_2_counts_the_refused_call_too(tmp_path: Path) -> None:
+    """An item rule counts every call asking within it, whatever its outcome (questions.md 5.2):
+    the follow-up naming the plate's hole alone, refused `already_answered`, asks within Q-2's
+    plate instance, so the rule counts two and misses its max of 1."""
+    review = r_3(tmp_path, (PLATE_HOLE,))
+
+    columns = review.columns(
+        review.log(), count_rules=[item_count_rule(ids=[PLATE_1, PIN_1], max=1)]
+    )
+
+    assert columns.re_asks == [repeat(1, "already_answered", "ER-002", of="ER-002")]
+    assert columns.question_counts == [counted("Q-2", 2, 0, 1)]
+    (row,) = columns.question_counts or []
+    assert row.max is not None and row.count > row.max
+
+
 def test_r_6_one_fasteners_question_answered_and_nothing_asked_after(tmp_path: Path) -> None:
     review = Review(tmp_path)
     review.ask(PLATE_1, item="fasteners")
@@ -864,6 +878,24 @@ def test_r_1_the_part_roles_question_counted_by_identity(
     assert columns.question_counts == [counted("Q-1", asked, 1, 1)]
     (row,) = columns.question_counts or []
     assert (row.count < row.min or (row.max is not None and row.count > row.max)) is miss
+
+
+def test_a_part_roles_rule_counts_the_part_roles_question_alone_beside_another_code_question(
+    tmp_path: Path,
+) -> None:
+    """questions.md 5.2: a `part_roles` rule counts the part-roles question by identity
+    (`is_part_roles_question`), not every code-written request: the drawing candidate question,
+    also written by code, recorded beside it is not counted."""
+    review = Review(tmp_path)
+    review.ask_part_roles()
+    spec = candidate_question(DrawingIndex.for_package(PACKAGE), None, "opens_closed")
+    assert spec is not None
+    drawing = tools_session.record_question(review.context, spec)
+    assert drawing.source == "code"
+
+    columns = review.columns(review.log(), count_rules=[part_roles_rule()])
+
+    assert columns.question_counts == [counted("Q-1", 1, 1, 1)]
 
 
 # --- in time: answered before, open at (questions.md 1 and 3; FR-020, D3) ----------------------

@@ -31,7 +31,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections import Counter
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -807,6 +807,131 @@ def test_a_withdrawn_finding_matching_no_forbidden_entry_counts_nothing(tmp_path
     assert withdrawn[0] in score.withdrawn_forbidden_hit_finding_ids
     assert score.withdrawn_forbidden_hit_finding_ids == [withdrawn[0]]
     assert not set(withdrawn[1:]) & set(score.finding_origins)
+
+
+def edit_stream(tmp_path: Path, edit: Callable[[list[dict[str, Any]]], None]) -> None:
+    """`all_bought`'s stream with `edit` applied to its events, a list it may change in place,
+    then every `seq` numbered again from 1, so the replay reads each event, an inserted one
+    included."""
+    stream = tmp_path / RUN / "events.jsonl"
+    events = [json.loads(line) for line in stream.read_text(encoding="utf-8").splitlines()]
+    edit(events)
+    for seq, event in enumerate(events, start=1):
+        event["seq"] = seq
+    stream.write_text("".join(json.dumps(event) + "\n" for event in events), encoding="utf-8")
+
+
+def last_announced(events: list[dict[str, Any]], finding_id: str) -> dict[str, Any]:
+    """The last `finding` event announcing `finding_id`."""
+    return next(
+        event
+        for event in reversed(events)
+        if event["type"] == "finding" and event["body"]["id"] == finding_id
+    )
+
+
+def withdrawal(events: list[dict[str, Any]], finding_id: str) -> int:
+    """The index of the `finding.withdrawn` event of `finding_id`."""
+    return next(
+        index
+        for index, event in enumerate(events)
+        if event["type"] == "finding.withdrawn" and event["body"]["finding_id"] == finding_id
+    )
+
+
+def test_a_withdrawn_finding_last_announced_unresolved_or_within_scope_is_no_withdrawn_hit(
+    tmp_path: Path,
+) -> None:
+    """`scoring.md` 3.3: a withdrawn finding counts only when its last body is demonstrated or
+    suspected. Each recast body still validates as a finding, so its status alone rules it out."""
+    first, second, third = all_bought(tmp_path)
+    recast: list[dict[str, Any]] = []
+
+    def recast_two(events: list[dict[str, Any]]) -> None:
+        for finding_id, status in ((first, "unresolved"), (second, "checked_within_scope")):
+            body = last_announced(events, finding_id)["body"]
+            body["status"] = status
+            recast.append(body)
+
+    edit_stream(tmp_path, recast_two)
+    assert [Finding.model_validate(body).status for body in recast] == [
+        "unresolved",
+        "checked_within_scope",
+    ]
+
+    score = score_all_bought(tmp_path)
+
+    assert score.withdrawn_forbidden_hit_finding_ids == [third]
+    assert not {first, second} & set(score.finding_origins)
+
+
+def test_an_id_withdrawn_then_announced_into_the_final_state_is_no_withdrawn_hit(
+    tmp_path: Path,
+) -> None:
+    """`scoring.md` 3.3: a withdrawn hit is an id absent from the final state. One announced again
+    after its withdrawal and held by the final session is a final-state finding, so a forbidden
+    hit and a false alarm, never a withdrawn hit too."""
+    first, second, third = all_bought(tmp_path)
+    again: list[dict[str, Any]] = []
+
+    def announce_again(events: list[dict[str, Any]]) -> None:
+        event = json.loads(json.dumps(last_announced(events, second)))
+        events.insert(withdrawal(events, third) + 1, event)
+        again.append(event["body"])
+
+    edit_stream(tmp_path, announce_again)
+    session_file = tmp_path / RUN / "session.json"
+    session = json.loads(session_file.read_text(encoding="utf-8"))
+    session["findings"].append(again[0])
+    session_file.write_text(json.dumps(session, indent=2), encoding="utf-8")
+
+    score = score_all_bought(tmp_path)
+
+    assert score.withdrawn_forbidden_hit_finding_ids == [first, third]
+    assert score.forbidden_hit_finding_ids == [second]
+    assert second in score.false_alarm_finding_ids
+
+
+def test_a_withdrawn_finding_is_judged_by_its_last_body_before_the_withdrawal(
+    tmp_path: Path,
+) -> None:
+    """`scoring.md` 3.3: the last `finding` body announced before the withdrawal decides. The
+    first id, announced on the pin, is announced again on the plate's instance alone before it is
+    withdrawn, so it matches no forbidden entry."""
+    first, second, third = all_bought(tmp_path)
+
+    def move_off_the_pin(events: list[dict[str, Any]]) -> None:
+        moved = json.loads(json.dumps(last_announced(events, first)))
+        assert PIN in moved["body"]["component_ids"]
+        moved["body"]["component_ids"] = ["cmp:0001"]
+        events.insert(withdrawal(events, first), moved)
+
+    edit_stream(tmp_path, move_off_the_pin)
+
+    score = score_all_bought(tmp_path)
+
+    assert score.withdrawn_forbidden_hit_finding_ids == [second, third]
+    assert first not in score.finding_origins
+
+
+def test_a_withdrawn_finding_whose_last_body_is_no_finding_is_skipped_the_column_assessed(
+    tmp_path: Path,
+) -> None:
+    """`scoring.md` 3.3: the last body must validate as a `Finding`. One that does not (a status
+    no finding takes) is no hit, and the column is still assessed."""
+    first, second, third = all_bought(tmp_path)
+
+    def spoil(events: list[dict[str, Any]]) -> None:
+        spoiled = json.loads(json.dumps(last_announced(events, third)))
+        spoiled["body"]["status"] = "maybe"
+        events.insert(withdrawal(events, third), spoiled)
+
+    edit_stream(tmp_path, spoil)
+
+    score = score_all_bought(tmp_path)
+
+    assert score.withdrawn_forbidden_hit_finding_ids == [first, second]
+    assert "withdrawn_forbidden_hit_finding_ids" not in score.not_assessed
 
 
 def test_with_the_stream_deleted_the_withdrawn_column_is_not_assessed(tmp_path: Path) -> None:

@@ -56,7 +56,7 @@ from swreview.benchmark import sets
 from swreview.benchmark.case_file import CaseFile, ScriptedAnswer
 from swreview.benchmark.questions import QuestionIds, Unscripted, scripted_answer_for
 from swreview.checks import part_roles
-from swreview.findings import ReviewModel, omit_at_default
+from swreview.findings import ReviewModel, first_refusal, model_refusals, omit_at_default
 
 if TYPE_CHECKING:
     from swreview.agent.checklist import Checklist, ChecklistItem
@@ -131,10 +131,7 @@ class UnscriptedRequest(ReviewModel):
 
     @model_serializer(mode="wrap")
     def _omit_entries_when_absent(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
-        data = handler(self)
-        if self.entries is None:
-            data.pop("entries", None)
-        return data
+        return omit_at_default(handler(self), self, "entries")
 
 
 class AnswerPoint(ReviewModel):
@@ -207,11 +204,8 @@ def read_answer_log(folder: Path | str) -> AnswerLog | None:
     try:
         return AnswerLog.model_validate_json(raw)
     except ValidationError as error:
-        first = error.errors(include_url=False)[0]
-        field = ".".join(str(part) for part in first["loc"])
-        where = f"{field}: " if field else ""
         raise ValueError(
-            f"{folder}: {ANSWER_LOG_FILE_NAME} does not validate: {where}{first['msg']}"
+            f"{folder}: {ANSWER_LOG_FILE_NAME} does not validate: {first_refusal(error)}"
         ) from None
 
 
@@ -260,7 +254,7 @@ def load_case_file(
     try:
         case = CaseFile.model_validate(payload)
     except ValidationError as error:
-        raise CaseFileError(f"{prefix} {_model_refusal(error)}") from None
+        raise CaseFileError(f"{prefix} {model_refusals(error)}") from None
     for reason in _loader_refusals(case, entry, package, checklist, profile):
         if reason is not None:
             raise CaseFileError(f"{prefix} {reason}")
@@ -300,21 +294,6 @@ def _case_file_name(path: Path) -> str:
     its file name."""
     relative = sets.checkout_relative(path, root=sets.REPO_ROOT)
     return relative.as_posix() if relative is not None else path.name
-
-
-def _model_refusal(error: ValidationError) -> str:
-    """The model's refusals as one clause each: its own rows' sentences as they are written,
-    which name the entry, and pydantic's as `<field>: <message>`, joined by `; `. The answer
-    key's reader words its model's refusals the same way (`answer_key._model_refusal`); this
-    module imports no answer-key module (FR-032), so the clause is written here."""
-    clauses = []
-    for line in error.errors(include_url=False):
-        if line["type"] == "value_error":
-            clauses.append(line["msg"].removeprefix("Value error, "))
-        else:
-            field = ".".join(str(part) for part in line["loc"])
-            clauses.append(f"{field}: {line['msg']}" if field else line["msg"])
-    return "; ".join(clauses)
 
 
 def _loader_refusals(

@@ -96,6 +96,7 @@ from swreview.benchmark.adoption import (
 from swreview.benchmark.origins import Origin
 from swreview.benchmark.runner import (
     REPO_ROOT,
+    SAVED_SET_FILE,
     RunProvenance,
     committable,
     load_provenance,
@@ -128,7 +129,6 @@ so that slice moves neither this version nor the committed header."""
 
 LEDGER_JSON = "ledger.json"
 LEDGER_MD = "ledger.md"
-SAVED_SET_FILE = "benchmark-set.json"
 
 LEDGER_BEGIN = "<!-- ledger:begin -->"
 LEDGER_END = "<!-- ledger:end -->"
@@ -782,8 +782,9 @@ def _refuse_for_the_committed_ledger(run: _LoadedRun, *, root: Path) -> None:
 
 
 def _names_an_absolute_path(saved: Path) -> bool:
-    """Whether the saved set at `saved` names a package path absolutely: a private entry, or a
-    copy saved before feature 014, which resolved every path (`contracts/provenance.md` 6.1).
+    """Whether the saved set at `saved` names a path absolutely, a package's or a case file's
+    (every path `sets.named_paths` reads off an entry): a private entry, or a copy saved before
+    feature 014, which resolved every path (`contracts/provenance.md` 6.1).
 
     Read off the saved bytes, since `load_saved_set` resolves every entry. Absolute in either
     platform's spelling, a drive, a share or a root, which is what a Windows path's anchor
@@ -793,7 +794,9 @@ def _names_an_absolute_path(saved: Path) -> bool:
     if not saved.is_file():
         return False
     entries = json.loads(saved.read_text(encoding="utf-8"))["packages"]
-    return any(PureWindowsPath(entry["path"]).anchor for entry in entries)
+    return any(
+        PureWindowsPath(named).anchor for entry in entries for named in sets.named_paths(entry)
+    )
 
 
 # --- the raw rows ------------------------------------------------------------------

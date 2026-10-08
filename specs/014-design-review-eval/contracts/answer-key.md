@@ -24,8 +24,10 @@ given. Every example value is fictional.
   `benchmark/answer_key_model.py`, are the format's one definition: the key, its entries, `Stamp`,
   the check-pattern grammar of section 3, the table of reference-keyed checks and their kinds of
   section 2.5, and the validators that need nothing but the model (section 4, rows 1, 3, 4, 5, 7
-  and row 6's grammar). It imports pydantic and `findings.ReviewModel` only, so the generator
-  writes keys through it (`generator.md` 7 and 9) without loading the loader, which imports the
+  and row 6's grammar). It imports pydantic, `findings.ReviewModel` and `findings.field_refusals`
+  (the entry refusals' one wording, which the case file's model shares) only (refined: research
+  9.14, implementation follow-ups), so the generator writes keys through it (`generator.md` 7 and
+  9) without loading the loader, which imports the
   matcher (`benchmark/matching.py`), the question reader (`benchmark/questions.py`, built on
   `tools/context.context_for`) and `tools/refs.resolve_dimension`. `benchmark/answer_key.py` holds
   `load_answer_key`, `current_stamp()` and the rows that need those modules (rows 2, 6's typo

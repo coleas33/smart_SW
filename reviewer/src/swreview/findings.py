@@ -19,9 +19,11 @@ from pydantic import (
     Field,
     SerializerFunctionWrapHandler,
     StringConstraints,
+    ValidationError,
     model_serializer,
     model_validator,
 )
+from pydantic_core import ErrorDetails
 
 from swreview.ids import SequentialIdAllocator
 from swreview.ir.models import (
@@ -73,6 +75,57 @@ def omit_at_default(data: dict[str, Any], model: BaseModel, *names: str) -> dict
         if getattr(model, name) == fields[name].default:
             data.pop(name, None)
     return data
+
+
+# --- the one wording of a pydantic refusal (feature 014; its research section 9.14) -------------
+#
+# Beside `ReviewModel`, which every module that words these refusals imports: the answer key's and
+# the case file's data-only formats may import nothing else of `swreview`, and the case file's
+# reader no answer-key module (FR-032), so this is the one place all of them can share.
+
+
+def _field(line: ErrorDetails) -> str:
+    """A pydantic refusal's location, its parts joined by `.`; empty where it names no field."""
+    return ".".join(str(part) for part in line["loc"])
+
+
+def _located(line: ErrorDetails) -> str:
+    """One pydantic refusal as `<field>: <message>`, or the message alone where it names no
+    field."""
+    field = _field(line)
+    return f"{field}: {line['msg']}" if field else line["msg"]
+
+
+def field_refusals(error: ValidationError) -> str:
+    """Pydantic's refusals inside one entry of the answer key or a case file, as one clause: a
+    missing field as `states no <field>` (the answer key's row 4 wording), any other as
+    `<field>: <message>`, joined by `; `. The entry's validator puts the entry's id first."""
+    clauses = []
+    for line in error.errors(include_url=False):
+        if line["type"] == "missing":
+            clauses.append(f"states no {_field(line)}")
+        else:
+            clauses.append(_located(line))
+    return "; ".join(clauses)
+
+
+def model_refusals(error: ValidationError) -> str:
+    """A format's refusals as its reader names them (`answer_key.load_answer_key`,
+    `answers.load_case_file`): the model's own rows' sentences as they are written, which name
+    the entry, and pydantic's as `<field>: <message>`, joined by `; `."""
+    clauses = []
+    for line in error.errors(include_url=False):
+        if line["type"] == "value_error":
+            clauses.append(line["msg"].removeprefix("Value error, "))
+        else:
+            clauses.append(_located(line))
+    return "; ".join(clauses)
+
+
+def first_refusal(error: ValidationError) -> str:
+    """The first refusal of a record that does not validate, `<field>: <message>`, for the one
+    line its reader raises (`answers.read_answer_log`, `scorecard.read_scorecard`)."""
+    return _located(error.errors(include_url=False)[0])
 
 
 class Calculation(ReviewModel):

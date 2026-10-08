@@ -175,7 +175,7 @@ whose `decide` never applies to a pane study (FR-045).
   with no arm does (`compare.py:475-480`).
 - A baseline's label is read off its arm and its marker alone, so `compare` refuses a record with
   arm `baseline` and a lever other than `none`, the pane baseline's marker set or not, as a
-  run-level refusal: "{run}: arm baseline with lever {lever}: a baseline run is the study with no
+  run-level refusal: "{run}: arm baseline with lever '{lever}': a baseline run is the study with no
   lever under test, so its lever is none; the record is inconsistent", as `check_study_arm`
   refuses `--arm baseline` with a study at run time. Labelled, the pane baseline would drop its
   lever, and a plain baseline would join that lever's study as its off arm (refined: research
@@ -341,13 +341,15 @@ renders as typed, which only a ledger written outside the repository can hold (s
 ### 6.4 Committable folders and the committed ledger
 
 **Committable** means inside the checkout root (`benchmark/runner.py:52`) and not ignored by
-`git check-ignore`; when git cannot answer, inside the checkout counts as committable. Inside is
+`git check-ignore`, asked as `git check-ignore -q -- <path>` so that a folder named like an option
+(`-x`, `--stdin`) is read as a path; when git cannot answer, inside the checkout counts as
+committable. Inside is
 one rule, `benchmark/sets.py`'s `checkout_relative(path, *, root)`: both resolved, then
 `is_relative_to`, giving the path relative to the root or `None`. `runner.committable`, a set's
 two written forms (6.1), `benchmark run`'s private packages and its carriage-return row (3.2)
 and the ledger's run folders (6.3) read it. The helper and `runner`'s `committable`, `tree_dirty`
 and `profile_is_example` take `root` by keyword with no default, since a command passes the root
-it read (refined: research 9.14, implementation follow-ups).
+it read (refined twice: research 9.14, implementation follow-ups).
 
 - **At run time** (`benchmark-run.md` section 3 row 5), exit 1 before any review: a committable
   `--out` with a set naming a package outside the repository, or with a profile whose
@@ -356,8 +358,9 @@ it read (refined: research 9.14, implementation follow-ups).
   write it outside the repository".
 - **In `compare`** (US2-10), when `--out` or `--into` is committable (the committed ledger is
   `--into docs/llm-efficiency-options.md`), and under `--check` too: a run whose
-  `profile_is_example` is false, whose saved set names an absolute path, or whose folder is not
-  committable is refused: "the committed ledger holds only fictional-profile studies over
+  `profile_is_example` is false, whose saved set names an absolute path (any path an entry names,
+  a package's or a case file's, `sets.named_paths`; refined: research 9.14, implementation
+  follow-ups), or whose folder is not committable is refused: "the committed ledger holds only fictional-profile studies over
   committed cases, from run folders the repository holds (FR-051): render {run} with --out
   outside the repository". A run with no profile (`profile_is_example` null) is not refused: it
   graded against no profile at all.
@@ -398,9 +401,10 @@ escaping hides nothing, and flags:
   (`</srv/x>`) is one. A UNC anchor and a drive letter with `/` start a path only at a token
   boundary (not after a word character); a drive letter and its backslash start one wherever they
   stand, so a single-backslash drive path glued to a word character in plain text (an escaped
-  line quoted, `...\nE:\...`) is flagged. A path lies under a fictional root only once its `..`
-  are applied, so one that starts at a root and climbs out of it is flagged (refined: research
-  9.14, implementation follow-ups).
+  line quoted, `...\nE:\...`) is flagged, and so, by decision, is plain text such as `regex:\d+`
+  (read as `x:\d+`), a false alarm kept on the refusing side. A path lies under a fictional root
+  only once its `..` are applied, so one that starts at a root and climbs out of it is flagged
+  (refined: research 9.14, implementation follow-ups).
 
 It runs over every file under `benchmarks/studies/` and `benchmarks/pilots/` (the paid pilot's
 folders, plan decision RF-36) that git does not ignore, and over the ledger block of

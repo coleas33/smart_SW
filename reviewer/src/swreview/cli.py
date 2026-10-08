@@ -102,6 +102,7 @@ from swreview.benchmark.replay import render_replay_lines, replay_recording
 from swreview.benchmark.runner import (
     EXAMPLE_PROFILE,
     PROVENANCE_SCHEMA,
+    SAVED_SET_FILE,
     AttemptRequest,
     RunProvenance,
     committable,
@@ -276,10 +277,6 @@ so in the session, because a dry run that reads like a finished review is worse 
 run at all.
 """
 
-
-SAVED_SET_FILE = "benchmark-set.json"
-"""`benchmark run` writes the set it ran into the run directory, so `benchmark score`
-can score it without being told twice which set this run was."""
 
 HANDLED_ERRORS = (
     UnsupportedSchemaVersionError,

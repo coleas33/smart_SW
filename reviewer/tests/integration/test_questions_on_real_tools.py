@@ -12,8 +12,9 @@ against a format 2 key: the guard's outcomes are the table's, and so are the col
 
 - R-2: the pin asked on no item, then the same call again, refused `already_asked`; scored
   against `U-1`, the pin's document unanswerable.
-- R-2, US3-5: among other calls, a drawing request on the pin, which has no attached drawing,
-  closed by code.
+- R-2, US3-5: among other calls, a drawing request on the pin's document `doc:0003`, answered
+  `closed_by_code` on a package carrying drawing evidence (the candidate drawing beside the
+  plate; the pin has none attached).
 - R-3: the fit asked naming the pin and the plate's hole, answered "press fit"; the item-only
   follow-up is recorded, so the driver answers it again at the next point and the script plays
   that second answer turn (`scripted-answers.md` 3's re-delivery): one re-ask, seen.

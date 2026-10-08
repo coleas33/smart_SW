@@ -37,8 +37,7 @@ from typing import Any
 from pydantic import SecretStr
 
 from swreview.agent.settings import MASK, redact
-from swreview.benchmark.compare import SAVED_SET_FILE
-from swreview.benchmark.runner import PROVENANCE_FILE
+from swreview.benchmark.runner import PROVENANCE_FILE, SAVED_SET_FILE
 from swreview.ir.loader import reject_answer_key_path
 from swreview.report.attention import EXPLANATION_UNAVAILABLE
 from swreview.secrets import KEY_SHAPES

@@ -22,6 +22,16 @@ research R16):* a Remodel run folder - named `...-remodel`, or holding `remodel-
 what the run did not reach, and the manifest's `run_kind` (`review` or `remodel`) says which list
 applied. The native copy under `copy/` is never included.
 
+*Amended 2026-10-08 by feature 014 (T071; its `contracts/provenance.md` section 7):* a benchmark
+run's package folder, `<run>/<package>`, is exported as a review's folder is, and when its parent
+holds `run-provenance.json` beside `benchmark-set.json` (a benchmark run's root) the export also
+reads `run-provenance.json` from that parent, and nothing else of the run root or of another
+package; the archive lies outside the run root as well as outside the package folder. Since the
+archive holds both folders' names at its top level, each manifest artifact record names its
+`source`: `run_root` for a name read from the run root, `run_dir` for every name read from the
+input tree, a review's included. The manifest's schema stays `swreview.handoff.v1` for the
+additive field.
+
 The manifest records export-time Git revision and dirty state, recorded run provenance when
 present, safe session/provider/efficiency/explanation settings, coverage and usage summary,
 each included artifact's byte count and SHA-256, and missing or excluded artifacts. The

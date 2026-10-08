@@ -82,7 +82,7 @@ entry) and the entry. No package folder is created.
 |---|---|---|
 | 1 | unreadable, not JSON, an unknown field, another version | "case file {name}: {reason}" |
 | 2 | `package_id` differs from the set entry's | names both ids |
-| 3 | an entry id repeated; an entry with both `part_roles` and `item`/`ids`, or neither | names the entry |
+| 3 | an entry id repeated; an entry with both `part_roles` and `item`/`ids`, or neither | names the entry, a blank id quoted (`''`; refined: research 9.14, implementation follow-ups) |
 | 4 | a blank answer | the pane route's rule (`chat/server.py:1417-1426`) |
 | 5 | `item` not a checklist item (`agent/checklist.py:64-66`) | names the entry and the item |
 | 6 | `item` is code-owned (`ChecklistItem.owner`, `agent/checklist.py:60`): `request_evidence` answers such an item `closed_by_code` and records nothing (`tools/session.py:112`), so the question can never be open | "can never be asked" |

@@ -72,6 +72,11 @@ PROVENANCE_FILE = "run-provenance.json"
 saves, at the root of the run directory rather than inside a package folder, because it
 describes the whole invocation."""
 
+SAVED_SET_FILE = "benchmark-set.json"
+"""`benchmark run` writes the set it ran into the run directory, so `benchmark score`
+can score it without being told twice which set this run was. The one definition of the
+name, which `cli`, `compare` and `handoff` import (feature 014 research 9.14)."""
+
 PROVENANCE_SCHEMA = 2
 """The schema `benchmark run` writes (feature 014 `contracts/provenance.md` 1). A record
 without the field predates it and reads as 1."""
@@ -217,7 +222,8 @@ def committable(path: Path | str, *, root: Path) -> bool:
     """Whether the repository at `root` could commit `path`: it lies inside `root` and git
     does not report it ignored (feature 014 `contracts/provenance.md` 6.4).
 
-    `git check-ignore -q` exits 0 for an ignored path and 1 for one git would track; any other
+    `git check-ignore -q -- <path>` exits 0 for an ignored path and 1 for one git would track,
+    the `--` keeping a folder named like an option (`-x`, `--stdin`) a path; any other
     exit, or no git at all, is git that cannot answer, and inside `root` that counts as
     committable: the side that refuses. A folder not made yet that only a directory pattern
     (`runs/`) ignores reads as committable for the same reason, since git cannot tell that a
@@ -228,7 +234,7 @@ def committable(path: Path | str, *, root: Path) -> bool:
     relative = checkout_relative(path, root=root)
     if relative is None:
         return False
-    proc = _git_process(Path(root).resolve(), "check-ignore", "-q", relative.as_posix())
+    proc = _git_process(Path(root).resolve(), "check-ignore", "-q", "--", relative.as_posix())
     ignored = proc is not None and proc.returncode == 0
     return not ignored
 

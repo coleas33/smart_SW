@@ -381,7 +381,8 @@ def test_a_built_key_dumped_with_absent_fields_omitted_builds_again_as_itself() 
 
 
 def test_the_model_s_producer_is_the_findings_source() -> None:
-    """Written out in the model (it imports `findings.ReviewModel` only, T021), pinned here."""
+    """Written out in the model (it imports no `findings` name but `ReviewModel` and
+    `field_refusals`, T021), pinned here."""
     assert set(get_args(answer_key_model.Producer)) == set(get_args(findings.Source))
 
 
@@ -392,9 +393,11 @@ def test_an_expected_status_is_a_finding_status_never_checked_within_scope() -> 
     )
 
 
-def test_the_model_imports_pydantic_the_standard_library_and_review_model_only() -> None:
+def test_the_model_imports_pydantic_the_standard_library_and_two_findings_names() -> None:
     """RF-1: the format is data only, so the generator writes keys through it without the
-    loader. US5's `test_benchmark_generator_imports.py` pins the same transitively (T124)."""
+    loader: from `swreview` it imports `findings.ReviewModel` and the entry refusals' one
+    wording, `findings.field_refusals` (research 9.14). US5's
+    `test_benchmark_generator_imports.py` pins the same transitively (T124)."""
     path = Path(answer_key_model.__file__)
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     modules: set[str] = set()
@@ -414,7 +417,7 @@ def test_the_model_imports_pydantic_the_standard_library_and_review_model_only()
         and module not in {"pydantic", "swreview.findings"}
     }
     assert outside == set()
-    assert from_findings == {"ReviewModel"}
+    assert from_findings == {"ReviewModel", "field_refusals"}
 
 
 # --- row 3: ids ------------------------------------------------------------------------------
