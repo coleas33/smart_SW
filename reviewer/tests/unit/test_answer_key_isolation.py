@@ -13,6 +13,10 @@ FR-030; QA-6), here in the unit file only, since the integration file is module-
 `benchmarks/case_files/`, as it withholds the keys', and a private set whose package path is,
 or lies under, its own case file's folder is refused at `load_set` by row 5, so that path
 never reaches `load_package`.
+
+Feature 014 T114 adds the key's half (`contracts/cases.md` 4.3 row 5 and 9; US5-11, FR-030;
+CS-15): a key a private set names cannot reach `load_package` either, since a package folder at
+the key's folder, and a key inside the package folder, are each refused at `load_set` by row 5.
 """
 
 from __future__ import annotations
@@ -256,6 +260,55 @@ def test_a_private_set_whose_package_is_at_or_under_its_case_file_s_folder_is_re
     assert message.startswith("benchmark set private.json:")
     assert str(package_dir.resolve()) in message
     assert str(case_file.resolve()) in message
+    assert message.endswith(
+        "the reviewer reads the package folder; keep keys and case files outside it"
+    )
+
+
+# --- the key's half (feature 014 T114) ------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("package", "key"),
+    [("vault/keys", "vault/keys/pkg-1.json"), ("vault/pkg-1", "vault/pkg-1/pkg-1.json")],
+    ids=["the package folder is the key's folder", "the key lies inside the package folder"],
+)
+def test_a_private_set_whose_key_is_at_or_inside_its_package_folder_is_refused_at_load_set(
+    tmp_path: Path, package: str, key: str
+) -> None:
+    """Row 5 (`contracts/cases.md` 4.3): the set is refused as it loads, before any reader is
+    handed the package path, so the key never reaches `load_package` (US5-11). Every path is
+    private: absolute, outside the root."""
+    root = tmp_path / "checkout"
+    key_path = tmp_path / key
+    key_path.parent.mkdir(parents=True)
+    key_path.write_text('{"key_format": 2}\n', encoding="utf-8")
+    package_dir = tmp_path / package
+    set_path = tmp_path / "vault" / "private.json"
+    set_path.write_text(
+        json.dumps(
+            {
+                "name": "private",
+                "packages": [
+                    {
+                        "package_id": "pkg-1",
+                        "path": str(package_dir),
+                        "key": str(key_path),
+                        "held_out": True,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SetError) as refused:
+        load_set(set_path, root=root)
+
+    message = str(refused.value)
+    assert message.startswith("benchmark set private.json:")
+    assert str(package_dir.resolve()) in message
+    assert str(key_path.resolve()) in message
     assert message.endswith(
         "the reviewer reads the package folder; keep keys and case files outside it"
     )

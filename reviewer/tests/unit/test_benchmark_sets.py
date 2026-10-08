@@ -32,6 +32,15 @@ decisions RF-4, RF-54, RF-61):
    `benchmarks/case_files` through the guard's own message, and row 5 a package path that is
    or lies under a named case file's folder, and a case file inside any entry's package
    folder, naming both paths.
+6. **The entry fields, keyed and keyless sets** (US5, T114; `cases.md` 4.1 to 4.3; RF-4;
+   CS-13, CS-15). An entry may also name its `key`, `design`, `twin_of` and `represents`,
+   each optional, the key resolving as the path does and both forms omitting an absent
+   field. A set in which some entry names a key is keyed, and row 6 then holds every entry
+   to it; a set naming none, as every set written before this feature, is keyless and reads
+   its keys from `--answer-keys`. `sets.key_path` is the one rule for where an entry's key
+   lives. Rows 1, 2 and 4 to 7 refuse, in 4.3's order, a file the strict models refuse, a
+   repeated id, a package under a withheld segment, a key in or around a package folder, a
+   key or case file on the wrong side of the root, and a bad `twin_of` or `represents`.
 
 Every set file here is written into a temporary checkout, a folder standing for a
 repository root, so no test depends on where this checkout lies. Rows 1, 2 and 4 to 7 and
@@ -53,6 +62,7 @@ from swreview.agent.checklist import load_checklist
 from swreview.agent.settings import PRIVATE_PANE_STUDY
 from swreview.benchmark import compare, digest, runner, sets
 from swreview.benchmark.runner import preflight_set, run_benchmark
+from swreview.benchmark.scorecard import score_run
 from swreview.benchmark.sets import (
     BenchmarkPackageRef,
     BenchmarkSet,
@@ -61,6 +71,7 @@ from swreview.benchmark.sets import (
     load_set,
 )
 from swreview.ir.loader import AnswerKeyAccessError
+from tests.unit.test_scorecard_usage import write_package as write_scored_package
 
 OUTSIDE_RULE = "a set file outside benchmarks/sets names every path absolutely"
 
@@ -1088,3 +1099,791 @@ def test_load_saved_set_meets_row_5_through_the_same_core(tmp_path: Path) -> Non
         load_saved_set(saved, root=checkout)
 
     assert str(refused.value).endswith(f": {ROW_5}")
+
+
+# --- the entry fields, keyed and keyless sets (US5, T114) ------------------------------------
+
+KEY_BYTES = b'{"key_format": 2}\n'
+"""A key's bytes as a set names them: the set loader never opens a key (FR-032), so they need
+not make a loadable one."""
+
+EVERY_KEY = "every entry of a keyed set names its key"
+SIDES = "a committed case's key and case file live in the repository, a private case's outside it"
+REPRESENTABLE = [*(f"R-{n}" for n in range(1, 9)), *(f"AF-{n}" for n in range(1, 4))]
+"""Every id `represents` may hold, the anchors R-1 to R-8 and the analyst-found AF-1 to AF-3."""
+
+
+def write_key_file(path: Path) -> Path:
+    """Write a key's bytes at exactly `path`."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(KEY_BYTES)
+    return path
+
+
+def committed_key(checkout: Path, package_id: str) -> Path:
+    """A key where the generator writes a committed one, `benchmarks/answer_keys/`."""
+    return write_key_file(checkout / "benchmarks" / "answer_keys" / f"{package_id}.json")
+
+
+def keyed_entry(package_id: str, **fields: object) -> dict[str, object]:
+    """A committed entry naming its committed key repository-relative, and `fields`."""
+    return {
+        **relative_entry(package_id),
+        "key": f"benchmarks/answer_keys/{package_id}.json",
+        **fields,
+    }
+
+
+def private_entry(
+    package_id: str, vault: Path, *, key: Path | None = None, **fields: object
+) -> dict[str, object]:
+    """A private entry naming absolutely its package under `vault/packages` and its key, by
+    default `vault/keys/<package_id>.json`, written there, and `fields`."""
+    named_key = key if key is not None else write_key_file(vault / "keys" / f"{package_id}.json")
+    return {
+        **absolute_entry(package_id, vault / "packages" / package_id, held_out=True),
+        "key": str(named_key),
+        **fields,
+    }
+
+
+def keyed_set(checkout: Path, *entries: dict[str, object]) -> Path:
+    """A set file `keyed.json` in `checkout`'s sets folder naming `entries`, each one's
+    committed key written."""
+    for entry in entries:
+        committed_key(checkout, str(entry["package_id"]))
+    return write_set(sets_folder(checkout) / "keyed.json", list(entries))
+
+
+def test_a_set_with_every_field_loads_and_reads_each_back(tmp_path: Path) -> None:
+    """`cases.md` 4.1's committed example: each field reads back as written, each path
+    resolved, and `file_form` writes the entries back as the file held them, field for field
+    and in 4.1's order."""
+    checkout = tmp_path / "checkout"
+    committed_case_file(checkout, "brun-1")
+    written: list[dict[str, object]] = [
+        {
+            "package_id": "brun-1",
+            "path": "benchmarks/packages/brun-1",
+            "key": "benchmarks/answer_keys/brun-1.json",
+            "case_file": "benchmarks/case_files/brun-1.json",
+            "held_out": True,
+            "design": "brun",
+            "represents": ["R-3", "AF-1"],
+        },
+        {
+            "package_id": "brun-1-twin",
+            "path": "benchmarks/packages/brun-1-twin",
+            "key": "benchmarks/answer_keys/brun-1-twin.json",
+            "held_out": True,
+            "design": "brun",
+            "twin_of": "brun-1",
+        },
+    ]
+    set_path = keyed_set(checkout, *written)
+
+    benchmark_set = load_set(set_path, root=checkout)
+
+    case, twin = benchmark_set.packages
+    benchmarks = checkout.resolve() / "benchmarks"
+    assert case.package_id == "brun-1"
+    assert case.path == benchmarks / "packages" / "brun-1"
+    assert case.key == benchmarks / "answer_keys" / "brun-1.json"
+    assert case.case_file == benchmarks / "case_files" / "brun-1.json"
+    assert case.held_out is True
+    assert case.design == "brun"
+    assert case.twin_of is None
+    assert case.represents == ["R-3", "AF-1"]
+    assert twin.package_id == "brun-1-twin"
+    assert twin.key == benchmarks / "answer_keys" / "brun-1-twin.json"
+    assert twin.case_file is None
+    assert twin.design == "brun"
+    assert twin.twin_of == "brun-1"
+    assert twin.represents is None
+
+    filed = json.loads(benchmark_set.file_form(root=checkout))
+    assert filed == {"name": "parity", "packages": written}
+    assert [list(entry) for entry in filed["packages"]] == [list(entry) for entry in written]
+
+
+def test_a_private_keyed_entry_loads_and_both_forms_write_its_key_absolute(
+    tmp_path: Path,
+) -> None:
+    """`cases.md` 4.1's private example: every path absolute, outside the root, and written
+    absolute with `/` by both forms."""
+    checkout = tmp_path / "checkout"
+    vault = tmp_path / "vault"
+    key = write_key_file(vault / "slice-keys" / "small-assembly.json")
+    case_file = write_case_file(vault / "slice-keys" / "small-assembly.case.json")
+    set_path = write_set(
+        vault / "private-slice.json",
+        [
+            {
+                **absolute_entry("small-assembly", vault / "slice" / "small-assembly"),
+                "key": str(key),
+                "case_file": str(case_file),
+                "held_out": True,
+                "design": "small-assembly",
+                "represents": ["R-1", "R-2", "R-3"],
+            }
+        ],
+    )
+
+    benchmark_set = load_set(set_path, root=checkout)
+
+    [ref] = benchmark_set.packages
+    assert ref.key == key.resolve()
+    for form in (benchmark_set.file_form(root=checkout), benchmark_set.saved_form(root=checkout)):
+        entry = json.loads(form)["packages"][0]
+        assert entry["key"] == key.resolve().as_posix()
+        assert entry["case_file"] == case_file.resolve().as_posix()
+        assert b"\\" not in form
+
+
+def test_file_form_omits_an_absent_optional_field_never_writing_null(tmp_path: Path) -> None:
+    checkout = tmp_path / "checkout"
+    benchmark_set = load_set(keyed_set(checkout, keyed_entry("pkg-1")), root=checkout)
+
+    for form in (benchmark_set.file_form(root=checkout), benchmark_set.saved_form(root=checkout)):
+        assert json.loads(form)["packages"] == [
+            {
+                "package_id": "pkg-1",
+                "path": "benchmarks/packages/pkg-1",
+                "key": "benchmarks/answer_keys/pkg-1.json",
+                "held_out": True,
+            }
+        ]
+        assert b"null" not in form
+
+
+def test_a_key_resolves_as_the_package_path_does(tmp_path: Path) -> None:
+    """Every key path is `Path.resolve`d, so a `..` counts where it leads (`cases.md` 4.2)."""
+    checkout = tmp_path / "checkout"
+    key = committed_key(checkout, "pkg-1")
+    set_path = write_set(
+        sets_folder(checkout) / "keyed.json",
+        [keyed_entry("pkg-1", key="benchmarks/packages/../answer_keys/pkg-1.json")],
+    )
+
+    [ref] = load_set(set_path, root=checkout).packages
+
+    assert ref.key == key.resolve()
+
+
+def test_a_relative_key_in_a_set_file_outside_benchmarks_sets_is_refused_by_row_3(
+    tmp_path: Path,
+) -> None:
+    """Row 3 reads every path an entry names, its key among them."""
+    checkout = tmp_path / "checkout"
+    set_path = write_set(
+        tmp_path / "private" / "parity.json",
+        [{**absolute_entry("pkg-1", tmp_path / "private" / "pkg-1"), "key": "keys/pkg-1.json"}],
+    )
+
+    message = refusal(set_path, root=checkout)
+
+    assert message == (
+        f"benchmark set parity.json: {OUTSIDE_RULE}, and entry pkg-1 names the relative path "
+        "keys/pkg-1.json"
+    )
+
+
+def test_load_saved_set_reads_every_field_back(tmp_path: Path) -> None:
+    checkout = tmp_path / "checkout"
+    set_path = keyed_set(
+        checkout,
+        keyed_entry("pkg-1", design="plate", represents=["R-6"]),
+        keyed_entry("pkg-1-twin", design="plate", twin_of="pkg-1"),
+    )
+    loaded = load_set(set_path, root=checkout)
+    saved = tmp_path / "runs" / "run-1" / "benchmark-set.json"
+    saved.parent.mkdir(parents=True)
+    saved.write_bytes(loaded.saved_form(root=checkout))
+
+    reread = load_saved_set(saved, root=checkout)
+
+    keys = checkout.resolve() / "benchmarks" / "answer_keys"
+    assert reread == loaded
+    assert [(ref.key, ref.design, ref.twin_of, ref.represents) for ref in reread.packages] == [
+        (keys / "pkg-1.json", "plate", None, ["R-6"]),
+        (keys / "pkg-1-twin.json", "plate", "pkg-1", None),
+    ]
+
+
+# --- keyless sets and key_path -----------------------------------------------------------------
+
+
+def test_a_set_written_before_this_feature_loads_and_is_keyless(tmp_path: Path) -> None:
+    """No `key` and no `design` (4.1): its keys fall back to `--answer-keys`."""
+    checkout = tmp_path / "checkout"
+    set_path = write_set(
+        sets_folder(checkout) / "parity.json",
+        [relative_entry("pkg-1"), relative_entry("pkg-2", held_out=False)],
+    )
+
+    benchmark_set = load_set(set_path, root=checkout)
+
+    for ref in benchmark_set.packages:
+        assert (ref.key, ref.design, ref.twin_of, ref.represents) == (None, None, None, None)
+    keys = tmp_path / "answer_keys"
+    assert [sets.key_path(ref, answer_keys=keys) for ref in benchmark_set.packages] == [
+        keys / "pkg-1.json",
+        keys / "pkg-2.json",
+    ]
+
+
+def test_key_path_on_a_keyless_set_given_no_directory_names_answer_keys(tmp_path: Path) -> None:
+    checkout = tmp_path / "checkout"
+    set_path = write_set(sets_folder(checkout) / "parity.json", [relative_entry("pkg-1")])
+    [ref] = load_set(set_path, root=checkout).packages
+
+    with pytest.raises(SetError) as refused:
+        sets.key_path(ref, answer_keys=None)
+
+    message = str(refused.value)
+    assert "--answer-keys" in message
+    assert "pkg-1" in message
+
+
+def test_key_path_on_a_keyed_set_is_the_entry_s_resolved_key_whatever_directory_is_given(
+    tmp_path: Path,
+) -> None:
+    checkout = tmp_path / "checkout"
+    [ref] = load_set(keyed_set(checkout, keyed_entry("pkg-1")), root=checkout).packages
+    key = checkout.resolve() / "benchmarks" / "answer_keys" / "pkg-1.json"
+
+    for answer_keys in (None, tmp_path / "answer_keys", tmp_path / "elsewhere"):
+        assert sets.key_path(ref, answer_keys=answer_keys) == key
+
+
+def test_the_committed_pilot_set_loads_as_a_keyless_set() -> None:
+    """T115's acceptance: `benchmarks/sets/pilot.json` names no key, so its keys are read
+    from the directory given, where each lies."""
+    benchmark_set = load_set(sets.REPO_ROOT / "benchmarks" / "sets" / "pilot.json")
+    keys = sets.REPO_ROOT / "benchmarks" / "answer_keys"
+
+    assert benchmark_set.packages
+    for ref in benchmark_set.packages:
+        assert ref.key is None
+        assert sets.key_path(ref, answer_keys=keys) == keys / f"{ref.package_id}.json"
+        assert sets.key_path(ref, answer_keys=keys).is_file()
+
+
+def test_a_keyless_set_of_absolute_private_paths_loads_and_scores_through_answer_keys(
+    tmp_path: Path,
+) -> None:
+    """The shape of every existing test set (`test_cli.py`'s `benchmark_set` fixture,
+    `test_benchmark_runner.py`'s sets): absolute temporary packages outside the root and no key.
+    It meets no row-6 refusal, and `score_run` reads each key from the directory given (RF-4).
+    It passes before T115 too, guarding the keyless exemption."""
+    private = tmp_path / "private"
+    run_dir, keys = private / "run", private / "answer_keys"
+    refs = [
+        write_scored_package(run_dir, keys, package_id, usage=None)
+        for package_id in ("pkg-a", "pkg-b")
+    ]
+    set_path = write_set(
+        private / "sets" / "pilot.json",
+        [absolute_entry(ref.package_id, ref.path, held_out=False) for ref in refs],
+        name="pilot",
+    )
+
+    benchmark_set = load_set(set_path, root=tmp_path / "checkout")
+    scorecard = score_run(run_dir, keys, benchmark_set)
+
+    assert [score.package_id for score in scorecard.per_package] == ["pkg-a", "pkg-b"]
+    assert scorecard.key_sha256 == {
+        package_id: hashlib.sha256((keys / f"{package_id}.json").read_bytes()).hexdigest()
+        for package_id in ("pkg-a", "pkg-b")
+    }
+
+
+def test_no_committed_set_file_holds_case_file_sha256() -> None:
+    """The generator writes the committed set files through `file_form` (`cases.md` 9)."""
+    set_files = sorted((sets.REPO_ROOT / "benchmarks" / "sets").glob("*.json"))
+
+    assert set_files
+    for set_file in set_files:
+        entries = json.loads(set_file.read_text(encoding="utf-8"))["packages"]
+        assert all("case_file_sha256" not in entry for entry in entries), set_file.name
+
+
+# --- row 1: the strict models ------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("kind", ["missing", "a folder"])
+def test_row_1_refuses_a_set_file_that_cannot_be_read(tmp_path: Path, kind: str) -> None:
+    checkout = tmp_path / "checkout"
+    set_path = sets_folder(checkout) / "parity.json"
+    if kind == "a folder":
+        set_path.mkdir(parents=True)
+
+    message = refusal(set_path, root=checkout)
+
+    assert message.startswith("benchmark set parity.json: cannot be read ("), message
+
+
+@pytest.mark.parametrize(
+    ("content", "gist"),
+    [
+        (b"", "not JSON"),
+        (b'{"name": "parity", "packages": [', "not JSON"),
+        (b'\xff\xfe{"name": "parity"}', "not UTF-8"),
+    ],
+    ids=["empty", "cut short", "not UTF-8"],
+)
+def test_row_1_refuses_a_set_file_that_is_not_json(
+    tmp_path: Path, content: bytes, gist: str
+) -> None:
+    checkout = tmp_path / "checkout"
+    set_path = sets_folder(checkout) / "parity.json"
+    set_path.parent.mkdir(parents=True)
+    set_path.write_bytes(content)
+
+    message = refusal(set_path, root=checkout)
+
+    assert message.startswith(f"benchmark set parity.json: {gist} ("), message
+
+
+def write_payload(checkout: Path, payload: object) -> Path:
+    """Write `payload` as the set file `parity.json` in `checkout`'s sets folder."""
+    set_path = sets_folder(checkout) / "parity.json"
+    set_path.parent.mkdir(parents=True, exist_ok=True)
+    set_path.write_text(json.dumps(payload), encoding="utf-8")
+    return set_path
+
+
+@pytest.mark.parametrize(
+    ("payload", "field"),
+    [
+        ({"name": "parity", "packages": [], "colour": "blue"}, "colour"),
+        ({"name": "parity", "packages": [{**relative_entry(), "colour": "blue"}]}, "colour"),
+        ({"name": "parity", "packages": [{**relative_entry(), "keys": "k.json"}]}, "keys"),
+        ({"packages": [relative_entry()]}, "name"),
+        ({"name": "parity"}, "packages"),
+        ({"name": "parity", "packages": [{"path": "benchmarks/packages/pkg-1"}]}, "package_id"),
+        ({"name": "parity", "packages": [{"package_id": "pkg-1"}]}, "path"),
+        ({"name": "parity", "packages": [{**relative_entry(), "held_out": "yes"}]}, "held_out"),
+        (
+            {"name": "parity", "packages": [{**relative_entry(), "represents": "R-1"}]},
+            "represents",
+        ),
+    ],
+    ids=[
+        "an unknown field at the set",
+        "an unknown field at an entry",
+        "a misspelt key, which would make the set keyless",
+        "no name",
+        "no packages",
+        "no package_id",
+        "no path",
+        "held_out not a boolean",
+        "represents not a list",
+    ],
+)
+def test_row_1_refuses_what_the_strict_models_refuse_naming_the_field(
+    tmp_path: Path, payload: dict[str, object], field: str
+) -> None:
+    checkout = tmp_path / "checkout"
+
+    message = refusal(write_payload(checkout, payload), root=checkout)
+
+    assert message.startswith("benchmark set parity.json: "), message
+    assert field in message, message
+
+
+def test_row_1_refuses_a_set_file_holding_no_object(tmp_path: Path) -> None:
+    checkout = tmp_path / "checkout"
+
+    message = refusal(write_payload(checkout, [relative_entry()]), root=checkout)
+
+    assert message.startswith("benchmark set parity.json: "), message
+
+
+def test_row_1_comes_before_row_2(tmp_path: Path) -> None:
+    checkout = tmp_path / "checkout"
+    payload = {
+        "name": "parity",
+        "packages": [relative_entry("pkg-1"), {**relative_entry("pkg-1"), "colour": "blue"}],
+    }
+
+    message = refusal(write_payload(checkout, payload), root=checkout)
+
+    assert "colour" in message
+    assert "twice" not in message
+
+
+# --- row 2: a repeated package id --------------------------------------------------------------
+
+
+def test_row_2_refuses_a_package_id_named_twice_naming_it(tmp_path: Path) -> None:
+    checkout = tmp_path / "checkout"
+    set_path = write_set(
+        sets_folder(checkout) / "parity.json",
+        [relative_entry("pkg-1"), relative_entry("pkg-2"), relative_entry("pkg-1")],
+    )
+
+    message = refusal(set_path, root=checkout)
+
+    assert message.startswith("benchmark set parity.json: "), message
+    assert "pkg-1" in message and "twice" in message
+    assert "pkg-2" not in message
+
+
+def test_row_2_comes_before_row_3(tmp_path: Path) -> None:
+    checkout = tmp_path / "checkout"
+    set_path = write_set(
+        tmp_path / "private" / "parity.json", [relative_entry("pkg-1"), relative_entry("pkg-1")]
+    )
+
+    message = refusal(set_path, root=checkout)
+
+    assert "pkg-1" in message
+    assert OUTSIDE_RULE not in message
+
+
+# --- row 4: the answer keys' segment -----------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "package_path",
+    [
+        "benchmarks/answer_keys",
+        "benchmarks/answer_keys/pkg-1",
+        "Benchmarks/Answer_Keys/pkg-1",
+    ],
+    ids=["the folder", "a package in it", "spelled in capitals"],
+)
+def test_a_package_path_under_benchmarks_answer_keys_is_refused_by_the_guard(
+    tmp_path: Path, package_path: str
+) -> None:
+    """Row 4 (`ir/loader.py`'s `reject_answer_key_path`); the `benchmarks/case_files` half is
+    US4's, above. A key there is no package, and loads (the every-field test above)."""
+    checkout = tmp_path / "checkout"
+    set_path = write_set(
+        sets_folder(checkout) / "parity.json",
+        [{"package_id": "pkg-1", "path": package_path, "held_out": False}],
+    )
+
+    with pytest.raises(AnswerKeyAccessError) as refused:
+        load_set(set_path, root=checkout)
+
+    resolved = (checkout / package_path).resolve()
+    assert str(refused.value).startswith(f"{resolved} is inside benchmarks/answer_keys; ")
+
+
+# --- row 5: the key's half (US5-11) ------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("package", "key"),
+    [
+        ("vault/pkg-1", "vault/pkg-1/pkg-1.json"),
+        ("vault/keys/pkg-1", "vault/keys/pkg-1.json"),
+        ("vault/keys/deeper/pkg-1", "vault/keys/pkg-1.json"),
+        ("vault/keys", "vault/keys/pkg-1.json"),
+        ("vault/pkg-1", "vault/pkg-1/keys/pkg-1.json"),
+    ],
+    ids=[
+        "a key inside the package folder",
+        "the package folder in the key's folder",
+        "the package folder below the key's folder",
+        "the package folder is the key's folder",
+        "a key below the package folder",
+    ],
+)
+def test_row_5_refuses_a_key_inside_a_package_folder_and_a_package_inside_a_key_s_folder(
+    tmp_path: Path, package: str, key: str
+) -> None:
+    """A private key cannot sit in, or contain, a folder the reviewer loads (D7; CS-15)."""
+    checkout = tmp_path / "checkout"
+    package_dir = tmp_path / package
+    key_path = write_key_file(tmp_path / key)
+    set_path = write_set(
+        tmp_path / "vault" / "private.json",
+        [{**absolute_entry("pkg-1", package_dir, held_out=True), "key": str(key_path)}],
+    )
+
+    message = refusal(set_path, root=checkout)
+
+    assert message.startswith("benchmark set private.json: entry pkg-1"), message
+    assert message.endswith(f": {ROW_5}"), message
+    assert str(package_dir.resolve()) in message
+    assert str(key_path.resolve()) in message
+    assert "'s key " in message
+
+
+def test_row_5_reads_every_entry_against_every_key(tmp_path: Path) -> None:
+    """One entry's package folder in another's key folder, and one entry's key below another's
+    package folder, are refused alike, naming both entries and both paths."""
+    checkout = tmp_path / "checkout"
+    vault = tmp_path / "vault"
+    in_keys = vault / "keys" / "pkg-2"
+    package_in_folder = write_set(
+        vault / "package-in-folder.json",
+        [
+            private_entry("pkg-1", vault),
+            {
+                **private_entry("pkg-2", vault, key=vault / "keys-2" / "pkg-2.json"),
+                "path": str(in_keys),
+            },
+        ],
+    )
+
+    message = refusal(package_in_folder, root=checkout)
+
+    assert "pkg-1" in message and "pkg-2" in message
+    assert str(in_keys.resolve()) in message
+    assert str((vault / "keys" / "pkg-1.json").resolve()) in message
+    assert message.endswith(f": {ROW_5}")
+
+    key_3 = write_key_file(vault / "packages" / "pkg-1" / "keys" / "pkg-3.json")
+    key_in_package = write_set(
+        vault / "key-in-package.json",
+        [private_entry("pkg-1", vault), private_entry("pkg-3", vault, key=key_3)],
+    )
+
+    message = refusal(key_in_package, root=checkout)
+
+    assert "pkg-1" in message and "pkg-3" in message
+    assert str((vault / "packages" / "pkg-1").resolve()) in message
+    assert str(key_3.resolve()) in message
+    assert message.endswith(f": {ROW_5}")
+
+
+def test_row_5_lets_a_neighbour_whose_name_only_begins_with_the_key_s_folder_load(
+    tmp_path: Path,
+) -> None:
+    """Folders compare by path, not by spelling: `keys-packages` does not lie in `keys`."""
+    checkout = tmp_path / "checkout"
+    vault = tmp_path / "vault"
+    set_path = write_set(
+        vault / "private.json",
+        [{**private_entry("pkg-1", vault), "path": str(vault / "keys-packages" / "pkg-1")}],
+    )
+
+    [ref] = load_set(set_path, root=checkout).packages
+
+    assert ref.key == (vault / "keys" / "pkg-1.json").resolve()
+
+
+# --- row 6: keyed sets ---------------------------------------------------------------------------
+
+
+def test_row_6_refuses_a_keyed_set_entry_naming_no_key(tmp_path: Path) -> None:
+    checkout = tmp_path / "checkout"
+    committed_key(checkout, "pkg-1")
+    set_path = write_set(
+        sets_folder(checkout) / "keyed.json", [keyed_entry("pkg-1"), relative_entry("pkg-2")]
+    )
+
+    message = refusal(set_path, root=checkout)
+
+    assert message.startswith("benchmark set keyed.json: entry pkg-2"), message
+    assert message.endswith(EVERY_KEY), message
+
+
+@pytest.mark.parametrize("field", ["key", "case_file"])
+def test_row_6_refuses_a_private_entry_whose_key_or_case_file_lies_inside_the_root(
+    tmp_path: Path, field: str
+) -> None:
+    checkout = tmp_path / "checkout"
+    vault = tmp_path / "vault"
+    if field == "key":
+        inside = committed_key(checkout, "pkg-1")
+        entry = private_entry("pkg-1", vault, key=inside)
+    else:
+        inside = committed_case_file(checkout, "pkg-1")
+        entry = private_entry("pkg-1", vault, case_file=str(inside))
+    set_path = write_set(vault / "private.json", [entry])
+
+    message = refusal(set_path, root=checkout)
+
+    assert message.startswith("benchmark set private.json: entry pkg-1"), message
+    assert str(inside.resolve()) in message
+    assert message.endswith(SIDES), message
+
+
+@pytest.mark.parametrize("field", ["key", "case_file"])
+def test_row_6_refuses_a_committed_entry_whose_key_or_case_file_lies_outside_the_root(
+    tmp_path: Path, field: str
+) -> None:
+    checkout = tmp_path / "checkout"
+    if field == "key":
+        outside = write_key_file(tmp_path / "vault" / "keys" / "pkg-1.json")
+    else:
+        outside = write_case_file(tmp_path / "vault" / "keys" / "pkg-1.case.json")
+    set_path = keyed_set(checkout, keyed_entry("pkg-1", **{field: str(outside)}))
+
+    message = refusal(set_path, root=checkout)
+
+    assert message.startswith("benchmark set keyed.json: entry pkg-1"), message
+    assert str(outside.resolve()) in message
+    assert message.endswith(SIDES), message
+
+
+def test_row_6_lets_a_keyed_set_of_committed_and_private_entries_each_on_its_side_load(
+    tmp_path: Path,
+) -> None:
+    """Row 6 reads each entry by its own side: a committed entry's key and case file inside
+    the root, a private one's outside it, in one set."""
+    checkout = tmp_path / "checkout"
+    vault = tmp_path / "vault"
+    committed_case_file(checkout, "pkg-1")
+    private_case = write_case_file(vault / "keys" / "pkg-2.case.json")
+    set_path = keyed_set(
+        checkout,
+        keyed_entry("pkg-1", case_file="benchmarks/case_files/pkg-1.json"),
+        private_entry("pkg-2", vault, case_file=str(private_case)),
+    )
+
+    committed, private = load_set(set_path, root=checkout).packages
+
+    assert committed.key == checkout.resolve() / "benchmarks" / "answer_keys" / "pkg-1.json"
+    assert private.key == (vault / "keys" / "pkg-2.json").resolve()
+    assert private.case_file == private_case.resolve()
+
+
+def test_row_6_does_not_check_a_keyless_set(tmp_path: Path) -> None:
+    """A keyless set's case files are not held to a side (RF-4): a private entry's case file
+    inside the root and a committed entry's outside it both load."""
+    checkout = tmp_path / "checkout"
+    inside = committed_case_file(checkout, "pkg-1")
+    outside = write_case_file(tmp_path / "vault" / "answers" / "pkg-2.case.json")
+    set_path = write_set(
+        sets_folder(checkout) / "keyless.json",
+        [
+            case_file_entry(absolute_entry("pkg-1", tmp_path / "vault" / "pkg-1"), inside),
+            case_file_entry(relative_entry("pkg-2"), outside),
+        ],
+    )
+
+    benchmark_set = load_set(set_path, root=checkout)
+
+    assert [ref.case_file for ref in benchmark_set.packages] == [
+        inside.resolve(),
+        outside.resolve(),
+    ]
+
+
+def test_row_5_comes_before_row_6(tmp_path: Path) -> None:
+    checkout = tmp_path / "checkout"
+    vault = tmp_path / "vault"
+    inside_package = write_key_file(vault / "packages" / "pkg-1" / "pkg-1.json")
+    set_path = write_set(
+        vault / "private.json",
+        [
+            private_entry("pkg-1", vault, key=inside_package),
+            absolute_entry("pkg-2", vault / "packages" / "pkg-2"),
+        ],
+    )
+
+    message = refusal(set_path, root=checkout)
+
+    assert message.endswith(ROW_5), message
+
+
+# --- row 7: twin_of and represents ---------------------------------------------------------------
+
+
+@pytest.mark.parametrize("twin_of", ["pkg-9", "pkg-1-twin"], ids=["no entry", "its own id"])
+def test_row_7_refuses_a_twin_of_naming_no_other_entry(tmp_path: Path, twin_of: str) -> None:
+    checkout = tmp_path / "checkout"
+    set_path = keyed_set(checkout, keyed_entry("pkg-1"), keyed_entry("pkg-1-twin", twin_of=twin_of))
+
+    message = refusal(set_path, root=checkout)
+
+    prefix = "benchmark set keyed.json: entry pkg-1-twin"
+    assert message.startswith(prefix), message
+    assert "twin_of" in message
+    assert twin_of in message.removeprefix(prefix)
+
+
+@pytest.mark.parametrize("value", ["R-9", "AF-4", "r-1", "R-0", "R-10"])
+def test_row_7_refuses_a_represents_value_outside_the_anchors_and_analyst_found_ids(
+    tmp_path: Path, value: str
+) -> None:
+    checkout = tmp_path / "checkout"
+    set_path = keyed_set(checkout, keyed_entry("pkg-1", represents=["R-1", value]))
+
+    message = refusal(set_path, root=checkout)
+
+    assert message.startswith("benchmark set keyed.json: entry pkg-1"), message
+    assert "represents" in message
+    assert value in message
+
+
+def test_row_7_refuses_a_represents_value_repeated(tmp_path: Path) -> None:
+    checkout = tmp_path / "checkout"
+    set_path = keyed_set(checkout, keyed_entry("pkg-1", represents=["R-2", "AF-1", "R-2"]))
+
+    message = refusal(set_path, root=checkout)
+
+    assert message.startswith("benchmark set keyed.json: entry pkg-1"), message
+    assert "R-2" in message
+    assert "AF-1" not in message
+
+
+def test_row_7_lets_every_anchor_and_analyst_found_id_load(tmp_path: Path) -> None:
+    checkout = tmp_path / "checkout"
+    set_path = keyed_set(
+        checkout, keyed_entry("pkg-1", represents=REPRESENTABLE), keyed_entry("pkg-2")
+    )
+
+    first, second = load_set(set_path, root=checkout).packages
+
+    assert first.represents == REPRESENTABLE
+    assert second.represents is None
+
+
+def test_row_7_reads_a_keyless_set_too(tmp_path: Path) -> None:
+    checkout = tmp_path / "checkout"
+    set_path = write_set(
+        sets_folder(checkout) / "parity.json", [{**relative_entry("pkg-1"), "twin_of": "pkg-2"}]
+    )
+
+    message = refusal(set_path, root=checkout)
+
+    assert message.startswith("benchmark set parity.json: entry pkg-1"), message
+    assert "twin_of" in message and "pkg-2" in message
+
+
+def test_a_set_failing_rows_2_and_7_is_named_by_row_2(tmp_path: Path) -> None:
+    checkout = tmp_path / "checkout"
+    set_path = keyed_set(
+        checkout,
+        keyed_entry("pkg-1", twin_of="pkg-9"),
+        keyed_entry("pkg-1", represents=["R-9"]),
+    )
+
+    message = refusal(set_path, root=checkout)
+
+    assert "pkg-1" in message
+    assert "pkg-9" not in message and "R-9" not in message
+
+
+def test_row_6_comes_before_row_7(tmp_path: Path) -> None:
+    checkout = tmp_path / "checkout"
+    committed_key(checkout, "pkg-1")
+    set_path = write_set(
+        sets_folder(checkout) / "keyed.json",
+        [keyed_entry("pkg-1", represents=["R-9"]), relative_entry("pkg-2")],
+    )
+
+    message = refusal(set_path, root=checkout)
+
+    assert message.endswith(EVERY_KEY), message
+    assert "R-9" not in message
+
+
+def test_load_saved_set_meets_row_7_through_the_same_core(tmp_path: Path) -> None:
+    checkout = tmp_path / "checkout"
+    saved = write_set(
+        tmp_path / "runs" / "run-1" / "benchmark-set.json",
+        [{**relative_entry("pkg-1"), "represents": ["AF-4"]}],
+    )
+
+    with pytest.raises(SetError) as refused:
+        load_saved_set(saved, root=checkout)
+
+    assert "AF-4" in str(refused.value)

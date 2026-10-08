@@ -2,8 +2,11 @@
 
 Mirrors `benchmarks/sets/pilot.json` (benchmarks/README.md): a name plus a list of
 package references, each a `package_id`, a path (repo-root relative in the committed
-file), optionally a case file of scripted answers, and a `held_out` flag consumed by the
-scorer's recall calculation.
+file), optionally its answer key, a case file of scripted answers, its design, the case it
+is the clean twin of and the anchors it represents, and a `held_out` flag consumed by the
+scorer's recall calculation. A set in which some entry names its key is keyed, and every
+entry then names its own; a set naming none is keyless, as every set written before feature
+014, and reads its keys from `--answer-keys` (`key_path`, the one rule; plan decision RF-4).
 
 One root decides every path rule: the running checkout's, `REPO_ROOT`, unless a caller
 passes another (feature 014 `contracts/cases.md` 4.2; plan decision RF-4). A relative
@@ -17,7 +20,7 @@ load time, any package path that resolves under `benchmarks/answer_keys/` or
 `benchmarks/case_files/` - the same rule `swreview.ir.loader` enforces when the reviewer
 actually opens a package, applied here so a misconfigured set fails before a run ever
 starts (constitution Principle VI, FR-025) - and any package path that holds, or lies in
-the folder of, a case file the set names (`contracts/cases.md` 4.3 row 5).
+the folder of, a key or case file the set names (`contracts/cases.md` 4.3 row 5).
 """
 
 from __future__ import annotations
@@ -26,8 +29,11 @@ import json
 from pathlib import Path
 from typing import Any
 
+from pydantic import ValidationError
+
 from swreview.benchmark.digest import sha256_of
-from swreview.findings import ReviewModel
+from swreview.benchmark.families import ANCHOR_FAMILY
+from swreview.findings import ReviewModel, model_refusals
 from swreview.ir.loader import reject_answer_key_path
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -42,13 +48,14 @@ records no commit."""
 class SetError(ValueError):
     """A benchmark set this build refuses to load (feature 014 `contracts/cases.md` 4.3).
 
-    A `ValueError`, so the command line prints it as one line and exits 1. Every message
-    starts "benchmark set {file name}:". The answer-key guard's own refusal stays
+    A `ValueError`, so the command line prints it as one line and exits 1. Every refusal of
+    a set file starts "benchmark set {file name}:"; `key_path`'s, which reads one entry and
+    no file, names the entry. The answer-key guard's own refusal stays
     `AnswerKeyAccessError` (`swreview.ir.loader`).
     """
 
 
-SET_PATH_FIELDS = ("path", "case_file")
+SET_PATH_FIELDS = ("path", "key", "case_file")
 """The entry fields that name a path, each resolved by the one rule: absolute as written,
 relative against the root only in a set file lying in `<root>/benchmarks/sets/` (row 3)."""
 
@@ -60,21 +67,40 @@ WITHHELD_FROM_THE_PACKAGE = (
 )
 """Row 5's gist (`contracts/cases.md` 4.3)."""
 
+EVERY_ENTRY_NAMES_ITS_KEY = "every entry of a keyed set names its key"
+"""Row 6's gist for an entry of a keyed set naming no key (`contracts/cases.md` 4.3)."""
+
+KEYS_ON_THEIR_SIDE = (
+    "a committed case's key and case file live in the repository, a private case's outside it"
+)
+"""Row 6's gist for a key or case file on the other side of the root from its package."""
+
 
 class BenchmarkPackageRef(ReviewModel):
     """One package entry in a benchmark set (feature 014 `contracts/cases.md` 4.1).
 
-    `case_file` names the entry's scripted answers (`contracts/scripted-answers.md` 2.1), and
+    `key` names the entry's answer key, a path as `path` is: a set in which some entry names
+    one is keyed, and row 6 then holds every entry to its own; a set naming none is keyless
+    and its keys are read from `--answer-keys` (`key_path`; plan decision RF-4). `case_file`
+    names the entry's scripted answers (`contracts/scripted-answers.md` 2.1), and
     `case_file_sha256` is the digest of its bytes, computed at load and carried into the saved
     set, never into a set file, so a study whose arms read different answers is refused by the
     set digest (plan decision QA-7). Both are absent for an entry naming no case file, whose
-    questions are all unscripted.
+    questions are all unscripted. `design` is the case's design, `twin_of` the package id of
+    the entry this one is the clean twin of (FR-028), and `represents` the anchors R-1 to R-8
+    and analyst-found defects AF-1 to AF-3 it stands for (FR-029). Every field but the first
+    two is optional, so a set or saved copy written before feature 014 still loads, and
+    absent unless named (plan decision CS-13).
     """
 
     package_id: str
     path: Path
+    key: Path | None = None
     case_file: Path | None = None
     held_out: bool = False
+    design: str | None = None
+    twin_of: str | None = None
+    represents: list[str] | None = None
     case_file_sha256: str | None = None
 
 
@@ -112,13 +138,15 @@ class BenchmarkSet(ReviewModel):
 
 
 def _entry_form(ref: BenchmarkPackageRef, root: Path, *, saved: bool) -> dict[str, Any]:
-    """One entry as both written forms hold it: its path and case file through
-    `_path_form`, an absent optional field omitted rather than written as null, and its
-    `case_file_sha256` in the saved form only."""
+    """One entry as both written forms hold it: each path it names (`SET_PATH_FIELDS`, its
+    package folder, key and case file) through `_path_form`, its other fields as given, an
+    absent optional field omitted rather than written as null, and its `case_file_sha256` in
+    the saved form only."""
     entry = ref.model_dump(mode="json", exclude_none=True)
-    entry["path"] = _path_form(ref.path, root)
-    if ref.case_file is not None:
-        entry["case_file"] = _path_form(ref.case_file, root)
+    for field in SET_PATH_FIELDS:
+        named = getattr(ref, field)
+        if named is not None:
+            entry[field] = _path_form(named, root)
     if not saved:
         entry.pop(CASE_FILE_SHA256, None)
     return entry
@@ -148,16 +176,21 @@ def checkout_relative(path: Path | str, *, root: Path) -> Path | None:
 def load_set(path: Path | str, *, root: Path = REPO_ROOT) -> BenchmarkSet:
     """Read a benchmark set file such as `benchmarks/sets/pilot.json`.
 
-    A relative package path or case file resolves against `root` only when the set file
-    lies in `<root>/benchmarks/sets/`. A set file anywhere else names every path
-    absolutely, and a relative one there is a `SetError` (feature 014 `contracts/cases.md`
-    4.3 row 3), which names both roots when the file lies in another checkout's
-    `benchmarks/sets/`. A set file holding a `case_file_sha256` is a `SetError` too (row
-    1): the digest is computed here, from each case file's bytes. Every path is resolved,
-    and `AnswerKeyAccessError` is raised if a package path - directly, or through a symlink
-    or junction - lies under `benchmarks/answer_keys/` or `benchmarks/case_files/` (row 4);
-    row 5 then refuses a package path at or under a named case file's folder, and a case
-    file inside any entry's package folder.
+    Refused by feature 014 `contracts/cases.md` 4.3's rows, in order, each a `SetError`
+    but row 4. Row 1: a file that cannot be read or is not JSON, or that the strict models
+    refuse (an unknown field, a missing required one, a wrong type), naming the field; a set
+    file holding a `case_file_sha256`, since the digest is computed here, from each case
+    file's bytes. Row 2: a `package_id` named twice. Row 3: a relative package path, key or
+    case file resolves against `root` only when the set file lies in `<root>/benchmarks/sets/`;
+    a set file anywhere else names every path absolutely, and one in another checkout's
+    `benchmarks/sets/` is refused naming both roots. Every path is then resolved, and row 4
+    raises `AnswerKeyAccessError` if a package path - directly, or through a symlink or
+    junction - lies under `benchmarks/answer_keys/` or `benchmarks/case_files/`. Row 5: a
+    package path at or under a named key's or case file's folder, and a key or case file
+    inside any entry's package folder. Row 6, in a keyed set only: an entry naming no key, or
+    a key or case file on the other side of the root from its package. Row 7: a `twin_of`
+    naming no other entry, a `represents` value outside R-1 to R-8 and AF-1 to AF-3, or one
+    repeated. A missing optional field stays absent.
     """
     return _read_set(path, root, saved=False)
 
@@ -174,58 +207,116 @@ def load_saved_set(path: Path | str, *, root: Path = REPO_ROOT) -> BenchmarkSet:
     return _read_set(path, root, saved=True)
 
 
+def key_path(entry: BenchmarkPackageRef, answer_keys: Path | None) -> Path:
+    """Where `entry`'s answer key lives, the one rule `score_run` and the set summary read
+    (feature 014 `contracts/cases.md` 4.1; plan decision RF-4).
+
+    In a keyed set it is the entry's own `key`, resolved at load, whatever directory is
+    given; row 6 holds every entry of a loaded keyed set to one, so an entry naming none is
+    in a keyless set, whose key is `<answer_keys>/<package_id>.json`, as `benchmark score`
+    has always read it. A keyless entry given no directory is a `SetError` naming
+    `--answer-keys`.
+    """
+    if entry.key is not None:
+        return entry.key
+    if answer_keys is None:
+        raise SetError(
+            f"set entry {entry.package_id} names no key, so its set is keyless and reads its "
+            "keys from --answer-keys <dir>, which was not given"
+        )
+    return Path(answer_keys) / f"{entry.package_id}.json"
+
+
 def _read_set(path: Path | str, root: Path, *, saved: bool) -> BenchmarkSet:
-    """The one set core: row 1's `case_file_sha256` and row 3 for a set file (never for a
-    saved copy), then every entry resolved against `root`, its package path through the
-    answer-key guard (row 4), then row 5 over every package folder and case file."""
+    """The one set core, in `contracts/cases.md` 4.3's order: row 1, the file through the
+    strict models and, for a set file (never a saved copy), its `case_file_sha256`; row 2;
+    row 3 for a set file; every entry resolved against `root`, its package path through the
+    answer-key guard (row 4); then rows 5, 6 and 7 over the resolved entries."""
     set_path = Path(path).resolve()
     checkout = root.resolve()
-    payload = json.loads(set_path.read_text(encoding="utf-8"))
-    entries = payload["packages"]
+    written, entries = _written_set(set_path)
     if not saved:
         _refuse_a_case_file_digest(set_path, entries)
+    _refuse_a_repeated_package_id(set_path, written.packages)
+    if not saved:
         _refuse_relative_paths_outside_sets(set_path, checkout, entries)
 
-    packages = [_package_ref(entry, checkout, saved=saved) for entry in entries]
-    _refuse_case_files_overlapping_package_folders(set_path, packages)
-    return BenchmarkSet(name=payload["name"], packages=packages)
+    packages = [_package_ref(ref, checkout, saved=saved) for ref in written.packages]
+    _refuse_withheld_files_overlapping_package_folders(set_path, packages)
+    _refuse_a_keyed_set_s_entries_off_their_side(set_path, checkout, packages)
+    _refuse_unknown_twins_and_represents(set_path, packages)
+    return BenchmarkSet(name=written.name, packages=packages)
 
 
-def _package_ref(entry: dict[str, Any], checkout: Path, *, saved: bool) -> BenchmarkPackageRef:
-    """One entry resolved against `checkout`.
+def _written_set(set_path: Path) -> tuple[BenchmarkSet, list[dict[str, Any]]]:
+    """Row 1: the file as written, through the strict models, with its entries as raw JSON,
+    whose paths row 3 reads as spelled.
 
-    Its package path passes the answer-key guard; its case file resolves by the same rule
-    but never meets the guard, since a committed one lies in `benchmarks/case_files/`,
-    withheld from the reviewer and not from the set. The case file's digest is a saved
-    copy's as saved, else computed from the file's bytes when it can be read; one that
-    cannot be read keeps no digest, so `benchmark.runner.preflight_set` refuses it naming
-    the file (`contracts/scripted-answers.md` 2.3 row 1).
+    A file that is missing, cannot be read or is not UTF-8 is refused like one that is not
+    JSON, as the key's and the case file's readers refuse theirs; an `OSError` is named by its
+    `strerror`, or its type when it has none, never its text, which carries the absolute path
+    the read was given. The models then refuse an unknown field, a missing required one and a
+    wrong type, naming each (`findings.model_refusals`); their paths stay as written, since
+    the JSON reading of a strict `Path` field takes a string.
+    """
+    try:
+        text = set_path.read_text(encoding="utf-8")
+    except OSError as error:
+        reason = error.strerror or type(error).__name__
+        raise _refused(set_path, f"cannot be read ({reason})") from None
+    except UnicodeDecodeError as error:
+        raise _refused(set_path, f"not UTF-8 ({error})") from None
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as error:
+        raise _refused(set_path, f"not JSON ({error})") from None
+    try:
+        written = BenchmarkSet.model_validate_json(text)
+    except ValidationError as error:
+        raise _refused(set_path, model_refusals(error)) from None
+    return written, payload["packages"]
+
+
+def _package_ref(
+    written: BenchmarkPackageRef, checkout: Path, *, saved: bool
+) -> BenchmarkPackageRef:
+    """One entry as written, resolved against `checkout`, every other field as given.
+
+    Its package path passes the answer-key guard; its key and case file resolve by the same
+    rule but never meet the guard, since a committed key lies in `benchmarks/answer_keys/`
+    and a committed case file in `benchmarks/case_files/`, withheld from the reviewer and not
+    from the set. The case file's digest is a saved copy's as saved, else computed from the
+    file's bytes when it can be read; one that cannot be read keeps no digest, so
+    `benchmark.runner.preflight_set` refuses it naming the file (`contracts/scripted-answers.md`
+    2.3 row 1).
     """
     package_path = reject_answer_key_path(
-        _named_path(entry["path"], checkout),
+        _named_path(written.path, checkout),
         "a benchmark set may not reference an answer key as a package",
     )
-    named_case_file = entry.get("case_file")
-    case_file = None
-    if named_case_file is not None:
-        case_file = _named_path(named_case_file, checkout).resolve()
+    case_file = _resolved(written.case_file, checkout)
     if saved:
-        case_file_sha256 = entry.get(CASE_FILE_SHA256)
+        case_file_sha256 = written.case_file_sha256
     else:
         case_file_sha256 = _case_file_digest(case_file)
-    return BenchmarkPackageRef(
-        package_id=entry["package_id"],
-        path=package_path,
-        case_file=case_file,
-        held_out=bool(entry.get("held_out", False)),
-        case_file_sha256=case_file_sha256,
+    return written.model_copy(
+        update={
+            "path": package_path,
+            "key": _resolved(written.key, checkout),
+            "case_file": case_file,
+            "case_file_sha256": case_file_sha256,
+        }
     )
 
 
-def _named_path(named: str, checkout: Path) -> Path:
+def _named_path(named: Path, checkout: Path) -> Path:
     """A path an entry names: absolute as written, or relative against `checkout`."""
-    path = Path(named)
-    return path if path.is_absolute() else checkout / path
+    return named if named.is_absolute() else checkout / named
+
+
+def _resolved(named: Path | None, checkout: Path) -> Path | None:
+    """A key or case file an entry names, resolved by `_named_path`'s rule, or `None`."""
+    return None if named is None else _named_path(named, checkout).resolve()
 
 
 def _case_file_digest(case_file: Path | None) -> str | None:
@@ -240,8 +331,9 @@ def _case_file_digest(case_file: Path | None) -> str | None:
 
 
 def _refuse_a_case_file_digest(set_path: Path, entries: list[dict[str, Any]]) -> None:
-    """Row 1's `case_file_sha256` (the rest of row 1 is US5's): the digest is computed at load
-    and carried into the saved set, so a set file never holds one (`contracts/cases.md` 4.1)."""
+    """Row 1's `case_file_sha256`, after the strict models (`_written_set`): the digest is
+    computed at load and carried into the saved set, so a set file never holds one
+    (`contracts/cases.md` 4.1)."""
     holding = next((entry for entry in entries if CASE_FILE_SHA256 in entry), None)
     if holding is not None:
         raise _refused(
@@ -253,9 +345,19 @@ def _refuse_a_case_file_digest(set_path: Path, entries: list[dict[str, Any]]) ->
 
 def named_paths(entry: dict[str, Any]) -> list[str]:
     """The paths `entry`, a set file's or a saved copy's entry as written, names, in
-    `SET_PATH_FIELDS` order: its package folder and, where it names one, its case file. Row 3
-    reads them here, and compare's ledger guard (`compare._names_an_absolute_path`)."""
+    `SET_PATH_FIELDS` order: its package folder and, where it names them, its key and case
+    file. Row 3 reads them here, and compare's ledger guard (`compare._names_an_absolute_path`)."""
     return [entry[field] for field in SET_PATH_FIELDS if entry.get(field) is not None]
+
+
+def _refuse_a_repeated_package_id(set_path: Path, packages: list[BenchmarkPackageRef]) -> None:
+    """Row 2: a package id names one entry, as it names one key, case file and run folder
+    (`contracts/cases.md` 2 and 4.3)."""
+    seen: set[str] = set()
+    for ref in packages:
+        if ref.package_id in seen:
+            raise _refused(set_path, f"package_id {ref.package_id} is named twice")
+        seen.add(ref.package_id)
 
 
 def _refuse_relative_paths_outside_sets(
@@ -296,34 +398,101 @@ def _refuse_relative_paths_outside_sets(
     )
 
 
-def _refuse_case_files_overlapping_package_folders(
+def _withheld_files(ref: BenchmarkPackageRef) -> list[tuple[str, Path]]:
+    """The files `ref` names that the reviewer never reads, each with the word a refusal
+    names it by: its key, then its case file, where it names them (rows 5 and 6)."""
+    named = [("key", ref.key), ("case file", ref.case_file)]
+    return [(kind, path) for kind, path in named if path is not None]
+
+
+def _refuse_withheld_files_overlapping_package_folders(
     set_path: Path, packages: list[BenchmarkPackageRef]
 ) -> None:
-    """Row 5's case-file half (`contracts/cases.md` 4.3; `contracts/scripted-answers.md` 2.1
-    and 6): each case file the set names and the folder it lies in are withheld paths, so a
-    package folder that is, or lies under, that folder is refused, and so is a case file
-    lying inside any entry's package folder, each naming both paths. Every case file against
-    every entry's package folder, its own entry's included, so a private case file can
-    neither sit in nor contain a folder the reviewer loads (US4-9). The key half is US5's.
+    """Row 5 (`contracts/cases.md` 4.3; `contracts/scripted-answers.md` 2.1 and 6; plan
+    decision CS-15): each key and case file the set names, and the folder it lies in, are
+    withheld paths, so a package folder that is, or lies under, that folder is refused, and
+    so is a key or case file lying inside any entry's package folder, each naming both paths.
+    Every withheld file against every entry's package folder, its own entry's included, so a
+    private key or case file can neither sit in nor contain a folder the reviewer loads
+    (US4-9, US5-11).
     """
     for holder in packages:
-        if holder.case_file is None:
-            continue
-        for ref in packages:
-            if ref.path.is_relative_to(holder.case_file.parent):
+        for kind, withheld in _withheld_files(holder):
+            for ref in packages:
+                if ref.path.is_relative_to(withheld.parent):
+                    raise _refused(
+                        set_path,
+                        f"entry {ref.package_id}'s package folder {ref.path} is or lies under "
+                        f"the folder of entry {holder.package_id}'s {kind} {withheld}: "
+                        f"{WITHHELD_FROM_THE_PACKAGE}",
+                    )
+                if withheld.is_relative_to(ref.path):
+                    raise _refused(
+                        set_path,
+                        f"entry {holder.package_id}'s {kind} {withheld} lies inside "
+                        f"entry {ref.package_id}'s package folder {ref.path}: "
+                        f"{WITHHELD_FROM_THE_PACKAGE}",
+                    )
+
+
+def _refuse_a_keyed_set_s_entries_off_their_side(
+    set_path: Path, checkout: Path, packages: list[BenchmarkPackageRef]
+) -> None:
+    """Row 6, in a keyed set only (`contracts/cases.md` 4.1 and 4.3; plan decision RF-4):
+    every entry names its key, and an entry's key and case file lie on its package's side
+    of the root, inside it for a committed entry and outside it for a private one (4.2), so
+    no committed case leans on a private file and no private key enters the repository
+    (FR-051). A keyless set, every set written before feature 014, reads its keys from
+    `--answer-keys` and is not checked here.
+    """
+    if all(ref.key is None for ref in packages):
+        return
+    for ref in packages:
+        if ref.key is None:
+            raise _refused(
+                set_path, f"entry {ref.package_id} names no key: {EVERY_ENTRY_NAMES_ITS_KEY}"
+            )
+        committed = checkout_relative(ref.path, root=checkout) is not None
+        for kind, withheld in _withheld_files(ref):
+            if (checkout_relative(withheld, root=checkout) is not None) == committed:
+                continue
+            package_side, file_side = ("inside", "outside") if committed else ("outside", "inside")
+            raise _refused(
+                set_path,
+                f"entry {ref.package_id}'s package folder lies {package_side} the repository "
+                f"and its {kind} {withheld} {file_side} it: {KEYS_ON_THEIR_SIDE}",
+            )
+
+
+def _refuse_unknown_twins_and_represents(
+    set_path: Path, packages: list[BenchmarkPackageRef]
+) -> None:
+    """Row 7 (`contracts/cases.md` 4.1 and 4.3; FR-028, FR-029): a `twin_of` names another
+    entry of the same set, never its own; each `represents` value is an anchor R-1 to R-8 or
+    an analyst-found defect AF-1 to AF-3, the ids `families.ANCHOR_FAMILY` maps, spelled
+    exactly, and named once. Read in keyed and keyless sets alike."""
+    package_ids = {ref.package_id for ref in packages}
+    for ref in packages:
+        if ref.twin_of is not None and (
+            ref.twin_of == ref.package_id or ref.twin_of not in package_ids
+        ):
+            raise _refused(
+                set_path,
+                f"entry {ref.package_id}'s twin_of {ref.twin_of} names no other entry of the set",
+            )
+        seen: set[str] = set()
+        for value in ref.represents or []:
+            if value not in ANCHOR_FAMILY:
                 raise _refused(
                     set_path,
-                    f"entry {ref.package_id}'s package folder {ref.path} is or lies under the "
-                    f"folder of entry {holder.package_id}'s case file {holder.case_file}: "
-                    f"{WITHHELD_FROM_THE_PACKAGE}",
+                    f"entry {ref.package_id} represents {value}, which is neither an anchor "
+                    "R-1 to R-8 nor an analyst-found defect AF-1 to AF-3",
                 )
-            if holder.case_file.is_relative_to(ref.path):
+            if value in seen:
                 raise _refused(
-                    set_path,
-                    f"entry {holder.package_id}'s case file {holder.case_file} lies inside "
-                    f"entry {ref.package_id}'s package folder {ref.path}: "
-                    f"{WITHHELD_FROM_THE_PACKAGE}",
+                    set_path, f"entry {ref.package_id} represents {value} more than once"
                 )
+            seen.add(value)
 
 
 def _sets_checkout(set_path: Path) -> Path | None:

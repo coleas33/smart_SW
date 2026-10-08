@@ -782,9 +782,9 @@ def _refuse_for_the_committed_ledger(run: _LoadedRun, *, root: Path) -> None:
 
 
 def _names_an_absolute_path(saved: Path) -> bool:
-    """Whether the saved set at `saved` names a path absolutely, a package's or a case file's
-    (every path `sets.named_paths` reads off an entry): a private entry, or a copy saved before
-    feature 014, which resolved every path (`contracts/provenance.md` 6.1).
+    """Whether the saved set at `saved` names a path absolutely, a package's, a key's or a case
+    file's (every path `sets.named_paths` reads off an entry): a private entry, or a copy saved
+    before feature 014, which resolved every path (`contracts/provenance.md` 6.1).
 
     Read off the saved bytes, since `load_saved_set` resolves every entry. Absolute in either
     platform's spelling, a drive, a share or a root, which is what a Windows path's anchor
