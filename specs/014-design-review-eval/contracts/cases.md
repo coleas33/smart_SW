@@ -106,7 +106,7 @@ A private set (never committed):
 |---|---|
 | `package_id` | required; unique in the set; equals the key's `package_id` (`answer-key.md` row 2) and the case file's |
 | `path` | required: the package folder. Relative (POSIX separators) resolves against the repository root (4.2); absolute is taken as written |
-| `key` | the key file. Relative for a committed entry, absolute for a private one. A set in which some entry names a key is **keyed**, and then every entry names its own (row 6). A set in which no entry names one is **keyless**, as every set written before this feature is: its keys are read as today, `<--answer-keys>/<package_id>.json` (`benchmark/scorecard.py:477-490`), and row 6 does not apply (plan decision RF-4) |
+| `key` | the key file. Relative for a committed entry, absolute for a private one. A set in which some entry names a key is **keyed**, and then every entry names its own (row 6). A set in which no entry names one is **keyless**, as every set written before this feature is: its keys are read as today, `<--answer-keys>/<package_id>.json` (`benchmark/scorecard.py:477-490`), and row 6 does not apply (plan decision RF-4). `benchmark score` over a keyed saved set given `--answer-keys` refuses it before any key is read, a usage error (exit 2) with one line: "a keyed set names its own answer keys; drop --answer-keys" (plan decision RF-85) |
 | `case_file` | optional; `scripted-answers.md` 2.1 |
 | `held_out` | derived from the key (4.5) |
 | `design` | the case's design; for a private entry, the owner's name for the real design (near-duplicate designs share one name, spec Edge Cases) |
@@ -617,8 +617,8 @@ column per family; an item of two families counted once in each; the other famil
 largest share; stale items listed; a private entry counted; below the floor printed with exit 0; a
 flag that disagrees with its key, exit 1 naming the package; an anchor mapped to its family (US5-2,
 FR-033). `reviewer/tests/unit/test_cli.py`: the command's wiring and its printed block pinned; and, for
-`benchmark score`, `--answer-keys` optional over a keyed saved set and a usage error (exit 2) naming
-it over a keyless one (RF-4).
+`benchmark score`, `--answer-keys` omitted over a keyed saved set, and refused with RF-85's line if
+given; a usage error (exit 2) naming it over a keyless one (RF-4, RF-85).
 
 `reviewer/tests/unit/test_pdf_parser.py`, `test_ingest_bom.py`, `test_ingest_manifest.py`: re-pointed
 to `reviewer/tests/fixtures/ingest/cover-blind-tap/`, asserting unchanged (CS-3).
