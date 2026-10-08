@@ -6,16 +6,18 @@ its caller looks the name up:
 
 - `swreview.chat.server.start_review`, the name the chat server binds at import, under its
   `_start_review` (as `test_chat_server.py` patches it);
-- `swreview.agent.runner.start_review`, which a `benchmark run --provider fake --pane-defaults
-  --standards-profile <a copy of the example profile>` review reaches through `run_review` in this
-  slice (lane B6's attempt body retargets this half, T101).
+- `swreview.cli.start_review`, the name `_review_fn` looks up, which a `benchmark run --provider
+  fake --pane-defaults --standards-profile <a copy of the example profile>` review calls before
+  playing it through `drive_review` (retargeted from `swreview.agent.runner.start_review`, which
+  the review reached through `run_review` in the parity slice, by T101).
 
 Over the same package, with the same `--model` and `--effort`, the two calls differ only in section
 5.1's transport rows; every other `start_review` argument is classified as compared, so one added
 later fails the test until it is classified. The two sessions' levers, model view, explanations
-and provider facts less the key's source are equal. In this slice the benchmark still reviews
-through `_review_fn` and `run_review`, which wrap nothing; the one stoppable tool set both wrap
-their tools in joins this file with lane B6 (T189).
+and provider facts less the key's source are equal. The benchmark reviews through `_review_fn`,
+which starts the review with `start_review` and plays it through `drive_review` (T101), wrapping
+nothing yet; the one stoppable tool set both wrap their tools in joins this file with lane B6
+(T189).
 """
 
 from __future__ import annotations
@@ -29,7 +31,6 @@ import pytest
 from starlette.testclient import TestClient
 from typer.testing import CliRunner
 
-import swreview.agent.runner as agent_runner
 import swreview.chat.server as chat_server
 from swreview import cli
 from swreview.agent.providers import ProviderName
@@ -123,7 +124,7 @@ def test_a_pane_defaults_attempt_starts_reviews_as_the_pane_does(
     pane_calls: list[dict[str, Any]] = []
     benchmark_calls: list[dict[str, Any]] = []
     monkeypatch.setattr(chat_server, "start_review", recorder(pane_calls))
-    monkeypatch.setattr(agent_runner, "start_review", recorder(benchmark_calls))
+    monkeypatch.setattr(cli, "start_review", recorder(benchmark_calls))
 
     run_root = tmp_path / "pane-runs"
     pane_run = run_root / "20261007-120000-cover"

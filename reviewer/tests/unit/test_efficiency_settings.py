@@ -42,7 +42,7 @@ from swreview import cli
 from swreview.agent.checklist import load_checklist
 from swreview.agent.providers import ProviderName
 from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
-from swreview.agent.runner import start_review
+from swreview.agent.runner import ReviewRun, start_review
 from swreview.agent.settings import (
     LEVER_NAMES,
     MODEL_VIEW_OFF,
@@ -56,6 +56,7 @@ from swreview.agent.settings import (
     efficiency_from_levers,
     pane_efficiency,
 )
+from swreview.benchmark import answers
 from swreview.benchmark.runner import AttemptRequest, preflight_set, run_benchmark
 from swreview.report.session import ReviewSession, load_session
 
@@ -667,13 +668,21 @@ def test_run_benchmark_passes_the_settings_to_every_package(
 def test_cli_review_fn_passes_the_settings_through(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, tmp_package_dir: Path
 ) -> None:
+    """Moved by feature 014 T101 (RF-49): `_review_fn` starts the review with `start_review`,
+    looked up as `swreview.cli.start_review`, and plays it through
+    `swreview.benchmark.answers.drive_review`, patched here to play nothing."""
     efficiency = EfficiencySettings(coverage_stop=True)
     seen: list[Any] = []
 
-    def fake_run_review(package_dir: Path, out_dir: Path, **options: Any) -> None:
+    def fake_start_review(package_dir: Path, out_dir: Path, **options: Any) -> ReviewRun:
         seen.append(options["efficiency"])
+        return start_review(package_dir, out_dir, **options)
 
-    monkeypatch.setattr(cli, "run_review", fake_run_review)
+    def fake_drive_review(run: ReviewRun, case_file: Any, *, max_answer_turns: int) -> None:
+        return None
+
+    monkeypatch.setattr(cli, "start_review", fake_start_review)
+    monkeypatch.setattr(answers, "drive_review", fake_drive_review)
 
     cli._review_fn(
         tmp_package_dir,

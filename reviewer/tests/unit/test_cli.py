@@ -23,6 +23,7 @@ import re
 import shutil
 import subprocess
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -32,15 +33,21 @@ from typer.testing import CliRunner
 from swreview import cli
 from swreview.agent.providers import ProviderName
 from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
+from swreview.agent.runner import ReviewRun, start_review
 from swreview.agent.settings import (
     ENTERPRISE_ENV,
     MASK,
     MODEL_VIEW_OFF,
+    MODEL_VIEW_PANE,
     EfficiencySettings,
     GeminiEnterprise,
     ProviderSettings,
     pane_defaults,
 )
+from swreview.benchmark import answers
+from swreview.benchmark.answers import ANSWER_LOG_VERSION, AnswerLog, read_answer_log
+from swreview.benchmark.case_file import CaseFile
+from swreview.benchmark.runner import EXAMPLE_PROFILE, AttemptRequest
 from swreview.checks.golden_interference import interference_case
 from swreview.checks.standards.run import CHECK_FILE_NAME
 from swreview.ir.loader import PACKAGE_FILE_NAME, load_package, save_package
@@ -2493,7 +2500,8 @@ def test_the_run_start_adapter_is_the_first_attempts(
     """Feature 014 RF-60 (`benchmark-run.md` 3 row 3): the adapter `benchmark run` builds to
     check the provider and the effort, before any folder is written, is the first package's,
     and every later package builds its own - one adapter per attempt, as before. Its resume
-    half is lane B6's (T203)."""
+    half is lane B6's (T203). Moved by T101 (RF-49): the spy sits on `swreview.cli.start_review`,
+    which `_review_fn` calls in place of `run_review`."""
     built = fake_provider()
     scripted = cli.provider_factory
     out = tmp_path / "runs" / "two-packages"
@@ -2506,14 +2514,14 @@ def test_the_run_start_adapter_is_the_first_attempts(
         return scripted(settings, efficiency)
 
     monkeypatch.setattr(cli, "provider_factory", watched_factory)
-    review = cli.run_review
+    review = cli.start_review
     served: list[Any] = []
 
     def recording_review(package_dir: Path, out_dir: Path, **options: Any) -> Any:
         served.append(options["provider"])
         return review(package_dir, out_dir, **options)
 
-    monkeypatch.setattr(cli, "run_review", recording_review)
+    monkeypatch.setattr(cli, "start_review", recording_review)
     second = tmp_path / "second-package"
     shutil.copytree(tmp_package_dir, second)
     set_path = tmp_path / "sets" / "two.json"
@@ -2674,6 +2682,193 @@ def test_an_unresolvable_provider_is_refused_before_a_bad_case_file(
     assert "OpenAI" in line, line
     assert "case file" not in line, line
     assert not out.exists()
+
+
+# --- `_review_fn` through the answer driver (feature 014 T100) -----------------------------------
+
+FIT_ANSWER: dict[str, Any] = {
+    "id": "A-1",
+    "item": "interfaces.fit",
+    "ids": ["cmp:0001"],
+    "answer": "press fit",
+}
+"""A case-file entry on the support package's first instance, which its one-turn script never
+asks about."""
+
+
+@dataclass
+class AttemptBody:
+    """What `_review_fn` called, in order, as the spies of `spy_on_the_attempt_body` saw it."""
+
+    order: list[str] = field(default_factory=list)
+    started: list[tuple[Path, Path, dict[str, Any], ReviewRun]] = field(default_factory=list)
+    driven: list[tuple[ReviewRun, CaseFile | None, int]] = field(default_factory=list)
+    closed: list[ReviewRun] = field(default_factory=list)
+
+
+def spy_on_the_attempt_body(
+    monkeypatch: pytest.MonkeyPatch, drive: Callable[..., Any] = answers.drive_review
+) -> AttemptBody:
+    """Spies on `start_review` where `_review_fn` looks it up (`swreview.cli.start_review`), on
+    `swreview.benchmark.answers.drive_review` and on `ReviewRun.close`: each records its call and
+    hands on to the real one, the driver to `drive`."""
+    body = AttemptBody()
+    real_close = ReviewRun.close
+
+    def recording_start_review(package_dir: Path, out_dir: Path, **options: Any) -> ReviewRun:
+        body.order.append("start_review")
+        run = start_review(package_dir, out_dir, **options)
+        body.started.append((package_dir, out_dir, options, run))
+        return run
+
+    def recording_drive_review(
+        run: ReviewRun, case_file: CaseFile | None, *, max_answer_turns: int
+    ) -> Any:
+        body.order.append("drive_review")
+        body.driven.append((run, case_file, max_answer_turns))
+        return drive(run, case_file, max_answer_turns=max_answer_turns)
+
+    def recording_close(run: ReviewRun) -> None:
+        body.order.append("close")
+        body.closed.append(run)
+        real_close(run)
+
+    monkeypatch.setattr(cli, "start_review", recording_start_review)
+    monkeypatch.setattr(answers, "drive_review", recording_drive_review)
+    monkeypatch.setattr(ReviewRun, "close", recording_close)
+    return body
+
+
+def test_review_fn_starts_the_review_and_plays_it_through_the_driver(
+    tmp_path: Path,
+    tmp_package_dir: Path,
+    fake_provider: Callable[..., list[RecordingProvider]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`scripted-answers.md` 3, `benchmark-run.md` 5.1 (QA-1): `_review_fn` starts the review with
+    `start_review`, receiving the arguments it passed `run_review` before the driver (US2, T051),
+    plays it through `drive_review` with the attempt's case file and bound, then closes the run,
+    and returns the final session."""
+    built = fake_provider()
+    body = spy_on_the_attempt_body(monkeypatch)
+    case_file = CaseFile.model_validate(
+        {"case_file_version": 1, "package_id": "cover", "answers": [FIT_ANSWER]}
+    )
+    profile = REPO_ROOT / EXAMPLE_PROFILE
+    efficiency = EfficiencySettings(tool_tiers=True)
+    out = tmp_path / "attempt"
+
+    session = cli._review_fn(
+        tmp_package_dir,
+        out,
+        provider="fake",
+        model="fake-1",
+        effort="high",
+        efficiency=efficiency,
+        attempt=AttemptRequest(
+            model_view=MODEL_VIEW_PANE,
+            standards_profile=profile,
+            case_file=case_file,
+            max_answer_turns=2,
+        ),
+    )
+
+    assert body.order == ["start_review", "drive_review", "close"]
+    [(package_dir, out_dir, options, run)] = body.started
+    [adapter] = built
+    assert (package_dir, out_dir) == (tmp_package_dir, out)
+    assert {name: value for name, value in options.items() if name != "redact"} == {
+        "provider": adapter,
+        "model": "fake-1",
+        "effort": "high",
+        "key_source": "none",
+        "efficiency": efficiency,
+        "model_view": MODEL_VIEW_PANE,
+        "standards_profile": profile,
+        "explain_findings": False,
+        "bridge": False,
+    }
+    assert callable(options["redact"])
+    [(driven_run, driven_case_file, bound)] = body.driven
+    assert driven_run is run
+    assert driven_case_file is case_file
+    assert bound == 2
+    assert body.closed == [run]
+    assert session is run.session
+    assert read_answer_log(out) == AnswerLog(
+        answer_log_version=ANSWER_LOG_VERSION,
+        points=[],
+        ended="no_open_questions",
+        last_turn_end="end",
+        unused_entries=["A-1"],
+    )
+
+
+def test_review_fn_closes_the_run_when_the_driver_raises(
+    tmp_path: Path,
+    tmp_package_dir: Path,
+    fake_provider: Callable[..., list[RecordingProvider]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`run.close()` is in a `finally`, as `run_review` has it: a driver that raises still closes
+    the run, and the exception leaves `_review_fn` unchanged."""
+
+    class DriverFailed(Exception):
+        pass
+
+    def failing_drive_review(
+        run: ReviewRun, case_file: CaseFile | None, *, max_answer_turns: int
+    ) -> Any:
+        raise DriverFailed
+
+    fake_provider()
+    body = spy_on_the_attempt_body(monkeypatch, drive=failing_drive_review)
+
+    with pytest.raises(DriverFailed):
+        cli._review_fn(
+            tmp_package_dir,
+            tmp_path / "attempt",
+            provider="fake",
+            model="fake-1",
+            effort="high",
+            attempt=AttemptRequest(
+                model_view=MODEL_VIEW_OFF,
+                standards_profile=None,
+                case_file=None,
+                max_answer_turns=0,
+            ),
+        )
+
+    assert body.order == ["start_review", "drive_review", "close"]
+    [(_, _, _, run)] = body.started
+    assert body.closed == [run]
+
+
+def test_every_benchmark_package_leaves_an_answer_log_with_or_without_a_case_file(
+    tmp_path: Path, tmp_package_dir: Path, fake_provider: Callable[..., list[RecordingProvider]]
+) -> None:
+    """`scripted-answers.md` 3: every benchmark package goes through the driver, so every package
+    folder carries an `answer-log.json`, the one whose entry names no case file included."""
+    fake_provider()
+    set_path = benchmark_set_with_a_case_file(tmp_path, tmp_package_dir, "cover")
+    second = tmp_path / "second-package"
+    shutil.copytree(tmp_package_dir, second)
+    named = json.loads(set_path.read_text(encoding="utf-8"))
+    named["packages"].append({"package_id": "cover-copy", "path": str(second), "held_out": True})
+    set_path.write_text(json.dumps(named), encoding="utf-8")
+    out = tmp_path / "runs" / "logged"
+
+    result = invoke("benchmark", "run", "--set", str(set_path), "--out", str(out))
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    for package_id, unused in (("cover", ["A-1"]), ("cover-copy", [])):
+        assert read_answer_log(out / package_id) == AnswerLog(
+            answer_log_version=ANSWER_LOG_VERSION,
+            points=[],
+            ended="no_open_questions",
+            last_turn_end="end",
+            unused_entries=unused,
+        ), package_id
 
 
 def test_benchmark_score_writes_a_scorecard(benchmark_run_dir: Path, answer_keys: Path) -> None:
