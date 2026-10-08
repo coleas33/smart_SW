@@ -25,7 +25,8 @@ from pathlib import Path
 
 import pytest
 
-from swreview.benchmark.runner import run_benchmark
+from swreview.agent.checklist import load_checklist
+from swreview.benchmark.runner import PreflightedSet, preflight_set, run_benchmark
 from swreview.benchmark.sets import BenchmarkPackageRef, BenchmarkSet, SetError, load_set
 from swreview.ir.loader import AnswerKeyAccessError, load_package
 from tests.support.packages import build_package
@@ -137,13 +138,12 @@ def test_run_benchmark_never_passes_an_answer_key_path(tmp_path: Path) -> None:
 
     out_dir = tmp_path / "out"
     run_benchmark(
-        set_path,
+        preflight_set(set_path, None, load_checklist(), root=tmp_path),
         out_dir,
         provider="openai",
         model="gpt-5.6",
         effort="high",
         review_fn=fake_review_fn,
-        root=tmp_path,
     )
 
     assert len(calls) == 1
@@ -157,11 +157,12 @@ def test_run_benchmark_never_passes_an_answer_key_path(tmp_path: Path) -> None:
 
 
 def test_run_benchmark_refuses_an_answer_key_path_even_if_the_set_object_smuggles_one(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
 ) -> None:
     """Defense in depth: even if a `BenchmarkSet` is constructed directly - bypassing
     `load_set`'s own check - the runner refuses to call `review_fn` on a package path
-    under `benchmarks/answer_keys/`.
+    under `benchmarks/answer_keys/`. Since feature 014 T097 (RF-61) the smuggled set is held by
+    a `PreflightedSet` built directly, bypassing `preflight_set` too.
     """
     smuggled = BenchmarkSet(
         name="smuggled",
@@ -173,12 +174,12 @@ def test_run_benchmark_refuses_an_answer_key_path_even_if_the_set_object_smuggle
             )
         ],
     )
-    monkeypatch.setattr("swreview.benchmark.runner.load_set", lambda _path, **_: smuggled)
+    preflighted = PreflightedSet(benchmark_set=smuggled, root=tmp_path, case_files={"evil": None})
     calls: list[object] = []
 
     with pytest.raises(AnswerKeyAccessError):
         run_benchmark(
-            tmp_path / "unused-set.json",
+            preflighted,
             tmp_path / "out",
             provider="fake",
             model="m",

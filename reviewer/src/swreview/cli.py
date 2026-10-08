@@ -86,6 +86,7 @@ from swreview.agent.settings import (
 )
 from swreview.agent.settings import pane_defaults as pane_defaults_for
 from swreview.benchmark import sets
+from swreview.benchmark.answers import DEFAULT_MAX_ANSWER_TURNS
 from swreview.benchmark.compare import (
     carry_sign_offs,
     committed_sign_off_sources,
@@ -104,6 +105,7 @@ from swreview.benchmark.runner import (
     RunProvenance,
     committable,
     current_commit,
+    preflight_set,
     profile_is_example,
     run_benchmark,
     sha256_of,
@@ -2311,7 +2313,8 @@ def _review_fn(
 
     `attempt` carries the run's model view and standards profile, passed to the review as
     the pane passes its own; the live tools are never offered to a benchmark review
-    (feature 014 RF-44, `contracts/benchmark-run.md` 5.1).
+    (feature 014 RF-44, `contracts/benchmark-run.md` 5.1). Its case file and answer-turn bound
+    are the scripted-answers driver's, which T101 puts here.
 
     The redaction is per package too, rather than left to `benchmark_run`: a library
     caller that reaches this through `benchmark.runner`'s default `review_fn` gets the
@@ -2409,10 +2412,11 @@ def _refuse_a_pane_study_breaking_its_file_rules(
       reports clean. Two unknown commits would pass the must-match rule as equal, and a tree git
       cannot vouch for is treated as a dirty one.
     - Both refuse a digested input inside the repository (`digested`, in order: the prompt, the
-      checklist, the profile or `None`, the set file) whose bytes hold a carriage return. A
-      working copy checked out before section 6.5's `eol=lf` keeps them and would record digests
-      another machine's runs do not share, which compare would refuse only after the study was
-      paid for. A file outside the repository, a private profile, is never read for it.
+      checklist, the profile or `None`, the set file, then each entry's case file or `None`)
+      whose bytes hold a carriage return. A working copy checked out before section 6.5's
+      `eol=lf` keeps them and would record digests another machine's runs do not share, which
+      compare would refuse only after the study was paid for. A file outside the repository, a
+      private profile, is never read for it.
     - `pane_defaults_private` grades against the real profile; its `--out` inside the repository
       is row 5's to refuse.
 
@@ -2537,6 +2541,15 @@ def benchmark_run(
             help="Run a study over a set with no held-out package; recorded with the run.",
         ),
     ] = False,
+    max_answer_turns: Annotated[
+        int,
+        typer.Option(
+            "--max-answer-turns",
+            min=0,
+            help="How many answer turns each review may take after its opening turn; 0 plays "
+            "the opening turn only.",
+        ),
+    ] = DEFAULT_MAX_ANSWER_TURNS,
     json_output: JsonFlag = False,
 ) -> None:
     """Review every package in the set, with answer keys unreadable."""
@@ -2577,7 +2590,9 @@ def benchmark_run(
             adapter = provider_factory(settings, resolved.efficiency)
             adapter.effort_mapping(settings.effort)
             run_start = RunStartAdapter(adapter)
-            benchmark_set = sets.load_set(set_file, root=root)
+            # Row 4: the set and every case file it names, checked against the profile.
+            preflighted = preflight_set(set_file, profile, load_checklist(), root=root)
+            benchmark_set = preflighted.benchmark_set
             # What rows 5 and 6 read is read once, and the record says what they read: the
             # profile's likeness to the example, the commit, the tracked tree, and the prompt
             # and checklist `agent.checklist` names at call time.
@@ -2597,7 +2612,13 @@ def benchmark_run(
                 benchmark_set=benchmark_set,
                 commit=commit,
                 dirty=dirty,
-                digested=(prompt_file, checklist_file, standards_profile, set_file),
+                digested=(
+                    prompt_file,
+                    checklist_file,
+                    standards_profile,
+                    set_file,
+                    *(ref.case_file for ref in benchmark_set.packages),
+                ),
                 root=root,
             )
             # Row 7, P-3.
@@ -2636,10 +2657,11 @@ def benchmark_run(
                     inert_settings=INERT_SETTINGS[provider],
                     prompt_digest=sha256_of(prompt_file),
                     tree_dirty=dirty,
+                    max_answer_turns=max_answer_turns,
                 ),
             )
             package_dirs = run_benchmark(
-                set_file,
+                preflighted,
                 out,
                 provider=settings.provider.value,
                 model=settings.model,
@@ -2647,9 +2669,9 @@ def benchmark_run(
                 review_fn=partial(_review_fn, run_start=run_start),
                 efficiency=resolved.efficiency,
                 explain_findings=resolved.explain_findings,
-                root=root,
                 model_view=resolved.model_view,
                 standards_profile=standards_profile,
+                max_answer_turns=max_answer_turns,
             )
 
     payload = {

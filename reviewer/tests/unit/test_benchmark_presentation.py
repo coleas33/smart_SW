@@ -8,8 +8,9 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from swreview.agent.checklist import load_checklist
 from swreview.benchmark.compare import CompareError, compare_runs, render_ledger_md
-from swreview.benchmark.runner import PROVENANCE_FILE, run_benchmark
+from swreview.benchmark.runner import PROVENANCE_FILE, preflight_set, run_benchmark
 from swreview.cli import app
 from swreview.report.session import load_session
 from tests.support.studies import RunSpec, write_run
@@ -45,8 +46,8 @@ def test_library_benchmark_default_provider_receives_explanations(
 ) -> None:
     set_path = write_set(tmp_path / "set.json", tmp_package_dir)
     run_benchmark(
-        set_path, tmp_path / "run", provider="fake", model=FAKE_MODEL,
-        effort="high", explain_findings=True,
+        preflight_set(set_path, None, load_checklist()), tmp_path / "run", provider="fake",
+        model=FAKE_MODEL, effort="high", explain_findings=True,
     )
     assert load_session(tmp_path / "run" / "cover" / "session.json").explanations_enabled
 

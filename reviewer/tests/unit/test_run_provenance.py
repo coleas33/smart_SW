@@ -403,7 +403,12 @@ def example_profile_copy(folder: Path) -> Path:
     return copy
 
 
-def slice_2_run(tmp_path: Path) -> tuple[list[str], dict[str, Any]]:
+SliceRun = tuple[list[str], dict[str, Any]]
+"""One run of a slice's test: the options typed, and each field the slice lands with the value
+that run writes."""
+
+
+def slice_2_runs(tmp_path: Path) -> list[SliceRun]:
     """The parity slice's options, and every field it adds with the value it writes
     (`provenance.md` 1; data-model section 7)."""
     profile = example_profile_copy(tmp_path / "profiles")
@@ -419,12 +424,18 @@ def slice_2_run(tmp_path: Path) -> tuple[list[str], dict[str, Any]]:
         "prompt_digest": digest.sha256_of(SYSTEM_PROMPT_FILE),
         "tree_dirty": tree_dirty(root=REPO_ROOT),
     }
-    return options, expected
+    return [(options, expected)]
 
 
-SLICE_RUNS = {2: slice_2_run}
-"""Each slice's run and the fields it lands, by slice number. Lane A3 adds slice 3 (T095) and
-lane B6 slice 6 (T201); each asserts its own fields and nothing about another slice's."""
+def slice_3_runs(tmp_path: Path) -> list[SliceRun]:
+    """The scripted-answers slice's one field, the answer-turn bound (`scripted-answers.md` 4):
+    as typed, and untyped as its default, 3."""
+    return [(["--max-answer-turns", "0"], {"max_answer_turns": 0}), ([], {"max_answer_turns": 3})]
+
+
+SLICE_RUNS = {2: slice_2_runs, 3: slice_3_runs}
+"""Each slice's runs and the fields it lands, by slice number. Lane B6 adds slice 6 (T201); each
+slice asserts its own fields and nothing about another slice's."""
 
 
 @pytest.mark.parametrize("slice_number", sorted(SLICE_RUNS))
@@ -432,15 +443,15 @@ def test_provenance_records_every_field_its_slice_adds(
     slice_number: int, tmp_path: Path, tmp_package_dir: Path
 ) -> None:
     """FR-013, FR-052, US2-3: every field a slice adds is in the record, with its value."""
-    options, expected = SLICE_RUNS[slice_number](tmp_path)
     set_path = one_package_set(tmp_path, tmp_package_dir)
-    out = tmp_path / "runs" / f"slice-{slice_number}"
+    for index, (options, expected) in enumerate(SLICE_RUNS[slice_number](tmp_path)):
+        out = tmp_path / "runs" / f"slice-{slice_number}-{index}"
 
-    result = run_arm(set_path, out, *options)
+        result = run_arm(set_path, out, *options)
 
-    assert result.exit_code == 0, result.stdout + result.stderr
-    record = read_record(out)
-    assert {name: record[name] for name in expected} == expected
+        assert result.exit_code == 0, result.stdout + result.stderr
+        record = read_record(out)
+        assert {name: record[name] for name in expected} == expected
 
 
 def spellings(path: Path) -> set[str]:

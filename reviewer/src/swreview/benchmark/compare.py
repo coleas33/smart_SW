@@ -250,6 +250,12 @@ MUST_MATCH: tuple[str, ...] = tuple(
 """Every other field of the record, in its own order: a field added later must match until
 someone exempts it by name."""
 
+NOT_RECORDED_WHEN_ABSENT: tuple[str, ...] = ("max_answer_turns",)
+"""The fields whose absence can only mean a record an older build wrote, so a refusal quotes an
+absent one "not recorded" (owner decision 47A). Every other field's value is quoted as it is:
+a schema-2 record's `profile_digest` of `None` means no profile, a `commit` of `None` that git
+could not answer."""
+
 
 class CompareError(ValueError):
     """A run, or a pair of runs, that may not be placed in a comparison."""
@@ -922,7 +928,8 @@ def _refuse_a_difference(
 
     One loop over `RunProvenance.model_fields`, so a field added later must match until it is
     exempted by name. `efficiency` is compared flag by flag, so the refusal names the flag, and
-    `studied`, the lever under test across a lever study's arms, is skipped.
+    `studied`, the lever under test across a lever study's arms, is skipped. Each value is
+    quoted by `_quoted`.
     """
     one, two = first.provenance, other.provenance
     assert one is not None and two is not None
@@ -941,8 +948,17 @@ def _refuse_a_difference(
             if value != other_value:
                 raise CompareError(
                     f"{first.run_dir} and {other.run_dir} cannot be placed in one "
-                    f"comparison: {field} differs ({value!r} against {other_value!r})"
+                    f"comparison: {field} differs ({_quoted(field, value)} against "
+                    f"{_quoted(field, other_value)})"
                 )
+
+
+def _quoted(field: str, value: object) -> str:
+    """A record's value as a must-match refusal quotes it: "not recorded" for an absent field
+    `NOT_RECORDED_WHEN_ABSENT` names, its `repr` otherwise (owner decision 47A)."""
+    if value is None and field in NOT_RECORDED_WHEN_ABSENT:
+        return "not recorded"
+    return repr(value)
 
 
 def _check_key_digests(runs: Sequence[_LoadedRun]) -> None:

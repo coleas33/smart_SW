@@ -39,6 +39,7 @@ from pydantic import ValidationError
 from typer.testing import CliRunner
 
 from swreview import cli
+from swreview.agent.checklist import load_checklist
 from swreview.agent.providers import ProviderName
 from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
 from swreview.agent.runner import start_review
@@ -55,7 +56,7 @@ from swreview.agent.settings import (
     efficiency_from_levers,
     pane_efficiency,
 )
-from swreview.benchmark.runner import AttemptRequest, run_benchmark
+from swreview.benchmark.runner import AttemptRequest, preflight_set, run_benchmark
 from swreview.report.session import ReviewSession, load_session
 
 runner = CliRunner()
@@ -651,7 +652,7 @@ def test_run_benchmark_passes_the_settings_to_every_package(
         seen.append(efficiency)
 
     run_benchmark(
-        set_path,
+        preflight_set(set_path, None, load_checklist()),
         tmp_path / "out",
         provider="fake",
         model="fake-scripted",
@@ -681,7 +682,9 @@ def test_cli_review_fn_passes_the_settings_through(
         model="fake-scripted",
         effort="high",
         efficiency=efficiency,
-        attempt=AttemptRequest(model_view=MODEL_VIEW_OFF, standards_profile=None),
+        attempt=AttemptRequest(
+            model_view=MODEL_VIEW_OFF, standards_profile=None, case_file=None, max_answer_turns=0
+        ),
     )
 
     assert seen == [efficiency]

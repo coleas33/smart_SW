@@ -39,7 +39,9 @@ from typing import Any
 
 import pytest
 from pydantic import ValidationError
+from typer.testing import CliRunner
 
+from swreview import cli
 from swreview.agent.checklist import load_checklist
 from swreview.benchmark import case_file, sets
 from swreview.benchmark.answers import CaseFileError, load_case_file
@@ -843,3 +845,99 @@ def test_a_case_file_inside_a_package_folder_the_set_names_is_refused_at_set_loa
     assert message.endswith(
         "the reviewer reads the package folder; keep keys and case files outside it"
     )
+
+
+# --- every refusal before any review (US4-8; T095) -------------------------------------------
+
+
+def case_file_set(
+    folder: Path, content: dict[str, Any] | str | None, *others: dict[str, Any]
+) -> Path:
+    """A private set file at `folder / "sets" / "fict.json"`: the roles package, written under
+    `folder / "packages"`, naming `content` as its case file under `folder / "case_files"`, then
+    the entries `others`, every path absolute. `content` `None` names a case file that is not
+    there. Outside the checkout, so a refusal names the case file by its file name (FR-051)."""
+    package = write_package(folder / "packages" / PACKAGE_ID)
+    case_path = folder / "case_files" / CASE_NAME
+    if content is not None:
+        write_case(case_path.parent, content)
+    entry = {
+        "package_id": PACKAGE_ID,
+        "path": str(package),
+        "case_file": str(case_path),
+        "held_out": True,
+    }
+    set_path = folder / "sets" / "fict.json"
+    set_path.parent.mkdir(parents=True, exist_ok=True)
+    set_path.write_text(
+        json.dumps({"name": "fict", "packages": [entry, *others]}, indent=2), encoding="utf-8"
+    )
+    return set_path
+
+
+BEFORE_ANY_REVIEW = [
+    pytest.param(None, "cannot be read (", id="row1-unreadable"),
+    pytest.param("{not json", "not JSON", id="row1-not-json"),
+    pytest.param(case(item_answer(), package_id="fict-other"), "fict-other", id="row2-package-id"),
+    pytest.param(
+        case(item_answer(), item_answer(item=FASTENERS, ids=[ROOT_ID])),
+        "A-1 names two entries",
+        id="row3-id-repeated",
+    ),
+    pytest.param(case(item_answer(answer="   ")), "A-1 states a blank answer", id="row4-blank"),
+    pytest.param(
+        case(item_answer(item="interfaces.fitt")), "interfaces.fitt", id="row5-not-an-item"
+    ),
+    pytest.param(
+        case(item_answer(item="provenance")), "can never be asked", id="row6-code-owned"
+    ),
+    pytest.param(case(item_answer(ids=[PLATE_1, "cmp:0099"])), "cmp:0099", id="row7-unknown-id"),
+    pytest.param(
+        case(item_answer(ids=[PIN_ID]), item_answer(id="A-2", ids=[PIN_1], answer="slip fit")),
+        "A-1 and A-2",
+        id="row8-intersecting",
+    ),
+    pytest.param(
+        case(roles_answer(), roles_answer(id="A-4", answer="None bought")),
+        "A-3 and A-4",
+        id="row9-two-part-roles",
+    ),
+    pytest.param(case(roles_answer()), part_roles.STATE_NO_PROFILE, id="row10-never-asked"),
+]
+"""A case file failing each row of section 2.3, for the set entry `PACKAGE_ID` with no profile,
+and what its refusal names: row 1 twice, a file that is not there, of which the set loader took no
+digest, and one that is not JSON."""
+
+
+@pytest.mark.parametrize(("content", "named"), BEFORE_ANY_REVIEW)
+def test_every_refusal_through_benchmark_run_comes_before_any_review(
+    content: dict[str, Any] | str | None,
+    named: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """US4-8: `benchmark run` refuses the case file with exit 1 and one line naming it and the
+    set entry, before the first review: a spy review function is never called, and no package
+    folder, nor anything else, is written."""
+    reviewed: list[Path] = []
+
+    def spy(package_dir: Path, session_out_dir: Path, **_keywords: Any) -> None:
+        reviewed.append(package_dir)
+
+    monkeypatch.setattr(cli, "_review_fn", spy)
+    set_path = case_file_set(tmp_path, content)
+    out = tmp_path / "runs" / "refused"
+
+    result = CliRunner().invoke(
+        cli.app,
+        ["benchmark", "run", "--set", str(set_path), "--out", str(out), "--provider", "fake"],
+    )
+
+    assert result.exit_code == 1, result.stdout + result.stderr
+    [line] = result.stderr.strip().splitlines()
+    assert line.startswith(f"error: CaseFileError: {PREFIX}"), line
+    assert named in line, line
+    assert str(tmp_path) not in line
+    assert reviewed == []
+    assert not (out / PACKAGE_ID).exists()
+    assert not out.exists()

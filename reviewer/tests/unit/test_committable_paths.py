@@ -515,8 +515,8 @@ def test_an_offline_run_over_a_committed_style_package_writes_no_local_path(
     `benchmarks/sets/`, the commands pointed at it through `sets.REPO_ROOT`, a scripted `benchmark
     run` with the example profile into `benchmarks/studies/<study>/<run>/`, then `score`, then
     `compare --out` a folder inside the repository: the scanner finds nothing in the run folder or
-    the ledger. Without `--max-answer-turns`, which the scripted-answers slice adds with the option
-    (`--max-answer-turns 0`; lane A3): the review here is one turn with no driver."""
+    the ledger. At `--max-answer-turns 0`, which the scripted-answers slice adds with the option
+    (lane A3): the one-turn scripted review cannot play an anchor's scripted answer."""
     root = tmp_path / "checkout"
     set_file = checkout(root)
     point_at(root, monkeypatch)
@@ -536,7 +536,14 @@ def test_an_offline_run_over_a_committed_style_package_writes_no_local_path(
     run = root / "benchmarks" / "studies" / "smoke" / "run-1"
     ledger = root / "benchmarks" / "ledgers" / "smoke"
 
-    ran = benchmark_run(set_file, run, "--standards-profile", str(root / runner.EXAMPLE_PROFILE))
+    ran = benchmark_run(
+        set_file,
+        run,
+        "--standards-profile",
+        str(root / runner.EXAMPLE_PROFILE),
+        "--max-answer-turns",
+        "0",
+    )
     assert ran.exit_code == 0, ran.stdout + ran.stderr
     scored = invoke("benchmark", "score", str(run), "--answer-keys", str(keys))
     assert scored.exit_code == 0, scored.stdout + scored.stderr

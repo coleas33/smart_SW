@@ -27,29 +27,43 @@ Feature 014 (`specs/014-design-review-eval/contracts/provenance.md` 1; data-mode
 adds schema 2, written before any review rather than after the set: what the run was started
 with (the pane-defaults marker, the model view, the profile's digest, whether it is the
 checkout's example, the live tools, the inert settings, the prompt's digest, whether the
-tracked tree was dirty), and never a path. A field a record older than that lacks reads as
-"not recorded".
+tracked tree was dirty, the answer-turn bound), and never a path. A field a record older than
+that lacks reads as "not recorded".
+
+## Refusals before any review (feature 014 INT-14)
+
+`preflight_set` reads the set and checks it, and every case file it names, before the first
+review (`contracts/benchmark-run.md` 3 row 4; `scripted-answers.md` 2.3), and `run_benchmark`
+takes only the `PreflightedSet` it returns, so a library caller meets the same refusals as the
+command line, which writes the provenance record between the two.
 """
 
 from __future__ import annotations
 
 import subprocess
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 from pydantic import Field
 
 from swreview import atomic
 from swreview.agent.settings import MODEL_VIEW_OFF, EfficiencySettings, ModelViewSettings
+from swreview.benchmark import answers
+from swreview.benchmark.case_file import CaseFile
 from swreview.benchmark.digest import sha256_of as sha256_of
-from swreview.benchmark.sets import REPO_ROOT, BenchmarkSet, checkout_relative, load_set
+from swreview.benchmark.sets import REPO_ROOT, BenchmarkSet, SetError, checkout_relative, load_set
 from swreview.findings import ReviewModel
-from swreview.ir.loader import reject_answer_key_path
+from swreview.ir.loader import load_package, reject_answer_key_path
 from swreview.report.session import load_session, save_session
+
+if TYPE_CHECKING:
+    from swreview.agent.checklist import Checklist
+    from swreview.checks.standards.profile import StandardsProfile
 
 ReviewFn = Callable[..., Any]
 
@@ -143,6 +157,11 @@ class RunProvenance(ReviewModel):
     tree_dirty: bool | None = None
     """Whether the checkout's tracked files differed from `commit`; `None` when git cannot
     answer."""
+
+    max_answer_turns: int | None = None
+    """How many answer turns each review could take after its opening turn
+    (`contracts/scripted-answers.md` 4); `None`, "not recorded", in a record older than the
+    field, never the default 3."""
 
 
 def _git_process(cwd: Path | str, *args: str) -> subprocess.CompletedProcess[str] | None:
@@ -261,8 +280,8 @@ class AttemptRequest:
     `provider`, `model`, `effort`, `efficiency` and `explain_findings` (feature 014 plan
     decision RF-44; `contracts/benchmark-run.md` 5.1). One value rather than one keyword per
     input, so an injected review function needs one keyword more whatever the values, and
-    the keywords it receives never vary with them. Later slices add the case file and the
-    answer-turn bound (lane A3) and the attempt's stop (lane B6).
+    the keywords it receives never vary with them. The robustness slice adds the attempt's
+    stop (lane B6).
     """
 
     model_view: ModelViewSettings
@@ -270,6 +289,81 @@ class AttemptRequest:
 
     standards_profile: Path | None
     """The standards profile every review grades against; `None` grades none."""
+
+    case_file: CaseFile | None
+    """This package's scripted answers as `preflight_set` loaded them, or `None` for a set
+    entry naming no case file, whose questions are all unscripted."""
+
+    max_answer_turns: int
+    """How many answer turns the review may take after its opening turn, the same for every
+    package (`contracts/scripted-answers.md` 4)."""
+
+
+@dataclass(frozen=True)
+class PreflightedSet:
+    """A benchmark set every refusal before the first review has passed: what `preflight_set`
+    returns and the one thing `run_benchmark` reviews (feature 014 INT-14; data-model section 4).
+
+    `benchmark_set` is the set as `load_set` read it against `root`, the checkout its relative
+    entries resolved against, and `case_files` holds, by package id, the `CaseFile` loaded and
+    checked for an entry naming one and `None` for an entry naming none. The checks that every
+    package's `package.json` and every key exist are US5's (lane G4).
+    """
+
+    benchmark_set: BenchmarkSet
+    root: Path
+    case_files: Mapping[str, CaseFile | None]
+
+
+ATTEMPTS_FOLDER = "attempts"
+"""The run folder's `attempts/`, where every attempt of every package runs
+(`contracts/benchmark-run.md` 4): a package whose id names it would have no folder of its own."""
+
+
+def preflight_set(
+    set_path: Path | str,
+    profile: StandardsProfile | None,
+    checklist: Checklist,
+    *,
+    root: Path = REPO_ROOT,
+) -> PreflightedSet:
+    """Read the set at `set_path` and refuse it, or a case file it names, before any review
+    (`contracts/benchmark-run.md` 3 row 4; `scripted-answers.md` 2.3; INT-14).
+
+    In order, the first refusal ending the run with one line: `load_set`'s refusals against
+    `root`; a package id equal to `attempts` ignoring case, a `SetError` naming it, since Windows
+    and macOS fold case and its folder would be the run's `attempts/` (owner decision 48A); then
+    each entry naming a case file, in set order. A case file the set loader could take no digest
+    of is refused by row 1 before its package is read; any other is checked by
+    `answers.load_case_file` against the package, `checklist` and `profile`, the profile the
+    reviews will grade against or `None`.
+    """
+    benchmark_set = load_set(set_path, root=root)
+    for ref in benchmark_set.packages:
+        if ref.package_id.casefold() == ATTEMPTS_FOLDER:
+            raise SetError(
+                f"benchmark set {Path(set_path).name}: package id {ref.package_id} would share "
+                f"the run folder's {ATTEMPTS_FOLDER}/ folder, where every attempt runs; ids are "
+                "compared ignoring case, as Windows and macOS compare folder names: choose "
+                "another id"
+            )
+    case_files: dict[str, CaseFile | None] = {}
+    for ref in benchmark_set.packages:
+        if ref.case_file is None:
+            case_files[ref.package_id] = None
+            continue
+        if ref.case_file_sha256 is None:
+            raise answers.unreadable_case_file(ref.case_file, entry=ref)
+        case_files[ref.package_id] = answers.load_case_file(
+            ref.case_file,
+            entry=ref,
+            package=load_package(ref.path).package,
+            checklist=checklist,
+            profile=profile,
+        )
+    return PreflightedSet(
+        benchmark_set=benchmark_set, root=root, case_files=MappingProxyType(case_files)
+    )
 
 
 def _default_review_fn(
@@ -327,7 +421,7 @@ def _record_unattended_runtime(session_out_dir: Path, elapsed_minutes: float) ->
 
 
 def run_benchmark(
-    set_path: Path | str,
+    preflighted: PreflightedSet,
     out_dir: Path | str,
     provider: str,
     model: str,
@@ -335,20 +429,24 @@ def run_benchmark(
     review_fn: ReviewFn | None = None,
     efficiency: EfficiencySettings | None = None,
     explain_findings: bool = False,
-    root: Path = REPO_ROOT,
     *,
     model_view: ModelViewSettings = MODEL_VIEW_OFF,
     standards_profile: Path | None = None,
+    max_answer_turns: int = answers.DEFAULT_MAX_ANSWER_TURNS,
 ) -> list[Path]:
-    """Review every package of the benchmark set at `set_path` into `out_dir`.
+    """Review every package of the preflighted set into `out_dir`.
 
     Calls `review_fn(package_dir, out_dir/package_id, provider=provider, model=model,
     effort=effort, efficiency=efficiency, attempt=AttemptRequest(...))` per package
     (default: `_default_review_fn`), then records unattended runtime for that package.
     Returns the list of per-package output directories, in benchmark-set order.
 
-    `attempt` carries what the call's other keywords do not: `model_view` and
-    `standards_profile`, the same for every package (feature 014 RF-44).
+    `preflighted` is what `preflight_set` returned, never a set path, so no review starts on a
+    set or a case file it would refuse (feature 014 INT-14, RF-61).
+
+    `attempt` carries what the call's other keywords do not: `model_view`,
+    `standards_profile` and `max_answer_turns`, the same for every package, and the package's
+    `case_file` as `preflight_set` loaded it (feature 014 RF-44).
 
     `explain_findings=True` adds the pane's presentation request, including its usage and
     runtime. The keyword is forwarded to injected review functions only when enabled,
@@ -362,16 +460,17 @@ def run_benchmark(
     `provider` and `model` are passed through unresolved - the review function decides
     what a name means (FR-016), so scoring a set on OpenAI and on Gemini differs by one
     argument and nothing else.
-
-    `root` is the checkout the set's relative entries resolve against, forwarded to
-    `load_set` (default: the running checkout; a test passes a temporary one).
     """
-    benchmark_set: BenchmarkSet = load_set(set_path, root=root)
+    if not isinstance(preflighted, PreflightedSet):
+        raise TypeError(
+            "run_benchmark reviews the PreflightedSet that preflight_set returns, not a "
+            f"{type(preflighted).__name__}: a set's refusals come before any review"
+        )
     active_review_fn = review_fn if review_fn is not None else _default_review_fn
     out_dir = Path(out_dir)
 
     package_dirs: list[Path] = []
-    for ref in benchmark_set.packages:
+    for ref in preflighted.benchmark_set.packages:
         _reject_answer_key_path(ref.path)
         package_out_dir = out_dir / ref.package_id
         _reject_answer_key_path(package_out_dir)
@@ -386,7 +485,12 @@ def run_benchmark(
             effort=effort,
             efficiency=efficiency,
             **({"explain_findings": True} if explain_findings else {}),
-            attempt=AttemptRequest(model_view=model_view, standards_profile=standards_profile),
+            attempt=AttemptRequest(
+                model_view=model_view,
+                standards_profile=standards_profile,
+                case_file=preflighted.case_files[ref.package_id],
+                max_answer_turns=max_answer_turns,
+            ),
         )
         elapsed_minutes = (time.perf_counter() - started) / 60.0
 

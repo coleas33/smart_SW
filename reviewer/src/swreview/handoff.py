@@ -483,6 +483,7 @@ _PROVENANCE_FIELDS: tuple[str, ...] = (
     "checklist_digest", "set_digest", "started_at", "set_too_small_override", "efficiency",
     "explanations_enabled", "provenance_schema", "pane_defaults", "model_view", "profile_digest",
     "profile_is_example", "live_tools", "inert_settings", "prompt_digest", "tree_dirty",
+    "max_answer_turns",
 )
 """The run provenance fields a bundle carries: a literal tuple, so a field the record gains
 reaches the bundle only once it is named here, and a test holds it equal to
