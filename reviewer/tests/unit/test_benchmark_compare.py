@@ -46,6 +46,7 @@ from swreview.agent.settings import (
     EfficiencySettings,
     ModelViewSettings,
 )
+from swreview.benchmark import scorecard as scorecard_module
 from swreview.benchmark import sets
 from swreview.benchmark.adoption import (
     ADOPT,
@@ -1587,6 +1588,37 @@ def test_a_pane_baseline_with_every_setting_off_is_refused_as_mislabelled(
     )
 
 
+@pytest.mark.parametrize(
+    "spec",
+    [
+        pytest.param(
+            pane_baseline_spec("baseline-1", 1, lever="tool_tiers"), id="pane-baseline-a-lever"
+        ),
+        pytest.param(
+            pane_baseline_spec("baseline-1", 1, lever=PANE_STUDY, profile_is_example=True),
+            id="pane-baseline-the-pane-study",
+        ),
+        pytest.param(
+            RunSpec(run="baseline-1", arm="baseline", rep=1, lever="tool_tiers"),
+            id="plain-baseline-a-lever",
+        ),
+    ],
+)
+def test_a_baseline_record_naming_a_lever_is_refused_as_inconsistent(
+    tmp_path: Path, spec: RunSpec
+) -> None:
+    """Section 3.3: a baseline's label is read off its arm and its marker alone, so a record with
+    arm baseline and a lever other than none is refused as inconsistent, as `--arm baseline` with
+    a study is at run time, rather than labelled: the pane baseline's label would drop the lever,
+    and a plain baseline's would place the run in that lever's study, read as its off arm."""
+    run_dir = write_run(tmp_path, spec)
+
+    assert refusal_of([run_dir]) == (
+        f"{run_dir}: arm baseline with lever {spec.lever!r}: a baseline run is the study with no "
+        "lever under test, so its lever is none; the record is inconsistent"
+    )
+
+
 SMOKE = RunSpec(run="smoke", arm=None, rep=None, lever="none")
 
 
@@ -1862,6 +1894,36 @@ def test_the_ledger_shows_model_view_profile_and_live_tools(tmp_path: Path) -> N
     assert one_row(ledger, "outcomes").contradictions == 5
     nothing = cells["no-false-alarm"]
     assert (nothing["findings by origin"], nothing["false alarms by origin"]) == ("none", "none")
+
+
+def test_the_origin_cells_go_through_the_scorecards_one_origin_formatter(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The ledger's two origin cells and the scorecard's origin line are one formatter,
+    `scorecard.fmt_origins`, the separator its one difference: a spy where compare looks it up
+    sees both cells, each with the ledger's `/`."""
+    seen: list[tuple[str, str]] = []
+    real = scorecard_module.fmt_origins
+
+    def spy(counts: Any, *, separator: str) -> str:
+        formatted = real(counts, separator=separator)
+        seen.append((formatted, separator))
+        return formatted
+
+    monkeypatch.setattr("swreview.benchmark.compare.fmt_origins", spy)
+    run_dir = rescored(
+        write_run(tmp_path, RunSpec(run="outcomes", arm=None, rep=None, lever="none")),
+        **OUTCOMES,
+    )
+
+    cells = cells_of(render_ledger_md(compare_runs([run_dir])), "outcomes")
+
+    assert seen == [
+        ("prerun 3 / configured_check 1 / model 1", " / "),
+        ("configured_check 1 / model 1", " / "),
+    ]
+    origin_cells = (cells["findings by origin"], cells["false alarms by origin"])
+    assert origin_cells == (seen[0][0], seen[1][0])
 
 
 def test_a_row_whose_session_predates_the_model_view_reads_off(tmp_path: Path) -> None:

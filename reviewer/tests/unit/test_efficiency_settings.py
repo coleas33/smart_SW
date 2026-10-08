@@ -496,31 +496,37 @@ def test_the_pane_baseline_is_exactly_pane_defaults(explanations_typed: bool) ->
         review_settings(study=NO_STUDY, arm="baseline", pane_defaults=True, lever=["tool_tiers"])
 
 
+PLAIN_BASELINE_REFUSAL = (
+    "--arm baseline with --payload-slimming, --history-pruning or --prune-after: a baseline run "
+    "has every change off; the pane baseline is --arm baseline --pane-defaults"
+)
+"""`check_study_arm`'s refusal of a model-view switch on a plain baseline, whole. It names the
+three switches whichever was typed (`MODEL_VIEW_SWITCHES`), so naming one proves nothing."""
+
+
 @pytest.mark.parametrize(
-    ("switches", "named"),
+    "switches",
     [
-        ({"payload_slimming": True}, "--payload-slimming"),
-        ({"history_pruning": True}, "--history-pruning"),
-        ({"history_pruning": True, "prune_after": 3}, "--prune-after"),
-        ({"prune_after": 3}, "--prune-after"),
+        pytest.param({"payload_slimming": True}, id="payload-slimming"),
+        pytest.param({"history_pruning": True}, id="history-pruning"),
+        pytest.param({"prune_after": 3}, id="prune-after"),
+        pytest.param({"history_pruning": True, "prune_after": 3}, id="history-pruning-prune-after"),
     ],
 )
-def test_a_plain_baseline_refuses_a_model_view_switch(
-    switches: dict[str, Any], named: str
-) -> None:
+def test_a_plain_baseline_refuses_a_model_view_switch(switches: dict[str, Any]) -> None:
     """PP-4: `agent/settings.py:756-766` named `--lever` only, so a plain baseline with the
-    model view on rendered as a baseline with every change off."""
-    message = refusal(NO_STUDY, "baseline", model_view_typed=True)
+    model view on rendered as a baseline with every change off. Each switch is typed alone, so
+    its refusal is pinned to it: the same command without it is accepted, and the refusal is the
+    baseline rule's whole message, never another rule's (`--prune-after` with pruning off has a
+    refusal of its own that names the flag too)."""
+    assert refusal(NO_STUDY, "baseline", model_view_typed=True) == PLAIN_BASELINE_REFUSAL
 
-    assert "--arm baseline" in message
-    assert "a baseline run has every change off" in message
-    for flag in MODEL_VIEW_SWITCHES:
-        assert flag in message
+    plain = review_settings(study=NO_STUDY, arm="baseline")
+    assert (plain.efficiency, plain.model_view) == (EfficiencySettings(), MODEL_VIEW_OFF)
 
     with pytest.raises(typer.BadParameter) as caught:
         review_settings(study=NO_STUDY, arm="baseline", **switches)
-    assert named in str(caught.value)
-    assert "a baseline run has every change off" in str(caught.value)
+    assert str(caught.value) == PLAIN_BASELINE_REFUSAL
 
 
 def test_the_resolver_refuses_a_workstation_lever_only_when_asked() -> None:

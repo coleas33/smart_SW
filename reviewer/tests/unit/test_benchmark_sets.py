@@ -18,6 +18,10 @@ decisions RF-4, RF-54, RF-61):
    final newline, so two copies of one tree at two locations give the same bytes. They are
    equal until US4 adds each entry's `case_file_sha256` to the saved form (T093), which
    moves `test_file_form_and_saved_form_are_one_serializer_until_us4` deliberately.
+4. **One inside-the-checkout rule.** `checkout_relative(path, *, root)` resolves both and
+   gives the path relative to the root when it lies inside it, else `None`; the written
+   forms, `benchmark run`'s private packages, committable folders and carriage-return rule,
+   and compare's ledger folder all read it, and none restates it.
 
 Every set file here is written into a temporary checkout, a folder standing for a
 repository root, so no test depends on where this checkout lies. Rows 1, 2 and 4 to 7 and
@@ -34,9 +38,16 @@ import pytest
 from typer.testing import CliRunner
 
 from swreview import cli
-from swreview.benchmark import runner, sets
+from swreview.agent.settings import PRIVATE_PANE_STUDY
+from swreview.benchmark import compare, runner, sets
 from swreview.benchmark.runner import run_benchmark
-from swreview.benchmark.sets import BenchmarkSet, SetError, load_saved_set, load_set
+from swreview.benchmark.sets import (
+    BenchmarkPackageRef,
+    BenchmarkSet,
+    SetError,
+    load_saved_set,
+    load_set,
+)
 from swreview.ir.loader import AnswerKeyAccessError
 
 OUTSIDE_RULE = "a set file outside benchmarks/sets names every path absolutely"
@@ -367,6 +378,91 @@ def test_a_file_form_written_into_the_sets_folder_loads_as_the_same_set(
     rewritten.write_bytes(benchmark_set.file_form(root=checkout))
 
     assert load_set(rewritten, root=checkout) == benchmark_set
+
+
+# --- one inside-the-checkout rule ------------------------------------------------------
+
+
+def test_checkout_relative_is_a_path_inside_the_root_relative_to_it(tmp_path: Path) -> None:
+    """Both resolved, then the path relative to the root when it lies inside it, the root itself
+    and a folder not made yet included, else `None`: a `..` that climbs out lies outside, as a
+    lexical reading would not see, and so does a neighbour whose name only begins with the
+    root's."""
+    root = tmp_path / "checkout"
+    inside = root / "benchmarks" / "packages" / "pkg-1"
+    inside.mkdir(parents=True)
+
+    assert sets.checkout_relative(inside, root=root) == Path("benchmarks", "packages", "pkg-1")
+    assert sets.checkout_relative(str(inside), root=root / "benchmarks" / "..") == Path(
+        "benchmarks", "packages", "pkg-1"
+    )
+    assert sets.checkout_relative(root, root=root) == Path(".")
+    assert sets.checkout_relative(root / "runs" / "new", root=root) == Path("runs", "new")
+    assert sets.checkout_relative(tmp_path / "private" / "pkg-2", root=root) is None
+    assert sets.checkout_relative(root / "benchmarks" / ".." / ".." / "pkg-2", root=root) is None
+    assert sets.checkout_relative(tmp_path / "checkout-copy" / "pkg-1", root=root) is None
+
+
+def test_every_inside_the_checkout_reading_goes_through_checkout_relative(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The rule is written once: the written forms, `benchmark run`'s private packages (row 5
+    and the pane study's set rule), its committable folders (row 5 and compare's ledger guard)
+    and its carriage-return rule, and compare's ledger folder each read it through
+    `checkout_relative`, a spy patched where each caller looks the name up seeing every path."""
+    root = (tmp_path / "checkout").resolve()
+    inside = root / "benchmarks" / "packages" / "pkg-1"
+    outside = (tmp_path / "private" / "pkg-2").resolve()
+    for folder in (inside, outside):
+        folder.mkdir(parents=True)
+    prompt = root / "prompt.md"
+    prompt.write_bytes(b"one line\n")
+    private_profile = outside.parent / "profile.yaml"
+    private_profile.write_bytes(b"never read for its line endings\r\n")
+    benchmark_set = BenchmarkSet(
+        name="parity",
+        packages=[
+            BenchmarkPackageRef(package_id="pkg-1", path=inside),
+            BenchmarkPackageRef(package_id="pkg-2", path=outside),
+        ],
+    )
+    seen: list[Path] = []
+    real = sets.checkout_relative
+
+    def spy(path: Path | str, *, root: Path) -> Path | None:
+        seen.append(Path(path))
+        return real(path, root=root)
+
+    monkeypatch.setattr(sets, "checkout_relative", spy)
+    monkeypatch.setattr(runner, "checkout_relative", spy)
+
+    def carriage_returns() -> None:
+        cli._refuse_a_pane_study_breaking_its_file_rules(
+            PRIVATE_PANE_STUDY,
+            standards_profile=private_profile,
+            is_example=False,
+            benchmark_set=benchmark_set,
+            commit="abc1234",
+            dirty=False,
+            digested=(prompt, None, private_profile),
+            root=root,
+        )
+
+    readings = {
+        "file form": (lambda: benchmark_set.file_form(root=root), [inside, outside]),
+        "saved form": (lambda: benchmark_set.saved_form(root=root), [inside, outside]),
+        "private packages": (
+            lambda: cli._private_packages(benchmark_set, root=root),
+            [inside, outside],
+        ),
+        "committable": (lambda: runner.committable(outside, root=root), [outside]),
+        "ledger folder": (lambda: compare._ledger_dir(outside, root=root), [outside]),
+        "carriage returns": (carriage_returns, [prompt, private_profile]),
+    }
+    for name, (reading, expected) in readings.items():
+        seen.clear()
+        reading()
+        assert seen == expected, name
 
 
 # --- the running checkout ------------------------------------------------------------

@@ -41,6 +41,7 @@ from jsonschema import Draft202012Validator
 
 from swreview.benchmark import scorecard as scorecard_module
 from swreview.benchmark.answer_key_model import AnswerKey
+from swreview.benchmark.origins import Origin
 from swreview.benchmark.scorecard import (
     Aggregate,
     PackageScore,
@@ -1116,6 +1117,34 @@ def test_the_page_adds_recall_by_producer_false_alarms_by_origin_and_the_held_ou
     ) in rendered
     assert "- false alarms by origin: none" in rendered
     assert "- held-out model-produced defects: 2" in rendered
+
+
+def test_fmt_origins_is_the_one_origin_formatter_its_separator_a_parameter(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The page's origin line and the ledger's origin cells are one formatter: each origin with a
+    count, in the order the counts hold, zero origins left out and `none` when every one is zero,
+    joined by the separator its caller names. The page names `, `, a spy where the scorecard
+    looks it up seeing the call; the ledger's `/` is `test_benchmark_compare.py`'s to pin."""
+    counts: dict[Origin, int] = {"prerun": 3, "configured_check": 0, "model": 1, "unknown": 0}
+
+    assert scorecard_module.fmt_origins(counts, separator=", ") == "prerun 3, model 1"
+    assert scorecard_module.fmt_origins(counts, separator=" / ") == "prerun 3 / model 1"
+    assert scorecard_module.fmt_origins({"prerun": 0}, separator=", ") == "none"
+    assert scorecard_module.fmt_origins({}, separator=" / ") == "none"
+
+    separators: list[str] = []
+    real = scorecard_module.fmt_origins
+
+    def spy(counts: Mapping[Origin, int], *, separator: str) -> str:
+        separators.append(separator)
+        return real(counts, separator=separator)
+
+    monkeypatch.setattr(scorecard_module, "fmt_origins", spy)
+    rendered = render_scorecard_md(recall_run(tmp_path, tuned_on_detected=True))
+
+    assert separators == [", "]
+    assert "- false alarms by origin: none" in rendered
 
 
 def test_the_scoring_rules_version_is_written_on_the_scorecard(tmp_path: Path) -> None:

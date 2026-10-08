@@ -389,16 +389,32 @@ def test_the_stamp_parser_reads_the_full_digest_of_the_old_and_the_new_form() ->
     assert stamped_profile_digest([f"standards.example.yaml sha256:{digest}"]) is None
 
 
-def test_display_digest_is_the_one_twelve_character_reading() -> None:
+def test_display_digest_is_the_one_twelve_character_reading(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """RF-5: the 12-character display of a profile digest is one helper, which
     `tolerances.profile_sha256` reads through (and, later, the ledger's profile cell and the
-    resume and exit messages); its `None` for a profile built in memory is unchanged."""
+    resume and exit messages); its `None` for a profile built in memory is unchanged. Equal
+    values could come from a second copy of the slice, so a spy on the helper, where
+    `profile_sha256` looks it up, sees the call and its answer returned."""
     digest = IDENTITY.sha256
     in_memory = StandardsProfile.model_validate(PROFILE.model_dump())
 
     assert display_digest(digest) == digest[:12]
     assert tolerances.profile_sha256(PROFILE) == display_digest(PROFILE.identity.sha256)
     assert tolerances.profile_sha256(in_memory) is None
+
+    seen: list[str] = []
+
+    def spy(sha256: str) -> str:
+        seen.append(sha256)
+        return "spied-digest"
+
+    monkeypatch.setattr("swreview.checks.standards.profile.display_digest", spy)
+    assert tolerances.profile_sha256(PROFILE) == "spied-digest"
+    assert seen == [PROFILE.identity.sha256]
+    assert tolerances.profile_sha256(in_memory) is None
+    assert seen == [PROFILE.identity.sha256]
 
 
 def test_coverage_limits_name_the_configuration_and_the_unresolved_instances() -> None:

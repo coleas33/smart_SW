@@ -17,9 +17,14 @@ streams are committed packed (RF-84). It flags:
   `scramble.WINDOWS_ANCHOR`, imported rather than restated (RF-6), and a drive letter followed by
   `/`, which that anchor does not read and the profiles' `vault_root`s are written with; and **a
   rooted path** outside them: a `/` at a token boundary (not after a word character, `:`, `/` or
-  `.`) followed by a non-space, so `and/or`, `1/2` and a URL's `//` are not paths. A drive or UNC
-  anchor starts a path only at a token boundary too (not after a word character), and a path runs
-  to the next space, quote, `<`, `>` or `|`, so a separator doubled inside one is no UNC path;
+  `.`) followed by a non-space, so `and/or`, `1/2` and a URL's `//` are not paths, nor an HTML end
+  tag's `/` (`</td>`) or a self-closing tag's `/>`, since the report slice's pages may be
+  committed. A UNC anchor and a drive letter with `/` start a path only at a token boundary too
+  (not after a word character), so a separator doubled inside a path is no UNC path and a URL's
+  scheme no drive; a drive letter with its backslash starts one wherever it stands, glued to a
+  word character included (`...\\nE:\\...` in plain text quoting an escaped line). A path runs to
+  the next space, quote, `<`, `>` or `|`, and lies under a fictional root only once its `..` are
+  applied, so one that climbs out of a root is flagged;
 - **a private entry**: a saved set (`benchmark-set.json`) naming a path outside the repository
   (`provenance.md` 6.1);
 - **a file it cannot read**: not UTF-8, a packed stream that does not decompress, or a saved set
@@ -123,10 +128,17 @@ _AFTER_NAME = r"(?![\w-])"
 `C:\\Fictional\\` is not the root of `C:\\FictionalVault\\` and a folder is not its longer-named
 neighbour's."""
 
+_END_TAG = r"(?<=<)/[A-Za-z][\w-]*\s*>"
+"""An HTML end tag from its `/` (`</td>`, `</TABLE>`, `</p >`), which starts no path: the report
+slice's pages may be committed. A `/` after `<` that a path follows (`</srv/x>`) is no end tag."""
+
 _PATH_START = re.compile(
     rf"(?<!\w)(?P<windows>{WINDOWS_ANCHOR.pattern})"
+    # The anchor glued to a word character, kept only when it is a drive and its backslash: a
+    # UNC anchor's two backslashes there are a separator doubled inside a path.
+    rf"|(?P<glued>{WINDOWS_ANCHOR.pattern})(?<=:\\)"
     r"|(?<!\w)(?P<drive>[A-Za-z]:/)"
-    r"|(?<![\w:/.])(?P<rooted>/)(?=\S)"
+    rf"|(?<![\w:/.])(?!{_END_TAG})(?P<rooted>/)(?=[^\s>])"
 )
 _PATH_END = re.compile(r"[\s\"'`<>|]")
 _TRAILING = ".,;:!?)]}"
@@ -275,7 +287,7 @@ def _text_offences(file: Path, text: str) -> list[Offence]:
     position = 0
     while (start := _PATH_START.search(text, position)) is not None:
         end = _path_end(text, start.end())
-        if not _overlaps(spans, start.start(), end) and not _fictional(text, start.start()):
+        if not _overlaps(spans, start.start(), end) and not _fictional(text[start.start() : end]):
             spans.append((start.start(), end, _anchor_reason(start)))
         position = end
     return [Offence(file, reason, text[begin:end]) for begin, end, reason in sorted(spans)]
@@ -295,8 +307,11 @@ def _overlaps(spans: list[tuple[int, int, str]], begin: int, end: int) -> bool:
     return any(begin < other_end and other_begin < end for other_begin, other_end, _ in spans)
 
 
-def _fictional(text: str, position: int) -> bool:
-    return any(root.match(text, position) for root in _FICTIONAL)
+def _fictional(path: str) -> bool:
+    """Whether `path` lies under a fictional root once its `..` are applied: one that starts at a
+    root and climbs out of it lies under none."""
+    applied = posixpath.normpath(path.replace("\\", "/"))
+    return any(root.match(path) and root.match(applied) for root in _FICTIONAL)
 
 
 def _anchor_reason(start: re.Match[str]) -> str:

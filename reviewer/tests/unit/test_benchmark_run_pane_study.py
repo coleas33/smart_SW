@@ -288,7 +288,7 @@ def test_a_pane_study_refuses_an_unknown_commit_and_a_dirty_tree(
     (clean / "notes.txt").write_bytes(b"untracked, and no change to the code\n")
     point_at(clean, monkeypatch)
     with monkeypatch.context() as unanswered:
-        unanswered.setattr(cli, "tree_dirty", lambda _root: None)
+        unanswered.setattr(cli, "tree_dirty", lambda *, root: None)
         out = tmp_path / "runs" / "unanswered"
         line = refused(run(clean, out), out, reviewed)
     assert f"--study {study}" in line and "git cannot say whether" in line

@@ -46,7 +46,7 @@ from pydantic import Field
 from swreview import atomic
 from swreview.agent.settings import MODEL_VIEW_OFF, EfficiencySettings, ModelViewSettings
 from swreview.benchmark.digest import sha256_of as sha256_of
-from swreview.benchmark.sets import REPO_ROOT, BenchmarkSet, load_set
+from swreview.benchmark.sets import REPO_ROOT, BenchmarkSet, checkout_relative, load_set
 from swreview.findings import ReviewModel
 from swreview.ir.loader import reject_answer_key_path
 from swreview.report.session import load_session, save_session
@@ -183,7 +183,7 @@ def current_commit(cwd: Path | str | None = None) -> str | None:
     return (output.strip() or None) if output is not None else None
 
 
-def tree_dirty(root: Path | str) -> bool | None:
+def tree_dirty(*, root: Path) -> bool | None:
     """Whether the checkout at `root` holds a tracked change, or `None` when git cannot say.
 
     `git status --porcelain --untracked-files=no`: a modified or staged tracked file is a
@@ -194,7 +194,7 @@ def tree_dirty(root: Path | str) -> bool | None:
     return bool(output.strip()) if output is not None else None
 
 
-def committable(path: Path | str, *, root: Path = REPO_ROOT) -> bool:
+def committable(path: Path | str, *, root: Path) -> bool:
     """Whether the repository at `root` could commit `path`: it lies inside `root` and git
     does not report it ignored (feature 014 `contracts/provenance.md` 6.4).
 
@@ -203,13 +203,13 @@ def committable(path: Path | str, *, root: Path = REPO_ROOT) -> bool:
     committable: the side that refuses. A folder not made yet that only a directory pattern
     (`runs/`) ignores reads as committable for the same reason, since git cannot tell that a
     name it has never seen is a folder; one inside an ignored folder reads ignored. The one
-    reading `benchmark run`'s row 5 and compare's ledger guard share.
+    reading `benchmark run`'s row 5 and compare's ledger guard share; inside `root` is
+    `sets.checkout_relative`'s reading.
     """
-    checkout = Path(root).resolve()
-    target = Path(path).resolve()
-    if not target.is_relative_to(checkout):
+    relative = checkout_relative(path, root=root)
+    if relative is None:
         return False
-    proc = _git_process(checkout, "check-ignore", "-q", str(target))
+    proc = _git_process(Path(root).resolve(), "check-ignore", "-q", relative.as_posix())
     ignored = proc is not None and proc.returncode == 0
     return not ignored
 

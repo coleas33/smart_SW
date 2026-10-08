@@ -302,8 +302,10 @@ reason) is untouched.
 3. `Finding.requirement` is the check's statement; `recommended_action` is the check's
    recommended change; `tool_result_ids` names the recording step, which exists because the
    run dispatches through `ToolRegistry` with a `SessionSink`.
-4. `coverage_limits` always carries the profile identity (`profile:<path> sha256:<hash>`) and,
-   where they apply: `configuration <name>`, `unresolved instances: <ids>`,
+4. `coverage_limits` always carries the profile identity first
+   (`profile:<file name> sha256:<digest>`: the file name of the profile's path, read with either
+   separator, and its digest, never the folder; feature 014 D12, as `contracts/profile.md` says)
+   and, where they apply: `configuration <name>`, `unresolved instances: <ids>`,
    `counts as the document stood; nothing was rebuilt`, and
    `exception:<id>: <note>` when waived.
 
