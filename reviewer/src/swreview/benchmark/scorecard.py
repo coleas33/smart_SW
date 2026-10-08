@@ -97,7 +97,7 @@ from swreview.benchmark.answers import UnscriptedRequest
 from swreview.benchmark.digest import sha256_of
 from swreview.benchmark.origins import MODEL_ORIGINS, Origin, finding_origin
 from swreview.benchmark.questions import CallRow, CountRow, QuestionIds, RepeatRow, UnanswerableRow
-from swreview.benchmark.sets import BenchmarkSet
+from swreview.benchmark.sets import BenchmarkPackageRef, BenchmarkSet
 from swreview.findings import Finding, ReviewModel, carried_count, first_refusal
 from swreview.ir.loader import PACKAGE_FILE_NAME, load_package
 from swreview.ir.models import EvidencePackage
@@ -1092,6 +1092,24 @@ def held_out_flag_error(package_id: str, flag: bool, answer_key: AnswerKey) -> s
     return (
         f"{package_id}: the set marks it held_out={json.dumps(flag)}, but its key holds {held} "
         "held-out items; the flag is derived from the key"
+    )
+
+
+def key_package_error(entry: BenchmarkPackageRef, answer_key: AnswerKey) -> str | None:
+    """The refusal of a key that names another package than its set entry, or `None` when it
+    names the entry's: `answer-key.md` 4 row 2's set half (FR-009), whose stem half the key
+    loader holds. Both ids and the key file's name, never its folder. The one writer of the
+    line, which the set summary calls for every entry once its key loads, and `score_run` too.
+
+    Only a keyed entry can be refused: a keyless one's key is `<package_id>.json`
+    (`sets.key_path`), whose stem the loader already holds its `package_id` to.
+    """
+    if answer_key.package_id == entry.package_id:
+        return None
+    assert entry.key is not None  # a keyless entry's key is named by its package id
+    return (
+        f"{entry.package_id}: its key {entry.key.name} names package {answer_key.package_id}, "
+        f"not the set entry's {entry.package_id}"
     )
 
 
