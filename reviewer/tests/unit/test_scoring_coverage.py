@@ -5,8 +5,11 @@ report's goal lines are built from, extracted so the scorer reads a goal's `Goal
 never the words file's display text (`words.goal_reasons`, "evidence missing" and the like).
 Each reading here is the one `_goal_line` decided before the extraction, on sessions built as
 data, with the row it was taken from. That `goal_lines`' output does not move is the report's own
-tests (`test_review_goals.py`, `test_finding_groups.py` and the fixtures), unchanged. The scorer's
-reading of those states (section 4's table) is T086's half of this file.
+tests (`test_review_goals.py`, `test_finding_groups.py` and the fixtures), unchanged.
+
+The scorer's half (T086, at the end; US3-3, US3-4; FR-018, D6): `scorecard.coverage_mismatches`
+reads each expected-coverage entry's goal through `goal_readings`, by section 4's table, and lists
+an entry whose reading is outside its `statuses`, naming the entry, the item and the reading.
 """
 
 from __future__ import annotations
@@ -15,10 +18,14 @@ from collections.abc import Sequence
 
 import pytest
 
+from swreview.benchmark import scorecard
+from swreview.benchmark.answer_key_model import ExpectedCoverage
+from swreview.benchmark.scorecard import CoverageMismatch
 from swreview.report.finding_groups import GoalReading, goal_lines, goal_readings
 from swreview.report.session import ReviewSession
 from swreview.report.summary import load_words
 from tests.support.attention import CoverageRow, CoverageSpec, FindingSpec
+from tests.unit.test_answer_key import coverage
 from tests.unit.test_attention import spec
 from tests.unit.test_review_summary import session_of
 
@@ -226,3 +233,138 @@ def test_an_unresolved_rule_row_beside_an_out_of_scope_one_reads_not_reached() -
 
     assert taken(one) == ("not_reached", "unresolved")
     assert one.row is session.coverage.unresolved[0]
+
+
+# --- the scorer's reading of a goal (scoring.md 4; T086) ----------------------------------------
+
+INTERFERENCE = ExpectedCoverage.model_validate(coverage())
+"""`CV-1`: interference expected unresolved or skipped (R-5, US3-3)."""
+
+
+def mismatches_of(
+    name: str,
+    entries: Sequence[ExpectedCoverage] = (INTERFERENCE,),
+    specs: Sequence[FindingSpec] = (),
+    **buckets: object,
+) -> list[CoverageMismatch]:
+    session, _ = readings_of(name, specs, **buckets)
+    return scorecard.coverage_mismatches(session, entries, load_words())
+
+
+def mismatch(entry: str, item: str, read: str) -> CoverageMismatch:
+    return CoverageMismatch.model_validate({"entry": entry, "item": item, "read": read})
+
+
+def test_r_5_interference_marked_checked_is_one_mismatch_naming_the_item() -> None:
+    """The off arm's model marks interference checked: read `checked` (US3-3)."""
+    assert mismatches_of("cv-r5-checked", checked=[row("interference")]) == [
+        mismatch("CV-1", "interference", "checked")
+    ]
+
+
+@pytest.mark.parametrize(
+    "buckets",
+    [
+        {"skipped": [row("coverage.prerun.interference", "no part was read.")]},
+        {"unresolved": [row("interference", "the pins were not read.")]},
+    ],
+    ids=["the pre-run's skipped row", "finalization's unresolved row"],
+)
+def test_the_on_arm_s_rows_read_within_the_entry(buckets: dict[str, object]) -> None:
+    assert mismatches_of("cv-r5-" + next(iter(buckets)), **buckets) == []
+
+
+def test_an_item_whose_only_row_failed_reads_unresolved() -> None:
+    """US3-4."""
+    failed = {"failed": [row("interference", "the tool timed out.")]}
+    expects_checked = ExpectedCoverage.model_validate(coverage(statuses=["checked"]))
+
+    assert mismatches_of("cv-failed", **failed) == []
+    assert mismatches_of("cv-failed-checked", (expects_checked,), **failed) == [
+        mismatch("CV-1", "interference", "unresolved")
+    ]
+
+
+def test_no_row_and_no_finding_reads_not_reported_always_a_mismatch() -> None:
+    every = ExpectedCoverage.model_validate(
+        coverage(statuses=["checked", "unresolved", "skipped", "out_of_scope"])
+    )
+
+    assert mismatches_of("cv-nothing", (every,)) == [
+        mismatch("CV-1", "interference", "not_reported")
+    ]
+
+
+def test_out_of_scope_reads_out_of_scope() -> None:
+    entry = ExpectedCoverage.model_validate(
+        coverage(item="mass.material", statuses=["out_of_scope"])
+    )
+    checked = ExpectedCoverage.model_validate(coverage(item="mass.material", statuses=["checked"]))
+    out = {"out_of_scope": [row("mass.material", "no mass was asked for.")]}
+
+    assert mismatches_of("cv-out", (entry,), **out) == []
+    assert mismatches_of("cv-out-checked", (checked,), **out) == [
+        mismatch("CV-1", "mass.material", "out_of_scope")
+    ]
+
+
+def test_a_goal_holding_a_finding_reads_checked() -> None:
+    """`issues` reads `checked`: the item was examined (SR-11)."""
+    entry = ExpectedCoverage.model_validate(coverage(item="holes.alignment", statuses=["skipped"]))
+
+    assert mismatches_of("cv-issues", (entry,), [spec("hole.coaxiality")]) == [
+        mismatch("CV-1", "holes.alignment", "checked")
+    ]
+
+
+def test_interfaces_fit_is_read_through_the_fits_and_stacks_goal() -> None:
+    """One expectation per goal: a row on `interfaces.stack` sets the goal's one state."""
+    entry = ExpectedCoverage.model_validate(coverage(item="interfaces.fit", statuses=["checked"]))
+
+    assert mismatches_of(
+        "cv-fits", (entry,), unresolved=[row("interfaces.stack", "the stack has no limits.")]
+    ) == [mismatch("CV-1", "interfaces.fit", "unresolved")]
+
+
+def test_a_coverage_prerun_fastener_joints_row_is_read_by_no_goal() -> None:
+    """Of the pre-run's `coverage.prerun.<family>` rows only interference and standards are goal
+    items (research §8.4): the fasteners goal reads nothing, so it is not reported."""
+    entry = ExpectedCoverage.model_validate(coverage(item="fasteners", statuses=["skipped"]))
+
+    assert mismatches_of(
+        "cv-fastener-joints",
+        (entry,),
+        skipped=[row("coverage.prerun.fastener_joints", "no joint was placed.")],
+    ) == [mismatch("CV-1", "fasteners", "not_reported")]
+
+
+@pytest.mark.parametrize(
+    ("buckets", "read"),
+    [
+        ({"checked": [row("interference")]}, "checked"),
+        ({"unresolved": [row("interference")]}, "unresolved"),
+        ({"failed": [row("interference")]}, "unresolved"),
+        ({"skipped": [row("interference")]}, "skipped"),
+        ({"out_of_scope": [row("interference")]}, "out_of_scope"),
+        ({}, "not_reported"),
+    ],
+    ids=["checked", "unresolved", "failed", "skipped", "out_of_scope", "no_check"],
+)
+def test_every_goal_reading_reads_as_section_4_s_table_says(
+    buckets: dict[str, object], read: str
+) -> None:
+    _, readings = readings_of("cv-table-" + read + "-" + "-".join(buckets), **buckets)
+
+    assert scorecard.coverage_read(reading_of(readings, "interference")) == read
+
+
+def test_each_entry_is_read_in_key_order() -> None:
+    entries = (
+        ExpectedCoverage.model_validate(coverage(id="CV-1", item="hygiene", statuses=["checked"])),
+        ExpectedCoverage.model_validate(coverage(id="CV-2", statuses=["checked"])),
+    )
+
+    assert mismatches_of("cv-order", entries) == [
+        mismatch("CV-1", "hygiene", "not_reported"),
+        mismatch("CV-2", "interference", "not_reported"),
+    ]

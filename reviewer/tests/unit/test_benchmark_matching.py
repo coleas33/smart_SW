@@ -16,7 +16,8 @@ Findings on checks and targets are built as data (`make_finding`); "real" findin
 by the tool that writes them (research §2 d2-model-finding-unmatchable), and the references of
 test 4 are read off results the real checks return. The overlap test of `answer-key.md` 5 is
 the same primitives (test 6). The joint kind, the unknown-role case and US1-17 read the results
-owner decision 19A gives every path (T025); forbidden entries are US3's (T083). Every id and
+owner decision 19A gives every path (T025); forbidden entries are US3's (T083, at the end): any
+one of their `checks` covering decides, and references are never compared for them. Every id and
 description is fictional.
 """
 
@@ -24,12 +25,19 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any, get_args
 
 import pytest
 
+from swreview.agent.providers.fake import ScriptedToolCall, ScriptedTurn
 from swreview.benchmark import answer_key_model, matching
-from swreview.benchmark.answer_key_model import CorrectCondition, KnownDefect, ReferenceKind
+from swreview.benchmark.answer_key_model import (
+    CorrectCondition,
+    ForbiddenEntry,
+    KnownDefect,
+    ReferenceKind,
+)
 from swreview.checks.fastener import CHECK_BOTTOMING, check_fastener_joint
 from swreview.checks.standards.profile import load_profile
 from swreview.findings import MODEL_FINDING_CHECK, Calculation, Finding
@@ -41,12 +49,14 @@ from swreview.tools.recording import result_to_finding
 from tests.golden.test_golden import FIXTURES_DIR
 from tests.support.findings import make_finding
 from tests.support.packages import build_package, persist_ref
+from tests.support.roles_review import roles_review
 from tests.unit.test_answer_key import (
     OTHER_DIMENSION,
     SHEET_DIMENSION,
     THIRD_DIMENSION,
     condition,
     defect,
+    forbidden,
 )
 from tests.unit.test_checks_fastener import layer, mm, screw, tapped_hole
 from tests.unit.test_drawing_finding_number_guard import (
@@ -787,3 +797,135 @@ def test_a_fit_defect_and_a_fit_condition_on_one_sheet_overlap_only_on_one_pair(
 
     assert_overlap(planted, fit(correct_condition, SHEET_DIMENSION, THIRD_DIMENSION), False)
     assert_overlap(planted, fit(correct_condition, OTHER_DIMENSION, SHEET_DIMENSION), True)
+
+
+# --- US3: forbidden entries (T083, for T084; `scoring.md` 2, `answer-key.md` 2.4 and 5) --------
+#
+# A forbidden entry's patterns are its `checks`, any one of which covering decides, and it is
+# never compared by references: it stays on parts or documents (FR-003), so a forbidden
+# `fastener.*` on a plate covers every joint of the plate.
+
+
+def forbidden_entry(**fields: Any) -> ForbiddenEntry:
+    """`test_answer_key.forbidden`'s well-formed forbidden entry, `FB-1` (`rms.*`, `hygiene.*` on
+    `cmp:0002`), with `fields` replacing its defaults, built through the model."""
+    return ForbiddenEntry.model_validate(forbidden(**fields))
+
+
+@pytest.mark.parametrize(
+    ("checks", "other", "overlap"),
+    [
+        (["hygiene.*", "rms.*"], "rms.folders.present", True),
+        (["hygiene.*", "rms.*"], "rms.sketches.*", True),
+        (["hygiene.revision_present"], "hygiene.*", True),
+        (["hygiene.*", "rms.sketches.*"], "rms.*", True),
+        (["hygiene.*"], "rms.folders.present", False),
+        (["rms.sketches.*"], "rms.folders.*", False),
+    ],
+)
+def test_a_forbidden_entry_overlaps_when_any_one_of_its_checks_meets_the_other_entry_s(
+    checks: list[str], other: str, overlap: bool
+) -> None:
+    """Condition 1, read for each of the forbidden entry's checks."""
+    assert_overlap(
+        forbidden_entry(checks=checks),
+        known_defect(check=other, component_ids=["cmp:0002"]),
+        overlap,
+    )
+
+
+def test_a_forbidden_fastener_family_overlaps_a_joint_keyed_defect_on_its_plate_whatever_the_joint(
+) -> None:
+    """References are never compared for a forbidden entry (`answer-key.md` 5)."""
+    on_the_plate = forbidden_entry(checks=["fastener.*"], component_ids=["cmp:0001"])
+    elsewhere = forbidden_entry(checks=["fastener.*"], component_ids=["cmp:0009"])
+
+    for joint in FOUR_SCREWS:
+        assert_overlap(on_the_plate, thread_match("D-1", joint), True)
+        assert_overlap(elsewhere, thread_match("D-1", joint), False)
+
+
+def test_a_forbidden_entry_and_a_condition_overlap_by_the_same_primitives() -> None:
+    """US3-1: the overlap exists, and `answer-key.md` 5 allows the pair; the scorer counts such
+    a finding once."""
+    assert_overlap(
+        forbidden_entry(checks=["rms.*"]),
+        correct_condition(check="rms.folders.present", component_ids=["cmp:0002"]),
+        True,
+    )
+
+
+def test_two_forbidden_entries_overlap_by_the_same_primitives() -> None:
+    assert_overlap(
+        forbidden_entry(), forbidden_entry(id="FB-2", checks=["rms.sketches.*"]), True
+    )
+
+
+def rms_findings(tmp_path: Path) -> list[Finding]:
+    """The real `check_rms_part`'s `rms.folders.present` findings on `roles_review`'s package:
+    one on the plate `cmp:0001` and one on the pin's instances `cmp:0002` and `cmp:0003`."""
+    run = roles_review(
+        tmp_path,
+        turns=(ScriptedTurn(text="graded", tool_calls=(ScriptedToolCall("check_rms_part"),)),),
+    )
+    run.start()
+    return [finding for finding in run.session.findings if finding.check == "rms.folders.present"]
+
+
+def test_a_real_rms_folders_present_finding_matches_a_forbidden_entry_on_its_part(
+    tmp_path: Path,
+) -> None:
+    """`FB-1` (`rms.*`, `hygiene.*` on `cmp:0002`)."""
+    on_the_plate, on_the_pin = rms_findings(tmp_path)
+    fb_1 = forbidden_entry()
+    assert on_the_plate.component_ids == ["cmp:0001"]
+    assert "cmp:0002" in on_the_pin.component_ids
+
+    assert matching.matches(on_the_pin, fb_1)
+    assert not matching.matches(on_the_plate, fb_1)
+
+
+def test_a_thread_match_finding_on_any_joint_of_the_plate_matches_a_forbidden_fastener_family(
+) -> None:
+    """No reference is compared: any screw and hole on the plate."""
+    entry = forbidden_entry(checks=["fastener.*"], component_ids=["cmp:0001"])
+
+    for joint in (["fst:0001", "hol:0001"], ["fst:0004", "hol:0004"], ["fst:0099", "hol:0099"]):
+        finding = make_finding(
+            check="fastener.thread_match", component_ids=["cmp:0001"], inputs=joint
+        )
+
+        assert matching.matches(finding, entry)
+
+
+@pytest.mark.parametrize(
+    ("check", "covered"),
+    [
+        ("fastener.bottoming", True),
+        ("fastener.head.fit", True),
+        ("fastener", False),
+        ("fasteners.x", False),
+    ],
+)
+def test_a_forbidden_fastener_family_covers_only_what_starts_with_its_id_and_a_dot(
+    check: str, covered: bool
+) -> None:
+    """The literal `fastener.*` rows, on the one entry that may hold the family (owner decision
+    37A; T022 pins the rule on `fastener.head.*`)."""
+    entry = forbidden_entry(checks=["fastener.*"], component_ids=["cmp:0001"])
+
+    assert matching.matches(make_finding(check=check), entry) is covered
+
+
+def test_fastener_never_overlaps_a_forbidden_fastener_family() -> None:
+    assert_overlap(
+        forbidden_entry(checks=["fastener.*"], component_ids=["cmp:0001"]),
+        known_defect(check="fastener", component_ids=["cmp:0001"]),
+        False,
+    )
+
+
+def test_a_forbidden_entry_s_patterns_are_its_checks() -> None:
+    """The one place an entry's patterns are read, by the matcher, the loader and the scorer."""
+    assert matching.entry_patterns(forbidden_entry()) == ["rms.*", "hygiene.*"]
+    assert matching.entry_patterns(known_defect(check="rms.*")) == ["rms.*"]

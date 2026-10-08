@@ -15,8 +15,12 @@ is committed.
    entry tuned-on; `D-1` arrives with the generator slice's regeneration (T149 moves this test).
 4. SC-002 over every key: each oracle finding matches its own defect and no other, `rms-part`'s on
    its stand-in package (RF-15).
-5. SC-001 over every key, on the scorer slice's columns, through `assert_oracle_and_null`, the one
-   assertion helper the golden scorecards read too.
+5. SC-001 over every key, on every column, through `assert_oracle_and_null`, the one assertion
+   helper the golden scorecards read too; and, since neither committed key holds an extension
+   list (T085), every column the key-extensions slice adds reads `null` with its key-list reason,
+   the two answer-log columns with theirs, and the call columns and tuned-on false alarms read
+   empty, so a stream or a stored result the builder failed to write fails the test instead of
+   reading "not assessed".
 
 Tests 1, 4 and 5 read every key the folder holds, so a key the generator adds is loaded, checked
 and scored with no edit here.
@@ -36,6 +40,7 @@ from swreview.checks.rms.registry import RMS_FAMILY, RULES
 from swreview.ir.models import EvidencePackage
 from swreview.report.summary import load_words
 from tests.support.scoring_probes import (
+    NOT_ASSESSED_WITHOUT_EXTENSIONS,
     assert_oracle_and_null,
     assert_oracle_matches_only_its_own_defects,
     oracle_review,
@@ -191,3 +196,27 @@ def test_sc_001_the_oracle_scores_full_marks_and_the_null_review_none(
     key = load_committed(key_path)
 
     assert_oracle_and_null(key, review_package(key_path, key), tmp_path)
+
+
+@pytest.mark.parametrize("key_path", COMMITTED_KEYS, ids=key_id)
+def test_sc_001_a_key_with_no_extension_list_reads_the_new_columns_not_assessed(
+    key_path: Path, tmp_path: Path
+) -> None:
+    key = load_committed(key_path)
+    assert not (
+        key.forbidden or key.expected_coverage or key.unanswerable_requests or key.question_counts
+    ), f"{key_path.stem} holds an extension list: test 5 reads it through assert_oracle_and_null"
+
+    reviews = assert_oracle_and_null(key, review_package(key_path, key), tmp_path)
+
+    for review, score in zip(("oracle", "null"), reviews, strict=True):
+        assert score.not_assessed == NOT_ASSESSED_WITHOUT_EXTENSIONS, review
+        for column in NOT_ASSESSED_WITHOUT_EXTENSIONS:
+            assert getattr(score, column) is None, (review, column)
+        for column in (
+            "re_asks",
+            "open_repeats",
+            "unmatched_requests",
+            "tuned_on_false_alarm_finding_ids",
+        ):
+            assert getattr(score, column) == [], (review, column)

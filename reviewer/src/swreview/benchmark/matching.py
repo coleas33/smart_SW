@@ -1,18 +1,21 @@
 """The one matcher: when a finding matches an answer-key entry, and when two entries overlap.
 
 Feature 014 `contracts/scoring.md` section 2 and `contracts/answer-key.md` section 5. A finding
-**matches** a known defect or a correct condition when all three hold:
+**matches** a known defect, a correct condition or a forbidden entry when all three hold:
 
 1. **Checks** (2.1, FR-001): the finding's check equals the entry's exact check, or starts with
-   a family's id and a dot. A sibling rule never matches: `fastener.thread_match` is not a
-   `fastener.bottoming` finding (owner decision 4A removed the prefix rule that said it was).
+   a family's id and a dot; a forbidden entry's `checks` match when any one does. A sibling rule
+   never matches: `fastener.thread_match` is not a `fastener.bottoming` finding (owner decision
+   4A removed the prefix rule that said it was).
 2. **Targets** (2.2, FR-003): the finding's parts meet the entry's `component_ids`, or its
    documents meet the entry's `document_ids` (`targets_overlap`).
 3. **References** (2.3, FR-061): on a reference-keyed check, the finding's references, read from
    its `inputs` alone by the kind of item the check names, **equal** one covered item's
    references. Equality, not "names all those of one", so a stack with an extra contributor or
    an entry naming part of a joint cannot let one finding match two entries (SC-002); roles are
-   never compared, so a fit called with bore and shaft swapped names the same pair.
+   never compared, so a fit called with bore and shaft swapped names the same pair. A forbidden
+   entry names no references (`answer-key.md` 2.4): it is never compared by them, so a forbidden
+   `fastener.*` on a plate covers every joint of the plate.
 
 Two entries **overlap** when one finding could match both (`entries_overlap`), which the key
 loader refuses for the pairs `answer-key.md` 5 names: the same three conditions, read off two
@@ -31,17 +34,31 @@ from collections.abc import Callable, Collection
 from swreview.benchmark.answer_key_model import (
     REFERENCE_KEYED_CHECKS,
     CorrectCondition,
+    ForbiddenEntry,
     KnownDefect,
     Reference,
+    ReferenceElement,
     ReferenceKind,
     pattern_covers,
 )
 from swreview.findings import Finding
 from swreview.ir.models import Dimension
 
-Entry = KnownDefect | CorrectCondition
-"""An entry on one check pattern, on its parts or documents, and, on a reference-keyed check,
-on the items it covers. Forbidden entries join with their model (US3, T080 and T084)."""
+Entry = KnownDefect | CorrectCondition | ForbiddenEntry
+"""An entry a finding is matched against: on its check patterns, on its parts or documents, and,
+for a known defect or a correct condition on a reference-keyed check, on the items it covers."""
+
+
+def entry_patterns(entry: Entry) -> list[str]:
+    """The check patterns an entry is on: a forbidden entry's `checks`, any other's one
+    `check`. The one place they are read, by the matcher, the key loader and the scorer."""
+    return list(entry.checks) if isinstance(entry, ForbiddenEntry) else [entry.check]
+
+
+def entry_references(entry: Entry) -> list[ReferenceElement] | None:
+    """The covered items an entry names: `None` on a forbidden entry, which names none
+    (`answer-key.md` 2.4), and on any entry on a check that is not reference-keyed."""
+    return None if isinstance(entry, ForbiddenEntry) else entry.references
 
 
 # --- 2.2: targets ----------------------------------------------------------------------------
@@ -133,20 +150,23 @@ def finding_references(finding: Finding, kind: ReferenceKind) -> frozenset[Refer
 
 
 def covered_items(entry: Entry) -> list[frozenset[Reference]]:
-    """The items the entry covers, each `references` element as the set of its references (an
-    entry on a check that is not reference-keyed covers none)."""
-    return [element.reference_set() for element in entry.references or []]
+    """The items the entry covers, each `references` element as the set of its references (a
+    forbidden entry, and an entry on a check that is not reference-keyed, covers none)."""
+    return [element.reference_set() for element in entry_references(entry) or []]
 
 
 # --- 2: the match, and answer-key.md 5: the overlap ------------------------------------------
 
 
 def matches(finding: Finding, entry: Entry) -> bool:
-    """Whether `finding` matches `entry`: its check under the entry's pattern (2.1), its
-    targets meeting the entry's (2.2), and, on a reference-keyed check, its references equal to
-    one covered item's (2.3)."""
-    if not pattern_covers(entry.check, finding.check) or not targets_overlap(finding, entry):
+    """Whether `finding` matches `entry`: its check under one of the entry's patterns (2.1),
+    its targets meeting the entry's (2.2), and, on a reference-keyed check, its references equal
+    to one covered item's (2.3), which a forbidden entry never compares."""
+    covered = any(pattern_covers(pattern, finding.check) for pattern in entry_patterns(entry))
+    if not covered or not targets_overlap(finding, entry):
         return False
+    if isinstance(entry, ForbiddenEntry):
+        return True
     kind = REFERENCE_KEYED_CHECKS.get(entry.check)
     if kind is None:
         return True
@@ -154,13 +174,19 @@ def matches(finding: Finding, entry: Entry) -> bool:
 
 
 def entries_overlap(a: Entry, b: Entry) -> bool:
-    """Whether one finding could match both entries (`answer-key.md` 5): their checks meet,
-    one covering the other, which also reads two families (`rms.*` covers `rms.sketches.*`);
-    their parts or their documents intersect; and, when both name references, they share an
-    equal covered item. `fastener.head` never overlaps `fastener.head.*`."""
-    checks = pattern_covers(a.check, b.check) or pattern_covers(b.check, a.check)
+    """Whether one finding could match both entries (`answer-key.md` 5): some check of one
+    meets some check of the other, one covering the other, which also reads two families
+    (`rms.*` covers `rms.sketches.*`); their parts or their documents intersect; and, when both
+    name references, they share an equal covered item, so a forbidden entry, which names none,
+    is compared by checks and targets alone. `fastener.head` never overlaps
+    `fastener.head.*`."""
+    checks = any(
+        pattern_covers(first, second) or pattern_covers(second, first)
+        for first in entry_patterns(a)
+        for second in entry_patterns(b)
+    )
     if not checks or not _targets_meet(a.component_ids, a.document_ids, b):
         return False
-    if a.references is None or b.references is None:
+    if entry_references(a) is None or entry_references(b) is None:
         return True
     return not set(covered_items(a)).isdisjoint(covered_items(b))

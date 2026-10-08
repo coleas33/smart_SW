@@ -25,10 +25,12 @@ pinned here, as `scoring.md` 11's `test_event_lines.py` numbers it:
 6. **`event_stream(folder)`** names the plain stream, else the packed one, else the plain
    path; a folder holding both is an unfinished pack and is refused.
 
-Row 4 (a spy counting one call per package from `score_run`, per transcript from the report
-and per `read_recording`, per attempt from `attempt_facts`, and the structural "no other
-reader of `events.jsonl` under `benchmark/`") and 6's `score_run` spy land with their
-callers (T086, T159, T166, T187).
+4. **One call per reader's unit.** A spy on it sees exactly one call per package from
+   `score_run` (T086); the report's, `read_recording`'s and `attempt_facts`' rows, and the
+   structural "no other reader of `events.jsonl` under `benchmark/`", land with their callers
+   (T159, T166, T187).
+
+6's `score_run` spy (T086): `score_run` finds each package's stream through `event_stream`.
 """
 
 from __future__ import annotations
@@ -36,8 +38,10 @@ from __future__ import annotations
 import gzip
 import re
 import zlib
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -49,7 +53,12 @@ from swreview.agent.events import (
     replay_events,
 )
 from swreview.agent.providers import AgentEvent
+from swreview.benchmark.scorecard import score_run
+from swreview.benchmark.sets import BenchmarkSet
 from swreview.chat import sessions
+from swreview.report.session import SessionUsage
+from tests.unit.test_scorecard_usage import make_usage
+from tests.unit.test_scorecard_usage import write_package as write_scored_package
 
 TESTS = Path(__file__).resolve().parents[1]
 REPLAY_FIXTURES = sorted((TESTS / "fixtures" / "replay").glob("*/events.jsonl"))
@@ -433,3 +442,54 @@ def test_event_stream_refuses_a_folder_holding_both_as_an_unfinished_pack(
 
     with pytest.raises(ValueError, match=f"^{re.escape(message)}$"):
         event_stream(tmp_path)
+
+
+# --- 4 and 6: score_run reads each package's stream once, found through event_stream (T086) ---
+
+
+def two_scored_packages(tmp_path: Path) -> tuple[Path, Path, BenchmarkSet]:
+    """`test_scorecard_usage.py`'s scored package twice, each with its `events.jsonl`."""
+    run_dir = tmp_path / "run"
+    keys = tmp_path / "answer_keys"
+    usage = SessionUsage.summed([make_usage()], [1])
+    refs = [
+        write_scored_package(run_dir, keys, package_id, usage=usage)
+        for package_id in ("pkg-a", "pkg-b")
+    ]
+    return run_dir, keys, BenchmarkSet(name="pilot", packages=refs)
+
+
+def test_score_run_replays_each_package_s_stream_exactly_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run_dir, keys, benchmark_set = two_scored_packages(tmp_path)
+    calls: list[Path] = []
+    real = events.replay_events
+
+    def spy(path: Path | str, after: int = 0, **hooks: Any) -> Iterator[AgentEvent]:
+        calls.append(Path(path))
+        return real(path, after, **hooks)
+
+    monkeypatch.setattr(events, "replay_events", spy)
+
+    score_run(run_dir, keys, benchmark_set)
+
+    assert calls == [run_dir / package / EVENTS_FILE_NAME for package in ("pkg-a", "pkg-b")]
+
+
+def test_score_run_finds_each_package_s_stream_through_event_stream(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run_dir, keys, benchmark_set = two_scored_packages(tmp_path)
+    folders: list[Path] = []
+    real = events.event_stream
+
+    def spy(folder: Path | str) -> Path:
+        folders.append(Path(folder))
+        return real(folder)
+
+    monkeypatch.setattr(events, "event_stream", spy)
+
+    score_run(run_dir, keys, benchmark_set)
+
+    assert folders == [run_dir / "pkg-a", run_dir / "pkg-b"]

@@ -16,14 +16,24 @@ path, never through the loader, and pin the model's own rows of section 4:
    one written by the generator, with no loader to name it, still reads "D-3 ...".
 4. **The two derivations** (`answer-key.md` 9's test 15): `holds_held_out()` and
    `held_out_model_defect_ids()`, the only ones there are.
+5. **The four extension lists** (T079; `answer-key.md` 2.1, 2.2, 2.4, 2.6, 2.7; `questions.md`
+   5.1 and 5.2's shapes): forbidden entries (`FB-<n>`, on parts or documents, never references,
+   their `checks` each through section 3's grammar, AK-4's family refusal kept to known defects
+   and correct conditions), expected coverage (`CV-<n>`, `statuses` non-empty from the four
+   listable readings, none twice), unanswerable requests (`U-<n>`) and question-count rules
+   (`Q-<n>`), each with the tag fields every entry has. The combinations `questions.md` 5.3
+   refuses build here: they are the loader's row 11.
 
 The loader's tests (T034, at the end of the file) read key files through
 `answer_key.load_answer_key(path, *, package, checklist, words)`, the one reader (`answer-key.md` 1,
 4 and 6): every refusal an `AnswerKeyError` starting "answer key {file name}:" and naming the entry;
 the model's rows first, then row 2 (the stem), row 6's typo guard (every check under a report goal),
 row 8 (overlaps, through `benchmark/matching.py`), row 12 (key-only), and with the package row 13
-(ids resolve) and row 14 (references owned by the entry's parts and documents). Every id and
-description is fictional.
+(ids resolve) and row 14 (references owned by the entry's parts and documents). US3's rows for
+the four lists (T083, at the very end): every list loading, the typo guard and the overlaps on
+forbidden entries, row 9 and row 10 on expected coverage, and row 11, `questions.md` 5.3's
+refusals of the question entries, run through `benchmark/questions.py`. Every id and description
+is fictional.
 """
 
 from __future__ import annotations
@@ -31,6 +41,8 @@ from __future__ import annotations
 import ast
 import json
 import sys
+from collections.abc import Callable
+from itertools import combinations
 from pathlib import Path
 from typing import Any, get_args
 
@@ -245,17 +257,22 @@ def test_a_key_format_other_than_2_is_refused_naming_the_field(value: object) ->
     assert FORMAT_1_SENTENCE not in message
 
 
-@pytest.mark.parametrize(
-    "field",
-    ["forbidden", "expected_coverage", "unanswerable_requests", "question_counts", "answers"],
-)
+@pytest.mark.parametrize("field", ["answers", "forbidden_entries", "unanswerable", "coverage"])
 def test_an_unknown_field_at_the_key_is_refused_naming_it(field: str) -> None:
-    """Section 2.1's four other lists are unknown fields until US3 adds their models (T080), so
-    the task that adds them changes this test on purpose; `answers`, a name no list will take,
-    stays refused after it."""
+    """Changed on purpose by T079: section 2.1's four other lists are fields now (the test
+    below), so this one refuses a field no list has, `answers` and names close to the lists'."""
     message = refusal(key(**{field: []}))
 
     assert f"{field}: Extra inputs are not permitted" in message
+
+
+@pytest.mark.parametrize(
+    "field", ["forbidden", "expected_coverage", "unanswerable_requests", "question_counts"]
+)
+def test_each_of_the_four_extension_lists_is_a_field_of_the_key_default_empty(field: str) -> None:
+    """Section 2.1: each optional, default empty."""
+    assert getattr(AnswerKey.model_validate(key(**{field: []})), field) == []
+    assert getattr(AnswerKey.model_validate(key()), field) == []
 
 
 def test_an_unknown_field_at_an_entry_is_refused_naming_the_entry_and_the_field() -> None:
@@ -1056,6 +1073,473 @@ def test_held_out_model_defect_ids_lists_held_out_model_defects_in_key_order() -
     assert built.held_out_model_defect_ids() == ["D-4", "D-1"]
 
 
+# --- US3: the four extension lists, the model's half (T079, for T080) ------------------------
+
+
+def forbidden(**fields: Any) -> dict[str, Any]:
+    """A well-formed forbidden entry on the fictional bought pin, with `fields` replacing its
+    defaults (`answer-key.md` 2's example)."""
+    entry: dict[str, Any] = {
+        "id": "FB-1",
+        "checks": ["rms.*", "hygiene.*"],
+        "component_ids": ["cmp:0002"],
+        "document_ids": [],
+        "tag": "tuned_on",
+        "description": "No modelling-practice or hygiene finding on the fictional bought pin.",
+    }
+    entry.update(fields)
+    return entry
+
+
+def coverage(**fields: Any) -> dict[str, Any]:
+    """A well-formed expected-coverage entry, with `fields` replacing its defaults."""
+    entry: dict[str, Any] = {
+        "id": "CV-1",
+        "item": "interference",
+        "statuses": ["unresolved", "skipped"],
+        "tag": "tuned_on",
+        "description": "Nothing of the fictional pins was read, so interference is not checked.",
+    }
+    entry.update(fields)
+    return entry
+
+
+def unanswerable(**fields: Any) -> dict[str, Any]:
+    """A well-formed unanswerable request, with `fields` replacing its defaults."""
+    entry: dict[str, Any] = {
+        "id": "U-1",
+        "documents": ["doc:0003"],
+        "item": None,
+        "tag": "tuned_on",
+        "description": "The fictional bought pin has no drawing to supply.",
+    }
+    entry.update(fields)
+    return entry
+
+
+def count_rule(**fields: Any) -> dict[str, Any]:
+    """A well-formed part-roles question-count rule, with `fields` replacing its defaults."""
+    entry: dict[str, Any] = {
+        "id": "Q-1",
+        "part_roles": True,
+        "min": 1,
+        "max": 1,
+        "tag": "tuned_on",
+        "description": "The fictional part-roles question is asked exactly once.",
+    }
+    entry.update(fields)
+    return entry
+
+
+def item_rule(**fields: Any) -> dict[str, Any]:
+    """A well-formed item question-count rule naming ids, with `fields` replacing its
+    defaults."""
+    entry: dict[str, Any] = {
+        "id": "Q-2",
+        "item": "interfaces.fit",
+        "ids": ["cmp:0001", "cmp:0002"],
+        "max": 1,
+        "tag": "tuned_on",
+        "description": "At most one question on the fictional pin's fit.",
+    }
+    entry.update(fields)
+    return entry
+
+
+EXTENSION_LISTS: dict[str, Callable[..., dict[str, Any]]] = {
+    "forbidden": forbidden,
+    "expected_coverage": coverage,
+    "unanswerable_requests": unanswerable,
+    "question_counts": count_rule,
+}
+"""Section 2.1's four other lists, each with its well-formed entry's builder."""
+
+SIX_LISTS: dict[str, Callable[..., dict[str, Any]]] = {
+    "known_defects": defect,
+    "correct_conditions": condition,
+    **EXTENSION_LISTS,
+}
+
+
+def test_a_key_holding_one_entry_of_each_of_the_six_lists_builds() -> None:
+    built = AnswerKey.model_validate(
+        key(
+            [defect()],
+            [condition()],
+            forbidden=[forbidden()],
+            expected_coverage=[coverage()],
+            unanswerable_requests=[unanswerable()],
+            question_counts=[count_rule(), item_rule()],
+        )
+    )
+
+    assert [entry.id for entry in built.forbidden] == ["FB-1"]
+    assert built.forbidden[0].checks == ["rms.*", "hygiene.*"]
+    assert built.forbidden[0].component_ids == ["cmp:0002"]
+    assert [(entry.id, entry.item, entry.statuses) for entry in built.expected_coverage] == [
+        ("CV-1", "interference", ["unresolved", "skipped"])
+    ]
+    assert [(entry.id, entry.documents, entry.item) for entry in built.unanswerable_requests] == [
+        ("U-1", ["doc:0003"], None)
+    ]
+    first, second = built.question_counts
+    assert (first.id, first.part_roles, first.item, first.ids, first.min, first.max) == (
+        "Q-1",
+        True,
+        None,
+        [],
+        1,
+        1,
+    )
+    assert (second.id, second.part_roles, second.item, second.ids, second.min, second.max) == (
+        "Q-2",
+        None,
+        "interfaces.fit",
+        ["cmp:0001", "cmp:0002"],
+        0,
+        1,
+    )
+
+
+def test_a_key_of_six_lists_dumped_with_absent_fields_omitted_builds_again_as_itself() -> None:
+    """The generator writes a key from the model: a null `item`, an absent `part_roles` or `max`
+    and an empty `ids` are left out of what it writes, and what it writes reads back the same."""
+    built = AnswerKey.model_validate(
+        key(
+            [defect()],
+            [condition()],
+            forbidden=[forbidden()],
+            expected_coverage=[coverage()],
+            unanswerable_requests=[unanswerable()],
+            question_counts=[count_rule(), without(item_rule(ids=[]), "max")],
+        )
+    )
+
+    dumped = built.model_dump(mode="json", exclude_none=True)
+
+    assert AnswerKey.model_validate(dumped) == built
+    assert "item" not in dumped["unanswerable_requests"][0]
+    assert "ids" not in dumped["question_counts"][0]
+    assert "item" not in dumped["question_counts"][0]
+    assert "ids" not in dumped["question_counts"][1]
+    assert "part_roles" not in dumped["question_counts"][1]
+    assert "max" not in dumped["question_counts"][1]
+    assert "references" not in dumped["forbidden"][0]
+    assert dumped["question_counts"][0]["part_roles"] is True
+
+
+@pytest.mark.parametrize("name", EXTENSION_LISTS)
+def test_an_unknown_field_on_each_new_entry_is_refused_naming_the_entry(name: str) -> None:
+    entry = EXTENSION_LISTS[name](severity="high")
+
+    message = refusal(key(**{name: [entry]}))
+
+    assert naming(entry["id"]) in message
+    assert "severity" in message
+    assert "Extra inputs are not permitted" in message
+
+
+def test_references_on_a_forbidden_entry_are_refused_naming_the_entry() -> None:
+    """FR-003: a forbidden entry stays on parts or documents (section 2.4), so a forbidden
+    `hole.*` on a plate covers every joint of the plate."""
+    entry = forbidden(id="FB-3", references=[ONE_ELEMENT_OF_EACH_KIND["joint"]])
+
+    message = refusal(key(forbidden=[entry]))
+
+    assert naming("FB-3") in message
+    assert "references" in message
+    assert "Extra inputs are not permitted" in message
+
+
+# row 3: ids and prefixes, over the six lists
+
+
+@pytest.mark.parametrize(
+    ("name", "entry_id"),
+    [
+        ("forbidden", "FB-1"),
+        ("forbidden", "FB-27"),
+        ("expected_coverage", "CV-1"),
+        ("expected_coverage", "CV-12"),
+        ("unanswerable_requests", "U-1"),
+        ("unanswerable_requests", "U-30"),
+        ("question_counts", "Q-1"),
+        ("question_counts", "Q-11"),
+    ],
+)
+def test_each_new_list_accepts_its_own_prefix_and_a_whole_number(name: str, entry_id: str) -> None:
+    built = AnswerKey.model_validate(key(**{name: [EXTENSION_LISTS[name](id=entry_id)]}))
+
+    assert [entry.id for entry in getattr(built, name)] == [entry_id]
+
+
+@pytest.mark.parametrize(
+    ("name", "entry_id"),
+    [
+        ("forbidden", "D-9"),
+        ("forbidden", "F-1"),
+        ("forbidden", "FB-0"),
+        ("forbidden", "FB1"),
+        ("expected_coverage", "FB-1"),
+        ("expected_coverage", "C-1"),
+        ("expected_coverage", "CV-01"),
+        ("unanswerable_requests", "Q-1"),
+        ("unanswerable_requests", "U-"),
+        ("question_counts", "U-1"),
+        ("question_counts", "Q-1a"),
+    ],
+)
+def test_an_id_with_another_list_s_prefix_or_no_whole_number_is_refused_naming_it(
+    name: str, entry_id: str
+) -> None:
+    assert naming(entry_id) in refusal(key(**{name: [EXTENSION_LISTS[name](id=entry_id)]}))
+
+
+@pytest.mark.parametrize("name", EXTENSION_LISTS)
+def test_an_id_repeated_in_one_new_list_is_refused_naming_it(name: str) -> None:
+    builder = EXTENSION_LISTS[name]
+    first = builder()
+
+    message = refusal(key(**{name: [first, builder(description="A second fictional entry.")]}))
+
+    assert f"{first['id']} names two entries; an id is unique across the key" in message
+
+
+@pytest.mark.parametrize(("first", "second"), list(combinations(SIX_LISTS, 2)))
+def test_an_id_repeated_across_any_two_of_the_six_lists_is_refused_naming_it(
+    first: str, second: str
+) -> None:
+    entry = SIX_LISTS[first]()
+    repeated = SIX_LISTS[second](id=entry["id"])
+
+    assert naming(entry["id"]) in refusal(key(**{first: [entry], second: [repeated]}))
+
+
+# row 4: the tag fields on each new list
+
+
+@pytest.mark.parametrize("name", EXTENSION_LISTS)
+def test_a_new_entry_with_no_tag_is_refused_naming_it(name: str) -> None:
+    entry = without(EXTENSION_LISTS[name](), "tag")
+
+    assert f"{entry['id']} states no tag" in refusal(key(**{name: [entry]}))
+
+
+@pytest.mark.parametrize("name", EXTENSION_LISTS)
+def test_a_held_out_new_entry_with_no_held_out_against_is_refused_naming_it(name: str) -> None:
+    entry = EXTENSION_LISTS[name](tag="held_out")
+
+    message = refusal(key(**{name: [entry]}))
+
+    assert naming(entry["id"]) in message
+    assert "held_out_against" in message
+
+
+@pytest.mark.parametrize("name", EXTENSION_LISTS)
+def test_a_tuned_on_new_entry_with_held_out_against_is_refused_naming_it(name: str) -> None:
+    entry = EXTENSION_LISTS[name](held_out_against=STAMP)
+
+    message = refusal(key(**{name: [entry]}))
+
+    assert naming(entry["id"]) in message
+    assert "held_out_against" in message
+
+
+@pytest.mark.parametrize("name", EXTENSION_LISTS)
+def test_a_held_out_new_entry_with_its_stamp_builds(name: str) -> None:
+    built = AnswerKey.model_validate(
+        key(**{name: [EXTENSION_LISTS[name](tag="held_out", held_out_against=STAMP)]})
+    )
+
+    assert getattr(built, name)[0].held_out_against == Stamp(**STAMP)
+
+
+@pytest.mark.parametrize("name", EXTENSION_LISTS)
+def test_a_new_entry_with_a_blank_description_is_refused_naming_it(name: str) -> None:
+    entry = EXTENSION_LISTS[name](description="  ")
+
+    message = refusal(key(**{name: [entry]}))
+
+    assert naming(entry["id"]) in message
+    assert "description" in message
+
+
+# row 5 and row 6's grammar: forbidden entries
+
+
+def test_a_forbidden_entry_naming_neither_parts_nor_documents_is_refused_naming_it() -> None:
+    message = refusal(key(forbidden=[forbidden(id="FB-2", component_ids=[], document_ids=[])]))
+
+    assert naming("FB-2") in message
+    assert "component_ids" in message
+    assert "document_ids" in message
+
+
+def test_a_forbidden_entry_naming_only_parts_or_only_documents_builds() -> None:
+    built = AnswerKey.model_validate(
+        key(
+            forbidden=[
+                forbidden(),
+                forbidden(id="FB-2", component_ids=[], document_ids=["doc:0003"]),
+            ]
+        )
+    )
+
+    assert [entry.document_ids for entry in built.forbidden] == [[], ["doc:0003"]]
+
+
+def test_a_forbidden_entry_with_empty_checks_is_refused_naming_it() -> None:
+    message = refusal(key(forbidden=[forbidden(id="FB-2", checks=[])]))
+
+    assert naming("FB-2") in message
+    assert "checks" in message
+
+
+@pytest.mark.parametrize("pattern", ["*", "rms*", "rms.", "rms.*.sketches", "Rms.folders", ""])
+def test_each_forbidden_pattern_goes_through_the_grammar_naming_the_entry_and_the_pattern(
+    pattern: str,
+) -> None:
+    """The bad pattern is the second of two, so every pattern is read, not only the first."""
+    message = refusal(key(forbidden=[forbidden(id="FB-2", checks=["hygiene.*", pattern])]))
+
+    assert naming("FB-2") in message
+    assert repr(pattern) in message
+
+
+@pytest.mark.parametrize("family", ["fastener.*", "hole.*", "fit.*", "stack.*"])
+def test_a_family_over_a_reference_keyed_check_builds_on_a_forbidden_entry_only(
+    family: str,
+) -> None:
+    """AK-4 is kept to known defects and correct conditions: a forbidden entry names no
+    references, so its family covers every joint of its parts (section 2.4)."""
+    built = AnswerKey.model_validate(key(forbidden=[forbidden(checks=[family])]))
+
+    assert built.forbidden[0].checks == [family]
+    for entries, named in (
+        (key([defect(id="D-2", check=family)]), "D-2"),
+        (key([], [condition(id="C-2", check=family)]), "C-2"),
+    ):
+        message = refusal(entries)
+
+        assert naming(named) in message
+        assert family in message
+
+
+# expected coverage: the statuses (section 2.6)
+
+
+@pytest.mark.parametrize(
+    "statuses",
+    [[], ["issues"], ["not_reported"], ["checked", "checked"], ["unresolved", "Checked"]],
+    ids=["empty", "issues", "not reported", "one value twice", "upper-case"],
+)
+def test_expected_coverage_statuses_outside_section_2_6_are_refused_naming_the_entry(
+    statuses: list[str],
+) -> None:
+    message = refusal(key(expected_coverage=[coverage(id="CV-2", statuses=statuses)]))
+
+    assert naming("CV-2") in message
+    assert "statuses" in message
+
+
+def test_each_of_the_four_listable_readings_builds() -> None:
+    every = ["checked", "unresolved", "skipped", "out_of_scope"]
+
+    built = AnswerKey.model_validate(key(expected_coverage=[coverage(statuses=every)]))
+
+    assert built.expected_coverage[0].statuses == every
+
+
+# unanswerable requests and question counts: the shapes (questions.md 5.1, 5.2)
+
+
+@pytest.mark.parametrize(
+    ("builder", "field", "value"),
+    [
+        pytest.param(unanswerable, "documents", "doc:0003", id="documents a string"),
+        pytest.param(unanswerable, "documents", [3], id="documents of a number"),
+        pytest.param(unanswerable, "item", 3, id="item a number"),
+        pytest.param(item_rule, "item", ["interfaces.fit"], id="a rule's item a list"),
+        pytest.param(count_rule, "part_roles", False, id="part_roles false"),
+        pytest.param(count_rule, "part_roles", 1, id="part_roles 1"),
+        pytest.param(count_rule, "part_roles", "true", id="part_roles a string"),
+        pytest.param(item_rule, "ids", "cmp:0001", id="ids a string"),
+        pytest.param(item_rule, "min", "1", id="min a string"),
+        pytest.param(item_rule, "min", 1.0, id="min a float"),
+        pytest.param(count_rule, "max", True, id="max a boolean"),
+    ],
+)
+def test_a_question_entry_of_the_wrong_shape_is_refused_naming_the_entry_and_the_field(
+    builder: Callable[..., dict[str, Any]], field: str, value: object
+) -> None:
+    entry = builder(**{field: value})
+    name = "unanswerable_requests" if builder is unanswerable else "question_counts"
+
+    message = refusal(key(**{name: [entry]}))
+
+    assert naming(entry["id"]) in message
+    assert field in message
+
+
+@pytest.mark.parametrize("value", [None, "drawing.manufacturing_inputs"])
+def test_an_unanswerable_request_s_item_is_a_string_or_null(value: str | None) -> None:
+    built = AnswerKey.model_validate(key(unanswerable_requests=[unanswerable(item=value)]))
+
+    assert built.unanswerable_requests[0].item == value
+
+
+def test_an_unanswerable_request_with_no_item_reads_as_null() -> None:
+    built = AnswerKey.model_validate(
+        key(unanswerable_requests=[without(unanswerable(), "item")])
+    )
+
+    assert built.unanswerable_requests[0].item is None
+
+
+@pytest.mark.parametrize(
+    ("name", "entry"),
+    [
+        pytest.param(
+            "question_counts",
+            item_rule(part_roles=True),
+            id="a rule with both part_roles and item",
+        ),
+        pytest.param("question_counts", item_rule(min=2), id="min 2"),
+        pytest.param("question_counts", item_rule(min=1, max=0), id="max below min"),
+        pytest.param("question_counts", count_rule(ids=["cmp:0001"]), id="ids beside part_roles"),
+        pytest.param(
+            "question_counts", without(without(count_rule(), "min"), "max"), id="no bounds"
+        ),
+        pytest.param("unanswerable_requests", unanswerable(documents=[]), id="empty documents"),
+    ],
+)
+def test_the_combinations_questions_md_5_3_refuses_still_build_here(
+    name: str, entry: dict[str, Any]
+) -> None:
+    """They are the loader's row 11 (T083), run through `benchmark/questions.py`, never
+    restated in the model."""
+    built = AnswerKey.model_validate(key(**{name: [entry]}))
+
+    assert [one.id for one in getattr(built, name)] == [entry["id"]]
+
+
+# test 15 over the new lists
+
+
+@pytest.mark.parametrize("name", EXTENSION_LISTS)
+def test_a_key_whose_only_held_out_entry_is_a_new_list_s_holds_held_out(name: str) -> None:
+    built = AnswerKey.model_validate(
+        key(
+            [defect(producer="model")],
+            [condition()],
+            **{name: [EXTENSION_LISTS[name](tag="held_out", held_out_against=STAMP)]},
+        )
+    )
+
+    assert built.holds_held_out() is True
+    assert built.held_out_model_defect_ids() == []
+
+
 # --- the loader (T034, for T037): `answer-key.md` 1, 4 and 6 -------------------------------------
 
 TESTS = Path(__file__).resolve().parents[1]
@@ -1792,3 +2276,513 @@ def test_an_unknown_id_is_named_before_an_unowned_reference(tmp_path: Path) -> N
         "answer key fict-key-a.json: D-2 names the component cmp:0009, which is not in the "
         "package"
     )
+
+
+# --- US3: the loader's rows for the four lists (T083, for T084) ------------------------------
+#
+# Over `SHAFT_BORE`: the housing part `doc:2` with its two instances `cmp:0001` (holding
+# `hole:1`) and `cmp:0002` (holding `fst:1`), the assembly `doc:1` and the drawing `doc:3`.
+
+FIT = "interfaces.fit"
+
+
+def test_a_format_2_key_with_every_list_loads_against_its_package(tmp_path: Path) -> None:
+    path = write_key(
+        tmp_path,
+        "fict-key-a",
+        known_defects=[
+            {
+                "check": "fastener.bottoming",
+                "component_ids": BOTH_PARTS,
+                "references": [JOINT],
+                "expected_status": "unresolved",
+            }
+        ],
+        correct_conditions=[fit_condition(BORE, SHAFT)],
+        forbidden=[{"checks": ["rms.*", "hygiene.*"], "component_ids": ["cmp:0002"]}],
+        expected_coverage=[{"item": "interference", "statuses": ["unresolved", "skipped"]}],
+        unanswerable_requests=[{"documents": ["doc:2"]}],
+        question_counts=[
+            {"part_roles": True, "min": 1, "max": 1},
+            {"item": FIT, "ids": ["cmp:0001"], "max": 1},
+        ],
+    )
+
+    loaded = load(path)
+
+    assert [entry.id for entry in loaded.forbidden] == ["FB-1"]
+    assert [entry.id for entry in loaded.expected_coverage] == ["CV-1"]
+    assert [entry.id for entry in loaded.unanswerable_requests] == ["U-1"]
+    assert [entry.id for entry in loaded.question_counts] == ["Q-1", "Q-2"]
+    assert loaded.ids_unchecked is None
+
+
+# row 6's typo guard over every forbidden pattern (AK-6)
+
+
+def test_a_forbidden_pattern_under_no_report_goal_is_refused_by_the_typo_guard(
+    tmp_path: Path,
+) -> None:
+    path = write_key(
+        tmp_path,
+        "fict-key-a",
+        forbidden=[{"checks": ["rms.*", "hygeine.*"], "component_ids": ["cmp:0002"]}],
+    )
+
+    assert load_refusal(path) == (
+        "answer key fict-key-a.json: FB-1 checks hygeine.*, which falls under no goal of the "
+        "report's words file, so it would grade nothing: a typo? (answer-key.md 3)"
+    )
+
+
+@pytest.mark.parametrize("checks", [["hygiene.*"], ["rms.*"], ["hygiene.*", "rms.*"]])
+def test_a_forbidden_pattern_under_a_report_goal_loads(tmp_path: Path, checks: list[str]) -> None:
+    path = write_key(
+        tmp_path, "fict-key-a", forbidden=[{"checks": checks, "component_ids": ["cmp:0002"]}]
+    )
+
+    assert load(path).forbidden[0].checks == checks
+
+
+# row 8's forbidden half: through `matching.entries_overlap` (US1-15, US3-1, SC-002)
+
+
+def test_a_forbidden_family_against_a_reference_keyed_defect_on_the_same_plate_is_refused(
+    tmp_path: Path,
+) -> None:
+    """A forbidden entry names no references, so against a joint-keyed defect only checks and
+    targets are compared (`answer-key.md` 5)."""
+    path = write_key(
+        tmp_path,
+        "fict-key-a",
+        known_defects=[
+            {
+                "check": "fastener.thread_match",
+                "component_ids": BOTH_PARTS,
+                "references": [FIRST_SCREW],
+            }
+        ],
+        forbidden=[{"checks": ["fastener.*"], "component_ids": ["cmp:0001"]}],
+        key_only=True,
+    )
+
+    assert load_refusal(path, None) == (
+        "answer key fict-key-a.json: FB-1 and D-1 overlap: one finding could match both "
+        "(answer-key.md 5)"
+    )
+
+
+def test_a_forbidden_entry_and_a_known_defect_sharing_only_a_document_are_refused(
+    tmp_path: Path,
+) -> None:
+    path = write_key(
+        tmp_path,
+        "fict-key-a",
+        known_defects=[
+            {
+                "check": "hygiene.revision_present",
+                "component_ids": ["cmp:0001"],
+                "document_ids": ["doc:2"],
+            }
+        ],
+        forbidden=[
+            {"checks": ["hygiene.*"], "component_ids": ["cmp:0002"], "document_ids": ["doc:2"]}
+        ],
+        key_only=True,
+    )
+
+    assert "FB-1 and D-1 overlap" in load_refusal(path, None)
+
+
+@pytest.mark.parametrize(
+    ("correct_conditions", "forbidden"),
+    [
+        pytest.param(
+            [{"check": "rms.folders.present", "component_ids": ["cmp:0002"]}],
+            [{"checks": ["rms.*"], "component_ids": ["cmp:0002"]}],
+            id="a forbidden rms.* against an rms.folders.present condition on one part (US3-1)",
+        ),
+        pytest.param(
+            [],
+            [
+                {"checks": ["rms.*", "hygiene.*"], "component_ids": ["cmp:0002"]},
+                {"checks": ["rms.sketches.*"], "component_ids": ["cmp:0002"]},
+            ],
+            id="two overlapping forbidden entries",
+        ),
+    ],
+)
+def test_a_forbidden_entry_may_overlap_a_condition_or_another_forbidden_entry(
+    tmp_path: Path,
+    correct_conditions: list[dict[str, Any]],
+    forbidden: list[dict[str, Any]],
+) -> None:
+    path = write_key(
+        tmp_path,
+        "fict-key-a",
+        correct_conditions=correct_conditions,
+        forbidden=forbidden,
+        key_only=True,
+    )
+
+    assert len(load(path, None).forbidden) == len(forbidden)
+
+
+def test_a_forbidden_family_beside_a_defect_on_other_parts_loads(tmp_path: Path) -> None:
+    path = write_key(
+        tmp_path,
+        "fict-key-a",
+        known_defects=[{"check": "hygiene.revision_present", "component_ids": ["cmp:0001"]}],
+        forbidden=[{"checks": ["hygiene.*"], "component_ids": ["cmp:0002"]}],
+        key_only=True,
+    )
+
+    assert [entry.id for entry in load(path, None).forbidden] == ["FB-1"]
+
+
+# row 9: expected coverage, one entry per goal (FR-018)
+
+
+@pytest.mark.parametrize(
+    ("entries", "named", "item"),
+    [
+        pytest.param(
+            [{"item": "interference.static", "statuses": ["checked"]}],
+            "CV-1",
+            "interference.static",
+            id="an item not in the checklist",
+        ),
+        pytest.param(
+            [{"item": "coverage.closeout", "statuses": ["checked"]}],
+            "CV-1",
+            "coverage.closeout",
+            id="coverage.closeout, which no goal reads",
+        ),
+        pytest.param(
+            [
+                {"item": "interfaces.fit", "statuses": ["checked"]},
+                {"item": "interfaces.stack", "statuses": ["unresolved"]},
+            ],
+            "CV-2",
+            "interfaces.stack",
+            id="interfaces.fit and interfaces.stack, one goal",
+        ),
+    ],
+)
+def test_an_expected_coverage_entry_row_9_refuses_names_the_entry_and_the_item(
+    tmp_path: Path, entries: list[dict[str, Any]], named: str, item: str
+) -> None:
+    path = write_key(tmp_path, "fict-key-a", expected_coverage=entries)
+
+    message = load_refusal(path)
+
+    assert f": {named} " in message and item in message, message
+
+
+def test_two_entries_on_items_of_different_goals_load(tmp_path: Path) -> None:
+    path = write_key(
+        tmp_path,
+        "fict-key-a",
+        expected_coverage=[
+            {"item": "interference", "statuses": ["unresolved"]},
+            {"item": "interfaces.stack", "statuses": ["skipped", "out_of_scope"]},
+        ],
+    )
+
+    assert [entry.item for entry in load(path).expected_coverage] == [
+        "interference",
+        "interfaces.stack",
+    ]
+
+
+# row 10: a goal holding a known defect reads checked (FR-018, SC-001)
+
+
+def test_a_goal_reading_a_known_defect_s_check_expecting_only_unresolved_is_refused(
+    tmp_path: Path,
+) -> None:
+    path = write_key(
+        tmp_path,
+        "fict-key-a",
+        known_defects=[{"check": "hygiene.revision_present", "component_ids": ["cmp:0001"]}],
+        expected_coverage=[{"item": "hygiene", "statuses": ["unresolved"]}],
+    )
+
+    message = load_refusal(path)
+
+    assert message.endswith(
+        "a goal holding a finding reads as checked (state issues); expect checked, or drop CV-1"
+    ), message
+
+
+def test_a_goal_reading_a_family_defect_s_check_is_refused_too(tmp_path: Path) -> None:
+    """The family's id is read with its trailing dot, as the typo guard reads it."""
+    path = write_key(
+        tmp_path,
+        "fict-key-a",
+        known_defects=[{"check": "rms.sketches.*", "component_ids": ["cmp:0001"]}],
+        expected_coverage=[{"item": "modeling.resilience", "statuses": ["skipped"]}],
+    )
+
+    assert "drop CV-1" in load_refusal(path)
+
+
+def test_a_goal_reading_a_known_defect_s_check_expecting_checked_too_loads(tmp_path: Path) -> None:
+    path = write_key(
+        tmp_path,
+        "fict-key-a",
+        known_defects=[{"check": "hygiene.revision_present", "component_ids": ["cmp:0001"]}],
+        expected_coverage=[{"item": "hygiene", "statuses": ["checked", "unresolved"]}],
+    )
+
+    assert load(path).expected_coverage[0].statuses == ["checked", "unresolved"]
+
+
+def test_a_goal_reading_only_a_condition_s_check_may_expect_unresolved(tmp_path: Path) -> None:
+    """A correct condition asks for no finding: row 10 reads known defects only."""
+    path = write_key(
+        tmp_path,
+        "fict-key-a",
+        correct_conditions=[{"check": "hygiene.revision_present", "component_ids": ["cmp:0001"]}],
+        expected_coverage=[{"item": "hygiene", "statuses": ["unresolved"]}],
+    )
+
+    assert load(path).expected_coverage[0].statuses == ["unresolved"]
+
+
+# row 11: `questions.md` 5.3's refusals, through `benchmark/questions.py` (FR-019, FR-060)
+
+
+@pytest.mark.parametrize(
+    ("unanswerable_requests", "question_counts", "named"),
+    [
+        pytest.param(
+            [{"documents": []}], [], ["U-1", "documents is empty"], id="U empty documents"
+        ),
+        pytest.param(
+            [{"documents": ["cmp:0001"]}],
+            [],
+            ["U-1", "cmp:0001", "not a document of the package"],
+            id="U an id that is not a document",
+        ),
+        pytest.param(
+            [{"documents": ["doc:2"], "item": "fit.size_only"}],
+            [],
+            ["U-1", "fit.size_only", "not a checklist item"],
+            id="U an item not in the checklist",
+        ),
+        pytest.param(
+            [{"documents": ["doc:2", "doc:3", "doc:2"]}],
+            [],
+            ["U-1", "doc:2 twice"],
+            id="U an id repeated",
+        ),
+        pytest.param(
+            [{"documents": ["doc:2"]}, {"documents": ["doc:2", "doc:3"], "item": FIT}],
+            [],
+            ["U-1 and U-2", "doc:2", "count twice"],
+            id="U two entries on one document, one with no item",
+        ),
+        pytest.param(
+            [{"documents": ["doc:2"], "item": FIT}, {"documents": ["doc:2"], "item": FIT}],
+            [],
+            ["U-1 and U-2", "count twice"],
+            id="U two entries on one document and one item",
+        ),
+        pytest.param(
+            [], [{"max": 1}], ["Q-1", "name exactly one"], id="Q neither part_roles nor item"
+        ),
+        pytest.param(
+            [],
+            [{"part_roles": True, "item": FIT, "max": 1}],
+            ["Q-1", "name exactly one"],
+            id="Q both part_roles and item",
+        ),
+        pytest.param(
+            [],
+            [{"part_roles": True, "ids": ["cmp:0001"], "max": 1}],
+            ["Q-1", "ids beside part_roles"],
+            id="Q ids beside part_roles",
+        ),
+        pytest.param(
+            [], [{"part_roles": True}], ["Q-1", "neither min nor max"], id="Q neither min nor max"
+        ),
+        pytest.param([], [{"item": FIT, "min": 2}], ["Q-1", "min 2"], id="Q min 2"),
+        pytest.param(
+            [], [{"item": FIT, "min": 1, "max": 0}], ["Q-1", "max 0", "below"], id="Q max below min"
+        ),
+        pytest.param(
+            [],
+            [{"item": "fit.size_only", "max": 1}],
+            ["Q-1", "fit.size_only", "not a checklist item"],
+            id="Q an item not in the checklist",
+        ),
+        pytest.param(
+            [],
+            [{"item": FIT, "ids": ["hole:1"], "max": 1}],
+            ["Q-1", "hole:1", "not a component instance or a document"],
+            id="Q an id that is not an instance or a document",
+        ),
+        pytest.param(
+            [],
+            [{"part_roles": True, "min": 1}, {"part_roles": True, "max": 1}],
+            ["Q-1 and Q-2", "part-roles question"],
+            id="Q two part_roles rules",
+        ),
+        pytest.param(
+            [],
+            [
+                {"item": FIT, "ids": ["cmp:0001"], "max": 1},
+                {"item": FIT, "ids": ["doc:2"], "max": 2},
+            ],
+            ["Q-1 and Q-2", FIT],
+            id="Q two rules on one item whose resolved ids intersect",
+        ),
+        pytest.param(
+            [],
+            [{"item": FIT, "ids": ["cmp:0001"], "max": 1}, {"item": FIT, "max": 2}],
+            ["Q-1 and Q-2", FIT],
+            id="Q two rules on one item, one naming no ids",
+        ),
+        pytest.param(
+            [{"documents": ["doc:2"]}],
+            [{"item": FIT, "ids": ["cmp:0001"], "min": 1}],
+            ["Q-1", "U-1", "unanswerable"],
+            id="Q a min-1 rule whose oracle question an unanswerable entry matches",
+        ),
+    ],
+)
+def test_each_question_entry_refusal_of_questions_md_5_3_is_row_11(
+    tmp_path: Path,
+    unanswerable_requests: list[dict[str, Any]],
+    question_counts: list[dict[str, Any]],
+    named: list[str],
+) -> None:
+    path = write_key(
+        tmp_path,
+        "fict-key-a",
+        unanswerable_requests=unanswerable_requests,
+        question_counts=question_counts,
+    )
+
+    message = load_refusal(path)
+
+    assert all(part in message for part in named), message
+
+
+@pytest.mark.parametrize(
+    ("unanswerable_requests", "question_counts"),
+    [
+        pytest.param(
+            [{"documents": ["doc:2"], "item": FIT}, {"documents": ["doc:2"], "item": "fasteners"}],
+            [],
+            id="two entries on one document and two items",
+        ),
+        pytest.param(
+            [],
+            [
+                {"item": FIT, "ids": ["cmp:0001"], "max": 1},
+                {"item": FIT, "ids": ["cmp:0002"], "max": 1},
+            ],
+            id="two rules on one item on disjoint instances",
+        ),
+        pytest.param(
+            [{"documents": ["doc:2"]}],
+            [{"item": FIT, "min": 1}, {"part_roles": True, "min": 1}],
+            id="min-1 rules whose oracle questions no unanswerable entry matches",
+        ),
+        pytest.param(
+            [{"documents": ["doc:2"], "item": "fasteners"}],
+            [{"item": FIT, "ids": ["cmp:0001"], "min": 1}],
+            id="a min-1 rule on another item than the unanswerable entry's",
+        ),
+    ],
+)
+def test_question_entries_section_5_3_allows_load(
+    tmp_path: Path,
+    unanswerable_requests: list[dict[str, Any]],
+    question_counts: list[dict[str, Any]],
+) -> None:
+    path = write_key(
+        tmp_path,
+        "fict-key-a",
+        unanswerable_requests=unanswerable_requests,
+        question_counts=question_counts,
+    )
+
+    loaded = load(path)
+
+    assert len(loaded.unanswerable_requests) == len(unanswerable_requests)
+    assert len(loaded.question_counts) == len(question_counts)
+
+
+def test_row_9_is_named_before_row_11(tmp_path: Path) -> None:
+    path = write_key(
+        tmp_path,
+        "fict-key-a",
+        expected_coverage=[{"item": "coverage.closeout", "statuses": ["checked"]}],
+        unanswerable_requests=[{"documents": []}],
+    )
+
+    message = load_refusal(path)
+
+    assert "CV-1" in message and "U-1" not in message, message
+
+
+def test_row_11_is_named_before_the_package_s_rows(tmp_path: Path) -> None:
+    path = write_key(
+        tmp_path,
+        "fict-key-a",
+        known_defects=[{"check": "hygiene.revision_present", "component_ids": ["cmp:0009"]}],
+        question_counts=[{"item": FIT, "min": 2}],
+    )
+
+    message = load_refusal(path)
+
+    assert "Q-1" in message and "cmp:0009" not in message, message
+
+
+def test_question_entries_naming_ids_on_a_key_only_key_load_with_their_ids_unresolved(
+    tmp_path: Path,
+) -> None:
+    """D7: with no package, row 11's resolution is skipped, as row 13 is."""
+    path = write_key(
+        tmp_path,
+        "fict-rms-part",
+        key_only=True,
+        known_defects=RMS_PART_SHAPED["known_defects"],
+        unanswerable_requests=[{"documents": ["doc:0099"]}],
+        question_counts=[{"item": FIT, "ids": ["cmp:0099"], "min": 1}],
+    )
+
+    loaded = load(path, None)
+
+    assert loaded.unanswerable_requests[0].documents == ["doc:0099"]
+    assert loaded.question_counts[0].ids == ["cmp:0099"]
+    assert loaded.ids_unchecked is not None
+
+
+# row 13 on forbidden entries (FR-009)
+
+
+@pytest.mark.parametrize(
+    ("targets", "reason"),
+    [
+        pytest.param(
+            {"component_ids": ["cmp:0009"]},
+            "FB-1 names the component cmp:0009, which is not in the package",
+            id="an unknown component",
+        ),
+        pytest.param(
+            {"component_ids": [], "document_ids": ["doc:9"]},
+            "FB-1 names the document doc:9, which is not in the package",
+            id="an unknown document",
+        ),
+    ],
+)
+def test_a_forbidden_entry_naming_an_id_the_package_does_not_hold_is_refused(
+    tmp_path: Path, targets: dict[str, list[str]], reason: str
+) -> None:
+    path = write_key(tmp_path, "fict-key-a", forbidden=[{"checks": ["hygiene.*"], **targets}])
+
+    assert load_refusal(path) == f"answer key fict-key-a.json: {reason}"

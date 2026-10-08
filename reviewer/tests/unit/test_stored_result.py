@@ -18,12 +18,14 @@ it promises is pinned here, as `questions.md` 9 lists it for this file:
    (`test_replay_accounting.py`), another step, a deleted file, and a recording made before
    feature 008.
 
-The questions reader's spy and the structural "no other reader of `tool-results/` under
-`benchmark/`" land with the questions reader (T081), the report's spy with the report (T165).
+4. **The questions reader reads through it** (T081): a spy sees `benchmark/questions.py` call it
+   for every request call, and, structurally, no module under `benchmark/` builds a path to a
+   stored result but through it. The report's spy lands with the report (T165).
 """
 
 from __future__ import annotations
 
+import ast
 import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -33,6 +35,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
+from swreview.benchmark import questions as questions_module
 from swreview.benchmark import replay as replay_module
 from swreview.benchmark.recording import RecordedCall, read_recording
 from swreview.benchmark.replay import TurnPlan, replay
@@ -49,6 +52,8 @@ from swreview.tools.registry import (
 )
 from tests.support.prerun import FIRST_INSTANCE, SECOND_INSTANCE, prerun_package
 from tests.support.replay import ALL_OFF, record_scripted_review, without_stored_results
+from tests.unit.test_benchmark_questions import PACKAGE as QUESTIONS_PACKAGE
+from tests.unit.test_benchmark_questions import Review as QuestionsReview
 from tests.unit.test_replay_accounting import COMPONENTS, LIVE, stored_file, with_bridge
 
 Envelope = dict[str, Any]
@@ -420,3 +425,103 @@ def test_a_recording_made_before_feature_008_reads_every_call_missing_and_estima
         (first.step, Unstored("missing")),
         (second.step, Unstored("missing")),
     ]
+
+
+# --- 4. the questions reader reads through it (T081; RF-30) ---------------------------------
+
+
+def test_the_questions_reader_calls_the_reader_for_every_request_call(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Once per `request_evidence` step, with the session, the step, its tool and arguments,
+    and for no other step."""
+    review = QuestionsReview(tmp_path)
+    review.call("get_component", {"component_id": "cmp:0001"})
+    first = review.ask("cmp:0002")
+    second = review.ask("cmp:0001", item="interfaces.fit")
+    seen: list[tuple[Path, UUID, int, str | None, Mapping[str, Any] | None]] = []
+
+    def spy(
+        run_dir: Path,
+        session_id: UUID,
+        step: int,
+        *,
+        tool: str | None = None,
+        arguments: Mapping[str, Any] | None = None,
+    ) -> StoredResult | Unstored:
+        seen.append((run_dir, session_id, step, tool, arguments))
+        return registry.read_stored_result(
+            run_dir, session_id, step, tool=tool, arguments=arguments
+        )
+
+    monkeypatch.setattr(questions_module, "read_stored_result", spy)
+
+    calls = questions_module.request_calls(
+        review.session, tmp_path, questions_module.QuestionIds(QUESTIONS_PACKAGE)
+    )
+
+    assert [call.step for call in calls] == [first.index, second.index]
+    assert seen == [
+        (tmp_path, review.session.session_id, step.index, step.tool, step.arguments)
+        for step in (first, second)
+    ]
+
+
+BENCHMARK_DIR = Path(questions_module.__file__).parent
+
+
+def _names_a_stored_result_folder(node: ast.AST) -> bool:
+    """`TOOL_RESULTS_DIR_NAME`, however it is reached, or the string `"tool-results"`."""
+    if isinstance(node, ast.Constant):
+        return node.value == TOOL_RESULTS_DIR_NAME
+    if isinstance(node, ast.Name):
+        return node.id == "TOOL_RESULTS_DIR_NAME"
+    if isinstance(node, ast.Attribute):
+        return node.attr == "TOOL_RESULTS_DIR_NAME"
+    return False
+
+
+def stored_result_paths(tree: ast.AST) -> list[int]:
+    """The lines of every `/` expression, `Path(...)` call or `joinpath(...)` call with the
+    stored-result folder as an operand."""
+    lines: list[int] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+            operands: list[ast.AST] = [node.left, node.right]
+        elif isinstance(node, ast.Call) and (
+            (isinstance(node.func, ast.Name) and node.func.id == "Path")
+            or (isinstance(node.func, ast.Attribute) and node.func.attr in ("Path", "joinpath"))
+        ):
+            operands = [*node.args, *(keyword.value for keyword in node.keywords)]
+        else:
+            continue
+        if any(_names_a_stored_result_folder(operand) for operand in operands):
+            lines.append(node.lineno)
+    return sorted(lines)
+
+
+def test_the_scan_finds_each_way_of_building_a_stored_result_path() -> None:
+    """The structural test below would pass on nothing; this one shows what it finds."""
+    built = ast.parse(
+        "a = run / TOOL_RESULTS_DIR_NAME\n"
+        "b = run / registry.TOOL_RESULTS_DIR_NAME / 'step-1.json'\n"
+        "c = Path(run, 'tool-results')\n"
+        "d = run.joinpath(TOOL_RESULTS_DIR_NAME)\n"
+        "e = pathlib.Path('tool-results')\n"
+        "f = f'{TOOL_RESULTS_DIR_NAME}/step-1.json'\n"
+        "g = run / 'session.json'\n"
+    )
+
+    assert stored_result_paths(built) == [1, 2, 3, 4, 5]
+
+
+def test_no_benchmark_module_builds_a_path_to_a_stored_result() -> None:
+    """RF-30: the one reader beside the one writer; a message naming the folder, as the
+    replay's reason does, builds no path."""
+    found = {
+        path.name: stored_result_paths(ast.parse(path.read_text(encoding="utf-8")))
+        for path in sorted(BENCHMARK_DIR.glob("*.py"))
+    }
+
+    assert "questions.py" in found and "replay.py" in found
+    assert {name: lines for name, lines in found.items() if lines} == {}

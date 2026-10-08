@@ -1926,6 +1926,31 @@ def test_the_origin_cells_go_through_the_scorecards_one_origin_formatter(
     assert origin_cells == (seen[0][0], seen[1][0])
 
 
+def test_the_origin_cells_count_the_final_state_never_a_withdrawn_hit(tmp_path: Path) -> None:
+    """`finding_origins` also names each withdrawn forbidden hit (`scoring.md` 5.5); the row
+    counts findings by origin as the scorer's aggregate does, over the final state alone (T087),
+    so the withdrawn `F-006` moves neither origin cell."""
+    run_dir = rescored(
+        write_run(tmp_path, RunSpec(run="withdrawn", arm=None, rep=None, lever="none")),
+        **{
+            **OUTCOMES,
+            "forbidden_hit_finding_ids": [],
+            "withdrawn_forbidden_hit_finding_ids": ["F-006"],
+            "finding_origins": {**OUTCOMES["finding_origins"], "F-006": "code_only_call"},
+        },
+    )
+
+    ledger = compare_runs([run_dir])
+
+    row = one_row(ledger, "withdrawn")
+    assert row.findings_by_origin["code_only_call"] == 0
+    assert sum(row.findings_by_origin.values()) == 5
+    assert row.false_alarms_by_origin["code_only_call"] == 0
+    cells = cells_of(render_ledger_md(ledger), "withdrawn")
+    assert cells["findings by origin"] == "prerun 3 / configured_check 1 / model 1"
+    assert cells["false alarms by origin"] == "configured_check 1 / model 1"
+
+
 def test_a_row_whose_session_predates_the_model_view_reads_off(tmp_path: Path) -> None:
     """`MODEL_VIEW_OFF` is what a session written before feature 008 means
     (`agent/settings.py`), so its row's model view is that constant and reads `off`. Its record,

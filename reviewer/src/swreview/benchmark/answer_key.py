@@ -16,17 +16,26 @@ summary, call it, after a run has finished. Nothing under `tools/`, `agent/`, `c
 naming the entry; then this module's rows, the first failing row ending the load:
 
 - row 2: `package_id` equals the file's stem (its set half lands with keyed sets);
-- row 6's typo guard (AK-6): every check, a family's id read with its trailing dot, falls under a
-  goal of the report's words file, so `hygeine.*` cannot grade nothing and pass every test;
-- row 8: no two known defects, and no known defect and correct condition, overlap, through
-  `matching.entries_overlap`, the scorer's own primitives;
+- row 6's typo guard (AK-6): every check pattern, a known defect's, a correct condition's and each
+  of a forbidden entry's, a family's id read with its trailing dot, falls under a goal of the
+  report's words file, so `hygeine.*` cannot grade nothing and pass every test;
+- row 8: no two known defects, no known defect and correct condition, and no forbidden entry and
+  known defect overlap, through `matching.entries_overlap`, the scorer's own primitives; a
+  forbidden entry may overlap a correct condition or another forbidden entry (US3-1);
+- row 9: each expected-coverage `item` is a checklist item, read by a goal of the report's words
+  file, and no goal is expected twice;
+- row 10: an expected-coverage entry whose goal also reads a known defect's check expects
+  `checked`, since a goal holding a finding reads as checked (`scoring.md` 4; SR-11);
+- row 11: `questions.md` 5.3's refusals of the unanswerable requests and the question-count rules,
+  run by `benchmark/questions.py`, which holds them once, their ids resolved only with the
+  package present;
 - row 12 (section 6): a key-only key loads with no package, its ids unchecked; a key-only key whose
   package exists, and a key without the marker whose package is missing, are refused;
 - with the package, row 13: every id resolves, component and document ids as
-  `ToolContext.entity_kind` reads them, holes, fasteners and hole instances against the package,
-  dimensions through `tools/refs.resolve_dimension` with its own message; and row 14: every
-  reference is owned by the entry's parts or documents, so a reference match implies the target
-  overlap FR-003 asks for.
+  `ToolContext.entity_kind` reads them, a forbidden entry's included, holes, fasteners and hole
+  instances against the package, dimensions through `tools/refs.resolve_dimension` with its own
+  message; and row 14: every reference is owned by the entry's parts or documents, so a reference
+  match implies the target overlap FR-003 asks for.
 
 Every refusal is an `AnswerKeyError`, a `ValueError` the command line prints as one line, starting
 "answer key {file name}:" and naming the entry, or both entries of an overlap.
@@ -56,17 +65,20 @@ from swreview.agent.checklist import CHECKLIST_FILE, SYSTEM_PROMPT_FILE, Checkli
 from swreview.benchmark import digest, matching
 from swreview.benchmark.answer_key_model import (
     AnswerKey,
+    CorrectCondition,
     DimensionReference,
     FitReference,
     HolePairReference,
     JointInstancesReference,
     JointReference,
+    KnownDefect,
     RecessReference,
     ReferenceElement,
     StackReference,
     Stamp,
     is_family,
 )
+from swreview.benchmark.questions import QuestionIds, question_entry_refusals
 from swreview.ir.loader import LoadedPackage
 from swreview.ir.models import EvidencePackage
 from swreview.report.finding_groups import goal_of
@@ -141,11 +153,11 @@ def load_answer_key(
     """Read the key at `path`, refusing it by section 4's rows in order.
 
     `package` is the package the set names, or `None` when it is not on disk (section 6).
-    `checklist` builds the context row 13 reads ids through; the coverage rows of the
-    key-extensions slice read its items. `words` is `report.summary.load_words()`, whose goals
-    the typo guard reads. A file that is missing, cannot be read or is not UTF-8 is refused
-    like one that is not JSON, before any row runs; an `OSError` is named by its `strerror`, or
-    its type when it has none, since its text carries the absolute path the read was given.
+    `checklist` builds the context row 13 reads ids through, and rows 9 and 11 read its items.
+    `words` is `report.summary.load_words()`, whose goals the typo guard and rows 9 and 10
+    read. A file that is missing, cannot be read or is not UTF-8 is refused like one that is not
+    JSON, before any row runs; an `OSError` is named by its `strerror`, or its type when it has
+    none, since its text carries the absolute path the read was given.
     """
     path = Path(path)
     try:
@@ -199,6 +211,11 @@ def _loader_refusals(
     yield _stem_refusal(path, key)
     yield from _typo_refusals(key, words)
     yield _overlap_refusal(key)
+    yield from _coverage_refusals(key, checklist, words)
+    yield from _coverage_goal_refusals(key, words)
+    yield from question_entry_refusals(
+        key, checklist=checklist, ids=None if package is None else QuestionIds(package)
+    )
     yield _key_only_refusal(key, package)
     if package is not None:
         context = _context(package, checklist)
@@ -213,28 +230,37 @@ def _stem_refusal(path: Path, key: AnswerKey) -> str | None:
     return None
 
 
+def _read_as(pattern: str) -> str:
+    """A check pattern as `finding_groups.goal_of` reads it: a family's id with its trailing dot
+    (AK-6), so `fasteners.*` reads as `fasteners.`, under no goal."""
+    return pattern.removesuffix("*") if is_family(pattern) else pattern
+
+
 def _typo_refusals(key: AnswerKey, words: Words) -> Iterator[str | None]:
-    """Row 6's typo guard (AK-6): `finding_groups.goal_of` of each check, a family's id with its
-    trailing dot, is a goal."""
-    for entry in _checked_entries(key):
-        read = entry.check.removesuffix("*") if is_family(entry.check) else entry.check
-        if goal_of(read, words.goals) is None:
-            yield (
-                f"{entry.id} checks {entry.check}, which falls under no goal of the report's words "
-                "file, so it would grade nothing: a typo? (answer-key.md 3)"
-            )
+    """Row 6's typo guard (AK-6): `finding_groups.goal_of` of each check pattern, every one of
+    a forbidden entry's included, is a goal."""
+    for entry in _targeted_entries(key):
+        for pattern in matching.entry_patterns(entry):
+            if goal_of(_read_as(pattern), words.goals) is None:
+                yield (
+                    f"{entry.id} checks {pattern}, which falls under no goal of the report's "
+                    "words file, so it would grade nothing: a typo? (answer-key.md 3)"
+                )
 
 
 def _overlap_refusal(key: AnswerKey) -> str | None:
-    """Row 8: known defect against known defect, then known defect against correct condition,
-    in key order, through the matcher's own overlap test (section 5)."""
-    pairs = [
+    """Row 8: known defect against known defect, known defect against correct condition, then
+    forbidden entry against known defect, in key order, through the matcher's own overlap test
+    (section 5). A forbidden entry against a correct condition or another forbidden entry is
+    allowed: the scorer counts such a finding once."""
+    pairs: list[tuple[matching.Entry, matching.Entry]] = [
         *combinations(key.known_defects, 2),
         *(
             (defect, condition)
             for defect in key.known_defects
             for condition in key.correct_conditions
         ),
+        *((forbidden, defect) for forbidden in key.forbidden for defect in key.known_defects),
     ]
     for first, second in pairs:
         if matching.entries_overlap(first, second):
@@ -243,6 +269,50 @@ def _overlap_refusal(key: AnswerKey) -> str | None:
                 "(answer-key.md 5)"
             )
     return None
+
+
+def _coverage_refusals(key: AnswerKey, checklist: Checklist, words: Words) -> Iterator[str | None]:
+    """Row 9 (FR-018): each expected-coverage `item` is a checklist item, read by a goal, and one
+    entry per goal; a `statuses` value outside section 2.6 is the model's refusal."""
+    items = {item.id for item in checklist.items}
+    expected: dict[str, str] = {}
+    for entry in key.expected_coverage:
+        goal = goal_of(entry.item, words.goals)
+        if entry.item not in items:
+            yield (
+                f"{entry.id} expects coverage of {entry.item}, which is not a checklist item "
+                "(answer-key.md 2.6)"
+            )
+        elif goal is None:
+            yield (
+                f"{entry.id} expects coverage of {entry.item}, which no goal of the report's "
+                "words file reads (answer-key.md 4)"
+            )
+        elif expected.setdefault(goal.id, entry.id) != entry.id:
+            yield (
+                f"{entry.id} expects coverage of {entry.item}, whose goal {goal.id} "
+                f"{expected[goal.id]} already expects: one entry per goal (answer-key.md 4)"
+            )
+
+
+def _coverage_goal_refusals(key: AnswerKey, words: Words) -> Iterator[str | None]:
+    """Row 10 (FR-018, SC-001; SR-11): the report reads a goal holding any finding other than a
+    pass as `issues`, which a key reads as `checked` (`scoring.md` 4), so an entry whose goal
+    also reads a known defect's check, a family's id with its trailing dot, expects `checked`:
+    otherwise a review that finds the defect would read as a coverage mismatch."""
+    for entry in key.expected_coverage:
+        goal = goal_of(entry.item, words.goals)
+        if goal is None or "checked" in entry.statuses:
+            continue
+        for defect in key.known_defects:
+            defect_goal = goal_of(_read_as(defect.check), words.goals)
+            if defect_goal is not None and defect_goal.id == goal.id:
+                yield (
+                    f"{entry.id} expects {', '.join(entry.statuses)} of {entry.item}, whose goal "
+                    f"{goal.id} also reads {defect.id}'s check {defect.check}: a goal holding a "
+                    "finding reads as checked (state issues); expect checked, or drop "
+                    f"{entry.id}"
+                )
 
 
 def _key_only_refusal(key: AnswerKey, package: EvidencePackage | None) -> str | None:
@@ -269,13 +339,15 @@ def _context(package: EvidencePackage, checklist: Checklist) -> ToolContext:
 
 
 def _id_refusals(key: AnswerKey, context: ToolContext) -> Iterator[str | None]:
-    """Row 13 (FR-009): every id the key names is in the package, by its kind."""
-    for entry in _checked_entries(key):
+    """Row 13 (FR-009): every id the key names is in the package, by its kind: the parts and
+    documents of every entry on them, a forbidden entry's included, and the references of a
+    known defect or a correct condition. The question entries' ids are row 11's."""
+    for entry in _targeted_entries(key):
         for kind, ids in (("component", entry.component_ids), ("document", entry.document_ids)):
             for entity_id in ids:
                 if context.entity_kind(entity_id) != kind:
                     yield f"{entry.id} names the {kind} {entity_id}, which is not in the package"
-        for element in entry.references or []:
+        for element in matching.entry_references(entry) or []:
             for kind, entity_id in _entities_named(element):
                 if kind == "hole instance":
                     yield _instance_refusal(entry.id, entity_id, context)
@@ -369,6 +441,12 @@ def _cite(dimension: DimensionReference) -> str:
     return f"the dimension {dimension.document_id} {dimension.sheet} {dimension.annotation}"
 
 
-def _checked_entries(key: AnswerKey) -> list[matching.Entry]:
+def _checked_entries(key: AnswerKey) -> list[KnownDefect | CorrectCondition]:
     """The key's entries on one check: its known defects, then its correct conditions."""
     return [*key.known_defects, *key.correct_conditions]
+
+
+def _targeted_entries(key: AnswerKey) -> list[matching.Entry]:
+    """The key's entries on parts or documents: its entries on one check, then its forbidden
+    entries."""
+    return [*_checked_entries(key), *key.forbidden]
