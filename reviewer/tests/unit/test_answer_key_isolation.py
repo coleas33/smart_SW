@@ -6,6 +6,13 @@ benchmark-harness layers built on top of it: `swreview.benchmark.sets.load_set` 
 to reference an answer key as a package, and `swreview.benchmark.runner.run_benchmark`
 never hands a package path under `benchmarks/answer_keys/` to its review function - both
 through the set it loads and, defensively, on its own.
+
+Feature 014 T093 adds the case file's half (`contracts/scripted-answers.md` 6 and 7; US4-9,
+FR-030; QA-6), here in the unit file only, since the integration file is module-marked
+`integration` (RF-26): the guard withholds a committed case file's folder,
+`benchmarks/case_files/`, as it withholds the keys', and a private set whose package path is,
+or lies under, its own case file's folder is refused at `load_set` by row 5, so that path
+never reaches `load_package`.
 """
 
 from __future__ import annotations
@@ -19,8 +26,9 @@ from pathlib import Path
 import pytest
 
 from swreview.benchmark.runner import run_benchmark
-from swreview.benchmark.sets import BenchmarkPackageRef, BenchmarkSet, load_set
-from swreview.ir.loader import AnswerKeyAccessError
+from swreview.benchmark.sets import BenchmarkPackageRef, BenchmarkSet, SetError, load_set
+from swreview.ir.loader import AnswerKeyAccessError, load_package
+from tests.support.packages import build_package
 
 
 def write_set(directory: Path, name: str, packages: list[dict[str, object]]) -> Path:
@@ -179,3 +187,74 @@ def test_run_benchmark_refuses_an_answer_key_path_even_if_the_set_object_smuggle
         )
 
     assert calls == []
+
+
+# --- the case file's half (feature 014 T093) ------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "folder",
+    ["benchmarks/case_files", "benchmarks/case_files/pkg-1"],
+    ids=["the case files' folder", "a folder in it"],
+)
+def test_load_package_refuses_a_path_under_case_files(tmp_path: Path, folder: str) -> None:
+    """A real `package.json` lies there, so the refusal is the guard's and not a missing
+    file's; its message names the segment it met (QA-6)."""
+    package_dir = tmp_path / folder
+    package_dir.mkdir(parents=True)
+    (package_dir / "package.json").write_text(
+        build_package().model_dump_json(indent=2) + "\n", encoding="utf-8"
+    )
+
+    with pytest.raises(AnswerKeyAccessError) as refused:
+        load_package(package_dir)
+
+    assert str(refused.value).startswith(
+        f"{package_dir.resolve()} is inside benchmarks/case_files; "
+    )
+
+
+@pytest.mark.parametrize(
+    "package",
+    ["vault/answers", "vault/answers/pkg-1"],
+    ids=["the case file's folder", "a folder under it"],
+)
+def test_a_private_set_whose_package_is_at_or_under_its_case_file_s_folder_is_refused_at_load_set(
+    tmp_path: Path, package: str
+) -> None:
+    """Row 5 (`contracts/cases.md` 4.3): the set is refused as it loads, before any reader is
+    handed the package path, so the case file never reaches `load_package` (US4-9). Every path
+    is private: absolute, outside the root."""
+    root = tmp_path / "checkout"
+    case_file = tmp_path / "vault" / "answers" / "pkg-1.case.json"
+    case_file.parent.mkdir(parents=True)
+    case_file.write_text('{"case_file_version": 1}\n', encoding="utf-8")
+    package_dir = tmp_path / package
+    set_path = tmp_path / "vault" / "private.json"
+    set_path.write_text(
+        json.dumps(
+            {
+                "name": "private",
+                "packages": [
+                    {
+                        "package_id": "pkg-1",
+                        "path": str(package_dir),
+                        "case_file": str(case_file),
+                        "held_out": True,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SetError) as refused:
+        load_set(set_path, root=root)
+
+    message = str(refused.value)
+    assert message.startswith("benchmark set private.json:")
+    assert str(package_dir.resolve()) in message
+    assert str(case_file.resolve()) in message
+    assert message.endswith(
+        "the reviewer reads the package folder; keep keys and case files outside it"
+    )
