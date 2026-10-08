@@ -26,6 +26,7 @@ No provider, no answer key, no run: every input here is a file this module wrote
 from __future__ import annotations
 
 import json
+import shutil
 from collections import Counter
 from collections.abc import Iterator, Sequence
 from dataclasses import replace
@@ -61,8 +62,10 @@ from swreview.benchmark.compare import (
     LEDGER_END,
     LEDGER_JSON,
     LEDGER_MD,
+    LEVER_COLUMNS,
     MUST_MATCH,
     RECORD_ONLY,
+    RUN_COLUMNS,
     RUN_IDENTITY,
     STUDY_KEY_FIELDS,
     UNKNOWN,
@@ -76,6 +79,8 @@ from swreview.benchmark.compare import (
     write_ledger,
 )
 from swreview.benchmark.runner import PROVENANCE_FILE, RunProvenance
+from swreview.benchmark.scorecard import NOT_ASSESSED, SCORECARD_FILE, Scorecard
+from swreview.checks.standards.profile import display_digest
 from tests.support.studies import (
     COMMIT,
     EXAMPLE_PROFILE_DIGEST,
@@ -92,6 +97,7 @@ from tests.support.studies import (
     write_run,
     write_study,
 )
+from tests.unit.test_run_provenance import git
 
 runner = CliRunner()
 
@@ -793,7 +799,7 @@ def test_write_ledger_writes_both_files(tmp_path: Path) -> None:
     assert json_path == out / LEDGER_JSON
     assert md_path == out / LEDGER_MD
     payload = json.loads(json_path.read_text(encoding="utf-8"))
-    assert payload["ledger_schema"] == "1.0"
+    assert payload["ledger_schema"] == "1.1"
     assert len(payload["runs"]) == 6
     assert payload["levers"][0]["owner_signed_off"] is False
 
@@ -1602,6 +1608,474 @@ def test_a_no_study_run_with_a_model_view_switch_renders_as_a_raw_row(
 
     assert one_row(ledger, "smoke").arm is None
     assert ledger.levers == []
+
+
+# --- the ledger 1.1 (feature 014 T066; `contracts/provenance.md` 5, 6.3 and 6.4) -------------
+
+
+def test_the_run_and_decision_columns_are_section_5s_final_order() -> None:
+    """INT-10: both headers pinned whole, in the order fixed up front, so a later slice cannot
+    insert a column without failing this, and the committed header is regenerated once. No
+    run-status column: its source arrives with the robustness slice."""
+    assert RUN_COLUMNS == (
+        "run",
+        "commit",
+        "lever",
+        "arm",
+        "rep",
+        "provider",
+        "model",
+        "effort",
+        "explanations",
+        "model view",
+        "profile",
+        "live tools",
+        "package",
+        "input",
+        "cached in",
+        "uncached in",
+        "output",
+        "reasoning/thoughts",
+        "tool-result in",
+        "total",
+        "rounds",
+        "tool calls",
+        "cached share",
+        "wall clock s",
+        "s to 1st finding",
+        "valid",
+        "missed",
+        "flagged",
+        "below expected",
+        "status mismatch",
+        "cleared",
+        "false alarms",
+        "contradicted",
+        "confirmed",
+        "unresolved",
+        "unresolved withheld",
+        "unresolved other",
+        "coverage bucket mix",
+        "findings by origin",
+        "false alarms by origin",
+    )
+    assert LEVER_COLUMNS == (
+        "Lever",
+        "Provider and model",
+        "Commit",
+        "Reps",
+        "Other levers on",
+        "Input tokens off -> on (median, min-max)",
+        "Cached input off -> on",
+        "Output off -> on",
+        "Reasoning or thoughts off -> on",
+        "Total tokens off -> on",
+        "Round trips off -> on",
+        "Tool calls off -> on",
+        "Wall clock off -> on",
+        "Dump wall clock off -> on",
+        "Valid / missed / false alarms / unresolved off -> on",
+        "Recall (held out) off -> on",
+        "Recall by producer (held out) off -> on",
+        "Median net saved minutes off -> on",
+        "Worst-case defects lost",
+        "Lever-specific counter",
+        "Decision",
+        "Owner signed off",
+        "Owner signed off at",
+        "Decision reason",
+        "Link to run dirs",
+    )
+    lines = render_ledger_md(compare_runs([])).splitlines()
+    assert "| " + " | ".join(RUN_COLUMNS) + " |" in lines
+    assert "| " + " | ".join(LEVER_COLUMNS) + " |" in lines
+
+
+def test_the_ledger_record_is_schema_1_1_and_names_no_pane_study_when_none_was_compared(
+    tmp_path: Path,
+) -> None:
+    """One bump (INT-10). The 1.1 record names `pane_studies`, a key omitted when no pane study
+    was compared and filled from the verdict slice, which moves neither the version nor the
+    header; until then a pane study renders raw rows only."""
+    dirs = write_study(tmp_path, pane_study_specs(reps=1))
+
+    json_path, _ = write_ledger(compare_runs(dirs), tmp_path / "ledger")
+
+    payload = json.loads(json_path.read_text(encoding="utf-8"))
+    assert payload["ledger_schema"] == "1.1"
+    assert "pane_studies" not in payload
+
+
+def test_the_closing_notes_say_tool_calls_counts_the_pre_run_and_regrade_steps() -> None:
+    """INT-10: `tool calls` stays `len(session.steps)`, not split by the step mark, and the
+    ledger says what it counts."""
+    rendered = render_ledger_md(compare_runs([]))
+
+    note = next(line for line in rendered.splitlines() if line.startswith("`tool calls`"))
+    assert "`len(session.steps)`" in note
+    assert "pre-run" in note
+    assert "regrade" in note
+
+
+def rescored(run_dir: Path, **fields: Any) -> Path:
+    """Rewrite the one package score of the run at `run_dir` with `fields`: the outcome lists a
+    hand-built score leaves empty (`studies.package_score`). Returns `run_dir`."""
+    path = run_dir / SCORECARD_FILE
+    card = Scorecard.model_validate_json(path.read_text(encoding="utf-8"))
+    [score] = card.per_package
+    edited = card.model_copy(update={"per_package": [score.model_copy(update=fields)]})
+    path.write_text(edited.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    return run_dir
+
+
+def numbered(prefix: str, count: int) -> list[str]:
+    """`count` key ids, `<prefix>1` onwards."""
+    return [f"{prefix}{number}" for number in range(1, count + 1)]
+
+
+OUTCOMES: dict[str, Any] = {
+    "flagged_defect_ids": numbered("D-", 1),
+    "flagged_below_expected_defect_ids": numbered("D-", 2),
+    "status_mismatch_defect_ids": numbered("D-", 3),
+    "cleared_defect_ids": numbered("D-", 4),
+    "contradicted_condition_ids": numbered("C-", 5),
+    "confirmed_condition_ids": numbered("C-", 6),
+    "false_alarms": 2,
+    "false_alarm_finding_ids": ["F-004", "F-005"],
+    "finding_origins": {
+        "F-001": "prerun",
+        "F-002": "prerun",
+        "F-003": "prerun",
+        "F-004": "configured_check",
+        "F-005": "model",
+    },
+    "not_assessed": {},
+}
+"""One package's outcome columns, each count distinct so a swapped cell fails."""
+
+
+def test_the_ledger_shows_model_view_profile_and_live_tools(tmp_path: Path) -> None:
+    """US2-3, PP-7 (`contracts/provenance.md` 5): the model view from the session, `off` for
+    `MODEL_VIEW_OFF` and for a view with both switches off, `pane` for `MODEL_VIEW_PANE`,
+    otherwise its switches; the profile through `display_digest`, `none` with no profile and
+    `unknown` with no record; live tools `yes`, `no` or `unknown`. Beside them the scorer's outcome
+    columns: the origin cells as mixes in `Origin`'s order with zero origins left out, `none` when
+    every origin is zero, and a column the key does not grade reading `not assessed`."""
+    smoke = {"arm": None, "rep": None, "lever": "none"}
+    specs = [
+        RunSpec(run="view-off", **smoke),
+        RunSpec(run="view-pane", model_view=MODEL_VIEW_PANE, **smoke),
+        RunSpec(
+            run="view-slimming",
+            model_view=ModelViewSettings(payload_slimming=True, history_pruning=False),
+            **smoke,
+        ),
+        RunSpec(
+            run="view-pruning",
+            model_view=ModelViewSettings(
+                payload_slimming=False, history_pruning=True, prune_after_rounds=3
+            ),
+            **smoke,
+        ),
+        RunSpec(
+            run="view-both",
+            model_view=ModelViewSettings(
+                payload_slimming=True, history_pruning=True, prune_after_rounds=1
+            ),
+            **smoke,
+        ),
+        RunSpec(
+            run="view-no-switch",
+            model_view=ModelViewSettings(
+                payload_slimming=False, history_pruning=False, prune_after_rounds=5
+            ),
+            **smoke,
+        ),
+        RunSpec(
+            run="profiled",
+            profile_digest=EXAMPLE_PROFILE_DIGEST,
+            profile_is_example=True,
+            live_tools=True,
+            **smoke,
+        ),
+        RunSpec(run="live-unknown", live_tools=None, **smoke),
+        RunSpec(run="no-false-alarm", packages=(PackageSpec(false_alarms=0),), **smoke),
+    ]
+    dirs = [write_run(tmp_path, spec) for spec in specs]
+    dirs.append(write_run(tmp_path, RunSpec(run="no-record", **smoke), with_provenance=False))
+    dirs.append(rescored(write_run(tmp_path, RunSpec(run="outcomes", **smoke)), **OUTCOMES))
+
+    ledger = compare_runs(dirs)
+    rendered = render_ledger_md(ledger)
+
+    cells = {row.run: cells_of(rendered, row.run) for row in ledger.runs}
+    views = {run: cells[run]["model view"] for run in cells if run.startswith("view-")}
+    assert views == {
+        "view-off": "off",
+        "view-pane": "pane",
+        "view-slimming": "slimming",
+        "view-pruning": "pruning after 3",
+        "view-both": "slimming, pruning after 1",
+        "view-no-switch": "off",
+    }
+    assert one_row(ledger, "view-pruning").model_view == specs[3].model_view
+    assert one_row(ledger, "profiled").profile_digest == EXAMPLE_PROFILE_DIGEST
+    assert cells["profiled"]["profile"] == display_digest(EXAMPLE_PROFILE_DIGEST)
+    assert len(cells["profiled"]["profile"]) == 12
+    assert cells["view-off"]["profile"] == "none"
+    assert cells["no-record"]["profile"] == UNKNOWN
+    assert one_row(ledger, "no-record").profile_digest is None
+    assert [cells[run]["live tools"] for run in ("profiled", "view-off", "live-unknown")] == [
+        "yes",
+        "no",
+        UNKNOWN,
+    ]
+    assert cells["no-record"]["live tools"] == UNKNOWN
+    assert one_row(ledger, "view-pane").pane_defaults is False
+    assert one_row(ledger, "no-record").pane_defaults is None
+
+    outcomes = cells["outcomes"]
+    assert {name: outcomes[name] for name in RUN_COLUMNS[RUN_COLUMNS.index("valid") :]} == {
+        "valid": "2",
+        "missed": "0",
+        "flagged": "1",
+        "below expected": "2",
+        "status mismatch": "3",
+        "cleared": "4",
+        "false alarms": "2",
+        "contradicted": "5",
+        "confirmed": "6",
+        "unresolved": "3",
+        "unresolved withheld": "0",
+        "unresolved other": "3",
+        "coverage bucket mix": "checked 2 / skipped 0 / unresolved 3 / failed 0 / out_of_scope 0",
+        "findings by origin": "prerun 3 / configured_check 1 / model 1",
+        "false alarms by origin": "configured_check 1 / model 1",
+    }
+    plain = cells["view-off"]
+    assert (plain["contradicted"], plain["confirmed"]) == (NOT_ASSESSED, NOT_ASSESSED)
+    assert (plain["findings by origin"], plain["false alarms by origin"]) == (
+        "unknown 1",
+        "unknown 1",
+    )
+    assert one_row(ledger, "view-off").contradictions is None
+    assert one_row(ledger, "outcomes").contradictions == 5
+    nothing = cells["no-false-alarm"]
+    assert (nothing["findings by origin"], nothing["false alarms by origin"]) == ("none", "none")
+
+
+def test_a_row_whose_session_predates_the_model_view_reads_off(tmp_path: Path) -> None:
+    """`MODEL_VIEW_OFF` is what a session written before feature 008 means
+    (`agent/settings.py`), so its row's model view is that constant and reads `off`. Its record,
+    older than feature 014's fields, recorded no profile and no live tools: both read `unknown`,
+    never `none` or `no`."""
+    spec = RunSpec(
+        run="ancient-view",
+        provenance_schema=1,
+        model_view=None,
+        live_tools=None,
+        inert_settings=None,
+        prompt_digest=None,
+        tree_dirty=None,
+    )
+    run_dir = write_run(tmp_path, spec, session_edit={"model_view": None})
+
+    ledger = compare_runs([run_dir])
+
+    assert one_row(ledger, "ancient-view").model_view == MODEL_VIEW_OFF
+    cells = cells_of(render_ledger_md(ledger), "ancient-view")
+    assert (cells["model view"], cells["profile"], cells["live tools"]) == ("off", UNKNOWN, UNKNOWN)
+
+
+def test_the_decision_row_reports_recall_by_producer_held_out(tmp_path: Path) -> None:
+    """SP-13 A: recall of the held-out known defects per producer, off -> on, reported beside
+    the overall recall and never gated on; a producer the keys hold no held-out defect of reads
+    unknown."""
+    dirs = write_study(tmp_path, study_specs(on=CHEAPER))
+
+    ledger = compare_runs(dirs)
+
+    row = lever_row(ledger, "parallel_tool_calls")
+    assert (row.recall_held_out_model.off_median, row.recall_held_out_model.on_median) == (1, 1)
+    assert row.recall_held_out_code.off_rows == row.recall_held_out_code.on_rows == 0
+    cell = lever_cells_of(render_ledger_md(ledger), "parallel_tool_calls")[
+        "Recall by producer (held out) off -> on"
+    ]
+    assert cell == (
+        "model: 1 (1-1, n=3) -> 1 (1-1, n=3), +0.0% ; "
+        "code: unknown (unknown-unknown, n=0) -> unknown (unknown-unknown, n=0), unknown"
+    )
+    assert row.decision == ADOPT
+
+
+COMMITTED_LEDGER_REFUSAL = (
+    "the committed ledger holds only fictional-profile studies over committed cases, from run "
+    "folders the repository holds (FR-051): render {run} with --out outside the repository"
+)
+
+
+def committed_ledger_refusal(run_dir: Path) -> str:
+    """The one line the command prints refusing `run_dir` for the committed ledger."""
+    return "error: CompareError: " + COMMITTED_LEDGER_REFUSAL.format(run=run_dir)
+
+IGNORED_RUNS = "ignored-runs"
+"""A folder the temporary checkout's `.gitignore` ignores."""
+
+
+def committed_checkout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
+    """A temporary checkout the command is pointed at through `sets.REPO_ROOT`, a git repository
+    ignoring `IGNORED_RUNS` where git is on the path, holding a ledger document inside it, so
+    committable; returns the checkout and the document."""
+    root = tmp_path / "checkout"
+    document = root / "docs" / "llm-efficiency-options.md"
+    document.parent.mkdir(parents=True)
+    document.write_text(_document(render_ledger_md(compare_runs([]))), encoding="utf-8")
+    (root / ".gitignore").write_text(f"{IGNORED_RUNS}/\n", encoding="utf-8")
+    if shutil.which("git") is not None:
+        git(root, "init", "-q")
+    monkeypatch.setattr(sets, "REPO_ROOT", root)
+    return root, document
+
+
+def guarded_runs(root: Path, tmp_path: Path) -> tuple[list[Path], list[Path]]:
+    """The runs the committed ledger refuses and the ones it takes, as `write_run` lays them out:
+    another profile than the example, a saved set naming an absolute path and a folder outside the
+    checkout; no profile, and the example profile, inside it."""
+    studies = root / "benchmarks" / "studies" / "smoke"
+    private = (tmp_path / "private" / "rms-part").as_posix()
+    refused = [
+        write_run(
+            studies,
+            replace(
+                SMOKE,
+                run="another-profile",
+                profile_digest=PRIVATE_PROFILE_DIGEST,
+                profile_is_example=False,
+            ),
+        ),
+        write_run(
+            studies,
+            replace(SMOKE, run="private-package"),
+            saved_packages=[{"package_id": "rms-part", "path": private, "held_out": True}],
+        ),
+        write_run(tmp_path / "elsewhere", replace(SMOKE, run="outside")),
+    ]
+    accepted = [
+        write_run(studies, replace(SMOKE, run="no-profile")),
+        write_run(
+            studies,
+            replace(
+                SMOKE,
+                run="example-profile",
+                profile_digest=EXAMPLE_PROFILE_DIGEST,
+                profile_is_example=True,
+            ),
+        ),
+    ]
+    return refused, accepted
+
+
+def compare_into(run_dirs: Sequence[Path], *destination: str) -> Any:
+    return invoke("benchmark", "compare", *[str(one) for one in run_dirs], *destination)
+
+
+def test_the_committed_ledger_refuses_another_profile_a_private_package_and_an_outside_folder(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """US2-10, FR-051 (`contracts/provenance.md` 6.4): with `--into` or `--out` somewhere the
+    repository may commit, and under `--check` too, a run graded against a profile other than the
+    fictional example, one whose saved set names an absolute path and one whose folder the
+    repository does not hold are each refused, exit 1, before anything is written. A run with no
+    profile graded against none and is not refused, nor is one graded against the example."""
+    root, document = committed_checkout(tmp_path, monkeypatch)
+    refused, accepted = guarded_runs(root, tmp_path)
+    before = document.read_text(encoding="utf-8")
+    out = root / "ledger"
+
+    for run_dir in refused:
+        for destination in (
+            ("--into", str(document)),
+            ("--into", str(document), "--check"),
+            ("--out", str(out)),
+        ):
+            result = compare_into([*accepted, run_dir], *destination)
+
+            assert result.exit_code == 1, (destination, result.stdout + result.stderr)
+            assert result.stderr.strip() == committed_ledger_refusal(run_dir), destination
+    assert document.read_text(encoding="utf-8") == before
+    assert not out.exists()
+
+    written = compare_into(accepted, "--into", str(document))
+    assert written.exit_code == 0, written.stdout + written.stderr
+    checked = compare_into(accepted, "--into", str(document), "--check")
+    assert checked.exit_code == 0, checked.stdout + checked.stderr
+    regenerated = document.read_text(encoding="utf-8")
+    assert "| no-profile |" in regenerated
+    assert "| example-profile |" in regenerated
+
+
+def test_a_ledger_written_outside_the_repository_accepts_them(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """US2-10: the same runs rendered into a ledger the repository cannot commit, a folder and a
+    document outside the checkout, are taken, every row rendered."""
+    root, _ = committed_checkout(tmp_path, monkeypatch)
+    refused, accepted = guarded_runs(root, tmp_path)
+    notes = tmp_path / "notes.md"
+    notes.write_text(_document(render_ledger_md(compare_runs([]))), encoding="utf-8")
+    out = tmp_path / "ledger"
+
+    result = compare_into([*accepted, *refused], "--out", str(out), "--into", str(notes))
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    for document in (out / LEDGER_MD, notes):
+        text = document.read_text(encoding="utf-8")
+        for run_dir in (*accepted, *refused):
+            assert f"| {run_dir.name} |" in text, (document, run_dir)
+
+
+def test_the_committed_ledger_reads_a_folder_git_ignores_as_one_it_does_not_hold(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Committable is `runner.committable`'s reading (`contracts/provenance.md` 6.4): a run folder
+    inside the checkout that git ignores is refused by the committed ledger, and a ledger written
+    into an ignored folder takes every run. Skipped where git is absent, never passed."""
+    if shutil.which("git") is None:
+        pytest.skip("git is not on the path")
+    root, document = committed_checkout(tmp_path, monkeypatch)
+    refused, accepted = guarded_runs(root, tmp_path)
+    ignored = write_run(root / IGNORED_RUNS, replace(SMOKE, run="ignored"))
+
+    result = compare_into([*accepted, ignored], "--into", str(document))
+
+    assert result.exit_code == 1
+    assert result.stderr.strip() == committed_ledger_refusal(ignored)
+    out = root / IGNORED_RUNS / "ledger"
+    taken = compare_into([*accepted, *refused, ignored], "--out", str(out))
+    assert taken.exit_code == 0, taken.stdout + taken.stderr
+    assert "| ignored |" in (out / LEDGER_MD).read_text(encoding="utf-8")
+
+
+def test_run_folders_render_repository_relative_inside_the_checkout(tmp_path: Path) -> None:
+    """Section 6.3: `RunRow.run_dir` and `LeverDecision.run_dirs` name a folder inside the checkout
+    relative to its root with `/`, however it was typed, so the committed table carries no
+    checkout location; a folder outside renders as typed, which only a ledger written outside
+    the repository can hold."""
+    root = tmp_path / "checkout"
+    off, on = study_specs(reps=1, on=CHEAPER)
+    write_run(root / "benchmarks" / "studies" / "lever", off)
+    write_run(tmp_path / "elsewhere", on)
+    inside = root / "benchmarks" / "studies" / ".." / "studies" / "lever" / "off-1"
+    outside = tmp_path / "elsewhere" / ".." / "elsewhere" / "on-1"
+
+    ledger = compare_runs([inside, outside], root=root)
+
+    relative = "benchmarks/studies/lever/off-1"
+    assert one_row(ledger, "off-1").run_dir == relative
+    assert one_row(ledger, "on-1").run_dir == str(outside)
+    assert lever_row(ledger, "parallel_tool_calls").run_dirs == [relative, str(outside)]
+    cells = lever_cells_of(render_ledger_md(ledger), "parallel_tool_calls")
+    assert cells["Link to run dirs"] == f"{relative}, {outside}"
 
 
 # --- the committed document the ledger is spliced into (T045) --------------------

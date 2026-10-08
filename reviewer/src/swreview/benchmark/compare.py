@@ -15,8 +15,10 @@ Three things this module is, in order of weight:
 2. **A renderer with one source per column.** No number is computed twice: the token
    counts are `session.usage.totals` verbatim, `uncached in` and the cached share are the
    scorecard's own derivation read through, `tool calls` is `len(session.steps)` and is
-   never conflated with `rounds`, and the four provenance columns are the provenance
-   record's.
+   never conflated with `rounds`, the provenance columns and the profile and live tools are
+   the provenance record's, the model view is the session's, and the outcome columns are the
+   scorer's `PackageScore` (feature 014 `contracts/provenance.md` 5). A run folder inside the
+   checkout is named relative to its root (section 6.3).
 3. **The reader that asks `adoption.decide` for the `Decision` column** and never types
    one. The owner's approval is `owner_signed_off`, a separate field this module never
    *computes*: `carry_sign_offs` copies it, and `owner_signed_off_at`, off the committed
@@ -47,6 +49,10 @@ What is refused, and what is merely null:
 - A run of a pane study with no arm, or a `pane_defaults` run not graded against the example
   profile: **refused**. Both pane studies render their raw rows and no decision row, under
   their own study keys (feature 014 `contracts/provenance.md` 3.2).
+- A ledger written where the repository may commit it, holding a run graded against another
+  profile than the fictional example, one whose saved set names an absolute path, or one from
+  a folder the repository does not hold: **refused**, naming the run (FR-051;
+  `contracts/provenance.md` 6.4).
 - No provenance record at all: **not** refused. The row renders with `lever`, `arm`,
   `rep` and `commit` null, because a run made before the convention existed is still a
   real run.
@@ -58,10 +64,10 @@ What is refused, and what is merely null:
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 from pydantic import Field
 
@@ -70,6 +76,7 @@ from swreview.agent.runner import SESSION_FILE_NAME
 from swreview.agent.settings import (
     LEVER_NAMES,
     MODEL_VIEW_OFF,
+    MODEL_VIEW_PANE,
     PANE_STUDY,
     PRIVATE_PANE_STUDY,
     ModelViewSettings,
@@ -86,20 +93,37 @@ from swreview.benchmark.adoption import (
     metric,
     off_on,
 )
-from swreview.benchmark.runner import REPO_ROOT, RunProvenance, load_provenance, sha256_of
+from swreview.benchmark.origins import Origin
+from swreview.benchmark.runner import (
+    REPO_ROOT,
+    RunProvenance,
+    committable,
+    load_provenance,
+    sha256_of,
+)
 from swreview.benchmark.scorecard import (
     SCORECARD_FILE,
     UNKNOWN,
     PackageScore,
     Scorecard,
+    by_origin,
+    false_alarm_origins,
+    fmt_assessed,
+    length_or_none,
     read_scorecard,
 )
+from swreview.checks.standards.profile import display_digest
 from swreview.checks.standards.report import stamped_profile_digest
 from swreview.exceptions import STANDARDS_CHECK_PREFIX
 from swreview.findings import ReviewModel
 from swreview.report.session import ReviewSession, load_session
 
-LEDGER_SCHEMA = "1.0"
+LEDGER_SCHEMA = "1.1"
+"""`ledger.json`'s schema (feature 014 `contracts/provenance.md` 5; plan decision INT-10): one bump
+for the feature, with the run and decision columns in their final order. The 1.1 record also names
+`pane_studies`, a key omitted when no pane study was compared and filled from the verdict slice,
+so that slice moves neither this version nor the committed header."""
+
 LEDGER_JSON = "ledger.json"
 LEDGER_MD = "ledger.md"
 SAVED_SET_FILE = "benchmark-set.json"
@@ -234,6 +258,9 @@ class RunRow(ReviewModel):
 
     run: str
     run_dir: str
+    """The run folder as the ledger names it (feature 014 `contracts/provenance.md` 6.3):
+    relative to the checkout's root with `/` inside it, as typed outside it."""
+
     commit: str | None
     lever: str | None
     arm: str | None
@@ -242,6 +269,26 @@ class RunRow(ReviewModel):
     model: str | None
     effort: str | None
     explanations_enabled: bool = False
+    model_view: ModelViewSettings
+    """The session's, which `_check_session` has held equal to a schema-2 record's;
+    `MODEL_VIEW_OFF` for a session written before feature 008, which that constant defines as
+    off."""
+
+    profile_recorded: bool
+    """Whether the record says which profile the run graded against, if any: false with no
+    record, or with one older than `RUN_START_SCHEMA`, whose `profile_digest` is absent rather
+    than none. The profile cell then reads unknown, never `none`."""
+
+    profile_digest: str | None
+    """The record's: the sha256 every standards finding of the run stamps; `None` with no
+    profile, and with no record."""
+
+    live_tools: bool | None
+    """The record's; `None` with no record, or one that did not record it."""
+
+    pane_defaults: bool | None
+    """The record's marker (PP-3); `None` with no record."""
+
     package_id: str
     held_out: bool
     other_levers_on: list[str]
@@ -259,7 +306,21 @@ class RunRow(ReviewModel):
     seconds_to_first_finding: float | None
     valid_findings: int
     missed_known_defects: int
+    flagged: int
+    flagged_below_expected: int
+    status_mismatches: int
+    cleared: int
+    """Four of the scorer's outcome lists, counted (feature 014 `scoring.md` 3.1): the defects
+    detected through an unresolved finding only, those met only below their expected status,
+    those credited above an expected unresolved, and those a `checked_within_scope` finding
+    cleared."""
+
     false_alarms: int
+    contradictions: int | None
+    confirmations: int | None
+    """The correct conditions contradicted and confirmed (`scoring.md` 3.2); `None`, rendered
+    `not assessed`, when the package's key holds no correct condition."""
+
     unresolved_count: int
     unresolved_because_withheld: int
     unresolved_other: int
@@ -269,6 +330,11 @@ class RunRow(ReviewModel):
     its gate is that the second does not move."""
 
     coverage_bucket_mix: dict[str, int]
+    findings_by_origin: dict[Origin, int]
+    false_alarms_by_origin: dict[Origin, int]
+    """Every origin, zeros included, in `Origin`'s order, as the scorer's aggregate counts them
+    (`scoring.md` 5.5); the cells leave the zeros out."""
+
     set_too_small_override: bool
 
 
@@ -323,6 +389,11 @@ class LeverDecision(ReviewModel):
     false_alarms: OffOn
     unresolved_count: OffOn
     recall_held_out: OffOn
+    recall_held_out_model: OffOn
+    recall_held_out_code: OffOn
+    """Recall of each producer's held-out known defects (feature 014 SP-13 A): reported beside
+    the overall recall, never gated on."""
+
     median_net_saved_minutes: OffOn
     """The number the pilot is judged on, across runs: the median of each run's own
     per-package median, with `n=` the runs that carried timing at all. Reported, never
@@ -347,6 +418,7 @@ class LeverDecision(ReviewModel):
     """The date beside the sign-off, written and carried by the same hand and the same
     rule. Rendered in its own column so FR-027's "with a date" has somewhere to live."""
     run_dirs: list[str]
+    """Each run folder as `RunRow.run_dir` names it."""
 
 
 class Ledger(ReviewModel):
@@ -361,6 +433,11 @@ class _LoadedRun:
 
     run: str
     run_dir: Path
+    """As typed: what a refusal names."""
+
+    ledger_dir: str
+    """As the ledger names it (`_ledger_dir`)."""
+
     provenance: RunProvenance | None
     scorecard: Scorecard
     sessions: dict[str, ReviewSession]
@@ -400,10 +477,31 @@ def _load_run(run_dir: Path, *, root: Path) -> _LoadedRun:
     return _LoadedRun(
         run=run_dir.name,
         run_dir=run_dir,
+        ledger_dir=_ledger_dir(run_dir, root=root),
         provenance=provenance,
         scorecard=scorecard,
         sessions=sessions,
     )
+
+
+def _ledger_dir(run_dir: Path, *, root: Path) -> str:
+    """A run folder as the ledger names it (feature 014 `contracts/provenance.md` 6.3).
+
+    Inside the checkout, relative to its root with `/` separators, however it was typed: the
+    committed table is rendered from absolute paths under `benchmarks/studies/` and would
+    otherwise carry the checkout's location. Outside it, as typed, which only a ledger written
+    outside the repository can hold (`_refuse_for_the_committed_ledger`).
+    """
+    resolved, checkout = run_dir.resolve(), root.resolve()
+    if resolved.is_relative_to(checkout):
+        return resolved.relative_to(checkout).as_posix()
+    return str(run_dir)
+
+
+def _model_view_of(session: ReviewSession) -> ModelViewSettings:
+    """The session's model view; a session written before feature 008 carries none, which
+    means off (`MODEL_VIEW_OFF`)."""
+    return session.model_view if session.model_view is not None else MODEL_VIEW_OFF
 
 
 def _check_record(run_dir: Path, provenance: RunProvenance | None) -> None:
@@ -475,9 +573,9 @@ def _check_session(
             )
         _check_profile_stamps(run_dir, package_id, session, provenance.profile_digest)
 
-    # A session written before feature 008 carries no model view, which means off.
-    view = session.model_view if session.model_view is not None else MODEL_VIEW_OFF
-    _check_arm(run_dir, package_id, session.efficiency.model_dump(), view, provenance)
+    _check_arm(
+        run_dir, package_id, session.efficiency.model_dump(), _model_view_of(session), provenance
+    )
 
 
 def _check_profile_stamps(
@@ -641,6 +739,46 @@ def _check_set_flags(run_dir: Path, scorecard: Scorecard, *, root: Path) -> None
             )
 
 
+def _refuse_for_the_committed_ledger(run: _LoadedRun, *, root: Path) -> None:
+    """FR-051's compare half (feature 014 `contracts/provenance.md` 6.4; PROV-09; US2-10), for a
+    ledger written where the repository may commit it: it holds only fictional-profile studies
+    over committed cases, from run folders the repository holds.
+
+    Refused: a run graded against a profile other than the fictional example
+    (`profile_is_example` false), one whose saved set names an absolute path, and one whose
+    folder is not committable (`runner.committable`: outside the checkout at `root`, or ignored
+    there). A run that recorded no profile (`profile_is_example` null) is not refused: it graded
+    against none.
+    """
+    provenance = run.provenance
+    another_profile = provenance is not None and provenance.profile_is_example is False
+    if (
+        another_profile
+        or _names_an_absolute_path(run.run_dir / SAVED_SET_FILE)
+        or not committable(run.run_dir, root=root)
+    ):
+        raise CompareError(
+            "the committed ledger holds only fictional-profile studies over committed cases, "
+            f"from run folders the repository holds (FR-051): render {run.run_dir} with --out "
+            "outside the repository"
+        )
+
+
+def _names_an_absolute_path(saved: Path) -> bool:
+    """Whether the saved set at `saved` names a package path absolutely: a private entry, or a
+    copy saved before feature 014, which resolved every path (`contracts/provenance.md` 6.1).
+
+    Read off the saved bytes, since `load_saved_set` resolves every entry. Absolute in either
+    platform's spelling, a drive, a share or a root, which is what a Windows path's anchor
+    reads, so a copy saved on another platform is read alike. A run with no saved copy names
+    none.
+    """
+    if not saved.is_file():
+        return False
+    entries = json.loads(saved.read_text(encoding="utf-8"))["packages"]
+    return any(PureWindowsPath(entry["path"]).anchor for entry in entries)
+
+
 # --- the raw rows ------------------------------------------------------------------
 
 
@@ -653,9 +791,10 @@ def _row(run: _LoadedRun, score: PackageScore) -> RunRow:
     studied = provenance.lever if provenance is not None else None
     info = session.provider_info
     coverage = session.coverage
+    profile_recorded = provenance is not None and provenance.provenance_schema >= RUN_START_SCHEMA
     return RunRow(
         run=run.run,
-        run_dir=str(run.run_dir),
+        run_dir=run.ledger_dir,
         commit=provenance.commit if provenance is not None else None,
         lever=studied,
         arm=provenance.arm if provenance is not None else None,
@@ -664,6 +803,11 @@ def _row(run: _LoadedRun, score: PackageScore) -> RunRow:
         model=info.model if info is not None else session.model,
         effort=info.effort_mapping.requested if info is not None else None,
         explanations_enabled=session.explanations_enabled,
+        model_view=_model_view_of(session),
+        profile_recorded=profile_recorded,
+        profile_digest=provenance.profile_digest if provenance is not None else None,
+        live_tools=provenance.live_tools if provenance is not None else None,
+        pane_defaults=provenance.pane_defaults if provenance is not None else None,
         package_id=score.package_id,
         held_out=score.held_out,
         other_levers_on=sorted(name for name in LEVER_NAMES if flags.get(name) and name != studied),
@@ -681,7 +825,13 @@ def _row(run: _LoadedRun, score: PackageScore) -> RunRow:
         seconds_to_first_finding=score.seconds_to_first_finding,
         valid_findings=score.valid_findings,
         missed_known_defects=score.missed_known_defects,
+        flagged=len(score.flagged_defect_ids),
+        flagged_below_expected=len(score.flagged_below_expected_defect_ids),
+        status_mismatches=len(score.status_mismatch_defect_ids),
+        cleared=len(score.cleared_defect_ids),
         false_alarms=score.false_alarms,
+        contradictions=length_or_none(score.contradicted_condition_ids),
+        confirmations=length_or_none(score.confirmed_condition_ids),
         unresolved_count=score.unresolved_count,
         unresolved_because_withheld=score.unresolved_because_withheld,
         unresolved_other=score.unresolved_other,
@@ -689,6 +839,8 @@ def _row(run: _LoadedRun, score: PackageScore) -> RunRow:
             bucket: len(getattr(coverage, bucket))
             for bucket in ("checked", "skipped", "unresolved", "failed", "out_of_scope")
         },
+        findings_by_origin=by_origin(score.finding_origins.values()),
+        false_alarms_by_origin=by_origin(false_alarm_origins(score)),
         set_too_small_override=(
             provenance.set_too_small_override if provenance is not None else False
         ),
@@ -992,13 +1144,15 @@ def _decision_row(
         false_alarms=stats["false_alarms"],
         unresolved_count=stats["unresolved_count"],
         recall_held_out=stats["recall_held_out"],
+        recall_held_out_model=stats["recall_held_out_model"],
+        recall_held_out_code=stats["recall_held_out_code"],
         median_net_saved_minutes=stats["median_net_saved_minutes"],
         worst_case_defects_lost=verdict.worst_case_defects_lost,
         lost_defect_ids=verdict.lost_defect_ids,
         lever_counter=_counter(lever, off, on),
         decision=verdict.decision,
         decision_reason=verdict.reason,
-        run_dirs=[str(run.run_dir) for run in runs],
+        run_dirs=[run.ledger_dir for run in runs],
     )
 
 
@@ -1056,15 +1210,26 @@ def _settings_of(record: RunProvenance) -> dict[str, object]:
 # --- the ledger --------------------------------------------------------------------
 
 
-def compare_runs(run_dirs: Sequence[Path | str], *, root: Path | None = None) -> Ledger:
+def compare_runs(
+    run_dirs: Sequence[Path | str],
+    *,
+    root: Path | None = None,
+    committed_ledger: bool = False,
+) -> Ledger:
     """Read N run directories and build the ledger. Contacts nothing and starts nothing.
 
-    `root` is the checkout a saved set's relative entries resolve against: `sets.REPO_ROOT`,
-    read at call time, unless the caller names another (feature 014 `contracts/provenance.md`
-    6.1). Every study is checked; a pane study renders its raw rows and no decision row.
+    `root` is the checkout a saved set's relative entries resolve against and a run folder
+    inside it is named relative to: `sets.REPO_ROOT`, read at call time, unless the caller names
+    another (feature 014 `contracts/provenance.md` 6.1, 6.3). `committed_ledger` says the ledger
+    is written where the repository may commit it, which refuses every run
+    `_refuse_for_the_committed_ledger` names (6.4). Every study is checked; a pane study renders
+    its raw rows and no decision row.
     """
     checkout = sets.REPO_ROOT if root is None else root
     loaded = [_load_run(path, root=checkout) for path in _distinct(run_dirs)]
+    if committed_ledger:
+        for run in loaded:
+            _refuse_for_the_committed_ledger(run, root=checkout)
     rows = [_row(run, score) for run in loaded for score in run.scorecard.per_package]
 
     studies: dict[tuple[str, str | None, str | None], list[_LoadedRun]] = {}
@@ -1181,6 +1346,9 @@ RUN_COLUMNS: tuple[str, ...] = (
     "model",
     "effort",
     "explanations",
+    "model view",
+    "profile",
+    "live tools",
     "package",
     "input",
     "cached in",
@@ -1196,12 +1364,23 @@ RUN_COLUMNS: tuple[str, ...] = (
     "s to 1st finding",
     "valid",
     "missed",
+    "flagged",
+    "below expected",
+    "status mismatch",
+    "cleared",
     "false alarms",
+    "contradicted",
+    "confirmed",
     "unresolved",
     "unresolved withheld",
     "unresolved other",
     "coverage bucket mix",
+    "findings by origin",
+    "false alarms by origin",
 )
+"""The run table's final order, fixed up front (feature 014 `contracts/provenance.md` 5; plan
+decision INT-10), so the committed header is regenerated once. No run-status column: its source
+arrives with the robustness slice, and a column added then would regenerate it a second time."""
 
 LEVER_COLUMNS: tuple[str, ...] = (
     "Lever",
@@ -1220,6 +1399,7 @@ LEVER_COLUMNS: tuple[str, ...] = (
     "Dump wall clock off -> on",
     "Valid / missed / false alarms / unresolved off -> on",
     "Recall (held out) off -> on",
+    "Recall by producer (held out) off -> on",
     "Median net saved minutes off -> on",
     "Worst-case defects lost",
     "Lever-specific counter",
@@ -1235,8 +1415,43 @@ def _header(columns: Sequence[str]) -> list[str]:
     return ["| " + " | ".join(columns) + " |", "|" + "---|" * len(columns)]
 
 
+def _mix(counts: Mapping[str, int]) -> str:
+    """A mix, `name count / name count / ...`, in the order `counts` holds."""
+    return " / ".join(f"{name} {count}" for name, count in counts.items())
+
+
+def _origin_mix(counts: Mapping[Origin, int]) -> str:
+    """The origins with a count, zero origins left out; `none` when every one is zero, so the
+    cell is never blank (feature 014 `contracts/provenance.md` 5)."""
+    return _mix({origin: count for origin, count in counts.items() if count}) or "none"
+
+
+def _model_view_cell(view: ModelViewSettings) -> str:
+    """`pane` for `MODEL_VIEW_PANE`, otherwise the switches that are on, `slimming`, `pruning
+    after N` or both, and `off` with neither: `MODEL_VIEW_OFF`, and a view whose prune count
+    differs with pruning itself off (feature 014 `contracts/provenance.md` 5)."""
+    if view == MODEL_VIEW_PANE:
+        return "pane"
+    switches = [
+        *(["slimming"] if view.payload_slimming else []),
+        *([f"pruning after {view.prune_after_rounds}"] if view.history_pruning else []),
+    ]
+    return ", ".join(switches) or "off"
+
+
+def _profile_cell(row: RunRow) -> str:
+    """The profile's digest through `display_digest`, the one 12-character reading (plan decision
+    RF-5); `none` with no profile, and `unknown` where the record does not say."""
+    if not row.profile_recorded:
+        return UNKNOWN
+    return "none" if row.profile_digest is None else display_digest(row.profile_digest)
+
+
+def _yes_no(value: bool | None) -> str:
+    return UNKNOWN if value is None else ("yes" if value else "no")
+
+
 def _run_line(row: RunRow) -> str:
-    mix = " / ".join(f"{bucket} {count}" for bucket, count in row.coverage_bucket_mix.items())
     cells = (
         row.run,
         _text(row.commit),
@@ -1247,6 +1462,9 @@ def _run_line(row: RunRow) -> str:
         _text(row.model),
         _text(row.effort),
         "on" if row.explanations_enabled else "off",
+        _model_view_cell(row.model_view),
+        _profile_cell(row),
+        _yes_no(row.live_tools),
         row.package_id,
         _count(row.input_tokens),
         _count(row.cached_input_tokens),
@@ -1262,11 +1480,19 @@ def _run_line(row: RunRow) -> str:
         _count(row.seconds_to_first_finding),
         _count(row.valid_findings),
         _count(row.missed_known_defects),
+        _count(row.flagged),
+        _count(row.flagged_below_expected),
+        _count(row.status_mismatches),
+        _count(row.cleared),
         _count(row.false_alarms),
+        fmt_assessed(row.contradictions),
+        fmt_assessed(row.confirmations),
         _count(row.unresolved_count),
         _count(row.unresolved_because_withheld),
         _count(row.unresolved_other),
-        mix,
+        _mix(row.coverage_bucket_mix),
+        _origin_mix(row.findings_by_origin),
+        _origin_mix(row.false_alarms_by_origin),
     )
     return "| " + " | ".join(cells) + " |"
 
@@ -1298,6 +1524,14 @@ def _quality(row: LeverDecision) -> str:
     )
 
 
+def _recall_by_producer(row: LeverDecision) -> str:
+    """Each producer's held-out recall, named, off -> on (feature 014 SP-13 A)."""
+    return (
+        f"model: {_off_on(row.recall_held_out_model)} ; "
+        f"code: {_off_on(row.recall_held_out_code)}"
+    )
+
+
 def _lever_line(row: LeverDecision) -> str:
     cells = (
         row.lever,
@@ -1317,6 +1551,7 @@ def _lever_line(row: LeverDecision) -> str:
         _off_on(row.dump_wall_clock_s),
         _quality(row),
         _off_on(row.recall_held_out),
+        _recall_by_producer(row),
         _off_on(row.median_net_saved_minutes),
         _count(row.worst_case_defects_lost),
         _counter_cell(row.lever_counter),
@@ -1356,6 +1591,9 @@ def render_ledger_md(ledger: Ledger) -> str:
         "`wall clock s` is the session's own `started_at` to `ended_at`, **not** "
         "`unattended_runtime_minutes`, which the benchmark runner overwrites with a span "
         "that also covers package load and adapter construction.",
+        "",
+        "`tool calls` is `len(session.steps)`, every step of the review: the pre-run's and the "
+        "regrade's steps are counted with the model's, not split by the step mark.",
     ]
     return "\n".join(lines) + "\n"
 

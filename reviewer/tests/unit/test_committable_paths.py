@@ -15,7 +15,8 @@ The committable-folder scanner, `tests/support/local_paths.py` (T055, for T056; 
 6.6; PROV-14, RF-6, RF-84): it flags the checkout, home and temporary folders in any spelling, a
 drive-letter, UNC or rooted path outside the named fictional roots, and a saved set naming a path
 outside the repository, reading JSON as strings and a packed stream by its decompressed text; and
-it finds nothing in section 6.6's reach of this checkout.
+it finds nothing in section 6.6's reach of this checkout, nor in what an offline run over a
+committed-style package, its score and its ledger write (T067, for T068; US2-11).
 
 The packed event streams' git rules (T057, for T058; `provenance.md` 6.6; 28A, RF-84): a packed
 stream is committable only in the study and pilot trees, a plain one nowhere but the replay
@@ -40,7 +41,8 @@ from swreview.benchmark.compare import LEDGER_BEGIN, LEDGER_END
 from swreview.benchmark.sets import REPO_ROOT, BenchmarkPackageRef, BenchmarkSet
 from tests.checks.golden_standards import PROFILE_DIR
 from tests.support import local_paths, mechanical, scramble
-from tests.unit.test_benchmark_run_options import benchmark_run
+from tests.support.answer_keys import write_key
+from tests.unit.test_benchmark_run_options import benchmark_run, invoke
 from tests.unit.test_benchmark_run_pane_study import (
     IGNORED,
     PACKAGE,
@@ -406,6 +408,48 @@ def test_no_committable_file_holds_a_local_path_or_a_private_set_entry() -> None
     git does not ignore (none yet), nor the committed ledger block, names a local folder, a path
     outside the fictional roots or a private set entry."""
     assert [str(offence) for offence in local_paths.scan_committable()] == []
+
+
+def test_an_offline_run_over_a_committed_style_package_writes_no_local_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """US2-11 (`provenance.md` 6.6 and 8; RF-25, RF-59; FR-051): in a temporary git repository
+    holding the example profile, a fictional package under `benchmarks/packages/` and its set under
+    `benchmarks/sets/`, the commands pointed at it through `sets.REPO_ROOT`, a scripted `benchmark
+    run` with the example profile into `benchmarks/studies/<study>/<run>/`, then `score`, then
+    `compare --out` a folder inside the repository: the scanner finds nothing in the run folder or
+    the ledger. Without `--max-answer-turns`, which the scripted-answers slice adds with the option
+    (`--max-answer-turns 0`; lane A3): the review here is one turn with no driver."""
+    root = tmp_path / "checkout"
+    set_file = checkout(root)
+    point_at(root, monkeypatch)
+    keys = root / "benchmarks" / "answer_keys"
+    write_key(
+        keys,
+        "pkg-1",
+        known_defects=[
+            {
+                "check": "drawing.manufacturing_inputs",
+                "document_ids": ["doc:1"],
+                "tag": "held_out",
+                "description": "The tapped hole callout omits the thread depth",
+            }
+        ],
+    )
+    run = root / "benchmarks" / "studies" / "smoke" / "run-1"
+    ledger = root / "benchmarks" / "ledgers" / "smoke"
+
+    ran = benchmark_run(set_file, run, "--standards-profile", str(root / runner.EXAMPLE_PROFILE))
+    assert ran.exit_code == 0, ran.stdout + ran.stderr
+    scored = invoke("benchmark", "score", str(run), "--answer-keys", str(keys))
+    assert scored.exit_code == 0, scored.stdout + scored.stderr
+    compared = invoke("benchmark", "compare", str(run), "--out", str(ledger))
+    assert compared.exit_code == 0, compared.stdout + compared.stderr
+
+    assert (run / "pkg-1" / "session.json").is_file()
+    assert (ledger / "ledger.md").is_file()
+    found = local_paths.scan_folder(run) + local_paths.scan_folder(ledger)
+    assert [str(offence) for offence in found] == []
 
 
 # --- the packed event streams' git rules (T057, for T058; provenance.md 6.6) --------------
