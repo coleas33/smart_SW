@@ -80,6 +80,7 @@ __all__ = [
     "RevisionSection",
     "StandardsProfile",
     "SwitchSection",
+    "display_digest",
     "load_profile",
     "load_review_profile",
     "name_matches",
@@ -186,6 +187,13 @@ class ProfileIdentity:
 
     path: str
     sha256: str
+
+
+def display_digest(sha256: str) -> str:
+    """The 12-character display of a profile's digest: the one reading every caller shows (a
+    citation, the ledger's profile cell, a resume or exit message), never the full 64 (feature
+    014 plan decision RF-5)."""
+    return sha256[:12]
 
 
 class _Section(BaseModel):

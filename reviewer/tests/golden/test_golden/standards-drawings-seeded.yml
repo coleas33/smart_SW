@@ -681,7 +681,7 @@ result:
     component_ids: []
     configuration: Default
     coverage_limits:
-    - profile:<profile-a.yaml> sha256:<sha256 of profile-a.yaml>
+    - profile:profile-a.yaml sha256:<sha256 of profile-a.yaml>
     - configuration Default
     disposition: null
     drawing_locations:
@@ -725,7 +725,7 @@ result:
     component_ids: []
     configuration: Default
     coverage_limits:
-    - profile:<profile-a.yaml> sha256:<sha256 of profile-a.yaml>
+    - profile:profile-a.yaml sha256:<sha256 of profile-a.yaml>
     - configuration Default
     disposition: null
     drawing_locations:
@@ -767,7 +767,7 @@ result:
     component_ids: []
     configuration: Default
     coverage_limits:
-    - profile:<profile-a.yaml> sha256:<sha256 of profile-a.yaml>
+    - profile:profile-a.yaml sha256:<sha256 of profile-a.yaml>
     - configuration Default
     disposition: null
     drawing_locations: []
@@ -804,7 +804,7 @@ result:
     component_ids: []
     configuration: Default
     coverage_limits:
-    - profile:<profile-a.yaml> sha256:<sha256 of profile-a.yaml>
+    - profile:profile-a.yaml sha256:<sha256 of profile-a.yaml>
     - configuration Default
     disposition: null
     drawing_locations:
