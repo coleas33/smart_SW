@@ -219,7 +219,14 @@ one: `profile_digest`, `profile_is_example`, `explanations_enabled` (PP-2), `max
 (D14.3), `set_too_small_override` (D5), `set_digest` (which holds each case file's digest,
 `scripted-answers.md` section 6), `prompt_digest`, `tree_dirty`, the three clock values,
 `retry_policy`, `inert_settings`, `provenance_schema`. The refusal names the first differing
-field and both values, in the existing message's shape (`compare.py:504-509`). The responding
+field and both values, in the existing message's shape (`compare.py:504-509`). An absent value is
+quoted "not recorded" only for a field named in `NOT_RECORDED_WHEN_ABSENT`, a set beside the
+exemption sets in `benchmark/compare.py`: the fields whose absence can only mean a record an older
+build wrote, `max_answer_turns` from the scripted-answers slice and the clock values,
+`retry_policy` and `jobs` from the robustness slice. Every other field's value is quoted as it
+is, since its `null` means something in a schema-2 record (`profile_digest` and
+`profile_is_example`: no profile; `commit`: git could not answer). The set says how a value is
+quoted and exempts nothing (owner decision 47A). The responding
 model is exempt within its aliases, which the run enforces per attempt (`benchmark-run.md`
 section 7), since snapshots may differ between repetitions.
 

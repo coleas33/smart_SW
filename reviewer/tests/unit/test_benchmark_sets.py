@@ -49,9 +49,10 @@ import pytest
 from typer.testing import CliRunner
 
 from swreview import cli
+from swreview.agent.checklist import load_checklist
 from swreview.agent.settings import PRIVATE_PANE_STUDY
 from swreview.benchmark import compare, digest, runner, sets
-from swreview.benchmark.runner import run_benchmark
+from swreview.benchmark.runner import preflight_set, run_benchmark
 from swreview.benchmark.sets import (
     BenchmarkPackageRef,
     BenchmarkSet,
@@ -575,13 +576,12 @@ def test_run_benchmark_resolves_a_relative_entry_against_the_root_given(tmp_path
     calls: list[Path] = []
 
     run_benchmark(
-        set_path,
+        preflight_set(set_path, None, load_checklist(), root=tmp_path),
         tmp_path / "out",
         provider="fake",
         model="m",
         effort="low",
         review_fn=lambda package_path, *_, **__: calls.append(package_path),
-        root=tmp_path,
     )
 
     assert calls == [package_dir.resolve()]
@@ -591,13 +591,14 @@ def test_run_benchmark_without_a_root_reads_the_set_against_the_running_checkout
     tmp_path: Path,
 ) -> None:
     """The default root is `REPO_ROOT`, so a temporary checkout's set is another
-    checkout's and is refused before any review."""
+    checkout's and is refused before any review. Since feature 014 T097 the set is read by
+    `preflight_set`, whose default root it is (RF-61)."""
     set_path = write_set(sets_folder(tmp_path) / "parity.json", [relative_entry("pkg-1")])
     calls: list[object] = []
 
     with pytest.raises(SetError):
         run_benchmark(
-            set_path,
+            preflight_set(set_path, None, load_checklist()),
             tmp_path / "out",
             provider="fake",
             model="m",

@@ -11,7 +11,8 @@ the product's own checklist the context under `QuestionIds` loads, and it writes
 refusal is a `CaseFileError` of one line, "case file {name}: set entry {package_id}: ...",
 naming the case-file entry where there is one; `{name}` is the file's path relative to the
 running checkout when it lies inside it, its file name otherwise, so no local folder reaches the
-line (FR-051).
+line (FR-051). `unreadable_case_file` words row 1's refusal the same way for a file the set loader
+could take no digest of, which `runner.preflight_set` refuses before reading the package.
 
 The answer log (section 5; data-model section 3; plan decisions QA-9, RF-31): `answer-log.json`,
 written into each package folder by the driver alone, through the one atomic writer, and read by
@@ -63,6 +64,10 @@ ANSWER_LOG_FILE_NAME = "answer-log.json"
 
 ANSWER_LOG_VERSION = 1
 """The one answer-log version this build writes and reads."""
+
+DEFAULT_MAX_ANSWER_TURNS = 3
+"""How many answer turns a review may take after its opening turn unless `benchmark run
+--max-answer-turns` says otherwise (`contracts/scripted-answers.md` 4; D14.3)."""
 
 Ended = Literal[
     "no_open_questions", "all_unscripted", "bound_reached", "turn_did_not_end", "stopped"
@@ -234,12 +239,11 @@ def load_case_file(
     carries the absolute path the read was given.
     """
     path = Path(path)
-    prefix = f"case file {_case_file_name(path)}: set entry {entry.package_id}:"
+    prefix = _prefix(path, entry)
     try:
         text = path.read_text(encoding="utf-8")
     except OSError as error:
-        reason = error.strerror or type(error).__name__
-        raise CaseFileError(f"{prefix} cannot be read ({reason})") from None
+        raise CaseFileError(f"{prefix} cannot be read ({_read_failure(error)})") from None
     except UnicodeDecodeError as error:
         raise CaseFileError(f"{prefix} not UTF-8 ({error})") from None
     try:
@@ -254,6 +258,33 @@ def load_case_file(
         if reason is not None:
             raise CaseFileError(f"{prefix} {reason}")
     return case
+
+
+def unreadable_case_file(path: Path | str, *, entry: sets.BenchmarkPackageRef) -> CaseFileError:
+    """Row 1's refusal of a case file the set loader could take no digest of, which
+    `runner.preflight_set` raises before reading the entry's package (`benchmark/sets.py` leaves
+    `case_file_sha256` absent for a file it cannot read).
+
+    The reason is the read's own, as `load_case_file` names it. A file that reads by now is
+    refused all the same: the saved set would carry no digest of the answers the run read.
+    """
+    path = Path(path)
+    try:
+        path.read_bytes()
+    except OSError as error:
+        return CaseFileError(f"{_prefix(path, entry)} cannot be read ({_read_failure(error)})")
+    return CaseFileError(f"{_prefix(path, entry)} could not be read when the set was loaded")
+
+
+def _prefix(path: Path, entry: sets.BenchmarkPackageRef) -> str:
+    """How every refusal starts: the case file, then the set entry it was loaded for."""
+    return f"case file {_case_file_name(path)}: set entry {entry.package_id}:"
+
+
+def _read_failure(error: OSError) -> str:
+    """An `OSError` as a refusal names it: its `strerror`, or its type when it has none, never
+    its text, which carries the absolute path the read was given (FR-051)."""
+    return error.strerror or type(error).__name__
 
 
 def _case_file_name(path: Path) -> str:

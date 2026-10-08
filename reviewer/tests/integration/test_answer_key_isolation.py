@@ -20,7 +20,8 @@ from pathlib import Path
 
 import pytest
 
-from swreview.benchmark.runner import run_benchmark
+from swreview.agent.checklist import load_checklist
+from swreview.benchmark.runner import preflight_set, run_benchmark
 from swreview.benchmark.sets import load_set
 
 pytestmark = pytest.mark.integration
@@ -57,7 +58,7 @@ def test_run_benchmark_on_the_real_pilot_set_never_passes_an_answer_key_path(
         calls.append(package_dir)
 
     run_benchmark(
-        PILOT_SET,
+        preflight_set(PILOT_SET, None, load_checklist()),
         tmp_path / "out",
         provider="openai",
         model="gpt-5.6",

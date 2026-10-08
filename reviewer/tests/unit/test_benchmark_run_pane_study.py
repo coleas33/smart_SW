@@ -50,10 +50,12 @@ PROMPT = "reviewer/src/swreview/agent/prompts/system_v1.md"
 CHECKLIST = "reviewer/src/swreview/agent/checklist_v1.yaml"
 IGNORED = "ignored-runs"
 """A folder the checkout's `.gitignore` ignores: a run folder inside it is not committable."""
+CASE_FILE = "benchmarks/case_files/pkg-1.json"
+"""The package's case file, which its set entry names when `checkout` is asked for one."""
 
 DIGESTED: tuple[str, ...] = (PROMPT, CHECKLIST, EXAMPLE, SET_FILE)
 """The digested inputs a pane study reads inside the repository, repository-relative, in row 6's
-order; lane A3 adds the case files (T095, T097)."""
+order; a case file the set names, row 6's last, is `test_benchmark_run_options.py`'s (T095)."""
 
 REAL_PROMPT = agent_checklist.SYSTEM_PROMPT_FILE
 REAL_CHECKLIST = agent_checklist.CHECKLIST_FILE
@@ -91,18 +93,24 @@ def checkout(
     private: tuple[Path, ...] = (),
     carriage_return_in: str | None = None,
     repository: bool = True,
+    case_file: bool = False,
 ) -> Path:
     """Lay out a fictional checkout at `root` and commit it; returns its set file.
 
     The example profile, LF copies of the system prompt and the checklist at their places in a
     checkout, a `.gitignore` ignoring `IGNORED`, one package under `benchmarks/packages/` and a set
     under `benchmarks/sets/` naming it relatively, then each folder of `private` by its absolute
-    path; every package held out, so P-3 has nothing to refuse. The one file `carriage_return_in`
-    names, repository-relative, is written with CRLF line endings. Committed with no line-ending
-    conversion, so the tree is clean and a carriage return is in the committed bytes, as in a
-    working copy git reports clean. `repository=False` leaves no repository: git cannot answer.
+    path; every package held out, so P-3 has nothing to refuse. With `case_file`, the package's
+    entry names `CASE_FILE`, one scripted answer naming its one component instance. The one file
+    `carriage_return_in` names, repository-relative, is written with CRLF line endings. Committed
+    with no line-ending conversion, so the tree is clean and a carriage return is in the committed
+    bytes, as in a working copy git reports clean. `repository=False` leaves no repository: git
+    cannot answer.
     """
-    entries = [{"package_id": "pkg-1", "path": PACKAGE, "held_out": True}] + [
+    package_entry: dict[str, Any] = {"package_id": "pkg-1", "path": PACKAGE, "held_out": True}
+    if case_file:
+        package_entry["case_file"] = CASE_FILE
+    entries = [package_entry] + [
         {"package_id": folder.name, "path": str(folder), "held_out": True} for folder in private
     ]
     files = {
@@ -113,6 +121,10 @@ def checkout(
         ".gitignore": f"{IGNORED}/\n".encode(),
         "README.md": b"A fictional checkout.\n",
     }
+    if case_file:
+        answer = {"id": "A-1", "item": "interfaces.fit", "ids": ["cmp:0001"], "answer": "press fit"}
+        scripted = {"case_file_version": 1, "package_id": "pkg-1", "answers": [answer]}
+        files[CASE_FILE] = (json.dumps(scripted, indent=2) + "\n").encode()
     for name, data in files.items():
         path = root / name
         path.parent.mkdir(parents=True, exist_ok=True)

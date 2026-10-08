@@ -65,6 +65,7 @@ from swreview.benchmark.compare import (
     LEDGER_MD,
     LEVER_COLUMNS,
     MUST_MATCH,
+    NOT_RECORDED_WHEN_ABSENT,
     RECORD_ONLY,
     RUN_COLUMNS,
     RUN_IDENTITY,
@@ -1232,6 +1233,7 @@ MUST_MATCH_CHANGES: list[tuple[str, dict[str, Any], str]] = [
     ("inert_settings", {"inert_settings": ("parallel_tool_calls",)}, "inert_settings"),
     ("prompt_digest", {"prompt_digest": "9" * 64}, "prompt_digest"),
     ("tree_dirty", {"tree_dirty": True}, "tree_dirty"),
+    ("max_answer_turns", {"max_answer_turns": 0}, "max_answer_turns"),
 ]
 """Each field a lever study holds equal, the change that moves it on one run, and the name its
 refusal reads: `efficiency` flag by flag (`contracts/provenance.md` 4)."""
@@ -1317,6 +1319,62 @@ def test_repetition_start_time_and_live_tools_never_refuse(tmp_path: Path) -> No
     dirs = write_study(tmp_path, specs)
 
     assert lever_row(compare_runs(dirs), "parallel_tool_calls").decision == ADOPT
+
+
+def with_a_case_file(spec: RunSpec, case_file_sha256: str) -> list[dict[str, Any]]:
+    """The saved set's entries for `spec`, each naming its committed case file and carrying
+    `case_file_sha256`, as a run of the scripted-answers slice saves them."""
+    return [
+        {
+            **entry,
+            "case_file": f"benchmarks/case_files/{entry['package_id']}.json",
+            "case_file_sha256": case_file_sha256,
+        }
+        for entry in saved_set_entries(spec)
+    ]
+
+
+def test_a_study_whose_arms_read_different_case_file_bytes_is_refused_naming_set_digest(
+    tmp_path: Path,
+) -> None:
+    """US4-6, QA-7: the saved sets differ only in one case file's digest, which reaches each
+    record's `set_digest`, so the existing rule refuses the study with no second must-match
+    field."""
+    off, on = RunSpec(run="off-1", arm="off", rep=1), RunSpec(run="on-1", arm="on")
+    dirs = [
+        write_run(tmp_path, off, saved_packages=with_a_case_file(off, "a" * 64)),
+        write_run(tmp_path, on, saved_packages=with_a_case_file(on, "b" * 64)),
+    ]
+    digests = [
+        json.loads((run_dir / PROVENANCE_FILE).read_text(encoding="utf-8"))["set_digest"]
+        for run_dir in dirs
+    ]
+
+    assert refusal_of(dirs) == (
+        f"{dirs[0]} and {dirs[1]} cannot be placed in one comparison: set_digest differs "
+        f"({digests[0]!r} against {digests[1]!r})"
+    )
+
+
+@pytest.mark.parametrize("pair", sorted(PAIRS))
+def test_a_record_older_than_the_bound_against_one_recording_3_reads_not_recorded(
+    tmp_path: Path, pair: str
+) -> None:
+    """D14.3, owner decision 47A: a record written before `max_answer_turns` holds none, which
+    reads "not recorded" in the refusal, never 3 and never `None`. The field is the one
+    `NOT_RECORDED_WHEN_ABSENT` names, beside the exemptions; every other field's value is quoted
+    as it is (the must-match cases above quote a profile digest's `None`)."""
+    first, second = PAIRS[pair]
+    dirs = write_study(tmp_path, [replace(first, max_answer_turns=None), second])
+
+    assert "max_answer_turns" not in json.loads(
+        (dirs[0] / PROVENANCE_FILE).read_text(encoding="utf-8")
+    )
+    assert refusal_of(dirs) == (
+        f"{dirs[0]} and {dirs[1]} cannot be placed in one comparison: max_answer_turns differs "
+        "(not recorded against 3)"
+    )
+    assert NOT_RECORDED_WHEN_ABSENT == ("max_answer_turns",)
 
 
 def test_a_lever_study_whose_arms_differ_in_another_lever_is_refused(tmp_path: Path) -> None:

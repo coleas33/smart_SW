@@ -2563,6 +2563,119 @@ def test_benchmark_run_on_a_missing_set_exits_1(tmp_path: Path) -> None:
     assert "nowhere.json" in result.stderr
 
 
+# --- the answer-turn bound and the case files (feature 014 T095) ---------------------------------
+
+
+def test_benchmark_run_max_answer_turns_defaults_to_3_and_is_recorded_as_typed(
+    tmp_path: Path, benchmark_set: Path, fake_provider: Callable[..., list[RecordingProvider]]
+) -> None:
+    """`scripted-answers.md` 4 (FR-025, D14.3): untyped, the bound is 3; typed, the record says
+    what was typed."""
+    fake_provider()
+    untyped = tmp_path / "runs" / "untyped"
+    typed = tmp_path / "runs" / "typed"
+
+    first = invoke("benchmark", "run", "--set", str(benchmark_set), "--out", str(untyped))
+    second = invoke(
+        "benchmark", "run", "--set", str(benchmark_set), "--out", str(typed),
+        "--max-answer-turns", "1",
+    )
+
+    assert first.exit_code == 0, first.stdout + first.stderr
+    assert second.exit_code == 0, second.stdout + second.stderr
+    for out, bound in ((untyped, 3), (typed, 1)):
+        record = json.loads((out / "run-provenance.json").read_text(encoding="utf-8"))
+        assert record["max_answer_turns"] == bound
+
+
+def test_a_negative_max_answer_turns_is_a_usage_error(
+    tmp_path: Path, benchmark_set: Path, fake_provider: Callable[..., list[RecordingProvider]]
+) -> None:
+    """Exit 2 naming the option and its range, before any adapter is built or anything
+    written."""
+    built = fake_provider()
+    out = tmp_path / "runs" / "negative"
+
+    result = invoke(
+        "benchmark", "run", "--set", str(benchmark_set), "--out", str(out),
+        "--max-answer-turns", "-1",
+    )
+
+    assert result.exit_code == 2
+    assert "Invalid value for '--max-answer-turns'" in plain_one_line(
+        result.stdout + result.stderr
+    )
+    assert built == []
+    assert not out.exists()
+
+
+def benchmark_set_with_a_case_file(tmp_path: Path, package_dir: Path, answers_for: str) -> Path:
+    """A one-package set whose entry `cover` names a case file answering for `answers_for`: the
+    entry's own package when it is `cover`, another's otherwise (row 2's refusal)."""
+    case_file = tmp_path / "case_files" / "cover.json"
+    case_file.parent.mkdir(parents=True)
+    answer = {"id": "A-1", "item": "interfaces.fit", "ids": ["cmp:0001"], "answer": "press fit"}
+    case_file.write_text(
+        json.dumps({"case_file_version": 1, "package_id": answers_for, "answers": [answer]}),
+        encoding="utf-8",
+    )
+    set_path = tmp_path / "sets" / "scripted.json"
+    set_path.parent.mkdir(parents=True)
+    set_path.write_text(
+        json.dumps(
+            {
+                "name": "scripted",
+                "packages": [
+                    {
+                        "package_id": "cover",
+                        "path": str(package_dir),
+                        "case_file": str(case_file),
+                        "held_out": True,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    return set_path
+
+
+def test_a_case_file_refusal_is_exit_1_with_one_line_naming_the_case_file_and_the_entry(
+    tmp_path: Path, tmp_package_dir: Path, fake_provider: Callable[..., list[RecordingProvider]]
+) -> None:
+    """US4-8: `benchmark-run.md` 3 row 4, a `CaseFileError` printed as one line, nothing written."""
+    fake_provider()
+    set_path = benchmark_set_with_a_case_file(tmp_path, tmp_package_dir, "fict-other")
+    out = tmp_path / "runs" / "refused"
+
+    result = invoke("benchmark", "run", "--set", str(set_path), "--out", str(out))
+
+    assert result.exit_code == 1
+    [line] = result.stderr.strip().splitlines()
+    assert line.startswith("error: CaseFileError: case file cover.json: set entry cover: "), line
+    assert "fict-other" in line
+    assert not out.exists()
+
+
+def test_an_unresolvable_provider_is_refused_before_a_bad_case_file(
+    tmp_path: Path, tmp_package_dir: Path
+) -> None:
+    """INT-14: row 3, the provider, before row 4, the set and its case files: with no OpenAI key
+    and a case file answering for another package, the one line names the provider."""
+    set_path = benchmark_set_with_a_case_file(tmp_path, tmp_package_dir, "fict-other")
+    out = tmp_path / "runs" / "no-key"
+
+    result = invoke(
+        "benchmark", "run", "--set", str(set_path), "--out", str(out), "--provider", "openai"
+    )
+
+    assert result.exit_code == 1
+    [line] = result.stderr.strip().splitlines()
+    assert "OpenAI" in line, line
+    assert "case file" not in line, line
+    assert not out.exists()
+
+
 def test_benchmark_score_writes_a_scorecard(benchmark_run_dir: Path, answer_keys: Path) -> None:
     body = payload(
         invoke(

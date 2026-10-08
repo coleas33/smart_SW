@@ -219,6 +219,9 @@ class RunSpec:
     inert_settings: tuple[str, ...] | None = ()
     prompt_digest: str | None = PROMPT_DIGEST
     tree_dirty: bool | None = False
+    max_answer_turns: int | None = 3
+    """The answer-turn bound, `benchmark run`'s default; `None` writes a record older than the
+    field, which holds none (feature 014 T096, on lane A3's behalf)."""
     standards_stamps: tuple[str, ...] = ()
     """The profile stamps this run's standards findings carry (`profile_stamp`): one
     `standards.*` finding per stamp in every package's session."""
@@ -257,6 +260,7 @@ class RunSpec:
             inert_settings=self.inert_settings,
             prompt_digest=self.prompt_digest,
             tree_dirty=self.tree_dirty,
+            max_answer_turns=self.max_answer_turns,
         )
 
 
@@ -703,7 +707,12 @@ def write_run(
         if spec.set_digest is None:
             recorded = replace(spec, set_digest=sha256_of(saved))
     if with_provenance:
-        write_provenance(run_dir, recorded.provenance())
+        written = write_provenance(run_dir, recorded.provenance())
+        if spec.max_answer_turns is None:
+            # A record older than the field holds no `max_answer_turns` at all, not a null.
+            payload = json.loads(written.read_text(encoding="utf-8"))
+            del payload["max_answer_turns"]
+            written.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     return run_dir
 
 

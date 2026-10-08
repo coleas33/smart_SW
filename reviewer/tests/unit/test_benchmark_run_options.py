@@ -15,11 +15,15 @@ RUN-05, RUN-14, RUN-16, RF-19, RF-44, INT-14; FR-011, FR-050; US2-1, US2-2):
 4. **Provenance first.** The record and the saved set are on disk before the first review.
 5. **The attempt request.** `run_benchmark` hands the review function `attempt`, an
    `AttemptRequest` carrying the model view and the profile, beside today's keywords, and
-   `cli._review_fn` passes both to the review with the live tools off (RF-44).
+   `cli._review_fn` passes both to the review with the live tools off (RF-44). The
+   scripted-answers slice (lane A3, T095) adds the case file `preflight_set` loaded for the
+   package and the answer-turn bound.
 
-The file's later tests are other slices': `test_a_package_id_attempts_is_refused` (lane A3, T095),
-the price row, the package time limit and the resume pointer (lane B6, T201, T203). Offline: the
-scripted provider, and a spy wherever a review would run.
+The scripted-answers slice's tests (lane A3, T095): `test_a_package_id_attempts_is_refused` (row 4
+in `preflight_set`, ignoring case, owner decision 48A), the attempt request grown by the case file
+and the bound, and row 6's carriage return in a case file the set names. The price row, the
+package time limit and the resume pointer are lane B6's (T201, T203). Offline: the scripted
+provider, and a spy wherever a review would run.
 """
 
 from __future__ import annotations
@@ -34,20 +38,24 @@ import pytest
 from typer.testing import CliRunner
 
 from swreview import cli
+from swreview.agent.checklist import load_checklist
 from swreview.agent.providers import EffortLevel, ProviderName
 from swreview.agent.providers.fake import FakeProvider, ScriptedTurn
 from swreview.agent.settings import (
     MODEL_VIEW_OFF,
     MODEL_VIEW_PANE,
+    PANE_STUDY,
     WORKSTATION_LEVERS,
     EfficiencySettings,
     ProviderSettings,
     pane_defaults,
 )
-from swreview.benchmark.runner import PROVENANCE_FILE, AttemptRequest, run_benchmark
+from swreview.benchmark.case_file import CaseFile
+from swreview.benchmark.runner import PROVENANCE_FILE, AttemptRequest, preflight_set, run_benchmark
 from swreview.checks.standards.profile import ProfileInvalid, ProfileUnreadable, load_profile
 from swreview.prerun import PRERUN_CHECK_PREFIX, STANDARDS_FAMILY_NAME
 from swreview.report.session import load_session
+from tests.unit.test_benchmark_case_file import PACKAGE_ID, case, case_file_set, item_answer
 from tests.unit.test_run_provenance import example_profile_copy, one_package_set, read_record
 
 SAVED_SET_FILE = "benchmark-set.json"
@@ -200,7 +208,7 @@ def test_benchmark_run_resolves_pane_defaults_model_view_and_profile_through_rev
     [review] = reviews
     assert review["efficiency"] == pane.efficiency
     assert review["attempt"] == AttemptRequest(
-        model_view=pane.model_view, standards_profile=profile
+        model_view=pane.model_view, standards_profile=profile, case_file=None, max_answer_turns=3
     )
     assert "explain_findings" not in review
 
@@ -383,6 +391,43 @@ def test_an_unresolvable_effort_is_refused_once(
     assert not out.exists()
 
 
+def set_of(tmp_path: Path, package_dir: Path, package_id: str) -> Path:
+    """A one-package set whose one entry has the id `package_id`."""
+    set_path = tmp_path / "sets" / f"{package_id}.json"
+    set_path.parent.mkdir(parents=True, exist_ok=True)
+    entry = {"package_id": package_id, "path": str(package_dir), "held_out": True}
+    set_path.write_text(json.dumps({"name": package_id, "packages": [entry]}), encoding="utf-8")
+    return set_path
+
+
+@pytest.mark.parametrize("package_id", ["attempts", "Attempts", "ATTEMPTS"])
+def test_a_package_id_attempts_is_refused(
+    tmp_path: Path, tmp_package_dir: Path, reviews: list[dict[str, Any]], package_id: str
+) -> None:
+    """Row 4, in `preflight_set` (lane A3): the package's folder would be the run's `attempts/`
+    folder (section 4), and on Windows and macOS a name differing only in case is the same folder,
+    so the id is refused ignoring case (owner decision 48A): exit 1, one line starting as every
+    set refusal does and naming the id, no review and nothing written. An id that only begins with
+    it runs."""
+    set_path = set_of(tmp_path, tmp_package_dir, package_id)
+    out = tmp_path / "runs" / "refused"
+
+    result = benchmark_run(set_path, out)
+
+    assert result.exit_code == 1
+    line = one_line(result)
+    assert line.startswith(f"error: SetError: benchmark set {set_path.name}: "), line
+    assert f"package id {package_id} " in line, line
+    assert reviews == []
+    assert not out.exists()
+
+    near_set = set_of(tmp_path, tmp_package_dir, "attempts-2")
+    near = benchmark_run(near_set, tmp_path / "runs" / "near")
+
+    assert near.exit_code == 0, near.stdout + near.stderr
+    assert len(reviews) == 1
+
+
 # --- 3. what declares a study for P-3 (PP-6) ----------------------------------------
 
 
@@ -461,8 +506,15 @@ def test_run_benchmark_hands_the_review_function_the_model_view_and_the_profile(
 ) -> None:
     """`attempt` beside today's four keywords, `explain_findings` still forwarded only when
     true; and `cli._review_fn` passes the attempt's model view and profile to the review, with
-    the live tools off."""
-    set_path = one_package_set(tmp_path, tmp_package_dir)
+    the live tools off. Grown by the scripted-answers slice (T095, RF-44): `attempt.case_file` is
+    the `CaseFile` `preflight_set` loaded for an entry naming one and `None` for an entry naming
+    none, and `attempt.max_answer_turns` the bound `run_benchmark` was given, 3 by default."""
+    payload = case(item_answer())
+    no_case_file = {"package_id": "cover", "path": str(tmp_package_dir), "held_out": True}
+    preflighted = preflight_set(
+        case_file_set(tmp_path, payload, no_case_file), None, load_checklist()
+    )
+    loaded = CaseFile.model_validate(payload)
     profile = example_profile_copy(tmp_path / "profiles")
     efficiency = EfficiencySettings(tool_tiers=True)
     calls: list[dict[str, Any]] = []
@@ -471,7 +523,7 @@ def test_run_benchmark_hands_the_review_function_the_model_view_and_the_profile(
         calls.append(keywords)
 
     run_benchmark(
-        set_path,
+        preflighted,
         tmp_path / "with-attempt",
         provider="fake",
         model="fake-1",
@@ -480,9 +532,10 @@ def test_run_benchmark_hands_the_review_function_the_model_view_and_the_profile(
         efficiency=efficiency,
         model_view=MODEL_VIEW_PANE,
         standards_profile=profile,
+        max_answer_turns=1,
     )
     run_benchmark(
-        set_path,
+        preflighted,
         tmp_path / "defaults",
         provider="fake",
         model="fake-1",
@@ -491,23 +544,36 @@ def test_run_benchmark_hands_the_review_function_the_model_view_and_the_profile(
         explain_findings=True,
     )
 
+    typed: dict[str, Any] = {
+        "provider": "fake",
+        "model": "fake-1",
+        "effort": "high",
+        "efficiency": efficiency,
+    }
+    untyped: dict[str, Any] = {
+        "provider": "fake",
+        "model": "fake-1",
+        "effort": "high",
+        "efficiency": None,
+        "explain_findings": True,
+    }
+    typed_attempt: dict[str, Any] = {
+        "model_view": MODEL_VIEW_PANE,
+        "standards_profile": profile,
+        "max_answer_turns": 1,
+    }
+    untyped_attempt: dict[str, Any] = {
+        "model_view": MODEL_VIEW_OFF,
+        "standards_profile": None,
+        "max_answer_turns": 3,
+    }
     assert calls == [
-        {
-            "provider": "fake",
-            "model": "fake-1",
-            "effort": "high",
-            "efficiency": efficiency,
-            "attempt": AttemptRequest(model_view=MODEL_VIEW_PANE, standards_profile=profile),
-        },
-        {
-            "provider": "fake",
-            "model": "fake-1",
-            "effort": "high",
-            "efficiency": None,
-            "explain_findings": True,
-            "attempt": AttemptRequest(model_view=MODEL_VIEW_OFF, standards_profile=None),
-        },
+        {**typed, "attempt": AttemptRequest(**typed_attempt, case_file=loaded)},
+        {**typed, "attempt": AttemptRequest(**typed_attempt, case_file=None)},
+        {**untyped, "attempt": AttemptRequest(**untyped_attempt, case_file=loaded)},
+        {**untyped, "attempt": AttemptRequest(**untyped_attempt, case_file=None)},
     ]
+    assert calls[0]["attempt"].case_file is preflighted.case_files[PACKAGE_ID]
 
     received: list[dict[str, Any]] = []
 
@@ -523,7 +589,12 @@ def test_run_benchmark_hands_the_review_function_the_model_view_and_the_profile(
         model="fake-1",
         effort="high",
         efficiency=efficiency,
-        attempt=AttemptRequest(model_view=MODEL_VIEW_PANE, standards_profile=profile),
+        attempt=AttemptRequest(
+            model_view=MODEL_VIEW_PANE,
+            standards_profile=profile,
+            case_file=None,
+            max_answer_turns=0,
+        ),
     )
 
     [options] = received
@@ -531,3 +602,47 @@ def test_run_benchmark_hands_the_review_function_the_model_view_and_the_profile(
     assert options["standards_profile"] == profile
     assert options["bridge"] is False
     assert options["efficiency"] == efficiency
+
+
+# --- 6. a case file under row 6's carriage-return rule (`provenance.md` 3.2) ------------------
+
+
+@pytest.mark.parametrize("arm", ["on", "off"])
+def test_a_pane_study_refuses_a_case_file_holding_a_carriage_return(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, arm: str
+) -> None:
+    """Row 6's case-file half (INT-3): a case file the set names inside the repository is a
+    digested input, its bytes reaching `set_digest` through the saved set, so in either arm of a
+    pane study one holding a carriage return is refused naming it repository-relative, before any
+    review and with nothing written."""
+    # `test_benchmark_run_pane_study.py` imports this module, so its fictional checkout is
+    # imported here, once both are loaded.
+    from tests.unit.test_benchmark_run_pane_study import (
+        ARMS,
+        CASE_FILE,
+        EOL_ADVICE,
+        EXAMPLE,
+        checkout,
+        point_at,
+        refused,
+        watch_reviews,
+    )
+
+    root = tmp_path / "checkout"
+    set_file = checkout(root, case_file=True, carriage_return_in=CASE_FILE)
+    point_at(root, monkeypatch)
+    reviewed = watch_reviews(monkeypatch)
+    out = tmp_path / "runs" / arm
+
+    result = benchmark_run(
+        set_file,
+        out,
+        "--study",
+        PANE_STUDY,
+        *ARMS[arm],
+        "--standards-profile",
+        str(root / EXAMPLE),
+    )
+
+    line = refused(result, out, reviewed)
+    assert line.endswith(f": check {CASE_FILE} {EOL_ADVICE}"), line
