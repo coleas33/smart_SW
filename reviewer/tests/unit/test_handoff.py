@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import shutil
@@ -424,6 +425,23 @@ def test_the_handoff_allowlist_names_every_provenance_field(
     carried_file = tmp_path / "carried-provenance.json"
     carried_file.write_text(json.dumps(carried), encoding="utf-8")
     assert scan_file(carried_file) == []
+
+
+def test_the_run_root_s_file_names_come_from_the_runner_not_the_ledger() -> None:
+    """`run-provenance.json` and `benchmark-set.json` are `benchmark.runner`'s names, the one
+    definition of each (research 9.14), so the general export imports no ledger module."""
+    tree = ast.parse(Path(handoff.__file__).read_text(encoding="utf-8"))
+    imported = {
+        (node.module, alias.name)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom)
+        for alias in node.names
+    }
+
+    assert ("swreview.benchmark.runner", "PROVENANCE_FILE") in imported
+    assert ("swreview.benchmark.runner", "SAVED_SET_FILE") in imported
+    assert all(module != "swreview.benchmark.compare" for module, _ in imported)
+    assert handoff.SAVED_SET_FILE == SAVED_SET_FILE
 
 
 def test_a_package_export_reads_only_the_run_roots_provenance_and_status(

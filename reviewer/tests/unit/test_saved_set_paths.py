@@ -21,6 +21,7 @@ checkout's `benchmarks/sets/`, the command pointed at that checkout by patching
 
 from __future__ import annotations
 
+import ast
 import json
 import shutil
 from pathlib import Path
@@ -29,8 +30,9 @@ from typing import Any
 import pytest
 from typer.testing import CliRunner
 
+import swreview
 from swreview import atomic, cli
-from swreview.benchmark import sets
+from swreview.benchmark import runner, sets
 from swreview.benchmark.runner import PROVENANCE_FILE
 from swreview.benchmark.sets import BenchmarkPackageRef, BenchmarkSet, load_set
 from swreview.ir.loader import save_package
@@ -219,3 +221,19 @@ def test_the_saved_copy_resolves_against_the_readers_checkout(
 
     assert len(reads) == 2
     assert [ref.path for ref in scored[-1].packages] == [(writer / PACKAGE).resolve()]
+
+
+def test_the_saved_set_s_file_name_is_written_once_in_the_product() -> None:
+    """One definition: `benchmark.runner.SAVED_SET_FILE`, beside `PROVENANCE_FILE`, which
+    `cli`, `compare` and `handoff` import, so no module keeps a copy of the run root's file
+    name (research 9.14). No other product module holds the literal."""
+    source = Path(swreview.__file__).parent
+    holders = sorted(
+        path.relative_to(source).as_posix()
+        for path in source.rglob("*.py")
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+        if isinstance(node, ast.Constant) and node.value == SAVED_SET_FILE
+    )
+
+    assert holders == ["benchmark/runner.py"]
+    assert runner.SAVED_SET_FILE == SAVED_SET_FILE

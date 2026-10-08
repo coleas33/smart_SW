@@ -2596,6 +2596,39 @@ def test_benchmark_run_max_answer_turns_defaults_to_3_and_is_recorded_as_typed(
         assert record["max_answer_turns"] == bound
 
 
+def test_benchmark_run_hands_each_review_the_bound_it_records(
+    tmp_path: Path,
+    benchmark_set: Path,
+    fake_provider: Callable[..., list[RecordingProvider]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`scripted-answers.md` 4 (FR-025): the bound the record holds is the one each review's
+    attempt carries to the driver, typed or the default 3, so the two never differ."""
+    fake_provider()
+    real = cli._review_fn
+    bounds: list[int] = []
+
+    def spy(package_dir: Path, session_out_dir: Path, **keywords: Any) -> Any:
+        bounds.append(keywords["attempt"].max_answer_turns)
+        return real(package_dir, session_out_dir, **keywords)
+
+    monkeypatch.setattr(cli, "_review_fn", spy)
+
+    for out, typed, bound in (("untyped", (), 3), ("typed", ("--max-answer-turns", "1"), 1)):
+        bounds.clear()
+        result = invoke(
+            "benchmark", "run", "--set", str(benchmark_set), "--out",
+            str(tmp_path / "runs" / out), *typed,
+        )
+
+        assert result.exit_code == 0, result.stdout + result.stderr
+        assert bounds == [bound]
+        record = json.loads(
+            (tmp_path / "runs" / out / "run-provenance.json").read_text(encoding="utf-8")
+        )
+        assert record["max_answer_turns"] == bound
+
+
 def test_a_negative_max_answer_turns_is_a_usage_error(
     tmp_path: Path, benchmark_set: Path, fake_provider: Callable[..., list[RecordingProvider]]
 ) -> None:

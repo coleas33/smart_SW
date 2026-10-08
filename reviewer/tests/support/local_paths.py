@@ -49,8 +49,8 @@ from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
 from typing import Any
 
-from swreview.benchmark.compare import LEDGER_BEGIN, LEDGER_END, SAVED_SET_FILE
-from swreview.benchmark.runner import EXAMPLE_PROFILE, _git
+from swreview.benchmark.compare import LEDGER_BEGIN, LEDGER_END
+from swreview.benchmark.runner import EXAMPLE_PROFILE, SAVED_SET_FILE, _git
 from swreview.benchmark.sets import REPO_ROOT
 from swreview.checks.standards.profile import load_profile
 from tests.checks.golden_standards import PROFILE_DIR

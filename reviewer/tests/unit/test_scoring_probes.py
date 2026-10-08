@@ -35,6 +35,7 @@ from tests.support.scoring_probes import (
     oracle_review,
     stand_in_package,
 )
+from tests.unit.test_answer_key import count_rule
 from tests.unit.test_drawing_finding_number_guard import FIRST, INGESTED, SECOND, guarded_package
 
 PACKAGE = guarded_package(build_package)
@@ -225,6 +226,19 @@ def test_an_oracle_with_no_demonstrated_defect_holds_no_step(tmp_path: Path) -> 
     session = oracle_review(key(EVERY_KIND[2:], []), PACKAGE, tmp_path)
 
     assert session.steps == []
+
+
+def test_an_oracle_whose_part_roles_rule_the_roles_never_ask_is_refused_naming_the_rule(
+    tmp_path: Path,
+) -> None:
+    """`questions.md` 8: the oracle asks the one question a `part_roles` rule with `min` 1
+    counts. With no profile the classifier asks no part-roles question, so the builder refuses,
+    naming the rule, rather than build an oracle that misses its own count."""
+    built = key(EVERY_KIND, []).model_dump(mode="json", exclude_none=True)
+    with_rule = AnswerKey.model_validate({**built, "question_counts": [count_rule()]})
+
+    with pytest.raises(ValueError, match="^Q-1: the roles of package .* ask no part-roles"):
+        oracle_review(with_rule, PACKAGE, tmp_path)
 
 
 def test_a_folder_already_holding_a_review_is_refused(tmp_path: Path) -> None:

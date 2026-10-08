@@ -98,7 +98,7 @@ from swreview.benchmark.digest import sha256_of
 from swreview.benchmark.origins import MODEL_ORIGINS, Origin, finding_origin
 from swreview.benchmark.questions import CallRow, CountRow, QuestionIds, RepeatRow, UnanswerableRow
 from swreview.benchmark.sets import BenchmarkSet
-from swreview.findings import Finding, ReviewModel, carried_count
+from swreview.findings import Finding, ReviewModel, carried_count, first_refusal
 from swreview.ir.loader import PACKAGE_FILE_NAME, load_package
 from swreview.ir.models import EvidencePackage
 from swreview.report.finding_groups import (
@@ -1181,11 +1181,8 @@ def read_scorecard(run_dir: Path | str) -> Scorecard:
     try:
         return Scorecard.model_validate_json(raw)
     except ValidationError as error:
-        first = error.errors(include_url=False)[0]
-        field = ".".join(str(part) for part in first["loc"])
-        where = f"{field}: " if field else ""
         raise ValueError(
-            f"{run_dir}: {SCORECARD_FILE} does not validate: {where}{first['msg']}"
+            f"{run_dir}: {SCORECARD_FILE} does not validate: {first_refusal(error)}"
         ) from None
 
 

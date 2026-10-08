@@ -79,6 +79,7 @@ from swreview.benchmark.answer_key_model import (
     is_family,
 )
 from swreview.benchmark.questions import QuestionIds, question_entry_refusals
+from swreview.findings import model_refusals
 from swreview.ir.loader import LoadedPackage
 from swreview.ir.models import EvidencePackage
 from swreview.report.finding_groups import goal_of
@@ -174,7 +175,7 @@ def load_answer_key(
     try:
         key = AnswerKey.model_validate(payload)
     except ValidationError as error:
-        raise AnswerKeyError(f"answer key {path.name}: {_model_refusal(error)}") from None
+        raise AnswerKeyError(f"answer key {path.name}: {model_refusals(error)}") from None
     for reason in _loader_refusals(path, key, package, checklist, words):
         if reason is not None:
             raise AnswerKeyError(f"answer key {path.name}: {reason}")
@@ -184,19 +185,6 @@ def load_answer_key(
             "against it (answer-key.md 6)"
         )
     return key
-
-
-def _model_refusal(error: ValidationError) -> str:
-    """The model's refusals as one clause each: its own rows' sentences as they are written,
-    which name the entry, and pydantic's as `<field>: <message>`, joined by `; `."""
-    clauses = []
-    for line in error.errors(include_url=False):
-        if line["type"] == "value_error":
-            clauses.append(line["msg"].removeprefix("Value error, "))
-        else:
-            field = ".".join(str(part) for part in line["loc"])
-            clauses.append(f"{field}: {line['msg']}" if field else line["msg"])
-    return "; ".join(clauses)
 
 
 def _loader_refusals(

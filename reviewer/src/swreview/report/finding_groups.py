@@ -204,16 +204,21 @@ class GoalReading:
 def goal_readings(session: ReviewSession, words: Words) -> list[GoalReading]:
     """One reading per goal, in the words file's order: the state decision `goal_lines` builds
     its lines from, for a reader that needs the `GoalReason` key (`benchmark/scorecard`)."""
-    return [_goal_reading(goal, mapped, rows) for goal, mapped, rows in _by_goal(session, words)]
+    return [
+        _goal_reading(goal, mapped, _issues(mapped), rows)
+        for goal, mapped, rows in _by_goal(session, words)
+    ]
 
 
 def goal_lines(session: ReviewSession, words: Words) -> list[GoalLine]:
     """One line per goal, in the words file's order (feature 009 `contracts/review-summary.md`
-    section 3): each goal's reading and the count of its findings other than a pass."""
-    return [
-        _goal_line(_goal_reading(goal, mapped, rows), len(_issues(mapped)), words)
-        for goal, mapped, rows in _by_goal(session, words)
-    ]
+    section 3): each goal's reading and the count of its findings other than a pass, the list
+    the reading read."""
+    lines: list[GoalLine] = []
+    for goal, mapped, rows in _by_goal(session, words):
+        issues = _issues(mapped)
+        lines.append(_goal_line(_goal_reading(goal, mapped, issues, rows), len(issues), words))
+    return lines
 
 
 def _by_goal(
@@ -247,16 +252,17 @@ def _issues(mapped: Sequence[Finding]) -> list[Finding]:
 def _goal_reading(
     goal: Goal,
     mapped: Sequence[Finding],
+    issues: Sequence[Finding],
     rows: Mapping[CoverageBucket, Sequence[CoverageItem]],
 ) -> GoalReading:
-    """One goal's state, first match winning (feature 009 `contracts/review-summary.md` 3)."""
+    """One goal's state, first match winning (feature 009 `contracts/review-summary.md` 3).
+    `issues` is `_issues(mapped)`, filtered once by the caller, which counts it too."""
 
     def reading(
         state: GoalState, reason: GoalReason | None = None, row: CoverageItem | None = None
     ) -> GoalReading:
         return GoalReading(goal=goal, state=state, reason=reason, row=row)
 
-    issues = _issues(mapped)
     if issues:
         return reading("issues")
     closeout = _first(rows, lambda item: item.check in goal.items)

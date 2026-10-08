@@ -4,11 +4,12 @@ The format's one definition (plan decision RF-1): the key and its entries, `Stam
 reference elements and the table of reference-keyed checks of section 2.5, the check-pattern
 grammar of section 3 with `pattern_covers`, and the load-time refusals that need nothing but the
 model (section 4: rows 1, 3, 4, 5, 7 and row 6's grammar), which run whenever an `AnswerKey` is
-built. It imports pydantic, the standard library and `findings.ReviewModel` only, so the case
-generator writes keys through it without loading `benchmark/answer_key.py`, the key's one
-reader, whose rows (2, 6's typo guard, 8 to 14) need the matcher, the question reader, the
-checklist, the report's goals or the package. Nothing under `tools/`, `agent/`, `checks/` or
-`benchmark/runner.py` imports either module: runs never read keys (FR-032).
+built. It imports pydantic, the standard library, `findings.ReviewModel` and the entry
+refusals' one wording, `findings.field_refusals`, only, so the case generator writes keys through
+it without loading `benchmark/answer_key.py`, the key's one reader, whose rows (2, 6's typo
+guard, 8 to 14) need the matcher, the question reader, the checklist, the report's goals or the
+package. Nothing under `tools/`, `agent/`, `checks/` or `benchmark/runner.py` imports either
+module: runs never read keys (FR-032).
 
 Every refusal names its entry ("D-3 states no expected_status"), pydantic's own as well as the
 model's rows, so a key the generator builds, with no loader there to name the entry, reads the
@@ -42,7 +43,7 @@ from pydantic import (
     model_validator,
 )
 
-from swreview.findings import ReviewModel
+from swreview.findings import ReviewModel, field_refusals
 
 KEY_FORMAT = 2
 """The one key format this build reads and the generator writes (section 2.1)."""
@@ -322,7 +323,7 @@ class _Entry(ReviewModel):
             entry_id = data.get("id") if isinstance(data, dict) else None
             if not isinstance(entry_id, str):
                 raise
-            raise ValueError(f"{entry_id} {_field_refusals(error)}") from None
+            raise ValueError(f"{entry_id} {field_refusals(error)}") from None
         for reason in entry._refusals():
             if reason is not None:
                 raise ValueError(f"{entry.id} {reason}")
@@ -549,19 +550,6 @@ class QuestionCount(_Entry):
         if not self.ids:
             data.pop("ids", None)
         return data
-
-
-def _field_refusals(error: ValidationError) -> str:
-    """Pydantic's refusals inside one entry as one clause: a missing field as `states no
-    <field>` (row 4's wording), any other as `<field>: <message>`, joined by `; `."""
-    clauses = []
-    for line in error.errors(include_url=False):
-        field = ".".join(str(part) for part in line["loc"])
-        if line["type"] == "missing":
-            clauses.append(f"states no {field}")
-        else:
-            clauses.append(f"{field}: {line['msg']}" if field else line["msg"])
-    return "; ".join(clauses)
 
 
 # --- section 2.1: the key --------------------------------------------------------------------

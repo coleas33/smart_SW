@@ -333,6 +333,26 @@ def test_outside_options_is_dumped_only_when_true_and_entries_only_when_present(
     ]
 
 
+def test_both_omissions_are_findings_omit_at_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """One rule omits a field at its default: `findings.omit_at_default`, which the log's two
+    models call by name, `outside_options` at false and `entries` at `None`."""
+    omitted: list[tuple[str, tuple[str, ...]]] = []
+    real = answers.omit_at_default
+
+    def spy(data: dict[str, Any], model: Any, *names: str) -> dict[str, Any]:
+        omitted.append((type(model).__name__, names))
+        return real(data, model, *names)
+
+    monkeypatch.setattr(answers, "omit_at_default", spy)
+
+    a_log().model_dump_json()
+
+    assert set(omitted) == {
+        ("AnswerSent", ("outside_options",)),
+        ("UnscriptedRequest", ("entries",)),
+    }
+
+
 # --- write_answer_log and read_answer_log (scripted-answers.md 5; RF-31) ------------------------
 
 
@@ -929,8 +949,11 @@ def test_a_negative_bound_is_refused_before_any_turn(tmp_path: Path) -> None:
     out = tmp_path / "run" / PACKAGE_ID
     run = start_review(package_folder(tmp_path), out, provider=provider, bridge=False)
 
-    with pytest.raises(ValueError, match="max_answer_turns"):
-        drive_review(run, None, max_answer_turns=-1)
+    try:
+        with pytest.raises(ValueError, match="max_answer_turns"):
+            drive_review(run, None, max_answer_turns=-1)
+    finally:
+        run.close()
 
     assert provider.sent == []
     assert not (out / ANSWER_LOG_FILE_NAME).exists()

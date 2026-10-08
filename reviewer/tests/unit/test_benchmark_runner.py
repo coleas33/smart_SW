@@ -10,7 +10,8 @@ adapter, turn, `session.json`.
 Feature 014 T095 (`contracts/scripted-answers.md` 2.3, 6 and 7; `benchmark-run.md` 3 row 4;
 `provenance.md` 1; INT-14, QA-7; FR-013, US4-6, US4-8): `run_benchmark` takes the
 `PreflightedSet` that `preflight_set` returns, the loaded set and each entry's loaded case file,
-so a case file failing any row of section 2.3 stops the run before the first review; the saved
+so a case file failing any row of section 2.3, row 10 read under the run's standards profile,
+stops the run before the first review; the saved
 set carries each case file's digest, so one changed byte moves `set_digest`; and the record holds
 the answer-turn bound, read "not recorded" where a record lacks it.
 """
@@ -41,6 +42,8 @@ from swreview.benchmark.runner import (
     run_benchmark,
 )
 from swreview.benchmark.sets import load_set
+from swreview.checks.standards.profile import load_profile
+from tests.support.roles_review import write_profile
 from tests.unit.test_benchmark_case_file import (
     BEFORE_ANY_REVIEW,
     CASE_NAME,
@@ -49,6 +52,7 @@ from tests.unit.test_benchmark_case_file import (
     case,
     case_file_set,
     item_answer,
+    roles_answer,
 )
 
 FAKE_MODEL = default_model(ProviderName.FAKE)
@@ -162,6 +166,58 @@ def test_a_case_file_that_cannot_be_read_is_refused_by_row_1_before_its_package_
     message = str(refused.value)
     assert message.startswith(f"{PREFIX}cannot be read ("), message
     assert str(tmp_path) not in message
+
+
+def test_the_profile_given_reaches_each_case_file_s_part_roles_row(tmp_path: Path) -> None:
+    """Row 10 (`scripted-answers.md` 2.3; QA-5) asks the classifier over the profile the reviews
+    will grade against: `preflight_set` holds a part-roles answer under the convention-only
+    profile, which asks the part-roles question, and refuses the same set with no profile,
+    naming the entry."""
+    payload = case(roles_answer())
+    set_path = case_file_set(tmp_path, payload)
+    profile = load_profile(write_profile(tmp_path))
+
+    preflighted = preflight_set(set_path, profile, load_checklist())
+
+    assert dict(preflighted.case_files) == {PACKAGE_ID: CaseFile.model_validate(payload)}
+    with pytest.raises(CaseFileError) as refused:
+        preflight_set(set_path, None, load_checklist())
+    message = str(refused.value)
+    assert message.startswith(f"{PREFIX}A-3 answers the part-roles question"), message
+
+
+def test_benchmark_run_checks_each_case_file_against_its_standards_profile(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`benchmark-run.md` 3 row 4: the run's `--standards-profile` is the one row 10 reads, so a
+    part-roles answer that profile asks for runs, while the same set with no profile is refused
+    before any review."""
+    set_path = case_file_set(tmp_path, case(roles_answer()))
+    profile = write_profile(tmp_path)
+    reviewed: list[Path] = []
+
+    def spy(package_dir: Path, session_out_dir: Path, **_keywords: Any) -> None:
+        reviewed.append(package_dir)
+
+    monkeypatch.setattr(cli, "_review_fn", spy)
+
+    def run(out: str, *options: str) -> Any:
+        return CliRunner().invoke(
+            cli.app,
+            [
+                "benchmark", "run", "--set", str(set_path), "--out", str(tmp_path / "runs" / out),
+                "--provider", "fake", *options,
+            ],
+        )
+
+    graded = run("graded", "--standards-profile", str(profile))
+    assert graded.exit_code == 0, graded.stdout + graded.stderr
+    assert len(reviewed) == 1
+
+    ungraded = run("ungraded")
+    assert ungraded.exit_code == 1, ungraded.stdout + ungraded.stderr
+    assert f"{PREFIX}A-3 answers the part-roles question" in ungraded.stderr
+    assert len(reviewed) == 1
 
 
 def test_run_benchmark_requires_a_preflighted_set(tmp_path: Path, tmp_package_dir: Path) -> None:

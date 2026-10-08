@@ -21,6 +21,8 @@ import pytest
 from swreview.benchmark import scorecard
 from swreview.benchmark.answer_key_model import ExpectedCoverage
 from swreview.benchmark.scorecard import CoverageMismatch
+from swreview.findings import Finding
+from swreview.report import finding_groups
 from swreview.report.finding_groups import GoalReading, goal_lines, goal_readings
 from swreview.report.session import ReviewSession
 from swreview.report.summary import load_words
@@ -108,6 +110,32 @@ def test_the_goal_lines_are_built_from_the_readings() -> None:
         assert (line.goal, line.title, line.state) == (one.goal.id, one.goal.title, one.state)
         assert line.reason == (None if one.reason is None else words.goal_reasons[one.reason])
         assert line.detail == (None if one.row is None else one.row.reason)
+
+
+def test_each_goal_s_findings_other_than_a_pass_are_filtered_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The reading's state and the line's findings count read one list: `goal_lines` and
+    `goal_readings` each filter a goal's findings once, and a line counts what its reading
+    read."""
+    session, readings = mixed_session()
+    words = load_words()
+    filtered: list[int] = []
+    real = finding_groups._issues
+
+    def spy(mapped: Sequence[Finding]) -> list[Finding]:
+        issues = real(mapped)
+        filtered.append(len(issues))
+        return issues
+
+    monkeypatch.setattr(finding_groups, "_issues", spy)
+
+    lines = goal_lines(session, words)
+    assert len(filtered) == len(lines)
+    assert [line.findings for line in lines] == filtered
+    filtered.clear()
+    assert goal_readings(session, words) == readings
+    assert len(filtered) == len(readings)
 
 
 # --- each reading _goal_line decides -------------------------------------------------------------

@@ -261,9 +261,11 @@ def test_case_file_version_is_1() -> None:
     assert CASE_FILE_VERSION == 1
 
 
-def test_the_case_file_module_imports_pydantic_the_standard_library_and_review_model_only() -> None:
+def test_the_case_file_module_imports_pydantic_the_stdlib_and_two_findings_names() -> None:
     """INT-6: the format is data only, so the generator writes case files through it without
-    `benchmark/answers.py`. US5's `test_benchmark_generator_imports.py` pins it transitively."""
+    `benchmark/answers.py`: from `swreview` it imports `findings.ReviewModel` and the entry
+    refusals' one wording, `findings.field_refusals` (research 9.14). US5's
+    `test_benchmark_generator_imports.py` pins it transitively."""
     path = Path(case_file.__file__)
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     modules: set[str] = set()
@@ -283,7 +285,7 @@ def test_the_case_file_module_imports_pydantic_the_standard_library_and_review_m
         and module not in {"pydantic", "swreview.findings"}
     }
     assert outside == set()
-    assert from_findings == {"ReviewModel"}
+    assert from_findings == {"ReviewModel", "field_refusals"}
 
 
 GENERATOR_FORBIDDEN = ("swreview.agent", "swreview.tools", "swreview.checks")
@@ -376,6 +378,11 @@ MODEL_ROWS = [
         case(roles_answer(part_roles=False)), ("A-3", "part_roles"), id="row3-part-roles-false"
     ),
     pytest.param(
+        case(item_answer(part_roles=False)),
+        ("A-1", "part_roles false"),
+        id="row3-part-roles-false-with-an-item-and-ids",
+    ),
+    pytest.param(
         case(roles_answer(part_roles=None)), ("A-3", "part_roles"), id="row3-part-roles-null"
     ),
     pytest.param(case(roles_answer(part_roles=1)), ("A-3", "part_roles"), id="row3-part-roles-1"),
@@ -426,6 +433,23 @@ def test_a_model_refusal_names_the_entry_first() -> None:
     message = model_refusal(case(item_answer(id="A-2", hint="fictional")))
 
     assert "A-2 hint:" in message, message
+
+
+@pytest.mark.parametrize("blank", ["", "  "], ids=["empty", "spaces"])
+def test_a_blank_id_is_named_quoted_never_as_a_bare_space(
+    blank: str, tmp_path: Path, package: EvidencePackage, profile: StandardsProfile
+) -> None:
+    """An entry whose id is blank is named by its quoted form, so the line names something
+    where the id stands: row 3's refusal and pydantic's alike, on the model and through the
+    reader."""
+    quoted = repr(blank)
+    for payload, reason in (
+        (case(item_answer(id=blank)), "is not a scripted answer's id"),
+        (case(without(item_answer(id=blank), "answer")), "states no answer"),
+    ):
+        assert f"{quoted} {reason}" in model_refusal(payload)
+        message = refusal(tmp_path, payload, package, profile)
+        assert f"{PREFIX}{quoted} {reason}" in message, message
 
 
 # --- row 1: what the file is -----------------------------------------------------------------

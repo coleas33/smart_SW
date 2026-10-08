@@ -251,9 +251,10 @@ def _refuse_a_case_file_digest(set_path: Path, entries: list[dict[str, Any]]) ->
         )
 
 
-def _named_paths(entry: dict[str, Any]) -> list[str]:
-    """The paths `entry` names, in `SET_PATH_FIELDS` order: its package folder and, where it
-    names one, its case file."""
+def named_paths(entry: dict[str, Any]) -> list[str]:
+    """The paths `entry`, a set file's or a saved copy's entry as written, names, in
+    `SET_PATH_FIELDS` order: its package folder and, where it names one, its case file. Row 3
+    reads them here, and compare's ledger guard (`compare._names_an_absolute_path`)."""
     return [entry[field] for field in SET_PATH_FIELDS if entry.get(field) is not None]
 
 
@@ -274,7 +275,7 @@ def _refuse_relative_paths_outside_sets(
         (
             (entry, named)
             for entry in entries
-            for named in _named_paths(entry)
+            for named in named_paths(entry)
             if not Path(named).is_absolute()
         ),
         None,

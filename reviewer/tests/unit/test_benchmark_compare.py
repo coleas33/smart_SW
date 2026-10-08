@@ -2084,10 +2084,12 @@ def committed_checkout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple
 
 def guarded_runs(root: Path, tmp_path: Path) -> tuple[list[Path], list[Path]]:
     """The runs the committed ledger refuses and the ones it takes, as `write_run` lays them out:
-    another profile than the example, a saved set naming an absolute path and a folder outside the
-    checkout; no profile, and the example profile, inside it."""
+    another profile than the example, a saved set naming an absolute path, a package's or only a
+    case file's, and a folder outside the checkout; no profile, and the example profile, inside
+    it."""
     studies = root / "benchmarks" / "studies" / "smoke"
     private = (tmp_path / "private" / "rms-part").as_posix()
+    private_case_file = (tmp_path / "private" / "rms-part.json").as_posix()
     refused = [
         write_run(
             studies,
@@ -2102,6 +2104,19 @@ def guarded_runs(root: Path, tmp_path: Path) -> tuple[list[Path], list[Path]]:
             studies,
             replace(SMOKE, run="private-package"),
             saved_packages=[{"package_id": "rms-part", "path": private, "held_out": True}],
+        ),
+        write_run(
+            studies,
+            replace(SMOKE, run="private-case-file"),
+            saved_packages=[
+                {
+                    "package_id": "rms-part",
+                    "path": "benchmarks/packages/rms-part",
+                    "case_file": private_case_file,
+                    "case_file_sha256": "0" * 64,
+                    "held_out": True,
+                }
+            ],
         ),
         write_run(tmp_path / "elsewhere", replace(SMOKE, run="outside")),
     ]
@@ -2129,8 +2144,9 @@ def test_the_committed_ledger_refuses_another_profile_a_private_package_and_an_o
 ) -> None:
     """US2-10, FR-051 (`contracts/provenance.md` 6.4): with `--into` or `--out` somewhere the
     repository may commit, and under `--check` too, a run graded against a profile other than the
-    fictional example, one whose saved set names an absolute path and one whose folder the
-    repository does not hold are each refused, exit 1, before anything is written. A run with no
+    fictional example, one whose saved set names an absolute path (a package's, or the case file
+    of a committed package) and one whose folder the repository does not hold are each refused,
+    exit 1, before anything is written. A run with no
     profile graded against none and is not refused, nor is one graded against the example."""
     root, document = committed_checkout(tmp_path, monkeypatch)
     refused, accepted = guarded_runs(root, tmp_path)

@@ -6,14 +6,16 @@ the part-roles question. The format's one definition (plan decision INT-6): `Cas
 `ScriptedAnswer`, strict, and the refusals of section 2.3 that need nothing but the model, which
 run whenever a `CaseFile` is built: row 1's version and unknown fields, row 3 (ids `A-<n>`,
 unique in the file, and each entry's shape) and row 4 (a blank answer). It imports pydantic, the
-standard library and `findings.ReviewModel` only, so US5's case generator writes case files
-through it without loading `benchmark/answers.py`, the one reader, which holds the driver and the
-rows that need the set entry, the package, the checklist or the profile (rows 2 and 5 to 10).
-Nothing under `tools/`, `agent/` or `checks/` imports this module.
+standard library, `findings.ReviewModel` and the entry refusals' one wording,
+`findings.field_refusals`, only, so US5's case generator writes case files through it without
+loading `benchmark/answers.py`, the one reader, which holds the driver and the rows that need the
+set entry, the package, the checklist or the profile (rows 2 and 5 to 10). Nothing under
+`tools/`, `agent/` or `checks/` imports this module.
 
 Every refusal names its entry ("A-2 states a blank answer"), pydantic's own as well as the
 model's rows, so a case file the generator builds, with no loader there to name the entry, reads
-the same as one the loader reads.
+the same as one the loader reads. A blank id is named quoted (`''`), so the line never starts
+with a bare space where the id stands.
 """
 
 from __future__ import annotations
@@ -30,7 +32,7 @@ from pydantic import (
     model_validator,
 )
 
-from swreview.findings import ReviewModel
+from swreview.findings import ReviewModel, field_refusals
 
 CASE_FILE_VERSION = 1
 """The one case-file version this build reads and the generator writes (section 2.2)."""
@@ -72,10 +74,10 @@ class ScriptedAnswer(ReviewModel):
             entry_id = data.get("id") if isinstance(data, dict) else None
             if not isinstance(entry_id, str):
                 raise
-            raise ValueError(f"{entry_id} {_field_refusals(error)}") from None
+            raise ValueError(f"{_named(entry_id)} {field_refusals(error)}") from None
         for reason in (entry._id_refusal(), entry._shape_refusal(), entry._answer_refusal()):
             if reason is not None:
-                raise ValueError(f"{entry.id} {reason}")
+                raise ValueError(f"{_named(entry.id)} {reason}")
         return entry
 
     def _id_refusal(self) -> str | None:
@@ -162,16 +164,7 @@ class CaseFile(ReviewModel):
         return self
 
 
-def _field_refusals(error: ValidationError) -> str:
-    """Pydantic's refusals inside one entry as one clause: a missing field as `states no
-    <field>`, any other as `<field>: <message>`, joined by `; `. The answer key's model words
-    its entries' refusals the same way (`answer_key_model._field_refusals`); this module imports
-    no other `swreview` module, so the clause is written here."""
-    clauses = []
-    for line in error.errors(include_url=False):
-        field = ".".join(str(part) for part in line["loc"])
-        if line["type"] == "missing":
-            clauses.append(f"states no {field}")
-        else:
-            clauses.append(f"{field}: {line['msg']}" if field else line["msg"])
-    return "; ".join(clauses)
+def _named(entry_id: str) -> str:
+    """How a refusal names an entry: its id, or the id quoted when it is blank (`''`), so the
+    line names something where the id stands."""
+    return entry_id if entry_id.strip() else repr(entry_id)
