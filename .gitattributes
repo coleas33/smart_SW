@@ -28,3 +28,14 @@ extractor/SwReview.AddIn/Terminal/TerminalPage/vendor/* -text
 
 # A recorded event-stream sample pinned byte for byte by both test suites; never normalise it.
 *.sse -text
+
+# The inputs a run digests over raw bytes check out with LF everywhere, so two machines' digests
+# agree (specs/014-design-review-eval/contracts/provenance.md 6.5). `eol` sets only a text file's
+# checkout ending: the binary rules above keep their -text.
+config/standards.example.yaml eol=lf
+reviewer/src/swreview/agent/checklist_v1.yaml eol=lf
+reviewer/src/swreview/agent/prompts/*.md eol=lf
+benchmarks/** eol=lf
+# The packed event streams a committed run folder holds (provenance.md 6.6); after the rule above,
+# so the later line wins and no checkout converts a compressed byte.
+*.gz binary
