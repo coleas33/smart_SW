@@ -473,3 +473,30 @@ def test_a_package_export_reads_only_the_run_roots_provenance_and_status(
         with pytest.raises(HandoffExportError, match="outside"):
             export_handoff(package, inside, exported_at=STAMP)
         assert not inside.exists()
+
+
+def test_each_artifact_record_names_the_folder_it_was_read_from(
+    tmp_path: Path, tmp_package_dir: Path
+) -> None:
+    """The manifest's record of a name read from a benchmark run's root says so, `source`
+    `run_root`, and every name read from the exported folder says `run_dir`: the archive holds
+    both at its top level, so only the record tells them apart. A review folder holding its own
+    `run-provenance.json` reads it as `run_dir`."""
+    run_root, _ = pane_defaults_run(tmp_path, one_package_set(tmp_path, tmp_package_dir))
+
+    entries = read_zip(
+        export_handoff(run_root / "cover", tmp_path / "package.zip", exported_at=STAMP)
+    )
+
+    sources = {record["path"]: record["source"] for record in manifest_of(entries)["artifacts"]}
+    assert set(sources) == set(entries) - {"handoff-manifest.json"}
+    assert sources.pop(PROVENANCE_FILE) == "run_root"
+    assert sources and set(sources.values()) == {"run_dir"}
+
+    review = tmp_path / "review"
+    write_run(review)
+    entries = read_zip(export_handoff(review, tmp_path / "review.zip", exported_at=STAMP))
+
+    records = manifest_of(entries)["artifacts"]
+    assert PROVENANCE_FILE in {record["path"] for record in records}
+    assert {record["source"] for record in records} == {"run_dir"}

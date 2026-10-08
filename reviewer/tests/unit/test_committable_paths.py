@@ -151,6 +151,11 @@ def reasons(path: Path) -> list[str]:
     return [offence.reason for offence in local_paths.scan_file(path)]
 
 
+def offences(path: Path) -> list[tuple[str, str]]:
+    """What the scanner flags in the one file at `path`: each reason and the text it flags."""
+    return [(offence.reason, offence.text) for offence in local_paths.scan_file(path)]
+
+
 def forward(path: str) -> str:
     return path.replace("\\", "/")
 
@@ -238,6 +243,98 @@ def test_the_scanner_ignores_and_or_fractions_urls_and_relative_paths(tmp_path: 
     )
     assert reasons(written(tmp_path / "ledger.md", text)) == []
     assert reasons(written(tmp_path / "message.json", json.dumps({"message": text}))) == []
+
+
+def test_an_html_end_tag_or_a_self_closing_tag_starts_no_path(tmp_path: Path) -> None:
+    """The report slice's pages may be committed (`report.md` 4): an end tag's `/` (`</td>`,
+    `</table>`, any case, a space before its `>`) and a self-closing tag's `/>` start no rooted
+    path. A rooted path in a cell or an attribute is still found, ended by the tag after it, and
+    so is one written straight after a `<`, which no end tag's name is."""
+    page = (
+        "<table><thead><tr><th>run</th></tr></thead>\n"
+        "<tr><td>valid</td><td>1/2</td></tr></TABLE>\n"
+        '<meta name="generator" content="swreview benchmark report" />\n<br/><hr />\n'
+        '<p>see <a href="transcripts/pane/run-1/pkg-1.html">pkg-1</a></p >\n'
+    )
+    assert reasons(written(tmp_path / "index.html", page)) == []
+    flagged = (
+        "<td>/srv/real-vault/bracket.SLDPRT</td>"
+        '<a href="/srv/other/notes.md">notes</a></srv/real-vault/x>\n'
+    )
+    assert offences(written(tmp_path / "flagged.html", flagged)) == [
+        (local_paths.ROOTED_PATH, "/srv/real-vault/bracket.SLDPRT"),
+        (local_paths.ROOTED_PATH, "/srv/other/notes.md"),
+        (local_paths.ROOTED_PATH, "/srv/real-vault/x"),
+    ]
+
+
+def test_a_path_that_climbs_out_of_a_fictional_root_is_flagged(tmp_path: Path) -> None:
+    """A path lies under a fictional root once its `..` are applied: one that starts at a root and
+    climbs out of it is flagged by its anchor, as the file spells it, in a plain file and in a
+    JSON one; one whose `..` stays inside the root passes."""
+    example = vault_root(REPO_ROOT / runner.EXAMPLE_PROFILE)
+    climbing = {
+        scramble.FICTIONAL_ROOT + "..\\Users\\someone\\bracket.SLDPRT": local_paths.DRIVE_PATH,
+        example + "/../Private/bracket.SLDPRT": local_paths.DRIVE_PATH,
+        "/Designs/../srv/real-vault/bracket.SLDPRT": local_paths.ROOTED_PATH,
+        "/Designs/a/../../srv/bracket.SLDPRT": local_paths.ROOTED_PATH,
+    }
+    for number, (path, reason) in enumerate(climbing.items()):
+        plain = written(tmp_path / f"{number}.md", f"read {path}\n")
+        assert offences(plain) == [(reason, path)], path
+        as_json = written(tmp_path / f"{number}.json", json.dumps({"path": path}))
+        assert reasons(as_json) == [reason], path
+    for path in (
+        scramble.FICTIONAL_ROOT + "Vault\\..\\Other\\bracket.SLDPRT",
+        "/Designs/a/../b/bracket.SLDPRT",
+    ):
+        assert reasons(written(tmp_path / "staying.md", f"read {path}\n")) == [], path
+
+
+def test_a_drive_path_glued_to_a_word_character_is_flagged(tmp_path: Path) -> None:
+    """A drive letter and its backslash start a path wherever they stand, so a path run into the
+    text before it is found: plain text quoting an escaped line (`...\\nE:\\...`), or a word typed
+    against it; under a fictional root it still passes. A drive letter with `/`, which a URL's
+    scheme ends in, and a UNC anchor's two backslashes still start one only at a token
+    boundary."""
+    path = "E:\\Vault\\Real\\bracket.SLDPRT"
+    for number, text in enumerate(
+        (f"line one\\n{path}\n", f"the run wrote{path} today\n", f"x_9{path}\n")
+    ):
+        assert offences(written(tmp_path / f"{number}.md", text)) == [
+            (local_paths.DRIVE_PATH, path)
+        ], text
+    fictional = f"see{scramble.FICTIONAL_ROOT}Vault\\bracket.SLDPRT\n"
+    assert reasons(written(tmp_path / "fictional.md", fictional)) == []
+    anchors = "https://example.com/a and native\\\\cover-assy.SLDASM\n"
+    assert reasons(written(tmp_path / "anchors.md", anchors)) == []
+
+
+def test_a_json_lines_file_and_a_packed_stream_are_read_line_by_line(tmp_path: Path) -> None:
+    """Each line of a `.jsonl` file, and of an `events.jsonl.gz` once decompressed, is parsed as
+    JSON on its own, so a path its escapes spell (`\\u005c` for each backslash) is found as the
+    line means it, on every line, and a line that is not JSON is read as its text. Read as one
+    text, the file would reach each offence as escaped."""
+    path = "E:\\Vault\\Real\\bracket.SLDPRT"
+    escaped = path.replace("\\", "\\u005c")
+    lines = (
+        '{"type": "tool.started", "arguments": {"path": "' + escaped + '"}}\n'
+        "not json: /srv/real-vault/bracket.SLDPRT\n"
+        '{"type": "tool.finished", "summary": "read ' + escaped + '"}\n'
+    )
+    plain = written(tmp_path / "plain" / "events.jsonl", lines)
+    packed = tmp_path / "packed" / "events.jsonl.gz"
+    packed.parent.mkdir()
+    packed.write_bytes(gzip.compress(lines.encode("utf-8"), compresslevel=9, mtime=0))
+    expected = [
+        (local_paths.DRIVE_PATH, path),
+        (local_paths.ROOTED_PATH, "/srv/real-vault/bracket.SLDPRT"),
+        (local_paths.DRIVE_PATH, path),
+    ]
+
+    assert offences(plain) == expected
+    assert offences(packed) == expected
+    assert offences(written(tmp_path / "whole.md", lines))[0] == (local_paths.DRIVE_PATH, escaped)
 
 
 def test_the_scanner_passes_each_named_fictional_root_and_nothing_beside_it(

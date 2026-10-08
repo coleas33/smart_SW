@@ -906,10 +906,12 @@ def _fmt_assessed_total(value: int | None, assessed: int, packages: int) -> str:
     return f"{value} ({assessed} of {packages} packages)"
 
 
-def _fmt_origins(counts: Mapping[Origin, int]) -> str:
-    """Each origin with a count, in `Origin`'s order, or `none`."""
+def fmt_origins(counts: Mapping[Origin, int], *, separator: str) -> str:
+    """Each origin with a count, in `Origin`'s order, joined by `separator`, or `none` when every
+    one is zero, so a cell is never blank. The scorecard's line (`, `) and the ledger's cells
+    (` / `, feature 014 `contracts/provenance.md` 5) alike."""
     named = [f"{origin} {count}" for origin, count in counts.items() if count]
-    return ", ".join(named) if named else "none"
+    return separator.join(named) if named else "none"
 
 
 def render_scorecard_md(scorecard: Scorecard) -> str:
@@ -965,6 +967,7 @@ def render_scorecard_md(scorecard: Scorecard) -> str:
         if aggregate.median_seconds_to_first_finding is None
         else f"{aggregate.median_seconds_to_first_finding:.1f} s"
     )
+    false_alarms_by_origin = fmt_origins(aggregate.false_alarms_by_origin, separator=", ")
     lines += [
         "",
         "## Aggregate",
@@ -977,7 +980,7 @@ def render_scorecard_md(scorecard: Scorecard) -> str:
         f"- cleared: {aggregate.cleared}",
         f"- missed known defects: {aggregate.missed_known_defects}",
         f"- false alarms: {aggregate.false_alarms}",
-        f"- false alarms by origin: {_fmt_origins(aggregate.false_alarms_by_origin)}",
+        f"- false alarms by origin: {false_alarms_by_origin}",
         f"- contradictions: {_fmt_assessed_total(aggregate.contradictions, assessed, packages)}",
         f"- confirmations: {_fmt_assessed_total(aggregate.confirmations, assessed, packages)}",
         f"- unresolved: {aggregate.unresolved_count}",

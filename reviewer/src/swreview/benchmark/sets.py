@@ -64,10 +64,9 @@ class BenchmarkSet(ReviewModel):
         indent 2, LF, a final newline; absent optional fields omitted. A set file never
         holds a `case_file_sha256` (plan decision RF-54).
         """
-        checkout = root.resolve()
         payload = {
             "name": self.name,
-            "packages": [_entry_form(ref, checkout) for ref in self.packages],
+            "packages": [_entry_form(ref, root) for ref in self.packages],
         }
         return (json.dumps(payload, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
 
@@ -92,7 +91,23 @@ def _entry_form(ref: BenchmarkPackageRef, root: Path) -> dict[str, Any]:
 
 def _path_form(path: Path, root: Path) -> str:
     """`path` relative to `root` when it lies inside it, else as it is; `/` either way."""
-    return path.relative_to(root).as_posix() if path.is_relative_to(root) else path.as_posix()
+    relative = checkout_relative(path, root=root)
+    return relative.as_posix() if relative is not None else path.as_posix()
+
+
+def checkout_relative(path: Path | str, *, root: Path) -> Path | None:
+    """`path` relative to the checkout at `root` when it lies inside it, else `None`.
+
+    The one inside-the-checkout rule: both resolved, so a `..`, a symlink or a junction counts
+    where it leads, then `is_relative_to`, so a neighbour whose name only begins with the
+    root's lies outside. The root itself is `Path(".")`. Read by both written forms here, by
+    `benchmark run`'s private packages, committable folders (`runner.committable`) and
+    carriage-return rule, and by compare's ledger folder (feature 014 `contracts/cases.md` 4.2,
+    `provenance.md` 3.2, 6.3 and 6.4). `root` has no default, as `runner`'s predicates on a
+    checkout: a caller passes the root its command read.
+    """
+    resolved, checkout = Path(path).resolve(), Path(root).resolve()
+    return resolved.relative_to(checkout) if resolved.is_relative_to(checkout) else None
 
 
 def load_set(path: Path | str, *, root: Path = REPO_ROOT) -> BenchmarkSet:

@@ -17,6 +17,11 @@ provider key and no SOLIDWORKS licence (FR-047); SOLIDWORKS is never started. Fo
       reviewer/src/swreview/agent/prompts/system_v1.md      # expect w/lf on every line
   ```
 
+- After this branch merges into `main`, any other checkout deletes its working copies of
+  `config/standards.example.yaml`, the checklist and the system prompt and checks them out again
+  (`git checkout -- <them>`; git leaves an unchanged working copy as it is), so they read LF and
+  their digests agree (plan RK-5); the check above then reads `w/lf`.
+
 - `uv sync`, then `uv run swreview tokenizer fetch` once per machine: section 1 runs with
   `SWREVIEW_REQUIRE_TOKENIZER=1`, under which a missing vocabulary fails the tests that need it
   rather than skipping them (`reviewer/tests/conftest.py:85-106`). The vocabulary is otherwise

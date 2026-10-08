@@ -33,6 +33,7 @@ No network: every command here runs the scripted provider.
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 import shutil
 import subprocess
@@ -56,7 +57,8 @@ from swreview.agent.settings import (
     default_model,
     pane_defaults,
 )
-from swreview.benchmark import digest
+from swreview.benchmark import digest, sets
+from swreview.benchmark import runner as benchmark_runner
 from swreview.benchmark.runner import (
     PROVENANCE_FILE,
     RunProvenance,
@@ -415,7 +417,7 @@ def slice_2_run(tmp_path: Path) -> tuple[list[str], dict[str, Any]]:
         "live_tools": False,
         "inert_settings": list(INERT_SETTINGS[ProviderName.FAKE]),
         "prompt_digest": digest.sha256_of(SYSTEM_PROMPT_FILE),
-        "tree_dirty": tree_dirty(REPO_ROOT),
+        "tree_dirty": tree_dirty(root=REPO_ROOT),
     }
     return options, expected
 
@@ -599,22 +601,46 @@ def test_tree_dirty_reads_tracked_changes_only_and_is_null_without_git(
         "first",
     )
 
-    assert tree_dirty(repository) is False
+    assert tree_dirty(root=repository) is False
     (repository / "untracked.txt").write_bytes(b"new\n")
-    assert tree_dirty(repository) is False
+    assert tree_dirty(root=repository) is False
     tracked.write_bytes(b"two\n")
-    assert tree_dirty(repository) is True
+    assert tree_dirty(root=repository) is True
 
     outside = tmp_path / "outside"
     outside.mkdir()
     monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path))
-    assert tree_dirty(outside) is None
+    assert tree_dirty(root=outside) is None
 
     def no_git(*_args: Any, **_kwargs: Any) -> Any:
         raise OSError("git is not on the path")
 
     monkeypatch.setattr("swreview.benchmark.runner.subprocess.run", no_git)
-    assert tree_dirty(repository) is None
+    assert tree_dirty(root=repository) is None
+
+
+@pytest.mark.parametrize(
+    ("module", "name"),
+    [
+        (benchmark_runner, "committable"),
+        (benchmark_runner, "tree_dirty"),
+        (benchmark_runner, "profile_is_example"),
+        (sets, "checkout_relative"),
+    ],
+    ids=["committable", "tree_dirty", "profile_is_example", "checkout_relative"],
+)
+def test_the_checkout_predicates_take_the_root_by_keyword_with_no_default(
+    module: Any, name: str
+) -> None:
+    """One signature for the runner's three predicates on a checkout and the rule they share:
+    `root` by keyword, with no default. `benchmark run` reads `sets.REPO_ROOT` once per
+    invocation and passes it on (T051), while a default is bound once, at import, so a call that
+    left the root out would ask about the import-time checkout rather than the one the command
+    read; with no default it fails instead."""
+    root = inspect.signature(getattr(module, name)).parameters["root"]
+
+    assert root.kind is inspect.Parameter.KEYWORD_ONLY
+    assert root.default is inspect.Parameter.empty
 
 
 def test_inert_settings_name_parallel_calls_and_dropped_reasoning_on_gemini_only(

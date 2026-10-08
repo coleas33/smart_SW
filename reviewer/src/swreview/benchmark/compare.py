@@ -109,6 +109,7 @@ from swreview.benchmark.scorecard import (
     by_origin,
     false_alarm_origins,
     fmt_assessed,
+    fmt_origins,
     length_or_none,
     read_scorecard,
 )
@@ -490,12 +491,11 @@ def _ledger_dir(run_dir: Path, *, root: Path) -> str:
     Inside the checkout, relative to its root with `/` separators, however it was typed: the
     committed table is rendered from absolute paths under `benchmarks/studies/` and would
     otherwise carry the checkout's location. Outside it, as typed, which only a ledger written
-    outside the repository can hold (`_refuse_for_the_committed_ledger`).
+    outside the repository can hold (`_refuse_for_the_committed_ledger`). Inside is
+    `sets.checkout_relative`'s reading.
     """
-    resolved, checkout = run_dir.resolve(), root.resolve()
-    if resolved.is_relative_to(checkout):
-        return resolved.relative_to(checkout).as_posix()
-    return str(run_dir)
+    relative = sets.checkout_relative(run_dir, root=root)
+    return relative.as_posix() if relative is not None else str(run_dir)
 
 
 def _model_view_of(session: ReviewSession) -> ModelViewSettings:
@@ -505,13 +505,23 @@ def _model_view_of(session: ReviewSession) -> ModelViewSettings:
 
 
 def _check_record(run_dir: Path, provenance: RunProvenance | None) -> None:
-    """The pane studies' run-level refusals, read off the record alone, so they abort the ledger
-    whatever the run scored (feature 014 `contracts/provenance.md` 3.2).
+    """The pane studies' and the baselines' run-level refusals, read off the record alone, so they
+    abort the ledger whatever the run scored (feature 014 `contracts/provenance.md` 3.2 and 3.3).
 
     A run of either pane study names its arm, and a `pane_defaults` run is graded against the
     checkout's example profile, which every committed case is keyed against (FR-027). The private
     study takes the real profile.
+
+    Before them, a baseline's study (section 3.3): `_study_key` labels a baseline by its arm and
+    its marker alone, so a record with arm baseline and a lever other than none is refused as
+    inconsistent, as `check_study_arm` refuses `--arm baseline` with a study at run time. Labelled,
+    the pane baseline would drop its lever and a plain baseline would join that lever's study.
     """
+    if provenance is not None and provenance.arm == BASELINE_ARM and provenance.lever != NO_LEVER:
+        raise CompareError(
+            f"{run_dir}: arm baseline with lever {provenance.lever!r}: a baseline run is the study "
+            "with no lever under test, so its lever is none; the record is inconsistent"
+        )
     if provenance is None or provenance.lever not in PANE_STUDIES:
         return
     if provenance.arm is None:
@@ -1420,12 +1430,6 @@ def _mix(counts: Mapping[str, int]) -> str:
     return " / ".join(f"{name} {count}" for name, count in counts.items())
 
 
-def _origin_mix(counts: Mapping[Origin, int]) -> str:
-    """The origins with a count, zero origins left out; `none` when every one is zero, so the
-    cell is never blank (feature 014 `contracts/provenance.md` 5)."""
-    return _mix({origin: count for origin, count in counts.items() if count}) or "none"
-
-
 def _model_view_cell(view: ModelViewSettings) -> str:
     """`pane` for `MODEL_VIEW_PANE`, otherwise the switches that are on, `slimming`, `pruning
     after N` or both, and `off` with neither: `MODEL_VIEW_OFF`, and a view whose prune count
@@ -1491,8 +1495,8 @@ def _run_line(row: RunRow) -> str:
         _count(row.unresolved_because_withheld),
         _count(row.unresolved_other),
         _mix(row.coverage_bucket_mix),
-        _origin_mix(row.findings_by_origin),
-        _origin_mix(row.false_alarms_by_origin),
+        fmt_origins(row.findings_by_origin, separator=" / "),
+        fmt_origins(row.false_alarms_by_origin, separator=" / "),
     )
     return "| " + " | ".join(cells) + " |"
 

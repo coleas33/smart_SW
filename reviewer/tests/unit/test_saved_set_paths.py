@@ -156,9 +156,11 @@ def test_the_saved_copy_resolves_against_the_readers_checkout(
 ) -> None:
     """`benchmark score <run>` with no `--set` reads the saved copy through
     `sets.load_saved_set(path, root=...)`, the root read as the command reads it: the reader's
-    checkout, never the run folder's grandparent. The run folder here lies in a decoy folder
-    that holds the same package path, so the grandparent rule would resolve there. A copy saved
-    before this feature, every entry absolute, still loads."""
+    checkout, never a folder around the copy. The decoy folder holds the run folder and a built
+    package at the entry's relative path, `benchmarks/packages/pkg-1`: it is the copy's
+    grandparent (the run folder's parent), so an entry resolved against the copy's grandparent
+    would find a package there. A copy saved before this feature, every entry absolute, still
+    loads."""
     writer = tmp_path / "writer" / "checkout"
     set_path = checkout_with_a_package(writer)
     decoy = tmp_path / "decoy"

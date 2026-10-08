@@ -37,6 +37,8 @@ from typing import Any
 from pydantic import SecretStr
 
 from swreview.agent.settings import MASK, redact
+from swreview.benchmark.compare import SAVED_SET_FILE
+from swreview.benchmark.runner import PROVENANCE_FILE
 from swreview.ir.loader import reject_answer_key_path
 from swreview.report.attention import EXPLANATION_UNAVAILABLE
 from swreview.secrets import KEY_SHAPES
@@ -64,7 +66,7 @@ REQUIRED_ARTIFACTS: tuple[str, ...] = (
 """The core run records. Missing files are recorded rather than making a partial run useless."""
 
 OPTIONAL_ARTIFACTS: tuple[str, ...] = (
-    "run-provenance.json",
+    PROVENANCE_FILE,
     "check.json",
     "chat-log.jsonl",
     "extract.log",
@@ -105,7 +107,7 @@ REMODEL_OPTIONAL_ARTIFACTS: tuple[str, ...] = (
     "report.md",
     "events.jsonl",
     "session.json",
-    "run-provenance.json",
+    PROVENANCE_FILE,
 )
 """A Remodel run's later records, present only once a run went further than its plan. The
 native copy under ``copy/`` is never among them."""
@@ -114,14 +116,22 @@ _REMODEL_MARKERS: tuple[str, ...] = ("remodel-open.jsonl", "source-attestation.j
 """Files only a Remodel run writes: any one of them, or a folder named ``...-remodel`` as
 ``RunFolders.CreateForRemodel`` names one, makes the run a Remodel run."""
 
-_RUN_ROOT_MARKERS: tuple[str, ...] = ("run-provenance.json", "benchmark-set.json")
+_RUN_ROOT_MARKERS: tuple[str, ...] = (PROVENANCE_FILE, SAVED_SET_FILE)
 """What a benchmark run's root holds beside its package folders: the run's record and its saved
 set. A folder whose parent holds both is one of a benchmark run's package folders."""
 
-_RUN_ROOT_ARTIFACTS: tuple[str, ...] = ("run-provenance.json",)
+_RUN_ROOT_ARTIFACTS: tuple[str, ...] = (PROVENANCE_FILE,)
 """What a benchmark package export reads from its run root, and nothing else of it: the run keeps
 its record at the root, which holds no session, and each package's session and events in
 ``<run>/<package>/``, which holds no record (014 `contracts/provenance.md` section 7)."""
+
+_FROM_RUN_DIR = "run_dir"
+"""An artifact record's ``source`` for a name read from the input tree."""
+
+_FROM_RUN_ROOT = "run_root"
+"""An artifact record's ``source`` for a name in ``_RUN_ROOT_ARTIFACTS`` read from a benchmark
+run's root: the archive holds both at its top level, so only the record tells them apart (014
+`contracts/provenance.md` section 7)."""
 
 _SOURCE_REFERENCE_POLICY = (
     "package and report may contain real-design paths, and so may a remodel run's open.json, "
@@ -172,13 +182,14 @@ def export_handoff(
         if run_kind == "remodel"
         else (REQUIRED_ARTIFACTS, OPTIONAL_ARTIFACTS)
     )
-    files, missing, excluded, scan = _collect(
+    files, sources, missing, excluded, scan = _collect(
         source, secret_values, required, optional, run_root=run_root
     )
 
     manifest = _manifest(
         source,
         files,
+        sources=sources,
         run_kind=run_kind,
         missing=missing,
         excluded=excluded,
@@ -248,6 +259,7 @@ def _collect(
     run_root: Path | None = None,
 ) -> tuple[
     list[tuple[str, bytes, int, bool]],
+    dict[str, str],
     list[str],
     list[dict[str, str]],
     dict[str, Any],
@@ -259,6 +271,7 @@ def _collect(
         selected = [item for item in selected if item[0] not in _RUN_ROOT_ARTIFACTS]
         selected += [(relative, run_root) for relative in _RUN_ROOT_ARTIFACTS]
     files: list[tuple[str, bytes, int, bool]] = []
+    sources: dict[str, str] = {}
     missing: list[str] = []
     excluded: list[dict[str, str]] = []
     redacted_files: list[str] = []
@@ -326,6 +339,7 @@ def _collect(
             continue
         total += len(data)
         files.append((relative, data, len(data), changed))
+        sources[relative] = _FROM_RUN_DIR if folder == source else _FROM_RUN_ROOT
     scan = {
         "method": "configured secret substrings and provider-key shape detectors",
         "configured_values_checked": bool(tuple(secrets)),
@@ -333,7 +347,7 @@ def _collect(
         "shape_hits": {key: sorted(value) for key, value in detector_hits.items() if value},
         "coverage": "best_effort_unknown_secrets_may_remain",
     }
-    return files, missing, excluded, scan
+    return files, sources, missing, excluded, scan
 
 
 def _sanitize(text: str, secrets: Iterable[str | SecretStr | None]) -> tuple[str, dict[str, bool]]:
@@ -351,6 +365,7 @@ def _manifest(
     source: Path,
     files: list[tuple[str, bytes, int, bool]],
     *,
+    sources: Mapping[str, str],
     missing: list[str],
     excluded: list[dict[str, str]],
     scan: dict[str, Any],
@@ -365,11 +380,12 @@ def _manifest(
             "size_bytes": size,
             "sha256": hashlib.sha256(data).hexdigest(),
             "redacted": redacted,
+            "source": sources[relative],
         }
         for relative, data, size, redacted in files
     ]
     session = _json_object_bytes(artifact_data.get("session.json"))
-    provenance = _json_object_bytes(artifact_data.get("run-provenance.json"))
+    provenance = _json_object_bytes(artifact_data.get(PROVENANCE_FILE))
     return {
         "schema": HANDOFF_SCHEMA,
         "exported_at": timestamp.isoformat(),

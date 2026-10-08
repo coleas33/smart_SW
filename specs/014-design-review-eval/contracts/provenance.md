@@ -173,6 +173,13 @@ whose `decide` never applies to a pane study (FR-045).
   `none` with no arm (`compare.py:378`), so a no-study smoke run with a model-view switch or
   `--pane-defaults` would be refused as a bad baseline; it now renders as a raw row, as any run
   with no arm does (`compare.py:475-480`).
+- A baseline's label is read off its arm and its marker alone, so `compare` refuses a record with
+  arm `baseline` and a lever other than `none`, the pane baseline's marker set or not, as a
+  run-level refusal: "{run}: arm baseline with lever {lever}: a baseline run is the study with no
+  lever under test, so its lever is none; the record is inconsistent", as `check_study_arm`
+  refuses `--arm baseline` with a study at run time. Labelled, the pane baseline would drop its
+  lever, and a plain baseline would join that lever's study as its off arm (refined: research
+  9.14, implementation follow-ups).
 
 ### 3.4 Lever studies
 
@@ -245,7 +252,9 @@ structural test holds that every field is in exactly one set.
   false alarms, **contradicted**, **confirmed**, unresolved, unresolved withheld, unresolved other,
   coverage bucket mix, **findings by origin**, **false alarms by origin**. The two origin cells are
   mixes like the coverage bucket mix (`prerun 3 / configured_check 1 / ...`, zero origins left
-  out); a column a key does not grade reads `not assessed`. `LEVER_COLUMNS` gains **Recall by
+  out), written by `scorecard.fmt_origins`, the scorecard's own origin formatter, with ` / ` for
+  its separator (refined: research 9.14, implementation follow-ups); a column a key does not grade
+  reads `not assessed`. `LEVER_COLUMNS` gains **Recall by
   producer (held out) off -> on** after "Recall (held out) off -> on" (SP-13 A). Nothing else
   moves. No run-status column: its source, the scorecard's `run_status`, arrives with the
   robustness slice, and a column added then would regenerate the header a second time; a run's
@@ -325,7 +334,13 @@ renders as typed, which only a ledger written outside the repository can hold (s
 ### 6.4 Committable folders and the committed ledger
 
 **Committable** means inside the checkout root (`benchmark/runner.py:52`) and not ignored by
-`git check-ignore`; when git cannot answer, inside the checkout counts as committable.
+`git check-ignore`; when git cannot answer, inside the checkout counts as committable. Inside is
+one rule, `benchmark/sets.py`'s `checkout_relative(path, *, root)`: both resolved, then
+`is_relative_to`, giving the path relative to the root or `None`. `runner.committable`, a set's
+two written forms (6.1), `benchmark run`'s private packages and its carriage-return row (3.2)
+and the ledger's run folders (6.3) read it. The helper and `runner`'s `committable`, `tree_dirty`
+and `profile_is_example` take `root` by keyword with no default, since a command passes the root
+it read (refined: research 9.14, implementation follow-ups).
 
 - **At run time** (`benchmark-run.md` section 3 row 5), exit 1 before any review: a committable
   `--out` with a set naming a package outside the repository, or with a profile whose
@@ -371,13 +386,22 @@ escaping hides nothing, and flags:
   `vault_root`s are read from their sources, so they cannot drift; `/Designs/` and `/Library/`,
   written inline by the builders, are listed with those citations. A rooted path is a `/` at a token boundary (not after a
   word character, `:`, `/` or `.`) followed by a non-space, so `and/or`, `1/2` and a URL's `//`
-  are not paths.
+  are not paths; nor is an HTML end tag's `/` (`</td>`, `</table>`) or a self-closing tag's
+  `/>`, since the report slice may commit its pages, though a path written straight after `<`
+  (`</srv/x>`) is one. A UNC anchor and a drive letter with `/` start a path only at a token
+  boundary (not after a word character); a drive letter and its backslash start one wherever they
+  stand, so a single-backslash drive path glued to a word character in plain text (an escaped
+  line quoted, `...\nE:\...`) is flagged. A path lies under a fictional root only once its `..`
+  are applied, so one that starts at a root and climbs out of it is flagged (refined: research
+  9.14, implementation follow-ups).
 
 It runs over every file under `benchmarks/studies/` and `benchmarks/pilots/` (the paid pilot's
 folders, plan decision RF-36) that git does not ignore, and over the ledger block of
 `docs/llm-efficiency-options.md`. A file whose name ends `.gz` is scanned by its decompressed text
 (`gzip.decompress`, then UTF-8), so a path inside a packed stream is found as in a plain file (plan
-decision RF-84). Every committable file a run, `score`, `compare`, `benchmark pilot`,
+decision RF-84); a `.jsonl` file, a decompressed `events.jsonl.gz` included, is read line by line,
+each line parsed as JSON on its own and one that is not JSON read as its text (refined: research
+9.14, implementation follow-ups). Every committable file a run, `score`, `compare`, `benchmark pilot`,
 `benchmark noise-floor` or `benchmark pack` writes is in its reach: the record, the saved set,
 `run-status.json`, every attempt folder (`session.json`, `events.jsonl.gz` once packed,
 `tool-results/`, `prompts.json`, `answer-log.json`), `event-streams.json`, `scorecard.*`,
@@ -474,7 +498,10 @@ git, not by the export.
   `benchmark-set.json` (a benchmark run's root), also reads those names only from the parent:
   `run-provenance.json` from the parity slice, `run-status.json` from the robustness slice. Nothing
   else of the run root or of another package is read, and the archive must lie outside the run root
-  as well as outside the package folder.
+  as well as outside the package folder. The archive holds both folders' names at its top level, so
+  each manifest artifact record names its `source`: `run_root` for a name read from the run root,
+  `run_dir` for every name read from the input tree, a review's included (refined: research 9.14,
+  implementation follow-ups).
 - `OPTIONAL_ARTIFACTS` (`handoff.py:61-76`) gains `prompts.json` and `answer-log.json` (robustness
   slice), the records a benchmark package folder now holds (none carries a path by section 6.6's
   test, though a private run's messages may name real designs, as the export's source policy

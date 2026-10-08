@@ -246,11 +246,13 @@ def test_a_key_format_other_than_2_is_refused_naming_the_field(value: object) ->
 
 
 @pytest.mark.parametrize(
-    "field", ["forbidden", "expected_coverage", "unanswerable_requests", "question_counts"]
+    "field",
+    ["forbidden", "expected_coverage", "unanswerable_requests", "question_counts", "answers"],
 )
 def test_an_unknown_field_at_the_key_is_refused_naming_it(field: str) -> None:
     """Section 2.1's four other lists are unknown fields until US3 adds their models (T080), so
-    the task that adds them changes this test on purpose."""
+    the task that adds them changes this test on purpose; `answers`, a name no list will take,
+    stays refused after it."""
     message = refusal(key(**{field: []}))
 
     assert f"{field}: Extra inputs are not permitted" in message
@@ -1206,6 +1208,7 @@ def test_a_missing_key_file_is_refused(tmp_path: Path) -> None:
 
     assert message.startswith("answer key fict-key-a.json: cannot be read (")
     assert "No such file or directory" in message
+    assert_names_no_folder(message, tmp_path)
 
 
 def test_a_key_file_that_cannot_be_read_is_refused(tmp_path: Path) -> None:
@@ -1214,7 +1217,17 @@ def test_a_key_file_that_cannot_be_read_is_refused(tmp_path: Path) -> None:
     path = tmp_path / "fict-key-a.json"
     path.mkdir()
 
-    assert load_refusal(path).startswith("answer key fict-key-a.json: cannot be read (")
+    message = load_refusal(path)
+
+    assert message.startswith("answer key fict-key-a.json: cannot be read (")
+    assert_names_no_folder(message, tmp_path)
+
+
+def assert_names_no_folder(message: str, folder: Path) -> None:
+    """The refusal names the key's file and never its folder: `str(OSError)` carries the
+    absolute path the read was given, so the loader names the error by its `strerror`."""
+    assert str(folder) not in message, message
+    assert folder.name not in message, message
 
 
 def test_a_key_file_that_is_not_utf_8_is_refused(tmp_path: Path) -> None:

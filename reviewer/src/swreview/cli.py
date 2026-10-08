@@ -2352,11 +2352,12 @@ def _refuse_a_folder_in_use(out: Path) -> None:
 
 def _private_packages(benchmark_set: BenchmarkSet, *, root: Path) -> list[str]:
     """The ids of the set's private entries: each package whose resolved path lies outside
-    `root`, the rule `BenchmarkSet.saved_form` writes them absolute by (feature 014
-    `contracts/cases.md` 4.2)."""
-    checkout = root.resolve()
+    `root`, by `sets.checkout_relative`, the rule `BenchmarkSet.saved_form` writes them absolute
+    by (feature 014 `contracts/cases.md` 4.2)."""
     return [
-        ref.package_id for ref in benchmark_set.packages if not ref.path.is_relative_to(checkout)
+        ref.package_id
+        for ref in benchmark_set.packages
+        if sets.checkout_relative(ref.path, root=root) is None
     ]
 
 
@@ -2453,14 +2454,13 @@ def _refuse_a_pane_study_breaking_its_file_rules(
             f"{flag}: git cannot say whether the checkout's tracked files match commit {commit}; "
             "a paid study must name the code it measured"
         )
-    checkout = root.resolve()
     for path in digested:
         if path is None:
             continue
-        resolved = Path(path).resolve()
-        if resolved.is_relative_to(checkout) and b"\r" in resolved.read_bytes():
+        relative = sets.checkout_relative(path, root=root)
+        if relative is not None and b"\r" in Path(path).read_bytes():
             raise ValueError(
-                f"check {resolved.relative_to(checkout).as_posix()} out again: section 6.5's "
+                f"check {relative.as_posix()} out again: section 6.5's "
                 "`eol=lf` has not reached this working copy"
             )
     if study == PRIVATE_PANE_STUDY and standards_profile is None:
@@ -2582,7 +2582,7 @@ def benchmark_run(
             # profile's likeness to the example, the commit, the tracked tree, and the prompt
             # and checklist `agent.checklist` names at call time.
             is_example = profile_is_example(standards_profile, root=root)
-            commit, dirty = current_commit(root), tree_dirty(root)
+            commit, dirty = current_commit(root), tree_dirty(root=root)
             prompt_file = agent_checklist.SYSTEM_PROMPT_FILE
             checklist_file = agent_checklist.CHECKLIST_FILE
             # Row 5, a committable folder over private data.
