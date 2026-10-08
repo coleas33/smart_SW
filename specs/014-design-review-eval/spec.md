@@ -56,6 +56,9 @@
 | 44A | 2026-10-07 | The too-small-set override is a must-match field of a study, so both arms carry it or neither does: the compare test of a study carrying it has both arms carry it, its decision row still refused for it, and a study one arm of which carries it alone is refused at the study. |
 | 47A | 2026-10-08 | When a study is refused for a field its runs record differently, a value a record lacks reads "not recorded" only for the fields whose absence can only mean a record an older build wrote, named in one list beside the exemptions: the answer-turn bound now, the robustness slice's clock, retry and jobs fields later. Every other field's value is quoted as it is, since its empty value means something in a current record (no profile, or a commit git could not name). |
 | 48A | 2026-10-08 | A package id equal to `attempts` in any case is refused before any review: its folder would be the run's attempts folder, and Windows and macOS fold case. |
+| 54A | 2026-10-08 | The case vocabulary gains a fourth committed list, the words of the six Resilient Modeling group folders' names (ref, construction, core, detail, modify, quarantine), so a generated custom part's compliant tree passes the names check; a test holds the list equal to the RMS type table's groups. |
+| 55A | 2026-10-08 | `coaxiality_undrawn` is treated like a drawing kind: with no tolerance drawn its call cannot confirm aligned holes, so its twin's condition carries no correct call, which the validation then never asks to confirm; the condition is still keyed and still catches a false alarm. |
+| 56A | 2026-10-08 | A generated drawing dimension may carry its nominal as the drawing writes it ("3.0"), so `kalo-fit-1`'s sheet reads "2X Ø3.0 +0.010/0" over "Ø3.0 +0.020/+0.014" exactly as its anchor pins them. |
 
 Refinements of earlier rows:
 - 13A completes 4A's status rule; 15A replaces the first draft's per-case held-out rule; D9 extends 11A's five origin buckets to seven.
