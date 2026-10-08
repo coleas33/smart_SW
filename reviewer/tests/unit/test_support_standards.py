@@ -7,6 +7,11 @@ schema version, the package id, the creation time and the extractor block stay i
 and it reuses feature 003's `build_features` for the feature tree rather than laying out a
 second one.
 
+`card`, the data card a fixture fills from its profile, lives here too since feature 014 moved
+it from `tests/checks/standards_fixtures.py` (`generator.md` 5.1 and 9; GN-3): it writes what
+it wrote there, that module re-exports it, and this one imports no `tests.checks` module, so
+the case generator can build a data card without loading the standards check run.
+
 The last test is the one that makes a golden trustworthy: **re-running the builder reproduces
 a written fixture byte for byte**, so a fixture that has drifted from its builder is a failure
 and not an invitation to rewrite the file.
@@ -14,6 +19,7 @@ and not an invitation to rewrite the file.
 
 from __future__ import annotations
 
+import ast
 import json
 from pathlib import Path
 
@@ -23,6 +29,7 @@ from swreview.checks.standards.library import PrefixMatcher
 from swreview.checks.standards.profile import StandardsProfile, load_profile
 from swreview.ir.loader import load_package, save_package
 from swreview.ir.models import EvidencePackage
+from tests.checks import standards_fixtures
 from tests.support.features import feature, sketch_feature
 from tests.support.standards import (
     PHASE_ORDER,
@@ -39,6 +46,7 @@ from tests.support.standards import (
     RevisionTableSpec,
     SheetSpec,
     ViewSpec,
+    card,
     standards_package,
 )
 
@@ -583,6 +591,107 @@ def test_gaps_are_passed_through_verbatim() -> None:
     package = standards_package(documents=[a_part()], gaps=[])
 
     assert package.gaps == []
+
+
+# --- card: the data card, moved here from tests/checks (feature 014, GN-3) -----------------
+
+SUPPORT_STANDARDS = Path(__file__).resolve().parents[1] / "support" / "standards.py"
+SUPPORT_PACKAGE = "tests.support"
+"""The package `SUPPORT_STANDARDS` is a module of, which a relative import is read against."""
+
+
+def test_card_fills_every_data_card_field_of_the_profile_in_its_order() -> None:
+    profile = load_profile(PROFILE_A)
+    first, second, third, fourth = profile.data_card.properties
+
+    written = card(profile)
+
+    assert written == {
+        first: "fixture value 1",
+        second: "fixture value 2",
+        third: "fixture value 3",
+        fourth: "fixture value 4",
+    }
+    assert list(written) == [first, second, third, fourth]
+
+
+def test_a_blank_field_is_present_and_whitespace_only() -> None:
+    profile = load_profile(PROFILE_A)
+    first, second, third, fourth = profile.data_card.properties
+
+    assert card(profile, blank=(1,)) == {
+        first: "fixture value 1",
+        second: "   ",
+        third: "fixture value 3",
+        fourth: "fixture value 4",
+    }
+
+
+def test_an_absent_field_is_left_out_and_the_others_keep_their_numbers() -> None:
+    profile = load_profile(PROFILE_A)
+    first, second, third, fourth = profile.data_card.properties
+
+    assert card(profile, absent=(0,)) == {
+        second: "fixture value 2",
+        third: "fixture value 3",
+        fourth: "fixture value 4",
+    }
+    # Both at once, as the matched pair's seeded part asks for them.
+    assert card(profile, blank=(1,), absent=(3,)) == {
+        first: "fixture value 1",
+        second: "   ",
+        third: "fixture value 3",
+    }
+
+
+def test_a_revision_is_written_after_the_card_under_the_profile_s_revision_property() -> None:
+    profile = load_profile(PROFILE_A)
+    first, second, third, fourth = profile.data_card.properties
+    revision_property = profile.revision.property
+
+    written = card(profile, revision=profile.revision.initial)
+
+    assert written == {
+        first: "fixture value 1",
+        second: "fixture value 2",
+        third: "fixture value 3",
+        fourth: "fixture value 4",
+        revision_property: profile.revision.initial,
+    }
+    assert list(written)[-1] == revision_property
+    assert revision_property not in card(profile)
+
+
+def test_the_standards_fixtures_card_is_this_one_re_exported_not_a_copy() -> None:
+    assert standards_fixtures.card is card
+    assert "card" in standards_fixtures.__all__
+
+
+def test_the_standards_builder_imports_no_tests_checks_module() -> None:
+    """`tests/checks/standards_fixtures.py` imports `tests/checks/golden_standards.py`, which
+    imports the standards check run; the case generator may not load it (`generator.md` 9), so
+    the module it takes `card` from may import nothing under `tests.checks`."""
+    source = SUPPORT_STANDARDS.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(SUPPORT_STANDARDS))
+    package_parts = SUPPORT_PACKAGE.split(".")
+    modules: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            modules.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            # `from . import x` is read in `tests.support`, `from .. import x` in `tests`.
+            anchor = package_parts[: len(package_parts) - node.level + 1] if node.level else []
+            module = [node.module] if node.module else []
+            modules.add(".".join([*anchor, *module]))
+
+    from_checks = sorted(
+        module
+        for module in modules
+        if module == "tests.checks" or module.startswith("tests.checks.")
+    )
+    assert from_checks == []
+    # Not vacuous: the scan sees the builder's own imports from the test tree.
+    assert {"tests.support.features", "tests.support.packages"} <= modules
 
 
 # --- a fixture that has drifted from its builder is a failure ------------------------------

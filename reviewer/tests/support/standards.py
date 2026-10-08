@@ -27,6 +27,11 @@ Two conventions worth stating, because a fixture that disagrees with them is a w
 - **No gap is invented here.** `gaps` is passed through verbatim: which gap a dumper records
   beside a null is the contract's business and a fixture must be free to say "this reading is
   missing and *no* gap was recorded", which is the case the checks must not clear.
+
+`card` (section 3) fills a data card from a profile. It moved here from
+`tests/checks/standards_fixtures.py`, which re-exports it, for feature 014's case generator
+(`generator.md` 5.1 and 9; GN-3): that module imports the standards check run, which the
+generator may not load, so this one imports nothing under `tests.checks`.
 """
 
 from __future__ import annotations
@@ -797,3 +802,37 @@ def _extractor(documents: Sequence[DocumentSpec]) -> ExtractorInfo:
         for name in PHASE_ORDER
     ]
     return build_package().extractor.model_copy(update={"profile": "standards", "phases": phases})
+
+
+# --- 3. The data card ---------------------------------------------------------------------
+
+VALUE = "fixture value {number}"
+"""What a filled data-card field holds. The *names* come from the profile; the values are
+this suite's own and carry no meaning, because no check reads a data-card value - it reads
+whether the field is present, blank or absent (`contracts/rules.md`)."""
+
+BLANK = "   "
+"""A field that is present and whitespace-only, which is a different defect from absent."""
+
+
+def card(
+    profile: StandardsProfile,
+    *,
+    blank: tuple[int, ...] = (),
+    absent: tuple[int, ...] = (),
+    revision: str | None = None,
+) -> dict[str, str]:
+    """A data card for `profile`, complete unless `blank` or `absent` says otherwise.
+
+    `blank` and `absent` index `profile.data_card.properties`, so a generator says "the
+    second field is blank and the fourth is missing" without naming either field - which is
+    what keeps the profile the single owner of those names.
+    """
+    properties = {
+        name: BLANK if index in blank else VALUE.format(number=index + 1)
+        for index, name in enumerate(profile.data_card.properties)
+        if index not in absent
+    }
+    if revision is not None:
+        properties[profile.revision.property] = revision
+    return properties
