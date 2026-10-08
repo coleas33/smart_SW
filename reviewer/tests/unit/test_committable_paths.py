@@ -16,6 +16,10 @@ The committable-folder scanner, `tests/support/local_paths.py` (T055, for T056; 
 drive-letter, UNC or rooted path outside the named fictional roots, and a saved set naming a path
 outside the repository, reading JSON as strings and a packed stream by its decompressed text; and
 it finds nothing in section 6.6's reach of this checkout.
+
+The packed event streams' git rules (T057, for T058; `provenance.md` 6.6; 28A, RF-84): a packed
+stream is committable only in the study and pilot trees, a plain one nowhere but the replay
+fixtures, and git reads every packed one as binary.
 """
 
 from __future__ import annotations
@@ -23,6 +27,7 @@ from __future__ import annotations
 import gzip
 import json
 import shutil
+import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -47,6 +52,7 @@ from tests.unit.test_benchmark_run_pane_study import (
     watch_reviews,
 )
 from tests.unit.test_benchmark_sets import relative_entry, sets_folder, write_set
+from tests.unit.test_line_endings import attributes
 from tests.unit.test_run_provenance import git
 
 
@@ -400,3 +406,52 @@ def test_no_committable_file_holds_a_local_path_or_a_private_set_entry() -> None
     git does not ignore (none yet), nor the committed ledger block, names a local folder, a path
     outside the fictional roots or a private set entry."""
     assert [str(offence) for offence in local_paths.scan_committable()] == []
+
+
+# --- the packed event streams' git rules (T057, for T058; provenance.md 6.6) --------------
+
+
+def ignored(path: str) -> bool:
+    """Whether `git check-ignore -q --no-index` reports `path` ignored in this checkout, tracked
+    or not; an answer other than yes (0) or no (1) fails the test."""
+    proc = subprocess.run(
+        ["git", "check-ignore", "-q", "--no-index", path],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert proc.returncode in (0, 1), proc.stderr
+    return proc.returncode == 0
+
+
+def test_packed_streams_are_committable_only_in_the_study_and_pilot_trees() -> None:
+    """28A; RF-84, which supersedes RF-78's plain-stream test. A packed stream in a study's or a
+    pilot's package or attempt folder is committable; a plain stream at each of those places is
+    ignored, the working form never reaching a commit, and so is a packed one anywhere else, the
+    anchored rule matching no `studies/` folder deeper in the tree. Every packed stream is binary,
+    `*.gz binary` coming after `benchmarks/** eol=lf`, so no checkout converts a compressed byte."""
+    if shutil.which("git") is None:
+        pytest.skip("git is not on the path")
+    places = [
+        f"{tree.as_posix()}/pane/run-1/{folder}"
+        for tree in local_paths.STUDY_TREES
+        for folder in ("pkg-1", "attempts/pkg-1/1")
+    ]
+    elsewhere = [
+        "benchmarks/packages/pkg-1",
+        "benchmarks/runs/pane/run-1/pkg-1",
+        "benchmarks/old/studies/pane/run-1/pkg-1",
+        "runs/pane/run-1/pkg-1",
+    ]
+    committable = [f"{place}/events.jsonl.gz" for place in places]
+    plain = [f"{place}/events.jsonl" for place in places]
+    packed_elsewhere = [f"{folder}/events.jsonl.gz" for folder in elsewhere]
+
+    assert [path for path in committable if ignored(path)] == []
+    assert [path for path in plain + packed_elsewhere if not ignored(path)] == []
+    packed = committable + packed_elsewhere
+    found = attributes(REPO_ROOT, packed, "binary", "text", "eol")
+    assert {path: (found[path]["binary"], found[path]["text"]) for path in packed} == {
+        path: ("set", "unset") for path in packed
+    }

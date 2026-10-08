@@ -78,6 +78,12 @@ benchmarks/**/chat-log.jsonl
 # The one exception: the replay fixtures' event logs are generated, fictional throughout, and
 # held to that by tests/unit/test_replay_fixture_hygiene.py (feature 008 T017, T018).
 !reviewer/tests/fixtures/replay/*/events.jsonl
+# A packed event stream is committable only in the study and pilot trees, whose fictional run
+# folders are committed whole; a plain one stays ignored there too
+# (specs/014-design-review-eval/contracts/provenance.md 6.6).
+**/events.jsonl.gz
+!benchmarks/studies/**/events.jsonl.gz
+!benchmarks/pilots/**/events.jsonl.gz
 
 # Local evidence imported from the 2026-09-20 pilot handoff (real-design paths). The whole
 # folder: its run folders' names carry a design number (owner decision 11B, 2026-09-24).
