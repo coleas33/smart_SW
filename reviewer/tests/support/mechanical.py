@@ -14,7 +14,8 @@ definition of what a hole feature, a screw or an interference row looks like in 
 - a screw is a component whose document is named in the vendor shape
   (`SHC_M4-0.7X12_FICT-0001.SLDPRT`, description `SCREW, SOC M4-0.7 X 12 MM, FICTIONAL`),
   with a body mesh and optionally a shank face; `is_toolbox` is false and no `Fastener` row
-  is written, as on all 89 recorded components;
+  is written, as on all 89 recorded components, unless `screw(fastener_row=True)` asks for
+  one (feature 014's case generator does);
 - every document that was opened carries a `mass_override` tool-error gap, because the
   recorded override read failed on every document (analyst fact 26).
 
@@ -63,6 +64,7 @@ from swreview.ir.models import (
     EvidencePackage,
     ExtractorInfo,
     FaceGeometry,
+    Fastener,
     Gap,
     GtolFrame,
     Hole,
@@ -460,6 +462,7 @@ class PackageBuilder:
     _interferences: list[Interference] = field(default_factory=list)
     _gaps: list[Gap] = field(default_factory=list)
     _screw_heads: dict[str, str] = field(default_factory=dict)
+    _fasteners: list[Fastener] = field(default_factory=list)
     _model_dimensions: list[ModelDimension] = field(default_factory=list)
     _model_annotations: list[ModelAnnotation] = field(default_factory=list)
 
@@ -867,6 +870,7 @@ class PackageBuilder:
         shank_face_mm: float | None = None,
         shank_face_span: tuple[float, float] | None = None,
         head_face_mm: float | None = None,
+        fastener_row: bool = False,
     ) -> str:
         """One screw instance, its origin at the bearing point and its z axis `direction`.
 
@@ -875,12 +879,17 @@ class PackageBuilder:
         the head. The mesh is the shank and the head; a shank face (optionally over
         `shank_face_span`, in mm along the axis from the bearing point) and a head face are
         extracted faces, present only when asked for.
+
+        `fastener_row` also writes a `Fastener` row, the next `fst:NNNN`, as Toolbox data
+        would: kind `screw`, the thread and length the file name states, so no name
+        contradicts it, and the placement's axis (feature 014 GN-2). The curated tools resolve
+        a fastener only through such a row. Off by default, as on every recorded component.
         """
         document = self._document(document_id)
         head = self._screw_heads[document_id]
-        match = re.match(r"^[A-Z]+_M(\d+(?:\.\d+)?)-[\d.]+X([\d.]+)_", document.file_name)
+        match = re.match(r"^[A-Z]+_M(\d+(?:\.\d+)?)-([\d.]+)X([\d.]+)_", document.file_name)
         assert match is not None
-        d, length = float(match.group(1)), float(match.group(2))
+        d, length = float(match.group(1)), float(match.group(3))
         head_d, head_k = HEAD_SIZES_MM[head][d]
         if HEADS[head]["countersunk"]:
             shank_span, head_span = (-length, -head_k), (-head_k, 0.0)
@@ -915,6 +924,26 @@ class PackageBuilder:
                 diameter_mm=head_face_mm,
                 lo_mm=head_span[0],
                 hi_mm=head_span[1],
+            )
+        if fastener_row:
+            fastener_id = f"fst:{len(self._fasteners) + 1:04d}"
+            self._fasteners.append(
+                Fastener(
+                    id=fastener_id,
+                    persist_ref=persist_ref(fastener_id),
+                    persist_ref_scope=self.root_id,
+                    component_id=component_id,
+                    kind="screw",
+                    identity_source="toolbox",
+                    thread_designation=f"M{match.group(1)}x{match.group(2)}",
+                    length=Quantity(value=length, unit="mm"),
+                    head_type=None,
+                    head_diameter=None,
+                    head_height=None,
+                    drive=None,
+                    axis=Axis(origin=_vec3(_m(bearing_mm)), direction=_vec3(_unit(direction))),
+                    material=None,
+                )
             )
         return component_id
 
@@ -1024,6 +1053,7 @@ class PackageBuilder:
             faces=[item.face for item in self._faces],
             bodies=bodies,
             interferences=self._interferences,
+            fasteners=self._fasteners,
             gaps=self._gaps,
             model_dimensions=self._model_dimensions,
             model_annotations=self._model_annotations,

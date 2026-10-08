@@ -27,10 +27,13 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from swreview.checks.fastener_identity import recognise_fasteners
 from swreview.checks.interference import group_interferences, volume_mm3
 from swreview.geometry.mesh import load_mesh
 from swreview.ir.loader import load_package
-from swreview.ir.models import EvidencePackage, FaceGeometry, Hole
+from swreview.ir.models import EvidencePackage, FaceGeometry, Hole, Quantity
+from swreview.tools import checks_fastener, query
+from swreview.tools.context import context_for, use_context
 from tests.support import mechanical
 from tests.support.mechanical import (
     FICTIONAL_ROOT,
@@ -219,6 +222,149 @@ def test_a_screw_is_named_in_the_vendor_shape_with_a_mesh_and_an_optional_face(
     # The shank runs 12 mm below the under-head plane and the socket head 4 mm above it.
     assert low[2] == pytest.approx(-0.007)
     assert high[2] == pytest.approx(0.009)
+
+
+# --- 1b. a screw's optional fastener row (feature 014 GN-2, generator.md 5.4) --------------
+
+TILTED = (0.0, 3.0, 4.0)
+"""Not a unit vector, so the row's axis direction is seen to be the placement's unit z axis."""
+
+
+def joint_builder() -> tuple[PackageBuilder, str, str]:
+    """A plate with one blind M4x0.7 tapped hole under a cover that states it is 5 mm thick.
+
+    Returns the builder, the hole and the cover; the screws are the test's to place."""
+    builder = PackageBuilder(design_stem="FICT-KALO-0000")
+    plate = builder.document("FICT-KALO-0001", "part", material="6061-T6")
+    cover = builder.document("FICT-KALO-0002", "part", properties={"Thickness": "5.0"})
+    plate_id = builder.component(plate, name="FICT-KALO-0001-1")
+    cover_id = builder.component(cover, name="FICT-KALO-0002-1")
+    hole_id = builder.hole(
+        plate_id,
+        hole_type="tapped",
+        size="M4x0.7",
+        thread="M4x0.7",
+        thread_depth_mm=8.0,
+        hole_depth_mm=10.0,
+        end_condition="blind",
+        instances=[
+            Instance(origin_mm=(0.0, 0.0, 0.0), direction=Z, faces=(Face(3.3, -10.0, 0.0),))
+        ],
+    )
+    return builder, hole_id, cover_id
+
+
+def test_a_screw_with_a_fastener_row_writes_one_toolbox_row_sized_by_its_file_name() -> None:
+    builder = two_part_builder()
+    document = builder.screw_document("SHC", "M4-0.7", 12.0, serial=1)
+    screw = builder.screw(
+        document, bearing_mm=(10.0, 20.0, 5.0), direction=TILTED, fastener_row=True
+    )
+    package = builder.build().package
+
+    [row] = package.fasteners
+    placed = next(item for item in package.components if item.id == screw)
+    assert row.id == "fst:0001"
+    assert row.component_id == screw
+    assert row.kind == "screw"
+    assert row.identity_source == "toolbox"
+    # The thread in the IR's designation form, as the name reader writes it from the file
+    # name, and the length the file name states.
+    assert row.thread_designation == "M4x0.7"
+    assert row.length == Quantity(value=12.0, unit="mm")
+    # The placement's axis: its origin at the bearing point, its direction the placement's z.
+    origin = [row.axis.origin.x, row.axis.origin.y, row.axis.origin.z]
+    direction = [row.axis.direction.x, row.axis.direction.y, row.axis.direction.z]
+    assert origin == pytest.approx([line[3] for line in placed.transform[:3]])
+    assert origin == pytest.approx([0.010, 0.020, 0.005])
+    assert direction == pytest.approx([line[2] for line in placed.transform[:3]])
+    assert direction == pytest.approx([0.0, 0.6, 0.8])
+    EvidencePackage.model_validate_json(package.model_dump_json())
+
+
+def test_each_screw_with_a_fastener_row_takes_the_next_fastener_id() -> None:
+    builder = two_part_builder()
+    socket = builder.screw_document("SHC", "M4-0.7", 12.0, serial=1)
+    flat = builder.screw_document("FHT", "M3-0.5", 10.0, serial=2)
+    first = builder.screw(socket, bearing_mm=(0.0, 0.0, 5.0), direction=Z, fastener_row=True)
+    builder.screw(socket, bearing_mm=(20.0, 0.0, 5.0), direction=Z)
+    third = builder.screw(flat, bearing_mm=(40.0, 0.0, 5.0), direction=Z, fastener_row=True)
+    rows = builder.build().package.fasteners
+
+    assert [(row.id, row.component_id) for row in rows] == [
+        ("fst:0001", first),
+        ("fst:0002", third),
+    ]
+    assert [(row.thread_designation, row.length) for row in rows] == [
+        ("M4x0.7", Quantity(value=12.0, unit="mm")),
+        ("M3x0.5", Quantity(value=10.0, unit="mm")),
+    ]
+
+
+def test_a_screw_writes_no_fastener_row_by_default() -> None:
+    builder = two_part_builder()
+    document = builder.screw_document("SHC", "M4-0.7", 12.0, serial=1)
+    builder.screw(document, bearing_mm=(0.0, 0.0, 5.0), direction=Z, shank_face_mm=3.3)
+
+    assert builder.build().package.fasteners == []
+
+
+def test_the_identity_check_reads_the_fastener_row_with_no_name_conflict() -> None:
+    """The row states what the file name and the description state, so the names only
+    cross-check it and the size stays trusted (`checks/fastener_identity.py`)."""
+    builder = two_part_builder()
+    document = builder.screw_document("SHC", "M4-0.7", 12.0, serial=1)
+    screw = builder.screw(
+        document, bearing_mm=(0.0, 0.0, 5.0), direction=Z, shank_face_mm=3.3, fastener_row=True
+    )
+    package = builder.build().package
+
+    [recognised] = recognise_fasteners(package)
+    assert recognised.component_id == screw
+    assert recognised.fastener == package.fasteners[0]
+    assert recognised.identity_source == "toolbox"
+    assert recognised.name_conflicts == ()
+    assert recognised.agreement == "agrees"
+    assert recognised.size_trusted
+
+
+def test_check_fastener_joint_and_list_fasteners_resolve_the_row_through_a_tool_context() -> None:
+    """The curated tools see only the package's rows (`tools/context.py`, `tools/query.py`): the
+    row is what gives a model a route to the joint (GN-2)."""
+    builder, hole_id, cover_id = joint_builder()
+    document = builder.screw_document("SHC", "M4-0.7", 12.0, serial=1)
+    screw = builder.screw(document, bearing_mm=(0.0, 0.0, 5.0), direction=Z, fastener_row=True)
+    package = builder.build().package
+
+    with use_context(context_for(package)):
+        listed = query.list_fasteners()
+        screws_listed = query.list_fasteners(kind="screw")
+        result = checks_fastener.check_fastener_joint("fst:0001", hole_id, [cover_id])
+
+    assert [item["id"] for item in listed] == ["fst:0001"]
+    assert [item["component_id"] for item in screws_listed] == [screw]
+    assert "error" not in result, result
+    assert result["status"] == "recorded"
+    findings = {finding["check"]: finding for finding in result["findings"]}
+    assert findings["fastener.thread_match"]["status"] == "checked_within_scope"
+    # The 12 mm the row carries, less the cover's 5 mm, is what reaches into 8 mm of thread.
+    bottoming = findings["fastener.bottoming"]
+    assert bottoming["status"] == "checked_within_scope"
+    assert bottoming["calculation"]["result"]["protrusion_mm"] == pytest.approx(7.0)
+
+
+def test_without_a_fastener_row_the_tools_have_no_route_to_the_screw() -> None:
+    builder, hole_id, cover_id = joint_builder()
+    document = builder.screw_document("SHC", "M4-0.7", 12.0, serial=1)
+    builder.screw(document, bearing_mm=(0.0, 0.0, 5.0), direction=Z)
+    package = builder.build().package
+
+    with use_context(context_for(package)):
+        listed = query.list_fasteners()
+        result = checks_fastener.check_fastener_joint("fst:0001", hole_id, [cover_id])
+
+    assert listed == []
+    assert result == {"error": "unknown fastener id 'fst:0001'"}
 
 
 def test_the_vendor_strings_have_the_shapes_the_recorded_packages_carry() -> None:
