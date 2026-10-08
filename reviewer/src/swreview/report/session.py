@@ -197,15 +197,36 @@ class CoveringRequests(NamedTuple):
     """The latest one still open: `already_asked`, when none is answered."""
 
 
+def covers(
+    blocks: str | None,
+    ids: frozenset[str],
+    earlier_blocks: str | None,
+    earlier_ids: frozenset[str],
+) -> bool:
+    """Whether an earlier question on `earlier_blocks` naming `earlier_ids` already asks a new
+    one on `blocks` naming `ids` (`contracts/re-ask-guard.md` section 3).
+
+    True when `blocks == earlier_blocks` (null equals null) and either `ids` is non-empty and a
+    subset of `earlier_ids`, or both are empty and `blocks` names a checklist item. Ids are
+    compared raw: an instance is never turned into its document, which would merge two
+    instances of one screw. A question with no checklist item and no ids is covered by nothing.
+    Extracted from `covering_requests` unchanged (feature 014, `contracts/questions.md` section
+    3), so the design-review eval's question matcher wraps this test rather than restating it.
+    """
+    if blocks != earlier_blocks:
+        return False
+    if ids:
+        return ids <= earlier_ids
+    return not earlier_ids and blocks is not None
+
+
 def covering_requests(
     session: ReviewSession, blocks: str | None, entity_ids: Sequence[str]
 ) -> CoveringRequests:
     """The earlier model-written requests that already ask a new model question.
 
-    `contracts/re-ask-guard.md` section 3. A request R covers the question when `R.blocks ==
-    blocks` (null equals null) and either the question's ids are non-empty and a subset of R's,
-    or both are empty and `blocks` names a checklist item. Ids are compared raw: an instance is
-    never turned into its document, which would merge two instances of one screw.
+    `contracts/re-ask-guard.md` section 3. A request R covers the question when `covers` says
+    so of the question's item and ids against R's.
 
     Two exclusions. A question with no checklist item and no ids is never covered: nothing says
     two such questions are the same one. And a code-written request (`source` `code`) covers
@@ -213,15 +234,14 @@ def covering_requests(
     would otherwise answer any later question about one of them - so only `model` requests are
     read here; code questions keep the exact test of `checks/questions.already_asked`.
     """
-    wanted = set(entity_ids)
+    wanted = frozenset(entity_ids)
     if not wanted and blocks is None:
         return CoveringRequests(answered=None, open=None)
     covering = [
         request
         for request in session.evidence_requests
         if request.source == "model"
-        and request.blocks == blocks
-        and (wanted <= set(request.entity_ids) if wanted else not request.entity_ids)
+        and covers(blocks, wanted, request.blocks, frozenset(request.entity_ids))
     ]
     still_open = [request for request in covering if request.status == "open"]
     return CoveringRequests(
