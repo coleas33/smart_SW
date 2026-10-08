@@ -83,7 +83,7 @@ from swreview.agent import events
 from swreview.agent.checklist import load_checklist
 from swreview.agent.providers import CACHED_SHARE_PUBLISHABLE, TokenUsage
 from swreview.agent.runner import SESSION_FILE_NAME
-from swreview.benchmark import answers, matching, questions
+from swreview.benchmark import answers, matching, questions, sets
 from swreview.benchmark.answer_key import load_answer_key
 from swreview.benchmark.answer_key_model import (
     AnswerKey,
@@ -1114,15 +1114,17 @@ def key_package_error(entry: BenchmarkPackageRef, answer_key: AnswerKey) -> str 
 
 
 def score_run(
-    run_dir: Path | str, answer_keys_dir: Path | str, benchmark_set: BenchmarkSet
+    run_dir: Path | str, answer_keys_dir: Path | None, benchmark_set: BenchmarkSet
 ) -> Scorecard:
     """Score every package in `benchmark_set` from `<run_dir>/<package_id>/session.json`
-    against `<answer_keys_dir>/<package_id>.json`.
+    against its answer key, found by `sets.key_path`: the entry's own `key` in a keyed set,
+    `<answer_keys_dir>/<package_id>.json` in a keyless one.
 
     Each key is read through `load_answer_key` against the package its set entry names (`None`
-    when that folder holds no `package.json`); a key-only key is refused, since it has no
-    package to have been reviewed, and so is a set flag its key does not back. Package order
-    follows `benchmark_set.packages`; `distribution` mirrors `per_package`.
+    when that folder holds no `package.json`); a key naming another package than its entry is
+    refused, then a key-only key, since it has no package to have been reviewed, and so is a
+    set flag its key does not back. Package order follows `benchmark_set.packages`;
+    `distribution` mirrors `per_package`.
     """
     run_dir = Path(run_dir)
     checklist = load_checklist()
@@ -1131,11 +1133,14 @@ def score_run(
     answer_keys: list[AnswerKey] = []
     key_sha256: dict[str, str] = {}
     for ref in benchmark_set.packages:
-        key_path = Path(answer_keys_dir) / f"{ref.package_id}.json"
+        key_path = sets.key_path(ref, answer_keys_dir)
         package = _package_on_disk(ref.path)
         answer_key = load_answer_key(
             key_path, package=package, checklist=checklist, words=words
         )
+        package_error = key_package_error(ref, answer_key)
+        if package_error is not None:
+            raise ValueError(package_error)
         if answer_key.key_only:
             raise ValueError(
                 f"{ref.package_id}: its key is key-only (package not built); it cannot be scored"

@@ -47,7 +47,8 @@ from swreview.agent.settings import (
 from swreview.benchmark import answers, sets
 from swreview.benchmark.answers import ANSWER_LOG_VERSION, AnswerLog, read_answer_log
 from swreview.benchmark.case_file import CaseFile
-from swreview.benchmark.runner import EXAMPLE_PROFILE, AttemptRequest
+from swreview.benchmark.runner import EXAMPLE_PROFILE, SAVED_SET_FILE, AttemptRequest
+from swreview.benchmark.scorecard import read_scorecard, score_run
 from swreview.checks.golden_interference import interference_case
 from swreview.checks.standards.run import CHECK_FILE_NAME
 from swreview.ir.loader import PACKAGE_FILE_NAME, load_package, save_package
@@ -59,7 +60,7 @@ from swreview.report.rerender import REPORT_FILE_NAME as REPORT_FILE
 from swreview.report.rerender import rerender_run_folder
 from swreview.report.session import load_session
 from tests.support.answer_keys import write_key
-from tests.support.console import plain_one_line
+from tests.support.console import plain_one_line, plain_words
 from tests.unit.test_benchmark_set_summary import (
     SYNTHETIC_BLOCK,
     checkout_of,
@@ -2958,6 +2959,142 @@ def test_benchmark_score_without_a_set_to_score_against_exits_1(
 
     assert result.exit_code == 1
     assert "--set" in result.stderr
+
+
+# --- benchmark score over keyed and keyless saved sets (feature 014 T120) ---------------------
+
+
+KEYED_SET_REFUSAL = "a keyed set names its own answer keys; drop --answer-keys"
+"""RF-85's one line: `benchmark score` over a keyed saved set given `--answer-keys` too."""
+
+
+def benchmark_run_over(tmp_path: Path, name: str, entry: dict[str, Any]) -> Path:
+    """`benchmark run` over the one-entry set file `sets/<name>.json` naming `entry`, its paths
+    absolute and outside the root (private), into `runs/<name>`: the run folder, whose saved set
+    `benchmark score` reads. The caller installs the fake provider."""
+    set_path = tmp_path / "sets" / f"{name}.json"
+    set_path.parent.mkdir(parents=True, exist_ok=True)
+    set_path.write_text(json.dumps({"name": name, "packages": [entry]}), encoding="utf-8")
+    out = tmp_path / "runs" / name
+    result = invoke("benchmark", "run", "--set", str(set_path), "--out", str(out))
+    assert result.exit_code == 0, result.stdout + result.stderr
+    return out
+
+
+@pytest.fixture
+def keyed_benchmark_run_dir(
+    tmp_path: Path,
+    tmp_package_dir: Path,
+    answer_keys: Path,
+    fake_provider: Callable[..., list[RecordingProvider]],
+) -> Path:
+    """`benchmark_run_dir` over a keyed set: its one entry, `cover`, names its own key, the
+    `answer_keys` fixture's `cover.json`, so the run's saved set names it too."""
+    fake_provider()
+    entry = {
+        "package_id": "cover",
+        "path": str(tmp_package_dir),
+        "key": str(answer_keys / "cover.json"),
+        "held_out": True,
+    }
+    return benchmark_run_over(tmp_path, "keyed", entry)
+
+
+def test_benchmark_score_over_a_keyed_saved_set_reads_each_entry_s_key_without_answer_keys(
+    keyed_benchmark_run_dir: Path, answer_keys: Path
+) -> None:
+    """`cases.md` 9's last bullet (RF-4; FR-030): a keyed saved set names every entry's key, so
+    `benchmark score` takes no `--answer-keys`, and its scorecard is what the keyless reading of
+    the same run scores: the saved set with every entry's `key` dropped, each key at
+    `<the keys' folder>/<package_id>.json`. `scored_at` is the clock's, the one field the two
+    scorings cannot share."""
+    run_dir = keyed_benchmark_run_dir
+    saved = sets.load_saved_set(run_dir / SAVED_SET_FILE)
+    assert [ref.key for ref in saved.packages] == [(answer_keys / "cover.json").resolve()]
+    keyless = saved.model_copy(
+        update={"packages": [ref.model_copy(update={"key": None}) for ref in saved.packages]}
+    )
+
+    result = invoke("benchmark", "score", str(run_dir))
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    scored = read_scorecard(run_dir)
+    expected = score_run(run_dir, answer_keys, keyless)
+    assert scored.model_dump(exclude={"scored_at"}) == expected.model_dump(exclude={"scored_at"})
+    assert [score.package_id for score in scored.per_package] == ["cover"]
+
+
+def test_benchmark_score_over_a_keyless_saved_set_without_answer_keys_is_a_usage_error(
+    benchmark_run_dir: Path, answer_keys: Path
+) -> None:
+    """RF-4: a keyless saved set, as every run made before feature 014 saved, reads its keys
+    from `--answer-keys`: without it a usage error (exit 2) naming the option, no scorecard
+    written; with it the command scores as it always has."""
+    refused = invoke("benchmark", "score", str(benchmark_run_dir))
+
+    assert refused.exit_code == 2
+    assert refused.stdout == ""
+    assert "--answer-keys" in plain_one_line(refused.stderr)
+    assert not (benchmark_run_dir / "scorecard.json").exists()
+
+    scored = invoke("benchmark", "score", str(benchmark_run_dir), "--answer-keys", str(answer_keys))
+
+    assert scored.exit_code == 0, scored.stdout + scored.stderr
+    assert read_scorecard(benchmark_run_dir).benchmark_set == "pilot"
+
+
+def test_score_refuses_a_keyed_entry_whose_key_names_another_package(
+    tmp_path: Path,
+    tmp_package_dir: Path,
+    fake_provider: Callable[..., list[RecordingProvider]],
+) -> None:
+    """`answer-key.md` 4 row 2's set half and 9 test 2 (FR-009): the keyed entry `pkg-a` names
+    as its key `pkg-b.json`, whose `package_id` is `pkg-b`, its own stem, so the key loader's
+    stem half passes. `benchmark score` refuses it with one line naming both ids, the line
+    `benchmark set-summary` gives (`scorecard.key_package_error`, its one writer), before any
+    scorecard is written. The entry's flag agrees with the key, so only the package is wrong."""
+    fake_provider()
+    key = write_key(
+        tmp_path / "keys",
+        "pkg-b",
+        known_defects=[{"check": "drawing.manufacturing_inputs", "document_ids": ["doc:1"]}],
+    )
+    entry = {"package_id": "pkg-a", "path": str(tmp_package_dir), "key": str(key)}
+    run_dir = benchmark_run_over(tmp_path, "crossed", {**entry, "held_out": False})
+
+    result = invoke("benchmark", "score", str(run_dir))
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert result.stderr == (
+        "error: ValueError: pkg-a: its key pkg-b.json names package pkg-b, not the set entry's "
+        "pkg-a\n"
+    )
+    assert not (run_dir / "scorecard.json").exists()
+    assert not (run_dir / "scorecard.md").exists()
+
+
+def test_score_refuses_answer_keys_beside_a_keyed_set(
+    keyed_benchmark_run_dir: Path, answer_keys: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """RF-85: a keyed set names every entry's key, so a directory given beside it is refused, a
+    usage error (exit 2) with one line, rather than ignored in silence or read. No key is read
+    (the scorer's key reader refuses to be called) and no scorecard is written."""
+
+    def no_key_read(*_: object, **__: object) -> None:
+        raise AssertionError("benchmark score read a key")
+
+    monkeypatch.setattr("swreview.benchmark.scorecard.load_answer_key", no_key_read)
+
+    result = invoke(
+        "benchmark", "score", str(keyed_benchmark_run_dir), "--answer-keys", str(answer_keys)
+    )
+
+    assert result.exit_code == 2, result.stdout + result.stderr
+    assert result.stdout == ""
+    assert f"Invalid value for '--answer-keys': {KEYED_SET_REFUSAL}" in plain_words(result.stderr)
+    assert not (keyed_benchmark_run_dir / "scorecard.json").exists()
+    assert not (keyed_benchmark_run_dir / "scorecard.md").exists()
 
 
 def test_benchmark_time_records_the_human_minutes(benchmark_run_dir: Path) -> None:

@@ -23,3 +23,9 @@ def plain(text: str) -> str:
 def plain_one_line(text: str) -> str:
     """`plain(text)` with its line breaks removed, for a word Rich may have wrapped."""
     return plain(text).replace("\n", "")
+
+
+def plain_words(text: str) -> str:
+    """`plain(text)` with a Rich box's side borders dropped and every run of whitespace made one
+    space, for a sentence Rich may have wrapped across an error box's lines."""
+    return " ".join(plain(text).replace("│", " ").split())

@@ -2725,18 +2725,30 @@ def _benchmark_set_for(run_dir: Path, set_file: Path | None, *, root: Path) -> B
 def benchmark_score(
     run_dir: Annotated[Path, typer.Argument(help="A benchmark run directory.")],
     answer_keys: Annotated[
-        Path, typer.Option("--answer-keys", help="Directory of answer keys.")
-    ],
+        Path | None,
+        typer.Option(
+            "--answer-keys", help="Directory of answer keys, for a set that names none."
+        ),
+    ] = None,
     set_file: Annotated[
         Path | None,
         typer.Option("--set", help="Benchmark set JSON; default: the copy the run saved."),
     ] = None,
     json_output: JsonFlag = False,
 ) -> None:
-    """Score a run against its answer keys; write scorecard.json and scorecard.md."""
+    """Score a run against its answer keys; write scorecard.json and scorecard.md.
+
+    A keyed set names each entry's key, and --answer-keys beside it is a usage error (exit 2);
+    a set that names no keys reads them from --answer-keys, a usage error without it.
+    """
     root = sets.REPO_ROOT  # read at call time, as `benchmark run` reads it
+    # The set is read first, so --answer-keys is held to the set's kind as a usage error
+    # before any key is read; anything else is refused with exit 1.
     with _errors_as_exit_1():
         benchmark_set = _benchmark_set_for(run_dir, set_file, root=root)
+    _refuse_answer_keys_beside_a_keyed_set(benchmark_set, answer_keys)
+    _require_answer_keys_for_a_keyless_set(benchmark_set, answer_keys)
+    with _errors_as_exit_1():
         scorecard = score_run(run_dir, answer_keys, benchmark_set)
         scorecard_json = Path(run_dir).resolve() / "scorecard.json"
         scorecard_md = Path(run_dir).resolve() / "scorecard.md"
@@ -2805,6 +2817,20 @@ def _require_answer_keys_for_a_keyless_set(
             sets.key_path(entry, answer_keys)
     except sets.SetError as refusal:
         raise typer.BadParameter(str(refusal), param_hint="'--answer-keys'") from None
+
+
+def _refuse_answer_keys_beside_a_keyed_set(
+    benchmark_set: BenchmarkSet, answer_keys: Path | None
+) -> None:
+    """A keyed set names every entry's key, so `benchmark score` given --answer-keys beside it
+    is a usage error (exit 2), before any key is read (plan decision RF-85): the directory would
+    be ignored in silence or score against keys the set does not name. `benchmark set-summary`,
+    which scores nothing, keeps `sets.key_path`'s reading and ignores the directory."""
+    if answer_keys is not None and any(entry.key is not None for entry in benchmark_set.packages):
+        raise typer.BadParameter(
+            "a keyed set names its own answer keys; drop --answer-keys",
+            param_hint="'--answer-keys'",
+        )
 
 
 @benchmark_app.command("time")
