@@ -1,7 +1,9 @@
 """Scripted answers in a benchmark run (feature 014, `contracts/scripted-answers.md`).
 
-This module holds the case file's one reader and the answer log's record; `drive_review` joins
-them with US4 (T099).
+This module holds the case file's one reader, the answer log's record and the driver that joins
+them, `drive_review` (section 3; plan decisions QA-1 to QA-4, QA-8, RF-13): it plays a review held
+open the way the pane's engineer would, answering each open question from the case file through
+`ReviewRun.answer_evidence_batch`, the method the pane's Send reaches, and writes the log.
 
 `load_case_file` (sections 2.3 and 3; plan decisions QA-5, QA-11) reads a case file into
 `benchmark/case_file.py`'s data-only model, whose own rows refuse first, then runs the rows that
@@ -32,7 +34,8 @@ This module imports no answer-key module (runs never read keys, FR-032), and not
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
+from dataclasses import dataclass
 from itertools import combinations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Self
@@ -48,16 +51,20 @@ from pydantic import (
 
 from swreview import atomic
 from swreview.agent.providers import TurnEndReason
+from swreview.agent.runner import open_evidence_requests
 from swreview.benchmark import sets
 from swreview.benchmark.case_file import CaseFile, ScriptedAnswer
-from swreview.benchmark.questions import QuestionIds
+from swreview.benchmark.questions import QuestionIds, Unscripted, scripted_answer_for
 from swreview.checks import part_roles
 from swreview.findings import ReviewModel, omit_at_default
 
 if TYPE_CHECKING:
     from swreview.agent.checklist import Checklist, ChecklistItem
+    from swreview.agent.providers import AgentEvent
+    from swreview.agent.runner import ReviewRun
     from swreview.checks.standards.profile import StandardsProfile
     from swreview.ir.models import EvidencePackage
+    from swreview.report.session import EvidenceRequest
 
 ANSWER_LOG_FILE_NAME = "answer-log.json"
 """Where the log sits: `<run>/<package_id>/answer-log.json`, beside the package's session."""
@@ -422,3 +429,147 @@ def _never_asked_refusal(
         f"{roles_answers[0].id} answers the part-roles question, which this review never asks: "
         f"{reason}"
     )
+
+
+# --- the driver (sections 3 and 4) -------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _Delivery:
+    """One open request a point answers: its row in the log, and the text that goes back."""
+
+    sent: AnswerSent
+    text: str
+
+
+def drive_review(
+    run: ReviewRun, case_file: CaseFile | None, *, max_answer_turns: int
+) -> AnswerLog:
+    """Play `run` as the pane's engineer would, answering its questions from `case_file`, and
+    write its answer log into `run.out_dir` (sections 3 to 5; QA-1 to QA-4, QA-8, QA-9, RF-13).
+
+    The opening turn is `run.start()`, as the pane plays it. At each answer point after a turn
+    that ended normally, the open requests are matched afresh, in session order, through the one
+    matcher (`questions.scripted_answer_for`; with no case file every one is `no_answer`), the
+    point is recorded with `steps_before` the session's step count, and its deliveries go back
+    in one `run.answer_evidence_batch`, each entry's answer trimmed: what the pane's Send sends.
+    An entry is delivered at every point where it is the one entry an open request asks within,
+    so a question asked again and recorded is answered again (RF-13). Answering stops at the
+    first point where the last turn did not end normally (`turn_did_not_end`, D2), nothing is
+    open (`no_open_questions`, no point recorded), nothing has a delivery (`all_unscripted`: an
+    unscripted question gets nothing, D3), or `max_answer_turns` answer turns have been played
+    (`bound_reached`: the deliveries held, nothing sent; QA-3).
+
+    How each turn ended is read off `run.sink`, since `start` and `answer_evidence_batch` return
+    the session, not the turn's result. The log is written in a `finally`, so a turn that raises
+    leaves one reading `turn_did_not_end` before the exception propagates; when no `turn.ended`
+    reached the listener at all, `last_turn_end` reads `error`, the turn having failed before it
+    said how it ended. The driver never calls `continue_session` (QA-20), reads no key and
+    writes no case-file text, and no product method changes for it: `answer_evidence_batch`'s
+    own refusals cannot fire on a batch naming only requests the session holds open.
+    """
+    if max_answer_turns < 0:
+        raise ValueError(f"max_answer_turns is {max_answer_turns}; the bound is 0 or more")
+    turn_ends: list[TurnEndReason] = []
+
+    def keep_turn_end(event: AgentEvent) -> None:
+        if event.type == "turn.ended":
+            turn_ends.append(event.body["reason"])
+
+    run.sink.add_listener(keep_turn_end)
+    entries = case_file.answers if case_file is not None else []
+    points: list[AnswerPoint] = []
+    ended: Ended = "turn_did_not_end"
+    try:
+        ended = _answer_points(run, case_file, points, turn_ends, max_answer_turns)
+    finally:
+        delivered = {one.entry for point in points for one in point.sent}
+        log = AnswerLog(
+            answer_log_version=ANSWER_LOG_VERSION,
+            points=points,
+            ended=ended,
+            last_turn_end=turn_ends[-1] if turn_ends else "error",
+            unused_entries=[entry.id for entry in entries if entry.id not in delivered],
+        )
+        write_answer_log(run.out_dir, log)
+    return log
+
+
+def _answer_points(
+    run: ReviewRun,
+    case_file: CaseFile | None,
+    points: list[AnswerPoint],
+    turn_ends: Sequence[TurnEndReason],
+    max_answer_turns: int,
+) -> Ended:
+    """The opening turn, then one answer point after each turn until one stops the review,
+    returning why. `points` gains each point as it is recorded, so a turn that raises leaves
+    the points before it for the log."""
+    run.start()
+    played = 0
+    while True:
+        if not turn_ends or turn_ends[-1] != "end":
+            return "turn_did_not_end"
+        requests = open_evidence_requests(run.session)
+        if not requests:
+            return "no_open_questions"
+        deliveries, unscripted = _decide(requests, case_file, ids=QuestionIds(run.context.ir))
+        held = bool(deliveries) and played == max_answer_turns
+        points.append(
+            AnswerPoint(
+                after_turn=played,
+                steps_before=len(run.session.steps),
+                sent=[] if held else [delivery.sent for delivery in deliveries],
+                unscripted=unscripted,
+                held=[delivery.sent.request_id for delivery in deliveries] if held else [],
+            )
+        )
+        if not deliveries:
+            return "all_unscripted"
+        if held:
+            return "bound_reached"
+        run.answer_evidence_batch(
+            [(delivery.sent.request_id, delivery.text) for delivery in deliveries]
+        )
+        played += 1
+
+
+def _decide(
+    requests: Sequence[EvidenceRequest], case_file: CaseFile | None, *, ids: QuestionIds
+) -> tuple[list[_Delivery], list[UnscriptedRequest]]:
+    """Each open request matched (`questions.md` 3's third use), in the order given: a delivery
+    of the one entry it asks within, its answer trimmed as the pane trims it, or unscripted with
+    its reason, an ambiguous one naming the entries it matched. With no case file every request
+    is `no_answer`. `ids` is the package as the review holds it now."""
+    answers = {entry.id: entry.answer for entry in case_file.answers} if case_file else {}
+    deliveries: list[_Delivery] = []
+    unscripted: list[UnscriptedRequest] = []
+    for request in requests:
+        decided = (
+            scripted_answer_for(request, case_file.answers, ids=ids)
+            if case_file is not None
+            else Unscripted("no_answer")
+        )
+        if isinstance(decided, Unscripted):
+            unscripted.append(
+                UnscriptedRequest(
+                    request_id=request.id,
+                    reason=decided.reason,
+                    entries=list(decided.entries) if decided.reason == "ambiguous" else None,
+                )
+            )
+            continue
+        text = answers[decided.entry_id].strip()
+        sent = AnswerSent(
+            request_id=request.id,
+            entry=decided.entry_id,
+            outside_options=_outside_options(request, text),
+        )
+        deliveries.append(_Delivery(sent, text))
+    return deliveries, unscripted
+
+
+def _outside_options(request: EvidenceRequest, text: str) -> bool:
+    """QA-8: the question offers options and no text box, so the page draws buttons only, and
+    `text` is none of them: an answer the page could not have sent, sent all the same."""
+    return bool(request.options) and not request.allow_text and text not in request.options
