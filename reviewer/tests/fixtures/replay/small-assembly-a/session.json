@@ -1,9 +1,9 @@
 {
-  "session_id": "54bf77f1-56f6-404c-832b-92ac0125b342",
+  "session_id": "ab366aa5-632d-4a9e-8c30-561961ddb89d",
   "package_id": "dbce1f40-e74b-4f3b-ae27-af61ec45d66a",
   "design_id": "dsn:681d2181ba04",
-  "started_at": "2026-10-07T14:30:46.459748Z",
-  "ended_at": "2026-10-07T14:30:46.548334Z",
+  "started_at": "2026-10-08T00:40:31.134979Z",
+  "ended_at": "2026-10-08T00:40:31.223880Z",
   "model": "gpt-5.6-luna",
   "provider_info": {
     "provider": "fake",
@@ -36,34 +36,34 @@
     "rounds": 39,
     "turns": 2,
     "totals": {
-      "input_tokens": 1507165,
-      "cached_input_tokens": 1436897,
+      "input_tokens": 1507109,
+      "cached_input_tokens": 1436841,
       "cache_write_tokens": 67908,
       "output_tokens": 6605,
       "reasoning_tokens": 2654,
       "tool_result_input_tokens": null,
-      "total_tokens": 1513770,
+      "total_tokens": 1513714,
       "latency_s": 95.64147399994545
     },
     "by_turn": [
       {
-        "input_tokens": 1445193,
-        "cached_input_tokens": 1374925,
+        "input_tokens": 1445141,
+        "cached_input_tokens": 1374873,
         "cache_write_tokens": 66064,
         "output_tokens": 5928,
         "reasoning_tokens": 2206,
         "tool_result_input_tokens": null,
-        "total_tokens": 1451121,
+        "total_tokens": 1451069,
         "latency_s": 88.99878119994537
       },
       {
-        "input_tokens": 61972,
-        "cached_input_tokens": 61972,
+        "input_tokens": 61968,
+        "cached_input_tokens": 61968,
         "cache_write_tokens": 1844,
         "output_tokens": 677,
         "reasoning_tokens": 448,
         "tool_result_input_tokens": null,
-        "total_tokens": 62649,
+        "total_tokens": 62645,
         "latency_s": 6.642692800000077
       }
     ]
@@ -77,7 +77,7 @@
       "result_summary": "{\"design_id\":\"dsn:681d2181ba04\",\"design_name\":\"268-88428\",\"configuration\":\"Default\",\"root_assembly_document_id\":\"doc:681d2181ba04\",\"drawing_document_ids\":[],\"document_count\":3,\"component_count\":4,\"ma…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00002110004425048828,
+      "elapsed_s": 0.000022599997464567423,
       "result_bytes": 473,
       "result_tokens": 163
     },
@@ -88,7 +88,7 @@
       "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Closed by code from the package before your first turn: each reviewed documen…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000030499999411404133,
+      "elapsed_s": 0.00003209995338693261,
       "result_bytes": 4111,
       "result_tokens": 911
     },
@@ -99,7 +99,7 @@
       "result_summary": "{\"result\":[{\"kind\":\"tool_error\",\"entity_kind\":\"mass_override\",\"entity_id\":\"doc:681d2181ba04\",\"reason\":\"read OverrideMass for '268-88428.SLDASM'\",\"error\":\"InvalidCastException: Unable to cast COM obje…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00003100000321865082,
+      "elapsed_s": 0.000029199989512562752,
       "result_bytes": 5791,
       "result_tokens": 1690
     },
@@ -113,7 +113,7 @@
       "result_summary": "{\"result\":[{\"id\":\"cmp:0001\",\"name\":\"268-88428\",\"full_path\":\"268-88428\",\"document_id\":\"doc:681d2181ba04\",\"referenced_configuration\":\"Default\",\"suppression\":\"resolved\",\"pattern_id\":null,\"is_toolbox\":fa…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000020000035874545574,
+      "elapsed_s": 0.000019400031305849552,
       "result_bytes": 221,
       "result_tokens": 74
     },
@@ -127,7 +127,7 @@
       "result_summary": "{\"result\":[{\"id\":\"cmp:0002\",\"name\":\"ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-2\",\"full_path\":\"ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-2\",\"document_id\":\"doc:792f2ea287a0\",\"referenced_configura…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000017300015315413475,
+      "elapsed_s": 0.000016700010746717453,
       "result_bytes": 795,
       "result_tokens": 323
     },
@@ -140,7 +140,7 @@
       "result_summary": "{\"result\":[{\"id\":\"mat:0001\",\"persist_ref\":\"aEIAABgAAAD//v8AAAAAABkAAAA=\",\"persist_ref_scope\":\"doc:681d2181ba04\",\"type\":\"swMateCOORDINATE\",\"entities\":[{\"component_id\":\"cmp:0004\",\"persist_ref\":\"aEIAAAY…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000036400044336915016,
+      "elapsed_s": 0.00003589998232200742,
       "result_bytes": 4371,
       "result_tokens": 2120
     },
@@ -154,7 +154,7 @@
       "result_summary": "{\"result\":[{\"id\":\"hol:0001\",\"persist_ref\":\"aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=\",\"persist_ref_scope\":\"doc:8a412bc4633c\",\"component_id\":…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00006320001557469368,
+      "elapsed_s": 0.00006009999196976423,
       "result_bytes": 2820,
       "result_tokens": 1176
     },
@@ -167,7 +167,7 @@
       "result_summary": "{\"component\":{\"id\":\"cmp:0004\",\"persist_ref\":\"aEIAAAUAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=\",\"persist_ref_scope\":\"doc:681d2181ba04\",\"name\":\"268-8…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00028550002025440335,
+      "elapsed_s": 0.0002929000183939934,
       "result_bytes": 27503,
       "result_tokens": 12665
     },
@@ -180,7 +180,7 @@
       "result_summary": "{\"component\":{\"id\":\"cmp:0002\",\"persist_ref\":\"aEIAAAUAAAD//v84WgBBAEwAVQBEACAASwBBAE0ALAAgADMATQBNACAAWAAgADEAOABNAE0AIABaAEkALAAgAFAAVQAsACAARgBPAFQALAAgADEANwA1ADQAMwBUADEANwA3AC0AMgBAADIANgA4AC0AOA…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00006410002242773771,
+      "elapsed_s": 0.00005960004637017846,
       "result_bytes": 3056,
       "result_tokens": 1344
     },
@@ -193,7 +193,7 @@
       "result_summary": "{\"component\":{\"id\":\"cmp:0003\",\"persist_ref\":\"aEIAAAUAAAD//v84WgBBAEwAVQBEACAASwBBAE0ALAAgADMATQBNACAAWAAgADEAOABNAE0AIABaAEkALAAgAFAAVQAsACAARgBPAFQALAAgADEANwA1ADQAMwBUADEANwA3AC0AMQBAADIANgA4AC0AOA…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00008410000009462237,
+      "elapsed_s": 0.00007200002437457442,
       "result_bytes": 7436,
       "result_tokens": 3527
     },
@@ -207,7 +207,7 @@
       "result_summary": "{\"result\":[]}",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000016300007700920105,
+      "elapsed_s": 0.00001550000160932541,
       "result_bytes": 14,
       "result_tokens": 5
     },
@@ -221,7 +221,7 @@
       "result_summary": "{\"result\":[{\"group_key\":\"cmp:0003|cmp:0004\",\"count\":1,\"statuses\":[\"computed\"],\"configurations\":[\"Default\"],\"interferences\":[{\"id\":\"int:0001\",\"configuration\":\"Default\",\"component_ids\":[\"cmp:0004\",\"cmp…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00003739999374374747,
+      "elapsed_s": 0.00003490003291517496,
       "result_bytes": 1132,
       "result_tokens": 354
     },
@@ -236,7 +236,7 @@
       "result_summary": "{\"result\":[]}",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000022499996703118086,
+      "elapsed_s": 0.00002239999594166875,
       "result_bytes": 14,
       "result_tokens": 5
     },
@@ -249,7 +249,7 @@
       "result_summary": "{\"result\":[{\"document_id\":\"doc:792f2ea287a0\",\"index\":0,\"text\":\"\\\"D1@Sketch1\\\" = \\\"N@Sketch1\\\"\",\"lhs\":\"D1@Sketch1\",\"is_global\":false,\"value\":0.5},{\"document_id\":\"doc:792f2ea287a0\",\"index\":1,\"text\":\"\\\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00002400000812485814,
+      "elapsed_s": 0.000023100001271814108,
       "result_bytes": 597,
       "result_tokens": 251
     },
@@ -262,7 +262,7 @@
       "result_summary": "{\"result\":[]}",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000013200042303651571,
+      "elapsed_s": 0.000012800039257854223,
       "result_bytes": 14,
       "result_tokens": 5
     },
@@ -275,7 +275,7 @@
       "result_summary": "{\"result\":[]}",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000013199984095990658,
+      "elapsed_s": 0.000012999982573091984,
       "result_bytes": 14,
       "result_tokens": 5
     },
@@ -296,7 +296,7 @@
       "result_summary": "{\"status\":\"computed\",\"configuration\":\"Default\",\"interferences\":[{\"id\":\"int:0001\",\"configuration\":\"Default\",\"component_ids\":[\"cmp:0004\",\"cmp:0003\"],\"volume\":{\"value\":0.0,\"unit\":\"m3\"},\"settings\":{\"trea…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00006079999729990959,
+      "elapsed_s": 0.00013500003842636943,
       "result_bytes": 1037,
       "result_tokens": 315
     },
@@ -310,7 +310,7 @@
       "result_summary": "{\"result\":[{\"group_key\":\"cmp:0003|cmp:0004\",\"count\":1,\"statuses\":[\"computed\"],\"configurations\":[\"Default\"],\"interferences\":[{\"id\":\"int:0001\",\"configuration\":\"Default\",\"component_ids\":[\"cmp:0004\",\"cmp…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00003350002225488424,
+      "elapsed_s": 0.000036999990697950125,
       "result_bytes": 1132,
       "result_tokens": 354
     },
@@ -323,7 +323,7 @@
       "result_summary": "{\"status\":\"contact\",\"contact\":{\"id\":\"C-001\",\"kind\":\"zero_volume\",\"group_key\":\"cmp:0003|cmp:0004\",\"configuration\":\"Default\",\"interference_ids\":[\"int:0001\"],\"component_ids\":[\"cmp:0003\",\"cmp:0004\"],\"vol…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.001227900036610663,
+      "elapsed_s": 0.001381699985358864,
       "result_bytes": 551,
       "result_tokens": 190
     },
@@ -336,7 +336,7 @@
       "result_summary": "{\"status\":\"contact\",\"contact\":{\"id\":\"C-002\",\"kind\":\"zero_volume\",\"group_key\":\"cmp:0002|cmp:0004\",\"configuration\":\"Default\",\"interference_ids\":[\"int:0002\"],\"component_ids\":[\"cmp:0002\",\"cmp:0004\"],\"vol…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00005849997978657484,
+      "elapsed_s": 0.00007110001752153039,
       "result_bytes": 551,
       "result_tokens": 190
     },
@@ -349,7 +349,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-001\",\"check\":\"rms.folders.present\",\"title\":\"missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q\\u2026\",\"status\":\"suspected\",\"seve…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.006794099987018853,
+      "elapsed_s": 0.007161699992138892,
       "result_bytes": 33777,
       "result_tokens": 12312
     },
@@ -360,7 +360,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-007\",\"check\":\"rms.assembly.mates_to_reference_geometry\",\"title\":\"mat:0002 (swMateCONCENTRIC) references swSelFACES on 268-88428-1, swSelFACES on\\u2026\",\"stat…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0013936999603174627,
+      "elapsed_s": 0.0014761000056751072,
       "result_bytes": 6216,
       "result_tokens": 2568
     },
@@ -373,7 +373,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-008\",\"check\":\"rms.params.global_variables_present\",\"title\":\"none of the 4 equation(s) is a global variable: D1@Sketch1, D1@Sketch5, D2@Sket\\u2026\",\"status\":\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0015704999677836895,
+      "elapsed_s": 0.0016446000081487,
       "result_bytes": 3438,
       "result_tokens": 1039
     },
@@ -384,9 +384,9 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-011\",\"check\":\"standards.part.sketches_fully_defined\",\"title\":\"Sketch2 is under-defined, at the top level of the feature tree\",\"status\":\"demonstrated\",\"severi…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.019191899977158755,
-      "result_bytes": 4159,
-      "result_tokens": 1257
+      "elapsed_s": 0.0201173999812454,
+      "result_bytes": 4147,
+      "result_tokens": 1253
     },
     {
       "index": 24,
@@ -403,7 +403,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-001\",\"what\":\"Vault version dok local-modification status for doc:681d2181ba04, doc:792f2ea287a0, dok doc:8a412bc4633c, tied to active configuration Defau…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00023180001880973577,
+      "elapsed_s": 0.00024210003903135657,
       "result_bytes": 687,
       "result_tokens": 197
     },
@@ -425,7 +425,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-002\",\"what\":\"The native part drawing package for 268-88428 dok the applicable drawing or supplier dimensional specification for dowel pin 17543T177, incl…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00024240004131570458,
+      "elapsed_s": 0.00024419999681413174,
       "result_bytes": 845,
       "result_tokens": 221
     },
@@ -446,7 +446,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-003\",\"what\":\"A mating-part hole-axis/coaxiality requirement for the two dowel joints, plus malunomopum hole or datum references for the pin-side axes if …",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00020249997032806277,
+      "elapsed_s": 0.0002166999620385468,
       "result_bytes": 746,
       "result_tokens": 203
     },
@@ -477,7 +477,7 @@
       "result_summary": "{\"status\":\"closed_by_code\",\"check\":\"provenance\",\"reason\":\"Reviewed as open in SOLIDWORKS: 3 documents, each at its own path in its active configuration; revision read on 3 of 3. The open files are ta…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00005470000905916095,
+      "elapsed_s": 0.00005889998283237219,
       "result_bytes": 507,
       "result_tokens": 125
     },
@@ -506,7 +506,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"drawing.manufacturing_inputs\",\"scope\":{\"component_ids\":[\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"po…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0001813999842852354,
+      "elapsed_s": 0.00020819995552301407,
       "result_bytes": 639,
       "result_tokens": 176
     },
@@ -546,7 +546,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"interfaces.fit\",\"scope\":{\"component_ids\":[\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[[\"cmp:0002\",\"cmp:0004\"],[\"cmp:0003\",\"cmp:0004…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00018009997438639402,
+      "elapsed_s": 0.00021620001643896103,
       "result_bytes": 637,
       "result_tokens": 195
     },
@@ -586,7 +586,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"interfaces.stack\",\"scope\":{\"component_ids\":[\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[[\"cmp:0002\",\"cmp:0004\"],[\"cmp:0003\",\"cmp:00…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00018099998123943806,
+      "elapsed_s": 0.00019270001212134957,
       "result_bytes": 610,
       "result_tokens": 184
     },
@@ -619,7 +619,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"out_of_scope\",\"coverage_item\":{\"check\":\"fasteners\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"position…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00017959997057914734,
+      "elapsed_s": 0.0002031000331044197,
       "result_bytes": 563,
       "result_tokens": 174
     },
@@ -659,7 +659,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"holes.alignment\",\"scope\":{\"component_ids\":[\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[[\"cmp:0002\",\"cmp:0004\"],[\"cmp:0003\",\"cmp:000…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00025939999613910913,
+      "elapsed_s": 0.00023140001576393843,
       "result_bytes": 611,
       "result_tokens": 187
     },
@@ -670,7 +670,7 @@
       "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Closed by code from the package before your first turn: each reviewed documen…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000055100012104958296,
+      "elapsed_s": 0.00005579995922744274,
       "result_bytes": 4149,
       "result_tokens": 917
     },
@@ -703,7 +703,7 @@
       "result_summary": "{\"status\":\"closed_by_code\",\"check\":\"coverage.closeout\",\"reason\":\"Closed by code when the review ends: every gap in the package and every open evidence request is reflected in coverage.\",\"open_items\":…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00005530001362785697,
+      "elapsed_s": 0.00006330001633614302,
       "result_bytes": 251,
       "result_tokens": 61
     },
@@ -714,7 +714,7 @@
       "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Closed by code from the package before your first turn: each reviewed documen…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00005440000677481294,
+      "elapsed_s": 0.00005360000068321824,
       "result_bytes": 4149,
       "result_tokens": 917
     }
@@ -1774,7 +1774,7 @@
         23
       ],
       "coverage_limits": [
-        "profile:..\\config\\standards.example.yaml sha256:a4e6ec47d8e3b4e877f3a04c634d02bff40bfcba5369118799a419b0a5297eec",
+        "profile:standards.example.yaml sha256:57d8be1d83818f38b0961c8cc364c4fbdfd278deeba8a2fa66f5f3ff547b99f8",
         "configuration Default"
       ],
       "recommended_action": "Add the relations or dimensions the sketch needs, so it is fully defined.",
@@ -1785,7 +1785,7 @@
     }
   ],
   "explanations_enabled": true,
-  "finding_explanation_fingerprint": "da7594aea452290abad2fcabea3fb8e5385a46315989a644ad5631836d6f296d",
+  "finding_explanation_fingerprint": "90677f7cc16d259dc4a3f837e3505f65c530bb5596ba360160225df0497c1725",
   "contacts": [
     {
       "id": "C-001",
@@ -3004,7 +3004,7 @@
     "assisted_supervision_minutes": 0.0,
     "assisted_verification_minutes": 0.0,
     "false_alarm_handling_minutes": 0.0,
-    "unattended_runtime_minutes": 0.0014764333333333332,
+    "unattended_runtime_minutes": 0.0014816833333333333,
     "net_saved_minutes": null
   }
 }
