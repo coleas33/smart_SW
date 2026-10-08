@@ -70,7 +70,8 @@ from swreview.benchmark.sets import (
     load_saved_set,
     load_set,
 )
-from swreview.ir.loader import AnswerKeyAccessError
+from swreview.ir.loader import AnswerKeyAccessError, save_package
+from tests.support.packages import build_package
 from tests.unit.test_scorecard_usage import write_package as write_scored_package
 
 OUTSIDE_RULE = "a set file outside benchmarks/sets names every path absolutely"
@@ -583,6 +584,7 @@ def test_the_committed_pilot_set_loads_unchanged_from_the_default_root() -> None
 def test_run_benchmark_resolves_a_relative_entry_against_the_root_given(tmp_path: Path) -> None:
     package_dir = tmp_path / "benchmarks" / "packages" / "pkg-1"
     package_dir.mkdir(parents=True)
+    save_package(build_package(), package_dir)
     set_path = write_set(sets_folder(tmp_path) / "parity.json", [relative_entry("pkg-1")])
     calls: list[Path] = []
 

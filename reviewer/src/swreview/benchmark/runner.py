@@ -32,10 +32,11 @@ that lacks reads as "not recorded".
 
 ## Refusals before any review (feature 014 INT-14)
 
-`preflight_set` reads the set and checks it, and every case file it names, before the first
-review (`contracts/benchmark-run.md` 3 row 4; `scripted-answers.md` 2.3), and `run_benchmark`
-takes only the `PreflightedSet` it returns, so a library caller meets the same refusals as the
-command line, which writes the provenance record between the two.
+`preflight_set` reads the set and checks it, that its packages and keys exist, and every case
+file it names, before the first review (`contracts/benchmark-run.md` 3 row 4; `cases.md` 4.4;
+`scripted-answers.md` 2.3), and `run_benchmark` takes only the `PreflightedSet` it returns, so a
+library caller meets the same refusals as the command line, which writes the provenance record
+between the two.
 """
 
 from __future__ import annotations
@@ -56,9 +57,16 @@ from swreview.agent.settings import MODEL_VIEW_OFF, EfficiencySettings, ModelVie
 from swreview.benchmark import answers
 from swreview.benchmark.case_file import CaseFile
 from swreview.benchmark.digest import sha256_of as sha256_of
-from swreview.benchmark.sets import REPO_ROOT, BenchmarkSet, SetError, checkout_relative, load_set
+from swreview.benchmark.sets import (
+    REPO_ROOT,
+    BenchmarkSet,
+    SetError,
+    checkout_relative,
+    load_set,
+    path_form,
+)
 from swreview.findings import ReviewModel
-from swreview.ir.loader import load_package, reject_answer_key_path
+from swreview.ir.loader import PACKAGE_FILE_NAME, load_package, reject_answer_key_path
 from swreview.report.session import load_session, save_session
 
 if TYPE_CHECKING:
@@ -311,9 +319,9 @@ class PreflightedSet:
     returns and the one thing `run_benchmark` reviews (feature 014 INT-14; data-model section 4).
 
     `benchmark_set` is the set as `load_set` read it against `root`, the checkout its relative
-    entries resolved against, and `case_files` holds, by package id, the `CaseFile` loaded and
-    checked for an entry naming one and `None` for an entry naming none. The checks that every
-    package's `package.json` and every key exist are US5's (lane G4).
+    entries resolved against, every package's `package.json` and every key it names there (the
+    key stat-ed, never opened), and `case_files` holds, by package id, the `CaseFile` loaded and
+    checked for an entry naming one and `None` for an entry naming none.
     """
 
     benchmark_set: BenchmarkSet
@@ -338,11 +346,13 @@ def preflight_set(
 
     In order, the first refusal ending the run with one line: `load_set`'s refusals against
     `root`; a package id equal to `attempts` ignoring case, a `SetError` naming it, since Windows
-    and macOS fold case and its folder would be the run's `attempts/` (owner decision 48A); then
-    each entry naming a case file, in set order. A case file the set loader could take no digest
-    of is refused by row 1 before its package is read; any other is checked by
+    and macOS fold case and its folder would be the run's `attempts/` (owner decision 48A); the
+    existence checks (`contracts/cases.md` 4.4; plan decision CS-16), a package folder holding
+    no `package.json` and then a key that is not a file, each a `SetError` naming every missing
+    one; then each entry naming a case file, in set order. A case file the set loader could take
+    no digest of is refused by row 1 before its package is read; any other is checked by
     `answers.load_case_file` against the package, `checklist` and `profile`, the profile the
-    reviews will grade against or `None`.
+    reviews will grade against or `None`, which the command line has loaded, or refused, first.
     """
     benchmark_set = load_set(set_path, root=root)
     for ref in benchmark_set.packages:
@@ -353,6 +363,26 @@ def preflight_set(
                 "compared ignoring case, as Windows and macOS compare folder names: choose "
                 "another id"
             )
+    _refuse_missing(
+        benchmark_set,
+        "package",
+        [
+            (ref.package_id, ref.path)
+            for ref in benchmark_set.packages
+            if not (ref.path / PACKAGE_FILE_NAME).is_file()
+        ],
+        root=root,
+    )
+    _refuse_missing(
+        benchmark_set,
+        "key",
+        [
+            (ref.package_id, ref.key)
+            for ref in benchmark_set.packages
+            if ref.key is not None and not ref.key.is_file()
+        ],
+        root=root,
+    )
     case_files: dict[str, CaseFile | None] = {}
     for ref in benchmark_set.packages:
         if ref.case_file is None:
@@ -370,6 +400,19 @@ def preflight_set(
     return PreflightedSet(
         benchmark_set=benchmark_set, root=root, case_files=MappingProxyType(case_files)
     )
+
+
+def _refuse_missing(
+    benchmark_set: BenchmarkSet, kind: str, missing: list[tuple[str, Path]], *, root: Path
+) -> None:
+    """One existence check's refusal (`contracts/cases.md` 4.4): every `(package id, path)` in
+    `missing`, in set order, in one line, "benchmark set {name}: {n} {kind}(s) missing: {id} at
+    {path}; ...", each path as the set's entry names it (`sets.path_form`), so a committed
+    entry's names no local folder. Nothing when nothing is missing."""
+    if not missing:
+        return
+    named = "; ".join(f"{package_id} at {path_form(path, root)}" for package_id, path in missing)
+    raise SetError(f"benchmark set {benchmark_set.name}: {len(missing)} {kind}(s) missing: {named}")
 
 
 def _default_review_fn(

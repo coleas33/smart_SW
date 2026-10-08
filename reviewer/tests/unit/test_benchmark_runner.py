@@ -14,14 +14,21 @@ so a case file failing any row of section 2.3, row 10 read under the run's stand
 stops the run before the first review; the saved
 set carries each case file's digest, so one changed byte moves `set_digest`; and the record holds
 the answer-turn bound, read "not recorded" where a record lacks it.
+
+Feature 014 T116 (`contracts/cases.md` 4.4 and 9; CS-16, INT-14; FR-030, FR-032; US5-3):
+`preflight_set` checks the set's files exist after the profile preflight and before the case-file
+checks: a package folder holding no `package.json`, committed or private, and a key that is not a
+file are each refused in one line naming every missing one, before any review and with no package
+folder created; and a run over a keyed set stats its keys and never opens one.
 """
 
 from __future__ import annotations
 
+import builtins
 import dataclasses
 import hashlib
 import json
-import shutil
+import os
 from pathlib import Path
 from typing import Any
 
@@ -41,8 +48,10 @@ from swreview.benchmark.runner import (
     preflight_set,
     run_benchmark,
 )
-from swreview.benchmark.sets import load_set
-from swreview.checks.standards.profile import load_profile
+from swreview.benchmark.sets import SetError, load_set
+from swreview.checks.standards.profile import ProfileUnreadable, load_profile
+from swreview.ir.loader import PACKAGE_FILE_NAME, save_package
+from tests.support.packages import build_package
 from tests.support.roles_review import write_profile
 from tests.unit.test_benchmark_case_file import (
     BEFORE_ANY_REVIEW,
@@ -54,6 +63,7 @@ from tests.unit.test_benchmark_case_file import (
     item_answer,
     roles_answer,
 )
+from tests.unit.test_benchmark_run_options import one_line, refusal_line
 
 FAKE_MODEL = default_model(ProviderName.FAKE)
 
@@ -155,10 +165,14 @@ def test_a_case_file_that_cannot_be_read_is_refused_by_row_1_before_its_package_
     tmp_path: Path,
 ) -> None:
     """The set loader took no digest of a case file it could not read (`benchmark/sets.py`), and
-    `preflight_set` refuses it by row 1 naming it, before loading its package: here the package
-    folder is gone too, and the refusal is still the case file's, with no local folder in it."""
+    `preflight_set` refuses it by row 1 naming it, before loading its package: here the package's
+    `package.json` is no package either, which loading it would refuse, and the refusal is still
+    the case file's, with no local folder in it. The file is there, since the existence checks
+    before any case file refuse a folder holding none (T117, `cases.md` 4.4)."""
     set_path = case_file_set(tmp_path, None)
-    shutil.rmtree(tmp_path / "packages" / PACKAGE_ID)
+    (tmp_path / "packages" / PACKAGE_ID / PACKAGE_FILE_NAME).write_text(
+        "{not a package", encoding="utf-8"
+    )
 
     with pytest.raises(CaseFileError) as refused:
         preflight_set(set_path, None, load_checklist())
@@ -238,6 +252,236 @@ def test_run_benchmark_requires_a_preflighted_set(tmp_path: Path, tmp_package_di
     assert "preflight_set" in str(refused.value)
     assert calls == []
     assert not (tmp_path / "out").exists()
+
+
+# --- the set's files exist before any review (US5-3, FR-030, FR-032; `cases.md` 4.4) ---------
+
+
+def checkout_set(root: Path, *entries: dict[str, Any]) -> Path:
+    """A set named `pilot` in the file `<root>/benchmarks/sets/study.json`, so a relative entry
+    resolves against `root` and a refusal's `{name}` is the set's name, not the file's."""
+    set_path = root / "benchmarks" / "sets" / "study.json"
+    set_path.parent.mkdir(parents=True, exist_ok=True)
+    set_path.write_text(
+        json.dumps({"name": "pilot", "packages": list(entries)}, indent=2), encoding="utf-8"
+    )
+    return set_path
+
+
+def committed_case(root: Path, package_id: str) -> dict[str, Any]:
+    """A committed entry of a keyed set: its package written under `<root>/benchmarks/packages/`
+    and its key under `<root>/benchmarks/answer_keys/`, both named root-relative. The key's bytes
+    are never read, so they need not be a key."""
+    save_package(build_package(), root / "benchmarks" / "packages" / package_id)
+    key = root / "benchmarks" / "answer_keys" / f"{package_id}.json"
+    key.parent.mkdir(parents=True, exist_ok=True)
+    key.write_text('{"key_format": 2}\n', encoding="utf-8")
+    return {
+        "package_id": package_id,
+        "path": f"benchmarks/packages/{package_id}",
+        "key": f"benchmarks/answer_keys/{package_id}.json",
+        "held_out": True,
+    }
+
+
+def private_case(vault: Path, package_id: str) -> dict[str, Any]:
+    """A private entry of a keyed set: its package under `<vault>/packages/` and its key under
+    `<vault>/keys/`, both named absolutely, outside the checkout."""
+    package = save_package(build_package(), vault / "packages" / package_id).parent
+    key = vault / "keys" / f"{package_id}.json"
+    key.parent.mkdir(parents=True, exist_ok=True)
+    key.write_text('{"key_format": 2}\n', encoding="utf-8")
+    return {"package_id": package_id, "path": str(package), "key": str(key), "held_out": True}
+
+
+def test_a_set_naming_missing_packages_is_refused_before_any_review_naming_every_one(
+    tmp_path: Path,
+) -> None:
+    """US5-3: a committed folder holding no `package.json` and a private folder that is not there
+    are named in one line, in set order, the committed one root-relative as the entry serializer
+    writes it and the private one absolute; the package that is there is not named, the review
+    function is never called and no folder is created under the run's folder."""
+    root = tmp_path / "checkout"
+    save_package(build_package(), root / "benchmarks" / "packages" / "kept")
+    (root / "benchmarks" / "packages" / "hollow").mkdir(parents=True)
+    away = tmp_path / "vault" / "packages" / "away"
+    set_path = checkout_set(
+        root,
+        {"package_id": "kept", "path": "benchmarks/packages/kept", "held_out": True},
+        {"package_id": "hollow", "path": "benchmarks/packages/hollow", "held_out": True},
+        {"package_id": "away", "path": str(away), "held_out": True},
+    )
+    out_dir = tmp_path / "runs" / "refused"
+    calls: list[object] = []
+
+    with pytest.raises(SetError) as refused:
+        run_benchmark(
+            preflight_set(set_path, None, load_checklist(), root=root),
+            out_dir,
+            provider="fake",
+            model="m",
+            effort="low",
+            review_fn=lambda *args, **kwargs: calls.append((args, kwargs)),
+        )
+
+    assert str(refused.value) == (
+        "benchmark set pilot: 2 package(s) missing: hollow at benchmarks/packages/hollow; "
+        f"away at {away.resolve().as_posix()}"
+    )
+    assert calls == []
+    assert not out_dir.exists()
+
+
+def test_a_keyed_set_naming_missing_keys_is_refused_before_any_review_naming_every_one(
+    tmp_path: Path,
+) -> None:
+    """CS-16: a key that is not there and a key path that is a folder, not a file, are named in
+    one line the same way, before any review: a missing private key found by `benchmark score`
+    after the paid runs would waste them."""
+    root = tmp_path / "checkout"
+    vault = tmp_path / "vault"
+    lost = committed_case(root, "lost")
+    away = private_case(vault, "away")
+    set_path = checkout_set(root, committed_case(root, "kept"), lost, away)
+    (root / lost["key"]).unlink()
+    away_key = Path(away["key"])
+    away_key.unlink()
+    away_key.mkdir()
+    out_dir = tmp_path / "runs" / "refused"
+    calls: list[object] = []
+
+    with pytest.raises(SetError) as refused:
+        run_benchmark(
+            preflight_set(set_path, None, load_checklist(), root=root),
+            out_dir,
+            provider="fake",
+            model="m",
+            effort="low",
+            review_fn=lambda *args, **kwargs: calls.append((args, kwargs)),
+        )
+
+    assert str(refused.value) == (
+        "benchmark set pilot: 2 key(s) missing: lost at benchmarks/answer_keys/lost.json; "
+        f"away at {away_key.resolve().as_posix()}"
+    )
+    assert calls == []
+    assert not out_dir.exists()
+
+
+def test_the_package_check_ends_the_preflight_before_the_key_check(tmp_path: Path) -> None:
+    """Each check ends the preflight: a set missing one entry's `package.json` and another's key
+    is named by the missing package alone."""
+    root = tmp_path / "checkout"
+    hollow = committed_case(root, "hollow")
+    lost = committed_case(root, "lost")
+    set_path = checkout_set(root, hollow, lost)
+    (root / hollow["path"] / PACKAGE_FILE_NAME).unlink()
+    (root / lost["key"]).unlink()
+
+    with pytest.raises(SetError) as refused:
+        preflight_set(set_path, None, load_checklist(), root=root)
+
+    assert str(refused.value) == (
+        "benchmark set pilot: 1 package(s) missing: hollow at benchmarks/packages/hollow"
+    )
+
+
+def test_a_run_over_a_keyed_set_stats_its_keys_and_never_opens_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """FR-032: the preflight and the run over a keyed set whose keys are there review every
+    package, and a spy on both ways a file is opened fails the test on any open of a key; the
+    stat that checks a key is there is allowed."""
+    root = tmp_path / "checkout"
+    kept = committed_case(root, "kept")
+    away = private_case(tmp_path / "vault", "away")
+    set_path = checkout_set(root, kept, away)
+    keys = {(root / kept["key"]).resolve(), Path(away["key"]).resolve()}
+    real_open, real_path_open = builtins.open, Path.open
+
+    def refuse_a_key(file: object) -> None:
+        if isinstance(file, str | os.PathLike) and Path(file).resolve() in keys:
+            pytest.fail(f"the run opened the key {file}")
+
+    def spied_open(file: Any, *args: Any, **kwargs: Any) -> Any:
+        refuse_a_key(file)
+        return real_open(file, *args, **kwargs)
+
+    def spied_path_open(self: Path, *args: Any, **kwargs: Any) -> Any:
+        refuse_a_key(self)
+        return real_path_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "open", spied_open)
+    monkeypatch.setattr(Path, "open", spied_path_open)
+    reviewed: list[Path] = []
+
+    run_benchmark(
+        preflight_set(set_path, None, load_checklist(), root=root),
+        tmp_path / "runs" / "keyed",
+        provider="fake",
+        model="m",
+        effort="low",
+        review_fn=lambda package_dir, _out, **_keywords: reviewed.append(package_dir),
+    )
+
+    assert reviewed == [
+        (root / kept["path"]).resolve(),
+        (tmp_path / "vault" / "packages" / "away").resolve(),
+    ]
+
+
+def test_a_missing_package_is_named_before_any_case_file_is_checked(tmp_path: Path) -> None:
+    """The existence checks come before the case-file checks (`cases.md` 4.4): the first entry's
+    case file is not JSON and the second entry's package is not there, and the refusal names the
+    missing package."""
+    gone = tmp_path / "vault" / "gone"
+    set_path = case_file_set(
+        tmp_path, "{not json", {"package_id": "gone", "path": str(gone), "held_out": True}
+    )
+
+    with pytest.raises(SetError) as refused:
+        preflight_set(set_path, None, load_checklist())
+
+    assert str(refused.value) == (
+        f"benchmark set fict: 1 package(s) missing: gone at {gone.resolve().as_posix()}"
+    )
+
+
+def test_benchmark_run_refuses_an_unreadable_profile_before_a_missing_package(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The existence checks come after the profile preflight (`cases.md` 4.4; FR-050): over a set
+    naming a missing package, an unreadable `--standards-profile` is the one line printed; with no
+    profile, the missing package is, each with exit 1, no review and no run folder."""
+    gone = tmp_path / "vault" / "gone"
+    set_path = write_set(tmp_path / "sets" / "pilot.json", gone)
+    missing = tmp_path / "profiles" / "absent.yaml"
+    reviewed: list[Path] = []
+    monkeypatch.setattr(
+        cli, "_review_fn", lambda package_dir, _out, **_keywords: reviewed.append(package_dir)
+    )
+
+    def run(out: Path, *options: str) -> Any:
+        return CliRunner().invoke(
+            cli.app,
+            [
+                "benchmark", "run", "--set", str(set_path), "--out", str(out),
+                "--provider", "fake", *options,
+            ],
+        )
+
+    profiled = run(tmp_path / "runs" / "profiled", "--standards-profile", str(missing))
+    assert profiled.exit_code == 1, profiled.stdout + profiled.stderr
+    assert one_line(profiled) == refusal_line(ProfileUnreadable, missing)
+
+    unprofiled = run(tmp_path / "runs" / "unprofiled")
+    assert unprofiled.exit_code == 1, unprofiled.stdout + unprofiled.stderr
+    assert one_line(unprofiled).startswith(
+        "error: SetError: benchmark set pilot: 1 package(s) missing: cover at "
+    )
+
+    assert reviewed == []
+    assert not (tmp_path / "runs").exists()
 
 
 # --- what a run records of its case files and bound (US4-6, QA-7, FR-013) ---------------------
