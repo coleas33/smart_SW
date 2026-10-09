@@ -631,6 +631,375 @@ refusals included, keeps its one row and its goal line through finalization.
 | A bucket that follows what was skipped | The hygiene component check writes no row for its passes, so "nothing checked" cannot be told from "nothing to find"; the reason carries the counts instead. *Taken by the amendment above* in the form "checked only on a checked row or a finding": an always-`checked` row made a run that checked nothing read "checked" on the summary, which is worse than the component check's silent passes reading `skipped`. |
 | Name the tools and add two lever 13 rewordings | Above: more exact sentences to keep matching, for words the tools' descriptions already carry. |
 
+### R2.26 Fine and non-standard thread pitch is flagged for the engineer to confirm (amendment 2026-10-08, owner decisions 50A to 53A)
+
+**Decision** (2026-10-08, the owner's decisions 50A to 53A, recorded before their code;
+`contracts/fasteners.md` section 8, `contracts/coarse-pitch.json`, tasks T110 to T126). The
+owner's request, verbatim: "Add check for fine pitch parts and threaded holes. Call out and flag
+to user to make sure they mean to use it anywhere. We almost always use standard threads not
+fine... so it's a common mistake." The owner chose the first option of each of four questions:
+
+- **50A, ISO and UNC table** (question 50: "What should count as fine pitch, and how should a
+  thread written with no pitch (M8) be treated?"). A per-diameter table of the ISO 261 metric
+  coarse pitch and the ASME B1.1 UNC threads per inch, held in one cited YAML data file in
+  `reviewer/src/swreview/checks/` (`coarse_pitch.yaml`, with `version` and `source` lines; source
+  "Owner decision 2026-10-08 (50A): the shop uses coarse threads; fine pitch must be confirmed").
+  Flagged: a metric pitch finer than that diameter's coarse pitch; an ISO 261 size with no coarse
+  pitch at all; an inch thread finer than UNC (UNF, UNEF, 8-UN and the other constant-pitch
+  series); and a pitch coarser than the coarse pitch, as non-standard. A metric thread written
+  with no pitch (`M8`) is coarse by the ISO designation rule (ISO 965-1 omits the coarse pitch
+  from the designation), stated on every result that relies on it. Threads whose pitch cannot be
+  read (unrecognised text, a size in no table such as M2.3, a mixed fraction the parser does not
+  read) and pipe threads (`NPT`, `NPTF`, `NPS`, `NPSM`, `BSP`, `BSPP`, `BSPT`, `G`, `R`, `Rc`,
+  `Rp`, `PT`, `PF`; a Hole Wizard pipe tap that arrives as a bare `3/8`) are listed as not
+  checked, never passed.
+- **51A, flag all, Accept** (question 51: "How should fine threads you mean to use (hydraulic
+  ports, locknuts) be handled?"). Every fine or non-standard thread is flagged on every review;
+  the engineer confirms with the existing Accept disposition. No allow-list and no persistence
+  across reviews now.
+- **52A, all model sources and the parser fixes** (question 52: "Which sources should the check
+  read?"). Hole Wizard tapped holes (`Hole.thread_designation` where `hole_type` is tapped),
+  cosmetic threads (`package.threads` designation), fastener rows (`package.fasteners`
+  `thread_designation`, any kind: a nut can be fine) and screws parsed from their names
+  (`recognise_fasteners`). Fasteners are flagged even when bought (choosing a fastener is a design
+  choice); tapped holes and cosmetic threads inside bought parts (feature 013's part roles) are
+  listed once in one coverage row, not flagged; drawings are out of scope and named in the
+  coverage limits as not read for pitch. The parsers are fixed in Python and C#: `parse_thread`
+  reads a decimal comma, a hyphen pitch (but `M8-6H` is a tolerance class) and the
+  multiplication sign, with pipe tokens recognised by one helper beside it; the name grammar
+  reads one whole number after a metric size as a pitch when it is at most that diameter's coarse
+  pitch, otherwise as a length, a size with no coarse pitch keeping today's rule; and the C# side
+  holds its own copy of the table, both copies pinned by a test on each side to one contract file,
+  `contracts/coarse-pitch.json` (the pattern of R2.11's shared name vectors).
+- **53A, a feature 010 amendment on a new branch** (question 53: "Where should this work
+  live?"). Feature 010's documents are amended - this entry, `contracts/fasteners.md` section 8
+  and dated tasks - before the code, on a new branch and worktree off main; test-first, with
+  adversarial review and the full gate; no push, merged on the owner's word.
+
+**Defaults taken on 2026-10-08 and stated to the owner, who did not override them** (each a
+default the owner may revise):
+
+| # | Default | Where |
+|---|---|---|
+| D1 | One new argument-free code-first tool, `check_threads`, appended to `CODE_FIRST_CHECKS` after `check_hygiene`, so the pre-run runs it and lever 13 withholds it once it has completed; its description within the 160-character cap | `contracts/fasteners.md` 8.7 |
+| D2 | Two finding ids: `thread.fine_pitch` (finer than coarse, a fine-only size, an inch thread finer than UNC) and `thread.nonstandard_pitch` (coarser than coarse); `suspected`, `medium`. Not a `fastener.` id, so a pitch finding never closes the "Fastener joints" checklist item; `thread.` joins the needs-judgement prefixes, so the findings land in the Review tab's Decide group; the Fasteners goal owns the two finding ids by name, in its `items`, so they are listed in the Fasteners group, and the coverage-only `thread.pitch` rows belong to no goal (the owner's decision 63A, below, which replaced D25; first written as the Fasteners goal and group owning the prefix); each id is classed `interface`, like `fastener.thread_match`; the checklist text does not change | 8.4 |
+| D3 | *Its grouping and words superseded the same day by the owner's decision 57A (below): one finding per (check, owning part), listing each designation with its sources and its coarse alternative.* As first written: one finding per (owning document, normalised designation), listing every hole feature, cosmetic thread or fastener instance with its entity id (Principle IV); the words name the part, not its id: "M8x1 is fine pitch (M8's coarse pitch is 1.25) on 3 tapped holes in <part>: <features>", "Confirm M8x1 is intended in <part>, or change it to the coarse M8x1.25.", requirement "threads use the coarse (standard) pitch unless a fine pitch is deliberate"; no percent sign. The ids on every source, the part named by its file, the requirement and no percent sign stand | 8.5 |
+| D4 | Passes have no calculation, so (R2.21) they are counted in one checked row ("N threads have the coarse pitch"), not one finding each; unreadable designations (a tapped hole with no designation among them) and unknown sizes are one unresolved row each, pipe threads, threads in bought parts and suppressed hole features one skipped row each; a package with no thread says so in one row | 8.6 |
+| D5 | Suppressed features: a `Hole` row carries no suppression flag, so it is joined on its owning document and `feature_name` to the `Feature` rows (`Feature.suppressed`); a suppressed hole is skipped, never flagged; where the join is not possible the coverage limits say so | 8.2 |
+| D6 | A fine screw in a coarse tapped hole is reported by `fastener.thread_match` (the mismatch, as today) and by `thread.fine_pitch` on the screw (the deliberate-choice question); both stay | 8.10 |
+| D7 | Inch pitches are compared as threads per inch (25.4 / `pitch_mm`, within 0.01), never as rounded millimetres; `#N` diameters come from `parse_thread`; `#0` has no UNC thread, so it is a fine-only size and is flagged like M25 | 8.1 |
+| D8 | The two tables below, as transcribed | `coarse-pitch.json` |
+
+**Defaults this entry takes in writing the design down** (2026-10-08; each a default the owner
+may revise):
+
+| # | Default | Why |
+|---|---|---|
+| D9 | A pitch marker straight after a metric size with no number after it (`M16xPh3P1.5`, `M8x`) makes the designation unreadable (`contracts/fasteners.md` 8.8, rule 4) | `parse_thread` reads `M16xPh3P1.5`, a multi-start thread's lead and pitch, as M16 with no pitch, which the no-pitch rule would pass as coarse; 50A says a thread whose pitch cannot be read is listed, never passed. The change reaches `fastener.thread_match` too, which then reads such text as unresolved rather than as a diameter-only match - the same rule, Principle I |
+| D10 | The answer to the part-roles question restates `check_threads` (`runner.ROLES_RESTATED` gains it, after `check_hygiene`) | `ROLES_RESTATED` is "every check whose grading reads the roles" (`reviewer/src/swreview/agent/runner.py:917-920`), and the thread check grades holes by role (52A); without it a finding on a part the engineer then calls bought would stay until the next review. It moves feature 013's `contracts/part-roles.md` section 6 table and 008's `contracts/answer-batch.md`. The restated-tools assertions of `test_answer_batch_roles.py:270` and `:521` do not move: neither review runs the check (no pre-run, and `_restate` restates only a check the session ran, `test_a_tool_that_never_ran_is_not_restated`). A restate is a real call through the dispatch, so the check's rows restate rather than add (D14), and T119 tests the regrade end to end |
+| D11 | The owning document is the document of the row's component for holes and cosmetic threads, and the fastener's own document for fasteners | the bought test (`roles.graded(document_id)`) and the grouping read one document per source; a fastener's part is what the engineer chose |
+| D12 | The suppression join also requires the `Feature` row's `configuration` to equal the component's `referenced_configuration`; a null `suppressed`, or no such row, is "not read" and said on the finding | a feature tree is read in the document's active configuration (`reviewer/src/swreview/ir/models.py:499-501`), `suppressed` is per that configuration and null when unreadable (`:514`), and a feature suppressed in one configuration may be active in another |
+| D13 | Fastener rows: any row with a designation is read, whatever its kind; a screw, bolt or nut row with none is unreadable; a washer, pin or `other` row with none states no thread and is not a source; a row whose component is `suppressed` is skipped as suppressed; a row `recognise_fasteners` does not return (its component or document absent) is unreadable | 52A reads every kind; a washer with no size has no thread to judge, and listing every one as unreadable would bury the real gaps. A pin's or washer's designation is its nominal size, read like a thread: a pin named for a fine-only size (`M25`) is flagged and confirmed like any other, and a pin recognised by name is read as a pin row is, so the same pin is treated alike whether the extractor or the name grammar recognised it; the owner may narrow the kinds |
+| D14 | Every coverage row is the coverage-only id `thread.pitch`; it needs no attention class (only finding ids do). A call withdraws every `thread.pitch` row from `checked`, `skipped` and `unresolved` before it records its own (`context.withdraw_coverage`), so the rows restate the current state (`contracts/fasteners.md` 8.7) | one id, which belongs to no goal, so the rows change no goal line (the owner's decision 63A; first written as owned by the Fasteners goal's prefix). *Amended 2026-10-08 in review:* the rows were first appended as `check_joints` appends its rows, a repeat left to the re-call guard; but the part-roles answer restates the check through the dispatch (D10, `runner._restate`), a real call the guard does not answer, and `record_coverage` only appends (`reviewer/src/swreview/tools/context.py:271-280`), so after "All bought" the old checked row would still count the newly bought part's tapped holes beside the new bought row listing them, every count twice. `check_drawings` restates its rows the same way (`reviewer/src/swreview/tools/drawings.py:134`); `test_coverage_withdrawn.py`'s set of code-first checks whose second call withdraws gains `check_threads` (T119) |
+| D15 | The C# copy holds the `metric` rows only; the Python copy holds every key; the contract file also carries a `standards` key naming the standard each table comes from | the C# name grammar reads nothing else; the standards belong with the numbers they cite |
+| D16 | The table and its classifier are `checks/coarse_pitch.py` (with the YAML); the check is `checks/thread_pitch.py` | the name grammar needs the table, and a single module holding the check would import `fastener_identity`, which imports `fastener_names`, which would import it back |
+| D17 | A package dumped with the `model_check` or `standards` profile says in one skipped row that the hole and fastener phases did not run; screws named by their parts are still checked. *Amended 2026-10-08 in the second review:* the same row is written on a freshly dumped `full` package (no `reused_from`) whose `extractor.phases` row for `hole` or `fastener` is `skipped`, naming the phases that did not run (`contracts/fasteners.md` 8.6) | the arrays are empty by design there (`reviewer/src/swreview/ir/models.py:1750-1761`), and "no thread" would be false. On a `full` package a hole or fastener phase is skipped only behind one that aborted (`extractor/SwReview.Extractor/Dump/PackageWriter.cs:334-370`), and a skipped phase records no gap of its own (the phase log, `:836-874`), so without the row its threads would be neither flagged nor listed and "no ... states a thread" could be false. A failed or aborted phase records its own null-id gap (`:809-825`) and is D20's. A reused package's rows are all `skipped` by design, and reuse refuses a dump that failed or aborted (`reviewer/src/swreview/benchmark/reuse.py` `_aborted_dump_refusals`), so its rows are not read |
+| D18 | A hyphen number followed by a pitch marker and a digit (`M4-0.7x12`, `M8-1 x 20`) is the pitch, the rest a length (`contracts/fasteners.md` 8.8, rule 3) | 52A counts a hyphen number as the pitch only when no letter or digit follows it, which keeps `M8-6H`'s tolerance class out; read literally, the `x` of a length is a letter, so `M8-1 x 20` would be a thread with no pitch, which the no-pitch rule passes as coarse - a false pass 50A forbids. Section 1 of `contracts/fasteners.md` already reads the vendor form `m<d>-<p>x<L>` as a pitch and a length, so the two parsers read it alike |
+
+**Defaults added on 2026-10-08 in the documents' review** (before any code; each a default the
+owner may revise):
+
+| # | Default | Why |
+|---|---|---|
+| D19 | After a hyphen number, `LH` or `RH` (any case) is the thread's hand and keeps the number the pitch (`M10-1.25LH` reads 1.25); no pitch is read only for a tolerance class, one digit followed by `e`, `f`, `g` or `h` in either case (`M8-6H`, `M8-6g6h`); any other letter after the number makes the designation unreadable (`M10-1.25G`, `M8-1x`) (`contracts/fasteners.md` 8.8, rule 3) | read literally, 52A's "not followed by a letter" gives `M10-1.25LH` no pitch, which the no-pitch rule passes as coarse - the false coarse 50A forbids - and so would any other letter after a pitch. A tolerance grade is one digit and its position a letter from `e` to `h` (ISO 965-1), so recognising the class itself, rather than "any letter", is the one reading in which no pitch is never reached by accident; everything else is listed, never passed |
+| D20 | One skipped row lists the package's `hole` gaps that name no hole row - components the hole phase did not read (lightweight, suppressed, unloaded, no loaded model) and hole-phase steps that failed - and the "nothing at all" row is written only when there is none (`contracts/fasteners.md` 8.6) | the extractor reads holes and cosmetic threads only from resolved components with a loaded model and records a `hole` gap for each other one (`extractor/SwReview.Extractor/Dump/HoleDumper.cs:119-147`); without the row a fine thread on a lightweight component would be neither flagged nor listed, and on a package whose only threads are there "no ... states a thread" would be false. The gap names no component id when it was written for a skipped component (its reason names it), so the row quotes each reason and scopes the ids the gaps carry. A gap about a hole that was read (thread depth, axis) is not about pitch. A part reviewed on its own gives no gap at all (open item 2), which stays T124's. *Amended 2026-10-08 in the second review:* the row covers every gap that names no row of the array its `entity_kind` stands for - `hole` gaps as above, `thread` gaps that name no cosmetic thread (a read that threw, `HoleDumper.cs:180`, null; a `GetDefinition` that returned nothing, `:419-428`, an id no row carries) and `fastener` gaps that name no fastener row (an identification that threw, `FastenerDumper.cs:72`, null; a read that threw after its id was allocated, `:116`) - because each leaves a cosmetic thread or a fastener neither flagged nor listed, exactly as a lightweight component's `hole` gap does; a failed or aborted hole or fastener phase is among them, by its null-id gap (`PackageWriter.cs:809-825`). *Amended 2026-10-08 in the third review:* the row orders its gaps by `entity_kind` (`hole`, `thread`, `fastener`), then `entity_id` with null first, then `reason`, never in the package's order, so it reads the same however the package lists them, as T116's shuffled packages require |
+| D21 | A finding that holds a tapped hole or cosmetic thread of an unclear part carries the part-roles note; one that holds fasteners only carries none (`contracts/fasteners.md` 8.2) | the note (`part_roles.NOTE`, "may be a bought part: ...") tells the engineer the answer may withdraw the finding; fasteners are classified whatever their role (52A), so on a fastener's finding it would promise a withdrawal no answer makes |
+| D22 | The name grammar's one whole number is a pitch only when it is positive: `M6 x 0` stays `M6` with no length (`contracts/fasteners.md` 8.8; a vector row) | 50A's rule ("at most that diameter's coarse pitch") read literally makes `M6 x 0` a zero pitch, `M6x0`, which `fastener.thread_match` and this check would then judge; both parsers refuse a length that is not positive today (`FastenerNameParserTests.Parse_LengthZeroOrNegative_IsRejected`), and the vector pins the thread too |
+
+**Defaults added on 2026-10-08 in the second review** (after 57A and 58A, before any code; each a
+default the owner may revise; D17 and D20 were amended in the same review):
+
+| # | Default | Why |
+|---|---|---|
+| D23 | The "screw recognised by name" source is the instances `recognise_fasteners` builds in memory for a component with no row in `package.fasteners`, whose `fastener.id` starts with `fst:name:`; `identity_source` never tells the two sources apart, and a fastener row is read once, as a row, whatever its `identity_source` (`contracts/fasteners.md` 8.2) | the extractor writes `name_parse` on every fastener row whose size and length both came from its name (`extractor/SwReview.Extractor/Dump/FastenerDumper.cs:153-155`), and `recognise_fasteners` passes a row's `identity_source` through (`reviewer/src/swreview/checks/fastener_identity.py:296-308`). Told apart by `identity_source`, such a row would be read twice - its sources doubled in its finding and in the checked count - would carry its component id in `inputs` instead of its row id, and would be classified when its component is suppressed, because only the in-memory screws are resolved by construction (`_named_row`, `:224`; built only for a resolved component, `:312`) |
+| D24 | Every coverage row of sources counts one per source it lists - a hole row (one feature on one component instance), a cosmetic thread row, a fastener instance - each by its id, so its number is the number of ids it lists; a finding's `{sources}` counts a part's tapped holes by distinct feature name (`contracts/fasteners.md` 8.5, 8.6) | a row spans the package and lists ids, so the count and the list must agree; a finding is about one part, whose feature is what the engineer changes, so a part used twice is one feature there and two hole rows in a row. Section 8.11's fixture figures are hole rows (on those fixtures each tapped-hole feature is on one component instance, so the two counts agree there) |
+| D25 | *Replaced the same day, before any code, by the owner's decision 63A (below): the Fasteners goal owns the two finding ids by name and the `thread.pitch` rows belong to no goal, so no goal line moves.* As first written: the Fasteners goal owns `thread.` (D2), so a coarse-pitch pass lifts its goal line to "checked" on a review whose `fasteners` close-out row is out of scope or whose only fastener rows are unresolved rule rows with no close-out row; an unresolved, skipped or failed close-out row still outranks it | it is the review-summary rule for every goal, one passed check reads "checked" (`reviewer/src/swreview/report/finding_groups.py:231-247`; 009 `contracts/review-summary.md` section 3). The third review found what it missed: with no checked row, a `thread.pitch` row bucketed `skipped` - the "nothing at all", bought, pipe, not-read or phases row - is a rule row that turns "not applicable (out of scope)" into "not reached" (`_goal_line`'s rule-row case), so every thread-less or bought-only design would read "Fasteners: not reached". Both moves went to the owner, who chose 63A |
+
+**The owner's later decisions** (2026-10-08, on three questions the documents' reviews raised;
+recorded before their code):
+
+- **57A, one finding per check and part.** The question: grouped per designation as D3 first had
+  it, two fine designations of one part share a verdict key - the check, the component ids, the
+  drawing places and the configuration (`reviewer/src/swreview/agent/runner.py:802-823`) - so the
+  part-roles restate (D10) folds both onto one id and withdraws the other. A probe on 2026-10-08
+  (scratch code over `838b66b`, not committed) recorded two `thread.fine_pitch` findings, `M6x0.75` and
+  `M8x1`, on the custom plate of `reviewer/tests/support/roles_review.py` and answered "All
+  bought": the plate stayed custom, yet one id was withdrawn as "bought part (your answer to
+  ER-001)" and the other kept the `M8x1` words, so `M6x0.75` left the review. The owner chose one
+  finding per (check, owning part): it lists each fine (or non-standard) designation with its
+  sources (entity ids) and its coarse alternative; `observed` is the designations' clauses joined
+  by "; ", then "in {part}"; the recommended action names every designation and its coarse
+  alternative ("Confirm M8x1 and M6x0.75 are intended in {part}, or change them to the coarse
+  M8x1.25 and M6x1."); a fastener keeps its own document, the fastener's file, as its part (D11).
+  It supersedes D3's grouping and words (`contracts/fasteners.md` 8.5 and 8.7, FR-030, T116, T118
+  and T119); the restate (D10) and its withdraw-before-record rows (D14) stand.
+- **58A, a restated finding keeps its disposition.** The owner's words: "Fix on this branch
+  (Recommended): own test-first commit: a restated finding keeps the earlier finding
+  disposition". Found in the same review: `_reconcile_restated` puts the restated finding in the
+  earlier one's place under the earlier id (`reviewer/src/swreview/agent/runner.py:1295`,
+  `finding.model_copy(update={"id": ...})`), and the restated finding carries no disposition, so
+  an Accept, a Reject or a Defer the engineer recorded before answering the part-roles question is
+  lost when the answer restates the check - in the session and in the re-announced `finding`
+  event, whose body is the whole finding. It predates this amendment (feature 013) and reaches
+  every restated check; it matters here because 51A makes Accept the one way to confirm a fine
+  thread, and the answer restates `check_threads` (D10). Fixed on this branch in its own
+  test-first commit before FP1 (group FPR, tasks T125 and T126): the restated finding keeps the
+  earlier finding's disposition; a finding the restate withdraws is withdrawn as before.
+  `_reconcile_reruns` (rule 3, `runner.py:826-857`), which folds a check the model itself runs
+  again in the resumed turn, copies the same way; it is not a restate, so 58A leaves it as it is,
+  recorded here for the owner.
+- **63A, the goal lines stay as they are.** The question (the third review, D25): with the
+  Fasteners goal owning `thread.`, the `thread.pitch` rows reach its goal line - a coarse pass
+  lifts it to "checked", and with none a skipped row turns "not applicable (out of scope)" into
+  "not reached" on every thread-less or bought-only design. The owner's words: "Keep goal lines as
+  is: fine-pitch findings land in Decide under Fasteners; pass/skip/unreadable rows show in
+  coverage but do not change the Fasteners line, so no existing review reads differently". So the
+  Fasteners goal of `review_words_v1.yaml` owns `thread.fine_pitch` and `thread.nonstandard_pitch`
+  by name, in its `items` (`goal_of` takes a goal's `items` before any prefix,
+  `reviewer/src/swreview/report/finding_groups.py:167-180`), never the prefix `thread.`; the
+  coverage-only `thread.pitch` belongs to no goal, as the part-roles rows already do
+  (`reviewer/tests/unit/test_report_bought_parts.py:216-217`,
+  `reviewer/tests/unit/test_prerun_digest.py:710-715`), and `goal_lines` passes over a row no goal
+  owns (`finding_groups.py:199-203`). Neither finding id is ever a coverage row's check, so
+  neither is read as a close-out row. A probe on 2026-10-08 (scratch, over `838b66b`, the two ids
+  added to the Fasteners `items` in memory) gave the Fasteners line "not applicable (out of
+  scope)" for a `fasteners` close-out row out of scope beside the "nothing at all" row, beside a
+  bought row and beside a coarse checked row, and "not reached (evidence missing)" for unresolved
+  `fastener.` rule rows beside a checked row - each the line of the same session without the
+  `thread.pitch` row - and "issues found" with a `thread.fine_pitch` finding. What moves:
+  `test_review_words.py`'s goal table, and its test that every id the policy classes starts with
+  a goal's prefix, which fails once the two ids are classed and is edited to `goal_of`'s own rule,
+  items first (T119). It replaces D25 (`contracts/fasteners.md` 8.4, FR-030, FR-031, T119,
+  T120); 63B and 63C were rejected (the table below).
+
+**Why**: VERIFIED on 2026-10-08 at `838b66b`; behaviour was run, not read.
+
+- **Nothing classifies a pitch today.** No coarse-pitch, UNC or pipe-thread table exists in the
+  repository; `ThreadSpec` carries a series (`metric` or `unified`), a diameter and a pitch and
+  nothing else (`reviewer/src/swreview/checks/fastener.py:110,124-136`).
+- **The parser misreads the spellings 52A names** (`parse_thread`, `fastener.py:157-204`, its
+  metric pattern `:113`; run on 2026-10-08): `M8x1,25` reads pitch 1.0 (a false fine flag);
+  `M8-1.25`, `M10-1.5-6H`, `M8×1`, `M4-0.7x12` and `M8-1 x 20` read no pitch (a false coarse
+  under the no-pitch rule);
+  `M16xPh3P1.5` reads M16 with no pitch; `1/8-27 NPT` reads as a unified 3.175 mm thread of
+  0.940741 mm pitch, which against #5's UNC 40 would be judged non-standard; `3/8`, `1-8`, `1-1/8-7`, `10-32`,
+  `G1/4` and `MF8x1` are not read; `M10x35` reads pitch 35; `1.000-8` and `1.125-8` read, so the
+  table's rows above 7/8 in are reachable through the decimal form; `2.000-4.5` is not read (the
+  pattern takes whole threads per inch only).
+- **The name grammar loses the common fine pitches** (`reviewer/src/swreview/checks/fastener_names.py:227-231`;
+  `extractor/SwReview.Extractor/Fasteners/FastenerNameParser.cs:396-406`; run on 2026-10-08):
+  `M8x1`, `M10x1`, `M20x2` and `M6x1` read as M8, M10, M20 and M6 with lengths of 1, 1, 2 and 1
+  mm. The `M10x35` row of `contracts/fastener-name-vectors.json` pins the rule; both parsers read
+  every row (`reviewer/tests/unit/test_fastener_names.py:32`;
+  `extractor/SwReview.Extractor.Tests/FastenerNameVectors.cs`, the file copied by a `Content` item
+  of `SwReview.Extractor.Tests.csproj`).
+- **Where threads enter.** A tapped hole's `thread_designation` is the Hole Wizard `FastenerSize`
+  verbatim, null for the other hole types (`extractor/SwReview.Extractor/Dump/HoleDumper.cs:288,293`);
+  a cosmetic thread's `designation` is its `ThreadCallout`, else its `Size`, else ""
+  (`HoleDumper.cs:433-435`), it has no feature name (`reviewer/src/swreview/ir/models.py:688-699`),
+  and it is always recorded internal (`HoleDumper.cs:454`); a fastener row's designation is a
+  `Size`-style configuration property verbatim, else the C# name parse
+  (`extractor/SwReview.Extractor/Dump/FastenerDumper.cs:151`), and its `identity_source` is
+  `name_parse` whenever neither its size nor its length came from a property (`:153-155`);
+  `recognise_fasteners` returns every row whatever its kind, with the `identity_source` the row
+  carries, and builds in memory the name-parsed screws, bolts and pins of resolved components with
+  no row, one per instance, each with the id `fst:name:{component id}`
+  (`reviewer/src/swreview/checks/fastener_identity.py:224,279-327`; D23).
+- **The committed fixtures state no fine thread** (counted 2026-10-08): the replay big-assembly has
+  12 tapped holes - 11 coarse, M2x0.4 to M10x1.5, and one `3/8`, the Hole Wizard pipe tap - no
+  cosmetic thread, no fastener row and no screw recognised by name, and 1,153 feature rows, in
+  which every tapped hole's feature is found in its component's referenced configuration and reads
+  not suppressed; the replay small assemblies one M5x0.8 tapped hole each, likewise joined and not
+  suppressed; the mechanical big assembly 12 coarse tapped holes and 68 coarse screws by name, and
+  no feature rows; the mechanical small assembly one M5x0.8. Their `hole` gaps that name no hole
+  row (D20): three on the replay big assembly (two lightweight components, one suppressed), two on
+  the replay small-assembly-b (two lightweight components), one on the mechanical big assembly
+  (`cmp:0010`, "no Hole Wizard feature of this component could be read"), none on the other two;
+  none has a `thread` or `fastener` gap that names no row, and every one is a freshly dumped
+  `full` package whose `hole` and `fastener` phases are `ok` (D17). Each tapped-hole feature is on
+  one component instance, so their hole rows and their features count alike (D24). So the check
+  records no finding on any of them (SC-010), and the replay's added findings ("62, 7 and 5", 008
+  `contracts/replay.md` section 9) do not move.
+- **The pre-run hook and the cap.** `CODE_FIRST_CHECKS` is the one hook
+  (`reviewer/src/swreview/tools/checks_mechanical.py:76`); `repeat_key` keys every name in it
+  `(tool,)` (`reviewer/src/swreview/prerun.py:1413-1419`); a description is capped at 160
+  characters (`reviewer/src/swreview/agent/providers/schema.py:100`). The proposed first paragraph is
+  123.
+- **Why `thread.` and not `fastener.`.** The checklist closes an item on any finding whose check
+  starts with the item's prefix (`reviewer/src/swreview/agent/checklist.py:68-76`), and the
+  `fasteners` item's prefix is `fastener.` (`reviewer/src/swreview/agent/checklist_v1.yaml:33-35`),
+  so a `fastener.` pitch id would close "Fastener joints" on a run where no joint was checked. The
+  needs-judgement prefixes are `interference.`, `fit.`, `fastener.`, `hole.`
+  (`reviewer/src/swreview/report/attention_policy_v1.yaml:28-32`, pinned at
+  `reviewer/tests/unit/test_attention_policy_file.py:74-75`); the Fasteners goal owns `fastener.`
+  (`reviewer/src/swreview/report/review_words_v1.yaml:137-141`, pinned at
+  `reviewer/tests/unit/test_review_words.py:250`); `goal_of` takes exact items, then the longest
+  prefix (`reviewer/src/swreview/report/finding_groups.py:167-180`), so a `thread.` id no goal
+  names would fall to "Other checks" and fail `test_every_classified_check_lands_in_one_of_the_seven_groups`.
+- **How the custom-parts-only checks read the roles.** `PartRoles.graded` grades an unknown id and
+  every document but a bought non-root one (`reviewer/src/swreview/checks/part_roles.py:294-298`);
+  hygiene grades `roles is None or roles.graded(document_id)` (`reviewer/src/swreview/checks/hygiene.py:312-315`)
+  and notes an unclear document's findings while the question is open (`:318-327`,
+  `part_roles.note_unclear`); `review_roles` is `None` when no roles are attached
+  (`reviewer/src/swreview/tools/checks_mechanical.py:185-189`).
+- **Suppression.** `Hole` has no suppression flag (`reviewer/src/swreview/ir/models.py:651-685`);
+  `Feature` carries `document_id`, `configuration` (the active one it was read in) and
+  `suppressed`, null when unreadable (`:485-514`); `HoleDumper` never asks whether a feature is
+  suppressed (`HoleDumper.cs:163-186`).
+- **The pins a new id moves.** `test_attention_catalogue.py:121-127` (13 numeric, 8 rule and 73
+  emittable ids) and `:166-179` (the judgement families are the numeric checks except the axial
+  stack). A table lookup records no calculation, so its passes are a count (R2.21), and a document
+  finding is a `DocumentResult` (`reviewer/src/swreview/checks/result.py:71-88`).
+- **Principle I and `M8`.** The constitution forbids inferring a favourable value
+  (`.specify/memory/constitution.md:29`). Reading `M8` as coarse is not an inference about this
+  part: it is the standard's designation rule, which the owner chose to apply (50A) over listing
+  every such thread as unknown (50B), and the checked row states it.
+
+**The two tables as transcribed on 2026-10-08** from ISO 261 and ASME B1.1. This is the record of
+that transcription, kept for the owner to check against the shop's copies of the two standards
+before relying on it; it is not maintained. `contracts/coarse-pitch.json` supersedes it: the
+contract file is the one source the check reads (through its two pinned copies), and a correction
+is an edit of that file and its two copies, never of these tables, which then record what was first
+transcribed.
+
+ISO 261, coarse pitch (mm) by nominal diameter:
+
+| Size | Pitch | Size | Pitch | Size | Pitch | Size | Pitch |
+|---|---|---|---|---|---|---|---|
+| M1 | 0.25 | M3 | 0.5 | M10 | 1.5 | M27 | 3 |
+| M1.1 | 0.25 | M3.5 | 0.6 | M11 | 1.5 | M30 | 3.5 |
+| M1.2 | 0.25 | M4 | 0.7 | M12 | 1.75 | M33 | 3.5 |
+| M1.4 | 0.3 | M4.5 | 0.75 | M14 | 2 | M36 | 4 |
+| M1.6 | 0.35 | M5 | 0.8 | M16 | 2 | M39 | 4 |
+| M1.8 | 0.35 | M6 | 1 | M18 | 2.5 | M42 | 4.5 |
+| M2 | 0.4 | M7 | 1 | M20 | 2.5 | M45 | 4.5 |
+| M2.2 | 0.45 | M8 | 1.25 | M22 | 2.5 | M48 | 5 |
+| M2.5 | 0.45 | M9 | 1.25 | M24 | 3 | M52 | 5 |
+| | | | | | | M56 | 5.5 |
+| | | | | | | M60 | 5.5 |
+| | | | | | | M64 | 6 |
+| | | | | | | M68 | 6 |
+
+ISO 261 diameters to 68 mm with fine pitches only (no coarse pitch): M5.5, M15, M17, M25, M26,
+M28, M32, M35, M38, M40, M50, M55, M58, M62, M65. Any other metric diameter is an unknown size.
+
+ASME B1.1, UNC threads per inch (the diameter in inches; `#N` is 0.060 + 0.013 N):
+
+| Size | Diameter | UNC | Size | Diameter | UNC |
+|---|---|---|---|---|---|
+| #1 | 0.073 | 64 | 1/2 | 0.5 | 13 |
+| #2 | 0.086 | 56 | 9/16 | 0.5625 | 12 |
+| #3 | 0.099 | 48 | 5/8 | 0.625 | 11 |
+| #4 | 0.112 | 40 | 3/4 | 0.75 | 10 |
+| #5 | 0.125 | 40 | 7/8 | 0.875 | 9 |
+| #6 | 0.138 | 32 | 1 | 1 | 8 |
+| #8 | 0.164 | 32 | 1-1/8 | 1.125 | 7 |
+| #10 | 0.19 | 24 | 1-1/4 | 1.25 | 7 |
+| #12 | 0.216 | 24 | 1-3/8 | 1.375 | 6 |
+| 1/4 | 0.25 | 20 | 1-1/2 | 1.5 | 6 |
+| 5/16 | 0.3125 | 18 | 1-3/4 | 1.75 | 5 |
+| 3/8 | 0.375 | 16 | 2 | 2 | 4.5 |
+| 7/16 | 0.4375 | 14 | | | |
+
+`#0` (0.060 in) has no UNC thread: a fine-only size, flagged like M25. Any other unified diameter
+is an unknown size.
+
+**What this moves**, each a deliberate edit in the task that lands it, never a loosened
+assertion: nothing committed through the parser fixes, which reach every caller of
+`parse_thread` - `fastener.thread_match`, the identity shank band, the head table's key, the name
+grammar - because no fixture spells a thread those ways (T111's acceptance holds the fastener
+tests and goldens unchanged), while the new `fastener.thread_match` outcomes for those spellings
+are pinned by T110's joint vectors (`contracts/fasteners.md` 8.9); the shared name vectors (T114); the tool-array pins of `test_tool_payload.py`,
+regenerated by its `--write`, and the tool lists of `test_docstring_split.py`,
+`test_tool_notes_prompt.py`, `test_provider_schema.py` (with 001's `contracts/agent-tools.md`),
+`test_tool_tiers.py` and `test_model_view.py`; the pre-run order of `test_tools_check_joints.py`,
+`test_joint_map_acceptance.py`, `test_prerun_digest.py`, `tests/support/prerun.py` and
+`test_withheld_prerun_tools.py`; `WITHHELD_ON_THE_FIXTURES` in `test_replay_fixtures.py`; the
+attention catalogue's counts and judgement families, `test_attention_policy_file.py`'s prefixes,
+`test_review_words.py`'s goal table and its classed-check routing test (63A), and `test_coverage_withdrawn.py`'s set of code-first checks
+whose second call withdraws (D14) (T119); the golden tree's allowed new paths in
+`test_ir_golden_fixtures_load.py` (T118); and the requested figures of 008
+`contracts/replay.md` section 9 (T121). The recorded totals of the replay do not move: no recorded
+tool's result, the prompt or the checklist changes.
+
+**Merging with the 014 branch** (noted for the owner, who merges): `[014] 2ecbc28` changed
+`checks/fastener.py`'s result `inputs` beside `_thread_match`, and 014 regenerated the replay and
+pane fixtures; T111 touches `parse_thread` only, and generated figures are re-measured after a
+merge, never hand-merged.
+
+**Open at the seat** (tasks T123 and T124, SC-012):
+
+1. What Hole Wizard writes for an ISO fine tapped hole, a UNF tapped hole and a cosmetic thread
+   callout has never been seen: no recording holds one, and only coarse metric strings and the bare
+   `3/8` pipe tap are on record. The seat dumps each and the check must flag each.
+2. Whether a part reviewed on its own yields any hole rows: `HoleDumper.cs:133-136` skips, with no
+   gap, every scope node whose handle is not an `IComponent2` (and `FastenerDumper.cs:87` the same),
+   and a part root's handle is its `IModelDoc2` (`extractor/SwReview.Extractor/Dump/ComponentTreeDumper.cs:315`),
+   so a part review may carry no tapped hole and no cosmetic thread at all. Read from the code only;
+   the seat confirms it, and until then a part review's thread check covers only what it was given.
+
+**Known limits, recorded rather than fixed** (2026-10-08, in the documents' review):
+
+- **Pipe series outside 50A's token list** (`NPSF`, `NPSI`, `NPSC`, `NPSL`, `NPSH`, `ANPT` and
+  others) are not recognised by `is_pipe_thread`, so `1/8-27 NPSF` reads as a unified thread and is
+  judged as one. It is flagged, never passed: up to 2 in no pipe size has its own size's UNC threads
+  per inch (pipe threads are 27, 18, 14 and 11.5 per inch there, UNC at 1/8 (#5), 1/4, 3/8, 1/2, 3/4
+  and 1 in is 40, 20, 16, 13, 10 and 8), `1-11.5` and the other decimal threads per inch are
+  unreadable, and `1/16` is a size in no table. The owner may add the tokens; it is one edit of the
+  one list beside `parse_thread`, with its vectors.
+- **A part reviewed on its own** may give no hole row and no gap (open item 2 above, T124), so the
+  "nothing at all" row cannot yet tell such a part from one with no thread.
+- **A tolerance class written after a space** joins the pitch: `parse_thread` removes all
+  whitespace before reading (`reviewer/src/swreview/checks/fastener.py:164`), which is how it
+  reads `M8 x 1.25`, so `M8x1.25 6H` reads pitch 1.256 and is flagged non-standard, and
+  `M8-1.25 6g` reads `M8-1.256G` and is unreadable (both run on 2026-10-08; vectors of
+  `contracts/fasteners.md` 8.9). A false flag or a listing, never a false pass; reading a space as
+  a separator is a parser change 52A did not ask for, left to the owner.
+
+**The sitting documents** (a decision of the orchestrating session on 2026-10-08, not the owner's;
+the owner may revise it). The open-seat guards hold the current handover and test plan to every
+open `[W]` task of feature 010 (`reviewer/tests/unit/test_workstation_handover.py:39-48`,
+`reviewer/tests/unit/test_workstation_test_plan.py:727-757`, through `tests/support/seat_tasks.py`),
+so T123 and T124 fail them until the documents say where they go. Option 1 was taken: the
+documents commit makes exactly two small edits outside this feature's folder - one row of the
+"Not in this sitting" table of `docs/test-plan-2026-09-27/workstation-test-plan.md` setting
+010 T123 and T124 aside for the next sitting plan, and one sentence in section 4 of
+`docs/test-plan-2026-09-27/workstation-handover.md` naming them. Rejected: writing them as steps
+and results rows of the 2026-09-27 plan (a sitting written and partly run, which the next sitting
+plan replaces), and leaving them without the `[W]` tag (seat work the guards would no longer see).
+
+**Alternatives rejected** (the owner's other options, as offered on 2026-10-08, and the ones this
+entry considered):
+
+| Option | Why not |
+|---|---|
+| 50B, "M8 = pitch unknown": the same table, but a thread with no pitch stated listed as "pitch unknown" rather than coarse | strict, but every Toolbox `M6 x 20` screw would land there, burying the real gaps; the owner chose the ISO naming rule, stated on the result (50A) |
+| 50C, metric only: leave inch threads alone (`#10-32` not flagged) | the owner's "anywhere"; a UNF thread is the same mistake in inch |
+| 51B, a profile allow-list: a standards-profile list of pre-approved fine threads | a profile version 5 section, every profile file and the replay fixtures regenerated; kept as a recorded alternative (hydraulic ports and locknuts would use it) |
+| 51C, acceptance persists: an accepted fine thread stays accepted on later reviews, bound to the part or feature through the exceptions store | the fastener checks never read `exceptions.json` today, and a binding for a thread needs its own fingerprint; kept as a recorded alternative |
+| 52B, rows only, no parser fix: holes, cosmetic threads and fastener rows, the parsers untouched | `M8x1`-style names would be missed, and `M8x1,25` would stay a false fine flag |
+| 52C, 52A plus drawing callouts | what a native tapped-hole callout holds has not been checked on a licensed seat (011 probe D7, task T065), and the PDF grammar reads no unified thread; drawings are named as not read instead |
+| 53B, a new feature 015, the full speckit cycle before code | the check is one rule of User Story 4's thread checks, and the amendment pattern (`6e1c3ed`) records it before its code at a fraction of the paperwork |
+| 53C, on the 014 branch, after its slice 4 | no merge clash, but a product change would ride with the evaluation's branch |
+| A `fastener.` id | it would close the "Fastener joints" checklist item by prefix on a run that checked no joint |
+| Inside `check_joints` or `check_hygiene` | `check_joints` is about placed joints and a fine thread needs none; hygiene closes its own checklist item and sorts as hygiene, last, where a judgement belongs in Decide |
+| A question to the engineer per thread (`QuestionSpec`) | the Accept disposition already records the engineer's confirmation on the finding; a question would block nothing and be asked again every review |
+| A finding per hole, cosmetic thread or fastener instance | a part used forty times would be forty findings for one choice (D3, 57A) |
+| A finding per part and designation (D3 as first written) | two designations of one part share a verdict key, so the part-roles restate kept one and withdrew the other although the part stayed custom; superseded by the owner's decision 57A |
+| Leaving the restate fold as it is (an earlier finding's disposition dropped) | an Accept recorded before the part-roles answer would be lost when the answer restates the check, and Accept is how the engineer confirms a fine thread (51A); fixed by the owner's decision 58A |
+| 63B, a goal of its own, "Thread pitch", in the Fasteners group | one more line on every Review summary, "not applicable" or "not reached" on most designs, and `test_review_words.py`'s goal table and every summary pin that counts goals move; the owner chose that no existing review reads differently (63A) |
+| 63C, the rows feed the Fasteners goal line (the prefix `thread.`, D25 as first written) | a coarse pass lifts the line to "checked", and with none a skipped row turns "not applicable (out of scope)" into "not reached", so the line moves on designs with threads and on designs without; the owner chose 63A |
+
 ## R3. Verified facts the plan relies on
 
 **Packages** (analyst fact 1, re-checked). The big assembly: 26 documents (23 parts, 3 assemblies), 89
@@ -687,6 +1056,7 @@ terminal profile (check tools are in neither); every golden of `report/markdown.
 | FR-018 | "count bodies it could not read" | met by the existing `body` gaps, counted in the Python mass coverage item; no new extractor field | the gaps exist (R3) |
 | FR-019 | the part number "property" and "revision" | the property names the standards profile (version 2) declares; skipped coverage without a profile | R2.17, R2.19 |
 | Polish, T098-T099 (2026-09-23) | two checklist items closed "on their findings and on their summary coverage", which neither tool wrote | each tool writes one summary row under its item's id (T108); the items name no tool | R2.25 |
+| The **Amended** line, US4 acceptance scenarios 5 to 7, the thread pitch edge cases, FR-029 to FR-034, the coarse-pitch table entity, SC-009 to SC-012 and two assumptions (2026-10-08) | no thread pitch rule; one whole number after a metric size always a length | the owner's decisions 50A to 53A, 57A, 58A and 63A, and the defaults D1 to D25 | R2.26 |
 
 ## R5. Open items, and the owner's answers of 2026-09-23
 
@@ -709,6 +1079,10 @@ Still open:
 | The real standards profile regenerated at version 2 with the decimal-place general tolerance bands and the part-number and description property names | owner | the general source (US8) and the hygiene property checks (US7) on real runs |
 | Confirmation of the twelve new ids' consequence classes (R2.22) at the next read-through | owner | nothing; they ship as a first opinion |
 | The interference volume unit and `IsPossibleInterference` on zero-volume rows (T069 of feature 001) | next sitting | the contact rule's inputs being verified at the source |
+| The coarse-pitch table checked against the shop's copies of ISO 261 and ASME B1.1 (R2.26, added 2026-10-08) | owner | nothing; it ships as transcribed, and a correction is one edit of `contracts/coarse-pitch.json` and its two pinned copies |
+| The defaults D1 to D25 of R2.26 (2026-10-08), except D3 and D25, which the owner's decisions 57A and 63A replaced | owner | nothing; each ships as written until revised |
+| Whether a check the model runs again in a resumed turn (`_reconcile_reruns`, rule 3) should keep an earlier finding's disposition as a restate does after 58A (R2.26, 2026-10-08) | owner | nothing; 58A fixes the restate only |
+| What Hole Wizard writes for an ISO fine tapped hole, a UNF tapped hole and a cosmetic thread callout, and whether a part reviewed on its own yields any hole rows (R2.26, T123, T124) | next sitting | SC-012 |
 
 ## R6. Where this design differs from the analyst's recommendations
 
