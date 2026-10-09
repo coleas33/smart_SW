@@ -443,7 +443,7 @@ FIT_ROLES = {
 }
 """A planted fit's two dimensions on the assembly's sheet, and the sibling fit beside them."""
 
-CLEAN_FIT = _fit_form("bore and shaft both toleranced for clearance", CLEARANCE, one_nominal=False)
+CLEAN_FIT = _fit_form("hole and shaft both toleranced for clearance", CLEARANCE, one_nominal=False)
 
 
 def _core_fit(name: str, status: ExpectedStatus, plant: Form) -> SeedKind:
@@ -471,7 +471,7 @@ FIT_TRANSITION = _core_fit(
     "fit_transition",
     "suspected",
     _fit_form(
-        "bore and shaft limits that straddle zero clearance, where the part must slide",
+        "hole and shaft limits that straddle zero clearance, where the part must slide",
         TRANSITION,
         one_nominal=True,
     ),
@@ -491,7 +491,7 @@ FIT_LIMIT_MISSING = _core_fit(
     "fit_limit_missing",
     "unresolved",
     _fit_form(
-        "the bore drawn with no tolerance, the shaft toleranced", BORE_UNDRAWN, one_nominal=False
+        "the hole drawn with no tolerance, the shaft toleranced", BORE_UNDRAWN, one_nominal=False
     ),
 )
 
@@ -800,7 +800,7 @@ PRESS_FIT_DRAWN = _anchor_fit(
     "press_fit_drawn",
     "suspected",
     _fit_form(
-        "a pin drawn wholly above its bore's limits while the model sits it line to line: a "
+        "a pin drawn wholly above its hole's limits while the model sits it line to line: a "
         "press fit (R-3, variant A)",
         INTERFERENCE,
         one_nominal=True,
@@ -814,7 +814,7 @@ PRESS_FIT_UNDRAWN = _anchor_fit(
     "press_fit_undrawn",
     "unresolved",
     _fit_form(
-        "bore and pin drawn with no tolerance, the pin's oversize only as free text (R-3, "
+        "hole and pin drawn with no tolerance, the pin's oversize only as free text (R-3, "
         "variant B)",
         UNDRAWN,
         one_nominal=True,

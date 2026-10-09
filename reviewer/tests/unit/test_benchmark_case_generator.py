@@ -22,7 +22,11 @@ not a contract kind, is under test; T146 adds the tests over the committed tree.
    places, no seeds and no decoys, and one condition per seed carrying the kind's check, the
    seed's places, tag and stamp, described "clean twin of <case> D-<n>: <the clean form>", with
    the kind's correct call where it confirms the clean form: never a drawing kind's, nor, by
-   owner decision 55A, `coaxiality_undrawn`'s.
+   owner decision 55A, `coaxiality_undrawn`'s. By owner decision 64A a case and its twin lay
+   every document they share under one id: `spec.set_aside` and `spec.laid_after` lay a
+   document the case lays alone after the drawings, and every twin the designs derive lays its
+   documents under its case's ids, so its conditions carry its case's documents, parts and
+   references.
 4. **The render format (section 7).** A key, a case file and a set entry are UTF-8, LF, indented
    2, with a final newline and non-ASCII written as itself; they validate through `AnswerKey`,
    `CaseFile` and `BenchmarkSet.file_form`; the IR's identity is section 5.5's.
@@ -1455,6 +1459,134 @@ def test_twin_refuses_a_kind_with_no_clean_form() -> None:
 
     with pytest.raises(CaseSpecError, match=r"^case spec quill-1: D-1 .*no clean form"):
         spec.twin(case(seeds=(code,), twin=True))
+
+
+def screwed(*, planted: bool) -> EvidencePackage:
+    """A plate and its base screw's document, and, when `planted`, a second screw's document of
+    another thread, as a case laying a planted screw holds it: each screw an instance with its
+    fastener row, the screw documents laid last, as every design lays them."""
+    builder = PackageBuilder("EX-1101-00")
+    builder.component(builder.document("EX-1101-01", "part"))
+    screws = [("M5-0.8", 0.0), ("M4-0.7", 20.0)] if planted else [("M5-0.8", 0.0)]
+    for serial, (thread, x) in enumerate(screws, start=1):
+        document = builder.screw_document("SHC", thread, 12.0, serial=serial)
+        builder.screw(document, bearing_mm=(x, 0.0, 4.0), direction=Z, fastener_row=True)
+    return builder.build().package
+
+
+def drawn(package: EvidencePackage, drawings: int) -> EvidencePackage:
+    """`package` with `drawings` ingested drawings laid over it, as a design lays its sheets."""
+    sheets = SheetBuilder(package)
+    for number in range(drawings):
+        sheets.drawing(f"EX-1101-0{number}")
+    return sheets.build()
+
+
+def test_set_aside_lays_a_case_s_own_document_after_the_drawings() -> None:
+    """Owner decision 64A: the planted screw's document, set aside while the drawings are laid,
+    follows them, its manifest entry, instance and mass gap re-pointed; every document the case
+    shares with its twin, the drawing among them, keeps the twin's id."""
+    kept, aside = spec.set_aside(screwed(planted=True), ["doc:0004"], drawings=1)
+
+    laid = spec.laid_after(drawn(kept, 1), aside)
+
+    assert [(document.document_id, document.file_name) for document in laid.documents] == [
+        ("doc:0001", "EX-1101-00.SLDASM"),
+        ("doc:0002", "EX-1101-01.SLDPRT"),
+        ("doc:0003", "SHC_M5-0.8X12_FICT-0001.SLDPRT"),
+        ("doc:0004", "EX-1101-00.SLDDRW"),
+        ("doc:0005", "SHC_M4-0.7X12_FICT-0002.SLDPRT"),
+    ]
+    assert [entry.document_id for entry in laid.manifest.entries] == [
+        document.document_id for document in laid.documents
+    ]
+    assert {row.name: row.document_id for row in laid.components} == {
+        "EX-1101-01-1": "doc:0002",
+        "SHC_M5-0.8X12_FICT-0001-1": "doc:0003",
+        "SHC_M4-0.7X12_FICT-0002-1": "doc:0005",
+    }
+    assert [gap.entity_id for gap in laid.gaps if gap.entity_kind == "mass_override"] == [
+        "doc:0001",
+        "doc:0002",
+        "doc:0003",
+        "doc:0005",
+    ]
+    twin = drawn(screwed(planted=False), 1)
+    assert twin.documents == laid.documents[: len(twin.documents)]
+    assert EvidencePackage.model_validate(laid.model_dump()) == laid
+
+
+def test_set_aside_with_nothing_to_set_aside_changes_nothing() -> None:
+    """A twin, or a case planting no screw of its own, sets nothing aside."""
+    package = screwed(planted=False)
+
+    kept, aside = spec.set_aside(package, [], drawings=2)
+
+    assert kept == package
+    assert spec.laid_after(drawn(kept, 2), aside) == drawn(package, 2)
+
+
+def test_set_aside_refuses_a_document_that_is_not_among_the_package_s_last() -> None:
+    """The drawings take the ids after the documents left, so a document set aside from among
+    them would leave a gap the drawings fill out of order."""
+    with pytest.raises(ValueError, match=r"^set_aside: doc:0003 is not among .*last documents"):
+        spec.set_aside(screwed(planted=True), ["doc:0003"], drawings=1)
+
+
+def test_set_aside_refuses_a_document_another_row_names() -> None:
+    """The root assembly is named by the design and by every persist ref's scope, rows
+    `set_aside` does not re-point, so they would come to name a drawing."""
+    package = PackageBuilder("EX-1101-00").build().package
+
+    with pytest.raises(ValueError, match=r"^set_aside: doc:0001 is named by a row it does not"):
+        spec.set_aside(package, ["doc:0001"], drawings=0)
+
+
+def test_laid_after_refuses_documents_that_do_not_follow_the_drawings() -> None:
+    """Set aside for two drawings and laid after one, the planted document would leave an id
+    unused: refused, naming its id and the one it should take."""
+    kept, aside = spec.set_aside(screwed(planted=True), ["doc:0004"], drawings=2)
+
+    with pytest.raises(ValueError, match=r"^laid_after: doc:0006 .*doc:0005"):
+        spec.laid_after(drawn(kept, 1), aside)
+
+
+TWINNED: list[CaseSpec] = [source for source in generate.every_spec() if source.twin]
+"""Every case of the designs that derives a twin (`generator.md` 4)."""
+
+
+def documents_by_id(files: Mapping[str, bytes], case_id: str) -> dict[str, tuple[str, str]]:
+    """Each document a rendered package lays, its file name and path by its id."""
+    return {
+        document.document_id: (document.file_name, document.path)
+        for document in package_of(files, case_id).documents
+    }
+
+
+@pytest.mark.parametrize("source", TWINNED, ids=lambda source: source.case_id)
+def test_every_committed_twin_carries_its_case_s_document_ids(source: CaseSpec) -> None:
+    """Owner decision 64A: every document a twin lays, its case lays under the same id, so each
+    condition carries its seed's documents, parts and references as the case's key names them
+    (`generator.md` 4). A document the case lays alone, a planted screw's, follows the
+    drawings."""
+    files = render.render_spec(source)
+    twin_id = f"{source.case_id}-twin"
+    laid = documents_by_id(files, source.case_id)
+
+    moved = {
+        document_id: document
+        for document_id, document in documents_by_id(files, twin_id).items()
+        if laid.get(document_id) != document
+    }
+    assert moved == {}
+    defects = key_of(files, source.case_id).known_defects
+    conditions = key_of(files, twin_id).correct_conditions
+    for defect, condition in zip(defects, conditions, strict=True):
+        assert (condition.document_ids, condition.component_ids, condition.references) == (
+            defect.document_ids,
+            defect.component_ids,
+            defect.references,
+        ), condition.id
 
 
 # --- 4. the render format, section 7 ----------------------------------------------------------

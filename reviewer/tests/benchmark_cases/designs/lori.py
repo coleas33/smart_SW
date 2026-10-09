@@ -68,6 +68,8 @@ from tests.benchmark_cases.spec import (
     ScrewPlace,
     Seed,
     Tree,
+    laid_after,
+    set_aside,
     tree_specs,
 )
 from tests.benchmark_cases.vocabulary import EXAMPLE_PROFILE
@@ -165,7 +167,7 @@ bore, -50 to -30, and the pocket, ending 2 mm under the cover; the gear on it, -
 inside the pocket."""
 
 ASSY_NOTES: tuple[tuple[str, NoteKind], ...] = (
-    ("THE SHAFT TURNS AND SLIDES FREELY IN THE SHAFT BORE.", "other"),
+    ("THE SHAFT TURNS AND SLIDES FREELY IN ITS HOLE.", "other"),
 )
 """The assembly sheet's note: the shaft's running intent, which `fit_transition`'s plant has the
 package state (`generator.md` 3), in a sentence, since a summary is a name (`generator.md` 8)."""
@@ -331,8 +333,9 @@ def lay(variant: str | None, places: Places) -> Laid:
     laid first as `screw_doc` and another thread or length given a document of its own; the
     contacts' interference rows. Then the bought documents moved into the bought folder and the
     custom parts' trees laid; then the three ingested drawings, the assembly's with its note, and
-    every drawn dimension, in place order. Every document is laid opened: no lori case leaves one
-    unread, and a record that asks it is refused."""
+    every drawn dimension, in place order, a planted screw's document after them (owner decision
+    64A). Every document is laid opened: no lori case leaves one unread, and a record that asks
+    it is refused."""
     if variant is not None:
         raise ValueError(f"design lori has no variant {variant}")
     unopened = [
@@ -498,6 +501,15 @@ def lay(variant: str | None, places: Places) -> Laid:
         }
     )
 
+    # A planted screw's document is the case's alone: set aside while the drawings are laid and
+    # laid after them, the case and its twin lay every document they share under one id (owner
+    # decision 64A).
+    planted = [
+        document
+        for drawn, document in screw_documents.items()
+        if drawn != (SCREW_THREAD, SCREW_LENGTH_MM)
+    ]
+    package, aside = set_aside(package, planted, drawings=len(DRAWINGS))
     sheets = SheetBuilder(package)
     for name, (stem, summary, notes) in DRAWINGS.items():
         ids[name] = sheets.drawing(stem, properties=_custom(places[name], stem, summary))
@@ -511,7 +523,7 @@ def lay(variant: str | None, places: Places) -> Laid:
                 limits=record.limits,
                 text=record.as_read(),
             )
-    return Laid(package=sheets.build(), meshes=built.meshes, ids=ids)
+    return Laid(package=laid_after(sheets.build(), aside), meshes=built.meshes, ids=ids)
 
 
 DESIGN = Design(name="lori", places=PLACES, lay=lay)

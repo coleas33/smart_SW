@@ -38,7 +38,7 @@ from uuid import UUID
 
 from swreview.benchmark.answer_key_model import ExpectedStatus, Producer, Stamp
 from swreview.benchmark.families import ANCHOR_FAMILY, Family, family_of
-from swreview.ir.models import EvidencePackage, SourceRef
+from swreview.ir.models import Document, EvidencePackage, ManifestEntry, SourceRef
 from tests.benchmark_cases import stamps
 from tests.benchmark_cases.vocabulary import CASE_VOCABULARY
 from tests.support.drawings import Limits
@@ -408,6 +408,128 @@ def unlaid(name: str) -> Lay:
         raise NotImplementedError(f"design {name} is a stub: its case specs are not written yet")
 
     return lay
+
+
+# --- a case's own documents, after the drawings (owner decision 64A) ---------------------------
+
+
+@dataclass(frozen=True)
+class SetAside:
+    """Documents `set_aside` took out of a package, already under the ids they take after its
+    drawings, with their manifest entries, for `laid_after` to append."""
+
+    documents: tuple[Document, ...]
+    entries: tuple[ManifestEntry, ...]
+
+
+def set_aside(
+    package: EvidencePackage, document_ids: Sequence[str], *, drawings: int
+) -> tuple[EvidencePackage, SetAside]:
+    """`package` less the documents `document_ids`, which must be its last, each renumbered as
+    the documents that follow `drawings` drawings, every row naming it re-pointed: its manifest
+    entry, set aside with it, its instances and its gaps (owner decision 64A).
+
+    A case can lay a document its twin does not: a planted screw of another thread or length has
+    a document of its own. Laid before the drawings, it would move every drawing's id, and the
+    twin's conditions would name other documents than the case's defects (`generator.md` 4).
+    Set aside while the drawings are laid and appended after them by `laid_after`, it leaves
+    every document the case and its twin share under one id. Refused, naming the document: one
+    that is not among the package's last, whose id the drawings would take out of order, and
+    one another row names (a feature, the design, a persist ref's scope), which this does not
+    re-point and which would come to name a drawing."""
+    kept = len(package.documents) - len(document_ids)
+    last = [document.document_id for document in package.documents[kept:]]
+    for document_id in document_ids:
+        if document_id not in last:
+            raise ValueError(
+                f"set_aside: {document_id} is not among the package's last documents "
+                f"({_listed(last)}), so the drawings would take the ids around it"
+            )
+    dumped = package.model_dump(mode="json")
+    for document_id in last:
+        repointed = (
+            2
+            + sum(row.document_id == document_id for row in package.components)
+            + sum(gap.entity_id == document_id for gap in package.gaps)
+        )
+        if _naming(dumped, document_id) != repointed:
+            raise ValueError(
+                f"set_aside: {document_id} is named by a row it does not re-point (only its "
+                "document, its manifest entry, its instances and its gaps are)"
+            )
+    renamed = {
+        document_id: f"doc:{kept + drawings + number:04d}"
+        for number, document_id in enumerate(last, start=1)
+    }
+    aside = SetAside(
+        documents=tuple(
+            document.model_copy(update={"document_id": renamed[document.document_id]})
+            for document in package.documents[kept:]
+        ),
+        entries=tuple(
+            entry.model_copy(update={"document_id": renamed[entry.document_id]})
+            for entry in package.manifest.entries
+            if entry.document_id in renamed
+        ),
+    )
+    remaining = package.model_copy(
+        update={
+            "documents": package.documents[:kept],
+            "manifest": package.manifest.model_copy(
+                update={
+                    "entries": [
+                        entry
+                        for entry in package.manifest.entries
+                        if entry.document_id not in renamed
+                    ]
+                }
+            ),
+            "components": [
+                row.model_copy(update={"document_id": renamed[row.document_id]})
+                if row.document_id in renamed
+                else row
+                for row in package.components
+            ],
+            "gaps": [
+                gap.model_copy(update={"entity_id": renamed[gap.entity_id]})
+                if gap.entity_id in renamed
+                else gap
+                for gap in package.gaps
+            ],
+        }
+    )
+    return remaining, aside
+
+
+def laid_after(package: EvidencePackage, aside: SetAside) -> EvidencePackage:
+    """`package`, its drawings laid, with the set-aside documents and their manifest entries
+    appended after its own; refused, naming the first that does not, unless each takes the next
+    id, which holds when exactly the drawings `set_aside` was told of were laid in between."""
+    for number, document in enumerate(aside.documents, start=len(package.documents) + 1):
+        if document.document_id != f"doc:{number:04d}":
+            raise ValueError(
+                f"laid_after: {document.document_id} does not follow the drawings, the next id "
+                f"being doc:{number:04d}: set it aside for as many drawings as are laid"
+            )
+    return package.model_copy(
+        update={
+            "documents": [*package.documents, *aside.documents],
+            "manifest": package.manifest.model_copy(
+                update={"entries": [*package.manifest.entries, *aside.entries]}
+            ),
+        }
+    )
+
+
+def _naming(value: Any, document_id: str) -> int:
+    """How many string values of a dumped package equal `document_id`, at any depth."""
+    if isinstance(value, str):
+        return int(value == document_id)
+    if isinstance(value, Mapping):
+        return sum(_naming(item, document_id) for item in value.values())
+    if isinstance(value, list):
+        return sum(_naming(item, document_id) for item in value)
+    return 0
 
 
 # --- section 2: the spec ---------------------------------------------------------------------

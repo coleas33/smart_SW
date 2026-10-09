@@ -63,6 +63,8 @@ from tests.benchmark_cases.spec import (
     ScrewPlace,
     Seed,
     Tree,
+    laid_after,
+    set_aside,
     tree_specs,
 )
 from tests.benchmark_cases.vocabulary import EXAMPLE_PROFILE
@@ -111,7 +113,7 @@ PARTS: dict[str, tuple[str, float, str]] = {
         "rusk rail",
     ),
     # an 80 x 40 x 12 mm block
-    "carriage_doc": (CARRIAGE_STEM, 80.0 * 40.0 * CARRIAGE_THICKNESS_MM, "rusk carriage"),
+    "carriage_doc": (CARRIAGE_STEM, 80.0 * 40.0 * CARRIAGE_THICKNESS_MM, "rusk block"),
 }
 """The custom parts, both steel, as a rail and its carriage are, their masses from their
 volumes."""
@@ -144,7 +146,7 @@ ON_AXIS: dict[str, tuple[str, float]] = {
 DRAWINGS: dict[str, tuple[str, str]] = {
     "assy_drw": (ASSY_STEM, "rusk assy drawing"),
     "rail_drw": (RAIL_STEM, "rusk rail drawing"),
-    "carriage_drw": (CARRIAGE_STEM, "rusk carriage drawing"),
+    "carriage_drw": (CARRIAGE_STEM, "rusk block drawing"),
 }
 """The ingested drawings, each a sheet `Sheet1` on page 1: (stem, summary)."""
 
@@ -297,8 +299,8 @@ def lay(variant: str | None, places: Places) -> Laid:
     `screw_doc` and another thread or length given a document of its own; the contacts'
     interference rows. Then the bought documents moved into the bought folder and the custom
     parts' trees laid; then the three ingested drawings and every drawn dimension, in place
-    order. Every document is laid opened: no rusk case leaves one unread, and a record that asks
-    it is refused."""
+    order, a planted screw's document after them (owner decision 64A). Every document is laid
+    opened: no rusk case leaves one unread, and a record that asks it is refused."""
     if variant is not None:
         raise ValueError(f"design rusk has no variant {variant}")
     unopened = [
@@ -464,6 +466,15 @@ def lay(variant: str | None, places: Places) -> Laid:
         }
     )
 
+    # A planted screw's document is the case's alone: set aside while the drawings are laid and
+    # laid after them, the case and its twin lay every document they share under one id (owner
+    # decision 64A).
+    planted = [
+        document
+        for drawn, document in screw_documents.items()
+        if drawn != (SCREW_THREAD, SCREW_LENGTH_MM)
+    ]
+    package, aside = set_aside(package, planted, drawings=len(DRAWINGS))
     sheets = SheetBuilder(package)
     for name, (stem, summary) in DRAWINGS.items():
         ids[name] = sheets.drawing(stem, properties=_custom(places[name], stem, summary))
@@ -477,7 +488,7 @@ def lay(variant: str | None, places: Places) -> Laid:
                 limits=record.limits,
                 text=record.as_read(),
             )
-    return Laid(package=sheets.build(), meshes=built.meshes, ids=ids)
+    return Laid(package=laid_after(sheets.build(), aside), meshes=built.meshes, ids=ids)
 
 
 DESIGN = Design(name="rusk", places=PLACES, lay=lay)
