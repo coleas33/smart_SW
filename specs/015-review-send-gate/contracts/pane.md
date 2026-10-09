@@ -6,7 +6,8 @@ FR-027, FR-030 to FR-034, FR-042, SC-007). Amends 002 `contracts/pane-host-messa
 and 3, `contracts/questions.md` sections 4 and 5, `contracts/sessions.md` sections 5 and 6, and
 `contracts/review-summary.md` section 1. Every rule of the pane design system holds: `tokens.css`
 linked first, no literal colour, `script-src 'self'` and `style-src 'self'` (no inline handler or
-style), every string set with `textContent` or `createTextNode`, and no page-side ranking.
+style), every string set with `textContent` or `createTextNode`, and no page-side ranking. Amended on
+2026-10-09 by the owner's plan review (research R7): decisions 68A, 69A, 72A, 73A and 77A.
 
 ## 1. The box
 
@@ -30,19 +31,26 @@ the class and message in a fold, as 009 `plain-words.md` section 5 prints a refu
 next change. The review that is running or waiting keeps the value it started with.
 
 **Host** (`ReviewHost`): `send_when_checked.save` reads a JSON boolean (`PagePayload.Flag`, new; a
-missing or non-boolean value is `InvalidRequest`), clones the settings, sets `SendWhenChecked`, saves
-the file (`UserSettings.Save`, atomic) and replaces the settings; **no restart, and no turn check**.
-A failed write is `SettingNotSaved` (redacted message), and the stored value stands. The reply is
+missing or non-boolean value is `InvalidRequest`), clones the settings, sets `SendsWhenChecked`, and
+hands the clone to `PersistSettings(next)`; **no restart, and no turn check**. The reply is
 `send_when_checked.saved {send_when_checked}`.
+
+**One persist step** (owner decision 73A). `PersistSettings(next)` is the one write of the settings
+file, which `settings.save` calls too: it saves the file (`UserSettings.Save`, atomic), replaces
+`_settings` and clears `_settingsError`, so a box click on a file with a load problem leaves no stale
+problem on screen, exactly as a Settings save does. A failed write is `SettingNotSaved` (redacted
+message) from either handler - `settings.save` answered `HostError` through `Receive`'s catch-all
+before (`ReviewHost.cs:596-599`) - and the stored settings stand. `settings.save` restarts the backend
+after it, as today; the box's save does not.
 
 **The setting** (`Settings/UserSettings.cs`; data-model section 1). The file's token is held raw,
 `[JsonPropertyName("send_when_checked")] JsonElement? SendWhenCheckedValue`, because a JSON converter
 cannot reach the `problems` list `Normalize(mode, problems)` fills after deserialization
-(`UserSettings.cs:253-255`, `:400`). `[JsonIgnore] bool? SendWhenChecked` is derived from it (`true` or
-`false` for a JSON boolean, else `null`) and its setter stores a boolean. `Normalize` adds the one
-load problem ("send_when_checked '{token}' is not true or false; ticked is in use.") for a held token
-that is not a boolean, and clears it, as it replaces every other bad field, so every other field loads
-as today and the next save drops the bad token. `SendsWhenChecked => SendWhenChecked != false`.
+(`UserSettings.cs:253-255`, `:400`). `[JsonIgnore] bool SendsWhenChecked` reads it (`false` exactly for
+a held JSON `false`, else `true`) and its setter stores a boolean: two members for the one setting
+(owner decision 73A). `Normalize` adds the one load problem ("send_when_checked '{token}' is not true
+or false; ticked is in use.") for a held token that is not a boolean, and clears it, as it replaces
+every other bad field, so every other field loads as today and the next save drops the bad token.
 Omitted from the file while no token is held, so a file written before this feature saves to its own
 bytes. 002 `settings.schema.json` gains, not in `required`:
 
@@ -55,11 +63,12 @@ bytes. 002 `settings.schema.json` gains, not in `required`:
 ## 2. Starting a review
 
 `review.start` is unchanged. The host reads `SendsWhenChecked` when it handles it and passes it as
-`NewSessionRequest.SendWhenChecked`; `review.started` gains `send_when_checked`. With it `false`, the
-host's ready status reads "Checked {n} components by code; nothing was sent to the model." and the page
-does **not** mark a turn running: it opens the stream (whose events end at `session.ended`, and whose
-`loadAttention` then draws the Send block), sets `state.notSent[chat_id]`, and shows the waiting
-status at once. The "Before this review" panel and its sentence ("No review tokens have been used.")
+`CreateReviewSession(..., ReviewMode.Wait)` (or `ReviewMode.Send` when ticked; data-model section 9,
+owner decision 71A); `review.started` gains `send_when_checked`. With it `false`, the host sets the
+record's `ModelStatus` to `not_sent` (owner decision 73A), its ready status reads "Checked {n}
+components by code; nothing was sent to the model.", and the page does **not** mark a turn running:
+it opens the stream (whose events end at `session.ended`, and whose `loadAttention` then draws the
+Send block) and shows the waiting status at once, from `review.started` until the summary arrives. The "Before this review" panel and its sentence ("No review tokens have been used.")
 are unchanged; the box's value is read at "Review available evidence" (FR-003).
 
 ## 3. The Send block
@@ -73,7 +82,7 @@ section 11; the engineer reads what the code found, then decides to send). Built
 |---|---|---|
 | the button | "Send to model" (page word, 59A), `button.primary`, `data-action="send"` | always in the block |
 | the size sentence | `send.text`, small, tier 3 ink | always |
-| one failure or refusal line | `send.failure` (a recorded failed first request, `send.failed`, or a Send that failed before any request, `send.not_started`); else a Send refusal's `labels.errors[class]`; else a failed re-run's `send.rerun_failed_text` with the error's class and message in a fold | when there is one |
+| one failure or refusal line | `send.failure` (a recorded failed first request, `send.failed`, or a Send that failed before any request, `send.not_started`, the provider's build included: owner decision 69A); else a Send refusal's `labels.errors[class]`; else a failed re-run's `send.rerun_failed_text` with the error's class and message in a fold | when there is one |
 
 The block is shown exactly while `state.summary.send` is present and no Send of this review is in
 flight (`state.sending`). It is the second exception to 009 `views.md` section 2's "Results shows no
@@ -82,12 +91,15 @@ computes nothing.
 
 **The button is enabled** when a chat is shown, it is of the active document (not `resultsStale`, and
 no drawing is active), no start, re-run or turn is in flight, and the review is not a read-only one
-(FR-018). Leaving the document disables it with the other review actions; returning offers it again.
+(FR-018) - except a restored waiting review, which is read-only and whose block is in state
+`restored`: its Send is the one control it offers (owner decision 68A). Leaving the document disables it with the other review actions; returning offers it again.
 
 **Pressing it**: for a live waiting review, `POST /sessions/{id}/send`; on `202` the block hides,
-`state.sending` is set, the turn is marked running and the stream is reopened; on a refusal the block
-stays with the refusal line. For a restored waiting review, section 7 first. The first `usage` event
-clears `state.sending` and `state.notSent[chat]`; `session.ended` clears `state.sending` too.
+`state.sending` is set, the turn is marked running and the stream is reopened; on a refusal (every
+refusal is a `404` or `409`: the provider's build is no longer one, 69A) the block stays with the
+refusal line. For a restored waiting review, section 7 first. The first `usage` event clears
+`state.sending` and adds the chat to `state.sentSeen`, so its chip drops the mark at once (section 8);
+`session.ended` clears `state.sending` too.
 
 **An `error` event while `state.sending` is set ends the Send on the page** (*second review,
 2026-10-09*): it is **not** drawn as an error card; `state.sending` is cleared and the turn unmarked;
@@ -100,6 +112,15 @@ before it writes the `error` (`review-flow.md` section 6), so the re-read never 
 without its `send` block. A Send pressed while the backend still finalizes the failed attempt is
 `409 TurnRunning`, printed as any refusal, and works once pressed again. A Send whose turn later
 fails after a round is today's error card.
+
+**After a reload** (owner decision 77A). `state.sending` lives in page memory, and a reload of a running
+chat restores from the snapshot and reads every later event as live (`app.js:1412-1434`). The snapshot
+therefore carries `send_in_flight: true` while the run's `_send_in_flight` is set (from the route's
+accepting the Send to its first round, or to its return to waiting; data-model sections 3 and 6),
+and omits the key otherwise; the page's restore sets `state.sending` from it. So the rule above holds
+after a reload: an `error` that follows - a first request that failed, or a Send that failed before
+any request and wrote one `error` and nothing after it - draws no error card and offers no Retry,
+and the Send block comes back with its failure line and Send.
 
 ## 4. The status line
 
@@ -126,19 +147,22 @@ reads "Apply answers" (page word) and the sentence beside it is the summary's `r
 backend sets to `send.apply_answers` for a waiting run. The panel is locked while a re-run or a Send is
 in flight, as while a turn runs. Applying posts the same `POST /sessions/{id}/evidence`; the page marks
 the turn running for the apply (so the panel locks) but draws the status line, Stop and the Send block
-by section 4's rule. A restored waiting review's panel is unlocked, and applying goes through section 7
-first.
+by section 4's rule. A restored waiting review's panel is read-only, as on any read-only restore: its
+questions wait until after Send (owner decision 68A).
 
 **An apply that fails** (`review-flow.md` section 4): the stream carries one `error` event while the
-apply is in flight, and no `turn.ended` or `session.ended`. The page draws **no error card** for it:
-it ends the apply (the panel unlocks), forgets the live chat for this review, and restores the review
-from its folder (`GET /reviews/{run_id}`, section 7's restored state, as FR-042 does), with the
-error's label in the Send block's failure line and its class and message in a fold, printed as any
-refusal is (009 `plain-words.md` section 5). The page shows whichever record the folder holds
+apply is in flight, and no `turn.ended` or `session.ended`. The rule is keyed on the summary's `send`
+block, not on page memory: an `error` on a running chat whose summary has a `send` block and with no
+Send in flight (`state.sending` unset) is an apply's failure, so the rule holds after a reload during
+the apply too (owner decision 77A). The page draws **no error card** for it: it ends the apply (the
+panel unlocks), forgets the live chat for this review, and restores the review from its folder
+(`GET /reviews/{run_id}`, section 7's restored state, as FR-042 does: read-only, with Send offered),
+with the error's label in the Send block's failure line and its class and message in a fold, printed
+as any refusal is (009 `plain-words.md` section 5). The page shows whichever record the folder holds
 (*second review, 2026-10-09*): when the failure came before the finalization wrote `session.json`,
 the answers that were being applied show open again; when it came after (the attention record's
-write), they show answered, and the re-run carries them. Either way the review's next answer,
-decision or Send re-runs it. When a confirmed read had merged its drawing before the failure, that
+write), they show answered, and the re-run carries them. Either way the review's Send re-runs it
+(68A). When a confirmed read had merged its drawing before the failure, that
 drawing's question is not asked again and the re-run names the outcome line it lost (`recheck.md`
 section 5).
 
@@ -152,36 +176,43 @@ is in flight, Stop is today's.
 
 ## 7. A restored waiting review, and its re-run
 
-A snapshot from `GET /reviews` whose summary has `send` with state `restored` is shown with
-`read_only` false: the line under the status line (`#read-only`) prints `send.restored_text`; the
-questions panel, the decision buttons and Send are enabled; the follow-up box is disabled (section 6);
-feature 009's read-only sentence is not shown (FR-031).
+Owner decision 68A: a snapshot from `GET /reviews` whose summary has `send` with state `restored` is
+read-only, as feature 009 shows every restored review: the line under the status line (`#read-only`)
+prints the snapshot's `read_only_reason`, which for this record is the first sentence of feature
+009's read-only line (`read_only_lead`) followed by `send.restored_line` (composed by the backend,
+`recheck.md` section 8; 73A); the questions
+panel, the decision buttons and the follow-up box are off, as on any read-only restore. The one
+difference is the Send block, whose Send is enabled (section 3). Send is the only re-run trigger.
 
-Its first answer, decision or Send runs `recheckThen(action)`:
+Its Send:
 
-1. `state.rechecking = true`; the status line, Save, Review, the chips, the questions panel, the
-   decision buttons and Send are refused (disabled; a press does nothing) and Stop is not offered;
+1. `state.rechecking = true`; the status line, Save, Review, the chips and Send are refused
+   (disabled; a press does nothing) and Stop is not offered;
 2. `review.recheck {chat_id}`;
-3. on `review.rechecked`: the drafts and pins of `previous_chat_id` move to the new `chat_id`, each
-   draft and the pending action re-keyed by `carried` (an id with no entry is dropped, and the
-   pending decision's card says "This decision no longer applies: its finding is not raised again."),
-   unless `review_session_id` equals the shown `send.session_id`, when the page already shows that
-   record (an adopted re-run after a reload, `recheck.md` section 7) and re-keys nothing;
-   the review is shown from the new chat's snapshot; then the action runs through its live route
-   (`/send`, `/evidence`, `/findings/{id}/disposition`);
+3. on `review.rechecked`: the pins of `previous_chat_id` move to the new `chat_id`, the review is
+   shown from the new chat's snapshot (a live waiting review), and the page posts
+   `POST /sessions/{chat_id}/send` for it, as section 3 does. Nothing is re-keyed: the page held no
+   draft and no pending action for a read-only review. If that Send is refused (`NoCredential`, say),
+   the review stays the live waiting review the re-run made - its questions and decisions usable, its
+   size sentence counted - with the refusal line beside Send;
 4. on `error`: `state.rechecking = false`; for `UnknownReview`, feature 009's "This review can no
    longer be restored." on the chip and no review shown; for anything else, the Send block's failure
-   line prints `send.rerun_failed_text` with the class and message in a fold, the restored review's
-   controls stay usable, and no Retry is offered (FR-041).
+   line prints `send.rerun_failed_text` with the class and message in a fold, the restored review
+   stays read-only with Send offered, and no Retry is offered (FR-041).
 
 **A restart with a waiting review on screen** (FR-042): when `init` names a backend other than the one
 the page held and the review on screen was a live waiting one, the page calls `showReview` for it at
-once; its snapshot is gone (`UnknownChat`), so it is restored from its folder as above.
+once; its snapshot is gone (`UnknownChat`), so it is restored from its folder as above: read-only,
+with Send offered. A draft answer typed before the restart is dropped with the live chat (68A).
 
 ## 8. The chips
 
-009 `sessions.md` section 5, amended: a chip's label gains " · not sent" while `state.notSent[chat]` is
-set or its item carries `model_status`; a found review's chip (its item carries `model_status`) names
+009 `sessions.md` section 5, amended: a chip's label gains " · not sent" while its `sessions` item
+carries `model_status` and the chat is not in `state.sentSeen`. The mark comes from the host's record
+alone (owner decision 73A; data-model section 9): the host sets it at an unticked start, keeps it
+across a re-run, sets it for a found review, and on every `sessions.list` refreshes each marked record
+with one bounded head read, so the mark is exact after a page reload, before the chip is chosen, and a
+ticked review's chip never carries it. A found review's chip names
 the date before the time, "{YYYY-MM-DD} {HH:MM}", when that date is not today on this machine - the
 stored wall clock of its `checked_at`, never converted (`records.md` section 1). Every
 other chip is today's. Pressing Review or Clear review while a review waits leaves its chip, marked
@@ -195,8 +226,8 @@ already on screen stays shown (*tasks review, 2026-10-09*; default, research R2.
 ## 9. The Settings section
 
 While the review on screen waits (live or restored), one line under Save (`.note`, page words):
-"Saving restarts the backend. The waiting review stays, and its next answer, decision or Send checks
-its saved evidence again first." While a re-run is in flight, Save is disabled and the line reads
+"Saving restarts the backend. The waiting review stays, and its Send checks its saved evidence again
+first." (owner decision 68A) While a re-run is in flight, Save is disabled and the line reads
 "Checking the saved evidence again; save when it is done." (FR-027, FR-041). The no-key sentence
 (`describeKeySource('none')`) becomes "No key is stored. With the box ticked a review fails until one
 is entered; with it unticked the code checks run and Send waits for a key."
@@ -209,7 +240,7 @@ Page words, live and in a transcript replay:
 |---|---|
 | `session.started` with `send_when_checked: false` | "Checked by code only: nothing is sent to the model until Send to model is pressed." |
 | `session.ended` while the review waits | "The checks ended at {ended_at}. Nothing was sent to the model." |
-| `session.sent` | "Sent to {provider} {model} ({requested} -> {param}={value})", and " - first request {n} input tokens" when its estimate counted one; the effort part shared with `describeStart` |
+| `session.sent` | "Sending to {provider} {model} ({requested} -> {param}={value})", and " - first request {n} input tokens" when its estimate counted one; the effort part shared with `describeStart`. It reads "Sending": `session.sent` is written before the attempt's record, which can still fail (owner decision 72A) |
 
 Every other line is today's, the failed attempt's `error` line and "The turn ended: error." included.
 
@@ -228,7 +259,10 @@ SC-007 reads.
   and its 4 px top margin). The first page task runs the two existing 300 by 600 tests with the real
   box in place and the box ticked, unedited; no margin or padding is trimmed for it.
 - **Above the summary** stand only the box and, for a restored review, the restored line under the
-  status line (at most about 70 px): about 91 px of the 226.
+  status line: about 91 px of the 226 on the proxy, whose restored line held about 70 px. Under owner
+  decisions 68A and 73A the line is the first sentence of feature 009's read-only line and the dated
+  Send sentence, a few words shorter than the proxy's (which also named an answer and a decision as
+  re-run triggers); `ReviewPageSendLayoutTests` measures the real one on the fixture.
 - **The Send block** sits under the summary, in every state.
 - **What is checked**: `ReviewPageSendLayoutTests`, on the big-assembly waiting fixture
   (`review-waiting-big-assembly.json`), in each worst case a waiting review shows - `waiting`;
@@ -248,15 +282,15 @@ SC-007 reads.
 | type | payload | host action |
 |------|---------|-------------|
 | `send_when_checked.save` (*new*) | `{send_when_checked: boolean}` | Write the setting with no restart and no turn check; reply `send_when_checked.saved {send_when_checked}`; `error {error_class: "SettingNotSaved"}` when the file cannot be written, the stored value unchanged; `InvalidRequest` for a missing or non-boolean value. |
-| `review.recheck` (*new*) | `{chat_id}` | `recheck.md` section 1: re-run a restored waiting review's checks from its own run folder with no dump, the call's own 10-minute timeout; reply `review.rechecked {chat_id, previous_chat_id, run_dir, not_examined, document, carried, review_session_id}`. Refusals `InvalidRequest`, `UnknownChat`, `DrawingActive`, `ReviewNotActive`, `BackendUnavailable`, and the backend's own classes. |
+| `review.recheck` (*new*) | `{chat_id}` | `recheck.md` section 1: re-run a restored waiting review's checks from its own run folder with no dump, as the first step of its Send, the call's timeout the measured bound (`ChecksOnlyTimeout`, or the one 30 s rule when the measured re-run fits inside 30 s; owner decision 70A); reply `review.rechecked {chat_id, previous_chat_id, run_dir, not_examined, document}`. Refusals `InvalidRequest`, `UnknownChat`, `DrawingActive`, `ReviewNotActive`, `BackendUnavailable`, and the backend's own classes. |
 | `ready` (amended) | `{}` | `init.settings` carries `send_when_checked`. |
-| `settings.save` / `settings.get` (amended) | as today | the replies' `settings` carry `send_when_checked`; a save keeps it. |
+| `settings.save` / `settings.get` (amended) | as today | the replies' `settings` carry `send_when_checked`; a save keeps it; a save's write goes through `PersistSettings`, and a failed write is `SettingNotSaved` (owner decision 73A). |
 | `review.start` (amended) | as today | the stored `send_when_checked` goes to `POST /sessions`; `review.started` carries `send_when_checked`. |
-| `sessions.list` (amended) | `{}` | first looks for a waiting review of the active document (`recheck.md` section 9); items carry `model_status` for a review found that way. |
+| `sessions.list` (amended) | `{}` | first looks for a waiting review of the active document (`recheck.md` section 9), and refreshes every record whose `ModelStatus` is set with one bounded head read each; items carry `model_status` for every record that waits for Send - an unticked start's, a re-run's, a found one's (owner decision 73A). |
 
 Host to page: `status` gains the stage `checking`. `ReviewPageContractTests` holds both new rows to the
 page's sends (its rules 1 and 2), so each new row lands in the commit where the page first posts it,
-never with its host handler alone (tasks T051 and T099).
+never with its host handler alone (tasks T055 and T108).
 
 ## 13. Tests
 
@@ -268,7 +302,8 @@ never visible on the waiting fixtures), and the moved `ReviewPageViewsTests.cs`,
 substring gains `send_when_checked`); `ReviewPageSummaryAcceptanceTests.cs` and
 `ReviewPageNarrowLayoutTests.cs` run unedited with the box in place (section 11). `ReviewPageDriver.cs`,
 which plays the host, answers `send_when_checked.save` and `review.recheck` (the latter with a
-fixture's `rechecked` body), has an error mode for each, and holds a re-run in flight with
+fixture's `rechecked` body), has an error mode for each, answers `sessions.list` with items that carry
+`model_status` (73A), and holds a re-run in flight with
 `HoldReviewRecheck` / `ReleaseReviewRecheck` as it holds a start with `HoldReviewStart` /
 `ReleaseReviewStart` - except that a held re-run also queues every later message and answers them in
 order on release, as the host's one pump does, so a page reloaded during a re-run is answered only
@@ -277,8 +312,8 @@ once it ends (FR-033).
 Page tests load backend-made fixtures, never a hand-built summary (research R2.25), all three written
 by `tests/fixtures/pane/generate_waiting_fixtures.py` with every clock pinned:
 `review-waiting.json` (a fictional package whose checks raise the part-roles question and a
-drawing-candidate question: `waiting`, `failed_send`) for `ReviewPageSendGateTests`;
-`review-waiting-restored.json` (the same package: `restored`, `restored_answered` after an answer, a
-confirmed read that moved the numbers and a Reject, and `rechecked` with its real `carried` maps) for
-`ReviewPageRecheckTests`; and `review-waiting-big-assembly.json` (`waiting`, `failed_send`,
+drawing-candidate question: `waiting`, `sending` - the live snapshot while a Send is held, carrying
+`send_in_flight: true` - and `failed_send`) for `ReviewPageSendGateTests`;
+`review-waiting-restored.json` (the same package: `restored`, and `rechecked`, the re-run's
+`POST /sessions` answer with the re-run's live snapshot) for `ReviewPageRecheckTests`; and `review-waiting-big-assembly.json` (`waiting`, `failed_send`,
 `restored`) for `ReviewPageSendLayoutTests` only.

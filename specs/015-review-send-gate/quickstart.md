@@ -5,7 +5,8 @@
 How to see each story work with no licence (Scenarios 1 to 7, on the development machine, where
 SOLIDWORKS is never started) and on the pilot workstation (Scenario 8, the [W] task). Commands run
 from `reviewer/` unless they say otherwise. Every fixture is fictional; expected results name the
-contract that defines them rather than repeating it.
+contract that defines them rather than repeating it. Amended on 2026-10-09 for the owner's plan
+review (decisions 68A to 80A, research R7).
 
 ## Prerequisites
 
@@ -29,8 +30,8 @@ dotnet test extractor/SwReview.sln -c Release --no-build --nologo
 
 All green before every commit; the add-in tests are part of the gate (62A). The tracked-files guard
 and the lever guard (`test_no_lever_in_pane_settings.py`) are in the first command and pass unchanged,
-and so do the characterization golden of a ticked review and the prefix characterization, committed
-first on the pre-feature code (research R2.28). A commit that changes the words file regenerates every
+and so do the characterization of a ticked review (five goldens, its failures included) and the
+prefix characterization, committed first on the pre-feature code (research R2.28). A commit that changes the words file regenerates every
 fixture carrying the labels block in that same commit, so it is green too.
 
 **The replay regeneration step** (research R2.28), on a machine that holds the owner's recordings
@@ -53,10 +54,10 @@ uv run pytest -q -p no:warnings -o addopts="" tests/unit/test_send_gate_server.p
 
 Expected: an unticked `POST /sessions` answers 201 with the chat `awaiting_send`, the provider factory
 never called, `events.jsonl` ending at `session.ended` with no `turn.ended`, `session.started` carrying
-`send_when_checked: false`, `session.json` carrying `model_status {state: "not_sent"}`, and `report.md`
-reading "- Model: not sent to the model (checked by code only)" (`contracts/review-flow.md` section 1,
-`contracts/records.md` sections 1 and 4). The ticked review with no key still fails 502 before any
-check (FR-035). Coverage holds the close-out row, one row per open question and one "not reviewed,
+`send_when_checked: false`, `session.json` carrying `model_status {state: "not_sent"}`, `report.md`
+reading "- Model: not sent to the model (checked by code only)", and the run's SOLIDWORKS pipe
+released (`contracts/review-flow.md` sections 1 and 8, `contracts/records.md` sections 1 and 4). The
+ticked review's no-key failure is pinned by the characterization (Scenario 7). Coverage holds the close-out row, one row per open question and one "not reviewed,
 because the review was not sent to the model" row per open model-owned item (SC-002).
 
 By hand, against a running backend with the scripted provider (development build only):
@@ -86,22 +87,25 @@ uv run pytest -q -p no:warnings -o addopts="" tests/unit/test_send_gate_server.p
 Expected: Send's refusals in the order of `contracts/review-flow.md` section 3; every request of the
 Send turn - the first and those after its tool calls, tool results included - byte-identical to a
 ticked review's of the same package, because the checks' finalization rows are withdrawn before the
-first request (SC-004; section 6 step 4); the size sentence's number equal
-to `count_tokens(request_prefix(...))` of exactly that request; `None` and the "Send starts the model's
+first request (SC-004; section 6 step 7); the size sentence's number, `session.sent`'s estimate and
+`model_status`'s equal to `count_tokens(request_prefix(...))` of the request the provider received
+(owner decision 78A); `None` and the "Send starts the model's
 review." sentence with the vocabulary absent; Gemini's number called approximate; a failed first
 request leaving the chat `awaiting_send`, its failure recorded, and a second Send carrying the opening
-once (section 6); a Send that fails before any request - at each of five points - leaving the chat
-waiting, one `error` and no turn event, no provider request, and `session.json` as it was before
-Send (section 6's guard); a decision held in flight refusing Send (section 4). Continuing the hand
+once (section 6); a Send that fails before any request - at each of its five points, the provider's
+build among them - leaving the chat waiting, one `error` and no turn event, no provider request, and
+`session.json` as it was before Send (section 6's guard, which only restores memory); a decision
+held on the chat's worker with Send queued behind it (section 4); the snapshot's `send_in_flight`
+while a Send is in flight (`contracts/pane.md` section 3). Continuing the hand
 session of Scenario 1:
 
 ```powershell
 Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:<port>/sessions/$($chat.chat_id)/send" -Headers $h -Body "{}" -ContentType "application/json"
 ```
 
-Expected: 202; the stream gains `session.sent` and the scripted turn; `session.json`'s `model_status`
-becomes `sent` with `sent_at`, the estimate and `opening_finding_ids`; the report adds "- Sent to the
-model: ...".
+Expected: 202; the stream gains `session.sent` (the Transcript reads "Sending to ...") and the
+scripted turn; `session.json`'s `model_status` becomes `sent` with `sent_at`, the estimate and
+`opening_finding_ids`; the report adds "- Sent to the model: ...".
 
 ## Scenario 3: Answers while it waits (US3)
 
@@ -115,32 +119,54 @@ request and recounts the size; the panel's sentence is `send.apply_answers`; aft
 names no withdrawn finding, its folded counts line equals the regraded counts, it carries the answer
 line, and it has no "withdrew" line and no instruction (SC-005; `contracts/review-flow.md` sections 4
 and 5); the Reject made while waiting is still on its finding; an apply that fails writes one `error`,
-fails the chat, and leaves `session.json` as it was before the apply.
+fails the chat, and leaves `session.json` as it was before the apply; a crash during the apply,
+copied with `disk_at`, holds the record before the apply, its answers open and no turn event (its
+read-only restore with Send offered is Scenario 4's, with the restored block).
 
 ## Scenario 4: A waiting review survives a restart (US4)
 
 ```powershell
-uv run pytest -q -p no:warnings -o addopts="" tests/unit/test_recheck.py
+uv run pytest -q -p no:warnings -o addopts="" tests/unit/test_recheck.py tests/unit/test_chat_review_routes.py tests/unit/test_review_snapshot.py
 ```
 
-Expected: a re-run in the same folder with zero extractions and zero bridge calls before the first
-request; the interference line and rows equal the first run's, and its carried live step at the first
-run's step index; the part-roles answer, the drawing answer whose read moved the numbers, and the
-Reject each on their own item, or named in the `coverage.recheck` row; a `send_failed` record still
-`send_failed` after its re-run; with nothing answered, the first request byte-identical to the live
-waiting review's (SC-008); a failed and a refused re-run, and one cut off at each of three points,
-each leaving `session.json` byte-equal to the earlier record and `GET /reviews` answering it, not
-read-only, with Send offered; a second re-run after a discarded answer adopting the first
-(`contracts/recheck.md` sections 2 to 8).
+Expected, every restart a backend started afresh over the same run root and every cut-off the
+folder a kill leaves (`tests/support/restart.py`): a re-run, started by Send, in the same folder with
+zero extractions and zero bridge calls before the first request; the interference line and rows
+equal the first run's, and its carried live step at the first run's step index; the part-roles
+answer, the drawing answer whose read moved the numbers, and the Reject each on their own item, or
+named in the `coverage.recheck` row, two decisions that meet one finding named and neither carried;
+the opening after a carried part-roles answer naming no finding it withdrew; a `send_failed` record
+still `send_failed` after its re-run; with nothing answered, the first request byte-identical to the
+live waiting review's (SC-008); a failed and a refused re-run, and one cut off at each of three
+points (the last inside `write_atomic`, its temporary left behind and passed over), each leaving
+`session.json` byte-equal to the earlier record; a second re-run after a discarded answer adopting
+the first (`contracts/recheck.md` sections 2 to 7). `GET /reviews` of a restarted app answers each
+such folder, the copy a crash during an apply left (Scenario 3) and the `send_failed` copy a crash
+during a Send left, read-only with the restored Send block and the composed restored line, and a
+sent record as today (`test_chat_review_routes.py`; `contracts/recheck.md` section 8).
+
+The re-run's time, opt-in (owner decision 70A):
+
+```powershell
+uv run pytest -m perf -s tests/perf/test_send_gate_perf.py
+```
+
+Expected: a ticked start, an unticked start and a re-run with a carry on the thousand-group package,
+the seconds printed; the figures, and the bound they set - one 30 s rule when the larger re-run fits
+inside 30 s, else `ChecksOnlyTimeout`, that re-run times three rounded up to the next 30 s - match
+what research R2.17 and RK-10 record.
 
 ```powershell
 cd ..
-dotnet test extractor/SwReview.sln -c Release --no-build --nologo --filter "FullyQualifiedName~RunFoldersNotSentTests|FullyQualifiedName~ReviewHostTests|FullyQualifiedName~BackendClientSessionBodyTests"
+dotnet test extractor/SwReview.sln -c Release --no-build --nologo --filter "FullyQualifiedName~RunFoldersNotSentTests|FullyQualifiedName~RunFoldersModelStatusTests|FullyQualifiedName~ReviewHostTests|FullyQualifiedName~BackendClientSessionBodyTests"
 ```
 
 Expected: the found-review search offers only the newest same-name folder's waiting record of this
-path and configuration, never behind a newer review, within 2 s on 500 fictional folders
-(`contracts/recheck.md` section 9); `review.recheck`'s refusals and request.
+path and configuration, never behind a newer review, opening one file of 500 fictional folders of the
+same document and finishing within 2 s (`contracts/recheck.md` section 9); the head reader bounded at
+64 KiB and opened so the backend can still replace the file; `sessions.list` refreshing only the
+marked records; `review.recheck`'s refusals and request, its mode unable to ask for a re-run that
+sends at once.
 
 ## Scenario 5: The box and the setting (US1)
 
@@ -150,7 +176,8 @@ dotnet test extractor/SwReview.sln -c Release --no-build --nologo --filter "Full
 
 Expected: an absent, null or non-boolean value reads ticked, every other setting loads, a pre-feature
 file saves to its own bytes; `send_when_checked.save` writes with no restart and is never refused; a
-failed write is `SettingNotSaved` and the stored value stands (`contracts/pane.md` section 1).
+failed write is `SettingNotSaved` and the stored value stands, from `settings.save` too; a box save on
+a file with a load problem clears the problem (`contracts/pane.md` section 1).
 
 ## Scenario 6: The page (US1 to US4)
 
@@ -162,9 +189,11 @@ Expected, in the offscreen WebView2 against the backend-made `review-waiting.jso
 `review-waiting-restored.json` and `review-waiting-big-assembly.json`: the box under the buttons; an
 unticked start showing "Checked by code. Not sent to the model.", the Send block under the summary
 and no Stop; Send, a failed first round beside Send, a Send that failed before any request beside
-Send with no error card, "Apply answers"; a restored review's line and its re-run on the first
-action, with real ids re-keyed; a reload during a re-run showing the review only once it ends; a
-backend restart moving a waiting review to the restored state at once; at 300 by 600 the headline,
+Send with no error card, the same after a reload during the Send, "Apply answers"; a chip's "not
+sent" from the host's item, after a reload too; a restored review read-only, its line feature 009's
+sentence and the dated Send sentence, and its Send re-running it first; an apply that fails, and the
+same after a reload, restoring the review read-only with Send; a reload during a re-run showing the
+review only once it ends; a backend restart moving a waiting review to the restored state at once; at 300 by 600 the headline,
 tally and not-reached line, and the Send to model button, in view in the four worst cases (SC-007;
 `contracts/pane.md` section 11, which records the measured slack). The existing 300 by 600 tests run
 with the box in place, unedited (measured to hold it: about 21 px of 226 px, research R2.21):
@@ -179,12 +208,14 @@ dotnet test extractor/SwReview.sln -c Release --no-build --nologo --filter "Full
 uv run pytest -q -p no:warnings -o addopts="" tests/unit/test_ticked_review_golden.py tests/unit/test_request_prefix_characterization.py tests/unit/test_pane_fixture.py tests/unit/test_pane_waiting_fixtures.py tests/unit/test_replay_fixture_hygiene.py tests/unit/test_replay_fixtures.py tests/unit/test_recording.py tests/unit/test_cli_benchmark_replay.py tests/unit/test_no_lever_in_pane_settings.py
 ```
 
-Expected: the characterization golden of a ticked review - every provider and presentation input,
-`events.jsonl`, `session.json`, `report.md` and `attention.json`, captured on the pre-feature code -
-byte-identical, and the replay's first-pass prefix of each committed fixture the characterized
+Expected: the characterization of a ticked review - five scenarios, each with its golden (success,
+posted with no new key and with the host's body; a factory that raises; a first request that raises
+before any round; a failure after a round; Stop at the first tool boundary), every provider and
+presentation input, `events.jsonl`, `session.json`, `report.md` and `attention.json`, captured on the
+pre-feature code - byte-identical, and the replay's first-pass prefix of each committed fixture the characterized
 sha256 and length (FR-035, SC-003; research R2.28); the pane fixture's snapshot part byte-identical
-and its labels block only five keys longer; the three waiting fixtures equal a fresh generation and
-pass the hygiene checks; every committed replay count unchanged; the replay refusing a never-sent
+and its labels block only five keys longer; the three waiting fixtures and the cross-language
+record `review-not-sent-session.json` equal a fresh generation and pass the hygiene checks; every committed replay count unchanged; the replay refusing a never-sent
 review and one sent after waiting in one sentence each (`contracts/records.md` section 6); the lever
 guard green. Where the owner's recordings are, the replay regeneration step of the gate shows no
 difference in any replay fixture.
@@ -209,15 +240,22 @@ On the licensed seat, with the build of this feature and the owner's key stored:
    answer withdrew; the report says when it was sent.
 5. Record in the results sheet: zero model rounds before Send (the `usage` events all follow
    `session.sent`), one extraction, the named ids, and whether the sentence carried a number.
-6. Record two timings. Both run inside one host call with the long timeout every call with
-   `send_when_checked` false has, 10 minutes (research RK-10), and these two numbers are what that
-   bound is later set from.
-   1. How long step 2's unticked `POST /sessions` took (from the backend log, or the time between the
-      host's "checking" and "ready" statuses).
-   2. How long a re-run takes. Press Review again with the box still unticked and wait until the
-      review waits; save Settings, which restarts the backend; then press Send to model. Record how
-      long the re-run before the first request took, measured the same way, and that the run folder
-      still holds one extraction.
+6. Close SOLIDWORKS while a review waits (owner decision 78A): press Review with the box still
+   unticked and wait until the review waits; close SOLIDWORKS; reopen it and open the small
+   assembly. Expected: the Review tab brings the review back from its run folder, read-only, its
+   chip dated and marked not sent, with Send offered. Record that it came back with Send.
+7. Record the timings, each inside one host call whose bound research R2.17 and RK-10 record from
+   the development machine's measurement - the one 30 s rule when the re-run fitted inside 30 s,
+   else `ChecksOnlyTimeout` (owner decision 70A); a re-run longer than 30 s under the one rule, or
+   than a third of `ChecksOnlyTimeout`, sets the bound again by the same rule.
+   1. How long step 2's unticked `POST /sessions` took (from the backend log, or else the time
+      between the host's last "Extracting" status and its ready status: an unticked start posts no
+      "checking" status, which only a re-run posts).
+   2. How long a re-run takes: press Send to model on the review step 6 brought back. Record how long
+      the re-run before the first request took (from the backend log, or the time between the host's
+      "checking" and "ready" statuses), and that the run folder still holds one extraction.
+   3. The same two timings on the big assembly: an unticked review of it, then SOLIDWORKS closed
+      and reopened (or Settings saved, which restarts the backend), then Send.
 
 ## Results
 

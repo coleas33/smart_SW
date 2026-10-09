@@ -3,7 +3,8 @@
 Normative for the estimate beside Send to model, its sentence, its record, and the check against
 real recordings (FR-012, FR-013, SC-006). Amends 008 `contracts/cost.md` (a new surface) and
 `contracts/tokenizer.md` section 1 (the pane sentence names no encoding; a Gemini figure is called
-approximate - recorded departures, spec FR-012 and FR-013).
+approximate - recorded departures, spec FR-012 and FR-013). Amended on 2026-10-09 by the owner's plan
+review (research R7): decisions 71A, 73A and 78A.
 
 ## 1. What is counted
 
@@ -34,9 +35,9 @@ framing an adapter adds (`FRAMING_TOKENS`) does not apply: the first request car
 ## 2. When it is counted
 
 Only in the run's Send cache (`ReviewRun.build_send_cache()`, `review-flow.md` section 5), on a
-worker thread, at the three points where the opening can change: the unticked start and a re-run
-(after `start_review` and the carry, before the finalization) and an apply while waiting (after the
-regrade, before its finalization). A failure there is the start's error body or an apply failure,
+worker thread, by its one caller `ReviewRun.close_waiting()` (owner decision 71A), at the three points
+where the opening can change: the unticked start and a re-run (after `start_review` and the carry,
+before the finalization) and an apply while waiting (after the regrade, before its finalization). A failure there is the start's error body or an apply failure,
 both already defined (*second review, 2026-10-09*). The attention and snapshot routes compute on the
 event loop and never write, so they only read the cache, and Send reads the same cached figure and
 records it. No route counts a token. A review restored from its folder is not counted until its
@@ -52,7 +53,9 @@ re-run (the text is not in memory). The vocabulary loads once per process (about
 | the vocabulary is not on this machine (`TokenizerUnavailable`) | `None` | `send.without` |
 | restored from its run folder, not yet re-run | `None` | `send.restored` |
 
-The words are `words.md` section 1. A `None` is never shown as zero (Principle I). The pane sentence
+The words are `words.md` section 1; `{tokens}` is written by `summary.tokens_text`, the one formatter
+009's resume sentence (`ResumeWords.of`) uses too (owner decision 73A). A `None` is never shown as
+zero (Principle I). The pane sentence
 names no encoding: an engineer reads a size, not an encoding (FR-013). Cost is in tokens, never
 currency (feature 008).
 
@@ -104,4 +107,12 @@ billed; its research R2.5).
   TokenizerUnavailable>)` - the precedent `test_step_sizes.py:166-171`. `tokens.encoding` is cached
   once per process (`tokens.py:150-153`) and the gate runs with `SWREVIEW_REQUIRE_TOKENIZER=1`, so
   pointing `SWREVIEW_TOKENIZER_DIR` at an empty folder would meet a warm cache and see a number;
+- **the number shown is the size of the request sent** (owner decision 78A): `tests/support/
+  recording_provider.RecordingProvider` keeps each `run()`'s raw system prompt, tool specs and first
+  message beside the encoded bytes, and `test_send_gate_server.py`, `test_waiting_answers.py` and
+  `test_recheck.py` each assert, for a plain Send, a Send after an apply and a Send after a re-run,
+  that `count_tokens(request_prefix(<the recorded system, tools and first message>))`,
+  `summary.send.input_tokens` read before Send, `session.sent.estimate.input_tokens` and
+  `model_status.estimate.input_tokens` are one number - so a cache built from tools or an opening
+  other than those the provider received fails, which a check against the code's own formula cannot;
 - Gemini approximate; the four sentences; SC-006 as above.
