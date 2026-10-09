@@ -287,6 +287,7 @@ are stable).
 | `run_part_checks`, `run_equation_checks` | `note_unclear` on the fail and warn results of unclear documents |
 | `check_rms_assembly`, `rms.assembly.mates_to_reference_geometry` | a mate entity on a bought component is exempt; a mate is graded on its custom and unclear sides; a mate with every side bought is not graded (one skipped subject line "mates between bought parts are not graded") |
 | `run_hygiene_checks(package, profile, roles)` (`checks/hygiene.py:309`) | the four property checks over graded documents; duplicates compared among graded documents only; `hygiene.component_not_resolved` over every document; `note_unclear` on unclear documents; property names compared through `property_key` (ignoring case and every space, `part-roles-profile.md` section 2), so a part-number property spelled without its space is found |
+| `run_thread_checks(package, roles)` (`checks/thread_pitch.py`, feature 010's thread pitch amendment, 2026-10-08, its `contracts/fasteners.md` section 8.2) | a bought part's tapped holes and cosmetic threads listed once in one skipped `thread.pitch` row, not classified; an unclear part's graded, `note_unclear` on each finding that holds one of them; fasteners classified whatever their role (choosing a bought fastener is a design choice), so a finding of fasteners alone carries no note |
 | `carry_over.py` (lever 11a) | an RMS finding on a bought document is not carried |
 | the drawing check | `drawing-capability.md` section 3 |
 | `package_brief._document_line` | `role=custom|bought|unclear` |
@@ -364,8 +365,9 @@ the rebuilt candidate question still matches exactly and a confirmed read is nev
 (3) then `answered_roles` reads the part-roles answer and, when the roles changed, reclassifies with
 the answers; (4) then one `ReviewRun._restate(tools)` (replacing `_restate_drawing_check`,
 `agent/runner.py:902`) restates the union of what changed, each tool once: `check_rms_part`,
-`check_rms_equations`, `check_rms_assembly`, `check_hygiene` and `check_drawings` when the roles
-changed, and `check_drawings` when a read reloaded the package. Each is a recorded step through the
+`check_rms_equations`, `check_rms_assembly`, `check_hygiene`, `check_threads` (feature 010's thread
+pitch amendment, 2026-10-08, its research R2.26 D10) and `check_drawings` when the roles changed,
+and `check_drawings` when a read reloaded the package. Each is a recorded step through the
 registry's dispatch and `PrerunGuard.answer_repeats_with`, superseding the findings of the call it
 restates.
 

@@ -61,10 +61,13 @@ def test_check_joints_takes_no_argument_and_is_a_check_tool() -> None:
 
 
 def test_check_joints_is_the_first_code_first_check() -> None:
+    """Edited deliberately by the thread pitch amendment's T119 (2026-10-08): `check_threads`
+    follows `check_hygiene`."""
     assert checks_mechanical.CODE_FIRST_CHECKS == (
         "check_joints",
         "check_mass_material",
         "check_hygiene",
+        "check_threads",
     )
 
 

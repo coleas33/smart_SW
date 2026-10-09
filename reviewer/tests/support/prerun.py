@@ -77,10 +77,12 @@ MODEL_DRIVEN_CALLS: tuple[ScriptedToolCall, ...] = (
     ScriptedToolCall("check_joints"),
     ScriptedToolCall("check_mass_material"),
     ScriptedToolCall("check_hygiene"),
+    ScriptedToolCall("check_threads"),
 )
 """What a model has to ask for to reach the state the pre-run reaches on its own; feature
-010's `check_joints`, `check_mass_material` and `check_hygiene` joined through
-`CODE_FIRST_CHECKS`, in its order, after the interference groups."""
+010's `check_joints`, `check_mass_material`, `check_hygiene` and `check_threads` (the thread
+pitch amendment, 2026-10-08) joined through `CODE_FIRST_CHECKS`, in its order, after the
+interference groups."""
 
 
 def _axis(z_origin: float, x_origin: float = 0.0) -> Axis:

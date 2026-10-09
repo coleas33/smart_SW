@@ -16,7 +16,7 @@ than from a list written down here, so a rule added to `checks/rms/registry.py` 
 sixteenth standards check renamed shows up as a red line in this file on the commit that
 made the change, not later.
 
-Five sources, which is every place a `Finding.check` value can come from:
+Seven sources, which is every place a `Finding.check` value can come from:
 
 1. `checks/rms/registry.py` `RULES` - the resilient-modeling catalogue;
 2. `checks/standards/registry.py` `RULES` - the sixteen release standards checks;
@@ -30,7 +30,9 @@ Five sources, which is every place a `Finding.check` value can come from:
    `hygiene.HYGIENE_CHECKS`;
 6. feature 011's drawing standard comparison, `drawing_context.CONFORMANCE_CHECK`
    (`drawing_profile.conformance`; added deliberately by feature 011 T056);
-7. nothing else: `build_finding` is the one finding constructor, and every caller of it
+7. feature 010's thread pitch check, `thread_pitch.CHECK_FINE_PITCH` and
+   `CHECK_NONSTANDARD_PITCH` (added deliberately by the amendment of 2026-10-08, T119);
+8. nothing else: `build_finding` is the one finding constructor, and every caller of it
    passes a `check` from one of the sources above.
 
 This test lands **after** the read-through (T022): the table it checks is one the owner
@@ -49,6 +51,7 @@ from swreview.checks import (
     joint_alignment,
     mass,
     stack,
+    thread_pitch,
     tool_access,
 )
 from swreview.checks.drawing_context import CONFORMANCE_CHECK
@@ -98,14 +101,23 @@ RULE_CHECKS: frozenset[str] = frozenset(
 number is its file name or it is not."""
 
 
+THREAD_CHECKS: frozenset[str] = frozenset(
+    {thread_pitch.CHECK_FINE_PITCH, thread_pitch.CHECK_NONSTANDARD_PITCH}
+)
+"""Feature 010's thread pitch findings (the amendment of 2026-10-08, `contracts/fasteners.md`
+section 8.4): a table lookup, and still a judgement family - only the engineer knows whether
+a fine pitch was meant."""
+
+
 def emittable() -> frozenset[str]:
-    """Every `Finding.check` value this build can write, from the six sources."""
+    """Every `Finding.check` value this build can write, from the seven sources."""
     return frozenset(
         {
             *RMS_RULES,
             *STANDARDS_RULES,
             *NUMERIC_CHECKS,
             *RULE_CHECKS,
+            *THREAD_CHECKS,
             DRAWING_FINDING_CHECK,
             CONFORMANCE_CHECK,
         }
@@ -122,8 +134,10 @@ def test_the_five_sources_between_them_name_every_emittable_check() -> None:
     assert len(RULE_CHECKS) == 8, "feature 010's mass (T066) and hygiene (T074) rules"
     assert DRAWING_FINDING_CHECK == "drawing.manufacturing_inputs"
     assert CONFORMANCE_CHECK == "drawing_profile.conformance"
-    assert len(emittable()) == 73, (
-        "the sources share no id (60 before feature 010, 72 before feature 011 T056)"
+    assert len(THREAD_CHECKS) == 2, "the thread pitch amendment's two finding ids (T119)"
+    assert len(emittable()) == 75, (
+        "the sources share no id (60 before feature 010, 72 before feature 011 T056, 73 "
+        "before the thread pitch amendment's T119)"
     )
 
 
@@ -171,9 +185,14 @@ def test_the_judgement_families_are_the_numeric_checks_except_the_axial_stack() 
     `stack.worst_case` is the one that is not, and deliberately: the engineer states the
     stack - the dimensions, their signs and the target are arguments to the check - so once
     it is stated, the arithmetic settles it and there is nothing left to judge.
+
+    And the two thread pitch ids (edited deliberately by the amendment of 2026-10-08, T119):
+    the coarse pitch is a table lookup, not a calculation, yet it is a judgement family all the
+    same, because the table cannot know whether a fine pitch was meant - only the engineer
+    does, and the owner asked for every one to be confirmed (51A).
     """
     policy = load_policy()
 
     judgement = {check for check in emittable() if policy.needs_judgement_of(check)}
 
-    assert judgement == NUMERIC_CHECKS - {stack.CHECK}
+    assert judgement == (NUMERIC_CHECKS - {stack.CHECK}) | THREAD_CHECKS

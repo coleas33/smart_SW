@@ -127,7 +127,12 @@ from swreview.report.session import (
 )
 from swreview.report.sources import answer_basis
 from swreview.report.summary import load_words
-from swreview.tools.checks_mechanical import attach_part_roles, check_hygiene, review_roles
+from swreview.tools.checks_mechanical import (
+    attach_part_roles,
+    check_hygiene,
+    check_threads,
+    review_roles,
+)
 from swreview.tools.context import ToolContext, build_context
 from swreview.tools.drawings import DRAWINGS_TOOL, ConfirmedRead, read_confirmed_candidates
 from swreview.tools.query import package_summary
@@ -914,10 +919,16 @@ def repeated_request_id(answers: Sequence[tuple[str, str]]) -> str | None:
 
 # --- the regrade after the part-roles answer (feature 013, contracts/part-roles.md 9) ---------
 
-ROLES_RESTATED: tuple[str, ...] = (*RMS_PRERUN_TOOLS, check_hygiene.__name__, DRAWINGS_TOOL)
+ROLES_RESTATED: tuple[str, ...] = (
+    *RMS_PRERUN_TOOLS,
+    check_hygiene.__name__,
+    check_threads.__name__,
+    DRAWINGS_TOOL,
+)
 """What an answer to the part-roles question restates, in this order: every check whose
 grading reads the roles. Interference, fits, fasteners, mass and joints include bought parts
-and are not restated (section 6)."""
+and are not restated (section 6). `check_threads` grades a part's tapped holes and cosmetic
+threads by its role (feature 010's thread pitch amendment, research R2.26 D10)."""
 
 BOUGHT_WITHDRAWAL = "bought part (your answer to {request_id})"
 """Why a finding a restated check no longer produces left the session after the answer."""

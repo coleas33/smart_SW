@@ -25,11 +25,14 @@ version: attention_policy_v1
 # Key 2. A finding whose check id starts with one of these sorts first among the undecided:
 # no tool can close it, because only the engineer knows whether the overlap is the intended
 # press fit, which two dimensions are one interface, or what a screw is meant to clamp.
+# `thread.` is feature 010's thread pitch check (amendment 2026-10-08, research R2.26): a
+# table lookup, yet only the engineer knows whether a fine pitch was meant (51A).
 needs_judgement:
   - interference.
   - fit.
   - fastener.
   - hole.
+  - thread.
 
 # Key 3. Every check id the product can emit, to exactly one class. The classes the owner
 # agreed on 2026-09-19 over the handover folders (research R2.15) are the three
@@ -120,6 +123,10 @@ classes:
   # to agree, like every joint check.
   fastener.head_fit: interface
   stack.worst_case: interface
+  # feature 010's thread pitch check (amendment 2026-10-08, research R2.26): a fine or
+  # non-standard pitch is a thread the mating part has to match, like `fastener.thread_match`.
+  thread.fine_pitch: interface
+  thread.nonstandard_pitch: interface
   # the drawing finding the model records -> manufacturing.
   drawing.manufacturing_inputs: manufacturing
   # feature 011's drawing standard comparison -> manufacturing, a first opinion for the
