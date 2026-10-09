@@ -1,0 +1,144 @@
+{
+  "key_format": 2,
+  "package_id": "mir-sitting",
+  "known_defects": [
+    {
+      "id": "D-1",
+      "tag": "tuned_on",
+      "description": "the custom part's Core sketch under-defined",
+      "check": "rms.sketches.fully_defined",
+      "component_ids": [
+        "cmp:0001"
+      ],
+      "document_ids": [
+        "doc:0002"
+      ],
+      "producer": "code",
+      "expected_status": "demonstrated"
+    },
+    {
+      "id": "D-2",
+      "tag": "tuned_on",
+      "description": "the custom part's Core sketch under-defined",
+      "check": "standards.part.sketches_fully_defined",
+      "component_ids": [
+        "cmp:0001"
+      ],
+      "document_ids": [
+        "doc:0002"
+      ],
+      "producer": "code",
+      "expected_status": "demonstrated"
+    },
+    {
+      "id": "D-3",
+      "tag": "tuned_on",
+      "description": "twenty content features of the custom part outside every group folder",
+      "check": "rms.grouping.all_features_in_a_group",
+      "component_ids": [
+        "cmp:0001"
+      ],
+      "document_ids": [
+        "doc:0002"
+      ],
+      "producer": "code",
+      "expected_status": "demonstrated"
+    },
+    {
+      "id": "D-4",
+      "tag": "tuned_on",
+      "description": "the custom part's equations holding no global variable",
+      "check": "rms.params.global_variables_present",
+      "component_ids": [
+        "cmp:0001"
+      ],
+      "document_ids": [
+        "doc:0002"
+      ],
+      "producer": "code",
+      "expected_status": "demonstrated"
+    }
+  ],
+  "correct_conditions": [],
+  "forbidden": [
+    {
+      "id": "FB-1",
+      "tag": "tuned_on",
+      "description": "The pin is a vendor part: its modelling practice and hygiene are not graded, however its own signals disagree about its role (R-1).",
+      "checks": [
+        "rms.*",
+        "hygiene.*"
+      ],
+      "component_ids": [
+        "cmp:0002",
+        "cmp:0003"
+      ],
+      "document_ids": [
+        "doc:0003"
+      ]
+    },
+    {
+      "id": "FB-2",
+      "tag": "tuned_on",
+      "description": "No drawing was read: the same-name drawings beside the assembly and the plate were not opened, and the pin has none, so no drawing finding stands on any of them (R-2).",
+      "checks": [
+        "drawing.*"
+      ],
+      "component_ids": [],
+      "document_ids": [
+        "doc:0001",
+        "doc:0002",
+        "doc:0003"
+      ]
+    },
+    {
+      "id": "FB-3",
+      "tag": "tuned_on",
+      "description": "Every document carries its revision under Rev, a property the profile does not name: the profile is wrong, not the documents (R-8).",
+      "checks": [
+        "hygiene.revision_present"
+      ],
+      "component_ids": [
+        "cmp:0001",
+        "cmp:0002",
+        "cmp:0003"
+      ],
+      "document_ids": [
+        "doc:0001",
+        "doc:0002",
+        "doc:0003"
+      ]
+    }
+  ],
+  "expected_coverage": [
+    {
+      "id": "CV-1",
+      "tag": "tuned_on",
+      "description": "The drawings beside the assembly and the plate were found and not read: the drawing inputs stay unresolved, never checked (R-2).",
+      "item": "drawing.manufacturing_inputs",
+      "statuses": [
+        "unresolved"
+      ]
+    }
+  ],
+  "unanswerable_requests": [
+    {
+      "id": "U-1",
+      "tag": "tuned_on",
+      "description": "A vendor pin's drawing can never be supplied: a request for it cannot be answered (R-2).",
+      "documents": [
+        "doc:0003"
+      ]
+    }
+  ],
+  "question_counts": [
+    {
+      "id": "Q-1",
+      "tag": "tuned_on",
+      "description": "Code asks once which parts are bought, the pin's signals disagreeing; it is asked exactly once (R-1).",
+      "part_roles": true,
+      "min": 1,
+      "max": 1
+    }
+  ]
+}

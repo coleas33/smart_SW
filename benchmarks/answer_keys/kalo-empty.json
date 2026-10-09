@@ -1,0 +1,44 @@
+{
+  "key_format": 2,
+  "package_id": "kalo-empty",
+  "known_defects": [],
+  "correct_conditions": [],
+  "forbidden": [
+    {
+      "id": "FB-1",
+      "tag": "tuned_on",
+      "description": "The plate's holes are empty by design, its screws in another assembly: no fastener or hole finding on the plate (R-6).",
+      "checks": [
+        "fastener.*",
+        "hole.*"
+      ],
+      "component_ids": [
+        "cmp:0001"
+      ],
+      "document_ids": []
+    }
+  ],
+  "expected_coverage": [
+    {
+      "id": "CV-1",
+      "tag": "tuned_on",
+      "description": "The package holds no screw, so no fastener joint can be checked (R-6).",
+      "item": "fasteners",
+      "statuses": [
+        "unresolved",
+        "out_of_scope"
+      ]
+    }
+  ],
+  "unanswerable_requests": [],
+  "question_counts": [
+    {
+      "id": "Q-1",
+      "tag": "tuned_on",
+      "description": "At most one question on which screws go in the plate's holes: once the engineer has answered it, asking again is a re-ask (R-6).",
+      "item": "fasteners",
+      "min": 0,
+      "max": 1
+    }
+  ]
+}

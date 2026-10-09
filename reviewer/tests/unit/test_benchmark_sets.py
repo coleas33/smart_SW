@@ -1358,17 +1358,18 @@ def test_key_path_on_a_keyed_set_is_the_entry_s_resolved_key_whatever_directory_
         assert sets.key_path(ref, answer_keys=answer_keys) == key
 
 
-def test_the_committed_pilot_set_loads_as_a_keyless_set() -> None:
-    """T115's acceptance: `benchmarks/sets/pilot.json` names no key, so its keys are read
-    from the directory given, where each lies."""
+def test_the_committed_pilot_set_is_keyed_each_entry_s_key_its_package_s_answer_key() -> None:
+    """T115's acceptance, moved by owner decision 67A once the generator writes `pilot.json`
+    (T151): the set is keyed, each entry naming `benchmarks/answer_keys/<package_id>.json`,
+    which `key_path` reads with no directory given."""
     benchmark_set = load_set(sets.REPO_ROOT / "benchmarks" / "sets" / "pilot.json")
     keys = sets.REPO_ROOT / "benchmarks" / "answer_keys"
 
     assert benchmark_set.packages
     for ref in benchmark_set.packages:
-        assert ref.key is None
-        assert sets.key_path(ref, answer_keys=keys) == keys / f"{ref.package_id}.json"
-        assert sets.key_path(ref, answer_keys=keys).is_file()
+        assert ref.key == keys / f"{ref.package_id}.json"
+        assert sets.key_path(ref, answer_keys=None) == ref.key
+        assert ref.key.is_file()
 
 
 def test_a_keyless_set_of_absolute_private_paths_loads_and_scores_through_answer_keys(

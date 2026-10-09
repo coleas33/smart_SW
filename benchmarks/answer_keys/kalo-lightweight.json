@@ -1,0 +1,45 @@
+{
+  "key_format": 2,
+  "package_id": "kalo-lightweight",
+  "known_defects": [
+    {
+      "id": "D-1",
+      "tag": "tuned_on",
+      "description": "the part's instances lightweight and its document not opened",
+      "check": "hygiene.component_not_resolved",
+      "component_ids": [
+        "cmp:0003"
+      ],
+      "document_ids": [
+        "doc:0004"
+      ],
+      "producer": "code",
+      "expected_status": "demonstrated"
+    }
+  ],
+  "correct_conditions": [],
+  "forbidden": [],
+  "expected_coverage": [
+    {
+      "id": "CV-1",
+      "tag": "tuned_on",
+      "description": "The pins are lightweight and the package reports no interference: interference was not checked, never checked and clean (R-5).",
+      "item": "interference",
+      "statuses": [
+        "unresolved",
+        "skipped"
+      ]
+    },
+    {
+      "id": "CV-2",
+      "tag": "tuned_on",
+      "description": "The pins' bodies were not read and no drawing gives the fit's limits: the fit stays unresolved (R-5).",
+      "item": "interfaces.fit",
+      "statuses": [
+        "unresolved"
+      ]
+    }
+  ],
+  "unanswerable_requests": [],
+  "question_counts": []
+}

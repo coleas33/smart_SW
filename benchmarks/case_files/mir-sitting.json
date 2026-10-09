@@ -1,0 +1,11 @@
+{
+  "case_file_version": 1,
+  "package_id": "mir-sitting",
+  "answers": [
+    {
+      "id": "A-1",
+      "part_roles": true,
+      "answer": "All bought"
+    }
+  ]
+}

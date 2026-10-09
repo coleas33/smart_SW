@@ -16,7 +16,10 @@ A stale stamp is not a load refusal (15A): the set summary and the committed-ite
 item. This slice's bullets: the stamp's three digests, three one-character tool-description patches
 each making a held-out entry stamped before them stale, and the digested set complete over every
 lever combination. The parity-slice bullet (the stamp against a run's `prompt_digest` and
-`checklist_digest`) is US2's (T046); the committed-item bullet is US5's (T148).
+`checklist_digest`) is US2's (T046); the committed-item bullet is US5's (T148): every held-out item
+of every committed key is stamped with `current_stamp()`, checked through `set_summary.stale_items`,
+and a prompt one byte longer fails the check listing every item, the new digests and what to do
+(US5-7; FR-031; CS-12).
 """
 
 from __future__ import annotations
@@ -35,9 +38,10 @@ from typer.testing import CliRunner
 from swreview import cli
 from swreview.agent.checklist import CHECKLIST_FILE, SYSTEM_PROMPT_FILE
 from swreview.agent.settings import EfficiencySettings, ModelViewSettings
-from swreview.benchmark import answer_key, digest
-from swreview.benchmark.answer_key_model import KnownDefect, Stamp
+from swreview.benchmark import answer_key, digest, set_summary
+from swreview.benchmark.answer_key_model import AnswerKey, KnownDefect, Stamp
 from swreview.benchmark.runner import PROVENANCE_FILE
+from swreview.benchmark.sets import REPO_ROOT
 from swreview.ir.loader import save_package
 from swreview.tools import registry, session
 from swreview.tools.context import context_for
@@ -54,6 +58,7 @@ from swreview.tools.registry import (
     spec_for,
     standards_tools,
 )
+from tests.benchmark_cases import stamps
 from tests.support.packages import build_package
 from tests.unit.test_drawing_finding_number_guard import guarded_package
 
@@ -256,3 +261,95 @@ def test_a_runs_prompt_and_checklist_digests_are_the_stamps(tmp_path: Path) -> N
     stamp = answer_key.current_stamp()
     assert record["prompt_digest"] == stamp.prompt == digest.sha256_of(SYSTEM_PROMPT_FILE)
     assert record["checklist_digest"] == stamp.checklist == digest.sha256_of(CHECKLIST_FILE)
+
+
+# --- every committed held-out item (the generator slice, T148) -------------------------------
+
+KEYS_DIR = REPO_ROOT / "benchmarks" / "answer_keys"
+
+KEY_LISTS: tuple[str, ...] = (
+    "known_defects",
+    "correct_conditions",
+    "forbidden",
+    "expected_coverage",
+    "unanswerable_requests",
+    "question_counts",
+)
+"""A key's six lists, in `answer-key.md` 2.1's order."""
+
+STAMP_MOVED = (
+    "the prompt, checklist or tool descriptions changed: in this commit, move every held-out item "
+    "the change cites to tuned-on in its case spec, set `stamps.CURRENT` to the digests above, "
+    "and regenerate"
+)
+"""What the stamp test tells the author of a change to what the model reads (`cases.md` 5)."""
+
+
+def committed_keys() -> list[AnswerKey]:
+    """Every committed key under `benchmarks/answer_keys/`, in file-name order, read through the
+    key's model."""
+    return [
+        AnswerKey.model_validate_json(path.read_bytes()) for path in sorted(KEYS_DIR.glob("*.json"))
+    ]
+
+
+def held_out_items(keys: Iterable[AnswerKey]) -> list[str]:
+    """Every held-out item of `keys`, as "{package} {id}", in key and list order."""
+    return [
+        f"{key.package_id} {item.id}"
+        for key in keys
+        for name in KEY_LISTS
+        for item in getattr(key, name)
+        if item.tag == "held_out"
+    ]
+
+
+def stamp_failure(keys: list[AnswerKey]) -> str | None:
+    """The stamp test's message, or `None` when every held-out item of `keys` is stamped with
+    `current_stamp()`: each stale item through `set_summary.stale_items`, the one lister, then
+    the current digests and what the change's commit must do."""
+    stamp = answer_key.current_stamp()
+    stale = set_summary.stale_items(keys, stamp)
+    if not stale:
+        return None
+    return "\n".join(
+        [
+            *(f"stale: {item}" for item in stale),
+            f"current digests: prompt {stamp.prompt}, checklist {stamp.checklist}, "
+            f"tools {stamp.tools}",
+            STAMP_MOVED,
+        ]
+    )
+
+
+def test_every_committed_held_out_item_is_stamped_with_the_current_stamp() -> None:
+    keys = committed_keys()
+
+    assert held_out_items(keys)
+    failure = stamp_failure(keys)
+    assert failure is None, failure
+
+
+def test_a_prompt_one_byte_longer_fails_the_stamp_check_listing_every_held_out_item(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The prompt `current_stamp` reads is pointed at a temporary copy one byte longer; the
+    repository's file is never written."""
+    before = SYSTEM_PROMPT_FILE.read_bytes()
+    longer = tmp_path / SYSTEM_PROMPT_FILE.name
+    longer.write_bytes(before + b"\n")
+    monkeypatch.setattr(answer_key, "SYSTEM_PROMPT_FILE", longer)
+    keys = committed_keys()
+
+    failure = stamp_failure(keys)
+
+    assert failure is not None
+    stamp = answer_key.current_stamp()
+    assert stamp.prompt == digest.sha256_of(longer) != stamps.CURRENT.prompt
+    assert failure.splitlines() == [
+        *(f"stale: {item}" for item in held_out_items(keys)),
+        f"current digests: prompt {stamp.prompt}, checklist {stamp.checklist}, tools {stamp.tools}",
+        STAMP_MOVED,
+    ]
+    assert "stale: brun-1 D-2" in failure.splitlines()
+    assert SYSTEM_PROMPT_FILE.read_bytes() == before
