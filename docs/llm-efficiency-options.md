@@ -266,7 +266,15 @@ the RMS part rules and the Standards sketch check read the tree one node per fea
 each absorbed sketch is named once and no carried row is - with section 5's tree-reading clause
 read for every check that reads the tree (section 9's row "Feature 013 US7"): the recorded and
 as-recorded columns fall with the part check's and the standards check's results, and the
-requested figures move by at most 448 tokens; the table below is that measurement). The fixtures record the scripted provider, whose pane runs checks first, lever 13, slimming,
+requested figures move by at most 448 tokens. *Re-measured 2026-10-09, feature 010's fine pitch
+amendment (owner decisions 50A to 53A):* `check_threads` joins the pre-run as a fourth code-first
+check, on the fixtures as they were, since no recorded tool's result, the prompt or the checklist
+changes; the recorded and as-recorded columns stay, and the requested figures fall by 73 tokens a
+main round with lever 13, which leaves out the new tool's schema that the all-off pass carries
+and adds its name and its digest line, and rise by 10 a main round without it, the digest line
+alone; the check finds no fine or
+non-standard thread on any fixture (section 9's row "Feature 010 fine pitch (50A-53A)"); the
+table below is that measurement). The fixtures record the scripted provider, whose pane runs checks first, lever 13, slimming,
 pruning and lever 14 - priced as an estimate, since the fixtures carry no reasoning items - but no
 parallel calls; `--lever parallel_tool_calls` gives the OpenAI pane, on which
 SC-003's regrouped estimate is read. The regrouped estimate assumes the model does not repeat a
@@ -276,9 +284,9 @@ rounds.
 
 | Fixture | Recorded | As recorded | Requested, pane defaults | Regrouped estimate, pane defaults (rule R) | Regrouped estimate, OpenAI pane (rules R and M) | Requested, `--prune-after 1` | Regrouped estimate, OpenAI pane, `--prune-after 1` |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| big-assembly | 10,582,573 | 10,582,475 | 662,927 | 486,892 | 276,302 | 617,999 | 232,553 |
-| small-assembly-a | 1,507,165 | 1,507,282 | 458,756 | 381,557 | 244,304 | 444,444 | 230,479 |
-| small-assembly-b | 1,416,304 | 1,416,437 | 450,370 | 388,625 | 242,465 | 437,458 | 229,767 |
+| big-assembly | 10,582,573 | 10,582,475 | 660,007 | 484,702 | 275,207 | 615,079 | 231,458 |
+| small-assembly-a | 1,507,165 | 1,507,282 | 455,982 | 379,221 | 242,844 | 441,670 | 229,019 |
+| small-assembly-b | 1,416,304 | 1,416,437 | 447,742 | 386,289 | 241,078 | 434,830 | 228,380 |
 
 Commands, in column order: `--no-pane-defaults` (recorded and as recorded), the default, the
 default's `regrouped estimate` line, `--lever parallel_tool_calls`, `--prune-after 1`, and
@@ -288,7 +296,7 @@ touching groups are recorded in the fixtures as the contacts feature 010's code 
 every requested pass holds them, and the recordings' findings that the type table or the tree
 reading narrow - 26, 3 and 2 RMS findings and 3, 1 and 1 Standards sketch findings - are recorded
 as the current code gives them (008 decision 23A; 013 T134-Q1 and T134-Q2); 62, 7 and 5 findings
-are added by feature 010's checks in the pre-run. The big fixture's follow-up round is 19,915
-requested against 346,313 recorded (19,229 at `--prune-after 1`; 22,807 and 22,121 with lever 14
+are added by feature 010's checks in the pre-run. The big fixture's follow-up round is 19,842
+requested against 346,313 recorded (19,156 at `--prune-after 1`; 22,734 and 22,048 with lever 14
 off). These are replay figures, not bills: the paid figures of the next workstation
 sitting go beside them (008 T102 to T105).
