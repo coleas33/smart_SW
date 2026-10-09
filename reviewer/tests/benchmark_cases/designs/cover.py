@@ -413,7 +413,7 @@ SPECS: tuple[CaseSpec, ...] = (
             Condition(
                 tag=CBT,
                 description=(
-                    "The cover's locating spigot, Ø40 -0.009/-0.025, in the housing's bore, "
+                    "The cover's locating spigot, Ø40 -0.009/-0.025, in the housing's hole, "
                     "Ø40 +0.025/0: a correct clearance fit."
                 ),
                 kind=seeds.SLIP_FIT,

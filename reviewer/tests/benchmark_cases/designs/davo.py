@@ -170,7 +170,7 @@ ON_AXIS: dict[str, tuple[str, float]] = {
 end clearance, -5 to the spigot's end at -4."""
 
 ASSY_NOTES: tuple[tuple[str, NoteKind], ...] = (
-    ("THE SPIGOT IS A SLIP FIT IN THE PILOT BORE.", "other"),
+    ("THE SPIGOT IS A SLIP FIT IN THE PILOT HOLE.", "other"),
 )
 """The assembly sheet's note: the spigot's intent, which `fit_interference_unintended`'s plant
 departs from (`generator.md` 3), in a sentence, since a summary is a name (`generator.md` 8)."""

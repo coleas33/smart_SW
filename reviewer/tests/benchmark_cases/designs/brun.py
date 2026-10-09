@@ -181,7 +181,7 @@ ON_SHAFT: dict[str, tuple[str, float]] = {
 housing's bottom and the bearing; the bearing on the shoulder, z = -30 to -18; the spacer on it,
 -18 to -3; the shim on that, -3 to -1; the float, -1 to the cover's face at 0."""
 
-ASSY_NOTES: tuple[tuple[str, NoteKind], ...] = (("THE BEARING SLIDES IN THE SEAT BORE.", "other"),)
+ASSY_NOTES: tuple[tuple[str, NoteKind], ...] = (("THE BEARING SLIDES IN ITS SEAT.", "other"),)
 """The assembly sheet's note: the floating bearing's intent, which `fit_transition`'s plant has
 the package state (`generator.md` 3), in a sentence, since a summary is a name (`generator.md`
 8)."""

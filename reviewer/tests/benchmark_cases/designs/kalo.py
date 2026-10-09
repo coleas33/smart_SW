@@ -99,6 +99,8 @@ from tests.benchmark_cases.spec import (
     Seed,
     Tree,
     TunedOn,
+    laid_after,
+    set_aside,
     tree_specs,
 )
 from tests.benchmark_cases.vocabulary import EXAMPLE_PROFILE
@@ -165,6 +167,11 @@ PINS: dict[str, tuple[float, float]] = {"pin_a": DOWEL_AXES[0], "pin_b": DOWEL_A
 
 SCREWS: dict[str, int] = {"screw_a": 0, "screw_b": 1}
 """Each screw's instance of the hole its record names."""
+
+SCREW_THREAD, SCREW_LENGTH_MM = "M5-0.8", 12.0
+"""The base's screws, all one document: M5 x 12 reaches 8 mm past the cover, inside the 9 mm
+thread, above the rule's 7.5 mm, the length `seeds.CLEAN_JOINT` gives, so a twin's screws are
+the base's."""
 
 UNSEATED_MM = 1.0
 """How far an unseated screw stands off its hole's axis, along x and y: more than the joint
@@ -278,18 +285,16 @@ PLACES: dict[str, Place] = {
     "pin_b_cover": ContactPlace(
         a="pin_b", b="cover", volume_mm3=None, possible=True, overlap_mm3=1.237
     ),
-    # M5 x 12 reaches 8 mm past the cover: inside the 9 mm thread, above the rule's 7.5 mm, the
-    # length `seeds.CLEAN_JOINT` gives, so a twin's screws are the base's.
     "screw_a": ScrewPlace(
-        thread="M5-0.8",
-        length_mm=12.0,
+        thread=SCREW_THREAD,
+        length_mm=SCREW_LENGTH_MM,
         hole="taps",
         clamped=("cover",),
         clamp_mm=COVER_THICKNESS_MM,
     ),
     "screw_b": ScrewPlace(
-        thread="M5-0.8",
-        length_mm=12.0,
+        thread=SCREW_THREAD,
+        length_mm=SCREW_LENGTH_MM,
         hole="taps",
         clamped=("cover",),
         clamp_mm=COVER_THICKNESS_MM,
@@ -361,7 +366,8 @@ def lay(variant: str | None, places: Places) -> Laid:
     `SCREWS_ELSEWHERE`); the contacts' interference rows; nothing of an unopened document's
     instances. Then the bought documents moved into the bought folder, the pin's free-text
     tolerance written under `OVERSIZE_TEXT`, and the custom parts' trees laid; then, unless
-    `UNDRAWN`, the two ingested drawings and every drawn dimension, in place order."""
+    `UNDRAWN`, the two ingested drawings and every drawn dimension, in place order, a planted
+    screw's document after them (owner decision 64A)."""
     if variant not in (None, *VARIANTS):
         raise ValueError(f"design kalo has no variant {variant}")
     builder = PackageBuilder(
@@ -446,8 +452,13 @@ def lay(variant: str | None, places: Places) -> Laid:
             cylinder_mesh((x, y, 0.0), Z, PIN_DIAMETER_MM, -PLATE_THICKNESS_MM, COVER_THICKNESS_MM),
         )
 
-    # One screw document per thread and length, as a vendor's part is, each screw an instance.
+    # One screw document per thread and length, as a vendor's part is, each screw an instance;
+    # the base's first, so a planted screw's is the last document laid.
     screw_documents: dict[tuple[str, float], str] = {}
+    if variant != SCREWS_ELSEWHERE:
+        screw_documents[(SCREW_THREAD, SCREW_LENGTH_MM)] = builder.screw_document(
+            "SHC", SCREW_THREAD, SCREW_LENGTH_MM, serial=1, properties={VENDOR: "FICT"}
+        )
     screws: dict[str, str] = {}
     for name, index in SCREWS.items() if variant != SCREWS_ELSEWHERE else ():
         record = places[name]
@@ -546,6 +557,15 @@ def lay(variant: str | None, places: Places) -> Laid:
     if variant == UNDRAWN:
         return Laid(package=package, meshes=built.meshes, ids=ids)
 
+    # A planted screw's document is the case's alone: set aside while the drawings are laid and
+    # laid after them, the case and its twin lay every document they share under one id (owner
+    # decision 64A).
+    planted = [
+        document
+        for drawn, document in screw_documents.items()
+        if drawn != (SCREW_THREAD, SCREW_LENGTH_MM)
+    ]
+    package, aside = set_aside(package, planted, drawings=len(DRAWINGS))
     sheets = SheetBuilder(package)
     for name, (stem, summary) in DRAWINGS.items():
         ids[name] = sheets.drawing(stem, properties=_custom(places[name], stem, summary))
@@ -559,7 +579,7 @@ def lay(variant: str | None, places: Places) -> Laid:
                 limits=record.limits,
                 text=record.as_read(),
             )
-    return Laid(package=sheets.build(), meshes=built.meshes, ids=ids)
+    return Laid(package=laid_after(sheets.build(), aside), meshes=built.meshes, ids=ids)
 
 
 DESIGN = Design(name="kalo", places=PLACES, lay=lay, variants=VARIANTS)
@@ -768,7 +788,7 @@ SPECS: tuple[CaseSpec, ...] = (
             QuestionCount(
                 tag=R6,
                 description=(
-                    "At most one question on which fasteners go in the plate's holes: once the "
+                    "At most one question on which screws go in the plate's holes: once the "
                     "engineer has answered it, asking again is a re-ask (R-6)."
                 ),
                 item="fasteners",
