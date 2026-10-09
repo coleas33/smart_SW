@@ -1273,12 +1273,14 @@ class ReviewRun:
 
         `mark` is how many findings the session held before the first restated call. Each
         finding a restated call added takes the id of the earlier finding with the same
-        verdict key and its place (`_verdict_key` ignores coverage limits, so a "may be
-        bought" note drops in place), and is announced again under that id. An earlier finding
-        of a restated check - one that cites one of its earlier steps, and was not carried from
-        another run, whose step numbers are that run's - is kept when a restated finding took
-        its place or a restated call returned its id (a check that de-duplicates, as
-        `check_drawings` does); every other one is no longer produced and is withdrawn.
+        verdict key, its place and its disposition (`_verdict_key` ignores coverage limits, so a
+        "may be bought" note drops in place), and is announced again under that id: an Accept,
+        Reject or Defer the engineer recorded before the answer stands (the owner's decision
+        58A, 2026-10-08, feature 010 research R2.26). An earlier finding of a restated check -
+        one that cites one of its earlier steps, and was not carried from another run, whose
+        step numbers are that run's - is kept when a restated finding took its place or a
+        restated call returned its id (a check that de-duplicates, as `check_drawings` does);
+        every other one is no longer produced and is withdrawn, its disposition with it.
         """
         session = self.session
         earlier = list(session.findings[:mark])
@@ -1292,7 +1294,9 @@ class ReviewRun:
             if index is None:
                 added.append(finding)
                 continue
-            merged[index] = finding.model_copy(update={"id": earlier[index].id})
+            merged[index] = finding.model_copy(
+                update={"id": earlier[index].id, "disposition": earlier[index].disposition}
+            )
             taken.add(earlier[index].id)
             folded.append(merged[index])
         returned = {finding_id for call in calls for finding_id in _returned_finding_ids(call)}
