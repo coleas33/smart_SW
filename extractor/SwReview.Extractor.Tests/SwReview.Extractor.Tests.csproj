@@ -108,6 +108,18 @@
   </ItemGroup>
 
   <!--
+    Feature 010 amendment 2026-10-08, T114. The coarse pitch table both copies are pinned to
+    (contracts/fasteners.md section 8.3): CoarsePitchContractTests asserts CoarsePitch's metric
+    rows equal the file's, as test_coarse_pitch.py does for the Python copy. Copied, not
+    duplicated, for the reason fastener-name-vectors.json is.
+  -->
+  <ItemGroup>
+    <Content Include="..\..\specs\010-mechanical-checks\contracts\coarse-pitch.json" Link="coarse-pitch.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <!--
     Feature 010 T086. The feature 010 table of guard-allowlist.md is the membership of the
     denials the Hole Wizard and tolerance reads add, and MechanicalChecksDenylistTests reads it
     the way StandardsDenylistTests reads 006's R8: copied, not transcribed.
