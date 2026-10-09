@@ -186,7 +186,11 @@ the date before the time, "{YYYY-MM-DD} {HH:MM}", when that date is not today on
 stored wall clock of its `checked_at`, never converted (`records.md` section 1). Every
 other chip is today's. Pressing Review or Clear review while a review waits leaves its chip, marked
 (FR-026). On `document.changed` the page follows with the list it holds (009 section 6, unchanged) and
-then asks `sessions.list` again, which may add a found review (`recheck.md` section 9).
+then asks `sessions.list` again, which may add a found review (`recheck.md` section 9). When the answer
+comes, the page follows again by the same rule, as it does after `init` (`requestSessions(true)`), so
+a found review of the active document is shown, restored from its folder, when no review of that
+document is on screen (FR-030: "the Review tab then shows that review"). A review of the document
+already on screen stays shown (*tasks review, 2026-10-09*; default, research R2.20).
 
 ## 9. The Settings section
 
@@ -251,7 +255,8 @@ SC-007 reads.
 | `sessions.list` (amended) | `{}` | first looks for a waiting review of the active document (`recheck.md` section 9); items carry `model_status` for a review found that way. |
 
 Host to page: `status` gains the stage `checking`. `ReviewPageContractTests` holds both new rows to the
-page's sends.
+page's sends (its rules 1 and 2), so each new row lands in the commit where the page first posts it,
+never with its host handler alone (tasks T051 and T099).
 
 ## 13. Tests
 

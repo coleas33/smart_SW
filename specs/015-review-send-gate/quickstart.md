@@ -209,11 +209,15 @@ On the licensed seat, with the build of this feature and the owner's key stored:
    answer withdrew; the report says when it was sent.
 5. Record in the results sheet: zero model rounds before Send (the `usage` events all follow
    `session.sent`), one extraction, the named ids, and whether the sentence carried a number.
-6. Record how long the unticked review's `POST /sessions` took (from the backend log, or the time
-   between the host's "checking" and "ready" statuses), and, after a Settings save with a review
-   waiting, how long the re-run on the next Send took. Both run inside one host call with the long
-   timeout every call with `send_when_checked` false has, 10 minutes (research RK-10), and these two
-   numbers are what that bound is later set from.
+6. Record two timings. Both run inside one host call with the long timeout every call with
+   `send_when_checked` false has, 10 minutes (research RK-10), and these two numbers are what that
+   bound is later set from.
+   1. How long step 2's unticked `POST /sessions` took (from the backend log, or the time between the
+      host's "checking" and "ready" statuses).
+   2. How long a re-run takes. Press Review again with the box still unticked and wait until the
+      review waits; save Settings, which restarts the backend; then press Send to model. Record how
+      long the re-run before the first request took, measured the same way, and that the run folder
+      still holds one extraction.
 
 ## Results
 
