@@ -663,6 +663,7 @@ WITHHELD_ON_THE_FIXTURES: dict[str, tuple[str, ...]] = {
         "check_joints",
         "check_mass_material",
         "check_hygiene",
+        "check_threads",
         "check_standards",
     ),
     "small-assembly-a": (
@@ -673,6 +674,7 @@ WITHHELD_ON_THE_FIXTURES: dict[str, tuple[str, ...]] = {
         "check_joints",
         "check_mass_material",
         "check_hygiene",
+        "check_threads",
         "check_standards",
     ),
     "small-assembly-b": (
@@ -682,12 +684,15 @@ WITHHELD_ON_THE_FIXTURES: dict[str, tuple[str, ...]] = {
         "check_joints",
         "check_mass_material",
         "check_hygiene",
+        "check_threads",
         "check_standards",
     ),
 }
 """What lever 13 takes off each fixture's pane array, in pre-run order. The replay has no
 bridge, so the interference tool leaves wherever the pre-run judged a group; the third
-fixture holds none, so the pre-run never called it and it stays."""
+fixture holds none, so the pre-run never called it and it stays. Edited deliberately by the
+thread pitch amendment's T119 (2026-10-08): `check_threads` is a code-first check, run to
+completion after `check_hygiene` on each fixture, so it leaves too."""
 
 
 @cache

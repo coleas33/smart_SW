@@ -88,6 +88,7 @@ CHECK = (
     "check_joints",
     "check_mass_material",
     "check_hygiene",
+    "check_threads",
 )
 SESSION = (
     "request_evidence",
@@ -99,9 +100,10 @@ SESSION = (
 BRIDGE = ("bridge_capture", "bridge_measure", "bridge_interference")
 
 EVERY_TOOL = (*QUERY, *MEASUREMENT, *CHECK, *SESSION)
-"""The 35 curated tools in registration order - the array a no-bridge run sends today
+"""The 36 curated tools in registration order - the array a no-bridge run sends today
 (32 until feature 010 T028 registered `check_joints`, 33 until T067 and T075 registered
-`check_mass_material` and `check_hygiene`)."""
+`check_mass_material` and `check_hygiene`, 35 until the thread pitch amendment's T120
+registered `check_threads`)."""
 
 RMS_TIER = (
     "list_features",
@@ -138,13 +140,16 @@ WITHOUT_RMS_TIER = (
     "check_joints",
     "check_mass_material",
     "check_hygiene",
+    "check_threads",
     "request_evidence",
     "mark_coverage",
     "record_drawing_finding",
     "get_review_checklist",
     "request_capture",
 )
-"""The 29 the RMS tier leaves, written out rather than filtered: this list is the pin."""
+"""The 30 the RMS tier leaves, written out rather than filtered: this list is the pin (29 until
+the thread pitch amendment's T120 registered `check_threads`, which reads holes, cosmetic
+threads and fasteners, not feature rows, so the tier keeps it as it keeps `check_hygiene`)."""
 
 GRADABLE: dict[str, Any] = {
     "full assembly, tree dumped": full_assembly_with_tree,
@@ -186,7 +191,8 @@ def test_a_package_with_feature_rows_keeps_every_tool_with_the_flag_on(build: An
 def test_a_package_with_no_feature_rows_loses_the_rms_tier_and_nothing_else(
     build: Any,
 ) -> None:
-    """35 tools to 29, and the 29 are named here rather than derived from the registry."""
+    """36 tools to 30 (35 to 29 until `check_threads`), and the 30 are named here rather than
+    derived from the registry."""
     assert tuple(offered(build(), efficiency=ON)) == WITHOUT_RMS_TIER
 
 

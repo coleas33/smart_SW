@@ -52,7 +52,7 @@ Each goal gains `group:`; a new `standards` goal is split out of `hygiene`; ten 
 | Goal | Items | Prefixes | Group |
 |---|---|---|---|
 | interference | `interference`, `coverage.prerun.interference` | `interference.` | interference_fit |
-| fasteners | `fasteners` | `fastener.` | fasteners |
+| fasteners | `fasteners`, `thread.fine_pitch`, `thread.nonstandard_pitch` | `fastener.` | fasteners |
 | hole_alignment | `holes.alignment` | `hole.`, `joint.` | interference_fit |
 | fits_and_stacks | `interfaces.fit`, `interfaces.stack` | `fit.`, `stack.` | interference_fit |
 | tool_access | - | `fastener.head_clearance`, `fastener.head_fit` | fasteners |
@@ -66,6 +66,12 @@ A finding's group is the group of `summary.goal_of(check, goals)` (the goal whos
 the longest prefix). A check no goal names goes to `other`. Folding Mass and material into Hygiene is
 one edit: that goal's `group: hygiene`; the `mass_material` group then has no goal and no row, and
 is left out (section 3), so six groups render.
+
+The fasteners goal's items name feature 010's two thread pitch finding ids (its amendment of
+2026-10-08, the owner's decision 63A, 010 research R2.26): a finding id in a goal's `items` is never
+a coverage row's check, so it is never read as a close-out row, and its findings land in the
+Fasteners group and make the goal line "issues found". The coverage-only `thread.pitch` rows belong
+to no goal, as the part-roles rows do, so no goal line moves.
 
 ## 3. The view
 

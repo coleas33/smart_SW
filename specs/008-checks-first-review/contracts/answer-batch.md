@@ -49,7 +49,8 @@ question was built with; then, when the batch answers the part-roles question (e
 question the current roles ask), the parts are classified again with the answer; then one
 `ReviewRun._restate` - which replaces `_restate_drawing_check` - restates the union of what
 changed, each check once (`check_rms_part`, `check_rms_equations`, `check_rms_assembly`,
-`check_hygiene` and `check_drawings` when the roles changed; `check_drawings` when a read reloaded
+`check_hygiene`, `check_threads` (feature 010's thread pitch amendment, 2026-10-08, its research
+R2.26 D10) and `check_drawings` when the roles changed; `check_drawings` when a read reloaded
 the package), each a recorded step the pre-run's guard answers repeats from. `_restate` folds
 each restated finding onto the earlier one with the same verdict key, which keeps its id, and the
 engineer's disposition on it (owner decision 58A, 2026-10-08), and
