@@ -325,6 +325,18 @@ Decisions 1A to 12A were taken in the eval interview of 2026-09-28, 13A to 16A o
 - **Options**: A: the scan leaves schema values and check ids out (the `source`, `kind`, `hole_type`, `check` and `item` fields, as feature 010's scan does) and reads gap reasons as sentences, by whole word; the three remaining words are reworded in `seeds.py` and the design files, never exempted and never by weakening the scan; no denylist token is printed, logged or committed, and the list's path is written nowhere. B: exempt the words that match.
 - **Chosen**: A. The prose is reworded in `seeds.py` (the fit kinds' forms) and in the designs `kalo` (`kalo-empty`'s question rule), `cover` (`C-1`), `brun`, `davo` and `lori` (the assembly sheets' notes) and `rusk` (the summaries of one part and its drawing); the scan is `test_benchmark_cases_are_fictional.py` (T150), which lands with the committed set and names the file, never a token, when it finds one; tasks.md T150.
 
+### 65A. Test 5's second half on a key holding no correct condition (2026-10-09)
+
+- **Question** (implementation, issue 65; tasks.md T149; `scoring.md` 7; `answer-key.md` 9 test 5): `test_committed_answer_keys.py` test 5's second half held every key with no extension list to the seven columns the key-extensions slice leaves unassessed, `NOT_ASSESSED_WITHOUT_EXTENSIONS`; the generated core cases' keys hold no correct condition either, so their two condition columns read `null` too, with "the key holds no correct condition", which `assert_oracle_and_null` already expects and the second half did not. Keep those keys in the second half, or read it only on keys holding a condition?
+- **Options**: A: keep every key with no extension list, and expect the two condition columns as not assessed, with their reason, when the key holds no correct condition. B: read the second half only on keys holding a correct condition.
+- **Chosen**: A. Applied in `test_committed_answer_keys.py`'s `test_sc_001_a_key_with_no_extension_list_reads_the_new_columns_not_assessed`, its expectation `NOT_ASSESSED_WITHOUT_EXTENSIONS` plus `scorecard.NO_CORRECT_CONDITION` on `scoring_probes.COLUMNS_BY_KEY_LIST["correct_conditions"]` when the key holds none; tasks.md T149.
+
+### 67A. The committed pilot set is keyed (2026-10-09)
+
+- **Question** (implementation, issue 67; tasks.md T115, T151; `cases.md` 4.1 and 6.1): T115's acceptance test, `test_benchmark_sets.py`'s `test_the_committed_pilot_set_loads_as_a_keyless_set`, read the hand-written `pilot.json`, which named no key; the generator writes `pilot.json` with the committed set, every entry naming its key (`generator.md` 7), so the test fails on the committed set as the contract has it. Move the test, or keep `pilot.json` keyless?
+- **Options**: A: the test becomes one that `pilot.json` is keyed and each entry's key is `benchmarks/answer_keys/<package_id>.json`, renamed to say so. B: write `pilot.json` without keys.
+- **Chosen**: A. Applied in `test_benchmark_sets.py`'s `test_the_committed_pilot_set_is_keyed_each_entry_s_key_its_package_s_answer_key` (each entry's key the package's answer key, read by `key_path` with no directory given); tasks.md T115 and T151.
+
 ---
 
 ## §2 The 2026-09-28 audit

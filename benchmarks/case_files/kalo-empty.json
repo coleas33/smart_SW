@@ -1,0 +1,14 @@
+{
+  "case_file_version": 1,
+  "package_id": "kalo-empty",
+  "answers": [
+    {
+      "id": "A-1",
+      "item": "fasteners",
+      "ids": [
+        "cmp:0001"
+      ],
+      "answer": "screws go in a seperate assy"
+    }
+  ]
+}

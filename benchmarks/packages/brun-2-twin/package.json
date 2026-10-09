@@ -1,0 +1,2975 @@
+{
+  "schema_version": "1.6.0",
+  "package_id": "4be0ecd2-b4ce-5f3d-9258-4c03f48a9d47",
+  "created_at": "2026-09-23T09:00:00Z",
+  "reuse_key": null,
+  "reused_from": null,
+  "reused_at": null,
+  "extractor": {
+    "name": "SwReview.Extractor",
+    "version": "0.0.0-fictional",
+    "sw_version": "2024 SP5",
+    "machine": "FICT-SEAT",
+    "profile": "full",
+    "phases": [
+      {
+        "name": "document",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "manifest",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "mate",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "feature",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "equation",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "cutlist",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "hole",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "fastener",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "face",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "body",
+        "elapsed_ms": 1,
+        "status": "ok"
+      }
+    ]
+  },
+  "manifest": {
+    "entries": [
+      {
+        "document_id": "doc:0001",
+        "vault_path": "C:\\Fictional\\Vault\\EX-1104-00.SLDASM",
+        "vault_version": 1,
+        "revision": null,
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:0002",
+        "vault_path": "C:\\Fictional\\Vault\\EX-1104-01.SLDPRT",
+        "vault_version": 1,
+        "revision": null,
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:0003",
+        "vault_path": "C:\\Fictional\\Vault\\EX-1104-02.SLDPRT",
+        "vault_version": 1,
+        "revision": null,
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:0004",
+        "vault_path": "C:\\Fictional\\Vault\\FICT Purchased\\FICT-SHAFT-20X80-0001.SLDPRT",
+        "vault_version": 1,
+        "revision": null,
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:0005",
+        "vault_path": "C:\\Fictional\\Vault\\FICT Purchased\\FICT-BEARING-20X42X12-0001.SLDPRT",
+        "vault_version": 1,
+        "revision": null,
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:0006",
+        "vault_path": "C:\\Fictional\\Vault\\FICT Purchased\\FICT-SPACER-30X42X15-0001.SLDPRT",
+        "vault_version": 1,
+        "revision": null,
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:0007",
+        "vault_path": "C:\\Fictional\\Vault\\FICT Purchased\\FICT-SHIM-30X42X2-0001.SLDPRT",
+        "vault_version": 1,
+        "revision": null,
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:0008",
+        "vault_path": "C:\\Fictional\\Vault\\FICT Purchased\\SHC_M5-0.8X20_FICT-0001.SLDPRT",
+        "vault_version": 1,
+        "revision": null,
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:0009",
+        "vault_path": "C:\\Fictional\\Vault\\EX-1104-00.SLDDRW",
+        "vault_version": 1,
+        "revision": null,
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "pdf"
+      },
+      {
+        "document_id": "doc:0010",
+        "vault_path": "C:\\Fictional\\Vault\\EX-1104-01.SLDDRW",
+        "vault_version": 1,
+        "revision": null,
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "pdf"
+      }
+    ],
+    "discrepancies": []
+  },
+  "design": {
+    "design_id": "brun-2-twin",
+    "name": "EX-1104-00",
+    "root_assembly_document_id": "doc:0001",
+    "active_configuration": "Default",
+    "drawing_document_ids": [
+      "doc:0009",
+      "doc:0010"
+    ]
+  },
+  "documents": [
+    {
+      "document_id": "doc:0001",
+      "kind": "assembly",
+      "file_name": "EX-1104-00.SLDASM",
+      "path": "C:\\Fictional\\Vault\\EX-1104-00.SLDASM",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "Item Code": "fixture value 1",
+        "Summary": "fixture value 2",
+        "Coating": "fixture value 3",
+        "Stock": "fixture value 4",
+        "DocRev": "A",
+        "Fictional Number": "EX-1104-00",
+        "Fictional Summary": "brun assy"
+      },
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    },
+    {
+      "document_id": "doc:0002",
+      "kind": "part",
+      "file_name": "EX-1104-01.SLDPRT",
+      "path": "C:\\Fictional\\Vault\\EX-1104-01.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "Item Code": "fixture value 1",
+        "Summary": "fixture value 2",
+        "Coating": "fixture value 3",
+        "Stock": "fixture value 4",
+        "DocRev": "A",
+        "Fictional Number": "EX-1104-01",
+        "Fictional Summary": "brun housing"
+      },
+      "config_properties": {},
+      "material": "6061-T6",
+      "mass": {
+        "mass_kg": 1.406335632,
+        "volume_m3": 0.000520865048929,
+        "center_of_mass": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "configuration": "Default"
+      },
+      "material_configuration": "Default"
+    },
+    {
+      "document_id": "doc:0003",
+      "kind": "part",
+      "file_name": "EX-1104-02.SLDPRT",
+      "path": "C:\\Fictional\\Vault\\EX-1104-02.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "Item Code": "fixture value 1",
+        "Summary": "fixture value 2",
+        "Coating": "fixture value 3",
+        "Stock": "fixture value 4",
+        "DocRev": "A",
+        "Fictional Number": "EX-1104-02",
+        "Fictional Summary": "brun cover"
+      },
+      "config_properties": {},
+      "material": "6061-T6",
+      "mass": {
+        "mass_kg": 0.31104,
+        "volume_m3": 0.00011520000000000001,
+        "center_of_mass": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "configuration": "Default"
+      },
+      "material_configuration": "Default"
+    },
+    {
+      "document_id": "doc:0004",
+      "kind": "part",
+      "file_name": "FICT-SHAFT-20X80-0001.SLDPRT",
+      "path": "C:\\Fictional\\Vault\\FICT Purchased\\FICT-SHAFT-20X80-0001.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "FICT Vendor": "FICT",
+        "Description": "SHAFT, Ø20 X 80 MM, FICTIONAL"
+      },
+      "config_properties": {},
+      "material": "Alloy Steel",
+      "mass": {
+        "mass_kg": 0.197292019,
+        "volume_m3": 0.000025132741229000002,
+        "center_of_mass": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "configuration": "Default"
+      },
+      "material_configuration": "Default"
+    },
+    {
+      "document_id": "doc:0005",
+      "kind": "part",
+      "file_name": "FICT-BEARING-20X42X12-0001.SLDPRT",
+      "path": "C:\\Fictional\\Vault\\FICT Purchased\\FICT-BEARING-20X42X12-0001.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "FICT Vendor": "FICT",
+        "Description": "BEARING, Ø20 X Ø42 X 12 MM, FICTIONAL"
+      },
+      "config_properties": {},
+      "material": "Alloy Steel",
+      "mass": {
+        "mass_kg": 0.100914868,
+        "volume_m3": 0.000012855397138000001,
+        "center_of_mass": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "configuration": "Default"
+      },
+      "material_configuration": "Default"
+    },
+    {
+      "document_id": "doc:0006",
+      "kind": "part",
+      "file_name": "FICT-SPACER-30X42X15-0001.SLDPRT",
+      "path": "C:\\Fictional\\Vault\\FICT Purchased\\FICT-SPACER-30X42X15-0001.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "FICT Vendor": "FICT",
+        "Description": "SPACER, Ø30 X Ø42 X 15 MM, FICTIONAL"
+      },
+      "config_properties": {},
+      "material": "Alloy Steel",
+      "mass": {
+        "mass_kg": 0.079903268,
+        "volume_m3": 0.000010178760198000001,
+        "center_of_mass": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "configuration": "Default"
+      },
+      "material_configuration": "Default"
+    },
+    {
+      "document_id": "doc:0007",
+      "kind": "part",
+      "file_name": "FICT-SHIM-30X42X2-0001.SLDPRT",
+      "path": "C:\\Fictional\\Vault\\FICT Purchased\\FICT-SHIM-30X42X2-0001.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "FICT Vendor": "FICT",
+        "Description": "SHIM, Ø30 X Ø42 X 2 MM, FICTIONAL"
+      },
+      "config_properties": {},
+      "material": "Alloy Steel",
+      "mass": {
+        "mass_kg": 0.010653769,
+        "volume_m3": 1.3571680260000002e-6,
+        "center_of_mass": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "configuration": "Default"
+      },
+      "material_configuration": "Default"
+    },
+    {
+      "document_id": "doc:0008",
+      "kind": "part",
+      "file_name": "SHC_M5-0.8X20_FICT-0001.SLDPRT",
+      "path": "C:\\Fictional\\Vault\\FICT Purchased\\SHC_M5-0.8X20_FICT-0001.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "Description": "SCREW, SOC M5-0.8 X 20 MM, FICTIONAL",
+        "FICT Vendor": "FICT"
+      },
+      "config_properties": {},
+      "material": "Alloy Steel",
+      "mass": {
+        "mass_kg": 0.00530993,
+        "volume_m3": 6.764241680000001e-7,
+        "center_of_mass": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "configuration": "Default"
+      },
+      "material_configuration": "Default"
+    },
+    {
+      "document_id": "doc:0009",
+      "kind": "drawing",
+      "file_name": "EX-1104-00.SLDDRW",
+      "path": "C:\\Fictional\\Vault\\EX-1104-00.SLDDRW",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "Item Code": "fixture value 1",
+        "Summary": "fixture value 2",
+        "Coating": "fixture value 3",
+        "Stock": "fixture value 4",
+        "DocRev": "A",
+        "Fictional Number": "EX-1104-00",
+        "Fictional Summary": "brun assy drawing"
+      },
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    },
+    {
+      "document_id": "doc:0010",
+      "kind": "drawing",
+      "file_name": "EX-1104-01.SLDDRW",
+      "path": "C:\\Fictional\\Vault\\EX-1104-01.SLDDRW",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "Item Code": "fixture value 1",
+        "Summary": "fixture value 2",
+        "Coating": "fixture value 3",
+        "Stock": "fixture value 4",
+        "DocRev": "A",
+        "Fictional Number": "EX-1104-01",
+        "Fictional Summary": "brun housing drawing"
+      },
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    }
+  ],
+  "components": [
+    {
+      "id": "cmp:0001",
+      "persist_ref": "Y21wOjAwMDE=",
+      "persist_ref_scope": "doc:0001",
+      "name": "EX-1104-01-1",
+      "document_id": "doc:0002",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          -1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          -0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": true,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "EX-1104-01-1",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0002",
+      "persist_ref": "Y21wOjAwMDI=",
+      "persist_ref_scope": "doc:0001",
+      "name": "EX-1104-02-1",
+      "document_id": "doc:0003",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          -1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          -0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "EX-1104-02-1",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0003",
+      "persist_ref": "Y21wOjAwMDM=",
+      "persist_ref_scope": "doc:0001",
+      "name": "FICT-SHAFT-20X80-0001-1",
+      "document_id": "doc:0004",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.06
+        ],
+        [
+          -1.0,
+          0.0,
+          0.0,
+          0.04
+        ],
+        [
+          0.0,
+          -0.0,
+          1.0,
+          -0.05
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "FICT-SHAFT-20X80-0001-1",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0004",
+      "persist_ref": "Y21wOjAwMDQ=",
+      "persist_ref_scope": "doc:0001",
+      "name": "FICT-BEARING-20X42X12-0001-1",
+      "document_id": "doc:0005",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.06
+        ],
+        [
+          -1.0,
+          0.0,
+          0.0,
+          0.04
+        ],
+        [
+          0.0,
+          -0.0,
+          1.0,
+          -0.024
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "FICT-BEARING-20X42X12-0001-1",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0005",
+      "persist_ref": "Y21wOjAwMDU=",
+      "persist_ref_scope": "doc:0001",
+      "name": "FICT-SPACER-30X42X15-0001-1",
+      "document_id": "doc:0006",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.06
+        ],
+        [
+          -1.0,
+          0.0,
+          0.0,
+          0.04
+        ],
+        [
+          0.0,
+          -0.0,
+          1.0,
+          -0.0105
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "FICT-SPACER-30X42X15-0001-1",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0006",
+      "persist_ref": "Y21wOjAwMDY=",
+      "persist_ref_scope": "doc:0001",
+      "name": "FICT-SHIM-30X42X2-0001-1",
+      "document_id": "doc:0007",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.06
+        ],
+        [
+          -1.0,
+          0.0,
+          0.0,
+          0.04
+        ],
+        [
+          0.0,
+          -0.0,
+          1.0,
+          -0.002
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "FICT-SHIM-30X42X2-0001-1",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0007",
+      "persist_ref": "Y21wOjAwMDc=",
+      "persist_ref_scope": "doc:0001",
+      "name": "SHC_M5-0.8X20_FICT-0001-1",
+      "document_id": "doc:0008",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.02
+        ],
+        [
+          -1.0,
+          0.0,
+          0.0,
+          0.015
+        ],
+        [
+          0.0,
+          -0.0,
+          1.0,
+          0.012
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "SHC_M5-0.8X20_FICT-0001-1",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0008",
+      "persist_ref": "Y21wOjAwMDg=",
+      "persist_ref_scope": "doc:0001",
+      "name": "SHC_M5-0.8X20_FICT-0001-2",
+      "document_id": "doc:0008",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.1
+        ],
+        [
+          -1.0,
+          0.0,
+          0.0,
+          0.015
+        ],
+        [
+          0.0,
+          -0.0,
+          1.0,
+          0.012
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "SHC_M5-0.8X20_FICT-0001-2",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0009",
+      "persist_ref": "Y21wOjAwMDk=",
+      "persist_ref_scope": "doc:0001",
+      "name": "SHC_M5-0.8X20_FICT-0001-3",
+      "document_id": "doc:0008",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.02
+        ],
+        [
+          -1.0,
+          0.0,
+          0.0,
+          0.065
+        ],
+        [
+          0.0,
+          -0.0,
+          1.0,
+          0.012
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "SHC_M5-0.8X20_FICT-0001-3",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0010",
+      "persist_ref": "Y21wOjAwMTA=",
+      "persist_ref_scope": "doc:0001",
+      "name": "SHC_M5-0.8X20_FICT-0001-4",
+      "document_id": "doc:0008",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.1
+        ],
+        [
+          -1.0,
+          0.0,
+          0.0,
+          0.065
+        ],
+        [
+          0.0,
+          -0.0,
+          1.0,
+          0.012
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "SHC_M5-0.8X20_FICT-0001-4",
+      "constrained_status_raw": null
+    }
+  ],
+  "mates": [],
+  "holes": [
+    {
+      "id": "hol:0001",
+      "persist_ref": "aG9sOjAwMDE=",
+      "persist_ref_scope": "doc:0002",
+      "component_id": "cmp:0001",
+      "feature_name": "FICT-HOLE-0001",
+      "hole_type": "tapped",
+      "standard": "ISO",
+      "size": "M5x0.8",
+      "thread_designation": "M5x0.8",
+      "thread_depth": {
+        "value": 9.0,
+        "unit": "mm"
+      },
+      "hole_depth": {
+        "value": 12.0,
+        "unit": "mm"
+      },
+      "end_condition": "blind",
+      "diameter": null,
+      "axis": {
+        "origin": {
+          "x": 0.02,
+          "y": 0.015,
+          "z": 0.0
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        }
+      },
+      "face_ids": [
+        "fac:0001",
+        "fac:0002",
+        "fac:0003",
+        "fac:0004"
+      ]
+    },
+    {
+      "id": "hol:0002",
+      "persist_ref": "aG9sOjAwMDI=",
+      "persist_ref_scope": "doc:0003",
+      "component_id": "cmp:0002",
+      "feature_name": "FICT-HOLE-0002",
+      "hole_type": "clearance",
+      "standard": "ISO",
+      "size": "M5",
+      "thread_designation": null,
+      "thread_depth": null,
+      "hole_depth": null,
+      "end_condition": "through",
+      "diameter": null,
+      "axis": {
+        "origin": {
+          "x": 0.02,
+          "y": 0.015,
+          "z": 0.0
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        }
+      },
+      "face_ids": [
+        "fac:0005",
+        "fac:0006",
+        "fac:0007",
+        "fac:0008"
+      ]
+    },
+    {
+      "id": "hol:0003",
+      "persist_ref": "aG9sOjAwMDM=",
+      "persist_ref_scope": "doc:0002",
+      "component_id": "cmp:0001",
+      "feature_name": "FICT-HOLE-0003",
+      "hole_type": "clearance",
+      "standard": "ISO",
+      "size": "Ø5.0",
+      "thread_designation": null,
+      "thread_depth": null,
+      "hole_depth": null,
+      "end_condition": "through",
+      "diameter": null,
+      "axis": {
+        "origin": {
+          "x": 0.02,
+          "y": 0.04,
+          "z": 0.0
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        }
+      },
+      "face_ids": [
+        "fac:0009"
+      ]
+    },
+    {
+      "id": "hol:0004",
+      "persist_ref": "aG9sOjAwMDQ=",
+      "persist_ref_scope": "doc:0002",
+      "component_id": "cmp:0001",
+      "feature_name": "FICT-HOLE-0004",
+      "hole_type": "clearance",
+      "standard": "ISO",
+      "size": "Ø5.0",
+      "thread_designation": null,
+      "thread_depth": null,
+      "hole_depth": null,
+      "end_condition": "through",
+      "diameter": null,
+      "axis": {
+        "origin": {
+          "x": 0.1,
+          "y": 0.04,
+          "z": 0.0
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        }
+      },
+      "face_ids": [
+        "fac:0010"
+      ]
+    },
+    {
+      "id": "hol:0005",
+      "persist_ref": "aG9sOjAwMDU=",
+      "persist_ref_scope": "doc:0003",
+      "component_id": "cmp:0002",
+      "feature_name": "FICT-HOLE-0005",
+      "hole_type": "clearance",
+      "standard": "ISO",
+      "size": "Ø5.1",
+      "thread_designation": null,
+      "thread_depth": null,
+      "hole_depth": null,
+      "end_condition": "through",
+      "diameter": null,
+      "axis": {
+        "origin": {
+          "x": 0.02,
+          "y": 0.04,
+          "z": 0.0
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        }
+      },
+      "face_ids": [
+        "fac:0011"
+      ]
+    },
+    {
+      "id": "hol:0006",
+      "persist_ref": "aG9sOjAwMDY=",
+      "persist_ref_scope": "doc:0003",
+      "component_id": "cmp:0002",
+      "feature_name": "FICT-HOLE-0006",
+      "hole_type": "clearance",
+      "standard": "ISO",
+      "size": "Ø5.1",
+      "thread_designation": null,
+      "thread_depth": null,
+      "hole_depth": null,
+      "end_condition": "through",
+      "diameter": null,
+      "axis": {
+        "origin": {
+          "x": 0.1,
+          "y": 0.04,
+          "z": 0.0
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        }
+      },
+      "face_ids": [
+        "fac:0012"
+      ]
+    }
+  ],
+  "threads": [],
+  "fasteners": [
+    {
+      "id": "fst:0001",
+      "persist_ref": "ZnN0OjAwMDE=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0007",
+      "kind": "screw",
+      "identity_source": "toolbox",
+      "thread_designation": "M5x0.8",
+      "length": {
+        "value": 20.0,
+        "unit": "mm"
+      },
+      "head_type": null,
+      "head_diameter": null,
+      "head_height": null,
+      "drive": null,
+      "axis": {
+        "origin": {
+          "x": 0.02,
+          "y": 0.015,
+          "z": 0.012
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        }
+      },
+      "material": null
+    },
+    {
+      "id": "fst:0002",
+      "persist_ref": "ZnN0OjAwMDI=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0008",
+      "kind": "screw",
+      "identity_source": "toolbox",
+      "thread_designation": "M5x0.8",
+      "length": {
+        "value": 20.0,
+        "unit": "mm"
+      },
+      "head_type": null,
+      "head_diameter": null,
+      "head_height": null,
+      "drive": null,
+      "axis": {
+        "origin": {
+          "x": 0.1,
+          "y": 0.015,
+          "z": 0.012
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        }
+      },
+      "material": null
+    },
+    {
+      "id": "fst:0003",
+      "persist_ref": "ZnN0OjAwMDM=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0009",
+      "kind": "screw",
+      "identity_source": "toolbox",
+      "thread_designation": "M5x0.8",
+      "length": {
+        "value": 20.0,
+        "unit": "mm"
+      },
+      "head_type": null,
+      "head_diameter": null,
+      "head_height": null,
+      "drive": null,
+      "axis": {
+        "origin": {
+          "x": 0.02,
+          "y": 0.065,
+          "z": 0.012
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        }
+      },
+      "material": null
+    },
+    {
+      "id": "fst:0004",
+      "persist_ref": "ZnN0OjAwMDQ=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0010",
+      "kind": "screw",
+      "identity_source": "toolbox",
+      "thread_designation": "M5x0.8",
+      "length": {
+        "value": 20.0,
+        "unit": "mm"
+      },
+      "head_type": null,
+      "head_diameter": null,
+      "head_height": null,
+      "drive": null,
+      "axis": {
+        "origin": {
+          "x": 0.1,
+          "y": 0.065,
+          "z": 0.012
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        }
+      },
+      "material": null
+    }
+  ],
+  "faces": [
+    {
+      "id": "fac:0001",
+      "persist_ref": "ZmFjOjAwMDE=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0001",
+      "body_id": "bod:0001",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.02,
+          "y": 0.015,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.0021000000000000003
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.0179,
+          "y": 0.012899999999999998,
+          "z": -0.012
+        },
+        "max": {
+          "x": 0.0221,
+          "y": 0.0171,
+          "z": 0.0
+        }
+      },
+      "area_m2": 0.0001583362697409256
+    },
+    {
+      "id": "fac:0002",
+      "persist_ref": "ZmFjOjAwMDI=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0001",
+      "body_id": "bod:0001",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.1,
+          "y": 0.015,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.0021000000000000003
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.0979,
+          "y": 0.012899999999999998,
+          "z": -0.012
+        },
+        "max": {
+          "x": 0.10210000000000001,
+          "y": 0.0171,
+          "z": 0.0
+        }
+      },
+      "area_m2": 0.0001583362697409256
+    },
+    {
+      "id": "fac:0003",
+      "persist_ref": "ZmFjOjAwMDM=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0001",
+      "body_id": "bod:0001",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.02,
+          "y": 0.065,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.0021000000000000003
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.0179,
+          "y": 0.0629,
+          "z": -0.012
+        },
+        "max": {
+          "x": 0.0221,
+          "y": 0.0671,
+          "z": 0.0
+        }
+      },
+      "area_m2": 0.0001583362697409256
+    },
+    {
+      "id": "fac:0004",
+      "persist_ref": "ZmFjOjAwMDQ=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0001",
+      "body_id": "bod:0001",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.1,
+          "y": 0.065,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.0021000000000000003
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.0979,
+          "y": 0.0629,
+          "z": -0.012
+        },
+        "max": {
+          "x": 0.10210000000000001,
+          "y": 0.0671,
+          "z": 0.0
+        }
+      },
+      "area_m2": 0.0001583362697409256
+    },
+    {
+      "id": "fac:0005",
+      "persist_ref": "ZmFjOjAwMDU=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0002",
+      "body_id": "bod:0002",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.02,
+          "y": 0.015,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.00275
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.01725,
+          "y": 0.01225,
+          "z": 0.0
+        },
+        "max": {
+          "x": 0.02275,
+          "y": 0.01775,
+          "z": 0.012
+        }
+      },
+      "area_m2": 0.0002073451151369263
+    },
+    {
+      "id": "fac:0006",
+      "persist_ref": "ZmFjOjAwMDY=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0002",
+      "body_id": "bod:0002",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.1,
+          "y": 0.015,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.00275
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.09725,
+          "y": 0.01225,
+          "z": 0.0
+        },
+        "max": {
+          "x": 0.10275000000000001,
+          "y": 0.01775,
+          "z": 0.012
+        }
+      },
+      "area_m2": 0.0002073451151369263
+    },
+    {
+      "id": "fac:0007",
+      "persist_ref": "ZmFjOjAwMDc=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0002",
+      "body_id": "bod:0002",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.02,
+          "y": 0.065,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.00275
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.01725,
+          "y": 0.06225,
+          "z": 0.0
+        },
+        "max": {
+          "x": 0.02275,
+          "y": 0.06775,
+          "z": 0.012
+        }
+      },
+      "area_m2": 0.0002073451151369263
+    },
+    {
+      "id": "fac:0008",
+      "persist_ref": "ZmFjOjAwMDg=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0002",
+      "body_id": "bod:0002",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.1,
+          "y": 0.065,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.00275
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.09725,
+          "y": 0.06225,
+          "z": 0.0
+        },
+        "max": {
+          "x": 0.10275000000000001,
+          "y": 0.06775,
+          "z": 0.012
+        }
+      },
+      "area_m2": 0.0002073451151369263
+    },
+    {
+      "id": "fac:0009",
+      "persist_ref": "ZmFjOjAwMDk=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0001",
+      "body_id": "bod:0001",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.02,
+          "y": 0.04,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.0025
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.0175,
+          "y": 0.0375,
+          "z": -0.02
+        },
+        "max": {
+          "x": 0.0225,
+          "y": 0.0425,
+          "z": -0.002
+        }
+      },
+      "area_m2": 0.0002827433388230814
+    },
+    {
+      "id": "fac:0010",
+      "persist_ref": "ZmFjOjAwMTA=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0001",
+      "body_id": "bod:0001",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.1,
+          "y": 0.04,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.0025
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.0975,
+          "y": 0.0375,
+          "z": -0.02
+        },
+        "max": {
+          "x": 0.10250000000000001,
+          "y": 0.0425,
+          "z": -0.002
+        }
+      },
+      "area_m2": 0.0002827433388230814
+    },
+    {
+      "id": "fac:0011",
+      "persist_ref": "ZmFjOjAwMTE=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0002",
+      "body_id": "bod:0002",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.02,
+          "y": 0.04,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.0025499999999999997
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.01745,
+          "y": 0.037450000000000004,
+          "z": 0.0
+        },
+        "max": {
+          "x": 0.02255,
+          "y": 0.04255,
+          "z": 0.012
+        }
+      },
+      "area_m2": 0.00019226547039969533
+    },
+    {
+      "id": "fac:0012",
+      "persist_ref": "ZmFjOjAwMTI=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0002",
+      "body_id": "bod:0002",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.1,
+          "y": 0.04,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.0025499999999999997
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.09745000000000001,
+          "y": 0.037450000000000004,
+          "z": 0.0
+        },
+        "max": {
+          "x": 0.10255,
+          "y": 0.04255,
+          "z": 0.012
+        }
+      },
+      "area_m2": 0.00019226547039969533
+    }
+  ],
+  "bodies": [
+    {
+      "id": "bod:0001",
+      "persist_ref": "Ym9kOjAwMDE=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0001",
+      "mesh_file": "meshes/bod-0001.glb",
+      "triangle_count": 288,
+      "is_solid": true
+    },
+    {
+      "id": "bod:0002",
+      "persist_ref": "Ym9kOjAwMDI=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0002",
+      "mesh_file": "meshes/bod-0002.glb",
+      "triangle_count": 288,
+      "is_solid": true
+    },
+    {
+      "id": "bod:0003",
+      "persist_ref": "Ym9kOjAwMDM=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0003",
+      "mesh_file": "meshes/bod-0003.glb",
+      "triangle_count": 48,
+      "is_solid": true
+    },
+    {
+      "id": "bod:0004",
+      "persist_ref": "Ym9kOjAwMDQ=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0004",
+      "mesh_file": "meshes/bod-0004.glb",
+      "triangle_count": 48,
+      "is_solid": true
+    },
+    {
+      "id": "bod:0005",
+      "persist_ref": "Ym9kOjAwMDU=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0005",
+      "mesh_file": "meshes/bod-0005.glb",
+      "triangle_count": 48,
+      "is_solid": true
+    },
+    {
+      "id": "bod:0006",
+      "persist_ref": "Ym9kOjAwMDY=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0006",
+      "mesh_file": "meshes/bod-0006.glb",
+      "triangle_count": 48,
+      "is_solid": true
+    },
+    {
+      "id": "bod:0007",
+      "persist_ref": "Ym9kOjAwMDc=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0007",
+      "mesh_file": "meshes/bod-0007.glb",
+      "triangle_count": 96,
+      "is_solid": true
+    },
+    {
+      "id": "bod:0008",
+      "persist_ref": "Ym9kOjAwMDg=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0008",
+      "mesh_file": "meshes/bod-0008.glb",
+      "triangle_count": 96,
+      "is_solid": true
+    },
+    {
+      "id": "bod:0009",
+      "persist_ref": "Ym9kOjAwMDk=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0009",
+      "mesh_file": "meshes/bod-0009.glb",
+      "triangle_count": 96,
+      "is_solid": true
+    },
+    {
+      "id": "bod:0010",
+      "persist_ref": "Ym9kOjAwMTA=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0010",
+      "mesh_file": "meshes/bod-0010.glb",
+      "triangle_count": 96,
+      "is_solid": true
+    }
+  ],
+  "interferences": [
+    {
+      "id": "int:0001",
+      "configuration": "Default",
+      "component_ids": [
+        "cmp:0003",
+        "cmp:0004"
+      ],
+      "volume": {
+        "value": 0.0,
+        "unit": "mm3"
+      },
+      "settings": {
+        "treat_coincident_as_interference": true,
+        "treat_subassemblies_as_components": true,
+        "include_multibody": false,
+        "ignore_hidden": true,
+        "fastener_folder_treatment": "include"
+      },
+      "status": "computed",
+      "error": null,
+      "group_key": "cmp:0003|cmp:0004",
+      "is_fastener": false,
+      "is_possible": false
+    },
+    {
+      "id": "int:0002",
+      "configuration": "Default",
+      "component_ids": [
+        "cmp:0001",
+        "cmp:0004"
+      ],
+      "volume": {
+        "value": 0.0,
+        "unit": "mm3"
+      },
+      "settings": {
+        "treat_coincident_as_interference": true,
+        "treat_subassemblies_as_components": true,
+        "include_multibody": false,
+        "ignore_hidden": true,
+        "fastener_folder_treatment": "include"
+      },
+      "status": "computed",
+      "error": null,
+      "group_key": "cmp:0001|cmp:0004",
+      "is_fastener": false,
+      "is_possible": false
+    }
+  ],
+  "captures": [],
+  "drawings": [
+    {
+      "document_id": "doc:0009",
+      "sheet_name": "Sheet1",
+      "page": 1,
+      "scale": "1:1",
+      "units": "mm",
+      "general_notes": [
+        {
+          "text": "THE BEARING SLIDES IN ITS SEAT.",
+          "source": {
+            "document_id": "doc:0009",
+            "sheet": "Sheet1",
+            "view": null,
+            "annotation": "note-1-1",
+            "persist_ref": null,
+            "page": null,
+            "bbox": null
+          },
+          "kind": "other"
+        }
+      ],
+      "dimensions": [
+        {
+          "nominal": {
+            "value": 42.0,
+            "unit": "mm"
+          },
+          "tolerance": {
+            "kind": "bilateral",
+            "upper": {
+              "value": 0.025,
+              "unit": "mm"
+            },
+            "lower": {
+              "value": 0.0,
+              "unit": "mm"
+            },
+            "source": {
+              "document_id": "doc:0009",
+              "sheet": "Sheet1",
+              "view": null,
+              "annotation": "dim-1-1",
+              "persist_ref": null,
+              "page": null,
+              "bbox": null
+            }
+          },
+          "source": {
+            "document_id": "doc:0009",
+            "sheet": "Sheet1",
+            "view": null,
+            "annotation": "dim-1-1",
+            "persist_ref": null,
+            "page": null,
+            "bbox": null
+          },
+          "text_as_read": "Ø42 +0.025/0"
+        },
+        {
+          "nominal": {
+            "value": 42.0,
+            "unit": "mm"
+          },
+          "tolerance": {
+            "kind": "bilateral",
+            "upper": {
+              "value": -0.009,
+              "unit": "mm"
+            },
+            "lower": {
+              "value": -0.025,
+              "unit": "mm"
+            },
+            "source": {
+              "document_id": "doc:0009",
+              "sheet": "Sheet1",
+              "view": null,
+              "annotation": "dim-1-2",
+              "persist_ref": null,
+              "page": null,
+              "bbox": null
+            }
+          },
+          "source": {
+            "document_id": "doc:0009",
+            "sheet": "Sheet1",
+            "view": null,
+            "annotation": "dim-1-2",
+            "persist_ref": null,
+            "page": null,
+            "bbox": null
+          },
+          "text_as_read": "Ø42 -0.009/-0.025"
+        },
+        {
+          "nominal": {
+            "value": 42.0,
+            "unit": "mm"
+          },
+          "tolerance": {
+            "kind": "bilateral",
+            "upper": {
+              "value": -0.009,
+              "unit": "mm"
+            },
+            "lower": {
+              "value": -0.025,
+              "unit": "mm"
+            },
+            "source": {
+              "document_id": "doc:0009",
+              "sheet": "Sheet1",
+              "view": null,
+              "annotation": "dim-1-3",
+              "persist_ref": null,
+              "page": null,
+              "bbox": null
+            }
+          },
+          "source": {
+            "document_id": "doc:0009",
+            "sheet": "Sheet1",
+            "view": null,
+            "annotation": "dim-1-3",
+            "persist_ref": null,
+            "page": null,
+            "bbox": null
+          },
+          "text_as_read": "Ø42 -0.009/-0.025"
+        },
+        {
+          "nominal": {
+            "value": 0.1,
+            "unit": "mm"
+          },
+          "tolerance": {
+            "kind": "none",
+            "upper": null,
+            "lower": null,
+            "source": {
+              "document_id": "doc:0009",
+              "sheet": "Sheet1",
+              "view": null,
+              "annotation": "dim-1-4",
+              "persist_ref": null,
+              "page": null,
+              "bbox": null
+            }
+          },
+          "source": {
+            "document_id": "doc:0009",
+            "sheet": "Sheet1",
+            "view": null,
+            "annotation": "dim-1-4",
+            "persist_ref": null,
+            "page": null,
+            "bbox": null
+          },
+          "text_as_read": "⌖ Ø0.1"
+        },
+        {
+          "nominal": {
+            "value": 30.0,
+            "unit": "mm"
+          },
+          "tolerance": {
+            "kind": "symmetric",
+            "upper": {
+              "value": 0.05,
+              "unit": "mm"
+            },
+            "lower": {
+              "value": -0.05,
+              "unit": "mm"
+            },
+            "source": {
+              "document_id": "doc:0009",
+              "sheet": "Sheet1",
+              "view": null,
+              "annotation": "dim-1-5",
+              "persist_ref": null,
+              "page": null,
+              "bbox": null
+            }
+          },
+          "source": {
+            "document_id": "doc:0009",
+            "sheet": "Sheet1",
+            "view": null,
+            "annotation": "dim-1-5",
+            "persist_ref": null,
+            "page": null,
+            "bbox": null
+          },
+          "text_as_read": "30 ±0.05"
+        },
+        {
+          "nominal": {
+            "value": 12.0,
+            "unit": "mm"
+          },
+          "tolerance": {
+            "kind": "symmetric",
+            "upper": {
+              "value": 0.05,
+              "unit": "mm"
+            },
+            "lower": {
+              "value": -0.05,
+              "unit": "mm"
+            },
+            "source": {
+              "document_id": "doc:0009",
+              "sheet": "Sheet1",
+              "view": null,
+              "annotation": "dim-1-6",
+              "persist_ref": null,
+              "page": null,
+              "bbox": null
+            }
+          },
+          "source": {
+            "document_id": "doc:0009",
+            "sheet": "Sheet1",
+            "view": null,
+            "annotation": "dim-1-6",
+            "persist_ref": null,
+            "page": null,
+            "bbox": null
+          },
+          "text_as_read": "12 ±0.05"
+        },
+        {
+          "nominal": {
+            "value": 15.0,
+            "unit": "mm"
+          },
+          "tolerance": {
+            "kind": "symmetric",
+            "upper": {
+              "value": 0.05,
+              "unit": "mm"
+            },
+            "lower": {
+              "value": -0.05,
+              "unit": "mm"
+            },
+            "source": {
+              "document_id": "doc:0009",
+              "sheet": "Sheet1",
+              "view": null,
+              "annotation": "dim-1-7",
+              "persist_ref": null,
+              "page": null,
+              "bbox": null
+            }
+          },
+          "source": {
+            "document_id": "doc:0009",
+            "sheet": "Sheet1",
+            "view": null,
+            "annotation": "dim-1-7",
+            "persist_ref": null,
+            "page": null,
+            "bbox": null
+          },
+          "text_as_read": "15 ±0.05"
+        },
+        {
+          "nominal": {
+            "value": 2.0,
+            "unit": "mm"
+          },
+          "tolerance": {
+            "kind": "symmetric",
+            "upper": {
+              "value": 0.05,
+              "unit": "mm"
+            },
+            "lower": {
+              "value": -0.05,
+              "unit": "mm"
+            },
+            "source": {
+              "document_id": "doc:0009",
+              "sheet": "Sheet1",
+              "view": null,
+              "annotation": "dim-1-8",
+              "persist_ref": null,
+              "page": null,
+              "bbox": null
+            }
+          },
+          "source": {
+            "document_id": "doc:0009",
+            "sheet": "Sheet1",
+            "view": null,
+            "annotation": "dim-1-8",
+            "persist_ref": null,
+            "page": null,
+            "bbox": null
+          },
+          "text_as_read": "2 ±0.05"
+        },
+        {
+          "nominal": {
+            "value": 1.0,
+            "unit": "mm"
+          },
+          "tolerance": {
+            "kind": "symmetric",
+            "upper": {
+              "value": 0.5,
+              "unit": "mm"
+            },
+            "lower": {
+              "value": -0.5,
+              "unit": "mm"
+            },
+            "source": {
+              "document_id": "doc:0009",
+              "sheet": "Sheet1",
+              "view": null,
+              "annotation": "dim-1-9",
+              "persist_ref": null,
+              "page": null,
+              "bbox": null
+            }
+          },
+          "source": {
+            "document_id": "doc:0009",
+            "sheet": "Sheet1",
+            "view": null,
+            "annotation": "dim-1-9",
+            "persist_ref": null,
+            "page": null,
+            "bbox": null
+          },
+          "text_as_read": "1 ±0.5"
+        }
+      ],
+      "views": [],
+      "parse_status": "text",
+      "parser": "pdf-text",
+      "source": "pdf_ingest"
+    },
+    {
+      "document_id": "doc:0010",
+      "sheet_name": "Sheet1",
+      "page": 1,
+      "scale": "1:1",
+      "units": "mm",
+      "general_notes": [],
+      "dimensions": [
+        {
+          "nominal": {
+            "value": 9.0,
+            "unit": "mm"
+          },
+          "tolerance": {
+            "kind": "none",
+            "upper": null,
+            "lower": null,
+            "source": {
+              "document_id": "doc:0010",
+              "sheet": "Sheet1",
+              "view": null,
+              "annotation": "dim-1-1",
+              "persist_ref": null,
+              "page": null,
+              "bbox": null
+            }
+          },
+          "source": {
+            "document_id": "doc:0010",
+            "sheet": "Sheet1",
+            "view": null,
+            "annotation": "dim-1-1",
+            "persist_ref": null,
+            "page": null,
+            "bbox": null
+          },
+          "text_as_read": "4X M5x0.8 - 6H THREAD ↧ 9"
+        }
+      ],
+      "views": [],
+      "parse_status": "text",
+      "parser": "pdf-text",
+      "source": "pdf_ingest"
+    }
+  ],
+  "features": [
+    {
+      "id": "feat:0001",
+      "persist_ref": "ZG9jOjAwMDIvMS1SZWY=",
+      "persist_ref_scope": "doc:0002",
+      "document_id": "doc:0002",
+      "configuration": "Default",
+      "name": "1-Ref",
+      "type_name": "FtrFolder",
+      "description": "intent",
+      "index": 0,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0002",
+      "persist_ref": "ZG9jOjAwMDIvRGF0dW0tMQ==",
+      "persist_ref_scope": "doc:0002",
+      "document_id": "doc:0002",
+      "configuration": "Default",
+      "name": "Datum-1",
+      "type_name": "RefAxis",
+      "description": "intent",
+      "index": 1,
+      "depth": 1,
+      "folder_id": "feat:0001",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0003",
+      "persist_ref": "ZG9jOjAwMDIvMi1Db25zdHJ1Y3Rpb24=",
+      "persist_ref_scope": "doc:0002",
+      "document_id": "doc:0002",
+      "configuration": "Default",
+      "name": "2-Construction",
+      "type_name": "FtrFolder",
+      "description": "intent",
+      "index": 2,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0004",
+      "persist_ref": "ZG9jOjAwMDIvQmxvY2stMQ==",
+      "persist_ref_scope": "doc:0002",
+      "document_id": "doc:0002",
+      "configuration": "Default",
+      "name": "Block-1",
+      "type_name": "ProfileFeature",
+      "description": "intent",
+      "index": 3,
+      "depth": 1,
+      "folder_id": "feat:0003",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0005"
+      ],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0005"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0005",
+      "persist_ref": "ZG9jOjAwMDIvQmxvY2stMg==",
+      "persist_ref_scope": "doc:0002",
+      "document_id": "doc:0002",
+      "configuration": "Default",
+      "name": "Block-2",
+      "type_name": "SurfaceExtrude",
+      "description": "intent",
+      "index": 4,
+      "depth": 1,
+      "folder_id": "feat:0003",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [
+        "feat:0004"
+      ],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0006",
+      "persist_ref": "ZG9jOjAwMDIvMy1Db3Jl",
+      "persist_ref_scope": "doc:0002",
+      "document_id": "doc:0002",
+      "configuration": "Default",
+      "name": "3-Core",
+      "type_name": "FtrFolder",
+      "description": "intent",
+      "index": 5,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0007",
+      "persist_ref": "ZG9jOjAwMDIvQmxvY2stMw==",
+      "persist_ref_scope": "doc:0002",
+      "document_id": "doc:0002",
+      "configuration": "Default",
+      "name": "Block-3",
+      "type_name": "ProfileFeature",
+      "description": "intent",
+      "index": 6,
+      "depth": 1,
+      "folder_id": "feat:0006",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0008"
+      ],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0008"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0008",
+      "persist_ref": "ZG9jOjAwMDIvQmxvY2stNA==",
+      "persist_ref_scope": "doc:0002",
+      "document_id": "doc:0002",
+      "configuration": "Default",
+      "name": "Block-4",
+      "type_name": "Extrusion",
+      "description": "intent",
+      "index": 7,
+      "depth": 1,
+      "folder_id": "feat:0006",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [
+        "feat:0007"
+      ],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0009",
+      "persist_ref": "ZG9jOjAwMDIvNC1EZXRhaWw=",
+      "persist_ref_scope": "doc:0002",
+      "document_id": "doc:0002",
+      "configuration": "Default",
+      "name": "4-Detail",
+      "type_name": "FtrFolder",
+      "description": "intent",
+      "index": 8,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0010",
+      "persist_ref": "ZG9jOjAwMDIvQmxvY2stNQ==",
+      "persist_ref_scope": "doc:0002",
+      "document_id": "doc:0002",
+      "configuration": "Default",
+      "name": "Block-5",
+      "type_name": "ProfileFeature",
+      "description": "intent",
+      "index": 9,
+      "depth": 1,
+      "folder_id": "feat:0009",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0011"
+      ],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0011"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0011",
+      "persist_ref": "ZG9jOjAwMDIvQmxvY2stNg==",
+      "persist_ref_scope": "doc:0002",
+      "document_id": "doc:0002",
+      "configuration": "Default",
+      "name": "Block-6",
+      "type_name": "Cut",
+      "description": "intent",
+      "index": 10,
+      "depth": 1,
+      "folder_id": "feat:0009",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [
+        "feat:0010"
+      ],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0012",
+      "persist_ref": "ZG9jOjAwMDIvQmxvY2stNw==",
+      "persist_ref_scope": "doc:0002",
+      "document_id": "doc:0002",
+      "configuration": "Default",
+      "name": "Block-7",
+      "type_name": "HoleWzd",
+      "description": "intent",
+      "index": 11,
+      "depth": 1,
+      "folder_id": "feat:0009",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0013",
+      "persist_ref": "ZG9jOjAwMDIvNS1Nb2RpZnk=",
+      "persist_ref_scope": "doc:0002",
+      "document_id": "doc:0002",
+      "configuration": "Default",
+      "name": "5-Modify",
+      "type_name": "FtrFolder",
+      "description": "intent",
+      "index": 12,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0014",
+      "persist_ref": "ZG9jOjAwMDIvQmxvY2stOA==",
+      "persist_ref_scope": "doc:0002",
+      "document_id": "doc:0002",
+      "configuration": "Default",
+      "name": "Block-8",
+      "type_name": "Draft",
+      "description": "intent",
+      "index": 13,
+      "depth": 1,
+      "folder_id": "feat:0013",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0015",
+      "persist_ref": "ZG9jOjAwMDIvQmxvY2stOQ==",
+      "persist_ref_scope": "doc:0002",
+      "document_id": "doc:0002",
+      "configuration": "Default",
+      "name": "Block-9",
+      "type_name": "LPattern",
+      "description": "intent",
+      "index": 14,
+      "depth": 1,
+      "folder_id": "feat:0013",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0016",
+      "persist_ref": "ZG9jOjAwMDIvNi1RdWFyYW50aW5l",
+      "persist_ref_scope": "doc:0002",
+      "document_id": "doc:0002",
+      "configuration": "Default",
+      "name": "6-Quarantine",
+      "type_name": "FtrFolder",
+      "description": "intent",
+      "index": 15,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0017",
+      "persist_ref": "ZG9jOjAwMDIvQmxvY2stMTA=",
+      "persist_ref_scope": "doc:0002",
+      "document_id": "doc:0002",
+      "configuration": "Default",
+      "name": "Block-10",
+      "type_name": "Chamfer",
+      "description": "intent",
+      "index": 16,
+      "depth": 1,
+      "folder_id": "feat:0016",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0018",
+      "persist_ref": "ZG9jOjAwMDIvQmxvY2stMTE=",
+      "persist_ref_scope": "doc:0002",
+      "document_id": "doc:0002",
+      "configuration": "Default",
+      "name": "Block-11",
+      "type_name": "Fillet",
+      "description": "intent",
+      "index": 17,
+      "depth": 1,
+      "folder_id": "feat:0016",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": {
+        "default_radius": {
+          "value": 0.003,
+          "unit": "m"
+        }
+      }
+    },
+    {
+      "id": "feat:0019",
+      "persist_ref": "ZG9jOjAwMDMvMS1SZWY=",
+      "persist_ref_scope": "doc:0003",
+      "document_id": "doc:0003",
+      "configuration": "Default",
+      "name": "1-Ref",
+      "type_name": "FtrFolder",
+      "description": "intent",
+      "index": 0,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0020",
+      "persist_ref": "ZG9jOjAwMDMvRGF0dW0tMQ==",
+      "persist_ref_scope": "doc:0003",
+      "document_id": "doc:0003",
+      "configuration": "Default",
+      "name": "Datum-1",
+      "type_name": "RefAxis",
+      "description": "intent",
+      "index": 1,
+      "depth": 1,
+      "folder_id": "feat:0019",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0021",
+      "persist_ref": "ZG9jOjAwMDMvMi1Db25zdHJ1Y3Rpb24=",
+      "persist_ref_scope": "doc:0003",
+      "document_id": "doc:0003",
+      "configuration": "Default",
+      "name": "2-Construction",
+      "type_name": "FtrFolder",
+      "description": "intent",
+      "index": 2,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0022",
+      "persist_ref": "ZG9jOjAwMDMvQmxvY2stMQ==",
+      "persist_ref_scope": "doc:0003",
+      "document_id": "doc:0003",
+      "configuration": "Default",
+      "name": "Block-1",
+      "type_name": "ProfileFeature",
+      "description": "intent",
+      "index": 3,
+      "depth": 1,
+      "folder_id": "feat:0021",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0023"
+      ],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0023"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0023",
+      "persist_ref": "ZG9jOjAwMDMvQmxvY2stMg==",
+      "persist_ref_scope": "doc:0003",
+      "document_id": "doc:0003",
+      "configuration": "Default",
+      "name": "Block-2",
+      "type_name": "SurfaceExtrude",
+      "description": "intent",
+      "index": 4,
+      "depth": 1,
+      "folder_id": "feat:0021",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [
+        "feat:0022"
+      ],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0024",
+      "persist_ref": "ZG9jOjAwMDMvMy1Db3Jl",
+      "persist_ref_scope": "doc:0003",
+      "document_id": "doc:0003",
+      "configuration": "Default",
+      "name": "3-Core",
+      "type_name": "FtrFolder",
+      "description": "intent",
+      "index": 5,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0025",
+      "persist_ref": "ZG9jOjAwMDMvQmxvY2stMw==",
+      "persist_ref_scope": "doc:0003",
+      "document_id": "doc:0003",
+      "configuration": "Default",
+      "name": "Block-3",
+      "type_name": "ProfileFeature",
+      "description": "intent",
+      "index": 6,
+      "depth": 1,
+      "folder_id": "feat:0024",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0026"
+      ],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0026"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0026",
+      "persist_ref": "ZG9jOjAwMDMvQmxvY2stNA==",
+      "persist_ref_scope": "doc:0003",
+      "document_id": "doc:0003",
+      "configuration": "Default",
+      "name": "Block-4",
+      "type_name": "Extrusion",
+      "description": "intent",
+      "index": 7,
+      "depth": 1,
+      "folder_id": "feat:0024",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [
+        "feat:0025"
+      ],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0027",
+      "persist_ref": "ZG9jOjAwMDMvNC1EZXRhaWw=",
+      "persist_ref_scope": "doc:0003",
+      "document_id": "doc:0003",
+      "configuration": "Default",
+      "name": "4-Detail",
+      "type_name": "FtrFolder",
+      "description": "intent",
+      "index": 8,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0028",
+      "persist_ref": "ZG9jOjAwMDMvQmxvY2stNQ==",
+      "persist_ref_scope": "doc:0003",
+      "document_id": "doc:0003",
+      "configuration": "Default",
+      "name": "Block-5",
+      "type_name": "ProfileFeature",
+      "description": "intent",
+      "index": 9,
+      "depth": 1,
+      "folder_id": "feat:0027",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0029"
+      ],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0029"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0029",
+      "persist_ref": "ZG9jOjAwMDMvQmxvY2stNg==",
+      "persist_ref_scope": "doc:0003",
+      "document_id": "doc:0003",
+      "configuration": "Default",
+      "name": "Block-6",
+      "type_name": "Cut",
+      "description": "intent",
+      "index": 10,
+      "depth": 1,
+      "folder_id": "feat:0027",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [
+        "feat:0028"
+      ],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0030",
+      "persist_ref": "ZG9jOjAwMDMvQmxvY2stNw==",
+      "persist_ref_scope": "doc:0003",
+      "document_id": "doc:0003",
+      "configuration": "Default",
+      "name": "Block-7",
+      "type_name": "HoleWzd",
+      "description": "intent",
+      "index": 11,
+      "depth": 1,
+      "folder_id": "feat:0027",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0031",
+      "persist_ref": "ZG9jOjAwMDMvNS1Nb2RpZnk=",
+      "persist_ref_scope": "doc:0003",
+      "document_id": "doc:0003",
+      "configuration": "Default",
+      "name": "5-Modify",
+      "type_name": "FtrFolder",
+      "description": "intent",
+      "index": 12,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0032",
+      "persist_ref": "ZG9jOjAwMDMvQmxvY2stOA==",
+      "persist_ref_scope": "doc:0003",
+      "document_id": "doc:0003",
+      "configuration": "Default",
+      "name": "Block-8",
+      "type_name": "Draft",
+      "description": "intent",
+      "index": 13,
+      "depth": 1,
+      "folder_id": "feat:0031",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0033",
+      "persist_ref": "ZG9jOjAwMDMvQmxvY2stOQ==",
+      "persist_ref_scope": "doc:0003",
+      "document_id": "doc:0003",
+      "configuration": "Default",
+      "name": "Block-9",
+      "type_name": "LPattern",
+      "description": "intent",
+      "index": 14,
+      "depth": 1,
+      "folder_id": "feat:0031",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0034",
+      "persist_ref": "ZG9jOjAwMDMvNi1RdWFyYW50aW5l",
+      "persist_ref_scope": "doc:0003",
+      "document_id": "doc:0003",
+      "configuration": "Default",
+      "name": "6-Quarantine",
+      "type_name": "FtrFolder",
+      "description": "intent",
+      "index": 15,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0035",
+      "persist_ref": "ZG9jOjAwMDMvQmxvY2stMTA=",
+      "persist_ref_scope": "doc:0003",
+      "document_id": "doc:0003",
+      "configuration": "Default",
+      "name": "Block-10",
+      "type_name": "Chamfer",
+      "description": "intent",
+      "index": 16,
+      "depth": 1,
+      "folder_id": "feat:0034",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0036",
+      "persist_ref": "ZG9jOjAwMDMvQmxvY2stMTE=",
+      "persist_ref_scope": "doc:0003",
+      "document_id": "doc:0003",
+      "configuration": "Default",
+      "name": "Block-11",
+      "type_name": "Fillet",
+      "description": "intent",
+      "index": 17,
+      "depth": 1,
+      "folder_id": "feat:0034",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": {
+        "default_radius": {
+          "value": 0.003,
+          "unit": "m"
+        }
+      }
+    }
+  ],
+  "equations": [
+    {
+      "document_id": "doc:0002",
+      "index": 0,
+      "text": "\"Size\" = 40mm",
+      "lhs": "Size",
+      "is_global": true,
+      "value": 0.04
+    },
+    {
+      "document_id": "doc:0002",
+      "index": 1,
+      "text": "\"D1@Block-3\" = \"Size\"",
+      "lhs": "D1@Block-3",
+      "is_global": false,
+      "value": 0.04
+    },
+    {
+      "document_id": "doc:0003",
+      "index": 0,
+      "text": "\"Size\" = 40mm",
+      "lhs": "Size",
+      "is_global": true,
+      "value": 0.04
+    },
+    {
+      "document_id": "doc:0003",
+      "index": 1,
+      "text": "\"D1@Block-3\" = \"Size\"",
+      "lhs": "D1@Block-3",
+      "is_global": false,
+      "value": 0.04
+    }
+  ],
+  "rms_suppress_test": null,
+  "gaps": [
+    {
+      "kind": "tool_error",
+      "entity_kind": "mass_override",
+      "entity_id": "doc:0001",
+      "reason": "IMassProperty.OverrideMass could not be read",
+      "error": "InvalidCastException: the mass property object is not IMassProperty"
+    },
+    {
+      "kind": "tool_error",
+      "entity_kind": "mass_override",
+      "entity_id": "doc:0002",
+      "reason": "IMassProperty.OverrideMass could not be read",
+      "error": "InvalidCastException: the mass property object is not IMassProperty"
+    },
+    {
+      "kind": "tool_error",
+      "entity_kind": "mass_override",
+      "entity_id": "doc:0003",
+      "reason": "IMassProperty.OverrideMass could not be read",
+      "error": "InvalidCastException: the mass property object is not IMassProperty"
+    },
+    {
+      "kind": "tool_error",
+      "entity_kind": "mass_override",
+      "entity_id": "doc:0004",
+      "reason": "IMassProperty.OverrideMass could not be read",
+      "error": "InvalidCastException: the mass property object is not IMassProperty"
+    },
+    {
+      "kind": "tool_error",
+      "entity_kind": "mass_override",
+      "entity_id": "doc:0005",
+      "reason": "IMassProperty.OverrideMass could not be read",
+      "error": "InvalidCastException: the mass property object is not IMassProperty"
+    },
+    {
+      "kind": "tool_error",
+      "entity_kind": "mass_override",
+      "entity_id": "doc:0006",
+      "reason": "IMassProperty.OverrideMass could not be read",
+      "error": "InvalidCastException: the mass property object is not IMassProperty"
+    },
+    {
+      "kind": "tool_error",
+      "entity_kind": "mass_override",
+      "entity_id": "doc:0007",
+      "reason": "IMassProperty.OverrideMass could not be read",
+      "error": "InvalidCastException: the mass property object is not IMassProperty"
+    },
+    {
+      "kind": "tool_error",
+      "entity_kind": "mass_override",
+      "entity_id": "doc:0008",
+      "reason": "IMassProperty.OverrideMass could not be read",
+      "error": "InvalidCastException: the mass property object is not IMassProperty"
+    }
+  ]
+}

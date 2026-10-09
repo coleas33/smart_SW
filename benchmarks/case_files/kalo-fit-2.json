@@ -1,0 +1,16 @@
+{
+  "case_file_version": 1,
+  "package_id": "kalo-fit-2",
+  "answers": [
+    {
+      "id": "A-1",
+      "item": "interfaces.fit",
+      "ids": [
+        "cmp:0003",
+        "cmp:0004",
+        "cmp:0001"
+      ],
+      "answer": "press fit"
+    }
+  ]
+}

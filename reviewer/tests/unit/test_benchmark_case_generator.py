@@ -1,12 +1,12 @@
-"""The case generator, its in-memory half (feature 014 T125; `generator.md` 2 to 4, 7, 10 and 11;
-data-model section 5; CS-1, GN-1, GN-4, GN-8, GN-9; FR-027, FR-028, FR-029, FR-031, FR-048,
-FR-051).
+"""The case generator, its in-memory half (feature 014 T125) and its committed half (T146);
+`generator.md` 2 to 4, 7, 10 and 11; data-model section 5; CS-1, GN-1, GN-4, GN-8, GN-9; FR-027,
+FR-028, FR-029, FR-031, FR-048, FR-051; SC-006, US5-1; RF-55, RF-75.
 
 Every committed case is written by `tests.benchmark_cases` from one case spec, through the
-formats' data-only models. This module drives the generator over a small fictional design
+formats' data-only models. Sections 1 to 6 drive the generator over a small fictional design
 defined here, `quill` (a plate, a cover, two dowel pins, two screws, an assembly drawing and the
 plate's drawing, built with the builders), and over seed kinds of its own where the machinery,
-not a contract kind, is under test; T146 adds the tests over the committed tree.
+not a contract kind, is under test; section 7 holds the tests over the committed tree.
 
 1. **Refusals (section 10).** Each row is a `CaseSpecError`, a `ValueError` beginning
    "case spec {case id}:" with the row's gist, the first failing row ending the run before
@@ -34,6 +34,15 @@ not a contract kind, is under test; T146 adds the tests over the committed tree.
 6. **Stale files (section 1).** `generate.stale_files` names every file under the four generated
    folders that the render lacks, skips the hand-kept and the native-package slot, deletes
    nothing; `generate.main` writes the render's bytes and exits 1 on a stale file.
+7. **The committed tree (section 11's tests 1 to 6, their committed halves).** (1) `render_all()`
+   equals the committed tree under the four generated folders, each committed file read as git
+   stores it (`as_committed`), the stale scan over the repository names nothing, and a stale file
+   planted beside a copy of the tree is named; (2) two renders in one process are equal, each IR
+   `package_id` is its case id's uuid5 and each `design_id` its case id, and rendering reads no
+   clock; (3) every custom document carries the example profile's names, and no rendered string
+   is a profile A property name; (4) every committed key and case file loads through its own
+   loader; (5) every committed twin is its case's `twin(...)`; (6) `cover-blind-tap`'s spec alone
+   passes `check_specs`, and every design's specs together cover every anchor.
 """
 
 from __future__ import annotations
@@ -41,7 +50,9 @@ from __future__ import annotations
 import dataclasses
 import json
 import re
-from collections.abc import Mapping
+import sys
+import time
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -49,16 +60,24 @@ from uuid import uuid5
 
 import pytest
 
-from swreview.benchmark import families
+from swreview.agent.checklist import load_checklist
+from swreview.benchmark import answers, families
+from swreview.benchmark.answer_key import load_answer_key
 from swreview.benchmark.answer_key_model import AnswerKey, Stamp, is_family
 from swreview.benchmark.case_file import CaseFile
-from swreview.benchmark.sets import REPO_ROOT, BenchmarkSet
+from swreview.benchmark.sets import REPO_ROOT, BenchmarkPackageRef, BenchmarkSet, load_set
 from swreview.checks.rms import registry as rms_registry
 from swreview.checks.rms_types import load_table
 from swreview.checks.standards import registry as standards_registry
 from swreview.checks.standards.part import evaluate_part
-from swreview.checks.standards.traversal import graded_documents
+from swreview.checks.standards.traversal import (
+    graded_documents,
+    part_number_matches,
+    property_key,
+)
+from swreview.ir.loader import load_package
 from swreview.ir.models import EvidencePackage, SourceRef
+from swreview.report.summary import load_words
 from swreview.tools import checks_fastener, rms_checks
 from swreview.tools.context import context_for, use_context
 from tests.benchmark_cases import designs, generate, render, seeds, spec, stamps, vocabulary
@@ -95,9 +114,11 @@ from tests.support.features import PartSpec, part_trees
 from tests.support.mechanical import (
     CREATED_AT,
     FICTIONAL_ROOT,
+    HYGIENE_PROPERTIES,
     Face,
     Instance,
     PackageBuilder,
+    as_committed,
     cylinder_mesh,
     transform,
 )
@@ -2135,3 +2156,287 @@ def test_the_designs_are_listed_in_order_each_a_stub_or_a_design() -> None:
         "cover",
     ]
     assert all(isinstance(module.SPECS, tuple) for module in designs.DESIGNS)
+
+
+# --- 7. the committed tree, section 11's committed halves (T146) -----------------------------
+
+SET_FILES: tuple[str, ...] = ("committed.json", "pilot.json")
+"""The set files naming every generated case: the pane study's and the lever studies' smoke set
+(`cases.md` 6.1); `pane-smoke.json` names two of `committed.json`'s entries."""
+
+REVISION_PRESENT = "hygiene.revision_present"
+"""The check a document's missing revision is keyed on (R-8's forbidden entry and
+`revision_missing`'s defect, `cases.md` 6.3)."""
+
+
+@pytest.fixture(scope="module")
+def rendered() -> dict[str, bytes]:
+    """`generate.render_all()`, once for the committed-tree tests that read it."""
+    return generate.render_all()
+
+
+def committed_entries() -> list[BenchmarkPackageRef]:
+    """Every entry of the set files naming the generated cases, in set order."""
+    return [
+        entry
+        for name in SET_FILES
+        for entry in load_set(REPO_ROOT / render.SETS / name, root=REPO_ROOT).packages
+    ]
+
+
+def rendered_packages(files: Mapping[str, bytes]) -> dict[str, Any]:
+    """Each rendered `package.json`, parsed, by its case id."""
+    return {
+        path.split("/")[2]: json.loads(content)
+        for path, content in files.items()
+        if path.startswith(f"{render.PACKAGES}/") and path.endswith("/package.json")
+    }
+
+
+# (1) regeneration (SC-006, US5-1)
+
+
+def test_render_all_equals_the_committed_tree_byte_for_byte(rendered: dict[str, bytes]) -> None:
+    """Every rendered file is committed with the same bytes, read as git stores it (RF-55); the
+    stale scan over the repository names nothing, so both sides name the same files, and the
+    native-package slot is on neither (RF-75)."""
+    missing = [path for path in rendered if not (REPO_ROOT / path).is_file()]
+    assert missing == [], "regenerate with `uv run python -m tests.benchmark_cases.generate`"
+    drifted = [
+        path for path, content in rendered.items() if as_committed(REPO_ROOT / path) != content
+    ]
+    assert drifted == [], "regenerate with the generator; never edit a case by hand"
+    assert generate.stale_files(REPO_ROOT, rendered) == []
+    assert [path for path in rendered if path.startswith(generate.NATIVE_SLOT)] == []
+
+
+def test_a_stale_file_beside_the_committed_tree_is_named(
+    rendered: dict[str, bytes], tmp_path: Path
+) -> None:
+    """A copy of the committed tree with one file the render lacks: the scan names it, and
+    neither the hand-kept key nor the native-package slot."""
+    _checkout(
+        tmp_path,
+        "benchmarks/answer_keys/gone-1.json",
+        "benchmarks/answer_keys/rms-part.json",
+        f"{generate.NATIVE_SLOT}package.json",
+    )
+    for relative, content in rendered.items():
+        target = tmp_path / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content)
+
+    assert generate.stale_files(tmp_path, rendered) == [
+        "stale: benchmarks/answer_keys/gone-1.json: delete it or restore its spec"
+    ]
+
+
+# (2) determinism
+
+
+def test_two_renders_in_one_process_are_equal(rendered: dict[str, bytes]) -> None:
+    assert generate.render_all() == rendered
+
+
+def test_each_committed_package_s_ir_identity_is_its_case_s(rendered: dict[str, bytes]) -> None:
+    """The IR `package_id` is the case id's uuid5 and `design.design_id` the case id (RF-75), for
+    every package the set files name."""
+    packages = rendered_packages(rendered)
+
+    assert set(packages) == {entry.package_id for entry in committed_entries()}
+    for case_id, data in packages.items():
+        assert data["package_id"] == str(uuid5(CASE_NAMESPACE, case_id)), case_id
+        assert data["design"]["design_id"] == case_id, case_id
+
+
+class _Clock:
+    """A clock that fails the render however it is read."""
+
+    def __getattr__(self, name: str) -> Any:
+        raise AssertionError(f"the generator read the clock (datetime.{name})")
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("the generator read the clock (datetime)")
+
+
+def _no_clock(*args: Any, **kwargs: Any) -> Any:
+    raise AssertionError("the generator read the clock (time)")
+
+
+def test_rendering_reads_no_clock(
+    rendered: dict[str, bytes], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`time.time`, `time.time_ns` and the `datetime` name of every module the generator runs,
+    its own and the builders' under `tests/support/`, patched to raise: the render succeeds,
+    unchanged (`generator.md` 1: no clock)."""
+    monkeypatch.setattr(time, "time", _no_clock)
+    monkeypatch.setattr(time, "time_ns", _no_clock)
+    patched = []
+    for name, module in sorted(sys.modules.items()):
+        if name.startswith(("tests.benchmark_cases", "tests.support.")) and hasattr(
+            module, "datetime"
+        ):
+            monkeypatch.setattr(module, "datetime", _Clock())
+            patched.append(name)
+
+    assert "tests.support.mechanical" in patched
+    assert generate.render_all() == rendered
+
+
+# (3) the example profile (FR-027)
+
+
+def _revision_keyed(key: Mapping[str, Any]) -> set[str]:
+    """The documents a key names under `hygiene.revision_present`, a known defect's or a
+    forbidden entry's: their missing profile revision is the case's point (R-8,
+    `revision_missing`)."""
+    documents: set[str] = set()
+    for defect in key["known_defects"]:
+        if defect["check"] == REVISION_PRESENT:
+            documents.update(defect["document_ids"])
+    for entry in key.get("forbidden", []):
+        if REVISION_PRESENT in entry["checks"]:
+            documents.update(entry["document_ids"])
+    return documents
+
+
+def test_every_custom_document_carries_the_example_profile_s_names(
+    rendered: dict[str, bytes],
+) -> None:
+    """A document whose file name follows the example profile's part-number convention carries
+    its data card, hygiene and revision property names (`generator.md` 5.2), but the revision on
+    a document whose key names its revision missing."""
+    hygiene = PROFILE.hygiene
+    assert hygiene is not None
+    names = [
+        *PROFILE.data_card.properties,
+        hygiene.part_number_property,
+        hygiene.description_property,
+    ]
+    custom: list[str] = []
+    missing: list[str] = []
+    for case_id, data in rendered_packages(rendered).items():
+        exempt = _revision_keyed(json.loads(rendered[f"{render.ANSWER_KEYS}/{case_id}.json"]))
+        for document in data["documents"]:
+            if not part_number_matches(PROFILE.part_number.pattern, document["file_name"]):
+                continue
+            custom.append(f"{case_id} {document['file_name']}")
+            expected = (
+                names if document["document_id"] in exempt else [PROFILE.revision.property, *names]
+            )
+            missing.extend(
+                f"{case_id} {document['file_name']} lacks {name}"
+                for name in expected
+                if name not in document["custom_properties"]
+            )
+
+    assert custom
+    assert missing == []
+
+
+def _strings(data: Any) -> Iterator[str]:
+    """Every key and every string value of a parsed JSON document."""
+    if isinstance(data, str):
+        yield data
+    elif isinstance(data, dict):
+        for key, value in data.items():
+            yield key
+            yield from _strings(value)
+    elif isinstance(data, list):
+        for item in data:
+            yield from _strings(item)
+
+
+def test_no_rendered_string_is_a_profile_a_property_name(rendered: dict[str, bytes]) -> None:
+    """Profile A's names (`tests/support/mechanical.py` `HYGIENE_PROPERTIES`) never appear in a
+    generated case, compared as a property name is (`property_key`)."""
+    profile_a = {property_key(name) for name in HYGIENE_PROPERTIES}
+
+    found = [
+        f"{path}: {text}"
+        for path, content in rendered.items()
+        if path.endswith(".json")
+        for text in _strings(json.loads(content))
+        if property_key(text) in profile_a
+    ]
+
+    assert found == []
+
+
+# (4) through the loaders (answer-key.md 4; scripted-answers.md 2.3)
+
+
+def test_every_committed_key_and_case_file_loads_through_its_own_loader() -> None:
+    """Every key the set files name loads against its committed package with
+    `load_answer_key` (every row of `answer-key.md` 4), and every case file passes
+    `answers.load_case_file` against its entry, package, checklist and the example profile."""
+    checklist, words = load_checklist(), load_words()
+    case_files = []
+    for entry in committed_entries():
+        package = load_package(entry.path).package
+        assert entry.key is not None, entry.package_id
+
+        key = load_answer_key(entry.key, package=package, checklist=checklist, words=words)
+
+        assert key.package_id == entry.package_id
+        if entry.case_file is not None:
+            answers.load_case_file(
+                entry.case_file,
+                entry=entry,
+                package=package,
+                checklist=checklist,
+                profile=PROFILE,
+            )
+            case_files.append(entry.package_id)
+
+    assert sorted(case_files) == ["kalo-empty", "kalo-fit-1", "kalo-fit-2", "mir-sitting"]
+
+
+# (5) twins (FR-028)
+
+
+def test_every_committed_twin_is_its_case_s_twin(rendered: dict[str, bytes]) -> None:
+    """Every case with a twin has its twin entry, naming the case in `twin_of`, in the case's
+    design; the twin's committed files are `twin(<its case>)`'s; and its conditions, `C-1`
+    onward, carry the case's defects' checks, references and tags."""
+    entries = {entry.package_id: entry for entry in committed_entries()}
+    specs = {case.case_id: case for case in generate.every_spec()}
+    twins = [entry for entry in entries.values() if entry.twin_of is not None]
+
+    assert {entry.twin_of for entry in twins} == {
+        case.case_id for case in specs.values() if case.twin
+    }
+    for entry in twins:
+        assert entry.twin_of is not None
+        derived = spec.twin(specs[entry.twin_of])
+        assert entry.package_id == derived.case_id == f"{entry.twin_of}-twin"
+        assert entry.design == entries[entry.twin_of].design
+        files = render.render_spec(derived)
+        assert {path: as_committed(REPO_ROOT / path) for path in files} == files, entry.package_id
+        case_key = key_of(rendered, entry.twin_of)
+        twin_key = key_of(rendered, entry.package_id)
+        assert [condition.id for condition in twin_key.correct_conditions] == [
+            f"C-{number}" for number in range(1, len(case_key.known_defects) + 1)
+        ]
+        for defect, condition in zip(
+            case_key.known_defects, twin_key.correct_conditions, strict=True
+        ):
+            assert (
+                condition.check,
+                condition.references,
+                condition.tag,
+                condition.held_out_against,
+            ) == (defect.check, defect.references, defect.tag, defect.held_out_against)
+
+
+# (6) the spec checks' committed half (RF-12; FR-029)
+
+
+def test_cover_blind_tap_s_own_spec_alone_passes_the_spec_checks() -> None:
+    assert [case.case_id for case in designs.cover.SPECS] == ["cover-blind-tap"]
+
+    spec.check_specs(designs.cover.SPECS)
+
+
+def test_every_design_s_specs_together_represent_every_anchor() -> None:
+    spec.check_anchor_coverage(generate.every_spec())
