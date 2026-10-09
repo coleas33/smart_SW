@@ -1,0 +1,149 @@
+# Contract: Honest Records of Whether a Review Was Sent
+
+Normative for what a review started with the box unticked writes about itself, and for the readers
+of those records (FR-009 to FR-011, FR-032, FR-036, FR-040). Amends 001
+`contracts/review-session.schema.json` and `contracts/README.md`; 002 `contracts/handoff-export.md`
+(added by this plan); 008 `contracts/replay.md` section 2. A review started with the box ticked
+writes nothing new: its `session.json`, `events.jsonl`, `report.md` and `attention.json` are what they
+are today (FR-032, FR-035).
+
+## 1. The session fields
+
+`report/session.py`, three optional `ReviewSession` fields, each dropped by the serializer at its
+default (the pattern `_omit_empty_finding_explanations` already follows), and `model_status`
+declared directly after `provider_info` so it is in the file's first kilobytes (`recheck.md`
+section 9 reads only a bounded head). 001 `review-session.schema.json` gains, never in `required`:
+
+```json
+"model_status": { "$ref": "#/$defs/ModelStatus", "description": "Feature 015: written only for a review started with the box unticked. Absent means the review was sent when its checks finished, as every review before the feature." },
+"live_detection": { "$ref": "#/$defs/LiveDetection", "description": "Feature 015: the first run's live interference outcome, which a re-run after a restart carries rather than repeats." },
+"drawing_outcomes": { "type": "array", "items": { "$ref": "#/$defs/DrawingOutcome" }, "description": "Feature 015: one line per drawing file a confirmed read asked for while the review waited." }
+```
+
+```json
+"ModelStatus": {
+  "type": "object", "additionalProperties": false,
+  "required": ["state", "document", "checked_at"],
+  "properties": {
+    "state": { "enum": ["not_sent", "send_failed", "sent"] },
+    "document": { "type": "object", "additionalProperties": false, "required": ["path", "configuration"],
+                  "properties": { "path": { "type": "string" }, "configuration": { "type": "string" } } },
+    "checked_at": { "type": "string", "format": "date-time" },
+    "profile": { "type": "object", "additionalProperties": false, "required": ["path", "sha256"],
+                 "properties": { "path": { "type": "string" }, "sha256": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" } } },
+    "rechecked_from": { "type": "string", "format": "uuid" },
+    "failures": { "type": "array", "items": { "$ref": "#/$defs/SendFailure" } },
+    "sent_at": { "type": "string", "format": "date-time" },
+    "estimate": { "$ref": "#/$defs/SendEstimate" },
+    "opening_finding_ids": { "type": "array", "items": { "type": "string", "pattern": "^F-[0-9]+$" } }
+  }
+},
+"SendFailure": { "type": "object", "additionalProperties": false, "required": ["at", "error_class", "reason"],
+  "properties": { "at": { "type": "string", "format": "date-time" }, "error_class": { "type": "string" }, "reason": { "type": "string" } } },
+"SendEstimate": { "type": "object", "additionalProperties": false, "required": ["input_tokens", "encoding", "approximate"],
+  "properties": { "input_tokens": { "type": ["integer", "null"], "minimum": 0 }, "encoding": { "const": "o200k_base" }, "approximate": { "type": "boolean" } } },
+"LiveDetection": { "type": "object", "additionalProperties": false, "required": ["configuration", "settings"],
+  "properties": { "configuration": { "type": "string" }, "settings": { "type": "object" },
+    "step_index": { "type": ["integer", "null"] }, "not_attempted": { "enum": ["no_bridge", "not_assembly", null] },
+    "groups": { "type": "integer", "minimum": 0 }, "rows_detected": { "type": "integer", "minimum": 0 },
+    "rows_added": { "type": "integer", "minimum": 0 }, "rows_collided": { "type": "integer", "minimum": 0 },
+    "error": { "type": ["string", "null"] }, "persist_error": { "type": ["string", "null"] } } },
+"DrawingOutcome": { "type": "object", "additionalProperties": false, "required": ["file", "outcome"],
+  "properties": { "file": { "type": "string" }, "outcome": { "type": "string" } } }
+```
+
+`model_status.state` moves `not_sent -> send_failed` (a Send's first request is about to be made,
+`review-flow.md` section 6) `-> sent` (its first round completed) or back to `send_failed` with the
+provider's reason; `sent` is final. A Send that fails before any request leaves `model_status` as it
+was before that Send - the pre-write undone - because no request was made; the failure is the
+stream's `error` event and the Send block's line, held by the live run only (`review-flow.md`
+section 6, *second review, 2026-10-09*). `profile` is the identity of the Standards profile the
+checks graded with: the path the review was given and the sha256 of its bytes when it loaded
+(`ProfileIdentity`, `checks/standards/profile.py`), `sha256` null when the profile was refused, the
+field omitted when the review had none; a re-run records its own and names a change
+(`recheck.md` section 4). It is a local path in the run folder's own record, which is never
+committed (FR-039). A re-run after a restart **carries** the earlier record's
+`state`, `document` and `failures` whole and adds `rechecked_from` (`recheck.md` section 4 step 5): a
+re-run never turns a `send_failed` record into `not_sent`, because `not_sent` means no request was
+ever made. `checked_at`, `sent_at` and each failure's `at` are stamped by `agent/events.local_now()`
+and keep their UTC offset; everything that prints one prints the stored wall clock as it is, never
+converted to the zone of the machine rendering it, so a record renders the same everywhere and a
+fixture generator pins the one clock. `document` is the reviewed root document's `{path,
+configuration}`, the shape `report/snapshot._root_document` already gives the snapshot (made public
+and shared, not copied). A session saved before this feature has no `model_status` and reads as sent.
+
+## 2. Finalization of a review not sent
+
+`finalize_session` reads `model_status`. While its `state` is not `sent`, each open checklist item
+whose `owner` is `model` is unresolved with `NOT_SENT_ITEM`, "{title}: not reviewed, because the
+review was not sent to the model"; an item left open after its blocking question was answered keeps
+`ANSWERED_BUT_OPEN` and adds `NOT_SENT_SUFFIX`, "; the review was not sent to the model". Nothing is
+marked checked because the model did not look (FR-009). A code-owned item is closed by code, as today.
+Once `sent`, finalization is today's.
+
+## 3. Running time
+
+For a session with `model_status`, `timing.unattended_runtime_minutes` is `(checked_at - started_at)`
+plus, once `sent`, `(ended_at - sent_at)`; the wait, and any minutes spent answering or deciding
+while it waits, are not running time (FR-011). `checked_at` is set by the first finalization of the
+checks (`review-flow.md` section 1 step 4); a re-run sets its own.
+
+## 4. The report
+
+`report/markdown.py`, `_render_title`:
+
+| `model_status` | Lines (in place of `- Model:` and `- Provider:`) |
+|---|---|
+| absent (sent at once, or before this feature) | today's, unchanged |
+| `not_sent` | `- Model: not sent to the model (checked by code only)` |
+| `send_failed` | `- Model: not sent to the model; the last attempt failed at {at}: {reason}` |
+| `sent` | today's `- Model:` and `- Provider:` lines, then `- Sent to the model: {sent_at} (checks finished {checked_at})` and, when there were failed attempts, `- Earlier attempts that failed: {n}` |
+
+A re-run adds `- Checked again from session: {rechecked_from}`, beside today's `- Retry of session:`.
+Because a re-run carries the earlier state and failures, a re-run of a failed send keeps the
+`send_failed` line, and `{n}` counts every failed attempt before the Send that got an answer, those
+made before a restart included. No not-sent report names a model or a provider as having run
+(SC-009).
+
+## 5. The transcript's events
+
+`session.started` carries `send_when_checked: false` for an unticked review; each Send attempt emits
+`session.sent` (`review-flow.md` section 7). The page words them (`pane.md` section 10). A not-sent
+review writes no `turn.ended` of any kind, a shutdown and a stop included (FR-010).
+
+## 6. The replay and the recording reader
+
+`benchmark/recording.read_recording` refuses, after it finds the session and **before** it reads the
+events, a session that carries `model_status`, in one sentence each (`RecordingRefused`):
+
+| `model_status.state` | Sentence |
+|---|---|
+| `not_sent`, `send_failed` | "{RUN_DIR} was never sent to the model, so it has no model turn to replay" |
+| `sent` | "{RUN_DIR} was sent to the model after waiting for Send; the replay reads only reviews sent when their checks finished" |
+
+008 `replay.md` section 2's table gains both rows above its first. A review sent at once is read as
+today (FR-040).
+
+## 7. The handoff export (added by this plan)
+
+`handoff.py`'s session summary gains `"model_status": session["model_status"]["state"]` when the
+session carries one, beside `provider_info`; nothing else in the bundle moves. 002
+`contracts/handoff-export.md` gains the key.
+
+## 8. The atomic write
+
+`save_session` writes through `atomic.write_atomic(path, bytes)`: the encoded JSON to a temporary in
+the session's own folder, then `os.replace`. The bytes are unchanged; a crash mid-write leaves the
+previous file whole. The helper is feature 014's (`reviewer/src/swreview/atomic.py`): imported when
+014 is on `main`, otherwise added with 014's exact name, signature and body (research R3).
+
+## 9. Tests
+
+`test_session_fields_015.py`, `test_report_model_status.py`, `test_runner_send.py` (finalization,
+timing, the mid-turn save at the first round, and the times rendered as stored), `test_recheck.py`
+(a re-run of a failed send keeps its failure line, and a later Send counts it; a changed profile is
+named), `test_send_gate_server.py` (a Send that fails before any request leaves `session.json` as it
+was), `test_recording.py` and `test_cli_benchmark_replay.py` (the refusals), `test_handoff.py`
+(research R4.1). The characterization of a ticked review (`test_ticked_review_golden.py`: its
+`session.json`, `events.jsonl`, `report.md` and `attention.json`, captured on the pre-feature code;
+research R2.28) and every replay fixture stay byte-identical.
