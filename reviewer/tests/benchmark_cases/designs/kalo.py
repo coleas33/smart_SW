@@ -20,8 +20,12 @@ tapped-hole callout alone (rule 5).
 plate's Ø3.0 dowel holes) and `cdowels` (the cover's Ø3.1 ones), two instances each; the
 fasteners `screw_a` and `screw_b`, one into each instance of `taps`, each the other's sibling
 joint (rule 6); on the assembly's sheet the pin's diameter `pin_dia` over its two bores,
-`plate_bore` and `cover_bore`, so each fit is the other's sibling fit (rule 6); and `callout`,
-the plate drawing's tapped-hole callout.
+`plate_bore` and `cover_bore`, so each fit is the other's sibling fit (rule 6), the pin and the
+plate's bore written "Ø3.0" as R-3's sheet writes them (owner decision 56A); and `callout`, the
+plate drawing's tapped-hole callout.
+
+**The variant** `OVERSIZE_TEXT` (R-3's variant B): the pin's oversize written only as free text,
+a configuration property of the pin's document that no check reads (research §3 R-3).
 
 **The core cases** (`cases.md` 6.2; rule 7): each two held-out model-produced seeds of two
 judgement families, with its twin.
@@ -29,6 +33,18 @@ judgement families, with its twin.
 - `kalo-1`: `thread_mismatch_unplaced` on `screw_a`, and `fit_limit_missing` on the pin in the
   plate, the plate's bore drawn with no tolerance on the assembly's sheet.
 - `kalo-2`: `bottoming_unplaced` on `screw_a`, and `callout_drill_only` on the plate's own drawing.
+
+**The R-3 anchor cases** (`cases.md` 6.3; FR-029; 15A): each tuned-on, representing R-3, with no
+twin. The pins sit line to line in the plate's Ø3.0 clearance holes with no tolerance source, so
+the joint map's floating-fastener pass stands, left ungraded (SR-21).
+
+- `kalo-fit-1`, variant A: `press_fit_drawn` on the pin in the plate, "2X Ø3.0 +0.010/0" over
+  "Ø3.0 +0.020/+0.014", one reference element covering both pins; at most one question on
+  `interfaces.fit`, answered "press fit".
+- `kalo-fit-2`, variant B (`OVERSIZE_TEXT`): `press_fit_undrawn`, both drawn Ø3.0 with no
+  tolerance; the same question rule and answer.
+- `kalo-fit-clean`: the pin in the cover's Ø3.1 hole with slip-fit limits, `slip_fit` a correct
+  condition on the two dimensions.
 """
 
 from __future__ import annotations
@@ -40,8 +56,10 @@ from typing import Literal
 from swreview.ir.models import SourceRef
 from tests.benchmark_cases import seeds, stamps
 from tests.benchmark_cases.spec import (
+    Answer,
     CaseSpec,
     ComponentPlace,
+    Condition,
     Design,
     DimensionPlace,
     DocumentPlace,
@@ -50,9 +68,11 @@ from tests.benchmark_cases.spec import (
     Laid,
     Place,
     Places,
+    QuestionCount,
     ScrewPlace,
     Seed,
     Tree,
+    TunedOn,
     tree_specs,
 )
 from tests.benchmark_cases.vocabulary import EXAMPLE_PROFILE
@@ -120,6 +140,18 @@ UNSEATED_MM = 1.0
 rules' 0.2 mm from every extracted axis, so the joint map leaves it unplaced (`joint_placement`,
 `generator.md` 3)."""
 
+OVERSIZE_TEXT = "oversize_text"
+"""R-3's variant B (`kalo-fit-2`): the pin's oversize only as free text, in a configuration
+property of the pin's document that no check reads (research §3 R-3)."""
+
+VARIANTS = (OVERSIZE_TEXT,)
+"""The design's variants (`Design.variants`)."""
+
+TOLERANCE_PROPERTY = "Tolerance"
+PIN_TOLERANCE_TEXT = "Ø3.0 +0.020/+0.014"
+"""That property and its text: the pin's diameter as its vendor states it, the limits variant A
+draws."""
+
 Z = (0.0, 0.0, 1.0)
 
 
@@ -186,15 +218,24 @@ PLACES: dict[str, Place] = {
         clamp_mm=COVER_THICKNESS_MM,
     ),
     # Both fits drawn for clearance (`seeds.CLEARANCE`, the clean fit), so nothing a correct
-    # reviewer checks on the base is anything but clear.
+    # reviewer checks on the base is anything but clear. The 3 mm nominals are written "3.0", as
+    # R-3's sheet writes them (`cases.md` 6.3; owner decision 56A).
     "plate_bore": DimensionPlace(
-        drawing="assy_drw", nominal_mm=3.0, limits=seeds.CLEARANCE[0], prefix="2X Ø"
+        drawing="assy_drw",
+        nominal_mm=3.0,
+        limits=seeds.CLEARANCE[0],
+        prefix="2X Ø",
+        nominal_text="3.0",
     ),
     "cover_bore": DimensionPlace(
         drawing="assy_drw", nominal_mm=3.1, limits=seeds.CLEARANCE[0], prefix="2X Ø"
     ),
     "pin_dia": DimensionPlace(
-        drawing="assy_drw", nominal_mm=PIN_DIAMETER_MM, limits=seeds.CLEARANCE[1], prefix="Ø"
+        drawing="assy_drw",
+        nominal_mm=PIN_DIAMETER_MM,
+        limits=seeds.CLEARANCE[1],
+        prefix="Ø",
+        nominal_text="3.0",
     ),
     # The complete callout `seeds.FULL_CALLOUT` writes for `taps`: count, thread, thread depth.
     "callout": DimensionPlace(
@@ -229,8 +270,10 @@ def lay(variant: str | None, places: Places) -> Laid:
     (`generator.md` 5.1): the documents, the components (the plate fixed), the hole rows with
     each record's thread, depths and offset, the pins' faces and meshes, the screws with their
     fastener rows, seated unless a record says not; the bought documents moved into the bought
-    folder and the custom parts' trees laid; then the two ingested drawings and every drawn
-    dimension, in place order."""
+    folder, the pin's free-text tolerance written under `OVERSIZE_TEXT`, and the custom parts'
+    trees laid; then the two ingested drawings and every drawn dimension, in place order."""
+    if variant not in (None, *VARIANTS):
+        raise ValueError(f"design kalo has no variant {variant}")
     builder = PackageBuilder(
         ASSY_STEM, root_properties=_custom(places["assy"], ASSY_STEM, "kalo assy")
     )
@@ -344,6 +387,19 @@ def lay(variant: str | None, places: Places) -> Laid:
         else document
         for document in package.documents
     ]
+    if variant == OVERSIZE_TEXT:
+        documents = [
+            document.model_copy(
+                update={
+                    "config_properties": {
+                        document.active_configuration: {TOLERANCE_PROPERTY: PIN_TOLERANCE_TEXT}
+                    }
+                }
+            )
+            if document.document_id == ids["pin_doc"]
+            else document
+            for document in documents
+        ]
     paths = {document.document_id: document.path for document in documents}
     entries = [
         entry.model_copy(update={"vault_path": paths[entry.document_id]})
@@ -392,7 +448,7 @@ def lay(variant: str | None, places: Places) -> Laid:
     return Laid(package=sheets.build(), meshes=built.meshes, ids=ids)
 
 
-DESIGN = Design(name="kalo", places=PLACES, lay=lay)
+DESIGN = Design(name="kalo", places=PLACES, lay=lay, variants=VARIANTS)
 
 # --- the cases -------------------------------------------------------------------------------
 
@@ -411,6 +467,32 @@ PIN_FIT = {
 
 CALLOUT = {"callout": "callout", "hole": "taps"}
 """The plate drawing's callout of the tapped holes the screws go into."""
+
+R3 = TunedOn("R-3")
+"""R-3's items are tuned-on: feature 013's prompt and checklist were written around them (15A)."""
+
+PIN_IN_PLATE = {"bore": "plate_bore", "shaft": "pin_dia"}
+"""R-3's joint, the pin line to line in the plate: the "2X" bore draws both pins' bores, so one
+reference element covers both pins (research §3 R-3)."""
+
+PIN_IN_COVER = {"bore": "cover_bore", "shaft": "pin_dia"}
+"""The 3.0 mm pin in the cover's 3.1 mm hole: R-3's clean case."""
+
+FIT_QUESTIONS = QuestionCount(
+    tag=R3,
+    description=(
+        "At most one question on the pin's fit: once the engineer has answered it, a request "
+        "for numeric limits asks it again (R-3)."
+    ),
+    item="interfaces.fit",
+    max=1,
+    represents="R-3",
+)
+
+PRESS_FIT_ANSWER = Answer(
+    answer="press fit", item="interfaces.fit", ids=("pin_a", "pin_b", "plate")
+)
+"""The engineer's answer to the fit question on the pins and the plate."""
 
 SPECS: tuple[CaseSpec, ...] = (
     CaseSpec(
@@ -433,5 +515,43 @@ SPECS: tuple[CaseSpec, ...] = (
         twin=True,
         sets=("committed",),
     ),
+    CaseSpec(
+        case_id="kalo-fit-1",
+        design=DESIGN,
+        seeds=(Seed(seeds.PRESS_FIT_DRAWN, PIN_IN_PLATE, R3, represents="R-3"),),
+        question_counts=(FIT_QUESTIONS,),
+        answers=(PRESS_FIT_ANSWER,),
+        represents=("R-3",),
+        sets=("committed",),
+    ),
+    CaseSpec(
+        case_id="kalo-fit-2",
+        design=DESIGN,
+        variant=OVERSIZE_TEXT,
+        seeds=(Seed(seeds.PRESS_FIT_UNDRAWN, PIN_IN_PLATE, R3, represents="R-3"),),
+        question_counts=(FIT_QUESTIONS,),
+        answers=(PRESS_FIT_ANSWER,),
+        represents=("R-3",),
+        sets=("committed",),
+    ),
+    CaseSpec(
+        case_id="kalo-fit-clean",
+        design=DESIGN,
+        conditions=(
+            Condition(
+                tag=R3,
+                description=(
+                    "The pin in the cover's 3.1 mm hole, drawn with slip-fit limits: a clearance "
+                    "fit, where the joint's alignment pass is right (R-3's clean case)."
+                ),
+                kind=seeds.SLIP_FIT,
+                at=PIN_IN_COVER,
+                represents="R-3",
+            ),
+        ),
+        represents=("R-3",),
+        sets=("committed",),
+    ),
 )
-"""The core cases (`cases.md` 6.2), each with its twin; the anchor cases follow (T133, T134)."""
+"""The core cases (`cases.md` 6.2), each with its twin, then the R-3 anchor cases (`cases.md`
+6.3); the R-4 to R-6 anchor cases follow (T134)."""
