@@ -5,7 +5,8 @@ of those records (FR-009 to FR-011, FR-032, FR-036, FR-040). Amends 001
 `contracts/review-session.schema.json` and `contracts/README.md`; 002 `contracts/handoff-export.md`
 (added by this plan); 008 `contracts/replay.md` section 2. A review started with the box ticked
 writes nothing new: its `session.json`, `events.jsonl`, `report.md` and `attention.json` are what they
-are today (FR-032, FR-035).
+are today (FR-032, FR-035). Amended on 2026-10-09 by the owner's plan review (research R7): decisions
+72A, 73A, 75A and 76A.
 
 ## 1. The session fields
 
@@ -55,9 +56,11 @@ section 9 reads only a bounded head). 001 `review-session.schema.json` gains, ne
 `model_status.state` moves `not_sent -> send_failed` (a Send's first request is about to be made,
 `review-flow.md` section 6) `-> sent` (its first round completed) or back to `send_failed` with the
 provider's reason; `sent` is final. A Send that fails before any request leaves `model_status` as it
-was before that Send - the pre-write undone - because no request was made; the failure is the
-stream's `error` event and the Send block's line, held by the live run only (`review-flow.md`
-section 6, *second review, 2026-10-09*). `profile` is the identity of the Standards profile the
+was before that Send, because no request was made: `session.sent` is emitted before the pre-write, so
+a failure up to the pre-write leaves no write behind, and a pre-write that fails leaves the file
+`write_atomic` was replacing whole; the guard restores the run's memory and never writes (owner
+decision 72A). The failure is the stream's `error` event and the Send block's line, held by the live
+run only (`review-flow.md` section 6). `profile` is the identity of the Standards profile the
 checks graded with: the path the review was given and the sha256 of its bytes when it loaded
 (`ProfileIdentity`, `checks/standards/profile.py`), `sha256` null when the profile was refused, the
 field omitted when the review had none; a re-run records its own and names a change
@@ -108,7 +111,8 @@ made before a restart included. No not-sent report names a model or a provider a
 ## 5. The transcript's events
 
 `session.started` carries `send_when_checked: false` for an unticked review; each Send attempt emits
-`session.sent` (`review-flow.md` section 7). The page words them (`pane.md` section 10). A not-sent
+`session.sent` (`review-flow.md` section 7), before the attempt's record is written, so the page words
+it "Sending to {provider} {model} ..." and never as sent (owner decision 72A; `pane.md` section 10). A not-sent
 review writes no `turn.ended` of any kind, a shutdown and a stop included (FR-010).
 
 ## 6. The replay and the recording reader
@@ -124,11 +128,12 @@ events, a session that carries `model_status`, in one sentence each (`RecordingR
 008 `replay.md` section 2's table gains both rows above its first. A review sent at once is read as
 today (FR-040).
 
-## 7. The handoff export (added by this plan)
+## 7. The handoff export (added by this plan; owner decision 73A)
 
 `handoff.py`'s session summary gains `"model_status": session["model_status"]["state"]` when the
 session carries one, beside `provider_info`; nothing else in the bundle moves. 002
-`contracts/handoff-export.md` gains the key.
+`contracts/handoff-export.md` gains the key. The owner kept this (plan question 2, answered by 73A):
+otherwise the export would be the last record that names a provider for a review never sent.
 
 ## 8. The atomic write
 
@@ -140,10 +145,13 @@ previous file whole. The helper is feature 014's (`reviewer/src/swreview/atomic.
 ## 9. Tests
 
 `test_session_fields_015.py`, `test_report_model_status.py`, `test_runner_send.py` (finalization,
-timing, the mid-turn save at the first round, and the times rendered as stored), `test_recheck.py`
+timing, the mid-turn save at the first round, the record a crash before and after the first round
+leaves - each the folder `tests/support/restart.py`'s `disk_at` copied at that point, read by a
+backend started afresh (owner decision 76A) - and the times rendered as stored), `test_recheck.py`
 (a re-run of a failed send keeps its failure line, and a later Send counts it; a changed profile is
 named), `test_send_gate_server.py` (a Send that fails before any request leaves `session.json` as it
-was), `test_recording.py` and `test_cli_benchmark_replay.py` (the refusals), `test_handoff.py`
-(research R4.1). The characterization of a ticked review (`test_ticked_review_golden.py`: its
-`session.json`, `events.jsonl`, `report.md` and `attention.json`, captured on the pre-feature code;
-research R2.28) and every replay fixture stay byte-identical.
+was, at each of its five failure points), `test_recording.py` and `test_cli_benchmark_replay.py` (the
+refusals), `test_handoff.py` (research R4.1). The characterization of a ticked review
+(`test_ticked_review_golden.py`: five scenarios, its failures included (owner decision 75A), each
+with its `session.json`, `events.jsonl`, `report.md` and `attention.json`, captured on the
+pre-feature code; research R2.28) and every replay fixture stay byte-identical.
