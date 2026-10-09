@@ -261,6 +261,17 @@ T161_NEW_PATHS: frozenset[str] = frozenset(
     + [f"test_golden/{case}.yml" for case in T161_NEW_CASES]
 )
 
+THREAD_PITCH_NEW_CASES: tuple[str, ...] = ("thread-pitch-flags", "thread-pitch-not-checked")
+"""The two goldens feature 010's thread pitch amendment adds (2026-10-08, the owner's decisions
+50A to 53A, task T118): `run_thread_checks` over a package of section 8.5's flags and one of
+section 8.6's rows. Held to `??` exactly as the new goldens above are, until committed; both are
+1.1.0 packages, so the pre-1.4.0 gates above read them too."""
+
+THREAD_PITCH_NEW_PATHS: frozenset[str] = frozenset(
+    [f"fixtures/{case}/" for case in THREAD_PITCH_NEW_CASES]
+    + [f"test_golden/{case}.yml" for case in THREAD_PITCH_NEW_CASES]
+)
+
 GOLDEN_HARNESS: frozenset[str] = frozenset({"test_golden.py", "test_standards_goldens.py"})
 """The two modules in that tree that are code rather than artefact, named so that they are
 accounted for rather than dropped by a directory filter.
@@ -460,7 +471,7 @@ def test_the_golden_tree_holds_only_this_feature_s_new_goldens() -> None:
     """
     changed = golden_tree_status()
 
-    new = NEW_GOLDEN_PATHS | DECISION_17A_NEW_PATHS | T161_NEW_PATHS
+    new = NEW_GOLDEN_PATHS | DECISION_17A_NEW_PATHS | T161_NEW_PATHS | THREAD_PITCH_NEW_PATHS
     rewritten = REWRITTEN_BY_THE_DRAWING_CHECKS | REWRITTEN_BY_DECISION_17A | REWRITTEN_BY_T161
     allowed = new | GOLDEN_HARNESS | rewritten
     stray = [f"{status} {path}" for status, path in changed if path not in allowed]

@@ -158,6 +158,9 @@ TODAY: dict[str, tuple[str, str, int]] = {
     ),
     "golden/fixtures/standards-unknown": ("6f499317928b1485", "782822ee80b30573", 1),
     "golden/fixtures/thread-mismatch": ("f8df1ccf2825d9d0", "d94b0f86ad59128a", 0),
+    # Feature 010's thread pitch amendment (T118): new with that round, pinned from its own output.
+    "golden/fixtures/thread-pitch-flags": ("2bb17bd5673b56ee", "4458eccfb6bf421f", 0),
+    "golden/fixtures/thread-pitch-not-checked": ("33658cbaf12ba847", "0cfcfdabdfe9b09f", 0),
     "golden/fixtures/tool-envelope": ("f8df1ccf2825d9d0", "d94b0f86ad59128a", 0),
 }
 
