@@ -1,0 +1,242 @@
+result:
+  checked:
+  - check: thread.pitch
+    error: null
+    reason: '2 threads have the coarse pitch: M8x1.25 (hol:0014), M8 (fas:0004); 1
+      of them has no pitch written, read as coarse because ISO 965-1 omits the coarse
+      pitch from a designation'
+    scope:
+      component_ids:
+      - cmp:0007
+      - cmp:0011
+      configuration: null
+      document_ids:
+      - doc:0007
+      - doc:0010
+      pairs: []
+      positions: []
+  coarse: 2
+  findings:
+  - component_ids:
+    - cmp:0001
+    documents:
+    - doc:0002
+    result:
+      calculation: null
+      check: thread.fine_pitch
+      coverage_limits:
+      - thread callouts on drawings were not read for pitch
+      inputs:
+      - hol:0001
+      - hol:0002
+      - hol:0003
+      - hol:0005
+      - 'ISO 261 coarse pitch of M8: 1.25 mm (coarse_pitch.yaml version 1)'
+      - 'ISO 261 coarse pitch of M6: 1 mm (coarse_pitch.yaml version 1)'
+      observed: 'M8x1 is fine pitch (M8''s coarse pitch is 1.25) on 3 tapped holes:
+        Tapped Hole1 (hol:0001), Tapped Hole2 (hol:0002), Tapped Hole3 (hol:0003);
+        M6x0.75 is fine pitch (M6''s coarse pitch is 1) on 1 tapped hole: Tapped Hole5
+        (hol:0005) in PLATE_FICT.SLDPRT'
+      recommended_action: Confirm M8x1 and M6x0.75 are intended in PLATE_FICT.SLDPRT,
+        or change them to the coarse M8x1.25 and M6x1.
+      requirement: threads use the coarse (standard) pitch unless a fine pitch is
+        deliberate
+      severity: medium
+      status: suspected
+  - component_ids:
+    - cmp:0001
+    documents:
+    - doc:0002
+    result:
+      calculation: null
+      check: thread.nonstandard_pitch
+      coverage_limits:
+      - thread callouts on drawings were not read for pitch
+      inputs:
+      - hol:0004
+      - 'ISO 261 coarse pitch of M8: 1.25 mm (coarse_pitch.yaml version 1)'
+      observed: 'M8x1.5 is coarser than the standard pitch (M8''s coarse pitch is
+        1.25) on 1 tapped hole: Tapped Hole4 (hol:0004) in PLATE_FICT.SLDPRT'
+      recommended_action: Confirm M8x1.5 is intended in PLATE_FICT.SLDPRT, or change
+        it to the coarse M8x1.25.
+      requirement: threads use the coarse (standard) pitch; no standard pitch of a
+        size is coarser than it
+      severity: medium
+      status: suspected
+  - component_ids:
+    - cmp:0002
+    - cmp:0003
+    documents:
+    - doc:0003
+    result:
+      calculation: null
+      check: thread.fine_pitch
+      coverage_limits:
+      - thread callouts on drawings were not read for pitch
+      inputs:
+      - hol:0006
+      - hol:0007
+      - 'ISO 261 coarse pitch of M10: 1.5 mm (coarse_pitch.yaml version 1)'
+      observed: 'M10x1.25 is fine pitch (M10''s coarse pitch is 1.5) on 1 tapped hole:
+        Tapped Hole1 (hol:0006, hol:0007) in BLOCK_FICT.SLDPRT'
+      recommended_action: Confirm M10x1.25 is intended in BLOCK_FICT.SLDPRT, or change
+        it to the coarse M10x1.5.
+      requirement: threads use the coarse (standard) pitch unless a fine pitch is
+        deliberate
+      severity: medium
+      status: suspected
+  - component_ids:
+    - cmp:0004
+    documents:
+    - doc:0004
+    result:
+      calculation: null
+      check: thread.fine_pitch
+      coverage_limits:
+      - thread callouts on drawings were not read for pitch
+      inputs:
+      - hol:0008
+      - hol:0009
+      - 'ISO 261 coarse pitch of M8: 1.25 mm (coarse_pitch.yaml version 1)'
+      - 'ISO 261: M25 has fine pitches only (coarse_pitch.yaml version 1)'
+      observed: 'M8x1 is fine pitch (M8''s coarse pitch is 1.25) on 1 tapped hole:
+        Tapped Hole1 (hol:0008); M25x1.5 is fine pitch (M25 has no coarse pitch in
+        ISO 261) on 1 tapped hole: Tapped Hole2 (hol:0009) in FLANGE_FICT.SLDPRT'
+      recommended_action: Confirm M8x1 and M25x1.5 are intended in FLANGE_FICT.SLDPRT,
+        or change M8x1 to the coarse M8x1.25, and M25x1.5 to a size that has a coarse
+        thread.
+      requirement: threads use the coarse (standard) pitch unless a fine pitch is
+        deliberate
+      severity: medium
+      status: suspected
+  - component_ids:
+    - cmp:0005
+    documents:
+    - doc:0005
+    result:
+      calculation: null
+      check: thread.fine_pitch
+      coverage_limits:
+      - thread callouts on drawings were not read for pitch
+      - a cosmetic thread carries no feature name, so whether it is suppressed was
+        not read
+      inputs:
+      - hol:0010
+      - hol:0011
+      - thr:0001
+      - 'ISO 261 coarse pitch of M6: 1 mm (coarse_pitch.yaml version 1)'
+      - written as 'M6 x 0.75' on hol:0011
+      observed: 'M6x0.75 is fine pitch (M6''s coarse pitch is 1) on 2 tapped holes
+        and 1 cosmetic thread: Tapped Hole1 (hol:0010), Tapped Hole2 (hol:0011), cosmetic
+        thread thr:0001 in COVER_FICT.SLDPRT'
+      recommended_action: Confirm M6x0.75 is intended in COVER_FICT.SLDPRT, or change
+        it to the coarse M6x1.
+      requirement: threads use the coarse (standard) pitch unless a fine pitch is
+        deliberate
+      severity: medium
+      status: suspected
+  - component_ids:
+    - cmp:0006
+    documents:
+    - doc:0006
+    result:
+      calculation: null
+      check: thread.fine_pitch
+      coverage_limits:
+      - thread callouts on drawings were not read for pitch
+      inputs:
+      - hol:0012
+      - 'ASME B1.1: #0 has no UNC thread (coarse_pitch.yaml version 1)'
+      observed: '#0-80 is fine pitch (#0 has no UNC thread in ASME B1.1) on 1 tapped
+        hole: Tapped Hole1 (hol:0012) in MICRO_FICT.SLDPRT'
+      recommended_action: 'Confirm #0-80 is intended in MICRO_FICT.SLDPRT, or change
+        it to a size that has a coarse thread.'
+      requirement: threads use the coarse (standard) pitch unless a fine pitch is
+        deliberate
+      severity: medium
+      status: suspected
+  - component_ids:
+    - cmp:0007
+    documents:
+    - doc:0007
+    result:
+      calculation: null
+      check: thread.fine_pitch
+      coverage_limits:
+      - thread callouts on drawings were not read for pitch
+      inputs:
+      - hol:0015
+      - 'ISO 261 coarse pitch of M8: 1.25 mm (coarse_pitch.yaml version 1)'
+      observed: 'M8x1 is fine pitch (M8''s coarse pitch is 1.25) on 1 tapped hole:
+        Tapped Hole3 (hol:0015) in BRACKET_FICT.SLDPRT'
+      recommended_action: Confirm M8x1 is intended in BRACKET_FICT.SLDPRT, or change
+        it to the coarse M8x1.25.
+      requirement: threads use the coarse (standard) pitch unless a fine pitch is
+        deliberate
+      severity: medium
+      status: suspected
+  - component_ids:
+    - cmp:0007
+    documents:
+    - doc:0007
+    result:
+      calculation: null
+      check: thread.nonstandard_pitch
+      coverage_limits:
+      - thread callouts on drawings were not read for pitch
+      inputs:
+      - hol:0013
+      - 'ASME B1.1 UNC of 1/4: 20 threads per inch (coarse_pitch.yaml version 1)'
+      observed: '1/4-18 is coarser than the standard pitch (1/4''s coarse thread is
+        UNC, 20 threads per inch) on 1 tapped hole: Tapped Hole1 (hol:0013) in BRACKET_FICT.SLDPRT'
+      recommended_action: Confirm 1/4-18 is intended in BRACKET_FICT.SLDPRT, or change
+        it to the coarse 1/4-20.
+      requirement: threads use the coarse (standard) pitch; no standard pitch of a
+        size is coarser than it
+      severity: medium
+      status: suspected
+  - component_ids:
+    - cmp:0008
+    - cmp:0009
+    documents:
+    - doc:0008
+    result:
+      calculation: null
+      check: thread.fine_pitch
+      coverage_limits:
+      - thread callouts on drawings were not read for pitch
+      inputs:
+      - fas:0001
+      - fas:0002
+      - 'ASME B1.1 UNC of #10: 24 threads per inch (coarse_pitch.yaml version 1)'
+      observed: '#10-32 is fine pitch (#10''s coarse thread is UNC, 24 threads per
+        inch) on 2 fastener instances: cmp:0008, cmp:0009 in SHC_10-32X0.5_FICT.SLDPRT'
+      recommended_action: 'Confirm #10-32 is intended in SHC_10-32X0.5_FICT.SLDPRT,
+        or change it to the coarse #10-24.'
+      requirement: threads use the coarse (standard) pitch unless a fine pitch is
+        deliberate
+      severity: medium
+      status: suspected
+  - component_ids:
+    - cmp:0010
+    documents:
+    - doc:0009
+    result:
+      calculation: null
+      check: thread.fine_pitch
+      coverage_limits:
+      - thread callouts on drawings were not read for pitch
+      inputs:
+      - fas:0003
+      - 'ISO 261 coarse pitch of M8: 1.25 mm (coarse_pitch.yaml version 1)'
+      observed: 'M8x1 is fine pitch (M8''s coarse pitch is 1.25) on 1 fastener instance:
+        cmp:0010 in SCREW_M8X1_FICT.SLDPRT'
+      recommended_action: Confirm M8x1 is intended in SCREW_M8X1_FICT.SLDPRT, or change
+        it to the coarse M8x1.25.
+      requirement: threads use the coarse (standard) pitch unless a fine pitch is
+        deliberate
+      severity: medium
+      status: suspected
+  skipped: []
+  threads: 20
+  unresolved: []

@@ -72,6 +72,7 @@ from swreview.report.session import CoverageItem, CoverageScope
 __all__ = [
     "CHECK_IDENTITY",
     "MINOR_DIAMETER_FACTOR",
+    "NAMED_FASTENER_ID_PREFIX",
     "RECOGNISED_KINDS",
     "SHANK_ALLOWANCE_MM",
     "Agreement",
@@ -99,6 +100,11 @@ FUNCTION_VERSION = "1"
 RECOGNISED_KINDS: tuple[str, ...] = ("screw", "bolt", "pin")
 """A name that parses to one of these makes a component a fastener; a nut or a washer
 named by size is recorded nowhere yet (it is not in a joint the checks model)."""
+
+NAMED_FASTENER_ID_PREFIX = "fst:name:"
+"""The id prefix of the in-memory `Fastener` of a screw recognised by its name, followed by
+its component id. It, never `identity_source`, tells such a screw from an extractor row, which
+can carry `name_parse` too (feature 010 research R2.26 D23)."""
 
 MINOR_DIAMETER_FACTOR = 1.226869
 """ISO 68-1: the basic minor diameter of an external thread is `d - 1.226869 P`."""
@@ -221,7 +227,7 @@ def _named_row(
     is the component's z axis through its origin until a joint places it."""
     origin, basis = component_frame(component)
     return Fastener(
-        id=f"fst:name:{component.id}",
+        id=f"{NAMED_FASTENER_ID_PREFIX}{component.id}",
         persist_ref=component.persist_ref,
         persist_ref_scope=component.persist_ref_scope,
         component_id=component.id,
