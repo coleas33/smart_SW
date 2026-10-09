@@ -17,6 +17,7 @@ from swreview.checks.fastener import (
     FUNCTION_VERSION,
     ClampedLayer,
     check_fastener_joint,
+    is_pipe_thread,
     nominal_diameter,
     parse_thread,
 )
@@ -131,6 +132,188 @@ def test_the_same_thread_written_two_ways_parses_to_one_canonical_form() -> None
 
 def test_a_thread_without_a_pitch_is_not_the_same_text_as_one_with_a_pitch() -> None:
     assert parse_thread("M6").normalized != parse_thread("M6x1.0").normalized
+
+
+# The fine pitch amendment's vectors (contracts/fasteners.md 8.8 and 8.9, the "Read as" column).
+
+
+@pytest.mark.parametrize(
+    ("designation", "diameter_mm", "pitch_mm"),
+    [
+        ("M8x1.25", 8.0, 1.25),
+        ("M8 x 1.25", 8.0, 1.25),
+        ("M8x1.25-6g", 8.0, 1.25),
+        ("M8x1.25-6G", 8.0, 1.25),
+        # Whitespace is removed before reading, so a grade written after a space joins the
+        # pitch: a known limit (research R2.26), flagged non-standard, never passed.
+        ("M8x1.25 6H", 8.0, 1.256),
+        # Rule 1: a comma between two digits is a decimal point.
+        ("M8x1,25", 8.0, 1.25),
+        ("M8-1,25", 8.0, 1.25),
+        # Rule 3: a hyphen number is the pitch before the end, a separator, a length or the hand.
+        ("M8-1.25", 8.0, 1.25),
+        ("M10-1.5-6H", 10.0, 1.5),
+        ("M4-0.7x12", 4.0, 0.7),
+        ("M8-1 x 20", 8.0, 1.0),
+        ("M8-1×20", 8.0, 1.0),
+        ("M10-1.25LH", 10.0, 1.25),
+        ("M8-1.25rh", 8.0, 1.25),
+        ("M8-1", 8.0, 1.0),
+        # ...and no pitch only before a tolerance class.
+        ("M8-6H", 8.0, None),
+        ("M8-6g", 8.0, None),
+        ("M8-6g6h", 8.0, None),
+        ("M8", 8.0, None),
+        # Rule 2: the multiplication sign is a pitch marker like x and *.
+        ("M8×1", 8.0, 1.0),
+        ("M8*1.25", 8.0, 1.25),
+        ("M6x1", 6.0, 1.0),
+        ("M7x1", 7.0, 1.0),
+        ("M3.5x0.6", 3.5, 0.6),
+        ("M8x1", 8.0, 1.0),
+        ("m8x1", 8.0, 1.0),
+        ("M8x1.0", 8.0, 1.0),
+        ("M8x0.75", 8.0, 0.75),
+        ("M10x1.25", 10.0, 1.25),
+        ("M12x1.5", 12.0, 1.5),
+        ("M25x1.5", 25.0, 1.5),
+        ("M25", 25.0, None),
+        ("M5.5x0.5", 5.5, 0.5),
+        ("M8x1.5", 8.0, 1.5),
+        ("M10x35", 10.0, 35.0),
+        ("M2.3x0.4", 2.3, 0.4),
+        ("M70", 70.0, None),
+    ],
+)
+def test_a_metric_designation_reads_its_diameter_and_pitch(
+    designation: str, diameter_mm: float, pitch_mm: float | None
+) -> None:
+    thread = parse_thread(designation)
+
+    assert thread.series == "metric"
+    assert thread.nominal_diameter == Quantity(value=diameter_mm, unit="mm")
+    if pitch_mm is None:
+        assert thread.pitch_mm is None
+    else:
+        assert thread.pitch_mm == pytest.approx(pitch_mm, abs=1e-9)
+
+
+@pytest.mark.parametrize(
+    ("designation", "diameter_in", "threads_per_inch"),
+    [
+        ("1/4-20", 0.25, 20),
+        ("1/4-20 UNC-2B", 0.25, 20),
+        ("1/4-20 UNF", 0.25, 20),
+        ("0.250-20", 0.25, 20),
+        ("#6-32", 0.138, 32),
+        ("#10-24", 0.190, 24),
+        ("1.000-8", 1.0, 8),
+        ("1/4-28", 0.25, 28),
+        ("1/4-28 UNF-2A", 0.25, 28),
+        ("1/4-32", 0.25, 32),
+        ("#10-32", 0.190, 32),
+        ("#10-32 UNF", 0.190, 32),
+        ("0.190-32", 0.190, 32),
+        ("1.125-8", 1.125, 8),
+        ("#0-80", 0.060, 80),
+        ("1/4-18", 0.25, 18),
+        ("1/8-27", 0.125, 27),
+        # parse_thread does not change for pipe text; is_pipe_thread is what tells it apart.
+        ("1/8-27 NPT", 0.125, 27),
+        ("1/2-14 NPTF", 0.5, 14),
+    ],
+)
+def test_a_unified_designation_reads_as_it_did(
+    designation: str, diameter_in: float, threads_per_inch: int
+) -> None:
+    thread = parse_thread(designation)
+
+    assert thread.series == "unified"
+    assert thread.nominal_diameter is not None
+    assert thread.nominal_diameter.value == pytest.approx(diameter_in * 25.4, abs=1e-6)
+    assert thread.pitch_mm == pytest.approx(25.4 / threads_per_inch, abs=1e-6)
+
+
+@pytest.mark.parametrize(
+    "designation",
+    [
+        # Read as M8-1.256G, and 1.256G is no tolerance class: a known limit (research R2.26).
+        "M8-1.25 6g",
+        # Rule 3: any other letter after a hyphen number.
+        "M10-1.25G",
+        "M8-1x",
+        "M8-1.25×",
+        # Rule 4: a pitch marker straight after the size with no number after it.
+        "M16xPh3P1.5",
+        "M8x",
+        "M8*",
+        "M8×",
+        "MF8x1",
+        "3/8",
+        "1-8",
+        "1-1/8-7",
+        "10-32",
+        "No. 10-32",
+        "",
+        # Pipe text parse_thread does not read, as before.
+        "NPT 1/8",
+        "3/4 NPSM",
+        "1/2 NPS",
+        "G1/4",
+        "G 1/2 A",
+        "R1/4",
+        "Rc1/4",
+        "Rp 1/2",
+        "PT1/8",
+        "PF1/4",
+        "1/4 BSPP",
+        "1/4 BSPT",
+        "1/2 BSP",
+    ],
+)
+def test_a_designation_whose_size_or_pitch_cannot_be_read_is_unrecognised(
+    designation: str,
+) -> None:
+    thread = parse_thread(designation)
+
+    assert thread.series is None
+    assert thread.nominal_diameter is None
+    assert thread.pitch_mm is None
+
+
+PIPE_THREADS = [
+    "1/8-27 NPT",
+    "NPT 1/8",
+    "1/2-14 NPTF",
+    "3/4 NPSM",
+    "1/2 NPS",
+    "G1/4",
+    "G 1/2 A",
+    "R1/4",
+    "Rc1/4",
+    "Rp 1/2",
+    "PT1/8",
+    "PF1/4",
+    "1/4 BSPP",
+    "1/4 BSPT",
+    "1/2 BSP",
+]
+
+
+@pytest.mark.parametrize(
+    "designation",
+    [*PIPE_THREADS, *(text.lower() for text in PIPE_THREADS), "  Rc 1/4  "],
+)
+def test_a_pipe_thread_is_recognised_by_its_token(designation: str) -> None:
+    assert is_pipe_thread(designation) is True
+
+
+@pytest.mark.parametrize(
+    "designation",
+    ["M8x1.25-6G", "M10x1.5-6g", "1/4-20 UNC-2B", "#10-32 UNF", "3/8", "M8", ""],
+)
+def test_a_screw_thread_or_a_bare_size_is_not_a_pipe_thread(designation: str) -> None:
+    assert is_pipe_thread(designation) is False
 
 
 # --- bottoming and engagement -----------------------------------------------------
@@ -471,6 +654,52 @@ def test_two_unrecognised_designations_are_unresolved_not_a_mismatch() -> None:
     )["fastener.thread_match"]
 
     assert match.status == "unresolved"
+
+
+@pytest.mark.parametrize(
+    ("screw_thread", "status"),
+    [
+        # Read pitch 1.0 before the fine pitch amendment: a false mismatch.
+        ("M8x1,25", "checked_within_scope"),
+        # Read no pitch before: matched on the diameter alone, with the one-sided-pitch limit.
+        ("M8-1.25", "checked_within_scope"),
+        # Read no pitch before: a missed mismatch.
+        ("M8-1", "demonstrated"),
+    ],
+)
+def test_the_parser_fixes_compare_the_pitch_of_the_thread_match(
+    screw_thread: str, status: str
+) -> None:
+    match = by_check(
+        check_fastener_joint(
+            screw(thread=screw_thread),
+            tapped_hole(thread="M8x1.25"),
+            [layer(mm(1.5))],
+            hole_material="6061-T6",
+        )
+    )["fastener.thread_match"]
+
+    assert match.status == status
+    assert match.calculation is not None
+    assert match.calculation.result["pitch_compared"] is True
+    assert match.calculation.result["matches"] is (status == "checked_within_scope")
+    assert match.coverage_limits == []
+
+
+def test_a_multi_start_thread_is_unresolved_in_the_thread_match_and_named() -> None:
+    # Read as M16 with no pitch before the fine pitch amendment, a diameter-only match (D9).
+    match = by_check(
+        check_fastener_joint(
+            screw(thread="M16xPh3P1.5"),
+            tapped_hole(thread="M16x1.5"),
+            [layer(mm(1.5))],
+            hole_material="6061-T6",
+        )
+    )["fastener.thread_match"]
+
+    assert match.status == "unresolved"
+    assert match.calculation is None
+    assert any("'M16xPh3P1.5'" in limit for limit in match.coverage_limits)
 
 
 # --- head clearance ---------------------------------------------------------------
