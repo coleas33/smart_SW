@@ -371,7 +371,8 @@ restates.
 
 **`_restate` reconciles its own restated calls** before it returns. It takes its own mark (the
 findings' count before its first call), runs the calls, and folds each finding they added onto the
-earlier finding with the same verdict key, which keeps its id (the `_verdict_key` reconcile,
+earlier finding with the same verdict key, which keeps its id, and the engineer's disposition on
+it (owner decision 58A, 2026-10-08) (the `_verdict_key` reconcile,
 `agent/runner.py:623`, which ignores coverage limits, so the note drops in place). An earlier finding
 of a restated tool is kept when a restated finding took its place or the restated call returned its
 id (a check that de-duplicates, as `check_drawings`' conformance findings do,
