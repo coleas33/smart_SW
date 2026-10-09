@@ -101,8 +101,10 @@ Checks 1 to 5 and the move `awaiting_send -> running` run on the event loop with
 between them, so a second Send, an answer, a decision or a Settings save that arrives while the
 adapter is being built meets `running` and is refused (`409 TurnRunning`): the build at order 6 is
 the route's only `await`, and it comes after the move (*second review, 2026-10-09*). When the build
-fails, the chat moves back `running -> awaiting_send` before the `502`, so the refusal changes
-nothing; when it succeeds, the worker runs `run.send(adapter)` (section 6).
+fails, the chat's stop flag is cleared and the chat moves back `running -> awaiting_send`, with no
+`await` between, before the `502`, so the refusal changes nothing, a stop sent during the build
+included (section 4, *tasks review, 2026-10-09*); when it succeeds, the worker runs
+`run.send(adapter)` (section 6).
 
 The settings are `ChatServer._settings({provider, model, effort})` of the chat - the one resolver,
 with the backend's environment. They are the settings in effect: changing the provider, model,
@@ -117,8 +119,18 @@ re-run first, `recheck.md`).
 | Accept, Reject, Defer | `POST /sessions/{id}/findings/{fid}/disposition` | saved at once on the live session; kept at Send and treated from then on as a decision made between turns (FR-024). On a waiting chat the route moves it `awaiting_send -> running` on the event loop right after `_require_idle`, with no `await` between, and back in a `finally` once `record_disposition` returns or raises, so a Send, an answer or a Settings save that arrives meanwhile is `409 TurnRunning` and no two threads write the session (research R2.12). Any other chat: today's path |
 | Timing | `POST /sessions/{id}/timing` | as the decision route: held `running` for `record_timing_live` on a waiting chat; today's path otherwise |
 | Follow-up | `POST /sessions/{id}/messages` | `409 NotSent` while `run.awaiting_send` (a follow-up would reach the model with no opening; FR-019) |
-| Stop | `POST /sessions/{id}/stop` | unchanged code: the session has an `ended_at`, so nothing is written, no event, no model call (FR-025); during an apply the stop flag is set and never read, then cleared |
+| Stop | `POST /sessions/{id}/stop` | unchanged code: the session has an `ended_at`, so nothing is written, no event, no model call (FR-025); during an apply the stop flag is set and never read, then cleared by `_play`'s `finally`; during a decision or timing hold, and while Send's adapter is built, the chat reads `running`, so the flag is set - see "The stop flag" below |
 | Shutdown | lifespan | unchanged code: a finalized session is skipped; nothing is written (FR-010) |
+
+**The stop flag** (*tasks review, 2026-10-09*). The stop route sets `chat.stop_requested` whenever the
+chat reads `running` (`chat/server.py:1497-1498`). The flag is read by `StoppableTools` (`:2145`) and
+`check_presentation_cancelled` (`:2147-2149`), and only `_play`'s `finally` clears it (`:2201`). Two
+of this feature's moves return a chat to `awaiting_send` outside `_play`: the decision and timing
+hold's `finally`, and Send's failed adapter build (section 3). Each clears the flag in the same step
+as the move, with no `await` between, so a stop sent then (a race, or an older page) changes
+nothing (FR-025): the next Send's first turn is never stopped by it. A stop sent while Send's
+adapter is built and the build succeeds is kept: the Send is in flight, and Stop is today's, so the
+first turn ends `stopped` at its first tool boundary (default, research R2.12).
 
 **Applying answers with no turn** (amends 008 `answer-batch.md` section 1 step 3, 009 FR-015, 011
 `confirmed-open.md` section 1, 013 `part-roles.md` section 9). `ReviewRun._apply_answers(answers)`
@@ -374,14 +386,20 @@ New `ChatError` subclasses; each has a sentence in the words file's `labels.erro
 
 Research R4.1: `test_send_gate_server.py`, `test_runner_send.py`, `test_deferred_provider.py`,
 `test_waiting_answers.py`; the moved `test_chat_sessions.py`, `test_chat_server.py` `ROUTES` and
-`test_events_schema.py`; and, first of all, the characterization of a ticked review on the
-pre-feature code (`test_ticked_review_golden.py`, research R2.28), which section 1's ticked path
-must keep byte for byte. Every test that drives an unticked review asserts the provider factory was
+`test_events_schema.py`, with the two tests that read the event-type enum,
+`test_gate_same_session.py`'s count and `test_provider_protocol.py`'s `valid_bodies()` (research
+R4.3); and, first of all, the characterization of a ticked review on the pre-feature code
+(`test_ticked_review_golden.py`, research R2.28), which section 1's ticked path must keep byte for
+byte. Every test that drives an unticked review asserts the provider factory was
 never called (`ProviderControl.built == []`) up to the Send under test. Section 6's guard is pinned
 at five failure points (`configure_provider`, the effort mapping, the pre-write's save, the
 `session.sent` emit, and the undo save after a failed emit): no provider request, the chat waiting
 again, one `error`, and a record that does not say a request was made. Section 4's hold is pinned by
-a decision held in flight while `POST /send` and `POST /evidence` are refused. Section 6's
+a decision held in flight while `POST /send` and `POST /evidence` are refused. Section 4's stop flag
+is pinned by a stop sent during each hold and during a held adapter build that fails: each answers
+`202` and writes nothing, and the next Send's first turn, which makes a tool call, runs to `end`
+with no `stopped` turn. Section 5's last sentence is pinned by an answer and a follow-up after Send
+whose messages carry none of the wait's lines. Section 6's
 withdrawal (steps 4 and 7) is pinned by comparing **every** request of a scripted first turn that
 calls `mark_coverage`, `request_evidence` and `get_review_checklist` - tool results included -
 between a ticked review and an unticked review sent, on the same package, and again after a failed

@@ -263,7 +263,11 @@ on a run root of 500 fictional folders finishes within 2 s on the development ma
 default bound). Nothing here throws: an unreadable root or file offers nothing.
 
 The page asks `sessions.list` again on `document.changed`, after following with the list it holds
-(009 `sessions.md` section 6 unchanged for every review it already has).
+(009 `sessions.md` section 6 unchanged for every review it already has), and follows again with the
+answer by the same rule, so a found review of the active document is shown when none of its reviews
+is on screen (`pane.md` section 8; *tasks review, 2026-10-09*). Its first answer, decision or Send
+then sends `review.recheck` with the found review's chat id, which the host accepts as any record it
+tracks (section 1).
 
 ## 10. A restart with a waiting review on screen
 
@@ -289,4 +293,7 @@ timing, and the `finding_subject_key` match each have their own case; so do (*se
 `drawing_read` on the re-run's record with no bridge call on a second re-run, a changed profile
 (another file, and the same file edited) and an unchanged one, and an open drawing question whose
 drawing an unfinished read merged. `ReviewPageRecheckTests` reloads the page while a re-run is held
-and sees the review only once it ends, waiting.
+and sees the review only once it ends, waiting. Section 9 is pinned end to end (*tasks review,
+2026-10-09*): `ReviewHostTests` re-runs a found review by its `session_id`, and
+`ReviewPageRecheckTests` finds one after a `document.changed`, shows it restored, and sends it
+through `review.recheck`.
