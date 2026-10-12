@@ -10,7 +10,14 @@ review (decisions 68A to 80A, research R7).
 
 ## Prerequisites
 
-- Features 001 to 013 on `main`; `uv sync` done; the tokenizer vocabulary fetched once
+- Features 001 to 013 on `main`, with the accepted 010-fine-pitch change integrated into the 015
+  branch before its T007-T008 characterizations. Record the baseline commit and gate results in
+  `review-2026-10-12.md`; the earlier `838b66b` code map is historical and its causes are re-verified
+  before editing. For the current execution, wait for the root task's 010 and 014 integrations
+  before capturing pins; reuse 014's `atomic.py` and skip T009-T010 when it is present. The open
+  FR-041 finding in that review needs an owner decision before US4; the US1 milestone can proceed
+  after the baseline gate.
+- `uv sync` done; the tokenizer vocabulary fetched once
   (`uv run swreview tokenizer fetch`, or `--from <file>`), so `SWREVIEW_REQUIRE_TOKENIZER=1` holds.
 - The .NET build tools and the WebView2 runtime for the add-in and page tests:
   `dotnet build extractor/SwReview.sln -c Release --nologo -v q` from the repository root.

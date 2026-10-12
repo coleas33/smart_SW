@@ -53,6 +53,11 @@ section 9 reads only a bounded head). 001 `review-session.schema.json` gains, ne
   "properties": { "file": { "type": "string" }, "outcome": { "type": "string" } } }
 ```
 
+`checked_at` is required even before the first save: setup constructs the in-memory model status
+with `local_now()` after the checks, and the first finalization replaces that provisional value
+with its end before writing `session.json`. A waiting apply keeps the first finalization's value;
+a re-run has its own first finalization (2026-10-12 re-check).
+
 `model_status.state` moves `not_sent -> send_failed` (a Send's first request is about to be made,
 `review-flow.md` section 6) `-> sent` (its first round completed) or back to `send_failed` with the
 provider's reason; `sent` is final. A Send that fails before any request leaves `model_status` as it
