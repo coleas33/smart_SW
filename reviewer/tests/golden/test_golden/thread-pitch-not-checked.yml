@@ -1,0 +1,87 @@
+result:
+  checked:
+  - check: thread.pitch
+    error: null
+    reason: '3 threads have the coarse pitch: M5x0.8 (hol:0001, hol:0002), M8 (hol:0007);
+      1 of them has no pitch written, read as coarse because ISO 965-1 omits the coarse
+      pitch from a designation'
+    scope:
+      component_ids:
+      - cmp:0001
+      - cmp:0002
+      - cmp:0003
+      configuration: null
+      document_ids:
+      - doc:0002
+      - doc:0003
+      pairs: []
+      positions: []
+  coarse: 3
+  findings: []
+  skipped:
+  - check: thread.pitch
+    error: null
+    reason: '2 pipe threads were not checked for pitch; a pipe thread has its own
+      series: ''1/8-27 NPT'' on hol:0006, ''G1/4'' on thr:0001'
+    scope:
+      component_ids:
+      - cmp:0003
+      configuration: null
+      document_ids:
+      - doc:0003
+      pairs: []
+      positions: []
+  - check: thread.pitch
+    error: null
+    reason: '2 threads on suppressed features or components were not checked for pitch:
+      Tapped Hole6 (hol:0008), fas:0001 (cmp:0004)'
+    scope:
+      component_ids:
+      - cmp:0003
+      - cmp:0004
+      configuration: null
+      document_ids:
+      - doc:0003
+      - doc:0004
+      pairs: []
+      positions: []
+  - check: thread.pitch
+    error: null
+    reason: '3 extractor gaps left holes, cosmetic threads or fasteners unread, so
+      their pitch was not checked: ''FICT-MIR-0005-1'' is lightweight, so its holes
+      were not read; GetDefinition returned nothing for cosmetic thread ''Cosmetic
+      Thread3''.; identifying ''FICT-MIR-0006-1'' as a fastener threw'
+    scope:
+      component_ids: []
+      configuration: null
+      document_ids: []
+      pairs: []
+      positions: []
+  threads: 12
+  unresolved:
+  - check: thread.pitch
+    error: null
+    reason: '4 threads could not be read for pitch, so their pitch was not checked:
+      ''3/8'' on hol:0003, no designation on hol:0004, no designation on thr:0002,
+      ''M8x1'' on fas:0002 (its part is not in the package)'
+    scope:
+      component_ids:
+      - cmp:0003
+      - cmp:0099
+      configuration: null
+      document_ids:
+      - doc:0003
+      pairs: []
+      positions: []
+  - check: thread.pitch
+    error: null
+    reason: '1 thread has a size in no pitch table (ISO 261 to M68, ASME B1.1 UNC
+      to 2 in), so their pitch was not checked: ''M2.3x0.4'' on hol:0005'
+    scope:
+      component_ids:
+      - cmp:0003
+      configuration: null
+      document_ids:
+      - doc:0003
+      pairs: []
+      positions: []

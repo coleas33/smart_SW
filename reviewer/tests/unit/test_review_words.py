@@ -247,7 +247,12 @@ GOAL_TABLE: list[tuple[str, list[str], list[str], str]] = [
         ["interference."],
         "interference_fit",
     ),
-    ("fasteners", ["fasteners"], ["fastener."], "fasteners"),
+    (
+        "fasteners",
+        ["fasteners", "thread.fine_pitch", "thread.nonstandard_pitch"],
+        ["fastener."],
+        "fasteners",
+    ),
     ("hole_alignment", ["holes.alignment"], ["hole.", "joint."], "interference_fit"),
     (
         "fits_and_stacks",
@@ -278,7 +283,9 @@ GOAL_TABLE: list[tuple[str, list[str], list[str], str]] = [
     ("modelling_practice", ["modeling.resilience"], ["rms."], "modelling_practice"),
 ]
 """013 `contracts/grouped-list.md` section 2: the ten goals, their items, prefixes and group.
-The `standards` goal is split out of `hygiene` (research R2.14)."""
+The `standards` goal is split out of `hygiene` (research R2.14). The Fasteners goal's items gain
+the two thread pitch finding ids by name (feature 010's amendment of 2026-10-08, the owner's
+decision 63A): its findings are listed under Fasteners and no goal line moves."""
 
 SEVEN_GROUPS: list[tuple[str, str, bool]] = [
     ("interference_fit", "Interference and fit", True),
@@ -369,6 +376,8 @@ def test_every_classified_check_lands_in_one_of_the_seven_groups() -> None:
         ("stack.gap", "interference_fit"),
         ("drawing_profile.conformance", "drawings"),
         ("mass.density", "mass_material"),
+        ("thread.fine_pitch", "fasteners"),
+        ("thread.nonstandard_pitch", "fasteners"),
     ],
 )
 def test_a_check_lands_in_its_goals_group(check: str, group: str) -> None:
@@ -452,11 +461,22 @@ def test_every_checklist_item_but_the_closeout_is_in_exactly_one_goal(source: st
     assert all(CLOSEOUT_ITEM_ID not in goal.items for goal in goals)
 
 
-def test_every_classified_check_maps_to_exactly_one_goal_by_longest_prefix() -> None:
+def test_every_classified_check_maps_to_exactly_one_goal_by_its_items_or_longest_prefix() -> None:
+    """`goal_of`'s own rule (`report/finding_groups.py`): a classed id one goal's `items` name
+    maps to that goal, every other one to exactly one goal by its longest prefix, and none is
+    left unmapped or tied. Edited deliberately by feature 010's amendment of 2026-10-08 (the
+    owner's decision 63A): the Fasteners goal owns the two thread pitch ids by name, in its
+    `items`, never by a prefix, so this test, which asked every classed id to start with some
+    goal's prefix, reads the items first as `goal_of` does."""
     goals = load_words().goals
     unmapped: list[str] = []
     tied: list[str] = []
     for check in load_policy().classes:
+        named = [goal.id for goal in goals if check in goal.items]
+        if named:
+            if len(named) != 1:
+                tied.append(check)
+            continue
         matches = [
             (len(prefix), goal.id)
             for goal in goals
@@ -487,12 +507,17 @@ def test_every_classified_check_maps_to_exactly_one_goal_by_longest_prefix() -> 
         ("mass.coverage", "mass_and_material"),
         ("hygiene.part_number_matches_file", "hygiene"),
         ("hygiene.coverage", "hygiene"),
+        ("thread.fine_pitch", "fasteners"),
+        ("thread.nonstandard_pitch", "fasteners"),
     ],
 )
 def test_feature_010s_check_and_coverage_ids_land_in_their_goals(check: str, goal: str) -> None:
     """Feature 010's findings and its coverage-only rows (`joint.map`, `mass.coverage`,
     `hygiene.coverage`) each land in one goal: the coverage rows are what tell a goal line
-    what the checks could not reach."""
+    what the checks could not reach. The thread pitch rows, `thread.pitch`, are the one feature
+    010 coverage id with no goal (the owner's decision 63A, 2026-10-08): they are listed with
+    the review's coverage and never move the Fasteners line, which owns the two thread pitch
+    finding ids by name."""
     found = goal_of(check, load_words().goals)
 
     assert found is not None and found.id == goal

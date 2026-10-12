@@ -135,7 +135,7 @@ The opening message is never pruned (`model-view.md` section 7).
 | `check_rms_assembly`, `check_standards` | `(tool,)` |
 | `check_interference_group` | `(tool, group_key)` |
 | `bridge_interference` | `(tool, configuration, sorted-JSON settings)`, only when `component_ids` is empty |
-| `check_joints`, `check_mass_material`, `check_hygiene`: every name in feature 010's `CODE_FIRST_CHECKS`, read when the key is asked for (*landed as*, T044, research R2.52; 010 T092-T093) | `(tool,)`, whatever arguments: they take none |
+| `check_joints`, `check_mass_material`, `check_hygiene`, `check_threads`: every name in feature 010's `CODE_FIRST_CHECKS`, read when the key is asked for (*landed as*, T044, research R2.52; 010 T092-T093; `check_threads` from 010's thread pitch amendment, 2026-10-08) | `(tool,)`, whatever arguments: they take none |
 | `check_drawings` (feature 011, *amended 2026-09-23*) | `(tool,)`, whatever arguments: it takes none |
 
 The ledger is the pre-run's, with one exception (feature 011, *amended 2026-09-23 on review*):

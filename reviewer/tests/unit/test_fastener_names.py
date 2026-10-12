@@ -72,6 +72,16 @@ def test_the_vector_table_covers_every_source_and_both_answers() -> None:
         assert any(row["source"] == source and row["expected"] is None for row in VECTORS)
 
 
+def test_each_source_and_text_appears_once_in_the_vector_table() -> None:
+    """pytest gives a repeated parametrize id a suffix and runs both, so a row added twice with
+    the same answer would pass unseen, and one added twice with two answers would pin neither
+    (feature 010 amendment 2026-10-08, T114)."""
+    pairs = [(row["source"], row["text"]) for row in VECTORS]
+    repeated = sorted({pair for pair in pairs if pairs.count(pair) > 1})
+
+    assert repeated == []
+
+
 # --- the forms one at a time ------------------------------------------------------------------
 
 

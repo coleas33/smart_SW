@@ -234,9 +234,14 @@ def test_a_second_check_drawings_withdraws_its_two_checks_and_the_stream_follows
     assert mirror(events) == held(context.require_session()) == first
 
 
-SUMMARY_ROW_FAMILIES: frozenset[str] = frozenset({"check_mass_material", "check_hygiene"})
-"""The code-first checks whose one summary row moves between buckets (feature 010 T108): a second
-call withdraws it. `check_joints` records again, as a second `check_rms_part` would; answering a
+SUMMARY_ROW_FAMILIES: frozenset[str] = frozenset(
+    {"check_mass_material", "check_hygiene", "check_threads"}
+)
+"""The code-first checks whose second call withdraws: the mass and hygiene families' one summary
+row moves between buckets (feature 010 T108), and `check_threads` restates its `thread.pitch`
+rows rather than adding to them (the thread pitch amendment, 2026-10-08, research R2.26 D14),
+because the part-roles answer restates it through the dispatch, a real call the re-call guard
+does not answer. `check_joints` records again, as a second `check_rms_part` would; answering a
 repeat is the re-call guard's (`checks_mechanical`'s module docstring)."""
 
 

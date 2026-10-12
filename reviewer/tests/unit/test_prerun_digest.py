@@ -267,7 +267,9 @@ def test_an_empty_model_check_package_enumerates_nothing_and_says_so(
     Feature 010 T028, edited deliberately: `check_joints` takes no argument and is always
     planned, and on a `model_check` package it records the one skipped row that says the
     hole phase did not run - a statement, not a silence. T067 and T075, edited deliberately:
-    `check_mass_material` and `check_hygiene` follow it, argument-free and always planned."""
+    `check_mass_material` and `check_hygiene` follow it, argument-free and always planned. The
+    thread pitch amendment's T119 (2026-10-08), edited deliberately: `check_threads` follows
+    them, argument-free and always planned too."""
     run, session = started(
         tmp_path, "empty", package=empty_model_check_package(), efficiency=ON
     )
@@ -280,6 +282,7 @@ def test_an_empty_model_check_package_enumerates_nothing_and_says_so(
         "check_joints",
         "check_mass_material",
         "check_hygiene",
+        "check_threads",
     ]
     assert [item.reason for item in session.coverage.skipped if item.check == "joint.map"] == [
         "the hole phase did not run (profile model_check)"

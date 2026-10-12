@@ -506,6 +506,7 @@ def sweep_arguments(package: Any) -> dict[str, dict[str, Any]]:
         "check_joints": {},
         "check_mass_material": {},
         "check_hygiene": {},
+        "check_threads": {},
         "request_evidence": {
             "what": "the tapped depth of the first hole",
             "why": "fastener.engagement",

@@ -16,6 +16,6 @@ from swreview.benchmark.answer_key_model import Stamp
 CURRENT = Stamp(
     prompt="03235a11335b15ec809d8a7519f2cc46c647e7b6baa05a231b69e7962e8e8992",
     checklist="8a964dd514d863e196e9a854a2682b301ab7a8dca9f73d7da86f5d2c2c3f874b",
-    tools="2a1e9bfe01cccdd16013ea31e8acbb86fc88e38ed2d27aade22d6a9fcae33015",
+    tools="dcc5fb3b8e5e231852b00d43e6e72a047fbac0e186eff2ba45e559a0c12e5405",
 )
 """The stamp every held-out seed and key-only entry of a committed case carries."""
