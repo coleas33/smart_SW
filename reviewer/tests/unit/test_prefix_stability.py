@@ -49,11 +49,10 @@ wire.
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import subprocess
 import sys
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
 
@@ -62,14 +61,10 @@ import pytest
 from swreview.agent import runner
 from swreview.agent.providers import (
     EffortLevel,
-    EffortMapping,
-    EventCallback,
-    ProviderName,
     ProviderTool,
-    TurnResult,
 )
 from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
-from swreview.agent.providers.openai_provider import _encode_history, tool_param
+from tests.support.recording_provider import RecordingProvider, encoded_tools
 from tests.unit.test_runner_provider import (
     COVERAGE_ARGUMENTS,
     DRAWING_FINDING_ARGUMENTS,
@@ -81,16 +76,6 @@ EFFORT: EffortLevel = "high"
 
 
 # --- the prefix, as bytes --------------------------------------------------------------
-
-
-def encoded_tools(tools: Iterable[ProviderTool]) -> bytes:
-    """The tool array exactly as the OpenAI adapter puts it on the wire.
-
-    `tool_param` is the adapter's own encoder (`strictify` included), so a schema change
-    that survives a round trip through the registry but changes one byte of JSON is
-    caught here rather than by a cache miss on the wire.
-    """
-    return json.dumps([tool_param(tool) for tool in tools], ensure_ascii=False).encode("utf-8")
 
 
 def prefix_digest(system: str, tools: Iterable[ProviderTool]) -> str:
@@ -108,52 +93,6 @@ def prefix_digest(system: str, tools: Iterable[ProviderTool]) -> str:
 
 
 # --- the harness -------------------------------------------------------------------------
-
-
-class RecordingProvider:
-    """The scripted fake, keeping what each turn was handed.
-
-    It delegates rather than subclasses so that what is recorded is unambiguously what
-    the runner passed in, and it records before the turn runs, so a turn that raises has
-    still contributed its prefix.
-    """
-
-    name = ProviderName.FAKE
-
-    def __init__(self, script: Sequence[ScriptedTurn], model: str = MODEL) -> None:
-        self.model = model
-        self._inner = FakeProvider(script=script, model=model)
-        self.systems: list[str] = []
-        self.tool_arrays: list[bytes] = []
-        self.inputs: list[list[str]] = []
-        """Each turn's encoded `input` list, one JSON string per item, in order."""
-
-    def effort_mapping(self, effort: EffortLevel) -> EffortMapping:
-        return self._inner.effort_mapping(effort)
-
-    def run(
-        self,
-        *,
-        system: str,
-        messages: Sequence[Mapping[str, Any]],
-        tools: Any,
-        effort: EffortLevel,
-        max_steps: int,
-        on_event: EventCallback,
-    ) -> TurnResult:
-        self.systems.append(system)
-        self.tool_arrays.append(encoded_tools(tools))
-        self.inputs.append(
-            [json.dumps(item, ensure_ascii=False) for item in _encode_history(messages)]
-        )
-        return self._inner.run(
-            system=system,
-            messages=messages,
-            tools=tools,
-            effort=effort,
-            max_steps=max_steps,
-            on_event=on_event,
-        )
 
 
 def call(name: str, **arguments: Any) -> ScriptedToolCall:
