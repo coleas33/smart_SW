@@ -177,6 +177,8 @@ A drawing's revision table, bill of materials and hole tables live on each sheet
 
 ## Requirements *(mandatory)*
 
+*Feature 015 amendment notice, 2026-10-08:* Planned amendments to FR-040 are specified in [015 review-flow.md](../015-review-send-gate/contracts/review-flow.md).
+
 ### Functional Requirements
 
 **Custom and bought parts (US1)**

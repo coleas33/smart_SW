@@ -1,5 +1,7 @@
 # Contract: Results or Transcript
 
+*Feature 015 amendment notice, 2026-10-08:* Planned amendments for the Send block and status line are specified in [015 pane.md](../../015-review-send-gate/contracts/pane.md).
+
 *Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed by 2026-09-27 (013 T054, T110):* Results holds the grouped findings list in place of Start here, Show all and the flat card list, and a model answer opens with its basis line; see 013 `contracts/grouped-list.md` section 5 and `contracts/sources.md` section 3.
 
 Normative for FR-017 to FR-019 and SC-006.

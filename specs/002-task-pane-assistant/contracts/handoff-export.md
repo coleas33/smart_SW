@@ -1,5 +1,7 @@
 # Local review handoff export
 
+*Feature 015 amendment notice, 2026-10-08:* Planned amendments for the handoff record are specified in [015 records.md](../../015-review-send-gate/contracts/records.md).
+
 `swreview handoff <run-dir> --out <archive.zip>` creates one local ZIP for an engineer to
 inspect or attach manually. The command accepts one review or partial Remodel run folder and refuses
 to overwrite an existing archive or place the archive inside that folder.

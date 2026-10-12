@@ -1,5 +1,7 @@
 # Contracts: SOLIDWORKS Agentic Design Review Pilot
 
+*Feature 015 amendment notice, 2026-10-08:* Planned amendments for `review-session.schema.json` are specified in [015 records.md](../../015-review-send-gate/contracts/records.md).
+
 *Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed by 2026-09-27 (013 T007, T077):* `review-session.schema.json` gains optional `allow_text` and `source` on `EvidenceRequest`, `source` on `Finding` and `CoverageItem`, and `drawing_read` on the session, each omitted at its default; see 013 `contracts/sources.md` and `data-model.md` section 3.
 
 These are the interfaces the feature exposes between its own layers and to the engineer.

@@ -1,5 +1,7 @@
 # Contract: The Drawing Capability and Drawing States
 
+*Feature 015 amendment notice, 2026-10-08:* Planned amendments for drawing outcomes in the opening are specified in [015 review-flow.md](../../015-review-send-gate/contracts/review-flow.md).
+
 Normative for FR-033 to FR-040 and User Story 4. Research R2.24 to R2.28. Amends feature 011's
 `contracts/questions.md` sections 3, 4, 5 and 6, `contracts/confirmed-open.md` sections 1, 2 and 4,
 and `contracts/brief.md` section 2; feature 001's `contracts/agent-tools.md` (`check_drawings`,

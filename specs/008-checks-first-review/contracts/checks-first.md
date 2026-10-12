@@ -1,5 +1,7 @@
 # Contract: Checks First
 
+*Feature 015 amendment notice, 2026-10-08:* Planned amendments for the waiting review and opening, the carried pre-run are specified in [015 review-flow.md](../../015-review-send-gate/contracts/review-flow.md), [015 recheck.md](../../015-review-send-gate/contracts/recheck.md).
+
 *Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`):* landed with 013 T030 - `not_evaluated_families(..., roles=)` ends with `part_role_families(package, roles)`, read from the roles attached to the review: `coverage.prerun.bought_parts` (skipped; the documents not graded because bought in `scope.document_ids`, or in the no-profile state "Bought parts were not told apart: {why}"), `coverage.prerun.maybe_bought` (unresolved; the unclear documents while the part-roles question is open) and the zero-match guard's `coverage.prerun.part_roles` (unresolved), each row and its digest line one sentence, none mapped to a goal; `NotEvaluated` gains `document_ids`, empty for every other family, so their items are unchanged. Pending: the roles attached before the pre-run by `start_review` (013 T022), provenance closed by code at setup (013 T060), and the `check_drawings` digest counting candidate files (013 T085); see 013 `contracts/part-roles.md` section 7, `contracts/re-ask-guard.md` section 2 and `contracts/drawing-capability.md` section 7.
 
 Normative for the pre-run under the pane default, live interference and its persistence, the

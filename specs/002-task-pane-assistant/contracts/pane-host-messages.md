@@ -1,5 +1,7 @@
 # Page ↔ Host Messages
 
+*Feature 015 amendment notice, 2026-10-08:* Planned amendments for the host messages are specified in [015 pane.md](../../015-review-send-gate/contracts/pane.md).
+
 The WebView2 pages talk to the add-in with `window.chrome.webview.postMessage(json)` and
 receive `WebMessageReceived` replies as JSON. Every message is `{ "type": string, "id":
 string, "payload": object }`; replies echo `id`. Unknown types are answered with

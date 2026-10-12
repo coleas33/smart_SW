@@ -1,5 +1,7 @@
 # Contract: The Read-Only Open of a Confirmed Candidate
 
+*Feature 015 amendment notice, 2026-10-08:* Planned amendments for confirmed reads while waiting are specified in [015 review-flow.md](../../015-review-send-gate/contracts/review-flow.md).
+
 *Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed by 2026-09-27 (013 T073, T081, T083):* the seat switch is reported on ping (`drawing_read`), the read happens once per distinct candidate path, and the merge removes every candidate row of the path it read; see 013 `contracts/drawing-capability.md` sections 1, 2 and 4.
 
 Normative for FR-036, FR-053 to FR-056, User Story 5 acceptance scenarios 5 to 7 and SC-011. The
