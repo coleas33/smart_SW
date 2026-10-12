@@ -67,7 +67,7 @@ description: "Task list for the send-to-model checkbox"
 
   Acceptance: red for want of the module.
 - [x] T004 [py] Lane G. Move `RecordingProvider` and its shared `encoded_tools` function from `reviewer/tests/unit/test_prefix_stability.py` to `reviewer/tests/support/recording_provider.py`, and add `for_presentation` and the raw inputs each `run()` entry keeps (owner decision 78A). **Moved**: `test_prefix_stability.py` imports both names from the helper and drops their old definitions; every assertion is unedited. The encoding rule remains in one place. The six other recorders research R2.28 names stay where they are: `test_cli.py:109`, `test_gate_standards_in_review.py:385`, `test_tool_tiers.py:271` and the three `SpyProvider`s. 015 adds no other recorder. Acceptance: T003 green; `test_prefix_stability.py` green.
-- [ ] T005 [P] [py] Lane G. Write `reviewer/tests/unit/test_questions_package.py` for the fictional questions package (research R2.25, R4.1). `tests/support/questions_package.py` builds a package, graded with fictional profile A at version 3 as `tests/support/roles_review.py` writes it, such that:
+- [x] T005 [P] [py] Lane G. Write `reviewer/tests/unit/test_questions_package.py` for the fictional questions package (research R2.25, R4.1). `tests/support/questions_package.py` builds a package, graded with fictional profile A at version 3 as `tests/support/roles_review.py` writes it, such that:
   - A checks-first review under the pane defaults raises two questions, both `source: "code"`: the part-roles question (an unclear part, the `convention_only` state), and one drawing-candidate question (a part with a same-name drawing that is not open).
   - The seat is a `ScriptedReviewBridge` (`tests/support/review_bridge.py`) that reads drawings: `drawing_read: "opens_closed"`.
   - "All bought" withdraws at least one **named** finding of the unclear part (a hygiene finding), besides the folded RMS findings the digest counts and never names (`PrerunResult._finding_lines`, `prerun.py:582-598`).
@@ -75,7 +75,7 @@ description: "Task list for the send-to-model checkbox"
   - Every path is under `C:\Fictional\` and every name is `FICT-`. The owner's denylist scan runs through `tests/support/fixture_denylist.py`, skipped (naming the file) where the denylist is absent.
 
   Acceptance: red for want of the module.
-- [ ] T006 [py] Lane G. Implement `reviewer/tests/support/questions_package.py` over existing builders, imported, never copied (DRY): `tests/support/roles_review.py`'s profile and package builders, `tests/support/drawings.py`'s candidate rows and `tests/support/review_bridge.ScriptedReviewBridge`. Extend `roles_review.py` (lane B's helper, in this task) only if its unclear part raises no named finding for the answer to withdraw, keeping `test_answer_batch_roles.py` and `test_runner_part_roles.py` green and unedited. Acceptance: T005 green.
+- [x] T006 [py] Lane G. Implement `reviewer/tests/support/questions_package.py` over existing builders, imported, never copied (DRY): `tests/support/roles_review.py`'s profile and package builders, `tests/support/drawings.py`'s candidate rows and `tests/support/review_bridge.ScriptedReviewBridge`. Extend `roles_review.py` (lane B's helper, in this task) only if its unclear part raises no named finding for the answer to withdraw, keeping `test_answer_batch_roles.py` and `test_runner_part_roles.py` green and unedited. Acceptance: T005 green.
 - [ ] T007 [py] Lane G. **The characterization of a ticked review, on the pre-feature code** (research R2.28 item 1; FR-035, SC-003; owner decision 75A). Write `reviewer/tests/unit/test_ticked_review_golden.py` and commit its five goldens, one per scenario, under `reviewer/tests/unit/test_ticked_review_golden/` (`pytest-regressions`, `reviewer/pyproject.toml:36`).
   - **The runs**: ticked `POST /sessions` on T006's package and seat, through `test_chat_server.py`'s `app` and `client` fixtures, imported as `test_chat_timing_route.py` imports them, with T004's `RecordingProvider` scripted. Five scenarios, each against its own golden:
     1. **Success**: the opening turn; one answer to the part-roles question that resumes the model (the path `_apply_answers` will hold, with `REGRADED_LINE`); one follow-up; and the explanation pass after each turn that ends `end`. It is posted twice - once with no `send_when_checked` or `recheck` in the body, and once with the body the host will send, `{send_when_checked: true, recheck: false}` (the pre-feature server reads the body with `.get` and ignores keys it does not know, `chat/server.py:1230-1236`) - and both runs equal the one golden.
@@ -123,11 +123,11 @@ description: "Task list for the send-to-model checkbox"
     - A session written before this feature, and every committed session (the golden, replay and pane fixtures), round-trips to its own bytes.
     - So does the `session.json` that T007's scenario writes, read from the run folder `play_ticked_review` returns, before normalization. T007's committed golden is not round-tripped: its placeholders stand in for times and UUIDs, so it does not validate as a `ReviewSession`, and the golden is never edited to make it.
     - Each new value validates against the amended `review-session.schema.json`.
-  - **The write**: `save_session` writes through `atomic.write_atomic` with the bytes unchanged. With `os.replace` patched to raise through `swreview.atomic.os`, the previous `session.json` stays whole.
+  - **The write**: capture `save_session`'s actual baseline output bytes before T014, including its platform newline output. On Windows, today's `Path.write_text(... + "\n", encoding="utf-8")` translates newlines to CRLF; `read_text` must not hide that difference. `save_session` writes through `atomic.write_atomic` with those bytes unchanged, preserving CRLF on Windows and LF where that was the baseline. With `os.replace` patched to raise through `swreview.atomic.os`, the previous `session.json` stays whole (independent US1 byte audit, 2026-10-12).
 
   Acceptance: red for want of the fields.
 - [ ] T014 [py] Lane R. Add `ModelStatus`, `SendFailure`, `SendEstimate`, `LiveDetectionRecord`, `DrawingOutcome` and the three `ReviewSession` fields to `report/session.py`. Each is dropped by the serializer at its default, following the pattern of `_omit_empty_finding_explanations` (`report/session.py:582-608`). Also:
-  - Make `save_session` (`:650-655`) write through `atomic.write_atomic`.
+  - Make `save_session` (`:650-655`) write through `atomic.write_atomic`. Preserve the old platform newline translation in this caller before encoding the bytes; leave the shared byte-only `atomic.write_atomic` unchanged, and keep T013's captured byte pin and T007's raw-file golden equal.
   - Add `LiveOutcome.as_record` and `from_record` to `prerun.py` (`:461`). These are two methods in lane B's file, added in this task, before lane B starts.
   - In the same commit, edit `specs/001-agentic-design-review/contracts/review-session.schema.json` with `contracts/records.md` section 1's five `$defs` and three properties, none in `required`. `test_session_fields_013.py::test_the_contract_names_exactly_the_sessions_fields` reads both the model and the schema, so they must land together.
 
@@ -264,6 +264,7 @@ description: "Task list for the send-to-model checkbox"
     - An unticked start on an unreadable package answers `InvalidPackage` as today, and registers no chat.
     - A cache build or a finalization that raises (`write_atomic` patched to raise) answers the error body any unexpected failure answers, registers no chat, and leaves the folder free (a following claim meets no `RunDirInUse`).
     - A ticked start's own paths, its no-key `502` among them, are T007's goldens (owner decision 75A), not a case here.
+  - **Overlapping starts** (independent US1 lifecycle audit, 2026-10-12): hold the first folder's setup before registration, and issue a second start for that same otherwise-empty folder. The second is `409 RunDirInUse`, with no second provider build or check setup; a different folder still starts. Cover ticked and unticked starts. A setup, cache-build or finalization failure releases the pending reservation and registers no chat, so a following claim meets no stale `RunDirInUse` (existing on-disk retry rules still apply); successful registration also releases the reservation while the registered chat keeps the folder claimed.
   - **While it waits**:
     - `POST /messages` is `409 NotSent`.
     - `POST /stop` writes no event, leaves the chat `awaiting_send`, and leaves `chat.stop_requested` unset.
@@ -275,6 +276,8 @@ description: "Task list for the send-to-model checkbox"
   1. `_start_review` (`:2111-2114`) builds `DeferredProvider.for_settings(...)` in place of the factory when `send_when_checked` is false.
   2. `ChatServer._open_waiting(chat, run)` (owner decision 71A), the tail T095's re-run shares: on the thread pool, before the chat is attached and registered, `run.close_waiting()` and `_render_run(run, chat.report_path, chat.run_dir)`; a raise moves the unregistered chat `extracting -> failed` and answers the error body. Then attach, register and move `extracting -> awaiting_send`.
   3. Answer 201.
+
+  Before the first await, reserve the resolved folder on the event loop. `_claim_run_dir` checks this pending-folder set as well as registered chats and files; a second start is `RunDirInUse`. Release the reservation on every setup/finalization failure and after successful registration, using one `finally` around the claimed start. Failed starts stay unregistered, and unrelated folders remain independent (2026-10-12 lifecycle audit).
 
   Also validate the body's `send_when_checked`, and add `NotSent` (409), refusing `POST /messages` while `run.awaiting_send`. **Amends 002** `contracts/chat-api.md` (the `POST /sessions` field; "starts the review turn immediately" holds only with the box ticked; `POST /messages`' `NotSent`) and spec FR-006. Acceptance: T040 green; T027 and T038 green; T007 byte-equal.
 - [ ] T042 [US1] [py] Lane B. Extend `reviewer/tests/unit/test_send_gate_server.py` with the SOLIDWORKS pipe of a waiting review (owner decision 79A; research R2.29; `contracts/review-flow.md` section 8; the spec's edge case "Several reviews waiting at once"). The seat is a real `BridgeClient(pipe, secret, transport=<a counting transport>)`, built through the app's `bridge_factory` as `tests/fixtures/pane/generate_drawing_questions.py:217` and `test_confirmed_drawing_read.py:677-689` build one; `ScriptedReviewBridge` has no transport, so it cannot show a pipe closed and opened again. The counting transport answers on the wire, as `test_bridge_client.py`'s `FakeTransport` does, the interference results T006's script gives (and, for T083, the confirmed read's); like `NamedPipeTransport` (`bridge/client.py:256-261`, `:288-291`), it opens its pipe on its first request after construction or after a `close()`, and it counts the pipes open (opened less closed):
@@ -363,6 +366,7 @@ description: "Task list for the send-to-model checkbox"
     - `label.check.send-when-checked` sits in `#session`, directly after the buttons' `.row`, set from `init`.
     - A change posts `send_when_checked.save` at once and keeps the new value shown.
     - A refused write puts the box back and prints the label in `#send-when-checked-note`, cleared at the next change.
+    - Rapid changes use the latest confirmed stored value: starting true, hold the false save, change back to true, let false succeed, then fail the true save. The box rolls back to the confirmed false, never the stale true captured before the first reply. An earlier success updates the confirmed value without replacing a newer optimistic choice (independent US1 reply-order audit, 2026-10-12).
     - The box is never disabled: not while a start is held, a turn runs or a review waits.
     - With `HoldReviewStart`, a box change shows at once and its save is posted after the `review.start`. On release, the waiting state follows `review.started.send_when_checked`, not the box.
   - **An unticked start**:
@@ -393,7 +397,7 @@ description: "Task list for the send-to-model checkbox"
   - `app.css`: `.send-panel` and the box line, with tokens only.
   - `render.js`: `render.sendBlock(send, extras)`, setting text with `textContent` only.
   - `app.js`:
-    - the box's message and its revert, and the waiting status-line state, read from `review.started` until the summary arrives;
+    - the box's message and its revert, tracking the latest confirmed stored value from init/settings and successful save replies, so a refused latest save reverts to that value even across rapid changes; keep newer optimistic choices visible and never disable the box; and the waiting status-line state, read from `review.started` until the summary arrives;
     - Stop and the follow-up box off while waiting (`app.js:1695-1704`, `:1864-1872`);
     - the Transcript lines, and the chip mark from the `sessions` item's `model_status` (no page-side map of waiting reviews; owner decision 73A);
     - the Settings lines and `describeKeySource('none')` (`:2484-2492`).
