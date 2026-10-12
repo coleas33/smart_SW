@@ -1377,7 +1377,24 @@ feature and never only against the feature's own code:
    Each golden holds every provider `run()` input (the system prompt, the encoded tools, the encoded
    messages) and every presentation request's input, in order; `events.jsonl`; and `session.json`,
    `report.md` and `attention.json` where the scenario writes them - with times, durations and UUIDs
-   replaced by placeholders in order of first appearance. Every later commit keeps all five
+   replaced by placeholders in order of first appearance. Timestamp/UUID identities are kept;
+   each duration occurrence gets its own number because equality of measured float values is
+   volatile. One fictional monotonic clock is injected through the existing event, runner and
+   tool-context clock seams, keeping equal stored timestamp values equal without accidental
+   wall-clock collisions. The real provider requests, tool dispatch and raw output bytes are
+   still captured. The harness also replaces only its
+   explicitly supplied scratch run directory and profile file, including their JSON-escaped
+   forms, with `<RUN_DIR>` and `<PROFILE_PATH>`. Matching requires complete quoted values or
+   complete lines: unknown sibling prefixes, names containing spaces or commas, descendants
+   and profile backup names remain visible, as do `C:\Fictional\` evidence
+   paths and every stable count and word. Duration normalization covers the named JSON fields,
+   the unattended-runtime line and, only in the captured `report.md`'s `Investigation Trace`
+   section with its exact `Elapsed (s)` header, the elapsed-seconds column. It leaves the
+   table's index, tool and status columns and all lookalike tables elsewhere unchanged.
+   Raw UTF-8 file strings retain
+   their actual CRLF/LF bytes: `read_bytes`, never newline-translating `read_text`. The separate
+   normalizer test pins these rules before capture (2026-10-12 baseline preparation).
+   Every later commit keeps all five
    byte-equal; they run in the gate. The shape checks that would have duplicated scenarios 2 and 3 on
    code that had already changed (a ticked no-key `502` in the unticked start's test, a ticked failed
    first request in the failed Send's test) are not written.
@@ -1556,7 +1573,18 @@ attention policy, the shared mechanical and pre-run builders, replay assertions,
 015 amends. Integrate the accepted 010 change before T007-T008 and re-verify the causes; otherwise
 the characterizations would freeze superseded ticked behavior. No 015 product change is allowed
 before those pins. The exact integrated baseline and verification are recorded in
-`review-2026-10-12.md`; until then baseline readiness is pending.
+`review-2026-10-12.md`; the accepted baseline is now `c93c86a`, integrating `main`
+`017ba0ac` (010 `a5b4ed8`, combined integration `7ebd4ae`, 014 goldens `48049bf`, T158
+receipt `017ba0ac`). The historical table remains the file map for the original review.
+At this actual head the additional shared changes since `45b5076` include 010's
+`agent/runner.py` pre-run/thread-tool wiring, `report/review_words_v1.yaml`, the mechanical
+registry/tools and the `tests/support/mechanical.py` and `tests/support/prerun.py` builders,
+plus the owning 008 answer-batch/checks-first/replay contract updates. None is replaced by
+015: new steps/offsets derive from actual dispatch, words are extended, and the existing
+helpers are imported. The other later changes are 014 probe helpers/goldens that 015 does
+not edit. The four merge conflicts were amendment-note placement only; both 014 amendments
+and 015 notices were preserved. Reuse 014's atomic writer and eleven tests, skipping
+T009-T010. Each later implementation re-verifies its historical cause at this baseline.
 
 ---
 
