@@ -327,7 +327,13 @@ The last line of `extract.log` is the dump's gate log (T109): `gated=` and every
 
 ### FP7 Gate
 
-- [ ] T122 The gate, run and reported, changing nothing: from `reviewer/`, `SWREVIEW_REQUIRE_TOKENIZER=1 uv run pytest -q -p no:warnings -o addopts="" -m "not live"`, `uv run ruff check src tests` and `uv run pytest -q -p no:warnings -o addopts="" -m perf tests/perf`; from the root, `dotnet build extractor/SwReview.sln -c Release` and `dotnet test extractor/SwReview.sln -c Release`; the public-repository guards `test_tracked_files_carry_no_recorded_number.py` and `test_standards_no_company_values.py` pass among them. Record each command's summary line here, that the tree is clean, and the commits from `838b66b`. Acceptance: every command green
+- [X] T122 The gate, run and reported, changing nothing: from `reviewer/`, `SWREVIEW_REQUIRE_TOKENIZER=1 uv run pytest -q -p no:warnings -o addopts="" -m "not live"`, `uv run ruff check src tests` and `uv run pytest -q -p no:warnings -o addopts="" -m perf tests/perf`; from the root, `dotnet build extractor/SwReview.sln -c Release` and `dotnet test extractor/SwReview.sln -c Release`; the public-repository guards `test_tracked_files_carry_no_recorded_number.py` and `test_standards_no_company_values.py` pass among them. Record each command's summary line here, that the tree is clean, and the commits from `838b66b`. Acceptance: every command green. Delivered 2026-10-12: fresh checks on `010-fine-pitch` at `7fcbf66`, with the commands above and no code changes:
+  - Tokenizer-enforced offline pytest: `12781 passed, 5 skipped, 7 deselected in 272.02s (0:04:32)`.
+  - Ruff: `All checks passed!`.
+  - Explicit performance suite: `11 passed in 5.90s`.
+  - Release build: `Build succeeded.`, `0 Warning(s)`, `0 Error(s)`; elapsed `00:00:01.43`.
+  - Release tests: extractor `Failed: 0, Passed: 9060, Skipped: 0, Total: 9060`, duration `18 s`; add-in `Failed: 0, Passed: 2129, Skipped: 0, Total: 2129`, duration `54 s`.
+  - Both public-repository guard modules also ran together with skip reasons enabled: `68 passed in 8.34s`, none skipped. The working tree was clean after the checks and before this gate record; `git diff --check` was clean. Implementation commits from `838b66b`, oldest first: `2d59d1c` (decisions and contracts), `436aca0` (T125-T126), `9d2de8c` (T110-T111), `65e6a4a` (T112-T113), `42b407a` (T114-T115), `93c5cf0` (T116-T118), `c08d7b6` (T119-T120), `7fcbf66` (T121). This T122 record follows them; T123 and T124 remain open workstation tasks.
 
 ### Workstation
 
