@@ -59,14 +59,14 @@ description: "Task list for the send-to-model checkbox"
 
 ### The pins, first, on the pre-feature code
 
-- [ ] T003 [P] [py] Lane G. Write `reviewer/tests/unit/test_recording_provider.py` (research R2.28, "One recording provider"):
+- [x] T003 [P] [py] Lane G. Write `reviewer/tests/unit/test_recording_provider.py` (research R2.28, "One recording provider"):
   - `tests/support/recording_provider.RecordingProvider` records each `run()` input into one ordered log, **before** its scripted turn runs: the system prompt, and the tools and history encoded as the OpenAI adapter encodes them. A turn that raises has still contributed its input.
   - Beside the encoded bytes, each `run()` entry keeps its raw inputs: the system prompt string, the tool specs (`name`, `description`, `parameters`) and the first message of the history, so a test can count `agent.runner.request_prefix(...)` of what the provider received (owner decision 78A).
   - `for_presentation(max_output_tokens)` returns a provider that records each presentation request into the same log in the same way, marked as a presentation.
   - Two runs of one script give equal logs.
 
   Acceptance: red for want of the module.
-- [ ] T004 [py] Lane G. Move `RecordingProvider` and its shared `encoded_tools` function from `reviewer/tests/unit/test_prefix_stability.py` to `reviewer/tests/support/recording_provider.py`, and add `for_presentation` and the raw inputs each `run()` entry keeps (owner decision 78A). **Moved**: `test_prefix_stability.py` imports both names from the helper and drops their old definitions; every assertion is unedited. The encoding rule remains in one place. The six other recorders research R2.28 names stay where they are: `test_cli.py:109`, `test_gate_standards_in_review.py:385`, `test_tool_tiers.py:271` and the three `SpyProvider`s. 015 adds no other recorder. Acceptance: T003 green; `test_prefix_stability.py` green.
+- [x] T004 [py] Lane G. Move `RecordingProvider` and its shared `encoded_tools` function from `reviewer/tests/unit/test_prefix_stability.py` to `reviewer/tests/support/recording_provider.py`, and add `for_presentation` and the raw inputs each `run()` entry keeps (owner decision 78A). **Moved**: `test_prefix_stability.py` imports both names from the helper and drops their old definitions; every assertion is unedited. The encoding rule remains in one place. The six other recorders research R2.28 names stay where they are: `test_cli.py:109`, `test_gate_standards_in_review.py:385`, `test_tool_tiers.py:271` and the three `SpyProvider`s. 015 adds no other recorder. Acceptance: T003 green; `test_prefix_stability.py` green.
 - [ ] T005 [P] [py] Lane G. Write `reviewer/tests/unit/test_questions_package.py` for the fictional questions package (research R2.25, R4.1). `tests/support/questions_package.py` builds a package, graded with fictional profile A at version 3 as `tests/support/roles_review.py` writes it, such that:
   - A checks-first review under the pane defaults raises two questions, both `source: "code"`: the part-roles question (an unclear part, the `convention_only` state), and one drawing-candidate question (a part with a same-name drawing that is not open).
   - The seat is a `ScriptedReviewBridge` (`tests/support/review_bridge.py`) that reads drawings: `drawing_read: "opens_closed"`.
