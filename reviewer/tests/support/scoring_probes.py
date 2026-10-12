@@ -30,17 +30,22 @@ US5 adds the probes and the golden machinery (T154, T155).
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from hashlib import sha256
 from pathlib import Path
-from typing import get_args
+from typing import Any, get_args
 from uuid import NAMESPACE_URL, uuid5
 
+from swreview.agent.checklist import load_checklist
 from swreview.agent.events import EVENTS_FILE_NAME, EventSink
 from swreview.agent.runner import SESSION_FILE_NAME, ask_part_roles, classify_part_roles
-from swreview.benchmark import matching, questions, scorecard
-from swreview.benchmark.answer_key import _dimensions_named, _entities_named
+from swreview.benchmark import answers, matching, questions, scorecard
+from swreview.benchmark.answer_key import _dimensions_named, _entities_named, load_answer_key
 from swreview.benchmark.answer_key_model import (
     AnswerKey,
+    CorrectCondition,
     KnownDefect,
     Producer,
     QuestionCount,
@@ -49,13 +54,16 @@ from swreview.benchmark.answer_key_model import (
 )
 from swreview.benchmark.questions import REQUEST_TOOL
 from swreview.benchmark.scorecard import PackageScore
-from swreview.checks.standards.profile import StandardsProfile
+from swreview.benchmark.sets import REPO_ROOT, BenchmarkPackageRef
+from swreview.checks.standards.profile import StandardsProfile, load_profile
 from swreview.findings import Finding, FindingIdAllocator, build_finding
+from swreview.ir.loader import load_package
 from swreview.ir.models import Dimension, EvidencePackage, Manifest, SourceRef
 from swreview.report.session import (
     ORIGIN_MARKS_VERSION,
     CoverageItem,
     CoverageScope,
+    EvidenceRequestIdAllocator,
     InvestigationStep,
     ReviewSession,
     Timing,
@@ -65,6 +73,7 @@ from swreview.report.summary import load_words
 from swreview.tools.context import ToolContext, context_for
 from swreview.tools.refs import resolve_dimension
 from swreview.tools.registry import TOOL_RESULTS_DIR_NAME, ToolRegistry
+from tests.support.mechanical import as_committed
 from tests.support.packages import build_package, persist_ref
 
 STARTED_AT = datetime(2026, 9, 28, 9, 0, tzinfo=UTC)
@@ -550,3 +559,884 @@ def _expected_recall(key: AnswerKey, detected: float) -> dict[str, float | None]
             for tag in get_args(Tag)
         },
     }
+
+
+# --- the golden view and version record (T154) -----------------------------------------------
+
+GOLDEN_EXCLUDED = (
+    "session_id",
+    "baseline_minutes",
+    "assisted_minutes",
+    "unattended_runtime_minutes",
+    "net_saved_minutes",
+    "usage",
+    "round_trips",
+    "cached_input_share",
+    "wall_clock_s",
+    "seconds_to_first_finding",
+    "tool_calls_by_name",
+)
+GOLDEN_IDENTITY = ("package_id", "held_out", "graded_items")
+
+
+def golden_view(score: PackageScore) -> dict[str, Any]:
+    """Every scorer-written package field, serialized as a snapshot can read it."""
+    return score.model_dump(mode="json", exclude=set(GOLDEN_EXCLUDED))
+
+
+def goldens_sha256(folder: Path) -> str:
+    """Hash paths and committed bytes in sorted path order (scoring.md 9.4, INT-12)."""
+    digest = sha256()
+    for path in sorted(folder.rglob("*.yml")):
+        digest.update(path.relative_to(folder).as_posix().encode("utf-8") + b"\0")
+        digest.update(as_committed(path) + b"\0")
+    return digest.hexdigest()
+
+
+def version_record_failures(rows: list[dict[str, Any]], digest: str, version: int) -> list[str]:
+    """The record's two-way rule: a rules bump and a golden move accompany one another."""
+    if not rows:
+        return ["the version record holds no row"]
+    failures = []
+    if rows[-1].get("version") != version:
+        failures.append(f"last version is not SCORING_RULES_VERSION {version}")
+    if rows[-1].get("goldens_sha256") != digest:
+        failures.append(f"last golden digest is not {digest}")
+    seen: set[str] = set()
+    for index, row in enumerate(rows):
+        previous = rows[index - 1] if index else None
+        if previous and row.get("version") != previous.get("version", 0) + 1:
+            failures.append(f"row {index + 1}: versions must rise by one")
+        unchanged = row.get("goldens_unchanged") is True
+        if unchanged:
+            reason = row.get("reason")
+            if not isinstance(reason, str) or not reason.strip():
+                failures.append(f"row {index + 1}: unchanged goldens need a reason")
+            if not previous or row.get("goldens_sha256") != previous.get("goldens_sha256"):
+                failures.append(f"row {index + 1}: declared unchanged goldens differ")
+        elif row.get("goldens_sha256") in seen:
+            failures.append(f"row {index + 1}: shared digest needs goldens_unchanged")
+        seen.add(row.get("goldens_sha256", ""))
+    return failures
+
+
+@dataclass(frozen=True)
+class Change:
+    """An explicit before/after value for a status, origin, bucket mix or assessed column."""
+
+    before: Any
+    after: Any
+
+
+@dataclass(frozen=True)
+class Probe:
+    name: str
+    case: str
+    base: str
+    behaviour: Callable[[Any], None]
+    moves: Mapping[str, int | Change]
+    entry: str | None = None
+    rule: str | None = None
+    overlay: str | None = None
+
+
+def _case(entry: BenchmarkPackageRef) -> tuple[AnswerKey, EvidencePackage]:
+    package = load_package(entry.path).package
+    if entry.key is None:
+        raise ValueError(f"{entry.package_id}: its committed entry names no key")
+    return load_answer_key(
+        entry.key, package=package, checklist=load_checklist(), words=load_words()
+    ), package
+
+
+def validate_probe(probe: Probe, entries: Mapping[str, BenchmarkPackageRef]) -> None:
+    """Keep a probe bound to real corpus entries, even when its base has a named overlay."""
+    if probe.case not in entries:
+        raise ValueError(f"probe {probe.name}: case {probe.case}, entry {probe.entry}, has gone")
+    key, _ = _case(entries[probe.case])
+    named = {
+        item.id
+        for field in (
+            "known_defects",
+            "correct_conditions",
+            "forbidden",
+            "expected_coverage",
+            "unanswerable_requests",
+            "question_counts",
+        )
+        for item in getattr(key, field)
+    }
+    if probe.entry is not None and probe.entry not in named:
+        raise ValueError(f"probe {probe.name}: case {probe.case}, entry {probe.entry}, has gone")
+
+
+def assert_probe_delta(probe: Probe, base: dict[str, Any], changed: dict[str, Any]) -> None:
+    """Check independently declared deltas before accepting a regenerated snapshot."""
+    moved = {name for name in base if base[name] != changed[name]}
+    assert moved == set(probe.moves), (
+        f"{probe.name}: moved {sorted(moved)}, declared {sorted(probe.moves)}"
+    )
+    for name, delta in probe.moves.items():
+        before, after = base[name], changed[name]
+        if isinstance(delta, Change):
+            assert (before, after) == (delta.before, delta.after), (
+                f"{probe.name}: {name}: expected {delta}, got {before!r} -> {after!r}"
+            )
+        else:
+            if isinstance(before, list) and isinstance(after, list):
+                actual = len(after) - len(before)
+            elif isinstance(before, dict) and isinstance(after, dict):
+                actual = len(after) - len(before)
+            else:
+                actual = after - before
+            assert actual == delta, f"{probe.name}: {name}: delta {actual}, expected {delta}"
+
+
+PROBE_KEY_OVERLAYS = {
+    "condition-and-forbidden": (
+        "mir-sitting has a forbidden rms family on the pin but no overlapping condition; "
+        "this isolated base adds a correct rms.sketches.fully_defined condition on that pin."
+    ),
+    "minimum-one-item-question": (
+        "kalo-fit-1's item rule permits zero questions; this isolated base raises its minimum "
+        "to one so an item question-count miss below the minimum can be probed."
+    ),
+    "coverage-expects-checked": (
+        "Every corpus coverage entry allows unresolved; this isolated mir-sitting base "
+        "expects checked on CV-1 so unresolved can be a mismatching reading."
+    ),
+}
+
+
+def _overlay_key(key: AnswerKey, name: str | None) -> AnswerKey:
+    """Three disclosed fixture gaps, never edits to a committed key or its corpus identity."""
+    if name is None:
+        return key
+    if name == "condition-and-forbidden" and key.package_id == "mir-sitting":
+        forbidden = next(entry for entry in key.forbidden if entry.id == "FB-1")
+        if any(entry.id == "C-1" for entry in key.correct_conditions):
+            raise ValueError("mir-sitting: overlay condition C-1 already exists in its real key")
+        condition = CorrectCondition(
+            id="C-1",
+            tag="tuned_on",
+            description="The probe-only pin sketch condition.",
+            check="rms.sketches.fully_defined",
+            component_ids=forbidden.component_ids,
+            document_ids=forbidden.document_ids,
+        )
+        return key.model_copy(update={"correct_conditions": [*key.correct_conditions, condition]})
+    if name == "minimum-one-item-question" and key.package_id == "kalo-fit-1":
+        return key.model_copy(
+            update={
+                "question_counts": [
+                    rule.model_copy(update={"min": 1}) if rule.id == "Q-1" else rule
+                    for rule in key.question_counts
+                ]
+            }
+        )
+    if name == "coverage-expects-checked" and key.package_id == "mir-sitting":
+        return key.model_copy(
+            update={
+                "expected_coverage": [
+                    entry.model_copy(update={"statuses": ["checked"]})
+                    if entry.id == "CV-1"
+                    else entry
+                    for entry in key.expected_coverage
+                ]
+            }
+        )
+    raise ValueError(f"{key.package_id}: unknown or inapplicable probe key overlay {name}")
+
+
+@dataclass
+class ProbeReview:
+    """One committed case's synthetic review; calls still use the product's real dispatch."""
+
+    key: AnswerKey
+    package: EvidencePackage
+    folder: Path
+    session: ReviewSession
+
+    def __post_init__(self) -> None:
+        self.context = context_for(self.package)
+        self.context.session = self.session
+        self.context.evidence_request_ids = EvidenceRequestIdAllocator(
+            start=1
+            + max(
+                (int(request.id.removeprefix("ER-")) for request in self.session.evidence_requests),
+                default=0,
+            )
+        )
+        self.context.tool_results_dir = self.folder / TOOL_RESULTS_DIR_NAME
+        self.sink = EventSink(self.folder / EVENTS_FILE_NAME, clock=lambda: STARTED_AT)
+        self.context.emit = self.sink.emit
+        self.dispatch = ToolRegistry().dispatch(self.context)
+        self.points: list[answers.AnswerPoint] = []
+
+    def entry(self, identifier: str):
+        for field in (
+            "known_defects",
+            "correct_conditions",
+            "forbidden",
+            "expected_coverage",
+            "unanswerable_requests",
+            "question_counts",
+        ):
+            for item in getattr(self.key, field):
+                if item.id == identifier:
+                    return item
+        raise ValueError(f"{self.key.package_id}: entry {identifier} has gone")
+
+    def add(
+        self, identifier: str, status: str = "suspected", *, check: str | None = None
+    ) -> Finding:
+        entry = self.entry(identifier)
+        pattern = check or getattr(entry, "check", None) or entry.checks[0]
+        defect = KnownDefect.model_construct(
+            id=entry.id,
+            tag=entry.tag,
+            description=entry.description,
+            check=pattern,
+            component_ids=entry.component_ids,
+            document_ids=entry.document_ids,
+            producer="model",
+            expected_status="unresolved" if status == "unresolved" else "suspected",
+            references=getattr(entry, "references", []),
+        )
+        finding = _oracle_finding(defect, self.package, f"F-{901 + len(self.session.findings):03}")
+        finding = finding.model_copy(update={"status": status})
+        self.context.record_finding(finding)
+        return finding
+
+    def replace_finding(self, identifier: str, **updates: Any) -> None:
+        defect = self.entry(identifier)
+        index = next(
+            i
+            for i, finding in enumerate(self.session.findings)
+            if matching.matches(finding, defect)
+        )
+        self.session.findings[index] = self.session.findings[index].model_copy(update=updates)
+
+    def remove(self, identifier: str) -> None:
+        entry = self.entry(identifier)
+        self.session.findings[:] = [
+            finding for finding in self.session.findings if not matching.matches(finding, entry)
+        ]
+
+    def ask(self, *ids: str, item: str | None = None):
+        arguments = {
+            "what": "A fictional probe value.",
+            "why": "The probe needs evidence.",
+            "entity_ids": list(ids),
+        }
+        if item is not None:
+            arguments["blocks"] = item
+        self.dispatch.call(REQUEST_TOOL, arguments)
+        return self.session.steps[-1]
+
+    def answer(self, *request_ids: str, unscripted=()) -> None:
+        for request_id in request_ids:
+            request = next(one for one in self.session.evidence_requests if one.id == request_id)
+            request.status = "answered"
+            request.answer = "press fit"
+            request.answered_at = STARTED_AT + timedelta(minutes=1 + len(self.points))
+        self.points.append(
+            answers.AnswerPoint(
+                after_turn=len(self.points),
+                steps_before=len(self.session.steps),
+                sent=[
+                    answers.AnswerSent(request_id=request_id, entry=f"A-{i + 1}")
+                    for i, request_id in enumerate(request_ids)
+                ],
+                unscripted=list(unscripted),
+                held=[],
+            )
+        )
+
+    def log(self, ended: str = "no_open_questions") -> None:
+        answers.write_answer_log(
+            self.folder,
+            answers.AnswerLog(
+                answer_log_version=answers.ANSWER_LOG_VERSION,
+                points=self.points,
+                ended=ended,
+                last_turn_end="end",
+                unused_entries=[],
+            ),
+        )
+
+    def save(self) -> None:
+        save_session(self.session, self.folder / SESSION_FILE_NAME)
+
+
+def probe_scores(
+    probe: Probe, entry: BenchmarkPackageRef, folder: Path
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Score a base and one behaviour under the same key, including any disclosed overlay."""
+    key, package = _case(entry)
+    key = _overlay_key(key, probe.overlay)
+    views = []
+    for label in ("base", "probe"):
+        target = folder / label
+        if probe.base == "oracle":
+            session = oracle_review(
+                key,
+                package,
+                target,
+                profile=load_profile(REPO_ROOT / "config" / "standards.example.yaml"),
+            )
+        elif probe.base == "null":
+            session = null_review(package, target)
+        else:
+            raise ValueError(f"{probe.name}: unknown base {probe.base}")
+        if label == "probe":
+            review = ProbeReview(key, package, target, session)
+            probe.behaviour(review)
+            review.save()
+        views.append(golden_view(_score(key, target, package)))
+    return views[0], views[1]
+
+
+# --- scoring behaviours (T155) ---------------------------------------------------------------
+
+
+def _alarm(review: ProbeReview, *, origin: str = "model") -> None:
+    finding = review.add("D-1", check="provenance.probe")
+    updates: dict[str, Any] = {"source": "model" if origin in ("model", "carried") else "code"}
+    if origin == "carried":
+        updates["carried_over_from"] = uuid5(NAMESPACE_URL, "probe/earlier-session")
+    elif origin == "unknown":
+        review.session.origin_marks = None
+    elif origin in ("prerun", "regrade", "code_only_call", "configured_check"):
+        step = ORACLE_STEP.model_copy(
+            update={
+                "index": len(review.session.steps),
+                "tool": "check_hygiene" if origin != "configured_check" else "check_fit",
+                "origin_mark": origin if origin in ("prerun", "regrade") else None,
+            }
+        )
+        review.session.steps.append(step)
+        updates["tool_result_ids"] = [step.index]
+    elif origin == "setup":
+        updates["tool_result_ids"] = []
+    review.session.findings[-1] = finding.model_copy(update=updates)
+
+
+def _status(review: ProbeReview, entry: str, status: str) -> None:
+    review.replace_finding(
+        entry, status=status, coverage_limits=[UNRESOLVED_LIMIT] if status == "unresolved" else []
+    )
+
+
+def _clear(review: ProbeReview, entry: str, *, beside_credit: bool = False) -> None:
+    if beside_credit:
+        review.add(entry, "checked_within_scope")
+    else:
+        _status(review, entry, "checked_within_scope")
+
+
+def _coverage(review: ProbeReview, bucket: str) -> None:
+    entry = review.entry("CV-1")
+    review.context.withdraw_coverage((entry.item,), tuple(scorecard.Coverage.model_fields))
+    if bucket != "not_reported":
+        review.context.record_coverage(
+            bucket,
+            CoverageItem(
+                check=entry.item,
+                scope=CoverageScope(),
+                reason="The probe's coverage reading.",
+                error=None,
+            ),
+        )
+
+
+def _unresolved(review: ProbeReview, *, withheld: bool) -> None:
+    check = "mass.material_assigned"
+    if withheld:
+        review.session.withheld_checks.append(check)
+    review.context.record_coverage(
+        "unresolved",
+        CoverageItem(
+            check=check,
+            scope=CoverageScope(),
+            reason="The probe's unresolved coverage.",
+            error=None,
+        ),
+    )
+
+
+def _reference_miss(review: ProbeReview, identifier: str, how: str) -> None:
+    defect = review.entry(identifier)
+    finding = next(one for one in review.session.findings if matching.matches(one, defect))
+    inputs = list(finding.inputs)
+    if how == "extra-stack-contributor":
+        existing = {
+            (one.source.document_id, one.source.annotation)
+            for one in inputs
+            if isinstance(one, Dimension)
+        }
+        inputs.append(
+            next(
+                one
+                for sheet in review.package.drawings
+                for one in sheet.dimensions
+                if (one.source.document_id, one.source.annotation) not in existing
+            )
+        )
+    elif how == "role-swapped-fit":
+        inputs.reverse()
+    elif how == "another-pair":
+        first = next(one for one in inputs if isinstance(one, str) and one.startswith("hol:"))
+        original = next(one for one in review.package.holes if one.id == first)
+        replacement = next(
+            one.id
+            for one in review.package.holes
+            if one.id != first and one.component_id == original.component_id
+        )
+        inputs = [replacement if one == first else one for one in inputs]
+    review.replace_finding(identifier, inputs=inputs)
+
+
+def _doc_finding(review: ProbeReview, *, location: bool, component: bool = False) -> None:
+    finding = review.add("D-2", "suspected")
+    updates = {}
+    if location:
+        updates["drawing_locations"] = [
+            SourceRef(document_id=review.entry("D-2").document_ids[0], sheet="Sheet1")
+        ]
+    if component:
+        updates["component_ids"] = [review.package.components[0].id]
+    review.session.findings[-1] = finding.model_copy(update=updates)
+
+
+def _withdrawn(review: ProbeReview) -> None:
+    """The real regrade reconciliation writes both the body and its withdrawal event."""
+    from swreview.agent.providers.fake import FakeProvider
+    from swreview.agent.runner import ReviewRun
+
+    step = ORACLE_STEP.model_copy(
+        update={"index": len(review.session.steps), "tool": "check_rms_part"}
+    )
+    review.session.steps.append(step)
+    finding = review.add("FB-1", check="rms.sketches.fully_defined")
+    finding = finding.model_copy(update={"source": "code", "tool_result_ids": [step.index]})
+    review.session.findings[-1] = finding
+    review.sink.emit("finding", review.context.finding_body(finding))
+    run = ReviewRun(
+        context=review.context,
+        provider=FakeProvider(script=[], model="fake-scripted"),
+        tools=review.dispatch,
+        system="synthetic probe",
+        sink=review.sink,
+        out_dir=review.folder,
+        effort="low",
+        max_steps=10,
+        dispatch=review.dispatch,
+    )
+    run._reconcile_restated(
+        len(review.session.findings),
+        {step.index: step.tool},
+        [],
+        {step.tool: "The real probe regrade no longer produces this finding."},
+    )
+
+
+def _unreadable(review: ProbeReview) -> None:
+    with (review.folder / EVENTS_FILE_NAME).open("a", encoding="utf-8", newline="\n") as stream:
+        stream.write("{not json\n")
+
+
+def _part_overlap(review: ProbeReview) -> None:
+    finding = review.add("D-1")
+    review.session.findings[-1] = finding.model_copy(
+        update={"component_ids": review.entry("D-1").component_ids[:1]}
+    )
+
+
+_DETECT = {
+    "matched_defect_ids": 1,
+    "missed_defect_ids": -1,
+    "missed_known_defects": -1,
+    "valid_findings": 1,
+    "finding_origins": 1,
+}
+_ALARM = {"false_alarms": 1, "false_alarm_finding_ids": 1, "finding_origins": 1}
+_LOST_TO_ALARM = {
+    "matched_defect_ids": -1,
+    "valid_findings": -1,
+    "missed_defect_ids": 1,
+    "missed_known_defects": 1,
+    "false_alarms": 1,
+    "false_alarm_finding_ids": 1,
+}
+
+
+def _scoring_probes() -> list[Probe]:
+    probes = [
+        Probe("credited", "kalo-1", "null", lambda r: r.add("D-1"), _DETECT, "D-1", "exact-check"),
+        Probe(
+            "flagged",
+            "kalo-fit-2",
+            "null",
+            lambda r: r.add("D-1", "unresolved"),
+            {name: delta for name, delta in _DETECT.items() if name != "valid_findings"}
+            | {"flagged_defect_ids": 1, "unresolved_count": 1},
+            "D-1",
+        ),
+        Probe(
+            "status-mismatch",
+            "kalo-fit-2",
+            "oracle",
+            lambda r: _status(r, "D-1", "suspected"),
+            {
+                "flagged_defect_ids": -1,
+                "unresolved_count": -1,
+                "valid_findings": 1,
+                "status_mismatch_defect_ids": 1,
+            },
+            "D-1",
+        ),
+        Probe(
+            "flagged-below-expected",
+            "kalo-1",
+            "oracle",
+            lambda r: _status(r, "D-1", "unresolved"),
+            {
+                "matched_defect_ids": -1,
+                "valid_findings": -1,
+                "flagged_below_expected_defect_ids": 1,
+                "unresolved_count": 1,
+            },
+            "D-1",
+        ),
+        Probe(
+            "cleared-alone",
+            "kalo-1",
+            "oracle",
+            lambda r: _clear(r, "D-1"),
+            {"matched_defect_ids": -1, "valid_findings": -1, "cleared_defect_ids": 1},
+            "D-1",
+        ),
+        Probe(
+            "cleared-beside-credit",
+            "kalo-1",
+            "oracle",
+            lambda r: _clear(r, "D-1", beside_credit=True),
+            {"cleared_defect_ids": 1, "finding_origins": 1},
+            "D-1",
+        ),
+        Probe(
+            "missed",
+            "kalo-1",
+            "oracle",
+            lambda r: r.remove("D-1"),
+            {
+                "matched_defect_ids": -1,
+                "valid_findings": -1,
+                "missed_defect_ids": 1,
+                "missed_known_defects": 1,
+                "finding_origins": -1,
+            },
+            "D-1",
+        ),
+        Probe("plain-false-alarm", "kalo-1", "null", _alarm, _ALARM, "D-1"),
+        Probe(
+            "contradiction",
+            "kalo-fit-clean",
+            "null",
+            lambda r: r.add("C-1"),
+            _ALARM | {"contradicted_condition_ids": 1, "tuned_on_false_alarm_finding_ids": 1},
+            "C-1",
+        ),
+        Probe(
+            "confirmation",
+            "kalo-fit-clean",
+            "null",
+            lambda r: r.add("C-1", "checked_within_scope"),
+            {"confirmed_condition_ids": 1, "finding_origins": 1},
+            "C-1",
+        ),
+        Probe(
+            "forbidden-hit",
+            "kalo-contact",
+            "null",
+            lambda r: r.add("FB-1"),
+            _ALARM | {"forbidden_hit_finding_ids": 1, "tuned_on_false_alarm_finding_ids": 1},
+            "FB-1",
+        ),
+        Probe(
+            "tuned-on-false-alarm",
+            "kalo-fit-clean",
+            "null",
+            lambda r: r.add("C-1"),
+            _ALARM | {"contradicted_condition_ids": 1, "tuned_on_false_alarm_finding_ids": 1},
+            "C-1",
+        ),
+        Probe(
+            "withdrawn-forbidden-hit",
+            "mir-sitting",
+            "oracle",
+            _withdrawn,
+            {"withdrawn_forbidden_hit_finding_ids": 1, "finding_origins": 1},
+            "FB-1",
+            "withdrawn-stream",
+        ),
+        Probe(
+            "condition-and-forbidden",
+            "mir-sitting",
+            "null",
+            lambda r: r.add("C-1"),
+            _ALARM
+            | {
+                "forbidden_hit_finding_ids": 1,
+                "tuned_on_false_alarm_finding_ids": 1,
+                "contradicted_condition_ids": 1,
+            },
+            "FB-1",
+            "condition-and-forbidden",
+            "condition-and-forbidden",
+        ),
+        Probe(
+            "family-at-depth",
+            "mir-sitting",
+            "oracle",
+            lambda r: r.add("FB-1", check="rms.sketches.depth.probe"),
+            _ALARM | {"forbidden_hit_finding_ids": 1, "tuned_on_false_alarm_finding_ids": 1},
+            "FB-1",
+            "family-at-depth",
+        ),
+        Probe(
+            "family-boundary",
+            "mir-sitting",
+            "oracle",
+            lambda r: r.add("FB-1", check="rmsx.probe"),
+            _ALARM,
+            "FB-1",
+            "family-boundary",
+        ),
+        Probe(
+            "sibling-rule",
+            "kalo-1",
+            "oracle",
+            lambda r: r.replace_finding("D-1", check="fastener.engagement"),
+            _LOST_TO_ALARM,
+            "D-1",
+            "sibling-rule",
+        ),
+        Probe("part-overlap", "kalo-1", "null", _part_overlap, _DETECT, "D-1", "part-overlap"),
+        Probe(
+            "drawing-location-overlap",
+            "kalo-2",
+            "null",
+            lambda r: _doc_finding(r, location=True),
+            _DETECT | {"status_mismatch_defect_ids": 1},
+            "D-2",
+            "drawing-location-overlap",
+        ),
+        Probe(
+            "provenance-document-overlap",
+            "kalo-2",
+            "null",
+            lambda r: _doc_finding(r, location=False),
+            _DETECT | {"status_mismatch_defect_ids": 1},
+            "D-2",
+            "provenance-document-overlap",
+        ),
+        Probe(
+            "component-provenance-not-read",
+            "kalo-2",
+            "null",
+            lambda r: _doc_finding(r, location=False, component=True),
+            _ALARM,
+            "D-2",
+            "component-provenance-not-read",
+        ),
+        Probe(
+            "role-swapped-fit",
+            "kalo-fit-1",
+            "oracle",
+            lambda r: _reference_miss(r, "D-1", "role-swapped-fit"),
+            {},
+            "D-1",
+            "role-swapped-fit",
+        ),
+        Probe(
+            "extra-stack-contributor",
+            "brun-1",
+            "oracle",
+            lambda r: _reference_miss(r, "D-1", "extra-stack-contributor"),
+            _LOST_TO_ALARM,
+            "D-1",
+            "extra-stack-contributor",
+        ),
+        Probe(
+            "another-pair",
+            "kalo-1",
+            "oracle",
+            lambda r: _reference_miss(r, "D-1", "another-pair"),
+            _LOST_TO_ALARM,
+            "D-1",
+            "another-pair",
+        ),
+    ]
+    for origin in (
+        "prerun",
+        "regrade",
+        "code_only_call",
+        "configured_check",
+        "model",
+        "carried",
+        "setup",
+        "unknown",
+    ):
+        probes.append(
+            Probe(
+                f"origin-{origin}",
+                "kalo-1",
+                "null",
+                lambda r, value=origin: _alarm(r, origin=value),
+                _ALARM
+                | {"finding_origins": Change({}, {"F-901": origin})}
+                | ({"carried_findings": 1} if origin == "carried" else {}),
+                "D-1",
+            )
+        )
+    for kind, case, entry in (
+        ("joint", "kalo-1", "D-1"),
+        ("hole-pair", "brun-1", "D-2"),
+        ("joint-instances", "kalo-contact-positive", "D-2"),
+        ("fit", "kalo-fit-1", "D-1"),
+        ("stack", "brun-1", "D-1"),
+    ):
+        probes.append(
+            Probe(
+                f"reference-{kind}-resolved",
+                case,
+                "null",
+                lambda r, one=entry: r.add(one),
+                _DETECT,
+                entry,
+                f"{kind}-resolved",
+            )
+        )
+        probes.append(
+            Probe(
+                f"reference-{kind}-unresolved",
+                case,
+                "null",
+                lambda r, one=entry: r.add(one, "unresolved"),
+                {
+                    "missed_defect_ids": -1,
+                    "missed_known_defects": -1,
+                    "flagged_below_expected_defect_ids": 1,
+                    "unresolved_count": 1,
+                    "finding_origins": 1,
+                },
+                entry,
+                f"{kind}-unresolved",
+            )
+        )
+    mix = {name: 0 for name in scorecard.Coverage.model_fields}
+    for bucket in ("checked", "unresolved", "skipped", "out_of_scope", "not_reported"):
+        overlay = "coverage-expects-checked" if bucket == "unresolved" else None
+        original = "checked" if overlay else "unresolved"
+        before = mix | {original: 1}
+        after = mix | ({bucket: 1} if bucket != "not_reported" else {})
+        moves = {"coverage_mismatches": 1, "coverage_bucket_mix": Change(before, after)}
+        if original == "unresolved":
+            moves["unresolved_other"] = -1
+        elif bucket == "unresolved":
+            moves["unresolved_other"] = 1
+        probes.append(
+            Probe(
+                f"coverage-mismatch-{bucket}",
+                "mir-sitting",
+                "oracle",
+                lambda r, value=bucket: _coverage(r, value),
+                moves,
+                "CV-1",
+                overlay=overlay,
+            )
+        )
+    for withheld in (False, True):
+        probes.append(
+            Probe(
+                "unresolved-withheld" if withheld else "unresolved-other",
+                "kalo-1",
+                "null",
+                lambda r, value=withheld: _unresolved(r, withheld=value),
+                {
+                    "unresolved_because_withheld" if withheld else "unresolved_other": 1,
+                    "coverage_bucket_mix": Change(mix, mix | {"unresolved": 1}),
+                },
+            )
+        )
+    # The base's exact not-assessed map is independently fixed by its key lists, not scored anew.
+    unknown = {
+        "contradicted_condition_ids": scorecard.NO_CORRECT_CONDITION,
+        "confirmed_condition_ids": scorecard.NO_CORRECT_CONDITION,
+        "unscripted_questions": questions.NO_ANSWER_LOG,
+        "bound_reached": questions.NO_ANSWER_LOG,
+    }
+    probes.append(
+        Probe(
+            "event-stream-unreadable",
+            "mir-sitting",
+            "oracle",
+            _unreadable,
+            {
+                "withdrawn_forbidden_hit_finding_ids": Change([], None),
+                "not_assessed": Change(
+                    unknown,
+                    unknown
+                    | {
+                        "withdrawn_forbidden_hit_finding_ids": (
+                            "the event stream cannot be read from line 2, and a withdrawal "
+                            "could lie after it"
+                        )
+                    },
+                ),
+            },
+            "FB-1",
+        )
+    )
+    return probes
+
+
+PROBES = tuple(_scoring_probes())
+MATCHING_RULES = (
+    "exact-check",
+    "family-at-depth",
+    "family-boundary",
+    "sibling-rule",
+    "part-overlap",
+    "drawing-location-overlap",
+    "provenance-document-overlap",
+    "component-provenance-not-read",
+    "joint-resolved",
+    "joint-unresolved",
+    "hole-pair-resolved",
+    "hole-pair-unresolved",
+    "joint-instances-resolved",
+    "joint-instances-unresolved",
+    "fit-resolved",
+    "fit-unresolved",
+    "stack-resolved",
+    "stack-unresolved",
+    "role-swapped-fit",
+    "extra-stack-contributor",
+    "another-pair",
+    "withdrawn-stream",
+    "condition-and-forbidden",
+)
+
+
+def _question_suite() -> tuple[tuple[Probe, ...], tuple[str, ...]]:
+    from tests.support.scoring_question_probes import QUESTION_MATCHING_RULES, question_probes
+
+    return tuple(question_probes()), QUESTION_MATCHING_RULES
+
+
+_QUESTION_PROBES, _QUESTION_MATCHING_RULES = _question_suite()
+PROBES += _QUESTION_PROBES
+MATCHING_RULES += _QUESTION_MATCHING_RULES

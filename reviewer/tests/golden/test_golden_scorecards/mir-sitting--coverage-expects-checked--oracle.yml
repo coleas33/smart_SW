@@ -1,0 +1,104 @@
+bound_reached: null
+carried_findings: 0
+cleared_defect_ids: []
+confirmed_condition_ids: null
+contradicted_condition_ids: null
+coverage_bucket_mix:
+  checked: 1
+  failed: 0
+  out_of_scope: 0
+  skipped: 0
+  unresolved: 0
+coverage_mismatches: []
+false_alarm_finding_ids: []
+false_alarms: 0
+finding_origins:
+  F-001: model
+  F-002: model
+  F-003: model
+  F-004: model
+flagged_below_expected_defect_ids: []
+flagged_defect_ids: []
+forbidden_hit_finding_ids: []
+graded_items:
+- expected_status: demonstrated
+  id: D-1
+  kind: known_defect
+  producer: code
+  tag: tuned_on
+- expected_status: demonstrated
+  id: D-2
+  kind: known_defect
+  producer: code
+  tag: tuned_on
+- expected_status: demonstrated
+  id: D-3
+  kind: known_defect
+  producer: code
+  tag: tuned_on
+- expected_status: demonstrated
+  id: D-4
+  kind: known_defect
+  producer: code
+  tag: tuned_on
+- expected_status: null
+  id: FB-1
+  kind: forbidden_entry
+  producer: null
+  tag: tuned_on
+- expected_status: null
+  id: FB-2
+  kind: forbidden_entry
+  producer: null
+  tag: tuned_on
+- expected_status: null
+  id: FB-3
+  kind: forbidden_entry
+  producer: null
+  tag: tuned_on
+- expected_status: null
+  id: CV-1
+  kind: expected_coverage
+  producer: null
+  tag: tuned_on
+- expected_status: null
+  id: U-1
+  kind: unanswerable_request
+  producer: null
+  tag: tuned_on
+- expected_status: null
+  id: Q-1
+  kind: question_count
+  producer: null
+  tag: tuned_on
+held_out: false
+matched_defect_ids:
+- D-1
+- D-2
+- D-3
+- D-4
+missed_defect_ids: []
+missed_known_defects: 0
+not_assessed:
+  bound_reached: the package has no answer log
+  confirmed_condition_ids: the key holds no correct condition
+  contradicted_condition_ids: the key holds no correct condition
+  unscripted_questions: the package has no answer log
+open_repeats: []
+package_id: mir-sitting
+question_counts:
+- count: 1
+  entry: Q-1
+  max: 1
+  min: 1
+re_asks: []
+status_mismatch_defect_ids: []
+tuned_on_false_alarm_finding_ids: []
+unanswerable_requests: []
+unmatched_requests: []
+unresolved_because_withheld: 0
+unresolved_count: 0
+unresolved_other: 0
+unscripted_questions: null
+valid_findings: 4
+withdrawn_forbidden_hit_finding_ids: []

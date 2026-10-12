@@ -576,6 +576,18 @@ or an id list, and the named change for a status or a mix (an origin moving from
 another). Some behaviours move two columns by definition, 1 in each: a forbidden hit is a false
 alarm, a contradiction is a false alarm.
 
+**Probe-only key fixtures (implementation clarification).** The frozen corpus does not contain a
+condition overlapping a forbidden entry, an item question-count minimum above zero, or an
+expected-coverage entry that excludes unresolved. Three named, isolated key overlays supply those
+probe bases: `condition-and-forbidden` adds a correct `rms.sketches.fully_defined` condition on
+`mir-sitting`'s forbidden pin; `minimum-one-item-question` raises `kalo-fit-1`'s `Q-1` minimum to
+one; `coverage-expects-checked` changes `mir-sitting`'s `CV-1` expected reading to checked. Each
+overlay's purpose is declared in `scoring_probes.PROBE_KEY_OVERLAYS`, its base has its own
+`<case>--<overlay>--<oracle|null>.yml`, and its probe uses the same overlaid key, so every
+`GOLDEN_IDENTITY` value stays fixed. The normal committed and pilot oracle/null goldens use their
+unchanged keys. Guards still require each case and the original key entry an overlay depends on to
+exist; a fixture overlay never writes a corpus package, key, set or case file.
+
 - **Columns**: credited; flagged; credited with a status mismatch; flagged below expected; cleared,
   alone and beside a credit; missed; a plain false alarm; a contradiction; a confirmation; a forbidden
   hit; a withdrawn forbidden hit; a tuned-on false alarm; a coverage mismatch of each reading; each of

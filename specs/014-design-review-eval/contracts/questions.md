@@ -287,6 +287,12 @@ null or oracle review plus one behaviour, moving only its columns:
   repeat; a code question that is no earlier question; an error answer that is no question; a call
   before an answer point (a repeat) and the same call after it (a re-ask).
 
+The item-count-below probe uses the disclosed `minimum-one-item-question` key fixture from
+`scoring.md` 9.3: every item count rule in the frozen corpus permits zero questions. Its isolated
+`kalo-fit-1` oracle base expects one, and only the probe drops that question. Its own base golden
+and probe retain identical key identity; the corpus's ordinary oracle and null goldens keep the
+original rule.
+
 ## 9. Tests
 
 Every test fails before its behaviour exists (constitution III). Sessions are built as data unless

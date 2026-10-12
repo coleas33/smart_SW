@@ -137,14 +137,17 @@ def refusal(run_dir: Path) -> ValueError:
 # --- 1. score_run writes the version ---------------------------------------------------------
 
 
-def test_the_scoring_rules_version_is_3_and_score_run_writes_it(tmp_path: Path) -> None:
-    """Pinned by value until the version record exists (INT-11); 3 is the key-extensions
-    slice's, which adds the forbidden, coverage and question columns."""
-    assert scorecard_module.SCORING_RULES_VERSION == 3
+def test_the_scoring_rules_version_matches_the_record_and_score_run_writes_it(
+    tmp_path: Path,
+) -> None:
+    """A later rules bump appends one version-record row (INT-11), which also pins the writer."""
+    record = Path(__file__).resolve().parents[1] / "golden" / "scoring_rules_versions.json"
+    expected = json.loads(record.read_text(encoding="utf-8"))[-1]["version"]
+    assert scorecard_module.SCORING_RULES_VERSION == expected
 
     scorecard = score_run(*build_scoring_fixture(tmp_path))
 
-    assert scorecard.scoring_rules_version == 3
+    assert scorecard.scoring_rules_version == expected
 
 
 # --- 2. an old scorecard meets the re-score line, before any session or parity check ---------
