@@ -16,8 +16,9 @@ contract carries a company value, a design name or number, or a local path (FR-0
 ## Contracts of other features this feature amends
 
 Each owning contract gains a one-line note dated 2026-10-08 pointing to the 015 contract that holds
-the amendment; the note and the JSON-schema additions land with the task that changes the code
-(`tasks.md`, "Amends"). This list is FR-038's, with what the plan found added (marked *plan*). The
+the amendment, in Setup task T001. The amendment text and the JSON-schema additions land with the
+task that changes the code (`tasks.md`, "Amends"); schemas cannot carry the Setup note, so it sits
+in their owning README. This list is FR-038's, with what the plan found added (marked *plan*). The
 owner's plan review of 2026-10-09 (decisions 68A to 80A, research R7) changed what several rows carry,
 added one row (009's words table, 73A) and removed none.
 

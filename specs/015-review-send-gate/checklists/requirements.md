@@ -110,3 +110,10 @@
   - **73A**: FR-026 (the chip's mark from the host's record, the same after a reload); FR-031, User Story 4 scenario 2 and the restoring edge case (the restored line composed from a lead key, the first sentence of feature 009's read-only line, which 009's line is composed from too; 009's second sentence is not in it); and FR-038's 009 entry (the words table's `read_only` row).
   - **75A**: FR-035 (the characterization covers a ticked review's failures). **76A**: FR-041 (one helper for a restart and a kill). **77A**: FR-033 and the edge cases on a provider error at Send, an apply that fails and restoring a waiting review (a reload during a Send or an apply). **79A**: the edge case "Several reviews waiting at once" (no SOLIDWORKS connection held while waiting). **80A**: FR-030 and the SOLIDWORKS-closed edge case (the search opens one file).
   - 70A, 74A and 78A move the plan only.
+
+- Fresh re-check of the amended head `8347827` on 2026-10-12: see
+  [review-2026-10-12.md](../review-2026-10-12.md). The Send rollback snapshot now precedes the
+  factory, the baseline integrates accepted 010 before the characterization pins, required
+  `checked_at` is initialized before the first finalization, and Setup note timing agrees with
+  T001. The late-write FR-041 guarantee remains an open owner decision before US4; the requirement
+  has not been relaxed and this review claims no implementation gate.

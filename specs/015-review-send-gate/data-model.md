@@ -138,7 +138,7 @@ module, which those modules import at their top (owner decision 74A; research R2
 |---|---|---|
 | `state` | `"not_sent" \| "send_failed" \| "sent"` | not sent: no request was made; send failed: a request was made and no model round completed; sent: a round completed |
 | `document` | `{path: str, configuration: str}` | the reviewed root document, as the snapshot names it (`report/snapshot._root_document`), so the host can find the review after SOLIDWORKS reopens |
-| `checked_at` | `datetime` | when the checks finished: the first finalization's end, stamped by `local_now` (its offset kept); a re-run stamps its own |
+| `checked_at` | `datetime` | required when the in-memory model status is constructed: initially `local_now()` after setup's checks; replaced by the first finalization's end before any record is saved (its offset kept). A later waiting apply keeps that first end; a re-run stamps its own |
 | `profile` | `{path: str, sha256: str \| None} \| None` | the Standards profile the checks graded with: the path the review was given and the sha256 of its bytes when it loaded (`ProfileIdentity`, `checks/standards/profile.py`), `sha256` null when it was refused; omitted when the review had none. A re-run compares it with the profile in effect and names a change (`contracts/recheck.md` section 4); a re-run records its own |
 | `rechecked_from` | `UUID \| None` | a re-run: the earlier record's `session_id`; omitted when `None` |
 | `failures` | `list[SendFailure]` | every failed attempt, oldest first; omitted when empty. A re-run carries the earlier record's list whole, and its `state` with it (`send_failed` stays `send_failed`) |

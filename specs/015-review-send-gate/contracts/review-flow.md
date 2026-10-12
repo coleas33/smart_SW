@@ -30,8 +30,9 @@ moves to `running`, `run.start` is submitted, `201`.
    the pre-run, the part-roles question and the drawing questions run exactly as they do today
    before a first request (008 `checks-first.md` sections 1 and 2);
 3. `start_review` emits `session.started` with `send_when_checked: false` (section 7), records
-   `model_status {state: "not_sent", document, profile}` (`profile` the identity of the Standards
-   profile it graded with, omitted when there is none) and, when the pre-run ran, `live_detection`
+   `model_status {state: "not_sent", document, checked_at: local_now(), profile}` (`profile` the
+   identity of the Standards profile it graded with, omitted when there is none) and, when the pre-run
+   ran, `live_detection`
    (`records.md` section 1), and the run keeps its `PrerunResult` and standards gap (section 5);
 4. `ChatServer._open_waiting(chat, run)` (owner decision 71A; the one tail the unticked start and a
    re-run share, `recheck.md` section 2), on the thread pool, all **before** the chat is attached
@@ -255,10 +256,13 @@ the order of the commit half is owner decision 72A, the build in the prepare hal
 
 **Prepare** - nothing written, nothing emitted, nothing in the session changed:
 
+Before entering the guarded steps, keep `before = session.model_status.model_copy(deep=True)`
+and clear `_send_error`. The rollback snapshot must exist before the factory can raise; clearing
+the prior in-memory error changes no session field and writes nothing (2026-10-12 re-check).
+
 1. `adapter = build_adapter()`: the route's `provider_factory` call, which constructs the SDK client
    (its first import can be cold), on this worker and never on the event loop (69A);
-2. `before = session.model_status.model_copy(deep=True)`; `_send_error = None`;
-   `attach_provider(adapter)`: `configure_provider(adapter, session)`, then
+2. `attach_provider(adapter)`: `configure_provider(adapter, session)`, then
    `adapter.start_steps_at(len(session.steps))` when the session has steps. The adapter is not yet
    the run's provider;
 3. `opening`, `estimate` and `named_ids` read from `_send_cache` (section 5);

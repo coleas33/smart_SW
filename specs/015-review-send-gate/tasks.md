@@ -7,7 +7,7 @@ description: "Task list for the send-to-model checkbox"
 
 **Input**: Design documents from `/specs/015-review-send-gate/` (`spec.md`, `plan.md`, `research.md`, `data-model.md`, `contracts/`, `quickstart.md`). Amended on 2026-10-09 for the owner's plan review, decisions 68A to 80A (research R7): nine tasks added (T011-T012, T042-T043, T069-T070, T073-T074 and T098), the tasks each decision moves rewritten test-first, and the list renumbered in execution order, every reference with it.
 
-**Prerequisites**: features 001 to 013 on main (`838b66b`; this branch's product code is equal to it until the first task below that edits `reviewer/src/`). Feature 014 is not merged: its branch stood at `28d7ae9` on 2026-10-09, which adds a benchmark design and its own tasks to `45b5076`, the head research R3 intersected, and touches none of R3's files. No licence and no key are needed before Phase W; the tokenizer vocabulary is fetched once (quickstart, Prerequisites). No run folder, recording or real profile is read by a test or enters the repository; every new fixture is fictional (`FICT-`, paths under `C:\Fictional\`).
+**Prerequisites**: features 001 to 013 on main. The original code map used `838b66b`, which equals this branch's product code at the reviewed docs-only head `8347827`. Before T007-T008, integrate the accepted 010-fine-pitch change from `main` into this branch, record the exact resulting pre-015 commit in `review-2026-10-12.md`, refresh research R3's shared-file intersection and re-verify the cited code paths. The baseline gate must pass before the characterization goldens are captured; they preserve this integrated baseline, not the historical `838b66b`. Feature 014 is not a prerequisite for US1: R3's historical intersection is at `45b5076`, and the 2026-10-12 review also checked `ee6571c`; intersect the actual head again before integration. No licence and no key are needed before Phase W; the tokenizer vocabulary is fetched once (quickstart, Prerequisites). No run folder, recording or real profile is read by a test or enters the repository; every new fixture is fictional (`FICT-`, paths under `C:\Fictional\`).
 
 **Tests**: REQUIRED, and **strictly test-first** (62A, Principle III): every implementation task follows the test task that must be written and must fail first ("Acceptance: red for want of ..."), and names it ("Acceptance: Txxx green"). Two pins come before everything else and are committed **green on the pre-feature code**: the characterization of a ticked review, five scenarios each with its golden, its failures included (T007; owner decision 75A), and the prefix characterization (T008) (research R2.28). Every later commit keeps both byte-equal, and no task regenerates them. One task, T082, is a refactor with no new test: T007 pins its path, and it says so. Five tasks are acceptance tests written after the code they check, and pass with no further code (T056, T077, T080, T098, T109; 009's precedent); T098 is the opt-in measurement of owner decision 70A. The tests that go red **by design** are named, with their file, in the task that moves them (research R4.3), and are edited deliberately there, never loosened. What must not move: T007's five goldens, T008's values, the pane fixture's snapshot part (its labels block gains keys only, in T030), every replay fixture, every check golden (`reviewer/tests/golden`), `test_no_lever_in_pane_settings.py`, `test_session.py`, `test_runner_provider.py`, `test_part_roles.py`, `test_confirmed_drawing_read.py`, `test_answer_batch_roles.py`, `test_replay_fixtures.py`, `test_cli.py` (the command-line review gains nothing, FR-037; T034 pins its printed lines), `PageRuleScanTests.cs`, `ReviewPageSessionsTests.cs`, `ReviewPageQuestionsTests.cs`, `ReviewPagePreparationTests.cs`, `ReviewPageSummaryAcceptanceTests.cs` and `ReviewPageNarrowLayoutTests.cs` (each of the last two runs with the box in place, unedited).
 
@@ -21,7 +21,7 @@ description: "Task list for the send-to-model checkbox"
 - **[Story]**: `US1` to `US4`; Setup, Foundational, Polish and Workstation tasks carry none
 - **[py]**, **[C#]**, **[page]**, **[doc]**: the kind of file the task touches (the Python reviewer; the add-in's C# and its C# tests; the Review page and its C# page tests; documents only)
 - **Lane B, R, H, W, C, G, S**: the lane that owns the files the task edits (`plan.md`, "Lanes and file ownership"). Where a task edits one line in another lane's file, it says so.
-- **Cause**: file:line at `838b66b`, re-verified on 2026-10-09 (research's VERIFIED entries). Line numbers drift; re-verify before editing.
+- **Cause**: historical file:line at `838b66b`, re-verified on 2026-10-09 (research's VERIFIED entries). The pre-015 baseline now includes accepted 010 before the pins; re-verify each cause against that recorded commit before editing. Line numbers drift.
 - **Amends NNN**: the other feature's contract or requirement the task changes. The task writes the amendment text in the same commit as the code; T001 places the one-line note pointing here first.
 - **[W]**: needs the licensed SOLIDWORKS seat on the pilot workstation
 
@@ -66,7 +66,7 @@ description: "Task list for the send-to-model checkbox"
   - Two runs of one script give equal logs.
 
   Acceptance: red for want of the module.
-- [ ] T004 [py] Lane G. Move `RecordingProvider` from `reviewer/tests/unit/test_prefix_stability.py:113-156` to `reviewer/tests/support/recording_provider.py`, and add `for_presentation` and the raw inputs each `run()` entry keeps (owner decision 78A). **Moved**: `test_prefix_stability.py` now imports it; only its import line changes, every assertion is unedited. The six other recorders research R2.28 names stay where they are: `test_cli.py:109`, `test_gate_standards_in_review.py:385`, `test_tool_tiers.py:271` and the three `SpyProvider`s. 015 adds no other recorder. Acceptance: T003 green; `test_prefix_stability.py` green.
+- [ ] T004 [py] Lane G. Move `RecordingProvider` and its shared `encoded_tools` function from `reviewer/tests/unit/test_prefix_stability.py` to `reviewer/tests/support/recording_provider.py`, and add `for_presentation` and the raw inputs each `run()` entry keeps (owner decision 78A). **Moved**: `test_prefix_stability.py` imports both names from the helper and drops their old definitions; every assertion is unedited. The encoding rule remains in one place. The six other recorders research R2.28 names stay where they are: `test_cli.py:109`, `test_gate_standards_in_review.py:385`, `test_tool_tiers.py:271` and the three `SpyProvider`s. 015 adds no other recorder. Acceptance: T003 green; `test_prefix_stability.py` green.
 - [ ] T005 [P] [py] Lane G. Write `reviewer/tests/unit/test_questions_package.py` for the fictional questions package (research R2.25, R4.1). `tests/support/questions_package.py` builds a package, graded with fictional profile A at version 3 as `tests/support/roles_review.py` writes it, such that:
   - A checks-first review under the pane defaults raises two questions, both `source: "code"`: the part-roles question (an unclear part, the `convention_only` state), and one drawing-candidate question (a part with a same-name drawing that is not open).
   - The seat is a `ScriptedReviewBridge` (`tests/support/review_bridge.py`) that reads drawings: `drawing_read: "opens_closed"`.
@@ -205,7 +205,7 @@ description: "Task list for the send-to-model checkbox"
   - **The checks only**: `start_review(..., send_when_checked=False)` with a `DeferredProvider` on T006's package runs exactly what a ticked review runs before its first request: the part roles and their question, the checks-first pre-run, and the drawing questions. Its findings, questions and coverage equal a ticked review's at that review's first `run()`, read from T004's recorder. It makes no provider call.
   - **What it records**:
     - It emits `session.started` with `send_when_checked: false`.
-    - It records `model_status {state: "not_sent", document, profile}`. `document` comes from `report/snapshot.root_document` (made public, research R2.15). `profile` is the identity `{path, sha256}` of the Standards profile it graded with (`ProfileIdentity`, `checks/standards/profile.py:183-188`), omitted when there is none.
+    - It records `model_status {state: "not_sent", document, checked_at: local_now(), profile}`. The required time is initialized after setup's checks and replaced by the first finalization's end before any record is saved; a later waiting apply must keep that first end (2026-10-12 re-check). `document` comes from `report/snapshot.root_document` (made public, research R2.15). `profile` is the identity `{path, sha256}` of the Standards profile it graded with (`ProfileIdentity`, `checks/standards/profile.py:183-188`), omitted when there is none.
     - When the pre-run ran, it records `live_detection` (`LiveOutcome.as_record()`).
     - The run keeps `_prerun` and `_standards_gap`.
   - **The defaults**: `earlier` with `send_when_checked=True` raises `ValueError`. With neither argument, `start_review` and `run_review` are today's, so the command-line review gains nothing (FR-037; T007 byte-equal).
@@ -479,7 +479,7 @@ description: "Task list for the send-to-model checkbox"
     - A second Send carries the opening once, and every request of its first turn is byte-identical to a ticked review's of the same package, tool results included (T063's comparison, with the same scripted first turn). The session at that first request holds no row of the finalization the failure ran (research R2.27, RK-11).
   - **A failure after a round** is today's: `failed`, with the error card.
   - A ticked review's failures are T007's goldens (owner decision 75A), not a case here.
-  - **The guard, at its five points** (owner decisions 69A and 72A): the factory raising; `configure_provider` raising; the effort mapping raising; the `session.sent` emit raising; and the pre-write's `save_session` raising. At each point:
+  - **The guard, at its five points** (owner decisions 69A and 72A): the factory raising; `configure_provider` raising; the effort mapping raising; the `session.sent` emit raising; and the pre-write's `save_session` raising. Capture the rollback snapshot before the factory is called, including when the prior model status already carries a failed attempt; a factory failure must not become an unbound rollback-variable error (2026-10-12 re-check). At each point:
     - no provider `run()` is recorded;
     - one `error` is written, and no `turn.ended` or `session.ended`;
     - the chat is `awaiting_send`, and `_send_in_flight` is cleared before the `error`;
@@ -491,7 +491,7 @@ description: "Task list for the send-to-model checkbox"
   - **A stop during a build that fails** (FR-025; `contracts/review-flow.md` section 4; research R2.12; moved here from T060, since it needs the guard). With the factory held, `POST /stop` answers `202` and writes no event. When the held factory then raises, the guard returns the run to waiting and `_play`'s `finally` clears the flag: the chat is `awaiting_send` with `chat.stop_requested` unset, and a following Send, whose scripted first turn makes a tool call, runs to `end`, with no `stopped` turn and exactly one presentation request.
 
   Acceptance: red for want of the guard.
-- [ ] T066 [US2] [py] Lane B. Implement the failure branch in `_run_turn` (`agent/runner.py:1434-1442`), the guard over `send`'s steps 1 to 7 - restoring the model status in memory, never writing, logging rather than raising when its own `error` emit fails (owner decision 72A) - `_send_error`, and `INTERRUPTED_SEND`. The state, `_send_in_flight` and the failure are set before the `error` is emitted. In `chat/server.py`, `_play` calls `run.release_bridge()` when it settles `awaiting_send` (owner decision 79A). Acceptance: T065 green; T062 and T063 green; T007 byte-equal.
+- [ ] T066 [US2] [py] Lane B. Implement the failure branch in `_run_turn` (`agent/runner.py:1434-1442`), the guard over `send`'s steps 1 to 7 - snapshotting the model status before the factory can raise, restoring it in memory, never writing, logging rather than raising when its own `error` emit fails (owner decision 72A) - `_send_error`, and `INTERRUPTED_SEND`. The state, `_send_in_flight` and the failure are set before the `error` is emitted. In `chat/server.py`, `_play` calls `run.release_bridge()` when it settles `awaiting_send` (owner decision 79A). Acceptance: T065 green; T062 and T063 green; T007 byte-equal.
 - [ ] T067 [US2] [py] Lane B. Extend `reviewer/tests/unit/test_send_gate_server.py` with the queue on the chat's worker (`contracts/review-flow.md` section 4; research R2.12; RK-14; owner decision 69A):
   - With `record_disposition` held on a waiting chat's worker, the write itself never moves the chat: `GET` reads `awaiting_send` during the write until `POST /send` is accepted (`202`), and `running` after it. The queued Send runs only after the write returns: in the recorded order, the decision's save comes before `session.sent`.
   - In another case, `POST /evidence` sent during the held write is accepted and applied after it.
@@ -958,7 +958,7 @@ Each group is one commit (two for T116's fixes if it has two findings). Each pas
 ### Phase dependencies
 
 - **Setup** (T001; T002 done): no dependency.
-- **Foundational** (T003-T033): T007 and T008 are committed first, on the pre-feature code, before any task edits `reviewer/src/`. The phase blocks every story.
+- **Foundational** (T003-T033): the accepted upstream baseline is integrated, recorded and verified first; then T007 and T008 are committed on that pre-feature code before any task edits `reviewer/src/`. The phase blocks every story.
 - **US1** (T034-T057): needs the Foundational phase. This is the MVP.
 - **US2** (T058-T081): needs US1 (a waiting review to send).
 - **US3** (T082-T091): needs US1. Its "kept at Send" and opening cases need US2's `send` (T064, T066).
@@ -1014,7 +1014,7 @@ Each group is one commit (two for T116's fixes if it has two findings). Each pas
 
 | Lane | Tasks | Runs beside |
 |---|---|---|
-| G (pins, fixtures, gates) [py] | T003-T008, T011-T012, T033, T052-T053, T057, T071-T072, T081, T091, T101-T102, T110, T117, T118 | its pins first and alone; its fixtures once the backend they play has landed |
+| G (pins, fixtures, gates) [py] | T007-T008, T011-T012, T033, T052-T053, T057, T071-T072, T081, T091, T101-T102, T110, T117, T118 | its pins first and alone; its fixtures once the backend they play has landed |
 | R (records, report, words) [py] | T009-T010, T013-T014, T029-T030, T038-T039, T044-T045, T078-T079, T099-T100, T111-T112 | B, H, W |
 | B (backend, runner) [py] | T015-T028, T034-T037, T040-T043, T046-T047, T058-T070, T080, T082-T088, T092-T098 | R, H, W; its hot files edited in task order |
 | H (host, settings) [C#] | T031-T032, T048-T051, T073-T074, T103-T106 | every lane |
@@ -1045,7 +1045,11 @@ Each group is one commit (two for T116's fixes if it has two findings). Each pas
 
 ### MVP first (User Story 1)
 
-1. Setup (T001), then the two pins on the pre-feature code (T003-T008).
+Before step 1, integrate and verify the accepted 010 baseline, and record its commit in
+`review-2026-10-12.md`. The review's open FR-041 finding must be resolved before US4, not before
+this US1 milestone; no promise of US4 failure recovery is changed by this review.
+
+1. Setup (T001), then the two pins on the pre-feature code (T007-T008).
 2. The rest of the Foundational phase (T009-T033).
 3. US1 (T034-T057).
 4. **Stop and validate**: on a fictional fixture with no key, an unticked review runs the checks, saves itself, shows its findings and waits, and nothing reaches a provider (quickstart Scenarios 1 and 5). The engineer already has the option the owner asked for, whose fallback is to press Review again with the box ticked.
@@ -1137,7 +1141,7 @@ Each story ends with its gate and leaves a ticked review byte-identical to the p
 - **Between T041 and T084**, an answer to a waiting review reaches `_ask`, and the deferred provider refuses it (`ProviderNotSent`). That fails the chat, with nothing sent, so SC-001 holds at every commit. The branch is not released between stories, and US3 closes the gap.
 - **Between T064 and T068** (C31 to C33), a decision or timing write accepted on a waiting chat still runs on the thread pool (`run_in_threadpool`), so a Send accepted while it writes can run beside it on the chat's worker: RK-14's two writers on one session. Nothing is sent early, so SC-001 holds; T068 closes the window inside US2, before its gate (T081).
 - **Between T084 and T086**, an answer applied while a review waits rebuilds the Send cache from the frozen opening, and `_prerun` is not yet restated, so a Send in that window would send an opening that may name a finding code withdrew, and a size that does not count the regrade. Nothing is sent before Send, so SC-001 holds; T086 closes the window inside US3, before its gate (T091).
-- A task's "Cause" is file:line at `838b66b`, which equals this branch's product code until the first task that edits `reviewer/src/` (T010, or T014 when 014's `atomic.py` is on `main` first); re-verify before editing.
+- A task's "Cause" is historical file:line at `838b66b`. Before T007-T008, the baseline integration above records the accepted pre-015 code (including 010); every cause is re-verified against it before editing. No 015 product change precedes the characterizations.
 - "Amends NNN" means the task writes that contract's amendment text in the same commit as the code. T001 placed the one-line note first.
 - No task reads a run folder, a recording (T080 and the regeneration step read them only where the owner's mapping is, and print percentages and pass/fail only), a real profile, or the seat's results. Every committed fixture is generated from fictional builders.
 - Merge note with feature 014: research R3's table, and T117 when 014 is on `main` first. Otherwise 014's branch reconciles at its own merge, using the same table.

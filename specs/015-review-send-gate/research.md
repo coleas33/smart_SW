@@ -19,7 +19,12 @@ project's fixture glob, the command-line review's output); entries it changed ar
 review, 2026-10-09*. A sixth pass the same day applied the owner's review of the plan (CLAUDE.md's
 review in its BIG CHANGE form, decisions 68A to 80A, each recorded in R7 with the options it
 rejected), reading the files each decision cites at the same product code; entries it changed are
-marked with the decision's id. Line numbers drift; every task re-verifies before editing.
+marked with the decision's id. A fresh review of the amended head `8347827` on 2026-10-12 is
+recorded in [review-2026-10-12.md](review-2026-10-12.md); it corrected the Send rollback snapshot
+order and the Setup note's timing, and records an open FR-041 finalization finding. The earlier
+VERIFIED dates and line numbers remain historical evidence. The accepted 010 integration is
+required before 015's baseline pins; its exact baseline commit is recorded there once available.
+Line numbers drift; every task re-verifies before editing.
 
 The owner asked for no interactive questions. Every question the spec left open is settled here by a
 default, marked **default taken 2026-10-08, the owner may revise**. The three the spec put to the
@@ -428,9 +433,10 @@ adapter's build in the prepare half, owner decision 69A; `session.sent` before t
 guard that only restores memory, owner decision 72A): `ReviewRun.send(build_adapter)` runs on the
 chat's worker, inside `_play`, in two halves and a guard.
 
-- **Prepare** - nothing written, nothing emitted, nothing in the session changed: (1) build the
-  adapter by calling `build_adapter`, the route's `provider_factory` call with the chat's settings
-  (69A); (2) keep a deep copy of the model status as it stands; configure the adapter
+- **Prepare** - nothing written, nothing emitted, nothing in the session changed: first keep a
+  deep copy of the model status and clear the prior in-memory `_send_error`, before any guarded
+  operation can raise (2026-10-12 re-check). Then (1) build the adapter by calling `build_adapter`,
+  the route's `provider_factory` call with the chat's settings (69A); (2) configure the adapter
   (`configure_provider`, `start_steps_at`) without yet making it the run's provider; (3) read the
   opening, its estimate and its named ids from the Send cache (R2.8), built earlier on the worker;
   (4) build the `session.sent` body (`adapter.name`, the model, `adapter.effort_mapping(effort)`,
@@ -1351,8 +1357,8 @@ feature and never only against the feature's own code:
 1. **The characterization golden**, `tests/unit/test_ticked_review_golden.py`, its golden files
    under `tests/unit/test_ticked_review_golden/` through `pytest-regressions` (already a development
    dependency, `pyproject.toml:36`). It is the first test task of the Foundational phase, written
-   and committed on the pre-feature code - this branch's product code is `838b66b`'s until the first
-   refactor - before any refactor, in one commit. It drives ticked reviews through the chat server's
+   and committed on the recorded pre-015 baseline, including accepted 010 before the pins
+   (2026-10-12 re-check; `review-2026-10-12.md`), before any 015 refactor, in one commit. It drives ticked reviews through the chat server's
    `TestClient` app (`test_chat_server.py`'s fixtures), with the recording provider below scripted,
    on the fictional questions package (R2.25), in **five scenarios, each with its own golden** (owner
    decision 75A), so the failures of a ticked review are pinned to the old code as its success is:
@@ -1539,8 +1545,18 @@ adds or relies on by name; a later 014 head is intersected again by the branch t
 014 also changes `findings.py` and `tools/registry.py`, which 015 only calls: `finding_subject_key`
 and `record_call` are unchanged there (014 adds functions beside them). The rest of 014's diff -
 its benchmark modules, the CLI, its check goldens, its tests and documents, `specs/008-.../
-contracts/cli.md` - is neither changed nor relied on by 015. The `smart_SW-fp` worktree touches
-feature 010 documents only.
+contracts/cli.md` - is neither changed nor relied on by 015.
+
+**Re-checked 2026-10-12.** At `ee6571c`, the only shared file changed since `45b5076` is
+`tests/support/mechanical.py`, adding the M6 socket-head dimensions. This does not replace the
+intersection required at the actual integration head. The earlier claim that `smart_SW-fp` touched
+only feature 010 documents was stale: `010-fine-pitch` at `7fcbf66` changes 68 files against
+`838b66b`, including `agent/runner.py`, the mechanical tools and their registry, the words and
+attention policy, the shared mechanical and pre-run builders, replay assertions, and contracts
+015 amends. Integrate the accepted 010 change before T007-T008 and re-verify the causes; otherwise
+the characterizations would freeze superseded ticked behavior. No 015 product change is allowed
+before those pins. The exact integrated baseline and verification are recorded in
+`review-2026-10-12.md`; until then baseline readiness is pending.
 
 ---
 
