@@ -115,6 +115,8 @@ The engineer and the owner see what a review cost in terms they can act on: how 
 
 ## Requirements *(mandatory)*
 
+*Feature 015 amendment notice, 2026-10-08:* Planned amendments to FR-008, FR-009 and FR-030 are specified in [015 review-flow.md](../015-review-send-gate/contracts/review-flow.md), [015 recheck.md](../015-review-send-gate/contracts/recheck.md).
+
 ### Functional Requirements
 
 **The replay**

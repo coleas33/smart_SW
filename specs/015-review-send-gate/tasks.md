@@ -38,7 +38,7 @@ description: "Task list for the send-to-model checkbox"
 
 **Purpose**: before any code, every contract this feature amends carries a dated note saying so.
 
-- [ ] T001 [doc] Lane C. Add a one-line amendment note to each contract feature 015 amends (`contracts/README.md`, "Contracts of other features this feature amends"). Date it 2026-10-08 and point it at the 015 contract that holds the text. The contracts are:
+- [x] T001 [doc] Lane C. Add a one-line amendment note to each contract feature 015 amends (`contracts/README.md`, "Contracts of other features this feature amends"). Date it 2026-10-08 and point it at the 015 contract that holds the text. The contracts are:
   - 001: `contracts/README.md`, for `review-session.schema.json`
   - 002: `contracts/README.md` (for `settings.schema.json` and `chat-events.schema.json`), `contracts/chat-api.md`, `contracts/pane-host-messages.md`, `contracts/handoff-export.md`, and `data-model.md` sections 3 and 4
   - 008: `contracts/checks-first.md`, `contracts/answer-batch.md`, `contracts/cost.md`, `contracts/tokenizer.md` and `contracts/replay.md`
@@ -222,11 +222,15 @@ description: "Task list for the send-to-model checkbox"
     - `checked_at` is stamped by `local_now` at the finalization's end, and `unattended_runtime_minutes` is `checked_at - started_at`, so a patched clock that waits an hour adds nothing.
   - **`test_events_schema.py` rows**: an unticked `session.started` with `send_when_checked: false` validates; one with `true` is refused (`const`); a ticked one without the key validates as today; any other new key is still refused.
 
+  **Moved, red by design on the 014-first baseline**: `test_benchmark_pane_parity.py` adds `send_when_checked` and `earlier` to `COMPARED`. Its signature remains exhaustively classified, and the ticked pane and benchmark compare the defaults `True` and `None`. This classification lands with T035, not in a later conditional merge.
+
   Acceptance: red for want of the arguments.
 - [ ] T035 [US1] [py] Lane B. Implement in `agent/runner.py`:
   - `start_review(..., send_when_checked: bool = True, earlier: ReviewSession | None = None)` (`:1497`). `earlier` is accepted but refused with `True`, and is carried from T093.
   - `ReviewRun.awaiting_send`, `_prerun` and `_standards_gap`, the model-status and live-detection writes, and the event field.
   - `NOT_SENT_ITEM`, `NOT_SENT_SUFFIX` and the running time in `finalize_session` (`:597-678`).
+
+  Keep T034's 014 parity classification in this same commit: `send_when_checked` and `earlier` are `COMPARED`, and `test_benchmark_pane_parity.py` passes on the integrated baseline.
 
   Also rename `report/snapshot._root_document` to `root_document` (`:79`; one name in lane R's file, in this task). Add the field inside the `session.started` branch's `body.properties` in `specs/002-task-pane-assistant/contracts/chat-events.schema.json` (`review-flow.md` section 7's JSON, not in `required`). **Amends 002** `chat-events.schema.json`; **008** `contracts/checks-first.md` section 1 (unticked: no provider is set up, and no first request follows the pre-run). Acceptance: T034 green; T007 byte-equal.
 - [ ] T036 [US1] [py] Lane B. Extend `reviewer/tests/unit/test_runner_send.py` and `test_send_estimate.py` with the Send cache (`contracts/review-flow.md` section 5; `contracts/estimate.md` sections 1 to 4; data-model sections 3 and 7; FR-012, FR-013):

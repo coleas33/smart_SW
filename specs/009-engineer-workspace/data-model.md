@@ -17,6 +17,8 @@ or page state, each normative in `contracts/`.
 
 ## 1. The words file (`reviewer/src/swreview/report/review_words_v1.yaml`)
 
+*Feature 015 amendment notice, 2026-10-08:* The planned amendment to the words table's `read_only` row is specified in [015 words.md](../015-review-send-gate/contracts/words.md).
+
 Loaded once per process by `summary.load_words() -> Words` (`functools.cache`, like `load_policy`).
 `Words` and every nested model are `extra="forbid"`. No `%` anywhere in the file.
 

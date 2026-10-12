@@ -140,6 +140,8 @@ Everywhere in the engineer's default view, internal vocabulary gives way to word
 
 ## Requirements *(mandatory)*
 
+*Feature 015 amendment notice, 2026-10-08:* Planned amendments to FR-015 and FR-021 are specified in [015 review-flow.md](../015-review-send-gate/contracts/review-flow.md), [015 recheck.md](../015-review-send-gate/contracts/recheck.md), [015 pane.md](../015-review-send-gate/contracts/pane.md).
+
 ### Functional Requirements
 
 *Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed by 2026-09-27 (013 T050, T108):* FR-007, FR-009, FR-010 and SC-001 (the summary block, the grouped findings list in place of the goal groups and the modelling-practice fold; 013 T050) and FR-019 (a follow-up answer opens with its basis line; 013 T108) change; see 013 `contracts/grouped-list.md` and `contracts/sources.md`.

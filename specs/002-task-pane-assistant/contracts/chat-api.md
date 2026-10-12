@@ -1,5 +1,7 @@
 # Reviewer Backend API
 
+*Feature 015 amendment notice, 2026-10-08:* Planned amendments for the Send gate, restoration are specified in [015 review-flow.md](../../015-review-send-gate/contracts/review-flow.md), [015 recheck.md](../../015-review-send-gate/contracts/recheck.md).
+
 *Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed by 2026-09-27 (013 T054):* the Review tab's Start here is replaced by the grouped findings list (`<section id="findings-by-type">`), so `not_examined`'s headline sits above that list; see 013 `contracts/grouped-list.md` section 5 (lands with 013 T054).
 
 One loopback service, not one per tab: `swreview chat serve` is the **reviewer backend**,

@@ -62,6 +62,8 @@ a completed one.
 
 ## 3. Chat session (Python, `chat/sessions.py`)
 
+*Feature 015 amendment notice, 2026-10-08:* Planned amendments to the chat state table are specified in [015 review-flow.md](../015-review-send-gate/contracts/review-flow.md).
+
 | Field | Type | Rules |
 |-------|------|-------|
 | `chat_id` | uuid | Distinct from `ReviewSession.session_id`. |
@@ -107,6 +109,8 @@ asserts each of them:
    including on the provider-failure path (FR-008).
 
 ## 4. Settings (C#, per Windows user)
+
+*Feature 015 amendment notice, 2026-10-08:* Planned amendments to settings are specified in [015 pane.md](../015-review-send-gate/contracts/pane.md).
 
 `%APPDATA%\SwReview\settings.json`, schema in `contracts/settings.schema.json`:
 

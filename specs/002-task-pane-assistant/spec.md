@@ -102,6 +102,8 @@ Captures, measurements, interference runs, and Show in SOLIDWORKS requested by t
 
 ## Requirements *(mandatory)*
 
+*Feature 015 amendment notice, 2026-10-08:* Planned amendments to FR-006 are specified in [015 review-flow.md](../015-review-send-gate/contracts/review-flow.md).
+
 ### Functional Requirements
 
 **Task Pane**

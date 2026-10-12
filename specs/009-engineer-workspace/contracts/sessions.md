@@ -1,5 +1,7 @@
 # Contract: One Review per Model, Kept
 
+*Feature 015 amendment notice, 2026-10-08:* Planned amendments for the waiting state and marks, restoration and found reviews are specified in [015 pane.md](../../015-review-send-gate/contracts/pane.md), [015 recheck.md](../../015-review-send-gate/contracts/recheck.md).
+
 Normative for FR-020 to FR-023, SC-005 and the session edge cases.
 
 ## 1. The host's record

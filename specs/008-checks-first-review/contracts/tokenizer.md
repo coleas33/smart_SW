@@ -1,5 +1,7 @@
 # Contract: The Tokenizer
 
+*Feature 015 amendment notice, 2026-10-08:* Planned amendments for the Send estimate are specified in [015 estimate.md](../../015-review-send-gate/contracts/estimate.md).
+
 Normative for `reviewer/src/swreview/tokens.py`, `swreview tokenizer fetch`, and where the
 vocabulary lives (FR-003, FR-026). Amended 2026-09-23: the vocabulary is **not** vendored into the
 repository; it is fetched once into a per-user cache (research R2.7).

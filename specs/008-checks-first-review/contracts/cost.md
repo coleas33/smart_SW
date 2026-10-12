@@ -1,5 +1,7 @@
 # Contract: Cost Reported Honestly
 
+*Feature 015 amendment notice, 2026-10-08:* Planned amendments for the Send estimate are specified in [015 estimate.md](../../015-review-send-gate/contracts/estimate.md).
+
 Normative for step sizes, the report's two additions and the pane's usage line (FR-026, FR-027,
 SC-009).
 

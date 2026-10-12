@@ -1,5 +1,7 @@
 # Contract: Part Roles - Custom, Bought or Unclear
 
+*Feature 015 amendment notice, 2026-10-08:* Planned amendments for part-role answers while waiting are specified in [015 review-flow.md](../../015-review-send-gate/contracts/review-flow.md).
+
 Normative for FR-005 to FR-014 and User Story 1. Research R2.3 to R2.11, R3 C4, C6, C10.
 Amends feature 003's `contracts/rules.md` (grading scope; the mates rule) and `contracts/tools.md`;
 feature 008's `contracts/checks-first.md` sections 1 and 4 and `contracts/answer-batch.md` section 1;
