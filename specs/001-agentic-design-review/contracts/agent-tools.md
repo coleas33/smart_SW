@@ -107,6 +107,7 @@ typed by the model.
 | `check_joints` | none | Feature 010: the joint map found from the geometry, recorded as `joint.map` coverage (one `checked` item per pattern group, one `skipped` item per candidate and per gap), then `hole.nominal_alignment` and `hole.position_stack` on every joint (the stack's tolerances from the resolver of feature 010 US8), the recognised fasteners' `fastener.identity`, `fastener.thread_match`, `fastener.engagement`, `fastener.bottoming` and `fastener.head_clearance`, and `fastener.head_fit` on every counterbore and countersink, one finding per pattern of identical results. Takes no argument, so it runs in the code-first pass (`CODE_FIRST_CHECKS`); returns counts, not a payload |
 | `check_mass_material` | none | Feature 010: `mass.material_assigned` (passes as one `checked` item), `mass.density` per part with a mass and a volume, `mass.assembly_override`, and `mass.coverage` counting the parts and bodies that were not read. Takes no argument (`CODE_FIRST_CHECKS`); returns counts |
 | `check_hygiene` | none | Feature 010: `hygiene.part_number_matches_file`, `hygiene.duplicate_description`, `hygiene.duplicate_part_number`, `hygiene.revision_present` and `hygiene.component_not_resolved`, the property names read from the attached standards run's profile (skipped, naming the setting, without one), and `hygiene.coverage`. Takes no argument (`CODE_FIRST_CHECKS`); returns counts |
+| `check_threads` | none | Feature 010's thread pitch amendment (2026-10-08, `specs/010-mechanical-checks/contracts/fasteners.md` section 8): every Hole Wizard tapped hole, cosmetic thread, fastener row and screw named by its part classified against the ISO 261 coarse pitch and the ASME B1.1 UNC threads per inch; one `thread.fine_pitch` or `thread.nonstandard_pitch` finding per check and owning part, the passes counted in one `checked` `thread.pitch` row, and every thread it could not judge (unreadable, an unknown size, a pipe thread, a bought part's, a suppressed feature's, one the extractor did not read) listed in a `thread.pitch` row, never passed. Its rows restate: a call withdraws every `thread.pitch` row before it records its own. Reads the part roles the review attached. Takes no argument (`CODE_FIRST_CHECKS`); returns counts with `threads` and `coarse` |
 | `record_drawing_finding` | `document_id`, `sheet`, `observed`, `requirement`, `source_refs: list[SourceRef]`, `status: "suspected" \| "unresolved"`, `recommended_action` | A non-numeric drawing finding. `status` may not be `demonstrated` or `checked_within_scope` from this tool. |
 
 ### A check checks first already ran: `already_run` (feature 008)
@@ -116,8 +117,8 @@ pre-run already ran **successfully** is answered, never run again (008 FR-012,
 `specs/008-checks-first-review/contracts/checks-first.md` section 5). The guarded calls:
 `check_rms_part` and `check_rms_equations` (whatever `document_id`), `check_rms_assembly`,
 `check_standards`, every `CODE_FIRST_CHECKS` name (feature 010's `check_joints`,
-`check_mass_material` and `check_hygiene`, whatever arguments), feature 011's `check_drawings`,
-`check_interference_group`
+`check_mass_material`, `check_hygiene` and `check_threads`, whatever arguments), feature 011's
+`check_drawings`, `check_interference_group`
 with the same `group_key`, and `bridge_interference` with `component_ids: []`, the same
 configuration and the same settings. The answer is one recorded step (status `ok`, no finding, no coverage):
 

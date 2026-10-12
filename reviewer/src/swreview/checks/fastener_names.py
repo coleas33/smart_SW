@@ -20,6 +20,12 @@ name is a null field, never a guess**: a length that is not a number is unknown,
 the table lacks leaves kind, head and drive null. And **a text that names no size is not a
 fastener name** (`None`): a bracket with tapped holes is not a screw.
 
+One bare whole number after a metric size is either a pitch or a length: `M8x1` is the common
+fine pitch and `M10x35` a 35 mm screw. It is a pitch when it is positive and at most that
+size's coarse pitch, which `coarse_pitch.coarse_pitch_mm` gives, and a length otherwise; a size
+with no coarse pitch, fine-only or unknown, keeps the length (amendment 2026-10-08, owner
+decision 52A, `contracts/fasteners.md` section 8.8).
+
 The grammar is the C# `FastenerNameParser`'s, form for form, and both parsers answer every
 row of `specs/010-mechanical-checks/contracts/fastener-name-vectors.json`, so they cannot
 drift. The words - head codes, kinds, heads - are data in `fastener_names.yaml`.
@@ -36,6 +42,7 @@ from typing import Literal
 
 import yaml
 
+from swreview.checks.coarse_pitch import coarse_pitch_mm
 from swreview.checks.fastener import ThreadSpec, parse_thread
 from swreview.checks.result import round_length
 
@@ -165,6 +172,7 @@ _SIZE_SEPARATOR = re.compile(r"(?<=[\d./])\s*x\s*(?=[#\d.\-])")
 _MIXED_FRACTION = re.compile(r"^(\d+)-(\d+)/(\d+)$")
 _FRACTION = re.compile(r"^(\d+)/(\d+)$")
 _DECIMAL = re.compile(r"^-?\d+(?:\.\d+)?$")
+_WHOLE_NUMBER = re.compile(r"^[0-9]+$")
 
 
 def _normalize(text: str | None) -> str:
@@ -206,6 +214,16 @@ def _length_mm(token: str, inches: bool) -> float | None:
     return round_length(value * _MM_PER_INCH) if inches else value
 
 
+def _is_whole_pitch(size_mm: float, token: str) -> bool:
+    """Whether one bare whole number after a metric size is its pitch: positive and at most
+    the size's coarse pitch. Zero is never a pitch (D22), and a size with no coarse pitch has
+    nothing to compare with."""
+    if not _WHOLE_NUMBER.match(token):
+        return False
+    coarse = coarse_pitch_mm(size_mm)
+    return coarse is not None and 0 < int(token) <= coarse
+
+
 def _size_and_length(text: str) -> tuple[str | None, float | None]:
     """The Toolbox and unified forms: a size first, then a pitch and a length."""
     suffix = text.find(" - ")
@@ -224,9 +242,11 @@ def _size_and_length(text: str) -> tuple[str | None, float | None]:
             return designation, None
         if len(tokens) >= 3:
             return f"{designation}x{tokens[1]}", _length_mm(tokens[2], inches=False)
-        # One value after the size: a decimal is a pitch ("M6x1.0"), a whole number a
-        # length ("M10x35"); guessing the other way round turns a 35 mm screw into a pitch.
-        if "." in tokens[1]:
+        # One value after the size: a decimal is a pitch ("M6x1.0"). A positive whole number
+        # is a pitch when it is at most the size's coarse pitch ("M8x1", "M6x1": the common
+        # fine pitches, and M6's coarse one), else a length ("M10x35"); a size with no coarse
+        # pitch, fine-only or unknown, keeps the length (owner decision 52A; section 8.8).
+        if "." in tokens[1] or _is_whole_pitch(float(metric.group(1)), tokens[1]):
             return f"{designation}x{tokens[1]}", None
         return designation, _length_mm(tokens[1], inches=False)
 

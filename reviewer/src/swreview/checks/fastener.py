@@ -57,6 +57,7 @@ __all__ = [
     "UsableThread",
     "check_fastener_joint",
     "check_placed_screw",
+    "is_pipe_thread",
     "nominal_diameter",
     "parse_thread",
 ]
@@ -110,7 +111,21 @@ class ClampedLayer:
 ThreadSeries = Literal["metric", "unified"]
 
 _WHITESPACE = re.compile(r"\s+")
-_METRIC = re.compile(r"^M(\d+(?:\.\d+)?)(?:[X*](\d+(?:\.\d+)?))?(?:$|[^0-9.].*$)")
+_DECIMAL_COMMA = re.compile(r"(?<=\d),(?=\d)")
+_METRIC = re.compile(
+    r"""
+    ^M(\d+(?:\.\d+)?)                       # the size: M8, M3.5
+    (?:
+        [X*×](?P<marked>\d+(?:\.\d+)?)      # a pitch marker and the pitch: M8x1.25, M8×1
+      | -(?P<hyphen>\d+(?:\.\d+)?)          # a hyphen pitch, before the end or a separator
+        (?=$|[^0-9A-Z.*×]|[X*×]\d|LH|RH)    # (M10-1.5-6H), a length (M4-0.7x12) or the hand
+      | -(?:\d[EFGH])+                      # a tolerance class, no pitch: M8-6H, M8-6g6h
+      | (?![X*×]|-\d)                       # no pitch: M8; a marker or a hyphen number that
+    )                                       # nothing above read is unreadable (M8x, M8-1x)
+    (?:$|[^0-9.].*$)
+    """,
+    re.VERBOSE,
+)
 _NUMBER_SERIES = re.compile(r"^#(\d+)-(\d+)(?:$|[^0-9.].*$)")
 _FRACTIONAL_INCH = re.compile(r"^(\d+)/(\d+)-(\d+)(?:$|[^0-9.].*$)")
 _DECIMAL_INCH = re.compile(r"^(\d*\.\d+)-(\d+)(?:$|[^0-9.].*$)")
@@ -155,17 +170,29 @@ def _tpi_to_pitch_mm(threads_per_inch: str) -> float:
 
 
 def parse_thread(designation: str) -> ThreadSpec:
-    """Parse `M6x1.0`, `1/4-20`, `#10-32` or `0.190-32` into a comparable `ThreadSpec`.
+    """Parse a metric or unified thread designation into a comparable `ThreadSpec`.
+
+    Metric: `M6`, `M6x1.0`, `M6*1`, `M8×1` (a pitch marker and the pitch); `M8-1.25` (a
+    hyphen pitch, also before a separator `M10-1.5-6H`, a length `M4-0.7x12` or the hand
+    `M10-1.25LH`); `M8-6H` and `M8-6g6h` (a tolerance class, so no pitch). Unified: `1/4-20`,
+    `#10-32`, `0.190-32`. A comma between two digits is a decimal point (`M8x1,25`).
+    Whitespace is removed and case ignored before reading, so a grade written after a space
+    joins the pitch (`M8x1.25 6H` reads 1.256), a known limit (feature 010
+    contracts/fasteners.md 8.8).
 
     Anything else comes back with `series=None` and no diameter: unrecognised, which the
-    checks report as unresolved rather than guessing at a match. A designation with no
-    pitch (`M6`) parses with `pitch_mm=None`; the comparison then uses diameter alone.
+    checks report as unresolved rather than guessing at a match. That includes a pitch
+    marker with no number after it (`M8x`, `M16xPh3P1.5`) and a hyphen number followed by
+    any other letter (`M10-1.25G`, `M8-1x`), which read with no pitch would pass as the
+    coarse thread. A designation with no pitch (`M6`) parses with `pitch_mm=None`; the
+    comparison then uses diameter alone. Pipe text is not told apart here (`1/8-27 NPT`
+    reads as unified): `is_pipe_thread` does that.
     """
-    cleaned = _WHITESPACE.sub("", designation).upper()
+    cleaned = _DECIMAL_COMMA.sub(".", _WHITESPACE.sub("", designation).upper())
 
     metric = _METRIC.match(cleaned)
     if metric is not None:
-        pitch = metric.group(2)
+        pitch = metric.group("marked") or metric.group("hyphen")
         return _spec(
             designation, "metric", float(metric.group(1)), None if pitch is None else float(pitch)
         )
@@ -202,6 +229,31 @@ def parse_thread(designation: str) -> ThreadSpec:
     return ThreadSpec(
         text=designation, series=None, nominal_diameter=None, pitch_mm=None, normalized=cleaned
     )
+
+
+# The one place pipe thread tokens are known (feature 010 contracts/fasteners.md 8.8).
+_PIPE_SERIES = ("NPT", "NPTF", "NPS", "NPSM", "BSP", "BSPP", "BSPT")
+"""Pipe series, read as a whole run of letters anywhere in the text: `1/8-27 NPT`, `1/4 BSPP`."""
+_PIPE_PREFIXES = ("G", "R", "RC", "RP", "PT", "PF")
+"""Pipe prefixes, read at the start of the text before a digit: `G1/4`, `Rc 1/2`, `PT1/8`."""
+
+_LETTER_RUN = re.compile(r"[A-Z]+")
+_PIPE_PREFIX = re.compile(rf"^(?:{'|'.join(_PIPE_PREFIXES)})\s*\d")
+
+
+def is_pipe_thread(designation: str) -> bool:
+    """Whether `designation` names a pipe thread, ignoring case.
+
+    True when a whole run of letters is a pipe series (`1/8-27 NPT`, `NPT 1/8`, `1/2 BSP`), or
+    when the trimmed text starts with a pipe prefix and then, after optional spaces, a digit
+    (`G1/4`, `G 1/2 A`, `Rc1/4`). A tolerance class letter (`M8x1.25-6G`) is neither.
+    `parse_thread` does not change for pipe text, so a caller that must tell a pipe thread
+    from a unified one asks this first.
+    """
+    text = designation.strip().upper()
+    if any(run in _PIPE_SERIES for run in _LETTER_RUN.findall(text)):
+        return True
+    return _PIPE_PREFIX.match(text) is not None
 
 
 def nominal_diameter(designation: str) -> Quantity | None:

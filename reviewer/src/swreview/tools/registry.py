@@ -133,6 +133,7 @@ def check_tools() -> tuple[Callable[..., Any], ...]:
         checks_mechanical.check_joints,
         checks_mechanical.check_mass_material,
         checks_mechanical.check_hygiene,
+        checks_mechanical.check_threads,
     )
 
 

@@ -589,3 +589,136 @@ def test_a_look_alike_request_is_an_evidence_request_like_any_other() -> None:
         answered_at=None, question=QUESTION, options=["All bought", "None bought"],
     )
     assert (request.source, request.allow_text) == ("model", False)
+
+
+# --- 7. a restated finding keeps the engineer's disposition (010 T125, owner decision 58A) ------
+#
+# Feature 010's amendment of 2026-10-08 (research R2.26, 58A): the restate folds every finding it
+# judges again onto its earlier id, and the disposition the engineer recorded on the earlier one
+# - through `chat/sessions.record_disposition`, the live chat's path - goes with it. Accept is how
+# the engineer confirms a fine thread (51A), and the part-roles answer restates the check. The
+# section imports where it uses, as section 5 does, so no line above it moves (T119 cites them).
+
+Recorded = list[tuple[str, dict[str, Any] | None]]
+
+
+def recorded_dispositions(findings: Sequence[Any]) -> Recorded:
+    """Each finding's id and its disposition as JSON (decision, note, by and at), in order."""
+    return [
+        (
+            finding.id,
+            None if finding.disposition is None else finding.disposition.model_dump(mode="json"),
+        )
+        for finding in findings
+    ]
+
+
+def saved_dispositions(run: runner.ReviewRun) -> Recorded:
+    """`recorded_dispositions` of the `session.json` the run last wrote."""
+    from swreview.report.session import load_session
+
+    return recorded_dispositions(load_session(run.session_path).findings)
+
+
+def disposed(run: runner.ReviewRun, *, pin_decision: str = "deferred") -> Recorded:
+    """`accepted` on the plate's first finding, `rejected` on its second and `pin_decision` on
+    the pin's first, each with its own note and `by`; the pin's second finding gets none.
+    Returns what the session then holds."""
+    from swreview.chat.sessions import record_disposition
+
+    plate, pin = ids_on(run, PLATE_ID), ids_on(run, PIN_ID)
+    for finding_id, decision, note, by in (
+        (plate[0], "accepted", "the plate is right as modelled", "a.engineer"),
+        (plate[1], "rejected", "the plate needs no change here", "b.engineer"),
+        (pin[0], pin_decision, "the pin is to be confirmed", "c.engineer"),
+    ):
+        record_disposition(run, finding_id, decision=decision, note=note, by=by)
+    recorded = recorded_dispositions(run.session.findings)
+    assert sum(disposition is None for _, disposition in recorded) == 1  # the pin's second
+    return recorded
+
+
+def test_none_bought_folds_every_finding_onto_its_id_with_its_disposition(
+    tmp_path: Path, scripted_registry: None
+) -> None:
+    run = graded(tmp_path)
+    recorded = disposed(run)
+    steps = len(run.session.steps)
+
+    run.answer_evidence_batch([("ER-001", "None bought")])
+
+    # Every finding is the restated one: it cites only the steps the answer's restate recorded.
+    restated = {step.index for step in run.session.steps[steps:]}
+    assert all(
+        finding.tool_result_ids and set(finding.tool_result_ids) <= restated
+        for finding in run.session.findings
+    )
+    assert recorded_dispositions(run.session.findings) == recorded
+
+
+def test_none_bought_writes_the_kept_dispositions_to_session_json(
+    tmp_path: Path, scripted_registry: None
+) -> None:
+    run = graded(tmp_path)
+    recorded = disposed(run)
+
+    run.answer_evidence_batch([("ER-001", "None bought")])
+
+    assert saved_dispositions(run) == recorded
+
+
+def test_none_bought_re_announces_each_finding_with_its_disposition(
+    tmp_path: Path, scripted_registry: None
+) -> None:
+    events: Events = []
+    run = graded(tmp_path, events=events)
+    recorded = disposed(run)
+    mark = len(events)
+
+    run.answer_evidence_batch([("ER-001", "None bought")])
+
+    ids = {finding_id for finding_id, _ in recorded}
+    announced = [
+        (body["id"], body["disposition"])
+        for kind, body in events[mark:]
+        if kind == "finding" and body["id"] in ids
+    ]
+    assert announced == recorded
+
+
+def test_all_bought_withdraws_an_accepted_pin_finding_as_before(
+    tmp_path: Path, scripted_registry: None
+) -> None:
+    events: Events = []
+    run = graded(tmp_path, events=events)
+    pin_findings = ids_on(run, PIN_ID)
+    disposed(run, pin_decision="accepted")
+    mark = len(events)
+
+    run.answer_evidence_batch([("ER-001", "All bought")])
+
+    assert pin_findings[0] not in [finding.id for finding in run.session.findings]
+    assert withdrawn(events[mark:]) == [
+        {"finding_id": finding_id, "reason": BOUGHT_REASON} for finding_id in pin_findings
+    ]
+    [row] = [item for item in run.session.coverage.skipped
+             if item.check == "coverage.prerun.bought_parts"]
+    assert pin_findings[0] in row.reason
+
+
+def test_all_bought_keeps_the_plate_findings_dispositions(
+    tmp_path: Path, scripted_registry: None
+) -> None:
+    run = graded(tmp_path)
+    plate_findings = ids_on(run, PLATE_ID)
+    recorded = disposed(run, pin_decision="accepted")
+
+    run.answer_evidence_batch([("ER-001", "All bought")])
+
+    kept = [
+        (finding_id, disposition)
+        for finding_id, disposition in recorded
+        if finding_id in plate_findings
+    ]
+    assert recorded_dispositions(run.session.findings) == kept
+    assert saved_dispositions(run) == kept

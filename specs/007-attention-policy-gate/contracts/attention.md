@@ -13,7 +13,7 @@ first key on which they differ; every key is one named lookup; there are no weig
 | # | Key | Order | Read from |
 |---|-----|-------|-----------|
 | 1 | suppressed | undecided first; `checked_within_scope`, or a disposition of `accepted` or `rejected`, last | `status`, `disposition.decision` |
-| 2 | needs judgement | a check whose id starts with `interference.`, `fit.`, `fastener.` or `hole.` first | the policy file's `needs_judgement` |
+| 2 | needs judgement | a check whose id starts with `interference.`, `fit.`, `fastener.`, `hole.` or `thread.` first | the policy file's `needs_judgement` |
 | 3 | consequence class | `rebuild_breaker` > `interface` > `manufacturing` > `unclassified` > `discipline` > `hygiene` | the policy file's `classes`; an id the table does not name is `unclassified` and is printed by name |
 | 4 | status | demonstrated > suspected > unresolved > checked_within_scope | `status` |
 | 5 | severity | high > medium > low > info | `severity`, verbatim |
@@ -70,6 +70,19 @@ correct, never a release-verdict failure (011 research R5 Q5); `drawing_profile.
 | Check id | Class | Emitted by |
 |---|---|---|
 | `drawing_profile.conformance` | `manufacturing` | `check_drawings` (011 US7) |
+
+**The two classes feature 010's thread pitch amendment added (2026-10-08).** The thread pitch
+check emits two new finding ids, classed in `attention_policy_v1.yaml` without a version change,
+for the reason the twelve above were (010 research R2.26, `contracts/fasteners.md` section 8.4).
+`thread.` joins key 2's needs-judgement prefixes: the coarse pitch is a table lookup, yet only the
+engineer knows whether a fine pitch was meant, and the owner asked for every one to be confirmed
+(010 decision 51A). No existing id starts with `thread.`, so no past ranking moves. The check's
+coverage-only `thread.pitch` is never a finding and reaches no ranking.
+
+| Check id | Class | Emitted by |
+|---|---|---|
+| `thread.fine_pitch` | `interface` | `check_threads` (010 US4, amendment 2026-10-08) |
+| `thread.nonstandard_pitch` | `interface` | `check_threads` (010 US4, amendment 2026-10-08) |
 
 ## 2. Folding
 

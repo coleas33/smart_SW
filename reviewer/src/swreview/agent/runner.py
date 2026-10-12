@@ -130,7 +130,12 @@ from swreview.report.session import (
 )
 from swreview.report.sources import answer_basis
 from swreview.report.summary import load_words
-from swreview.tools.checks_mechanical import attach_part_roles, check_hygiene, review_roles
+from swreview.tools.checks_mechanical import (
+    attach_part_roles,
+    check_hygiene,
+    check_threads,
+    review_roles,
+)
 from swreview.tools.context import ToolContext, build_context
 from swreview.tools.drawings import DRAWINGS_TOOL, ConfirmedRead, read_confirmed_candidates
 from swreview.tools.query import package_summary
@@ -916,10 +921,16 @@ def repeated_request_id(answers: Sequence[tuple[str, str]]) -> str | None:
 
 # --- the regrade after the part-roles answer (feature 013, contracts/part-roles.md 9) ---------
 
-ROLES_RESTATED: tuple[str, ...] = (*RMS_PRERUN_TOOLS, check_hygiene.__name__, DRAWINGS_TOOL)
+ROLES_RESTATED: tuple[str, ...] = (
+    *RMS_PRERUN_TOOLS,
+    check_hygiene.__name__,
+    check_threads.__name__,
+    DRAWINGS_TOOL,
+)
 """What an answer to the part-roles question restates, in this order: every check whose
 grading reads the roles. Interference, fits, fasteners, mass and joints include bought parts
-and are not restated (section 6)."""
+and are not restated (section 6). `check_threads` grades a part's tapped holes and cosmetic
+threads by its role (feature 010's thread pitch amendment, research R2.26 D10)."""
 
 BOUGHT_WITHDRAWAL = "bought part (your answer to {request_id})"
 """Why a finding a restated check no longer produces left the session after the answer."""
@@ -1277,12 +1288,14 @@ class ReviewRun:
 
         `mark` is how many findings the session held before the first restated call. Each
         finding a restated call added takes the id of the earlier finding with the same
-        verdict key and its place (`_verdict_key` ignores coverage limits, so a "may be
-        bought" note drops in place), and is announced again under that id. An earlier finding
-        of a restated check - one that cites one of its earlier steps, and was not carried from
-        another run, whose step numbers are that run's - is kept when a restated finding took
-        its place or a restated call returned its id (a check that de-duplicates, as
-        `check_drawings` does); every other one is no longer produced and is withdrawn.
+        verdict key, its place and its disposition (`_verdict_key` ignores coverage limits, so a
+        "may be bought" note drops in place), and is announced again under that id: an Accept,
+        Reject or Defer the engineer recorded before the answer stands (the owner's decision
+        58A, 2026-10-08, feature 010 research R2.26). An earlier finding of a restated check -
+        one that cites one of its earlier steps, and was not carried from another run, whose
+        step numbers are that run's - is kept when a restated finding took its place or a
+        restated call returned its id (a check that de-duplicates, as `check_drawings` does);
+        every other one is no longer produced and is withdrawn, its disposition with it.
         """
         session = self.session
         earlier = list(session.findings[:mark])
@@ -1296,7 +1309,9 @@ class ReviewRun:
             if index is None:
                 added.append(finding)
                 continue
-            merged[index] = finding.model_copy(update={"id": earlier[index].id})
+            merged[index] = finding.model_copy(
+                update={"id": earlier[index].id, "disposition": earlier[index].disposition}
+            )
             taken.add(earlier[index].id)
             folded.append(merged[index])
         returned = {finding_id for call in calls for finding_id in _returned_finding_ids(call)}

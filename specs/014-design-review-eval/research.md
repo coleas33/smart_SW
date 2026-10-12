@@ -1829,3 +1829,29 @@ Found by the implementation of `kalo`'s R-4 to R-6 anchor cases (tasks.md T134),
   5. A document place's `opened` reaches `PackageBuilder.document`, and every instance of an unopened document is laid `suppression="lightweight"` with no hole row, face, mesh or interference row on it (`kalo._opened`; `tests/support/mechanical.py:471-577`), so `component_lightweight`, which sets `opened=False` on the pin's document, leaves both pins lightweight and the package with no interference row, as §3 R-5's seed lays it.
   6. A contact is laid `is_possible` only while it carries no volume: `seeds._overlap` replaces only the row's volume, so once `interference_positive` plants the overlap the row is a measured overlap, not SOLIDWORKS's possible-interference flag for coincident or touching faces (`ir/models.py`'s `Interference.is_possible`); the interference check judges it by its volume (`checks/interference.py` `_contact`).
 - Read and left as it is: 1.237 mm³ is the volume the fixture row states, not the crescent a 3.0 mm pin 0.750 mm off a 3.1 mm hole cuts through the 4 mm cover (about 8 mm³; the fixture's 6 mm face, about 12 mm³). The interference check reads the row's volume and never the faces, and T134 and `cases.md` 6.3 pin the number, so the case keeps it.
+
+
+## Integration checkpoint: accepted fine-pitch baseline
+
+Integrated `010-fine-pitch` through its final gate commit `a5b4ed8` into the slice-4
+baseline `ee6571c`. The fixture helper keeps both branches’ fastener builders, cosmetic
+threads and feature rows, with one fastener collection and one constructor argument.
+The parser and joint-reference tests keep both behaviours. Both historical replay rows
+are retained, and the combined code’s measured row is in feature 008’s replay contract.
+
+Held-out items cited by this integration: **none**. The fine-pitch implementation and
+its acceptance fixtures were established independently of the held-out corpus; its
+existing `cover-blind-tap` replay anchor is already tuned-on. No held-out item was used
+to change the thread rules, prompt or tool description. The integration adds the
+`check_threads` description/schema to the offered-tool digest, so `stamps.CURRENT`
+records the new digest and the generated held-out keys are resealed without changing
+case tags. The prompt and checklist digests are unchanged.
+
+Validation: the initial focused run had one expected stale-stamp failure and 250 passes;
+after updating the generator stamp and regenerating, held-out stamps, case reachability,
+validation, generator reproducibility, replay, checks-first and pane-fixture tests passed
+(591 passed, one skipped). The ten replay configurations and lever-14-off pair were
+measured over all three committed fixtures: no finding lost or not replayable, and the
+62, 7 and 5 additional checks-first findings remain. No replay fixture or real recording
+was regenerated or read. The combined summary still meets the held-out floor; its
+exact counts are recorded with the slice-4 gate.

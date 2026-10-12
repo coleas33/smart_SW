@@ -17,7 +17,10 @@ definition of what a hole feature, a screw or an interference row looks like in 
   is written, as on all 89 recorded components, unless `screw(fastener_row=True)` asks for
   one (feature 014's case generator does);
 - every document that was opened carries a `mass_override` tool-error gap, because the
-  recorded override read failed on every document (analyst fact 26).
+  recorded override read failed on every document (analyst fact 26);
+- a cosmetic thread, a `Fastener` row and a feature-tree row (the thread pitch amendment,
+  T116) are written as `HoleDumper`, `FastenerDumper` and the feature dump write them: none
+  is on the recorded packages, so the committed replay fixtures retain that absence.
 
 **Every string is fictional.** Paths start with `FICTIONAL_ROOT`; names are built from
 `VOCABULARY`, sizes, ids and two SOLIDWORKS library material names committed goldens already
@@ -57,6 +60,7 @@ from swreview.ir.models import (
     BBox3D,
     BodyRef,
     ComponentInstance,
+    CosmeticThread,
     CylinderFace,
     Design,
     Document,
@@ -65,6 +69,7 @@ from swreview.ir.models import (
     ExtractorInfo,
     FaceGeometry,
     Fastener,
+    Feature,
     Gap,
     GtolFrame,
     Hole,
@@ -466,6 +471,8 @@ class PackageBuilder:
     _fasteners: list[Fastener] = field(default_factory=list)
     _model_dimensions: list[ModelDimension] = field(default_factory=list)
     _model_annotations: list[ModelAnnotation] = field(default_factory=list)
+    _threads: list[CosmeticThread] = field(default_factory=list)
+    _features: list[Feature] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.root_id = self.document(self.design_stem, "assembly", properties=self.root_properties)
@@ -809,6 +816,100 @@ class PackageBuilder:
         )
         return annotation_id
 
+    # --- cosmetic threads, fastener rows and feature rows (T116) ----------------------------
+
+    def cosmetic_thread(
+        self, component_id: str, *, designation: str, depth_mm: float | None = None
+    ) -> str:
+        """One cosmetic thread as `HoleDumper.ReadCosmeticThread` writes it: its callout, else
+        its size, else `""` as `designation`, no face id, and always internal."""
+        thread_id = f"thr:{len(self._threads) + 1:04d}"
+        self._threads.append(
+            CosmeticThread(
+                id=thread_id,
+                persist_ref=persist_ref(thread_id),
+                persist_ref_scope=self._components[component_id].document_id,
+                component_id=component_id,
+                face_id="",
+                designation=designation,
+                depth=None if depth_mm is None else Quantity(value=depth_mm, unit="mm"),
+                is_external=False,
+            )
+        )
+        return thread_id
+
+    def fastener_row(
+        self,
+        component_id: str,
+        *,
+        designation: str | None,
+        kind: Literal["screw", "bolt", "nut", "washer", "pin", "other"] = "screw",
+        identity_source: Literal["toolbox", "custom_property", "name_parse", "manual"] = (
+            "custom_property"
+        ),
+        length_mm: float | None = None,
+    ) -> str:
+        """One `Fastener` row as `FastenerDumper` writes it: the component's persist ref, no
+        head or drive, the document's material, and its axis the component's z axis through
+        its origin until a shank face is read."""
+        fastener_id = f"fas:{len(self._fasteners) + 1:04d}"
+        component = self._components[component_id]
+        frame = np.array(component.transform, dtype=float)
+        self._fasteners.append(
+            Fastener(
+                id=fastener_id,
+                persist_ref=component.persist_ref,
+                persist_ref_scope=component.persist_ref_scope,
+                component_id=component_id,
+                kind=kind,
+                identity_source=identity_source,
+                thread_designation=designation,
+                length=None if length_mm is None else Quantity(value=length_mm, unit="mm"),
+                head_type=None,
+                head_diameter=None,
+                head_height=None,
+                drive=None,
+                axis=Axis(origin=_vec3(frame[:3, 3]), direction=_vec3(frame[:3, 2])),
+                material=self._document(component.document_id).material,
+            )
+        )
+        return fastener_id
+
+    def feature(
+        self,
+        document_id: str,
+        name: str,
+        *,
+        suppressed: bool | None = False,
+        configuration: str | None = None,
+        type_name: str = "HoleWzd",
+    ) -> str:
+        """One top-level feature-tree row (schema 1.1.0), read in `configuration` - the
+        document's active one unless named - with no sketch and nothing depending on it."""
+        feature_id = f"feat:{len(self._features) + 1:04d}"
+        self._features.append(
+            Feature(
+                id=feature_id,
+                persist_ref=persist_ref(feature_id),
+                persist_ref_scope=document_id,
+                document_id=document_id,
+                configuration=configuration or self._document(document_id).active_configuration,
+                name=name,
+                type_name=type_name,
+                description="",
+                index=sum(1 for item in self._features if item.document_id == document_id),
+                depth=0,
+                folder_id=None,
+                suppressed=suppressed,
+                error_code=0,
+                child_ids=[],
+                parent_ids=[],
+                sketch=None,
+                fillet=None,
+            )
+        )
+        return feature_id
+
     def gap(self, **fields: Any) -> None:
         self._gaps.append(Gap(**fields))
 
@@ -1051,10 +1152,12 @@ class PackageBuilder:
             documents=self._documents,
             components=[self._components[key] for key in sorted(self._components)],
             holes=self._holes,
+            threads=self._threads,
+            fasteners=self._fasteners,
             faces=[item.face for item in self._faces],
             bodies=bodies,
             interferences=self._interferences,
-            fasteners=self._fasteners,
+            features=self._features,
             gaps=self._gaps,
             model_dimensions=self._model_dimensions,
             model_annotations=self._model_annotations,

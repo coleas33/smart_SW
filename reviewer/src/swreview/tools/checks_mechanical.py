@@ -10,13 +10,16 @@ argument-free check tools in the order the pre-run calls them; `prerun.planned_c
 it and plans `(name, {})` for each one the run did not withhold, after the interference
 groups and before `check_standards`. A check that needed its own pre-run branch, or its own
 memory of having run, would be a second copy of what feature 008 owns. The tuple grows with
-the stories: `check_joints` (US2), then `check_mass_material` (US6) and `check_hygiene` (US7).
+the stories: `check_joints` (US2), then `check_mass_material` (US6) and `check_hygiene` (US7),
+then `check_threads` (US4's thread pitch amendment of 2026-10-08).
 
 **Each tool is a thin wrapper** over a plain function of the package (`build_joint_map` and
 the checks that run on it), usable from a test or a script with no session, and returns
 counts rather than a payload the model has to page through (`contracts/code-first.md`
 section 3). A second call records again, exactly as a second `check_rms_part` does; answering
-repeats is feature 008's re-call guard, in one place.
+repeats is feature 008's re-call guard, in one place. The one exception is `check_threads`,
+whose rows restate rather than add, because the part-roles answer calls it again through the
+dispatch (`contracts/fasteners.md` section 8.7).
 """
 
 from __future__ import annotations
@@ -48,6 +51,8 @@ from swreview.checks.mass import SUMMARY_CHECK as MASS_SUMMARY
 from swreview.checks.mass import run_mass_checks
 from swreview.checks.part_roles import PART_ROLES_ATTRIBUTE, PartRoles
 from swreview.checks.result import CheckResult, DocumentResult
+from swreview.checks.thread_pitch import COVERAGE_CHECK as THREAD_PITCH_CHECK
+from swreview.checks.thread_pitch import run_thread_checks
 from swreview.checks.tolerances import ResolverLookup
 from swreview.checks.tool_access import recess_group, run_head_fit, sweep_head
 from swreview.report.names import plural
@@ -69,11 +74,17 @@ __all__ = [
     "check_hygiene",
     "check_joints",
     "check_mass_material",
+    "check_threads",
     "record_joint_map",
     "review_roles",
 ]
 
-CODE_FIRST_CHECKS: tuple[str, ...] = ("check_joints", "check_mass_material", "check_hygiene")
+CODE_FIRST_CHECKS: tuple[str, ...] = (
+    "check_joints",
+    "check_mass_material",
+    "check_hygiene",
+    "check_threads",
+)
 """The argument-free check tools the pre-run calls, in order. Each must be in
 `registry.check_tools()` and take no parameter; `test_code_first_registration.py` holds it
 to both."""
@@ -502,6 +513,45 @@ def check_hygiene() -> ToolResult:
         HYGIENE_SUMMARY,
         run_hygiene_checks(context.ir, profile, review_roles(context)),
         {"profile": "absent" if profile is None else "attached"},
+    )
+
+
+THREAD_ROW_BUCKETS: tuple[CoverageBucket, ...] = ("checked", "skipped", "unresolved")
+"""Every bucket a `thread.pitch` row can be in (`contracts/fasteners.md` section 8.6): a call
+withdraws the rows from all three before it records its own (section 8.7)."""
+
+
+def check_threads() -> ToolResult:
+    """Flag every fine or non-standard thread pitch on tapped holes, cosmetic threads and
+    fasteners; the shop uses coarse threads.
+
+    Notes:
+        Takes no argument. Threads it cannot read, pipe threads and threads in bought parts are
+        listed, never passed.
+    """
+    # `contracts/fasteners.md` section 8.7: the rows restate, never add. The part-roles answer
+    # restates this check through the dispatch (`runner.ROLES_RESTATED`), a real call the
+    # re-call guard does not answer, so appended rows would leave the old checked row counting
+    # a newly bought part's tapped holes beside the bought row listing them (research R2.26
+    # D14). The findings are reconciled by the restate itself, as every restated check's are.
+    context = current_context()
+    session = context.require_session()
+    findings_before = len(session.findings)
+    checks = run_thread_checks(context.ir, review_roles(context))
+    context.withdraw_coverage((THREAD_PITCH_CHECK,), THREAD_ROW_BUCKETS)
+    refused = _record_documents(context, checks.findings)
+    if refused is not None:
+        return refused
+    written: Counter[CoverageBucket] = Counter()
+    _record_coverage(context, written, "checked", checks.checked)
+    _record_coverage(context, written, "skipped", checks.skipped)
+    _record_coverage(context, written, "unresolved", checks.unresolved)
+    findings = session.findings[findings_before:]
+    return _summary(
+        findings=[finding.id for finding in findings],
+        statuses=Counter(finding.status for finding in findings),
+        written=written,
+        extra={"threads": checks.threads, "coarse": checks.coarse},
     )
 
 
