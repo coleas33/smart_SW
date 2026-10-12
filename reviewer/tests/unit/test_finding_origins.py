@@ -697,6 +697,7 @@ def test_with_checks_first_the_pre_run_the_regrade_and_the_model_each_mark_their
         ("check_rms_equations", "regrade"),
         ("check_rms_assembly", "regrade"),
         ("check_hygiene", "regrade"),
+        ("check_threads", "regrade"),
         ("check_rms_part", None),
     ]
 

@@ -1,0 +1,59 @@
+bound_reached: null
+carried_findings: 0
+cleared_defect_ids: []
+confirmed_condition_ids: null
+contradicted_condition_ids: null
+coverage_bucket_mix:
+  checked: 0
+  failed: 0
+  out_of_scope: 0
+  skipped: 0
+  unresolved: 0
+coverage_mismatches: null
+false_alarm_finding_ids: []
+false_alarms: 0
+finding_origins: {}
+flagged_below_expected_defect_ids: []
+flagged_defect_ids: []
+forbidden_hit_finding_ids: null
+graded_items:
+- expected_status: demonstrated
+  id: D-1
+  kind: known_defect
+  producer: code
+  tag: tuned_on
+- expected_status: demonstrated
+  id: D-2
+  kind: known_defect
+  producer: code
+  tag: held_out
+held_out: true
+matched_defect_ids: []
+missed_defect_ids:
+- D-1
+- D-2
+missed_known_defects: 2
+not_assessed:
+  bound_reached: the package has no answer log
+  confirmed_condition_ids: the key holds no correct condition
+  contradicted_condition_ids: the key holds no correct condition
+  coverage_mismatches: the key holds no expected coverage
+  forbidden_hit_finding_ids: the key holds no forbidden entry
+  question_counts: the key holds no question-count rule
+  unanswerable_requests: the key holds no unanswerable request
+  unscripted_questions: the package has no answer log
+  withdrawn_forbidden_hit_finding_ids: the key holds no forbidden entry
+open_repeats: []
+package_id: kalo-contact-positive
+question_counts: null
+re_asks: []
+status_mismatch_defect_ids: []
+tuned_on_false_alarm_finding_ids: []
+unanswerable_requests: null
+unmatched_requests: []
+unresolved_because_withheld: 0
+unresolved_count: 0
+unresolved_other: 0
+unscripted_questions: null
+valid_findings: 0
+withdrawn_forbidden_hit_finding_ids: null
