@@ -209,9 +209,10 @@ def test_canonical_schema_still_refuses_an_args_entry_with_no_parameter() -> Non
 def test_the_pin_covers_exactly_the_tools_that_reach_a_provider() -> None:
     """A new tool must be added to the pin deliberately, not discovered missing at T056."""
     assert set(PRE_SPLIT_DESCRIPTIONS) == {function.__name__ for function in ALL_TOOL_FUNCTIONS}
-    assert len(PRE_SPLIT_DESCRIPTIONS) == 38, (
+    assert len(PRE_SPLIT_DESCRIPTIONS) == 39, (
         "35 until feature 010 T028 added check_joints, 36 until T067 and T075 added "
-        "check_mass_material and check_hygiene"
+        "check_mass_material and check_hygiene, 38 until the thread pitch amendment's T120 "
+        "added check_threads"
     )
 
 
@@ -320,13 +321,15 @@ def test_a_tool_already_under_the_caps_reports_nothing() -> None:
 
 # --- the pinned pre-split text -----------------------------------------------------------
 
-PRE_SPLIT_DESCRIPTION_BYTES = 16_767
+PRE_SPLIT_DESCRIPTION_BYTES = 17_001
 """16,006 until feature 010: T022 said what a touching group now is (a contact), T028 added
 `check_joints`, T035 said a nominal position is a zone and T037 said `check_joints` checks
 alignment (16,702); T067 and T075 added `check_mass_material` and `check_hygiene` and
 rewrote `check_joints` under the 160-character cap to name every check it now runs, its
 notes cut to keep the array under `test_tool_payload.ARRAY_CEILING`; edited deliberately
-with the entries below that moved."""
+with the entries below that moved. 16,767 until feature 010's thread pitch amendment
+(2026-10-08, T119): `check_threads` is one more tool, its 234 bytes `contracts/fasteners.md`
+section 8.7's description and notes, added deliberately with its entry below."""
 """UTF-8 bytes of the 35 pre-split descriptions. The split moves text; it never loses any."""
 
 PRE_SPLIT_DESCRIPTIONS: dict[str, str] = {
@@ -598,6 +601,12 @@ revisions, and suppressed or lightweight components.
 
 Takes no argument. Property names come from the attached standards profile; without
 one those checks are skipped.""",
+    "check_threads": """\
+Flag every fine or non-standard thread pitch on tapped holes, cosmetic threads and
+fasteners; the shop uses coarse threads.
+
+Takes no argument. Threads it cannot read, pipe threads and threads in bought parts are
+listed, never passed.""",
     "request_evidence": """\
 Record something you need and the package does not have. Returns its id.
 

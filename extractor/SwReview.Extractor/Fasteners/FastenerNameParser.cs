@@ -43,7 +43,11 @@ public sealed class FastenerIdentity
 ///   "M6 x 20"              size, then length in mm
 ///   "M6x1.0 x 20 - 20N"    size and pitch, then length; the "- 20N" thread-length suffix
 ///                          is ignored
-///   "M10x35"               size, then length (an integer after the size is a length)
+///   "M10x35"               size, then length: one bare integer after the size is a length
+///                          when it is above the size's coarse pitch, and a pitch when it is
+///                          positive and at most that pitch ("M8x1", "M6x1"); a size with no
+///                          coarse pitch keeps the length (CoarsePitch; owner decision 52A,
+///                          contracts/fasteners.md section 8.8)
 ///   "M6x1.0"               size and pitch only; the 1.0 is a PITCH, not a 1 mm screw
 ///   "M4-0.7 x 12"          a pitch written with a hyphen is a pitch (feature 010)
 ///   "1/4-20 x 1-1/2"       unified inch thread, then length in inches
@@ -158,6 +162,10 @@ public static class FastenerNameParser
 
     private static readonly Regex DecimalNumber = new Regex(
         @"^-?\d+(?:\.\d+)?$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    /// <summary>"1" and "35": a bare whole number, which may be a pitch or a length.</summary>
+    private static readonly Regex WholeNumber = new Regex(
+        @"^[0-9]+$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     /// <summary>
     /// Reads whatever the configuration name, description and file name say. Every source is
@@ -364,7 +372,7 @@ public static class FastenerNameParser
                 return;
             }
 
-            ReadMetricPitchAndLength(tokens, reading);
+            ReadMetricPitchAndLength(metric.Groups[1].Value, tokens, reading);
             return;
         }
 
@@ -378,7 +386,7 @@ public static class FastenerNameParser
         }
     }
 
-    private static void ReadMetricPitchAndLength(string[] tokens, SourceReading reading)
+    private static void ReadMetricPitchAndLength(string size, string[] tokens, SourceReading reading)
     {
         if (tokens.Length == 1)
         {
@@ -393,10 +401,11 @@ public static class FastenerNameParser
             return;
         }
 
-        // One value after the size. A pitch is written with a decimal point ("M6x1.0");
-        // a length is a whole number of millimetres ("M10x35"). Toolbox writes both this
-        // way, and guessing the other way round would turn a 35 mm screw into a pitch.
-        if (tokens[1].IndexOf('.') >= 0)
+        // One value after the size. A decimal is a pitch ("M6x1.0"). A positive whole number
+        // is a pitch when it is at most the size's coarse pitch ("M8x1", "M6x1": the common
+        // fine pitches, and M6's coarse one), else a length ("M10x35"); a size with no coarse
+        // pitch, fine-only or unknown, keeps the length (owner decision 52A; section 8.8).
+        if (tokens[1].IndexOf('.') >= 0 || IsWholePitch(size, tokens[1]))
         {
             reading.ThreadDesignation += "x" + tokens[1];
         }
@@ -404,6 +413,24 @@ public static class FastenerNameParser
         {
             reading.Length = MakeLength(tokens[1], LengthUnit.Mm);
         }
+    }
+
+    /// <summary>
+    /// Whether one bare whole number after a metric size is its pitch: positive and at most
+    /// the size's coarse pitch (<see cref="CoarsePitch"/>). Zero is never a pitch, and a size
+    /// with no coarse pitch has nothing to compare with.
+    /// </summary>
+    private static bool IsWholePitch(string size, string token)
+    {
+        if (!WholeNumber.IsMatch(token)
+            || !double.TryParse(size, NumberStyles.Float, CultureInfo.InvariantCulture, out double sizeMm))
+        {
+            return false;
+        }
+
+        double? coarsePitchMm = CoarsePitch.CoarsePitchMm(sizeMm);
+        double value = ToDouble(token);
+        return coarsePitchMm != null && value > 0.0 && value <= coarsePitchMm.Value;
     }
 
     private static Quantity? MakeLength(string token, LengthUnit unit)

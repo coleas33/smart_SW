@@ -1,24 +1,35 @@
 # Command-Line Additions
 
+*Amended 2026-09-29 by feature 014 (`specs/014-design-review-eval/`), in benchmark-run.md section 2; the amendment text lands with the 014 task that changes the code, landed 2026-10-07 (014 T044):* `--pane-defaults` includes the explanation pass.
+
 ## `swreview` (Python)
 
 | Command | Arguments | Effect |
 |---------|-----------|--------|
 | `swreview benchmark replay RUN_DIR` | `--pane-defaults/--no-pane-defaults` (default on), `--lever NAME`..., `--payload-slimming`, `--history-pruning`, `--prune-after N`, `--standards-profile PATH`, `--json` | Replays a review run folder through the current code twice - as recorded, and with the requested settings - with a scripted provider, and prints per-round and total input tokens, the finding comparison and, from User Story 4, the regrouped estimate (`replay.md`). No key, no network, no SOLIDWORKS; writes nothing into `RUN_DIR`. **Exit 1** on a refusal (one sentence) or a lost finding (after printing); **exit 2** on a usage error. Payload: the `ReplayReport` |
-| `swreview review` | `--pane-defaults` (new), `--payload-slimming` (new), `--history-pruning` (new), `--prune-after N` (new); `--lever prerun_checks`, `--lever parallel_tool_calls` (existing) | Every change is **off** unless asked. `--pane-defaults` applies exactly `pane_defaults(provider)` - checks first, the tools it ran to completion leaving the array (lever 13, amendment 2026-09-23; `--lever withhold_prerun_tools` without `--lever prerun_checks` or `--lever procedural_gate` is refused, exit 2), parallel calls for OpenAI, payload slimming, history pruning after two rounds - the settings a pane review runs with; the explicit switches add to it or, without it, turn one change on. The session records what ran (`efficiency`, `model_view`) |
+| `swreview review` | `--pane-defaults` (new), `--payload-slimming` (new), `--history-pruning` (new), `--prune-after N` (new); `--lever prerun_checks`, `--lever parallel_tool_calls` (existing) | Every change is **off** unless asked. `--pane-defaults` applies exactly `pane_defaults(provider)` - checks first, the tools it ran to completion leaving the array (lever 13, amendment 2026-09-23; `--lever withhold_prerun_tools` without `--lever prerun_checks` or `--lever procedural_gate` is refused, exit 2), parallel calls for OpenAI, payload slimming, history pruning after two rounds, and since feature 014 the bounded explanation pass unless `--no-explain-findings` is typed (014 `contracts/benchmark-run.md` section 2, PP-1) - the settings a pane review runs with; the explicit switches add to it or, without it, turn one change on. `--explain-findings/--no-explain-findings` is tri-state: a typed value wins, and untyped it follows `--pane-defaults`, else off. The session records what ran (`efficiency`, `model_view`, `explanations_enabled`) |
 | `swreview benchmark run` | unchanged | Stays all-off for the model view, so its arms compare with every recorded ledger row |
 
 One resolver, `_review_settings(provider, *, pane_defaults, lever, payload_slimming,
-history_pruning, prune_after) -> (EfficiencySettings, ModelViewSettings)`, serves `review` and
-`benchmark replay`:
+history_pruning, prune_after, explain_findings=None, study="none", arm=None,
+allow_workstation_levers=True) -> ResolvedReview(efficiency, model_view, explain_findings)`
+(a frozen value; feature 014 `contracts/benchmark-run.md` section 2), serves `review` and
+`benchmark replay`, which reads the efficiency and the model view only:
 
-1. Start from `pane_defaults(provider)` when asked, else `(EfficiencySettings(), MODEL_VIEW_OFF)`.
+1. Start from `pane_defaults(provider)` when asked (explanations on), else every change off
+   (`EfficiencySettings()`, `MODEL_VIEW_OFF`, explanations off).
 2. Add the named levers through `efficiency_from_levers` (the pane's own levers included), so every
    existing refusal applies - `--pane-defaults --lever coverage_stop` is refused by `GATED_ALONE`,
    `--lever parallel_tool_calls --provider gemini` by the Gemini rule.
 3. Turn on `--payload-slimming` and `--history-pruning` when given.
 4. `--prune-after N` sets the prune age; **exit 2** when N < 1 or when pruning is not on (neither
    `--history-pruning` nor `--pane-defaults`), naming the flags.
+5. A typed `--explain-findings` or `--no-explain-findings` wins over the base's explanations.
+
+`study`, `arm` and `allow_workstation_levers` (feature 014 RF-19; the defaults are `review`'s and
+`benchmark replay`'s) reach `check_study_arm` and the workstation-lever refusal, with the markers
+of what was typed: `--pane-defaults`, the `--lever` names as typed (never the pane's own), whether a
+model-view switch was typed and whether an explanation flag was.
 
 ## What a review run folder holds
 

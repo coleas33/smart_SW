@@ -18,6 +18,12 @@ import yaml
 from swreview.report.session import ReviewSession
 
 CHECKLIST_FILE = Path(__file__).parent / "checklist_v1.yaml"
+SYSTEM_PROMPT_FILE = Path(__file__).parent / "prompts" / "system_v1.md"
+"""The system prompt's versioned commitments, which `agent/runner.py` reads and imports from here.
+
+Named beside the checklist file (feature 014 RF-1) so the benchmark's stamp can name the prompt
+and the checklist without importing the runner, which imports the tools.
+"""
 
 Owner = Literal["model", "code"]
 """Who closes an item (feature 013, `contracts/re-ask-guard.md` section 1).

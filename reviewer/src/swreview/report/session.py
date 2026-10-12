@@ -36,6 +36,16 @@ from swreview.ir.models import omit_when_null
 KeySource = Literal["settings", "env", "none"]
 """Where the API key for this run came from, or `none` when the run needed no key."""
 
+StepMark = Literal["prerun", "regrade"]
+"""Which code made a step itself (feature 014, `contracts/scoring.md` section 5.2): the
+pre-run before the first turn, or a check restated after an answer. A step the model asked for
+carries no mark."""
+
+ORIGIN_MARKS_VERSION = 1
+"""What `start_review` writes into `ReviewSession.origin_marks` on every new session: the steps
+of this session carry their marks. A session without it predates the marks, and the origin of
+its code findings is unknown (feature 014, FR-007)."""
+
 
 class ProviderInfo(ReviewModel):
     """Which provider ran this review and how its effort control was set (feature 002).
@@ -69,10 +79,16 @@ class InvestigationStep(ReviewModel):
     """The same text in tokens, estimated with o200k_base; `None` when the tokenizer was
     unavailable. Both sizes are left out of `session.json` when null, so a session written
     before feature 008 keeps its bytes (`contracts/cost.md` section 1)."""
+    origin_mark: StepMark | None = None
+    """Set only by `prerun.recorded_call(mark=...)` after the call: `prerun` for the pre-run's
+    calls (`_prerun_call`), `regrade` for the checks `ReviewRun._restate` restates after an
+    answer (feature 014, `contracts/scoring.md` section 5.2). Omitted when `None`, so a step
+    the model asked for, and every session written before the mark, keeps its bytes; neither
+    the step's events nor its stored result carry it."""
 
     @model_serializer(mode="wrap")
-    def _omit_unmeasured_sizes(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
-        return omit_when_null(handler, self, "result_bytes", "result_tokens")
+    def _omit_null_additions(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        return omit_when_null(handler, self, "result_bytes", "result_tokens", "origin_mark")
 
 
 QUESTION_MAX_LENGTH = 140
@@ -181,15 +197,36 @@ class CoveringRequests(NamedTuple):
     """The latest one still open: `already_asked`, when none is answered."""
 
 
+def covers(
+    blocks: str | None,
+    ids: frozenset[str],
+    earlier_blocks: str | None,
+    earlier_ids: frozenset[str],
+) -> bool:
+    """Whether an earlier question on `earlier_blocks` naming `earlier_ids` already asks a new
+    one on `blocks` naming `ids` (`contracts/re-ask-guard.md` section 3).
+
+    True when `blocks == earlier_blocks` (null equals null) and either `ids` is non-empty and a
+    subset of `earlier_ids`, or both are empty and `blocks` names a checklist item. Ids are
+    compared raw: an instance is never turned into its document, which would merge two
+    instances of one screw. A question with no checklist item and no ids is covered by nothing.
+    Extracted from `covering_requests` unchanged (feature 014, `contracts/questions.md` section
+    3), so the design-review eval's question matcher wraps this test rather than restating it.
+    """
+    if blocks != earlier_blocks:
+        return False
+    if ids:
+        return ids <= earlier_ids
+    return not earlier_ids and blocks is not None
+
+
 def covering_requests(
     session: ReviewSession, blocks: str | None, entity_ids: Sequence[str]
 ) -> CoveringRequests:
     """The earlier model-written requests that already ask a new model question.
 
-    `contracts/re-ask-guard.md` section 3. A request R covers the question when `R.blocks ==
-    blocks` (null equals null) and either the question's ids are non-empty and a subset of R's,
-    or both are empty and `blocks` names a checklist item. Ids are compared raw: an instance is
-    never turned into its document, which would merge two instances of one screw.
+    `contracts/re-ask-guard.md` section 3. A request R covers the question when `covers` says
+    so of the question's item and ids against R's.
 
     Two exclusions. A question with no checklist item and no ids is never covered: nothing says
     two such questions are the same one. And a code-written request (`source` `code`) covers
@@ -197,15 +234,14 @@ def covering_requests(
     would otherwise answer any later question about one of them - so only `model` requests are
     read here; code questions keep the exact test of `checks/questions.already_asked`.
     """
-    wanted = set(entity_ids)
+    wanted = frozenset(entity_ids)
     if not wanted and blocks is None:
         return CoveringRequests(answered=None, open=None)
     covering = [
         request
         for request in session.evidence_requests
         if request.source == "model"
-        and request.blocks == blocks
-        and (wanted <= set(request.entity_ids) if wanted else not request.entity_ids)
+        and covers(blocks, wanted, request.blocks, frozenset(request.entity_ids))
     ]
     still_open = [request for request in covering if request.status == "open"]
     return CoveringRequests(
@@ -506,6 +542,14 @@ class ReviewSession(ReviewModel):
     off, so every session written before it keeps its bytes.
     """
 
+    origin_marks: int | None = None
+    """`ORIGIN_MARKS_VERSION`, written by `start_review` on every new session, the pane's
+    included, whatever the levers: this session's steps carry their `origin_mark` (feature 014,
+    `contracts/scoring.md` section 5.2). A value always written rather than a flag, because a
+    false flag would be dropped like every false field here; absence means the session predates
+    the marks and its code findings' origins are unknown. Omitted when `None`, so a session
+    written before it keeps its bytes."""
+
     usage: SessionUsage | None = None
     """What this run cost, summed from the `usage` events (feature 005).
 
@@ -584,6 +628,8 @@ class ReviewSession(ReviewModel):
         self, handler: SerializerFunctionWrapHandler
     ) -> dict[str, Any]:
         data = handler(self)
+        if self.origin_marks is None:
+            data.pop("origin_marks", None)
         if not self.finding_explanations:
             data.pop("finding_explanations", None)
         if not self.explanations_enabled:

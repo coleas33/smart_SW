@@ -11,7 +11,10 @@ exactly what the rule tests, the group tests and the golden fixtures will rely o
   `sketch.consumer_ids`, with `None` reserved for the gap case (absence is null, never a
   default);
 - packages that validate and round-trip through `EvidencePackage`, so no later task
-  builds a fixture the IR would reject.
+  builds a fixture the IR would reject;
+- `part_trees`, the one place trees and equations are laid (feature 014, `generator.md` 5.1,
+  GN-3): the rows `rms_package` writes for the same parts, laid on a `PackageBuilder` package
+  too, with every RMS golden generator still writing what is committed.
 """
 
 from __future__ import annotations
@@ -40,11 +43,13 @@ from tests.support.features import (
     feature,
     fillet_feature,
     folder,
+    part_trees,
     rms_package,
     sketch_feature,
     suppress_row,
     suppress_run,
 )
+from tests.support.mechanical import PackageBuilder, as_committed, load_generator
 
 IR_CONTRACT = contract_validator("ir.schema.json")
 """The committed `ir.schema.json`; every built package is validated against it."""
@@ -717,3 +722,141 @@ def test_a_package_the_ir_would_reject_fails_loudly() -> None:
                 )
             ]
         )
+
+
+# --- part_trees: the one place trees and equations are laid (feature 014 GN-3) ----------
+
+GOLDEN_FIXTURES = Path(__file__).resolve().parents[1] / "golden" / "fixtures"
+
+RMS_GOLDENS: tuple[str, ...] = ("rms-assembly", "rms-equations", "rms-exceptions", "rms-part")
+"""The four goldens whose `generate_package.py` builds its package with `rms_package`."""
+
+
+def mixed_parts() -> list[PartSpec]:
+    """Every input `part_trees` reads, over three documents: both traversal shapes, a
+    configuration other than Default, equations on two documents (one with `is_global`
+    unreadable), and between them a part with neither a tree nor an equation."""
+    return [
+        PartSpec(
+            document_id="doc:2",
+            name="housing",
+            features=core_specs(),
+            equations=[
+                equation('"width" = 40', is_global=True, value=40.0),
+                equation('"D1@Sketch1" = "width" * 2'),
+            ],
+        ),
+        PartSpec(document_id="doc:3", name="pin"),
+        PartSpec(
+            document_id="doc:4",
+            name="cover",
+            features=core_specs(),
+            equations=[equation('"depth" = 6', is_global=None)],
+            shape="flat",
+            configuration="Machined",
+        ),
+    ]
+
+
+@pytest.mark.parametrize("assembly", [None, AssemblySpec()], ids=["part-only", "assembly"])
+def test_part_trees_returns_the_rows_rms_package_writes_for_the_same_parts(
+    assembly: AssemblySpec | None,
+) -> None:
+    parts = mixed_parts()
+    package = rms_package(parts=parts, assembly=assembly)
+
+    features, equations = part_trees(parts)
+
+    assert features == package.features
+    assert equations == package.equations
+    # Not vacuous: one feature sequence across the parts, the pin adding nothing to it, the
+    # flat cover closing its folder with an end tag, and the equations indexed per document.
+    assert [row.id for row in features] == [f"feat:{number:04d}" for number in range(1, 12)]
+    assert [row.document_id for row in features] == ["doc:2"] * 5 + ["doc:4"] * 6
+    assert features[-2].name == f"3-Core{END_TAG_SUFFIX}"
+    assert {row.configuration for row in features[5:]} == {"Machined"}
+    assert [(row.document_id, row.index, row.is_global) for row in equations] == [
+        ("doc:2", 0, True),
+        ("doc:2", 1, False),
+        ("doc:4", 0, None),
+    ]
+
+
+def test_part_trees_of_no_parts_is_two_empty_lists() -> None:
+    assert part_trees([]) == ([], [])
+
+
+def test_part_trees_laid_on_a_package_builder_package_carry_its_documents_ids() -> None:
+    """How the case generator lays them (`generator.md` 5.1): on the package `PackageBuilder`
+    built, by `model_copy`, each part spec naming the builder's document it is the tree of."""
+    builder = PackageBuilder(design_stem="FICT-KALO-0000")
+    plate = builder.document("FICT-KALO-0001", "part", material="6061-T6")
+    cover = builder.document("FICT-KALO-0002", "part", configurations=("Machined",))
+    builder.component(plate)
+    builder.component(cover, configuration="Machined")
+    built = builder.build().package
+    features, equations = part_trees(
+        [
+            PartSpec(
+                document_id=plate,
+                name="FICT-KALO-0001",
+                features=core_specs(),
+                equations=[equation('"width" = 40', is_global=True, value=40.0)],
+            ),
+            PartSpec(
+                document_id=cover,
+                name="FICT-KALO-0002",
+                features=core_specs(),
+                equations=[equation('"depth" = 6', is_global=True, value=6.0)],
+                shape="flat",
+                configuration="Machined",
+            ),
+        ]
+    )
+
+    package = built.model_copy(update={"features": features, "equations": equations})
+
+    assert (plate, cover) == ("doc:0002", "doc:0003")
+    assert [row.document_id for row in package.features] == [plate] * 5 + [cover] * 6
+    assert all(row.persist_ref_scope == row.document_id for row in package.features)
+    assert [(row.document_id, row.index) for row in package.equations] == [(plate, 0), (cover, 0)]
+    cover_document = next(item for item in package.documents if item.document_id == cover)
+    assert {row.configuration for row in package.features[5:]} == {
+        cover_document.active_configuration
+    }
+    assert_round_trips(package)
+
+
+@pytest.mark.parametrize("name", RMS_GOLDENS)
+def test_each_rms_golden_generator_still_writes_what_is_committed(
+    name: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Pinned against the committed files, so laying trees through `part_trees` moves nothing a
+    generator writes (`generator.md` 11; GN-3).
+
+    `package.json` is compared as data at the committed file's schema version: the goldens are
+    static inputs written at 1.1.0 that nothing rewrites (`test_ir_golden_fixtures_load.py`),
+    while `rms_package` writes `SCHEMA_VERSION`. Every other file the generator writes - its
+    case and, for two of them, the exceptions whose digests fingerprint the trees - is compared
+    byte for byte, both sides read as LF (`write_text` writes CRLF on Windows)."""
+    fixture = GOLDEN_FIXTURES / name
+    generator = load_generator(fixture / "generate_package.py")
+    monkeypatch.setattr(generator, "FIXTURE_DIR", tmp_path)
+
+    generator.main()
+
+    committed = sorted(
+        path.name
+        for path in fixture.iterdir()
+        if path.is_file() and path.name != "generate_package.py"
+    )
+    assert sorted(path.name for path in tmp_path.iterdir()) == committed
+    written = EvidencePackage.model_validate_json(as_committed(tmp_path / "package.json"))
+    golden = EvidencePackage.model_validate_json(as_committed(fixture / "package.json"))
+    assert written.schema_version == SCHEMA_VERSION
+    assert written.model_copy(update={"schema_version": golden.schema_version}) == golden
+    for file_name in committed:
+        if file_name != "package.json":
+            assert as_committed(tmp_path / file_name) == as_committed(fixture / file_name), (
+                f"{name}/{file_name}"
+            )

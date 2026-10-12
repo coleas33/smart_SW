@@ -1009,7 +1009,7 @@ result:
     component_ids: []
     configuration: Default
     coverage_limits:
-    - profile:<profile-b.yaml> sha256:<sha256 of profile-b.yaml>
+    - profile:profile-b.yaml sha256:<sha256 of profile-b.yaml>
     - configuration Default
     disposition: null
     drawing_locations: []
@@ -1046,7 +1046,7 @@ result:
     component_ids: []
     configuration: Default
     coverage_limits:
-    - profile:<profile-b.yaml> sha256:<sha256 of profile-b.yaml>
+    - profile:profile-b.yaml sha256:<sha256 of profile-b.yaml>
     - configuration Default
     disposition: null
     drawing_locations:
@@ -1089,7 +1089,7 @@ result:
     - cmp:0002
     configuration: Default
     coverage_limits:
-    - profile:<profile-b.yaml> sha256:<sha256 of profile-b.yaml>
+    - profile:profile-b.yaml sha256:<sha256 of profile-b.yaml>
     - configuration Default
     disposition: null
     drawing_locations:
@@ -1133,7 +1133,7 @@ result:
     - cmp:0003
     configuration: Default
     coverage_limits:
-    - profile:<profile-b.yaml> sha256:<sha256 of profile-b.yaml>
+    - profile:profile-b.yaml sha256:<sha256 of profile-b.yaml>
     - configuration Machined
     disposition: null
     drawing_locations:
@@ -1173,7 +1173,7 @@ result:
     - cmp:0003
     configuration: Default
     coverage_limits:
-    - profile:<profile-b.yaml> sha256:<sha256 of profile-b.yaml>
+    - profile:profile-b.yaml sha256:<sha256 of profile-b.yaml>
     - configuration Machined
     disposition: null
     drawing_locations: []
@@ -1208,7 +1208,7 @@ result:
     - cmp:0003
     configuration: Default
     coverage_limits:
-    - profile:<profile-b.yaml> sha256:<sha256 of profile-b.yaml>
+    - profile:profile-b.yaml sha256:<sha256 of profile-b.yaml>
     - configuration Machined
     disposition: null
     drawing_locations:
@@ -1251,7 +1251,7 @@ result:
     - cmp:0003
     configuration: Default
     coverage_limits:
-    - profile:<profile-b.yaml> sha256:<sha256 of profile-b.yaml>
+    - profile:profile-b.yaml sha256:<sha256 of profile-b.yaml>
     - configuration Machined
     disposition: null
     drawing_locations: []

@@ -455,7 +455,10 @@ from the dump folder and the big assembly's run folder. 008 T105 replays each ru
 research R5. If T066 and T077 passed, the development machine sets each switch in a commit of its
 own, editing the one pin test the task names, and 011 T095 goes into the next handover, with 013
 T142's second half (the host answers `opens_closed`, and the review offers the read-only open once
-per drawing file). Feature 013's census reruns over the N folders' packages, counts only; 013 T141
+per drawing file). Feature 010's fine-pitch amendment (2026-10-08) added two seat tasks after this
+list was written, 010 T123 and T124 (what Hole Wizard writes for fine tapped holes and a cosmetic
+thread callout, and whether a part opened on its own gives hole rows); this sitting does not ask
+them, and they go into the next sitting plan. Feature 013's census reruns over the N folders' packages, counts only; 013 T141
 to T144's results are ticked from the findings document, and the version 4 profile, like the
 version 3 one, never enters the repository. For
 feature 004: `swreview remodel plan` runs over each P folder's `package.json` for T003, counts

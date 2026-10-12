@@ -167,6 +167,8 @@ METRICS: dict[str, Callable[[ArmRun], float | None]] = {
     "false_alarms": lambda run: run.scorecard.aggregate.false_alarms,
     "unresolved_count": lambda run: run.scorecard.aggregate.unresolved_count,
     "recall_held_out": lambda run: run.scorecard.aggregate.recall,
+    "recall_held_out_model": lambda run: run.scorecard.aggregate.recall_by_producer.model.held_out,
+    "recall_held_out_code": lambda run: run.scorecard.aggregate.recall_by_producer.code.held_out,
     "median_net_saved_minutes": lambda run: run.scorecard.aggregate.median_net_saved_minutes,
 }
 """Every metric the ledger compares, each read from its **one** source.
@@ -177,7 +179,9 @@ threshold rests on, so the ledger and the gate can never disagree about what a n
 column exists so the row says "unknown" rather than leaving levers 9 and 10 unrepresented.
 `median_net_saved_minutes` is the number the pilot is judged on and the one metric here
 that is **reported and never gated on** (feature 007 FR-006): `decide` names the metrics
-it reads, so adding an entry to this table gates nothing by construction.
+it reads, so adding an entry to this table gates nothing by construction. The two recalls by
+producer, the held-out known defects of each producer, are reported beside the overall recall
+on the same terms (feature 014 SP-13 A).
 """
 
 

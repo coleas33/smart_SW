@@ -15,8 +15,10 @@ Three things this module is, in order of weight:
 2. **A renderer with one source per column.** No number is computed twice: the token
    counts are `session.usage.totals` verbatim, `uncached in` and the cached share are the
    scorecard's own derivation read through, `tool calls` is `len(session.steps)` and is
-   never conflated with `rounds`, and the four provenance columns are the provenance
-   record's.
+   never conflated with `rounds`, the provenance columns and the profile and live tools are
+   the provenance record's, the model view is the session's, and the outcome columns are the
+   scorer's `PackageScore` (feature 014 `contracts/provenance.md` 5). A run folder inside the
+   checkout is named relative to its root (section 6.3).
 3. **The reader that asks `adoption.decide` for the `Decision` column** and never types
    one. The owner's approval is `owner_signed_off`, a separate field this module never
    *computes*: `carry_sign_offs` copies it, and `owner_signed_off_at`, off the committed
@@ -29,13 +31,28 @@ Principle VI and FR-025 are untouched.
 
 What is refused, and what is merely null:
 
+- A scorecard scored under other scoring rules, or malformed: **refused** by
+  `scorecard.read_scorecard` before anything else is read, with the command that re-scores it
+  (feature 014 `scoring.md` 8).
 - No `efficiency` on a session at all: **refused** - the run predates the flag carrier
   and cannot be attributed to an arm.
 - The two records disagreeing, on the settings, the provider, the model, the effort, the
-  saved set copy, or the arm against the studied lever's flag: **refused**, naming it.
-- Two runs of one study differing in commit, effort, set file or checklist: **refused**,
-  naming the field. There is no declared exception; lever 2's off arm is its flag off,
-  not an earlier commit.
+  model view, a standards finding's profile stamp, the saved set copy, or the arm against
+  its settings: **refused**, naming it. A saved set whose `held_out` flag disagrees with a
+  package's scored items, or that does not hold a scored package: **refused**, naming the
+  package (feature 014 `contracts/provenance.md` 2).
+- Two runs of one study differing in any field of the record but the named exemptions
+  (`MUST_MATCH`; feature 014 `contracts/provenance.md` 4): **refused**, naming the first such
+  field. There is no declared exception; lever 2's off arm is its flag off, not an earlier
+  commit. Two runs scored against two versions of one package's answer key
+  (`Scorecard.key_sha256`): **refused**, naming the package (feature 014 INT-16).
+- A run of a pane study with no arm, or a `pane_defaults` run not graded against the example
+  profile: **refused**. Both pane studies render their raw rows and no decision row, under
+  their own study keys (feature 014 `contracts/provenance.md` 3.2).
+- A ledger written where the repository may commit it, holding a run graded against another
+  profile than the fictional example, one whose saved set names an absolute path, or one from
+  a folder the repository does not hold: **refused**, naming the run (FR-051;
+  `contracts/provenance.md` 6.4).
 - No provenance record at all: **not** refused. The row renders with `lever`, `arm`,
   `rep` and `commit` null, because a run made before the convention existed is still a
   real run.
@@ -46,16 +63,25 @@ What is refused, and what is merely null:
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import json
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 from pydantic import Field
 
 from swreview.agent.providers import CACHED_SHARE_PUBLISHABLE
 from swreview.agent.runner import SESSION_FILE_NAME
-from swreview.agent.settings import LEVER_NAMES
+from swreview.agent.settings import (
+    LEVER_NAMES,
+    MODEL_VIEW_OFF,
+    MODEL_VIEW_PANE,
+    PANE_STUDY,
+    PRIVATE_PANE_STUDY,
+    ModelViewSettings,
+)
+from swreview.benchmark import sets
 from swreview.benchmark.adoption import (
     BASELINE,
     METRICS,
@@ -67,16 +93,42 @@ from swreview.benchmark.adoption import (
     metric,
     off_on,
 )
-from swreview.benchmark.runner import REPO_ROOT, RunProvenance, load_provenance, sha256_of
-from swreview.benchmark.scorecard import UNKNOWN, PackageScore, Scorecard
+from swreview.benchmark.origins import Origin
+from swreview.benchmark.runner import (
+    REPO_ROOT,
+    SAVED_SET_FILE,
+    RunProvenance,
+    committable,
+    load_provenance,
+    sha256_of,
+)
+from swreview.benchmark.scorecard import (
+    SCORECARD_FILE,
+    UNKNOWN,
+    PackageScore,
+    Scorecard,
+    by_origin,
+    false_alarm_origins,
+    final_state_origins,
+    fmt_assessed,
+    fmt_origins,
+    length_or_none,
+    read_scorecard,
+)
+from swreview.checks.standards.profile import display_digest
+from swreview.checks.standards.report import stamped_profile_digest
+from swreview.exceptions import STANDARDS_CHECK_PREFIX
 from swreview.findings import ReviewModel
 from swreview.report.session import ReviewSession, load_session
 
-LEDGER_SCHEMA = "1.0"
+LEDGER_SCHEMA = "1.1"
+"""`ledger.json`'s schema (feature 014 `contracts/provenance.md` 5; plan decision INT-10): one bump
+for the feature, with the run and decision columns in their final order. The 1.1 record also names
+`pane_studies`, a key omitted when no pane study was compared and filled from the verdict slice,
+so that slice moves neither this version nor the committed header."""
+
 LEDGER_JSON = "ledger.json"
 LEDGER_MD = "ledger.md"
-SCORECARD_FILE = "scorecard.json"
-SAVED_SET_FILE = "benchmark-set.json"
 
 LEDGER_BEGIN = "<!-- ledger:begin -->"
 LEDGER_END = "<!-- ledger:end -->"
@@ -85,6 +137,24 @@ runs it claims to summarize (T045)."""
 
 BASELINE_ARM = "baseline"
 NO_LEVER = "none"
+
+PANE_BASELINE_LABEL = "none (pane defaults)"
+"""The pane baseline's study label (`--study none --arm baseline --pane-defaults`; feature 014
+PP-4): its own study key beside the plain baseline's `none`, so it carries its own sign-off."""
+
+BASELINE_LABELS: tuple[str, ...] = (NO_LEVER, PANE_BASELINE_LABEL)
+"""The two baselines' study labels: each a distribution, and no decision."""
+
+PANE_STUDIES: tuple[str, ...] = (PANE_STUDY, PRIVATE_PANE_STUDY)
+"""The two pane studies (feature 014 `contracts/provenance.md` 3.1), each its own study key.
+
+Until the verdict slice routes them to `verdict`, compare checks them and renders their raw rows,
+and never hands them to `_decision_row`: `decide` never applies to a pane study (FR-045)."""
+
+RUN_START_SCHEMA = 2
+"""The first provenance schema to record the model view and the profile's digest (feature 014
+`contracts/provenance.md` 1). An older record recorded neither, so no session is held against it
+on either."""
 
 STUDIES_DIR = REPO_ROOT / "benchmarks" / "studies"
 """Where the run directories the committed ledger is rendered from live.
@@ -117,6 +187,9 @@ other column moves."""
 
 GATE_COUNTER = "check_fit and check_axial_stack calls per run (must not fall)"
 
+BASELINE_COUNTER = "none: a baseline study has no lever to counter"
+"""Both baselines' counter: neither has a lever under test."""
+
 LEVER_COUNTERS: dict[str, str] = {
     TRIM_LEVER: "distinct tool names called",
     "tool_tiers": "unresolved because withheld",
@@ -132,7 +205,8 @@ LEVER_COUNTERS: dict[str, str] = {
     "compact_queries": "distinct tool names called (compact discovery and full detail)",
     "withhold_prerun_tools": "tool array per request, and calls answered already_run",
     "drop_prior_reasoning": "requested input per round after the first turn (replay estimate)",
-    NO_LEVER: "none: a baseline study has no lever to counter",
+    NO_LEVER: BASELINE_COUNTER,
+    PANE_BASELINE_LABEL: BASELINE_COUNTER,
 }
 """The number **this** lever's gate needs and no other's (ab-harness section 6).
 
@@ -148,6 +222,40 @@ COUNTER_METRIC: dict[str, str] = {"parallel_tool_calls": "tool_calls"}
 """The counters that are already a metric in `adoption.METRICS`; the rest render unknown
 until their lever lands."""
 
+# What must match across a study (feature 014 `contracts/provenance.md` 4): every field of the
+# record but these named exemptions, each in exactly one set.
+
+RUN_IDENTITY: tuple[str, ...] = ("rep", "started_at")
+"""Which run this is: never compared."""
+
+RECORD_ONLY: tuple[str, ...] = ("live_tools",)
+"""Recorded and shown, never must-match (PP-9)."""
+
+STUDY_KEY_FIELDS: tuple[str, ...] = ("lever", "provider", "model")
+"""The study's key (`_study_key`): two runs differing in one are two studies, not a refusal."""
+
+ACROSS_ARMS: tuple[str, ...] = ("arm",)
+"""What names the arm, exempt across the arms of every study, lever and pane alike: a lever
+study's off and on runs share one study key (plan decision RF-10)."""
+
+ACROSS_PANE_ARMS: tuple[str, ...] = ("efficiency", "model_view", "pane_defaults")
+"""What the pane study varies (D5), exempt across its two arms only. Across a lever study's arms
+only the studied lever's own flag in `efficiency` is."""
+
+MUST_MATCH: tuple[str, ...] = tuple(
+    name
+    for name in RunProvenance.model_fields
+    if name not in (*RUN_IDENTITY, *RECORD_ONLY, *STUDY_KEY_FIELDS, *ACROSS_ARMS, *ACROSS_PANE_ARMS)
+)
+"""Every other field of the record, in its own order: a field added later must match until
+someone exempts it by name."""
+
+NOT_RECORDED_WHEN_ABSENT: tuple[str, ...] = ("max_answer_turns",)
+"""The fields whose absence can only mean a record an older build wrote, so a refusal quotes an
+absent one "not recorded" (owner decision 47A). Every other field's value is quoted as it is:
+a schema-2 record's `profile_digest` of `None` means no profile, a `commit` of `None` that git
+could not answer."""
+
 
 class CompareError(ValueError):
     """A run, or a pair of runs, that may not be placed in a comparison."""
@@ -158,6 +266,9 @@ class RunRow(ReviewModel):
 
     run: str
     run_dir: str
+    """The run folder as the ledger names it (feature 014 `contracts/provenance.md` 6.3):
+    relative to the checkout's root with `/` inside it, as typed outside it."""
+
     commit: str | None
     lever: str | None
     arm: str | None
@@ -166,6 +277,26 @@ class RunRow(ReviewModel):
     model: str | None
     effort: str | None
     explanations_enabled: bool = False
+    model_view: ModelViewSettings
+    """The session's, which `_check_session` has held equal to a schema-2 record's;
+    `MODEL_VIEW_OFF` for a session written before feature 008, which that constant defines as
+    off."""
+
+    profile_recorded: bool
+    """Whether the record says which profile the run graded against, if any: false with no
+    record, or with one older than `RUN_START_SCHEMA`, whose `profile_digest` is absent rather
+    than none. The profile cell then reads unknown, never `none`."""
+
+    profile_digest: str | None
+    """The record's: the sha256 every standards finding of the run stamps; `None` with no
+    profile, and with no record."""
+
+    live_tools: bool | None
+    """The record's; `None` with no record, or one that did not record it."""
+
+    pane_defaults: bool | None
+    """The record's marker (PP-3); `None` with no record."""
+
     package_id: str
     held_out: bool
     other_levers_on: list[str]
@@ -183,7 +314,21 @@ class RunRow(ReviewModel):
     seconds_to_first_finding: float | None
     valid_findings: int
     missed_known_defects: int
+    flagged: int
+    flagged_below_expected: int
+    status_mismatches: int
+    cleared: int
+    """Four of the scorer's outcome lists, counted (feature 014 `scoring.md` 3.1): the defects
+    detected through an unresolved finding only, those met only below their expected status,
+    those credited above an expected unresolved, and those a `checked_within_scope` finding
+    cleared."""
+
     false_alarms: int
+    contradictions: int | None
+    confirmations: int | None
+    """The correct conditions contradicted and confirmed (`scoring.md` 3.2); `None`, rendered
+    `not assessed`, when the package's key holds no correct condition."""
+
     unresolved_count: int
     unresolved_because_withheld: int
     unresolved_other: int
@@ -193,6 +338,11 @@ class RunRow(ReviewModel):
     its gate is that the second does not move."""
 
     coverage_bucket_mix: dict[str, int]
+    findings_by_origin: dict[Origin, int]
+    false_alarms_by_origin: dict[Origin, int]
+    """Every origin, zeros included, in `Origin`'s order, as the scorer's aggregate counts them
+    (`scoring.md` 5.5); the cells leave the zeros out."""
+
     set_too_small_override: bool
 
 
@@ -247,6 +397,11 @@ class LeverDecision(ReviewModel):
     false_alarms: OffOn
     unresolved_count: OffOn
     recall_held_out: OffOn
+    recall_held_out_model: OffOn
+    recall_held_out_code: OffOn
+    """Recall of each producer's held-out known defects (feature 014 SP-13 A): reported beside
+    the overall recall, never gated on."""
+
     median_net_saved_minutes: OffOn
     """The number the pilot is judged on, across runs: the median of each run's own
     per-package median, with `n=` the runs that carried timing at all. Reported, never
@@ -271,6 +426,7 @@ class LeverDecision(ReviewModel):
     """The date beside the sign-off, written and carried by the same hand and the same
     rule. Rendered in its own column so FR-027's "with a date" has somewhere to live."""
     run_dirs: list[str]
+    """Each run folder as `RunRow.run_dir` names it."""
 
 
 class Ledger(ReviewModel):
@@ -285,6 +441,11 @@ class _LoadedRun:
 
     run: str
     run_dir: Path
+    """As typed: what a refusal names."""
+
+    ledger_dir: str
+    """As the ledger names it (`_ledger_dir`)."""
+
     provenance: RunProvenance | None
     scorecard: Scorecard
     sessions: dict[str, ReviewSession]
@@ -297,15 +458,18 @@ class _LoadedRun:
 # --- reading and validating one run directory ------------------------------------
 
 
-def _load_run(run_dir: Path) -> _LoadedRun:
+def _load_run(run_dir: Path, *, root: Path) -> _LoadedRun:
     scorecard_path = run_dir / SCORECARD_FILE
     if not scorecard_path.is_file():
         raise CompareError(
             f"{run_dir}: no {SCORECARD_FILE}; run `swreview benchmark score` on this run "
             f"before comparing it"
         )
-    scorecard = Scorecard.model_validate_json(scorecard_path.read_bytes())
+    # Before any session or parity check (feature 014 `scoring.md` 8): a folder scored under
+    # other rules meets the re-score line, never a refusal its old fields happen to trigger.
+    scorecard = read_scorecard(run_dir)
     provenance = load_provenance(run_dir)
+    _check_record(run_dir, provenance)
 
     sessions: dict[str, ReviewSession] = {}
     for score in scorecard.per_package:
@@ -317,13 +481,65 @@ def _load_run(run_dir: Path) -> _LoadedRun:
         sessions[score.package_id] = session
 
     _check_saved_set(run_dir, provenance)
+    _check_set_flags(run_dir, scorecard, root=root)
     return _LoadedRun(
         run=run_dir.name,
         run_dir=run_dir,
+        ledger_dir=_ledger_dir(run_dir, root=root),
         provenance=provenance,
         scorecard=scorecard,
         sessions=sessions,
     )
+
+
+def _ledger_dir(run_dir: Path, *, root: Path) -> str:
+    """A run folder as the ledger names it (feature 014 `contracts/provenance.md` 6.3).
+
+    Inside the checkout, relative to its root with `/` separators, however it was typed: the
+    committed table is rendered from absolute paths under `benchmarks/studies/` and would
+    otherwise carry the checkout's location. Outside it, as typed, which only a ledger written
+    outside the repository can hold (`_refuse_for_the_committed_ledger`). Inside is
+    `sets.checkout_relative`'s reading.
+    """
+    relative = sets.checkout_relative(run_dir, root=root)
+    return relative.as_posix() if relative is not None else str(run_dir)
+
+
+def _model_view_of(session: ReviewSession) -> ModelViewSettings:
+    """The session's model view; a session written before feature 008 carries none, which
+    means off (`MODEL_VIEW_OFF`)."""
+    return session.model_view if session.model_view is not None else MODEL_VIEW_OFF
+
+
+def _check_record(run_dir: Path, provenance: RunProvenance | None) -> None:
+    """The pane studies' and the baselines' run-level refusals, read off the record alone, so they
+    abort the ledger whatever the run scored (feature 014 `contracts/provenance.md` 3.2 and 3.3).
+
+    A run of either pane study names its arm, and a `pane_defaults` run is graded against the
+    checkout's example profile, which every committed case is keyed against (FR-027). The private
+    study takes the real profile.
+
+    Before them, a baseline's study (section 3.3): `_study_key` labels a baseline by its arm and
+    its marker alone, so a record with arm baseline and a lever other than none is refused as
+    inconsistent, as `check_study_arm` refuses `--arm baseline` with a study at run time. Labelled,
+    the pane baseline would drop its lever and a plain baseline would join that lever's study.
+    """
+    if provenance is not None and provenance.arm == BASELINE_ARM and provenance.lever != NO_LEVER:
+        raise CompareError(
+            f"{run_dir}: arm baseline with lever {provenance.lever!r}: a baseline run is the study "
+            "with no lever under test, so its lever is none; the record is inconsistent"
+        )
+    if provenance is None or provenance.lever not in PANE_STUDIES:
+        return
+    if provenance.arm is None:
+        raise CompareError(
+            f"{run_dir}: a run of the {provenance.lever} study has no arm; name the arm: on or off"
+        )
+    if provenance.lever == PANE_STUDY and provenance.profile_is_example is not True:
+        raise CompareError(
+            f"{run_dir}: a {PANE_STUDY} run grades against the checkout's example profile, and "
+            f"this one recorded profile_is_example {provenance.profile_is_example!r}"
+        )
 
 
 def _check_session(
@@ -366,26 +582,88 @@ def _check_session(
                     f"disagree on {field}: {written_value!r} against {recorded_value!r}"
                 )
 
-    _check_arm(run_dir, package_id, session.efficiency.model_dump(), provenance)
+    if provenance.provenance_schema >= RUN_START_SCHEMA:
+        if session.model_view != provenance.model_view:
+            raise CompareError(
+                f"{run_dir} / {package_id}: session.json and the provenance record disagree "
+                f"on model_view: {session.model_view!r} against {provenance.model_view!r}"
+            )
+        _check_profile_stamps(run_dir, package_id, session, provenance.profile_digest)
+
+    _check_arm(
+        run_dir, package_id, session.efficiency.model_dump(), _model_view_of(session), provenance
+    )
+
+
+def _check_profile_stamps(
+    run_dir: Path, package_id: str, session: ReviewSession, profile_digest: str | None
+) -> None:
+    """Every standards finding's profile stamp against the record's `profile_digest` (US2-3).
+
+    Read through `stamped_profile_digest`, the one parser of the stamp, in either form: the
+    path-bearing one findings carried before feature 014's D12 and the file-name one after it. A
+    stamp on a run that recorded no profile is refused too: the record says the review graded
+    against none.
+    """
+    for finding in session.findings:
+        if not finding.check.startswith(STANDARDS_CHECK_PREFIX):
+            continue
+        stamped = stamped_profile_digest(finding.coverage_limits)
+        if stamped == profile_digest:
+            continue
+        where = f"{run_dir} / {package_id}: {finding.id} ({finding.check})"
+        if profile_digest is None:
+            raise CompareError(
+                f"{where} stamps the profile {stamped!r}, but the provenance record recorded no "
+                "profile"
+            )
+        raise CompareError(
+            f"{where} and the provenance record disagree on profile_digest: {stamped!r} against "
+            f"{profile_digest!r}"
+        )
 
 
 def _check_arm(
-    run_dir: Path, package_id: str, flags: dict[str, bool], provenance: RunProvenance
+    run_dir: Path,
+    package_id: str,
+    flags: dict[str, bool],
+    view: ModelViewSettings,
+    provenance: RunProvenance,
 ) -> None:
-    """The arm against the studied lever's own flag - a second clause, not a narrowing.
+    """The arm against its settings - a second clause, not a narrowing.
 
-    A baseline run has no lever under test and is exempt; it is checked instead as every
-    flag false (contracts/ab-harness.md section 3).
+    A baseline run, `arm == "baseline"` and only that (feature 014 `contracts/provenance.md`
+    3.3: a run with no arm is a raw row whatever it switched on), has no lever under test: the
+    plain baseline is checked as every flag false and `MODEL_VIEW_OFF`, the pane baseline by its
+    marker and settings that are not all off. A pane study's arm is `_check_pane_arm`'s; a lever
+    study's is checked against the studied lever's own flag (contracts/ab-harness.md section 3).
     """
-    if provenance.arm == BASELINE_ARM or provenance.lever == NO_LEVER:
-        on = sorted(name for name in LEVER_NAMES if flags[name])
+    on = sorted(name for name in LEVER_NAMES if flags[name])
+    changes = [*on, *(["model_view"] if view != MODEL_VIEW_OFF else [])]
+    if provenance.arm == BASELINE_ARM:
+        if provenance.pane_defaults:
+            if not changes:
+                raise CompareError(
+                    f"{run_dir} / {package_id}: a pane baseline carries pane_defaults, but "
+                    "every lever and the model view are off: mislabelled, it would measure the "
+                    "plain baseline"
+                )
+            return
         if on:
             raise CompareError(
                 f"{run_dir} / {package_id}: a baseline run has every flag off, but "
                 f"{', '.join(on)} is on"
             )
+        if view != MODEL_VIEW_OFF:
+            raise CompareError(
+                f"{run_dir} / {package_id}: a baseline run has the model view off, but it is "
+                f"{view!r}; the pane baseline is --arm baseline --pane-defaults"
+            )
         return
     if provenance.arm is None:
+        return
+    if provenance.lever in PANE_STUDIES:
+        _check_pane_arm(run_dir, package_id, changes, provenance)
         return
     if provenance.lever not in flags:
         raise CompareError(f"{run_dir}: provenance names an unknown lever {provenance.lever!r}")
@@ -394,6 +672,39 @@ def _check_arm(
             f"{run_dir} / {package_id}: the provenance record says arm "
             f"{provenance.arm!r} while session.efficiency has {provenance.lever} "
             f"{flags[provenance.lever]}"
+        )
+
+
+def _check_pane_arm(
+    run_dir: Path, package_id: str, changes: list[str], provenance: RunProvenance
+) -> None:
+    """A pane study's arm against the constants that define it (feature 014 PP-3).
+
+    `changes` is every lever on, and `model_view` when the view is not `MODEL_VIEW_OFF`. The off
+    arm has every change off and the marker false; the on arm carries the marker and settings
+    that are not the off arm's, or it would measure nothing. Never re-derived from today's
+    `pane_defaults()`: the run-time rule made the on arm's settings the pane's at the run's
+    commit, and re-deriving them would refuse every recorded pane study the day the defaults
+    change.
+    """
+    study = provenance.lever
+    if provenance.arm == "off":
+        found = [*changes, *(["pane_defaults"] if provenance.pane_defaults else [])]
+        if found:
+            raise CompareError(
+                f"{run_dir} / {package_id}: the off arm of {study} has every change off, but "
+                f"{', '.join(found)} is on"
+            )
+        return
+    if not provenance.pane_defaults:
+        raise CompareError(
+            f"{run_dir} / {package_id}: the on arm of {study} is exactly --pane-defaults, but "
+            "its record carries pane_defaults false"
+        )
+    if not changes:
+        raise CompareError(
+            f"{run_dir} / {package_id}: the on arm of {study} has every lever off and the model "
+            "view off: mislabelled, it would measure nothing"
         )
 
 
@@ -415,6 +726,79 @@ def _check_saved_set(run_dir: Path, provenance: RunProvenance | None) -> None:
         )
 
 
+def _check_set_flags(run_dir: Path, scorecard: Scorecard, *, root: Path) -> None:
+    """Each scored package's saved-set entry against its scored items (feature 014 FR-032's
+    compare half; plan decisions RF-39, RF-62).
+
+    The `held_out` flag is derived from the key: true exactly when some graded item is tagged
+    held out. Compare reads no key, so it reads the scorecard's copy of its tags, `graded_items`;
+    `score` made the same check against the key itself, a package that then failed included. A
+    scored package the saved set does not hold is refused too. Only where the saved copy is
+    there, as `_check_saved_set`; read through `load_saved_set`, whose relative entries resolve
+    against `root`, the reader's checkout.
+    """
+    saved = run_dir / SAVED_SET_FILE
+    if not saved.is_file():
+        return
+    flags = {ref.package_id: ref.held_out for ref in sets.load_saved_set(saved, root=root).packages}
+    for score in scorecard.per_package:
+        if score.package_id not in flags:
+            raise CompareError(
+                f"{run_dir}: {score.package_id} is scored but not in the run's saved set"
+            )
+        held = sum(1 for item in score.graded_items if item.tag == "held_out")
+        flag = flags[score.package_id]
+        if flag != (held > 0):
+            raise CompareError(
+                f"{run_dir}: the saved set marks {score.package_id} held_out={json.dumps(flag)}, "
+                f"but its scored items hold {held} held-out items; the flag is derived from the "
+                "key"
+            )
+
+
+def _refuse_for_the_committed_ledger(run: _LoadedRun, *, root: Path) -> None:
+    """FR-051's compare half (feature 014 `contracts/provenance.md` 6.4; PROV-09; US2-10), for a
+    ledger written where the repository may commit it: it holds only fictional-profile studies
+    over committed cases, from run folders the repository holds.
+
+    Refused: a run graded against a profile other than the fictional example
+    (`profile_is_example` false), one whose saved set names an absolute path, and one whose
+    folder is not committable (`runner.committable`: outside the checkout at `root`, or ignored
+    there). A run that recorded no profile (`profile_is_example` null) is not refused: it graded
+    against none.
+    """
+    provenance = run.provenance
+    another_profile = provenance is not None and provenance.profile_is_example is False
+    if (
+        another_profile
+        or _names_an_absolute_path(run.run_dir / SAVED_SET_FILE)
+        or not committable(run.run_dir, root=root)
+    ):
+        raise CompareError(
+            "the committed ledger holds only fictional-profile studies over committed cases, "
+            f"from run folders the repository holds (FR-051): render {run.run_dir} with --out "
+            "outside the repository"
+        )
+
+
+def _names_an_absolute_path(saved: Path) -> bool:
+    """Whether the saved set at `saved` names a path absolutely, a package's, a key's or a case
+    file's (every path `sets.named_paths` reads off an entry): a private entry, or a copy saved
+    before feature 014, which resolved every path (`contracts/provenance.md` 6.1).
+
+    Read off the saved bytes, since `load_saved_set` resolves every entry. Absolute in either
+    platform's spelling, a drive, a share or a root, which is what a Windows path's anchor
+    reads, so a copy saved on another platform is read alike. A run with no saved copy names
+    none.
+    """
+    if not saved.is_file():
+        return False
+    entries = json.loads(saved.read_text(encoding="utf-8"))["packages"]
+    return any(
+        PureWindowsPath(named).anchor for entry in entries for named in sets.named_paths(entry)
+    )
+
+
 # --- the raw rows ------------------------------------------------------------------
 
 
@@ -427,9 +811,10 @@ def _row(run: _LoadedRun, score: PackageScore) -> RunRow:
     studied = provenance.lever if provenance is not None else None
     info = session.provider_info
     coverage = session.coverage
+    profile_recorded = provenance is not None and provenance.provenance_schema >= RUN_START_SCHEMA
     return RunRow(
         run=run.run,
-        run_dir=str(run.run_dir),
+        run_dir=run.ledger_dir,
         commit=provenance.commit if provenance is not None else None,
         lever=studied,
         arm=provenance.arm if provenance is not None else None,
@@ -438,6 +823,11 @@ def _row(run: _LoadedRun, score: PackageScore) -> RunRow:
         model=info.model if info is not None else session.model,
         effort=info.effort_mapping.requested if info is not None else None,
         explanations_enabled=session.explanations_enabled,
+        model_view=_model_view_of(session),
+        profile_recorded=profile_recorded,
+        profile_digest=provenance.profile_digest if provenance is not None else None,
+        live_tools=provenance.live_tools if provenance is not None else None,
+        pane_defaults=provenance.pane_defaults if provenance is not None else None,
         package_id=score.package_id,
         held_out=score.held_out,
         other_levers_on=sorted(name for name in LEVER_NAMES if flags.get(name) and name != studied),
@@ -455,7 +845,13 @@ def _row(run: _LoadedRun, score: PackageScore) -> RunRow:
         seconds_to_first_finding=score.seconds_to_first_finding,
         valid_findings=score.valid_findings,
         missed_known_defects=score.missed_known_defects,
+        flagged=len(score.flagged_defect_ids),
+        flagged_below_expected=len(score.flagged_below_expected_defect_ids),
+        status_mismatches=len(score.status_mismatch_defect_ids),
+        cleared=len(score.cleared_defect_ids),
         false_alarms=score.false_alarms,
+        contradictions=length_or_none(score.contradicted_condition_ids),
+        confirmations=length_or_none(score.confirmed_condition_ids),
         unresolved_count=score.unresolved_count,
         unresolved_because_withheld=score.unresolved_because_withheld,
         unresolved_other=score.unresolved_other,
@@ -463,6 +859,8 @@ def _row(run: _LoadedRun, score: PackageScore) -> RunRow:
             bucket: len(getattr(coverage, bucket))
             for bucket in ("checked", "skipped", "unresolved", "failed", "out_of_scope")
         },
+        findings_by_origin=by_origin(final_state_origins(score)),
+        false_alarms_by_origin=by_origin(false_alarm_origins(score)),
         set_too_small_override=(
             provenance.set_too_small_override if provenance is not None else False
         ),
@@ -473,41 +871,113 @@ def _row(run: _LoadedRun, score: PackageScore) -> RunRow:
 
 
 def _study_key(run: _LoadedRun) -> tuple[str, str | None, str | None] | None:
-    """One study is one lever, one provider and one model. A run with no provenance
-    belongs to none: it renders as a raw row and gates nothing."""
-    if run.provenance is None or run.provenance.arm is None:
+    """One study is one label, one provider and one model (feature 014
+    `contracts/provenance.md` 3.1): the label is the lever, but the pane baseline's is
+    `PANE_BASELINE_LABEL`. A run with no provenance, or no arm, belongs to none: it renders as a
+    raw row and gates nothing."""
+    provenance = run.provenance
+    if provenance is None or provenance.arm is None:
         return None
-    return (run.provenance.lever, run.provenance.provider, run.provenance.model)
+    pane_baseline = provenance.arm == BASELINE_ARM and provenance.pane_defaults
+    label = PANE_BASELINE_LABEL if pane_baseline else provenance.lever
+    return (label, provenance.provider, provenance.model)
 
 
-def _check_one_study(runs: Sequence[_LoadedRun]) -> None:
+def _check_one_study(
+    key: tuple[str, str | None, str | None], runs: Sequence[_LoadedRun]
+) -> None:
     """Refuse to place two runs in one comparison when what was fixed was not.
 
-    The provider and the model are part of the study key, so two models are two studies
-    rather than one refusal; commit, effort, set file and checklist are the four that
-    must be equal *within* a study, with no declared exception.
+    Every field of the record must be equal but the named exemptions (feature 014
+    `contracts/provenance.md` 4): the run's identity, the record-only field and the study key
+    always, so two models are two studies rather than one refusal; the arm across the arms; and
+    across a pane study's arms what it varies, across a lever study's the studied lever's own
+    flag. Each run is held against the first run of its own arm, and the first run of each arm
+    against the study's first, so a difference within one arm is caught as well as one across
+    them. There is no other exception.
 
     Then the repetitions, which is what stops a six-run set being one run counted six
     times: within an arm every `rep` is distinct, and a gated arm (`off` or `on`) has one
     at all. `adoption.MIN_REPS` counts runs, and without this it is satisfied by copies.
     A baseline arm is exempt from the second clause only: it gates nothing.
     """
-    first = runs[0].provenance
-    assert first is not None
-    for run in runs[1:]:
-        other = run.provenance
-        assert other is not None
-        for field in (
-            "commit", "effort", "set_digest", "checklist_digest", "max_steps",
-            "explanations_enabled",
-        ):
-            if getattr(first, field) != getattr(other, field):
-                raise CompareError(
-                    f"{runs[0].run_dir} and {run.run_dir} cannot be placed in one "
-                    f"comparison: {field} differs "
-                    f"({getattr(first, field)!r} against {getattr(other, field)!r})"
-                )
+    label = key[0]
+    always = (*RUN_IDENTITY, *RECORD_ONLY, *STUDY_KEY_FIELDS)
+    across = (*always, *ACROSS_ARMS, *(ACROSS_PANE_ARMS if label in PANE_STUDIES else ()))
+    studied = label if label in LEVER_NAMES else None
+    first_of_arm: dict[str | None, _LoadedRun] = {}
+    for run in runs:
+        assert run.provenance is not None
+        arm = run.provenance.arm
+        if arm in first_of_arm:
+            _refuse_a_difference(first_of_arm[arm], run, exempt=always)
+            continue
+        first_of_arm[arm] = run
+        if run is not runs[0]:
+            _refuse_a_difference(runs[0], run, exempt=across, studied=studied)
+    _check_key_digests(runs)
     _check_repetitions(runs)
+
+
+def _refuse_a_difference(
+    first: _LoadedRun,
+    other: _LoadedRun,
+    *,
+    exempt: Sequence[str],
+    studied: str | None = None,
+) -> None:
+    """Refuse `other` beside `first` on the first field of the record, in its own order, that
+    differs and that `exempt` does not name.
+
+    One loop over `RunProvenance.model_fields`, so a field added later must match until it is
+    exempted by name. `efficiency` is compared flag by flag, so the refusal names the flag, and
+    `studied`, the lever under test across a lever study's arms, is skipped. Each value is
+    quoted by `_quoted`.
+    """
+    one, two = first.provenance, other.provenance
+    assert one is not None and two is not None
+    for name in RunProvenance.model_fields:
+        if name in exempt:
+            continue
+        if name == "efficiency":
+            pairs = [
+                (f"efficiency.{flag}", getattr(one.efficiency, flag), getattr(two.efficiency, flag))
+                for flag in LEVER_NAMES
+                if flag != studied
+            ]
+        else:
+            pairs = [(name, getattr(one, name), getattr(two, name))]
+        for field, value, other_value in pairs:
+            if value != other_value:
+                raise CompareError(
+                    f"{first.run_dir} and {other.run_dir} cannot be placed in one "
+                    f"comparison: {field} differs ({_quoted(field, value)} against "
+                    f"{_quoted(field, other_value)})"
+                )
+
+
+def _quoted(field: str, value: object) -> str:
+    """A record's value as a must-match refusal quotes it: "not recorded" for an absent field
+    `NOT_RECORDED_WHEN_ABSENT` names, its `repr` otherwise (owner decision 47A)."""
+    if value is None and field in NOT_RECORDED_WHEN_ABSENT:
+        return "not recorded"
+    return repr(value)
+
+
+def _check_key_digests(runs: Sequence[_LoadedRun]) -> None:
+    """One key per package across a study (feature 014 INT-16): an arm scored against an
+    edited key measures the edit, and a private key is not pinned by the commit."""
+    seen: dict[str, tuple[str, Path]] = {}
+    for run in runs:
+        for package_id, digest in run.scorecard.key_sha256.items():
+            first_digest, first_run = seen.setdefault(package_id, (digest, run.run_dir))
+            if digest != first_digest:
+                raise CompareError(
+                    f"{first_run} and {run.run_dir} cannot be placed in one comparison: they "
+                    f"were scored against two versions of {package_id}'s answer key "
+                    f"(key_sha256 {first_digest} against {digest}); re-score both against one "
+                    "key"
+                )
 
 
 def _check_repetitions(runs: Sequence[_LoadedRun]) -> None:
@@ -654,11 +1124,10 @@ def _decision_row(
     key: tuple[str, str | None, str | None], runs: Sequence[_LoadedRun]
 ) -> LeverDecision:
     lever, provider, model = key
-    _check_one_study(runs)
     arms = [(run, run.provenance.arm) for run in runs if run.provenance is not None]
     off = [_arm_run(run) for run, arm in arms if arm != "on"]
     on = [_arm_run(run) for run, arm in arms if arm == "on"]
-    baseline = lever == NO_LEVER
+    baseline = lever in BASELINE_LABELS
 
     verdict = (
         Verdict(
@@ -705,13 +1174,15 @@ def _decision_row(
         false_alarms=stats["false_alarms"],
         unresolved_count=stats["unresolved_count"],
         recall_held_out=stats["recall_held_out"],
+        recall_held_out_model=stats["recall_held_out_model"],
+        recall_held_out_code=stats["recall_held_out_code"],
         median_net_saved_minutes=stats["median_net_saved_minutes"],
         worst_case_defects_lost=verdict.worst_case_defects_lost,
         lost_defect_ids=verdict.lost_defect_ids,
         lever_counter=_counter(lever, off, on),
         decision=verdict.decision,
         decision_reason=verdict.reason,
-        run_dirs=[str(run.run_dir) for run in runs],
+        run_dirs=[run.ledger_dir for run in runs],
     )
 
 
@@ -726,12 +1197,69 @@ def _commit_of(runs: Sequence[_LoadedRun], *, on_arm: bool) -> str | None:
     return None
 
 
+# --- what a pane study's arms differed in (feature 014 `contracts/provenance.md` 3.5) ------
+
+
+@dataclass(frozen=True)
+class SettingsDiffered:
+    """What a pane study's two arms differed in, and which recorded settings act on nothing on
+    its provider (FR-052). The verdict prints both (US2-8)."""
+
+    arms_differed_in: tuple[str, ...]
+    """The efficiency and model-view fields whose values differ between the arms, in the
+    record's field order."""
+
+    inert: tuple[str, ...]
+    """The settings the record names inert, whether or not the arms differed in them: Gemini's
+    parallel calls are recorded off in both arms and made in parallel in both."""
+
+
+def settings_differed(off: RunProvenance, on: RunProvenance) -> SettingsDiffered:
+    """The settings the off and the on arm's records differ in, and the inert ones the record
+    names (`inert_settings` matches across a study, so either arm's is the study's)."""
+    off_settings, on_settings = _settings_of(off), _settings_of(on)
+    return SettingsDiffered(
+        arms_differed_in=tuple(
+            name for name, value in on_settings.items() if value != off_settings[name]
+        ),
+        inert=on.inert_settings if on.inert_settings is not None else (),
+    )
+
+
+def _settings_of(record: RunProvenance) -> dict[str, object]:
+    """A record's efficiency flags and model-view fields by name; a model view the record did
+    not record reads each field unknown (`None`), which differs from any recorded value."""
+    view = (
+        record.model_view.model_dump()
+        if record.model_view is not None
+        else dict.fromkeys(ModelViewSettings.model_fields)
+    )
+    return {**record.efficiency.model_dump(), **view}
+
+
 # --- the ledger --------------------------------------------------------------------
 
 
-def compare_runs(run_dirs: Sequence[Path | str]) -> Ledger:
-    """Read N run directories and build the ledger. Contacts nothing and starts nothing."""
-    loaded = [_load_run(path) for path in _distinct(run_dirs)]
+def compare_runs(
+    run_dirs: Sequence[Path | str],
+    *,
+    root: Path | None = None,
+    committed_ledger: bool = False,
+) -> Ledger:
+    """Read N run directories and build the ledger. Contacts nothing and starts nothing.
+
+    `root` is the checkout a saved set's relative entries resolve against and a run folder
+    inside it is named relative to: `sets.REPO_ROOT`, read at call time, unless the caller names
+    another (feature 014 `contracts/provenance.md` 6.1, 6.3). `committed_ledger` says the ledger
+    is written where the repository may commit it, which refuses every run
+    `_refuse_for_the_committed_ledger` names (6.4). Every study is checked; a pane study renders
+    its raw rows and no decision row.
+    """
+    checkout = sets.REPO_ROOT if root is None else root
+    loaded = [_load_run(path, root=checkout) for path in _distinct(run_dirs)]
+    if committed_ledger:
+        for run in loaded:
+            _refuse_for_the_committed_ledger(run, root=checkout)
     rows = [_row(run, score) for run in loaded for score in run.scorecard.per_package]
 
     studies: dict[tuple[str, str | None, str | None], list[_LoadedRun]] = {}
@@ -739,10 +1267,16 @@ def compare_runs(run_dirs: Sequence[Path | str]) -> Ledger:
         key = _study_key(run)
         if key is not None:
             studies.setdefault(key, []).append(run)
+    for key, runs in studies.items():
+        _check_one_study(key, runs)
 
     return Ledger(
         runs=rows,
-        levers=[_decision_row(key, runs) for key, runs in studies.items()],
+        levers=[
+            _decision_row(key, runs)
+            for key, runs in studies.items()
+            if key[0] not in PANE_STUDIES
+        ],
     )
 
 
@@ -842,6 +1376,9 @@ RUN_COLUMNS: tuple[str, ...] = (
     "model",
     "effort",
     "explanations",
+    "model view",
+    "profile",
+    "live tools",
     "package",
     "input",
     "cached in",
@@ -857,12 +1394,23 @@ RUN_COLUMNS: tuple[str, ...] = (
     "s to 1st finding",
     "valid",
     "missed",
+    "flagged",
+    "below expected",
+    "status mismatch",
+    "cleared",
     "false alarms",
+    "contradicted",
+    "confirmed",
     "unresolved",
     "unresolved withheld",
     "unresolved other",
     "coverage bucket mix",
+    "findings by origin",
+    "false alarms by origin",
 )
+"""The run table's final order, fixed up front (feature 014 `contracts/provenance.md` 5; plan
+decision INT-10), so the committed header is regenerated once. No run-status column: its source
+arrives with the robustness slice, and a column added then would regenerate it a second time."""
 
 LEVER_COLUMNS: tuple[str, ...] = (
     "Lever",
@@ -881,6 +1429,7 @@ LEVER_COLUMNS: tuple[str, ...] = (
     "Dump wall clock off -> on",
     "Valid / missed / false alarms / unresolved off -> on",
     "Recall (held out) off -> on",
+    "Recall by producer (held out) off -> on",
     "Median net saved minutes off -> on",
     "Worst-case defects lost",
     "Lever-specific counter",
@@ -896,8 +1445,37 @@ def _header(columns: Sequence[str]) -> list[str]:
     return ["| " + " | ".join(columns) + " |", "|" + "---|" * len(columns)]
 
 
+def _mix(counts: Mapping[str, int]) -> str:
+    """A mix, `name count / name count / ...`, in the order `counts` holds."""
+    return " / ".join(f"{name} {count}" for name, count in counts.items())
+
+
+def _model_view_cell(view: ModelViewSettings) -> str:
+    """`pane` for `MODEL_VIEW_PANE`, otherwise the switches that are on, `slimming`, `pruning
+    after N` or both, and `off` with neither: `MODEL_VIEW_OFF`, and a view whose prune count
+    differs with pruning itself off (feature 014 `contracts/provenance.md` 5)."""
+    if view == MODEL_VIEW_PANE:
+        return "pane"
+    switches = [
+        *(["slimming"] if view.payload_slimming else []),
+        *([f"pruning after {view.prune_after_rounds}"] if view.history_pruning else []),
+    ]
+    return ", ".join(switches) or "off"
+
+
+def _profile_cell(row: RunRow) -> str:
+    """The profile's digest through `display_digest`, the one 12-character reading (plan decision
+    RF-5); `none` with no profile, and `unknown` where the record does not say."""
+    if not row.profile_recorded:
+        return UNKNOWN
+    return "none" if row.profile_digest is None else display_digest(row.profile_digest)
+
+
+def _yes_no(value: bool | None) -> str:
+    return UNKNOWN if value is None else ("yes" if value else "no")
+
+
 def _run_line(row: RunRow) -> str:
-    mix = " / ".join(f"{bucket} {count}" for bucket, count in row.coverage_bucket_mix.items())
     cells = (
         row.run,
         _text(row.commit),
@@ -908,6 +1486,9 @@ def _run_line(row: RunRow) -> str:
         _text(row.model),
         _text(row.effort),
         "on" if row.explanations_enabled else "off",
+        _model_view_cell(row.model_view),
+        _profile_cell(row),
+        _yes_no(row.live_tools),
         row.package_id,
         _count(row.input_tokens),
         _count(row.cached_input_tokens),
@@ -923,11 +1504,19 @@ def _run_line(row: RunRow) -> str:
         _count(row.seconds_to_first_finding),
         _count(row.valid_findings),
         _count(row.missed_known_defects),
+        _count(row.flagged),
+        _count(row.flagged_below_expected),
+        _count(row.status_mismatches),
+        _count(row.cleared),
         _count(row.false_alarms),
+        fmt_assessed(row.contradictions),
+        fmt_assessed(row.confirmations),
         _count(row.unresolved_count),
         _count(row.unresolved_because_withheld),
         _count(row.unresolved_other),
-        mix,
+        _mix(row.coverage_bucket_mix),
+        fmt_origins(row.findings_by_origin, separator=" / "),
+        fmt_origins(row.false_alarms_by_origin, separator=" / "),
     )
     return "| " + " | ".join(cells) + " |"
 
@@ -959,6 +1548,14 @@ def _quality(row: LeverDecision) -> str:
     )
 
 
+def _recall_by_producer(row: LeverDecision) -> str:
+    """Each producer's held-out recall, named, off -> on (feature 014 SP-13 A)."""
+    return (
+        f"model: {_off_on(row.recall_held_out_model)} ; "
+        f"code: {_off_on(row.recall_held_out_code)}"
+    )
+
+
 def _lever_line(row: LeverDecision) -> str:
     cells = (
         row.lever,
@@ -978,6 +1575,7 @@ def _lever_line(row: LeverDecision) -> str:
         _off_on(row.dump_wall_clock_s),
         _quality(row),
         _off_on(row.recall_held_out),
+        _recall_by_producer(row),
         _off_on(row.median_net_saved_minutes),
         _count(row.worst_case_defects_lost),
         _counter_cell(row.lever_counter),
@@ -1017,6 +1615,9 @@ def render_ledger_md(ledger: Ledger) -> str:
         "`wall clock s` is the session's own `started_at` to `ended_at`, **not** "
         "`unattended_runtime_minutes`, which the benchmark runner overwrites with a span "
         "that also covers package load and adapter construction.",
+        "",
+        "`tool calls` is `len(session.steps)`, every step of the review: the pre-run's and the "
+        "regrade's steps are counted with the model's, not split by the step mark.",
     ]
     return "\n".join(lines) + "\n"
 

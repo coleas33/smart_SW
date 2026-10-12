@@ -1,0 +1,3 @@
+{
+  "callable": "swreview.checks.thread_pitch:run_thread_checks"
+}

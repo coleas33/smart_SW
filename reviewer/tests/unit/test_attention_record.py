@@ -35,7 +35,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
-import swreview.report.attention_record as attention_record_module
+from swreview import atomic
 from swreview.agent import runner
 from swreview.agent.providers.fake import FakeProvider, ScriptedTurn
 from swreview.checks.rms.run import RmsScope, is_check_folder, run_rms_check
@@ -178,13 +178,56 @@ def test_a_failed_replacement_keeps_the_previous_record_and_cleans_its_temp_file
     def fail_replace(source: str, destination: Path) -> None:
         raise OSError(f"cannot replace {destination} from {source}")
 
-    monkeypatch.setattr(attention_record_module.os, "replace", fail_replace)
+    monkeypatch.setattr(atomic.os, "replace", fail_replace)
     with pytest.raises(OSError, match="cannot replace"):
         write_attention_record(review_dir, review_ranking, review_session_id)
 
     assert record_file.read_bytes() == before
     assert not list(review_dir.glob(f".{ATTENTION_FILE_NAME}.*.tmp"))
     assert read_attention_record(review_dir).session_id == review_session_id
+
+
+def test_the_record_is_written_through_the_one_atomic_writer_with_lf_bytes(
+    review_dir: Path,
+    review_ranking: Ranking,
+    review_session_id: UUID,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Owner decision 34A: the record goes through `atomic.write_atomic`, the product's one
+    atomic writer, as exactly the bytes of its JSON, so `\\n` stays `\\n` on Windows too
+    (a text-mode write gave `\\r\\n` there); a failed replace keeps the previous record and
+    leaves no temporary, and a successful one replaces an older record of other bytes whole."""
+    record_file = review_dir / ATTENTION_FILE_NAME
+    expected = (
+        AttentionRecord.of(review_ranking, review_session_id).model_dump_json(indent=2) + "\n"
+    ).encode("utf-8")
+    older = b'{"an older record": "' + b"x" * len(expected) + b'"}\n'
+    record_file.write_bytes(older)
+
+    def fail_replace(source: str, destination: Path) -> None:
+        raise OSError(f"cannot replace {destination} from {source}")
+
+    with monkeypatch.context() as patched:
+        patched.setattr(atomic.os, "replace", fail_replace)
+        with pytest.raises(OSError, match="cannot replace"):
+            write_attention_record(review_dir, review_ranking, review_session_id)
+
+    assert record_file.read_bytes() == older
+    assert not list(review_dir.glob(f".{ATTENTION_FILE_NAME}.*.tmp"))
+
+    real_write_atomic = atomic.write_atomic
+    calls: list[tuple[Path, bytes]] = []
+
+    def spy(path: Path, data: bytes) -> None:
+        calls.append((path, data))
+        real_write_atomic(path, data)
+
+    monkeypatch.setattr(atomic, "write_atomic", spy)
+    written = write_attention_record(review_dir, review_ranking, review_session_id)
+
+    assert calls == [(record_file, expected)]
+    assert written.read_bytes() == expected
+    assert b"\r" not in written.read_bytes()
 
 
 def test_no_percent_sign_reaches_the_record(

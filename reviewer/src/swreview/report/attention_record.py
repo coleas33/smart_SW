@@ -30,11 +30,10 @@ pure module keeps importing nothing that does I/O.
 
 from __future__ import annotations
 
-import os
-import tempfile
 from pathlib import Path
 from uuid import UUID
 
+from swreview import atomic
 from swreview.findings import ReviewModel
 from swreview.report.attention import AttentionRow, CoverageBlock, NotAmplified, Ranking
 from swreview.report.session import SESSION_FILE_NAME, load_session
@@ -123,26 +122,7 @@ def write_attention_record(directory: Path | str, ranking: Ranking, session_id: 
     # soon as that state is visible. Writing in place briefly exposes an empty/truncated
     # JSON file to that reader. Replace the completed file instead, so readers see either
     # the previous valid record or this complete one, never a partial document.
-    temporary_name: str | None = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=target,
-            prefix=f".{ATTENTION_FILE_NAME}.",
-            suffix=".tmp",
-            delete=False,
-        ) as temporary:
-            temporary_name = temporary.name
-            temporary.write(record.model_dump_json(indent=2) + "\n")
-        os.replace(temporary_name, record_file)
-        temporary_name = None
-    finally:
-        if temporary_name is not None:
-            try:
-                Path(temporary_name).unlink()
-            except FileNotFoundError:
-                pass
+    atomic.write_atomic(record_file, (record.model_dump_json(indent=2) + "\n").encode("utf-8"))
     return record_file
 
 

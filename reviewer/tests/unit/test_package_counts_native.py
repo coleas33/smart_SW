@@ -45,6 +45,9 @@ TODAY: dict[str, tuple[str, str, int]] = {
     "golden/fixtures/cover-blind-tap": ("dbba4226c0e1f0f3", "635a2e5758ca48bc", 0),
     "golden/fixtures/joint-bottoming": ("f8df1ccf2825d9d0", "d94b0f86ad59128a", 0),
     "golden/fixtures/joint-ok": ("f8df1ccf2825d9d0", "d94b0f86ad59128a", 0),
+    # Feature 014 T026, owner decision 19A: new with the unknown-role golden, pinned from its
+    # own output.
+    "golden/fixtures/joint-unknown-role": ("ed78cd35058fe410", "da73de79e2f12418", 0),
     "golden/fixtures/joint-unsupported": ("f8df1ccf2825d9d0", "d94b0f86ad59128a", 0),
     "golden/fixtures/mixed-units": ("4c1160b5d03154da", "d68d67e3efc25e79", 0),
     "golden/fixtures/plate-stack": ("eab35adb4cb414ca", "81357ce7d45ee980", 0),
@@ -158,6 +161,9 @@ TODAY: dict[str, tuple[str, str, int]] = {
     ),
     "golden/fixtures/standards-unknown": ("6f499317928b1485", "782822ee80b30573", 1),
     "golden/fixtures/thread-mismatch": ("f8df1ccf2825d9d0", "d94b0f86ad59128a", 0),
+    # Feature 010's thread pitch amendment (T118): new with that round, pinned from its own output.
+    "golden/fixtures/thread-pitch-flags": ("2bb17bd5673b56ee", "4458eccfb6bf421f", 0),
+    "golden/fixtures/thread-pitch-not-checked": ("33658cbaf12ba847", "0cfcfdabdfe9b09f", 0),
     "golden/fixtures/tool-envelope": ("f8df1ccf2825d9d0", "d94b0f86ad59128a", 0),
 }
 

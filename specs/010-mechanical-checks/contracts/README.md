@@ -6,7 +6,8 @@
 | Interference outcomes: finding or contact, the `Contact` record, `ReviewSession.contacts`, the report's Contacts section, thread-model contacts, the replay's reclassification | `contacts.md` | `checks/interference.py`, `tools/checks_interference.py` → `session.json`, `report.md`, feature 009's pane, feature 008's replay |
 | The joint map: hole instances, gates, assignment, members, placement, kinds, candidates, coverage, ids, thresholds | `joint-map.md` | `checks/joints.py` → every joint check, `check_joints`, the report's coverage |
 | Alignment and the stack-up: fixed and floating clearance, the position budget callout, the zone-radius rule, the stack models and verdicts | `alignment.md` | `checks/joint_alignment.py`, `checks/result.py`, `checks/hole_alignment.py` → `hole.nominal_alignment`, `hole.position_stack`, `hole.coaxiality` |
-| Fasteners: the name grammar and the shared vector table, recognition, the shank band, placement, the placed screw, the engagement rule, the extractor candidate gate | `fasteners.md` | `checks/fastener_names.py`, `checks/fastener_identity.py`, `checks/fastener.py`, `FastenerNameParser.cs`, `FastenerDumper.cs` → `fastener.*` findings |
+| Fasteners: the name grammar and the shared vector table, recognition, the shank band, placement, the placed screw, the engagement rule, the extractor candidate gate; since 2026-10-08, thread pitch (section 8) | `fasteners.md` | `checks/fastener_names.py`, `checks/fastener_identity.py`, `checks/fastener.py`, `FastenerNameParser.cs`, `FastenerDumper.cs` → `fastener.*` findings; `checks/coarse_pitch.py`, `checks/thread_pitch.py`, `check_threads` → `thread.*` findings |
+| The coarse-pitch table (2026-10-08): ISO 261 coarse pitches, the fine-only diameters, ASME B1.1 UNC threads per inch | `coarse-pitch.json` | the one source → `checks/coarse_pitch.yaml` and `Fasteners/CoarsePitch.cs`, each pinned to it by a test (`fasteners.md` section 8.3) |
 | Tool access: head plane and direction, tool choice, reach, the sweep, head fit | `tool-access.md` | `checks/tool_access.py` → `fastener.head_clearance`, `fastener.head_fit` |
 | Mass and material: the material-class table, the three checks, the coverage count, the extractor override read | `mass-material.md` | `checks/material_classes.py`, `checks/mass.py`, `PropertyDumper.cs` → `mass.*` findings |
 | Hygiene: the five checks, the profile names, the data card's zero-match profile error | `hygiene.md` | `checks/hygiene.py`, `checks/standards/document.py` → `hygiene.*` findings, the standards data card |
@@ -19,7 +20,8 @@ The IR goes to 1.5.0 with three optional members, each omitted when empty, so a 
 loads and serializes to its own bytes. The review-session contract gains one optional property,
 `contacts`, never in `required`. The standards profile gains version 2 and the loader still reads
 version 1. The attention policy stays `attention_policy_v1`: twelve rows are added and none is
-changed. `engagement_rules.yaml`, `tool_envelopes.yaml` and the new data files carry their own
+changed (and on 2026-10-08 two more, `thread.fine_pitch` and `thread.nonstandard_pitch`, with
+the needs-judgement prefix `thread.`, which no earlier id starts with; `fasteners.md` section 8.4). `engagement_rules.yaml`, `tool_envelopes.yaml` and the new data files carry their own
 `version`, and every finding cites the row it used.
 
 ## What this feature does *not* move

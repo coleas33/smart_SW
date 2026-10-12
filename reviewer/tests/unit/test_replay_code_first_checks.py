@@ -45,9 +45,10 @@ EXAMPLE_PROFILE = REPO_ROOT / "config" / "standards.example.yaml"
 FIXTURES = REPO_ROOT / "reviewer" / "tests" / "fixtures" / "replay"
 NAMES = ("big-assembly", "small-assembly-a", "small-assembly-b")
 
-MECHANICAL_CHECKS = ("check_joints", "check_mass_material", "check_hygiene")
-"""The three feature 010 adds, in `CODE_FIRST_CHECKS` order; named, because they are what
-SC-006 is about."""
+MECHANICAL_CHECKS = ("check_joints", "check_mass_material", "check_hygiene", "check_threads")
+"""The four feature 010 adds, in `CODE_FIRST_CHECKS` order; named, because they are what
+SC-006 is about. `check_threads` joined with the thread pitch amendment (2026-10-08, T119), so
+SC-006's no-added-round acceptance covers it too (SC-011)."""
 
 CHECKS_FIRST = EfficiencySettings(prerun_checks=True)
 """Checks first alone, model view off: the arm that isolates what the pre-run adds."""

@@ -189,7 +189,7 @@ def test_the_big_assembly_carries_one_presentation_round() -> None:
     assert [r.kind for r in report.rounds].count("presentation") == 1
 
 
-BIG_RECORDED_TOTAL = 10_582_573
+BIG_RECORDED_TOTAL = 10_582_149
 """The big fixture's recorded input. The recording's bill is 12.4M, and the fixture was within 1%
 of it until feature 003's decision 20A (2026-09-25): the fixtures follow the code (decision 3A),
 and the part check the recorded review made no longer names the 106 system rows the eleven
@@ -232,6 +232,18 @@ sketch once and no carried row - 583 feature rows from 760 - and its result is 3
 smaller (146,370 from 182,848), carried by the 31 rounds after it (1,130,818); and the Standards
 sketch finding names each absorbed sketch once too, so the one `check_standards` result is 837
 tokens smaller (4,354 from 5,191), carried by the 28 rounds after it (23,436).
+
+Feature 014's owner decision 40A (2026-10-07) moves it by +136 to 10,582,709: each of the three
+recorded `check_interference_group` calls that writes a finding returns a result 2 tokens larger,
+the finding's `tool_result_ids` now citing its step as a contact's does, carried by the 25, 22
+and 21 rounds after them, the follow-up round included.
+
+Feature 014's D12 (2026-10-07) moves it by -560 to 10,582,149: the one `check_standards` result
+is 20 tokens smaller (4,334 from 4,354), each of its five findings' profile stamps naming the
+file and its digest, never its folder (`profile:standards.example.yaml`, 4 tokens shorter), the
+digest that of the example profile as git stores it, with LF line endings (`57d8be1d...`, the
+same length in tokens as the `a4e6ec47...` of its CRLF working copy), carried by the 28 rounds
+after it, the follow-up round included.
 
 Pinned exactly, not within 1% (the review of decision 23A, 008 T127): the figure is the sum of
 the fixture's recorded usage, so nothing but a regeneration moves it, and `contracts/replay.md`
@@ -496,7 +508,7 @@ REGROUPED_TARGET = 300_000
 """SC-003 as amended (research R2.43, R4): each small fixture's regrouped estimate."""
 FOLLOW_UP_TARGET = 30_000
 """SC-004: the big fixture's follow-up question, against 405k recorded."""
-BIG_FOLLOW_UP_RECORDED = 346_313
+BIG_FOLLOW_UP_RECORDED = 346_299
 """The big fixture's follow-up round's recorded input. The recording's follow-up carried 405k
 (405,320 on the fixtures before decision 20A); since 003 T092 the part check it carries is 21,928
 tokens smaller (383,392); 013 T042 made it 42 larger (383,434: both checklist answers 26 tokens
@@ -507,7 +519,10 @@ both checklist answers 10 tokens larger with the drawing item's words), and 013 
 and 013 T158 24 larger (383,628: both checklist answers and the close-out mark 8 tokens larger
 each, with the close-out's description saying when code closes it), and 013 T134 37,315 smaller
 (346,313: the part check's result 36,478 tokens smaller and the standards result 837 smaller,
-each absorbed sketch named once and no carried row, after T132-T133).
+each absorbed sketch named once and no carried row, after T132-T133), and 014 owner decision
+40A 6 larger (346,319: the three interference findings' results 2 tokens larger each, each
+finding citing its step), and 014's D12 20 smaller (346,299: the standards result's five profile
+stamps 4 tokens shorter each, naming the file and its LF digest, never its folder).
 Pinned exactly, as
 `BIG_RECORDED_TOTAL` is and for the same reason (008 T127): it was held above a floor of
 400,000, then 380,000, which a regeneration could cross or not unseen."""
@@ -663,6 +678,7 @@ WITHHELD_ON_THE_FIXTURES: dict[str, tuple[str, ...]] = {
         "check_joints",
         "check_mass_material",
         "check_hygiene",
+        "check_threads",
         "check_standards",
     ),
     "small-assembly-a": (
@@ -673,6 +689,7 @@ WITHHELD_ON_THE_FIXTURES: dict[str, tuple[str, ...]] = {
         "check_joints",
         "check_mass_material",
         "check_hygiene",
+        "check_threads",
         "check_standards",
     ),
     "small-assembly-b": (
@@ -682,12 +699,15 @@ WITHHELD_ON_THE_FIXTURES: dict[str, tuple[str, ...]] = {
         "check_joints",
         "check_mass_material",
         "check_hygiene",
+        "check_threads",
         "check_standards",
     ),
 }
 """What lever 13 takes off each fixture's pane array, in pre-run order. The replay has no
 bridge, so the interference tool leaves wherever the pre-run judged a group; the third
-fixture holds none, so the pre-run never called it and it stays."""
+fixture holds none, so the pre-run never called it and it stays. Edited deliberately by the
+thread pitch amendment's T119 (2026-10-08): `check_threads` is a code-first check, run to
+completion after `check_hygiene` on each fixture, so it leaves too."""
 
 
 @cache

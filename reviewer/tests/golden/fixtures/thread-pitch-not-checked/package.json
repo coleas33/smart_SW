@@ -1,0 +1,767 @@
+{
+  "schema_version": "1.1.0",
+  "package_id": "01000000-0000-4000-8000-000000000118",
+  "created_at": "2026-10-08T09:00:00Z",
+  "extractor": {
+    "name": "SwReview.Extractor",
+    "version": "0.0.0-fictional",
+    "sw_version": null,
+    "machine": "FICT-SEAT"
+  },
+  "manifest": {
+    "entries": [
+      {
+        "document_id": "doc:0001",
+        "vault_path": "/Designs/FICT-MIR-0000.SLDASM",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:0002",
+        "vault_path": "/Designs/HOUSING_FICT.SLDPRT",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:0003",
+        "vault_path": "/Designs/PORT_FICT.SLDPRT",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:0004",
+        "vault_path": "/Designs/SCREW_M8X1_FICT.SLDPRT",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      }
+    ],
+    "discrepancies": []
+  },
+  "design": {
+    "design_id": "dsn:fict",
+    "name": "FICT-MIR-0000",
+    "root_assembly_document_id": "doc:0001",
+    "active_configuration": "Default",
+    "drawing_document_ids": []
+  },
+  "documents": [
+    {
+      "document_id": "doc:0001",
+      "kind": "assembly",
+      "file_name": "FICT-MIR-0000.SLDASM",
+      "path": "native/FICT-MIR-0000.SLDASM",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {},
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    },
+    {
+      "document_id": "doc:0002",
+      "kind": "part",
+      "file_name": "HOUSING_FICT.SLDPRT",
+      "path": "native/HOUSING_FICT.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {},
+      "config_properties": {},
+      "material": "6061-T6",
+      "mass": null
+    },
+    {
+      "document_id": "doc:0003",
+      "kind": "part",
+      "file_name": "PORT_FICT.SLDPRT",
+      "path": "native/PORT_FICT.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {},
+      "config_properties": {},
+      "material": "6061-T6",
+      "mass": null
+    },
+    {
+      "document_id": "doc:0004",
+      "kind": "part",
+      "file_name": "SCREW_M8X1_FICT.SLDPRT",
+      "path": "native/SCREW_M8X1_FICT.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {},
+      "config_properties": {},
+      "material": "6061-T6",
+      "mass": null
+    }
+  ],
+  "components": [
+    {
+      "id": "cmp:0001",
+      "persist_ref": "Y21wOjAwMDE=",
+      "persist_ref_scope": "doc:0001",
+      "name": "HOUSING_FICT-1",
+      "document_id": "doc:0002",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "HOUSING_FICT-1",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0002",
+      "persist_ref": "Y21wOjAwMDI=",
+      "persist_ref_scope": "doc:0001",
+      "name": "HOUSING_FICT-2",
+      "document_id": "doc:0002",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "HOUSING_FICT-2",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0003",
+      "persist_ref": "Y21wOjAwMDM=",
+      "persist_ref_scope": "doc:0001",
+      "name": "PORT_FICT-1",
+      "document_id": "doc:0003",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "PORT_FICT-1",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0004",
+      "persist_ref": "Y21wOjAwMDQ=",
+      "persist_ref_scope": "doc:0001",
+      "name": "SCREW_M8X1_FICT-1",
+      "document_id": "doc:0004",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "suppressed",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "SCREW_M8X1_FICT-1",
+      "constrained_status_raw": null
+    }
+  ],
+  "mates": [],
+  "holes": [
+    {
+      "id": "hol:0001",
+      "persist_ref": "aG9sOjAwMDE=",
+      "persist_ref_scope": "doc:0002",
+      "component_id": "cmp:0001",
+      "feature_name": "Tapped Hole1",
+      "hole_type": "tapped",
+      "standard": "ISO",
+      "size": "M5",
+      "thread_designation": "M5x0.8",
+      "thread_depth": null,
+      "hole_depth": null,
+      "end_condition": "blind",
+      "diameter": null,
+      "axis": {
+        "origin": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        }
+      },
+      "face_ids": []
+    },
+    {
+      "id": "hol:0002",
+      "persist_ref": "aG9sOjAwMDI=",
+      "persist_ref_scope": "doc:0002",
+      "component_id": "cmp:0002",
+      "feature_name": "Tapped Hole1",
+      "hole_type": "tapped",
+      "standard": "ISO",
+      "size": "M5",
+      "thread_designation": "M5x0.8",
+      "thread_depth": null,
+      "hole_depth": null,
+      "end_condition": "blind",
+      "diameter": null,
+      "axis": {
+        "origin": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        }
+      },
+      "face_ids": []
+    },
+    {
+      "id": "hol:0003",
+      "persist_ref": "aG9sOjAwMDM=",
+      "persist_ref_scope": "doc:0003",
+      "component_id": "cmp:0003",
+      "feature_name": "Tapped Hole1",
+      "hole_type": "tapped",
+      "standard": "ANSI Inch",
+      "size": "3/8",
+      "thread_designation": "3/8",
+      "thread_depth": null,
+      "hole_depth": null,
+      "end_condition": "blind",
+      "diameter": null,
+      "axis": {
+        "origin": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        }
+      },
+      "face_ids": []
+    },
+    {
+      "id": "hol:0004",
+      "persist_ref": "aG9sOjAwMDQ=",
+      "persist_ref_scope": "doc:0003",
+      "component_id": "cmp:0003",
+      "feature_name": "Tapped Hole2",
+      "hole_type": "tapped",
+      "standard": "ISO",
+      "size": "M8",
+      "thread_designation": null,
+      "thread_depth": null,
+      "hole_depth": null,
+      "end_condition": "blind",
+      "diameter": null,
+      "axis": {
+        "origin": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        }
+      },
+      "face_ids": []
+    },
+    {
+      "id": "hol:0005",
+      "persist_ref": "aG9sOjAwMDU=",
+      "persist_ref_scope": "doc:0003",
+      "component_id": "cmp:0003",
+      "feature_name": "Tapped Hole3",
+      "hole_type": "tapped",
+      "standard": "ISO",
+      "size": "M2.3",
+      "thread_designation": "M2.3x0.4",
+      "thread_depth": null,
+      "hole_depth": null,
+      "end_condition": "blind",
+      "diameter": null,
+      "axis": {
+        "origin": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        }
+      },
+      "face_ids": []
+    },
+    {
+      "id": "hol:0006",
+      "persist_ref": "aG9sOjAwMDY=",
+      "persist_ref_scope": "doc:0003",
+      "component_id": "cmp:0003",
+      "feature_name": "Tapped Hole4",
+      "hole_type": "tapped",
+      "standard": "ANSI Inch",
+      "size": "1/8",
+      "thread_designation": "1/8-27 NPT",
+      "thread_depth": null,
+      "hole_depth": null,
+      "end_condition": "blind",
+      "diameter": null,
+      "axis": {
+        "origin": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        }
+      },
+      "face_ids": []
+    },
+    {
+      "id": "hol:0007",
+      "persist_ref": "aG9sOjAwMDc=",
+      "persist_ref_scope": "doc:0003",
+      "component_id": "cmp:0003",
+      "feature_name": "Tapped Hole5",
+      "hole_type": "tapped",
+      "standard": "ISO",
+      "size": "M8",
+      "thread_designation": "M8",
+      "thread_depth": null,
+      "hole_depth": null,
+      "end_condition": "blind",
+      "diameter": null,
+      "axis": {
+        "origin": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        }
+      },
+      "face_ids": []
+    },
+    {
+      "id": "hol:0008",
+      "persist_ref": "aG9sOjAwMDg=",
+      "persist_ref_scope": "doc:0003",
+      "component_id": "cmp:0003",
+      "feature_name": "Tapped Hole6",
+      "hole_type": "tapped",
+      "standard": "ISO",
+      "size": "M6",
+      "thread_designation": "M6x0.75",
+      "thread_depth": null,
+      "hole_depth": null,
+      "end_condition": "blind",
+      "diameter": null,
+      "axis": {
+        "origin": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        }
+      },
+      "face_ids": []
+    }
+  ],
+  "threads": [
+    {
+      "id": "thr:0001",
+      "persist_ref": "dGhyOjAwMDE=",
+      "persist_ref_scope": "doc:0003",
+      "component_id": "cmp:0003",
+      "face_id": "",
+      "designation": "G1/4",
+      "depth": null,
+      "is_external": false
+    },
+    {
+      "id": "thr:0002",
+      "persist_ref": "dGhyOjAwMDI=",
+      "persist_ref_scope": "doc:0003",
+      "component_id": "cmp:0003",
+      "face_id": "",
+      "designation": "",
+      "depth": null,
+      "is_external": false
+    }
+  ],
+  "fasteners": [
+    {
+      "id": "fas:0001",
+      "persist_ref": "Y21wOjAwMDQ=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0004",
+      "kind": "screw",
+      "identity_source": "custom_property",
+      "thread_designation": "M8x1",
+      "length": null,
+      "head_type": null,
+      "head_diameter": null,
+      "head_height": null,
+      "drive": null,
+      "axis": {
+        "origin": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        }
+      },
+      "material": "Alloy Steel"
+    },
+    {
+      "id": "fas:0002",
+      "persist_ref": "Y21wOjAwOTk=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0099",
+      "kind": "screw",
+      "identity_source": "custom_property",
+      "thread_designation": "M8x1",
+      "length": null,
+      "head_type": null,
+      "head_diameter": null,
+      "head_height": null,
+      "drive": null,
+      "axis": {
+        "origin": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        }
+      },
+      "material": "Alloy Steel"
+    }
+  ],
+  "faces": [],
+  "bodies": [],
+  "interferences": [],
+  "captures": [],
+  "drawings": [],
+  "features": [
+    {
+      "id": "feat:0001",
+      "persist_ref": "ZmVhdDowMDAx",
+      "persist_ref_scope": "doc:0002",
+      "document_id": "doc:0002",
+      "configuration": "Default",
+      "name": "Tapped Hole1",
+      "type_name": "HoleWzd",
+      "description": "",
+      "index": 0,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0002",
+      "persist_ref": "ZmVhdDowMDAy",
+      "persist_ref_scope": "doc:0003",
+      "document_id": "doc:0003",
+      "configuration": "Default",
+      "name": "Tapped Hole1",
+      "type_name": "HoleWzd",
+      "description": "",
+      "index": 0,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0003",
+      "persist_ref": "ZmVhdDowMDAz",
+      "persist_ref_scope": "doc:0003",
+      "document_id": "doc:0003",
+      "configuration": "Default",
+      "name": "Tapped Hole2",
+      "type_name": "HoleWzd",
+      "description": "",
+      "index": 1,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0004",
+      "persist_ref": "ZmVhdDowMDA0",
+      "persist_ref_scope": "doc:0003",
+      "document_id": "doc:0003",
+      "configuration": "Default",
+      "name": "Tapped Hole3",
+      "type_name": "HoleWzd",
+      "description": "",
+      "index": 2,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0005",
+      "persist_ref": "ZmVhdDowMDA1",
+      "persist_ref_scope": "doc:0003",
+      "document_id": "doc:0003",
+      "configuration": "Default",
+      "name": "Tapped Hole4",
+      "type_name": "HoleWzd",
+      "description": "",
+      "index": 3,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0006",
+      "persist_ref": "ZmVhdDowMDA2",
+      "persist_ref_scope": "doc:0003",
+      "document_id": "doc:0003",
+      "configuration": "Default",
+      "name": "Tapped Hole5",
+      "type_name": "HoleWzd",
+      "description": "",
+      "index": 4,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0007",
+      "persist_ref": "ZmVhdDowMDA3",
+      "persist_ref_scope": "doc:0003",
+      "document_id": "doc:0003",
+      "configuration": "Default",
+      "name": "Tapped Hole6",
+      "type_name": "HoleWzd",
+      "description": "",
+      "index": 5,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": true,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    }
+  ],
+  "equations": [],
+  "rms_suppress_test": null,
+  "gaps": [
+    {
+      "kind": "not_extracted",
+      "entity_kind": "hole",
+      "entity_id": null,
+      "reason": "'FICT-MIR-0005-1' is lightweight, so its holes were not read",
+      "error": null
+    },
+    {
+      "kind": "unsupported",
+      "entity_kind": "thread",
+      "entity_id": "thr:0009",
+      "reason": "GetDefinition returned nothing for cosmetic thread 'Cosmetic Thread3'.",
+      "error": null
+    },
+    {
+      "kind": "tool_error",
+      "entity_kind": "fastener",
+      "entity_id": null,
+      "reason": "identifying 'FICT-MIR-0006-1' as a fastener threw",
+      "error": null
+    },
+    {
+      "kind": "not_extracted",
+      "entity_kind": "hole",
+      "entity_id": "hol:0001",
+      "reason": "the axis of 'Tapped Hole1' could not be read",
+      "error": null
+    },
+    {
+      "kind": "not_extracted",
+      "entity_kind": "body",
+      "entity_id": "cmp:0004",
+      "reason": "the component is suppressed; its bodies were not read",
+      "error": null
+    }
+  ]
+}

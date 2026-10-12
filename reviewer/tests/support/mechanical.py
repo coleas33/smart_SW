@@ -14,9 +14,13 @@ definition of what a hole feature, a screw or an interference row looks like in 
 - a screw is a component whose document is named in the vendor shape
   (`SHC_M4-0.7X12_FICT-0001.SLDPRT`, description `SCREW, SOC M4-0.7 X 12 MM, FICTIONAL`),
   with a body mesh and optionally a shank face; `is_toolbox` is false and no `Fastener` row
-  is written, as on all 89 recorded components;
+  is written, as on all 89 recorded components, unless `screw(fastener_row=True)` asks for
+  one (feature 014's case generator does);
 - every document that was opened carries a `mass_override` tool-error gap, because the
-  recorded override read failed on every document (analyst fact 26).
+  recorded override read failed on every document (analyst fact 26);
+- a cosmetic thread, a `Fastener` row and a feature-tree row (the thread pitch amendment,
+  T116) are written as `HoleDumper`, `FastenerDumper` and the feature dump write them: none
+  is on the recorded packages, so the committed replay fixtures retain that absence.
 
 **Every string is fictional.** Paths start with `FICTIONAL_ROOT`; names are built from
 `VOCABULARY`, sizes, ids and two SOLIDWORKS library material names committed goldens already
@@ -56,6 +60,7 @@ from swreview.ir.models import (
     BBox3D,
     BodyRef,
     ComponentInstance,
+    CosmeticThread,
     CylinderFace,
     Design,
     Document,
@@ -63,6 +68,8 @@ from swreview.ir.models import (
     EvidencePackage,
     ExtractorInfo,
     FaceGeometry,
+    Fastener,
+    Feature,
     Gap,
     GtolFrame,
     Hole,
@@ -238,6 +245,7 @@ HEAD_SIZES_MM: dict[str, dict[float, tuple[float, float]]] = {
         3: (5.5, 3.0),
         4: (7.0, 4.0),
         5: (8.5, 5.0),
+        6: (10.0, 6.0),
         8: (13.0, 8.0),
         10: (16.0, 10.0),
     },
@@ -460,8 +468,11 @@ class PackageBuilder:
     _interferences: list[Interference] = field(default_factory=list)
     _gaps: list[Gap] = field(default_factory=list)
     _screw_heads: dict[str, str] = field(default_factory=dict)
+    _fasteners: list[Fastener] = field(default_factory=list)
     _model_dimensions: list[ModelDimension] = field(default_factory=list)
     _model_annotations: list[ModelAnnotation] = field(default_factory=list)
+    _threads: list[CosmeticThread] = field(default_factory=list)
+    _features: list[Feature] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.root_id = self.document(self.design_stem, "assembly", properties=self.root_properties)
@@ -805,6 +816,100 @@ class PackageBuilder:
         )
         return annotation_id
 
+    # --- cosmetic threads, fastener rows and feature rows (T116) ----------------------------
+
+    def cosmetic_thread(
+        self, component_id: str, *, designation: str, depth_mm: float | None = None
+    ) -> str:
+        """One cosmetic thread as `HoleDumper.ReadCosmeticThread` writes it: its callout, else
+        its size, else `""` as `designation`, no face id, and always internal."""
+        thread_id = f"thr:{len(self._threads) + 1:04d}"
+        self._threads.append(
+            CosmeticThread(
+                id=thread_id,
+                persist_ref=persist_ref(thread_id),
+                persist_ref_scope=self._components[component_id].document_id,
+                component_id=component_id,
+                face_id="",
+                designation=designation,
+                depth=None if depth_mm is None else Quantity(value=depth_mm, unit="mm"),
+                is_external=False,
+            )
+        )
+        return thread_id
+
+    def fastener_row(
+        self,
+        component_id: str,
+        *,
+        designation: str | None,
+        kind: Literal["screw", "bolt", "nut", "washer", "pin", "other"] = "screw",
+        identity_source: Literal["toolbox", "custom_property", "name_parse", "manual"] = (
+            "custom_property"
+        ),
+        length_mm: float | None = None,
+    ) -> str:
+        """One `Fastener` row as `FastenerDumper` writes it: the component's persist ref, no
+        head or drive, the document's material, and its axis the component's z axis through
+        its origin until a shank face is read."""
+        fastener_id = f"fas:{len(self._fasteners) + 1:04d}"
+        component = self._components[component_id]
+        frame = np.array(component.transform, dtype=float)
+        self._fasteners.append(
+            Fastener(
+                id=fastener_id,
+                persist_ref=component.persist_ref,
+                persist_ref_scope=component.persist_ref_scope,
+                component_id=component_id,
+                kind=kind,
+                identity_source=identity_source,
+                thread_designation=designation,
+                length=None if length_mm is None else Quantity(value=length_mm, unit="mm"),
+                head_type=None,
+                head_diameter=None,
+                head_height=None,
+                drive=None,
+                axis=Axis(origin=_vec3(frame[:3, 3]), direction=_vec3(frame[:3, 2])),
+                material=self._document(component.document_id).material,
+            )
+        )
+        return fastener_id
+
+    def feature(
+        self,
+        document_id: str,
+        name: str,
+        *,
+        suppressed: bool | None = False,
+        configuration: str | None = None,
+        type_name: str = "HoleWzd",
+    ) -> str:
+        """One top-level feature-tree row (schema 1.1.0), read in `configuration` - the
+        document's active one unless named - with no sketch and nothing depending on it."""
+        feature_id = f"feat:{len(self._features) + 1:04d}"
+        self._features.append(
+            Feature(
+                id=feature_id,
+                persist_ref=persist_ref(feature_id),
+                persist_ref_scope=document_id,
+                document_id=document_id,
+                configuration=configuration or self._document(document_id).active_configuration,
+                name=name,
+                type_name=type_name,
+                description="",
+                index=sum(1 for item in self._features if item.document_id == document_id),
+                depth=0,
+                folder_id=None,
+                suppressed=suppressed,
+                error_code=0,
+                child_ids=[],
+                parent_ids=[],
+                sketch=None,
+                fillet=None,
+            )
+        )
+        return feature_id
+
     def gap(self, **fields: Any) -> None:
         self._gaps.append(Gap(**fields))
 
@@ -867,6 +972,7 @@ class PackageBuilder:
         shank_face_mm: float | None = None,
         shank_face_span: tuple[float, float] | None = None,
         head_face_mm: float | None = None,
+        fastener_row: bool = False,
     ) -> str:
         """One screw instance, its origin at the bearing point and its z axis `direction`.
 
@@ -875,12 +981,17 @@ class PackageBuilder:
         the head. The mesh is the shank and the head; a shank face (optionally over
         `shank_face_span`, in mm along the axis from the bearing point) and a head face are
         extracted faces, present only when asked for.
+
+        `fastener_row` also writes a `Fastener` row, the next `fst:NNNN`, as Toolbox data
+        would: kind `screw`, the thread and length the file name states, so no name
+        contradicts it, and the placement's axis (feature 014 GN-2). The curated tools resolve
+        a fastener only through such a row. Off by default, as on every recorded component.
         """
         document = self._document(document_id)
         head = self._screw_heads[document_id]
-        match = re.match(r"^[A-Z]+_M(\d+(?:\.\d+)?)-[\d.]+X([\d.]+)_", document.file_name)
+        match = re.match(r"^[A-Z]+_M(\d+(?:\.\d+)?)-([\d.]+)X([\d.]+)_", document.file_name)
         assert match is not None
-        d, length = float(match.group(1)), float(match.group(2))
+        d, length = float(match.group(1)), float(match.group(3))
         head_d, head_k = HEAD_SIZES_MM[head][d]
         if HEADS[head]["countersunk"]:
             shank_span, head_span = (-length, -head_k), (-head_k, 0.0)
@@ -915,6 +1026,26 @@ class PackageBuilder:
                 diameter_mm=head_face_mm,
                 lo_mm=head_span[0],
                 hi_mm=head_span[1],
+            )
+        if fastener_row:
+            fastener_id = f"fst:{len(self._fasteners) + 1:04d}"
+            self._fasteners.append(
+                Fastener(
+                    id=fastener_id,
+                    persist_ref=persist_ref(fastener_id),
+                    persist_ref_scope=self.root_id,
+                    component_id=component_id,
+                    kind="screw",
+                    identity_source="toolbox",
+                    thread_designation=f"M{match.group(1)}x{match.group(2)}",
+                    length=Quantity(value=length, unit="mm"),
+                    head_type=None,
+                    head_diameter=None,
+                    head_height=None,
+                    drive=None,
+                    axis=Axis(origin=_vec3(_m(bearing_mm)), direction=_vec3(_unit(direction))),
+                    material=None,
+                )
             )
         return component_id
 
@@ -1021,9 +1152,12 @@ class PackageBuilder:
             documents=self._documents,
             components=[self._components[key] for key in sorted(self._components)],
             holes=self._holes,
+            threads=self._threads,
+            fasteners=self._fasteners,
             faces=[item.face for item in self._faces],
             bodies=bodies,
             interferences=self._interferences,
+            features=self._features,
             gaps=self._gaps,
             model_dimensions=self._model_dimensions,
             model_annotations=self._model_annotations,
@@ -1044,3 +1178,14 @@ def load_generator(path: Path) -> ModuleType:
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def as_committed(path: Path) -> bytes:
+    """A fixture file's bytes as git stores them.
+
+    `.gitattributes` marks `*.json` as text, so a Windows checkout with `core.autocrlf` may
+    hand the file back with CRLF endings; the generator writes LF, which is what the blob
+    holds. A GLB is binary and compared untouched.
+    """
+    content = path.read_bytes()
+    return content if path.suffix == ".glb" else content.replace(b"\r\n", b"\n")

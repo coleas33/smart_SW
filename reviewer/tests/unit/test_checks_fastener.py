@@ -4,23 +4,37 @@ These pin FR-023 and FR-024 and the acceptance scenarios of US5: a bottoming mar
 an engagement ratio computed from the screw length, the clamped stack, the washers and
 the usable thread depth; an unknown input that stays unknown; a thread mismatch reported
 as demonstrated; and a joint kind the pilot does not support reported as out of scope,
-never as passed.
+never as passed. Feature 014's FR-061 (owner decision 19A): every result, on every path and
+from `check_placed_screw` too, leads its `inputs` with the fastener's and the hole's ids.
 """
 
 from __future__ import annotations
+
+from collections.abc import Callable
 
 import pytest
 from pint import DimensionalityError
 
 from swreview.checks.engagement_rules import load_rules
 from swreview.checks.fastener import (
+    CHECK_BOTTOMING,
+    CHECK_ENGAGEMENT,
+    CHECK_HEAD_CLEARANCE,
+    CHECK_THREAD_MATCH,
+    CHECK_UNSUPPORTED,
     FUNCTION_VERSION,
     ClampedLayer,
+    HeadSweep,
+    Placement,
+    UsableThread,
     check_fastener_joint,
+    check_placed_screw,
+    is_pipe_thread,
     nominal_diameter,
     parse_thread,
 )
 from swreview.checks.result import CheckResult
+from swreview.geometry.envelope import EnvelopeHit, EnvelopeResult
 from swreview.ir.models import Angle, Axis, Fastener, Hole, Quantity, Vec3
 from tests.support.packages import persist_ref
 
@@ -131,6 +145,188 @@ def test_the_same_thread_written_two_ways_parses_to_one_canonical_form() -> None
 
 def test_a_thread_without_a_pitch_is_not_the_same_text_as_one_with_a_pitch() -> None:
     assert parse_thread("M6").normalized != parse_thread("M6x1.0").normalized
+
+
+# The fine pitch amendment's vectors (contracts/fasteners.md 8.8 and 8.9, the "Read as" column).
+
+
+@pytest.mark.parametrize(
+    ("designation", "diameter_mm", "pitch_mm"),
+    [
+        ("M8x1.25", 8.0, 1.25),
+        ("M8 x 1.25", 8.0, 1.25),
+        ("M8x1.25-6g", 8.0, 1.25),
+        ("M8x1.25-6G", 8.0, 1.25),
+        # Whitespace is removed before reading, so a grade written after a space joins the
+        # pitch: a known limit (research R2.26), flagged non-standard, never passed.
+        ("M8x1.25 6H", 8.0, 1.256),
+        # Rule 1: a comma between two digits is a decimal point.
+        ("M8x1,25", 8.0, 1.25),
+        ("M8-1,25", 8.0, 1.25),
+        # Rule 3: a hyphen number is the pitch before the end, a separator, a length or the hand.
+        ("M8-1.25", 8.0, 1.25),
+        ("M10-1.5-6H", 10.0, 1.5),
+        ("M4-0.7x12", 4.0, 0.7),
+        ("M8-1 x 20", 8.0, 1.0),
+        ("M8-1×20", 8.0, 1.0),
+        ("M10-1.25LH", 10.0, 1.25),
+        ("M8-1.25rh", 8.0, 1.25),
+        ("M8-1", 8.0, 1.0),
+        # ...and no pitch only before a tolerance class.
+        ("M8-6H", 8.0, None),
+        ("M8-6g", 8.0, None),
+        ("M8-6g6h", 8.0, None),
+        ("M8", 8.0, None),
+        # Rule 2: the multiplication sign is a pitch marker like x and *.
+        ("M8×1", 8.0, 1.0),
+        ("M8*1.25", 8.0, 1.25),
+        ("M6x1", 6.0, 1.0),
+        ("M7x1", 7.0, 1.0),
+        ("M3.5x0.6", 3.5, 0.6),
+        ("M8x1", 8.0, 1.0),
+        ("m8x1", 8.0, 1.0),
+        ("M8x1.0", 8.0, 1.0),
+        ("M8x0.75", 8.0, 0.75),
+        ("M10x1.25", 10.0, 1.25),
+        ("M12x1.5", 12.0, 1.5),
+        ("M25x1.5", 25.0, 1.5),
+        ("M25", 25.0, None),
+        ("M5.5x0.5", 5.5, 0.5),
+        ("M8x1.5", 8.0, 1.5),
+        ("M10x35", 10.0, 35.0),
+        ("M2.3x0.4", 2.3, 0.4),
+        ("M70", 70.0, None),
+    ],
+)
+def test_a_metric_designation_reads_its_diameter_and_pitch(
+    designation: str, diameter_mm: float, pitch_mm: float | None
+) -> None:
+    thread = parse_thread(designation)
+
+    assert thread.series == "metric"
+    assert thread.nominal_diameter == Quantity(value=diameter_mm, unit="mm")
+    if pitch_mm is None:
+        assert thread.pitch_mm is None
+    else:
+        assert thread.pitch_mm == pytest.approx(pitch_mm, abs=1e-9)
+
+
+@pytest.mark.parametrize(
+    ("designation", "diameter_in", "threads_per_inch"),
+    [
+        ("1/4-20", 0.25, 20),
+        ("1/4-20 UNC-2B", 0.25, 20),
+        ("1/4-20 UNF", 0.25, 20),
+        ("0.250-20", 0.25, 20),
+        ("#6-32", 0.138, 32),
+        ("#10-24", 0.190, 24),
+        ("1.000-8", 1.0, 8),
+        ("1/4-28", 0.25, 28),
+        ("1/4-28 UNF-2A", 0.25, 28),
+        ("1/4-32", 0.25, 32),
+        ("#10-32", 0.190, 32),
+        ("#10-32 UNF", 0.190, 32),
+        ("0.190-32", 0.190, 32),
+        ("1.125-8", 1.125, 8),
+        ("#0-80", 0.060, 80),
+        ("1/4-18", 0.25, 18),
+        ("1/8-27", 0.125, 27),
+        # parse_thread does not change for pipe text; is_pipe_thread is what tells it apart.
+        ("1/8-27 NPT", 0.125, 27),
+        ("1/2-14 NPTF", 0.5, 14),
+    ],
+)
+def test_a_unified_designation_reads_as_it_did(
+    designation: str, diameter_in: float, threads_per_inch: int
+) -> None:
+    thread = parse_thread(designation)
+
+    assert thread.series == "unified"
+    assert thread.nominal_diameter is not None
+    assert thread.nominal_diameter.value == pytest.approx(diameter_in * 25.4, abs=1e-6)
+    assert thread.pitch_mm == pytest.approx(25.4 / threads_per_inch, abs=1e-6)
+
+
+@pytest.mark.parametrize(
+    "designation",
+    [
+        # Read as M8-1.256G, and 1.256G is no tolerance class: a known limit (research R2.26).
+        "M8-1.25 6g",
+        # Rule 3: any other letter after a hyphen number.
+        "M10-1.25G",
+        "M8-1x",
+        "M8-1.25×",
+        # Rule 4: a pitch marker straight after the size with no number after it.
+        "M16xPh3P1.5",
+        "M8x",
+        "M8*",
+        "M8×",
+        "MF8x1",
+        "3/8",
+        "1-8",
+        "1-1/8-7",
+        "10-32",
+        "No. 10-32",
+        "",
+        # Pipe text parse_thread does not read, as before.
+        "NPT 1/8",
+        "3/4 NPSM",
+        "1/2 NPS",
+        "G1/4",
+        "G 1/2 A",
+        "R1/4",
+        "Rc1/4",
+        "Rp 1/2",
+        "PT1/8",
+        "PF1/4",
+        "1/4 BSPP",
+        "1/4 BSPT",
+        "1/2 BSP",
+    ],
+)
+def test_a_designation_whose_size_or_pitch_cannot_be_read_is_unrecognised(
+    designation: str,
+) -> None:
+    thread = parse_thread(designation)
+
+    assert thread.series is None
+    assert thread.nominal_diameter is None
+    assert thread.pitch_mm is None
+
+
+PIPE_THREADS = [
+    "1/8-27 NPT",
+    "NPT 1/8",
+    "1/2-14 NPTF",
+    "3/4 NPSM",
+    "1/2 NPS",
+    "G1/4",
+    "G 1/2 A",
+    "R1/4",
+    "Rc1/4",
+    "Rp 1/2",
+    "PT1/8",
+    "PF1/4",
+    "1/4 BSPP",
+    "1/4 BSPT",
+    "1/2 BSP",
+]
+
+
+@pytest.mark.parametrize(
+    "designation",
+    [*PIPE_THREADS, *(text.lower() for text in PIPE_THREADS), "  Rc 1/4  "],
+)
+def test_a_pipe_thread_is_recognised_by_its_token(designation: str) -> None:
+    assert is_pipe_thread(designation) is True
+
+
+@pytest.mark.parametrize(
+    "designation",
+    ["M8x1.25-6G", "M10x1.5-6g", "1/4-20 UNC-2B", "#10-32 UNF", "3/8", "M8", ""],
+)
+def test_a_screw_thread_or_a_bare_size_is_not_a_pipe_thread(designation: str) -> None:
+    assert is_pipe_thread(designation) is False
 
 
 # --- bottoming and engagement -----------------------------------------------------
@@ -473,6 +669,52 @@ def test_two_unrecognised_designations_are_unresolved_not_a_mismatch() -> None:
     assert match.status == "unresolved"
 
 
+@pytest.mark.parametrize(
+    ("screw_thread", "status"),
+    [
+        # Read pitch 1.0 before the fine pitch amendment: a false mismatch.
+        ("M8x1,25", "checked_within_scope"),
+        # Read no pitch before: matched on the diameter alone, with the one-sided-pitch limit.
+        ("M8-1.25", "checked_within_scope"),
+        # Read no pitch before: a missed mismatch.
+        ("M8-1", "demonstrated"),
+    ],
+)
+def test_the_parser_fixes_compare_the_pitch_of_the_thread_match(
+    screw_thread: str, status: str
+) -> None:
+    match = by_check(
+        check_fastener_joint(
+            screw(thread=screw_thread),
+            tapped_hole(thread="M8x1.25"),
+            [layer(mm(1.5))],
+            hole_material="6061-T6",
+        )
+    )["fastener.thread_match"]
+
+    assert match.status == status
+    assert match.calculation is not None
+    assert match.calculation.result["pitch_compared"] is True
+    assert match.calculation.result["matches"] is (status == "checked_within_scope")
+    assert match.coverage_limits == []
+
+
+def test_a_multi_start_thread_is_unresolved_in_the_thread_match_and_named() -> None:
+    # Read as M16 with no pitch before the fine pitch amendment, a diameter-only match (D9).
+    match = by_check(
+        check_fastener_joint(
+            screw(thread="M16xPh3P1.5"),
+            tapped_hole(thread="M16x1.5"),
+            [layer(mm(1.5))],
+            hole_material="6061-T6",
+        )
+    )["fastener.thread_match"]
+
+    assert match.status == "unresolved"
+    assert match.calculation is None
+    assert any("'M16xPh3P1.5'" in limit for limit in match.coverage_limits)
+
+
 # --- head clearance ---------------------------------------------------------------
 
 
@@ -593,3 +835,280 @@ def test_an_angle_where_a_length_belongs_raises_a_dimensionality_error() -> None
             [ClampedLayer(component_id="cmp:0003", thickness=Angle(value=5.0, unit="deg"))],
             hole_material="6061-T6",
         )
+
+
+# --- the joint's references on every path (feature 014 FR-061, owner decision 19A) --------
+
+JOINT_REFS: list[Quantity | str] = ["fst:1", "hole:1"]
+"""The joint's references: `screw()`'s and `tapped_hole()`'s ids, which lead every result's
+`inputs` so a finding names the exact joint it judges (constitution Principle IV)."""
+
+LAYER_1_5 = mm(1.5)
+CLAMPED_SOURCES: list[Quantity | str] = [M6X20, THREAD_DEPTH_12, LAYER_1_5]
+"""What a clamped joint's `inputs` held before 19A, in `_build_stack`'s order: the screw
+length, the usable thread depth and the clamped layer, each as read."""
+
+PROTRUSION_6 = mm(6.0)
+USABLE_10 = mm(10.0)
+PLACED = Placement(
+    protrusion_mm=6.0,
+    protrusion_source="the fictional tip measured on the tapped axis",
+    usable_thread=UsableThread(length_mm=10.0, source="the Hole Wizard thread depth"),
+)
+"""A placed screw 6 mm into 10 mm of usable thread."""
+PLACED_SOURCES: list[Quantity | str] = [PROTRUSION_6, USABLE_10]
+"""What a placed screw's `inputs` held before 19A: the protrusion and the usable thread."""
+
+NOT_PLACED = Placement(
+    protrusion_mm=None,
+    protrusion_source="",
+    usable_thread=None,
+    missing=(
+        "the protrusion of fst:1 (the fictional tip could not be found)",
+        "the usable thread depth of hole hole:1",
+    ),
+)
+
+HIT = EnvelopeResult(
+    hits=[EnvelopeHit(component_id="cmp:0009", first_hit_distance_m=0.010)], unresolved=[]
+)
+CLEAR = EnvelopeResult(hits=[], unresolved=[])
+PART_SWEPT = EnvelopeResult(hits=[], unresolved=["missing mesh for component cmp:0009"])
+
+Results = Callable[[], dict[str, CheckResult]]
+
+
+def clamped_joint(
+    fastener: Fastener | None = None,
+    hole: Hole | None = None,
+    hole_material: str = "6061-T6",
+    envelope: EnvelopeResult | None = None,
+) -> dict[str, CheckResult]:
+    """`check_fastener_joint` on `screw()` in `tapped_hole()` through 1.5 mm, but for what
+    the caller changes."""
+    return by_check(
+        check_fastener_joint(
+            screw() if fastener is None else fastener,
+            tapped_hole() if hole is None else hole,
+            [layer(LAYER_1_5)],
+            hole_material=hole_material,
+            envelope=envelope,
+        )
+    )
+
+
+def placed_screw(
+    fastener: Fastener | None = None,
+    hole: Hole | None = None,
+    placement: Placement = PLACED,
+    hole_material: str = "6061-T6",
+    envelope: HeadSweep | None = None,
+) -> dict[str, CheckResult]:
+    """`check_placed_screw` on `screw()` placed in `tapped_hole()`, but for what the caller
+    changes."""
+    return by_check(
+        check_placed_screw(
+            screw() if fastener is None else fastener,
+            tapped_hole() if hole is None else hole,
+            placement,
+            hole_material=hole_material,
+            envelope=envelope,
+        )
+    )
+
+
+def every_path(
+    entry_point: str,
+    results: Callable[..., dict[str, CheckResult]],
+    sources: list[Quantity | str],
+    *,
+    resolved: tuple[str, str],
+    missing: dict[str, object],
+    missing_sources: list[Quantity | str],
+    sweep: Callable[[EnvelopeResult], object],
+    no_sweep: object,
+) -> list[object]:
+    """The fourteen paths of the four rules, through `checks/fastener.py`'s thirteen result
+    sites (engagement's two unresolved paths share one), by `entry_point`, each as `(results,
+    check, the status the path ends in, the sources after the two ids)`.
+
+    `resolved` is the default joint's bottoming and engagement verdicts, `missing` what leaves
+    the joint without a length it needs, `sweep` wraps an envelope the way the entry point
+    takes one and `no_sweep` stands for no sweep, so one table serves both entry points.
+    """
+
+    def case(
+        call: Results, check: str, status: str, path: str, expected: list[Quantity | str]
+    ) -> object:
+        return pytest.param(call, check, status, expected, id=f"{entry_point}: {check}, {path}")
+
+    bottoming, engagement = resolved
+    return [
+        case(
+            lambda: results(hole=tapped_hole(end_condition="through")),
+            CHECK_BOTTOMING,
+            "checked_within_scope",
+            "a through hole",
+            sources,
+        ),
+        case(
+            lambda: results(hole=tapped_hole(end_condition="unknown")),
+            CHECK_BOTTOMING,
+            "unresolved",
+            "an unknown end condition",
+            sources,
+        ),
+        case(
+            lambda: results(**missing),
+            CHECK_BOTTOMING,
+            "unresolved",
+            "a missing input",
+            missing_sources,
+        ),
+        case(lambda: results(), CHECK_BOTTOMING, bottoming, "resolved", sources),
+        case(
+            lambda: results(**missing),
+            CHECK_ENGAGEMENT,
+            "unresolved",
+            "a missing input",
+            missing_sources,
+        ),
+        case(
+            lambda: results(hole_material="unobtainium"),
+            CHECK_ENGAGEMENT,
+            "unresolved",
+            "no rule for the material",
+            sources,
+        ),
+        case(lambda: results(), CHECK_ENGAGEMENT, engagement, "resolved", sources),
+        case(
+            lambda: results(fastener=screw(thread=None)),
+            CHECK_THREAD_MATCH,
+            "unresolved",
+            "a missing designation",
+            sources,
+        ),
+        case(
+            lambda: results(
+                fastener=screw(thread="NPT 1/8"), hole=tapped_hole(thread="BSPT 1/8")
+            ),
+            CHECK_THREAD_MATCH,
+            "unresolved",
+            "an unreadable designation",
+            sources,
+        ),
+        case(lambda: results(), CHECK_THREAD_MATCH, "checked_within_scope", "resolved", sources),
+        case(
+            lambda: results(envelope=no_sweep),
+            CHECK_HEAD_CLEARANCE,
+            "unresolved",
+            "no envelope",
+            sources,
+        ),
+        case(
+            lambda: results(envelope=sweep(HIT)),
+            CHECK_HEAD_CLEARANCE,
+            "demonstrated",
+            "a hit",
+            sources,
+        ),
+        case(
+            lambda: results(envelope=sweep(PART_SWEPT)),
+            CHECK_HEAD_CLEARANCE,
+            "unresolved",
+            "a body not swept",
+            sources,
+        ),
+        case(
+            lambda: results(envelope=sweep(CLEAR)),
+            CHECK_HEAD_CLEARANCE,
+            "checked_within_scope",
+            "clear",
+            sources,
+        ),
+    ]
+
+
+EVERY_PATH = [
+    # 20 mm through 1.5 mm protrudes 18.5 mm into 12 mm of thread: it bottoms, and engages
+    # all 12 mm, 2.0 x d against aluminium's 1.5 x d.
+    *every_path(
+        "check_fastener_joint",
+        clamped_joint,
+        CLAMPED_SOURCES,
+        resolved=("demonstrated", "checked_within_scope"),
+        missing={"hole": tapped_hole(thread_depth=None)},
+        missing_sources=[M6X20, LAYER_1_5],
+        sweep=lambda envelope: envelope,
+        no_sweep=None,
+    ),
+    # 6 mm into 10 mm of thread: 4 mm of margin, and 1.0 x d against 1.5 x d.
+    *every_path(
+        "check_placed_screw",
+        placed_screw,
+        PLACED_SOURCES,
+        resolved=("checked_within_scope", "demonstrated"),
+        missing={"placement": NOT_PLACED},
+        missing_sources=[],
+        sweep=lambda envelope: HeadSweep(envelope=envelope, inputs={"tool": "hex_key"}),
+        no_sweep=HeadSweep(envelope=None, missing="no body mesh near the fictional head"),
+    ),
+]
+
+
+@pytest.mark.parametrize(("results", "check", "status", "sources"), EVERY_PATH)
+def test_every_result_of_the_four_rules_leads_its_inputs_with_the_fastener_and_the_hole(
+    results: Results, check: str, status: str, sources: list[Quantity | str]
+) -> None:
+    """19A, on each of the fourteen paths of the four rules, through both entry points:
+    unresolved and resolved alike, the two ids lead, and what `inputs` held before follows
+    them unchanged."""
+    result = results()[check]
+
+    assert result.status == status
+    assert result.inputs == [*JOINT_REFS, *sources]
+
+
+def test_the_calculation_inputs_are_what_they_were() -> None:
+    """19A writes the ids into `inputs` only: the calculation still names them once, by name,
+    beside every length as read and in millimetres, through both entry points."""
+    calculation = clamped_joint()[CHECK_BOTTOMING].calculation
+    placed = placed_screw()[CHECK_BOTTOMING].calculation
+
+    assert calculation is not None
+    assert calculation.inputs == {
+        "fastener_id": "fst:1",
+        "hole_id": "hole:1",
+        "fastener_length": M6X20,
+        "fastener_length_mm": mm(20.0),
+        "usable_thread_depth": THREAD_DEPTH_12,
+        "usable_thread_depth_mm": mm(12.0),
+        "clamped_0_cmp:0003": LAYER_1_5,
+        "clamped_0_cmp:0003_mm": mm(1.5),
+    }
+    assert placed is not None
+    assert placed.inputs == {
+        "fastener_id": "fst:1",
+        "hole_id": "hole:1",
+        "protrusion_mm": PROTRUSION_6,
+        "usable_thread_depth_mm": USABLE_10,
+        "usable_thread_source": "the Hole Wizard thread depth",
+    }
+
+
+@pytest.mark.parametrize("kind", ["pin", "other", "nut", "washer"])
+def test_an_unsupported_joint_names_its_fastener_and_its_hole_from_both_callers(
+    kind: str,
+) -> None:
+    """`fastener.unsupported` names the hole its call names, from `check_fastener_joint` and
+    from `check_placed_screw` alike (FR-061)."""
+    for results in (
+        check_fastener_joint(
+            screw(kind=kind), tapped_hole(), [layer(LAYER_1_5)], hole_material="6061-T6"
+        ),
+        check_placed_screw(screw(kind=kind), tapped_hole(), PLACED),
+    ):
+        [result] = results
+        assert result.check == CHECK_UNSUPPORTED
+        assert result.inputs == JOINT_REFS
+        assert result.coverage_limits == [f"out_of_scope: {kind}"]

@@ -277,7 +277,7 @@ def drawing_item_closed(context: ToolContext) -> bool:
     return bool(item_closed_by_code(DrawingIndex.for_package(context.ir), _review_roles(context)))
 
 
-def _documents_named(context: ToolContext, entity_ids: Sequence[str]) -> list[str]:
+def documents_named(context: ToolContext, entity_ids: Sequence[str]) -> list[str]:
     """The documents `entity_ids` name, first-named first: a document is itself, a component its
     document, a hole or a fastener its component's document; any other id names none."""
     documents: list[str] = []
@@ -319,7 +319,7 @@ def drawing_request_closed(
 
     if not _offers_drawings(context):
         return None
-    documents = _documents_named(context, entity_ids)
+    documents = documents_named(context, entity_ids)
     if not documents:
         return None
     index = DrawingIndex.for_package(context.ir)

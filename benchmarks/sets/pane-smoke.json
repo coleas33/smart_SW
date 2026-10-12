@@ -1,0 +1,23 @@
+{
+  "name": "pane-smoke",
+  "packages": [
+    {
+      "package_id": "kalo-1",
+      "path": "benchmarks/packages/kalo-1",
+      "key": "benchmarks/answer_keys/kalo-1.json",
+      "held_out": true,
+      "design": "kalo"
+    },
+    {
+      "package_id": "kalo-fit-1",
+      "path": "benchmarks/packages/kalo-fit-1",
+      "key": "benchmarks/answer_keys/kalo-fit-1.json",
+      "case_file": "benchmarks/case_files/kalo-fit-1.json",
+      "held_out": false,
+      "design": "kalo",
+      "represents": [
+        "R-3"
+      ]
+    }
+  ]
+}

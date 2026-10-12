@@ -219,12 +219,16 @@ def _roles(joint: Joint) -> tuple[list[HoleInstance], list[HoleInstance]]:
     return clearance, unknown
 
 
-def _unknown_role(check: str, instances: Sequence[HoleInstance], requirement: str) -> CheckResult:
-    names = ", ".join(item.hole_id for item in instances)
+def _unknown_role(
+    check: str, joint: Joint, unknown: Sequence[HoleInstance], requirement: str
+) -> CheckResult:
+    """Unresolved for the `unknown` instances' role: the words name their holes, and `inputs`
+    every instance of the joint, its references (feature 014 FR-061, owner decision 19A)."""
+    names = ", ".join(item.hole_id for item in unknown)
     return unresolved(
         check,
         f"the role of {names} (its hole type is unknown), so its clearance",
-        [item.id for item in instances],
+        [item.id for item in joint.instances],
         requirement=requirement,
         recommended_action=(
             f"Record the hole type of {names} in the model's Hole Wizard feature so the joint "
@@ -288,7 +292,7 @@ def check_nominal_alignment(
     if not clearance and not unknown:
         return None
     if unknown:
-        return _unknown_role(CHECK_NOMINAL, unknown, REQUIREMENT_NOMINAL)
+        return _unknown_role(CHECK_NOMINAL, joint, unknown, REQUIREMENT_NOMINAL)
     fastener = fastener_size(joint, package)
     if fastener is None:
         return _no_fastener(CHECK_NOMINAL, joint, REQUIREMENT_NOMINAL)
@@ -505,7 +509,7 @@ def check_position_stack(
     if not clearance and not unknown:
         return None
     if unknown:
-        return _unknown_role(CHECK_STACK, unknown, REQUIREMENT_STACK)
+        return _unknown_role(CHECK_STACK, joint, unknown, REQUIREMENT_STACK)
     fastener = fastener_size(joint, package)
     if fastener is None:
         return _no_fastener(CHECK_STACK, joint, REQUIREMENT_STACK)

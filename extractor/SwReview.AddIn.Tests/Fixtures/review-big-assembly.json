@@ -10863,7 +10863,7 @@
         11
       ],
       "coverage_limits": [
-        "profile:..\\config\\standards.example.yaml sha256:a4e6ec47d8e3b4e877f3a04c634d02bff40bfcba5369118799a419b0a5297eec",
+        "profile:standards.example.yaml sha256:57d8be1d83818f38b0961c8cc364c4fbdfd278deeba8a2fa66f5f3ff547b99f8",
         "configuration Kamibat"
       ],
       "recommended_action": "Add the relations or dimensions the sketch needs, so it is fully defined.",
@@ -10927,7 +10927,7 @@
         11
       ],
       "coverage_limits": [
-        "profile:..\\config\\standards.example.yaml sha256:a4e6ec47d8e3b4e877f3a04c634d02bff40bfcba5369118799a419b0a5297eec",
+        "profile:standards.example.yaml sha256:57d8be1d83818f38b0961c8cc364c4fbdfd278deeba8a2fa66f5f3ff547b99f8",
         "configuration Kamibat"
       ],
       "recommended_action": "Add the relations or dimensions the sketch needs, so it is fully defined.",
@@ -10991,7 +10991,7 @@
         11
       ],
       "coverage_limits": [
-        "profile:..\\config\\standards.example.yaml sha256:a4e6ec47d8e3b4e877f3a04c634d02bff40bfcba5369118799a419b0a5297eec",
+        "profile:standards.example.yaml sha256:57d8be1d83818f38b0961c8cc364c4fbdfd278deeba8a2fa66f5f3ff547b99f8",
         "configuration Kamibat",
         "feat:0611 Bounding-Box2: suppressed in Kamibat"
       ],
@@ -11046,7 +11046,7 @@
         11
       ],
       "coverage_limits": [
-        "profile:..\\config\\standards.example.yaml sha256:a4e6ec47d8e3b4e877f3a04c634d02bff40bfcba5369118799a419b0a5297eec",
+        "profile:standards.example.yaml sha256:57d8be1d83818f38b0961c8cc364c4fbdfd278deeba8a2fa66f5f3ff547b99f8",
         "configuration Kamibat"
       ],
       "recommended_action": "Tick Exclude from cut list on the item, so the released cut list carries only what is cut.",
@@ -11100,7 +11100,7 @@
         11
       ],
       "coverage_limits": [
-        "profile:..\\config\\standards.example.yaml sha256:a4e6ec47d8e3b4e877f3a04c634d02bff40bfcba5369118799a419b0a5297eec",
+        "profile:standards.example.yaml sha256:57d8be1d83818f38b0961c8cc364c4fbdfd278deeba8a2fa66f5f3ff547b99f8",
         "configuration Kamibat"
       ],
       "recommended_action": "Add the relations or dimensions the sketch needs, so it is fully defined.",
@@ -11188,7 +11188,9 @@
         "function": "swreview.checks.interference.check_interference_group",
         "function_version": "1"
       },
-      "tool_result_ids": [],
+      "tool_result_ids": [
+        14
+      ],
       "coverage_limits": [
         "interference.static evaluated the components as modelled in one configuration; clearance across any motion path was not established"
       ],
@@ -11287,7 +11289,9 @@
         "function": "swreview.checks.interference.check_interference_group",
         "function_version": "1"
       },
-      "tool_result_ids": [],
+      "tool_result_ids": [
+        17
+      ],
       "coverage_limits": [
         "interference.static evaluated the components as modelled in one configuration; clearance across any motion path was not established"
       ],
@@ -11400,7 +11404,9 @@
         "function": "swreview.checks.interference.check_interference_group",
         "function_version": "1"
       },
-      "tool_result_ids": [],
+      "tool_result_ids": [
+        18
+      ],
       "coverage_limits": [
         "interference.static evaluated the components as modelled in one configuration; clearance across any motion path was not established"
       ],
@@ -15740,8 +15746,8 @@
         "cmp:0088": "VUKO MIL BELIKAB, TIL-LAMAMOSU VURUNURA, SAS MIL GOSO, DAS, 29'64 PO FIDA, 8764 VURUNURA, DIS, 6926R326-4",
         "cmp:0089": "GEM_M3-0.5X8_PE8_NA-15"
       },
-      "resume_input_tokens": 346313,
-      "resume_text": "Sending resumes the review once. Its last round sent 346,313 input tokens."
+      "resume_input_tokens": 346299,
+      "resume_text": "Sending resumes the review once. Its last round sent 346,299 input tokens."
     },
     "groups": {
       "version": 1,

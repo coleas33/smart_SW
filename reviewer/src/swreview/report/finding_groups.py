@@ -30,6 +30,7 @@ type-checking import only.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
 from pydantic import SerializerFunctionWrapHandler, model_serializer
@@ -64,6 +65,7 @@ __all__ = [
     "FindingsByType",
     "Goal",
     "GoalLine",
+    "GoalReading",
     "GoalReason",
     "GoalState",
     "GroupRow",
@@ -71,6 +73,7 @@ __all__ = [
     "findings_by_type",
     "goal_lines",
     "goal_of",
+    "goal_readings",
     "goal_state_text",
 ]
 
@@ -180,13 +183,50 @@ def goal_of(check: str, goals: Sequence[Goal]) -> Goal | None:
     return max(matches, key=lambda match: match[0])[1]
 
 
-# --- the goal lines ---------------------------------------------------------------------------
+# --- the goal readings and the goal lines -----------------------------------------------------
+
+
+@dataclass(frozen=True)
+class GoalReading:
+    """One goal's state, decided once, for its goal line and for the scorer (feature 014 RF-23).
+
+    `reason` is the `GoalReason` key, never the words file's text for it, so a reader that maps
+    the state reads no wording; `row` is the coverage row the reason was taken from, whose
+    sentence is the goal line's `detail`, `None` when no row speaks for the state.
+    """
+
+    goal: Goal
+    state: GoalState
+    reason: GoalReason | None
+    row: CoverageItem | None
+
+
+def goal_readings(session: ReviewSession, words: Words) -> list[GoalReading]:
+    """One reading per goal, in the words file's order: the state decision `goal_lines` builds
+    its lines from, for a reader that needs the `GoalReason` key (`benchmark/scorecard`)."""
+    return [
+        _goal_reading(goal, mapped, _issues(mapped), rows)
+        for goal, mapped, rows in _by_goal(session, words)
+    ]
 
 
 def goal_lines(session: ReviewSession, words: Words) -> list[GoalLine]:
     """One line per goal, in the words file's order (feature 009 `contracts/review-summary.md`
-    section 3): each finding and each coverage row counted for its one goal (`goal_of`), in
-    one pass over each, then each goal's state first match winning."""
+    section 3): each goal's reading and the count of its findings other than a pass, the list
+    the reading read."""
+    lines: list[GoalLine] = []
+    for goal, mapped, rows in _by_goal(session, words):
+        issues = _issues(mapped)
+        lines.append(_goal_line(_goal_reading(goal, mapped, issues, rows), len(issues), words))
+    return lines
+
+
+def _by_goal(
+    session: ReviewSession, words: Words
+) -> list[tuple[Goal, list[Finding], dict[CoverageBucket, list[CoverageItem]]]]:
+    """Each goal, in the words file's order, with its findings and its coverage rows by bucket:
+    each finding and each coverage row counted for its one goal (`goal_of`), in one pass over
+    each."""
     goals = words.goals
     mapped: dict[str, list[Finding]] = {goal.id: [] for goal in goals}
     rows: dict[str, dict[CoverageBucket, list[CoverageItem]]] = {
@@ -201,50 +241,61 @@ def goal_lines(session: ReviewSession, words: Words) -> list[GoalLine]:
             goal = goal_of(item.check, goals)
             if goal is not None:
                 rows[goal.id][bucket].append(item)
-    return [_goal_line(goal, mapped[goal.id], rows[goal.id], words) for goal in goals]
+    return [(goal, mapped[goal.id], rows[goal.id]) for goal in goals]
 
 
-def _goal_line(
+def _issues(mapped: Sequence[Finding]) -> list[Finding]:
+    """A goal's findings other than a pass: what makes its state `issues`, and its count."""
+    return [finding for finding in mapped if finding.status != SUPPRESSED_STATUS]
+
+
+def _goal_reading(
     goal: Goal,
     mapped: Sequence[Finding],
+    issues: Sequence[Finding],
     rows: Mapping[CoverageBucket, Sequence[CoverageItem]],
-    words: Words,
-) -> GoalLine:
-    """One goal's state, first match winning (feature 009 `contracts/review-summary.md` 3)."""
-    issues = [finding for finding in mapped if finding.status != SUPPRESSED_STATUS]
+) -> GoalReading:
+    """One goal's state, first match winning (feature 009 `contracts/review-summary.md` 3).
+    `issues` is `_issues(mapped)`, filtered once by the caller, which counts it too."""
 
-    def line(
+    def reading(
         state: GoalState, reason: GoalReason | None = None, row: CoverageItem | None = None
-    ) -> GoalLine:
-        """The goal's line; its `detail` is `row`'s reason, and says who wrote it."""
-        return GoalLine(
-            goal=goal.id,
-            title=goal.title,
-            state=state,
-            state_label=words.goal_states[state],
-            findings=len(issues),
-            reason=None if reason is None else words.goal_reasons[reason],
-            detail=None if row is None else row.reason,
-            detail_source="model" if row is not None and coverage_source(row) == "model" else None,
-        )
+    ) -> GoalReading:
+        return GoalReading(goal=goal, state=state, reason=reason, row=row)
 
     if issues:
-        return line("issues")
+        return reading("issues")
     closeout = _first(rows, lambda item: item.check in goal.items)
     if closeout is not None:
-        return line("not_reached", *closeout)
+        return reading("not_reached", *closeout)
     if not mapped and not any(rows.values()):
-        return line("not_reached", "no_check")
+        return reading("not_reached", "no_check")
     if rows["checked"] or mapped:
         # `mapped` holds within-scope findings only here: `issues` was empty.
-        return line("checked")
+        return reading("checked")
     rule_row = _first(rows, lambda item: True)
     if rule_row is not None:
         # The case the contract's four rows leave open: only rule rows, none checked, and
         # at least one of them unresolved, skipped or failed.
-        return line("not_reached", *rule_row)
+        return reading("not_reached", *rule_row)
     # Every row left is out of scope, and there is at least one: `no_check` took the rest.
-    return line("not_applicable", "out_of_scope", rows["out_of_scope"][0])
+    return reading("not_applicable", "out_of_scope", rows["out_of_scope"][0])
+
+
+def _goal_line(reading: GoalReading, findings: int, words: Words) -> GoalLine:
+    """The goal's line from its reading; its `detail` is the reading's row's reason, and says
+    who wrote it."""
+    row = reading.row
+    return GoalLine(
+        goal=reading.goal.id,
+        title=reading.goal.title,
+        state=reading.state,
+        state_label=words.goal_states[reading.state],
+        findings=findings,
+        reason=None if reading.reason is None else words.goal_reasons[reading.reason],
+        detail=None if row is None else row.reason,
+        detail_source="model" if row is not None and coverage_source(row) == "model" else None,
+    )
 
 
 def _first(

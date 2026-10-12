@@ -11,9 +11,9 @@ Two layers, deliberately:
 1. **Specs** - frozen dataclasses (`FeatureSpec`, `EquationSpec`, `InstanceSpec`,
    `MateSpec`, `PartSpec`, `SubassemblySpec`, `AssemblySpec`) that say what a fixture
    contains, naming features and component instances by *name*.
-2. **Layout** - `build_features` and `rms_package`, which allocate `feat:NNNN` and
-   `cmp:NNNN` ids in traversal order, resolve every name to an id, and emit validated IR
-   models.
+2. **Layout** - `build_features`, `part_trees` and `rms_package`, which allocate
+   `feat:NNNN` and `cmp:NNNN` ids in traversal order, resolve every name to an id, and
+   emit validated IR models.
 
 The split exists because the same tree must be emitted in both traversal shapes of
 `specs/003-resilient-modeling/contracts/rules.md` ("Group assignment"):
@@ -359,6 +359,41 @@ def _is_folder(spec: FeatureSpec) -> bool:
     return spec.type_name == FOLDER_TYPE and not spec.name.endswith(END_TAG_SUFFIX)
 
 
+def part_trees(parts: Sequence[PartSpec]) -> tuple[list[Feature], list[Equation]]:
+    """Every part's feature rows and equations, in `parts` order.
+
+    The features share one `feat:NNNN` sequence across the parts; each part's equations are
+    indexed from 0 in its own document. The one place trees and equations are laid:
+    `rms_package` calls it, and so does the feature 014 case generator, which lays them on a
+    `PackageBuilder` package by naming that package's document ids in the specs
+    (`specs/014-design-review-eval/contracts/generator.md` 5.1).
+    """
+    features: list[Feature] = []
+    equations: list[Equation] = []
+    for part in parts:
+        features.extend(
+            build_features(
+                part.features,
+                document_id=part.document_id,
+                shape=part.shape,
+                configuration=part.configuration,
+                start=len(features) + 1,
+            )
+        )
+        for index, spec in enumerate(part.equations):
+            equations.append(
+                Equation(
+                    document_id=part.document_id,
+                    index=index,
+                    text=spec.text,
+                    lhs=spec.lhs,
+                    is_global=spec.is_global,
+                    value=spec.value,
+                )
+            )
+    return features, equations
+
+
 # --- 4. The suppress-test run -----------------------------------------------------
 
 
@@ -633,29 +668,7 @@ def rms_package(
             if mate_spec.entity_gap:
                 built_gaps.append(mate_entity_gap(mate_id, len(mate_spec.entities)))
 
-    features: list[Feature] = []
-    equations: list[Equation] = []
-    for part in parts:
-        features.extend(
-            build_features(
-                part.features,
-                document_id=part.document_id,
-                shape=part.shape,
-                configuration=part.configuration,
-                start=len(features) + 1,
-            )
-        )
-        for index, spec in enumerate(part.equations):
-            equations.append(
-                Equation(
-                    document_id=part.document_id,
-                    index=index,
-                    text=spec.text,
-                    lhs=spec.lhs,
-                    is_global=spec.is_global,
-                    value=spec.value,
-                )
-            )
+    features, equations = part_trees(parts)
 
     root_document = assembly.document_id if assembly is not None else parts[0].document_id
     design_name = assembly.name if assembly is not None else parts[0].name

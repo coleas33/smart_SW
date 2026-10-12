@@ -122,6 +122,7 @@ def check_interference_group(group_key: str) -> ToolResult:
         result,
         component_ids=selected.component_ids,
         exception_id=None if exception is None else exception.id,
+        tool_result_ids=[context.current_step_id],
     )
     if "error" in recorded:
         return recorded

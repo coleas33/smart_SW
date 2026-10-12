@@ -57,6 +57,7 @@ __all__ = [
     "UsableThread",
     "check_fastener_joint",
     "check_placed_screw",
+    "is_pipe_thread",
     "nominal_diameter",
     "parse_thread",
 ]
@@ -110,7 +111,21 @@ class ClampedLayer:
 ThreadSeries = Literal["metric", "unified"]
 
 _WHITESPACE = re.compile(r"\s+")
-_METRIC = re.compile(r"^M(\d+(?:\.\d+)?)(?:[X*](\d+(?:\.\d+)?))?(?:$|[^0-9.].*$)")
+_DECIMAL_COMMA = re.compile(r"(?<=\d),(?=\d)")
+_METRIC = re.compile(
+    r"""
+    ^M(\d+(?:\.\d+)?)                       # the size: M8, M3.5
+    (?:
+        [X*×](?P<marked>\d+(?:\.\d+)?)      # a pitch marker and the pitch: M8x1.25, M8×1
+      | -(?P<hyphen>\d+(?:\.\d+)?)          # a hyphen pitch, before the end or a separator
+        (?=$|[^0-9A-Z.*×]|[X*×]\d|LH|RH)    # (M10-1.5-6H), a length (M4-0.7x12) or the hand
+      | -(?:\d[EFGH])+                      # a tolerance class, no pitch: M8-6H, M8-6g6h
+      | (?![X*×]|-\d)                       # no pitch: M8; a marker or a hyphen number that
+    )                                       # nothing above read is unreadable (M8x, M8-1x)
+    (?:$|[^0-9.].*$)
+    """,
+    re.VERBOSE,
+)
 _NUMBER_SERIES = re.compile(r"^#(\d+)-(\d+)(?:$|[^0-9.].*$)")
 _FRACTIONAL_INCH = re.compile(r"^(\d+)/(\d+)-(\d+)(?:$|[^0-9.].*$)")
 _DECIMAL_INCH = re.compile(r"^(\d*\.\d+)-(\d+)(?:$|[^0-9.].*$)")
@@ -155,17 +170,29 @@ def _tpi_to_pitch_mm(threads_per_inch: str) -> float:
 
 
 def parse_thread(designation: str) -> ThreadSpec:
-    """Parse `M6x1.0`, `1/4-20`, `#10-32` or `0.190-32` into a comparable `ThreadSpec`.
+    """Parse a metric or unified thread designation into a comparable `ThreadSpec`.
+
+    Metric: `M6`, `M6x1.0`, `M6*1`, `M8×1` (a pitch marker and the pitch); `M8-1.25` (a
+    hyphen pitch, also before a separator `M10-1.5-6H`, a length `M4-0.7x12` or the hand
+    `M10-1.25LH`); `M8-6H` and `M8-6g6h` (a tolerance class, so no pitch). Unified: `1/4-20`,
+    `#10-32`, `0.190-32`. A comma between two digits is a decimal point (`M8x1,25`).
+    Whitespace is removed and case ignored before reading, so a grade written after a space
+    joins the pitch (`M8x1.25 6H` reads 1.256), a known limit (feature 010
+    contracts/fasteners.md 8.8).
 
     Anything else comes back with `series=None` and no diameter: unrecognised, which the
-    checks report as unresolved rather than guessing at a match. A designation with no
-    pitch (`M6`) parses with `pitch_mm=None`; the comparison then uses diameter alone.
+    checks report as unresolved rather than guessing at a match. That includes a pitch
+    marker with no number after it (`M8x`, `M16xPh3P1.5`) and a hyphen number followed by
+    any other letter (`M10-1.25G`, `M8-1x`), which read with no pitch would pass as the
+    coarse thread. A designation with no pitch (`M6`) parses with `pitch_mm=None`; the
+    comparison then uses diameter alone. Pipe text is not told apart here (`1/8-27 NPT`
+    reads as unified): `is_pipe_thread` does that.
     """
-    cleaned = _WHITESPACE.sub("", designation).upper()
+    cleaned = _DECIMAL_COMMA.sub(".", _WHITESPACE.sub("", designation).upper())
 
     metric = _METRIC.match(cleaned)
     if metric is not None:
-        pitch = metric.group(2)
+        pitch = metric.group("marked") or metric.group("hyphen")
         return _spec(
             designation, "metric", float(metric.group(1)), None if pitch is None else float(pitch)
         )
@@ -204,6 +231,31 @@ def parse_thread(designation: str) -> ThreadSpec:
     )
 
 
+# The one place pipe thread tokens are known (feature 010 contracts/fasteners.md 8.8).
+_PIPE_SERIES = ("NPT", "NPTF", "NPS", "NPSM", "BSP", "BSPP", "BSPT")
+"""Pipe series, read as a whole run of letters anywhere in the text: `1/8-27 NPT`, `1/4 BSPP`."""
+_PIPE_PREFIXES = ("G", "R", "RC", "RP", "PT", "PF")
+"""Pipe prefixes, read at the start of the text before a digit: `G1/4`, `Rc 1/2`, `PT1/8`."""
+
+_LETTER_RUN = re.compile(r"[A-Z]+")
+_PIPE_PREFIX = re.compile(rf"^(?:{'|'.join(_PIPE_PREFIXES)})\s*\d")
+
+
+def is_pipe_thread(designation: str) -> bool:
+    """Whether `designation` names a pipe thread, ignoring case.
+
+    True when a whole run of letters is a pipe series (`1/8-27 NPT`, `NPT 1/8`, `1/2 BSP`), or
+    when the trimmed text starts with a pipe prefix and then, after optional spaces, a digit
+    (`G1/4`, `G 1/2 A`, `Rc1/4`). A tolerance class letter (`M8x1.25-6G`) is neither.
+    `parse_thread` does not change for pipe text, so a caller that must tell a pipe thread
+    from a unified one asks this first.
+    """
+    text = designation.strip().upper()
+    if any(run in _PIPE_SERIES for run in _LETTER_RUN.findall(text)):
+        return True
+    return _PIPE_PREFIX.match(text) is not None
+
+
 def nominal_diameter(designation: str) -> Quantity | None:
     """The nominal thread diameter in millimetres, or `None` if the designation is unread."""
     return parse_thread(designation).nominal_diameter
@@ -224,6 +276,10 @@ class _Stack:
     `missing` holds noun phrases naming the values that could not be obtained; they are
     what the unresolved results report, so they read as "the length of fastener fst:1".
 
+    `refs` are the joint's references, the fastener's and the hole's ids: every result of
+    the four rules leads its `inputs` with them, then `sources`, on every path, so a finding
+    names the exact joint it judges (feature 014 FR-061, owner decision 19A).
+
     `bottoming_derivation` and `engagement_derivation` say where the protrusion and the
     usable thread came from - the lines each rule function writes ahead of its own - and
     `pose` what is assumed about the screw's seat. A clamped stack derives its protrusion
@@ -238,6 +294,7 @@ class _Stack:
     protrusion_mm: float | None = None
     missing: list[str] = field(default_factory=list)
     inputs: dict[str, Quantity | str] = field(default_factory=dict)
+    refs: list[str] = field(default_factory=list)
     sources: list[Quantity | str] = field(default_factory=list)
     bottoming_derivation: list[str] = field(default_factory=lambda: [CLAMPED_PROTRUSION])
     engagement_derivation: list[str] = field(default_factory=list)
@@ -246,6 +303,11 @@ class _Stack:
     def missing_for(self, *keywords: str) -> list[str]:
         """The missing phrases that mention any of `keywords`, in table order."""
         return [phrase for phrase in self.missing if any(word in phrase for word in keywords)]
+
+
+def _inputs(stack: _Stack) -> list[Quantity | str]:
+    """A result's `inputs`: the joint's references, then every length as read."""
+    return [*stack.refs, *stack.sources]
 
 
 def _record(stack: _Stack, name: str, quantity: Quantity) -> float:
@@ -266,6 +328,7 @@ def _build_stack(
     stack = _Stack()
     stack.inputs["fastener_id"] = fastener.id
     stack.inputs["hole_id"] = hole.id
+    stack.refs = [fastener.id, hole.id]
 
     if fastener.length is None:
         stack.missing.append(f"the length of fastener {fastener.id}")
@@ -344,7 +407,7 @@ def _bottoming(fastener: Fastener, hole: Hole, stack: _Stack) -> CheckResult:
             severity="info",
             observed=f"Hole {hole.id} is a through hole, so the screw cannot bottom in it.",
             requirement=_BOTTOMING_REQUIREMENT,
-            inputs=list(stack.sources),
+            inputs=_inputs(stack),
             calculation=_calculation(
                 CHECK_BOTTOMING,
                 stack,
@@ -362,7 +425,7 @@ def _bottoming(fastener: Fastener, hole: Hole, stack: _Stack) -> CheckResult:
         return unresolved(
             CHECK_BOTTOMING,
             f"the end condition of hole {hole.id}",
-            stack.sources,
+            _inputs(stack),
             requirement=_BOTTOMING_REQUIREMENT,
             recommended_action=f"Record whether {hole.id} is blind or through, then re-run.",
         )
@@ -371,7 +434,7 @@ def _bottoming(fastener: Fastener, hole: Hole, stack: _Stack) -> CheckResult:
         return unresolved(
             CHECK_BOTTOMING,
             " and ".join(stack.missing),
-            stack.sources,
+            _inputs(stack),
             requirement=_BOTTOMING_REQUIREMENT,
             recommended_action="Supply the missing dimension, then re-run the check.",
         )
@@ -388,7 +451,7 @@ def _bottoming(fastener: Fastener, hole: Hole, stack: _Stack) -> CheckResult:
             f"{stack.thread_depth_mm} mm of usable thread: margin {margin_mm} mm"
         ),
         requirement=_BOTTOMING_REQUIREMENT,
-        inputs=list(stack.sources),
+        inputs=_inputs(stack),
         calculation=_calculation(
             CHECK_BOTTOMING,
             stack,
@@ -473,7 +536,7 @@ def _engagement(
             severity="medium",
             observed=f"{' and '.join(missing)} is unknown; the check did not run",
             requirement=requirement,
-            inputs=list(stack.sources),
+            inputs=_inputs(stack),
             calculation=calculation,
             coverage_limits=[_limit(CHECK_ENGAGEMENT, missing)],
             recommended_action="Supply the missing value, then re-run the check.",
@@ -493,7 +556,7 @@ def _engagement(
             f"against the {rule.min_engagement_ratio} x d rule for {rule.name}"
         ),
         requirement=requirement,
-        inputs=list(stack.sources),
+        inputs=_inputs(stack),
         calculation=calculation,
         coverage_limits=[],
         recommended_action=(
@@ -521,7 +584,7 @@ def _thread_match(fastener: Fastener, hole: Hole, stack: _Stack) -> CheckResult:
         return unresolved(
             CHECK_THREAD_MATCH,
             " and ".join(missing),
-            stack.sources,
+            _inputs(stack),
             requirement=_THREAD_REQUIREMENT,
             recommended_action="Record both thread designations, then re-run the check.",
         )
@@ -535,7 +598,7 @@ def _thread_match(fastener: Fastener, hole: Hole, stack: _Stack) -> CheckResult:
         return unresolved(
             CHECK_THREAD_MATCH,
             f"the thread size in {' and '.join(repr(text) for text in unreadable)}",
-            stack.sources,
+            _inputs(stack),
             requirement=_THREAD_REQUIREMENT,
             recommended_action=(
                 "Record the thread in a standard designation (M6x1.0, 1/4-20), then re-run."
@@ -560,7 +623,7 @@ def _thread_match(fastener: Fastener, hole: Hole, stack: _Stack) -> CheckResult:
         severity=_SEVERITY_BY_STATUS.get(status, "high"),
         observed=observed,
         requirement=_THREAD_REQUIREMENT,
-        inputs=list(stack.sources),
+        inputs=_inputs(stack),
         calculation=_calculation(
             CHECK_THREAD_MATCH,
             stack,
@@ -609,7 +672,7 @@ def _head_clearance(
         return unresolved(
             CHECK_HEAD_CLEARANCE,
             f"the tool envelope around the head of {fastener.id}{because}",
-            stack.sources,
+            _inputs(stack),
             requirement=_HEAD_REQUIREMENT,
             recommended_action=(
                 f"Export the body meshes near {fastener.id} and re-run the check with an "
@@ -647,7 +710,7 @@ def _head_clearance(
             severity="medium",
             observed=f"The tool envelope of {fastener.id} runs into {blocking}.",
             requirement=_HEAD_REQUIREMENT,
-            inputs=list(stack.sources),
+            inputs=_inputs(stack),
             calculation=calculation,
             coverage_limits=list(envelope.unresolved),
             recommended_action=(
@@ -665,7 +728,7 @@ def _head_clearance(
                 "swept, but not every body could be tested."
             ),
             requirement=_HEAD_REQUIREMENT,
-            inputs=list(stack.sources),
+            inputs=_inputs(stack),
             calculation=calculation,
             coverage_limits=list(envelope.unresolved),
             recommended_action="Export the missing body meshes, then re-run the check.",
@@ -676,7 +739,7 @@ def _head_clearance(
         severity="info",
         observed=f"The tool envelope of {fastener.id} is clear of every body that was swept.",
         requirement=_HEAD_REQUIREMENT,
-        inputs=list(stack.sources),
+        inputs=_inputs(stack),
         calculation=calculation,
         coverage_limits=[
             f"{CHECK_HEAD_CLEARANCE} swept only the bodies passed to the raycast, sampled on "
@@ -686,7 +749,9 @@ def _head_clearance(
     )
 
 
-def _unsupported(fastener: Fastener) -> CheckResult:
+def _unsupported(fastener: Fastener, hole: Hole) -> CheckResult:
+    """One out-of-scope result naming the fastener and the hole its call names (feature 014
+    FR-061, owner decision 19A)."""
     supported = " and ".join(SUPPORTED_KINDS)
     return CheckResult(
         check=CHECK_UNSUPPORTED,
@@ -697,7 +762,7 @@ def _unsupported(fastener: Fastener) -> CheckResult:
             "tapped hole only."
         ),
         requirement="joint kinds outside the pilot are reported out of scope, never as passed",
-        inputs=[fastener.id],
+        inputs=[fastener.id, hole.id],
         calculation=None,
         coverage_limits=[f"out_of_scope: {fastener.kind}"],
         recommended_action=f"Review the {fastener.kind} joint at {fastener.id} by hand.",
@@ -727,7 +792,7 @@ def check_fastener_joint(
     Raises `pint.DimensionalityError` when an angle is supplied where a length belongs.
     """
     if fastener.kind not in SUPPORTED_KINDS:
-        return [_unsupported(fastener)]
+        return [_unsupported(fastener, hole)]
 
     stack = _build_stack(fastener, hole, clamped, washers)
     rule = (rules or load_rules()).for_material(hole_material)
@@ -808,6 +873,7 @@ def _placed_stack(fastener: Fastener, hole: Hole, placement: Placement) -> _Stac
     )
     stack.inputs["fastener_id"] = fastener.id
     stack.inputs["hole_id"] = hole.id
+    stack.refs = [fastener.id, hole.id]
     stack.missing = list(placement.missing)
     if placement.protrusion_mm is not None:
         stack.protrusion_mm = round_length(placement.protrusion_mm)
@@ -901,7 +967,7 @@ def check_placed_screw(
     unresolved naming why.
     """
     if fastener.kind not in SUPPORTED_KINDS:
-        return [_unsupported(fastener)]
+        return [_unsupported(fastener, hole)]
 
     stack = _placed_stack(fastener, hole, placement)
     rule = (rules or load_rules()).for_material(hole_material)

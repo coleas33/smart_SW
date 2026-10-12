@@ -37,6 +37,8 @@ from pathlib import Path
 
 import tiktoken
 
+from swreview import atomic
+
 __all__ = [
     "ENCODING_SHA256",
     "FETCH_COMMAND",
@@ -218,10 +220,5 @@ def fetch_vocabulary(source: Path | None = None) -> tuple[Path, bool]:
             f"{ENCODING_SHA256}, so nothing was written to {target.parent}"
         )
     target.parent.mkdir(parents=True, exist_ok=True)
-    temporary = target.with_name(f"{target.name}.{os.getpid()}.tmp")
-    try:
-        temporary.write_bytes(content)
-        os.replace(temporary, target)
-    finally:
-        temporary.unlink(missing_ok=True)
+    atomic.write_atomic(target, content)
     return target, True

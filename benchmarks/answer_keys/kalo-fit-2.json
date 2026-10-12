@@ -1,0 +1,46 @@
+{
+  "key_format": 2,
+  "package_id": "kalo-fit-2",
+  "known_defects": [
+    {
+      "id": "D-1",
+      "tag": "tuned_on",
+      "description": "hole and pin drawn with no tolerance, the pin's oversize only as free text (R-3, variant B)",
+      "check": "fit.size_only",
+      "component_ids": [],
+      "document_ids": [
+        "doc:0006"
+      ],
+      "references": [
+        {
+          "bore": {
+            "document_id": "doc:0006",
+            "sheet": "Sheet1",
+            "annotation": "dim-1-1"
+          },
+          "shaft": {
+            "document_id": "doc:0006",
+            "sheet": "Sheet1",
+            "annotation": "dim-1-3"
+          }
+        }
+      ],
+      "producer": "model",
+      "expected_status": "unresolved"
+    }
+  ],
+  "correct_conditions": [],
+  "forbidden": [],
+  "expected_coverage": [],
+  "unanswerable_requests": [],
+  "question_counts": [
+    {
+      "id": "Q-1",
+      "tag": "tuned_on",
+      "description": "At most one question on the pin's fit: once the engineer has answered it, a request for numeric limits asks it again (R-3).",
+      "item": "interfaces.fit",
+      "min": 0,
+      "max": 1
+    }
+  ]
+}

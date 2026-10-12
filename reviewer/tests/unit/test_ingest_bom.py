@@ -17,7 +17,9 @@ from swreview.ingest.bom import BOM_COLUMNS, BomRow, bom_gaps, read_bom
 from swreview.ir.models import EvidencePackage
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-BENCHMARK_BOM = REPO_ROOT / "benchmarks" / "packages" / "cover-blind-tap" / "bom.csv"
+BENCHMARK_BOM = (
+    REPO_ROOT / "reviewer" / "tests" / "fixtures" / "ingest" / "cover-blind-tap" / "bom.csv"
+)
 
 HEADER = "item,part_number,document_id,description,quantity,configuration"
 

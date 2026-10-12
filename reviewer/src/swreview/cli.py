@@ -42,8 +42,10 @@ import sys
 import zipfile
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
+from functools import partial
 from pathlib import Path
 from typing import Annotated, Any, get_args
 
@@ -51,8 +53,10 @@ import typer
 from pydantic import ValidationError
 from pydantic_core import to_jsonable_python
 
+from swreview import atomic
+from swreview.agent import checklist as agent_checklist
 from swreview.agent import providers
-from swreview.agent.checklist import CHECKLIST_FILE, load_checklist
+from swreview.agent.checklist import load_checklist
 from swreview.agent.providers import AgentProvider, EffortLevel, ProviderName
 from swreview.agent.providers.fake import ScriptedToolCall, ScriptedTurn
 from swreview.agent.runner import (
@@ -60,13 +64,17 @@ from swreview.agent.runner import (
     SESSION_FILE_NAME,
     load_exceptions,
     run_review,
+    start_review,
 )
 from swreview.agent.settings import (
     DEFAULT_EFFORT,
     DEFAULT_PROVIDER,
+    INERT_SETTINGS,
     LEVER_NAMES,
     MODEL_VIEW_OFF,
     NO_STUDY,
+    PANE_STUDY,
+    PRIVATE_PANE_STUDY,
     EfficiencySettings,
     ModelViewSettings,
     PaneDefaults,
@@ -78,6 +86,8 @@ from swreview.agent.settings import (
     redact,
 )
 from swreview.agent.settings import pane_defaults as pane_defaults_for
+from swreview.benchmark import answers, set_summary, sets
+from swreview.benchmark.answers import DEFAULT_MAX_ANSWER_TURNS
 from swreview.benchmark.compare import (
     carry_sign_offs,
     committed_sign_off_sources,
@@ -90,14 +100,27 @@ from swreview.benchmark.compare import (
 from swreview.benchmark.recording import RecordingRefused, read_recording
 from swreview.benchmark.replay import render_replay_lines, replay_recording
 from swreview.benchmark.runner import (
+    EXAMPLE_PROFILE,
+    PROVENANCE_SCHEMA,
+    SAVED_SET_FILE,
+    AttemptRequest,
     RunProvenance,
+    committable,
     current_commit,
+    preflight_set,
+    profile_is_example,
     run_benchmark,
     sha256_of,
+    tree_dirty,
     write_provenance,
 )
-from swreview.benchmark.scorecard import render_scorecard_md, score_run
-from swreview.benchmark.sets import BenchmarkSet, load_set
+from swreview.benchmark.scorecard import (
+    known_defect_count,
+    of_model_origin,
+    render_scorecard_md,
+    score_run,
+)
+from swreview.benchmark.sets import BenchmarkSet
 from swreview.benchmark.timing import record_timing, record_timing_at
 from swreview.chat import DEFAULT_ALLOW_ORIGIN, DEFAULT_RUN_ROOT
 from swreview.checks.golden_interference import interference_case
@@ -112,6 +135,8 @@ from swreview.checks.standards.profile import (
     DEFAULT_PATH,
     SETTING_NAME,
     ProfileError,
+    ProfileInvalid,
+    ProfileUnreadable,
     ProfileUpgradeRefused,
     load_profile,
     propose_version_4,
@@ -253,10 +278,6 @@ run at all.
 """
 
 
-SAVED_SET_FILE = "benchmark-set.json"
-"""`benchmark run` writes the set it ran into the run directory, so `benchmark score`
-can score it without being told twice which set this run was."""
-
 HANDLED_ERRORS = (
     UnsupportedSchemaVersionError,
     AnswerKeyAccessError,
@@ -383,6 +404,10 @@ def _efficiency(
     study: str = NO_STUDY,
     arm: str | None = None,
     allow_workstation_levers: bool = True,
+    pane_defaults: bool = False,
+    typed_levers: Sequence[str] = (),
+    model_view_typed: bool = False,
+    explanations_typed: bool = False,
 ) -> EfficiencySettings:
     """What `--lever`, `--study` and `--arm` resolve to for one run, or a usage error.
 
@@ -391,6 +416,10 @@ def _efficiency(
     or a package is read. That is the whole reason the study refusals live on the command
     that chooses the lever rather than on `benchmark compare`: a refusal after six paid
     runs is worthless (contracts/ab-harness.md section 2).
+
+    `pane_defaults`, `typed_levers`, `model_view_typed` and `explanations_typed` are the
+    typed markers `check_study_arm` reads for the pane study and the baselines (feature 014
+    RF-19), which `_review_settings` derives; each defaults to nothing typed.
     """
     try:
         efficiency = efficiency_from_levers(
@@ -398,10 +427,31 @@ def _efficiency(
             provider=provider,
             allow_workstation_levers=allow_workstation_levers,
         )
-        check_study_arm(study=study, arm=arm, efficiency=efficiency)
+        check_study_arm(
+            study=study,
+            arm=arm,
+            efficiency=efficiency,
+            pane_defaults=pane_defaults,
+            levers=typed_levers,
+            model_view_typed=model_view_typed,
+            explanations_typed=explanations_typed,
+        )
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from exc
     return efficiency
+
+
+@dataclass(frozen=True)
+class ResolvedReview:
+    """What one review's switches resolve to (feature 014 `contracts/benchmark-run.md` 2).
+
+    Frozen, as `PaneDefaults` is: a statement about the run, read by the command that starts
+    it, never adjusted after the resolver has spoken.
+    """
+
+    efficiency: EfficiencySettings
+    model_view: ModelViewSettings
+    explain_findings: bool
 
 
 def _review_settings(
@@ -412,29 +462,51 @@ def _review_settings(
     payload_slimming: bool,
     history_pruning: bool,
     prune_after: int | None,
-) -> tuple[EfficiencySettings, ModelViewSettings]:
-    """What one review's switches resolve to: its levers and its model view (feature 008).
+    explain_findings: bool | None = None,
+    study: str = NO_STUDY,
+    arm: str | None = None,
+    allow_workstation_levers: bool = True,
+) -> ResolvedReview:
+    """What one review's switches resolve to: its levers, model view and explanations.
 
     The one resolver `swreview review` and `swreview benchmark replay` share, so the two
     commands cannot read the same flags differently (`specs/008-checks-first-review/
-    contracts/cli.md`):
+    contracts/cli.md`; feature 014 `contracts/benchmark-run.md` section 2):
 
-    1. start from `pane_defaults(provider)` when `--pane-defaults` is given, else every
-       change off;
+    1. start from `pane_defaults(provider)` when `--pane-defaults` is given (the
+       explanation pass on), else every change off (the explanation pass off);
     2. add the named levers through `efficiency_from_levers`, the pane's own included, so
        every existing refusal applies (`--pane-defaults --lever coverage_stop` is
        `GATED_ALONE`'s);
     3. turn on `--payload-slimming` and `--history-pruning` when given;
     4. `--prune-after N` sets the prune age, and is a usage error when N is below 1 or when
-       pruning is not on, naming the flags.
+       pruning is not on, naming the flags;
+    5. a typed `--explain-findings` or `--no-explain-findings` wins over the base's
+       explanations (PP-1); `None` is neither typed.
+
+    `study`, `arm` and `allow_workstation_levers` reach `check_study_arm` and
+    `efficiency_from_levers` through `_efficiency` with the markers of what was typed - the
+    `--lever` names as typed, never the pane's own - so a run keeps its study checks and its
+    workstation-lever refusal through this one resolver (RF-19). Their defaults are what
+    `review` and `benchmark replay` always had.
     """
     base = (
         pane_defaults_for(provider)
         if pane_defaults
-        else PaneDefaults(EfficiencySettings(), MODEL_VIEW_OFF)
+        else PaneDefaults(EfficiencySettings(), MODEL_VIEW_OFF, explain_findings=False)
     )
     pane_levers = [name for name, on in base.efficiency.model_dump().items() if on]
-    efficiency = _efficiency([*pane_levers, *(lever or ())], provider=provider)
+    efficiency = _efficiency(
+        [*pane_levers, *(lever or ())],
+        provider=provider,
+        study=study,
+        arm=arm,
+        allow_workstation_levers=allow_workstation_levers,
+        pane_defaults=pane_defaults,
+        typed_levers=lever or (),
+        model_view_typed=payload_slimming or history_pruning or prune_after is not None,
+        explanations_typed=explain_findings is not None,
+    )
     slimming = base.model_view.payload_slimming or payload_slimming
     pruning = base.model_view.history_pruning or history_pruning
     age = base.model_view.prune_after_rounds
@@ -447,8 +519,12 @@ def _review_settings(
                 "--history-pruning or --pane-defaults"
             )
         age = prune_after
-    return efficiency, ModelViewSettings(
-        payload_slimming=slimming, history_pruning=pruning, prune_after_rounds=age
+    return ResolvedReview(
+        efficiency,
+        ModelViewSettings(
+            payload_slimming=slimming, history_pruning=pruning, prune_after_rounds=age
+        ),
+        base.explain_findings if explain_findings is None else explain_findings,
     )
 
 
@@ -458,7 +534,8 @@ PaneDefaultsOption = Annotated[
         "--pane-defaults",
         help="Run with exactly the settings a pane review runs with (checks first and the "
         "tools it ran leaving the array, parallel calls on OpenAI, payload slimming, history "
-        "pruning after two rounds).",
+        "pruning after two rounds, and the finding explanations unless "
+        "--no-explain-findings).",
     ),
 ]
 ReplayPaneDefaultsOption = Annotated[
@@ -490,6 +567,17 @@ PruneAfterOption = Annotated[
         help="The prune age in rounds (default 2); needs history pruning on.",
     ),
 ]
+ExplainFindingsOption = Annotated[
+    bool | None,
+    typer.Option(
+        "--explain-findings/--no-explain-findings",
+        help="Include the pane's bounded finding explanations and their usage; default: "
+        "on with --pane-defaults, else off.",
+        rich_help_panel="Presentation",
+    ),
+]
+"""Tri-state (feature 014 PP-1): a typed value wins over the base `_review_settings` starts
+from, and `None` is neither typed."""
 
 
 @contextmanager
@@ -706,24 +794,18 @@ def review(
     payload_slimming: PayloadSlimmingOption = False,
     history_pruning: HistoryPruningOption = False,
     prune_after: PruneAfterOption = None,
-    explain_findings: Annotated[
-        bool,
-        typer.Option(
-            "--explain-findings/--no-explain-findings",
-            help="Include the pane's bounded finding explanations and their usage.",
-            rich_help_panel="Presentation",
-        ),
-    ] = False,
+    explain_findings: ExplainFindingsOption = None,
     json_output: JsonFlag = False,
 ) -> None:
     """Run the agent loop over a package; write session.json and report.md."""
-    efficiency, model_view = _review_settings(
+    resolved = _review_settings(
         provider,
         pane_defaults=pane_defaults,
         lever=lever,
         payload_slimming=payload_slimming,
         history_pruning=history_pruning,
         prune_after=prune_after,
+        explain_findings=explain_findings,
     )
     with _errors_as_exit_1():
         settings = _provider_settings(provider, model, effort)
@@ -731,15 +813,15 @@ def review(
             session = run_review(
                 package_dir,
                 out,
-                provider=provider_factory(settings, efficiency),
+                provider=provider_factory(settings, resolved.efficiency),
                 model=settings.model,
                 effort=settings.effort,
                 key_source=settings.key_source,
                 max_steps=max_steps,
-                efficiency=efficiency,
-                model_view=model_view,
+                efficiency=resolved.efficiency,
+                model_view=resolved.model_view,
                 standards_profile=standards_profile,
-                explain_findings=explain_findings,
+                explain_findings=resolved.explain_findings,
                 fail_tool=tuple(fail_tool or ()),
                 bridge=bridge,
                 redact=redactor,
@@ -2189,6 +2271,25 @@ def exceptions_list(
 # --- benchmark -------------------------------------------------------------------
 
 
+class RunStartAdapter:
+    """The adapter `benchmark run` built before any review, held for the run's first attempt.
+
+    The run-start check builds one adapter and maps the effort, so a missing key or an
+    effort the model does not offer is refused once rather than on every package (feature
+    014 `contracts/benchmark-run.md` 3 row 3). An adapter that has served no turn holds no
+    per-turn state, so it is handed to the first attempt instead of thrown away, and a run
+    still builds exactly one adapter per attempt (plan decision RF-60).
+    """
+
+    def __init__(self, adapter: AgentProvider) -> None:
+        self._adapter: AgentProvider | None = adapter
+
+    def take(self) -> AgentProvider | None:
+        """The adapter, the first time; `None` after, so every later attempt builds its own."""
+        adapter, self._adapter = self._adapter, None
+        return adapter
+
+
 def _review_fn(
     package_dir: Path,
     session_out_dir: Path,
@@ -2196,30 +2297,190 @@ def _review_fn(
     provider: str,
     model: str,
     effort: str,
+    attempt: AttemptRequest,
     efficiency: EfficiencySettings | None = None,
     explain_findings: bool = False,
+    run_start: RunStartAdapter | None = None,
 ) -> Any:
     """One package of a benchmark set, reviewed through the same hooks as `review`.
 
     A fresh adapter per package on purpose: adapters carry per-turn state (step indices,
-    a client), and a set of twenty packages sharing one would interleave their traces.
+    a client), and a set of twenty packages sharing one would interleave their traces. The
+    one exception is no exception: the first attempt takes `run_start`'s adapter, which has
+    served no turn.
+
+    `attempt` carries the run's model view and standards profile, passed to the review as
+    the pane passes its own; the live tools are never offered to a benchmark review
+    (feature 014 RF-44, `contracts/benchmark-run.md` 5.1). The review is held open with
+    `start_review` and played by the scripted-answers driver, `answers.drive_review`, with
+    the attempt's case file and answer-turn bound: the opening turn, then each question the
+    case file answers sent back through the method the pane's Send reaches, and the package's
+    `answer-log.json` written, with or without a case file (`contracts/scripted-answers.md`
+    3; QA-1). The run is closed in a `finally`, as `run_review` closes it, and the final
+    session returned. `run_review` stays the `review` command's one-turn form.
 
     The redaction is per package too, rather than left to `benchmark_run`: a library
     caller that reaches this through `benchmark.runner`'s default `review_fn` gets the
     same guarantee as one that came through the command line (FR-015).
     """
     settings = ProviderSettings.from_env(provider=provider, model=model, effort=effort)
+    adapter = run_start.take() if run_start is not None else None
     with _redacting(settings) as redactor:
-        return run_review(
+        run = start_review(
             package_dir,
             session_out_dir,
-            provider=provider_factory(settings, efficiency),
+            provider=adapter if adapter is not None else provider_factory(settings, efficiency),
             model=settings.model,
             effort=settings.effort,
             key_source=settings.key_source,
             efficiency=efficiency,
+            model_view=attempt.model_view,
+            standards_profile=attempt.standards_profile,
             explain_findings=explain_findings,
+            bridge=False,
             redact=redactor,
+        )
+        try:
+            answers.drive_review(
+                run, attempt.case_file, max_answer_turns=attempt.max_answer_turns
+            )
+        finally:
+            run.close()
+        return run.session
+
+
+def _refuse_a_folder_in_use(out: Path) -> None:
+    """Section 3 row 1 (feature 014 `contracts/benchmark-run.md`): `--out` is a new folder or
+    an empty one.
+
+    A second run into one folder would append a second session with duplicate sequence
+    numbers to every package's stream, so anything already there - a file in the folder, or
+    a file where the folder would be - is refused before any review. The message names no
+    command: `benchmark resume`, which the robustness slice adds with its pointer, does not
+    exist yet.
+    """
+    if out.exists() and (not out.is_dir() or any(out.iterdir())):
+        raise FileExistsError(f"{out} is not empty; choose a new folder")
+
+
+def _private_packages(benchmark_set: BenchmarkSet, *, root: Path) -> list[str]:
+    """The ids of the set's private entries: each package whose resolved path lies outside
+    `root`, by `sets.checkout_relative`, the rule `BenchmarkSet.saved_form` writes them absolute
+    by (feature 014 `contracts/cases.md` 4.2)."""
+    return [
+        ref.package_id
+        for ref in benchmark_set.packages
+        if sets.checkout_relative(ref.path, root=root) is None
+    ]
+
+
+def _refuse_a_committable_folder_over_private_data(
+    out: Path, benchmark_set: BenchmarkSet, is_example: bool | None, *, root: Path
+) -> None:
+    """Section 3 row 5 (feature 014 `contracts/provenance.md` 6.4; PROV-09): a run folder the
+    repository could commit holds no private data.
+
+    Committable is `runner.committable`'s reading: inside the checkout and not ignored by git,
+    or inside it where git cannot answer. Such an `--out` is refused for a set naming a package
+    outside the checkout, which the saved set and the sessions would carry, and for a profile
+    other than the fictional example, whose values the findings would carry; for any run, since
+    a run need not declare a study to be committed. A run with no profile graded against none
+    and is not refused for it.
+    """
+    private = _private_packages(benchmark_set, root=root)
+    if private:
+        what = f"names private package {private[0]}"
+    elif is_example is False:
+        what = "grades against a profile other than the fictional example"
+    else:
+        return
+    if committable(out, root=root):
+        raise ValueError(
+            f"{out} is inside the repository, where it may be committed; this run {what}: "
+            "write it outside the repository"
+        )
+
+
+def _refuse_a_pane_study_breaking_its_file_rules(
+    study: str,
+    *,
+    standards_profile: Path | None,
+    is_example: bool | None,
+    benchmark_set: BenchmarkSet,
+    commit: str | None,
+    dirty: bool | None,
+    digested: Sequence[Path | None],
+    root: Path,
+) -> None:
+    """Section 3 row 6 (feature 014 `contracts/provenance.md` 3.2's run-time table; PROV-05,
+    INT-3): what a pane study's record must be able to name, in the table's order.
+
+    - `pane_defaults` grades against the fictional example, since every committed case is keyed
+      against it (FR-027) and one study has one profile (D5), over committed cases only: the
+      private slice is its own study (FR-056).
+    - Both pane studies name the code they measured: a commit git names and a tracked tree git
+      reports clean. Two unknown commits would pass the must-match rule as equal, and a tree git
+      cannot vouch for is treated as a dirty one.
+    - Both refuse a digested input inside the repository (`digested`, in order: the prompt, the
+      checklist, the profile or `None`, the set file, then each entry's case file or `None`)
+      whose bytes hold a carriage return. A working copy checked out before section 6.5's
+      `eol=lf` keeps them and would record digests another machine's runs do not share, which
+      compare would refuse only after the study was paid for. A file outside the repository, a
+      private profile, is never read for it.
+    - `pane_defaults_private` grades against the real profile; its `--out` inside the repository
+      is row 5's to refuse.
+
+    The price row is lane B6's (RF-79).
+    """
+    if study not in (PANE_STUDY, PRIVATE_PANE_STUDY):
+        return
+    flag = f"--study {study}"
+    if study == PANE_STUDY:
+        if standards_profile is None:
+            raise ValueError(
+                f"{flag}: no --standards-profile; every committed case is keyed against the "
+                f"fictional example: pass --standards-profile {EXAMPLE_PROFILE.as_posix()}"
+            )
+        if is_example is not True:
+            raise ValueError(
+                f"{flag}: --standards-profile names a profile other than the fictional example; "
+                "every committed case is keyed against the example, and one study has one profile"
+            )
+        private = _private_packages(benchmark_set, root=root)
+        if private:
+            raise ValueError(
+                f"{flag}: the set names private package {private[0]}, outside the repository; a "
+                "pane study's set holds committed cases only; the private slice is its own study, "
+                f"`{PRIVATE_PANE_STUDY}`"
+            )
+    if commit is None:
+        raise ValueError(
+            f"{flag}: git cannot name this checkout's commit; a paid study must name the code it "
+            "measured"
+        )
+    if dirty is True:
+        raise ValueError(
+            f"{flag}: the checkout's tracked files differ from commit {commit}; a paid study must "
+            "name the code it measured: commit the change or set it aside first"
+        )
+    if dirty is None:
+        raise ValueError(
+            f"{flag}: git cannot say whether the checkout's tracked files match commit {commit}; "
+            "a paid study must name the code it measured"
+        )
+    for path in digested:
+        if path is None:
+            continue
+        relative = sets.checkout_relative(path, root=root)
+        if relative is not None and b"\r" in Path(path).read_bytes():
+            raise ValueError(
+                f"check {relative.as_posix()} out again: section 6.5's "
+                "`eol=lf` has not reached this working copy"
+            )
+    if study == PRIVATE_PANE_STUDY and standards_profile is None:
+        raise ValueError(
+            f"{flag}: no --standards-profile; the private slice grades against the real profile: "
+            "pass it with --standards-profile"
         )
 
 
@@ -2233,8 +2494,11 @@ def _refuse_a_set_too_small_to_gate(benchmark_set: BenchmarkSet, override: bool)
     never be read as a gate.
 
     It applies to a run that declares itself part of a study - one that typed `--lever`,
-    `--study` or `--arm`. A plain `benchmark run` over a small set is a smoke test and is
-    not held to a gate's precondition; it produces no arm and gates nothing.
+    `--study` or `--arm`, and since feature 014 (PP-6) `--pane-defaults`,
+    `--payload-slimming` or `--history-pruning`, which change what a review runs with as a
+    lever does. A plain `benchmark run` over a small set is a smoke test and is not held to
+    a gate's precondition, and neither is one that only names a standards profile: it
+    produces no arm and gates nothing.
     """
     if override or any(ref.held_out for ref in benchmark_set.packages):
         return
@@ -2255,14 +2519,19 @@ def benchmark_run(
     model: ModelOption = None,
     effort: EffortOption = DEFAULT_EFFORT_CHOICE,
     lever: LeverOption = None,
-    explain_findings: Annotated[
-        bool,
+    pane_defaults: PaneDefaultsOption = False,
+    payload_slimming: PayloadSlimmingOption = False,
+    history_pruning: HistoryPruningOption = False,
+    prune_after: PruneAfterOption = None,
+    explain_findings: ExplainFindingsOption = None,
+    standards_profile: Annotated[
+        Path | None,
         typer.Option(
-            "--explain-findings/--no-explain-findings",
-            help="Match pane presentation; include explanation usage in both study arms.",
-            rich_help_panel="Presentation",
+            "--standards-profile",
+            help="Grade the release standards checks in every review, against this profile; "
+            "a profile that cannot be loaded stops the run before any review.",
         ),
-    ] = False,
+    ] = None,
     study: Annotated[
         str,
         typer.Option("--study", help="The lever this run is an arm of, or none."),
@@ -2282,55 +2551,138 @@ def benchmark_run(
             help="Run a study over a set with no held-out package; recorded with the run.",
         ),
     ] = False,
+    max_answer_turns: Annotated[
+        int,
+        typer.Option(
+            "--max-answer-turns",
+            min=0,
+            help="How many answer turns each review may take after its opening turn; 0 plays "
+            "the opening turn only.",
+        ),
+    ] = DEFAULT_MAX_ANSWER_TURNS,
     json_output: JsonFlag = False,
 ) -> None:
     """Review every package in the set, with answer keys unreadable."""
-    declares_a_study = bool(lever) or study != NO_STUDY or arm is not None
-    efficiency = _efficiency(
-        lever,
-        provider=provider,
+    # The one root every path rule reads, once, at call time (feature 014 RF-4), so a test
+    # points the command at a temporary checkout by patching `sets.REPO_ROOT`.
+    root = sets.REPO_ROOT
+    declares_a_study = (
+        bool(lever)
+        or pane_defaults
+        or payload_slimming
+        or history_pruning
+        or study != NO_STUDY
+        or arm is not None
+    )
+    resolved = _review_settings(
+        provider,
+        pane_defaults=pane_defaults,
+        lever=lever,
+        payload_slimming=payload_slimming,
+        history_pruning=history_pruning,
+        prune_after=prune_after,
+        explain_findings=explain_findings,
         study=study,
         arm=arm,
         allow_workstation_levers=False,
     )
-    with _errors_as_exit_1():
-        benchmark_set = load_set(set_file)
-        if declares_a_study:
-            _refuse_a_set_too_small_to_gate(benchmark_set, set_too_small_override)
+    run_dir = Path(out).resolve()
+    with _errors_as_exit_1(ProfileUnreadable, ProfileInvalid):
+        # Feature 014 `contracts/benchmark-run.md` section 3, in its order, each before any
+        # review and with nothing written. Row 1: a new folder or an empty one.
+        _refuse_a_folder_in_use(out)
+        # Row 2: loaded here and never in the shared resolver, so `review` and the pane keep
+        # recording a refusal and going on.
+        profile = load_profile(standards_profile) if standards_profile is not None else None
+        # Row 3: one adapter, its effort mapped, sending nothing; the first attempt's.
         settings = _provider_settings(provider, model, effort)
-        started_at = datetime.now(UTC)
         with _redacting(settings):
+            adapter = provider_factory(settings, resolved.efficiency)
+            adapter.effort_mapping(settings.effort)
+            run_start = RunStartAdapter(adapter)
+            # Row 4: the set and every case file it names, checked against the profile.
+            preflighted = preflight_set(set_file, profile, load_checklist(), root=root)
+            benchmark_set = preflighted.benchmark_set
+            # What rows 5 and 6 read is read once, and the record says what they read: the
+            # profile's likeness to the example, the commit, the tracked tree, and the prompt
+            # and checklist `agent.checklist` names at call time.
+            is_example = profile_is_example(standards_profile, root=root)
+            commit, dirty = current_commit(root), tree_dirty(root=root)
+            prompt_file = agent_checklist.SYSTEM_PROMPT_FILE
+            checklist_file = agent_checklist.CHECKLIST_FILE
+            # Row 5, a committable folder over private data.
+            _refuse_a_committable_folder_over_private_data(
+                out, benchmark_set, is_example, root=root
+            )
+            # Row 6, the pane study's file rules.
+            _refuse_a_pane_study_breaking_its_file_rules(
+                study,
+                standards_profile=standards_profile,
+                is_example=is_example,
+                benchmark_set=benchmark_set,
+                commit=commit,
+                dirty=dirty,
+                digested=(
+                    prompt_file,
+                    checklist_file,
+                    standards_profile,
+                    set_file,
+                    *(ref.case_file for ref in benchmark_set.packages),
+                ),
+                root=root,
+            )
+            # Row 7, P-3.
+            if declares_a_study:
+                _refuse_a_set_too_small_to_gate(benchmark_set, set_too_small_override)
+
+            # Before any review, so a run that stops part way is still attributable: the
+            # location-free saved set, then the record that digests it.
+            started_at = datetime.now(UTC)
+            run_dir.mkdir(parents=True, exist_ok=True)
+            saved_set = run_dir / SAVED_SET_FILE
+            atomic.write_atomic(saved_set, benchmark_set.saved_form(root=root))
+            provenance_file = write_provenance(
+                run_dir,
+                RunProvenance(
+                    commit=commit,
+                    lever=study,
+                    arm=arm,
+                    rep=rep,
+                    provider=settings.provider.value,
+                    model=settings.model,
+                    effort=settings.effort,
+                    max_steps=DEFAULT_MAX_STEPS,
+                    checklist_digest=sha256_of(checklist_file),
+                    set_digest=sha256_of(saved_set),
+                    started_at=started_at,
+                    set_too_small_override=set_too_small_override,
+                    efficiency=resolved.efficiency,
+                    explanations_enabled=resolved.explain_findings,
+                    provenance_schema=PROVENANCE_SCHEMA,
+                    pane_defaults=pane_defaults,
+                    model_view=resolved.model_view,
+                    profile_digest=profile.identity.sha256 if profile is not None else None,
+                    profile_is_example=is_example,
+                    live_tools=False,
+                    inert_settings=INERT_SETTINGS[provider],
+                    prompt_digest=sha256_of(prompt_file),
+                    tree_dirty=dirty,
+                    max_answer_turns=max_answer_turns,
+                ),
+            )
             package_dirs = run_benchmark(
-                set_file,
+                preflighted,
                 out,
                 provider=settings.provider.value,
                 model=settings.model,
                 effort=settings.effort,
-                review_fn=_review_fn,
-                efficiency=efficiency,
-                explain_findings=explain_findings,
+                review_fn=partial(_review_fn, run_start=run_start),
+                efficiency=resolved.efficiency,
+                explain_findings=resolved.explain_findings,
+                model_view=resolved.model_view,
+                standards_profile=standards_profile,
+                max_answer_turns=max_answer_turns,
             )
-        saved_set = Path(out).resolve() / SAVED_SET_FILE
-        saved_set.write_text(benchmark_set.model_dump_json(indent=2) + "\n", encoding="utf-8")
-        provenance_file = write_provenance(
-            Path(out).resolve(),
-            RunProvenance(
-                commit=current_commit(),
-                lever=study,
-                arm=arm,
-                rep=rep,
-                provider=settings.provider.value,
-                model=settings.model,
-                effort=settings.effort,
-                max_steps=DEFAULT_MAX_STEPS,
-                checklist_digest=sha256_of(CHECKLIST_FILE),
-                set_digest=sha256_of(saved_set),
-                started_at=started_at,
-                set_too_small_override=set_too_small_override,
-                efficiency=efficiency,
-                explanations_enabled=explain_findings,
-            ),
-        )
 
     payload = {
         "set": str(Path(set_file).resolve()),
@@ -2350,32 +2702,53 @@ def benchmark_run(
     _emit(payload, lines, json_output)
 
 
-def _benchmark_set_for(run_dir: Path, set_file: Path | None) -> BenchmarkSet:
-    """The set a run was made from: `--set` if given, else the copy the run saved."""
+def _benchmark_set_for(run_dir: Path, set_file: Path | None, *, root: Path) -> BenchmarkSet:
+    """The set a run was made from: `--set` if given, else the copy the run saved.
+
+    An explicit `--set` is a set file, read by `load_set`; the saved copy by
+    `load_saved_set`, whose relative entries resolve against `root`, the reader's checkout,
+    wherever the run folder lies (feature 014 `contracts/provenance.md` 6.1). `load_set`
+    would refuse them: a run folder is no `benchmarks/sets/`.
+    """
     path = Path(set_file) if set_file is not None else Path(run_dir) / SAVED_SET_FILE
     if not path.is_file():
         raise FileNotFoundError(
             f"no benchmark set to score against at {path}: pass --set, or score a run made "
             f"by `swreview benchmark run`, which saves {SAVED_SET_FILE} in the run directory"
         )
-    return load_set(path)
+    if set_file is not None:
+        return sets.load_set(path, root=root)
+    return sets.load_saved_set(path, root=root)
 
 
 @benchmark_app.command("score")
 def benchmark_score(
     run_dir: Annotated[Path, typer.Argument(help="A benchmark run directory.")],
     answer_keys: Annotated[
-        Path, typer.Option("--answer-keys", help="Directory of answer keys.")
-    ],
+        Path | None,
+        typer.Option(
+            "--answer-keys", help="Directory of answer keys, for a set that names none."
+        ),
+    ] = None,
     set_file: Annotated[
         Path | None,
         typer.Option("--set", help="Benchmark set JSON; default: the copy the run saved."),
     ] = None,
     json_output: JsonFlag = False,
 ) -> None:
-    """Score a run against its answer keys; write scorecard.json and scorecard.md."""
+    """Score a run against its answer keys; write scorecard.json and scorecard.md.
+
+    A keyed set names each entry's key, and --answer-keys beside it is a usage error (exit 2);
+    a set that names no keys reads them from --answer-keys, a usage error without it.
+    """
+    root = sets.REPO_ROOT  # read at call time, as `benchmark run` reads it
+    # The set is read first, so --answer-keys is held to the set's kind as a usage error
+    # before any key is read; anything else is refused with exit 1.
     with _errors_as_exit_1():
-        benchmark_set = _benchmark_set_for(run_dir, set_file)
+        benchmark_set = _benchmark_set_for(run_dir, set_file, root=root)
+    _refuse_answer_keys_beside_a_keyed_set(benchmark_set, answer_keys)
+    _require_answer_keys_for_a_keyless_set(benchmark_set, answer_keys)
+    with _errors_as_exit_1():
         scorecard = score_run(run_dir, answer_keys, benchmark_set)
         scorecard_json = Path(run_dir).resolve() / "scorecard.json"
         scorecard_md = Path(run_dir).resolve() / "scorecard.md"
@@ -2391,12 +2764,73 @@ def benchmark_score(
         "aggregate": to_jsonable_python(aggregate),
     }
     lines = [
-        f"scored {aggregate.packages} packages of set {scorecard.benchmark_set}",
-        f"valid findings: {aggregate.valid_findings}, missed: {aggregate.missed_known_defects}, "
-        f"false alarms: {aggregate.false_alarms}, unresolved: {aggregate.unresolved_count}",
+        f"scored {aggregate.packages} packages of set {scorecard.benchmark_set} "
+        f"(scoring rules version {scorecard.scoring_rules_version})",
+        f"detected: {aggregate.detected} of {known_defect_count(scorecard)} "
+        f"(flagged {aggregate.flagged}; below expected {aggregate.flagged_below_expected}), "
+        f"cleared: {aggregate.cleared}, false alarms: {aggregate.false_alarms} "
+        f"({of_model_origin(aggregate.false_alarms_by_origin)} of model origin), "
+        f"unresolved: {aggregate.unresolved_count}",
         f"wrote {scorecard_json} and {scorecard_md}",
     ]
     _emit(payload, lines, json_output)
+
+
+@benchmark_app.command("set-summary")
+def benchmark_set_summary(
+    set_file: Annotated[Path, typer.Argument(help="Benchmark set JSON.")],
+    answer_keys: Annotated[
+        Path | None,
+        typer.Option(
+            "--answer-keys", help="Directory of answer keys, for a set that names none."
+        ),
+    ] = None,
+) -> None:
+    """Print a set's held-out, twinned, code-produced, tuned-on and anchor counts per family.
+
+    Then the held-out model-produced total against the floor of 34, the largest design's share
+    and the held-out items whose stamp is stale (feature 014 `contracts/cases.md` 8). Reads the
+    set, its packages and its keys, never a case file or a provider. Exit 1 when the set, a key
+    or a package cannot be read, a key names another package or a held_out flag disagrees with
+    its key; exit 2 for a set that names no keys given no --answer-keys. A count below the floor
+    is printed, not refused.
+    """
+    root = sets.REPO_ROOT  # read at call time, as `benchmark score` reads it
+    # The set is read here first, so a missing --answer-keys is told apart as a usage error
+    # before `summarize`, which reads it again, refuses anything else with exit 1.
+    with _errors_as_exit_1():
+        benchmark_set = sets.load_set(set_file, root=root)
+    _require_answer_keys_for_a_keyless_set(benchmark_set, answer_keys)
+    with _errors_as_exit_1():
+        summary = set_summary.summarize(set_file, root=root, answer_keys=answer_keys)
+    typer.echo(set_summary.render_summary(summary))
+
+
+def _require_answer_keys_for_a_keyless_set(
+    benchmark_set: BenchmarkSet, answer_keys: Path | None
+) -> None:
+    """A keyless set, as every set written before feature 014 is, reads its keys from
+    --answer-keys (plan decision RF-4): without it, a usage error (exit 2) naming the option.
+    `sets.key_path` is the one rule for where an entry's key lives, and its refusal the line."""
+    try:
+        for entry in benchmark_set.packages:
+            sets.key_path(entry, answer_keys)
+    except sets.SetError as refusal:
+        raise typer.BadParameter(str(refusal), param_hint="'--answer-keys'") from None
+
+
+def _refuse_answer_keys_beside_a_keyed_set(
+    benchmark_set: BenchmarkSet, answer_keys: Path | None
+) -> None:
+    """A keyed set names every entry's key, so `benchmark score` given --answer-keys beside it
+    is a usage error (exit 2), before any key is read (plan decision RF-85): the directory would
+    be ignored in silence or score against keys the set does not name. `benchmark set-summary`,
+    which scores nothing, keeps `sets.key_path`'s reading and ignores the directory."""
+    if answer_keys is not None and any(entry.key is not None for entry in benchmark_set.packages):
+        raise typer.BadParameter(
+            "a keyed set names its own answer keys; drop --answer-keys",
+            param_hint="'--answer-keys'",
+        )
 
 
 @benchmark_app.command("time")
@@ -2481,7 +2915,7 @@ def benchmark_replay(
         provider = ProviderName(recording.provider)
     except ValueError:
         provider = ProviderName.FAKE
-    requested = _review_settings(
+    resolved = _review_settings(
         provider,
         pane_defaults=pane_defaults,
         lever=lever,
@@ -2491,7 +2925,9 @@ def benchmark_replay(
     )
     with _errors_as_exit_1(RecordingRefused, TokenizerUnavailable):
         report = replay_recording(
-            recording, requested=requested, standards_profile=standards_profile
+            recording,
+            requested=(resolved.efficiency, resolved.model_view),
+            standards_profile=standards_profile,
         )
     _emit(report.model_dump(mode="json", by_alias=True), render_replay_lines(report), json_output)
     if report.findings.lost:
@@ -2531,10 +2967,20 @@ def benchmark_compare(
     The owner's `Owner signed off` and `Owner signed off at` cells are read back off the
     ledger this invocation is about to overwrite and re-rendered unchanged, so a
     hand-written sign-off survives regeneration and does not read as drift (FR-027).
+
+    An `--out` or `--into` the repository may commit (`runner.committable`), `--check` or not,
+    makes the ledger the committed one, which refuses a run graded against another profile than
+    the fictional example, over a private package, or from a folder the repository does not hold
+    (feature 014 `contracts/provenance.md` 6.4; FR-051).
     """
+    root = sets.REPO_ROOT  # read at call time, as `benchmark run` reads it
     with _errors_as_exit_1():
+        committed = any(
+            committable(path, root=root) for path in (out, into) if path is not None
+        )
         ledger = carry_sign_offs(
-            compare_runs(run_dirs or []), *committed_sign_off_sources(out, into)
+            compare_runs(run_dirs or [], root=root, committed_ledger=committed),
+            *committed_sign_off_sources(out, into),
         )
         rendered = render_ledger_md(ledger)
         written: list[str] = []

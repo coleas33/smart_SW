@@ -14,6 +14,10 @@ material of each layer and of the tapped part is read from the package, never ty
 `envelope_case` builds its obstruction bodies from the world AABB stored on a
 `FaceGeometry`: the harness hands a case only the package, with no directory to resolve
 `BodyRef.mesh_file` against, so a fixture cannot load a real mesh.
+
+`alignment_case` takes nothing from `case.json`: it runs the joint map's two alignment checks
+over every joint the map finds, as the `check_joints` tool runs them (feature 014, owner
+decision 19A's `joint-unknown-role` golden).
 """
 
 from __future__ import annotations
@@ -25,11 +29,14 @@ import trimesh
 from pydantic_core import to_jsonable_python
 
 from swreview.checks.fastener import ClampedLayer, check_fastener_joint
+from swreview.checks.joint_alignment import run_joint_checks
+from swreview.checks.joints import build_joint_map
 from swreview.checks.result import CheckResult, round_length
+from swreview.checks.tolerances import ResolverLookup
 from swreview.geometry.envelope import EnvelopeResult, envelope_raycast
 from swreview.ir.models import EvidencePackage, Fastener, Hole, Quantity
 
-__all__ = ["envelope_case", "joint_case"]
+__all__ = ["alignment_case", "envelope_case", "joint_case"]
 
 LayerArg = Mapping[str, Any]
 
@@ -166,4 +173,22 @@ def envelope_case(
     return {
         "envelope": _jsonable_envelope(envelope),
         "results": [to_jsonable_python(result) for result in results],
+    }
+
+
+def alignment_case(package: EvidencePackage) -> dict[str, Any]:
+    """Run `hole.nominal_alignment` and `hole.position_stack` over every joint in the package.
+
+    The tolerance sources are read as `check_joints` reads them, through `ResolverLookup`
+    (`tools/checks_mechanical.py`), with no standards profile: the harness hands a case only
+    the package. Each result comes back beside the id of the joint it judges, and what the
+    checks recorded as not evaluated beside them.
+    """
+    checks = run_joint_checks(package, build_joint_map(package), ResolverLookup(package))
+    return {
+        "results": [
+            {"joint": item.joint.id, "result": to_jsonable_python(item.result)}
+            for item in checks.results
+        ],
+        "skipped": [to_jsonable_python(item) for item in checks.skipped],
     }

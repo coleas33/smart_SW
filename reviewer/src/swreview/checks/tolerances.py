@@ -313,8 +313,10 @@ def iso_dimension(
 def profile_sha256(profile: StandardsProfile) -> str | None:
     """The first 12 hex of the profile file's sha256, or `None` for a profile built in memory,
     which has no file: the one reading of a profile's identity, never a value (FR-034)."""
+    from swreview.checks.standards.profile import display_digest
+
     try:
-        return profile.identity.sha256[:12]
+        return display_digest(profile.identity.sha256)
     except RuntimeError:
         return None
 

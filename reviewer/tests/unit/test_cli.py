@@ -23,6 +23,7 @@ import re
 import shutil
 import subprocess
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -32,15 +33,22 @@ from typer.testing import CliRunner
 from swreview import cli
 from swreview.agent.providers import ProviderName
 from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
+from swreview.agent.runner import ReviewRun, start_review
 from swreview.agent.settings import (
     ENTERPRISE_ENV,
     MASK,
     MODEL_VIEW_OFF,
+    MODEL_VIEW_PANE,
     EfficiencySettings,
     GeminiEnterprise,
     ProviderSettings,
     pane_defaults,
 )
+from swreview.benchmark import answers, sets
+from swreview.benchmark.answers import ANSWER_LOG_VERSION, AnswerLog, read_answer_log
+from swreview.benchmark.case_file import CaseFile
+from swreview.benchmark.runner import EXAMPLE_PROFILE, SAVED_SET_FILE, AttemptRequest
+from swreview.benchmark.scorecard import read_scorecard, score_run
 from swreview.checks.golden_interference import interference_case
 from swreview.checks.standards.run import CHECK_FILE_NAME
 from swreview.ir.loader import PACKAGE_FILE_NAME, load_package, save_package
@@ -51,7 +59,14 @@ from swreview.report.names import component_names
 from swreview.report.rerender import REPORT_FILE_NAME as REPORT_FILE
 from swreview.report.rerender import rerender_run_folder
 from swreview.report.session import load_session
-from tests.support.console import plain_one_line
+from tests.support.answer_keys import write_key
+from tests.support.console import plain_one_line, plain_words
+from tests.unit.test_benchmark_set_summary import (
+    SYNTHETIC_BLOCK,
+    checkout_of,
+    keyless_set,
+    synthetic_set,
+)
 from tests.unit.test_rerender import (
     NAMED_COMPONENT,
     PLACEHOLDER,
@@ -2395,24 +2410,22 @@ def benchmark_set(tmp_path: Path, tmp_package_dir: Path) -> Path:
 
 @pytest.fixture
 def answer_keys(tmp_path: Path) -> Path:
+    """Edited deliberately by feature 014 T038 (SR-23): the key is format 2, written through
+    `write_key`, its drawing defect keyed to `doc:1`, a document the support package holds, and
+    held out against the current stamp, since the set marks `cover` held out and `score` refuses
+    a flag its key does not back. The fixture tests the command's wiring, not the check."""
     directory = tmp_path / "answer_keys"
-    directory.mkdir()
-    (directory / "cover.json").write_text(
-        json.dumps(
+    write_key(
+        directory,
+        "cover",
+        known_defects=[
             {
-                "package_id": "cover",
-                "known_defects": [
-                    {
-                        "id": "D-1",
-                        "check": "drawing.manufacturing_inputs",
-                        "component_ids": [],
-                        "description": "The tapped hole callout omits the thread depth",
-                    }
-                ],
-                "correct_conditions": [],
+                "check": "drawing.manufacturing_inputs",
+                "document_ids": ["doc:1"],
+                "tag": "held_out",
+                "description": "The tapped hole callout omits the thread depth",
             }
-        ),
-        encoding="utf-8",
+        ],
     )
     return directory
 
@@ -2485,12 +2498,417 @@ def test_benchmark_run_without_a_model_takes_the_providers_default(
     assert [provider.settings.model for provider in built] == ["gemini-3.5-flash"]
 
 
-def test_benchmark_run_on_a_missing_set_exits_1(tmp_path: Path) -> None:
+def test_the_run_start_adapter_is_the_first_attempts(
+    tmp_path: Path,
+    tmp_package_dir: Path,
+    fake_provider: Callable[..., list[RecordingProvider]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Feature 014 RF-60 (`benchmark-run.md` 3 row 3): the adapter `benchmark run` builds to
+    check the provider and the effort, before any folder is written, is the first package's,
+    and every later package builds its own - one adapter per attempt, as before. Its resume
+    half is lane B6's (T203). Moved by T101 (RF-49): the spy sits on `swreview.cli.start_review`,
+    which `_review_fn` calls in place of `run_review`."""
+    built = fake_provider()
+    scripted = cli.provider_factory
+    out = tmp_path / "runs" / "two-packages"
+    folder_written_at_build: list[bool] = []
+
+    def watched_factory(
+        settings: ProviderSettings, efficiency: EfficiencySettings | None = None
+    ) -> RecordingProvider:
+        folder_written_at_build.append(out.exists())
+        return scripted(settings, efficiency)
+
+    monkeypatch.setattr(cli, "provider_factory", watched_factory)
+    review = cli.start_review
+    served: list[Any] = []
+
+    def recording_review(package_dir: Path, out_dir: Path, **options: Any) -> Any:
+        served.append(options["provider"])
+        return review(package_dir, out_dir, **options)
+
+    monkeypatch.setattr(cli, "start_review", recording_review)
+    second = tmp_path / "second-package"
+    shutil.copytree(tmp_package_dir, second)
+    set_path = tmp_path / "sets" / "two.json"
+    set_path.parent.mkdir()
+    set_path.write_text(
+        json.dumps(
+            {
+                "name": "two",
+                "packages": [
+                    {"package_id": "cover", "path": str(tmp_package_dir), "held_out": True},
+                    {"package_id": "cover-copy", "path": str(second), "held_out": True},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
     result = invoke(
-        "benchmark", "run", "--set", str(tmp_path / "nowhere.json"), "--out", str(tmp_path / "o")
+        "benchmark", "run", "--set", str(set_path), "--out", str(out), "--provider", "fake"
+    )
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert len(built) == 2
+    assert folder_written_at_build == [False, True]
+    assert len(served) == 2
+    assert all(used is made for used, made in zip(served, built, strict=True))
+
+
+def test_benchmark_run_on_a_missing_set_exits_1(tmp_path: Path) -> None:
+    """Moved by feature 014 (T048, `benchmark-run.md` 15): the provider is resolved before the
+    set is read (section 3 row 3), so this passes `--provider fake` - the default, OpenAI, would
+    stop at row 3 on a machine without a key and pin nothing about the set - and asserts that
+    the one line names the missing set file."""
+    result = invoke(
+        "benchmark",
+        "run",
+        "--set",
+        str(tmp_path / "nowhere.json"),
+        "--out",
+        str(tmp_path / "o"),
+        "--provider",
+        "fake",
     )
 
     assert result.exit_code == 1
+    assert result.stderr.strip().count("\n") == 0
+    assert "nowhere.json" in result.stderr
+
+
+# --- the answer-turn bound and the case files (feature 014 T095) ---------------------------------
+
+
+def test_benchmark_run_max_answer_turns_defaults_to_3_and_is_recorded_as_typed(
+    tmp_path: Path, benchmark_set: Path, fake_provider: Callable[..., list[RecordingProvider]]
+) -> None:
+    """`scripted-answers.md` 4 (FR-025, D14.3): untyped, the bound is 3; typed, the record says
+    what was typed."""
+    fake_provider()
+    untyped = tmp_path / "runs" / "untyped"
+    typed = tmp_path / "runs" / "typed"
+
+    first = invoke("benchmark", "run", "--set", str(benchmark_set), "--out", str(untyped))
+    second = invoke(
+        "benchmark", "run", "--set", str(benchmark_set), "--out", str(typed),
+        "--max-answer-turns", "1",
+    )
+
+    assert first.exit_code == 0, first.stdout + first.stderr
+    assert second.exit_code == 0, second.stdout + second.stderr
+    for out, bound in ((untyped, 3), (typed, 1)):
+        record = json.loads((out / "run-provenance.json").read_text(encoding="utf-8"))
+        assert record["max_answer_turns"] == bound
+
+
+def test_benchmark_run_hands_each_review_the_bound_it_records(
+    tmp_path: Path,
+    benchmark_set: Path,
+    fake_provider: Callable[..., list[RecordingProvider]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`scripted-answers.md` 4 (FR-025): the bound the record holds is the one each review's
+    attempt carries to the driver, typed or the default 3, so the two never differ."""
+    fake_provider()
+    real = cli._review_fn
+    bounds: list[int] = []
+
+    def spy(package_dir: Path, session_out_dir: Path, **keywords: Any) -> Any:
+        bounds.append(keywords["attempt"].max_answer_turns)
+        return real(package_dir, session_out_dir, **keywords)
+
+    monkeypatch.setattr(cli, "_review_fn", spy)
+
+    for out, typed, bound in (("untyped", (), 3), ("typed", ("--max-answer-turns", "1"), 1)):
+        bounds.clear()
+        result = invoke(
+            "benchmark", "run", "--set", str(benchmark_set), "--out",
+            str(tmp_path / "runs" / out), *typed,
+        )
+
+        assert result.exit_code == 0, result.stdout + result.stderr
+        assert bounds == [bound]
+        record = json.loads(
+            (tmp_path / "runs" / out / "run-provenance.json").read_text(encoding="utf-8")
+        )
+        assert record["max_answer_turns"] == bound
+
+
+def test_a_negative_max_answer_turns_is_a_usage_error(
+    tmp_path: Path, benchmark_set: Path, fake_provider: Callable[..., list[RecordingProvider]]
+) -> None:
+    """Exit 2 naming the option and its range, before any adapter is built or anything
+    written."""
+    built = fake_provider()
+    out = tmp_path / "runs" / "negative"
+
+    result = invoke(
+        "benchmark", "run", "--set", str(benchmark_set), "--out", str(out),
+        "--max-answer-turns", "-1",
+    )
+
+    assert result.exit_code == 2
+    assert "Invalid value for '--max-answer-turns'" in plain_one_line(
+        result.stdout + result.stderr
+    )
+    assert built == []
+    assert not out.exists()
+
+
+def benchmark_set_with_a_case_file(tmp_path: Path, package_dir: Path, answers_for: str) -> Path:
+    """A one-package set whose entry `cover` names a case file answering for `answers_for`: the
+    entry's own package when it is `cover`, another's otherwise (row 2's refusal)."""
+    case_file = tmp_path / "case_files" / "cover.json"
+    case_file.parent.mkdir(parents=True)
+    answer = {"id": "A-1", "item": "interfaces.fit", "ids": ["cmp:0001"], "answer": "press fit"}
+    case_file.write_text(
+        json.dumps({"case_file_version": 1, "package_id": answers_for, "answers": [answer]}),
+        encoding="utf-8",
+    )
+    set_path = tmp_path / "sets" / "scripted.json"
+    set_path.parent.mkdir(parents=True)
+    set_path.write_text(
+        json.dumps(
+            {
+                "name": "scripted",
+                "packages": [
+                    {
+                        "package_id": "cover",
+                        "path": str(package_dir),
+                        "case_file": str(case_file),
+                        "held_out": True,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    return set_path
+
+
+def test_a_case_file_refusal_is_exit_1_with_one_line_naming_the_case_file_and_the_entry(
+    tmp_path: Path, tmp_package_dir: Path, fake_provider: Callable[..., list[RecordingProvider]]
+) -> None:
+    """US4-8: `benchmark-run.md` 3 row 4, a `CaseFileError` printed as one line, nothing written."""
+    fake_provider()
+    set_path = benchmark_set_with_a_case_file(tmp_path, tmp_package_dir, "fict-other")
+    out = tmp_path / "runs" / "refused"
+
+    result = invoke("benchmark", "run", "--set", str(set_path), "--out", str(out))
+
+    assert result.exit_code == 1
+    [line] = result.stderr.strip().splitlines()
+    assert line.startswith("error: CaseFileError: case file cover.json: set entry cover: "), line
+    assert "fict-other" in line
+    assert not out.exists()
+
+
+def test_an_unresolvable_provider_is_refused_before_a_bad_case_file(
+    tmp_path: Path, tmp_package_dir: Path
+) -> None:
+    """INT-14: row 3, the provider, before row 4, the set and its case files: with no OpenAI key
+    and a case file answering for another package, the one line names the provider."""
+    set_path = benchmark_set_with_a_case_file(tmp_path, tmp_package_dir, "fict-other")
+    out = tmp_path / "runs" / "no-key"
+
+    result = invoke(
+        "benchmark", "run", "--set", str(set_path), "--out", str(out), "--provider", "openai"
+    )
+
+    assert result.exit_code == 1
+    [line] = result.stderr.strip().splitlines()
+    assert "OpenAI" in line, line
+    assert "case file" not in line, line
+    assert not out.exists()
+
+
+# --- `_review_fn` through the answer driver (feature 014 T100) -----------------------------------
+
+FIT_ANSWER: dict[str, Any] = {
+    "id": "A-1",
+    "item": "interfaces.fit",
+    "ids": ["cmp:0001"],
+    "answer": "press fit",
+}
+"""A case-file entry on the support package's first instance, which its one-turn script never
+asks about."""
+
+
+@dataclass
+class AttemptBody:
+    """What `_review_fn` called, in order, as the spies of `spy_on_the_attempt_body` saw it."""
+
+    order: list[str] = field(default_factory=list)
+    started: list[tuple[Path, Path, dict[str, Any], ReviewRun]] = field(default_factory=list)
+    driven: list[tuple[ReviewRun, CaseFile | None, int]] = field(default_factory=list)
+    closed: list[ReviewRun] = field(default_factory=list)
+
+
+def spy_on_the_attempt_body(
+    monkeypatch: pytest.MonkeyPatch, drive: Callable[..., Any] = answers.drive_review
+) -> AttemptBody:
+    """Spies on `start_review` where `_review_fn` looks it up (`swreview.cli.start_review`), on
+    `swreview.benchmark.answers.drive_review` and on `ReviewRun.close`: each records its call and
+    hands on to the real one, the driver to `drive`."""
+    body = AttemptBody()
+    real_close = ReviewRun.close
+
+    def recording_start_review(package_dir: Path, out_dir: Path, **options: Any) -> ReviewRun:
+        body.order.append("start_review")
+        run = start_review(package_dir, out_dir, **options)
+        body.started.append((package_dir, out_dir, options, run))
+        return run
+
+    def recording_drive_review(
+        run: ReviewRun, case_file: CaseFile | None, *, max_answer_turns: int
+    ) -> Any:
+        body.order.append("drive_review")
+        body.driven.append((run, case_file, max_answer_turns))
+        return drive(run, case_file, max_answer_turns=max_answer_turns)
+
+    def recording_close(run: ReviewRun) -> None:
+        body.order.append("close")
+        body.closed.append(run)
+        real_close(run)
+
+    monkeypatch.setattr(cli, "start_review", recording_start_review)
+    monkeypatch.setattr(answers, "drive_review", recording_drive_review)
+    monkeypatch.setattr(ReviewRun, "close", recording_close)
+    return body
+
+
+def test_review_fn_starts_the_review_and_plays_it_through_the_driver(
+    tmp_path: Path,
+    tmp_package_dir: Path,
+    fake_provider: Callable[..., list[RecordingProvider]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`scripted-answers.md` 3, `benchmark-run.md` 5.1 (QA-1): `_review_fn` starts the review with
+    `start_review`, receiving the arguments it passed `run_review` before the driver (US2, T051),
+    plays it through `drive_review` with the attempt's case file and bound, then closes the run,
+    and returns the final session."""
+    built = fake_provider()
+    body = spy_on_the_attempt_body(monkeypatch)
+    case_file = CaseFile.model_validate(
+        {"case_file_version": 1, "package_id": "cover", "answers": [FIT_ANSWER]}
+    )
+    profile = REPO_ROOT / EXAMPLE_PROFILE
+    efficiency = EfficiencySettings(tool_tiers=True)
+    out = tmp_path / "attempt"
+
+    session = cli._review_fn(
+        tmp_package_dir,
+        out,
+        provider="fake",
+        model="fake-1",
+        effort="high",
+        efficiency=efficiency,
+        attempt=AttemptRequest(
+            model_view=MODEL_VIEW_PANE,
+            standards_profile=profile,
+            case_file=case_file,
+            max_answer_turns=2,
+        ),
+    )
+
+    assert body.order == ["start_review", "drive_review", "close"]
+    [(package_dir, out_dir, options, run)] = body.started
+    [adapter] = built
+    assert (package_dir, out_dir) == (tmp_package_dir, out)
+    assert {name: value for name, value in options.items() if name != "redact"} == {
+        "provider": adapter,
+        "model": "fake-1",
+        "effort": "high",
+        "key_source": "none",
+        "efficiency": efficiency,
+        "model_view": MODEL_VIEW_PANE,
+        "standards_profile": profile,
+        "explain_findings": False,
+        "bridge": False,
+    }
+    assert callable(options["redact"])
+    [(driven_run, driven_case_file, bound)] = body.driven
+    assert driven_run is run
+    assert driven_case_file is case_file
+    assert bound == 2
+    assert body.closed == [run]
+    assert session is run.session
+    assert read_answer_log(out) == AnswerLog(
+        answer_log_version=ANSWER_LOG_VERSION,
+        points=[],
+        ended="no_open_questions",
+        last_turn_end="end",
+        unused_entries=["A-1"],
+    )
+
+
+def test_review_fn_closes_the_run_when_the_driver_raises(
+    tmp_path: Path,
+    tmp_package_dir: Path,
+    fake_provider: Callable[..., list[RecordingProvider]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`run.close()` is in a `finally`, as `run_review` has it: a driver that raises still closes
+    the run, and the exception leaves `_review_fn` unchanged."""
+
+    class DriverFailed(Exception):
+        pass
+
+    def failing_drive_review(
+        run: ReviewRun, case_file: CaseFile | None, *, max_answer_turns: int
+    ) -> Any:
+        raise DriverFailed
+
+    fake_provider()
+    body = spy_on_the_attempt_body(monkeypatch, drive=failing_drive_review)
+
+    with pytest.raises(DriverFailed):
+        cli._review_fn(
+            tmp_package_dir,
+            tmp_path / "attempt",
+            provider="fake",
+            model="fake-1",
+            effort="high",
+            attempt=AttemptRequest(
+                model_view=MODEL_VIEW_OFF,
+                standards_profile=None,
+                case_file=None,
+                max_answer_turns=0,
+            ),
+        )
+
+    assert body.order == ["start_review", "drive_review", "close"]
+    [(_, _, _, run)] = body.started
+    assert body.closed == [run]
+
+
+def test_every_benchmark_package_leaves_an_answer_log_with_or_without_a_case_file(
+    tmp_path: Path, tmp_package_dir: Path, fake_provider: Callable[..., list[RecordingProvider]]
+) -> None:
+    """`scripted-answers.md` 3: every benchmark package goes through the driver, so every package
+    folder carries an `answer-log.json`, the one whose entry names no case file included."""
+    fake_provider()
+    set_path = benchmark_set_with_a_case_file(tmp_path, tmp_package_dir, "cover")
+    second = tmp_path / "second-package"
+    shutil.copytree(tmp_package_dir, second)
+    named = json.loads(set_path.read_text(encoding="utf-8"))
+    named["packages"].append({"package_id": "cover-copy", "path": str(second), "held_out": True})
+    set_path.write_text(json.dumps(named), encoding="utf-8")
+    out = tmp_path / "runs" / "logged"
+
+    result = invoke("benchmark", "run", "--set", str(set_path), "--out", str(out))
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    for package_id, unused in (("cover", ["A-1"]), ("cover-copy", [])):
+        assert read_answer_log(out / package_id) == AnswerLog(
+            answer_log_version=ANSWER_LOG_VERSION,
+            points=[],
+            ended="no_open_questions",
+            last_turn_end="end",
+            unused_entries=unused,
+        ), package_id
 
 
 def test_benchmark_score_writes_a_scorecard(benchmark_run_dir: Path, answer_keys: Path) -> None:
@@ -2513,6 +2931,24 @@ def test_benchmark_score_writes_a_scorecard(benchmark_run_dir: Path, answer_keys
     assert body["aggregate"]["packages"] == 1
 
 
+def test_benchmark_score_prints_its_three_summary_lines(
+    benchmark_run_dir: Path, answer_keys: Path
+) -> None:
+    """Feature 014 `scoring.md` 7's summary (T036, `test_scorecard.py` 13). The scripted review
+    records one drawing finding, the model's, on `doc:2`; the key's one defect is on `doc:1`,
+    so the defect is missed and the finding is a false alarm of model origin."""
+    result = invoke("benchmark", "score", str(benchmark_run_dir), "--answer-keys", str(answer_keys))
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    run_dir = benchmark_run_dir.resolve()
+    assert result.stdout.splitlines() == [
+        "scored 1 packages of set pilot (scoring rules version 3)",
+        "detected: 0 of 1 (flagged 0; below expected 0), cleared: 0, false alarms: 1 "
+        "(1 of model origin), unresolved: 0",
+        f"wrote {run_dir / 'scorecard.json'} and {run_dir / 'scorecard.md'}",
+    ]
+
+
 def test_benchmark_score_without_a_set_to_score_against_exits_1(
     tmp_path: Path, answer_keys: Path
 ) -> None:
@@ -2523,6 +2959,142 @@ def test_benchmark_score_without_a_set_to_score_against_exits_1(
 
     assert result.exit_code == 1
     assert "--set" in result.stderr
+
+
+# --- benchmark score over keyed and keyless saved sets (feature 014 T120) ---------------------
+
+
+KEYED_SET_REFUSAL = "a keyed set names its own answer keys; drop --answer-keys"
+"""RF-85's one line: `benchmark score` over a keyed saved set given `--answer-keys` too."""
+
+
+def benchmark_run_over(tmp_path: Path, name: str, entry: dict[str, Any]) -> Path:
+    """`benchmark run` over the one-entry set file `sets/<name>.json` naming `entry`, its paths
+    absolute and outside the root (private), into `runs/<name>`: the run folder, whose saved set
+    `benchmark score` reads. The caller installs the fake provider."""
+    set_path = tmp_path / "sets" / f"{name}.json"
+    set_path.parent.mkdir(parents=True, exist_ok=True)
+    set_path.write_text(json.dumps({"name": name, "packages": [entry]}), encoding="utf-8")
+    out = tmp_path / "runs" / name
+    result = invoke("benchmark", "run", "--set", str(set_path), "--out", str(out))
+    assert result.exit_code == 0, result.stdout + result.stderr
+    return out
+
+
+@pytest.fixture
+def keyed_benchmark_run_dir(
+    tmp_path: Path,
+    tmp_package_dir: Path,
+    answer_keys: Path,
+    fake_provider: Callable[..., list[RecordingProvider]],
+) -> Path:
+    """`benchmark_run_dir` over a keyed set: its one entry, `cover`, names its own key, the
+    `answer_keys` fixture's `cover.json`, so the run's saved set names it too."""
+    fake_provider()
+    entry = {
+        "package_id": "cover",
+        "path": str(tmp_package_dir),
+        "key": str(answer_keys / "cover.json"),
+        "held_out": True,
+    }
+    return benchmark_run_over(tmp_path, "keyed", entry)
+
+
+def test_benchmark_score_over_a_keyed_saved_set_reads_each_entry_s_key_without_answer_keys(
+    keyed_benchmark_run_dir: Path, answer_keys: Path
+) -> None:
+    """`cases.md` 9's last bullet (RF-4; FR-030): a keyed saved set names every entry's key, so
+    `benchmark score` takes no `--answer-keys`, and its scorecard is what the keyless reading of
+    the same run scores: the saved set with every entry's `key` dropped, each key at
+    `<the keys' folder>/<package_id>.json`. `scored_at` is the clock's, the one field the two
+    scorings cannot share."""
+    run_dir = keyed_benchmark_run_dir
+    saved = sets.load_saved_set(run_dir / SAVED_SET_FILE)
+    assert [ref.key for ref in saved.packages] == [(answer_keys / "cover.json").resolve()]
+    keyless = saved.model_copy(
+        update={"packages": [ref.model_copy(update={"key": None}) for ref in saved.packages]}
+    )
+
+    result = invoke("benchmark", "score", str(run_dir))
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    scored = read_scorecard(run_dir)
+    expected = score_run(run_dir, answer_keys, keyless)
+    assert scored.model_dump(exclude={"scored_at"}) == expected.model_dump(exclude={"scored_at"})
+    assert [score.package_id for score in scored.per_package] == ["cover"]
+
+
+def test_benchmark_score_over_a_keyless_saved_set_without_answer_keys_is_a_usage_error(
+    benchmark_run_dir: Path, answer_keys: Path
+) -> None:
+    """RF-4: a keyless saved set, as every run made before feature 014 saved, reads its keys
+    from `--answer-keys`: without it a usage error (exit 2) naming the option, no scorecard
+    written; with it the command scores as it always has."""
+    refused = invoke("benchmark", "score", str(benchmark_run_dir))
+
+    assert refused.exit_code == 2
+    assert refused.stdout == ""
+    assert "--answer-keys" in plain_one_line(refused.stderr)
+    assert not (benchmark_run_dir / "scorecard.json").exists()
+
+    scored = invoke("benchmark", "score", str(benchmark_run_dir), "--answer-keys", str(answer_keys))
+
+    assert scored.exit_code == 0, scored.stdout + scored.stderr
+    assert read_scorecard(benchmark_run_dir).benchmark_set == "pilot"
+
+
+def test_score_refuses_a_keyed_entry_whose_key_names_another_package(
+    tmp_path: Path,
+    tmp_package_dir: Path,
+    fake_provider: Callable[..., list[RecordingProvider]],
+) -> None:
+    """`answer-key.md` 4 row 2's set half and 9 test 2 (FR-009): the keyed entry `pkg-a` names
+    as its key `pkg-b.json`, whose `package_id` is `pkg-b`, its own stem, so the key loader's
+    stem half passes. `benchmark score` refuses it with one line naming both ids, the line
+    `benchmark set-summary` gives (`scorecard.key_package_error`, its one writer), before any
+    scorecard is written. The entry's flag agrees with the key, so only the package is wrong."""
+    fake_provider()
+    key = write_key(
+        tmp_path / "keys",
+        "pkg-b",
+        known_defects=[{"check": "drawing.manufacturing_inputs", "document_ids": ["doc:1"]}],
+    )
+    entry = {"package_id": "pkg-a", "path": str(tmp_package_dir), "key": str(key)}
+    run_dir = benchmark_run_over(tmp_path, "crossed", {**entry, "held_out": False})
+
+    result = invoke("benchmark", "score", str(run_dir))
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert result.stderr == (
+        "error: ValueError: pkg-a: its key pkg-b.json names package pkg-b, not the set entry's "
+        "pkg-a\n"
+    )
+    assert not (run_dir / "scorecard.json").exists()
+    assert not (run_dir / "scorecard.md").exists()
+
+
+def test_score_refuses_answer_keys_beside_a_keyed_set(
+    keyed_benchmark_run_dir: Path, answer_keys: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """RF-85: a keyed set names every entry's key, so a directory given beside it is refused, a
+    usage error (exit 2) with one line, rather than ignored in silence or read. No key is read
+    (the scorer's key reader refuses to be called) and no scorecard is written."""
+
+    def no_key_read(*_: object, **__: object) -> None:
+        raise AssertionError("benchmark score read a key")
+
+    monkeypatch.setattr("swreview.benchmark.scorecard.load_answer_key", no_key_read)
+
+    result = invoke(
+        "benchmark", "score", str(keyed_benchmark_run_dir), "--answer-keys", str(answer_keys)
+    )
+
+    assert result.exit_code == 2, result.stdout + result.stderr
+    assert result.stdout == ""
+    assert f"Invalid value for '--answer-keys': {KEYED_SET_REFUSAL}" in plain_words(result.stderr)
+    assert not (keyed_benchmark_run_dir / "scorecard.json").exists()
+    assert not (keyed_benchmark_run_dir / "scorecard.md").exists()
 
 
 def test_benchmark_time_records_the_human_minutes(benchmark_run_dir: Path) -> None:
@@ -2556,6 +3128,58 @@ def test_benchmark_time_for_an_unknown_package_exits_1(benchmark_run_dir: Path) 
     result = invoke("benchmark", "time", str(benchmark_run_dir), "nope", "--baseline", "10")
 
     assert result.exit_code == 1
+
+
+# --- benchmark set-summary (feature 014 T118) ------------------------------------------------
+
+
+def test_benchmark_set_summary_prints_its_block_line_for_line(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`cases.md` 8, over `test_benchmark_set_summary.py`'s synthetic set: the set's line, one
+    line per family in `FAMILY_LABELS` order, the floor, the largest design share and one line
+    per stale item. It reads no case file (kalo-fit-1 names one that is no case file, and the
+    case file's one reader refuses to be called) and contacts no provider (the factory every
+    review builds its adapter through refuses to be called). The root is read at call time, as
+    `benchmark score` reads it."""
+
+    def no_provider(*_: object, **__: object) -> None:
+        raise AssertionError("benchmark set-summary built a provider")
+
+    def no_case_file(*_: object, **__: object) -> None:
+        raise AssertionError("benchmark set-summary read a case file")
+
+    set_file = synthetic_set(tmp_path)
+    monkeypatch.setattr(cli, "provider_factory", no_provider)
+    monkeypatch.setattr(answers, "load_case_file", no_case_file)
+    monkeypatch.setattr(sets, "REPO_ROOT", checkout_of(tmp_path))
+
+    result = invoke("benchmark", "set-summary", str(set_file))
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert result.stdout.splitlines() == SYNTHETIC_BLOCK
+    assert result.stderr == ""
+
+
+def test_benchmark_set_summary_over_a_keyless_set_without_answer_keys_is_a_usage_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """T115's `key_path` rule, as `benchmark score`'s (RF-4): a keyless set, as every set
+    written before feature 014 is, reads its keys from `--answer-keys`, so without it the command
+    is a usage error naming the option; with it the summary prints."""
+    set_file, keys = keyless_set(tmp_path)
+    monkeypatch.setattr(sets, "REPO_ROOT", checkout_of(tmp_path))
+
+    refused = invoke("benchmark", "set-summary", str(set_file))
+    printed = invoke("benchmark", "set-summary", str(set_file), "--answer-keys", str(keys))
+
+    assert refused.exit_code == 2
+    assert refused.stdout == ""
+    assert "--answer-keys" in plain_one_line(refused.stderr)
+    assert printed.exit_code == 0, printed.stdout + printed.stderr
+    assert printed.stdout.splitlines()[0] == (
+        "benchmark set keyless: 1 packages (1 held out, 0 private), 1 designs"
+    )
 
 
 # --- the command surface ---------------------------------------------------------

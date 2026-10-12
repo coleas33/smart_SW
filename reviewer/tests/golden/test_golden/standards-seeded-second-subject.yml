@@ -841,7 +841,7 @@ result:
     component_ids: []
     configuration: Default
     coverage_limits:
-    - profile:<profile-a.yaml> sha256:<sha256 of profile-a.yaml>
+    - profile:profile-a.yaml sha256:<sha256 of profile-a.yaml>
     - configuration Default
     disposition: null
     drawing_locations:
@@ -937,7 +937,7 @@ result:
     component_ids: []
     configuration: Default
     coverage_limits:
-    - profile:<profile-a.yaml> sha256:<sha256 of profile-a.yaml>
+    - profile:profile-a.yaml sha256:<sha256 of profile-a.yaml>
     - configuration Default
     disposition: null
     drawing_locations:
@@ -979,7 +979,7 @@ result:
     component_ids: []
     configuration: Default
     coverage_limits:
-    - profile:<profile-a.yaml> sha256:<sha256 of profile-a.yaml>
+    - profile:profile-a.yaml sha256:<sha256 of profile-a.yaml>
     - configuration Default
     disposition: null
     drawing_locations: []
@@ -1017,7 +1017,7 @@ result:
     component_ids: []
     configuration: Default
     coverage_limits:
-    - profile:<profile-a.yaml> sha256:<sha256 of profile-a.yaml>
+    - profile:profile-a.yaml sha256:<sha256 of profile-a.yaml>
     - configuration Default
     disposition: null
     drawing_locations:
@@ -1059,7 +1059,7 @@ result:
     - cmp:0002
     configuration: Default
     coverage_limits:
-    - profile:<profile-a.yaml> sha256:<sha256 of profile-a.yaml>
+    - profile:profile-a.yaml sha256:<sha256 of profile-a.yaml>
     - configuration Default
     disposition: null
     drawing_locations: []
@@ -1092,7 +1092,7 @@ result:
     - cmp:0002
     configuration: Default
     coverage_limits:
-    - profile:<profile-a.yaml> sha256:<sha256 of profile-a.yaml>
+    - profile:profile-a.yaml sha256:<sha256 of profile-a.yaml>
     - configuration Default
     - counts as the document stood; nothing was rebuilt
     disposition: null
@@ -1128,7 +1128,7 @@ result:
     - cmp:0002
     configuration: Default
     coverage_limits:
-    - profile:<profile-a.yaml> sha256:<sha256 of profile-a.yaml>
+    - profile:profile-a.yaml sha256:<sha256 of profile-a.yaml>
     - configuration Default
     disposition: null
     drawing_locations:
@@ -1170,7 +1170,7 @@ result:
     - cmp:0002
     configuration: Default
     coverage_limits:
-    - profile:<profile-a.yaml> sha256:<sha256 of profile-a.yaml>
+    - profile:profile-a.yaml sha256:<sha256 of profile-a.yaml>
     - configuration Default
     disposition: null
     drawing_locations:
@@ -1228,7 +1228,7 @@ result:
     - cmp:0002
     configuration: Default
     coverage_limits:
-    - profile:<profile-a.yaml> sha256:<sha256 of profile-a.yaml>
+    - profile:profile-a.yaml sha256:<sha256 of profile-a.yaml>
     - configuration Default
     disposition: null
     drawing_locations:
@@ -1271,7 +1271,7 @@ result:
     - cmp:0002
     configuration: Default
     coverage_limits:
-    - profile:<profile-a.yaml> sha256:<sha256 of profile-a.yaml>
+    - profile:profile-a.yaml sha256:<sha256 of profile-a.yaml>
     - configuration Default
     disposition: null
     drawing_locations:
@@ -1330,7 +1330,7 @@ result:
     - cmp:0022
     configuration: Default
     coverage_limits:
-    - profile:<profile-a.yaml> sha256:<sha256 of profile-a.yaml>
+    - profile:profile-a.yaml sha256:<sha256 of profile-a.yaml>
     - configuration Fabricated
     disposition: null
     drawing_locations:
@@ -1389,7 +1389,7 @@ result:
     - cmp:0022
     configuration: Default
     coverage_limits:
-    - profile:<profile-a.yaml> sha256:<sha256 of profile-a.yaml>
+    - profile:profile-a.yaml sha256:<sha256 of profile-a.yaml>
     - configuration Fabricated
     - counts as the document stood; nothing was rebuilt
     disposition: null
@@ -1453,7 +1453,7 @@ result:
     - cmp:0022
     configuration: Default
     coverage_limits:
-    - profile:<profile-a.yaml> sha256:<sha256 of profile-a.yaml>
+    - profile:profile-a.yaml sha256:<sha256 of profile-a.yaml>
     - configuration Fabricated
     disposition: null
     drawing_locations: []
@@ -1508,7 +1508,7 @@ result:
     - cmp:0022
     configuration: Default
     coverage_limits:
-    - profile:<profile-a.yaml> sha256:<sha256 of profile-a.yaml>
+    - profile:profile-a.yaml sha256:<sha256 of profile-a.yaml>
     - configuration Fabricated
     disposition: null
     drawing_locations:
@@ -1564,7 +1564,7 @@ result:
     - cmp:0026
     configuration: Default
     coverage_limits:
-    - profile:<profile-a.yaml> sha256:<sha256 of profile-a.yaml>
+    - profile:profile-a.yaml sha256:<sha256 of profile-a.yaml>
     - configuration Fabricated
     disposition: null
     drawing_locations: []

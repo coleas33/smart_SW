@@ -1,5 +1,7 @@
 # Curated Agent Tools
 
+*Amended 2026-09-29 by feature 014 (`specs/014-design-review-eval/`), in scoring.md section 10, landed 2026-10-07 (014 T026):* every `check_fastener_joint` finding leads its `inputs` with its fastener's and its hole's ids on every path, unresolved included, and the out-of-scope result of a joint kind the pilot does not model names the hole too (owner decision 19A, 014 FR-061); `calculation.inputs` and the findings' words do not change.
+
 *Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed by 2026-09-27 (013 T060, T062, T064, T066, T087, T097, T117, T119):* `request_evidence` and `mark_coverage` gain non-error answers (`closed_by_code`, `already_answered`, `already_asked`) and `open_items`, and `request_evidence` accepts joint, feature and drawing entity ids, with no signature or docstring change; see 013 `contracts/re-ask-guard.md` and `contracts/tokens.md` section 2.
 
 The reviewer exposes exactly these tools to the model. There is no general code execution,
@@ -96,7 +98,7 @@ typed by the model.
 |------|-----------|----------|
 | `check_fit` | `bore_dimension_ref: SourceRef`, `shaft_dimension_ref: SourceRef` | `fit.size_only` finding: min/max clearance or interference |
 | `check_axial_stack` | `dimension_refs: list[SourceRef]`, `signs: list[+1 \| -1]`, `target_gap: SourceRef \| null` | `stack.worst_case` finding; `unresolved` if any tolerance kind is `none` |
-| `check_fastener_joint` | `fastener_id: str`, `hole_id: str`, `clamped_component_ids: list[str]` | `fastener.bottoming`, `fastener.engagement`, `fastener.thread_match`, `fastener.head_clearance` findings; `unresolved` when `thread_depth` is null |
+| `check_fastener_joint` | `fastener_id: str`, `hole_id: str`, `clamped_component_ids: list[str]` | `fastener.bottoming`, `fastener.engagement`, `fastener.thread_match`, `fastener.head_clearance` findings, each naming `fastener_id` and `hole_id` first in its `inputs` (014, 19A); `unresolved` when `thread_depth` is null |
 | `check_hole_alignment` | `hole_id_a: str`, `hole_id_b: str`, `tolerance: SourceRef \| null` | `hole.coaxiality` finding |
 | `check_interference_group` | `group_key: str` | grouped `interference.static` finding, honoring exceptions |
 | `check_rms_part` | `document_id: str \| null` | Resilient Modeling part-scope findings and aggregated coverage for one part document, or for every part document (null) including the ones whose tree was not read |
@@ -105,6 +107,7 @@ typed by the model.
 | `check_joints` | none | Feature 010: the joint map found from the geometry, recorded as `joint.map` coverage (one `checked` item per pattern group, one `skipped` item per candidate and per gap), then `hole.nominal_alignment` and `hole.position_stack` on every joint (the stack's tolerances from the resolver of feature 010 US8), the recognised fasteners' `fastener.identity`, `fastener.thread_match`, `fastener.engagement`, `fastener.bottoming` and `fastener.head_clearance`, and `fastener.head_fit` on every counterbore and countersink, one finding per pattern of identical results. Takes no argument, so it runs in the code-first pass (`CODE_FIRST_CHECKS`); returns counts, not a payload |
 | `check_mass_material` | none | Feature 010: `mass.material_assigned` (passes as one `checked` item), `mass.density` per part with a mass and a volume, `mass.assembly_override`, and `mass.coverage` counting the parts and bodies that were not read. Takes no argument (`CODE_FIRST_CHECKS`); returns counts |
 | `check_hygiene` | none | Feature 010: `hygiene.part_number_matches_file`, `hygiene.duplicate_description`, `hygiene.duplicate_part_number`, `hygiene.revision_present` and `hygiene.component_not_resolved`, the property names read from the attached standards run's profile (skipped, naming the setting, without one), and `hygiene.coverage`. Takes no argument (`CODE_FIRST_CHECKS`); returns counts |
+| `check_threads` | none | Feature 010's thread pitch amendment (2026-10-08, `specs/010-mechanical-checks/contracts/fasteners.md` section 8): every Hole Wizard tapped hole, cosmetic thread, fastener row and screw named by its part classified against the ISO 261 coarse pitch and the ASME B1.1 UNC threads per inch; one `thread.fine_pitch` or `thread.nonstandard_pitch` finding per check and owning part, the passes counted in one `checked` `thread.pitch` row, and every thread it could not judge (unreadable, an unknown size, a pipe thread, a bought part's, a suppressed feature's, one the extractor did not read) listed in a `thread.pitch` row, never passed. Its rows restate: a call withdraws every `thread.pitch` row before it records its own. Reads the part roles the review attached. Takes no argument (`CODE_FIRST_CHECKS`); returns counts with `threads` and `coarse` |
 | `record_drawing_finding` | `document_id`, `sheet`, `observed`, `requirement`, `source_refs: list[SourceRef]`, `status: "suspected" \| "unresolved"`, `recommended_action` | A non-numeric drawing finding. `status` may not be `demonstrated` or `checked_within_scope` from this tool. |
 
 ### A check checks first already ran: `already_run` (feature 008)
@@ -114,8 +117,8 @@ pre-run already ran **successfully** is answered, never run again (008 FR-012,
 `specs/008-checks-first-review/contracts/checks-first.md` section 5). The guarded calls:
 `check_rms_part` and `check_rms_equations` (whatever `document_id`), `check_rms_assembly`,
 `check_standards`, every `CODE_FIRST_CHECKS` name (feature 010's `check_joints`,
-`check_mass_material` and `check_hygiene`, whatever arguments), feature 011's `check_drawings`,
-`check_interference_group`
+`check_mass_material`, `check_hygiene` and `check_threads`, whatever arguments), feature 011's
+`check_drawings`, `check_interference_group`
 with the same `group_key`, and `bridge_interference` with `component_ids: []`, the same
 configuration and the same settings. The answer is one recorded step (status `ok`, no finding, no coverage):
 
