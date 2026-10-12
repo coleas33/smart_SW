@@ -1,0 +1,11 @@
+files: {}
+requests: []
+response:
+  body:
+    error_class: RuntimeError
+    message: The fictional provider key is unavailable.
+    retryable: true
+  listing:
+  - package.json
+  - profile-v3.yaml
+  status: 502
