@@ -34,14 +34,20 @@ from typing import Any, get_args
 
 import pytest
 
+from swreview.checks import tolerances
 from swreview.checks.rules.results import RuleOutcome
-from swreview.checks.standards.profile import load_profile
+from swreview.checks.standards.profile import (
+    ProfileIdentity,
+    StandardsProfile,
+    display_digest,
+    load_profile,
+)
 from swreview.checks.standards.registry import RULES, STANDARDS_FAMILY
 from swreview.checks.standards.report import (
-    PROFILE_LIMIT,
     SUMMARY_CHECK,
     check_rows,
     report_results,
+    stamped_profile_digest,
     subject_input,
 )
 from swreview.checks.standards.results import (
@@ -311,9 +317,104 @@ def test_coverage_limits_always_carry_the_profile_identity_and_no_profile_value(
     )
 
     limits = only_finding(payload)["coverage_limits"]
-    assert limits[0] == PROFILE_LIMIT.format(path=IDENTITY.path, sha256=IDENTITY.sha256)
+    assert limits[0] == f"profile:profile-a.yaml sha256:{IDENTITY.sha256}"
     assert IDENTITY.sha256 in limits[0]
     assert not any(PROFILE.export_control.phrase in limit for limit in limits), limits
+
+
+@pytest.mark.parametrize(
+    ("path", "name"),
+    [
+        ("..\\config\\standards.example.yaml", "standards.example.yaml"),
+        ("../config/standards.example.yaml", "standards.example.yaml"),
+        ("C:\\FictionalVault\\profiles\\standards.yaml", "standards.yaml"),
+        ("/fictional/profiles/standards.yaml", "standards.yaml"),
+        ("..\\config/mixed separators.yaml", "mixed separators.yaml"),
+        ("standards.example.yaml", "standards.example.yaml"),
+    ],
+)
+def test_the_profile_stamp_names_the_file_and_its_digest_never_its_folder(
+    path: str, name: str
+) -> None:
+    """Feature 014's D12: the stamp every finding carries names the profile's file and its
+    digest, never the folder it was read from, whichever separator that folder was written with
+    and on every platform; `ProfileIdentity.path` still says where the file is."""
+    package = model_package()
+    documents = documents_of(package)
+    top = document_named(package, documents, "top")
+    plate = document_named(package, documents, "plate")
+    identity = ProfileIdentity(path=path, sha256=IDENTITY.sha256)
+
+    context = context_for(package)
+    reported = report_results(
+        context,
+        [
+            violation(NOT_EXPLODED, top.document_id, [document_subject(top)]),
+            violation(PART_REBUILD, plate.document_id, [document_subject(plate)]),
+        ],
+        list(documents),
+        identity,
+    )
+
+    assert "error" not in reported, reported
+    findings = reported["findings"]
+    assert len(findings) == 2, findings
+    for body in findings:
+        stamp = body["coverage_limits"][0]
+        assert stamp == f"profile:{name} sha256:{IDENTITY.sha256}"
+        assert "/" not in stamp
+        assert "\\" not in stamp
+    assert identity.path == path
+    assert IDENTITY.path == str(FIXTURE_DIR / "profile-a.yaml")
+
+
+def test_the_stamp_parser_reads_the_full_digest_of_the_old_and_the_new_form() -> None:
+    """`stamped_profile_digest` is the one reader of the stamp: the full 64-character digest of
+    the old, path-bearing form and of D12's, found by its ` sha256:` suffix, so a file name with
+    a space in it still parses, and `None` where no stamp is."""
+    digest = IDENTITY.sha256
+    assert len(digest) == 64
+
+    old = f"profile:..\\config\\standards.example.yaml sha256:{digest}"
+    new = f"profile:standards.example.yaml sha256:{digest}"
+    spaced = f"profile:my standards.yaml sha256:{digest}"
+    assert stamped_profile_digest([old]) == digest
+    assert stamped_profile_digest([new]) == digest
+    assert stamped_profile_digest([spaced]) == digest
+    assert stamped_profile_digest(["configuration Default", new, NO_REBUILD_NOTE]) == digest
+
+    assert stamped_profile_digest([]) is None
+    assert stamped_profile_digest(["configuration Default", NO_REBUILD_NOTE]) is None
+    assert stamped_profile_digest([f"profile:standards.example.yaml sha256:{digest[:12]}"]) is None
+    assert stamped_profile_digest([f"standards.example.yaml sha256:{digest}"]) is None
+
+
+def test_display_digest_is_the_one_twelve_character_reading(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """RF-5: the 12-character display of a profile digest is one helper, which
+    `tolerances.profile_sha256` reads through (and, later, the ledger's profile cell and the
+    resume and exit messages); its `None` for a profile built in memory is unchanged. Equal
+    values could come from a second copy of the slice, so a spy on the helper, where
+    `profile_sha256` looks it up, sees the call and its answer returned."""
+    digest = IDENTITY.sha256
+    in_memory = StandardsProfile.model_validate(PROFILE.model_dump())
+
+    assert display_digest(digest) == digest[:12]
+    assert tolerances.profile_sha256(PROFILE) == display_digest(PROFILE.identity.sha256)
+    assert tolerances.profile_sha256(in_memory) is None
+
+    seen: list[str] = []
+
+    def spy(sha256: str) -> str:
+        seen.append(sha256)
+        return "spied-digest"
+
+    monkeypatch.setattr("swreview.checks.standards.profile.display_digest", spy)
+    assert tolerances.profile_sha256(PROFILE) == "spied-digest"
+    assert seen == [PROFILE.identity.sha256]
+    assert tolerances.profile_sha256(in_memory) is None
+    assert seen == [PROFILE.identity.sha256]
 
 
 def test_coverage_limits_name_the_configuration_and_the_unresolved_instances() -> None:

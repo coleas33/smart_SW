@@ -60,6 +60,7 @@ from swreview.report.session import (
 )
 from swreview.tools.checks_mechanical import attach_part_roles
 from swreview.tools.context import ToolContext, build_context
+from tests.support.answer_keys import write_key
 from tests.support.carry_over import (
     CARRIED_AT,
     COMPONENT,
@@ -761,7 +762,11 @@ def test_the_scorecard_scores_a_carried_finding_exactly_as_a_computed_one(
 ) -> None:
     """Why `Finding.status` is not touched: the scorecard matches on check, components and
     status, so a carried `demonstrated` finding must still match its known defect. A sixth
-    status, or a `carried` status, would have moved it into the missed column."""
+    status, or a `carried` status, would have moved it into the missed column.
+
+    Edited deliberately by feature 014 T038 (RF-49), what it asserts unchanged: the key is format
+    2, written through `write_key`, its defect `D-1` (format 2's id for `KD-1`) tuned on under a
+    set flag of false, and the package saved at its set entry's path."""
     package = carry_package()
     previous_path = written_previous(package, [rms_finding(package)], tmp_path)
     context, _ = run_context(package, tmp_path)
@@ -773,31 +778,28 @@ def test_the_scorecard_scores_a_carried_finding_exactly_as_a_computed_one(
     run_dir = tmp_path / "run"
     save_session(session, run_dir / "pkg-a" / "session.json")
     keys_dir = tmp_path / "answer_keys"
-    keys_dir.mkdir()
-    (keys_dir / "pkg-a.json").write_text(
-        json.dumps(
+    write_key(
+        keys_dir,
+        "pkg-a",
+        known_defects=[
             {
-                "package_id": "pkg-a",
-                "known_defects": [
-                    {
-                        "id": "KD-1",
-                        "check": RMS_CHECK,
-                        "component_ids": [COMPONENT],
-                        "description": "the sketch is not fully defined",
-                    }
-                ],
-                "correct_conditions": [],
+                "check": RMS_CHECK,
+                "component_ids": [COMPONENT],
+                "producer": "code",
+                "expected_status": "demonstrated",
+                "description": "the sketch is not fully defined",
             }
-        ),
-        encoding="utf-8",
+        ],
     )
+    package_dir = tmp_path / "packages" / "pkg-a"
+    save_package(package, package_dir)
     benchmark_set = BenchmarkSet(
         name="carry-over",
-        packages=[BenchmarkPackageRef(package_id="pkg-a", path=tmp_path, held_out=True)],
+        packages=[BenchmarkPackageRef(package_id="pkg-a", path=package_dir, held_out=False)],
     )
 
     (score,) = score_run(run_dir, keys_dir, benchmark_set).per_package
 
-    assert score.matched_defect_ids == ["KD-1"]
+    assert score.matched_defect_ids == ["D-1"]
     assert score.missed_defect_ids == []
     assert score.carried_findings == 1

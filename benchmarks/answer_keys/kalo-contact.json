@@ -1,0 +1,25 @@
+{
+  "key_format": 2,
+  "package_id": "kalo-contact",
+  "known_defects": [],
+  "correct_conditions": [],
+  "forbidden": [
+    {
+      "id": "FB-1",
+      "tag": "tuned_on",
+      "description": "The pins sit line to line in the plate: their zero-volume rows and the possible row are contacts, never interference findings (R-4).",
+      "checks": [
+        "interference.static"
+      ],
+      "component_ids": [
+        "cmp:0003",
+        "cmp:0004",
+        "cmp:0001"
+      ],
+      "document_ids": []
+    }
+  ],
+  "expected_coverage": [],
+  "unanswerable_requests": [],
+  "question_counts": []
+}

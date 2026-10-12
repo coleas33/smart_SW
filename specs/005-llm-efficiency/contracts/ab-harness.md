@@ -1,5 +1,7 @@
 # Contract: the A/B harness and the results ledger
 
+*Amended 2026-09-29 by feature 014 (`specs/014-design-review-eval/`), in provenance.md sections 1 to 5 and 6.1, benchmark-run.md sections 3, 4 and 14, scoring.md sections 7 and 8, verdict.md sections 5 and 7; the amendment text lands with the 014 task that changes the code, sections 4's and 9's scorer half landed 2026-10-07 (014 T038), sections 2, 10.1 and 10.2 landed 2026-10-07 (014 T051), sections 3 and 10.5 landed 2026-10-07 (014 T065), section 4's ledger 1.1 landed 2026-10-07 (014 T068):* sections 2, 3, 4, 5, 7, 9, 10.1, 10.2 and 10.5 change (the provenance record, the must-match rule, the saved set's form, the ledger's columns, the pane study's route, compare's version refusal).
+
 The A/B protocol, the runs it produces, and `swreview benchmark compare`, the one reader that
 validates those runs and renders the ledger.
 
@@ -136,6 +138,28 @@ would carry both shas as `commit_off` and `commit_on` and would never be present
 time` is unchanged. A human baseline does not change between repetitions, and pretending to
 re-measure it would put noise into `net_saved_minutes`.
 
+*Amended 2026-10-07 by feature 014 (T051; its `contracts/benchmark-run.md` 2 and 3,
+`contracts/provenance.md` 3):* `benchmark run` resolves its switches through `cli._review_settings`,
+the one resolver `review` and `benchmark replay` share, with `allow_workstation_levers=False` and
+the typed study and arm, so every refusal above still holds. It takes `--pane-defaults`,
+`--payload-slimming`, `--history-pruning`, `--prune-after N`, `--standards-profile PATH` and a
+tri-state `--explain-findings/--no-explain-findings` (a typed value wins; untyped, it follows
+`--pane-defaults`, else off). Two pane studies join the lever studies, `--study pane_defaults` and
+`--study pane_defaults_private`, each with the arms `on` (exactly `--pane-defaults`) and `off`
+(every change off) and the explanation setting typed in both; and two baselines, the plain
+`--study none --arm baseline` (every lever off, and now no model-view switch either) and the pane
+baseline, `--study none --arm baseline --pane-defaults` and nothing else (014
+`contracts/provenance.md` 3.1 to 3.3). `--pane-defaults`, `--payload-slimming` and
+`--history-pruning` declare a study for P-3 as `--lever` does; `--standards-profile` alone does
+not. After the usage errors and before any review, the run refuses, each on one line with exit 1
+and nothing written, in this order: an `--out` that exists and holds anything ("{out} is not empty;
+choose a new folder"); a standards profile that cannot be loaded (`ProfileUnreadable` or
+`ProfileInvalid`, with its message), which `review` still records and goes on past; a provider
+whose adapter cannot be built or whose model does not offer the effort (one adapter is built and
+its effort mapped, sending nothing, and that adapter serves the first package's review); then the
+set loader's refusals, then P-3. The pane studies' run-time file rules (014 `contracts/provenance.md`
+3.2's second table) take their place between the set and P-3 with 014 T054.
+
 ## 3. What `compare` validates, and it is the point of the command (RK-20)
 
 `compare` takes N run directories. For each one it reads the provenance record, `session.json`,
@@ -185,6 +209,37 @@ produced. Principle VI and FR-025 are untouched.
 `ledger.md` from the run directories, which are the only source. There is no append-only state to
 drift.
 
+*Amended 2026-10-07 by feature 014 (T064, T065; its `contracts/provenance.md` 2 to 4; owner
+decision 44A):* what `compare` validates grows in four places. **The cross-checks**: against a
+record of schema 2, the session's `model_view` equals the record's (a session with none is
+refused), and every `standards.*` finding's profile stamp, read through
+`checks.standards.report.stamped_profile_digest` in the old path-bearing form or the file-name
+form, equals the record's `profile_digest` (a stamp on a run that recorded no profile is refused);
+an older record recorded neither and is held to neither. **The arm against its settings**: the
+baseline clause applies to `arm: "baseline"` only, so a run with no arm is a raw row whatever it
+switched on; the plain baseline is every flag false and `MODEL_VIEW_OFF`; the pane baseline
+(`pane_defaults: true`) has settings that are not all off, and is its own study, labelled
+`none (pane defaults)`, with its own sign-off. A pane study's off arm has every lever off,
+`MODEL_VIEW_OFF` and `pane_defaults: false`; its on arm has `pane_defaults: true` and settings
+that are not all off, or it is refused as mislabelled; both are checked against those constants,
+never re-derived from today's `pane_defaults()`. A run of either pane study with no arm, and a
+`pane_defaults` run whose `profile_is_example` is not true, are run-level refusals. Both pane
+studies render raw rows under their own study keys and no decision row. **The set flags**: where
+the saved copy is there, read through `sets.load_saved_set(path, root=...)` (`root` a keyword of
+`compare_runs` and the command, `sets.REPO_ROOT` read at call time), each scored package's saved
+`held_out` must equal whether some `graded_items` entry of its `PackageScore` is tagged
+`held_out`, and a scored package the saved copy does not hold is refused, each naming the run
+and the package. **Across the set**, the must-match rule above becomes one loop over
+`RunProvenance.model_fields` less named exemptions (`compare.RUN_IDENTITY`, `RECORD_ONLY`,
+`STUDY_KEY_FIELDS`, `ACROSS_ARMS` and `ACROSS_PANE_ARMS`; every other field is
+`compare.MUST_MATCH`, a field added later included until it is exempted by name). Each run is
+held against the first run of its own arm, and the first run of each arm against the study's
+first: `arm` is exempt across the arms, a pane study's `efficiency`, `model_view` and
+`pane_defaults` across its two arms, and a lever study's studied flag across its arms, with
+`efficiency` compared flag by flag. The refusal names the first differing field and both values.
+`set_too_small_override` is one of those fields, so both arms of a study carry it or neither does
+(owner decision 44A).
+
 ## 4. `ledger.json`, the raw ledger
 
 `ledger.json` holds two arrays, `runs` and `levers`. `runs` is **one object per run per package**.
@@ -225,6 +280,45 @@ Every field has **exactly one source and no field is computed twice**.
 | `lever`, `arm`, `rep`, `commit` | the run's provenance record, written from `--study`, `--arm`, `--rep` and the commit sha, cross-checked against `session.efficiency` (section 3) |
 | `other_levers_on` | `session.efficiency`: every flag true other than the studied lever |
 | `lever_counter` | the lever's own gate number; section 6 |
+
+*Amended 2026-10-07 by feature 014 (T038; its `contracts/scoring.md` 3 and 8):* `compare` reads
+each `scorecard.json` through `scorecard.read_scorecard`, which reads `scoring_rules_version` before
+it validates anything, so a folder scored under other rules is refused with the command that
+re-scores it before any session is loaded or any record cross-checked. The `PackageScore` counts a
+row reads keep their fields, scored by 014's rules through its one matcher: `valid_findings` the
+demonstrated or suspected findings that credit a known defect, `missed_known_defects` the defects no
+finding matched, `false_alarms` every demonstrated or suspected finding that credits none, one
+contradicting a correct condition included, and `matched_defect_ids`, which the adoption rule reads,
+the detected defects. A study whose runs were scored against two versions of one package's key is
+refused, naming the package. The ledger's 014 columns are 014 `provenance.md` section 5's.
+
+*Amended 2026-10-07 by feature 014 (T066 to T069; its `contracts/provenance.md` 5, 6.3 and 6.4;
+plan decision INT-10):* `ledger_schema` is `"1.1"`, one bump for the feature, with the columns in
+their final order and the committed header regenerated once. The 1.1 record also names
+`pane_studies`, a key omitted when no pane study was compared and filled from 014's verdict slice,
+which moves neither the version nor the header. Each run object gains `model_view` (the session's;
+`MODEL_VIEW_OFF` for a session written before feature 008), `profile_recorded`, `profile_digest`,
+`live_tools` and `pane_defaults` (the record's), and the scorer's per-package outcome counts:
+`flagged`, `flagged_below_expected`, `status_mismatches`, `cleared`, `contradictions` and
+`confirmations` (null, rendered `not assessed`, when the key holds no correct condition), and
+`findings_by_origin` and `false_alarms_by_origin`, every origin with zeros. The run table reads:
+run, commit, lever, arm, rep, provider, model, effort, explanations, model view, profile, live
+tools, package, input, cached in, uncached in, output, reasoning/thoughts, tool-result in, total,
+rounds, tool calls, cached share, wall clock s, s to 1st finding, valid, missed, flagged, below
+expected, status mismatch, cleared, false alarms, contradicted, confirmed, unresolved, unresolved
+withheld, unresolved other, coverage bucket mix, findings by origin, false alarms by origin. The
+model view reads `off`, `pane`, or its switches (`slimming`, `pruning after N`, or both); the profile
+reads the digest's 12-character display, `none` with no profile and `unknown` where the record does
+not say; live tools reads `yes`, `no` or `unknown`; the origin cells are mixes with zero origins
+left out, `none` when every one is zero. There is no run-status column. The decision table gains
+`Recall by producer (held out) off -> on` after `Recall (held out) off -> on`, each producer's
+held-out recall, reported and never gated on; nothing else moves. `tool calls` stays
+`len(session.steps)`, the pre-run's and the regrade's steps included, and the ledger's closing notes
+say so. `run_dir` and a decision row's `run_dirs` name a folder inside the checkout relative to its
+root with `/`, one outside as typed. A ledger written where the repository may commit it (`--out` or
+`--into` inside the checkout and not ignored by git, `--check` included) refuses a run graded
+against another profile than the fictional example, one whose saved set names an absolute path,
+and one whose folder the repository does not hold.
 
 **Null is null.** A token field whose session total is null is `null` in the ledger, never `0` and
 never omitted (RK-1). A median over a column containing nulls is computed over the non-null values
@@ -442,6 +536,12 @@ All of these run with no key and no seat, because every input is a file.
 18. `worst_case_defects_lost` is `null`, and its cell reads `unknown`, for an unstable control arm,
     for either refused precondition and for a baseline row; it is `0` only where the comparison
     ran and found nothing.
+19. (feature 014 T036) `compare` refuses a scorecard scored under another scoring-rules version, a
+    lower one with the line naming the command that re-scores it and a higher one naming the newer
+    build, before it loads a session or runs a parity check, and a malformed one naming the folder
+    and the field, never as a bare validation error (`tests/unit/test_scoring_rules_version.py`).
+20. (feature 014 T036, INT-16) `compare` refuses two runs of one study whose scorecards name two
+    `key_sha256` digests for one package's key, naming the package.
 
 ## 10. What the implementation settled (T037-T045)
 
@@ -477,11 +577,38 @@ presentation setting, not an efficiency lever. The session and provenance indepe
 record it, the raw ledger displays it, and its provider usage/runtime remain in the
 session totals. A comparison with inconsistent presentation settings is refused.
 
+*Amended 2026-10-07 by feature 014 (T050, T051; its `contracts/provenance.md` 1):* the record is
+written **before any review**, right after the saved set and before the first package's review,
+rather than after the set, so a run that stops part way is still attributable; as UTF-8 bytes with
+`\n` line endings through the one atomic writer, `swreview.atomic.write_atomic`. Beside the fields
+above it carries `provenance_schema` (2; a record without it reads 1), `pane_defaults` (as typed;
+absent reads false), `model_view` (the resolved model view), `profile_digest`
+(`load_profile(path).identity.sha256`, the digest every standards finding stamps),
+`profile_is_example` (whether the profile's bytes equal the checkout's
+`config/standards.example.yaml` at run time), `live_tools` (false from `benchmark run`),
+`inert_settings` (`agent.settings.INERT_SETTINGS[provider]`), `prompt_digest` (the sha256 of the
+system prompt's raw bytes) and `tree_dirty` (whether `git status --porcelain --untracked-files=no`
+lists anything; null when git cannot answer). `explanations_enabled` is the resolved value. A field
+an older record lacks reads as not recorded, and the record names **no path**: not the profile's,
+nor its folder, the set file's, a package's or the output folder's. Which of these fields must match
+across a study is 014 `contracts/provenance.md` section 4, with compare's cross-checks.
+
 ### 10.2 `set_digest` is the digest of the saved copy
 
 The sha256 of the `benchmark-set.json` the run saved, **not** of the file `--set` named.
 Two consequences, both wanted: the cross-check of section 3 can be run entirely inside the
 run directory, and two set files that differ only in whitespace are one set.
+
+*Amended 2026-10-07 by feature 014 (T051, T052; its `contracts/provenance.md` 6.1):* the saved copy
+is `BenchmarkSet.saved_form(root=...)` and is location-free: every path inside the checkout relative
+to its root with `/` separators, a private one absolute; UTF-8 JSON, indent 2, LF, one final
+newline, written through `write_atomic` before any review. `set_digest` is the sha256 of those
+bytes, so two checkouts of one tree at two locations, on any platform, record one digest (014
+US2-11), where a copy of resolved absolute paths written with `write_text` carried the checkout's
+location and moved with it. `benchmark score` reads the saved copy through
+`sets.load_saved_set(path, root=...)`, resolving its relative entries against the reader's
+checkout, never against the run folder's grandparent; a copy saved before feature 014, every entry
+absolute, still loads.
 
 ### 10.3 The checklist digest is checked across a study, not against the session
 
@@ -505,6 +632,11 @@ an OpenAI study and a Gemini study renders two rows as section 5 asks. Within on
 four fields that must be equal are `commit`, `effort`, `set_digest` and `checklist_digest`,
 and the refusal names the one that differed. There is still no declared exception, lever 2
 included.
+
+*Amended 2026-10-07 by feature 014 (T065; its `contracts/provenance.md` 4):* the same-commit
+refusal is the must-match loop's `commit` (section 3's amendment), applied within a study as
+before. The four fields are now every field of the record but the named exemptions, and the
+refusal names the first that differed, `efficiency.<lever>` for a lever's flag.
 
 ### 10.6 Two exits, which are not the same thing
 

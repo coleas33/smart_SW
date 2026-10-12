@@ -44,8 +44,10 @@ from __future__ import annotations
 import json
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
+from pathlib import Path
 from time import perf_counter
 from typing import Any, Literal, Protocol, runtime_checkable
+from uuid import UUID
 
 from pydantic import validate_call
 from pydantic_core import to_jsonable_python
@@ -131,6 +133,7 @@ def check_tools() -> tuple[Callable[..., Any], ...]:
         checks_mechanical.check_joints,
         checks_mechanical.check_mass_material,
         checks_mechanical.check_hygiene,
+        checks_mechanical.check_threads,
     )
 
 
@@ -430,6 +433,81 @@ class SessionSink:
                     error=f"{type(error).__name__}: {error}",
                 ),
             )
+
+
+UnstoredReason = Literal["missing", "unreadable", "other_session", "other_call"]
+
+
+@dataclass(frozen=True)
+class StoredResult:
+    """A recorded step's full result, as `SessionSink._store` wrote it (plan decision RF-30)."""
+
+    payload: dict[str, Any]
+    status: str
+    """The envelope's `status`, the step's own: `ok` or `error`."""
+    text: str
+    """The file's raw text: its bytes decoded as UTF-8, never parsed and re-serialized."""
+
+
+@dataclass(frozen=True)
+class Unstored:
+    """Why a step has no stored result to read: the file is `missing`, `unreadable`, another
+    session's (`other_session`), or another call's (`other_call`)."""
+
+    reason: UnstoredReason
+
+
+def read_stored_result(
+    run_dir: Path,
+    session_id: UUID,
+    step: int,
+    *,
+    tool: str | None = None,
+    arguments: Mapping[str, Any] | None = None,
+) -> StoredResult | Unstored:
+    """The full result `_store` wrote for `step` of session `session_id` in `run_dir`.
+
+    The one reader beside the one writer (plan decision RF-30): the replay, the questions
+    reader and the report read `tool-results/step-<step>.json` through it and nowhere else.
+    The file is this call's result only when it is an envelope with a payload object naming
+    this session, this step and, when given, this tool and these arguments. Anything else is
+    `Unstored`, naming why: `missing`, no file (a step nothing was stored for, or a session
+    recorded before feature 008); `unreadable`, not UTF-8 JSON (or nested too deep to
+    parse), not an object, a payload that is not an object, or a status that is not a
+    string; `other_session`, a stale file from an earlier review in a reused folder, which
+    is what `session_id` is written for, and named before any other mismatch; `other_call`,
+    another step, tool or arguments. What is on disk never makes it raise.
+    """
+    path = run_dir / TOOL_RESULTS_DIR_NAME / f"step-{step}.json"
+    try:
+        raw = path.read_bytes()
+    except FileNotFoundError:
+        return Unstored("missing")
+    except OSError:
+        return Unstored("unreadable")
+    try:
+        # The bytes decoded rather than `read_text`, so `text` keeps the file's line endings.
+        text = raw.decode("utf-8")
+        envelope = json.loads(text)
+    except (ValueError, RecursionError):
+        # `UnicodeDecodeError` and `json.JSONDecodeError` are both a `ValueError`; a nesting
+        # past the interpreter's limit is a `RecursionError` instead.
+        return Unstored("unreadable")
+    if (
+        not isinstance(envelope, dict)
+        or not isinstance(envelope.get("payload"), dict)
+        or not isinstance(envelope.get("status"), str)
+    ):
+        return Unstored("unreadable")
+    if envelope.get("session_id") != str(session_id):
+        return Unstored("other_session")
+    if (
+        envelope.get("step") != step
+        or (tool is not None and envelope.get("tool") != tool)
+        or (arguments is not None and envelope.get("arguments") != dict(arguments))
+    ):
+        return Unstored("other_call")
+    return StoredResult(payload=envelope["payload"], status=envelope["status"], text=text)
 
 
 # --- one recorded tool ----------------------------------------------------------------

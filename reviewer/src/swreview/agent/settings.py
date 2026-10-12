@@ -59,6 +59,7 @@ __all__ = [
     "DEFAULT_MODELS",
     "DEFAULT_PROVIDER",
     "ENTERPRISE_ENV",
+    "INERT_SETTINGS",
     "LEVER_NAMES",
     "MASK",
     "MESH_MODES",
@@ -67,6 +68,8 @@ __all__ = [
     "MODEL_VIEW_PANE",
     "NO_STUDY",
     "OUTPUT_CEILINGS",
+    "PANE_STUDY",
+    "PRIVATE_PANE_STUDY",
     "WORKSTATION_LEVERS",
     "EfficiencySettings",
     "ExtractionSettings",
@@ -521,6 +524,20 @@ def pane_efficiency(provider: ProviderName) -> EfficiencySettings:
     )
 
 
+INERT_SETTINGS: Mapping[ProviderName, tuple[str, ...]] = {
+    ProviderName.OPENAI: (),
+    ProviderName.GEMINI: ("parallel_tool_calls", "drop_prior_reasoning"),
+    ProviderName.FAKE: (),
+}
+"""The recorded settings that change nothing on a provider (feature 014 FR-052, D14.5).
+
+Gemini makes parallel calls whatever the flag, which `pane_efficiency` records off for it,
+and sends no reasoning items for lever 14 to drop. Recorded per run as `inert_settings`, so a
+pane study's verdict names them beside the settings its arms differed in rather than crediting
+them with a difference (`specs/014-design-review-eval/contracts/provenance.md` section 3.5).
+"""
+
+
 class ModelViewSettings(BaseModel):
     """What the model reads of each tool result (feature 008 User Story 3).
 
@@ -561,11 +578,16 @@ class PaneDefaults:
 
     efficiency: EfficiencySettings
     model_view: ModelViewSettings
+    explain_findings: bool
+    """The bounded explanation pass over the top findings (feature 014 PP-1): the chat server
+    reads it here rather than passing a literal of its own, so `--pane-defaults` runs what the
+    pane runs."""
 
 
 def pane_defaults(provider: ProviderName) -> PaneDefaults:
-    """The pane's levers and model view: read by the pane, `--pane-defaults` and the replay."""
-    return PaneDefaults(pane_efficiency(provider), MODEL_VIEW_PANE)
+    """The pane's levers, model view and explanations: read by the pane, `--pane-defaults` and
+    the replay, which uses the levers and the model view only."""
+    return PaneDefaults(pane_efficiency(provider), MODEL_VIEW_PANE, explain_findings=True)
 
 
 MeshMode = Literal["eager", "lazy", "off"]
@@ -639,6 +661,16 @@ ARMS: tuple[str, ...] = ("off", "on", "baseline")
 
 NO_STUDY = "none"
 """What `--study` says when a run is testing no lever at all."""
+
+PANE_STUDY = "pane_defaults"
+"""The pane study (feature 014 FR-014): arms `on` (exactly `--pane-defaults`) and `off` (every
+change off), the explanation setting typed in both, over the committed set and the example
+profile at a known commit with a clean tree (`specs/014-design-review-eval/contracts/
+provenance.md` section 3.2)."""
+
+PRIVATE_PANE_STUDY = "pane_defaults_private"
+"""The pane study's private twin: the real profile, private packages and an `--out` outside the
+repository; its own study key, so its rows are never the pane study's (owner decision 23A)."""
 
 
 def _levers_sentence() -> str:
@@ -727,29 +759,135 @@ def efficiency_from_levers(
     return EfficiencySettings(**{name: True for name in chosen})
 
 
-def check_study_arm(*, study: str, arm: str | None, efficiency: EfficiencySettings) -> None:
-    """Refuse a run whose `--study`, `--arm` and `--lever` contradict each other.
+_MODEL_VIEW_SWITCHES = "--payload-slimming, --history-pruning or --prune-after"
+"""How a refusal names the model-view switches: `check_study_arm` is told that one was typed,
+not which."""
+
+
+def _typed_changes(
+    *, pane_defaults: bool, levers: Sequence[str], model_view_typed: bool
+) -> list[str]:
+    """The changes one command line typed, each as the flags that typed it, for a refusal."""
+    changes = []
+    if pane_defaults:
+        changes.append("--pane-defaults")
+    if levers:
+        changes.append("--lever " + ", ".join(dict.fromkeys(levers)))
+    if model_view_typed:
+        changes.append(_MODEL_VIEW_SWITCHES)
+    return changes
+
+
+def _check_pane_study_arm(
+    study: str,
+    arm: str,
+    *,
+    pane_defaults: bool,
+    levers: Sequence[str],
+    model_view_typed: bool,
+    explanations_typed: bool,
+) -> None:
+    """The pane study's arm rules (feature 014 `contracts/provenance.md` section 3.2).
+
+    `arm` is one of `ARMS`. The on arm is exactly `--pane-defaults` and the off arm has every
+    change off, so the two differ in the pane's settings and nothing else; the explanation
+    setting is typed in both, so compare can hold it equal (PP-2).
+    """
+    if arm == "baseline":
+        raise ValueError(
+            f"--arm baseline with --study {study}: a baseline's study is none; the pane "
+            f"baseline is --study none --arm baseline --pane-defaults"
+        )
+    if not explanations_typed:
+        raise ValueError(
+            f"--study {study} without --explain-findings or --no-explain-findings: type the "
+            f"explanation setting in both arms; the pane study holds it equal and stated"
+        )
+    if arm == "on":
+        wrong = [] if pane_defaults else ["without --pane-defaults"]
+        wrong += [
+            f"with {change}"
+            for change in _typed_changes(
+                pane_defaults=False, levers=levers, model_view_typed=model_view_typed
+            )
+        ]
+        if wrong:
+            raise ValueError(
+                f"--study {study} --arm on {' and '.join(wrong)}: the on arm is exactly "
+                f"--pane-defaults"
+            )
+        return
+    changes = _typed_changes(
+        pane_defaults=pane_defaults, levers=levers, model_view_typed=model_view_typed
+    )
+    if changes:
+        raise ValueError(
+            f"--study {study} --arm off with {' and '.join(changes)}: the off arm has every "
+            f"change off"
+        )
+
+
+def check_study_arm(
+    *,
+    study: str,
+    arm: str | None,
+    efficiency: EfficiencySettings,
+    pane_defaults: bool = False,
+    levers: Sequence[str] = (),
+    model_view_typed: bool = False,
+    explanations_typed: bool = False,
+) -> None:
+    """Refuse a run whose `--study`, `--arm` and what it typed contradict each other.
 
     Which lever a run is testing and which arm it is are facts *about the study*, not
     about the settings: they exist across two run folders, not inside one, which is why
     they are typed rather than derived. A run mislabelled in its own provenance record is
     worse than no run, because it renders without complaint in the wrong arm.
 
+    The pane study and the two baselines (feature 014 `contracts/provenance.md` sections 3.2
+    and 3.3) are rules about what was *typed*, which the resolved settings cannot show: the
+    pane baseline's levers are on, and only `pane_defaults` says they are the pane's rather
+    than typed ones. So the caller passes the typed markers; each defaults to nothing typed,
+    which leaves every rule as it stood before them.
+
     Args:
-        study: A lever name, or `none` for a run that is testing no lever.
+        study: A lever name, `PANE_STUDY`, `PRIVATE_PANE_STUDY`, or `none` for a run that is
+            testing no lever.
         arm: `off`, `on`, `baseline`, or None when the run claims no arm.
-        efficiency: The settings `--lever` resolved to.
+        efficiency: The settings the run resolved to.
+        pane_defaults: `--pane-defaults` was typed.
+        levers: The `--lever` names as typed, never the pane's own.
+        model_view_typed: `--payload-slimming`, `--history-pruning` or `--prune-after` was
+            typed.
+        explanations_typed: `--explain-findings` or `--no-explain-findings` was typed.
 
     Raises:
         ValueError: For any of the four contradictions of contracts/ab-harness.md
-            section 2.
+            section 2, or a pane-study or baseline rule of feature 014's provenance.md
+            sections 3.2 and 3.3.
     """
-    if study != NO_STUDY and study not in LEVER_NAMES:
-        raise ValueError(f"unknown --study {study!r}: {_levers_sentence()}, or none")
+    pane_study = study in (PANE_STUDY, PRIVATE_PANE_STUDY)
+    if not pane_study and study != NO_STUDY and study not in LEVER_NAMES:
+        raise ValueError(
+            f"unknown --study {study!r}: {_levers_sentence()}, or {PANE_STUDY}, "
+            f"{PRIVATE_PANE_STUDY} or none"
+        )
     if arm is None:
+        if pane_study:
+            raise ValueError(f"--study {study} without --arm: name the arm: on or off")
         return
     if arm not in ARMS:
         raise ValueError(f"unknown --arm {arm!r}: one of {', '.join(ARMS)}")
+    if pane_study:
+        _check_pane_study_arm(
+            study,
+            arm,
+            pane_defaults=pane_defaults,
+            levers=levers,
+            model_view_typed=model_view_typed,
+            explanations_typed=explanations_typed,
+        )
+        return
 
     on_levers = sorted(name for name in LEVER_NAMES if getattr(efficiency, name))
 
@@ -759,10 +897,25 @@ def check_study_arm(*, study: str, arm: str | None, efficiency: EfficiencySettin
                 f"--arm baseline with --study {study}: a baseline run is the study with "
                 f"no lever under test, so its study is none"
             )
+        if pane_defaults:
+            others = _typed_changes(
+                pane_defaults=False, levers=levers, model_view_typed=model_view_typed
+            )
+            if others:
+                raise ValueError(
+                    f"--arm baseline --pane-defaults with {' and '.join(others)}: the pane "
+                    f"baseline is exactly --pane-defaults"
+                )
+            return
         if on_levers:
             raise ValueError(
                 f"--arm baseline with --lever {', '.join(on_levers)}: a baseline run has "
                 f"every lever off"
+            )
+        if model_view_typed:
+            raise ValueError(
+                f"--arm baseline with {_MODEL_VIEW_SWITCHES}: a baseline run has every "
+                f"change off; the pane baseline is --arm baseline --pane-defaults"
             )
         return
 

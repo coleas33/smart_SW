@@ -40,8 +40,7 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
-from pydantic import ValidationError
-
+from swreview.agent.events import replay_events  # re-exported: the pane imports it from here
 from swreview.agent.providers import AgentEvent, EventType
 from swreview.agent.runner import EVENTS_FILE_NAME, EventSink, ReviewRun
 from swreview.benchmark.timing import timing_with
@@ -101,33 +100,6 @@ class InvalidTransitionError(RuntimeError):
 
 
 # --- the event file ------------------------------------------------------------------
-
-
-def replay_events(path: Path | str, after: int = 0) -> Iterator[AgentEvent]:
-    """Every event in `events.jsonl` whose `seq` is greater than `after`.
-
-    `after` is the `Last-Event-ID` the pane reconnected with, so a reconnect is never told
-    the same thing twice, and 0 (no header) replays the session from the beginning.
-
-    A file that is not there yet is an empty stream, not an error: the pane may open the
-    stream before the first event is written. A line that does not parse ends the replay
-    rather than raising - the one way a line is malformed is a backend killed mid-write,
-    and what the pane needs then is everything that survived, followed by the live stream.
-    """
-    file = Path(path)
-    if not file.is_file():
-        return
-    with file.open(encoding="utf-8") as handle:
-        for line in handle:
-            text = line.strip()
-            if not text:
-                continue
-            try:
-                event = AgentEvent.model_validate_json(text)
-            except ValidationError:
-                return
-            if event.seq > after:
-                yield event
 
 
 class Subscriber:

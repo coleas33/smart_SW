@@ -11,6 +11,10 @@ same in both, and this module is that everything:
   runs would have two stamping rules and, the first time one changed, two dialects of a
   file the pane replays from either (`002/contracts/chat-events.schema.json` is
   authoritative for both).
+- **`replay_events`**, the one reader of that file, beside its writer: the pane's reconnect
+  and remodel replay through it, and the benchmark's readers move onto it in US3, US6 and
+  US7 (feature 014 plan decision RF-29); **`event_stream`** finds a benchmark run's stream,
+  plain or packed (owner decision 28A, plan decision RF-83).
 - **`UsageLedger`**, which rides on that stream as a listener and is therefore shared by
   construction: it reads `usage` and `turn.ended` events and knows nothing about what run
   produced them.
@@ -34,10 +38,15 @@ not review-shaped despite the module it lives in (`report/session.py`).
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Mapping
+import gzip
+import re
+import zlib
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
+
+from pydantic import ValidationError
 
 from swreview.agent.providers import (
     AgentEvent,
@@ -49,6 +58,11 @@ from swreview.agent.providers import (
 from swreview.report.session import SessionUsage
 
 EVENTS_FILE_NAME = "events.jsonl"
+
+PACKED_EVENTS_FILE_NAME = "events.jsonl.gz"
+"""A benchmark run's stream once `swreview benchmark pack`, which US7 adds, has packed it
+(owner decision 28A). Recordings and live sessions are never packed, so the pane only reads
+the plain name."""
 
 DEFAULT_MAX_STEPS = 200
 """Tool calls one turn may make. A session of many turns may make many times this."""
@@ -129,6 +143,106 @@ class EventSink:
         there is no second construction site to keep in step.
         """
         self._listeners.append(listener)
+
+
+_NOT_UTF8 = re.compile("[\udc80-\udcff]")
+"""What `_open_stream` decodes each byte that is not UTF-8 to: a lone surrogate
+(`errors="surrogateescape"`), which no UTF-8 text decodes to. Pydantic would refuse such a line
+too (`model_validate_json` raises a `ValidationError` on a lone surrogate), so the check is there
+for clarity: it names the cut character as the reason a line is unreadable."""
+
+
+def replay_events(
+    path: Path | str,
+    after: int = 0,
+    *,
+    on_unreadable: Callable[[int], None] | None = None,
+) -> Iterator[AgentEvent]:
+    """Every event in `events.jsonl` whose `seq` is greater than `after`.
+
+    `after` is the `Last-Event-ID` the pane reconnected with, so a reconnect is never told
+    the same thing twice, and 0 (no header) replays the session from the beginning.
+
+    A file that is not there yet is an empty stream, not an error: the pane may open the
+    stream before the first event is written. A line that does not parse ends the replay
+    rather than raising - the one way a line is malformed is a backend killed mid-write,
+    and what the pane needs then is everything that survived, followed by the live stream.
+    A write cut inside a multibyte character (a tolerance sign, say) leaves a line that is
+    not UTF-8, and that line ends the replay the same way: each byte that is not UTF-8
+    decodes to a lone surrogate in the line that holds it, so the damage is its own line's
+    and no earlier line's. Lines end where text mode ends them, at a newline, a carriage
+    return and newline, or a lone carriage return, as at `be01974` (owner decision 38A).
+
+    A path whose name ends `.gz` is a packed stream (`PACKED_EVENTS_FILE_NAME`) and reads
+    as its plain form. A truncated or corrupt archive ends the replay as a malformed line
+    does, at the line being read when decompression failed.
+
+    `on_unreadable` is told where a replay stopped short: the 1-based number of that line
+    in the file, blank lines counted. It is not called for a missing or empty file, nor
+    for a log read to its end - a reader that must not mistake a damaged log for a
+    complete one passes it, as the benchmark's scorer, report and attempt reader will when
+    they move onto it in US3, US6 and US7.
+    """
+    file = Path(path)
+    if not file.is_file():
+        return
+    read = 0
+    unreadable: int | None = None
+    try:
+        with _open_stream(file) as handle:
+            for read, line in enumerate(handle, start=1):
+                text = line.strip()
+                if not text:
+                    continue
+                if _NOT_UTF8.search(text):
+                    unreadable = read
+                    break
+                try:
+                    event = AgentEvent.model_validate_json(text)
+                except ValidationError:
+                    unreadable = read
+                    break
+                if event.seq > after:
+                    yield event
+    except (EOFError, gzip.BadGzipFile, zlib.error):
+        unreadable = read + 1
+    if unreadable is not None and on_unreadable is not None:
+        on_unreadable(unreadable)
+
+
+def _open_stream(file: Path) -> TextIO:
+    """The stream's lines as text, decompressed when it is packed.
+
+    Text mode with universal newlines, as at `be01974` (owner decision 38A). A byte that is
+    not UTF-8 reads as a lone surrogate (`_NOT_UTF8`) instead of raising out of a read that
+    holds earlier lines too.
+    """
+    if file.name.endswith(".gz"):
+        return gzip.open(file, "rt", encoding="utf-8", errors="surrogateescape")
+    return file.open(encoding="utf-8", errors="surrogateescape")
+
+
+def event_stream(folder: Path | str) -> Path:
+    """Where a benchmark run folder's stream is: plain, else packed, else the plain path.
+
+    The plain path when neither exists, which `replay_events` reads as an empty stream, as
+    it does today. A folder holding both is a pack that did not finish (the pack, which US7
+    adds, will write and verify the packed stream before it deletes the plain one) and is
+    refused rather than read as either.
+    """
+    folder = Path(folder)
+    plain = folder / EVENTS_FILE_NAME
+    packed = folder / PACKED_EVENTS_FILE_NAME
+    if plain.is_file() and packed.is_file():
+        raise ValueError(
+            f"{folder} holds {EVENTS_FILE_NAME} and {PACKED_EVENTS_FILE_NAME}: a pack did "
+            "not finish; run swreview benchmark pack on its run again"
+        )
+    if plain.is_file():
+        return plain
+    if packed.is_file():
+        return packed
+    return plain
 
 
 class UsageLedger:

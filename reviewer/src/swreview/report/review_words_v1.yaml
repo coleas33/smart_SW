@@ -128,6 +128,8 @@ goal_reasons:
 # line, and so is Standards (feature 013, its research R2.14). `group` is the
 # `finding_groups` id a goal's findings are listed under - one taxonomy for goals and groups:
 # folding Mass and material into Hygiene is that goal's `group: hygiene` and no other edit.
+# A goal's `items` may also name a finding id it owns without its prefix: no coverage row
+# carries one, so it is never a close-out row.
 goals:
   - id: interference
     title: "Interference"
@@ -136,7 +138,10 @@ goals:
     group: interference_fit
   - id: fasteners
     title: "Fasteners"
-    items: [fasteners]
+    # The two thread pitch finding ids by name (feature 010 amendment 2026-10-08, the owner's
+    # decision 63A), never the prefix `thread.`: the coverage-only `thread.pitch` rows then
+    # belong to no goal, so no goal line moves.
+    items: [fasteners, thread.fine_pitch, thread.nonstandard_pitch]
     prefixes: [fastener.]
     group: fasteners
   - id: hole_alignment

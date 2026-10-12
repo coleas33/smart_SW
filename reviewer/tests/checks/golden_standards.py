@@ -21,9 +21,10 @@ on:
    result: `session.json`, `report.md` and `check.json` are written and are not part of
    what is compared, because their content is the session's and is pinned by the unit tests
    that own it;
-3. **the profile identity is rendered as a token, not as this machine's path.** Every
-   finding carries `profile:<path> sha256:<hash>` (FR-034), and the path is wherever this
-   checkout happens to sit. The substitution is built from the values the run actually
+3. **the profile identity is rendered as a token, not as this machine's path.** The run's
+   `profile.path` is wherever this checkout happens to sit, and every finding carries
+   `profile:<file name> sha256:<hash>` (FR-034; the file name alone since feature 014's D12,
+   so only its hash is a token there). The substitution is built from the values the run actually
    stamped, so a run that graded against the *wrong* profile leaves a real path and a real
    hash in the baseline rather than the token - which is exactly the diff that should be
    noticed.

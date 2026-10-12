@@ -2,7 +2,7 @@
 
 The package is the day-one benchmark for User Story 1: exported files only, no
 SOLIDWORKS seat. Two conditions are seeded on purpose and must survive any change to
-this script (see `benchmarks/packages/cover-blind-tap/notes.md`):
+this script (see `specs/014-design-review-eval/contracts/cases.md` 6.4):
 
 - the housing sheet calls out `4X M6x1.0 - 6H` with a depth of 14 and nothing else. The
   usable thread depth is not stated anywhere on the drawing, so the fastener
@@ -25,7 +25,7 @@ then build the package from the manifest, the BOM and these PDFs:
 
     uv run python -c "from pathlib import Path; \\
         from swreview.ingest.package_builder import build_package; \\
-        p = Path('../benchmarks/packages/cover-blind-tap'); \\
+        p = Path('tests/fixtures/ingest/cover-blind-tap'); \\
         build_package(p, p / 'manifest.json', p / 'bom.csv')"
 """
 
@@ -36,7 +36,7 @@ from pathlib import Path
 import pymupdf
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DRAWINGS = REPO_ROOT / "benchmarks" / "packages" / "cover-blind-tap" / "drawings"
+DRAWINGS = REPO_ROOT / "reviewer" / "tests" / "fixtures" / "ingest" / "cover-blind-tap" / "drawings"
 SYMBOL_FONT = Path("C:/Windows/Fonts/seguisym.ttf")
 
 DEPTH = "\u21a7"

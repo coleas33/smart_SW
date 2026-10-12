@@ -1,0 +1,74 @@
+{
+  "key_format": 2,
+  "package_id": "mir-sitting-positive",
+  "known_defects": [
+    {
+      "id": "D-1",
+      "tag": "tuned_on",
+      "description": "a document carrying no revision under the profile's revision property",
+      "check": "hygiene.revision_present",
+      "component_ids": [
+        "cmp:0001"
+      ],
+      "document_ids": [
+        "doc:0002"
+      ],
+      "producer": "code",
+      "expected_status": "demonstrated"
+    }
+  ],
+  "correct_conditions": [
+    {
+      "id": "C-1",
+      "tag": "tuned_on",
+      "description": "The plate's tree is compliant: every sketch of the custom part fully defined (R-7's clean case).",
+      "check": "rms.sketches.fully_defined",
+      "component_ids": [
+        "cmp:0001"
+      ],
+      "document_ids": [
+        "doc:0002"
+      ]
+    },
+    {
+      "id": "C-2",
+      "tag": "tuned_on",
+      "description": "The plate's tree is compliant: every sketch of the custom part fully defined (R-7's clean case).",
+      "check": "standards.part.sketches_fully_defined",
+      "component_ids": [
+        "cmp:0001"
+      ],
+      "document_ids": [
+        "doc:0002"
+      ]
+    },
+    {
+      "id": "C-3",
+      "tag": "tuned_on",
+      "description": "The plate's tree is compliant: every content feature of the custom part inside a group folder (R-7's clean case).",
+      "check": "rms.grouping.all_features_in_a_group",
+      "component_ids": [
+        "cmp:0001"
+      ],
+      "document_ids": [
+        "doc:0002"
+      ]
+    },
+    {
+      "id": "C-4",
+      "tag": "tuned_on",
+      "description": "The plate's tree is compliant: a global variable driving the custom part's dimension (R-7's clean case).",
+      "check": "rms.params.global_variables_present",
+      "component_ids": [
+        "cmp:0001"
+      ],
+      "document_ids": [
+        "doc:0002"
+      ]
+    }
+  ],
+  "forbidden": [],
+  "expected_coverage": [],
+  "unanswerable_requests": [],
+  "question_counts": []
+}

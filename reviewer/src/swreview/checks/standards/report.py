@@ -8,7 +8,7 @@ writes a `Finding` and no tool author writes a `CoverageItem`.
 Five things are this family's own, and they are what is left here:
 
 1. **the profile stamp and this family's evidence format.** Every finding carries
-   `profile:<path> sha256:<hash>` in `coverage_limits` - the identity and never a value
+   `profile:<file name> sha256:<hash>` in `coverage_limits` - the identity and never a value
    (FR-001, FR-034) - plus the configuration the document was read in and the instances
    that did not resolve, where they apply; and every subject is one `inputs` entry as
    `<kind> <id> <name> persist_ref=<ref|none> scope=<document_id>` (data-model section 3).
@@ -45,6 +45,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
+from pathlib import PureWindowsPath
 from typing import Any
 
 from pydantic_core import to_jsonable_python
@@ -79,6 +80,7 @@ __all__ = [
     "check_rows",
     "document_of",
     "report_results",
+    "stamped_profile_digest",
     "subject_input",
     "subject_kind",
     "verdict_from",
@@ -89,10 +91,28 @@ SUMMARY_CHECK = STANDARDS_FAMILY.summary_check
 """`standards.release`: the one aggregated coverage item that carries the run's verdict. It
 is not one of the sixteen and no document is ever graded against it."""
 
-PROFILE_LIMIT = "profile:{path} sha256:{sha256}"
-"""The profile identity on every finding - the path and the content hash, and **no profile
+PROFILE_LIMIT = "profile:{name} sha256:{sha256}"
+"""The profile identity on every finding - the file name and the content hash, and **no profile
 value** (FR-001, FR-034). A reader of a finding has to be able to tell which standard it
-was graded against without the standard being copied into the report."""
+was graded against without the standard being copied into the report. Never the folder
+(feature 014's D12): a finding goes into run folders and fixtures that may be committed, and
+the folder names the machine; `ProfileIdentity.path`, the Standards tab and `swreview check
+standards` still say where the file is."""
+
+_STAMP = re.compile(r"profile:.* sha256:(?P<sha256>[0-9a-f]{64})")
+"""Either form of the stamp, read by its ` sha256:` suffix: the path-bearing one findings carried
+before feature 014's D12 and the file-name one after it, a name holding a space included."""
+
+
+def stamped_profile_digest(limits: Sequence[str]) -> str | None:
+    """The full 64-character profile digest the first stamp in `limits` carries, of either form,
+    or `None` where no limit is a stamp: the one parser of `PROFILE_LIMIT`. Not
+    `tolerances.profile_sha256`, which reads a loaded profile's 12-character display."""
+    for limit in limits:
+        match = _STAMP.fullmatch(limit)
+        if match is not None:
+            return match["sha256"]
+    return None
 
 CONFIGURATION_LIMIT = "configuration {name}"
 UNRESOLVED_INSTANCES_LIMIT = "unresolved instances: {ids}"
@@ -255,7 +275,9 @@ def _stamped(
         return result
     document = documents.get(result.document_id)
     limits = [
-        PROFILE_LIMIT.format(path=identity.path, sha256=identity.sha256),
+        # The file name read with either separator, so a Windows path is cut the same on every
+        # platform.
+        PROFILE_LIMIT.format(name=PureWindowsPath(identity.path).name, sha256=identity.sha256),
         *_document_limits(document),
         *result.result.coverage_limits,
     ]

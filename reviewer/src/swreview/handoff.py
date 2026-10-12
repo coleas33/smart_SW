@@ -10,6 +10,11 @@ A Remodel run folder is judged by a Remodel run's records (``REMODEL_REQUIRED_AR
 so its missing list says what the run did not reach rather than naming review files it
 never writes; the manifest's ``run_kind`` says which list applied.
 
+A benchmark run's package folder is exported with its run's record: ``benchmark run`` keeps
+``run-provenance.json`` at the run root, beside ``benchmark-set.json``, and each package's
+session and events in ``<run>/<package>/``, so that one name is read from the parent and
+nothing else of the run root or of another package.
+
 The secret scan is a safety net, not a proof that a bundle is secret-free.  Configured
 secret values are redacted with the product redactor and the provider-key shapes used by
 ``audit-secrets`` are masked too.  Unknown or undiscoverable secrets may still require
@@ -32,6 +37,7 @@ from typing import Any
 from pydantic import SecretStr
 
 from swreview.agent.settings import MASK, redact
+from swreview.benchmark.runner import PROVENANCE_FILE, SAVED_SET_FILE
 from swreview.ir.loader import reject_answer_key_path
 from swreview.report.attention import EXPLANATION_UNAVAILABLE
 from swreview.secrets import KEY_SHAPES
@@ -59,7 +65,7 @@ REQUIRED_ARTIFACTS: tuple[str, ...] = (
 """The core run records. Missing files are recorded rather than making a partial run useless."""
 
 OPTIONAL_ARTIFACTS: tuple[str, ...] = (
-    "run-provenance.json",
+    PROVENANCE_FILE,
     "check.json",
     "chat-log.jsonl",
     "extract.log",
@@ -100,7 +106,7 @@ REMODEL_OPTIONAL_ARTIFACTS: tuple[str, ...] = (
     "report.md",
     "events.jsonl",
     "session.json",
-    "run-provenance.json",
+    PROVENANCE_FILE,
 )
 """A Remodel run's later records, present only once a run went further than its plan. The
 native copy under ``copy/`` is never among them."""
@@ -108,6 +114,23 @@ native copy under ``copy/`` is never among them."""
 _REMODEL_MARKERS: tuple[str, ...] = ("remodel-open.jsonl", "source-attestation.json", "open.json")
 """Files only a Remodel run writes: any one of them, or a folder named ``...-remodel`` as
 ``RunFolders.CreateForRemodel`` names one, makes the run a Remodel run."""
+
+_RUN_ROOT_MARKERS: tuple[str, ...] = (PROVENANCE_FILE, SAVED_SET_FILE)
+"""What a benchmark run's root holds beside its package folders: the run's record and its saved
+set. A folder whose parent holds both is one of a benchmark run's package folders."""
+
+_RUN_ROOT_ARTIFACTS: tuple[str, ...] = (PROVENANCE_FILE,)
+"""What a benchmark package export reads from its run root, and nothing else of it: the run keeps
+its record at the root, which holds no session, and each package's session and events in
+``<run>/<package>/``, which holds no record (014 `contracts/provenance.md` section 7)."""
+
+_FROM_RUN_DIR = "run_dir"
+"""An artifact record's ``source`` for a name read from the input tree."""
+
+_FROM_RUN_ROOT = "run_root"
+"""An artifact record's ``source`` for a name in ``_RUN_ROOT_ARTIFACTS`` read from a benchmark
+run's root: the archive holds both at its top level, so only the record tells them apart (014
+`contracts/provenance.md` section 7)."""
 
 _SOURCE_REFERENCE_POLICY = (
     "package and report may contain real-design paths, and so may a remodel run's open.json, "
@@ -135,15 +158,21 @@ def export_handoff(
 ) -> Path:
     """Write one no-overwrite, atomically published handoff ZIP and return its path.
 
-    ``run_dir`` is the sole input tree.  Only :data:`REQUIRED_ARTIFACTS` and the exact
-    names in :data:`OPTIONAL_ARTIFACTS` are read.  ``out_zip`` must be outside that tree.
+    ``run_dir`` is the input tree.  Only :data:`REQUIRED_ARTIFACTS` and the exact
+    names in :data:`OPTIONAL_ARTIFACTS` are read.  When ``run_dir`` is a benchmark run's
+    package folder (its parent holds ``run-provenance.json`` beside ``benchmark-set.json``),
+    the names in ``_RUN_ROOT_ARTIFACTS`` are read from that run root instead, and nothing
+    else of it.  ``out_zip`` must be outside every tree read: the run root as well as
+    ``run_dir``.
     ``repo_dir`` identifies the checkout whose revision is recorded; when omitted, the
     run directory is used and a non-checkout simply records unknown build identity.
     ``exported_at`` is injectable so a manifest and ZIP can be reproduced in tests or by
     an archival caller that already has an export timestamp.
     """
     source = _checked_run_dir(run_dir)
-    target = _checked_output(out_zip, source)
+    run_root = _benchmark_run_root(source)
+    # The run root holds the package folder, so an archive outside it is outside both trees.
+    target = _checked_output(out_zip, run_root if run_root is not None else source)
     timestamp = (exported_at or datetime.now(UTC)).astimezone(UTC)
     secret_values = tuple(secrets)
     run_kind = "remodel" if _is_remodel_run(source) else "review"
@@ -152,11 +181,14 @@ def export_handoff(
         if run_kind == "remodel"
         else (REQUIRED_ARTIFACTS, OPTIONAL_ARTIFACTS)
     )
-    files, missing, excluded, scan = _collect(source, secret_values, required, optional)
+    files, sources, missing, excluded, scan = _collect(
+        source, secret_values, required, optional, run_root=run_root
+    )
 
     manifest = _manifest(
         source,
         files,
+        sources=sources,
         run_kind=run_kind,
         missing=missing,
         excluded=excluded,
@@ -182,6 +214,16 @@ def _checked_run_dir(run_dir: Path | str) -> Path:
     if not source.is_dir():
         raise HandoffExportError(f"run directory is not a directory: {source}")
     return source
+
+
+def _benchmark_run_root(source: Path) -> Path | None:
+    """``source``'s parent when it holds a benchmark run's record beside its saved set, so that
+    ``source`` is one of the run's package folders; otherwise ``None``, and nothing of the
+    parent is read."""
+    parent = source.parent
+    if parent != source and all((parent / name).is_file() for name in _RUN_ROOT_MARKERS):
+        return parent
+    return None
 
 
 def _is_remodel_run(source: Path) -> bool:
@@ -212,21 +254,30 @@ def _collect(
     secrets: Iterable[str | SecretStr | None],
     required: tuple[str, ...] = REQUIRED_ARTIFACTS,
     optional: tuple[str, ...] = OPTIONAL_ARTIFACTS,
+    *,
+    run_root: Path | None = None,
 ) -> tuple[
     list[tuple[str, bytes, int, bool]],
+    dict[str, str],
     list[str],
     list[dict[str, str]],
     dict[str, Any],
 ]:
-    selected = (*required, *optional)
+    # Each name with the folder it is read from: a benchmark package folder's run-root names
+    # come from its run root alone, never from the package folder.
+    selected: list[tuple[str, Path]] = [(relative, source) for relative in (*required, *optional)]
+    if run_root is not None:
+        selected = [item for item in selected if item[0] not in _RUN_ROOT_ARTIFACTS]
+        selected += [(relative, run_root) for relative in _RUN_ROOT_ARTIFACTS]
     files: list[tuple[str, bytes, int, bool]] = []
+    sources: dict[str, str] = {}
     missing: list[str] = []
     excluded: list[dict[str, str]] = []
     redacted_files: list[str] = []
     detector_hits: dict[str, list[str]] = {name: [] for name, _ in _SHAPE_DETECTORS}
     total = 0
-    for relative in selected:
-        path = source / relative
+    for relative, folder in selected:
+        path = folder / relative
         if path.is_symlink():
             raise HandoffExportError(f"allowlisted artifact must not be a symlink: {relative}")
         if not path.exists() or not path.is_file():
@@ -234,7 +285,7 @@ def _collect(
                 missing.append(relative)
             continue
         resolved = path.resolve()
-        if resolved.parent != source:
+        if resolved.parent != folder:
             raise HandoffExportError(f"allowlisted artifact escapes the run directory: {relative}")
         try:
             size = path.stat().st_size
@@ -287,6 +338,7 @@ def _collect(
             continue
         total += len(data)
         files.append((relative, data, len(data), changed))
+        sources[relative] = _FROM_RUN_DIR if folder == source else _FROM_RUN_ROOT
     scan = {
         "method": "configured secret substrings and provider-key shape detectors",
         "configured_values_checked": bool(tuple(secrets)),
@@ -294,7 +346,7 @@ def _collect(
         "shape_hits": {key: sorted(value) for key, value in detector_hits.items() if value},
         "coverage": "best_effort_unknown_secrets_may_remain",
     }
-    return files, missing, excluded, scan
+    return files, sources, missing, excluded, scan
 
 
 def _sanitize(text: str, secrets: Iterable[str | SecretStr | None]) -> tuple[str, dict[str, bool]]:
@@ -312,6 +364,7 @@ def _manifest(
     source: Path,
     files: list[tuple[str, bytes, int, bool]],
     *,
+    sources: Mapping[str, str],
     missing: list[str],
     excluded: list[dict[str, str]],
     scan: dict[str, Any],
@@ -326,11 +379,12 @@ def _manifest(
             "size_bytes": size,
             "sha256": hashlib.sha256(data).hexdigest(),
             "redacted": redacted,
+            "source": sources[relative],
         }
         for relative, data, size, redacted in files
     ]
     session = _json_object_bytes(artifact_data.get("session.json"))
-    provenance = _json_object_bytes(artifact_data.get("run-provenance.json"))
+    provenance = _json_object_bytes(artifact_data.get(PROVENANCE_FILE))
     return {
         "schema": HANDOFF_SCHEMA,
         "exported_at": timestamp.isoformat(),
@@ -400,6 +454,7 @@ def _session_summary(session: Mapping[str, Any] | None) -> dict[str, Any] | None
     } | {
         "provider_info": provider_safe or None,
         "efficiency": session.get("efficiency"),
+        "model_view": session.get("model_view"),
         "explanations": {
             "enabled": bool(session.get("explanations_enabled", False)),
             "fingerprint": session.get("finding_explanation_fingerprint"),
@@ -422,15 +477,22 @@ def _explanation_count(explanations: Any) -> int:
     return sum(1 for text in explanations.values() if text != EXPLANATION_UNAVAILABLE)
 
 
+_PROVENANCE_FIELDS: tuple[str, ...] = (
+    "commit", "lever", "arm", "rep", "provider", "model", "effort", "max_steps",
+    "checklist_digest", "set_digest", "started_at", "set_too_small_override", "efficiency",
+    "explanations_enabled", "provenance_schema", "pane_defaults", "model_view", "profile_digest",
+    "profile_is_example", "live_tools", "inert_settings", "prompt_digest", "tree_dirty",
+    "max_answer_turns",
+)
+"""The run provenance fields a bundle carries: a literal tuple, so a field the record gains
+reaches the bundle only once it is named here, and a test holds it equal to
+``RunProvenance.model_fields`` (014 `contracts/provenance.md` section 7). None is a path."""
+
+
 def _provenance_summary(provenance: Mapping[str, Any] | None) -> dict[str, Any] | None:
     if provenance is None:
         return None
-    keys = (
-        "commit", "lever", "arm", "rep", "provider", "model", "effort", "max_steps",
-        "checklist_digest", "set_digest", "started_at", "set_too_small_override", "efficiency",
-        "explanations_enabled",
-    )
-    return {key: provenance.get(key) for key in keys if key in provenance}
+    return {key: provenance.get(key) for key in _PROVENANCE_FIELDS if key in provenance}
 
 
 def _git_identity(repo_dir: Path) -> dict[str, Any]:

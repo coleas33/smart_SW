@@ -1,0 +1,462 @@
+{
+  "schema_version": "1.3.0",
+  "package_id": "01400000-0000-4000-8000-000000000019",
+  "created_at": "2026-10-07T12:00:00Z",
+  "reuse_key": null,
+  "reused_from": null,
+  "reused_at": null,
+  "extractor": {
+    "name": "SwReview.Extractor",
+    "version": "0.0.0-fictional",
+    "sw_version": "2024 SP5",
+    "machine": "FICT-SEAT",
+    "profile": "full"
+  },
+  "manifest": {
+    "entries": [
+      {
+        "document_id": "doc:0001",
+        "vault_path": "C:\\Fictional\\Vault\\FICT-VENTA-0000.SLDASM",
+        "vault_version": 1,
+        "revision": null,
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:0002",
+        "vault_path": "C:\\Fictional\\Vault\\FICT-VENTA-0001.SLDPRT",
+        "vault_version": 1,
+        "revision": null,
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:0003",
+        "vault_path": "C:\\Fictional\\Vault\\FICT-VENTA-0002.SLDPRT",
+        "vault_version": 1,
+        "revision": null,
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:0004",
+        "vault_path": "C:\\Fictional\\Vault\\FICT-VENTA-0003.SLDPRT",
+        "vault_version": 1,
+        "revision": null,
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      }
+    ],
+    "discrepancies": []
+  },
+  "design": {
+    "design_id": "dsn:fict",
+    "name": "FICT-VENTA-0000",
+    "root_assembly_document_id": "doc:0001",
+    "active_configuration": "Default",
+    "drawing_document_ids": []
+  },
+  "documents": [
+    {
+      "document_id": "doc:0001",
+      "kind": "assembly",
+      "file_name": "FICT-VENTA-0000.SLDASM",
+      "path": "C:\\Fictional\\Vault\\FICT-VENTA-0000.SLDASM",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {},
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    },
+    {
+      "document_id": "doc:0002",
+      "kind": "part",
+      "file_name": "FICT-VENTA-0001.SLDPRT",
+      "path": "C:\\Fictional\\Vault\\FICT-VENTA-0001.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {},
+      "config_properties": {},
+      "material": "Alloy Steel",
+      "mass": null
+    },
+    {
+      "document_id": "doc:0003",
+      "kind": "part",
+      "file_name": "FICT-VENTA-0002.SLDPRT",
+      "path": "C:\\Fictional\\Vault\\FICT-VENTA-0002.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {},
+      "config_properties": {},
+      "material": "6061-T6",
+      "mass": null
+    },
+    {
+      "document_id": "doc:0004",
+      "kind": "part",
+      "file_name": "FICT-VENTA-0003.SLDPRT",
+      "path": "C:\\Fictional\\Vault\\FICT-VENTA-0003.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {},
+      "config_properties": {},
+      "material": "6061-T6",
+      "mass": null
+    }
+  ],
+  "components": [
+    {
+      "id": "cmp:0001",
+      "persist_ref": "Y21wOjAwMDE=",
+      "persist_ref_scope": "doc:0001",
+      "name": "FICT-VENTA-0001-1",
+      "document_id": "doc:0002",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "FICT-VENTA-0001-1",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0002",
+      "persist_ref": "Y21wOjAwMDI=",
+      "persist_ref_scope": "doc:0001",
+      "name": "FICT-VENTA-0002-1",
+      "document_id": "doc:0003",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "FICT-VENTA-0002-1",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0003",
+      "persist_ref": "Y21wOjAwMDM=",
+      "persist_ref_scope": "doc:0001",
+      "name": "FICT-VENTA-0003-1",
+      "document_id": "doc:0004",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "FICT-VENTA-0003-1",
+      "constrained_status_raw": null
+    }
+  ],
+  "mates": [],
+  "holes": [
+    {
+      "id": "hol:0001",
+      "persist_ref": "aG9sOjAwMDE=",
+      "persist_ref_scope": "doc:0002",
+      "component_id": "cmp:0001",
+      "feature_name": "FICT-HOLE-0001",
+      "hole_type": "tapped",
+      "standard": "ISO",
+      "size": "M3x0.5",
+      "thread_designation": "M3x0.5",
+      "thread_depth": {
+        "value": 6.0,
+        "unit": "mm"
+      },
+      "hole_depth": {
+        "value": 8.0,
+        "unit": "mm"
+      },
+      "end_condition": "blind",
+      "diameter": null,
+      "axis": {
+        "origin": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        }
+      },
+      "face_ids": [
+        "fac:0001"
+      ]
+    },
+    {
+      "id": "hol:0002",
+      "persist_ref": "aG9sOjAwMDI=",
+      "persist_ref_scope": "doc:0003",
+      "component_id": "cmp:0002",
+      "feature_name": "FICT-HOLE-0002",
+      "hole_type": "unknown",
+      "standard": "ISO",
+      "size": "M3",
+      "thread_designation": null,
+      "thread_depth": null,
+      "hole_depth": null,
+      "end_condition": "through",
+      "diameter": null,
+      "axis": {
+        "origin": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        }
+      },
+      "face_ids": [
+        "fac:0002"
+      ]
+    },
+    {
+      "id": "hol:0003",
+      "persist_ref": "aG9sOjAwMDM=",
+      "persist_ref_scope": "doc:0004",
+      "component_id": "cmp:0003",
+      "feature_name": "FICT-HOLE-0003",
+      "hole_type": "clearance",
+      "standard": "ISO",
+      "size": "M3",
+      "thread_designation": null,
+      "thread_depth": null,
+      "hole_depth": null,
+      "end_condition": "through",
+      "diameter": null,
+      "axis": {
+        "origin": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        }
+      },
+      "face_ids": [
+        "fac:0003"
+      ]
+    }
+  ],
+  "threads": [],
+  "fasteners": [],
+  "faces": [
+    {
+      "id": "fac:0001",
+      "persist_ref": "ZmFjOjAwMDE=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0001",
+      "body_id": "bod:0001",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.00125
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": -0.00125,
+          "y": -0.00125,
+          "z": -0.008
+        },
+        "max": {
+          "x": 0.00125,
+          "y": 0.00125,
+          "z": 0.0
+        }
+      },
+      "area_m2": 0.00006283185307179587
+    },
+    {
+      "id": "fac:0002",
+      "persist_ref": "ZmFjOjAwMDI=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0002",
+      "body_id": "bod:0002",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.0017
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": -0.0017,
+          "y": -0.0017,
+          "z": 0.0
+        },
+        "max": {
+          "x": 0.0017,
+          "y": 0.0017,
+          "z": 0.002
+        }
+      },
+      "area_m2": 0.00002136283004441059
+    },
+    {
+      "id": "fac:0003",
+      "persist_ref": "ZmFjOjAwMDM=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0003",
+      "body_id": "bod:0003",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.0017
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": -0.0017,
+          "y": -0.0017,
+          "z": 0.002
+        },
+        "max": {
+          "x": 0.0017,
+          "y": 0.0017,
+          "z": 0.0045
+        }
+      },
+      "area_m2": 0.000026703537555513237
+    }
+  ],
+  "bodies": [],
+  "interferences": [],
+  "captures": [],
+  "drawings": [],
+  "features": [],
+  "equations": [],
+  "rms_suppress_test": null,
+  "gaps": []
+}

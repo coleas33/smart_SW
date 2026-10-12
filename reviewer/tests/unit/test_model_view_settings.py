@@ -67,7 +67,11 @@ def test_the_two_named_values_are_the_contracts() -> None:
 
 @pytest.mark.parametrize("provider", list(ProviderName))
 def test_the_pane_defaults_are_one_function_of_the_provider(provider: ProviderName) -> None:
-    assert pane_defaults(provider) == PaneDefaults(pane_efficiency(provider), MODEL_VIEW_PANE)
+    # Edited deliberately by feature 014 T042 (`benchmark-run.md` 15, PP-1): the pane's
+    # defaults include the explanation pass, which the chat server now reads from here.
+    assert pane_defaults(provider) == PaneDefaults(
+        pane_efficiency(provider), MODEL_VIEW_PANE, explain_findings=True
+    )
 
 
 def test_the_view_settings_are_not_levers() -> None:

@@ -105,21 +105,22 @@ column because of this table.
 **Flag**: `trim_tool_descriptions`. **Default**: off. **Scope**: both providers; the tool schema
 and the system prompt. **Read**: once at `start_review`, applied **after** `spec_for`.
 
-**The honest ceiling, measured on this tree (VERIFIED).** Of 35,844 bytes sent today, **16,042
+**The honest ceiling, measured on this tree (VERIFIED).** Of 36,246 bytes sent today, **16,206
 (45 percent) is JSON structure** and lever 2 cannot reach it; only lever 4 or a schema change can.
-19,802 bytes (55 percent) is prose. (Regenerated 2026-09-23 when feature 010 added
+20,040 bytes (55 percent) is prose. (Regenerated 2026-09-23 when feature 010 added
 `check_joints` and reworded two docstrings, and again when feature 009 gave `request_evidence` its
 three optional arguments, and again when feature 010 registered `check_mass_material` and
-`check_hygiene`; the four cap rows below were measured on the 32-tool array of 2026-09-16.)
+`check_hygiene`, and again on 2026-10-08 when feature 010's thread pitch amendment registered
+`check_threads`; the four cap rows below were measured on the 32-tool array of 2026-09-16.)
 
 | Cap (tool / parameter description) | Bytes | Saved |
 |---|---|---|
-| none (today) | 35,844 | 0 |
+| none (today) | 36,246 | 0 |
 | 300 / 120 | 27,158 | 20 percent |
 | 200 / 100 | 25,020 | 27 percent |
 | **160 / 90** | **23,834** | **30 percent** |
 | 120 / 70 | 22,450 | 34 percent |
-| everything stripped (floor) | 16,042 | 55 percent |
+| everything stripped (floor) | 16,206 | 55 percent |
 
 So about 30 percent of the tool payload, roughly 2,550 tokens per request, roughly 153,000 tokens
 over a 60-call review. This is **below** the source document's "a third to a half" at the upper
@@ -486,11 +487,13 @@ detected group was judged and live detection is not offered, each of feature 010
 call to one; nothing the model is sent asks for one. `get_finding` and `bridge_interference`
 never leave.
 
-**Measured** (regenerated 2026-09-23 by `python -m tests.unit.test_tool_payload --write`): the
-slimmed pane array falls from 36 tools and 36,200 bytes to **29 tools and 29,217 bytes** on
-OpenAI (29,552 on Gemini), **6,983 bytes and about 1,496 o200k tokens less on every request**
-(6,668 and 1,435 on Gemini); with a bridge, which keeps `check_interference_group`, 33 tools and
-34,145 bytes, 5,753 bytes and about 1,230 tokens less. Lever 13 is a thirteenth lever: the
+**Measured** (regenerated 2026-09-23 by `python -m tests.unit.test_tool_payload --write`, and
+again on 2026-10-08 when feature 010's thread pitch amendment added `check_threads`, one more
+`CODE_FIRST_CHECKS` name the lever withholds): the slimmed pane array falls from 37 tools and
+36,602 bytes to **29 tools and 29,217 bytes** on OpenAI (29,552 on Gemini), **7,385 bytes and
+about 1,581 o200k tokens less on every request** (7,019 and 1,509 on Gemini); with a bridge,
+which keeps `check_interference_group`, 33 tools and 34,145 bytes, 6,155 bytes and about 1,315
+tokens less. Lever 13 is a thirteenth lever: the
 lever-count pins move to thirteen, and no pane control exists (`test_no_lever_in_pane_settings.py`).
 
 ### Lever 14: earlier turns' reasoning leaves the request view (feature 013)
@@ -583,9 +586,10 @@ bytes on OpenAI. A standards profile leaves the same four arrays, because lever 
 
 Every other array a review can send is **pinned for both providers**, so its growth shows in
 review, and **not asserted**: checks first off (the command line's and `benchmark run`'s default,
-the "off" arm of every A/B here), a standards run with checks first off (38,058 and 37,976 bytes
-with feature 011's drawing family), the bridged arrays (40,268 and 40,624 bytes on OpenAI with the
-family), and the pre-run without payload slimming. The test module names every array from five
+the "off" arm of every A/B here), a standards run with checks first off (38,460 and 38,327 bytes
+with feature 011's drawing family since feature 010's `check_threads`, 2026-10-08), the bridged
+arrays (40,670 and 41,026 bytes on OpenAI with the family), and the pre-run without payload
+slimming. The test module names every array from five
 switches - payload slimming, a bridge, a standards run, drawing evidence and a completed pre-run -
 and `ARRAY_KINDS` says which kind each is, so a new array fails a test until it is classified.
 *Amended 2026-09-23 (011 T096)*: a sixth switch - whether the pre-run judged an interference group,

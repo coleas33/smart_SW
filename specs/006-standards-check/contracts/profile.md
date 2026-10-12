@@ -1,5 +1,7 @@
 # The Standards Profile
 
+*Amended 2026-09-29 by feature 014 (`specs/014-design-review-eval/`), in provenance.md section 6.2 (D12), landed 2026-10-07 (014 T060):* the stamp on a standards finding names the profile's file and digest, never its folder ("Where it lives", the last row).
+
 *Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed with 013 T014:* profile version 4 adds the `part_roles` section - one entry per part-role signal (bought prefixes and folder names, the make-or-buy switch, vendor properties, a distributor block, catalogue shapes, custom and bought number prefixes, detail properties), each refused by position when blank - and extends the name-pattern vocabulary with `@` (one letter) and `*` (any run) for the catalogue shapes only; `part_number.pattern` keeps `#` and `?`. The known versions are 1 to 4, a version 1 to 3 file carrying `part_roles` is refused naming it, and property names are compared ignoring case and every space. The block below is the example, version 4; the field rules are 013 `contracts/part-roles-profile.md` section 3.
 
 The company's configuration for the sixteen checks. **This file is not committed to this
@@ -19,7 +21,7 @@ clean result, which is the worst failure a release gate has.
 | Default | `%LOCALAPPDATA%\SwReview\standards.yaml` |
 | Override | `swreview check standards --profile <yaml>`, which is what lets CI grade a fixture package against a fictional profile |
 | Who validates it | **Exactly one place**: `checks/standards/profile.py` on the reasoning side. The host checks only that a path is configured and the file is readable, and refuses before it creates a run folder or dumps anything (FR-002) |
-| What leaves the reasoning side | `{path, sha256}` only. **No profile value is written into the check record, the session, the report, a finding or any message to the page as a profile field** (FR-034); a coverage reason may quote the one value a check compared against where FR-016 requires both configurations to be named |
+| What leaves the reasoning side | `{path, sha256}` only. **No profile value is written into the check record, the session, the report, a finding or any message to the page as a profile field** (FR-034); a coverage reason may quote the one value a check compared against where FR-016 requires both configurations to be named. The stamp every standards finding carries first in `coverage_limits` is `profile:<file name> sha256:<digest>`: the file name of `path`, read with either separator, and the digest, never the folder (feature 014 D12), since a finding reaches run folders and fixtures that may be committed; `{path, sha256}` still leaves through `ProfileIdentity`, and the Standards tab and `swreview check standards` still say where the file is |
 
 ## Schema
 

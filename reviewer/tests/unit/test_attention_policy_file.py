@@ -71,8 +71,16 @@ def test_the_policy_file_loads_and_is_versioned() -> None:
     assert policy()["version"] == "attention_policy_v1"
 
 
-def test_the_needs_judgement_set_is_the_four_declared_prefixes() -> None:
-    assert policy()["needs_judgement"] == ["interference.", "fit.", "fastener.", "hole."]
+def test_the_needs_judgement_set_is_the_five_declared_prefixes() -> None:
+    """Four until feature 010's thread pitch amendment (2026-10-08, T119) added `thread.`:
+    only the engineer knows whether a fine pitch was meant (`contracts/fasteners.md` 8.4)."""
+    assert policy()["needs_judgement"] == [
+        "interference.",
+        "fit.",
+        "fastener.",
+        "hole.",
+        "thread.",
+    ]
 
 
 def test_every_class_is_one_of_the_six_and_none_is_unclassified() -> None:

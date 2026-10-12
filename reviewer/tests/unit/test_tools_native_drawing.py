@@ -65,6 +65,9 @@ TODAY: dict[str, str] = {
     "golden/fixtures/cover-blind-tap": "5f8828844f3d8cf3",
     "golden/fixtures/joint-bottoming": "49126b32cbbb2628",
     "golden/fixtures/joint-ok": "49126b32cbbb2628",
+    # Feature 014 T026, owner decision 19A: new with the unknown-role golden, pinned from its
+    # own output.
+    "golden/fixtures/joint-unknown-role": "b14a26ba6eee3acb",
     "golden/fixtures/joint-unsupported": "49126b32cbbb2628",
     "golden/fixtures/mixed-units": "e0c95d9d1db0b529",
     "golden/fixtures/plate-stack": "b073c80e46fe3789",
@@ -95,6 +98,9 @@ TODAY: dict[str, str] = {
     "golden/fixtures/standards-drawings/standards-drawings-ingested": "25cecba539f1bdab",
     "golden/fixtures/standards-multiplicity": "0867b71418afeafd",
     "golden/fixtures/thread-mismatch": "49126b32cbbb2628",
+    # Feature 010's thread pitch amendment (T118): new with that round, pinned from its own output.
+    "golden/fixtures/thread-pitch-flags": "e934ca9db147c09b",
+    "golden/fixtures/thread-pitch-not-checked": "b14a26ba6eee3acb",
     "golden/fixtures/tool-envelope": "49126b32cbbb2628",
 }
 

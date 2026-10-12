@@ -1,0 +1,52 @@
+{
+  "key_format": 2,
+  "package_id": "kalo-2",
+  "known_defects": [
+    {
+      "id": "D-1",
+      "tag": "held_out",
+      "held_out_against": {
+        "prompt": "03235a11335b15ec809d8a7519f2cc46c647e7b6baa05a231b69e7962e8e8992",
+        "checklist": "8a964dd514d863e196e9a854a2682b301ab7a8dca9f73d7da86f5d2c2c3f874b",
+        "tools": "dcc5fb3b8e5e231852b00d43e6e72a047fbac0e186eff2ba45e559a0c12e5405"
+      },
+      "description": "a blind tapped hole whose usable thread depth is shorter than the screw's reach past its clamped stack, the screw on no extracted hole axis",
+      "check": "fastener.bottoming",
+      "component_ids": [
+        "cmp:0005",
+        "cmp:0001"
+      ],
+      "document_ids": [],
+      "references": [
+        {
+          "fastener": "fst:0001",
+          "hole": "hol:0001"
+        }
+      ],
+      "producer": "model",
+      "expected_status": "demonstrated"
+    },
+    {
+      "id": "D-2",
+      "tag": "held_out",
+      "held_out_against": {
+        "prompt": "03235a11335b15ec809d8a7519f2cc46c647e7b6baa05a231b69e7962e8e8992",
+        "checklist": "8a964dd514d863e196e9a854a2682b301ab7a8dca9f73d7da86f5d2c2c3f874b",
+        "tools": "dcc5fb3b8e5e231852b00d43e6e72a047fbac0e186eff2ba45e559a0c12e5405"
+      },
+      "description": "the part drawing's tapped-hole callout states the drill depth only",
+      "check": "drawing.manufacturing_inputs",
+      "component_ids": [],
+      "document_ids": [
+        "doc:0007"
+      ],
+      "producer": "model",
+      "expected_status": "unresolved"
+    }
+  ],
+  "correct_conditions": [],
+  "forbidden": [],
+  "expected_coverage": [],
+  "unanswerable_requests": [],
+  "question_counts": []
+}

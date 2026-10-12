@@ -25,6 +25,7 @@
     "retry_of": { "type": ["string", "null"], "format": "uuid" },
     "reused_from": { "type": ["string", "null"] },
     "efficiency": { "anyOf": [{ "$ref": "#/$defs/EfficiencySettings" }, { "type": "null" }] },
+    "origin_marks": { "type": "integer", "description": "Feature 014 (contracts/scoring.md section 5.2): ORIGIN_MARKS_VERSION, 1, written by start_review on every new session, the pane's included, whatever the levers: this session's steps carry their origin_mark. Absence means the session predates the marks and its code findings' origins are unknown. Added to properties and left out of required, and omitted when absent, so older sessions still validate and keep their bytes" },
     "usage": { "anyOf": [{ "$ref": "#/$defs/SessionUsage" }, { "type": "null" }] },
     "withheld_checks": { "type": "array", "items": { "type": "string" }, "description": "Coverage checks closed out by a tool this run declined to offer (feature 005 lever 4, FR-054). Added to properties and left out of required, so a session written before the field existed still validates; empty for every run with tool_tiers off" },
     "steps": { "type": "array", "items": { "$ref": "#/$defs/InvestigationStep" } },
@@ -130,7 +131,8 @@
         "status": { "enum": ["ok", "error"] }, "error": { "type": ["string", "null"] },
         "elapsed_s": { "type": "number", "minimum": 0 },
         "result_bytes": { "type": "integer", "minimum": 0 },
-        "result_tokens": { "type": "integer", "minimum": 0, "description": "estimated with o200k_base" }
+        "result_tokens": { "type": "integer", "minimum": 0, "description": "estimated with o200k_base" },
+        "origin_mark": { "enum": ["prerun", "regrade"], "description": "Feature 014 (contracts/scoring.md section 5.2): which code made this step itself, set only by prerun.recorded_call after the call - prerun for the pre-run's calls, regrade for a check restated after an answer. Omitted on a step the model asked for and on every step written before the mark; neither the step's tool events nor its stored result carry it" }
       }
     },
     "EvidenceRequest": {

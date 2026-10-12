@@ -2115,7 +2115,7 @@ class ChatServer:
         bridge = chat.bridge or {}
         # Feature 008: the pane's levers and model view are decided in one place - checks
         # first, payload slimming and history pruning since 2026-09-22 - and recorded on the
-        # session like any other run's.
+        # session like any other run's. Feature 014 (PP-1): the explanation pass too.
         defaults = pane_defaults(settings.provider)
         try:
             run = start_review(
@@ -2135,7 +2135,7 @@ class ChatServer:
                 bridge_factory=self.bridge_factory,
                 callbacks=[chat.publish],
                 redact=self.redact,
-                explain_findings=True,
+                explain_findings=defaults.explain_findings,
             )
         except PACKAGE_ERRORS as exc:
             raise InvalidPackage(

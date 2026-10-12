@@ -1,6 +1,12 @@
 {
   "name": "pilot",
   "packages": [
-    { "package_id": "cover-blind-tap", "path": "benchmarks/packages/cover-blind-tap", "held_out": false }
+    {
+      "package_id": "cover-blind-tap",
+      "path": "benchmarks/packages/cover-blind-tap",
+      "key": "benchmarks/answer_keys/cover-blind-tap.json",
+      "held_out": false,
+      "design": "cover"
+    }
   ]
 }

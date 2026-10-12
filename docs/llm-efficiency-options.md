@@ -24,7 +24,7 @@ and step budgets. The generated raw ledger displays explanation mode explicitly.
 
 | What | Measured | Consequence |
 |---|---|---|
-| Tool schemas sent with every model request | 35 tools, **35,844 bytes** in the OpenAI encoding and 35,915 in the Gemini one (38 tools, 39,542 and 39,431 with the bridge); a pane review, once checks first has run its tools to completion (feature 008 lever 13), sends 29 tools and **29,217 bytes** (29,552 Gemini), 6,983 bytes and about 1,496 o200k tokens less per request (33 tools and 34,145 bytes with the bridge, which keeps `check_interference_group`); regenerated 2026-09-23 by `python -m tests.unit.test_tool_payload --write`, run from `reviewer/` | A review with 60 tool calls resends the whole array 60 times; the longest descriptions are `check_rms_assembly` (1,455 bytes), `check_rms_part` (1,296), `check_interference_group` (905) and `check_fastener_joint` (871), and the largest whole tool objects are `check_axial_stack` (2,734 bytes), `check_fit` (2,413) and `record_drawing_finding` (2,156); with every description emptied the array still weighs **16,042 bytes**, 45 percent of the payload and a floor no trimming can reach, so lever 2's ceiling is the other 55 percent |
+| Tool schemas sent with every model request | 36 tools, **36,246 bytes** in the OpenAI encoding and 36,266 in the Gemini one (39 tools, 39,944 and 39,782 with the bridge); a pane review, once checks first has run its tools to completion (feature 008 lever 13), sends 29 tools and **29,217 bytes** (29,552 Gemini), 7,385 bytes and about 1,581 o200k tokens less per request (33 tools and 34,145 bytes with the bridge, which keeps `check_interference_group`); regenerated 2026-10-08 by `python -m tests.unit.test_tool_payload --write`, run from `reviewer/`, when feature 010's thread pitch amendment added `check_threads` (one more argument-free check the pre-run runs and lever 13 withholds, so the pane's array did not move) | A review with 60 tool calls resends the whole array 60 times; the longest descriptions are `check_rms_assembly` (1,455 bytes), `check_rms_part` (1,296), `check_interference_group` (905) and `check_fastener_joint` (871), and the largest whole tool objects are `check_axial_stack` (2,734 bytes), `check_fit` (2,413) and `record_drawing_finding` (2,156); with every description emptied the array still weighs **16,206 bytes**, 45 percent of the payload and a floor no trimming can reach, so lever 2's ceiling is the other 55 percent |
 | System prompt plus checklist | 5,057 plus 2,909 bytes, about 2,000 tokens, plus the package census | Resent every request, but stable, so cacheable |
 | Step budget | `max_steps` 200 per turn, no coverage-driven stop | A turn ends on the budget or on the model's own decision, never because coverage is complete |
 | Parallel tool calls | `parallel_tool_calls: False` in the OpenAI adapter | One round trip per query; each round trip resends the whole growing history |
@@ -167,21 +167,23 @@ repetitions per provider. Each lever row must be compared against its matching b
 
 ### Runs
 
-| run | commit | lever | arm | rep | provider | model | effort | explanations | package | input | cached in | uncached in | output | reasoning/thoughts | tool-result in | total | rounds | tool calls | cached share | wall clock s | s to 1st finding | valid | missed | false alarms | unresolved | unresolved withheld | unresolved other | coverage bucket mix |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| run | commit | lever | arm | rep | provider | model | effort | explanations | model view | profile | live tools | package | input | cached in | uncached in | output | reasoning/thoughts | tool-result in | total | rounds | tool calls | cached share | wall clock s | s to 1st finding | valid | missed | flagged | below expected | status mismatch | cleared | false alarms | contradicted | confirmed | unresolved | unresolved withheld | unresolved other | coverage bucket mix | findings by origin | false alarms by origin |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 
 No runs: no run directories were compared.
 
 ### Decisions
 
-| Lever | Provider and model | Commit | Reps | Other levers on | Input tokens off -> on (median, min-max) | Cached input off -> on | Output off -> on | Reasoning or thoughts off -> on | Total tokens off -> on | Round trips off -> on | Tool calls off -> on | Wall clock off -> on | Dump wall clock off -> on | Valid / missed / false alarms / unresolved off -> on | Recall (held out) off -> on | Median net saved minutes off -> on | Worst-case defects lost | Lever-specific counter | Decision | Owner signed off | Owner signed off at | Decision reason | Link to run dirs |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Lever | Provider and model | Commit | Reps | Other levers on | Input tokens off -> on (median, min-max) | Cached input off -> on | Output off -> on | Reasoning or thoughts off -> on | Total tokens off -> on | Round trips off -> on | Tool calls off -> on | Wall clock off -> on | Dump wall clock off -> on | Valid / missed / false alarms / unresolved off -> on | Recall (held out) off -> on | Recall by producer (held out) off -> on | Median net saved minutes off -> on | Worst-case defects lost | Lever-specific counter | Decision | Owner signed off | Owner signed off at | Decision reason | Link to run dirs |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 
 No decisions: no run directories were compared.
 
 `Decision` is computed by the adoption rule and is never typed; `Owner signed off` and `Owner signed off at` are the owner's separate act, written by hand into the committed table once the row has been read and carried forward verbatim by every later regeneration. No flag default changes until they are written.
 
 `wall clock s` is the session's own `started_at` to `ended_at`, **not** `unattended_runtime_minutes`, which the benchmark runner overwrites with a span that also covers package load and adapter construction.
+
+`tool calls` is `len(session.steps)`, every step of the review: the pre-run's and the regrade's steps are counted with the model's, not split by the step mark.
 
 <!-- ledger:end -->
 
@@ -191,7 +193,9 @@ Rows the generated ledger cannot carry: every run below was made on the one-pack
 set with `--i-know-the-set-is-too-small`, so `compare` computes no decision and the study
 folders stay outside `benchmarks/studies/` (a committed override row fails the check test).
 They are evidence, not gates; the pane default changes nothing on their account. Recorded
-from the workstation packet of 2026-09-19 (`docs/pane-findings-2026-09-19.md`).
+from the workstation packet of 2026-09-19 (`docs/pane-findings-2026-09-19.md`). Their quality
+figures (valid, missed and false alarms) were scored under scoring rules version 1, before
+feature 014's scorer.
 
 **Token baseline, pilot workstation, 2026-09-19.** One review of the small assembly, the
 dowel-pin one, with every lever off, openai `gpt-5.6-luna` at high effort: 1,215,720 tokens, of
@@ -266,7 +270,19 @@ the RMS part rules and the Standards sketch check read the tree one node per fea
 each absorbed sketch is named once and no carried row is - with section 5's tree-reading clause
 read for every check that reads the tree (section 9's row "Feature 013 US7"): the recorded and
 as-recorded columns fall with the part check's and the standards check's results, and the
-requested figures move by at most 448 tokens; the table below is that measurement). The fixtures record the scripted provider, whose pane runs checks first, lever 13, slimming,
+requested figures move by at most 448 tokens. *Re-measured 2026-10-07, feature 014's owner
+decision 40A:* `check_interference_group` cites its own step on every finding, so the big fixture,
+regenerated, rises by 136 in its recorded and as-recorded columns, to 10,582,709 and 10,582,611,
+and its follow-up round records 346,319; no requested figure moves, and the small fixtures do not
+move. *Re-measured 2026-10-07, feature 014's D12:* every standards finding's profile stamp names
+the profile's file and its digest, never its folder, so the three fixtures, regenerated, fall in
+their recorded and as-recorded columns, by 560, 56 and 72, the big fixture's to 10,582,149 and
+10,582,051, and its follow-up round records 346,299; no requested figure moves. Integration with feature 010's fine pitch amendment adds `check_threads` to the pre-run.
+It finds no fine or non-standard thread in the replay fixtures; with lever 13 the replay
+prices 73 fewer tokens per main round, and without it 10 more. The table below is the
+combined measurement (008 `contracts/replay.md` section 9, "Feature 010 + 014 integration"),
+keeping feature 014's recorded fixture totals. The fixtures record
+the scripted provider, whose pane runs checks first, lever 13, slimming,
 pruning and lever 14 - priced as an estimate, since the fixtures carry no reasoning items - but no
 parallel calls; `--lever parallel_tool_calls` gives the OpenAI pane, on which
 SC-003's regrouped estimate is read. The regrouped estimate assumes the model does not repeat a
@@ -276,9 +292,9 @@ rounds.
 
 | Fixture | Recorded | As recorded | Requested, pane defaults | Regrouped estimate, pane defaults (rule R) | Regrouped estimate, OpenAI pane (rules R and M) | Requested, `--prune-after 1` | Regrouped estimate, OpenAI pane, `--prune-after 1` |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| big-assembly | 10,582,573 | 10,582,475 | 662,927 | 486,892 | 276,302 | 617,999 | 232,553 |
-| small-assembly-a | 1,507,165 | 1,507,282 | 458,756 | 381,557 | 244,304 | 444,444 | 230,479 |
-| small-assembly-b | 1,416,304 | 1,416,437 | 450,370 | 388,625 | 242,465 | 437,458 | 229,767 |
+| big-assembly | 10,582,149 | 10,582,051 | 660,007 | 484,702 | 275,207 | 615,079 | 231,458 |
+| small-assembly-a | 1,507,109 | 1,507,226 | 455,982 | 379,221 | 242,844 | 441,670 | 229,019 |
+| small-assembly-b | 1,416,232 | 1,416,365 | 447,742 | 386,289 | 241,078 | 434,830 | 228,380 |
 
 Commands, in column order: `--no-pane-defaults` (recorded and as recorded), the default, the
 default's `regrouped estimate` line, `--lever parallel_tool_calls`, `--prune-after 1`, and
@@ -288,7 +304,7 @@ touching groups are recorded in the fixtures as the contacts feature 010's code 
 every requested pass holds them, and the recordings' findings that the type table or the tree
 reading narrow - 26, 3 and 2 RMS findings and 3, 1 and 1 Standards sketch findings - are recorded
 as the current code gives them (008 decision 23A; 013 T134-Q1 and T134-Q2); 62, 7 and 5 findings
-are added by feature 010's checks in the pre-run. The big fixture's follow-up round is 19,915
-requested against 346,313 recorded (19,229 at `--prune-after 1`; 22,807 and 22,121 with lever 14
+are added by feature 010's checks in the pre-run. The big fixture's follow-up round is 19,842
+requested against 346,299 recorded (19,156 at `--prune-after 1`; 22,734 and 22,048 with lever 14
 off). These are replay figures, not bills: the paid figures of the next workstation
 sitting go beside them (008 T102 to T105).

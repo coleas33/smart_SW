@@ -13,9 +13,11 @@ turns a group of detection results into one finding, and the two rules US3 hangs
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
+from pathlib import Path
 
 import pytest
 
+from swreview.agent.providers.fake import ScriptedToolCall
 from swreview.exceptions import ExceptionStore
 from swreview.ir.models import (
     EvidencePackage,
@@ -27,6 +29,7 @@ from swreview.report.session import Contact
 from swreview.tools import checks_interference, query
 from swreview.tools.context import ToolContext, context_for, use_context
 from swreview.tools.registry import RecordedTool, ToolRegistry
+from tests.support.prerun import CHECKS_FIRST, GROUP_KEY, OFF, review
 
 MakePackage = Callable[..., EvidencePackage]
 
@@ -364,3 +367,66 @@ def test_record_contact_refuses_outside_a_review_session(
 
     with pytest.raises(ValueError, match="review session"):
         contact_context.record_contact(record)
+
+
+# --- the step a finding cites (014 owner decision 40A) ----------------------------------------
+#
+# A finding cites the step of the call that wrote it, as a contact does, so its origin is read
+# from that step (014 `contracts/scoring.md` 5.3, rule 4): a pre-run finding reads `prerun`, a
+# model-called one a check the model called. A finding citing no step would read
+# `configured_check`, model origin, whoever made the call.
+
+
+@pytest.mark.parametrize("group_key", ["boss/screws", "flange/cover", "other/config"])
+def test_a_finding_cites_the_step_in_flight(context: ToolContext, group_key: str) -> None:
+    """Demonstrated, unresolved, and in another configuration: every finding the tool writes."""
+    result = checks_interference.check_interference_group(group_key)  # the step in flight: 0
+
+    assert result["finding"]["tool_result_ids"] == [0]
+    [finding] = context.require_session().findings
+    assert finding.tool_result_ids == [0]
+
+
+def test_an_excepted_finding_cites_the_step_in_flight(context: ToolContext) -> None:
+    context.exceptions = accepted_store(context)
+
+    result = checks_interference.check_interference_group("boss/screws")
+
+    assert result["finding"]["status"] == "checked_within_scope"
+    assert result["finding"]["tool_result_ids"] == [0]
+
+
+def test_a_finding_through_the_registry_cites_the_step_it_was_recorded_as(
+    context: ToolContext,
+) -> None:
+    tool = recorded(context, "check_interference_group")
+
+    payload = tool.call({"group_key": "boss/screws"}).payload
+
+    session = context.require_session()
+    assert [step.tool for step in session.steps] == ["check_interference_group"]
+    assert payload["finding"]["tool_result_ids"] == [session.steps[0].index]
+    assert session.findings[0].tool_result_ids == [session.steps[0].index]
+
+
+def test_a_pre_run_interference_finding_cites_its_own_pre_run_step(tmp_path: Path) -> None:
+    """Checks first: the pre-run judges the package's one group before the first turn."""
+    session = review(tmp_path, "checks-first", efficiency=CHECKS_FIRST)
+
+    [step] = [step for step in session.steps if step.tool == "check_interference_group"]
+    [finding] = [finding for finding in session.findings if finding.check == "interference.static"]
+    assert step.origin_mark == "prerun"
+    assert step.arguments == {"group_key": GROUP_KEY}
+    assert finding.tool_result_ids == [step.index]
+
+
+def test_a_model_called_interference_finding_cites_its_own_unmarked_step(tmp_path: Path) -> None:
+    """Checks first off: the scripted model judges the same group itself."""
+    call = ScriptedToolCall("check_interference_group", {"group_key": GROUP_KEY})
+
+    session = review(tmp_path, "off", calls=(call,), efficiency=OFF)
+
+    [step] = [step for step in session.steps if step.tool == "check_interference_group"]
+    [finding] = [finding for finding in session.findings if finding.check == "interference.static"]
+    assert step.origin_mark is None
+    assert finding.tool_result_ids == [step.index]

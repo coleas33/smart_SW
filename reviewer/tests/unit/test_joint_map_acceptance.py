@@ -185,8 +185,9 @@ def test_with_lever_5_on_check_joints_is_a_real_step_after_the_interference_grou
     assert result is not None
     tools = [call.tool for call in result.calls]
     # Edited deliberately by feature 010 T067 and T075: the two later code-first checks
-    # follow `check_joints` in `CODE_FIRST_CHECKS` order.
-    assert tools[-3:] == ["check_joints", "check_mass_material", "check_hygiene"]
+    # follow `check_joints` in `CODE_FIRST_CHECKS` order; and by the thread pitch amendment's
+    # T119 (2026-10-08): `check_threads` follows them.
+    assert tools[-4:] == ["check_joints", "check_mass_material", "check_hygiene", "check_threads"]
     assert tools.index("check_joints") > max(
         index for index, tool in enumerate(tools) if tool == "check_interference_group"
     )

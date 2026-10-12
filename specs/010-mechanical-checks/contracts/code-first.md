@@ -2,6 +2,8 @@
 
 *Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed with 013 T020 and T028:* `check_hygiene` reads the part roles attached to the review (`review_roles(context)`) and the review's loaded profile (`review_profile(context)`, which replaces `_attached_profile` and answers even when the standards phases were not dumped); see 013 `contracts/part-roles.md` sections 5 and 6.
 
+*Amended 2026-10-08 (owner decisions 50A to 53A, research R2.26, tasks T119 and T120):* the tuple gains a fourth tool, `check_threads`, after `check_hygiene` - argument-free, planned after it, withheld by lever 13 once it has completed and keyed `(tool,)` by the re-call guard like the other three; its payload and rows are `fasteners.md` section 8.
+
 Normative for how every check in this feature joins the code-first pass (FR-026, SC-006).
 
 ## 1. The tuple

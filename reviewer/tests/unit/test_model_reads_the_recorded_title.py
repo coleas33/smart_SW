@@ -80,7 +80,7 @@ PINS: dict[tuple[str, str], str] = {
         "3bc7a6cd67c6261087f75a581b49da01909bf7e4d94c4ee28f7a2a1685e03dfd"
     ),
     ("full", "check_interference_group"): (
-        "155517df6fc42ea9a55db986f6f937d63260d358d3602b73018ca4cbf9f9c0c6"
+        "843a2230cd0ead210652917f3b3c8b38ba7a10fe8ab45a6c8f676d50489d3c21"
     ),
     ("full", "record_drawing_finding"): (
         "8190dbc601f12186e38de748182d42e8d733d8a0099106cd61dedcf108cbf9ee"
@@ -98,7 +98,8 @@ PINS: dict[tuple[str, str], str] = {
         "c14b9135c12a23bacda20a5c93d1a59d40d1dde5a59afe09081336a347efb1f7"
     ),
 }
-"""SHA-256 of the UTF-8 text the model reads of each call, taken at `d47a91f`."""
+"""SHA-256 of the UTF-8 text the model reads of each call, taken at `d47a91f`; the full view of
+`check_interference_group` re-pinned for 014 owner decision 40A, its finding now citing its step."""
 
 
 @cache

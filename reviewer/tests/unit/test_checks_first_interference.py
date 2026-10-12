@@ -306,18 +306,18 @@ def test_a_failed_live_call_is_failed_and_skipped_coverage_and_the_review_starts
 def test_a_persist_failure_is_unresolved_and_the_findings_still_stand(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from swreview.ir import loader
+    from swreview import atomic
 
     folder = package_folder(tmp_path)
     before = (folder / PACKAGE_FILE_NAME).read_bytes()
-    real_replace = loader.os.replace
+    real_replace = atomic.os.replace
 
     def refuse(source: Any, target: Any) -> None:
         if Path(target).name == PACKAGE_FILE_NAME:
             raise PermissionError("package.json is locked")
         real_replace(source, target)
 
-    monkeypatch.setattr(loader.os, "replace", refuse)
+    monkeypatch.setattr(atomic.os, "replace", refuse)
     run, session = reviewed(folder, folder, bridge_answering(live_answer()))
 
     [item] = [

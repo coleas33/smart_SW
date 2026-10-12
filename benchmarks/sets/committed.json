@@ -1,0 +1,404 @@
+{
+  "name": "committed",
+  "packages": [
+    {
+      "package_id": "kalo-1",
+      "path": "benchmarks/packages/kalo-1",
+      "key": "benchmarks/answer_keys/kalo-1.json",
+      "held_out": true,
+      "design": "kalo"
+    },
+    {
+      "package_id": "kalo-1-twin",
+      "path": "benchmarks/packages/kalo-1-twin",
+      "key": "benchmarks/answer_keys/kalo-1-twin.json",
+      "held_out": true,
+      "design": "kalo",
+      "twin_of": "kalo-1"
+    },
+    {
+      "package_id": "kalo-2",
+      "path": "benchmarks/packages/kalo-2",
+      "key": "benchmarks/answer_keys/kalo-2.json",
+      "held_out": true,
+      "design": "kalo"
+    },
+    {
+      "package_id": "kalo-2-twin",
+      "path": "benchmarks/packages/kalo-2-twin",
+      "key": "benchmarks/answer_keys/kalo-2-twin.json",
+      "held_out": true,
+      "design": "kalo",
+      "twin_of": "kalo-2"
+    },
+    {
+      "package_id": "kalo-fit-1",
+      "path": "benchmarks/packages/kalo-fit-1",
+      "key": "benchmarks/answer_keys/kalo-fit-1.json",
+      "case_file": "benchmarks/case_files/kalo-fit-1.json",
+      "held_out": false,
+      "design": "kalo",
+      "represents": [
+        "R-3"
+      ]
+    },
+    {
+      "package_id": "kalo-fit-2",
+      "path": "benchmarks/packages/kalo-fit-2",
+      "key": "benchmarks/answer_keys/kalo-fit-2.json",
+      "case_file": "benchmarks/case_files/kalo-fit-2.json",
+      "held_out": false,
+      "design": "kalo",
+      "represents": [
+        "R-3"
+      ]
+    },
+    {
+      "package_id": "kalo-fit-clean",
+      "path": "benchmarks/packages/kalo-fit-clean",
+      "key": "benchmarks/answer_keys/kalo-fit-clean.json",
+      "held_out": false,
+      "design": "kalo",
+      "represents": [
+        "R-3"
+      ]
+    },
+    {
+      "package_id": "kalo-contact",
+      "path": "benchmarks/packages/kalo-contact",
+      "key": "benchmarks/answer_keys/kalo-contact.json",
+      "held_out": false,
+      "design": "kalo",
+      "represents": [
+        "R-4",
+        "R-5"
+      ]
+    },
+    {
+      "package_id": "kalo-contact-positive",
+      "path": "benchmarks/packages/kalo-contact-positive",
+      "key": "benchmarks/answer_keys/kalo-contact-positive.json",
+      "held_out": true,
+      "design": "kalo",
+      "represents": [
+        "R-4",
+        "AF-2"
+      ]
+    },
+    {
+      "package_id": "kalo-lightweight",
+      "path": "benchmarks/packages/kalo-lightweight",
+      "key": "benchmarks/answer_keys/kalo-lightweight.json",
+      "held_out": false,
+      "design": "kalo",
+      "represents": [
+        "R-5"
+      ]
+    },
+    {
+      "package_id": "kalo-empty",
+      "path": "benchmarks/packages/kalo-empty",
+      "key": "benchmarks/answer_keys/kalo-empty.json",
+      "case_file": "benchmarks/case_files/kalo-empty.json",
+      "held_out": false,
+      "design": "kalo",
+      "represents": [
+        "R-6"
+      ]
+    },
+    {
+      "package_id": "kalo-empty-positive",
+      "path": "benchmarks/packages/kalo-empty-positive",
+      "key": "benchmarks/answer_keys/kalo-empty-positive.json",
+      "held_out": true,
+      "design": "kalo",
+      "represents": [
+        "R-6",
+        "AF-1"
+      ]
+    },
+    {
+      "package_id": "tessa-1",
+      "path": "benchmarks/packages/tessa-1",
+      "key": "benchmarks/answer_keys/tessa-1.json",
+      "held_out": true,
+      "design": "tessa",
+      "represents": [
+        "AF-1"
+      ]
+    },
+    {
+      "package_id": "tessa-1-twin",
+      "path": "benchmarks/packages/tessa-1-twin",
+      "key": "benchmarks/answer_keys/tessa-1-twin.json",
+      "held_out": true,
+      "design": "tessa",
+      "twin_of": "tessa-1"
+    },
+    {
+      "package_id": "tessa-2",
+      "path": "benchmarks/packages/tessa-2",
+      "key": "benchmarks/answer_keys/tessa-2.json",
+      "held_out": true,
+      "design": "tessa",
+      "represents": [
+        "AF-2"
+      ]
+    },
+    {
+      "package_id": "tessa-2-twin",
+      "path": "benchmarks/packages/tessa-2-twin",
+      "key": "benchmarks/answer_keys/tessa-2-twin.json",
+      "held_out": true,
+      "design": "tessa",
+      "twin_of": "tessa-2"
+    },
+    {
+      "package_id": "tessa-groups",
+      "path": "benchmarks/packages/tessa-groups",
+      "key": "benchmarks/answer_keys/tessa-groups.json",
+      "held_out": true,
+      "design": "tessa",
+      "represents": [
+        "AF-3",
+        "R-4"
+      ]
+    },
+    {
+      "package_id": "okta-1",
+      "path": "benchmarks/packages/okta-1",
+      "key": "benchmarks/answer_keys/okta-1.json",
+      "held_out": true,
+      "design": "okta"
+    },
+    {
+      "package_id": "okta-1-twin",
+      "path": "benchmarks/packages/okta-1-twin",
+      "key": "benchmarks/answer_keys/okta-1-twin.json",
+      "held_out": true,
+      "design": "okta",
+      "twin_of": "okta-1"
+    },
+    {
+      "package_id": "okta-2",
+      "path": "benchmarks/packages/okta-2",
+      "key": "benchmarks/answer_keys/okta-2.json",
+      "held_out": true,
+      "design": "okta"
+    },
+    {
+      "package_id": "okta-2-twin",
+      "path": "benchmarks/packages/okta-2-twin",
+      "key": "benchmarks/answer_keys/okta-2-twin.json",
+      "held_out": true,
+      "design": "okta",
+      "twin_of": "okta-2"
+    },
+    {
+      "package_id": "brun-1",
+      "path": "benchmarks/packages/brun-1",
+      "key": "benchmarks/answer_keys/brun-1.json",
+      "held_out": true,
+      "design": "brun"
+    },
+    {
+      "package_id": "brun-1-twin",
+      "path": "benchmarks/packages/brun-1-twin",
+      "key": "benchmarks/answer_keys/brun-1-twin.json",
+      "held_out": true,
+      "design": "brun",
+      "twin_of": "brun-1"
+    },
+    {
+      "package_id": "brun-2",
+      "path": "benchmarks/packages/brun-2",
+      "key": "benchmarks/answer_keys/brun-2.json",
+      "held_out": true,
+      "design": "brun"
+    },
+    {
+      "package_id": "brun-2-twin",
+      "path": "benchmarks/packages/brun-2-twin",
+      "key": "benchmarks/answer_keys/brun-2-twin.json",
+      "held_out": true,
+      "design": "brun",
+      "twin_of": "brun-2"
+    },
+    {
+      "package_id": "pelin-1",
+      "path": "benchmarks/packages/pelin-1",
+      "key": "benchmarks/answer_keys/pelin-1.json",
+      "held_out": true,
+      "design": "pelin"
+    },
+    {
+      "package_id": "pelin-1-twin",
+      "path": "benchmarks/packages/pelin-1-twin",
+      "key": "benchmarks/answer_keys/pelin-1-twin.json",
+      "held_out": true,
+      "design": "pelin",
+      "twin_of": "pelin-1"
+    },
+    {
+      "package_id": "pelin-2",
+      "path": "benchmarks/packages/pelin-2",
+      "key": "benchmarks/answer_keys/pelin-2.json",
+      "held_out": true,
+      "design": "pelin"
+    },
+    {
+      "package_id": "pelin-2-twin",
+      "path": "benchmarks/packages/pelin-2-twin",
+      "key": "benchmarks/answer_keys/pelin-2-twin.json",
+      "held_out": true,
+      "design": "pelin",
+      "twin_of": "pelin-2"
+    },
+    {
+      "package_id": "davo-1",
+      "path": "benchmarks/packages/davo-1",
+      "key": "benchmarks/answer_keys/davo-1.json",
+      "held_out": true,
+      "design": "davo"
+    },
+    {
+      "package_id": "davo-1-twin",
+      "path": "benchmarks/packages/davo-1-twin",
+      "key": "benchmarks/answer_keys/davo-1-twin.json",
+      "held_out": true,
+      "design": "davo",
+      "twin_of": "davo-1"
+    },
+    {
+      "package_id": "davo-2",
+      "path": "benchmarks/packages/davo-2",
+      "key": "benchmarks/answer_keys/davo-2.json",
+      "held_out": true,
+      "design": "davo"
+    },
+    {
+      "package_id": "davo-2-twin",
+      "path": "benchmarks/packages/davo-2-twin",
+      "key": "benchmarks/answer_keys/davo-2-twin.json",
+      "held_out": true,
+      "design": "davo",
+      "twin_of": "davo-2"
+    },
+    {
+      "package_id": "rusk-1",
+      "path": "benchmarks/packages/rusk-1",
+      "key": "benchmarks/answer_keys/rusk-1.json",
+      "held_out": true,
+      "design": "rusk"
+    },
+    {
+      "package_id": "rusk-1-twin",
+      "path": "benchmarks/packages/rusk-1-twin",
+      "key": "benchmarks/answer_keys/rusk-1-twin.json",
+      "held_out": true,
+      "design": "rusk",
+      "twin_of": "rusk-1"
+    },
+    {
+      "package_id": "rusk-2",
+      "path": "benchmarks/packages/rusk-2",
+      "key": "benchmarks/answer_keys/rusk-2.json",
+      "held_out": true,
+      "design": "rusk"
+    },
+    {
+      "package_id": "rusk-2-twin",
+      "path": "benchmarks/packages/rusk-2-twin",
+      "key": "benchmarks/answer_keys/rusk-2-twin.json",
+      "held_out": true,
+      "design": "rusk",
+      "twin_of": "rusk-2"
+    },
+    {
+      "package_id": "lori-1",
+      "path": "benchmarks/packages/lori-1",
+      "key": "benchmarks/answer_keys/lori-1.json",
+      "held_out": true,
+      "design": "lori"
+    },
+    {
+      "package_id": "lori-1-twin",
+      "path": "benchmarks/packages/lori-1-twin",
+      "key": "benchmarks/answer_keys/lori-1-twin.json",
+      "held_out": true,
+      "design": "lori",
+      "twin_of": "lori-1"
+    },
+    {
+      "package_id": "lori-2",
+      "path": "benchmarks/packages/lori-2",
+      "key": "benchmarks/answer_keys/lori-2.json",
+      "held_out": true,
+      "design": "lori"
+    },
+    {
+      "package_id": "lori-2-twin",
+      "path": "benchmarks/packages/lori-2-twin",
+      "key": "benchmarks/answer_keys/lori-2-twin.json",
+      "held_out": true,
+      "design": "lori",
+      "twin_of": "lori-2"
+    },
+    {
+      "package_id": "venta-1",
+      "path": "benchmarks/packages/venta-1",
+      "key": "benchmarks/answer_keys/venta-1.json",
+      "held_out": true,
+      "design": "venta"
+    },
+    {
+      "package_id": "venta-1-twin",
+      "path": "benchmarks/packages/venta-1-twin",
+      "key": "benchmarks/answer_keys/venta-1-twin.json",
+      "held_out": true,
+      "design": "venta",
+      "twin_of": "venta-1"
+    },
+    {
+      "package_id": "venta-2",
+      "path": "benchmarks/packages/venta-2",
+      "key": "benchmarks/answer_keys/venta-2.json",
+      "held_out": true,
+      "design": "venta"
+    },
+    {
+      "package_id": "venta-2-twin",
+      "path": "benchmarks/packages/venta-2-twin",
+      "key": "benchmarks/answer_keys/venta-2-twin.json",
+      "held_out": true,
+      "design": "venta",
+      "twin_of": "venta-2"
+    },
+    {
+      "package_id": "mir-sitting",
+      "path": "benchmarks/packages/mir-sitting",
+      "key": "benchmarks/answer_keys/mir-sitting.json",
+      "case_file": "benchmarks/case_files/mir-sitting.json",
+      "held_out": false,
+      "design": "mir",
+      "represents": [
+        "R-1",
+        "R-2",
+        "R-7",
+        "R-8"
+      ]
+    },
+    {
+      "package_id": "mir-sitting-positive",
+      "path": "benchmarks/packages/mir-sitting-positive",
+      "key": "benchmarks/answer_keys/mir-sitting-positive.json",
+      "held_out": false,
+      "design": "mir",
+      "represents": [
+        "R-8",
+        "R-7",
+        "R-1"
+      ]
+    }
+  ]
+}

@@ -30,7 +30,7 @@ import pytest
 import requests
 from typer.testing import CliRunner
 
-from swreview import cli, tokens
+from swreview import atomic, cli, tokens
 
 SRC_ROOT = Path(tokens.__file__).resolve().parent
 VOCABULARY_BYTES = 3_613_922
@@ -344,6 +344,40 @@ def test_fetch_replaces_a_damaged_file_in_the_cache(source_file: Path, cache_dir
     result = runner.invoke(cli.app, ["tokenizer", "fetch", "--from", str(source_file)])
 
     assert result.exit_code == 0, result.output
+    assert target.read_bytes() == source_file.read_bytes()
+
+
+def test_fetch_writes_the_vocabulary_through_the_one_atomic_writer(
+    source_file: Path, cache_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Owner decision 34A: the vocabulary lands through `atomic.write_atomic`, the product's
+    one atomic writer, as the source's bytes; a failed replace keeps the damaged file and
+    leaves no temporary in the cache, and the next fetch replaces that file whole."""
+    target = cache_dir / tokens.VOCABULARY_FILE_NAME
+    target.write_bytes(b"damaged")
+
+    def fail_replace(source: object, destination: object) -> None:
+        raise OSError(f"cannot replace {destination} from {source}")
+
+    with monkeypatch.context() as patched:
+        patched.setattr(atomic.os, "replace", fail_replace)
+        with pytest.raises(OSError, match="cannot replace"):
+            tokens.fetch_vocabulary(source_file)
+
+    assert target.read_bytes() == b"damaged"
+    assert sorted(path.name for path in cache_dir.iterdir()) == [tokens.VOCABULARY_FILE_NAME]
+
+    real_write_atomic = atomic.write_atomic
+    calls: list[tuple[Path, bytes]] = []
+
+    def spy(path: Path, data: bytes) -> None:
+        calls.append((path, data))
+        real_write_atomic(path, data)
+
+    monkeypatch.setattr(atomic, "write_atomic", spy)
+
+    assert tokens.fetch_vocabulary(source_file) == (target, True)
+    assert calls == [(target, source_file.read_bytes())]
     assert target.read_bytes() == source_file.read_bytes()
 
 

@@ -80,12 +80,13 @@ pruning."""
 LEVER_OFF = PANE.efficiency.model_copy(update={"withhold_prerun_tools": False})
 """The pane with lever 13 off: checks first alone, the array every pane review sent before."""
 
-SEVEN: tuple[str, ...] = tuple(call.name for call in MODEL_DRIVEN_CALLS)
-"""The seven tools the pre-run runs to completion on `prerun_package()`, in its order."""
+EIGHT: tuple[str, ...] = tuple(call.name for call in MODEL_DRIVEN_CALLS)
+"""The eight tools the pre-run runs to completion on `prerun_package()`, in its order (seven,
+named `SEVEN`, until the thread pitch amendment's T119 added `check_threads`, 2026-10-08)."""
 
-RMS: tuple[str, ...] = SEVEN[:3]
+RMS: tuple[str, ...] = EIGHT[:3]
 INTERFERENCE = "check_interference_group"
-CODE_FIRST: tuple[str, ...] = SEVEN[4:]
+CODE_FIRST: tuple[str, ...] = EIGHT[4:]
 STANDARDS = "check_standards"
 UNKNOWN_TOOL = "no tool named"
 
@@ -158,15 +159,15 @@ def prerun_steps_ok(run: ReviewRun) -> None:
 # --- the pane default ------------------------------------------------------------------------
 
 
-def test_the_pane_offers_the_array_less_the_seven_tools_checks_first_ran(tmp_path: Path) -> None:
+def test_the_pane_offers_the_array_less_the_eight_tools_checks_first_ran(tmp_path: Path) -> None:
     run, spy = reviewed(tmp_path)
     prerun_steps_ok(run)
 
     names = offered(spy)
-    assert not set(SEVEN) & set(names)
+    assert not set(EIGHT) & set(names)
     assert "get_finding" in names, "the model reads a finding's detail through it"
     taken = withheld_by_the_lever(tmp_path / "pair")
-    assert sorted(taken) == sorted(SEVEN), "those seven and nothing else"
+    assert sorted(taken) == sorted(EIGHT), "those eight and nothing else"
 
 
 def test_the_digest_names_exactly_the_tools_withheld_after_the_evaluated_block(
@@ -175,9 +176,9 @@ def test_the_digest_names_exactly_the_tools_withheld_after_the_evaluated_block(
     run, _ = reviewed(tmp_path)
     text = opening(run)
 
-    assert withheld_line(SEVEN) in text
+    assert withheld_line(EIGHT) in text
     lines = text.splitlines()
-    at = lines.index(withheld_line(SEVEN))
+    at = lines.index(withheld_line(EIGHT))
     assert lines[at + 1].startswith("Findings recorded: ")
     assert text.count("Not offered to you this session") == 1
 
@@ -205,8 +206,8 @@ def test_a_call_to_every_withheld_tool_is_answered_by_the_guard(tmp_path: Path) 
         tmp_path, turns=(ScriptedTurn(text="done", tool_calls=MODEL_DRIVEN_CALLS),)
     )
 
-    answered = model_steps(run, len(SEVEN))
-    assert [step.tool for step in answered] == list(SEVEN)
+    answered = model_steps(run, len(EIGHT))
+    assert [step.tool for step in answered] == list(EIGHT)
     for step in answered:
         assert step.status == "ok", step
         assert f'"status":"{ALREADY_RUN}"' in step.result_summary
@@ -215,7 +216,7 @@ def test_a_call_to_every_withheld_tool_is_answered_by_the_guard(tmp_path: Path) 
 
 
 def openai_rounds() -> list[Any]:
-    """One response calling all seven withheld tools together, then the closing text."""
+    """One response calling all eight withheld tools together, then the closing text."""
     items = [
         function_call_item(
             call_id=f"call_{index}",
@@ -250,7 +251,7 @@ def test_the_openai_adapter_sends_no_withheld_schema_and_gets_the_guards_answers
         bodies = request_bodies(route)
 
     sent = [tool["name"] for tool in bodies[0]["tools"]]
-    assert not set(SEVEN) & set(sent)
+    assert not set(EIGHT) & set(sent)
     assert "get_finding" in sent
     assert [tool["name"] for tool in bodies[1]["tools"]] == sent, "fixed for the session"
     outputs = [
@@ -258,7 +259,7 @@ def test_the_openai_adapter_sends_no_withheld_schema_and_gets_the_guards_answers
         for item in bodies[1]["input"]
         if item.get("type") == "function_call_output"
     ]
-    assert [output["status"] for output in outputs] == [ALREADY_RUN] * len(SEVEN)
+    assert [output["status"] for output in outputs] == [ALREADY_RUN] * len(EIGHT)
     assert UNKNOWN_TOOL not in json.dumps(bodies[1])
 
 
@@ -286,10 +287,10 @@ def test_the_gemini_adapter_declares_no_withheld_tool_and_gets_the_guards_answer
 
     for call in models.calls:
         declared = [d.name for d in call["config"].tools[0].function_declarations]
-        assert not set(SEVEN) & set(declared)
+        assert not set(EIGHT) & set(declared)
         assert "get_finding" in declared
-    answered = model_steps(run, len(SEVEN))
-    assert [step.tool for step in answered] == list(SEVEN)
+    answered = model_steps(run, len(EIGHT))
+    assert [step.tool for step in answered] == list(EIGHT)
     assert all(f'"status":"{ALREADY_RUN}"' in step.result_summary for step in answered)
     responses = [
         part.function_response.response
@@ -297,7 +298,7 @@ def test_the_gemini_adapter_declares_no_withheld_tool_and_gets_the_guards_answer
         for part in content.parts or ()
         if part.function_response is not None
     ]
-    assert len(responses) == len(SEVEN)
+    assert len(responses) == len(EIGHT)
     assert UNKNOWN_TOOL not in json.dumps(responses, default=str)
 
 
@@ -326,7 +327,7 @@ def test_an_unknown_tool_error_lists_the_array_the_model_was_sent(tmp_path: Path
     [step] = model_steps(run, 1)
     assert step.status == "error" and step.error is not None
     listed = listed_in(step.error)
-    assert not set(SEVEN) & set(listed)
+    assert not set(EIGHT) & set(listed)
     assert listed == sorted(offered(spy)), "the names offered, no more and no fewer"
 
 
@@ -342,7 +343,7 @@ def test_with_lever_13_off_an_unknown_tool_error_lists_every_tool_as_before(
     [step] = model_steps(run, 1)
     assert step.error is not None
     listed = listed_in(step.error)
-    assert set(SEVEN) <= set(listed)
+    assert set(EIGHT) <= set(listed)
     assert listed == sorted(offered(spy))
 
 
@@ -363,7 +364,7 @@ def test_with_a_tier_and_lever_13_an_unknown_tool_error_names_neither_kind_of_wi
     [step] = model_steps(run, 1)
     assert step.error is not None
     listed = listed_in(step.error)
-    assert not set(SEVEN) & set(listed)
+    assert not set(EIGHT) & set(listed)
     assert listed == sorted(offered(spy))
 
 
@@ -396,7 +397,7 @@ def test_the_openai_adapter_sends_an_unknown_tool_error_naming_no_withheld_tool(
     ]
     sent = [tool["name"] for tool in bodies[0]["tools"]]
     assert listed_in(output["error"]) == sorted(sent)
-    assert not set(SEVEN) & set(listed_in(output["error"]))
+    assert not set(EIGHT) & set(listed_in(output["error"]))
 
 
 def test_the_gemini_adapter_sends_an_unknown_tool_error_naming_no_withheld_tool(
@@ -432,7 +433,7 @@ def test_the_gemini_adapter_sends_an_unknown_tool_error_naming_no_withheld_tool(
     assert response is not None
     error = str(response["error"]["error"])  # Gemini's `error` field holds the payload
     assert listed_in(error) == sorted(declared)
-    assert not set(SEVEN) & set(listed_in(error))
+    assert not set(EIGHT) & set(listed_in(error))
 
 
 # --- one rule for "completed", one filter for the array --------------------------------------
@@ -459,7 +460,7 @@ def test_the_guards_ledger_and_lever_13_read_one_rule_for_a_completed_call(
     prerun_steps_ok(run)
 
     assert "check_hygiene" in offered(spy), "not answerable, so not withheld"
-    assert withheld_line([name for name in SEVEN if name != "check_hygiene"]) in opening(run)
+    assert withheld_line([name for name in EIGHT if name != "check_hygiene"]) in opening(run)
     [step] = model_steps(run, 1)
     assert step.tool == "check_hygiene" and step.status == "ok"
     assert ALREADY_RUN not in step.result_summary, "the ledger no longer answers it either"
@@ -479,7 +480,7 @@ def test_the_prompts_tool_notes_describe_the_guards_array(
     names = offered(spy)
     noted = [name for name in names if f"### {name}\n" in spy.systems[0]]
     assert noted, "precondition: some offered tool has notes"
-    assert not any(f"### {name}\n" in spy.systems[0] for name in SEVEN)
+    assert not any(f"### {name}\n" in spy.systems[0] for name in EIGHT)
     dropped = noted[0]
 
     original = PrerunGuard.__iter__
@@ -514,8 +515,8 @@ def test_a_failed_code_first_call_keeps_only_that_tool(tmp_path: Path) -> None:
 
     names = offered(spy)
     assert "check_hygiene" in names
-    assert not (set(SEVEN) - {"check_hygiene"}) & set(names)
-    assert withheld_line([name for name in SEVEN if name != "check_hygiene"]) in opening(run)
+    assert not (set(EIGHT) - {"check_hygiene"}) & set(names)
+    assert withheld_line([name for name in EIGHT if name != "check_hygiene"]) in opening(run)
 
 
 def test_a_failed_group_call_keeps_the_interference_tool(tmp_path: Path) -> None:
@@ -587,7 +588,7 @@ def test_a_group_the_pre_run_did_not_reach_keeps_the_interference_tool(
     prerun_steps_ok(run)
 
     assert INTERFERENCE in offered(spy)
-    assert not (set(SEVEN) - {INTERFERENCE}) & set(offered(spy))
+    assert not (set(EIGHT) - {INTERFERENCE}) & set(offered(spy))
 
 
 def test_every_group_judged_withholds_the_interference_tool(tmp_path: Path) -> None:
@@ -632,15 +633,15 @@ def test_with_live_detection_offered_the_interference_tool_stays(tmp_path: Path)
     names = offered(spy)
     assert INTERFERENCE in names
     assert "bridge_interference" in names
-    assert not (set(SEVEN) - {INTERFERENCE}) & set(names)
-    assert withheld_line([name for name in SEVEN if name != INTERFERENCE]) in opening(run)
+    assert not (set(EIGHT) - {INTERFERENCE}) & set(names)
+    assert withheld_line([name for name in EIGHT if name != INTERFERENCE]) in opening(run)
 
 
 def test_with_no_profile_there_is_no_standards_tool_to_withhold(tmp_path: Path) -> None:
     run, spy = reviewed(tmp_path)
 
     assert STANDARDS not in offered(spy)
-    assert STANDARDS not in withheld_line(SEVEN)
+    assert STANDARDS not in withheld_line(EIGHT)
     assert "standards: no profile was configured for this review" in opening(run)
 
 
@@ -652,7 +653,7 @@ def test_an_attached_standards_run_that_completed_leaves_the_array(tmp_path: Pat
 
     assert any(step.tool == STANDARDS for step in run.session.steps)
     assert STANDARDS not in offered(spy)
-    assert withheld_line((*SEVEN, STANDARDS)) in opening(run)
+    assert withheld_line((*EIGHT, STANDARDS)) in opening(run)
 
 
 def test_an_attached_standards_run_that_failed_stays_offered(tmp_path: Path) -> None:
@@ -674,9 +675,9 @@ def test_with_the_lever_off_the_array_prompt_and_opening_are_todays(tmp_path: Pa
     on_run, _ = reviewed(tmp_path, folder="on")
     off_run, off = reviewed(tmp_path, folder="off", efficiency=LEVER_OFF)
 
-    assert set(SEVEN) <= set(offered(off))
+    assert set(EIGHT) <= set(offered(off))
     assert "Not offered to you this session" not in opening(off_run)
-    assert opening(on_run).replace(withheld_line(SEVEN) + "\n", "") == opening(off_run)
+    assert opening(on_run).replace(withheld_line(EIGHT) + "\n", "") == opening(off_run)
     _, all_off = reviewed(tmp_path, folder="all-off", efficiency=EfficiencySettings())
     assert off.systems == all_off.systems, "checks first alone leaves the system prompt alone"
 
@@ -689,19 +690,19 @@ def test_the_gate_with_lever_13_withholds_the_same_tools_and_its_brief_says_so(
     gated = EfficiencySettings(procedural_gate=True, withhold_prerun_tools=True)
     run, spy = reviewed(tmp_path, efficiency=gated)
 
-    assert not set(SEVEN) & set(offered(spy))
-    assert withheld_line(SEVEN) in opening(run)
+    assert not set(EIGHT) & set(offered(spy))
+    assert withheld_line(EIGHT) in opening(run)
 
 
 def test_the_command_lines_lever_pair_without_the_view_withholds_the_same_tools(
     tmp_path: Path,
 ) -> None:
     """`--lever prerun_checks --lever withhold_prerun_tools` with the model view off: the
-    same seven leave, and `get_finding` is not offered because slimming is off."""
+    same eight leave, and `get_finding` is not offered because slimming is off."""
     both = EfficiencySettings(prerun_checks=True, withhold_prerun_tools=True)
     _, spy = reviewed(tmp_path, efficiency=both, model_view=MODEL_VIEW_OFF)
 
-    assert not set(SEVEN) & set(offered(spy))
+    assert not set(EIGHT) & set(offered(spy))
     assert "get_finding" not in offered(spy)
 
 
@@ -709,7 +710,7 @@ def test_the_lever_without_checks_first_withholds_nothing(tmp_path: Path) -> Non
     run, spy = reviewed(tmp_path, efficiency=EfficiencySettings(withhold_prerun_tools=True))
 
     assert run.session.steps == []
-    assert set(SEVEN) <= set(offered(spy))
+    assert set(EIGHT) <= set(offered(spy))
     assert "Not offered to you this session" not in opening(run)
 
 
@@ -747,6 +748,6 @@ def test_replaying_a_recording_made_with_the_lever_applies_it_as_recorded(
     )
 
     assert passes.as_recorded.withhold_prerun_tools is True
-    for name in SEVEN:
+    for name in EIGHT:
         assert f'"name": "{name}"' not in passes.first.prefix, name
         assert f'"name": "{name}"' in passes.second.prefix, name

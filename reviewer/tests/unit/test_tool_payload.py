@@ -382,7 +382,7 @@ class ArrayShape:
     - `standards`: a standards profile attaches a standards run, which adds `check_standards`;
     - `drawings`: a package with drawing evidence adds the drawing family;
     - `prerun`: checks first ran every tool it runs to completion and lever 13 took them off
-      (`prerun.withheld_tools`) - the seven, less the interference tool while live detection is
+      (`prerun.withheld_tools`) - the eight, less the interference tool while live detection is
       offered, plus `check_drawings` and `check_standards` when they are offered;
     - `groups` (011 T096, found on review): the pre-run judged the package's interference groups,
       every one under a key no other group shares. Lever 13 withholds only a tool the pre-run
@@ -668,22 +668,22 @@ REVIEW_ARRAY_TOOL_COUNTS: dict[str, int] = {
     "review+slim+bridge+drawings-prerun": 34,
     "review+slim-prerun-no-groups": 30,
     "review+slim+drawings-prerun-no-groups": 31,
-    "review": 35,
-    "review+drawings": 37,
-    "review+standards": 36,
-    "review+standards+drawings": 38,
-    "review+bridge": 38,
-    "review+bridge+drawings": 40,
-    "review+bridge+standards": 39,
-    "review+bridge+standards+drawings": 41,
-    "review+slim": 36,
-    "review+slim+drawings": 38,
-    "review+slim+standards": 37,
-    "review+slim+standards+drawings": 39,
-    "review+slim+bridge": 39,
-    "review+slim+bridge+drawings": 41,
-    "review+slim+bridge+standards": 40,
-    "review+slim+bridge+standards+drawings": 42,
+    "review": 36,
+    "review+drawings": 38,
+    "review+standards": 37,
+    "review+standards+drawings": 39,
+    "review+bridge": 39,
+    "review+bridge+drawings": 41,
+    "review+bridge+standards": 40,
+    "review+bridge+standards+drawings": 42,
+    "review+slim": 37,
+    "review+slim+drawings": 39,
+    "review+slim+standards": 38,
+    "review+slim+standards+drawings": 40,
+    "review+slim+bridge": 40,
+    "review+slim+bridge+drawings": 42,
+    "review+slim+bridge+standards": 41,
+    "review+slim+bridge+standards+drawings": 43,
     "review-prerun": 28,
     "review+drawings-prerun": 29,
     "review+bridge-prerun": 32,
@@ -698,22 +698,22 @@ REVIEW_ARRAY_BYTES: dict[str, dict[str, int]] = {
     "review+slim+bridge+drawings-prerun": {"openai": 34_579, "gemini": 34_630},
     "review+slim-prerun-no-groups": {"openai": 30_447, "gemini": 30_731},
     "review+slim+drawings-prerun-no-groups": {"openai": 30_881, "gemini": 31_114},
-    "review": {"openai": 35_844, "gemini": 35_915},
-    "review+drawings": {"openai": 36_570, "gemini": 36_539},
-    "review+standards": {"openai": 37_332, "gemini": 37_352},
-    "review+standards+drawings": {"openai": 38_058, "gemini": 37_976},
-    "review+bridge": {"openai": 39_542, "gemini": 39_431},
-    "review+bridge+drawings": {"openai": 40_268, "gemini": 40_055},
-    "review+bridge+standards": {"openai": 41_030, "gemini": 40_868},
-    "review+bridge+standards+drawings": {"openai": 41_756, "gemini": 41_492},
-    "review+slim": {"openai": 36_200, "gemini": 36_220},
-    "review+slim+drawings": {"openai": 36_926, "gemini": 36_844},
-    "review+slim+standards": {"openai": 37_688, "gemini": 37_657},
-    "review+slim+standards+drawings": {"openai": 38_414, "gemini": 38_281},
-    "review+slim+bridge": {"openai": 39_898, "gemini": 39_736},
-    "review+slim+bridge+drawings": {"openai": 40_624, "gemini": 40_360},
-    "review+slim+bridge+standards": {"openai": 41_386, "gemini": 41_173},
-    "review+slim+bridge+standards+drawings": {"openai": 42_112, "gemini": 41_797},
+    "review": {"openai": 36_246, "gemini": 36_266},
+    "review+drawings": {"openai": 36_972, "gemini": 36_890},
+    "review+standards": {"openai": 37_734, "gemini": 37_703},
+    "review+standards+drawings": {"openai": 38_460, "gemini": 38_327},
+    "review+bridge": {"openai": 39_944, "gemini": 39_782},
+    "review+bridge+drawings": {"openai": 40_670, "gemini": 40_406},
+    "review+bridge+standards": {"openai": 41_432, "gemini": 41_219},
+    "review+bridge+standards+drawings": {"openai": 42_158, "gemini": 41_843},
+    "review+slim": {"openai": 36_602, "gemini": 36_571},
+    "review+slim+drawings": {"openai": 37_328, "gemini": 37_195},
+    "review+slim+standards": {"openai": 38_090, "gemini": 38_008},
+    "review+slim+standards+drawings": {"openai": 38_816, "gemini": 38_632},
+    "review+slim+bridge": {"openai": 40_300, "gemini": 40_087},
+    "review+slim+bridge+drawings": {"openai": 41_026, "gemini": 40_711},
+    "review+slim+bridge+standards": {"openai": 41_788, "gemini": 41_524},
+    "review+slim+bridge+standards+drawings": {"openai": 42_514, "gemini": 42_148},
     "review-prerun": {"openai": 28_861, "gemini": 29_247},
     "review+drawings-prerun": {"openai": 29_295, "gemini": 29_630},
     "review+bridge-prerun": {"openai": 33_789, "gemini": 33_942},
@@ -725,7 +725,12 @@ REVIEW_ARRAY_BYTES: dict[str, dict[str, int]] = {
 (decision 9A): the one place an array's tool count and bytes are written, which the named
 constants below read. **Regenerated, never transcribed** - `--write` prints them in its review
 array table, in a commit of their own. The six pane-default arrays are also asserted under
-`ARRAY_CEILING`; the others are pinned so their growth shows in review, and never asserted."""
+`ARRAY_CEILING`; the others are pinned so their growth shows in review, and never asserted.
+
+Regenerated by feature 010's thread pitch amendment (2026-10-08, T120): `check_threads` is one
+more tool in every array that offers it, 402 bytes on OpenAI and 351 on Gemini; the `-prerun`
+arrays withhold it once the pre-run completed it, as lever 13 withholds `check_hygiene`, so
+none of them moved and every pane default stays under the ceiling."""
 
 REVIEW_TOOL_COUNT = REVIEW_ARRAY_TOOL_COUNTS["review"]
 REVIEW_BRIDGE_TOOL_COUNT = REVIEW_ARRAY_TOOL_COUNTS["review+bridge"]
@@ -737,9 +742,9 @@ Six files of the spec package still quote 34,248 (and 37,709 for the bridge, mea
 37,712); probe-log.md lists them by line for the change that is allowed to edit them."""
 BRIDGE_OPENAI_ARRAY_BYTES = REVIEW_ARRAY_BYTES["review+bridge"]["openai"]
 """The bridged review array, lever 2 off: pinned and never asserted under the ceiling."""
-TRIMMED_OPENAI_ARRAY_BYTES = 22_850
-TRIMMED_GEMINI_ARRAY_BYTES = 22_921
-TRIMMED_OPENAI_BRIDGE_ARRAY_BYTES = 25_413
+TRIMMED_OPENAI_ARRAY_BYTES = 23_138
+TRIMMED_GEMINI_ARRAY_BYTES = 23_158
+TRIMMED_OPENAI_BRIDGE_ARRAY_BYTES = 25_701
 """Lever 2 on: the same 32 tools carrying the first paragraph of each docstring instead of
 the whole body. **Regenerated, never transcribed** - `--write` prints them.
 
@@ -747,18 +752,22 @@ the whole body. **Regenerated, never transcribed** - `--write` prints them.
 bytes and 30 percent, measured before the split existed; the split that keeps the rejoin
 byte-equal (T052) leaves 22,850 bytes and 36.3 percent on OpenAI. Nothing here is typed to
 match a document: a pin is a measurement or it is nothing, and the same rule already
-applies to `GEMINI_ARRAY_BYTES` above."""
+applies to `GEMINI_ARRAY_BYTES` above.
+
+Regenerated by the thread pitch amendment's T120 (2026-10-08), with every figure below that
+counts the review array: `check_threads`'s object, trimmed and not, and the floor its schema
+adds. The MCP figures do not move (check tools are not MCP tools)."""
 
 MCP_TOOL_COUNT = 20
 MCP_OPENAI_ARRAY_BYTES = 14_866
 MCP_GEMINI_ARRAY_BYTES = 14_084
 LARGEST_TOOL = "check_axial_stack"
 LARGEST_TOOL_BYTES = 2_734
-RMS_TIER_KEPT_TOOLS = 29
-RMS_TIER_KEPT_BYTES = 27_751
+RMS_TIER_KEPT_TOOLS = 30
+RMS_TIER_KEPT_BYTES = 28_153
 RMS_TIER_DELTA_BYTES = 8_093
-RMS_TIER_DELTA_PERCENT = 22.6
-STRUCTURAL_FLOOR_BYTES = 16_042
+RMS_TIER_DELTA_PERCENT = 22.3
+STRUCTURAL_FLOOR_BYTES = 16_206
 
 SLIM_REVIEW_TOOL_COUNT = REVIEW_ARRAY_TOOL_COUNTS["review+slim"]
 SLIM_OPENAI_ARRAY_BYTES = REVIEW_ARRAY_BYTES["review+slim"]["openai"]
@@ -774,17 +783,19 @@ PRERUN_BRIDGE_TOOL_COUNT = REVIEW_ARRAY_TOOL_COUNTS["review+slim+bridge-prerun"]
 PRERUN_BRIDGE_OPENAI_ARRAY_BYTES = REVIEW_ARRAY_BYTES["review+slim+bridge-prerun"]["openai"]
 PRERUN_BRIDGE_GEMINI_ARRAY_BYTES = REVIEW_ARRAY_BYTES["review+slim+bridge-prerun"]["gemini"]
 """The pane arrays once checks first has run every pre-run tool to completion (feature 008
-lever 13): the slimmed review array less the seven, and with a bridge less six, the
+lever 13): the slimmed review array less the eight, and with a bridge less seven, the
 interference tool staying. **Regenerated, never transcribed** - `--write` prints them in its
 `review+slim-prerun` and `review+slim+bridge-prerun` rows."""
 
-PRERUN_SAVED_BYTES = {"openai": 6_983, "gemini": 6_668}
-PRERUN_SAVED_TOKENS = {"openai": 1_496, "gemini": 1_435}
-PRERUN_BRIDGE_SAVED_BYTES = {"openai": 5_753, "gemini": 5_489}
-PRERUN_BRIDGE_SAVED_TOKENS = {"openai": 1_230, "gemini": 1_180}
+PRERUN_SAVED_BYTES = {"openai": 7_385, "gemini": 7_019}
+PRERUN_SAVED_TOKENS = {"openai": 1_581, "gemini": 1_509}
+PRERUN_BRIDGE_SAVED_BYTES = {"openai": 6_155, "gemini": 5_840}
+PRERUN_BRIDGE_SAVED_TOKENS = {"openai": 1_315, "gemini": 1_254}
 """What lever 13 takes off every request of a pane review, without and with a bridge: bytes
 exactly, and o200k tokens of the compact array as an estimate (a provider renders tool
-definitions its own way). `--write` prints them in its Lever 13 table."""
+definitions its own way). `--write` prints them in its Lever 13 table. Regenerated by the
+thread pitch amendment's T120 (2026-10-08): `check_threads` is one more tool the lever takes
+off, so the saving grows by its object and one separator while the kept array stays."""
 
 TOOL_OBJECT_CEILING = {"openai": 3_000, "gemini": 3_500}
 """No single tool may weigh more than this. Headroom, not a target."""
@@ -814,9 +825,10 @@ they keep the pane's arrays under it."""
 
 
 def test_curated_tool_count_is_pinned() -> None:
-    """35 tools, 38 with the bridge (32 and 35 until feature 010 T028 added
+    """36 tools, 39 with the bridge (32 and 35 until feature 010 T028 added
     `check_joints`, 33 and 36 until T067 and T075 added `check_mass_material` and
-    `check_hygiene`). A new tool is a decision, not an accident."""
+    `check_hygiene`, 35 and 38 until the thread pitch amendment's T120 added `check_threads`,
+    2026-10-08). A new tool is a decision, not an accident."""
     assert len(TOOL_FUNCTIONS) == REVIEW_TOOL_COUNT
     assert len(TOOLSETS["review+bridge"]) == REVIEW_BRIDGE_TOOL_COUNT
 
@@ -869,7 +881,7 @@ def test_the_slimmed_review_array_is_pinned(encoding: str, expected: int) -> Non
     [("openai", PRERUN_OPENAI_ARRAY_BYTES), ("gemini", PRERUN_GEMINI_ARRAY_BYTES)],
 )
 def test_the_pane_array_without_the_pre_runs_tools_is_pinned(encoding: str, expected: int) -> None:
-    """Feature 008 lever 13: the array a pane review sends once checks first ran all seven. A
+    """Feature 008 lever 13: the array a pane review sends once checks first ran all eight. A
     pane default, so also under the ceiling (`test_every_array_the_pane_sends_by_default_...`)."""
     array = TOOLSETS["review+slim-prerun"]
     total = measure("review+slim-prerun", array, encoding).total_bytes
@@ -986,15 +998,19 @@ def test_the_trim_takes_the_same_bytes_off_either_encoding(encoding: str) -> Non
     off = measure("review", TOOL_FUNCTIONS, encoding).total_bytes
     on = measure("review", TOOL_FUNCTIONS, encoding, trim=True).total_bytes
 
-    assert off - on == 12_994
+    # 12,994 until the thread pitch amendment's T120 (2026-10-08): `check_threads`'s notes are
+    # what lever 2 takes off it (`--write`'s Lever 2 table).
+    assert off - on == 13_108
 
 
 def test_the_trim_is_bounded_by_the_structural_floor() -> None:
-    """36 percent off, and the remaining 16,042 bytes is structure no trim can reach."""
+    """36 percent off, and the remaining 16,206 bytes is structure no trim can reach (36.3
+    percent and 16,042 bytes until the thread pitch amendment's T120 added `check_threads`,
+    2026-10-08; `--write`'s Lever 2 table and structural floor line)."""
     off = measure("review", TOOL_FUNCTIONS, "openai").total_bytes
     on = measure("review", TOOL_FUNCTIONS, "openai", trim=True).total_bytes
 
-    assert round(100 * (off - on) / off, 1) == 36.3
+    assert round(100 * (off - on) / off, 1) == 36.2
     assert on > structural_floor_bytes()
 
 
@@ -1026,7 +1042,8 @@ def test_largest_tool_object_is_check_axial_stack() -> None:
 
 
 def test_rms_tier_row_is_the_array_delta_not_the_object_sum() -> None:
-    """Withholding the six RMS tools: 35 tools to 29, and what that takes off the wire."""
+    """Withholding the six RMS tools: 36 tools to 30 (35 to 29 until `check_threads`), and
+    what that takes off the wire."""
     delta = tier_delta()
     assert delta.kept_tools == RMS_TIER_KEPT_TOOLS
     assert delta.kept_bytes == RMS_TIER_KEPT_BYTES
@@ -1046,7 +1063,9 @@ def test_the_rms_tier_delta_shrinks_once_lever_2_has_taken_its_bytes() -> None:
     which is why every row records which other levers were on.
     """
     assert tier_delta(trim=True).delta_bytes == 2_745
-    assert tier_delta(trim=True).delta_percent == 12.0
+    # 12.0 until the thread pitch amendment's T120 (2026-10-08): the same 2,745 bytes of an
+    # array one tool larger (`--write`'s RMS tier table).
+    assert tier_delta(trim=True).delta_percent == 11.9
     assert tier_delta(trim=True).kept_tools == RMS_TIER_KEPT_TOOLS
 
 
