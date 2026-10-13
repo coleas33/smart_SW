@@ -30,6 +30,58 @@ public sealed class ReviewPageSendLayoutTests
         });
     }
 
+    /// <summary>T077 acceptance on the backend's actual failed first-request snapshot;
+    /// authored only after complete T075 green, with every page/shared asset held unchanged.</summary>
+    [Fact]
+    public void AFailedSendKeepsTheHeadlineTallyNotReachedAndSendInside300By600()
+    {
+        WaitingReviewFixture fixture = WaitingReviewFixture.Read("review-waiting-big-assembly.json");
+        JsonElement failed = fixture.Root.GetProperty("failed_send");
+        string expectedFailure = failed.GetProperty("ranking").GetProperty("summary").GetProperty("send").GetProperty("failure").GetString()!;
+        Assert.False(string.IsNullOrWhiteSpace(expectedFailure));
+        Assert.Equal("awaiting_send", failed.GetProperty("chat_state").GetString());
+        ReviewPageDriver.Run(driver =>
+        {
+            fixture.Configure(driver);
+            driver.InitialRoutes.RemoveAll(route => route.Path == "/sessions/chat-1/snapshot");
+            driver.InitialRoutes.Add(("GET", "/sessions/chat-1/snapshot", 200, failed.GetRawText()));
+        }, async driver =>
+        {
+            await ReviewPageSummaryAcceptanceTests.NarrowPane(driver);
+            JsonElement measured = await driver.Read(ReadGeometry);
+            JsonElement failure = await driver.Read(@"
+var line=document.querySelector('#send .note.bad');
+return JSON.stringify({ok:true,text:line?line.textContent:null,rendered:h.rendered(line),
+ failureInView:h.inView(line),failureSlack:line?window.innerHeight-line.getBoundingClientRect().bottom:null,
+ errorCard:!!document.querySelector('#errors .card.error')});");
+            _output.WriteLine("SC007 " + measured.GetRawText());
+            _output.WriteLine("Failure " + failure.GetRawText());
+            Assert.Equal(expectedFailure, failure.GetProperty("text").GetString());
+            Assert.True(failure.GetProperty("rendered").GetBoolean());
+            Assert.False(failure.GetProperty("errorCard").GetBoolean());
+            Assert.True(measured.GetProperty("headlineInView").GetBoolean(), measured.ToString());
+            Assert.True(measured.GetProperty("tallyInView").GetBoolean(), measured.ToString());
+            Assert.True(measured.GetProperty("notReachedInView").GetBoolean(), measured.ToString());
+            Assert.True(measured.GetProperty("sendInView").GetBoolean(), measured.ToString());
+            Assert.True(measured.GetProperty("sendSlack").GetDouble() >= 0, measured.ToString());
+            // Read-only diagnostic requested after acceptance: ordinary Results scrolling
+            // must reveal the whole failure note, without changing any page asset or style.
+            JsonElement scrolled = await driver.Read(@"
+var line=document.querySelector('#send .note.bad');var scroller=line.parentElement;
+while(scroller && ['auto','scroll'].indexOf(getComputedStyle(scroller).overflowY)<0)scroller=scroller.parentElement;
+if(!scroller)throw new Error('failure has no scrolling ancestor');
+var before=scroller.scrollTop;var clipBottom=scroller.getBoundingClientRect().bottom;
+var originalBottom=line.getBoundingClientRect().bottom;
+scroller.scrollTop+=Math.max(0,originalBottom-clipBottom)+1;
+return JSON.stringify({ok:true,text:line.textContent,wholeNoteInView:h.inView(line),
+ scrollerId:scroller.id,scrollTopBefore:before,scrollTopAfter:scroller.scrollTop,
+ initialClipBottom:clipBottom,initialNoteBottom:originalBottom,noteBottomAfter:line.getBoundingClientRect().bottom});");
+            _output.WriteLine("Scroll " + scrolled.GetRawText());
+            Assert.Equal(expectedFailure, scrolled.GetProperty("text").GetString());
+            Assert.True(scrolled.GetProperty("wholeNoteInView").GetBoolean(), scrolled.ToString());
+        });
+    }
+
     [Theory]
     [InlineData(260)]
     [InlineData(300)]

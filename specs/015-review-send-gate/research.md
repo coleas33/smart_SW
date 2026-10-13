@@ -1107,6 +1107,22 @@ folder (a second record of one fact).
 
 ### R2.21 The page
 
+
+**T077 acceptance measured 2026-10-13.** After the corrected T075/T076 candidate passed
+all 38 Send cases and its required full gates, the real backend's
+`failed_send` snapshot in `review-waiting-big-assembly.json` was restored at 300 by 600.
+The headline, tally, not-reached line and Send to model button all satisfy SC-007. The Send
+button's bottom is 153.4375 px above the window edge; the not-reached line's is 199.828125 px.
+The session buttons occupy two rows and the box remains directly below them. The exact backend
+failure sentence renders without an error card. Its bottom is 41.09375 px above the window edge,
+but the scrolling Results viewport initially clips 7.296875 px of the note (`h.inView` is
+false). Ordinary scrolling of `#results` by 8 px makes the exact whole note visible
+(`h.inView` is true), so this is accessible scroll content. SC-007 requires the summary's
+three lines and the Send button, which remain in view at the initial scroll position. No page or shared asset
+changed after the acceptance test was authored, and no layout fallback was made. The new case
+and the four unchanged T056 cases pass. The raw fixture SHA256 is
+`b3d5c881cdfae89aade0e2234c080e5ac3e5e0fbb926431f70abc5505351946f`.
+
 **Decision** (`contracts/pane.md`):
 
 - the box: `<label class="check send-when-checked">` with the owner's words, in `#session` under the
