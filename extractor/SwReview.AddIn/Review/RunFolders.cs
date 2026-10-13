@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using System.Text.Json;
 using SwReview.Extractor.Dump;
 
 namespace SwReview.AddIn.Review;
@@ -23,6 +24,37 @@ namespace SwReview.AddIn.Review;
 /// </summary>
 public static class RunFolders
 {
+    /// <summary>The top-level model status in the bounded head, or no readable answer.</summary>
+    public static JsonElement? ReadModelStatus(string? runDirectory, Func<string, Stream>? openHead = null)
+    {
+        if (string.IsNullOrWhiteSpace(runDirectory)) return null;
+        try
+        {
+            byte[] head;
+            using (Stream stream = (openHead ?? OpenSessionHead)(Path.Combine(runDirectory!, "session.json")))
+            {
+                head = PackageIndex.FillHead(stream, 65536);
+            }
+            var reader = new Utf8JsonReader(head, isFinalBlock: false, state: default);
+            while (reader.Read())
+            {
+                if (reader.TokenType != JsonTokenType.PropertyName || reader.CurrentDepth != 1
+                    || !reader.ValueTextEquals("model_status")) continue;
+                if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject) return null;
+                if (!JsonDocument.TryParseValue(ref reader, out JsonDocument? status)) return null;
+                using (status) { return status.RootElement.Clone(); }
+            }
+        }
+        catch (Exception)
+        {
+            // A missing, replaced, half-written or unreadable head keeps the existing mark.
+        }
+        return null;
+    }
+
+    internal static Stream OpenSessionHead(string path) => new FileStream(
+        path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+
     /// <summary>
     /// How much of the document name the folder may spend. `meshes\&lt;body id&gt;.glb` goes
     /// underneath it and .NET Framework 4.8 still enforces MAX_PATH by default, so a 200

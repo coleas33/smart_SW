@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Text.Json;
 using SwReview.AddIn.Settings;
@@ -168,6 +169,9 @@ public sealed class ReviewHostOptions
 
     /// <summary>The open document, asked for fresh each time; SOLIDWORKS owns the answer.</summary>
     public Func<PageDocument?> CurrentDocument { get; set; } = () => null;
+
+    /// <summary>The bounded session head opener; null uses the shared replace-safe opener.</summary>
+    public Func<string, Stream>? OpenSessionHead { get; set; }
 
     /// <summary>Read only the component census before a paid review; no run folder or model call.</summary>
     public Func<ReviewPreparation>? PrepareReview { get; set; }
@@ -1075,9 +1079,20 @@ public sealed class ReviewHost : IDisposable
     /// </summary>
     private void SendReviews(string? id)
     {
+        IReadOnlyList<SessionRecord> reviews = Reviews();
+        foreach (SessionRecord record in reviews)
+        {
+            if (record.ModelStatus == null) continue;
+            JsonElement? status = RunFolders.ReadModelStatus(record.RunDirectory, _options.OpenSessionHead);
+            if (status.HasValue && status.Value.TryGetProperty("state", out JsonElement state)
+                && state.ValueKind == JsonValueKind.String && state.GetString() == "sent")
+            {
+                record.ModelStatus = null;
+            }
+        }
         Send("sessions", id, new Dictionary<string, object?>
         {
-            { "items", Reviews().Select(ReviewItem).ToArray() },
+            { "items", reviews.Select(ReviewItem).ToArray() },
         });
     }
 
