@@ -35,6 +35,13 @@ run_id=<run folder name>, usage=run.usage_ledger, chat_state=chat.state, last_se
 (data-model section 8). It computes and writes nothing (as the attention route).
 `404 UnknownChat` for a chat this backend does not hold.
 
+*Amended by feature 015 T070*: the live snapshot optionally carries
+`send_in_flight: true` while the accepted Send is in progress, from its `202` until
+the first completed model round reports `usage`, or until a pre-usage guard or
+request failure returns it to waiting. The flag clears before that `usage` or
+`error` event is emitted. The key is omitted otherwise, including idle waiting
+and ticked chats, disk restoration and `review_snapshot` at its default.
+
 ## 4. The run folder
 
 `GET /reviews/{run_id}` → `200` with `review_snapshot(load_session(...), load_package(...).package,

@@ -1364,6 +1364,7 @@ class ChatServer:
             usage=run.usage_ledger,
             send=run.send_input() if run.awaiting_send else None,
             chat_state=chat.state.value,
+            send_in_flight=run._send_in_flight,
             last_seq=run.sink.seq,
         )
         return JSONResponse(to_jsonable_python(body))

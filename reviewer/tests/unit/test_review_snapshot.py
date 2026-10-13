@@ -201,3 +201,20 @@ def test_two_calls_give_the_same_bytes_and_mutate_nothing(
     assert as_bytes(first) == as_bytes(second)
     assert session.model_dump_json() == session_before
     assert package.model_dump_json() == package_before
+
+
+@pytest.mark.parametrize("in_flight", [False, True])
+def test_send_in_flight_is_additive_only_when_true_and_default_keeps_old_bytes(
+    session: ReviewSession, package: EvidencePackage, in_flight: bool
+) -> None:
+    before = session.model_dump(mode="json")
+    default = review_snapshot(session, package, run_id=RUN_ID)
+    explicit = review_snapshot(session, package, run_id=RUN_ID, send_in_flight=in_flight)
+
+    assert "send_in_flight" not in default
+    if in_flight:
+        assert explicit.pop("send_in_flight") is True
+    else:
+        assert "send_in_flight" not in explicit
+    assert as_bytes(explicit) == as_bytes(default)
+    assert session.model_dump(mode="json") == before
