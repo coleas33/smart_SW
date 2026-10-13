@@ -967,3 +967,161 @@ def test_two_waiting_reviews_send_independently_without_rebuilding_the_other(
         owner.chats[UUID(chat_id)].run.session.model_status.state == "sent"
         for chat_id in (first, second)
     )
+
+
+@pytest.mark.parametrize(
+    "stop,own_error", [(False, False), (True, False), (False, True)]
+)
+def test_send_guard_settles_waiting_releases_pipe_and_clears_failed_build_stop(
+    pipe_app: Any,
+    pipe_client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    monkeypatch: pytest.MonkeyPatch,
+    stop: bool,
+    own_error: bool,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from swreview.agent.providers.fake import ScriptedTurn
+
+    folder = run_root / "FICT-guard-pipe"
+    started = pipe_review(pipe_client, folder)
+    assert started.status_code == 201, started.text
+    assert provider_control.built == []
+    chat_id = started.json()["chat_id"]
+    held = pipe_app.state.server.chats[UUID(chat_id)]
+    run = held.run
+    transport = pipe_app.state.pipe_transports[-1]
+    raw = run.session_path.read_bytes()
+    marker = run.sink.seq
+    entered, release = threading.Event(), threading.Event()
+    emit = run.sink.emit
+
+    def factory(settings: Any) -> Any:
+        run.context.bridge.ping()
+        entered.set()
+        assert release.wait(chat.TIMEOUT_S)
+        raise RuntimeError("FICT failed build")
+
+    def event(kind: Any, body: Any) -> Any:
+        if kind == "error":
+            assert run.awaiting_send and not run._send_in_flight
+            assert run._send_error.reason == "FICT failed build"
+            if own_error:
+                raise OSError("FICT error log refused")
+        return emit(kind, body)
+
+    try:
+        with monkeypatch.context() as patch:
+            patch.setattr(pipe_app.state.server, "provider_factory", factory)
+            patch.setattr(run.sink, "emit", event)
+            assert (
+                pipe_client.post(f"/sessions/{chat_id}/send", json={}).status_code
+                == 202
+            )
+            assert entered.wait(chat.TIMEOUT_S)
+            assert transport.open_pipes == 1
+            if stop:
+                old_events = run.events_path.read_bytes()
+                assert (
+                    pipe_client.post(f"/sessions/{chat_id}/stop", json={}).status_code
+                    == 202
+                )
+                assert run.events_path.read_bytes() == old_events
+                assert held.stop_requested.is_set()
+            release.set()
+            assert chat.settle(pipe_client, chat_id) == "awaiting_send"
+        assert (
+            transport.open_pipes == 0
+            and run.context.bridge is pipe_app.state.pipe_clients[-1]
+        )
+        assert run.session_path.read_bytes() == raw
+        assert not held.stop_requested.is_set() and not run._send_in_flight
+        tail = [event for event in replay_events(run.events_path) if event.seq > marker]
+        assert [event.type for event in tail] == ([] if own_error else ["error"])
+        if own_error:
+            assert "FICT error log refused" in caplog.text
+        summary = pipe_client.get(f"/sessions/{chat_id}/attention").json()["summary"]
+        from swreview.report.summary import load_words
+
+        error = run._send_error
+        assert summary["send"]["failure"] == load_words().send.not_started.format(
+            reason=error.reason, time=error.at.strftime("%H:%M")
+        )
+        provider = RecordingProvider(
+            [
+                ScriptedTurn(
+                    text="FICT retry", tool_calls=(chat.call("get_review_checklist"),)
+                )
+            ],
+            explanation_script=[ScriptedTurn(text="FICT explanation")],
+            clock=lambda: 0.0,
+        )
+        monkeypatch.setattr(
+            pipe_app.state.server, "provider_factory", lambda settings: provider
+        )
+        assert pipe_client.post(f"/sessions/{chat_id}/send", json={}).status_code == 202
+        assert chat.settle(pipe_client, chat_id) in {"waiting_engineer", "ended"}
+        assert held.run.session.model_status.state == "sent"
+        assert not held.stop_requested.is_set()
+        reasons = [
+            event.body["reason"]
+            for event in replay_events(run.events_path)
+            if event.type == "turn.ended"
+        ]
+        assert reasons == ["end"]
+        assert sum(entry.presentation for entry in provider.log) == 1
+    finally:
+        release.set()
+
+
+@pytest.mark.parametrize("after_usage", [False, True])
+def test_request_failure_settles_waiting_before_usage_and_failed_after_usage(
+    app: Any,
+    client: TestClient,
+    run_dir: Path,
+    provider_control: chat.ProviderControl,
+    monkeypatch: pytest.MonkeyPatch,
+    after_usage: bool,
+) -> None:
+    from swreview.agent.providers import usage_body
+    from swreview.agent.providers.fake import SYNTHETIC_USAGE
+
+    chat_id = waiting_chat(client, run_dir)
+    assert provider_control.built == []
+    held = app.state.server.chats[UUID(chat_id)]
+    provider = RecordingProvider((), clock=lambda: 0.0)
+
+    def request(**kwargs: Any) -> Any:
+        kwargs["on_event"]("text.delta", {"text": "FICT incomplete stream"})
+        if after_usage:
+            kwargs["on_event"](
+                "usage",
+                usage_body(
+                    SYNTHETIC_USAGE,
+                    round_index=0,
+                    provider=provider.name,
+                    model=provider.model,
+                ),
+            )
+        raise RuntimeError("FICT first request")
+
+    monkeypatch.setattr(provider._inner, "run", request)
+    monkeypatch.setattr(app.state.server, "provider_factory", lambda settings: provider)
+    assert client.post(f"/sessions/{chat_id}/send", json={}).status_code == 202
+    assert chat.settle(client, chat_id) == (
+        "failed" if after_usage else "awaiting_send"
+    )
+    assert len(provider.log) == 1
+    summary = client.get(f"/sessions/{chat_id}/attention").json()["summary"]
+    if after_usage:
+        assert "send" not in summary
+    else:
+        from swreview.report.summary import load_words
+
+        error = held.run.session.model_status.failures[-1]
+        assert summary["send"]["failure"] == load_words().send.failed.format(
+            reason=error.reason, time=error.at.strftime("%H:%M")
+        )
+        assert isinstance(held.run.provider, DeferredProvider)
+    assert not held.run._send_in_flight and not held.stop_requested.is_set()

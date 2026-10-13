@@ -175,4 +175,13 @@ submission have no intervening await on the event loop. The adapter factory and 
 on that chat's single worker, so another Send or answer encounters running. The first usage
 marks the persisted review sent; a Stop during a successful held build reaches the ordinary
 tool-boundary stop. Preparation guards and first-request rollback are specified by feature015
-`contracts/review-flow.md` section6 and land in T066; they are not a new refusal after202.
+`contracts/review-flow.md` section 6 and implemented by T066; they are not a new refusal after 202.
+
+
+Feature 015 T066 completes the Send guard: the rollback model-status snapshot is taken before
+the factory; pre-request failure restores it in memory without saving, clears the in-flight
+marker before its error, and returns to awaiting_send. A first request failure before any usage
+replaces this attempt's Interrupted entry with its redacted failure, empties history and restores
+the DeferredProvider before the error/turn-ended/finalization sequence. Existing earlier failure
+history remains. A completed round retains today's fatal-error behavior. Settling awaiting_send
+releases the retained bridge transport; the worker finally clears Stop after success or failure.
