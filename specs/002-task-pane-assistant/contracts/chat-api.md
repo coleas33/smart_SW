@@ -162,3 +162,17 @@ A running turn owns process state that is not on disk, so:
   `turn.ended {reason: "error"}` when a turn was mid-flight, then `session.ended` with an
   `ended_at`, and saves `session.json`. A session is never left without an ended time
   (FR-008), including the provider-failure path that raises out of the runner.
+
+
+## Feature 015 Send route (T061/T064, 2026-10-12)
+
+`POST /sessions/{chat_id}/send` accepts an empty body (other keys ignored) and returns 202
+with the running chat view. It refuses, in order: UnknownChat (404), SessionFailed,
+TurnRunning, NotWaiting, NoCredential (each 409). The last checks the existing settings
+resolver's usable credential, including scripted and Gemini enterprise configurations.
+Refusals change nothing. Validation, awaiting_send -> running, the in-flight flag and worker
+submission have no intervening await on the event loop. The adapter factory and Send execute
+on that chat's single worker, so another Send or answer encounters running. The first usage
+marks the persisted review sent; a Stop during a successful held build reaches the ordinary
+tool-boundary stop. Preparation guards and first-request rollback are specified by feature015
+`contracts/review-flow.md` section6 and land in T066; they are not a new refusal after202.

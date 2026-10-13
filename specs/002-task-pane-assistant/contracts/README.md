@@ -41,3 +41,8 @@ control.
 Path arguments: every path a caller supplies (`run_dir` in `chat-api.md`, any path reaching
 a host-side `ShellExecute`) is canonicalized and must resolve to a descendant of the
 configured `run_root` (or the log folder); UNC and device paths are refused.
+
+*Feature 015 T064 landed 2026-10-12:* `chat-events.schema.json` includes the additive
+`session.sent` event body `{provider, model, effort_mapping, estimate}`. It precedes the
+attempt's interrupted pre-write; its live words say Sending, not that a round completed.
+The first usage writes the sent model-status record. Ticked reviews emit no new event.

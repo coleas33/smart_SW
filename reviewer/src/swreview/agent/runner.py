@@ -611,6 +611,18 @@ def closeout_item(review: ReviewSession, package: EvidencePackage) -> CoverageIt
     )
 
 
+def withdraw_finalization(review: ReviewSession, written: list[CoverageItem]) -> None:
+    """Withdraw only the rows this run's prior finalization appended, by identity."""
+    review.coverage.unresolved[:] = [
+        item for item in review.coverage.unresolved if all(item is not stale for stale in written)
+    ]
+    review.coverage.checked[:] = [
+        item for item in review.coverage.checked if all(item is not stale for stale in written)
+    ]
+    written.clear()
+
+
+
 def finalize_session(
     context: ToolContext,
     started: datetime,
@@ -635,13 +647,7 @@ def finalize_session(
     """
     review = context.session
     previous = written if written is not None else []
-    review.coverage.unresolved[:] = [
-        item for item in review.coverage.unresolved if all(item is not stale for stale in previous)
-    ]
-    review.coverage.checked[:] = [
-        item for item in review.coverage.checked if all(item is not stale for stale in previous)
-    ]
-    previous.clear()
+    withdraw_finalization(review, previous)
 
     # Feature 013 (`contracts/tokens.md` section 1): the close-out is code's, written first so
     # the item is closed before the open items are counted, and rebuilt like every row here.
@@ -699,7 +705,7 @@ def finalize_session(
     status = review.model_status
     ended = events.local_now() if status is not None else datetime.now(UTC)
     if status is not None:
-        if review.ended_at is None:
+        if review.ended_at is None and status.state == "not_sent":
             status.checked_at = ended
         runtime = (status.checked_at - started).total_seconds() / 60.0
         if status.state == "sent" and status.sent_at is not None:
@@ -709,6 +715,9 @@ def finalize_session(
     review.ended_at = ended
     review.timing = review.timing.replace(unattended_runtime_minutes=runtime)
     return review
+
+
+INTERRUPTED_SEND = "the backend stopped before the model answered"
 
 
 # --- lever 7: the coverage-driven stop ---------------------------------------------------
@@ -1146,6 +1155,9 @@ class ReviewRun:
         check counts in its answer turn and a stopped turn's steps roll into the next answer."""
         self._send_cache: SendCache | None = None
         self._send_error: SendFailure | None = None
+        self._send_in_flight = False
+        self._sent_at: datetime | None = None
+        self._interrupted_send: SendFailure | None = None
         self._opening_changed = False
         self._answered = False
         """Whether the turn running now has emitted a `text.done`."""
@@ -1373,6 +1385,43 @@ class ReviewRun:
             )
         return stale
 
+    def attach_provider(self, provider: AgentProvider) -> None:
+        """Configure an adapter before installing it, keeping the existing step offsets."""
+        configure_provider(provider, self.session)
+        if self.session.steps:
+            provider.start_steps_at(len(self.session.steps))
+
+    def send(self, build_adapter: Callable[[], AgentProvider]) -> ReviewSession:
+        """Prepare the adapter without writes, then record and play the cached opening."""
+        self._send_in_flight = True
+        self._send_error = None
+        adapter = build_adapter()
+        self.attach_provider(adapter)
+        cache = self._send_cache
+        if cache is None:
+            raise ValueError("Send needs the waiting run's prepared cache")
+        body = {
+            "provider": adapter.name,
+            "model": adapter.model,
+            "effort_mapping": adapter.effort_mapping(self.effort).model_dump(mode="json"),
+            "estimate": cache.estimate.model_dump(mode="json"),
+        }
+        self.sink.emit("session.sent", body)
+        status = self.session.model_status
+        if status is None:
+            raise ValueError("Send needs a waiting model status")
+        self._interrupted_send = SendFailure(
+            at=events.local_now(), error_class="Interrupted", reason=INTERRUPTED_SEND
+        )
+        status.state = "send_failed"
+        status.failures.append(self._interrupted_send)
+        save_session(self.session, self.session_path)
+        withdraw_finalization(self.session, self._finalized)
+        self.provider = adapter
+        self.awaiting_send = False
+        self._sent_at = events.local_now()
+        return self._say(cache.opening)
+
     def opening_at_send(self) -> str:
         """The opening frozen during setup; waiting answers add their branch in T086."""
         return self.opening_message
@@ -1574,6 +1623,18 @@ class ReviewRun:
         model's text. Every other event reaches the sink unchanged, and the explanation pass,
         which never calls this, gets no basis.
         """
+        if event_type == "usage" and self._send_in_flight:
+            status = self.session.model_status
+            assert status is not None and self._send_cache is not None
+            status.state = "sent"
+            status.sent_at = self._sent_at
+            status.estimate = self._send_cache.estimate
+            status.opening_finding_ids = list(self._send_cache.named_ids)
+            status.failures = [
+                failure for failure in status.failures if failure is not self._interrupted_send
+            ]
+            self._send_in_flight = False
+            save_session(self.session, self.session_path)
         if event_type == "text.done":
             steps = self.session.steps[self._basis_from :]
             body = {**body, "basis": answer_basis(steps, self.context.ir, load_words())}

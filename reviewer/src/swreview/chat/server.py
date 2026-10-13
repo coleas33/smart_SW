@@ -300,6 +300,16 @@ class RunDirInUse(ChatError):
     error_class = "RunDirInUse"
 
 
+class NotWaiting(ChatError):
+    status = 409
+    error_class = "NotWaiting"
+
+
+class NoCredential(ChatError):
+    status = 409
+    error_class = "NoCredential"
+
+
 class NotSent(ChatError):
     """A follow-up needs the opening request, which an unsent review has not made."""
 
@@ -1395,6 +1405,23 @@ class ChatServer:
 
         return EventSourceResponse(stream())
 
+    async def send_review(self, request: Request) -> Response:
+        """Reserve a waiting review on the event loop; build and send on its own worker."""
+        chat = self._chat(request)
+        self._require_idle(chat)
+        run = self._run_of(chat)
+        if not run.awaiting_send:
+            raise NotWaiting("this review is not waiting for Send")
+        settings = self._settings(
+            {"provider": chat.provider, "model": chat.model, "effort": chat.effort}
+        )
+        if not settings.has_credential:
+            raise NoCredential("this review needs a usable model credential before Send")
+        chat.to(ChatState.RUNNING)
+        run._send_in_flight = True
+        self._submit(chat, partial(run.send, partial(self.provider_factory, settings)))
+        return JSONResponse(chat.public(), status_code=202)
+
     async def post_message(self, request: Request) -> Response:
         chat = self._chat(request)
         body = await self._json(request)
@@ -2270,7 +2297,8 @@ class ChatServer:
             self._close_out(chat, exc)
             settled = ChatState.FAILED
         else:
-            settled = ChatState.WAITING_ENGINEER if chat.open_requests else ChatState.ENDED
+            settled = (ChatState.AWAITING_SEND if chat.run is not None and chat.run.awaiting_send
+                       else ChatState.WAITING_ENGINEER if chat.open_requests else ChatState.ENDED)
         finally:
             chat.stop_requested.clear()
             # Keep the folder claimed until the report and attention record have finished
@@ -2509,6 +2537,7 @@ def create_app(
         Route("/sessions", server.create_session, methods=["POST"]),
         Route("/sessions/{chat_id}", server.get_session, methods=["GET"]),
         Route("/sessions/{chat_id}/events", server.events, methods=["GET"]),
+        Route("/sessions/{chat_id}/send", server.send_review, methods=["POST"]),
         Route("/sessions/{chat_id}/messages", server.post_message, methods=["POST"]),
         Route(
             "/sessions/{chat_id}/evidence/{request_id}",
