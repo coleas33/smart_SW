@@ -461,3 +461,26 @@ def test_an_evidence_request_without_the_short_form_still_validates() -> None:
 )
 def test_a_short_form_past_its_limits_fails_the_contract(short_form: dict[str, Any]) -> None:
     assert not contract_validator(EVENTS_CONTRACT).is_valid(evidence_event(**short_form))
+
+
+# Feature 015 T034: only unticked starts add the optional field.
+@pytest.mark.parametrize(
+    "value,valid", [(None, True), (False, True), (True, False), ("false", False)]
+)
+def test_session_started_send_when_checked_is_false_when_present(value: Any, valid: bool) -> None:
+    event = {
+        "seq": 1, "at": "2026-10-08T09:14:00+05:30", "type": "session.started",
+        "body": {
+            "session_id": "aaaaaaaa-1234-4234-8234-123456789abc",
+            "package_id": "bbbbbbbb-1234-4234-8234-123456789abc",
+            "provider": "fake", "model": "fake-1",
+            "effort_mapping": {
+                "requested": "high", "provider_param": "effort", "provider_value": "high",
+            },
+        },
+    }
+    if value is not None:
+        event["body"]["send_when_checked"] = value
+    assert contract_validator(EVENTS_CONTRACT).is_valid(event) is valid
+    event["body"]["FICT_unknown_015_field"] = False
+    assert not contract_validator(EVENTS_CONTRACT).is_valid(event)

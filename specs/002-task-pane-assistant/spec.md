@@ -113,7 +113,7 @@ Captures, measurements, interference runs, and Show in SOLIDWORKS requested by t
 - **FR-003**: Each finding MUST be shown with its status, severity, title, affected components or drawing locations, and a Show in SOLIDWORKS action; expanding the card MUST reveal the full finding fields defined in feature 001.
 - **FR-004**: The pane MUST let the engineer record a disposition (accepted, rejected, deferred) with a note on any finding, and MUST persist it to the session file and re-render the report.
 - **FR-005**: The pane MUST let the engineer answer an open evidence request in the chat and MUST resume the session with that answer.
-- **FR-006**: The pane MUST accept follow-up messages in an existing session and MUST append the resulting steps and findings to the same session file.
+- **FR-006**: The pane MUST accept follow-up messages in an existing session after it has been sent to the model and MUST append the resulting steps and findings to the same session file. While a review waits for Send, the backend MUST refuse a follow-up with `409 NotSent` without changing the review (feature 015 T041).
 - **FR-007**: The pane MUST extract the open document into the run folder before starting a review and MUST refuse to start when no document is open.
 - **FR-008**: The pane MUST show every error with its class and a next action (retry, open settings, view log) and MUST never leave a session without an ended time.
 

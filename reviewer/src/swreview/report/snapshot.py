@@ -32,8 +32,9 @@ from swreview.report.unexamined import not_examined
 if TYPE_CHECKING:  # pragma: no cover - imported for annotations only
     from swreview.agent.events import UsageLedger
     from swreview.report.session import ReviewSession
+    from swreview.report.summary import SendInput
 
-__all__ = ["review_snapshot"]
+__all__ = ["review_snapshot", "root_document"]
 
 
 def review_snapshot(
@@ -42,6 +43,7 @@ def review_snapshot(
     *,
     run_id: str,
     usage: UsageLedger | None = None,
+    send: SendInput | None = None,
     chat_state: str | None = None,
     last_seq: int | None = None,
     read_only_reason: str | None = None,
@@ -63,7 +65,7 @@ def review_snapshot(
         "read_only_reason": read_only_reason,
         "chat_state": chat_state,
         "last_seq": last_seq,
-        "document": _root_document(package),
+        "document": root_document(package),
         "findings": [pane_finding(finding, names) for finding in session.findings],
         "evidence_requests": [request.pane_body() for request in session.evidence_requests],
         "coverage": [
@@ -71,12 +73,12 @@ def review_snapshot(
             for bucket in COVERAGE_BUCKETS
             for item in getattr(session.coverage, bucket)
         ],
-        "ranking": to_jsonable_python(review_ranking(session, package, usage=usage)),
+        "ranking": to_jsonable_python(review_ranking(session, package, usage=usage, send=send)),
         "not_examined": None if block is None else block.model_dump(mode="json"),
     }
 
 
-def _root_document(package: EvidencePackage) -> dict[str, str] | None:
+def root_document(package: EvidencePackage) -> dict[str, str] | None:
     """The reviewed document's `{path, configuration}`, the shape `review.started` names."""
     root = next(
         (

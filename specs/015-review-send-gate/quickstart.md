@@ -285,3 +285,9 @@ On the licensed seat, with the build of this feature and the owner's key stored:
   SHA256-equal to held bytes. Both frozen characterizations remain unchanged. The earlier
   combined run's stale renderer/words guards and their corrections are recorded in
   `review-2026-10-12.md`; it is not counted as green.
+
+- **US1 backend checkpoint, 2026-10-12 (T034–T047; T057 pending):** combined candidate
+  15,848 Python tests passed, 5 skipped, 7 deselected in 373.62 s; Ruff clean;
+  Release zero warnings/errors; 9,060 extractor and 2,138 add-in tests passed, none
+  skipped. Actual owner-mapped input-seeded regeneration left the literal replay diff
+  clean and all nine raw fixture files unchanged; both frozen characterizations are unchanged.

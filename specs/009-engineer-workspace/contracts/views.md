@@ -49,6 +49,13 @@ class="type-row">` per row, a group's goal lines after its rows, the checked fol
 `#findings`, the holding list. The summary's goal lines live under their groups. Collapse all
 shuts every row and every card's fold, and leaves the groups as they are.
 
+*Feature 015 amendment landed 2026-10-12 (T044–T045):* the Send block immediately after
+`#summary` is another exception to the Results view's token-count rule: its backend
+`send.text` names the first request's counted input tokens, with no encoding name. It
+prints an unknown-count sentence when no number is available and calls a Gemini count
+approximate. The page reads the count and sentence; it computes neither (015
+`contracts/pane.md` section 3 and `contracts/estimate.md`).
+
 ## 3. The status line
 
 `#results-state` reads, from page state alone:
@@ -57,6 +64,7 @@ shuts every row and every card's fold, and leaves the groups as they are.
 |---|---|
 | a turn is running and the stream is live | "The review is running." |
 | a reconnect is pending | "Reconnecting to the review." |
+| no turn running, a review waiting for Send (before open questions) | "Checked by code. Not sent to the model." |
 | no turn running, open questions in the summary | "Waiting for your answers." |
 | no turn running, a chat shown | "The review has finished." |
 | no chat | nothing (the line is hidden) |
