@@ -1004,6 +1004,14 @@ class RolesRegrade:
     unmatched: tuple[tuple[CoverageBucket, CoverageItem], ...] = ()
 
 
+@dataclass(frozen=True)
+class AppliedAnswers:
+    """Drawing outcomes and bought-part withdrawals from applying an answer batch."""
+
+    read: tuple[ConfirmedRead, ...]
+    withdrawn_by_answer: tuple[str, ...]
+
+
 def unmatched_rows(
     answer: part_roles.RolesAnswer,
 ) -> tuple[tuple[CoverageBucket, CoverageItem], ...]:
@@ -1221,6 +1229,30 @@ class ReviewRun:
         resumed turn re-runs replaces its earlier verdict rather than adding a second one
         (rule 3).
         """
+        applied = self._apply_answers(answers)
+        message = answers_message(answers)
+        if applied.withdrawn_by_answer:
+            message += "\n" + REGRADED_LINE.format(ids=", ".join(applied.withdrawn_by_answer))
+        outcomes = drawing_outcome_lines(applied.read)
+        if outcomes:
+            message = "\n".join(outcomes) + "\n\n" + message
+        # Taken only after `_restate` returns, so a withdrawal can never shift a restated
+        # finding into the earlier part, where it would stay as a duplicate under a new id.
+        before = len(self.session.findings)
+        self._ask(message)
+        for finding in _reconcile_reruns(self.session, before):
+            self.sink.emit("finding", self.context.finding_body(finding))
+        return self.finalize()
+
+    def _apply_answers(
+        self, answers: Sequence[tuple[str, str]], *, read_drawings: bool = True
+    ) -> AppliedAnswers:
+        """Validate and apply answers by code, before the caller chooses its next turn.
+
+        Confirmed drawings are read before the part-roles regrade, then one restatement
+        reconciles all affected checks. A restored review's carry can skip drawing reads
+        while using the same validation, answer events and regrade.
+        """
         if not answers:
             raise ValueError("an answer batch needs at least one answer")
         repeated = repeated_request_id(answers)
@@ -1242,10 +1274,12 @@ class ReviewRun:
         # parts again. (3) Then one `_restate` restates the union of what changed, each tool
         # once, and reconciles its own calls. Every other answer does nothing here.
         package = self.context.package
-        read = read_confirmed_candidates(self.context, requests, self.out_dir)
+        read = (
+            read_confirmed_candidates(self.context, requests, self.out_dir)
+            if read_drawings else []
+        )
         # Feature 013 (`contracts/drawing-capability.md` section 6): each file's outcome,
         # refusals included, reaches the model - one line per file the read asked for.
-        outcomes = drawing_outcome_lines(read)
         reasons: dict[str, str] = {}
         if self.context.package is not package:
             reasons[DRAWINGS_TOOL] = DRAWING_WITHDRAWAL
@@ -1255,23 +1289,13 @@ class ReviewRun:
             bought = BOUGHT_WITHDRAWAL.format(request_id=regrade.request_id)
             reasons = {tool: reasons.get(tool, bought) for tool in ROLES_RESTATED}
         withdrawn = self._restate(reasons)
-        message = answers_message(answers)
+        by_answer: list[str] = []
         if regrade is not None:
             by_answer = [finding_id for finding_id, reason in withdrawn if reason == bought]
             record_part_roles_rows(self.context, withdrawn=by_answer)
             for bucket, item in regrade.unmatched:
                 self.context.record_coverage(bucket, item)
-            if by_answer:
-                message += "\n" + REGRADED_LINE.format(ids=", ".join(by_answer))
-        if outcomes:
-            message = "\n".join(outcomes) + "\n\n" + message
-        # Taken only after `_restate` returns, so a withdrawal can never shift a restated
-        # finding into the earlier part, where it would stay as a duplicate under a new id.
-        before = len(self.session.findings)
-        self._ask(message)
-        for finding in _reconcile_reruns(self.session, before):
-            self.sink.emit("finding", self.context.finding_body(finding))
-        return self.finalize()
+        return AppliedAnswers(read=tuple(read), withdrawn_by_answer=tuple(by_answer))
 
     def _regrade_roles(self, answered: Sequence[EvidenceRequest]) -> RolesRegrade | None:
         """Classify the parts again when `answered` holds the part-roles question (013).
