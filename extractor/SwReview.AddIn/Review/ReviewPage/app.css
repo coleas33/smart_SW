@@ -1652,3 +1652,14 @@ body.view-transcript #results {
   font: inherit;
   font-size: var(--text-small);
 }
+
+.send-panel {
+  padding: 8px 12px;
+  border-top: 1px solid var(--hair);
+}
+
+.send-text {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: var(--text-small);
+}

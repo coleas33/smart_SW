@@ -71,6 +71,8 @@ FILES = ("package.json", "session.json", "events.jsonl")
 PANE = "pane"
 """The pane fixture's label among the committed fixtures the string checks read."""
 PANE_GENERATOR = FIXTURES.parent / "pane" / "generate_pane_fixture.py"
+WAITING_NAMES = ("waiting", "waiting-big-assembly")
+WAITING_GENERATOR = FIXTURES.parent / "pane" / "generate_waiting_fixtures.py"
 FORBIDDEN_WORDS = (
     "_LIBRARY",
     "LIBRARY",
@@ -103,6 +105,8 @@ def committed_files(name: str) -> tuple[Path, ...]:
     its generator writes it (`TARGET`), so the path is not spelled a second time here."""
     if name == PANE:
         return (Path(load_generator(PANE_GENERATOR).TARGET),)
+    if name in WAITING_NAMES:
+        return (Path(load_generator(WAITING_GENERATOR).TARGETS[name]),)
     return tuple(FIXTURES / name / file for file in FILES)
 
 
@@ -128,7 +132,7 @@ def fixture(request: pytest.FixtureRequest) -> Path:
     return FIXTURES / request.param
 
 
-@pytest.fixture(params=(*NAMES, PANE))
+@pytest.fixture(params=(*NAMES, PANE, *WAITING_NAMES))
 def files(request: pytest.FixtureRequest) -> tuple[Path, ...]:
     """Every committed fixture the string checks read: the three replay folders and the pane."""
     found = committed_files(request.param)

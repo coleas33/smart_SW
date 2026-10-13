@@ -72,6 +72,7 @@ from collections.abc import Callable, Iterable, Iterator, Mapping
 from pathlib import Path
 from typing import Any
 
+from swreview.checks.drawing_context import CANDIDATES_WHY
 from swreview.checks.hole_alignment import EXCLUDED_EFFECTS as HOLE_EXCLUDED_EFFECTS
 from swreview.checks.standards.profile import load_profile
 
@@ -273,13 +274,24 @@ _CATALOGUE_NUMBER = re.compile(
 )
 _BETWEEN_CODE_AND_NUMBER = re.compile(r"[ ,_\-]+")
 
-REVIEWER_OWN_TEXT: tuple[str, ...] = tuple(HOLE_EXCLUDED_EFFECTS)
+REVIEWER_OWN_TEXT: tuple[str, ...] = (
+    *HOLE_EXCLUDED_EFFECTS,
+    CANDIDATES_WHY,
+    "no interface was evaluated: `check_fit` needs two drawing dimensions identified as "
+    "the bore and the shaft of one interface, which nothing in the package says.",
+    "its own, and the package does not say whether such a face is a bore or a boss, "
+    "so none is used as a joint member",
+)
 """Sentences the reviewer itself writes into findings that carry a word the leak checks deny.
 
 The hole check names "material condition modifiers (MMC, LMC)" among what it did not consider:
 maximum material condition, the product's own words, not a supplier's code. Read from the
-product rather than retyped, so a change there is a change here; `without_reviewer_text`
-removes exactly these sentences before a fixture is checked, and nothing else.
+product rather than retyped, so a change there is a change here. The drawing-candidate reason
+is also read from its public constant. The other two exact public clauses are the no-interface
+reason in `prerun.not_evaluated_families` and the joint-member reason in
+`checks.joints._free_faces`.
+Waiting fixture tests exercise those actual reasons and prove changed or unrelated text is
+still scanned. `without_reviewer_text` removes exactly these clauses, and nothing else.
 """
 
 DENYLIST_FOLDER_PREFIX = "folder: "

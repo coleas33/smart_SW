@@ -1157,6 +1157,19 @@
     return group;
   }
 
+  /** The backend owns every word and count of the waiting review's Send block. */
+  function sendBlock(send, extras) {
+    var block = el('div');
+    var action = button('Send to model', 'send', 'primary');
+    action.disabled = !!(extras && extras.disabled);
+    block.appendChild(action);
+    block.appendChild(el('p', 'send-text', String(send.text || '')));
+    if (send.failure) {
+      block.appendChild(el('p', 'note bad', String(send.failure)));
+    }
+    return block;
+  }
+
   // ---- the running usage line (feature 005 T016a) --------------------------------------
 
   /**
@@ -1244,6 +1257,7 @@
     typeGroups: typeGroups,
     findingExplanation: findingExplanation,
     summaryBlock: summaryBlock,
+    sendBlock: sendBlock,
     contactList: contactList,
     notExaminedHeadline: notExaminedHeadline,
     reviewChips: reviewChips,

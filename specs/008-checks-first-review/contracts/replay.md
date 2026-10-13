@@ -568,6 +568,15 @@ and summary match (`same_summary`) and its size sits within the framing noise of
 growth; the generator's own leak check polices every replaced token of three characters or more
 with a letter, and every replaced number of five digits or more.
 
+*Amended 2026-10-12 by feature 015 T052–T053:* the same string checks also read
+`review-waiting.json` and `review-waiting-big-assembly.json`, generated from fresh unticked
+reviews. `scramble.REVIEWER_OWN_TEXT` also removes the exact public drawing-candidate reason
+(`drawing_context.CANDIDATES_WHY`), the no-interface fit reason in `prerun.not_evaluated_families`,
+and the fixed joint-member clause in `checks.joints._free_faces`. These are the reviewer's
+own words. Tests use the actual snapshot reasons and keep changed clauses and unrelated
+words subject to the unchanged denylist. No individual word or path is exempted, and the
+snapshots are stored without text replacement.
+
 The committed hygiene test checks every fixture file: document and vault paths under the
 fictional root; no drive path outside it, no email, no http(s) URL, no copyright sign; and, when
 the denylist file exists, none of its lines (the test says why it skipped that part when the file

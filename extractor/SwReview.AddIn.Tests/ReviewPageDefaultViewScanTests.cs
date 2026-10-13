@@ -58,9 +58,17 @@ public sealed class ReviewPageDefaultViewScanTests
         string[] tokens =
         {
             "checked_within_scope", "out_of_scope", "not_reached", "not_applicable", "within_scope", "waiting_engineer",
+            "awaiting_send", "not_sent", "send_failed",
         };
 
         AssertNoneVisible(tokens, text);
+        WaitingReviewFixture waiting = WaitingReviewFixture.Read();
+        ReviewPageDriver.Run(waiting.Configure, async driver =>
+        {
+            await waiting.Start(driver);
+            string visible = (await driver.Read("return JSON.stringify({ok:true,text:h.visibleText(document.getElementById('results'))});")).GetProperty("text").GetString()!;
+            AssertNoneVisible(tokens, visible);
+        });
     }
 
     [Fact]

@@ -1211,6 +1211,25 @@ box inside the viewport, `:37-53`). VERIFIED (2026-10-09) that `.check` has `mar
 review) that `--text-small` is 12 px and `--line` 1.45 (`web/shared/tokens.css:51`, `:55`): the box
 line is about 21 px, which the measured slack holds with room; no rule is trimmed for it.
 
+**T056 waiting measurement, 2026-10-12.** The real backend-generated
+`review-waiting-big-assembly.json` preview from T053, with 13,388 first-request tokens and
+no code questions, was played into the implemented page in offscreen WebView2. Its raw SHA-256
+was `e59826c40117bf139eeb04126453327d8cd3359b1b6f35dec8d65bcf9a9f0eee`.
+T054 passed all 14 cases on the real waiting fixtures before the unchanged T056 assertions
+ran; T056 passed all four cases. No layout rule was changed to obtain this result. The
+headline, tally, not-reached line and Send to model button were all in the 300 by 600 viewport.
+
+| Viewport | Session button rows | Not-reached slack to fold | Send button slack to fold | Horizontal overflow |
+|---|---|---|---|---|
+| 260 by 600 | 3 | 164.4375 px | 118.046875 px | none |
+| 300 by 600 | 2 | 199.828125 px | 153.4375 px | none |
+| 420 by 600 | 2 | 236.71875 px | 190.328125 px | none |
+
+At 300 px the button row ended at 182.046875 px and the box began at 186.046875 px,
+directly below it. This measures the US1 waiting state; the later failed-Send and restored
+states remain their own acceptance work. Parent integration regenerates the accepted T053
+fixtures and requires raw equality with this preview before its final pane/full gate.
+
 ### R2.22 Where the words live
 
 **Decision**: every sentence the Send block, the summary and the questions panel print comes from
