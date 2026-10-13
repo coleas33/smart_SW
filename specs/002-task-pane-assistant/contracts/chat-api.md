@@ -155,7 +155,9 @@ A running turn owns process state that is not on disk, so:
 
 - `settings.save` in the pane MUST NOT restart the backend while a turn is running; the host
   refuses with `error {error_class: "TurnRunning"}` and the page offers Save again when the
-  turn ends (`pane-host-messages.md`).
+  turn ends (`pane-host-messages.md`). A review at `awaiting_send` has no running turn, so
+  Save is accepted there. A failed settings write is `SettingNotSaved`, with the stored
+  settings unchanged. The Review box saves its setting without a restart or turn check.
 - On any shutdown signal the server finalizes every live chat before exiting: it writes
   `turn.ended {reason: "error"}` when a turn was mid-flight, then `session.ended` with an
   `ended_at`, and saves `session.json`. A session is never left without an ended time

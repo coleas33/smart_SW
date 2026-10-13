@@ -291,3 +291,14 @@ On the licensed seat, with the build of this feature and the owner's key stored:
   Release zero warnings/errors; 9,060 extractor and 2,138 add-in tests passed, none
   skipped. Actual owner-mapped input-seeded regeneration left the literal replay diff
   clean and all nine raw fixture files unchanged; both frozen characterizations are unchanged.
+
+- **T057 US1 checks-and-wait checkpoint, 2026-10-12:** final combined T048–T056
+  candidate passed 15,870 Python tests, 5 skipped, 7 deselected in 380.50 s; Ruff
+  clean; Release zero warnings/errors; 9,060 extractor and 2,176 add-in tests passed,
+  none skipped. Post-gate actual owner-mapped verification completed all three unchanged
+  generators, literal replay diff clean, nine raw fixture files byte-equal. Frozen ticked
+  goldens/prefix pins and existing protected tests remain unchanged. Both actual waiting
+  fixtures match independent raw generation; the 300x600 waiting page has 153.4375 px
+  below Send and 199.828125 px below not-reached, with no overflow at 260/300/420 px.
+  Independent final review found no issue. T118 and later stories remain incomplete;
+  the displayed Send button gains its action in US2 T076. No partial-workflow main merge.

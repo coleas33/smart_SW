@@ -85,6 +85,11 @@ check hosts would honour a `run_id` the same way (their pages send none); `RunPa
 each folder's id maps, so alternating Show between a review and a check parses neither package
 again.
 
+*Amended by feature 015 T055*: a chip whose host item carries `model_status` adds " · not sent".
+The mark belongs to the host record, so it is present before a chip is chosen after a page reload.
+Clear review and Review again keep a waiting review's marked chip; choosing it reads its waiting
+snapshot, with no running turn and Stop off.
+
 ## 6. Returning to a document
 
 On `document.changed`, and after `init`: when no turn runs and no start is in flight, the shown

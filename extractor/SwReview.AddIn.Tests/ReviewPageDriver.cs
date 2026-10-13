@@ -82,6 +82,44 @@ internal sealed class ReviewPageDriver
     /// <summary>Holds the `review.start` reply back until <see cref="ReleaseReviewStart"/>: a start in flight.</summary>
     public bool HoldReviewStart { get; set; }
 
+    public object? PreparationReply { get; set; }
+
+    public async Task Reload()
+    {
+        _booted = false;
+        _readyId = null;
+        Page.Reload();
+        await BootAsync();
+    }
+
+    public bool SendWhenChecked { get; set; } = true;
+
+    public string KeySource { get; set; } = "settings";
+
+    public object? SendWhenCheckedSaveError { get; set; }
+
+    public bool HoldSendWhenCheckedSave { get; set; }
+
+    private readonly Queue<(string Id, bool Value)> _heldBoxSaves = new Queue<(string, bool)>();
+
+    private readonly Queue<(string Type, string Id, JsonElement Payload)> _heldMessages =
+        new Queue<(string, string, JsonElement)>();
+
+    public async Task ReleaseSendWhenCheckedSave(object? error = null)
+    {
+        Assert.NotEmpty(_heldBoxSaves);
+        var held = _heldBoxSaves.Dequeue();
+        AnswerBoxSave(held.Id, held.Value, error);
+        await OffscreenReviewPage.Settled(Page);
+    }
+
+    public async Task ChangeSendWhenChecked(bool value)
+    {
+        await Page.ExecuteScriptAsync("var box=document.getElementById('send-when-checked');box.checked="
+            + (value ? "true" : "false") + ";box.dispatchEvent(new Event('change'));0");
+        await OffscreenReviewPage.Settled(Page);
+    }
+
     private string? _heldStart;
 
     /// <summary>Answers a held `review.start` and lets the page react.</summary>
@@ -92,6 +130,11 @@ internal sealed class ReviewPageDriver
         string id = _heldStart!;
         _heldStart = null;
         Reply("review.started", id, ReviewStarted?.Invoke(_starts) ?? DefaultStarted(_starts));
+        while (_heldMessages.Count > 0)
+        {
+            var held = _heldMessages.Dequeue();
+            Answer(held.Type, held.Id, held.Payload);
+        }
         await OffscreenReviewPage.Settled(Page);
     }
 
@@ -420,6 +463,16 @@ var h = {
             _posted.Add(new PostedMessage(type, payload));
         }
 
+        if (_heldStart != null)
+        {
+            _heldMessages.Enqueue((type, id, payload));
+            return;
+        }
+        Answer(type, id, payload);
+    }
+
+    private void Answer(string type, string id, JsonElement payload)
+    {
         switch (type)
         {
             case "ready":
@@ -436,6 +489,11 @@ var h = {
 
             case "models.list":
                 Reply("models", id, new { provider = "openai", models = new object[0] });
+                return;
+
+            case "review.prepare":
+                Assert.NotNull(PreparationReply);
+                Reply("review.prepared", id, PreparationReply!);
                 return;
 
             case "review.start":
@@ -472,6 +530,12 @@ var h = {
                 Reply("entity.shown", id, new { ok = true, state_code = 0, message = "ok", full_path = "Pin-A-1" });
                 return;
 
+            case "send_when_checked.save":
+                bool send = payload.GetProperty("send_when_checked").GetBoolean();
+                if (HoldSendWhenCheckedSave) _heldBoxSaves.Enqueue((id, send));
+                else AnswerBoxSave(id, send, SendWhenCheckedSaveError);
+                return;
+
             case "settings.save":
                 if (SettingsSaveError != null)
                 {
@@ -487,9 +551,20 @@ var h = {
         }
     }
 
+    private void AnswerBoxSave(string id, bool value, object? error)
+    {
+        if (error != null) Reply("error", id, error);
+        else
+        {
+            SendWhenChecked = value;
+            Reply("send_when_checked.saved", id, new { send_when_checked = value });
+        }
+    }
+
     private object DefaultStarted(int press) => new Dictionary<string, object?>
     {
         { "chat_id", "chat-" + press },
+        { "send_when_checked", SendWhenChecked },
         { "run_dir", @"C:\SwReviewRuns\20260923-101500-bracket-" + press },
         { "document", Document },
     };
@@ -502,15 +577,17 @@ var h = {
         backend = new { port = 51999, origin = Origin },
         token = Token,
         settings = Settings(),
-        key_source = "settings",
+        key_source = KeySource,
         run_root = @"C:\SwReviewRuns",
         providers = new[] { "openai", "gemini" },
         document = Document,
+        review_preparation = PreparationReply != null,
     };
 
-    private static object Settings() => new
+    private object Settings() => new
     {
         version = 1,
+        send_when_checked = SendWhenChecked,
         provider = "openai",
         model = "gpt-5.6",
         effort = "high",

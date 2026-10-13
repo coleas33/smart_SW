@@ -346,6 +346,7 @@ public sealed class ReviewHostTests
 
             NewSessionRequest posted = Assert.Single(world.Backend.Created);
             Assert.Equal(expected, posted.RunDirectory);
+            Assert.Equal(ReviewMode.Send, posted.Mode);
             Assert.Equal("openai", posted.Provider);
             Assert.Equal("gpt-5.1", posted.Model);
             Assert.Equal("high", posted.Effort);
@@ -367,6 +368,186 @@ public sealed class ReviewHostTests
             // The bridge secret authorizes the in-process tool service (T047). It travels to
             // the backend and nowhere else; the page must never see it.
             world.AssertNothingPostedContains("bridge-secret-value");
+        }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ReviewStartUsesTheStoredModeAndMarksOnlyAnUntickedReview(bool send)
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Document = new PageDocument(@"C:\Fictional\FICT-assembly.SLDASM", "Default");
+            world.Settings.SendsWhenChecked = send;
+            world.Open();
+            world.Receive("review.start", "start", new { });
+            Assert.Equal(send ? ReviewMode.Send : ReviewMode.Wait, Assert.Single(world.Backend.Created).Mode);
+            Assert.Equal(send, world.Reply("review.started", "start").GetProperty("send_when_checked").GetBoolean());
+            Assert.Equal(send ? null : "not_sent", Assert.Single(world.Host.Sessions).ModelStatus);
+            world.Receive("sessions.list", "list", new { });
+            JsonElement item = Assert.Single(world.Reply("sessions", "list").GetProperty("items").EnumerateArray());
+            if (send) Assert.False(item.TryGetProperty("model_status", out _));
+            else
+            {
+                Assert.Equal("not_sent", item.GetProperty("model_status").GetString());
+                Assert.Equal("Checked 12 components by code; nothing was sent to the model.", world.LastPosted("status").GetProperty("message").GetString());
+            }
+        }
+    }
+
+    [Fact]
+    public void AWaitingReviewKeepsItsMarkWhenACheckBecomesLatestBeforeItsStatusAndListReply()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Open();
+            string reviewRun = world.TrackedRun("waiting-review");
+            world.Host.TrackSession("waiting-review", reviewRun,
+                new PageDocument(@"C:\Fictional\FICT-assembly.SLDASM", "Default"),
+                new DateTimeOffset(world.Now), "not_sent");
+            SessionRecord review = Assert.Single(world.Host.Reviews());
+            // The review is already visible to list readers before its ready/reply tail runs.
+            Assert.Equal("not_sent", review.ModelStatus);
+            SessionRecord check = world.Host.TrackCheck(world.TrackedRun("model-check"));
+            Assert.Same(check, world.Host.LatestSession);
+            world.Host.PostStatus("ready", "Checked 12 components by code; nothing was sent to the model.");
+            world.Receive("sessions.list", "after-check", new { });
+            JsonElement item = Assert.Single(world.Reply("sessions", "after-check").GetProperty("items").EnumerateArray());
+            Assert.Equal("waiting-review", item.GetProperty("chat_id").GetString());
+            Assert.Equal("not_sent", item.GetProperty("model_status").GetString());
+            Assert.Null(check.ModelStatus);
+            Assert.Same(check, world.Host.LatestSession);
+        }
+    }
+
+    /// <summary>The independent check pump can publish a new latest run while a review
+    /// starts. A waiting mark belongs to the review before any reader can see its record.</summary>
+    [Fact]
+    public void AWaitingReviewIsPublishedCompleteWhileTheCheckPumpTracksOtherRuns()
+    {
+        using (var world = new ReviewWorld())
+        using (var pumping = new ManualResetEventSlim())
+        using (var stop = new ManualResetEventSlim())
+        {
+            world.Document = new PageDocument(@"C:\Fictional\FICT-assembly.SLDASM", "Default");
+            world.Settings.SendsWhenChecked = false;
+            world.Open();
+            string run = world.TrackedRun("waiting-review");
+            string checkRun = world.TrackedRun("independent-check");
+            var checks = new List<SessionRecord>();
+            Exception? pumpFailure = null;
+            bool sawIncompleteReview = false;
+            var pump = new Thread(() =>
+            {
+                try
+                {
+                    pumping.Set();
+                    while (!stop.IsSet)
+                    {
+                        checks.Add(world.Host.TrackCheck(checkRun));
+                        SessionRecord? review = world.Host.FindSession("chat-1");
+                        if (review != null && review.ModelStatus != "not_sent") sawIncompleteReview = true;
+                    }
+                }
+                catch (Exception failure) { pumpFailure = failure; }
+            }) { IsBackground = true };
+            var create = typeof(ReviewHost).GetMethod("CreateReviewSession",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+            pump.Start();
+            try
+            {
+                Assert.True(pumping.Wait(TimeSpan.FromSeconds(5)), "the check pump did not start");
+                for (int i = 0; i < 2000; i++)
+                {
+                    create.Invoke(world.Host, new object?[] { world.Document, run, null, ReviewMode.Wait,
+                        "race-" + i, new DumpSummary(Path.Combine(run, "package.json"), 12, 0, null) });
+                }
+            }
+            finally
+            {
+                stop.Set();
+                Assert.True(pump.Join(TimeSpan.FromSeconds(5)), "the check pump did not stop");
+            }
+            Assert.Null(pumpFailure);
+            Assert.NotEmpty(checks);
+            Assert.False(sawIncompleteReview, "a waiting review was published before its not_sent mark");
+            Assert.All(checks, check => Assert.Null(check.ModelStatus));
+            Assert.Equal("not_sent", Assert.Single(world.Host.Reviews()).ModelStatus);
+        }
+    }
+
+    [Fact]
+    public void LosingTheBackendDuringAHeldExtractionEndsTheStatusInErrorAndKeepsNoReview()
+    {
+        using (var world = new ReviewWorld())
+        using (var extracting = new ManualResetEventSlim())
+        using (var release = new ManualResetEventSlim())
+        {
+            world.Document = new PageDocument(@"C:\Fictional\FICT-assembly.SLDASM", "Default");
+            world.Settings.SendsWhenChecked = false;
+            world.Dump.OnRun = () => { extracting.Set(); Assert.True(release.Wait(TimeSpan.FromSeconds(5))); };
+            world.Open();
+            Exception? startFailure = null;
+            var start = new Thread(() =>
+            {
+                try { world.Receive("review.start", "lost-backend", new { }); }
+                catch (Exception failure) { startFailure = failure; }
+            }) { IsBackground = true };
+            start.Start();
+            try
+            {
+                Assert.True(extracting.Wait(TimeSpan.FromSeconds(5)), "the extraction did not start");
+                world.Backend.Endpoint = null;
+                world.Backend.CreateFailure = new BackendRequestException("BackendUnavailable", "FICT-backend stopped", true);
+            }
+            finally
+            {
+                release.Set();
+                Assert.True(start.Join(TimeSpan.FromSeconds(5)), "the review start did not finish");
+            }
+            Assert.Null(startFailure);
+            Assert.Equal(1, world.Dump.Runs);
+            JsonElement error = world.Reply("error", "lost-backend");
+            Assert.Equal("BackendUnavailable", error.GetProperty("error_class").GetString());
+            Assert.True(error.GetProperty("retryable").GetBoolean());
+            Assert.Equal("FICT-backend stopped", error.GetProperty("message").GetString());
+            Assert.Equal("error", world.LastPosted("status").GetProperty("stage").GetString());
+            Assert.Empty(world.Host.Sessions);
+            Assert.Empty(world.AllPosted("review.started"));
+        }
+    }
+
+    [Fact]
+    public void AQueuedBoxChangeAffectsTheRetryAndKeepsTheEarlierStartMode()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Document = new PageDocument(@"C:\Fictional\FICT-assembly.SLDASM", "Default");
+            world.Open();
+            world.Receive("review.start", "first", new { });
+            world.Receive("send_when_checked.save", "box", new { send_when_checked = false });
+            world.Reply("send_when_checked.saved", "box");
+            world.Now = world.Now.AddSeconds(1);
+            world.Backend.NextChatId = "chat-2";
+            world.Receive("review.start", "retry", new { retry_of = "chat-1" });
+            Assert.Equal(new[] { ReviewMode.Send, ReviewMode.Wait }, world.Backend.Created.Select(request => request.Mode));
+            Assert.Equal("chat-1", world.Backend.Created[1].RetryOf);
+        }
+    }
+
+    [Fact]
+    public void AnUntickedStartThatTimesOutKeepsNoRecord()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Document = new PageDocument(@"C:\Fictional\FICT-assembly.SLDASM", "Default");
+            world.Settings.SendsWhenChecked = false;
+            world.Backend.CreateFailure = new BackendRequestException("BackendUnavailable", "request timed out", true);
+            world.Open();
+            world.Receive("review.start", "timeout", new { });
+            Assert.Equal("BackendUnavailable", world.Reply("error", "timeout").GetProperty("error_class").GetString());
+            Assert.Empty(world.Host.Sessions);
         }
     }
 

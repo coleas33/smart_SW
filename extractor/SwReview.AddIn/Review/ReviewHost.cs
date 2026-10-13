@@ -126,6 +126,9 @@ public sealed class SessionRecord
     /// <summary>When the review was tracked (`ReviewHostOptions.Now`); null for a check.</summary>
     public DateTimeOffset? StartedAt { get; }
 
+    /// <summary>Set while this record has not been sent to the model.</summary>
+    public string? ModelStatus { get; set; }
+
     /// <summary>
     /// Whether this run is a Model check.
     ///
@@ -375,14 +378,20 @@ public sealed class ReviewHost : IDisposable
     /// the SOLIDWORKS session, not the backend process: a settings save restarts the backend and
     /// keeps every record.
     /// </summary>
-    public void TrackSession(string chatId, string runDirectory, PageDocument? document, DateTimeOffset? startedAt)
+    public void TrackSession(string chatId, string runDirectory, PageDocument? document, DateTimeOffset? startedAt) =>
+        TrackSession(chatId, runDirectory, document, startedAt, null);
+
+    /// <summary>Publishes the review with its model mark already set. A check pump may make
+    /// another record latest immediately afterward, so metadata belongs to this record.</summary>
+    public void TrackSession(
+        string chatId, string runDirectory, PageDocument? document, DateTimeOffset? startedAt, string? modelStatus)
     {
         if (chatId == null)
         {
             throw new ArgumentNullException(nameof(chatId));
         }
 
-        var record = new SessionRecord(chatId, runDirectory, document, startedAt);
+        var record = new SessionRecord(chatId, runDirectory, document, startedAt) { ModelStatus = modelStatus };
         lock (_sessionsLock)
         {
             _sessions.RemoveAll(session => session.ChatId == chatId);
@@ -649,6 +658,10 @@ public sealed class ReviewHost : IDisposable
                 SendSettings("settings", id);
                 return;
 
+            case "send_when_checked.save":
+                SaveSendWhenChecked(id, payload);
+                return;
+
             case "settings.save":
                 Save(id, payload);
                 return;
@@ -905,9 +918,10 @@ public sealed class ReviewHost : IDisposable
             next.SetApiKey(null);
         }
 
-        next.Save(_options.SettingsPath);
-        _settings = next;
-        _settingsError = null;
+        if (!PersistSettings(next, id))
+        {
+            return;
+        }
 
         ResolvedApiKey key = next.ResolveApiKey(_options.Environment);
         string? restartFailure = null;
@@ -932,6 +946,38 @@ public sealed class ReviewHost : IDisposable
         {
             PostStatus("error", restartFailure);
         }
+    }
+
+    private void SaveSendWhenChecked(string? id, JsonElement payload)
+    {
+        bool? value = PagePayload.Flag(payload, "send_when_checked");
+        if (!value.HasValue)
+        {
+            SendError(id, "InvalidRequest", "send_when_checked must be true or false", retryable: false);
+            return;
+        }
+        UserSettings next = Clone(_settings);
+        next.SendsWhenChecked = value.Value;
+        if (PersistSettings(next, id))
+        {
+            Send("send_when_checked.saved", id, new { send_when_checked = next.SendsWhenChecked });
+        }
+    }
+
+    private bool PersistSettings(UserSettings next, string? id)
+    {
+        try
+        {
+            next.Save(_options.SettingsPath);
+        }
+        catch (Exception failure)
+        {
+            SendError(id, "SettingNotSaved", failure.Message, retryable: false);
+            return false;
+        }
+        _settings = next;
+        _settingsError = null;
+        return true;
     }
 
     private void ReportSettingsProblems(ResolvedApiKey key)
@@ -1035,8 +1081,9 @@ public sealed class ReviewHost : IDisposable
         });
     }
 
-    private static Dictionary<string, object?> ReviewItem(SessionRecord record) =>
-        new Dictionary<string, object?>
+    private static Dictionary<string, object?> ReviewItem(SessionRecord record)
+    {
+        var item = new Dictionary<string, object?>
         {
             { "chat_id", record.ChatId },
             { "run_id", record.RunId },
@@ -1048,6 +1095,9 @@ public sealed class ReviewHost : IDisposable
                 record.StartedAt?.ToString("yyyy-MM-dd'T'HH:mm:sszzz", CultureInfo.InvariantCulture)
             },
         };
+        if (record.ModelStatus != null) item["model_status"] = record.ModelStatus;
+        return item;
+    }
 
     /// <summary>
     /// `session.forget {chat_id}`: removes that review's record and answers the list without it.
@@ -1212,9 +1262,8 @@ public sealed class ReviewHost : IDisposable
         // Before the dump, whatever the preparation says: the extraction's attach reads a
         // drawing (feature 011), so the Review tab refuses one here rather than extracting it
         // as the design under review (contracts/attach.md section 3).
-        if (document.Kind == "drawing")
+        if (!CanReviewDocument(document, id))
         {
-            SendError(id, "DrawingActive", DrawingGuidance(document), retryable: true);
             return;
         }
 
@@ -1243,14 +1292,8 @@ public sealed class ReviewHost : IDisposable
             return;
         }
 
-        if (_options.Backend.Endpoint == null)
+        if (!BackendReady(id))
         {
-            SendError(
-                id,
-                "BackendUnavailable",
-                "the review backend is not running yet, so there is nowhere to send the review. "
-                + "Check the log, then press Review again.",
-                retryable: true);
             return;
         }
 
@@ -1289,9 +1332,39 @@ public sealed class ReviewHost : IDisposable
             return;
         }
 
+        CreateReviewSession(document, runDirectory, Blank(Text(payload, "retry_of")),
+            _settings.SendsWhenChecked ? ReviewMode.Send : ReviewMode.Wait, id, summary);
+    }
+
+    private bool CanReviewDocument(PageDocument document, string? id)
+    {
+        if (document.Kind != "drawing") return true;
+        SendError(id, "DrawingActive", DrawingGuidance(document), retryable: true);
+        return false;
+    }
+
+    private bool BackendReady(string? id)
+    {
+        if (_options.Backend.Endpoint != null) return true;
+        SendError(id, "BackendUnavailable",
+            "the review backend is not running yet, so there is nowhere to send the review. "
+            + "Check the log, then press Review again.", retryable: true);
+        return false;
+    }
+
+    private void CreateReviewSession(
+        PageDocument document, string runDirectory, string? retryOf, ReviewMode mode,
+        string? id, DumpSummary summary)
+    {
+        if (!CanReviewDocument(document, id))
+        {
+            return;
+        }
         ChatSessionHandle handle;
         try
         {
+            // CreateSession checks the current endpoint. If the backend stopped during the
+            // dump, its refusal follows the same error status and reply path as any request.
             handle = _options.Backend.CreateSession(new NewSessionRequest(
                 runDirectory,
                 _settings.Provider,
@@ -1301,8 +1374,8 @@ public sealed class ReviewHost : IDisposable
                 _options.Bridge,
                 // FR-028: the page's Retry on an error card starts a fresh chat that says
                 // which one it is replacing, so the pair can be read back in the run folder.
-                Blank(Text(payload, "retry_of")),
-                Blank(_settings.StandardsProfilePath)));
+                retryOf,
+                Blank(_settings.StandardsProfilePath), mode));
         }
         catch (Exception failure)
         {
@@ -1315,15 +1388,18 @@ public sealed class ReviewHost : IDisposable
 
         // The document captured before the dump, and the moment the review was tracked: what its
         // chip in the pane names (feature 009 FR-020).
-        TrackSession(handle.ChatId, runDirectory, document, new DateTimeOffset(_options.Now()));
-
-        PostStatus("ready", ReadyMessage(summary.Components, summary.Gaps, summary.Unexamined));
+        TrackSession(handle.ChatId, runDirectory, document, new DateTimeOffset(_options.Now()),
+            mode == ReviewMode.Send ? null : "not_sent");
+        PostStatus("ready", mode == ReviewMode.Send
+            ? ReadyMessage(summary.Components, summary.Gaps, summary.Unexamined)
+            : $"Checked {summary.Components} components by code; nothing was sent to the model.");
 
         // `document` is the one captured before the dump, not whichever is active now: the
         // review is of what was extracted, and the page binds what it shows to this (U8).
         Send("review.started", id, new Dictionary<string, object?>
         {
             { "chat_id", handle.ChatId },
+            { "send_when_checked", mode == ReviewMode.Send },
             { "run_dir", runDirectory },
             { "not_examined", handle.NotExamined },
             { "document", DocumentPayload(document) },
@@ -1383,6 +1459,7 @@ public sealed class ReviewHost : IDisposable
         return new Dictionary<string, object?>
         {
             { "version", settings.Version },
+            { "send_when_checked", settings.SendsWhenChecked },
             { "provider", settings.Provider },
             { "model", settings.Model },
             { "effort", settings.Effort },

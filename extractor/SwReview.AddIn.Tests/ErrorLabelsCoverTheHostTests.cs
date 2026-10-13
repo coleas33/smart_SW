@@ -37,7 +37,7 @@ public sealed class ErrorLabelsCoverTheHostTests
                      "NoDocument", "DrawingActive", "NotAttached", "BackendUnavailable", "TurnRunning", "PreparationExpired",
                      "PreparationFailed", "RunFolderFailed", "ExtractionFailed", "InvalidSettings", "UnknownModel",
                      "FakeProviderNotAllowed", "InvalidRequest", "UnknownMessage", "HostError", "PathRefused",
-                     "NotFound", "OpenFailed", "UnknownChat", "UnknownCheck", "HttpError",
+                     "NotFound", "OpenFailed", "UnknownChat", "UnknownCheck", "HttpError", "SettingNotSaved",
                  })
         {
             Assert.Contains(expected, classes);

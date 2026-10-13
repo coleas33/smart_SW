@@ -81,6 +81,10 @@
     chatId: null,
     runDir: null,
     turnRunning: false,
+    awaitingSend: false,
+    sendWhenCheckedConfirmed: true,
+    sendWhenCheckedChange: 0,
+    sendWhenCheckedPending: 0,
 
     // The document the review on screen is of, as `review.started` named it, and whether the
     // document on screen is some other one (U8). Stale results are hidden, not discarded: the
@@ -590,7 +594,7 @@
         return;
       case 'session.ended':
         state.textBlock = null;
-        appendCard(render.textBlock('system', 'The session ended at ' + (body.ended_at || 'now') + '.'));
+        appendCard(render.textBlock('system', describeEnd(body)));
         return;
       case 'error':
         appendCard(errorLine(body));
@@ -631,7 +635,16 @@
         + 'report.md in the run folder is written by the backend and is unaffected.'));
   }
 
+  function describeEnd(body) {
+    return waitingForSend()
+      ? 'The checks ended at ' + (body.ended_at || 'now') + '. Nothing was sent to the model.'
+      : 'The session ended at ' + (body.ended_at || 'now') + '.';
+  }
+
   function describeStart(body) {
+    if (body.send_when_checked === false) {
+      return 'Checked by code only: nothing is sent to the model until Send to model is pressed.';
+    }
     var line = 'Review started with ' + (body.provider || '?') + ' ' + (body.model || '?');
     if (body.effort_mapping) {
       line += ' (' + body.effort_mapping.requested + ' -> '
@@ -1038,6 +1051,8 @@
       sentence = 'Reconnecting to the review.';
     } else if (state.turnRunning) {
       sentence = 'The review is running.';
+    } else if (waitingForSend()) {
+      sentence = 'Checked by code. Not sent to the model.';
     } else if (questions && questions.count > 0) {
       sentence = 'Waiting for your answers.';
     } else {
@@ -1063,7 +1078,7 @@
     state.textBlock = null;
     state.runningTool = '';
     renderTranscriptHead();
-    appendCard(render.textBlock('system', 'The session ended at ' + (body.ended_at || 'now') + '.'));
+    appendCard(render.textBlock('system', describeEnd(body)));
     // Nothing further will be streamed; a follow-up reopens the stream from the same seq.
     closeStream();
     showStreamState('The session ended.');
@@ -1121,6 +1136,7 @@
    */
   function applyRanking(ranking) {
     state.summary = ranking.summary || null;
+    state.awaitingSend = !!(state.summary && state.summary.send);
     renderSummary();
     renderQuestions();
     renderGroups(ranking.groups || null);
@@ -1142,6 +1158,27 @@
       ui.summary.appendChild(render.summaryBlock(state.summary));
     }
     ui.summary.hidden = !state.summary;
+    renderSend();
+  }
+
+  function waitingForSend() {
+    return state.awaitingSend || !!(state.summary && state.summary.send);
+  }
+
+  function renderSend() {
+    render.clear(ui.send);
+    var block = state.summary && state.summary.send;
+    ui.send.hidden = !block;
+    if (block) {
+      ui.send.appendChild(render.sendBlock(block, {
+        disabled: !state.chatId || state.resultsStale || isDrawing(state.documentInfo)
+          || state.startPending || state.turnRunning || state.readOnly !== null
+      }));
+    }
+    ui.waitingSettingsNote.textContent = waitingForSend()
+      ? 'Saving restarts the backend. The waiting review stays, and its Send checks its saved evidence again first.' : '';
+    ui.waitingSettingsNote.hidden = !waitingForSend();
+    renderStartReview();
   }
 
   /**
@@ -1285,7 +1322,8 @@
   function chipLabel(item) {
     var label = docs.label(reviewDocument(item)) || String(item.run_id || '');
     var clock = clockOf(item.started_at);
-    return clock ? label + ' ' + clock : label;
+    label = clock ? label + ' ' + clock : label;
+    return item.model_status ? label + ' · not sent' : label;
   }
 
   function clockOf(startedAt) {
@@ -1412,6 +1450,7 @@
   function restore(snapshot, fromFolder) {
     var body = snapshot || {};
     state.restoredFromFolder = fromFolder;
+    state.awaitingSend = body.chat_state === 'awaiting_send';
     state.readOnly = body.read_only ? String(body.read_only_reason || '') : null;
     state.snapshotLastSeq = typeof body.last_seq === 'number' ? body.last_seq : 0;
 
@@ -1645,6 +1684,11 @@
       return;
     }
 
+    // A refused new extraction has no Send block. The waiting review remains in the host's
+    // chips and can be restored, but its active presentation belongs to the earlier attempt.
+    if (waitingForSend()) {
+      clearReview();
+    }
     clearPreparation();
 
     closeStream();
@@ -1665,6 +1709,7 @@
     send('review.start', request).then(function (payload) {
       resetTranscript();
       state.chatId = payload.chat_id;
+      state.awaitingSend = payload.send_when_checked === false;
       state.runDir = payload.run_dir;
       state.reviewed = payload.document || null;
       state.notExamined = payload.not_examined || null;
@@ -1672,7 +1717,7 @@
       renderSession();
       renderBinding();
       renderAnswers();
-      setTurnRunning(true);
+      setTurnRunning(!state.awaitingSend);
       openStream();
       // The host has just kept this review: ask for the list again, so its chip appears.
       requestSessions(false);
@@ -1696,9 +1741,16 @@
     ui.startReview.disabled = state.startPending || state.turnRunning || !state.documentInfo
       || isDrawing(state.documentInfo);
     var followupDisabled = state.startPending || state.turnRunning || !!state.preparation
-      || !state.chatId || state.resultsStale || state.readOnly !== null;
+      || !state.chatId || state.resultsStale || state.readOnly !== null || waitingForSend();
     ui.followupText.disabled = followupDisabled;
+    ui.followupText.placeholder = waitingForSend()
+      ? 'Not sent to the model yet: press Send to model first' : 'Ask a follow-up about any finding';
     ui.followupSend.disabled = followupDisabled;
+    var sendButton = ui.send.querySelector('[data-action="send"]');
+    if (sendButton) {
+      sendButton.disabled = !state.chatId || state.resultsStale || isDrawing(state.documentInfo)
+        || state.startPending || state.turnRunning || state.readOnly !== null;
+    }
     ui.clearReview.disabled = !canClearReview();
     syncQuestionControls();
   }
@@ -1759,6 +1811,7 @@
     ui.staleReview.hidden = !line;
 
     renderSession();
+    renderSend();
     renderStartReview();
     renderResultsState();
   }
@@ -1825,6 +1878,7 @@
     render.clear(ui.coverage);
     ui.coverage.hidden = true;
     state.summary = null;
+    state.awaitingSend = false;
     state.questionIndex = 0;
     state.questionNote = null;
     state.readOnly = null;
@@ -1867,7 +1921,7 @@
     }
     state.turnRunning = running;
     renderStartReview();
-    ui.stop.disabled = !running || !state.chatId;
+    ui.stop.disabled = !running || !state.chatId || waitingForSend();
     renderResultsState();
   }
 
@@ -1880,7 +1934,7 @@
   function sendFollowUp() {
     var text = ui.followupText.value.trim();
     if (!text || !state.chatId || state.turnRunning || state.startPending || state.preparation
-        || state.resultsStale || state.readOnly !== null) {
+        || state.resultsStale || state.readOnly !== null || waitingForSend()) {
       return;
     }
 
@@ -2470,6 +2524,10 @@
       return;
     }
 
+    state.sendWhenCheckedConfirmed = state.settings.send_when_checked !== false;
+    if (!state.sendWhenCheckedPending) {
+      ui.sendWhenChecked.checked = state.sendWhenCheckedConfirmed;
+    }
     renderProviders();
     ui.effort.value = state.settings.effort;
     ui.baseUrl.value = state.settings.base_url || '';
@@ -2488,7 +2546,7 @@
     if (source === 'env') {
       return 'No stored key; the key in this workstation environment will be used.';
     }
-    return 'No key is stored. Reviews will fail until one is entered.';
+    return 'No key is stored. With the box ticked a review fails until one is entered; with it unticked the code checks run and Send waits for a key.';
   }
 
   // A key is a credential for one vendor, and there is one key slot: saving a different
@@ -2523,6 +2581,26 @@
       ui.modelNote.textContent = error.message;
     }).then(function () {
       ui.refreshModels.disabled = false;
+    });
+  }
+
+  function saveSendWhenChecked() {
+    var change = ++state.sendWhenCheckedChange;
+    var chosen = ui.sendWhenChecked.checked;
+    state.sendWhenCheckedPending++;
+    render.clear(ui.sendWhenCheckedNote);
+    ui.sendWhenCheckedNote.hidden = true;
+    send('send_when_checked.save', { send_when_checked: chosen }).then(function (reply) {
+      state.sendWhenCheckedConfirmed = reply.send_when_checked;
+      if (state.settings) state.settings.send_when_checked = reply.send_when_checked;
+      if (change === state.sendWhenCheckedChange) ui.sendWhenChecked.checked = reply.send_when_checked;
+    }).catch(function (error) {
+      if (change !== state.sendWhenCheckedChange) return;
+      ui.sendWhenChecked.checked = state.sendWhenCheckedConfirmed;
+      errorInto(ui.sendWhenCheckedNote, error, error.message);
+      ui.sendWhenCheckedNote.hidden = false;
+    }).then(function () {
+      state.sendWhenCheckedPending--;
     });
   }
 
@@ -2639,6 +2717,9 @@
     ui.location = document.getElementById('gcp-location');
     ui.save = document.getElementById('save-settings');
     ui.saveState = document.getElementById('save-state');
+    ui.waitingSettingsNote = document.getElementById('waiting-settings-note');
+    ui.sendWhenChecked = document.getElementById('send-when-checked');
+    ui.sendWhenCheckedNote = document.getElementById('send-when-checked-note');
 
     ui.startReview = document.getElementById('start-review');
     ui.stop = document.getElementById('stop-turn');
@@ -2652,6 +2733,7 @@
     ui.usage = document.getElementById('usage-line');
     ui.groups = document.getElementById('findings-by-type');
     ui.summary = document.getElementById('summary');
+    ui.send = document.getElementById('send');
     ui.questions = document.getElementById('questions');
     ui.contacts = document.getElementById('contacts');
     ui.notExamined = document.getElementById('not-examined');
@@ -2675,6 +2757,8 @@
     ui.followup = document.getElementById('followup');
     ui.followupText = document.getElementById('followup-text');
     ui.followupSend = document.getElementById('followup-send');
+
+    ui.sendWhenChecked.addEventListener('change', saveSendWhenChecked);
 
     ui.toggleSettings.addEventListener('click', function () {
       ui.settings.hidden = !ui.settings.hidden;
