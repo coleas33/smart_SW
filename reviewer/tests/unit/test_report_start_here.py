@@ -461,7 +461,7 @@ would count its calls and demand a ranking the re-modeller has no session to com
 
 RENDER_SITES: frozenset[str] = frozenset(
     {
-        "chat/server.py::_render_report",
+        "chat/server.py::_render_run",
         "chat/sessions.py::record_disposition",
         "chat/sessions.py::record_timing_live",
         "checks/rules/run.py::write_report",

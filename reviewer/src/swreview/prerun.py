@@ -49,7 +49,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from time import perf_counter
 from typing import TYPE_CHECKING, Any, Literal
@@ -85,7 +85,13 @@ from swreview.report.attention import (
     start_here_lines,
 )
 from swreview.report.names import plural
-from swreview.report.session import Contact, CoverageItem, CoverageScope, StepMark
+from swreview.report.session import (
+    Contact,
+    CoverageItem,
+    CoverageScope,
+    LiveDetectionRecord,
+    StepMark,
+)
 from swreview.tools import checks_mechanical
 from swreview.tools.checks_interference import groups_of
 from swreview.tools.context import ToolContext
@@ -481,6 +487,15 @@ class LiveOutcome:
     `bridge_interference` drops (research R2.16)."""
     error: str | None = None
     persist_error: str | None = None
+
+    def as_record(self) -> LiveDetectionRecord:
+        """Carry every live outcome field into the restart-safe session record."""
+        return LiveDetectionRecord(**asdict(self))
+
+    @classmethod
+    def from_record(cls, record: LiveDetectionRecord) -> LiveOutcome:
+        """Restore the same outcome without making another live call."""
+        return cls(**record.model_dump())
 
     @property
     def succeeded(self) -> bool:

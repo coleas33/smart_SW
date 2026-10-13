@@ -2269,16 +2269,20 @@ class ChatServer:
         run = chat.run
         if run is None:
             return
+        self._render_run(run, chat.report_path, chat.run_dir)
+
+    def _render_run(self, run: ReviewRun, report_path: Path, run_dir: Path) -> None:
+        """Write both review views from one ranking, logging secondary failures."""
         try:
             ranking = rank(run.session)
-            chat.report_path.write_text(
+            report_path.write_text(
                 render_report(run.session, run.context.ir, ranking=ranking), encoding="utf-8"
             )
-            write_attention_record(chat.run_dir, ranking, run.session.session_id)
+            write_attention_record(run_dir, ranking, run.session.session_id)
         except Exception as exc:  # noqa: BLE001 - see below
             # A report that would not render is not a reason to lose the session: the
             # session file is already written and `report` answers 404 until it is there.
-            logger.warning("rendering %s failed: %s", chat.report_path, self.redact(str(exc)))
+            logger.warning("rendering %s failed: %s", report_path, self.redact(str(exc)))
 
     def _end_stopped(self, chat: ChatSession, *, settle: bool = True) -> None:
         """How a stopped chat closes, wherever the stop was noticed.

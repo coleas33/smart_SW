@@ -69,7 +69,7 @@ a completed one.
 | `chat_id` | uuid | Distinct from `ReviewSession.session_id`. |
 | `run_dir` | path | Contains `package.json`; the review session and events live here. |
 | `review_session_id` | uuid | Set when the runner starts. |
-| `state` | `idle \| extracting \| running \| waiting_engineer \| ended \| failed` | `waiting_engineer` while an evidence request is open and no turn is running. |
+| `state` | `idle \| extracting \| awaiting_send \| running \| waiting_engineer \| ended \| failed` | `awaiting_send` when an unticked review has finished its code checks and is saved; `waiting_engineer` while an evidence request is open and no turn is running. |
 | `messages` | provider-neutral history: `[{role: user \| assistant \| tool, ...}]` | Owned by the runner; adapters translate. |
 | `open_requests` | list of `EvidenceRequest` ids | Cleared on answer. |
 | `events_path` | path | `events.jsonl`. |
@@ -81,6 +81,12 @@ Transitions: `idle → extracting → running → (waiting_engineer ↔ running)
 session whose previous turn already ended (FR-006, US1 acceptance scenarios 4 and 5); any
 state `→ failed` on an unrecoverable error, and `failed` still writes `session.ended`.
 `failed` is terminal: its only exit is a new `ChatSession` carrying `retry_of`.
+
+*Amended 2026-10-12 by feature 015 (T017–T018):* an unsent review adds
+`extracting → awaiting_send`, `awaiting_send → running`, `running → awaiting_send` and
+`awaiting_send → failed`. No other move out of `awaiting_send` is allowed; it is unfinished
+and continues to hold its run folder. The existing sent-review transitions are unchanged.
+
 `POST /messages`, `POST /evidence` and `POST /disposition` are accepted in `running`
 (409 while a turn is running), `waiting_engineer` and `ended`; in `failed` they are 409.
 
@@ -126,6 +132,7 @@ asserts each of them:
 | `terminal_cli` | `codex \| gemini` | Last choice. |
 | `python` | string \| null | Explicit interpreter or `uv` path override. |
 | `run_root` | string | Default `%USERPROFILE%\Documents\SwReview\runs`. |
+| `send_when_checked` | bool, optional | Feature 015: absent or true sends after checks; false waits. Saved from Review without restarting. C# holds the raw token as `SendWhenCheckedValue`, omits an absent token, and exposes settable `SendsWhenChecked`; an invalid token produces one load problem and is dropped while other settings load. |
 
 ## 5. Pane process records (C#)
 

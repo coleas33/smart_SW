@@ -1404,8 +1404,13 @@ feature and never only against the feature's own code:
    moves; the commit that moves it into `request_prefix` must reproduce all three (R2.9).
 3. **The replay regeneration step**, on a machine that holds the owner's recordings mapping
    (`%LOCALAPPDATA%\SwReview\recordings.json`, read by `tests/support/recordings.py`): 008
-   `contracts/replay.md` section 8's three generator commands, then `git diff --exit-code --
-   reviewer/tests/fixtures/replay`. Where the mapping is absent the step is skipped, naming why. It
+   `contracts/replay.md` section 8's unchanged-fixture recipe: `uv run python
+   tests/fixtures/replay/verify_regeneration.py` from `reviewer/`, which seeds only the committed
+   runtime inputs while calling the unchanged generators and self-checks; then from the root the
+   literal `git diff --exit-code -- reviewer/tests/fixtures/replay`, comparing raw bytes against
+   the baseline. Every pass consumes its exact runtime-input budget; no output is normalized or
+   rewritten, and stable payload changes remain visible. An unseeded generator run is not claimed
+   byte-clean. Where the mapping is absent the step is skipped, naming why. It
    runs at the gate of every phase that changes the runner, the pre-run, a provider or the records,
    and at the final gate.
 

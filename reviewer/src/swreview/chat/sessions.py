@@ -6,7 +6,9 @@ machine can be read (and tested) without an ASGI client.
 **The state machine is data-model section 3 and nothing else.** `idle -> extracting ->
 running -> (waiting_engineer <-> running)* -> ended`, `ended -> running` when the engineer
 sends a follow-up or answers an evidence request on a session whose previous turn already
-ended (FR-006), any state `-> failed`, and `failed` terminal - its only exit is a new
+ended (FR-006), `extracting -> awaiting_send -> running` for an unsent review, with a failed
+Send or applied answers returning `running -> awaiting_send`, any state `-> failed`, and
+`failed` terminal - its only exit is a new
 `ChatSession` carrying `retry_of`. `TRANSITIONS` below is the whole rule, and `to()` is
 the only way to move; a transition it does not name raises rather than being tolerated,
 because the pane draws its buttons from this state and a state nobody can reach from the
@@ -69,6 +71,7 @@ class ChatState(StrEnum):
 
     IDLE = "idle"
     EXTRACTING = "extracting"
+    AWAITING_SEND = "awaiting_send"
     RUNNING = "running"
     WAITING_ENGINEER = "waiting_engineer"
     ENDED = "ended"
@@ -77,9 +80,12 @@ class ChatState(StrEnum):
 
 TRANSITIONS: Mapping[ChatState, frozenset[ChatState]] = {
     ChatState.IDLE: frozenset({ChatState.EXTRACTING, ChatState.FAILED}),
-    ChatState.EXTRACTING: frozenset({ChatState.RUNNING, ChatState.FAILED}),
+    ChatState.EXTRACTING: frozenset(
+        {ChatState.RUNNING, ChatState.AWAITING_SEND, ChatState.FAILED}
+    ),
+    ChatState.AWAITING_SEND: frozenset({ChatState.RUNNING, ChatState.FAILED}),
     ChatState.RUNNING: frozenset(
-        {ChatState.WAITING_ENGINEER, ChatState.ENDED, ChatState.FAILED}
+        {ChatState.AWAITING_SEND, ChatState.WAITING_ENGINEER, ChatState.ENDED, ChatState.FAILED}
     ),
     ChatState.WAITING_ENGINEER: frozenset(
         {ChatState.RUNNING, ChatState.ENDED, ChatState.FAILED}

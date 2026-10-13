@@ -103,6 +103,7 @@ __all__ = [
     "QuestionView",
     "ReviewRanking",
     "ReviewSummary",
+    "SendWords",
     "SummaryGroup",
     "Tally",
     "Words",
@@ -284,6 +285,20 @@ class ResumeWords(ReviewModel):
         return self.without if tokens is None else self.with_tokens.format(tokens=f"{tokens:,}")
 
 
+class SendWords(ReviewModel):
+    """The waiting review's Send sentences (feature 015, its words contract)."""
+
+    first_request: str
+    first_request_approximate: str
+    without: str
+    restored: str
+    failed: str
+    not_started: str
+    apply_answers: str
+    restored_line: str
+    rerun_failed: str
+
+
 class Labels(ReviewModel):
     """The card vocabulary `GET /labels` serves, verbatim (data-model section 7)."""
 
@@ -319,8 +334,10 @@ class Words(ReviewModel):
     drawings: DrawingsWords
     contacts: CountWords
     resume: ResumeWords
+    send: SendWords
     answer_basis: AnswerBasisWords
-    read_only: str
+    read_only_lead: str
+    read_only_off: str
     goal_states: dict[GoalState, str]
     goal_reasons: dict[GoalReason, str]
     goals: list[Goal]
@@ -329,6 +346,11 @@ class Words(ReviewModel):
     finding_group_checked: CheckedFoldWords
     finding_group_text: FindingGroupText
     labels: Labels
+
+    @property
+    def read_only(self) -> str:
+        """Feature 009's unchanged sentence, composed from its two recorded words."""
+        return f"{self.read_only_lead} {self.read_only_off}"
 
     @model_validator(mode="after")
     def _every_goal_names_a_listed_group(self) -> Words:

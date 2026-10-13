@@ -67,6 +67,11 @@ PLACEHOLDERS: dict[str, set[str]] = {
     "contacts.one": set(),
     "contacts.many": {"n"},
     "resume.with_tokens": {"tokens"},
+    "send.first_request": {"tokens"},
+    "send.first_request_approximate": {"tokens"},
+    "send.failed": {"reason", "time"},
+    "send.not_started": {"reason", "time"},
+    "send.restored_line": {"when"},
     "answer_basis.many": {"n"},
     "resume.without": set(),
     "finding_group_text.one": set(),
@@ -133,6 +138,7 @@ def test_the_words_are_loaded_once() -> None:
         ("groups", "decide"),
         ("drawings",),
         ("resume",),
+        ("send",),
         ("labels",),
         ("goals", 0),
         ("finding_groups", 0),
@@ -552,3 +558,107 @@ def test_the_open_then_review_words_are_the_drawing_checks_instruction() -> None
     assert drawings.open_then_review_many.format(names="FICT-1.SLDDRW", model="FICT-1.SLDASM") == (
         check
     )
+
+
+# --- waiting to send (feature 015 T029) ----------------------------------------------------
+
+
+SEND_SENTENCES = {
+    "first_request": (
+        "Send starts the model's review. Its first request is {tokens} input tokens; "
+        "the requests after it are not counted in advance."
+    ),
+    "first_request_approximate": (
+        "Send starts the model's review. Its first request is about {tokens} input tokens "
+        "(approximate: Gemini counts tokens its own way); "
+        "the requests after it are not counted in advance."
+    ),
+    "without": "Send starts the model's review.",
+    "restored": "Send checks the saved evidence again, then starts the model's review.",
+    "failed": (
+        "The model did not answer: {reason} ({time}). "
+        "Nothing else changed; Send to model is offered again."
+    ),
+    "not_started": (
+        "Send to model could not start: {reason} ({time}). "
+        "Nothing was sent; Send to model is offered again."
+    ),
+    "apply_answers": (
+        "Applying your answers regrades the review by code. Nothing is sent to the model."
+    ),
+    "restored_line": "Its checks ran {when}; Send checks the saved evidence again first.",
+    "rerun_failed": (
+        "The saved evidence could not be checked again, so nothing changed and nothing was sent. "
+        "The next Send tries again."
+    ),
+}
+SEND_ERRORS = {
+    "NoCredential": (
+        "No key is available, so nothing was sent. "
+        "Save a key in Settings; the review keeps waiting."
+    ),
+    "NotSent": (
+        "This review has not been sent to the model, so it takes no follow-up yet. "
+        "Press Send to model first."
+    ),
+    "NotWaiting": "This review is not waiting to be sent. Reload it to see where it stands.",
+    "ReviewNotActive": (
+        "This review is of another document. Open that document in SOLIDWORKS, then try again."
+    ),
+    "SettingNotSaved": "The settings could not be saved, so the stored settings stand.",
+}
+
+
+def test_the_send_block_is_the_nine_contract_sentences() -> None:
+    words = load_words()
+    assert words.send.__class__.__name__ == "SendWords"
+    assert words.send.model_dump() == SEND_SENTENCES
+    assert raw_words()["send"] == SEND_SENTENCES
+
+
+@pytest.mark.parametrize("key", SEND_SENTENCES)
+@pytest.mark.parametrize("mistake", ["missing", "misspelt"])
+def test_every_send_key_is_required_and_typos_are_refused(key: str, mistake: str) -> None:
+    data = raw_words()
+    assert "send" in data
+    value = data["send"].pop(key)
+    if mistake == "misspelt":
+        data["send"][key + "_typo"] = value
+    with pytest.raises(ValidationError):
+        Words.model_validate(data)
+
+
+def test_read_only_sentences_are_separate_and_the_old_property_is_exact() -> None:
+    words = load_words()
+    assert words.read_only_lead == (
+        "The backend restarted, so this review is shown from its run folder."
+    )
+    assert words.read_only_off == "Follow-ups, decisions and answers are off."
+    assert words.read_only == (
+        "The backend restarted, so this review is shown from its run folder. "
+        "Follow-ups, decisions and answers are off."
+    )
+    assert "read_only" not in raw_words()
+    assert "read_only" not in words.model_dump()
+    assert words.send.restored_line.count("backend restarted") == 0
+
+
+@pytest.mark.parametrize("key", ["read_only_lead", "read_only_off"])
+def test_both_read_only_sentences_are_required(key: str) -> None:
+    data = raw_words()
+    assert key in data
+    del data[key]
+    with pytest.raises(ValidationError):
+        Words.model_validate(data)
+
+
+def test_the_replaced_read_only_file_key_is_refused() -> None:
+    data = raw_words()
+    data["read_only"] = load_words().read_only
+    with pytest.raises(ValidationError):
+        Words.model_validate(data)
+
+
+def test_the_five_send_errors_are_exact_contract_sentences() -> None:
+    errors = load_words().labels.errors
+    assert {key: errors.get(key) for key in SEND_ERRORS} == SEND_ERRORS
