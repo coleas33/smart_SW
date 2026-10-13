@@ -547,7 +547,7 @@ description: "Task list for the send-to-model checkbox"
 
   Acceptance: red for want of the press.
 - [x] T076 [US2] [page] Lane W. Implement Send in `app.js`: `state.sending`, set by the press and by a restore whose snapshot carries `send_in_flight` (owner decision 77A); `state.sentSeen`; the press; the rule for an `error` while sending, which re-reads the attention; the enabling rule; and the Transcript line, "Sending to ...", which shares `describeStart`'s effort part. Add the failure line to `render.sendBlock`. **Amends 009** `contracts/views.md` section 2 (the block sits under the summary). Acceptance: T075 green; `PageRuleScanTests` green.
-- [ ] T077 [US2] [page] Lane W. Extend `ReviewPageSendLayoutTests.cs` with `failed_send` and its failure line: the headline, tally and not-reached line, and the Send to model button, are inside 300 by 600 (SC-007). This is an acceptance test. Acceptance: green.
+- [x] T077 [US2] [page] Lane W. Extend `ReviewPageSendLayoutTests.cs` with `failed_send` and its failure line: the headline, tally and not-reached line, and the Send to model button, are inside 300 by 600 (SC-007). This is an acceptance test. Acceptance: green.
 - [ ] T078 [P] [US2] [py] Lane R. Extend `reviewer/tests/unit/test_recording.py` and `test_cli_benchmark_replay.py` (`contracts/records.md` section 6; FR-040). Before it reads the events, `read_recording` refuses, with one `RecordingRefused` sentence each:
   - a never-sent or send-failed session: "{RUN_DIR} was never sent to the model, so it has no model turn to replay";
   - a session sent after waiting: "{RUN_DIR} was sent to the model after waiting for Send; the replay reads only reviews sent when their checks finished".
