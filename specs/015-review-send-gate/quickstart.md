@@ -302,3 +302,20 @@ On the licensed seat, with the build of this feature and the owner's key stored:
   below Send and 199.828125 px below not-reached, with no overflow at 260/300/420 px.
   Independent final review found no issue. T118 and later stories remain incomplete;
   the displayed Send button gains its action in US2 T076. No partial-workflow main merge.
+
+
+- **US2 Send and replay checkpoint, 2026-10-13 (T058–T079; T080/T081 pending):**
+  final C39 candidate passed 15,962 Python tests, 5 skipped, 7 deselected in
+  382.67 s; Ruff clean; Release zero warnings/errors; 9,060 extractor and
+  2,220 add-in tests passed, none skipped. Actual owner-mapped verification
+  completed all three unchanged replay generators, the literal replay diff
+  was empty, and all nine replay outputs and 24 held public controls stayed
+  raw SHA256-equal. Send, first-request failure/retry, stream replay, restore
+  during Send, failed-Send layout and before-events replay refusals have their
+  separate tests-first receipts in review-2026-10-12.md. The T077 300x600
+  failed-Send acceptance passed with unchanged page assets. The strict T080
+  estimate acceptance remains externally prepared and red: the unchanged
+  25% SC-006 bound is exceeded by recorded gaps of 31.5%, 34.7% and 34.7%,
+  also reproduced on the accepted pre-015 baseline. T081 and T118 remain
+  incomplete; no US3 implementation, live provider run or SOLIDWORKS sitting
+  is claimed, and this partial workflow has not been merged to main.

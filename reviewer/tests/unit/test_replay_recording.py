@@ -20,6 +20,7 @@ import pytest
 from swreview.agent.providers import TokenUsage
 from swreview.agent.providers.fake import ScriptedToolCall
 from swreview.agent.settings import EfficiencySettings
+from swreview.benchmark import recording as recording_reader
 from swreview.benchmark.recording import RecordingRefused, read_recording
 from swreview.benchmark.replay import TurnPlan
 from swreview.ir.loader import save_package
@@ -371,6 +372,51 @@ def test_a_benchmark_run_root_is_refused_with_its_sentence(
 
     assert "benchmark" in message
     assert "some-package" in message
+
+
+@pytest.mark.parametrize("state", ["not_sent", "send_failed", "sent"])
+@pytest.mark.parametrize("events_state", ["present", "missing", "broken"])
+def test_a_review_started_waiting_is_refused_before_the_events_are_read(
+    tmp_path: Path,
+    package_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    state: str,
+    events_state: str,
+) -> None:
+    folder = recorded(tmp_path, package_dir, [TurnPlan(rounds=((SUMMARY,),))])
+    session_file = folder / "session.json"
+    session = json.loads(session_file.read_text(encoding="utf-8"))
+    session["model_status"] = {
+        "state": state,
+        "document": {"path": "FICT-assembly.SLDASM", "configuration": "Default"},
+        "checked_at": session["started_at"],
+    }
+    if state == "send_failed":
+        session["model_status"]["failures"] = [
+            {"at": session["started_at"], "error_class": "RuntimeError", "reason": "FICT-failed"}
+        ]
+    elif state == "sent":
+        session["model_status"]["sent_at"] = session["started_at"]
+    session_file.write_text(json.dumps(session), encoding="utf-8")
+    events = folder / "events.jsonl"
+    if events_state == "missing":
+        events.unlink()
+    elif events_state == "broken":
+        events.write_text("{FICT-not-json\n", encoding="utf-8")
+
+    def forbidden_event_read(path: Path) -> None:
+        pytest.fail("the waiting-session refusal must happen before reading events")
+
+    monkeypatch.setattr(recording_reader, "_events", forbidden_event_read)
+    if state == "sent":
+        expected = (
+            f"{folder} was sent to the model after waiting for Send; "
+            "the replay reads only reviews sent when their checks finished"
+        )
+    else:
+        expected = f"{folder} was never sent to the model, so it has no model turn to replay"
+
+    assert refusal(folder) == expected
 
 
 def test_a_check_folder_with_no_event_log_is_refused(tmp_path: Path, package_dir: Path) -> None:

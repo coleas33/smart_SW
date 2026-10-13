@@ -155,7 +155,7 @@ leaves - each the folder `tests/support/restart.py`'s `disk_at` copied at that p
 backend started afresh (owner decision 76A) - and the times rendered as stored), `test_recheck.py`
 (a re-run of a failed send keeps its failure line, and a later Send counts it; a changed profile is
 named), `test_send_gate_server.py` (a Send that fails before any request leaves `session.json` as it
-was, at each of its five failure points), `test_recording.py` and `test_cli_benchmark_replay.py` (the
+was, at each of its five failure points), `test_replay_recording.py` and `test_cli_benchmark_replay.py` (the
 refusals), `test_handoff.py` (research R4.1). The characterization of a ticked review
 (`test_ticked_review_golden.py`: five scenarios, its failures included (owner decision 75A), each
 with its `session.json`, `events.jsonl`, `report.md` and `attention.json`, captured on the
