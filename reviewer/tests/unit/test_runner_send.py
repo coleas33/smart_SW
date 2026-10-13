@@ -915,3 +915,263 @@ def test_every_sent_request_and_tool_result_equals_ticked_and_counted_prefix(
     finally:
         waiting.close()
         ticked.close()
+
+
+# T065: failure guard snapshots before the factory and restores waiting before error.
+class FictSendError(RuntimeError):
+    pass
+
+
+@pytest.mark.parametrize("point", ["factory", "configure", "mapping", "event", "save"])
+@pytest.mark.parametrize("prior_failure", [False, True])
+def test_send_guard_restores_the_exact_record_at_each_pre_request_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    point: str,
+    prior_failure: bool,
+) -> None:
+    from swreview.report.session import SendFailure
+
+    run = checks_only_run(tmp_path / f"FICT-guard-{point}-{prior_failure}")
+    try:
+        run.close_waiting()
+        status = run.session.model_status
+        assert status is not None
+        if prior_failure:
+            status.state = "send_failed"
+            status.failures.append(
+                SendFailure(at=CHECKED, error_class="FICT-prior", reason="FICT prior")
+            )
+            runner.save_session(run.session, run.session_path)
+        before = status.model_copy(deep=True)
+        raw = run.session_path.read_bytes()
+        marker = run.sink.seq
+        provider = send_recorder()
+        errors: list[Any] = []
+        writes: list[Any] = []
+        save = runner.save_session
+        emit = run.sink.emit
+
+        def refused(*args: Any, **kwargs: Any) -> Any:
+            assert run.session.model_status == before or point == "save"
+            raise FictSendError("FICT secret")
+
+        def event(kind: Any, body: Any) -> Any:
+            if kind == "error":
+                assert run.awaiting_send and not run._send_in_flight
+                assert isinstance(run.provider, DeferredProvider)
+                assert run.session.model_status == before
+                assert run._send_error.reason == "FICT redacted"
+                errors.append(body)
+            if kind == "session.sent" and point == "event":
+                refused()
+            return emit(kind, body)
+
+        def saved(session: Any, path: Path) -> Any:
+            writes.append(session.model_status.model_copy(deep=True))
+            if point == "save":
+                refused()
+            return save(session, path)
+
+        with monkeypatch.context() as patch:
+            patch.setattr(
+                run, "redact", lambda text: text.replace("FICT secret", "FICT redacted")
+            )
+            patch.setattr(run.sink, "emit", event)
+            patch.setattr(runner, "save_session", saved)
+            if point == "configure":
+                patch.setattr(runner, "configure_provider", refused)
+            elif point == "mapping":
+                patch.setattr(provider, "effort_mapping", refused)
+            result = run.send(refused if point == "factory" else lambda: provider)
+        assert result is run.session
+        assert run.session_path.read_bytes() == raw
+        assert run.session.model_status == before
+        assert run.messages == [] and isinstance(run.provider, DeferredProvider)
+        assert run.awaiting_send and not run._send_in_flight and provider.log == []
+        tail = [
+            event
+            for event in events.replay_events(run.events_path)
+            if event.seq > marker
+        ]
+        assert [event.type for event in tail] == (
+            ["session.sent"] if point == "save" else []
+        ) + ["error"]
+        assert len(errors) == 1 and errors[0]["error_class"] == "FictSendError"
+        assert len(writes) == (1 if point == "save" else 0)
+        assert run.send_input()["send_error"].reason == "FICT redacted"
+        retry = send_recorder()
+        run.send(lambda: retry)
+        assert run.session.model_status.state == "sent" and not run.awaiting_send
+        assert run._send_error is None
+        assert [
+            failure.error_class for failure in run.session.model_status.failures
+        ] == (["FICT-prior"] if prior_failure else [])
+        assert sum(not entry.presentation for entry in retry.log) == 1
+    finally:
+        run.close()
+
+
+def test_send_guard_logs_its_own_error_emit_and_can_retry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    run = checks_only_run(tmp_path / "FICT-guard-error")
+    try:
+        run.close_waiting()
+        raw = run.session_path.read_bytes()
+        emit = run.sink.emit
+
+        def fail(*args: Any, **kwargs: Any) -> Any:
+            raise FictSendError("FICT own emit")
+
+        with monkeypatch.context() as patch:
+            patch.setattr(run.sink, "emit", fail)
+            assert run.send(fail) is run.session
+        assert "FICT own emit" in caplog.text
+        assert run.awaiting_send and not run._send_in_flight
+        assert run.session_path.read_bytes() == raw
+        assert isinstance(run.provider, DeferredProvider)
+        assert run.sink.emit == emit
+        run.send(send_recorder)
+        assert run.session.model_status.state == "sent"
+    finally:
+        run.close()
+
+
+@pytest.mark.parametrize("after_usage", [False, True])
+def test_failed_first_request_is_waiting_only_before_a_completed_round(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    after_usage: bool,
+) -> None:
+    from swreview.agent.providers import TokenUsage, usage_body
+    from swreview.agent.providers.openai_provider import _encode_history
+
+    run = checks_only_run(tmp_path / f"FICT-request-failure-{after_usage}")
+    ticked_fixture = build_questions_package(
+        tmp_path / f"FICT-ticked-retry-{after_usage}"
+    )
+    try:
+        run.close_waiting()
+        checked = run.session.model_status.checked_at
+        provider = RecordingProvider((), clock=lambda: 0.0)
+        error_states: list[Any] = []
+        original_emit = run.sink.emit
+
+        def request(**kwargs: Any) -> Any:
+            kwargs["on_event"]("text.delta", {"text": "FICT streamed before failure"})
+            if after_usage:
+                kwargs["on_event"](
+                    "usage",
+                    usage_body(
+                        TokenUsage(
+                            input_tokens=7,
+                            output_tokens=1,
+                            cached_input_tokens=None,
+                            cache_write_tokens=None,
+                            reasoning_tokens=None,
+                            tool_result_input_tokens=None,
+                            total_tokens=8,
+                            latency_s=0.0,
+                        ),
+                        round_index=0,
+                        provider=provider.name,
+                        model=provider.model,
+                    ),
+                )
+            raise FictSendError("FICT secret")
+
+        def emitted(kind: Any, body: Any) -> Any:
+            if kind == "error":
+                error_states.append(
+                    (
+                        run.awaiting_send,
+                        run._send_in_flight,
+                        run.messages.copy(),
+                        run.provider,
+                    )
+                )
+            return original_emit(kind, body)
+
+        with monkeypatch.context() as patch:
+            patch.setattr(provider._inner, "run", request)
+            patch.setattr(run.sink, "emit", emitted)
+            patch.setattr(
+                run, "redact", lambda text: text.replace("FICT secret", "FICT redacted")
+            )
+            if after_usage:
+                with pytest.raises(FictSendError):
+                    run.send(lambda: provider)
+            else:
+                assert run.send(lambda: provider) is run.session
+        assert len(provider.log) == 1
+        assert run.session.model_status.checked_at == checked
+        if after_usage:
+            assert run.session.model_status.state == "sent" and not run.awaiting_send
+            assert error_states[0][0:2] == (False, False)
+        else:
+            assert run.session.model_status.state == "send_failed" and run.awaiting_send
+            assert error_states[0][0:3] == (True, False, [])
+            assert isinstance(error_states[0][3], DeferredProvider)
+            assert (
+                run.provider.name == provider.name
+                and run.provider.model == provider.model
+            )
+            assert [
+                failure.error_class for failure in run.session.model_status.failures
+            ] == ["FictSendError"]
+            assert run.session.model_status.failures[0].reason == "FICT redacted"
+            assert run.usage_ledger.current_round_count == 0
+            assert run.messages == []
+            own_rows = tuple(run._finalized)
+            retry = send_recorder()
+            requested = retry._inner.run
+
+            def first(**kwargs: Any) -> Any:
+                assert not any(
+                    row is old
+                    for row in run.session.coverage.unresolved
+                    + run.session.coverage.checked
+                    for old in own_rows
+                )
+                assert len(kwargs["messages"]) == 1
+                return requested(**kwargs)
+
+            monkeypatch.setattr(retry._inner, "run", first)
+            run.send(lambda: retry)
+            ticked_provider = send_recorder()
+            defaults = pane_defaults(ticked_provider.name)
+            ticked = runner.start_review(
+                ticked_fixture.folder,
+                ticked_fixture.folder,
+                provider=ticked_provider,
+                standards_profile=ticked_fixture.profile,
+                bridge=True,
+                bridge_factory=lambda pipe, secret: ticked_fixture.bridge,
+                efficiency=defaults.efficiency,
+                model_view=defaults.model_view,
+                explain_findings=True,
+            )
+            try:
+                ticked.start()
+                assert retry.log == ticked_provider.log
+                assert _encode_history(run.messages) == _encode_history(ticked.messages)
+            finally:
+                ticked.close()
+            assert [
+                failure.error_class for failure in run.session.model_status.failures
+            ] == ["FictSendError"]
+        tail = list(events.replay_events(run.events_path))
+        assert any(
+            event.type == "text.delta"
+            and event.body["text"] == "FICT streamed before failure"
+            for event in tail
+        )
+        assert any(
+            event.type == "turn.ended" and event.body["reason"] == "error"
+            for event in tail
+        )
+    finally:
+        run.close()

@@ -41,6 +41,7 @@ injectable for the same reason: `--bridge` needs a workstation, a unit test does
 from __future__ import annotations
 
 import json
+import logging
 from collections import Counter
 from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
@@ -58,6 +59,7 @@ from swreview.agent.events import (
     EventListener,
     EventSink,
     UsageLedger,
+    emit_error,
     emit_turn_failed,
     no_redaction,
     utc_now,
@@ -76,6 +78,7 @@ from swreview.agent.providers import (
     ToolSet,
     TurnResult,
 )
+from swreview.agent.providers.deferred import DeferredProvider
 from swreview.agent.providers.schema import ToolSpec
 from swreview.agent.settings import (
     MODEL_VIEW_OFF,
@@ -1393,34 +1396,57 @@ class ReviewRun:
 
     def send(self, build_adapter: Callable[[], AgentProvider]) -> ReviewSession:
         """Prepare the adapter without writes, then record and play the cached opening."""
+        before = (
+            self.session.model_status.model_copy(deep=True) if self.session.model_status else None
+        )
         self._send_in_flight = True
         self._send_error = None
-        adapter = build_adapter()
-        self.attach_provider(adapter)
-        cache = self._send_cache
-        if cache is None:
-            raise ValueError("Send needs the waiting run's prepared cache")
-        body = {
-            "provider": adapter.name,
-            "model": adapter.model,
-            "effort_mapping": adapter.effort_mapping(self.effort).model_dump(mode="json"),
-            "estimate": cache.estimate.model_dump(mode="json"),
-        }
-        self.sink.emit("session.sent", body)
-        status = self.session.model_status
-        if status is None:
-            raise ValueError("Send needs a waiting model status")
-        self._interrupted_send = SendFailure(
-            at=events.local_now(), error_class="Interrupted", reason=INTERRUPTED_SEND
-        )
-        status.state = "send_failed"
-        status.failures.append(self._interrupted_send)
-        save_session(self.session, self.session_path)
-        withdraw_finalization(self.session, self._finalized)
-        self.provider = adapter
-        self.awaiting_send = False
-        self._sent_at = events.local_now()
-        return self._say(cache.opening)
+        try:
+            adapter = build_adapter()
+            self.attach_provider(adapter)
+            cache = self._send_cache
+            if cache is None:
+                raise ValueError("Send needs the waiting run's prepared cache")
+            body = {
+                "provider": adapter.name,
+                "model": adapter.model,
+                "effort_mapping": adapter.effort_mapping(self.effort).model_dump(mode="json"),
+                "estimate": cache.estimate.model_dump(mode="json"),
+            }
+            self.sink.emit("session.sent", body)
+            status = self.session.model_status
+            if status is None:
+                raise ValueError("Send needs a waiting model status")
+            self._interrupted_send = SendFailure(
+                at=events.local_now(), error_class="Interrupted", reason=INTERRUPTED_SEND
+            )
+            status.state = "send_failed"
+            status.failures.append(self._interrupted_send)
+            save_session(self.session, self.session_path)
+            withdraw_finalization(self.session, self._finalized)
+            self.provider = adapter
+            self.awaiting_send = False
+            self._sent_at = events.local_now()
+        except Exception as exc:
+            self.session.model_status = before
+            self.awaiting_send = True
+            self._send_in_flight = False
+            self._send_error = SendFailure(
+                at=events.local_now(), error_class=type(exc).__name__, reason=self.redact(str(exc))
+            )
+            try:
+                emit_error(self.sink, exc, self.redact)
+            except Exception as failure:
+                logging.getLogger(__name__).warning(
+                    "reporting Send preparation failure failed: %s", self.redact(str(failure))
+                )
+            return self.session
+        try:
+            return self._say(cache.opening)
+        except Exception:
+            if self.awaiting_send:
+                return self.session
+            raise
 
     def opening_at_send(self) -> str:
         """The opening frozen during setup; waiting answers add their branch in T086."""
@@ -1592,6 +1618,23 @@ class ReviewRun:
             # The redaction, the `error_body` shape and the `turn.ended` that closes the
             # turn are `agent/events.py`'s, shared with the re-model run (004 T106); what
             # is this run's own is what follows - finalize, then re-raise.
+            before_first_round = self._send_in_flight and self.usage_ledger.current_round_count == 0
+            if before_first_round:
+                status = self.session.model_status
+                assert status is not None
+                failure = SendFailure(
+                    at=events.local_now(),
+                    error_class=type(exc).__name__,
+                    reason=self.redact(str(exc)),
+                )
+                status.failures = [
+                    failure if item is self._interrupted_send else item for item in status.failures
+                ]
+                status.state = "send_failed"
+                self.messages = []
+                self.awaiting_send = True
+                self._send_in_flight = False
+                self.provider = DeferredProvider(self.provider.name, self.provider.model)
             self._explanation_allowed = False
             self._close_basis()
             emit_turn_failed(self.sink, exc, self.redact)

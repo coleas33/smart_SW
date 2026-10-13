@@ -2301,6 +2301,8 @@ class ChatServer:
                        else ChatState.WAITING_ENGINEER if chat.open_requests else ChatState.ENDED)
         finally:
             chat.stop_requested.clear()
+            if settled is ChatState.AWAITING_SEND and chat.run is not None:
+                chat.run.release_bridge()
             # Keep the folder claimed until the report and attention record have finished
             # rendering. A retry that starts after `ended` is published could otherwise
             # rotate the session while this worker is still writing the predecessor's
