@@ -78,6 +78,7 @@ from swreview.agent.providers import (
     ToolCallResult,
     error_body,
 )
+from swreview.agent.providers.deferred import DeferredProvider
 from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
 from swreview.agent.runner import (
     EVENTS_FILE_NAME,
@@ -297,6 +298,13 @@ class RunDirInUse(ChatError):
 
     status = 409
     error_class = "RunDirInUse"
+
+
+class NotSent(ChatError):
+    """A follow-up needs the opening request, which an unsent review has not made."""
+
+    status = 409
+    error_class = "NotSent"
 
 
 class AlreadyAnswered(EvidenceRefusal):
@@ -1188,6 +1196,7 @@ class ChatServer:
         self.secrets = tuple(secrets) if secrets is not None else environment_secrets()
         self.chats: dict[UUID, ChatSession] = {}
         self._workers: dict[UUID, ThreadPoolExecutor] = {}
+        self._pending_run_dirs: set[Path] = set()
 
     def redact(self, text: str) -> str:
         """Mask every configured key out of anything headed for the page or a log."""
@@ -1229,6 +1238,9 @@ class ChatServer:
 
     async def create_session(self, request: Request) -> Response:
         body = await self._json(request)
+        send_when_checked = body.get("send_when_checked", True)
+        if not isinstance(send_when_checked, bool):
+            raise ChatError("send_when_checked must be a boolean")
         run_dir = resolve_run_dir(body.get("run_dir"), self.run_root)
         retry_of = self._uuid(body.get("retry_of"), "retry_of")
         standards_profile = self._optional_path(body, "standards_profile")
@@ -1247,11 +1259,31 @@ class ChatServer:
             created_at=datetime.now(UTC),
         )
         chat.to(ChatState.EXTRACTING)
-        run = await run_in_threadpool(self._start_review, chat, settings, standards_profile)
-        chat.attach(run)
-        self.chats[chat.chat_id] = chat
-        chat.to(ChatState.RUNNING)
-        self._submit(chat, run.start)
+        self._pending_run_dirs.add(run_dir)
+        try:
+            if send_when_checked:
+                run = await run_in_threadpool(self._start_review, chat, settings, standards_profile)
+                chat.attach(run)
+                self.chats[chat.chat_id] = chat
+                chat.to(ChatState.RUNNING)
+                self._submit(chat, run.start)
+            else:
+                run = await run_in_threadpool(
+                    partial(
+                        self._start_review,
+                        chat,
+                        settings,
+                        standards_profile,
+                        send_when_checked=False,
+                    )
+                )
+                await self._open_waiting(chat, run)
+        except Exception:
+            if chat.state is ChatState.EXTRACTING:
+                chat.to(ChatState.FAILED)
+            raise
+        finally:
+            self._pending_run_dirs.discard(run_dir)
         return JSONResponse(
             {
                 "chat_id": str(chat.chat_id),
@@ -1293,7 +1325,14 @@ class ChatServer:
         """
         run = self._run_of(self._chat(request))
         return JSONResponse(
-            to_jsonable_python(review_ranking(run.session, run.context.ir, usage=run.usage_ledger))
+            to_jsonable_python(
+                review_ranking(
+                    run.session,
+                    run.context.ir,
+                    usage=run.usage_ledger,
+                    send=run.send_input() if run.awaiting_send else None,
+                )
+            )
         )
 
     async def snapshot(self, request: Request) -> Response:
@@ -1312,6 +1351,7 @@ class ChatServer:
             run.context.ir,
             run_id=chat.run_dir.name,
             usage=run.usage_ledger,
+            send=run.send_input() if run.awaiting_send else None,
             chat_state=chat.state.value,
             last_seq=run.sink.seq,
         )
@@ -1363,6 +1403,8 @@ class ChatServer:
             raise ChatError("a message needs a non-empty 'text'")
         self._require_idle(chat)
         run = self._run_of(chat)
+        if run.awaiting_send:
+            raise NotSent("this review has not been sent to the model; press Send to model first")
         chat.to(ChatState.RUNNING)
         self._submit(chat, partial(run.continue_session, text))
         return JSONResponse(chat.public(), status_code=202)
@@ -2045,6 +2087,10 @@ class ChatServer:
         being written over, and the folder stops answering `GET /checks/{check_id}`
         because its `check.json` no longer names the session that is in it.
         """
+        if run_dir in self._pending_run_dirs:
+            raise RunDirInUse(
+                f"a chat is already being set up in {run_dir}; one chat per run folder"
+            )
         live = next(
             (chat for chat in self.chats.values() if chat.run_dir == run_dir and not chat.finished),
             None,
@@ -2105,13 +2151,18 @@ class ChatServer:
         chat: ChatSession,
         settings: ProviderSettings,
         standards_profile: str | None = None,
+        *,
+        send_when_checked: bool = True,
     ) -> ReviewRun:
         """Load the package and bind the tools. Blocking, so it runs off the event loop."""
         self._rotate_previous(chat)
-        try:
-            adapter = self.provider_factory(settings)
-        except Exception as exc:
-            raise ProviderFailed.wrapping(exc) from exc
+        if send_when_checked:
+            try:
+                adapter = self.provider_factory(settings)
+            except Exception as exc:
+                raise ProviderFailed.wrapping(exc) from exc
+        else:
+            adapter = DeferredProvider.for_settings(settings)
         bridge = chat.bridge or {}
         # Feature 008: the pane's levers and model view are decided in one place - checks
         # first, payload slimming and history pruning since 2026-09-22 - and recorded on the
@@ -2136,6 +2187,7 @@ class ChatServer:
                 callbacks=[chat.publish],
                 redact=self.redact,
                 explain_findings=defaults.explain_findings,
+                send_when_checked=send_when_checked,
             )
         except PACKAGE_ERRORS as exc:
             raise InvalidPackage(
@@ -2150,6 +2202,28 @@ class ChatServer:
 
         run.check_presentation_cancelled = check_presentation_cancelled
         return run
+
+    async def _open_waiting(self, chat: ChatSession, run: ReviewRun) -> None:
+        """Save both views before publishing a waiting run on the event loop."""
+
+        def close_and_render() -> None:
+            try:
+                run.close_waiting()
+                self._render_run(run, chat.report_path, chat.run_dir)
+                run.release_bridge()
+            except Exception:
+                with contextlib.suppress(Exception):
+                    run.close()
+                raise
+
+        try:
+            await run_in_threadpool(close_and_render)
+        except Exception:
+            chat.to(ChatState.FAILED)
+            raise
+        chat.attach(run)
+        self.chats[chat.chat_id] = chat
+        chat.to(ChatState.AWAITING_SEND)
 
     def _review_retry_of(self, chat: ChatSession) -> UUID | None:
         """The *review session* the retried *chat* wrote, when this backend still holds it."""

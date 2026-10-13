@@ -49,6 +49,8 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
+from swreview import tokens
+from swreview.agent import events
 from swreview.agent.checklist import FINDING_BUCKET, SYSTEM_PROMPT_FILE, Checklist, load_checklist
 from swreview.agent.events import (
     DEFAULT_MAX_STEPS,
@@ -68,6 +70,7 @@ from swreview.agent.providers import (
     ModelViewAware,
     PriorReasoningAware,
     PromptCacheAware,
+    ProviderName,
     ProviderTool,
     ToolCallResult,
     ToolSet,
@@ -122,14 +125,18 @@ from swreview.report.session import (
     CoverageScope,
     EvidenceRequest,
     KeySource,
+    ModelStatus,
     ProviderInfo,
     ReviewSession,
+    SendEstimate,
+    SendFailure,
     cut_short_reason,
     latest_answered,
     save_session,
 )
+from swreview.report.snapshot import root_document
 from swreview.report.sources import answer_basis
-from swreview.report.summary import load_words
+from swreview.report.summary import SendInput, load_words
 from swreview.tools.checks_mechanical import (
     attach_part_roles,
     check_hygiene,
@@ -156,6 +163,9 @@ PROFILE_CHECK = "coverage.extractor_profile"
 ANSWERED_BUT_OPEN = "{title}: still open after {request_id} was answered: '{answer}'"
 """Finalization's reason for an item still open after its blocking request was answered
 (feature 013, `contracts/re-ask-guard.md` section 3): the answer stands, quoted."""
+
+NOT_SENT_ITEM = "{title}: not reviewed, because the review was not sent to the model"
+NOT_SENT_SUFFIX = "; the review was not sent to the model"
 
 REDUCED_PROFILE_SKIPPED = (
     "the evidence was written by the {profile!r} dump profile: the {phases} phases were "
@@ -669,6 +679,15 @@ def finalize_session(
             if answered is not None
             else f"{item.title}: the review ended without a finding or a coverage entry for it"
         )
+        if (
+            review.model_status is not None
+            and review.model_status.state != "sent"
+            and item.owner == "model"
+        ):
+            if answered is not None:
+                reason += NOT_SENT_SUFFIX
+            else:
+                reason = NOT_SENT_ITEM.format(title=item.title)
         previous.append(_unresolved(review, item.id, reason))
 
     stamp_carry_over_keys(
@@ -677,11 +696,18 @@ def finalize_session(
         efficiency=review.efficiency if review.efficiency is not None else EfficiencySettings(),
     )
 
-    ended = datetime.now(UTC)
+    status = review.model_status
+    ended = events.local_now() if status is not None else datetime.now(UTC)
+    if status is not None:
+        if review.ended_at is None:
+            status.checked_at = ended
+        runtime = (status.checked_at - started).total_seconds() / 60.0
+        if status.state == "sent" and status.sent_at is not None:
+            runtime += (ended - status.sent_at).total_seconds() / 60.0
+    else:
+        runtime = (ended - started).total_seconds() / 60.0
     review.ended_at = ended
-    review.timing = review.timing.replace(
-        unattended_runtime_minutes=(ended - started).total_seconds() / 60.0
-    )
+    review.timing = review.timing.replace(unattended_runtime_minutes=runtime)
     return review
 
 
@@ -1009,6 +1035,15 @@ def _restated_tool_of(finding: Finding, restated_steps: Mapping[int, str]) -> st
 # --- one review in flight ----------------------------------------------------------------
 
 
+@dataclass(frozen=True)
+class SendCache:
+    """One completed preparation of the first request, kept until Send reads it."""
+
+    opening: str
+    estimate: SendEstimate
+    named_ids: list[str]
+
+
 class ReviewRun:
     """One review: the session, the provider, the message history and the event stream.
 
@@ -1037,6 +1072,9 @@ class ReviewRun:
         prerun_guard: PrerunGuard | None = None,
         profile: Any | None = None,
         profile_refusal: str | None = None,
+        awaiting_send: bool = False,
+        prerun: PrerunResult | None = None,
+        standards_gap: Any | None = None,
     ) -> None:
         self.context = context
         self.provider = provider
@@ -1095,6 +1133,9 @@ class ReviewRun:
         self._profile_refusal = profile_refusal
         """The standards profile `start_review` loaded, or the loader's refusal: the part-roles
         answer classifies the parts again with them (`_regrade_roles`)."""
+        self.awaiting_send = awaiting_send
+        self._prerun = prerun
+        self._standards_gap = standards_gap
         self._explanation_allowed = False
         self._pending_turn_end: str | None = None
         self.check_presentation_cancelled: Callable[[], None] = lambda: None
@@ -1103,6 +1144,9 @@ class ReviewRun:
         first of `session.steps` the next answer's basis counts. It starts at 0, so turn 1 counts
         the pre-run's checks, and it advances only when a turn that answered ends, so a restated
         check counts in its answer turn and a stopped turn's steps roll into the next answer."""
+        self._send_cache: SendCache | None = None
+        self._send_error: SendFailure | None = None
+        self._opening_changed = False
         self._answered = False
         """Whether the turn running now has emitted a `text.done`."""
 
@@ -1329,6 +1373,46 @@ class ReviewRun:
             )
         return stale
 
+    def opening_at_send(self) -> str:
+        """The opening frozen during setup; waiting answers add their branch in T086."""
+        return self.opening_message
+
+    def first_request_estimate(self) -> int | None:
+        """Count the first request locally, with the tools offered to the adapter."""
+        prefix = request_prefix(self.system, self.tools, self.opening_at_send())
+        try:
+            return tokens.count_tokens(prefix)
+        except tokens.TokenizerUnavailable:
+            return None
+
+    def build_send_cache(self) -> None:
+        """Prepare every field before replacing the previous complete cache."""
+        opening = self.opening_at_send()
+        estimate = SendEstimate(
+            input_tokens=self.first_request_estimate(),
+            encoding=tokens.TOKENIZER_NAME,
+            approximate=self.provider.name == ProviderName.GEMINI,
+        )
+        named_ids = self._prerun.named_finding_ids() if self._prerun is not None else []
+        self._send_cache = SendCache(opening=opening, estimate=estimate, named_ids=named_ids)
+
+    def send_input(self) -> SendInput:
+        """Read the waiting summary's already-prepared values without rebuilding them."""
+        cache = self._send_cache
+        if cache is None:
+            raise ValueError("a waiting summary needs a prepared Send cache")
+        return {
+            "state": "waiting",
+            "input_tokens": cache.estimate.input_tokens,
+            "provider": self.provider.name,
+            "send_error": self._send_error,
+        }
+
+    def close_waiting(self) -> ReviewSession:
+        """Build the cache on the caller's worker, then write the checked review."""
+        self.build_send_cache()
+        return self.finalize()
+
     def finalize(self) -> ReviewSession:
         """Close the session out, write `session.json` and `attention.json`, and say so.
 
@@ -1401,6 +1485,11 @@ class ReviewRun:
             body["usage"] = session.usage.model_dump(mode="json")
         self.sink.emit("session.ended", body)
         return session
+
+    def release_bridge(self) -> None:
+        """Close the live transport while retaining its client for a later request."""
+        if self.context.bridge is not None:
+            self.context.bridge.close()
 
     def close(self) -> None:
         """Release what the run holds open. Only the live bridge needs it today."""
@@ -1564,6 +1653,8 @@ def start_review(
     callbacks: Iterable[EventListener] = (),
     redact: Callable[[str], str] = no_redaction,
     explain_findings: bool = False,
+    send_when_checked: bool = True,
+    earlier: ReviewSession | None = None,
 ) -> ReviewRun:
     """Prepare a review of `package_dir` writing into `out_dir`; play it with `start()`.
 
@@ -1623,6 +1714,8 @@ def start_review(
             to `events.jsonl` (FR-015). The caller that resolved the key builds it;
             `no_redaction` is the default because a run may legitimately have no key.
     """
+    if earlier is not None and send_when_checked:
+        raise ValueError("earlier is only accepted when send_when_checked is false")
     loaded = load_package(package_dir)
     checklist = load_checklist()
     chosen_model = model if model is not None else provider.model
@@ -1697,6 +1790,7 @@ def start_review(
                 "provider": str(provider.name),
                 "model": chosen_model,
                 "effort_mapping": effort_mapping.model_dump(mode="json"),
+                **({"send_when_checked": False} if not send_when_checked else {}),
             },
         )
         record_partial_evidence(session, loaded.package)
@@ -1751,6 +1845,23 @@ def start_review(
             context.record_coverage("skipped", standards_gap.coverage_item())
         if prerun is None:
             record_part_roles_rows(context)
+        if not send_when_checked:
+            document = root_document(loaded.package)
+            if document is None:
+                raise ValueError("the package has no reviewed root document")
+            profile_identity = None
+            if loaded_profile.path is not None:
+                profile_identity = {
+                    "path": loaded_profile.path,
+                    "sha256": loaded_profile.profile.identity.sha256
+                    if loaded_profile.profile is not None else None,
+                }
+            session.model_status = ModelStatus(
+                state="not_sent", document=document, checked_at=events.local_now(),
+                profile=profile_identity,
+            )
+            if prerun is not None and prerun.live is not None:
+                session.live_detection = prerun.live.as_record()
         if session.steps:
             # Setup wrote steps - today only the pre-run does - so the adapter numbers its
             # own calls from there rather than from 0. `tool.started.step_index` identifies
@@ -1815,6 +1926,9 @@ def start_review(
         prerun_guard=guard,
         profile=loaded_profile.profile,
         profile_refusal=profile_refusal,
+        awaiting_send=not send_when_checked,
+        prerun=prerun,
+        standards_gap=standards_gap if standards_profile is not None else None,
     )
 
 

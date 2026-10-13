@@ -76,3 +76,14 @@ nothing else in the page changes:
 No percentage. The words are the report's (research R2.46). The change is confined to
 `usageLine` and its doc comment, and lands after the feature 009 page work it must be rebased
 onto.
+
+
+## 5. The first request's size beside Send (feature 015)
+
+*Feature 015 amendment landed 2026-10-12 (T044–T045):* a waiting review's Results view
+shows the first-request sentence from the words file, using the Send cache's count, not a
+route's recount. The number is formatted with thousands separators by `tokens_text`,
+which the earlier resume sentence uses too. An unavailable count prints no number; a
+Gemini count is called approximate; a restored waiting review says Send checks the saved
+evidence again before starting the model. No currency or encoding name is printed in this
+sentence (015 `contracts/estimate.md` and `contracts/words.md`).

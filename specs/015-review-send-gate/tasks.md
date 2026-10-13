@@ -203,7 +203,7 @@ description: "Task list for the send-to-model checkbox"
 
 ### The backend
 
-- [ ] T034 [P] [US1] [py] Lane B. Extend `reviewer/tests/unit/test_runner_send.py` and `test_events_schema.py` (`contracts/review-flow.md` sections 1 and 7; `contracts/records.md` sections 1 to 3; FR-006, FR-009 to FR-011, FR-037).
+- [x] T034 [P] [US1] [py] Lane B. Extend `reviewer/tests/unit/test_runner_send.py` and `test_events_schema.py` (`contracts/review-flow.md` sections 1 and 7; `contracts/records.md` sections 1 to 3; FR-006, FR-009 to FR-011, FR-037).
   - **The checks only**: `start_review(..., send_when_checked=False)` with a `DeferredProvider` on T006's package runs exactly what a ticked review runs before its first request: the part roles and their question, the checks-first pre-run, and the drawing questions. Its findings, questions and coverage equal a ticked review's at that review's first `run()`, read from T004's recorder. It makes no provider call.
   - **What it records**:
     - It emits `session.started` with `send_when_checked: false`.
@@ -227,7 +227,7 @@ description: "Task list for the send-to-model checkbox"
   **Moved, red by design on the 014-first baseline**: `test_benchmark_pane_parity.py` adds `send_when_checked` and `earlier` to `COMPARED`. Its signature remains exhaustively classified, and the ticked pane and benchmark compare the defaults `True` and `None`. This classification lands with T035, not in a later conditional merge.
 
   Acceptance: red for want of the arguments.
-- [ ] T035 [US1] [py] Lane B. Implement in `agent/runner.py`:
+- [x] T035 [US1] [py] Lane B. Implement in `agent/runner.py`:
   - `start_review(..., send_when_checked: bool = True, earlier: ReviewSession | None = None)` (`:1497`). `earlier` is accepted but refused with `True`, and is carried from T093.
   - `ReviewRun.awaiting_send`, `_prerun` and `_standards_gap`, the model-status and live-detection writes, and the event field.
   - `NOT_SENT_ITEM`, `NOT_SENT_SUFFIX` and the running time in `finalize_session` (`:597-678`).
@@ -235,7 +235,7 @@ description: "Task list for the send-to-model checkbox"
   Keep T034's 014 parity classification in this same commit: `send_when_checked` and `earlier` are `COMPARED`, and `test_benchmark_pane_parity.py` passes on the integrated baseline.
 
   Also rename `report/snapshot._root_document` to `root_document` (`:79`; one name in lane R's file, in this task). Add the field inside the `session.started` branch's `body.properties` in `specs/002-task-pane-assistant/contracts/chat-events.schema.json` (`review-flow.md` section 7's JSON, not in `required`). **Amends 002** `chat-events.schema.json`; **008** `contracts/checks-first.md` section 1 (unticked: no provider is set up, and no first request follows the pre-run). Acceptance: T034 green; T007 byte-equal.
-- [ ] T036 [US1] [py] Lane B. Extend `reviewer/tests/unit/test_runner_send.py` and `test_send_estimate.py` with the Send cache (`contracts/review-flow.md` section 5; `contracts/estimate.md` sections 1 to 4; data-model sections 3 and 7; FR-012, FR-013):
+- [x] T036 [US1] [py] Lane B. Extend `reviewer/tests/unit/test_runner_send.py` and `test_send_estimate.py` with the Send cache (`contracts/review-flow.md` section 5; `contracts/estimate.md` sections 1 to 4; data-model sections 3 and 7; FR-012, FR-013):
   - **The cache**: `build_send_cache()` sets `_send_cache` `{opening, estimate, named_ids}` in one assignment.
   - **One caller** (owner decision 71A): `close_waiting()` calls `build_send_cache()` and then `finalize()`, in that order, and is the only caller of `build_send_cache` (a spy counts one build per call; nothing else in `agent/runner.py` or `chat/server.py` calls it).
   - **The opening**: with nothing applied, it **is** the frozen `opening_message`, byte for byte. It also equals the opening built again after the finalization (the order pin, research R2.8).
@@ -243,8 +243,8 @@ description: "Task list for the send-to-model checkbox"
   - **The estimate** is `SendEstimate {input_tokens: count_tokens(request_prefix(system, tools, opening)), encoding: "o200k_base", approximate: provider == "gemini"}`, where `self.tools` is the offered tools less what lever 13 withheld. `input_tokens` is `None`, never zero, when `tokens.encoding` is patched to raise `TokenizerUnavailable` (the precedent is `test_step_sizes.py:166-171`; the vocabulary is cached per process, so an empty `SWREVIEW_TOKENIZER_DIR` would not take effect).
 
   Acceptance: red for want of the cache.
-- [ ] T037 [US1] [py] Lane B. Implement `SendCache`, `ReviewRun.build_send_cache()`, `close_waiting()` (its one caller: the cache, then the finalization; owner decision 71A), `opening_at_send()` and `first_request_estimate()` in `agent/runner.py`. `opening_at_send()` has only its frozen branch here; T086 adds the rebuilt one. Add `PrerunResult.named_finding_ids()` in `prerun.py` (`:522`, beside `_finding_lines`). Acceptance: T036 green; T007 byte-equal.
-- [ ] T038 [P] [US1] [py] Lane R. Write `reviewer/tests/unit/test_report_model_status.py` (`contracts/records.md` section 4; FR-032, SC-009). The header reads, by model status:
+- [x] T037 [US1] [py] Lane B. Implement `SendCache`, `ReviewRun.build_send_cache()`, `close_waiting()` (its one caller: the cache, then the finalization; owner decision 71A), `opening_at_send()` and `first_request_estimate()` in `agent/runner.py`. `opening_at_send()` has only its frozen branch here; T086 adds the rebuilt one. Add `PrerunResult.named_finding_ids()` in `prerun.py` (`:522`, beside `_finding_lines`). Acceptance: T036 green; T007 byte-equal.
+- [x] T038 [P] [US1] [py] Lane R. Write `reviewer/tests/unit/test_report_model_status.py` (`contracts/records.md` section 4; FR-032, SC-009). The header reads, by model status:
   - `not_sent`: "- Model: not sent to the model (checked by code only)", and no Provider line.
   - `send_failed`: "- Model: not sent to the model; the last attempt failed at {at}: {reason}".
   - `sent`: today's Model and Provider lines, then "- Sent to the model: {sent_at} (checks finished {checked_at})", and, when there were failed attempts, "- Earlier attempts that failed: {n}".
@@ -253,8 +253,8 @@ description: "Task list for the send-to-model checkbox"
   - A session with no `model_status` renders today's header (T007's `report.md` byte-equal).
 
   Acceptance: red for want of the lines.
-- [ ] T039 [US1] [py] Lane R. Implement the model-status lines in `_render_title` (`report/markdown.py:146-180`). It lands before the unticked start (T040-T041), whose test reads this header in the `report.md` on disk at the 201, so that commit holds no red test. Acceptance: T038 green; every `.md` golden and T007 byte-equal.
-- [ ] T040 [P] [US1] [py] Lane B. Extend `reviewer/tests/unit/test_send_gate_server.py` with the unticked start (`contracts/review-flow.md` sections 1, 2, 4 and 9; FR-006 to FR-010, FR-019, FR-025; SC-001, SC-002). Every unticked case asserts `ProviderControl.built == []`; the ticked overlap case permits the legitimate start's existing provider build and asserts no build for the refused duplicate.
+- [x] T039 [US1] [py] Lane R. Implement the model-status lines in `_render_title` (`report/markdown.py:146-180`). It lands before the unticked start (T040-T041), whose test reads this header in the `report.md` on disk at the 201, so that commit holds no red test. Acceptance: T038 green; every `.md` golden and T007 byte-equal.
+- [x] T040 [P] [US1] [py] Lane B. Extend `reviewer/tests/unit/test_send_gate_server.py` with the unticked start (`contracts/review-flow.md` sections 1, 2, 4 and 9; FR-006 to FR-010, FR-019, FR-025; SC-001, SC-002). Every unticked case asserts `ProviderControl.built == []`; the ticked overlap case permits the legitimate start's existing provider build and asserts no build for the refused duplicate.
   - **The start**: with no key in settings or the environment, `POST /sessions` with `send_when_checked: false` answers `201 {chat_id, review_session_id, not_examined}`, with the chat `awaiting_send`. The Send cache is built once per start, by `close_waiting` (owner decision 71A).
   - **What is on disk when the 201 arrives**:
     - `events.jsonl` ends at `session.ended`, with no `turn.started` or `turn.ended`.
@@ -274,7 +274,7 @@ description: "Task list for the send-to-model checkbox"
     - Two reviews waiting at once each keep their own state.
 
   Acceptance: red for want of the field.
-- [ ] T041 [US1] [py] Lane B. Implement the unticked branch of `create_session` (`chat/server.py:1230-1262`), in this order:
+- [x] T041 [US1] [py] Lane B. Implement the unticked branch of `create_session` (`chat/server.py:1230-1262`), in this order:
   1. `_start_review` (`:2111-2114`) builds `DeferredProvider.for_settings(...)` in place of the factory when `send_when_checked` is false.
   2. `ChatServer._open_waiting(chat, run)` (owner decision 71A), the tail T095's re-run shares: on the thread pool, before the chat is attached and registered, `run.close_waiting()` and `_render_run(run, chat.report_path, chat.run_dir)`; a raise moves the unregistered chat `extracting -> failed` and answers the error body. Then attach, register and move `extracting -> awaiting_send`.
   3. Answer 201.
@@ -282,15 +282,15 @@ description: "Task list for the send-to-model checkbox"
   Before the first await, reserve the resolved folder on the event loop. `_claim_run_dir` checks this pending-folder set as well as registered chats and files; a second start is `RunDirInUse`. Release the reservation on every setup/finalization failure and after successful registration, using one `finally` around the claimed start. Failed starts stay unregistered, and unrelated folders remain independent (2026-10-12 lifecycle audit).
 
   Also validate the body's `send_when_checked`, and add `NotSent` (409), refusing `POST /messages` while `run.awaiting_send`. **Amends 002** `contracts/chat-api.md` (the `POST /sessions` field; "starts the review turn immediately" holds only with the box ticked; `POST /messages`' `NotSent`) and spec FR-006. Acceptance: T040 green; T027 and T038 green; T007 byte-equal.
-- [ ] T042 [US1] [py] Lane B. Extend `reviewer/tests/unit/test_send_gate_server.py` with the SOLIDWORKS pipe of a waiting review (owner decision 79A; research R2.29; `contracts/review-flow.md` section 8; the spec's edge case "Several reviews waiting at once"). The seat is a real `BridgeClient(pipe, secret, transport=<a counting transport>)`, built through the app's `bridge_factory` as `tests/fixtures/pane/generate_drawing_questions.py:217` and `test_confirmed_drawing_read.py:677-689` build one; `ScriptedReviewBridge` has no transport, so it cannot show a pipe closed and opened again. The counting transport answers on the wire, as `test_bridge_client.py`'s `FakeTransport` does, the interference results T006's script gives (and, for T083, the confirmed read's); like `NamedPipeTransport` (`bridge/client.py:256-261`, `:288-291`), it opens its pipe on its first request after construction or after a `close()`, and it counts the pipes open (opened less closed):
+- [x] T042 [US1] [py] Lane B. Extend `reviewer/tests/unit/test_send_gate_server.py` with the SOLIDWORKS pipe of a waiting review (owner decision 79A; research R2.29; `contracts/review-flow.md` section 8; the spec's edge case "Several reviews waiting at once"). The seat is a real `BridgeClient(pipe, secret, transport=<a counting transport>)`, built through the app's `bridge_factory` as `tests/fixtures/pane/generate_drawing_questions.py:217` and `test_confirmed_drawing_read.py:677-689` build one; `ScriptedReviewBridge` has no transport, so it cannot show a pipe closed and opened again. The counting transport answers on the wire, as `test_bridge_client.py`'s `FakeTransport` does, the interference results T006's script gives (and, for T083, the confirmed read's); like `NamedPipeTransport` (`bridge/client.py:256-261`, `:288-291`), it opens its pipe on its first request after construction or after a `close()`, and it counts the pipes open (opened less closed):
   - Five unticked assembly reviews started in one backend, each with SOLIDWORKS attached (so the pre-run's live detection opens the pipe), hold zero open pipes once each `201` arrives.
   - `ReviewRun.release_bridge()` closes only the transport and keeps the client: the run's `BridgeClient` is the same object after it, and a later call through it opens the pipe again. With no bridge (`no_bridge`), it does nothing.
   - A ticked review's transport is not closed by the start (T007 byte-equal).
   - **A start that fails** (`contracts/review-flow.md` section 1 step 4): an unticked assembly start, SOLIDWORKS attached, whose finalization raises answers today's error body, registers no chat, and leaves zero pipes open: `_open_waiting`'s failure branch closes the run (`run.close()`).
 
   Acceptance: red for want of `release_bridge`.
-- [ ] T043 [US1] [py] Lane B. Add `ReviewRun.release_bridge()` to `agent/runner.py` (closing the context's bridge transport through `BridgeClient.close()`, `bridge/client.py:569-571`, which closes only the transport) and call it in `ChatServer._open_waiting` after the render and before the chat is registered (`chat/server.py`); in `_open_waiting`'s failure branch, close the run instead (`run.close()`, `agent/runner.py:1386-1390`) before the chat moves `extracting -> failed`. T066 adds its second call, in `_play`'s settle. Acceptance: T042 green; T040 green; T007 byte-equal.
-- [ ] T044 [P] [US1] [py] Lane R. Write `reviewer/tests/unit/test_send_block.py` (data-model section 6; `contracts/pane.md` section 3; `contracts/words.md` section 1; `contracts/estimate.md` section 3; FR-012, FR-034).
+- [x] T043 [US1] [py] Lane B. Add `ReviewRun.release_bridge()` to `agent/runner.py` (closing the context's bridge transport through `BridgeClient.close()`, `bridge/client.py:569-571`, which closes only the transport) and call it in `ChatServer._open_waiting` after the render and before the chat is registered (`chat/server.py`); in `_open_waiting`'s failure branch, close the run instead (`run.close()`, `agent/runner.py:1386-1390`) before the chat moves `extracting -> failed`. T066 adds its second call, in `_play`'s settle. Acceptance: T042 green; T040 green; T007 byte-equal.
+- [x] T044 [P] [US1] [py] Lane R. Write `reviewer/tests/unit/test_send_block.py` (data-model section 6; `contracts/pane.md` section 3; `contracts/words.md` section 1; `contracts/estimate.md` section 3; FR-012, FR-034).
   - `review_ranking(session, package, *, usage=None, send=None)` omits `summary.send` when `send` is `None`, keeping the pane fixture's bytes (`test_pane_fixture.py` green and unedited).
   - From `send_input` `{state, input_tokens, provider, send_error}` it builds `SendBlock {state, input_tokens, approximate, text, failure, rerun_failed_text}`, with no `session_id` and no restored line (owner decisions 68A and 73A).
   - **`waiting`**:
@@ -303,18 +303,18 @@ description: "Task list for the send-to-model checkbox"
   - Every sentence comes from the words file.
 
   Acceptance: red for want of the block.
-- [ ] T045 [US1] [py] Lane R. Implement `SendBlock`, `ReviewSummary.send` (omitted when `None`), `review_ranking(send=)`, `resume_text` while waiting and `tokens_text` (extracted from `ResumeWords.of`, which now calls it; `report/summary.py:279-284`) in `report/summary.py`. **Amends**:
+- [x] T045 [US1] [py] Lane R. Implement `SendBlock`, `ReviewSummary.send` (omitted when `None`), `review_ranking(send=)`, `resume_text` while waiting and `tokens_text` (extracted from `ResumeWords.of`, which now calls it; `report/summary.py:279-284`) in `report/summary.py`. **Amends**:
   - **009** `contracts/review-summary.md` section 1 (the `send` block) and `contracts/views.md` section 2 (the Send block's count, a second exception to "Results shows no token count");
   - **008** `contracts/cost.md` (a new surface, the Send sentence) and `contracts/tokenizer.md` section 1 (the pane sentence names no encoding, and a Gemini figure is called approximate).
 
   Acceptance: T044 green; `test_pane_fixture.py` green and unedited.
-- [ ] T046 [US1] [py] Lane B. Extend `reviewer/tests/unit/test_send_gate_server.py` (`contracts/estimate.md` section 2; research R2.8):
+- [x] T046 [US1] [py] Lane B. Extend `reviewer/tests/unit/test_send_gate_server.py` (`contracts/estimate.md` section 2; research R2.8):
   - For a waiting chat, `GET /sessions/{id}/attention` and the snapshot answer `summary.send {state: "waiting", input_tokens: <the cache's count>, ...}` and `chat_state: "awaiting_send"`.
   - With `_opening_message` and `count_tokens` patched to raise once the cache exists, both routes still answer `200` with the cached figure: no route builds an opening or counts a token.
   - A ticked chat's answers carry no `send`.
 
   Acceptance: red for want of the block on the routes.
-- [ ] T047 [US1] [py] Lane B. Add `ReviewRun.send_input()`, which reads `_send_cache` and `_send_error` and computes nothing, and pass it from the attention and snapshot routes while `run.awaiting_send` (`chat/server.py:1267-1318`). Acceptance: T046 green; T007 byte-equal.
+- [x] T047 [US1] [py] Lane B. Add `ReviewRun.send_input()`, which reads `_send_cache` and `_send_error` and computes nothing, and pass it from the attention and snapshot routes while `run.awaiting_send` (`chat/server.py:1267-1318`). Acceptance: T046 green; T007 byte-equal.
 
 ### The host
 

@@ -2,6 +2,10 @@
 
 *Feature 015 amendment notice, 2026-10-08:* Planned amendments for `settings.schema.json`, `chat-events.schema.json` are specified in [015 pane.md](../../015-review-send-gate/contracts/pane.md), [015 review-flow.md](../../015-review-send-gate/contracts/review-flow.md).
 
+*Feature 015 US1 event amendment, landed 2026-10-12:* `session.started` accepts the optional
+`send_when_checked` field only with value `false`, identifying a checks-only start. Ticked
+starts omit it and keep the previous body. Other new fields remain refused by the closed schema.
+
 *Amended 2026-09-29 by feature 014 (`specs/014-design-review-eval/`), in benchmark-run.md sections 6 to 8; the amendment text lands with the 014 task that changes the code:* `chat-events.schema.json` gains optional `served_model`, `stop_reason` and `retries` on the `usage` and `error` bodies.
 
 *Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed 2026-09-27 (013 T038, T108):* `chat-events.schema.json`: `text.done`'s body gains optional `basis`, and a `finding.withdrawn` event is added; see 013 `contracts/sources.md` section 3 and `contracts/part-roles.md` section 9.

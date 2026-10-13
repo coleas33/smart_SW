@@ -1,12 +1,18 @@
 # Reviewer Backend API
 
-*Feature 015 amendment notice, 2026-10-08:* Planned amendments for the Send gate, restoration are specified in [015 review-flow.md](../../015-review-send-gate/contracts/review-flow.md), [015 recheck.md](../../015-review-send-gate/contracts/recheck.md).
+*Feature 015 amendment, 2026-10-12 (T041):* `POST /sessions` accepts the optional boolean
+`send_when_checked` (default true); false saves a checks-only review in `awaiting_send`.
+Follow-ups before Send are refused with `409 NotSent`. The flow is specified in
+[015 review-flow.md](../../015-review-send-gate/contracts/review-flow.md).
+The later Send and restoration changes remain specified in
+[015 recheck.md](../../015-review-send-gate/contracts/recheck.md).
 
 *Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed by 2026-09-27 (013 T054):* the Review tab's Start here is replaced by the grouped findings list (`<section id="findings-by-type">`), so `not_examined`'s headline sits above that list; see 013 `contracts/grouped-list.md` section 5 (lands with 013 T054).
 
 One loopback service, not one per tab: `swreview chat serve` is the **reviewer backend**,
-and it serves **checks as well as chats**. The `/sessions/*` routes run a review turn
-through a provider; the `/checks/*` routes grade a design without one - against the
+and it serves **checks as well as chats**. A ticked `/sessions` start runs a review turn
+through a provider; an unticked start runs the code checks and waits for Send without
+building a provider client or requiring a key. The `/checks/*` routes grade a design - against the
 Resilient Modeling rules (feature 003, User Story 6) or against a standards profile
 (feature 006, User Story 3) - and construct no provider, read no key and make no
 network call at all. Everything below - the handshake, the token, the origin rules, the
@@ -32,10 +38,10 @@ the settings file.
 | GET | `/health` | | `{status: "ok", version, providers: ["openai", "gemini"]}`; a development build also lists `"fake"` |
 | GET | `/models?provider=openai\|gemini\|fake` | | `{models: [{id, label}]}` from the provider; `fake` returns one scripted id; 502 with the provider error class on failure |
 | GET | `/labels` | | `200` with the `labels` block of `reviewer/src/swreview/report/review_words_v1.yaml`, verbatim (feature 009, `specs/009-engineer-workspace/contracts/plain-words.md` section 1, data-model section 7): `{version, status, severity, bucket, evidence_status, contact_kind, errors}` - the words the Review tab prints for each token, and one next-step sentence per error class. Token required like every route. Reads no session and writes nothing. |
-| POST | `/sessions` | `{run_dir, provider, model, effort, bridge: {pipe, secret} \| null, engineer, retry_of: chat_id \| null, standards_profile: str \| null}` | `201 {chat_id, review_session_id, not_examined}`; starts the review turn immediately. `standards_profile` is the configured profile path, passed to the reasoning side to attach `check_standards`; blank or null means no profile. An unreadable or invalid configured profile leaves the review possible and makes the standards family not evaluated, rather than refusing the review. `not_examined` is the shared `{sentence, headline, instances}` block from `report/unexamined.py`, or null when every instance was read; Review displays its `headline` (names, no ids; feature 009 T013) above the grouped findings (`<section id="findings-by-type">`, feature 013 T054; above Start here until then) as soon as the session starts, with the instances' ids in a fold, and falls back to `sentence` from a backend that sends no `headline`. `sentence` keeps the ids and is what `report.md` and both check bodies print. 400 if `run_dir` fails the path rule below or `run_dir/package.json` is missing or invalid. |
+| POST | `/sessions` | `{run_dir, provider, model, effort, bridge: {pipe, secret} \| null, engineer, retry_of: chat_id \| null, standards_profile: str \| null, send_when_checked?: boolean}` | `201 {chat_id, review_session_id, not_examined}`; starts the review turn immediately when `send_when_checked` is true or absent. False runs the code checks, builds the Send cache, finalizes and renders the record, then registers the chat in `awaiting_send`, without a provider request. A non-boolean value is `400 InvalidRequest` naming `send_when_checked`. `standards_profile` is the configured profile path, passed to the reasoning side to attach `check_standards`; blank or null means no profile. An unreadable or invalid configured profile leaves the review possible and makes the standards family not evaluated, rather than refusing the review. `not_examined` is the shared `{sentence, headline, instances}` block from `report/unexamined.py`, or null when every instance was read; Review displays its `headline` (names, no ids; feature 009 T013) above the grouped findings (`<section id="findings-by-type">`, feature 013 T054; above Start here until then) as soon as the session starts, with the instances' ids in a fold, and falls back to `sentence` from a backend that sends no `headline`. `sentence` keeps the ids and is what `report.md` and both check bodies print. 400 if `run_dir` fails the path rule below or `run_dir/package.json` is missing or invalid. |
 | GET | `/sessions/{chat_id}` | | `ChatSession` state without `token` and without `bridge` (neither the HTTP token nor the bridge secret is ever echoed) |
 | GET | `/sessions/{chat_id}/events` | `Last-Event-ID` header optional | `text/event-stream`; replays from `events.jsonl` after the given id, then live. Event `id` = `seq`, `event` = `type`, `data` = JSON body. |
-| POST | `/sessions/{chat_id}/messages` | `{text}` | 202; appends a user turn and runs, including on a session whose previous turn already ended (`ended → running`, see data-model section 3). 409 if a turn is running. |
+| POST | `/sessions/{chat_id}/messages` | `{text}` | 202; appends a user turn and runs, including on a session whose previous turn already ended (`ended → running`, see data-model section 3). 409 if a turn is running; `409 NotSent` while the run waits for Send, without changing the review. |
 | POST | `/sessions/{chat_id}/evidence/{request_id}` | `{answer}` | 202; marks answered, resumes. 404 unknown request; 409 already answered. Both refusal bodies carry `request_id` naming the request beside `error_class`, `message` and `retryable` (feature 009 T042), as the batch route's will; no other error body has the key. |
 | POST | `/sessions/{chat_id}/evidence` | `{answers: [{request_id, answer}, ...]}` | 202; every named request answered, one `evidence.answered` each in submission order, and the review resumes **once** (feature 008, `specs/008-checks-first-review/contracts/answer-batch.md`, normative). Checked in this order, and a refusal changes nothing: `404 UnknownChat`; `400 InvalidRequest` naming the index or the repeated id when `answers` is not a non-empty list of objects each with a non-empty string `request_id` and a non-empty string `answer`, or names one id twice; `409 TurnRunning` / `SessionFailed`; then every id, `404 UnknownEvidenceRequest` / `409 AlreadyAnswered` naming the first failing id. Some of the open requests may be answered; the rest stay open. The single-answer route above stays and uses the same validator (`runner.answerable`). No new event type. |
 | POST | `/sessions/{chat_id}/findings/{finding_id}/disposition` | `{decision, note, by}` | 200 with the `Finding`; 409 on an illegal transition. Re-renders `report.md`. |
@@ -57,6 +63,16 @@ provider's error class name.
 
 Concurrency: one running turn per chat; the server serializes messages and evidence
 answers per chat and refuses with 409 rather than queueing silently.
+
+One chat owns each run folder. Before setup's first await, both ticked and unticked starts
+reserve its resolved path: an overlapping start on the same folder is `409 RunDirInUse`
+before another setup or provider build, while another folder may start independently.
+The pending reservation is released on failure and after registration; an unfinished
+registered chat, including `awaiting_send`, continues to hold the folder. A failed start
+registers no chat, and existing on-disk Retry rules still apply to any files it left.
+An unticked start is registered only after its cache, finalization and render finish, so
+shutdown cannot finalize that unregistered run concurrently. Stop and graceful shutdown
+write nothing for a finalized waiting review; its state remains `awaiting_send`.
 
 ## Path rule for `run_dir`
 

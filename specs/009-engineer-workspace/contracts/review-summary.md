@@ -24,6 +24,18 @@ issues and whose fold the passes; `ReviewRanking` carries the same `groups`. Thr
 
 `attention.json`, the Model check and Standards bodies, and `report.md` do not carry it.
 
+*Feature 015 amendment landed 2026-10-12 (T044–T045):* `review_ranking` and
+`review_summary` accept the optional keyword `send=None`. A waiting run supplies cached
+`{state, input_tokens, provider, send_error}`; a restored waiting review supplies state
+`restored` and an unknown count. `ReviewSummary.send` is omitted when absent, preserving the
+previous ranking bytes. When present it holds exactly `{state, input_tokens, approximate,
+text, failure, rerun_failed_text}` (015 `contracts/pane.md` section 3); it carries no session
+id or restored line. Its sentences come from the words file, and `resume_text` is
+`send.apply_answers` while it is present. `tokens_text` is the shared thousands formatter
+for this first-request sentence and the previous resume sentence. A failure uses the
+stored wall clock, with a prepare failure taking precedence over the latest recorded
+failed first request.
+
 ## 2. The groups
 
 Every finding outside a folded family is in exactly one group, first match winning:

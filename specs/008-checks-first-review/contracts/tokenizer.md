@@ -14,6 +14,12 @@ largest results - comes from `count_tokens(text) -> int` over exactly the text t
 (`tool_result_text`, `model-view.md` section 6), and every surface that prints one names the
 encoding. A Gemini recording is priced with the same encoding and labelled a shape comparison.
 
+*Feature 015 amendment landed 2026-10-12 (T044–T045):* the pane's Send sentence is an
+exception to naming the encoding on every surface. Its cached first-request count uses
+this same encoding, but the sentence names no encoding and calls a Gemini count
+approximate because Gemini counts tokens its own way (015 `contracts/estimate.md`
+sections 3 and 4). An unavailable count remains `None`, shown with no number.
+
 ## 2. The vocabulary lives in a per-user cache, never in the repository
 
 - File name: `fb374d419588a4632f3f557e76b4b70aebbca790`, the name tiktoken caches the encoding's

@@ -594,7 +594,13 @@ class PrerunResult:
                 lines.append(_collapsed_line(tool, calls))
         return lines
 
-    def _finding_lines(self) -> list[str]:
+    def named_finding_ids(self) -> list[str]:
+        """The ids the digest names, selected by its own render loop."""
+        ids: list[str] = []
+        self._finding_lines(named_ids=ids)
+        return ids
+
+    def _finding_lines(self, *, named_ids: list[str] | None = None) -> list[str]:
         """One line per folded family or per check and status, in recording order."""
         grouped: dict[tuple[str, str], list[Finding]] = {}
         for finding in self.findings:
@@ -608,7 +614,10 @@ class PrerunResult:
                 continue
             ids = [finding.id for finding in findings]
             more = len(ids) - DIGEST_ID_CAP
-            named = ", ".join(ids[:DIGEST_ID_CAP]) + (f", and {more} more" if more > 0 else "")
+            shown = ids[:DIGEST_ID_CAP]
+            if named_ids is not None:
+                named_ids.extend(shown)
+            named = ", ".join(shown) + (f", and {more} more" if more > 0 else "")
             lines.append(f"  {check} - {len(ids)} {status}: {named}")
         return lines
 
