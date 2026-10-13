@@ -529,10 +529,10 @@ description: "Task list for the send-to-model checkbox"
 
   Acceptance: red for want of the reader.
 - [x] T074 [US2] [C#] Lane H. Extract `PackageIndex.FillHead(stream, maxBytes)` from `HeadOf`'s fill loop (`extractor/SwReview.Extractor/Dump/PackageIndex.cs:266-291`; one helper in the extractor's file, in this task), which `HeadOf` now calls. Add `RunFolders.ReadModelStatus(runDirectory, openHead)` in `Review/RunFolders.cs`, its default opener `FileShare.ReadWrite | FileShare.Delete`, and the refresh of the marked records in `sessions.list` in `ReviewHost.cs`, where only a head that says `sent` clears a mark and a `null` read keeps it. **Amends 002** `contracts/pane-host-messages.md` (`sessions.list` refreshes the marked records; owner decision 73A). Acceptance: T073 green; T050's mark case green and unedited (its fake backend writes no `session.json`, a `null` read, which keeps the mark); `PackageIndex`'s tests green and unedited; zero warnings.
-- [ ] T075 [US2] [page] Lane W. Extend `ReviewPageSendGateTests.cs` with Send (`contracts/pane.md` sections 3, 6, 8 and 10; FR-017 to FR-019, FR-033, FR-035).
+- [x] T075 [US2] [page] Lane W. Extend `ReviewPageSendGateTests.cs` with Send (`contracts/pane.md` sections 3, 6, 8 and 10; FR-017 to FR-019, FR-033, FR-035).
   - **Send**:
     - It posts `/send`. On `202` the block hides, the turn is marked running, and the stream reopens.
-    - The first `usage` enables the follow-up box and drops the chip's mark at once (`state.sentSeen`), until the next `sessions` answer agrees (owner decision 73A).
+    - The first `usage` clears the waiting guard and placeholder and drops the chip's mark at once (`state.sentSeen`), until the next `sessions` answer agrees (owner decision 73A). Follow-up controls then use today's turn, document and read-only guards: they enable when that turn ends, not while it still runs (`pane.md` section 6; contract clarification 2026-10-12).
     - Once a Send is in flight, Stop is today's.
     - `session.sent` writes "Sending to {provider} {model} ({requested} -> {param}={value}) - first request {n} input tokens" (owner decision 72A).
   - **Failures**:
@@ -546,7 +546,7 @@ description: "Task list for the send-to-model checkbox"
   - **Two waiting reviews**: with two waiting chips, Send posts `/send` for the chip on screen only, and the other chip stays waiting, with its mark.
 
   Acceptance: red for want of the press.
-- [ ] T076 [US2] [page] Lane W. Implement Send in `app.js`: `state.sending`, set by the press and by a restore whose snapshot carries `send_in_flight` (owner decision 77A); `state.sentSeen`; the press; the rule for an `error` while sending, which re-reads the attention; the enabling rule; and the Transcript line, "Sending to ...", which shares `describeStart`'s effort part. Add the failure line to `render.sendBlock`. **Amends 009** `contracts/views.md` section 2 (the block sits under the summary). Acceptance: T075 green; `PageRuleScanTests` green.
+- [x] T076 [US2] [page] Lane W. Implement Send in `app.js`: `state.sending`, set by the press and by a restore whose snapshot carries `send_in_flight` (owner decision 77A); `state.sentSeen`; the press; the rule for an `error` while sending, which re-reads the attention; the enabling rule; and the Transcript line, "Sending to ...", which shares `describeStart`'s effort part. Add the failure line to `render.sendBlock`. **Amends 009** `contracts/views.md` section 2 (the block sits under the summary). Acceptance: T075 green; `PageRuleScanTests` green.
 - [ ] T077 [US2] [page] Lane W. Extend `ReviewPageSendLayoutTests.cs` with `failed_send` and its failure line: the headline, tally and not-reached line, and the Send to model button, are inside 300 by 600 (SC-007). This is an acceptance test. Acceptance: green.
 - [ ] T078 [P] [US2] [py] Lane R. Extend `reviewer/tests/unit/test_recording.py` and `test_cli_benchmark_replay.py` (`contracts/records.md` section 6; FR-040). Before it reads the events, `read_recording` refuses, with one `RecordingRefused` sentence each:
   - a never-sent or send-failed session: "{RUN_DIR} was never sent to the model, so it has no model turn to replay";

@@ -82,6 +82,11 @@
     runDir: null,
     turnRunning: false,
     awaitingSend: false,
+    sending: false,
+    sendAwaitingStart: false,
+    sendPending: false,
+    sendError: null,
+    sentSeen: Object.create(null),
     sendWhenCheckedConfirmed: true,
     sendWhenCheckedChange: 0,
     sendWhenCheckedPending: 0,
@@ -257,7 +262,9 @@
         // One raw SSE frame, read by the host. Frames for a chat this page is no longer
         // showing are dropped: a reconnect or a second review replaces the transcript, and a
         // late frame from the stream before it belongs to a session that is gone.
-        if (payload.chat_id === state.chatId) {
+        if (payload.chat_id === state.chatId && !state.sendPending) {
+          // A pending Send holds the cursor: its acceptance reopens the durable event log
+          // after establishing the sending state, including frames already queued by the host.
           // A frame is the only proof this side of the channel has that the stream really
           // connected: `events.open` is a request, and the host does not answer it. So this is
           // where the backoff resets. Resetting it in `openStream` - which is exactly what the
@@ -273,7 +280,7 @@
         }
         return;
       case 'events.closed':
-        if (payload.chat_id === state.chatId) {
+        if (payload.chat_id === state.chatId && !state.sendPending) {
           scheduleReconnect(payload.reason || 'The event stream closed.');
         }
         return;
@@ -369,7 +376,7 @@
    * the channel.
    */
   function openStream() {
-    if (!state.chatId) {
+    if (!state.chatId || state.sendPending) {
       return;
     }
 
@@ -507,6 +514,10 @@
       case 'session.started':
         appendCard(render.textBlock('system', describeStart(body)));
         return;
+      case 'session.sent':
+        state.sendAwaitingStart = false;
+        appendCard(render.textBlock('system', describeSent(body)));
+        return;
       case 'text.delta':
         writeDelta(body.text);
         return;
@@ -543,16 +554,43 @@
         renderCoverage();
         return;
       case 'usage':
+        if (state.sending) {
+          state.attentionEpoch++;
+          state.sending = false;
+          state.sendAwaitingStart = false;
+          state.awaitingSend = false;
+          state.sentSeen[state.chatId] = true;
+          // This review has reached the model. Its preceding waiting block is now obsolete.
+          if (state.summary) state.summary.send = null;
+          renderSend();
+          renderChips();
+        }
         state.usage.push(body);
         renderUsage();
         return;
       case 'turn.ended':
-        endTurn(body);
+        // A retry's retained cursor can precede the previous failed attempt's closing pair.
+        // Keep that chronology without ending the accepted attempt before its session.sent.
+        if (state.sending && state.sendAwaitingStart) onReplayedEvent(event);
+        else endTurn(body);
         return;
       case 'session.ended':
-        endSession(body);
+        if (state.sending && state.sendAwaitingStart) onReplayedEvent(event);
+        else endSession(body);
         return;
       case 'error':
+        if (state.sending) {
+          state.sending = false;
+          state.sendAwaitingStart = false;
+          state.awaitingSend = true;
+          state.textBlock = null;
+          state.runningTool = '';
+          setTurnRunning(false);
+          renderTranscriptHead();
+          appendCard(errorLine(body));
+          loadAttention();
+          return;
+        }
         setTurnRunning(false);
         unansweredFollowUp('failed');
         showError(body);
@@ -645,10 +683,21 @@
     if (body.send_when_checked === false) {
       return 'Checked by code only: nothing is sent to the model until Send to model is pressed.';
     }
-    var line = 'Review started with ' + (body.provider || '?') + ' ' + (body.model || '?');
-    if (body.effort_mapping) {
-      line += ' (' + body.effort_mapping.requested + ' -> '
-        + body.effort_mapping.provider_param + '=' + body.effort_mapping.provider_value + ')';
+    return 'Review started with ' + (body.provider || '?') + ' ' + (body.model || '?')
+      + describeEffort(body);
+  }
+
+  function describeEffort(body) {
+    var mapping = body.effort_mapping;
+    return mapping ? ' (' + mapping.requested + ' -> '
+      + mapping.provider_param + '=' + mapping.provider_value + ')' : '';
+  }
+
+  function describeSent(body) {
+    var line = 'Sending to ' + (body.provider || '?') + ' ' + (body.model || '?')
+      + describeEffort(body);
+    if (body.estimate && typeof body.estimate.input_tokens === 'number') {
+      line += ' - first request ' + body.estimate.input_tokens.toLocaleString('en-US') + ' input tokens';
     }
     return line;
   }
@@ -1074,6 +1123,8 @@
   }
 
   function endSession(body) {
+    state.sending = false;
+    state.sendAwaitingStart = false;
     setTurnRunning(false);
     state.textBlock = null;
     state.runningTool = '';
@@ -1162,17 +1213,53 @@
   }
 
   function waitingForSend() {
-    return state.awaitingSend || !!(state.summary && state.summary.send);
+    return state.sending || state.awaitingSend || !!(state.summary && state.summary.send);
+  }
+
+  /** The single enabling rule used by both Send's renderer and its press. */
+  function canSendToModel() {
+    return !!state.chatId && !!(state.summary && state.summary.send) && !state.resultsStale
+      && !isDrawing(state.documentInfo) && !state.startPending && !state.turnRunning
+      && !state.sending && !state.sendPending && state.readOnly === null;
+  }
+
+  function sendToModel() {
+    if (!canSendToModel()) {
+      return;
+    }
+    var chatId = state.chatId;
+    var resumeStream = !!state.stream || state.reconnectTimer !== null;
+    state.sendPending = true;
+    // Pause an old attempt's stream without consuming its cursor. Accepted Send events and
+    // a refused retry's prior finalization are both replayed from that cursor after the reply.
+    closeStream();
+    state.sendError = null;
+    renderSend();
+    call(sessionPath('/send'), 'POST').then(function () {
+      if (state.chatId !== chatId) return;
+      state.sendPending = false;
+      state.sending = true;
+      state.sendAwaitingStart = true;
+      setTurnRunning(true);
+      renderSend();
+      openStream();
+    }, function (error) {
+      if (state.chatId !== chatId) return;
+      state.sendPending = false;
+      state.sendError = errorBody(error);
+      renderSend();
+      if (resumeStream) openStream();
+    });
   }
 
   function renderSend() {
     render.clear(ui.send);
     var block = state.summary && state.summary.send;
-    ui.send.hidden = !block;
+    ui.send.hidden = !block || state.sending;
     if (block) {
       ui.send.appendChild(render.sendBlock(block, {
-        disabled: !state.chatId || state.resultsStale || isDrawing(state.documentInfo)
-          || state.startPending || state.turnRunning || state.readOnly !== null
+        disabled: !canSendToModel(),
+        error: state.sendError, labels: state.labels
       }));
     }
     ui.waitingSettingsNote.textContent = waitingForSend()
@@ -1295,6 +1382,15 @@
 
   function applySessions(payload) {
     state.reviews = (payload && payload.items) || [];
+    var seen = state.sentSeen;
+    state.sentSeen = Object.create(null);
+    for (var index = 0; index < state.reviews.length; index++) {
+      var item = state.reviews[index] || {};
+      var chatId = String(item.chat_id || '');
+      // A list requested before first usage can arrive afterwards. Keep the live fact until
+      // the host agrees that this review was sent; it alone supplies marks after a reload.
+      if (item.model_status && seen[chatId]) state.sentSeen[chatId] = true;
+    }
     renderChips();
   }
 
@@ -1323,7 +1419,8 @@
     var label = docs.label(reviewDocument(item)) || String(item.run_id || '');
     var clock = clockOf(item.started_at);
     label = clock ? label + ' ' + clock : label;
-    return item.model_status ? label + ' · not sent' : label;
+    return item.model_status && !state.sentSeen[String(item.chat_id || '')]
+      ? label + ' · not sent' : label;
   }
 
   function clockOf(startedAt) {
@@ -1361,7 +1458,7 @@
    * a sort.
    */
   function followActiveDocument() {
-    if (state.turnRunning || state.startPending) {
+    if (state.turnRunning || state.startPending || state.sendPending) {
       return;
     }
     if (state.chatId && docs.same(state.reviewed, state.documentInfo)) {
@@ -1390,7 +1487,7 @@
    * shows no review.
    */
   function showReview(chatId) {
-    if (state.turnRunning || state.startPending) {
+    if (state.turnRunning || state.startPending || state.sendPending) {
       return;
     }
     var item = keptReview(chatId);
@@ -1451,6 +1548,8 @@
     var body = snapshot || {};
     state.restoredFromFolder = fromFolder;
     state.awaitingSend = body.chat_state === 'awaiting_send';
+    state.sending = body.send_in_flight === true;
+    state.sendAwaitingStart = false;
     state.readOnly = body.read_only ? String(body.read_only_reason || '') : null;
     state.snapshotLastSeq = typeof body.last_seq === 'number' ? body.last_seq : 0;
 
@@ -1635,7 +1734,7 @@
       startReview(retryOf);
       return;
     }
-    if (state.startPending || state.turnRunning) {
+    if (state.startPending || state.turnRunning || state.sendPending) {
       return;
     }
     clearPreparation();
@@ -1680,7 +1779,7 @@
   }
 
   function startReview(retryOf, preparationId) {
-    if (state.startPending || state.turnRunning || isDrawing(state.documentInfo)) {
+    if (state.startPending || state.turnRunning || state.sendPending || isDrawing(state.documentInfo)) {
       return;
     }
 
@@ -1738,9 +1837,9 @@
    * pressable again (FR-030).
    */
   function renderStartReview() {
-    ui.startReview.disabled = state.startPending || state.turnRunning || !state.documentInfo
+    ui.startReview.disabled = state.startPending || state.turnRunning || state.sendPending || !state.documentInfo
       || isDrawing(state.documentInfo);
-    var followupDisabled = state.startPending || state.turnRunning || !!state.preparation
+    var followupDisabled = state.startPending || state.turnRunning || state.sendPending || !!state.preparation
       || !state.chatId || state.resultsStale || state.readOnly !== null || waitingForSend();
     ui.followupText.disabled = followupDisabled;
     ui.followupText.placeholder = waitingForSend()
@@ -1748,8 +1847,7 @@
     ui.followupSend.disabled = followupDisabled;
     var sendButton = ui.send.querySelector('[data-action="send"]');
     if (sendButton) {
-      sendButton.disabled = !state.chatId || state.resultsStale || isDrawing(state.documentInfo)
-        || state.startPending || state.turnRunning || state.readOnly !== null;
+      sendButton.disabled = !canSendToModel();
     }
     ui.clearReview.disabled = !canClearReview();
     syncQuestionControls();
@@ -1761,7 +1859,7 @@
    * pointing at nothing - while the backend goes on spending tokens on it.
    */
   function canClearReview() {
-    return !!state.chatId && !state.turnRunning && !state.startPending;
+    return !!state.chatId && !state.turnRunning && !state.startPending && !state.sendPending;
   }
 
   /**
@@ -1879,6 +1977,10 @@
     ui.coverage.hidden = true;
     state.summary = null;
     state.awaitingSend = false;
+    state.sending = false;
+    state.sendAwaitingStart = false;
+    state.sendPending = false;
+    state.sendError = null;
     state.questionIndex = 0;
     state.questionNote = null;
     state.readOnly = null;
@@ -1921,7 +2023,7 @@
     }
     state.turnRunning = running;
     renderStartReview();
-    ui.stop.disabled = !running || !state.chatId || waitingForSend();
+    ui.stop.disabled = !running || !state.chatId || (waitingForSend() && !state.sending);
     renderResultsState();
   }
 
@@ -1999,6 +2101,9 @@
 
     var card = target.closest('.card');
     switch (action) {
+      case 'send':
+        sendToModel();
+        return;
       case 'show':
         showInSolidWorks(card);
         return;
@@ -2219,9 +2324,9 @@
     return answers;
   }
 
-  /** The panel is locked while a turn runs or a start is in flight, and for a hidden or read-only review. */
+  /** The panel is locked while a turn runs, a start or Send is in flight, or a review is hidden or read-only. */
   function questionsLocked() {
-    return state.turnRunning || state.startPending || state.resultsStale || !state.chatId
+    return state.turnRunning || state.startPending || state.sendPending || state.resultsStale || !state.chatId
       || state.readOnly !== null;
   }
 

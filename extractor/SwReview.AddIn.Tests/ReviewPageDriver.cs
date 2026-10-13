@@ -92,6 +92,19 @@ internal sealed class ReviewPageDriver
         await BootAsync();
     }
 
+    /// <summary>Holds actual sessions.list reply ids to test a list that crossed a usage event.</summary>
+    public bool HoldSessions { get; set; }
+
+    private readonly Queue<string> _heldSessions = new Queue<string>();
+
+    public async Task ReleaseSessions()
+    {
+        Assert.NotEmpty(_heldSessions);
+        HoldSessions = false;
+        Reply("sessions", _heldSessions.Dequeue(), new { items = Sessions.ToArray() });
+        await OffscreenReviewPage.Settled(Page);
+    }
+
     public bool SendWhenChecked { get; set; } = true;
 
     public string KeySource { get; set; } = "settings";
@@ -167,6 +180,22 @@ internal sealed class ReviewPageDriver
         Page.ExecuteScriptAsync(
             "window.__fetch.routes[" + JsonSerializer.Serialize(method + " " + path) + "] = {status: "
             + status + ", body: " + bodyJson + "};0");
+
+    /// <summary>Holds an actual routed fetch response, retaining the body it captured at the call.</summary>
+    public async Task HoldRoute(string method, string path, int status, string bodyJson)
+    {
+        await Route(method, path, status, bodyJson);
+        await Page.ExecuteScriptAsync("window.__fetch.routes[" + JsonSerializer.Serialize(method + " " + path) + "].hold=true;0");
+    }
+
+    public async Task ReleaseRoute(string method, string path)
+    {
+        await Read("var key=" + JsonSerializer.Serialize(method + " " + path) + ";var held=window.__fetch.held;"
+            + "var index=held.findIndex(function(item){return item.key===key;});"
+            + "if(index<0)throw new Error('no held fetch for '+key);"
+            + "window.__fetch.routes[key].hold=false;held.splice(index,1)[0].complete();return JSON.stringify({ok:true});");
+        await OffscreenReviewPage.Settled(Page);
+    }
 
     /// <summary>Makes a route reject the way an unreachable backend does.</summary>
     public Task Fail(string method, string path) =>
@@ -514,7 +543,8 @@ var h = {
                 return;
 
             case "sessions.list":
-                Reply("sessions", id, new { items = Sessions.ToArray() });
+                if (HoldSessions) _heldSessions.Enqueue(id);
+                else Reply("sessions", id, new { items = Sessions.ToArray() });
                 return;
 
             case "session.forget":
@@ -606,7 +636,7 @@ var h = {
     private const string FetchStub = @"
 (function () {
   var origin = '" + Origin + @"';
-  window.__fetch = { calls: [], routes: {} };
+  window.__fetch = { calls: [], routes: {}, held: [] };
   window.fetch = function (url, request) {
     var method = (request && request.method) || 'GET';
     var path = String(url);
@@ -627,11 +657,17 @@ var h = {
       route = { status: 404, body: { error_class: 'NotFound', message: 'no route ' + path, retryable: false } };
     }
     var text = route.body === undefined || route.body === null ? '' : JSON.stringify(route.body);
-    return Promise.resolve({
+    var response = {
       ok: route.status >= 200 && route.status < 300,
       status: route.status,
       text: function () { return Promise.resolve(text); }
-    });
+    };
+    if (route.hold) {
+      return new Promise(function (resolve) {
+        window.__fetch.held.push({ key: method + ' ' + path, complete: function () { resolve(response); } });
+      });
+    }
+    return Promise.resolve(response);
   };
 }());0";
 

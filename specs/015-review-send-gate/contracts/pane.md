@@ -82,7 +82,11 @@ section 11; the engineer reads what the code found, then decides to send). Built
 |---|---|---|
 | the button | "Send to model" (page word, 59A), `button.primary`, `data-action="send"` | always in the block |
 | the size sentence | `send.text`, small, tier 3 ink | always |
-| one failure or refusal line | `send.failure` (a recorded failed first request, `send.failed`, or a Send that failed before any request, `send.not_started`, the provider's build included: owner decision 69A); else a Send refusal's `labels.errors[class]`; else a failed re-run's `send.rerun_failed_text` with the error's class and message in a fold | when there is one |
+| one failure or refusal line | a current Send refusal's `labels.errors[class]`; else `send.failure` (a recorded failed first request, `send.failed`, or a Send that failed before any request, `send.not_started`, the provider's build included: owner decision 69A); else a failed re-run's `send.rerun_failed_text` with the error's class and message in a fold | when there is one |
+
+**Implementation/contract clarification, 2026-10-12:** a current retry refusal takes display
+priority over an earlier recorded failure, so the engineer sees why this press was refused.
+The next press clears that current error; the stored failure remains its fallback.
 
 The block is shown exactly while `state.summary.send` is present and no Send of this review is in
 flight (`state.sending`). It is the second exception to 009 `views.md` section 2's "Results shows no

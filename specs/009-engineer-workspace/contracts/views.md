@@ -56,6 +56,12 @@ prints an unknown-count sentence when no number is available and calls a Gemini 
 approximate. The page reads the count and sentence; it computes neither (015
 `contracts/pane.md` section 3 and `contracts/estimate.md`).
 
+
+*Feature 015 clarification landed 2026-10-12 (T075–T076):* first usage after Send
+clears the waiting guard and chip mark immediately. Follow-up controls then use the existing
+turn, document and read-only guards, so an active turn still disables them until it ends
+(015 `contracts/pane.md` sections 3, 6 and 8).
+
 ## 3. The status line
 
 `#results-state` reads, from page state alone:
