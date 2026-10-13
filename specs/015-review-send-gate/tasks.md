@@ -568,7 +568,7 @@ description: "Task list for the send-to-model checkbox"
 **Independent Test**: spec.md User Story 3; quickstart Scenario 3.
 
 - [x] T082 [US3] [py] Lane B. **Refactor**: extract `ReviewRun._apply_answers(answers, *, read_drawings=True)` from `answer_evidence_batch` (`agent/runner.py:1138-1202`), and have `answer_evidence_batch` call it before `_ask` (`contracts/review-flow.md` section 4; DRY). It holds the batch's steps 1, 2 and 2a: validate; mark each answer with `evidence.answered`; `read_confirmed_candidates`; the part-roles regrade; one `_restate`; and the bought-parts and unmatched-piece rows. A refactor under existing pins, with no new test: T007's resumed answer pins every request, event and record of this path. Acceptance: T007 byte-equal; `test_answer_batch_roles.py`, `test_confirmed_drawing_read.py` and `test_part_roles.py` green and unedited.
-- [ ] T083 [P] [US3] [py] Lane B. Write `reviewer/tests/unit/test_waiting_answers.py` over T006's package (`contracts/review-flow.md` section 4; FR-020 to FR-022, FR-024; US3 scenarios 1 to 3; SC-001).
+- [x] T083 [P] [US3] [py] Lane B. Write `reviewer/tests/unit/test_waiting_answers.py` over T006's package (`contracts/review-flow.md` section 4; FR-020 to FR-022, FR-024; US3 scenarios 1 to 3; SC-001).
   - **"All bought"** through `POST /evidence` on a waiting chat:
     - withdraws the unclear part's findings, with `finding.withdrawn` events;
     - makes no provider request and builds no provider, and writes no `turn.*` event;
@@ -582,7 +582,7 @@ description: "Task list for the send-to-model checkbox"
   - **Decisions and timing**: a Reject while waiting is saved at once, is still on its finding after Send, and from then on is treated as a decision made between turns (FR-024). A timing input made while waiting is kept at Send.
 
   Acceptance: red for want of the waiting branch.
-- [ ] T084 [US3] [py] Lane B. Implement the waiting branch of `answer_evidence_batch`. After `_apply_answers` it ends in the two helpers T097's carry shares (owner decision 71A):
+- [x] T084 [US3] [py] Lane B. Implement the waiting branch of `answer_evidence_batch`. After `_apply_answers` it ends in the two helpers T097's carry shares (owner decision 71A):
   1. `_settle_waiting(applied)`: append each `ConfirmedRead` to `drawing_outcomes`, and set `_opening_changed`;
   2. `close_waiting()`: `build_send_cache()`, then finalize.
 

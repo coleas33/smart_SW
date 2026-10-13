@@ -168,7 +168,7 @@ Everywhere in the engineer's default view, internal vocabulary gives way to word
 
 - **FR-013**: The review MUST be able to ask a question in a short form (at most 140 characters), with up to five offered answers and the check goal it blocks, in addition to today's longer description.
 - **FR-014**: Open questions MUST appear above Start here one at a time with a pager, their offered answers or a text box, and "Skip for now".
-- **FR-015**: Answers MUST be sent together as one submission that resumes the review once; skipped questions MUST stay open and unresolved; nothing may be filled in for an unanswered question.
+- **FR-015**: Answers MUST be sent together as one submission. A review already sent resumes once; a review waiting for Send applies the answers by code, finalizes again and keeps waiting without a model turn (feature 015 T084, 2026-10-13; [review flow](../015-review-send-gate/contracts/review-flow.md) section 4). Skipped questions MUST stay open and unresolved; nothing may be filled in for an unanswered question.
 - **FR-016**: Before sending, the pane MUST state the approximate cost of resuming, from the last round's measured input size.
 
 **Results or Transcript (User Story 5)**

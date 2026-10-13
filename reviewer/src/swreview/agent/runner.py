@@ -126,6 +126,7 @@ from swreview.report.session import (
     CoverageBucket,
     CoverageItem,
     CoverageScope,
+    DrawingOutcome,
     EvidenceRequest,
     KeySource,
     ModelStatus,
@@ -1230,6 +1231,9 @@ class ReviewRun:
         (rule 3).
         """
         applied = self._apply_answers(answers)
+        if self.awaiting_send:
+            self._settle_waiting(applied)
+            return self.close_waiting()
         message = answers_message(answers)
         if applied.withdrawn_by_answer:
             message += "\n" + REGRADED_LINE.format(ids=", ".join(applied.withdrawn_by_answer))
@@ -1296,6 +1300,13 @@ class ReviewRun:
             for bucket, item in regrade.unmatched:
                 self.context.record_coverage(bucket, item)
         return AppliedAnswers(read=tuple(read), withdrawn_by_answer=tuple(by_answer))
+
+    def _settle_waiting(self, applied: AppliedAnswers) -> None:
+        """Keep confirmed outcomes for Send and mark the opening as changed by code."""
+        self.session.drawing_outcomes.extend(
+            DrawingOutcome(file=item.file_name, outcome=item.outcome) for item in applied.read
+        )
+        self._opening_changed = True
 
     def _regrade_roles(self, answered: Sequence[EvidenceRequest]) -> RolesRegrade | None:
         """Classify the parts again when `answered` holds the part-roles question (013).
