@@ -776,3 +776,30 @@ def test_the_redacting_filter_still_masks_records_of_the_logger_it_is_on() -> No
         logger.handlers.clear()
         logger.filters.clear()
     assert capture.lines == [f"calling with {MASK}"]
+
+
+@pytest.mark.parametrize(
+    ("provider", "values", "environment", "expected"),
+    [
+        pytest.param("openai", {"api_key": KEY}, {}, True, id="settings-key"),
+        pytest.param("openai", {}, {"OPENAI_API_KEY": ENV_KEY}, True, id="environment-key"),
+        pytest.param("gemini", {"api_key": GOOGLE_KEY}, {}, True, id="gemini-settings-key"),
+        pytest.param("gemini", {}, {"GOOGLE_API_KEY": GOOGLE_KEY}, True, id="gemini-env-key"),
+        pytest.param("fake", {}, {}, True, id="scripted-needs-no-key"),
+        pytest.param(
+            "gemini",
+            {"enterprise": {"project": "fictional-cad", "location": "us-central1"}},
+            {},
+            True,
+            id="enterprise-needs-no-key",
+        ),
+        pytest.param("openai", {}, {}, False, id="openai-no-credential"),
+        pytest.param("gemini", {}, {}, False, id="gemini-no-key-or-project"),
+    ],
+)
+def test_has_credential_resolves_send_availability_without_building_a_client(
+    provider: str, values: dict[str, Any], environment: dict[str, str], expected: bool
+) -> None:
+    """015 T058: Send checks resolved credentials, including the two keyless providers."""
+    settings = ProviderSettings.from_env(provider=provider, env=environment, **values)
+    assert settings.has_credential is expected
