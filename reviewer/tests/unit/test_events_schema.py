@@ -247,9 +247,30 @@ def test_every_event_of_a_full_run_validates_against_the_contract(
 
 
 def test_a_full_run_emits_every_event_type_the_runner_and_tools_can_emit(
-    full_run: runner.ReviewRun,
+    full_run: runner.ReviewRun, tmp_path: Path, tmp_package_dir: Path,
 ) -> None:
-    emitted = {event["type"] for event in events_of(full_run)}
+    from swreview.agent.providers import ProviderName
+    from swreview.agent.providers.deferred import DeferredProvider
+    from swreview.agent.settings import ProviderSettings
+
+    waiting = runner.start_review(
+        tmp_package_dir,
+        tmp_path / "FICT-schema-send",
+        provider=DeferredProvider.for_settings(
+            ProviderSettings(provider=ProviderName.FAKE, model=MODEL)
+        ),
+        effort="high",
+        send_when_checked=False,
+    )
+    try:
+        waiting.close_waiting()
+        waiting.send(lambda: FakeProvider(script=[ScriptedTurn(text="FICT sent")], model=MODEL))
+        for event in events_of(waiting):
+            contract_validator(EVENTS_CONTRACT).validate(event)
+        emitted = ({event["type"] for event in events_of(full_run)}
+                   | {event["type"] for event in events_of(waiting)})
+    finally:
+        waiting.close()
     assert NOT_YET_EMITTED <= SCHEMA_EVENT_TYPES
     assert emitted == SCHEMA_EVENT_TYPES - NOT_YET_EMITTED
     assert emitted <= set(get_args(EventType))

@@ -428,7 +428,7 @@ description: "Task list for the send-to-model checkbox"
 
   Acceptance: red for want of the property.
 - [x] T059 [US2] [py] Lane B. Add `has_credential` to `ProviderSettings` in `agent/settings.py` (`:194-215`), the one place the rule lives. Acceptance: T058 green.
-- [ ] T060 [P] [US2] [py] Lane B. Extend `reviewer/tests/unit/test_send_gate_server.py` with the route (`contracts/review-flow.md` sections 2, 3 and 9; FR-016, FR-018; owner decision 69A).
+- [x] T060 [P] [US2] [py] Lane B. Extend `reviewer/tests/unit/test_send_gate_server.py` with the route (`contracts/review-flow.md` sections 2, 3 and 9; FR-016, FR-018; owner decision 69A).
   - **Refusals**: `POST /sessions/{id}/send` refuses, in this order and changing nothing, each leaving the chat `awaiting_send`:
     1. `404 UnknownChat`;
     2. `409 SessionFailed`;
@@ -440,12 +440,12 @@ description: "Task list for the send-to-model checkbox"
   - **The answer**: `202`, with the public view.
 
   **Moved**: `test_chat_server.py`'s `ROUTES` (`:279-296`) gains `POST /sessions/{chat}/send`, so its door tests (no token, wrong token, preflight) cover it. Acceptance: red for want of the route.
-- [ ] T061 [US2] [py] Lane B. Add the route, `NotWaiting` and `NoCredential` (409) to `chat/server.py` (owner decision 69A):
+- [x] T061 [US2] [py] Lane B. Add the route, `NotWaiting` and `NoCredential` (409) to `chat/server.py` (owner decision 69A):
   1. Checks 1 to 5, the move `awaiting_send -> running`, setting the run's `_send_in_flight`, and `_submit(chat, partial(run.send, build_adapter))` run on the event loop, with no `await` between them; `build_adapter` is `partial(self.provider_factory, settings)`, with the chat's `_settings({provider, model, effort})` (`:1996-2010`).
   2. The route answers `202`. It builds nothing, refuses nothing after the move, and touches no stop flag: `_play`'s `finally` (`:2201`) stays the only place it is cleared.
 
   `_play` settles `awaiting_send` while `run.awaiting_send` (`:2186-2208`). **Amends 002** `contracts/chat-api.md` (the Send row; `NotWaiting`, `NoCredential`). Acceptance: T060's refusal cases green. Its build, `202` and successful-build stop cases each end in a Send that runs, which needs `run.send`; T064 adds it in the same commit (C31), so no commit holds a route that submits a method not yet written, and the `202` case is never green only because `_play` swallowed an `AttributeError`. T007 byte-equal.
-- [ ] T062 [P] [US2] [py] Lane B. Extend `reviewer/tests/unit/test_runner_send.py` with `ReviewRun.send(build_adapter)` (`contracts/review-flow.md` section 6; `contracts/records.md` sections 1 and 3; research R2.10, R2.11, R2.27; FR-011, FR-014, FR-032):
+- [x] T062 [P] [US2] [py] Lane B. Extend `reviewer/tests/unit/test_runner_send.py` with `ReviewRun.send(build_adapter)` (`contracts/review-flow.md` section 6; `contracts/records.md` sections 1 and 3; research R2.10, R2.11, R2.27; FR-011, FR-014, FR-032):
   - **The prepare half** changes nothing, the adapter's build included (owner decision 69A): the session is deep-equal, nothing changes on disk, and no event is written.
   - **The commit half**, in order (owner decision 72A):
     1. `session.sent`.
@@ -460,7 +460,7 @@ description: "Task list for the send-to-model checkbox"
   - **Running time**: once sent, `unattended_runtime_minutes` is `(checked_at - started_at) + (ended_at - sent_at)`.
 
   Acceptance: red for want of `send`.
-- [ ] T063 [US2] [py] Lane B. Extend `reviewer/tests/unit/test_send_gate_server.py` and `test_events_schema.py` with a Send that works (US2 scenarios 2, 3 and 6; FR-014, FR-015, FR-019; SC-004; research R2.14, R2.27).
+- [x] T063 [US2] [py] Lane B. Extend `reviewer/tests/unit/test_send_gate_server.py` and `test_events_schema.py` with a Send that works (US2 scenarios 2, 3 and 6; FR-014, FR-015, FR-019; SC-004; research R2.14, R2.27).
   - **Byte-identical**: with nothing answered while waiting, **every** request of Send's first turn is byte-identical to a ticked review's of the same package, read from T004's recorder. The first turn is scripted to call `mark_coverage`, `request_evidence` and `get_review_checklist`, and the comparison includes the tool results.
   - **The size shown is the size sent** (owner decision 78A): `count_tokens(request_prefix(<the recorded raw system prompt, tool specs and first message>))` equals `summary.send.input_tokens` read before Send, `session.sent`'s `estimate.input_tokens` and `model_status.estimate.input_tokens`.
   - **The pipe**: with T042's counting transport, Send's first live tool opens the pipe the start released (owner decision 79A).
@@ -480,7 +480,7 @@ description: "Task list for the send-to-model checkbox"
   - `test_provider_protocol.py::test_every_schema_event_type_has_a_case` (`:184-186`) needs `valid_bodies()` (`:112`) to cover the whole enum. `valid_bodies()` gains a `session.sent` body, `{provider, model, effort_mapping, estimate}`, as `review-flow.md` section 7 fixes it, so `test_agent_event_validates_against_the_contract` validates it too; the test itself is unedited.
 
   Acceptance: red for want of `send`.
-- [ ] T064 [US2] [py] Lane B. Implement in `agent/runner.py`: `ReviewRun.attach_provider`; `send(build_adapter)` with its prepare half (the build, the configuration, the cache read, the `session.sent` body) and its commit half (`session.sent`, the pre-write, the withdrawal), without the guard (T066 adds it); `withdraw_finalization(session, written)`, extracted from `finalize_session`'s start (`:619-627`), which now calls it (owner decision 72A); `_send_in_flight` and its clear at the first `usage`; and the first-`usage` mark and its save in `_emit_turn_event` (`:1460-1473`). Add `"session.sent"` to `EventType` (`agent/providers/__init__.py`), and its branch to `specs/002-task-pane-assistant/contracts/chat-events.schema.json` (`review-flow.md` section 7's JSON; the `type` enum gains it). **Amends 002** `chat-events.schema.json`. Acceptance: T060 green, its build, `202` and successful-build stop cases included (a stop during a build that fails is T065's, green with the guard in T066); T062 and T063 green, the three moved tests included; `test_provider_protocol.py::test_event_type_literal_matches_the_schema` green and unedited; T007 byte-equal.
+- [x] T064 [US2] [py] Lane B. Implement in `agent/runner.py`: `ReviewRun.attach_provider`; `send(build_adapter)` with its prepare half (the build, the configuration, the cache read, the `session.sent` body) and its commit half (`session.sent`, the pre-write, the withdrawal), without the guard (T066 adds it); `withdraw_finalization(session, written)`, extracted from `finalize_session`'s start (`:619-627`), which now calls it (owner decision 72A); `_send_in_flight` and its clear at the first `usage`; and the first-`usage` mark and its save in `_emit_turn_event` (`:1460-1473`). Add `"session.sent"` to `EventType` (`agent/providers/__init__.py`), and its branch to `specs/002-task-pane-assistant/contracts/chat-events.schema.json` (`review-flow.md` section 7's JSON; the `type` enum gains it). **Amends 002** `chat-events.schema.json`. Acceptance: T060 green, its build, `202` and successful-build stop cases included (a stop during a build that fails is T065's, green with the guard in T066); T062 and T063 green, the three moved tests included; `test_provider_protocol.py::test_event_type_literal_matches_the_schema` green and unedited; T007 byte-equal.
 - [ ] T065 [US2] [py] Lane B. Extend `test_runner_send.py` and `test_send_gate_server.py` with a Send that fails (`contracts/review-flow.md` section 6; FR-016, FR-017; research R2.10; RK-13).
   - **A first request that raises before any round** (the round count is read before `emit_turn_failed`):
     - The `Interrupted` entry is replaced with the provider's class and redacted reason.

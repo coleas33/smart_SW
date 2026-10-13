@@ -770,3 +770,200 @@ def test_send_input_reads_the_held_cache_and_error_without_computing(
     }
     assert values["send_error"] is failure
     assert provider_control.built == []
+# T060/T063: the route reserves before the factory and runs only on its chat worker.
+
+
+@pytest.mark.parametrize(
+    "state,waiting,credential,error",
+    [
+        ("failed", False, False, "SessionFailed"),
+        ("running", False, False, "TurnRunning"),
+        ("awaiting_send", False, False, "NotWaiting"),
+        ("awaiting_send", True, False, "NoCredential"),
+    ],
+)
+def test_send_refusals_are_ordered_and_change_nothing(
+    app: Any,
+    client: TestClient,
+    run_dir: Path,
+    provider_control: chat.ProviderControl,
+    monkeypatch: pytest.MonkeyPatch,
+    state: str,
+    waiting: bool,
+    credential: bool,
+    error: str,
+) -> None:
+    from swreview.agent.providers import ProviderName
+    from swreview.agent.settings import ProviderSettings
+
+    chat_id = waiting_chat(client, run_dir)
+    assert provider_control.built == []
+    held = app.state.server.chats[UUID(chat_id)]
+    held.state = ChatState(state)
+    held.run.awaiting_send = waiting
+    settings = ProviderSettings(provider=ProviderName.OPENAI, model="gpt-4.1")
+    monkeypatch.setattr(app.state.server, "_settings", lambda body: settings)
+    before = files_in(run_dir)
+    session = held.run.session.model_dump(mode="json")
+    response = client.post(f"/sessions/{chat_id}/send", json={"ignored": True})
+    assert response.status_code == 409 and response.json()["error_class"] == error
+    assert files_in(run_dir) == before and held.run.session.model_dump(mode="json") == session
+    assert provider_control.built == []
+    held.state = ChatState.AWAITING_SEND
+    held.run.awaiting_send = True
+
+
+def test_send_unknown_chat_is_first(client: TestClient) -> None:
+    response = client.post("/sessions/00000000-0000-4000-8000-000000000001/send", json={})
+    assert response.status_code == 404 and response.json()["error_class"] == "UnknownChat"
+
+
+@pytest.mark.parametrize("stop", [False, True])
+def test_send_answers_202_reserves_the_chat_and_builds_on_its_worker(
+    app: Any,
+    client: TestClient,
+    run_dir: Path,
+    provider_control: chat.ProviderControl,
+    monkeypatch: pytest.MonkeyPatch,
+    stop: bool,
+) -> None:
+    from swreview.agent.providers.fake import ScriptedTurn
+
+    chat_id = waiting_chat(client, run_dir)
+    assert provider_control.built == []
+    held = app.state.server.chats[UUID(chat_id)]
+    entered, release = threading.Event(), threading.Event()
+    threads: list[int] = []
+    provider = RecordingProvider(
+        [ScriptedTurn(text="FICT sent", tool_calls=(chat.call("get_review_checklist"),))],
+        explanation_script=[ScriptedTurn(text="FICT explanation")],
+    )
+
+    def factory(settings: Any) -> Any:
+        threads.append(threading.get_ident())
+        entered.set()
+        assert release.wait(chat.TIMEOUT_S)
+        return provider
+
+    monkeypatch.setattr(app.state.server, "provider_factory", factory)
+    try:
+        response = client.post(f"/sessions/{chat_id}/send", json={"ignored": True})
+        assert response.status_code == 202 and response.json()["state"] == "running"
+        assert entered.wait(chat.TIMEOUT_S)
+        assert held.run._send_in_flight and chat.state_of(client, chat_id) == "running"
+        assert (
+            client.post(f"/sessions/{chat_id}/send", json={}).json()["error_class"] == "TurnRunning"
+        )
+        for suffix, payload in (
+            ("evidence", {"answers": [{"request_id": "ER-FICT", "answer": "FICT"}]}),
+            ("messages", {"text": "FICT follow up"}),
+        ):
+            refusal = client.post(f"/sessions/{chat_id}/{suffix}", json=payload)
+            assert refusal.status_code == 409
+            assert refusal.json()["error_class"] == "TurnRunning"
+        assert threads == [app.state.server._workers[UUID(chat_id)]._threads.copy().pop().ident]
+        assert provider.log == []
+        if stop:
+            old = chat.events_of(run_dir)
+            assert client.post(f"/sessions/{chat_id}/stop", json={}).status_code == 202
+            assert chat.events_of(run_dir) == old
+        release.set()
+        assert chat.settle(client, chat_id) in {"waiting_engineer", "ended"}
+        assert held.run.session.model_status.state == "sent"
+        assert held.stop_requested.is_set() is False
+        reasons = [
+            event["body"]["reason"]
+            for event in chat.events_of(run_dir)
+            if event["type"] == "turn.ended"
+        ]
+        assert reasons[-1] == ("stopped" if stop else "end")
+        if not stop:
+            assert sum(entry.presentation for entry in provider.log) <= 1
+            assert (
+                client.post(
+                    f"/sessions/{chat_id}/messages", json={"text": "FICT follow up"}
+                ).status_code
+                == 202
+            )
+            chat.settle(client, chat_id)
+    finally:
+        release.set()
+
+
+def test_send_first_live_tool_reopens_the_waiting_transport(
+    pipe_app: Any,
+    pipe_client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    folder = run_root / "FICT-live-send"
+    response = pipe_review(pipe_client, folder)
+    assert response.status_code == 201, response.text
+    chat_id = response.json()["chat_id"]
+    assert provider_control.built == []
+    held = pipe_app.state.server.chats[UUID(chat_id)]
+    transport = pipe_app.state.pipe_transports[0]
+    assert transport.open_pipes == 0
+    opened = transport.opened
+    provider = RecordingProvider(
+        [
+            chat.turn(
+                "FICT live",
+                chat.call(
+                    "bridge_interference",
+                    component_ids=[held.run.context.ir.components[0].id],
+                    configuration="Default",
+                    settings=held.run.session.live_detection.settings,
+                ),
+            )
+        ]
+    )
+    monkeypatch.setattr(pipe_app.state.server, "provider_factory", lambda settings: provider)
+    assert pipe_client.post(f"/sessions/{chat_id}/send", json={}).status_code == 202
+    assert chat.settle(pipe_client, chat_id) in {"ended", "waiting_engineer"}
+    assert transport.opened == opened + 1 and transport.open_pipes == 1
+    assert held.run.context.bridge is pipe_app.state.pipe_clients[0]
+    assert any(
+        step.tool == "bridge_interference" and step.status == "ok"
+        for step in held.run.session.steps
+    )
+
+
+def test_two_waiting_reviews_send_independently_without_rebuilding_the_other(
+    app: Any,
+    client: TestClient,
+    run_dir: Path,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    other = run_root / "FICT-second-send"
+    shutil.copytree(run_dir, other)
+    first = waiting_chat(client, run_dir)
+    second = waiting_chat(client, other)
+    assert provider_control.built == []
+    owner = app.state.server
+    providers = [
+        RecordingProvider([chat.turn("FICT one")]),
+        RecordingProvider([chat.turn("FICT two")]),
+    ]
+    built: list[Any] = []
+
+    def factory(settings: Any) -> Any:
+        built.append(settings)
+        return providers[len(built) - 1]
+
+    monkeypatch.setattr(owner, "provider_factory", factory)
+    raw_second = files_in(other)
+    assert client.post(f"/sessions/{first}/send", json={}).status_code == 202
+    chat.settle(client, first)
+    assert len(built) == 1 and providers[1].log == []
+    assert chat.state_of(client, second) == "awaiting_send" and files_in(other) == raw_second
+    assert client.post(f"/sessions/{second}/send", json={}).status_code == 202
+    chat.settle(client, second)
+    assert len(built) == 2 and all(provider.log for provider in providers)
+    assert all(
+        owner.chats[UUID(chat_id)].run.session.model_status.state == "sent"
+        for chat_id in (first, second)
+    )

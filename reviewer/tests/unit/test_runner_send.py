@@ -677,3 +677,241 @@ def test_real_deferred_cache_and_close_use_no_factory_sdk_or_network(
         assert session.model_status.sent_at is None
         assert run._send_cache == cache
         assert run.turns == 0
+# T062/T063: Send prepares without writes, commits in order, and pins the actual provider boundary.
+
+
+def send_recorder() -> RecordingProvider:
+    from swreview.agent.providers.fake import ScriptedToolCall
+
+    return RecordingProvider(
+        [
+            ScriptedTurn(
+                text="FICT checked",
+                tool_calls=(
+                    ScriptedToolCall(
+                        "mark_coverage",
+                        {
+                            "check": "drawing.context",
+                            "bucket": "checked",
+                            "reason": "FICT reviewed",
+                        },
+                    ),
+                    ScriptedToolCall(
+                        "request_evidence",
+                        {
+                            "what": "FICT depth",
+                            "why": "FICT needs drawing",
+                            "entity_ids": ["doc:0002"],
+                        },
+                    ),
+                    ScriptedToolCall("get_review_checklist", {}),
+                ),
+            ),
+            ScriptedTurn(text="FICT answer"),
+        ],
+        explanation_script=[ScriptedTurn(text="FICT explanation")],
+        clock=lambda: 0.0,
+    )
+
+
+def test_send_preparation_changes_nothing_and_commit_withdraws_only_its_own_rows(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from tests.support.restart import disk_at, restarted_app
+    from tests.unit import test_chat_server as chat_cases
+
+    clock = [CHECKED]
+    monkeypatch.setattr(events, "local_now", lambda: clock[0])
+    run = checks_only_run(tmp_path / "FICT-send")
+    try:
+        run.started = CHECKED - timedelta(minutes=2)
+        run.session.started_at = run.started
+        run.close_waiting()
+        checked = run.session.model_status.checked_at
+        before = run.session.model_dump(mode="json")
+        raw = run.session_path.read_bytes()
+        old_events = run.events_path.read_bytes()
+        previous = tuple(run._finalized)
+        unrelated = CoverageItem(
+            check="FICT.other", scope=CoverageScope(), reason="FICT unrelated", error=None
+        )
+        run.session.coverage.checked.append(unrelated)
+        before = run.session.model_dump(mode="json")
+        provider = send_recorder()
+        order: list[str] = []
+        save = runner.save_session
+        configure = runner.configure_provider
+        withdraw = runner.withdraw_finalization
+        with (
+            disk_at(run.out_dir, "before-first-usage") as before_usage,
+            disk_at(run.out_dir, "after-first-usage-save") as after_usage,
+        ):
+
+            def configured(adapter: Any, session: Any) -> None:
+                assert adapter is provider
+                assert run.session.model_dump(mode="json") == before
+                assert run.session_path.read_bytes() == raw
+                assert run.events_path.read_bytes() == old_events
+                assert isinstance(run.provider, DeferredProvider)
+                order.append("configure")
+                configure(adapter, session)
+
+            def factory() -> Any:
+                assert run.session.model_dump(mode="json") == before
+                assert run.session_path.read_bytes() == raw
+                assert run.events_path.read_bytes() == old_events
+                order.append("factory")
+                return provider
+
+            def saved(session: Any, path: Path) -> None:
+                if session.model_status.state == "send_failed":
+                    assert order[-1] == "session.sent"
+                    assert session.ended_at is not None
+                    assert session.model_status.failures[-1].error_class == "Interrupted"
+                    assert session.model_status.failures[-1].reason == runner.INTERRUPTED_SEND
+                    assert all(
+                        any(
+                            row is old
+                            for row in session.coverage.checked + session.coverage.unresolved
+                        )
+                        for old in previous
+                    )
+                    order.append("prewrite")
+                elif session.model_status.state == "sent" and session.ended_at is None:
+                    assert run._send_in_flight is False
+                    assert session.model_status.checked_at == checked
+                    assert session.model_status.sent_at == CHECKED + timedelta(hours=1)
+                    assert session.model_status.estimate == run._send_cache.estimate
+                    assert session.model_status.opening_finding_ids == run._send_cache.named_ids
+                    assert not any(
+                        f.error_class == "Interrupted" for f in session.model_status.failures
+                    )
+                    assert unrelated in session.coverage.checked
+                    assert not any(
+                        row is old
+                        for row in session.coverage.checked + session.coverage.unresolved
+                        for old in previous
+                    )
+                    order.append("first-usage-save")
+                save(session, path)
+                if session.model_status.state == "sent" and session.ended_at is None:
+                    after_usage()
+
+            def withdrawn(session: Any, written: Any) -> None:
+                committing = session.model_status.state == "send_failed"
+                if committing:
+                    assert order[-1] == "prewrite"
+                withdraw(session, written)
+                assert not written
+                if committing:
+                    order.append("withdraw")
+
+            original_run = provider.run
+
+            def requested(**kwargs: Any) -> Any:
+                assert order[-1] == "withdraw"
+                before_usage()
+                assert provider._inner._step_index == len(run.session.steps)
+                return original_run(**kwargs)
+
+            monkeypatch.setattr(runner, "configure_provider", configured)
+            monkeypatch.setattr(runner, "save_session", saved)
+            monkeypatch.setattr(runner, "withdraw_finalization", withdrawn)
+            monkeypatch.setattr(provider, "run", requested)
+            run.sink.add_listener(
+                lambda event: order.append(event.type) if event.type == "session.sent" else None
+            )
+            clock[0] += timedelta(hours=1)
+            run.send(factory)
+            assert order[:5] == ["factory", "configure", "session.sent", "prewrite", "withdraw"]
+            assert "first-usage-save" in order
+            interrupted = load_session(before_usage.folder / "session.json")
+            assert interrupted.model_status.state == "send_failed"
+            assert interrupted.model_status.failures[-1].reason == runner.INTERRUPTED_SEND
+            sent = load_session(after_usage.folder / "session.json")
+            assert sent.model_status.state == "sent" and sent.ended_at is None
+            with restarted_app(
+                after_usage.root,
+                {"token": chat_cases.TOKEN, "allow_origin": chat_cases.ORIGIN, "development": True},
+            ) as fresh:
+                restored = fresh.get(f"/reviews/{after_usage.folder.name}")
+                assert restored.status_code == 200, restored.text
+                assert restored.json()["read_only"] is True
+            assert run.session.model_status.checked_at == checked
+            assert run.session.timing.unattended_runtime_minutes == 2
+            assert sum(entry.presentation for entry in provider.log) == 1
+    finally:
+        run.close()
+
+
+def test_withdraw_finalization_is_shared_by_finalize_and_send() -> None:
+    assert "withdraw_finalization(" in inspect.getsource(runner.finalize_session)
+    assert "withdraw_finalization(" in inspect.getsource(ReviewRun.send)
+    assert "coverage.unresolved[:]" not in inspect.getsource(ReviewRun.send)
+    session = build_session()
+    old = CoverageItem(check="FICT.old", scope=CoverageScope(), reason="same", error=None)
+    equal = old.model_copy(deep=True)
+    session.coverage.checked[:] = [old, equal]
+    written = [old]
+    runner.withdraw_finalization(session, written)
+    assert len(session.coverage.checked) == 1 and session.coverage.checked[0] is equal
+    assert written == []
+
+
+@pytest.mark.usefixtures("vocabulary")
+def test_every_sent_request_and_tool_result_equals_ticked_and_counted_prefix(
+    tmp_path: Path,
+) -> None:
+    from swreview.agent.providers.openai_provider import _encode_history
+
+    waiting = checks_only_run(tmp_path / "FICT-wait")
+    ticked_provider = send_recorder()
+    fixture = build_questions_package(tmp_path / "FICT-tick")
+    defaults = pane_defaults(ProviderName.FAKE)
+    ticked = start_review(
+        fixture.folder,
+        fixture.folder,
+        provider=ticked_provider,
+        standards_profile=fixture.profile,
+        bridge=True,
+        bridge_factory=lambda pipe, secret: fixture.bridge,
+        efficiency=defaults.efficiency,
+        model_view=defaults.model_view,
+        explain_findings=True,
+    )
+    provider = send_recorder()
+    try:
+        waiting.close_waiting()
+        shown = waiting.send_input()["input_tokens"]
+        waiting.send(lambda: provider)
+        ticked.start()
+        assert provider.log == ticked_provider.log
+        assert _encode_history(waiting.messages) == _encode_history(ticked.messages)
+        assert len([message for message in waiting.messages if message["role"] == "tool"]) == 3
+        first = provider.log[0]
+        # Specs come from the actual recorder, not from the waiting cache.
+        specs = tuple(
+            __import__("types").SimpleNamespace(
+                name=row["name"], description=row["description"], schema=row["parameters"]
+            )
+            for row in first.tool_specs
+        )
+        count = runner.tokens.count_tokens(
+            runner.request_prefix(first.system, specs, first.first_message["content"])
+        )
+        assert count == shown == waiting.session.model_status.estimate.input_tokens
+        sent = next(
+            json.loads(line)
+            for line in waiting.events_path.read_text().splitlines()
+            if json.loads(line)["type"] == "session.sent"
+        )
+        assert sent["body"]["estimate"]["input_tokens"] == count
+        assert set(sent["body"]) == {"provider", "model", "effort_mapping", "estimate"}
+        assert sum(entry.presentation for entry in provider.log) == 1
+        waiting.answer_evidence(waiting.session.evidence_requests[-1].id, "FICT 12 mm")
+        ticked.answer_evidence(ticked.session.evidence_requests[-1].id, "FICT 12 mm")
+        assert provider.log == ticked_provider.log
+    finally:
+        waiting.close()
+        ticked.close()
