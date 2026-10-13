@@ -15,8 +15,11 @@ from swreview.agent.providers.fake import FakeProvider
 from swreview.agent.runner import request_prefix
 from swreview.agent.settings import EfficiencySettings
 from swreview.benchmark import replay
+from swreview.benchmark.recording import read_recording
 from swreview.tokens import TokenizerUnavailable, count_tokens
 from tests.support.recording_provider import RecordingProvider
+from tests.support.recordings import RECORDING_NAMES, recording_folder
+from tests.support.replay import ALL_OFF
 from tests.unit.test_runner_send import waiting_cache_run
 
 
@@ -157,3 +160,38 @@ def test_two_different_prepared_prefixes_have_different_independent_numeric_coun
             counts.append(expected)
     assert prefixes[0] != prefixes[1]
     assert counts[0] != counts[1]
+
+
+@pytest.mark.usefixtures("vocabulary")
+def test_the_estimate_bounds_each_recordings_billed_first_round(tmp_path: Path) -> None:
+    """SC-006 measures the actual owner recordings, never fixture token totals.
+
+    The first as-recorded pass rebuilds the offered tools and opening through the shared
+    request-prefix renderer. Output is only the percentage gap, never a design name,
+    a recording folder or either request size. Missing owner inputs use the recording
+    mapping helper's existing skip reason, just as the replay's acceptance tests do.
+    """
+    checked = False
+    outside: list[float] = []
+    for index, name in enumerate(RECORDING_NAMES):
+        recording = read_recording(recording_folder(name))
+        if recording.provider != ProviderName.OPENAI.value:
+            continue
+        checked = True
+        first_round = recording.turns[0].main_rounds[0]
+        billed = first_round.usage.input_tokens
+        if billed is None or billed <= 0:
+            pytest.fail("the recorded first model round has no positive billed input")
+        passes = replay.replay_passes(recording, tmp_path / str(index), requested=ALL_OFF)
+        estimated = count_tokens(passes.first.prefix)
+        gap = (estimated / billed - 1) * 100
+        print(f"{gap:+.1f}%")
+        # A normal assert would put both private sizes into pytest's rewritten failure.
+        # Keep the exact acceptance bounds while reporting only their percentage gap.
+        if estimated < billed or estimated > billed * 1.35:
+            outside.append(gap)
+    if not checked:
+        pytest.skip("the owner's mapped recordings contain no OpenAI review")
+    if outside:
+        percentages = ", ".join(f"{gap:+.1f}%" for gap in outside)
+        pytest.fail(f"first-request gaps outside 0% to +35%: {percentages}")
