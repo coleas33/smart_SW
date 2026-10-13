@@ -1175,3 +1175,35 @@ def test_failed_first_request_is_waiting_only_before_a_completed_round(
         )
     finally:
         run.close()
+
+
+# --- 015 US3: rebuilding an untouched opening preserves the frozen pin --------------------
+
+
+def test_the_opening_builder_reproduces_the_frozen_opening_without_waiting_answers(
+    tmp_path: Path,
+) -> None:
+    run = checks_only_run(tmp_path)
+    try:
+        assert runner._opening_message(
+            run._prerun, run.session, run.context.ir,
+            standards_gap=run._standards_gap, roles=review_roles(run.context),
+        ) == run.opening_message
+    finally:
+        run.close()
+
+
+def test_restating_nothing_keeps_the_frozen_builder_byte_equal(tmp_path: Path) -> None:
+    from swreview import prerun
+
+    run = checks_only_run(tmp_path)
+    try:
+        original = run._prerun
+        rebuilt = prerun.restated(original, run.context, (), run._standards_gap)
+        assert rebuilt is original
+        assert runner._opening_message(
+            rebuilt, run.session, run.context.ir,
+            standards_gap=run._standards_gap, roles=review_roles(run.context),
+        ) == run.opening_message
+    finally:
+        run.close()

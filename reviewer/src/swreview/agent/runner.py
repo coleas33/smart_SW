@@ -112,6 +112,12 @@ from swreview.prerun import (
     prerun_checks,
     recorded_call,
 )
+from swreview.prerun import (
+    restated as restated_prerun,
+)
+from swreview.prerun import (
+    returned_finding_ids as _returned_finding_ids,
+)
 from swreview.report.attention import rank
 from swreview.report.attention_record import write_attention_record
 from swreview.report.explanations import (
@@ -988,6 +994,13 @@ DRAWING_OUTCOME_LINE = "Drawing {file}: {outcome}"
 included, so the model never re-reads unchanged evidence to learn what happened."""
 
 
+WAIT_ANSWER_LINE = (
+    "{request_id} ({question}) was answered before this review was sent: {answer}. "
+    "The checks above were graded again by code with this answer."
+)
+"""One opening line per code question answered while waiting, never a resumed instruction."""
+
+
 def drawing_outcome_lines(read: Sequence[ConfirmedRead]) -> list[str]:
     """`DRAWING_OUTCOME_LINE` for each drawing file a confirmed read asked for, in the
     question's order: `read_confirmed_candidates` answers one `ConfirmedRead` per distinct
@@ -1027,16 +1040,6 @@ def unmatched_rows(
         check=part_roles.PART_ROLES_CHECK, scope=CoverageScope(), reason=sentence, error=None
     )
     return (("unresolved", item),)
-
-
-def _returned_finding_ids(call: PrerunCall) -> list[str]:
-    """The finding ids a restated call returned without adding them: a de-duplicating check
-    (`check_drawings`) hands back the id of a finding the session already holds."""
-    payload = call.payload if isinstance(call.payload, Mapping) else {}
-    returned = payload.get("finding_ids")
-    if not isinstance(returned, list):
-        return []
-    return [item for item in returned if isinstance(item, str)]
 
 
 def _restated_tool_of(finding: Finding, restated_steps: Mapping[int, str]) -> str | None:
@@ -1171,6 +1174,7 @@ class ReviewRun:
         self._sent_at: datetime | None = None
         self._interrupted_send: SendFailure | None = None
         self._opening_changed = False
+        self._restated_calls: tuple[PrerunCall, ...] = ()
         self._answered = False
         """Whether the turn running now has emitted a `text.done`."""
 
@@ -1306,6 +1310,9 @@ class ReviewRun:
         self.session.drawing_outcomes.extend(
             DrawingOutcome(file=item.file_name, outcome=item.outcome) for item in applied.read
         )
+        self._prerun = restated_prerun(
+            self._prerun, self.context, self._restated_calls, self._standards_gap
+        )
         self._opening_changed = True
 
     def _regrade_roles(self, answered: Sequence[EvidenceRequest]) -> RolesRegrade | None:
@@ -1346,6 +1353,7 @@ class ReviewRun:
         adapter numbers the resumed turn's calls after it. Then `_reconcile_restated` folds and
         withdraws. Returns every withdrawn finding's `(id, reason)`, in session order.
         """
+        self._restated_calls = ()
         dispatch = self._dispatch
         if dispatch is None or not reasons:
             return []
@@ -1369,7 +1377,9 @@ class ReviewRun:
                 self._prerun_guard.answer_repeats_with(call)
             calls.append(call)
         self.provider.start_steps_at(len(session.steps))
-        return self._reconcile_restated(mark, restated_steps, calls, reasons)
+        withdrawn = self._reconcile_restated(mark, restated_steps, calls, reasons)
+        self._restated_calls = tuple(calls)
+        return withdrawn
 
     def _reconcile_restated(
         self,
@@ -1484,8 +1494,37 @@ class ReviewRun:
             raise
 
     def opening_at_send(self) -> str:
-        """The opening frozen during setup; waiting answers add their branch in T086."""
-        return self.opening_message
+        """The frozen opening, or the same builder over the applied code evidence."""
+        if not self._opening_changed:
+            return self.opening_message
+        opening = _opening_message(
+            self._prerun, self.session, self.context.ir,
+            standards_gap=self._standards_gap, roles=review_roles(self.context),
+        )
+        lines = [
+            DRAWING_OUTCOME_LINE.format(file=item.file, outcome=item.outcome)
+            for item in self.session.drawing_outcomes
+        ]
+        answered = sorted(
+            (request for request in self.session.evidence_requests
+             if request.source == "code" and request.status == "answered"),
+            key=lambda request: (
+                (request.answered_at.timestamp()
+                 if request.answered_at is not None else float("-inf")),
+                request.id,
+            ),
+        )
+        lines.extend(
+            WAIT_ANSWER_LINE.format(
+                request_id=request.id, question=request.question or request.what,
+                answer=request.answer,
+            )
+            for request in answered
+        )
+        if not lines:
+            return opening
+        prefix = opening.removesuffix(OPENING_MESSAGE)
+        return prefix + "\n".join(lines) + "\n\n" + OPENING_MESSAGE
 
     def first_request_estimate(self) -> int | None:
         """Count the first request locally, with the tools offered to the adapter."""

@@ -6,19 +6,24 @@ import json
 import threading
 from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from uuid import UUID
 
 import pytest
 from starlette.testclient import TestClient
 
+from swreview import prerun, tokens
 from swreview.agent import runner
 from swreview.agent.events import replay_events
 from swreview.agent.providers.deferred import DeferredProvider
+from swreview.agent.runner import request_prefix
 from swreview.bridge.client import BridgeError
 from swreview.checks.drawing_context import CANDIDATE_CONFIRM
+from swreview.report.attention import family_counts, family_of
 from swreview.report.session import load_session
 from swreview.report.summary import load_words
+from swreview.tools.model_view import count_findings
 from tests.support.questions_package import QuestionsPackage, build_questions_package
 from tests.support.recording_provider import RecordingProvider
 from tests.support.roles_review import PIN_ID
@@ -350,3 +355,458 @@ def test_a_reject_and_timing_written_while_waiting_are_kept_at_send(
     assert sent.timing.assisted_verification_minutes == 9
     assert sent.timing.false_alarm_handling_minutes == 2
     assert provider.log
+
+
+# --- T085: rebuilt opening and exact prefix count -----------------------------------------
+
+
+def wait_line(request: Any) -> str:
+    return (
+        f"{request.id} ({request.question}) was answered before this review was sent: "
+        f"{request.answer}. The checks above were graded again by code with this answer."
+    )
+
+
+def applied_roles(app: Any, client: TestClient, folder: Path) -> Waiting:
+    waiting = waiting_review(app, client, folder)
+    assert apply(client, waiting, (question(waiting).id, "All bought")).status_code == 202
+    assert chat.settle(client, waiting.chat_id) == "awaiting_send"
+    return waiting
+
+
+@pytest.mark.usefixtures("vocabulary")
+def test_an_answer_changes_the_count_to_the_exact_rebuilt_prefix(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+) -> None:
+    waiting = waiting_review(app, client, run_root / "FICT-waiting-count")
+    before = waiting.run._send_cache
+    assert apply(client, waiting, (question(waiting).id, "All bought")).status_code == 202
+    assert chat.settle(client, waiting.chat_id) == "awaiting_send"
+    current = waiting.run._send_cache
+    assert current.estimate.input_tokens != before.estimate.input_tokens
+    assert current.opening != before.opening
+    assert current.estimate.input_tokens == tokens.count_tokens(
+        request_prefix(waiting.run.system, waiting.run.tools, current.opening)
+    )
+    assert current.opening == waiting.run.opening_at_send()
+
+    assert provider_control.built == []
+
+
+@pytest.mark.usefixtures("vocabulary")
+def test_the_size_shown_after_an_apply_is_the_size_in_the_actual_first_request(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    waiting = applied_roles(app, client, run_root / "FICT-waiting-size-sent")
+    summary = client.get(f"/sessions/{waiting.chat_id}/snapshot").json()["ranking"]["summary"]
+    shown = summary["send"]["input_tokens"]
+    provider = RecordingProvider([chat.turn("FICT sent")])
+    monkeypatch.setattr(app.state.server, "provider_factory", lambda settings: provider)
+    marker = waiting.run.sink.seq
+    assert provider_control.built == []
+    assert client.post(f"/sessions/{waiting.chat_id}/send", json={}).status_code == 202
+    chat.settle(client, waiting.chat_id)
+    recorded = provider.log[0]
+    specs = [
+        SimpleNamespace(name=row["name"], description=row["description"], schema=row["parameters"])
+        for row in recorded.tool_specs
+    ]
+    prefix = request_prefix(recorded.system, specs, recorded.first_message["content"])
+    estimate = next(
+        event.body["estimate"]["input_tokens"]
+        for event in new_events(waiting, marker)
+        if event.type == "session.sent"
+    )
+    assert tokens.count_tokens(prefix) == shown == estimate
+    assert waiting.run.session.model_status.estimate.input_tokens == shown
+    assert load_session(waiting.run.session_path).model_status.estimate.input_tokens == shown
+
+
+def test_restated_returns_the_input_when_no_call_was_restated(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+) -> None:
+    waiting = waiting_review(app, client, run_root / "FICT-waiting-no-restatement")
+    original = waiting.run._prerun
+    assert (
+        prerun.restated(original, waiting.run.context, (), waiting.run._standards_gap) is original
+    )
+
+    assert provider_control.built == []
+
+
+def test_restated_replaces_calls_in_place_with_standing_folded_findings_and_current_roles(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    waiting = waiting_review(app, client, run_root / "FICT-waiting-restated")
+    original = waiting.run._prerun
+    recorded_call = runner.recorded_call
+    calls: list[Any] = []
+
+    def captured(*args: Any, **kwargs: Any) -> Any:
+        call = recorded_call(*args, **kwargs)
+        calls.append(call)
+        return call
+
+    monkeypatch.setattr(runner, "recorded_call", captured)
+    assert apply(client, waiting, (question(waiting).id, "All bought")).status_code == 202
+    assert chat.settle(client, waiting.chat_id) == "awaiting_send"
+    rebuilt = prerun.restated(original, waiting.run.context, calls, waiting.run._standards_gap)
+    assert calls
+    by_tool = {call.tool: call for call in calls}
+    assert [call.tool for call in rebuilt.calls] == [call.tool for call in original.calls]
+    for before, after in zip(original.calls, rebuilt.calls, strict=True):
+        if before.tool not in by_tool:
+            assert after is before
+            continue
+        current = by_tool[before.tool]
+        assert after.step_index == current.step_index and after.arguments == current.arguments
+        expected = tuple(
+            f
+            for f in waiting.run.session.findings
+            if current.step_index in f.tool_result_ids and f.carried_over_from is None
+        )
+        assert after.findings == expected
+        assert all(f in waiting.run.session.findings for f in after.findings)
+    assert rebuilt.live is original.live
+    assert rebuilt.families is original.families and rebuilt.withheld is original.withheld
+    checks = [family.check for family in rebuilt.not_evaluated]
+    assert "coverage.prerun.maybe_bought" not in checks
+    assert "coverage.prerun.bought_parts" in checks
+    assert waiting.run._prerun == rebuilt
+
+    assert provider_control.built == []
+
+
+def test_the_send_opening_names_only_standing_findings_and_correct_folded_family_counts(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    waiting = waiting_review(app, client, run_root / "FICT-waiting-honest-digest")
+    before = set(waiting.run._prerun.named_finding_ids())
+    assert apply(client, waiting, (question(waiting).id, "All bought")).status_code == 202
+    assert chat.settle(client, waiting.chat_id) == "awaiting_send"
+    run = waiting.run
+    after = {f.id for f in run.session.findings}
+    removed = before - after
+    assert removed
+    provider = RecordingProvider([chat.turn("FICT sent")])
+    monkeypatch.setattr(app.state.server, "provider_factory", lambda settings: provider)
+    assert provider_control.built == []
+    assert client.post(f"/sessions/{waiting.chat_id}/send", json={}).status_code == 202
+    chat.settle(client, waiting.chat_id)
+    opening = provider.log[0].first_message["content"]
+    assert all(fid not in opening for fid in removed)
+    expected = {
+        f.id
+        for f in run.session.findings
+        if family_of(f.check, run.session.folded_families) is None
+    }
+    assert expected <= set(run._send_cache.named_ids)
+    assert all(fid in opening for fid in expected)
+    rms = [
+        f for f in run.session.findings if family_of(f.check, run.session.folded_families) == "rms"
+    ]
+    counts = count_findings((f.check, f.status, f.severity) for f in rms)
+    statuses = ", ".join(f"{count} {status}" for status, count in counts.by_status.items())
+    expected_line = (
+        f"  modelling practice: {family_counts(counts.findings, counts.rules)} ({statuses}); "
+        f"{prerun.FAMILY_COUNTS_NOTE}"
+    )
+    assert expected_line in opening
+    assert not set(run.session.model_status.opening_finding_ids) & removed
+    assert set(run.session.model_status.opening_finding_ids) <= after
+
+
+def test_outcomes_then_wait_answers_appear_once_in_order_between_digest_and_instruction(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    waiting = waiting_review(app, client, run_root / "FICT-waiting-lines")
+    role, drawing = question(waiting), question(waiting, drawing=True)
+    # Deliberately reverse id order: ordering follows answers, with ids breaking clock ties.
+    assert apply(client, waiting, (drawing.id, CANDIDATE_CONFIRM)).status_code == 202
+    assert chat.settle(client, waiting.chat_id) == "awaiting_send"
+    assert apply(client, waiting, (role.id, "All bought")).status_code == 202
+    assert chat.settle(client, waiting.chat_id) == "awaiting_send"
+    provider = RecordingProvider([chat.turn("FICT sent")])
+    monkeypatch.setattr(app.state.server, "provider_factory", lambda settings: provider)
+    assert provider_control.built == []
+    assert client.post(f"/sessions/{waiting.chat_id}/send", json={}).status_code == 202
+    chat.settle(client, waiting.chat_id)
+    opening = provider.log[0].first_message["content"]
+    lines = [
+        f"Drawing {outcome.file}: {outcome.outcome}"
+        for outcome in waiting.run.session.drawing_outcomes
+    ] + [wait_line(drawing), wait_line(role)]
+    assert "\n\n" + "\n".join(lines) + "\n\n" + runner.OPENING_MESSAGE in opening
+    digest_end = opening.index(prerun.NOT_EVALUATED_HEADER)
+    assert all(opening.count(line) == 1 and opening.index(line) > digest_end for line in lines)
+    assert "withdrew" not in opening
+    assert runner.REGRADED_LINE.split("{ids}")[0] not in opening
+    assert runner.answers_message([(role.id, "All bought")]) not in opening
+
+
+def test_the_rebuilt_branch_has_no_extra_separator_when_no_wait_line_exists(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+) -> None:
+    waiting = waiting_review(app, client, run_root / "FICT-waiting-empty-lines")
+    waiting.run._settle_waiting(runner.AppliedAnswers(read=(), withdrawn_by_answer=()))
+    assert waiting.run.opening_at_send() == waiting.run.opening_message
+    assert "\n\n\n" not in waiting.run.opening_at_send()
+
+    assert provider_control.built == []
+
+
+def test_send_after_an_apply_removes_every_finalization_row_but_keeps_code_rows(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    waiting = waiting_review(app, client, run_root / "FICT-waiting-clean-coverage")
+    run = waiting.run
+    earlier = tuple(run._finalized)
+    assert apply(client, waiting, (question(waiting).id, "All bought")).status_code == 202
+    assert chat.settle(client, waiting.chat_id) == "awaiting_send"
+    applied = tuple(run._finalized)
+    assert earlier and applied
+    code_rows = [
+        row
+        for bucket in runner.CoverageBucket.__args__
+        for row in getattr(run.session.coverage, bucket)
+        if row.check in {"coverage.prerun.part_roles", "coverage.prerun.bought_parts"}
+    ]
+    assert code_rows
+    code_coverage = {
+        bucket: [
+            row
+            for row in getattr(run.session.coverage, bucket)
+            if all(row is not final for final in applied)
+        ]
+        for bucket in runner.CoverageBucket.__args__
+    }
+    expected_buckets = {}
+    for item in run.context.checklist.items:
+        if item.owner != "model":
+            continue
+        if any(f.check.startswith(item.check_prefix) for f in run.session.findings):
+            expected_buckets[item.id] = "finding"
+        else:
+            expected_buckets[item.id] = next(
+                (
+                    bucket
+                    for bucket in ("checked", "skipped", "unresolved", "out_of_scope")
+                    if any(row.check == item.id for row in code_coverage[bucket])
+                ),
+                "open",
+            )
+    provider = RecordingProvider(
+        [
+            chat.turn(
+                "FICT sent",
+                chat.call("get_review_checklist"),
+                chat.call(
+                    "request_evidence", what="FICT next evidence", why="FICT checks", entity_ids=[]
+                ),
+            )
+        ]
+    )
+    request = provider._inner.run
+    observed: list[dict[str, Any]] = []
+
+    def at_request(**kwargs: Any) -> Any:
+        rows = [
+            row
+            for bucket in runner.CoverageBucket.__args__
+            for row in getattr(run.session.coverage, bucket)
+        ]
+        expected = [item for item in run.context.checklist.items if item.owner == "model"]
+        observed.append(
+            {
+                "earlier_rows": [
+                    row for row in rows if any(row is prior for prior in (*earlier, *applied))
+                ],
+                "code_rows_kept": all(any(row is code for row in rows) for code in code_rows),
+                "buckets": {
+                    item.id: run.context.checklist.bucket_of(item, run.session) for item in expected
+                },
+                "open_items": [
+                    item.id for item in run.context.checklist.open_items(run.session, owner="model")
+                ],
+            }
+        )
+        return request(**kwargs)
+
+    monkeypatch.setattr(provider._inner, "run", at_request)
+    monkeypatch.setattr(app.state.server, "provider_factory", lambda settings: provider)
+    assert provider_control.built == []
+    assert client.post(f"/sessions/{waiting.chat_id}/send", json={}).status_code == 202
+    chat.settle(client, waiting.chat_id)
+    assert len(observed) == 1
+    first = observed[0]
+    assert first["earlier_rows"] == [] and first["code_rows_kept"]
+    assert first["buckets"]
+    assert first["buckets"] == expected_buckets
+    open_ids = [item_id for item_id, bucket in expected_buckets.items() if bucket == "open"]
+    assert open_ids and first["open_items"] == open_ids
+    messages = [message for message in run.messages if message["role"] == "tool"]
+    checklist = next(
+        message["content"] for message in messages if message["name"] == "get_review_checklist"
+    )
+    assert {
+        item["id"]: item["bucket"] for item in checklist["result"] if item["id"] in expected_buckets
+    } == expected_buckets
+    assert (
+        next(message["content"] for message in messages if message["name"] == "request_evidence")[
+            "open_items"
+        ]
+        == open_ids
+    )
+
+
+def test_a_failed_send_then_apply_then_send_uses_the_rebuilt_opening_once(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    waiting = waiting_review(app, client, run_root / "FICT-waiting-failed-then-apply")
+    failed = RecordingProvider([chat.turn("unused")])
+
+    def refusal(**kwargs: Any) -> Any:
+        raise RuntimeError("FICT first request refused")
+
+    monkeypatch.setattr(failed._inner, "run", refusal)
+    monkeypatch.setattr(app.state.server, "provider_factory", lambda settings: failed)
+    assert provider_control.built == []
+    assert client.post(f"/sessions/{waiting.chat_id}/send", json={}).status_code == 202
+    assert chat.settle(client, waiting.chat_id) == "awaiting_send"
+    frozen = failed.log[0].first_message["content"]
+    assert apply(client, waiting, (question(waiting).id, "All bought")).status_code == 202
+    assert chat.settle(client, waiting.chat_id) == "awaiting_send"
+    provider = RecordingProvider([chat.turn("FICT retry")])
+    monkeypatch.setattr(app.state.server, "provider_factory", lambda settings: provider)
+    assert client.post(f"/sessions/{waiting.chat_id}/send", json={}).status_code == 202
+    chat.settle(client, waiting.chat_id)
+    opening = provider.log[0].first_message["content"]
+    assert opening != frozen and opening == waiting.run._send_cache.opening
+    assert len([message for message in waiting.run.messages if message["role"] == "user"]) == 1
+    assert opening.count(wait_line(question(waiting))) == 1
+
+
+def test_wait_lines_are_not_added_to_later_answer_or_followup_or_presentation_requests(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    waiting = waiting_review(app, client, run_root / "FICT-waiting-never-repeat")
+    role, drawing = question(waiting), question(waiting, drawing=True)
+    assert (
+        apply(client, waiting, (role.id, "All bought"), (drawing.id, CANDIDATE_CONFIRM)).status_code
+        == 202
+    )
+    assert chat.settle(client, waiting.chat_id) == "awaiting_send"
+    provider = RecordingProvider(
+        [
+            chat.turn(
+                "FICT sent",
+                chat.call(
+                    "request_evidence",
+                    what="FICT follow-up evidence",
+                    why="FICT model question",
+                    entity_ids=[],
+                ),
+            ),
+            chat.turn("FICT answered"),
+            chat.turn("FICT follow-up"),
+        ]
+    )
+    monkeypatch.setattr(app.state.server, "provider_factory", lambda settings: provider)
+    assert provider_control.built == []
+    assert client.post(f"/sessions/{waiting.chat_id}/send", json={}).status_code == 202
+    assert chat.settle(client, waiting.chat_id) == "waiting_engineer"
+    model_question = next(
+        q
+        for q in waiting.run.session.evidence_requests
+        if q.source != "code" and q.status == "open"
+    )
+    assert apply(client, waiting, (model_question.id, "FICT model answer")).status_code == 202
+    chat.settle(client, waiting.chat_id)
+    assert (
+        client.post(
+            f"/sessions/{waiting.chat_id}/messages", json={"text": "FICT later follow-up"}
+        ).status_code
+        == 202
+    )
+    chat.settle(client, waiting.chat_id)
+    lines = [f"Drawing {o.file}: {o.outcome}" for o in waiting.run.session.drawing_outcomes] + [
+        wait_line(role),
+        wait_line(drawing),
+    ]
+    user_messages = [
+        message["content"] for message in waiting.run.messages if message["role"] == "user"
+    ]
+    assert len(user_messages) == 3
+    assert all(line in user_messages[0] for line in lines)
+    assert all(line not in text for text in user_messages[1:] for line in lines)
+    assert any(record.presentation for record in provider.log), (
+        "actual presentation requests must be observed"
+    )
+    for record in provider.log:
+        encoded = "\n".join(piece.decode("utf-8") for piece in record.encoded_history)
+        assert all(encoded.count(line) <= 1 for line in lines)
+
+
+def test_restated_keeps_a_standing_drawing_finding_returned_by_the_deduplicating_check() -> None:
+    from swreview.checks.standards.profile import load_profile
+    from swreview.ir.loader import load_package
+    from swreview.tools.registry import ToolRegistry
+    from tests.unit.test_drawing_conformance import PLATE_DRAWING, PROFILE_A, reviewed, with_drawing
+
+    package = load_package(PLATE_DRAWING).package
+    context = reviewed(package, with_drawing(load_profile(PROFILE_A), projection="first_angle"))
+    dispatch = ToolRegistry().dispatch(context)
+    initial = prerun.recorded_call(
+        context, dispatch, "check_drawings", {}, call_id="FICT-first-drawing", mark="prerun"
+    )
+    original = prerun.PrerunResult(calls=(initial,), not_evaluated=())
+    assert len(initial.findings) == 2
+    repeated = prerun.recorded_call(
+        context, dispatch, "check_drawings", {}, call_id="FICT-regraded-drawing", mark="regrade"
+    )
+    assert repeated.findings == ()
+    assert repeated.payload["finding_ids"] == [finding.id for finding in initial.findings]
+    assert all(repeated.step_index not in finding.tool_result_ids for finding in initial.findings)
+
+    rebuilt = prerun.restated(original, context, (repeated,), None)
+
+    assert rebuilt.named_finding_ids() == [finding.id for finding in initial.findings]
+    assert rebuilt.calls[0].findings == initial.findings
+    assert all(finding.id in rebuilt.digest() for finding in initial.findings)
