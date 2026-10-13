@@ -1,4 +1,4 @@
-"""Write US1 waiting page fixtures through the real unticked backend, with fictional clocks.
+"""Write waiting, sending and failed-Send page fixtures through the real backend.
 
 Run from reviewer/:
     uv run python tests/fixtures/pane/generate_waiting_fixtures.py --write
@@ -7,8 +7,10 @@ The small package is T006's shared questions package. Its fictional paths are re
 the checks to the replay fixtures' public root, so the existing hygiene scan needs no exception.
 The big package is the committed, fictional big-assembly replay evidence, including its meshes.
 Both are new live checks-only reviews, not edited snapshots of earlier sessions. Each fixture
-contains only labels and the actual GET /sessions/{chat_id}/snapshot response. No provider,
-recording, key, SOLIDWORKS seat or network request is used.
+contains labels and actual GET /sessions/{chat_id}/snapshot responses. Start builds no provider;
+Send uses one scripted adapter whose first request fails before usage. The small fixture also
+captures a snapshot inside that first request. No SDK, recording, key, SOLIDWORKS seat or
+network request is used.
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ import sys
 import tempfile
 from collections.abc import Callable, Sequence
 from contextlib import ExitStack, contextmanager
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -34,6 +37,7 @@ from tests.support.questions_package import build_questions_package  # noqa: E40
 from tests.support.scramble import FICTIONAL_ROOT  # noqa: E402
 
 from swreview.agent import events, runner  # noqa: E402
+from swreview.agent.providers.fake import FakeProvider  # noqa: E402
 from swreview.agent.settings import ProviderSettings  # noqa: E402
 from swreview.chat import server  # noqa: E402
 from swreview.chat.server import create_app  # noqa: E402
@@ -50,6 +54,7 @@ TARGETS = {
     for name in NAMES
 }
 WRITE_COMMAND = "uv run python tests/fixtures/pane/generate_waiting_fixtures.py --write"
+FAILURE_REASON = "FICT scripted first request failed"
 TOKEN = "fict-waiting-fixture-token"
 ORIGIN = "https://swreview.invalid"
 ProviderFactory = Callable[[ProviderSettings], Any]
@@ -90,10 +95,57 @@ def forbidden_provider(settings: ProviderSettings) -> Any:
     raise AssertionError(f"Waiting fixture tried to build a {settings.provider.value} provider")
 
 
+
+class FixtureRequestError(RuntimeError):
+    """One fictional first request fails before the scripted adapter reports any usage."""
+
+
+class FailingFirstRequest(FakeProvider):
+    def __init__(self, at_request: Callable[[], None]) -> None:
+        super().__init__(script=(), model="fake-1")
+        self.at_request = at_request
+
+    def run(self, **kwargs: Any) -> Any:
+        self.at_request()
+        raise FixtureRequestError(FAILURE_REASON)
+
+
+
+@dataclass
+class FixtureFactory:
+    """Guard the checks-only start, then script one failure inside the actual Send."""
+
+    waiting_factory: ProviderFactory
+    sending_started: bool = False
+    client: TestClient | None = None
+    chat_id: str = ""
+    headers: dict[str, str] = field(default_factory=dict)
+    in_request: dict[str, Any] = field(default_factory=dict)
+
+    def at_first_request(self) -> None:
+        if self.client is None or not self.chat_id:
+            raise AssertionError("The scripted request must belong to a started chat")
+        snapshot = self.client.get(
+            f"/sessions/{self.chat_id}/snapshot", headers=self.headers
+        )
+        if snapshot.status_code != 200:
+            raise AssertionError(f"Sending fixture snapshot failed: {snapshot.text}")
+        self.in_request.update(snapshot.json())
+
+    def __call__(self, settings: ProviderSettings) -> Any:
+        if not self.sending_started:
+            return self.waiting_factory(settings)
+        return FailingFirstRequest(self.at_first_request)
+
+
 def waiting_fixtures(
     *, provider_factory: ProviderFactory = forbidden_provider, observe: Observer | None = None
 ) -> dict[str, dict[str, Any]]:
-    """Fresh live snapshots; observe inspects the actual completed run before temp cleanup."""
+    """Fresh snapshots; observe inspects checks before Send and before temp cleanup.
+
+    provider_factory guards the initial checks-only start. Only the real Send route may
+    build the scripted first-request failure; every resulting state is read through HTTP.
+    """
     result: dict[str, dict[str, Any]] = {}
     with tempfile.TemporaryDirectory() as temporary, pinned_clocks():
         root = Path(temporary)
@@ -111,9 +163,10 @@ def waiting_fixtures(
                 shutil.copytree(SOURCE, folder, ignore=shutil.ignore_patterns(
                     "session.json", "events.jsonl", "report.md", "attention.json", "tool-results"
                 ))
+            fixture_factory = FixtureFactory(provider_factory)
             app = create_app(
                 token=TOKEN, allow_origin=ORIGIN, run_root=root, development=True,
-                provider_factory=provider_factory,
+                provider_factory=fixture_factory,
                 bridge_factory=(lambda pipe, secret, seat=bridge: seat) if bridge else None,
             )
             with TestClient(app) as client:
@@ -135,10 +188,41 @@ def waiting_fixtures(
                     raise AssertionError(f"Waiting fixture snapshot failed: {snapshot.text}")
                 if observe is not None:
                     observe(name, folder, app)
-                result[name] = {
+                fixture = {
                     "labels": load_words().labels.model_dump(mode="json"),
                     "waiting": snapshot.json(),
                 }
+                fixture_factory.client = client
+                fixture_factory.chat_id = chat_id
+                fixture_factory.headers = headers
+                fixture_factory.sending_started = True
+                response = client.post(f"/sessions/{chat_id}/send", json={}, headers=headers)
+                if response.status_code != 202:
+                    raise AssertionError(f"Waiting fixture Send failed: {response.text}")
+                owner = app.state.server
+                [held] = owner.chats.values()
+                # A barrier on the same worker follows Send and all its settle/render work.
+                owner._workers[held.chat_id].submit(lambda: None).result(timeout=10)
+                in_request = fixture_factory.in_request
+                if not in_request or in_request.get("send_in_flight") is not True:
+                    raise AssertionError("The actual first request supplied no in-flight snapshot")
+                if name == "waiting":
+                    fixture["sending"] = in_request
+                snapshot = client.get(f"/sessions/{chat_id}/snapshot", headers=headers)
+                if snapshot.status_code != 200:
+                    raise AssertionError(f"Failed-Send fixture snapshot failed: {snapshot.text}")
+                fixture["failed_send"] = snapshot.json()
+                event_types = [
+                    json.loads(line)["type"]
+                    for line in (folder / "events.jsonl").read_text().splitlines()
+                ]
+                if event_types.count("session.sent") != 1 or "usage" in event_types:
+                    raise AssertionError("The scripted Send must fail before its first usage")
+                if event_types.count("error") != 1:
+                    raise AssertionError("The scripted first request must emit exactly one error")
+                if fixture["failed_send"]["chat_state"] != "awaiting_send":
+                    raise AssertionError("The scripted first request did not settle waiting")
+                result[name] = fixture
     return result
 
 
