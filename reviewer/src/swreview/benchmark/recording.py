@@ -154,6 +154,16 @@ def read_recording(run_dir: Path | str) -> Recording:
         session_file = run_folder_session(directory)
     except (FileNotFoundError, ValueError) as exc:
         raise RecordingRefused(str(exc)) from exc
+    session = load_session(session_file)
+    if session.model_status is not None:
+        if session.model_status.state == "sent":
+            raise RecordingRefused(
+                f"{directory} was sent to the model after waiting for Send; "
+                "the replay reads only reviews sent when their checks finished"
+            )
+        raise RecordingRefused(
+            f"{directory} was never sent to the model, so it has no model turn to replay"
+        )
     events_file = directory / EVENTS_FILE_NAME
     if not events_file.is_file():
         raise RecordingRefused(
@@ -172,7 +182,6 @@ def read_recording(run_dir: Path | str) -> Recording:
             f"{directory} holds no {PACKAGE_FILE_NAME}: the replay re-runs the recorded calls "
             "against the package and cannot without it"
         )
-    session = load_session(session_file)
     reader = _EventReader()
     for event in events:
         reader.read(event)

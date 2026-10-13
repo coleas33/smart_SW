@@ -50,8 +50,15 @@ SOLIDWORKS (FR-002): both passes run `start_review` with `FakeProvider` in a
 
 ## 2. Reading a recording
 
+Amended by feature 015 T079 (FR-040): after finding `session.json`, read its
+`model_status` before checking or reading `events.jsonl`. Reviews started waiting for Send
+are refused by their stored state; a review sent when its checks finished has no
+`model_status` and follows the existing reader path.
+
 | Folder | Answer |
 |---|---|
+| session with `model_status.state` of `not_sent` or `send_failed` | "`<RUN_DIR>` was never sent to the model, so it has no model turn to replay" |
+| session with `model_status.state` of `sent` | "`<RUN_DIR>` was sent to the model after waiting for Send; the replay reads only reviews sent when their checks finished" |
 | no `session.json` | `run_folder_session`'s own sentence (and its benchmark-root sentence when a `<package_id>/session.json` sits below) |
 | no `events.jsonl` | "`<RUN_DIR>` holds no events.jsonl: it is a check folder or was written before the event log, and a check has no provider rounds to replay" |
 | an event log with no `usage` event | "`<RUN_DIR>/events.jsonl` records no usage event: no provider round was recorded, so there is nothing to price" |
