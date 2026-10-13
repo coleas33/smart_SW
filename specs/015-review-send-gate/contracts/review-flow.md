@@ -239,7 +239,9 @@ the model to re-run, replace or continue (FR-023). None of these lines is sent a
 **The rebuilt digest** (`prerun.restated(prerun, context, calls, standards)`, new): the pre-run
 result with (a) each restated tool's calls replaced, in place, by its restated `PrerunCall`, whose
 `findings` are the session's standing findings that cite that call's step (a finding `_restate`
-folded keeps its id), and (b) `not_evaluated` recomputed by `not_evaluated_families` with the current
+folded keeps its id), plus still-standing ids the restated call returned (a de-duplicating drawing
+check can return an existing id without changing its earlier step; T086 correction, 2026-10-13),
+and (b) `not_evaluated` recomputed by `not_evaluated_families` with the current
 roles and the run's live outcome and withheld tools. `withheld`, `live` and `families` are kept. With
 nothing restated, `restated` returns its input, so the builder reproduces the frozen opening byte for
 byte (pinned by a test). Every finding the digest names stands; every standing pre-run finding is
@@ -287,7 +289,10 @@ the prior in-memory error changes no session field and writes nothing (2026-10-1
    cleared, so the model's first turn reads the coverage a ticked review's first turn reads: no item
    placed by a close-out, `open_items` and `get_review_checklist` as a review sent at once sees them
    (US2, FR-015; research R2.27), on every Send: the first, one after a failed Send, one after
-   answers applied while waiting, and one after a re-run. Rows anything else wrote stay. Then
+   answers applied while waiting, and one after a re-run. Rows anything else wrote stay. An
+   otherwise-open model-owned item has no standing finding matching its check prefix and no
+   surviving coverage row that places its checklist id; failed, nonmatching and per-rule rows
+   do not close it (T085 clarification, 2026-10-13). Then
    `self.provider = adapter`, `awaiting_send = False`, `sent_at = local_now()` (held, not yet
    recorded). The withdrawal filters lists already in memory and the rest are assignments: nothing
    here can raise;

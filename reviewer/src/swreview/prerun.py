@@ -49,7 +49,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator, Mapping, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from time import perf_counter
 from typing import TYPE_CHECKING, Any, Literal
@@ -144,6 +144,8 @@ __all__ = [
     "prerun_tools",
     "recorded_call",
     "repeat_key",
+    "restated",
+    "returned_finding_ids",
     "withheld_tools",
 ]
 
@@ -620,6 +622,58 @@ class PrerunResult:
             named = ", ".join(shown) + (f", and {more} more" if more > 0 else "")
             lines.append(f"  {check} - {len(ids)} {status}: {named}")
         return lines
+
+
+def returned_finding_ids(call: PrerunCall) -> list[str]:
+    """The finding ids a restated call returned without adding them: a de-duplicating check
+    (`check_drawings`) hands back the id of a finding the session already holds."""
+    payload = call.payload if isinstance(call.payload, Mapping) else {}
+    returned = payload.get("finding_ids")
+    if not isinstance(returned, list):
+        return []
+    return [item for item in returned if isinstance(item, str)]
+
+
+
+def restated(
+    prerun: PrerunResult | None,
+    context: ToolContext,
+    calls: Sequence[PrerunCall],
+    standards: NotEvaluated | None = None,
+) -> PrerunResult | None:
+    """Replace restated calls with the standing findings they now cite, in place.
+
+    A regrade reconciles a new verdict onto an earlier id before this runs, so the raw
+    call's findings are not the digest's source. The session's standing findings are.
+    """
+    if prerun is None or not calls:
+        return prerun
+    session = context.require_session()
+    replacements: dict[str, PrerunCall] = {}
+    for call in calls:
+        returned = set(returned_finding_ids(call))
+        replacements[call.tool] = replace(
+            call,
+            findings=tuple(
+                finding for finding in session.findings
+                if (finding.carried_over_from is None
+                    and call.step_index in finding.tool_result_ids)
+                or finding.id in returned
+            ),
+        )
+    withheld = [
+        (family.check.removeprefix(PRERUN_CHECK_PREFIX), family.reason)
+        for family in prerun.not_evaluated
+        if family.check.removeprefix(PRERUN_CHECK_PREFIX) in prerun_tools()
+    ]
+    return replace(
+        prerun,
+        calls=tuple(replacements.get(call.tool, call) for call in prerun.calls),
+        not_evaluated=not_evaluated_families(
+            context.ir, withheld, standards, live=prerun.live,
+            roles=checks_mechanical.review_roles(context),
+        ),
+    )
 
 
 def _collapsed_line(tool: str, calls: Sequence[PrerunCall]) -> str:

@@ -1,6 +1,6 @@
 # Contract: The Drawing Capability and Drawing States
 
-*Feature 015 amendment notice, 2026-10-08:* Planned amendments for drawing outcomes in the opening are specified in [015 review-flow.md](../../015-review-send-gate/contracts/review-flow.md).
+*Feature 015 amendment, 2026-10-13 (T086):* Confirmed outcomes from a read while waiting reach the model in the rebuilt Send opening, before the wait-answer lines, and are never added again to a later answer or follow-up. Section 6 below covers both waiting and already-sent reviews; see [015 review-flow.md](../../015-review-send-gate/contracts/review-flow.md) section 5.
 
 Normative for FR-033 to FR-040 and User Story 4. Research R2.24 to R2.28. Amends feature 011's
 `contracts/questions.md` sections 3, 4, 5 and 6, `contracts/confirmed-open.md` sections 1, 2 and 4,
@@ -132,6 +132,13 @@ refusal, the bridge error, the ten-drawing bound, no connection). The drawing br
 (`drawings/brief.py:335-354`) carries each document's state and, for a candidate, the confirmed-open
 outcome when there is one, with candidates deduplicated. The resumed message for a batch with no
 confirmed read is byte-identical to today's (replays rebuild it).
+
+*Amended by feature 015 (T086, 2026-10-13).* A read made while the review waits for Send
+starts no turn. Its stored `drawing_outcomes` supply one `DRAWING_OUTCOME_LINE` per file,
+refusals included, in order, between the rebuilt digest and `OPENING_MESSAGE`, before any
+`WAIT_ANSWER_LINE`. The lines are not added to messages after Send; the existing opening
+remains in request history. A read on an already-sent review keeps the resumed-message path
+above unchanged.
 
 ## 7. The payload and the digest
 

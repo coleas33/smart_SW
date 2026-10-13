@@ -135,6 +135,18 @@ package equals the written one and a Retry grows neither.
 No payload key (`subjects`, `inputs`, `drawing_locations`) ever appears in the opening message.
 The opening message is never pruned (`model-view.md` section 7).
 
+*Amended by feature 015 (T086, 2026-10-13).* When code applies answers while a review waits
+for Send, `prerun.restated` replaces each restated tool's calls in place and re-reads their
+findings from standing session findings citing the new call's step, plus still-standing ids
+the restated call returned. A de-duplicating drawing check keeps its existing finding's earlier
+step, so the returned id also belongs in the rebuilt digest. It recomputes the not-evaluated families with the current roles, keeping the live outcome, folded families and
+withheld tools. With no restatement it returns its input, preserving the frozen opening bytes.
+The same opening builder renders the rebuilt digest; after it and before the opening
+instruction, it adds ordered drawing outcomes, then code questions answered while waiting.
+Those lines occur only in the opening already held by later requests, never as additions to a
+later answer or follow-up. See [015 review flow](../../015-review-send-gate/contracts/review-flow.md)
+section 5.
+
 ## 5. The re-call guard
 
 `PrerunGuard(tools, prerun)` wraps the dispatch innermost when a pre-run ran. Its ledger holds the
