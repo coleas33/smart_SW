@@ -85,11 +85,14 @@ def test_each_committed_fixture_equals_fresh_backend_bytes(
 
 
 @pytest.mark.parametrize("name", NAMES)
-def test_the_live_snapshot_and_labels_have_the_exact_us1_shape(
+def test_the_live_snapshot_and_labels_have_the_exact_us2_shape(
     name: str, generated: dict[str, dict[str, Any]]
 ) -> None:
     fixture = generated[name]
-    assert list(fixture) == ["labels", "waiting"]
+    keys = ["labels", "waiting"]
+    if name == "waiting":
+        keys.append("sending")
+    assert list(fixture) == [*keys, "failed_send"]
     assert fixture["labels"] == load_words().labels.model_dump(mode="json")
     waiting = fixture["waiting"]
     assert waiting["run_id"] == f"fict-{name}"
@@ -165,3 +168,50 @@ def test_hygiene_removes_only_the_exact_public_code_reason(
     mixed = without_reviewer_text(f"FICT supplier bore; {reason}; FICT foreign callouts")
     assert "FICT supplier bore" in mixed
     assert "FICT foreign callouts" in mixed
+
+
+@pytest.mark.parametrize("name", NAMES)
+@pytest.mark.parametrize("source", ("committed", "fresh"))
+def test_failed_send_is_an_actual_live_waiting_snapshot_with_the_words_failure(
+    name: str, source: str, generated: dict[str, dict[str, Any]]
+) -> None:
+    """015 T071: both page fixtures carry a failed first request, ready for another Send."""
+    fixture = (
+        json.loads(TARGETS[name].read_bytes()) if source == "committed" else generated[name]
+    )
+    before = fixture["waiting"]
+    failed = fixture["failed_send"]
+    assert failed["run_id"] == before["run_id"]
+    assert failed["document"] == before["document"]
+    assert failed["chat_state"] == "awaiting_send"
+    assert failed["read_only"] is False
+    assert "send_in_flight" not in failed
+    assert failed["last_seq"] > before["last_seq"]
+    block = failed["ranking"]["summary"]["send"]
+    assert block["state"] == "waiting"
+    assert block["input_tokens"] == before["ranking"]["summary"]["send"]["input_tokens"]
+    assert block["text"] == before["ranking"]["summary"]["send"]["text"]
+    assert block["failure"] == load_words().send.failed.format(
+        reason="FICT scripted first request failed", time="12:00"
+    )
+
+
+@pytest.mark.parametrize("source", ("committed", "fresh"))
+def test_sending_is_the_live_snapshot_while_the_first_request_is_held(
+    source: str, generated: dict[str, dict[str, Any]]
+) -> None:
+    """015 T071: the reload snapshot comes before first usage, with Send still in flight."""
+    fixture = (
+        json.loads(TARGETS["waiting"].read_bytes())
+        if source == "committed"
+        else generated["waiting"]
+    )
+    before = fixture["waiting"]
+    sending = fixture["sending"]
+    failed = fixture["failed_send"]
+    assert sending["run_id"] == before["run_id"]
+    assert sending["document"] == before["document"]
+    assert sending["chat_state"] == "running"
+    assert sending["send_in_flight"] is True
+    assert sending["read_only"] is False
+    assert before["last_seq"] < sending["last_seq"] < failed["last_seq"]
