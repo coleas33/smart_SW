@@ -1164,7 +1164,9 @@
     action.disabled = !!(extras && extras.disabled);
     block.appendChild(action);
     block.appendChild(el('p', 'send-text', String(send.text || '')));
-    if (send.failure) {
+    if (extras && extras.error) {
+      block.appendChild(plainError(extras.error, extras.labels));
+    } else if (send.failure) {
       block.appendChild(el('p', 'note bad', String(send.failure)));
     }
     return block;
