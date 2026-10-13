@@ -397,6 +397,77 @@ public sealed class ReviewHostTests
     }
 
     [Fact]
+    public void SessionsRefreshesEachMarkedRecordOnceAndNeverReadsATickedRecord()
+    {
+        using (var world = new ReviewWorld())
+        {
+            var opened = new List<string>();
+            world.OpenSessionHead = path =>
+            {
+                opened.Add(path);
+                string state = path.Contains("waiting") ? "sent" : "send_failed";
+                return new MemoryStream(System.Text.Encoding.UTF8.GetBytes("{\"model_status\":{\"state\":\"" + state + "\"}}"));
+            };
+            world.Open();
+            string waiting = world.TrackedRun("waiting");
+            string failed = world.TrackedRun("failed");
+            string ticked = world.TrackedRun("ticked");
+            world.Host.TrackSession("waiting", waiting, null, null, "not_sent");
+            world.Host.TrackSession("failed", failed, null, null, "send_failed");
+            world.Host.TrackSession("ticked", ticked);
+            world.Host.TrackCheck(world.TrackedRun("check"));
+            world.Receive("sessions.list", "first-marks", new { });
+            Assert.Equal(new[] { Path.Combine(waiting, "session.json"), Path.Combine(failed, "session.json") }, opened);
+            JsonElement[] items = world.Reply("sessions", "first-marks").GetProperty("items").EnumerateArray().ToArray();
+            Assert.Equal(3, items.Length);
+            Assert.False(items.Single(item => item.GetProperty("chat_id").GetString() == "waiting").TryGetProperty("model_status", out _));
+            Assert.Equal("send_failed", items.Single(item => item.GetProperty("chat_id").GetString() == "failed").GetProperty("model_status").GetString());
+            Assert.False(items.Single(item => item.GetProperty("chat_id").GetString() == "ticked").TryGetProperty("model_status", out _));
+            opened.Clear();
+            world.Receive("sessions.list", "second-marks", new { });
+            Assert.Equal(new[] { Path.Combine(failed, "session.json") }, opened);
+        }
+    }
+
+    [Theory]
+    [InlineData("missing")]
+    [InlineData("unreadable")]
+    [InlineData("past-cap")]
+    [InlineData("unknown-state")]
+    public void AnUnconfirmedHeadKeepsTheWaitingMarkAcrossASecondReady(string head)
+    {
+        using (var world = new ReviewWorld())
+        {
+            var opened = new List<string>();
+            world.OpenSessionHead = path =>
+            {
+                opened.Add(path);
+                if (head == "missing") throw new FileNotFoundException("FICT absent", path);
+                if (head == "unreadable") throw new IOException("FICT cannot read");
+                string json = head == "past-cap"
+                    ? "{\"padding\":\"" + new string('x', 65536) + "\",\"model_status\":{\"state\":\"sent\"}}"
+                    : "{\"model_status\":{\"state\":\"FICT-future-state\"}}";
+                return new MemoryStream(System.Text.Encoding.UTF8.GetBytes(json));
+            };
+            world.Open();
+            string run = world.TrackedRun("waiting");
+            world.Host.TrackSession("waiting", run, null, null, "not_sent");
+            world.Receive("ready", "first-ready", new { });
+            world.Receive("sessions.list", "first-list", new { });
+            world.Receive("ready", "second-ready", new { });
+            world.Receive("sessions.list", "second-list", new { });
+            Assert.Equal(2, opened.Count);
+            Assert.All(opened, path => Assert.Equal(Path.Combine(run, "session.json"), path));
+            foreach (string id in new[] { "first-list", "second-list" })
+            {
+                JsonElement item = Assert.Single(world.Reply("sessions", id).GetProperty("items").EnumerateArray());
+                Assert.Equal("not_sent", item.GetProperty("model_status").GetString());
+            }
+            Assert.Equal("not_sent", world.Host.FindSession("waiting")!.ModelStatus);
+        }
+    }
+
+    [Fact]
     public void AWaitingReviewKeepsItsMarkWhenACheckBecomesLatestBeforeItsStatusAndListReply()
     {
         using (var world = new ReviewWorld())
@@ -2007,6 +2078,8 @@ public sealed class ReviewHostTests
 
         public BridgeConfig? Bridge { get; set; }
 
+        public Func<string, Stream>? OpenSessionHead { get; set; }
+
         public string Engineer { get; } = "test-engineer";
 
         public bool UseResolver { get; set; } = true;
@@ -2030,6 +2103,7 @@ public sealed class ReviewHostTests
                 BuildMode = BuildMode.Development,
                 LogFolder = LogFolder,
                 CurrentDocument = () => Document,
+                OpenSessionHead = OpenSessionHead,
                 PrepareReview = Prepare,
                 DrawingModels = DrawingModels,
                 Environment = _ => null,
