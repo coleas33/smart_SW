@@ -1125,3 +1125,194 @@ def test_request_failure_settles_waiting_before_usage_and_failed_after_usage(
         )
         assert isinstance(held.run.provider, DeferredProvider)
     assert not held.run._send_in_flight and not held.stop_requested.is_set()
+
+
+@pytest.mark.parametrize("kind", ["disposition", "timing"])
+@pytest.mark.parametrize(
+    "next_action,fail_write",
+    [("send", False), ("evidence", False), ("send", True), ("stop_send", False)],
+)
+def test_waiting_writes_share_the_chat_worker_and_queue_send_or_answer(
+    pipe_app: Any,
+    pipe_client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    monkeypatch: pytest.MonkeyPatch,
+    kind: str,
+    next_action: str,
+    fail_write: bool,
+) -> None:
+    from swreview.agent.providers.fake import ScriptedTurn
+
+    folder = run_root / f"FICT-queue-{kind}-{next_action}-{fail_write}"
+    started = pipe_review(pipe_client, folder)
+    assert started.status_code == 201, started.text
+    assert provider_control.built == []
+    chat_id = started.json()["chat_id"]
+    owner = pipe_app.state.server
+    held = owner.chats[UUID(chat_id)]
+    run = held.run
+    finding_id = run.session.findings[0].id
+    endpoint = (
+        f"/sessions/{chat_id}/findings/{finding_id}/disposition"
+        if kind == "disposition"
+        else f"/sessions/{chat_id}/timing"
+    )
+    payload = (
+        {"decision": "rejected", "note": "FICT kept decision"}
+        if kind == "disposition"
+        else {"baseline": 45, "supervision": 6, "verification": 9, "false_alarms": 2}
+    )
+    target = "record_disposition" if kind == "disposition" else "record_timing_live"
+    original = getattr(server, target)
+    entered, release = threading.Event(), threading.Event()
+    order: list[str] = []
+    identities: list[int] = []
+
+    def write(*args: Any, **kwargs: Any) -> Any:
+        identities.append(threading.get_ident())
+        entered.set()
+        assert release.wait(chat.TIMEOUT_S)
+        if fail_write:
+            order.append("write.failed")
+            raise ValueError("FICT held write failed")
+        result = original(*args, **kwargs)
+        order.append("write.saved")
+        return result
+
+    provider = RecordingProvider(
+        [
+            ScriptedTurn(
+                text="FICT queued Send", tool_calls=(chat.call("get_review_checklist"),)
+            )
+        ],
+        explanation_script=[ScriptedTurn(text="FICT explanation")],
+        clock=lambda: 0.0,
+    )
+
+    def factory(settings: Any) -> Any:
+        identities.append(threading.get_ident())
+        assert order[-1] == ("write.failed" if fail_write else "write.saved")
+        order.append("factory")
+        return provider
+
+    # This group isolates worker dispatch; the real waiting-answer branch belongs to US3 T084.
+    def apply(answers: Any) -> Any:
+        identities.append(threading.get_ident())
+        assert order[-1] == "write.saved"
+        question = run.session.evidence_requests[0]
+        assert answers == [(question.id, "FICT answer")]
+        question.status, question.answer = "answered", "FICT answer"
+        runner.save_session(run.session, run.session_path)
+        order.append("answer.saved")
+        return run.session
+
+    monkeypatch.setattr(server, target, write)
+    monkeypatch.setattr(owner, "provider_factory", factory)
+    monkeypatch.setattr(run, "answer_evidence_batch", apply)
+    run.sink.add_listener(
+        lambda event: (
+            order.append("session.sent") if event.type == "session.sent" else None
+        )
+    )
+    with ThreadPoolExecutor(max_workers=1) as caller:
+        request = caller.submit(pipe_client.post, endpoint, json=payload)
+        try:
+            assert entered.wait(chat.TIMEOUT_S)
+            assert chat.state_of(pipe_client, chat_id) == "awaiting_send"
+            assert not held.stop_requested.is_set()
+            worker = owner._workers[UUID(chat_id)]
+            assert identities == [next(iter(worker._threads)).ident]
+            if next_action == "stop_send":
+                old = run.events_path.read_bytes()
+                assert (
+                    pipe_client.post(f"/sessions/{chat_id}/stop", json={}).status_code
+                    == 202
+                )
+                assert run.events_path.read_bytes() == old
+                assert not held.stop_requested.is_set()
+            if next_action == "evidence":
+                question = run.session.evidence_requests[0]
+                following = pipe_client.post(
+                    f"/sessions/{chat_id}/evidence",
+                    json={
+                        "answers": [
+                            {"request_id": question.id, "answer": "FICT answer"}
+                        ]
+                    },
+                )
+            else:
+                following = pipe_client.post(f"/sessions/{chat_id}/send", json={})
+            assert following.status_code == 202
+            assert chat.state_of(pipe_client, chat_id) == "running"
+            assert order == [] and provider.log == []
+            release.set()
+            recorded = request.result(timeout=chat.TIMEOUT_S)
+            assert recorded.status_code == (
+                409
+                if kind == "disposition" and fail_write
+                else 500
+                if fail_write
+                else 200
+            )
+            assert chat.settle(pipe_client, chat_id) == (
+                "awaiting_send" if next_action == "evidence" else "waiting_engineer"
+            )
+        finally:
+            release.set()
+    assert len(set(identities)) == 1
+    assert not held.stop_requested.is_set()
+    saved = load_session(run.session_path)
+    if not fail_write:
+        if kind == "disposition":
+            assert saved.findings[0].disposition.decision == "rejected"
+            assert saved.findings[0].disposition.note == "FICT kept decision"
+        else:
+            assert saved.timing.baseline_minutes == 45
+            assert saved.timing.assisted_supervision_minutes == 6
+        assert order[0] == "write.saved"
+    if next_action == "evidence":
+        assert order == ["write.saved", "answer.saved"] and provider.log == []
+    else:
+        assert order.index("factory") < order.index("session.sent")
+        assert sum(entry.presentation for entry in provider.log) == 1
+        assert [
+            event.body["reason"]
+            for event in replay_events(run.events_path)
+            if event.type == "turn.ended"
+        ] == ["end"]
+
+
+@pytest.mark.parametrize("kind", ["disposition", "timing"])
+def test_ticked_decision_and_timing_keep_the_existing_threadpool_path(
+    app: Any,
+    client: TestClient,
+    finished_chat: str,
+    monkeypatch: pytest.MonkeyPatch,
+    kind: str,
+) -> None:
+    held = app.state.server.chats[UUID(finished_chat)]
+    calls: list[Any] = []
+    old = server.run_in_threadpool
+
+    async def pool(call: Any) -> Any:
+        calls.append(call)
+        return await old(call)
+
+    async def refused(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("FICT ticked worker route")
+
+    monkeypatch.setattr(server, "run_in_threadpool", pool)
+    monkeypatch.setattr(app.state.server, "_on_worker", refused, raising=False)
+    endpoint = (
+        f"/sessions/{finished_chat}/findings/{held.run.session.findings[0].id}/disposition"
+        if kind == "disposition"
+        else f"/sessions/{finished_chat}/timing"
+    )
+    payload = (
+        {"decision": "accepted", "note": "FICT ticked"}
+        if kind == "disposition"
+        else {"baseline": 45}
+    )
+    assert client.post(endpoint, json=payload).status_code == 200
+    assert len(calls) == 1

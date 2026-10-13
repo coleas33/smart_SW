@@ -185,3 +185,9 @@ replaces this attempt's Interrupted entry with its redacted failure, empties his
 the DeferredProvider before the error/turn-ended/finalization sequence. Existing earlier failure
 history remains. A completed round retains today's fatal-error behavior. Settling awaiting_send
 releases the retained bridge transport; the worker finally clears Stop after success or failure.
+
+
+Feature 015 T068 serializes a waiting review's disposition/timing write on the same one-thread
+executor its Send and answers use. The route awaits the write while leaving awaiting_send and
+Stop untouched; a subsequently accepted Send or answer queues behind it. A failed write answers
+its existing error and does not cancel queued work. Other chat states retain run_in_threadpool.
