@@ -422,12 +422,12 @@ description: "Task list for the send-to-model checkbox"
 
 **Independent Test**: spec.md User Story 2; quickstart Scenario 2, and Scenario 6's Send cases.
 
-- [ ] T058 [P] [US2] [py] Lane B. Extend `reviewer/tests/unit/test_provider_settings.py` (`contracts/review-flow.md` section 3, order 5; FR-016). `ProviderSettings.has_credential` is:
+- [x] T058 [P] [US2] [py] Lane B. Extend `reviewer/tests/unit/test_provider_settings.py` (`contracts/review-flow.md` section 3, order 5; FR-016). `ProviderSettings.has_credential` is:
   - true for a key from the settings, a key from the environment, the scripted provider, and Gemini with an enterprise project and no key;
   - false with no key anywhere and, for Gemini, no enterprise project.
 
   Acceptance: red for want of the property.
-- [ ] T059 [US2] [py] Lane B. Add `has_credential` to `ProviderSettings` in `agent/settings.py` (`:194-215`), the one place the rule lives. Acceptance: T058 green.
+- [x] T059 [US2] [py] Lane B. Add `has_credential` to `ProviderSettings` in `agent/settings.py` (`:194-215`), the one place the rule lives. Acceptance: T058 green.
 - [ ] T060 [P] [US2] [py] Lane B. Extend `reviewer/tests/unit/test_send_gate_server.py` with the route (`contracts/review-flow.md` sections 2, 3 and 9; FR-016, FR-018; owner decision 69A).
   - **Refusals**: `POST /sessions/{id}/send` refuses, in this order and changing nothing, each leaving the chat `awaiting_send`:
     1. `404 UnknownChat`;
