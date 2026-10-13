@@ -33,7 +33,7 @@ from dataclasses import dataclass, field, replace
 from functools import cache
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 
-from swreview.checks.questions import QuestionSpec
+from swreview.checks.questions import QuestionSpec, asks_same
 from swreview.checks.result import CheckResult
 from swreview.ir.models import ComponentInstance, Document, EvidencePackage
 from swreview.report.names import and_list, plural
@@ -909,9 +909,7 @@ def answered_roles(
         spec is None
         or request.status != "answered"
         or request.answer is None
-        or request.question != spec.question
-        or tuple(request.options) != spec.options
-        or tuple(request.entity_ids) != spec.entity_ids
+        or not asks_same(request, spec)
     ):
         return None
     listed = list(spec.entity_ids)

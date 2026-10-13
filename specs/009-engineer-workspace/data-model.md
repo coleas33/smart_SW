@@ -33,7 +33,9 @@ Loaded once per process by `summary.load_words() -> Words` (`functools.cache`, l
 | `drawings` | `{read_one, read_many, candidates_one, candidates_many, more}` | "Drawing read: {names}", "Drawings read: {names}", "Same-name drawing found but not open: {names}", "Same-name drawings found but not open: {names}", "{names} and {n} more" (*added 2026-09-23, decision 10A*) |
 | `contacts` | `{one, many}` | "1 size-for-size contact", "{n} size-for-size contacts" |
 | `resume` | `{with_tokens, without}` | "Sending resumes the review once. Its last round sent {tokens} input tokens." / "Sending resumes the review once." |
-| `read_only` | str | "The backend restarted, so this review is shown from its run folder. Follow-ups, decisions and answers are off." |
+| `read_only_lead` | str | "The backend restarted, so this review is shown from its run folder." (*015 amendment, 2026-10-12, owner decision 73A*) |
+| `read_only_off` | str | "Follow-ups, decisions and answers are off." |
+| `Words.read_only` | property | Composes the two file keys with a space, preserving the previous sentence exactly. The file no longer accepts a `read_only` key; a restored waiting review uses the lead plus `send.restored_line` (015 `contracts/words.md` section 1). |
 | `goal_states` | map `issues \| checked \| not_reached \| not_applicable` → str | "issues found", "checked, no issue", "not reached", "not applicable" |
 | `goal_reasons` | map `unresolved \| skipped \| failed \| out_of_scope \| no_check` → str | "evidence missing", "skipped", "a check failed", "out of scope", "no check ran" |
 | `goals` | list of `{id, title, items: list[str], prefixes: list[str]}` | the eight goals of research R2.4, in the owner's order (*amended 2026-09-26, feature 013 T046:* ten goals with `standards` split from `hygiene`, each with `group`, a `finding_groups` id) |

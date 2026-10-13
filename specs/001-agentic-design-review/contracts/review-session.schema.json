@@ -22,6 +22,7 @@
     "ended_at": { "type": ["string", "null"], "format": "date-time" },
     "model": { "type": "string" },
     "provider_info": { "anyOf": [{ "$ref": "#/$defs/ProviderInfo" }, { "type": "null" }] },
+    "model_status": {"$ref": "#/$defs/ModelStatus", "description": "Feature 015: written only for a review started with the box unticked. Absent means the review was sent when its checks finished, as every review before the feature."},
     "retry_of": { "type": ["string", "null"], "format": "uuid" },
     "reused_from": { "type": ["string", "null"] },
     "efficiency": { "anyOf": [{ "$ref": "#/$defs/EfficiencySettings" }, { "type": "null" }] },
@@ -35,10 +36,212 @@
     "model_view": { "$ref": "#/$defs/ModelViewSettings", "description": "What the model read of each tool result (feature 008 User Story 3): always written by a review of this build, off when the caller gave none; absent on sessions written before it, which means off. Added to properties and left out of required, and omitted when absent, so older sessions keep their bytes" },
     "folded_families": { "type": "array", "items": { "type": "string" }, "description": "Rule families whose findings rank and render as one collapsed group (feature 008 FR-014): [\"rms\"] when the review ran checks first. Added to properties and left out of required, and omitted from session.json when empty, so a session written before the field existed still validates and round-trips to its own bytes" },
     "drawing_read": { "enum": ["none", "open_only", "opens_closed"], "description": "What the SOLIDWORKS host said it can do with a closed drawing (feature 013, contracts/drawing-capability.md section 2), read once when a custom document has a drawing candidate, so a summary re-rendered later says the same. Added to properties and left out of required, and omitted when never read, so older sessions keep their bytes" },
+    "live_detection": {"$ref": "#/$defs/LiveDetection", "description": "Feature 015: the first run's live interference outcome, which a re-run after a restart carries rather than repeats."},
+    "drawing_outcomes": {"type": "array", "items": {"$ref": "#/$defs/DrawingOutcome"}, "description": "Feature 015: one line per drawing file a confirmed read asked for while the review waited."},
     "coverage": { "$ref": "#/$defs/Coverage" },
     "timing": { "$ref": "#/$defs/Timing" }
   },
   "$defs": {
+    "ModelStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state",
+        "document",
+        "checked_at"
+      ],
+      "properties": {
+        "state": {
+          "enum": [
+            "not_sent",
+            "send_failed",
+            "sent"
+          ]
+        },
+        "document": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path",
+            "configuration"
+          ],
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "configuration": {
+              "type": "string"
+            }
+          }
+        },
+        "checked_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "profile": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path",
+            "sha256"
+          ],
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "sha256": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "rechecked_from": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "failures": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SendFailure"
+          }
+        },
+        "sent_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "estimate": {
+          "$ref": "#/$defs/SendEstimate"
+        },
+        "opening_finding_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^F-[0-9]+$"
+          }
+        }
+      }
+    },
+    "SendFailure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "at",
+        "error_class",
+        "reason"
+      ],
+      "properties": {
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "error_class": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        }
+      }
+    },
+    "SendEstimate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "input_tokens",
+        "encoding",
+        "approximate"
+      ],
+      "properties": {
+        "input_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "encoding": {
+          "const": "o200k_base"
+        },
+        "approximate": {
+          "type": "boolean"
+        }
+      }
+    },
+    "LiveDetection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "configuration",
+        "settings"
+      ],
+      "properties": {
+        "configuration": {
+          "type": "string"
+        },
+        "settings": {
+          "type": "object"
+        },
+        "step_index": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "not_attempted": {
+          "enum": [
+            "no_bridge",
+            "not_assembly",
+            null
+          ]
+        },
+        "groups": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rows_detected": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rows_added": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rows_collided": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "persist_error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "DrawingOutcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file",
+        "outcome"
+      ],
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "outcome": {
+          "type": "string"
+        }
+      }
+    },
     "Quantity": { "$ref": "ir.schema.json#/$defs/Quantity" },
     "Angle": { "$ref": "ir.schema.json#/$defs/Angle" },
     "Dimension": { "$ref": "ir.schema.json#/$defs/Dimension" },

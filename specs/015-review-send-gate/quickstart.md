@@ -43,15 +43,23 @@ fixture carrying the labels block in that same commit, so it is green too.
 
 **The replay regeneration step** (research R2.28), on a machine that holds the owner's recordings
 mapping (`%LOCALAPPDATA%\SwReview\recordings.json`), at the gate of every phase that changes the
-runner, the pre-run, a provider or the records, and at the final gate: run 008
-`contracts/replay.md` section 8's three generator commands from `reviewer/`, then
+runner, the pre-run, a provider or the records, and at the final gate: use 008
+`contracts/replay.md` section 8's unchanged-fixture verification recipe from `reviewer/`:
+
+```powershell
+uv run python tests/fixtures/replay/verify_regeneration.py
+```
+
+Then from the repository root run the literal raw fixture check:
 
 ```powershell
 git diff --exit-code -- reviewer/tests/fixtures/replay
 ```
 
-Expected: no difference. Where the mapping is absent, the step is skipped and the gate record says
-so, naming why.
+Expected: no difference, with the nine package/session/event files byte-equal to the held
+committed baseline. The verifier seeds only runtime producer inputs and calls the unchanged
+generators and self-checks; its zero exit alone does not establish byte equality. Where the
+mapping is absent, the step is skipped and the gate record says so, naming why.
 
 ## Scenario 1: A checks-only review with no key (US1)
 
@@ -267,3 +275,13 @@ On the licensed seat, with the build of this feature and the owner's key stored:
 ## Results
 
 *(Recorded by the gate task on the development machine and by the [W] task at the sitting.)*
+
+
+- **T033 foundation, 2026-10-12:** combined T013–T032 candidate and input-only replay
+  verification helper: 15,743 Python tests passed, 5 skipped, 7 deselected in 375.17 s;
+  Ruff clean; Release zero warnings/errors; 9,060 extractor and 2,138 add-in tests passed,
+  none skipped. Actual owner-mapped verifier completed all three unchanged generators
+  with exact input budgets; literal fixture diff clean and all nine raw fixture files
+  SHA256-equal to held bytes. Both frozen characterizations remain unchanged. The earlier
+  combined run's stale renderer/words guards and their corrections are recorded in
+  `review-2026-10-12.md`; it is not counted as green.

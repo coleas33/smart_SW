@@ -90,6 +90,12 @@ RESULT_ROW = re.compile(
 )
 """A row of the results sheet: step, task, and the three cells the engineer fills in."""
 
+READ_ONLY_SENTENCE = (
+    "The backend restarted, so this review is shown from its run folder. Follow-ups, decisions "
+    "and answers are off."
+)
+"""The same literal product sentence, now composed from two words-file keys by feature 015."""
+
 QUOTED: tuple[tuple[str, str], ...] = (
     # The update script and the registration.
     ("failed with exit code", "extractor/tools/update-workstation.ps1"),
@@ -169,8 +175,7 @@ QUOTED: tuple[tuple[str, str], ...] = (
     ("not reached", "reviewer/src/swreview/report/review_words_v1.yaml"),
     ("size-for-size contacts", "reviewer/src/swreview/report/review_words_v1.yaml"),
     ("Sending resumes the review once.", "reviewer/src/swreview/report/review_words_v1.yaml"),
-    ("The backend restarted, so this review is shown from its run folder. Follow-ups, decisions "
-     "and answers are off.", "reviewer/src/swreview/report/review_words_v1.yaml"),
+    (READ_ONLY_SENTENCE, "reviewer/src/swreview/report/review_words_v1.yaml"),
     # The page's own words.
     ("The review has finished.", "extractor/SwReview.AddIn/Review/ReviewPage/app.js"),
     ("Waiting for your answers.", "extractor/SwReview.AddIn/Review/ReviewPage/app.js"),
@@ -773,7 +778,13 @@ def test_every_sentence_the_plan_quotes_is_the_products(
     plan: str, sentence: str, source: str
 ) -> None:
     assert sentence in plan
-    assert sentence in (REPO / source).read_text(encoding="utf-8")
+    if (
+        source == "reviewer/src/swreview/report/review_words_v1.yaml"
+        and sentence == READ_ONLY_SENTENCE
+    ):
+        assert load_words().read_only == sentence
+    else:
+        assert sentence in (REPO / source).read_text(encoding="utf-8")
 
 
 def test_every_one_liner_compiles_and_holds_no_double_quote(plan: str) -> None:

@@ -89,6 +89,7 @@ __all__ = [
     "GeminiRequestError",
     "GeminiServerError",
     "UnsupportedEffortError",
+    "effort_mapping_for",
     "usage_of",
 ]
 
@@ -278,6 +279,34 @@ def usage_of(
     )
 
 
+def effort_mapping_for(model: str, effort: EffortLevel) -> EffortMapping:
+    """The adapter's effort rule, available without a key or SDK client."""
+    if model.startswith(BUDGET_MODEL_PREFIX):
+        matches = [name for name in THINKING_BUDGETS if model.startswith(name)]
+        if not matches:
+            raise UnsupportedEffortError(
+                f"no thinking budget table for model {model!r}; "
+                f"known 2.5 models are {_listed(THINKING_BUDGETS)}"
+            )
+        budgets = THINKING_BUDGETS[max(matches, key=len)]
+        if effort not in budgets:
+            raise UnsupportedEffortError(
+                f"effort {effort!r} has no thinking budget on model {model!r}; "
+                f"it offers {_listed(budgets)}"
+            )
+        return EffortMapping(
+            requested=effort, provider_param=BUDGET_PARAM, provider_value=budgets[effort]
+        )
+    if effort not in THINKING_LEVELS:
+        raise UnsupportedEffortError(
+            f"effort {effort!r} has no thinking level on model {model!r}; "
+            f"Gemini offers {_listed(THINKING_LEVELS)}"
+        )
+    return EffortMapping(
+        requested=effort, provider_param=LEVEL_PARAM, provider_value=THINKING_LEVELS[effort]
+    )
+
+
 class GeminiProvider:
     """The Gemini adapter. `providers.get("gemini")` returns this class."""
 
@@ -380,35 +409,7 @@ class GeminiProvider:
     # --- effort ------------------------------------------------------------------------
 
     def effort_mapping(self, effort: EffortLevel) -> EffortMapping:
-        """What `effort` becomes on this model, or `UnsupportedEffortError`."""
-        if self.model.startswith(BUDGET_MODEL_PREFIX):
-            budgets = self._budget_table()
-            if effort not in budgets:
-                raise UnsupportedEffortError(
-                    f"effort {effort!r} has no thinking budget on model {self.model!r}; "
-                    f"it offers {_listed(budgets)}"
-                )
-            return EffortMapping(
-                requested=effort, provider_param=BUDGET_PARAM, provider_value=budgets[effort]
-            )
-        if effort not in THINKING_LEVELS:
-            raise UnsupportedEffortError(
-                f"effort {effort!r} has no thinking level on model {self.model!r}; "
-                f"Gemini offers {_listed(THINKING_LEVELS)}"
-            )
-        return EffortMapping(
-            requested=effort, provider_param=LEVEL_PARAM, provider_value=THINKING_LEVELS[effort]
-        )
-
-    def _budget_table(self) -> dict[str, int]:
-        """The budget row for this 2.5 model, longest prefix first. No row is an error."""
-        matches = [name for name in THINKING_BUDGETS if self.model.startswith(name)]
-        if not matches:
-            raise UnsupportedEffortError(
-                f"no thinking budget table for model {self.model!r}; "
-                f"known 2.5 models are {_listed(THINKING_BUDGETS)}"
-            )
-        return THINKING_BUDGETS[max(matches, key=len)]
+        return effort_mapping_for(self.model, effort)
 
     # --- one turn ----------------------------------------------------------------------
 

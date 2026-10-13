@@ -1513,6 +1513,35 @@ class ReviewRun:
 # --- entry points ---------------------------------------------------------------------
 
 
+def request_prefix(system: str, tools: Iterable[ProviderTool], opening: str) -> str:
+    """Render the shared prefix measured by replay and the first-request estimate."""
+    schemas = [
+        {"name": tool.name, "description": tool.description, "parameters": tool.schema}
+        for tool in tools
+    ]
+    return system + json.dumps(schemas) + opening
+
+
+def configure_provider(provider: AgentProvider, session: ReviewSession) -> None:
+    """Apply this session's optional adapter settings once, in their original order."""
+    if isinstance(provider, ModelViewAware):
+        provider.use_model_view(session.model_view)
+    efficiency = session.efficiency
+    if (
+        efficiency is not None
+        and efficiency.prompt_cache_key
+        and isinstance(provider, PromptCacheAware)
+    ):
+        # The session id is the cache key for the whole conversation, across every turn.
+        provider.use_prompt_cache(str(session.session_id))
+    if (
+        efficiency is not None
+        and efficiency.drop_prior_reasoning
+        and isinstance(provider, PriorReasoningAware)
+    ):
+        provider.drop_prior_reasoning()
+
+
 def start_review(
     package_dir: Path | str,
     out_dir: Path | str,
@@ -1641,10 +1670,7 @@ def start_review(
         # carry their origin marks, whatever the levers; a session without it predates them.
         session.origin_marks = ORIGIN_MARKS_VERSION
         session.model_view = model_view if model_view is not None else MODEL_VIEW_OFF
-        if isinstance(provider, ModelViewAware):
-            # Feature 008, read once, here, like lever 3's cache key: the settings the
-            # session records are the settings the adapter sends with (research R2.33).
-            provider.use_model_view(session.model_view)
+        configure_provider(provider, session)
         if checks_first(session.efficiency):
             # Feature 008: a review that runs its checks first shows the modelling-practice
             # findings as one folded group. A plain session value, set once here, so the
@@ -1655,17 +1681,6 @@ def start_review(
         # where this run's evidence comes from, and the one place the lever is turned into
         # that statement is `ExtractionSettings.for_efficiency`.
         context.extraction = ExtractionSettings.for_efficiency(session.efficiency)
-        if session.efficiency.prompt_cache_key and isinstance(provider, PromptCacheAware):
-            # Lever 3, read **once**, here: a flag re-read per turn could change the
-            # request mid-session, and the cache key is the one thing that must not move
-            # while the session lasts. The session id rather than anything this process
-            # made up, because the pane restarts the backend on a settings save and
-            # resumes this same run folder (contracts/levers.md, lever 3).
-            provider.use_prompt_cache(str(session.session_id))
-        if session.efficiency.drop_prior_reasoning and isinstance(provider, PriorReasoningAware):
-            # Lever 14 (feature 013), read once here like lever 3: earlier turns' reasoning
-            # leaves each request; the history keeps it. Inert on an adapter without it.
-            provider.drop_prior_reasoning()
         # The stream opens before anything is written to it. Everything below this line
         # emits - partial evidence writes coverage, lever 11a writes carried findings, and
         # lever 5's pre-run writes a tool call, two findings and coverage of its own - and
