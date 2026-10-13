@@ -502,7 +502,7 @@ description: "Task list for the send-to-model checkbox"
 
   Acceptance: red for want of the guard.
 - [x] T066 [US2] [py] Lane B. Implement the failure branch in `_run_turn` (`agent/runner.py:1434-1442`), the guard over `send`'s steps 1 to 7 - snapshotting the model status before the factory can raise, restoring it in memory, never writing, logging rather than raising when its own `error` emit fails (owner decision 72A) - `_send_error`, and `INTERRUPTED_SEND`. The state, `_send_in_flight` and the failure are set before the `error` is emitted. In `chat/server.py`, `_play` calls `run.release_bridge()` when it settles `awaiting_send` (owner decision 79A). Acceptance: T065 green; T062 and T063 green; T007 byte-equal.
-- [ ] T067 [US2] [py] Lane B. Extend `reviewer/tests/unit/test_send_gate_server.py` with the queue on the chat's worker (`contracts/review-flow.md` section 4; research R2.12; RK-14; owner decision 69A):
+- [x] T067 [US2] [py] Lane B. Extend `reviewer/tests/unit/test_send_gate_server.py` with the queue on the chat's worker (`contracts/review-flow.md` section 4; research R2.12; RK-14; owner decision 69A):
   - With `record_disposition` held on a waiting chat's worker, the write itself never moves the chat: `GET` reads `awaiting_send` during the write until `POST /send` is accepted (`202`), and `running` after it. The queued Send runs only after the write returns: in the recorded order, the decision's save comes before `session.sent`.
   - In another case, `POST /evidence` sent during the held write is accepted and applied after it.
   - On release, the decision is saved and kept at Send.
@@ -512,7 +512,7 @@ description: "Task list for the send-to-model checkbox"
   - A ticked chat's two routes take today's path (`run_in_threadpool`), with no worker.
 
   Acceptance: red for want of the queue.
-- [ ] T068 [US2] [py] Lane B. Add `ChatServer._on_worker(chat, call)` to `chat/server.py` - submit `call` to the chat's one-thread worker (the executor `_submit` makes, `:2176-2184`) and await it - and use it in `disposition` and `timing` (`:1444-1483`) when the chat is `awaiting_send`, leaving the chat's state and stop flag untouched; any other chat keeps today's `run_in_threadpool` (owner decision 69A). Acceptance: T067 green; `test_chat_timing_route.py` green and unedited; T007 byte-equal.
+- [x] T068 [US2] [py] Lane B. Add `ChatServer._on_worker(chat, call)` to `chat/server.py` - submit `call` to the chat's one-thread worker (the executor `_submit` makes, `:2176-2184`) and await it - and use it in `disposition` and `timing` (`:1444-1483`) when the chat is `awaiting_send`, leaving the chat's state and stop flag untouched; any other chat keeps today's `run_in_threadpool` (owner decision 69A). Acceptance: T067 green; `test_chat_timing_route.py` green and unedited; T007 byte-equal.
 - [ ] T069 [US2] [py] Lane B. Extend `reviewer/tests/unit/test_send_gate_server.py` and `test_review_snapshot.py` with the snapshot's `send_in_flight` (owner decision 77A; research R2.30; `contracts/pane.md` section 3; data-model section 6):
   - The snapshot route answers `send_in_flight: true` from the send route's `202` to the first `usage`; and from the `202` to the guard's return to waiting, and to the failure branch's - each clearing it before its `error`.
   - It omits the key otherwise: an idle waiting chat's snapshot, a ticked chat's, and `review_snapshot`'s output with the parameter at its default, so the pane fixture is unchanged (`test_pane_fixture.py` green and unedited).

@@ -44,6 +44,7 @@ request it failed on cannot carry the key back to the page.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import hmac
 import json
@@ -1520,16 +1521,16 @@ class ChatServer:
         run = self._run_of(chat)
         finding_id = request.path_params["finding_id"]
         try:
-            finding = await run_in_threadpool(
-                partial(
-                    record_disposition,
-                    run,
-                    finding_id,
-                    decision=decision,
-                    note=str(body.get("note") or ""),
-                    by=str(body.get("by") or chat.engineer),
-                )
+            execute = self._on_worker if chat.state is ChatState.AWAITING_SEND else None
+            action = partial(
+                record_disposition,
+                run,
+                finding_id,
+                decision=decision,
+                note=str(body.get("note") or ""),
+                by=str(body.get("by") or chat.engineer),
             )
+            finding = await execute(chat, action) if execute else await run_in_threadpool(action)
         except KeyError as exc:
             raise UnknownFinding(f"no finding {finding_id!r} in this session") from exc
         except ValueError as exc:
@@ -1548,7 +1549,11 @@ class ChatServer:
         inputs = _timing_inputs(await self._json(request))
         self._require_idle(chat)
         run = self._run_of(chat)
-        recorded = await run_in_threadpool(partial(record_timing_live, run, **inputs))
+        action = partial(record_timing_live, run, **inputs)
+        recorded = (
+            await self._on_worker(chat, action)
+            if chat.state is ChatState.AWAITING_SEND else await run_in_threadpool(action)
+        )
         return JSONResponse(recorded.model_dump(mode="json"))
 
     async def stop(self, request: Request) -> Response:
@@ -2274,15 +2279,23 @@ class ChatServer:
 
     # --- the worker ------------------------------------------------------------------
 
-    def _submit(self, chat: ChatSession, action: Callable[[], Any]) -> None:
-        """Run one turn on this chat's own thread. One thread per chat, one turn at a time."""
+    def _worker(self, chat: ChatSession) -> ThreadPoolExecutor:
+        """The shared serial executor for this chat's turns and waiting writes."""
         worker = self._workers.get(chat.chat_id)
         if worker is None:
             worker = ThreadPoolExecutor(
                 max_workers=1, thread_name_prefix=f"chat-{chat.chat_id.hex[:8]}"
             )
             self._workers[chat.chat_id] = worker
-        worker.submit(self._play, chat, action)
+        return worker
+
+    def _submit(self, chat: ChatSession, action: Callable[[], Any]) -> None:
+        """Run one turn on this chat's own thread. One thread per chat, one turn at a time."""
+        self._worker(chat).submit(self._play, chat, action)
+
+    async def _on_worker(self, chat: ChatSession, action: Callable[[], Any]) -> Any:
+        """Await a waiting write without changing its chat's state or stop flag."""
+        return await asyncio.wrap_future(self._worker(chat).submit(action))
 
     def _play(self, chat: ChatSession, action: Callable[[], Any]) -> None:
         """One turn, and the state it leaves the chat in. This never raises."""
