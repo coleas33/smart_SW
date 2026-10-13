@@ -75,11 +75,15 @@ section 2).
 
 ## 6. SC-006: against real recordings
 
+Owner amendment, 2026-10-13: the upper acceptance limit is 35%, approved after
+the recorded gaps were explained. The count must still be at least billed input.
+
+
 `test_send_estimate.py::test_the_estimate_bounds_each_recordings_billed_first_round`: for each real
 OpenAI recording the replay reads - outside the repository, through the owner's recording mapping
 (008 `replay.md` section 8) - the replay's first pass rebuilds the first request (`request_prefix` of
 its run) and the test counts it; the count must be at least the recording's billed first-round
-`input_tokens` and at most 25% above it. Each recording's gap is printed as a percentage only - no
+`input_tokens` and at most 35% above it. Each recording's gap is printed as a percentage only - no
 size, no name. The test finds each recording through `tests/support/recordings.recording_folder`,
 which skips, naming why, when the mapping or the folder is absent - as the replay's real-recording
 tests do - and needs the vocabulary fixture; it adds no pytest marker (`pyproject.toml` registers

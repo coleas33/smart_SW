@@ -319,3 +319,17 @@ On the licensed seat, with the build of this feature and the owner's key stored:
   also reproduced on the accepted pre-015 baseline. T081 and T118 remain
   incomplete; no US3 implementation, live provider run or SOLIDWORKS sitting
   is claimed, and this partial workflow has not been merged to main.
+
+
+- **T081 US2 Send gate, 2026-10-13 (T058–T081 complete):** the owner approved
+  SC-006's upper estimate tolerance of 35%; the required lower bound remains
+  at billed input. T080 passed on all three actual recorded cases, with gaps
+  of 31.5%, 34.7% and 34.7%. The final frozen C40 candidate passed 15,963
+  Python tests, 5 skipped, 7 deselected in 385.77 s; Ruff clean; Release zero
+  warnings/errors; 9,060 extractor and 2,220 add-in tests passed, none skipped.
+  Actual owner-mapped regeneration completed all three unchanged generators,
+  literal replay diff empty, nine replay outputs and all 24 held public
+  controls raw SHA256-equal. Independent staged review was clean. This
+  resolves the earlier T080/T081 pending decision; the estimator and request
+  prefix were not changed. US3 starts at T082; T118 remains incomplete. No
+  live provider run, SOLIDWORKS sitting or partial-workflow main merge is claimed.
