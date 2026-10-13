@@ -1316,3 +1316,104 @@ def test_ticked_decision_and_timing_keep_the_existing_threadpool_path(
     )
     assert client.post(endpoint, json=payload).status_code == 200
     assert len(calls) == 1
+
+
+# T069: restore reads the live flag from the accepted Send through its first usage.
+
+
+@pytest.mark.parametrize("outcome", ["success", "guard_failure", "request_failure"])
+def test_snapshot_keeps_send_in_flight_until_usage_or_the_failure_state_is_set(
+    app: Any,
+    client: TestClient,
+    run_dir: Path,
+    provider_control: chat.ProviderControl,
+    monkeypatch: pytest.MonkeyPatch,
+    outcome: str,
+) -> None:
+    chat_id = waiting_chat(client, run_dir)
+    assert provider_control.built == []
+    held = app.state.server.chats[UUID(chat_id)]
+    factory_entered, factory_release = threading.Event(), threading.Event()
+    request_entered, request_release = threading.Event(), threading.Event()
+    provider = RecordingProvider([chat.turn("FICT first model round")], clock=lambda: 0.0)
+    original_request = provider._inner.run
+    original_emit = held.run.sink.emit
+    emitted: list[tuple[str, dict[str, Any]]] = []
+
+    def snapshot() -> dict[str, Any]:
+        response = client.get(f"/sessions/{chat_id}/snapshot")
+        assert response.status_code == 200, response.text
+        return dict(response.json())
+
+    def request(**kwargs: Any) -> Any:
+        request_entered.set()
+        assert request_release.wait(chat.TIMEOUT_S)
+        if outcome == "request_failure":
+            kwargs["on_event"]("text.delta", {"text": "FICT partial text"})
+            raise RuntimeError("FICT before any completed round")
+        return original_request(**kwargs)
+
+    def factory(settings: Any) -> Any:
+        factory_entered.set()
+        assert factory_release.wait(chat.TIMEOUT_S)
+        if outcome == "guard_failure":
+            raise RuntimeError("FICT adapter construction")
+        return provider
+
+    def emitted_after_state(event_type: str, body: Any) -> Any:
+        if event_type in {"usage", "error"}:
+            emitted.append((event_type, snapshot()))
+        return original_emit(event_type, body)
+
+    monkeypatch.setattr(provider._inner, "run", request)
+    monkeypatch.setattr(app.state.server, "provider_factory", factory)
+    monkeypatch.setattr(held.run.sink, "emit", emitted_after_state)
+    try:
+        assert "send_in_flight" not in snapshot()
+        response = client.post(f"/sessions/{chat_id}/send", json={})
+        assert response.status_code == 202
+        assert factory_entered.wait(chat.TIMEOUT_S)
+        building = snapshot()
+        assert building["send_in_flight"] is True
+        assert building["chat_state"] == "running"
+        assert provider.log == []
+        factory_release.set()
+        if outcome != "guard_failure":
+            assert request_entered.wait(chat.TIMEOUT_S)
+            assert snapshot()["send_in_flight"] is True
+            request_release.set()
+        settled = chat.settle(client, chat_id)
+        assert "send_in_flight" not in snapshot()
+        expected_event = "usage" if outcome == "success" else "error"
+        assert any(event == expected_event for event, _ in emitted)
+        assert all("send_in_flight" not in body for _, body in emitted)
+        if outcome == "success":
+            assert settled in {"waiting_engineer", "ended"}
+            assert held.run.session.model_status.state == "sent"
+        else:
+            assert settled == "awaiting_send"
+            assert held.run.awaiting_send is True
+    finally:
+        factory_release.set()
+        request_release.set()
+
+
+def test_idle_waiting_and_ticked_route_snapshots_keep_the_flag_absent(
+    app: Any, client: TestClient, run_dir: Path, run_root: Path
+) -> None:
+    waiting_id = waiting_chat(client, run_dir)
+    waiting = client.get(f"/sessions/{waiting_id}/snapshot")
+    assert waiting.status_code == 200
+    assert "send_in_flight" not in waiting.json()
+    assert "send" in waiting.json()["ranking"]["summary"]
+    ticked_dir = run_root / "FICT-ticked-snapshot"
+    shutil.copytree(run_dir, ticked_dir)
+    for name in ("session.json", "events.jsonl", "report.md", "attention.json"):
+        (ticked_dir / name).unlink(missing_ok=True)
+    created = client.post("/sessions", json=chat.session_body(ticked_dir))
+    assert created.status_code == 201, created.text
+    ticked_id = created.json()["chat_id"]
+    chat.settle(client, ticked_id)
+    ticked = client.get(f"/sessions/{ticked_id}/snapshot")
+    assert ticked.status_code == 200
+    assert "send_in_flight" not in ticked.json()

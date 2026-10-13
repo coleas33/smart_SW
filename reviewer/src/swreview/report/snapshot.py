@@ -44,6 +44,7 @@ def review_snapshot(
     run_id: str,
     usage: UsageLedger | None = None,
     send: SendInput | None = None,
+    send_in_flight: bool = False,
     chat_state: str | None = None,
     last_seq: int | None = None,
     read_only_reason: str | None = None,
@@ -59,7 +60,7 @@ def review_snapshot(
     """
     block = not_examined(package)
     names = component_names(package)
-    return {
+    snapshot = {
         "run_id": run_id,
         "read_only": read_only_reason is not None,
         "read_only_reason": read_only_reason,
@@ -76,6 +77,9 @@ def review_snapshot(
         "ranking": to_jsonable_python(review_ranking(session, package, usage=usage, send=send)),
         "not_examined": None if block is None else block.model_dump(mode="json"),
     }
+    if send_in_flight:
+        snapshot["send_in_flight"] = True
+    return snapshot
 
 
 def root_document(package: EvidencePackage) -> dict[str, str] | None:
