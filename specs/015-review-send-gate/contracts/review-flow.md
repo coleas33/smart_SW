@@ -90,7 +90,11 @@ owner decision 69A). `_play` settles `awaiting_send` when `run.awaiting_send` is
 action, and then calls `run.release_bridge()` (owner decision 79A), else `waiting_engineer` or
 `ended` as today. A Settings save is accepted while a chat is `awaiting_send` and refused, as today, while one
 is `running` - which covers answers being applied and a Send in flight (FR-027). An apply that fails
-moves the chat `running -> failed` (section 4), a move that exists today.
+moves the chat `running -> failed` (section 4), a move that exists today. `_play` also releases
+the pipe when a still-not-sent run settles `failed`, before rendering and publishing that state.
+A failure of this release is logged without replacing the apply's error or preventing the
+record from being rendered and the failed chat from releasing its folder. The ordinary
+sent-review release behavior is unchanged.
 
 ## 3. `POST /sessions/{chat_id}/send`
 
@@ -150,7 +154,16 @@ at its first tool boundary (default, research R2.12).
 `confirmed-open.md` section 1, 013 `part-roles.md` section 9). `ReviewRun._apply_answers(answers)`
 holds steps 1, 2 and 2a of the batch, shared by both paths: validate, mark each answer with its
 `evidence.answered` event, `read_confirmed_candidates`, the part-roles regrade, one `_restate`, the
-bought-parts rows and the unmatched-piece rows. Then:
+bought-parts rows and the unmatched-piece rows.
+
+The implementation shares `_answer_requests(answers)` (validation only) and
+`_apply_answer_requests(answers, requests, *, read_drawings=True)` (the answer events,
+confirmed read and regrade). `_apply_answers(answers, *, read_drawings=True)` composes them
+for the ordinary answer and carry callers. The waiting branch validates once, outside its
+failure guard, then guards the same apply body, `_settle_waiting` and `close_waiting`.
+An invalid batch therefore changes no record and writes no error event; an exception after
+validation, including a `ValueError` from the read or regrade, follows the recovery below.
+Then:
 
 - **a run that was sent** (today): the resumed message as today, `_ask`, the reconcile, finalize;
 - **a waiting run**: `_settle_waiting(applied)` - each `ConfirmedRead` is appended to
@@ -177,7 +190,10 @@ the Send cache's build, or the finalization's writes - is caught there, and the 
 3. re-raises.
 
 `_play` moves the chat `running -> failed`, and `_close_out` writes nothing because the record's
-`ended_at` is set (`_already_ended`). The failed chat no longer holds the folder; the page restores
+`ended_at` is set (`_already_ended`). Its `finally` releases the pipe a confirmed read may have
+opened, including when a later cache build or save failed, then renders the restored record
+and publishes `failed`; a secondary release failure is logged and does not interrupt these
+steps. The failed chat no longer holds the folder; the page restores
 the review read-only with Send offered, and its Send re-runs it from the folder (`recheck.md`;
 owner decision 68A). The page's side is
 `pane.md` section 5. Which record the folder holds depends on where the failure came - the
@@ -188,6 +204,16 @@ finalization writes `session.json`, then `attention.json`, then the `session.end
 |---|---|---|
 | before the finalization's `save_session` (the read, the regrade, `_restate`, the cache, the save itself) | the record before the apply | the answers being applied open again |
 | after it (`write_attention_record`, the `session.ended` event) | the applied record | the answers answered; the re-run carries them (`recheck.md` section 4) |
+
+**Minimal US3 restoration prerequisite (2026-10-13).** For the pane's failed-apply restore,
+`GET /reviews/{run_id}` forwards `SendInput {state: "restored", input_tokens: null,
+provider: the recorded provider_info.provider (empty when unrecorded), send_error: null}`
+for a persisted `not_sent` or
+`send_failed` model status. Existing summary code supplies the restored words and the
+persisted failed-Send history; no live cache or request count is read or built. The route
+writes nothing and retains today's read-only reason. Legacy and sent records keep their
+existing snapshots. This prerequisite does not implement a re-run, carry, or the composed
+dated reason: T099/T100 and the remainder of US4 stay pending.
 
 **A drawing merged before the failure.** A confirmed read merges its drawing into the folder's
 `package.json` before the regrade; its outcome line reaches `session.json` only with the

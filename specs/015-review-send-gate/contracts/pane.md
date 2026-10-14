@@ -170,6 +170,13 @@ write), they show answered, and the re-run carries them. Either way the review's
 drawing's question is not asked again and the re-run names the outcome line it lost (`recheck.md`
 section 5).
 
+**Implementation sequence, 2026-10-13:** US3 brings forward only the disk Send-state
+forwarding needed for this restore (`review-flow.md` section 4). A `not_sent` or `send_failed`
+disk record supplies the existing restored Send block with an unknown count and its persisted
+failure history, while retaining today's generic read-only reason. The page may show its
+local apply-error label and fold with that block; the restored Send action stays unavailable
+until US4's recheck path exists. This does not complete T099/T100 or the composed dated line.
+
 ## 6. The follow-up box and Stop
 
 While the summary has a `send` block, or no `usage` of this review has arrived after its Send, the

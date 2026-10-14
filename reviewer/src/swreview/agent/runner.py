@@ -142,6 +142,7 @@ from swreview.report.session import (
     SendFailure,
     cut_short_reason,
     latest_answered,
+    load_session,
     save_session,
 )
 from swreview.report.snapshot import root_document
@@ -1234,10 +1235,17 @@ class ReviewRun:
         resumed turn re-runs replaces its earlier verdict rather than adding a second one
         (rule 3).
         """
-        applied = self._apply_answers(answers)
         if self.awaiting_send:
-            self._settle_waiting(applied)
-            return self.close_waiting()
+            requests = self._answer_requests(answers)
+            try:
+                applied = self._apply_answer_requests(answers, requests)
+                self._settle_waiting(applied)
+                return self.close_waiting()
+            except Exception as exc:
+                self.context.session = load_session(self.session_path)
+                emit_error(self.sink, exc, self.redact)
+                raise
+        applied = self._apply_answers(answers)
         message = answers_message(answers)
         if applied.withdrawn_by_answer:
             message += "\n" + REGRADED_LINE.format(ids=", ".join(applied.withdrawn_by_answer))
@@ -1261,13 +1269,26 @@ class ReviewRun:
         reconciles all affected checks. A restored review's carry can skip drawing reads
         while using the same validation, answer events and regrade.
         """
+        requests = self._answer_requests(answers)
+        return self._apply_answer_requests(answers, requests, read_drawings=read_drawings)
+
+    def _answer_requests(self, answers: Sequence[tuple[str, str]]) -> list[EvidenceRequest]:
+        """Validate the whole batch without changing the record or emitting an event."""
         if not answers:
             raise ValueError("an answer batch needs at least one answer")
         repeated = repeated_request_id(answers)
         if repeated is not None:
             raise ValueError(REPEATED_ANSWER.format(request_id=repeated))
-        requests = [answerable(self.session, request_id) for request_id, _ in answers]
+        return [answerable(self.session, request_id) for request_id, _ in answers]
 
+    def _apply_answer_requests(
+        self,
+        answers: Sequence[tuple[str, str]],
+        requests: Sequence[EvidenceRequest],
+        *,
+        read_drawings: bool = True,
+    ) -> AppliedAnswers:
+        """Apply a validated batch through the shared answer, read and regrade path."""
         for request, (request_id, answer) in zip(requests, answers, strict=True):
             request.status = "answered"
             request.answer = answer

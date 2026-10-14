@@ -276,6 +276,12 @@ failure}` (`pane.md` section 3). Every other record is read-only as today, with 
 (`Words.read_only`, the two keys composed).
 The route still writes nothing.
 
+**Implementation sequence, 2026-10-13:** US3's failed-apply restore brings forward only
+the restored Send block through `_read_review`'s existing `SendInput` seam. It uses the
+persisted model status and provider metadata, reports no input count, and retains the
+current generic read-only reason. The composed dated reason, restart/carry/recheck tests
+and actions, and T099/T100 remain pending; this prerequisite does not complete US4.
+
 ## 9. Finding a waiting review after SOLIDWORKS reopens
 
 `sessions.list`, before it answers, runs `FindNotSentReview` when the active document is a part or an
