@@ -7,7 +7,8 @@ to overwrite an existing archive or place the archive inside that folder.
 The archive contains `handoff-manifest.json` and an allowlist of run records:
 `package.json`, `session.json`, `attention.json`, `report.md`, and `events.jsonl` when
 present. It may also contain the recorded `run-provenance.json`, `check.json`,
-`chat-log.jsonl`, named extraction/check log files, and `remodel.log`, `remodel-open.jsonl`,
+`chat-log.jsonl`, `extraction-progress.jsonl`, named extraction/check log files, and `remodel.log`,
+`remodel-open.jsonl`,
 `open.json`, and `source-attestation.json`. Missing required records are listed
 in the manifest so an incomplete run remains useful. Arbitrary recursive files, native CAD
 documents, machine settings, environment files, and credentials are never discovered.
@@ -18,7 +19,10 @@ research R16):* a Remodel run folder - named `...-remodel`, or holding `remodel-
 `remodel-open.jsonl`, `remodel.log`, `source-attestation.json`, `open.json`,
 `package-before.json` and `plan.json`; optional `exceptions.json`, `changes.jsonl`,
 `geometry.json`, `grades.json`, `package-after.json`, `rms-before.json`, `rms-after.json`,
-`report.md`, `events.jsonl`, `session.json` and `run-provenance.json`. Its missing list then says
+`report.md`, `events.jsonl`, `session.json`, `run-provenance.json` and
+`extraction-progress.jsonl`. The durable extraction trace is optional for both review and Remodel
+exports; its absence does not add a missing required record. It follows the same UTF-8, size,
+redaction and path bounds as every other optional log. Its missing list then says
 what the run did not reach, and the manifest's `run_kind` (`review` or `remodel`) says which list
 applied. The native copy under `copy/` is never included.
 

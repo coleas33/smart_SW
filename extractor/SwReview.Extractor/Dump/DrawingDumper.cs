@@ -291,8 +291,12 @@ public interface IDrawingReader : IDimensionToleranceReads, IAnnotationSymbolRea
     /// <summary><c>IAnnotation.GetAttachedEntities3()</c>; a null entry is a dangling attachment.</summary>
     IReadOnlyList<object?> AttachedEntities(object annotation);
 
-    /// <summary><c>IView.GetCorrespondingEntity(entity)</c>: the model entity; null when it maps to none.</summary>
-    object? CorrespondingEntity(object view, object entity);
+    /// <summary>
+    /// <c>IModelDocExtension.GetCorrespondingEntity2(entity)</c> of the owning part document:
+    /// a drawing/assembly-context attachment mapped into part context; null when no entity maps.
+    /// <see cref="FaceDocument"/> must find that document from the original attachment first.
+    /// </summary>
+    object? CorrespondingEntity(object document, object entity);
 
     /// <summary>Whether a model entity is a face, an edge, or neither: a COM cast, not gated.</summary>
     AttachedEntityKind EntityKind(object entity);
@@ -301,12 +305,13 @@ public interface IDrawingReader : IDimensionToleranceReads, IAnnotationSymbolRea
     IReadOnlyList<object> AdjacentFaces(object edge);
 
     /// <summary>
-    /// The part document that owns a model face: the view's referenced document for a part
-    /// drawing, the face's component's document for an assembly drawing
-    /// (<c>IEntity.GetComponent</c>, <c>IComponent2.GetModelDoc2</c>). Gates its reads itself; null
-    /// when no document answers. Nothing is opened or resolved.
+    /// The part document that owns an original drawing attachment: the view's referenced
+    /// document for a part drawing, the attachment's component's document for an assembly
+    /// drawing (<c>IEntity.GetComponent</c>, <c>IComponent2.GetModelDoc2</c>). Called before
+    /// mapping loses the component context. Gates its reads itself; null when no part answers.
+    /// Nothing is opened or resolved.
     /// </summary>
-    object? FaceDocument(object view, object face);
+    object? FaceDocument(object view, object entity);
 
     /// <summary><c>ISFSymbol.GetSymbol()</c>, verbatim.</summary>
     int SurfaceFinishSymbol(object symbol);
@@ -1552,8 +1557,14 @@ public sealed class DrawingDumper : IDrawingSource
 
         try
         {
+            object? document = _reader.FaceDocument(view.Handle, entity);
+            if (document == null)
+            {
+                return false;
+            }
+
             object? model = _gate.Call(
-                "GetCorrespondingEntity", () => _reader.CorrespondingEntity(view.Handle, entity));
+                "GetCorrespondingEntity2", () => _reader.CorrespondingEntity(document, entity));
             if (model == null)
             {
                 return false;
@@ -1562,12 +1573,12 @@ public sealed class DrawingDumper : IDrawingSource
             switch (_reader.EntityKind(model))
             {
                 case AttachedEntityKind.Face:
-                    return TieFace(view, model, AttachedVia.Face, faces, seen);
+                    return TieFace(document, model, AttachedVia.Face, faces, seen);
                 case AttachedEntityKind.Edge:
                     bool tied = false;
                     foreach (object face in _gate.Call("GetTwoAdjacentFaces2", () => _reader.AdjacentFaces(model)))
                     {
-                        tied |= TieFace(view, face, AttachedVia.Edge, faces, seen);
+                        tied |= TieFace(document, face, AttachedVia.Edge, faces, seen);
                     }
 
                     return tied;
@@ -1592,14 +1603,8 @@ public sealed class DrawingDumper : IDrawingSource
 
     /// <summary>One model face, scoped to its own part document; true when it has a reference.</summary>
     private bool TieFace(
-        ViewContext view, object face, AttachedVia via, List<AttachedFace> faces, HashSet<string> seen)
+        object document, object face, AttachedVia via, List<AttachedFace> faces, HashSet<string> seen)
     {
-        object? document = _reader.FaceDocument(view.Handle, face);
-        if (document == null)
-        {
-            return false;
-        }
-
         ScopedPersistRef? reference = _reader.PersistRef(document, face);
         if (reference == null)
         {

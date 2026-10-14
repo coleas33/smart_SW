@@ -66,6 +66,7 @@ REQUIRED_ARTIFACTS: tuple[str, ...] = (
 
 OPTIONAL_ARTIFACTS: tuple[str, ...] = (
     PROVENANCE_FILE,
+    "extraction-progress.jsonl",
     "check.json",
     "chat-log.jsonl",
     "extract.log",
@@ -96,6 +97,7 @@ phases and log, the attestation, the open record, the baseline package and the p
 the run did not reach."""
 
 REMODEL_OPTIONAL_ARTIFACTS: tuple[str, ...] = (
+    "extraction-progress.jsonl",
     "exceptions.json",
     "changes.jsonl",
     "geometry.json",

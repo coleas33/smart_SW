@@ -521,7 +521,7 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
     private string DumpInto(
         string runDirectory, string fileName, string stage, IRemodelRunReporter reporter)
     {
-        MakeTheCopyActive(runDirectory, fileName);
+        string copy = MakeTheCopyActive(runDirectory, fileName);
 
         DumpSummary summary = _dump.Run(
             runDirectory, line => reporter.Status(stage, line), DumpProfile.ModelCheck);
@@ -541,7 +541,7 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
                 + "different reading of the part.");
         }
 
-        RequireItReadTheCopy(written, runDirectory, fileName);
+        RequireItReadTheCopy(written, runDirectory, copy, fileName);
 
         string target = Path.Combine(runDirectory, fileName);
         if (File.Exists(target))
@@ -557,7 +557,7 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
 
     /// <summary>
     /// Makes this run's copy the active document before a dump (004 T159; research R13.8, D6):
-    /// the copy found as `remodel.open_copy` finds it, the one part in the run folder's `copy/`,
+    /// the one real part in the run folder's `copy/`, matching `open.json` when recorded,
     /// handed to <see cref="IRemodelSeat.ActivateOpenCopy"/>, which only ever activates - a dump
     /// that could open a document would be a second way to open one.
     ///
@@ -569,7 +569,7 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
     /// taken, and nothing is dumped. `remodel.open_copy`'s own words for a missing copy speak of
     /// a plan and a report that a plan-time dump does not have yet, so they are not used here.
     /// </summary>
-    private void MakeTheCopyActive(string runDirectory, string fileName)
+    private string MakeTheCopyActive(string runDirectory, string fileName)
     {
         string copy;
         try
@@ -597,6 +597,8 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
         {
             throw CopyNotActive(fileName, null);
         }
+
+        return copy;
     }
 
     /// <summary>
@@ -615,9 +617,9 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
     /// Refuses a dump that is not a reading of this run's copy, before it can be renamed into a
     /// run artifact.
     ///
-    /// The check is the copy folder rather than one exact file name, because the copy's name is
-    /// the bridge's to choose and `&lt;run_dir&gt;/copy/` is the one folder this run created:
-    /// the engineer's source is never inside it, and it is the whole of what the host deletes.
+    /// The check is the exact copy path selected before activation, not merely its folder:
+    /// a lock file or a different document beside the copy is not the document this run opened.
+    /// The copy's name remains the bridge's to choose.
     ///
     /// A package that names no document is refused too. It says nothing about what it read, and
     /// unknown is not the copy (constitution Principle I).
@@ -627,19 +629,17 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
     /// the run folder unrenamed, which is where the evidence for this refusal belongs.
     /// </summary>
     private static void RequireItReadTheCopy(
-        string written, string runDirectory, string fileName)
+        string written, string runDirectory, string copy, string fileName)
     {
-        string copyFolder = Path.GetFullPath(Path.Combine(
-            runDirectory, SwReview.Extractor.Rms.RemodelCopy.CopyFolderName));
-        string? read = FolderOfDocumentIn(written);
+        string? read = DocumentIn(written);
 
-        if (read == null || !string.Equals(read, copyFolder, StringComparison.OrdinalIgnoreCase))
+        if (!OpenDrawingDiscovery.SamePath(read, copy))
         {
             throw new InvalidOperationException(
                 $"the dump written for '{fileName}' "
                 + (read == null
                     ? "names no document, so which document it read cannot be established"
-                    : $"names a document that is not in '{copyFolder}'")
+                    : "names a document that is not this run's exact copy")
                 + $", so it is not a reading of this run's copy. '{runDirectory}' keeps the "
                 + "package it wrote as the evidence; the path it named is not repeated here, "
                 + "because nothing after the copy may name the source.");
@@ -647,14 +647,14 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
     }
 
     /// <summary>
-    /// The folder holding `documents[0].path` of a written package, or null when the file says
+    /// `documents[0].path` of a written package, or null when the file says
     /// nothing readable about what it read.
     ///
     /// Null for every unreadable shape rather than a throw per shape: every one of them means
     /// the same thing to the one caller - the document is unknown - and unknown is refused
     /// there, by name, once.
     /// </summary>
-    private static string? FolderOfDocumentIn(string packagePath)
+    private static string? DocumentIn(string packagePath)
     {
         string? documentPath;
         try
@@ -702,8 +702,7 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
 
         try
         {
-            string? folder = Path.GetDirectoryName(documentPath);
-            return string.IsNullOrEmpty(folder) ? null : Path.GetFullPath(folder!);
+            return Path.IsPathRooted(documentPath) ? Path.GetFullPath(documentPath) : null;
         }
         catch (ArgumentException)
         {
@@ -722,11 +721,14 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
     // ---- the copy ------------------------------------------------------------------------------
 
     /// <summary>
-    /// The one `.SLDPRT` under the run folder's `copy/`.
+    /// The one real `.SLDPRT` under the run folder's `copy/`, excluding SOLIDWORKS's `~$`
+    /// lock files. The lock lives beside an open part and has the same extension, but it is not
+    /// another part and must never be activated or dumped.
     ///
-    /// Found rather than composed, because the copy's name is the bridge's to choose
-    /// (`RemodelCopy`), and refused by name when it is not there: a discarded copy is an
-    /// ordinary state of a run whose artifacts are still readable.
+    /// `open.json` records the exact copy path before HTTP Open answers. When that record exists,
+    /// the real part must match it; a different file in the folder cannot stand in for the copy.
+    /// Older run folders without an open record retain the singleton check. Two real parts are
+    /// always refused, even if the record names one of them.
     /// </summary>
     private static string CopyIn(string runDirectory)
     {
@@ -734,11 +736,21 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
             runDirectory ?? throw new ArgumentNullException(nameof(runDirectory)),
             SwReview.Extractor.Rms.RemodelCopy.CopyFolderName);
 
-        string[] parts = Directory.Exists(folder)
-            ? Directory.GetFiles(folder, "*.SLDPRT", SearchOption.TopDirectoryOnly)
-            : new string[0];
+        var parts = new List<string>();
+        if (Directory.Exists(folder))
+        {
+            foreach (string file in Directory.GetFiles(folder, "*", SearchOption.TopDirectoryOnly))
+            {
+                if (!Path.GetFileName(file).StartsWith("~$", StringComparison.Ordinal)
+                    && string.Equals(Path.GetExtension(file),
+                        SwReview.Extractor.Rms.RemodelCopy.PartExtension, StringComparison.OrdinalIgnoreCase))
+                {
+                    parts.Add(file);
+                }
+            }
+        }
 
-        if (parts.Length == 0)
+        if (parts.Count == 0)
         {
             throw new RemodelRefusal(
                 "CopyDiscarded",
@@ -747,15 +759,51 @@ public sealed class BackendRemodelPipeline : IRemodelPipeline
                 retryable: false);
         }
 
-        if (parts.Length > 1)
+        if (parts.Count > 1)
         {
             throw new InvalidOperationException(
-                $"'{folder}' holds {parts.Length.ToString(CultureInfo.InvariantCulture)} parts "
+                $"'{folder}' holds {parts.Count.ToString(CultureInfo.InvariantCulture)} parts "
                 + "and a run folder holds exactly one copy. Nothing is opened until it is clear "
                 + "which file the run wrote.");
         }
 
+        string record = Path.Combine(runDirectory, "open.json");
+        if (File.Exists(record) && !OpenDrawingDiscovery.SamePath(OpenedCopyIn(record), parts[0]))
+        {
+            throw new InvalidOperationException(
+                "this run's open record does not identify the exact part in its copy folder. "
+                + "Nothing is activated or opened until the copy can be established.");
+        }
+
         return parts[0];
+    }
+
+    private static string? OpenedCopyIn(string record)
+    {
+        try
+        {
+            using (var file = new FileStream(record, FileMode.Open, FileAccess.Read, FileShare.Read))
+            using (JsonDocument document = JsonDocument.Parse(file))
+            {
+                return document.RootElement.ValueKind == JsonValueKind.Object
+                    && document.RootElement.TryGetProperty("copy_path", out JsonElement path)
+                    && path.ValueKind == JsonValueKind.String
+                        ? path.GetString()
+                        : null;
+            }
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     // ---- what has to be there before a call is made ---------------------------------------------

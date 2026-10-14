@@ -69,7 +69,8 @@ public static class SwDump
             // The open drawings a review reads with its design (feature 011): listed and read
             // where they stand, never opened. Discovery runs under the Full profile of a part or
             // assembly root only, which PackageWriter decides.
-            openDrawings: new SwOpenDrawingReader(swApp, session.Gate));
+            openDrawings: new SwOpenDrawingReader(swApp, session.Gate),
+            gate: session.Gate);
     }
 
     /// <summary>
@@ -84,7 +85,11 @@ public static class SwDump
             throw new ArgumentNullException(nameof(options));
         }
 
-        ISwSession session = SwSession.AttachForDump(swApp, documentPath, options.Configuration);
-        return CreateWriter(swApp, session).Write(options);
+        using var progress = new ExtractionProgress(options.OutputDirectory);
+        var gate = new SwGate();
+        using IDisposable? observation = progress.Observe(gate);
+        ISwSession session = progress.Step("attach", () =>
+            SwSession.AttachForDump(swApp, documentPath, options.Configuration, gate));
+        return CreateWriter(swApp, session).Write(options, progress);
     }
 }

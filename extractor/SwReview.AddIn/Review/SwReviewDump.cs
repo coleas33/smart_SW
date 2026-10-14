@@ -57,6 +57,7 @@ public sealed class SwReviewDump : IReviewDump
             throw new ArgumentNullException(nameof(progress));
         }
 
+        using var trace = new ExtractionProgress(outputDirectory);
         return _thread.Invoke(() =>
         {
             progress("Attaching to the active document...");
@@ -67,7 +68,10 @@ public sealed class SwReviewDump : IReviewDump
             // Standards tab passes a drawing, which is read with no configuration; the Review
             // and Model check tabs refuse one before they get here (contracts/attach.md
             // section 3).
-            ISwSession session = SwSession.AttachForDump(_swApp, documentPath: null, configurationName: null);
+            var gate = new SwGate();
+            using IDisposable? observation = trace.Observe(gate);
+            ISwSession session = trace.Step("attach", () =>
+                SwSession.AttachForDump(_swApp, documentPath: null, configurationName: null, gate: gate));
             string? configuration = session.ConfigurationName();
 
             progress(
@@ -90,7 +94,7 @@ public sealed class SwReviewDump : IReviewDump
                 Profile = profile,
             };
 
-            DumpResult result = SwDump.CreateWriter(_swApp, session).Write(options);
+            DumpResult result = SwDump.CreateWriter(_swApp, session).Write(options, trace);
 
             return new DumpSummary(
                 result.PackageFilePath,
