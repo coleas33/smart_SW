@@ -36,6 +36,10 @@ Sources: [current workstation follow-up](testing-feedback-2026-10-13.md),
 
 ## Foundations shared by drawings and loads
 
+The [engineering-context foundation draft](engineering-context-foundation.md)
+expands the first structure, record lifecycle, reuse boundaries and initial milestone.
+It remains documentation-only.
+
 Prepare one evidence-binding contract for both capabilities. It should name the
 model, configuration, component instance, evidence package/hash, relevant source
 revision, scoped entity reference and geometry/placement fingerprints. The LLM
