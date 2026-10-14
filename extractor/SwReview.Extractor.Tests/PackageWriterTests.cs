@@ -1721,6 +1721,70 @@ public class PackageWriterTests : IDisposable
     }
 
     [Fact]
+    public void Write_DurableTraceIsReadableBeforeTraversalDiscoveryAndDrawingReads()
+    {
+        var sources = new FakeSources();
+        sources.OpenDrawing(AssemblyDrawingPath, AssemblyPath);
+        sources.BeforeRead = phase =>
+        {
+            using var stream = new FileStream(Path.Combine(Options().OutputDirectory, "extraction-progress.jsonl"),
+                FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var reader = new StreamReader(stream);
+            string trace = reader.ReadToEnd();
+            Assert.Contains("\"phase\":\"" + phase + "\"", trace, StringComparison.Ordinal);
+            Assert.Contains("\"state\":\"before\"", trace, StringComparison.Ordinal);
+        };
+
+        NewWriter(sources).Write(Options());
+
+        string complete = File.ReadAllText(Path.Combine(Options().OutputDirectory, "extraction-progress.jsonl"));
+        Assert.Contains("\"phase\":\"package\",\"state\":\"after\"", complete, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Write_DurableTraceSurvivesTraversalFailureAndOmitsPrivateExceptionMessage()
+    {
+        var sources = new FakeSources
+        {
+            TraversalFailure = new InvalidOperationException("FICT-private-design-message"),
+        };
+
+        Assert.Throws<InvalidOperationException>(() => NewWriter(sources).Write(Options()));
+
+        string trace = File.ReadAllText(Path.Combine(Options().OutputDirectory, "extraction-progress.jsonl"));
+        Assert.Contains("\"phase\":\"traversal\",\"state\":\"before\"", trace, StringComparison.Ordinal);
+        Assert.Contains("InvalidOperationException", trace, StringComparison.Ordinal);
+        Assert.DoesNotContain("FICT-private-design-message", trace, StringComparison.Ordinal);
+        Assert.False(File.Exists(Path.Combine(Options().OutputDirectory, "package.json")));
+    }
+
+    [Theory]
+    [InlineData(false, "failed")]
+    [InlineData(true, "aborted")]
+    public void Write_DurableTraceRecordsFailedOrAbortedPhase(bool circuit, string expected)
+    {
+        var sources = new FakeSources
+        {
+            MateFailure = circuit ? new CircuitOpenError("FICT-private-error") : new InvalidOperationException("FICT-private-error"),
+        };
+
+        DumpResult result = NewWriter(sources).Write(Options());
+
+        string trace = File.ReadAllText(Path.Combine(Options().OutputDirectory, "extraction-progress.jsonl"));
+        Assert.Contains("\"phase\":\"mate\",\"state\":\"" + expected + "\"", trace, StringComparison.Ordinal);
+        Assert.DoesNotContain("FICT-private-error", trace, StringComparison.Ordinal);
+        Assert.True(File.Exists(result.PackageFilePath));
+        Assert.Equal(!circuit, sources.MeshesWereDumped);
+    }
+
+    [Fact]
+    public void Build_DoesNotCreateDiagnosticFiles()
+    {
+        NewWriter().Build(Options());
+        Assert.False(Directory.Exists(Options().OutputDirectory));
+    }
+
+    [Fact]
     public void Write_WritesPackageJsonIntoTheOutputDirectory()
     {
         DumpResult result = NewWriter().Write(Options());
@@ -1842,6 +1906,10 @@ public class PackageWriterTests : IDisposable
             NewNode("screw-1", "bracket-assy-1", ScrewPath, DocumentKind.Part),
         };
 
+        public Action<string>? BeforeRead { get; set; }
+
+        public Exception? TraversalFailure { get; set; }
+
         public string RootDocumentPath { get; set; } = AssemblyPath;
 
         public DocumentKind RootDocumentKind { get; set; } = DocumentKind.Assembly;
@@ -1925,6 +1993,7 @@ public class PackageWriterTests : IDisposable
 
         IReadOnlyList<OpenDocument> IOpenDrawingSource.OpenDocuments()
         {
+            BeforeRead?.Invoke("drawing-discovery");
             OpenDocumentsListed++;
             return OpenDocumentsFailure == null ? OpenDocumentList : throw OpenDocumentsFailure;
         }
@@ -2028,6 +2097,8 @@ public class PackageWriterTests : IDisposable
 
         public ComponentTreeResult Traverse(GapCollector gaps, DumpOptions options)
         {
+            BeforeRead?.Invoke("traversal");
+            if (TraversalFailure != null) throw TraversalFailure;
             SeenOptions = options;
             if (TraversalGap != null)
             {
@@ -2220,6 +2291,7 @@ public class PackageWriterTests : IDisposable
 
         IReadOnlyList<DrawingRecord> IDrawingSource.Dump(DumpScope scope)
         {
+            BeforeRead?.Invoke("drawing");
             DrawingsWereDumped = true;
             SeenDrawings.AddRange(scope.Drawings);
 

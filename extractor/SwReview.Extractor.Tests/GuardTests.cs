@@ -1012,6 +1012,7 @@ public class DrawingFamilyDenylistTests
     [InlineData("ScaleDecimal")]
     [InlineData("GetOrientationName")]
     [InlineData("GetCorrespondingEntity")]
+    [InlineData("GetCorrespondingEntity2")]
     [InlineData("GetDisplayDimensions")]
     [InlineData("GetTableAnnotations")]
     [InlineData("GetText")]
