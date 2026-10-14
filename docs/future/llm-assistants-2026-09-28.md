@@ -1,5 +1,11 @@
 # Two LLM assistant ideas: a concept assistant and a hand-calc assistant (2026-09-28)
 
+**Current-status note (2026-10-14):** this is dated research. Features 014 and 015 are now
+assigned to evaluation and the review send gate; the allocation instructions below are
+historical. See [the current roadmap](../future-capabilities-roadmap-2026-10-14.md) for the
+smaller load-context-first proposal and drawing preparation. The estimates below have not
+been adopted as a delivery schedule.
+
 **Status: idea only. Researched and estimated on 2026-09-28. Not planned, not specified, not
 started.** Nothing here is a decision. Every choice below is left for the owner, and each one
 lists the recommended option first.
