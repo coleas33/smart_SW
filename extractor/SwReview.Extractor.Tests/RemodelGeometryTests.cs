@@ -38,6 +38,12 @@ namespace SwReview.Extractor.Tests;
 /// </summary>
 public class RemodelGeometryTests : IDisposable
 {
+    // Safety controls are read before recalculation; measured values remain strictly after it.
+    private static readonly string[] OverrideControlReads =
+    {
+        "GetOverrideOptions", "GetOverrideMass", "GetOverrideCenterOfMass", "GetOverrideMomentsOfInertia",
+    };
+
     private readonly RemodelHarness _harness;
 
     public RemodelGeometryTests()
@@ -75,6 +81,10 @@ public class RemodelGeometryTests : IDisposable
         Assert.Equal(
             new[]
             {
+                nameof(FakeMassProperty.GetOverrideOptions),
+                "GetOverrideMass",
+                "GetOverrideCenterOfMass",
+                "GetOverrideMomentsOfInertia",
                 nameof(FakeMassProperty.SetUseSystemUnits),
                 nameof(FakeMassProperty.Recalculate),
                 nameof(FakeMassProperty.GetVolume),
@@ -159,8 +169,10 @@ public class RemodelGeometryTests : IDisposable
         Assert.True(recalculated >= 0, "Recalculate() was never called.");
 
         int firstRead = MassProperty.Members.FindIndex(
-            member => member.StartsWith("Get", StringComparison.Ordinal));
+            member => member.StartsWith("Get", StringComparison.Ordinal) && !OverrideControlReads.Contains(member));
         Assert.True(firstRead > recalculated, "a value was read before Recalculate() answered.");
+        Assert.Equal(OverrideControlReads, MassProperty.Members.Take(4));
+        Assert.All(OverrideControlReads, member => Assert.True(MassProperty.Members.IndexOf(member) < recalculated));
     }
 
     [Fact]
@@ -190,7 +202,8 @@ public class RemodelGeometryTests : IDisposable
         // The typed members, by name, so a rewrite through the raw object fails here.
         foreach (string member in new[]
         {
-            "CreateMassProperty2", "set_UseSystemUnits", "Recalculate", "get_Volume",
+            "CreateMassProperty2", "GetOverrideOptions", "get_OverrideMass", "get_OverrideCenterOfMass",
+            "get_OverrideMomentsOfInertia", "set_UseSystemUnits", "Recalculate", "get_Volume",
             "get_SurfaceArea", "get_CenterOfMass", "get_PrincipalMomentsOfInertia", "get_Mass",
             "get_Density",
         })
@@ -271,6 +284,10 @@ public class RemodelGeometryTests : IDisposable
         Assert.Equal(
             new[]
             {
+                nameof(FakeMassProperty.GetOverrideOptions),
+                "GetOverrideMass",
+                "GetOverrideCenterOfMass",
+                "GetOverrideMomentsOfInertia",
                 nameof(FakeMassProperty.SetUseSystemUnits),
                 nameof(FakeMassProperty.Recalculate),
                 nameof(FakeMassProperty.GetVolume),
@@ -346,7 +363,8 @@ public class RemodelGeometryTests : IDisposable
 
         AssertNothingMeasured(reading);
         Assert.DoesNotContain(
-            MassProperty.Members, member => member.StartsWith("Get", StringComparison.Ordinal));
+            MassProperty.Members, member => member.StartsWith("Get", StringComparison.Ordinal) && !OverrideControlReads.Contains(member));
+        Assert.Equal(OverrideControlReads, MassProperty.Members.Take(4));
 
         // The reading still says which part it is of, and what the bodies were.
         Assert.Equal(1, reading.SolidBodyCount);
@@ -452,6 +470,10 @@ public class RemodelGeometryTests : IDisposable
                 "GetFaceCount",
                 "GetEdgeCount",
                 "CreateMassProperty2",
+                "GetOverrideOptions",
+                "get_OverrideMass",
+                "get_OverrideCenterOfMass",
+                "get_OverrideMomentsOfInertia",
                 "set_UseSystemUnits",
                 "Recalculate",
                 "get_Volume",

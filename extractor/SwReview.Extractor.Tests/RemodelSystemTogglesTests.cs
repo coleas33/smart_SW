@@ -298,11 +298,20 @@ public class RemodelSystemTogglesTests
         var host = new ToggleHostFake();
         host.UnsettableToggles.Add(RemodelSystemToggles.WarnSaveUpdateErrors);
 
-        Assert.Throws<InvalidOperationException>(() => RemodelSystemToggles.Apply(host, Gate()));
+        RemodelSystemToggles? captured = null;
+        var error = Assert.Throws<AggregateException>(() =>
+            RemodelSystemToggles.Apply(host, Gate(), value => captured = value));
 
+        Assert.Equal(2, error.InnerExceptions.Count);
+        Assert.IsType<InvalidOperationException>(error.InnerExceptions[0]);
+        Assert.IsType<AggregateException>(error.InnerExceptions[1]);
+        Assert.Equal(new[] { "swWarnSaveUpdateErrors" }, captured!.Outstanding);
         Assert.True(host.Toggle(RemodelSystemToggles.InputDimValOnCreate));
         Assert.True(host.Toggle(RemodelSystemToggles.ShowErrorsEveryRebuild));
         Assert.False(host.CommandInProgress);
+        host.UnsettableToggles.Clear();
+        captured.Restore();
+        Assert.Empty(captured.Outstanding);
     }
 
     [Fact]

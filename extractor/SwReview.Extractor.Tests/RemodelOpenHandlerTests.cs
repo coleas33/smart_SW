@@ -1151,7 +1151,7 @@ public class RemodelOpenHandlerTests : IDisposable
 
     /// <summary>
     /// U27 (default taken 2026-09-28, the owner may revise; research R5.6's amendment): the three
-    /// dialog toggles hold for the session, and <c>CommandInProgress</c> is true only while
+    /// dialog toggles now also go back before idle (T180), and <c>CommandInProgress</c> is true only while
     /// <c>remodel.open</c> runs its own sequence of calls. The API help says to set it before a
     /// sequence and back after it, and that it affects only out-of-process applications; it was
     /// left true for the whole session when SOLIDWORKS exited during the first baseline reading.
@@ -1164,7 +1164,8 @@ public class RemodelOpenHandlerTests : IDisposable
         Ok<RemodelOpenResult>(dispatcher.Dispatch(OpenRequest(Probe(dispatcher))));
 
         Assert.Equal(
-            new[] { "10=False", "77=False", "329=False", "CommandInProgress=True", "CommandInProgress=False" },
+            new[] { "10=False", "77=False", "329=False", "CommandInProgress=True", "CommandInProgress=False",
+                "10=False", "77=False", "329=False" },
             seat.ToggleWrites);
         Assert.False(seat.CommandInProgress);
 
@@ -1185,13 +1186,13 @@ public class RemodelOpenHandlerTests : IDisposable
         SwBridgeDispatcher dispatcher = Dispatcher(seat);
         Ok<RemodelOpenResult>(dispatcher.Dispatch(OpenRequest(Probe(dispatcher))));
 
-        Assert.Equal("CommandInProgress=True", seat.ToggleWrites.Last());
+        Assert.Equal("CommandInProgress=True", seat.ToggleWrites[4]);
         Assert.True(seat.CommandInProgress);
     }
 
     /// <summary>
-    /// With the flag put back at open, the session's end restores the three toggles and writes
-    /// the flag no second time: nothing is outstanding for it.
+    /// T180 puts all four settings back before idle, so a clean session's end writes none
+    /// a second time: nothing is outstanding.
     /// </summary>
     [Fact]
     public void Close_AfterAnOpen_RestoresTheThreeTogglesAndLeavesTheCommandFlagAlone()
@@ -1202,7 +1203,7 @@ public class RemodelOpenHandlerTests : IDisposable
 
         RemodelSessionEnd outcome = dispatcher.EndRemodelSession(RemodelSessionEnd.ReasonToolServiceStopped);
 
-        Assert.Equal(new[] { "10=False", "77=False", "329=False" }, seat.ToggleWrites);
+        Assert.Empty(seat.ToggleWrites);
         Assert.Empty(outcome.SettingsOutstanding);
     }
 
@@ -1277,6 +1278,7 @@ public class RemodelOpenHandlerTests : IDisposable
                 "GetSaveFlag",
                 "GetUnits",
                 "ISldWorks.set_CommandInProgress",
+                "settings.restore_idle",
             }.SelectMany(step => new[] { "before " + step, "after " + step }),
             markers);
     }

@@ -116,6 +116,10 @@ public delegate bool FakeGetCustomProperty(RemodelProbePart part, string key, ou
 /// </summary>
 public sealed class FakeRemodelProbeHost : IRemodelProbeHost
 {
+    private readonly Dictionary<object, string> _overrides = new Dictionary<object, string>();
+
+    public FakeRemodelProbeHost() => MeasureMassPropertiesImpl = DefaultMassProperties;
+
     public List<string> Calls { get; } = new List<string>();
 
     private readonly Dictionary<int, bool> _toggles = new Dictionary<int, bool>();
@@ -378,11 +382,35 @@ public sealed class FakeRemodelProbeHost : IRemodelProbeHost
         return BuildAnalyticSolidImpl(spec, savePath);
     }
 
-    public Func<RemodelProbePart, IMassPropertyReading?> MeasureMassPropertiesImpl { get; set; } = _ => new FakeMassProperty();
+    public Func<RemodelProbePart, IMassPropertyReading?> MeasureMassPropertiesImpl { get; set; }
 
     public IMassPropertyReading? MeasureMassProperties(RemodelProbePart part)
     {
         Calls.Add(nameof(MeasureMassProperties));
         return MeasureMassPropertiesImpl(part);
+    }
+
+    public Action<RemodelProbePart, string> ApplyMassPropertyOverrideImpl { get; set; } = (_, _) => { };
+
+    public void ApplyMassPropertyOverride(RemodelProbePart part, string kind)
+    {
+        Calls.Add(nameof(ApplyMassPropertyOverride) + ":" + kind);
+        _overrides[part.Document] = kind;
+        ApplyMassPropertyOverrideImpl(part, kind);
+    }
+
+    private IMassPropertyReading DefaultMassProperties(RemodelProbePart part)
+    {
+        string kind = _overrides.TryGetValue(part.Document, out string? applied) ? applied : "none";
+        var mass = new FakeMassProperty
+        {
+            OverrideMass = kind == "mass",
+            OverrideCenterOfMass = kind == "center_of_mass",
+            OverrideMomentsOfInertia = kind == "moments",
+        };
+        if (kind == "mass") mass.Mass = RemodelProbeOverrideValues.Mass;
+        if (kind == "center_of_mass") mass.CenterOfMass = RemodelProbeOverrideValues.Center();
+        if (kind == "moments") mass.PrincipalMoments = RemodelProbeOverrideValues.Moments();
+        return mass;
     }
 }
