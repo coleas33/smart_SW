@@ -1,8 +1,45 @@
-# Offline engineering context
+# Engineering context
 
 This delivery works with saved evidence packages on a machine without SOLIDWORKS.
 It stores requirements and total applied forces, with explicit engineer confirmation.
 It does not create drawings, apply Simulation loads, infer supports or certify a design.
+
+## In the Review pane
+
+Open a saved part or assembly and expand **Engineering context**. Choose **Extract
+context evidence** to save a package without starting the model review. Choose a saved
+target, or use **Use selected component or face** to prefill a unique target already
+present in the extraction. Selection is an uncalibrated observation: it does not verify
+that current geometry still matches the saved package. A selected face missing from
+the extraction remains unavailable.
+
+Enter a requirement or total force, a stable input ID, input source and assumptions.
+For a force, choose N, kN or lbf, its signed direction, saved root/component coordinate
+frame and optional point in metres. Leave an unknown magnitude blank and give a reason.
+Save the draft, inspect the displayed target, values, frame and source, then enter your
+name and confirm the exact displayed input. To change an existing input, choose its
+**Edit saved input** button, make the changes and choose **Save revised input**. This
+creates a new revision and invalidates its old confirmation. Typing an existing name
+in the new-input form does not replace it; **New input** starts a separate draft.
+
+Choose **Review with saved context** to attach the displayed context revision to that
+same evidence package. It does not extract again. Ordinary **Review** still starts the
+existing review flow. Switching the active document/configuration or changing the saved
+package requires preparation again. Unknown and draft inputs can inform a review with
+their recorded states; they do not become confirmed forces.
+
+Live checks can append evidence when the review starts. If that changes the exact
+saved baseline, the model's opening summary retains the historical inputs and marks
+their applicability as needing review. Confirmation is never carried to changed
+evidence automatically.
+
+Pane stores live under `run_root/.engineering-context/<run_id>`, beside the extracted
+run folders. The API displays engineering values while omitting private source paths,
+native reference bytes and actor history. Keep the private store when preserving local
+approval history. See the [pane contract](contracts/pane-context.md) and the pending
+[SOLIDWORKS workstation checks](native-entry.md).
+
+## Command line
 
 From `reviewer`, install with `uv sync --all-extras`. Use a private context directory
 outside the extracted package and outside CAD source directories. The examples use
@@ -74,7 +111,8 @@ can leave an unpublished revision. Preserve and inspect it: only publication of 
 identical original artifact can reuse that revision; a different retry is refused.
 There is no automatic recovery or revision-deletion command in this delivery.
 
-Next workstation gate: selected native faces, scoped reference resolution across a new
-extraction, unsaved-state attestation and engineer UI. Those require SOLIDWORKS testing
-on the other machine. Automated drawing writers and structural analysis remain later
-roadmap work.
+Next workstation gate: calibrate selected native faces and repeated occurrences, then
+establish source freshness and scoped reference continuity across a new extraction.
+The pane and read-only adapter are implemented, with offline tests; actual SOLIDWORKS
+behavior requires testing on the other machine. Automated drawing writers and structural
+analysis remain later roadmap work.

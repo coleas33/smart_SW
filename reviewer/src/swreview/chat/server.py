@@ -131,6 +131,7 @@ from swreview.checks.standards.run import (
     read_standards_check,
     run_standards_check,
 )
+from swreview.engineering_context.models import ContextArtifact
 from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore, ReviewException
 from swreview.ir.loader import load_package
 from swreview.ir.models import EvidencePackage, UnsupportedSchemaVersionError
@@ -1188,6 +1189,10 @@ class ChatServer:
         self.secrets = tuple(secrets) if secrets is not None else environment_secrets()
         self.chats: dict[UUID, ChatSession] = {}
         self._workers: dict[UUID, ThreadPoolExecutor] = {}
+        # The separate route module reuses ChatError after this module is loaded.
+        from swreview.chat.engineering_context import EngineeringContextServer
+
+        self.engineering_context = EngineeringContextServer(self)
 
     def redact(self, text: str) -> str:
         """Mask every configured key out of anything headed for the page or a log."""
@@ -1247,19 +1252,30 @@ class ChatServer:
             created_at=datetime.now(UTC),
         )
         chat.to(ChatState.EXTRACTING)
-        run = await run_in_threadpool(self._start_review, chat, settings, standards_profile)
-        chat.attach(run)
-        self.chats[chat.chat_id] = chat
-        chat.to(ChatState.RUNNING)
-        self._submit(chat, run.start)
-        return JSONResponse(
-            {
-                "chat_id": str(chat.chat_id),
-                "review_session_id": str(chat.review_session_id),
-                "not_examined": to_jsonable_python(not_examined(run.context.ir)),
-            },
-            status_code=201,
+        artifact = self.engineering_context.begin_review(
+            run_dir, body.get("engineering_context"), requested="engineering_context" in body
         )
+        try:
+            if artifact is None:
+                run = await run_in_threadpool(self._start_review, chat, settings, standards_profile)
+            else:
+                run = await run_in_threadpool(
+                    self._start_review, chat, settings, standards_profile, artifact
+                )
+            chat.attach(run)
+            self.chats[chat.chat_id] = chat
+            chat.to(ChatState.RUNNING)
+            self._submit(chat, run.start)
+            return JSONResponse(
+                {
+                    "chat_id": str(chat.chat_id),
+                    "review_session_id": str(chat.review_session_id),
+                    "not_examined": to_jsonable_python(not_examined(run.context.ir)),
+                },
+                status_code=201,
+            )
+        finally:
+            self.engineering_context.end_review_preparation(run_dir)
 
     async def get_session(self, request: Request) -> Response:
         return JSONResponse(self._chat(request).public())
@@ -2105,8 +2121,11 @@ class ChatServer:
         chat: ChatSession,
         settings: ProviderSettings,
         standards_profile: str | None = None,
+        engineering_context: ContextArtifact | None = None,
     ) -> ReviewRun:
         """Load the package and bind the tools. Blocking, so it runs off the event loop."""
+        if engineering_context is not None:
+            self.engineering_context.validate_prepared_review(chat.run_dir, engineering_context)
         self._rotate_previous(chat)
         try:
             adapter = self.provider_factory(settings)
@@ -2117,6 +2136,9 @@ class ChatServer:
         # first, payload slimming and history pruning since 2026-09-22 - and recorded on the
         # session like any other run's. Feature 014 (PP-1): the explanation pass too.
         defaults = pane_defaults(settings.provider)
+        context_options = (
+            {"engineering_context": engineering_context} if engineering_context is not None else {}
+        )
         try:
             run = start_review(
                 chat.run_dir,
@@ -2136,6 +2158,7 @@ class ChatServer:
                 callbacks=[chat.publish],
                 redact=self.redact,
                 explain_findings=defaults.explain_findings,
+                **context_options,
             )
         except PACKAGE_ERRORS as exc:
             raise InvalidPackage(
@@ -2403,6 +2426,7 @@ def create_app(
     # module's door - `ChatError`, `resolve_run_dir`, `PACKAGE_ERRORS` - without the two
     # importing each other. The Remodel routes are a separate module because a re-model is
     # not a chat: no turn, no evidence request, no disposition (`backend-remodel.md`).
+    from swreview.chat.engineering_context import engineering_context_routes
     from swreview.chat.remodel import RemodelServer, remodel_routes
 
     remodel = RemodelServer(
@@ -2455,6 +2479,7 @@ def create_app(
         Route("/sessions/{chat_id}/snapshot", server.snapshot, methods=["GET"]),
         # A finished review restored read-only from its run folder, by name (feature 009).
         Route("/reviews/{run_id}", server.read_review, methods=["GET"]),
+        *engineering_context_routes(server.engineering_context),
         # The Model check tab (`contracts/model-check.md`) and the Standards tab
         # (`contracts/standards-check.md`). The two literal paths are listed first so they
         # are matched before the `{check_id}` pattern that follows them; the read and the

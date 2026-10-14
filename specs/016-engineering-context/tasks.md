@@ -11,3 +11,10 @@
 - [x] T009 Document offline delivery and the pending native selection gate.
 - [ ] T010 Native SOLIDWORKS selection/rebinding and unsaved-state verification
       (future workstation gate; excluded from the offline delivery).
+- [x] T011 Bounded guarded selection observation and scoped saved-target matching.
+- [x] T012 Authenticated private context routes and exact session attachment.
+- [x] T013 Prepare evidence, enter/inspect/confirm and review-with-context pane flow.
+- [x] T014 Fake native/backend/WebView regressions, Release compile and full offline gate
+      ([final receipt](offline-gate-native-entry.md)).
+- [ ] T015 Native selection calibration and source-freshness attestation on the workstation
+      (remains pending; no cross-extraction approval carry-forward in this slice).

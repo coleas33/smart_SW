@@ -458,6 +458,7 @@ public class SwReviewAddIn : ISwAddin
             DrawingModels = DrawingModels,
             Dump = reviewDump,
             PrepareReview = reviewDump.Prepare,
+            EngineeringSelection = new EngineeringContext.SwEngineeringSelectionCapture(_swApp, _applicationThread),
             EntityResolver = new SwEntityResolver(
                 _swApp,
                 _applicationThread,

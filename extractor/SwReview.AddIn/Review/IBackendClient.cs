@@ -38,6 +38,20 @@ public sealed class BridgeConfig
     public string Secret { get; }
 }
 
+/// <summary>Explicit saved context attachment; no local path or native approval claim.</summary>
+public sealed class EngineeringContextAttachment
+{
+    public EngineeringContextAttachment(string contextId, string headDigest, string packageSha256)
+    {
+        ContextId = contextId ?? throw new ArgumentNullException(nameof(contextId));
+        HeadDigest = headDigest ?? throw new ArgumentNullException(nameof(headDigest));
+        PackageSha256 = packageSha256 ?? throw new ArgumentNullException(nameof(packageSha256));
+    }
+    public string ContextId { get; }
+    public string HeadDigest { get; }
+    public string PackageSha256 { get; }
+}
+
 /// <summary>The `POST /sessions` body (chat-api.md).</summary>
 public sealed class NewSessionRequest
 {
@@ -49,7 +63,8 @@ public sealed class NewSessionRequest
         string engineer,
         BridgeConfig? bridge,
         string? retryOf,
-        string? standardsProfilePath = null)
+        string? standardsProfilePath = null,
+        EngineeringContextAttachment? engineeringContext = null)
     {
         RunDirectory = runDirectory ?? throw new ArgumentNullException(nameof(runDirectory));
         Provider = provider ?? throw new ArgumentNullException(nameof(provider));
@@ -59,6 +74,7 @@ public sealed class NewSessionRequest
         Bridge = bridge;
         RetryOf = retryOf;
         StandardsProfilePath = standardsProfilePath;
+        EngineeringContext = engineeringContext;
     }
 
     /// <summary>`run_dir`: the folder the dump was just written into.</summary>
@@ -83,6 +99,9 @@ public sealed class NewSessionRequest
     /// setting is blank. The backend owns loading and validating the file.
     /// </summary>
     public string? StandardsProfilePath { get; }
+
+    /// <summary>The exact saved context selected for this review, or null for an ordinary review.</summary>
+    public EngineeringContextAttachment? EngineeringContext { get; }
 }
 
 /// <summary>What `POST /sessions` returns: `201 {chat_id, review_session_id, not_examined}`.</summary>
