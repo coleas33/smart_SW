@@ -86,7 +86,7 @@ from swreview.agent.settings import (
     redact,
 )
 from swreview.agent.settings import pane_defaults as pane_defaults_for
-from swreview.benchmark import answers, set_summary, sets
+from swreview.benchmark import answers, report_page, set_summary, sets
 from swreview.benchmark.answers import DEFAULT_MAX_ANSWER_TURNS
 from swreview.benchmark.compare import (
     carry_sign_offs,
@@ -2319,6 +2319,11 @@ def _review_fn(
     3; QA-1). The run is closed in a `finally`, as `run_review` closes it, and the final
     session returned. `run_review` stays the `review` command's one-turn form.
 
+    The package's `prompts.json` (`report_page.write_prompts_record`; feature 014
+    `contracts/benchmark-run.md` 12, FR-057) is written before the first turn and again in the
+    `finally`, so an attempt that raised still records what it sent first; the run is closed
+    even when that second write raises. Only a benchmark attempt writes it (INT-1).
+
     The redaction is per package too, rather than left to `benchmark_run`: a library
     caller that reaches this through `benchmark.runner`'s default `review_fn` gets the
     same guarantee as one that came through the command line (FR-015).
@@ -2341,11 +2346,15 @@ def _review_fn(
             redact=redactor,
         )
         try:
+            report_page.write_prompts_record(run, session_out_dir)
             answers.drive_review(
                 run, attempt.case_file, max_answer_turns=attempt.max_answer_turns
             )
         finally:
-            run.close()
+            try:
+                report_page.write_prompts_record(run, session_out_dir)
+            finally:
+                run.close()
         return run.session
 
 
