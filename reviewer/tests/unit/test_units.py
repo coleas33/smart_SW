@@ -103,6 +103,7 @@ def test_module_exports_only_the_agreed_surface() -> None:
         "as_degrees",
         "as_mm",
         "convert",
+        "force_newtons",
         "to_angle",
         "to_length",
     }

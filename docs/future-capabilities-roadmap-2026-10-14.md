@@ -1,10 +1,12 @@
 # Future capabilities roadmap: drawings and engineering load context
 
 Status snapshot: 2026-10-14, after main `8a8682f` and
-`015-review-send-gate` `c4f17d5`. This is a planning record. Its proposed stages,
-contracts, probes and examples are documentation; they have not been implemented
-or authorised as a new development batch. No constitution or capability gate is
-changed by this document.
+`015-review-send-gate` `c4f17d5`. This began as a planning record. The shared
+engineering-context foundation was subsequently authorized as
+[Feature 016](../specs/016-engineering-context/quickstart.md); its first delivery
+provides offline requirements/forces, revision history, explicit confirmation and
+bounded LLM reads. The later stages, probes, drawing writers and structural analysis
+remain proposals. No constitution or native capability gate is changed.
 
 ## Current roadmap
 
@@ -16,7 +18,7 @@ changed by this document.
 | Remodel, 004 | Stage 1 organises a copied feature tree. Plan and prerequisite repairs exist; the latest lifetime/settings and geometry-override repairs are on 015. | Blocking native probes, measured calibration and actual Plan/cleanup/Start validation. Stage 2 geometry reconstruction needs its own later specification. |
 | Drawing context, 011/013 | Related already-open drawings can be read during Full Review; annotations/tables and a bounded per-part brief exist. | Closed-drawing approval opening needs D14; numerical use needs D4/D5 unit/precision confirmation and separate D6/D8 entity-binding evidence. |
 | Drawing creation, reserved 012 | Architecture direction exists; no 012 feature package or production creator exists. | Evaluate the owner's generator base, define a narrow drawing family, then specify a reviewed plan and new-output executor. |
-| Load context and estimates | A researched concept exists; no product load-case model, structural solver or Simulation executor exists. | Specify engineer-confirmed context first, then independently validated calculations and existing-study import. |
+| Load context and estimates | Feature 016 provides the offline requirement/applied-force sidecar and explicit confirmation; no broader load-case model, structural solver or Simulation executor exists. | Native selection/rebinding and unsaved-state attestation on the workstation; then separately specified load cases, validated calculations and existing-study import. |
 
 The three production gates remain separate: drawing approval opening, drawing
 numerical binding and Remodel Start are all off. A successful drawing-open probe
@@ -38,7 +40,8 @@ Sources: [current workstation follow-up](testing-feedback-2026-10-13.md),
 
 The [engineering-context foundation draft](engineering-context-foundation.md)
 expands the first structure, record lifecycle, reuse boundaries and initial milestone.
-It remains documentation-only.
+The first offline implementation is delivered in Feature 016. Native binding adapters,
+broader load cases and drawing/solver execution remain later work.
 
 Prepare one evidence-binding contract for both capabilities. It should name the
 model, configuration, component instance, evidence package/hash, relevant source

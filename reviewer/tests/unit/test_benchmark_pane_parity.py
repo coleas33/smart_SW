@@ -70,6 +70,7 @@ COMPARED = frozenset(
         "model_view",
         "explain_findings",
         "standards_profile",
+        "engineering_context",
         "max_steps",
         "previous_session",
         "fail_tool",

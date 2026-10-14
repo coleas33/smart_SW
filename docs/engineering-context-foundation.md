@@ -1,9 +1,13 @@
 # Engineering context foundation — design draft
 
 Prepared 2026-10-14 as a documentation-only continuation of the
-[future roadmap](future-capabilities-roadmap-2026-10-14.md). This is a proposed
-foundation, not an approved feature specification or implementation batch.
-No runtime modules, schemas, tools, native readers or fixtures are created by it.
+[future roadmap](future-capabilities-roadmap-2026-10-14.md). Implementation was
+subsequently authorized and the first offline slice is specified in
+[Feature 016](../specs/016-engineering-context/spec.md), with
+[usage instructions](../specs/016-engineering-context/quickstart.md).
+This design still describes later structures beyond that slice. Native selection,
+cross-extraction rebinding and unsaved-state attestation remain workstation gates;
+broader load cases, drawing writers and structural calculations remain later work.
 
 ## First structure to build when authorised
 
@@ -161,15 +165,16 @@ The review run would inject matching context into the existing `ToolContext`.
 The LLM would use context/record IDs for read-only detail access; it does not select
 arbitrary filesystem paths or create confirmations. A deterministic bounded summary
 names baseline, confirmed/draft/unknown/stale counts, short anchors and omission
-counts. Full detail would be available through the recorded tool boundary. Native
+counts. Bounded detail is available through the recorded tool boundary. Native
 reference bytes and private paths stay behind the tools; engineering text is data,
 not executable instructions. Existing drawing briefs remain evidence coverage,
 not approved drawing plans.
 
 ## Proposed integration layout
 
-These are prospective locations; none are created now. Start with models, binding,
-store and brief responsibilities. Split further only when implementation requires it.
+The offline models, binding, store, brief and recorded read tools below are implemented
+in Feature 016, with `workflow.py` and `cli.py` providing operator entry/confirmation.
+The extractor's native selection/binding adapter remains prospective.
 
 ```text
 reviewer/src/swreview/engineering_context/
@@ -181,7 +186,7 @@ reviewer/src/swreview/engineering_context/
 reviewer/src/swreview/units.py
                     shared conversion registry, extended only for admitted quantities
 reviewer/src/swreview/tools/engineering_context.py
-                    later recorded read-only access by context/record ID
+                    recorded read-only access by context/record ID
 extractor/SwReview.Extractor/EngineeringContext/
                     later bounded native selection/binding adapter
 ```
