@@ -26,15 +26,17 @@ pinned here, as `scoring.md` 11's `test_event_lines.py` numbers it:
    path; a folder holding both is an unfinished pack and is refused.
 
 4. **One call per reader's unit.** A spy on it sees exactly one call per package from
-   `score_run` (T086); the report's, `read_recording`'s and `attempt_facts`' rows, and the
-   structural "no other reader of `events.jsonl` under `benchmark/`", land with their callers
-   (T159, T166, T187).
+   `score_run` (T086) and one per `read_recording` (T159); the report's and `attempt_facts`'
+   rows land with their callers (T166, T187). The structural half (T159): no other reader of
+   `events.jsonl` under `benchmark/`, and no module there decompresses a stream itself; a
+   module-level sentence the owner named may name the files (owner decision 81A).
 
 6's `score_run` spy (T086): `score_run` finds each package's stream through `event_stream`.
 """
 
 from __future__ import annotations
 
+import ast
 import gzip
 import re
 import zlib
@@ -53,10 +55,12 @@ from swreview.agent.events import (
     replay_events,
 )
 from swreview.agent.providers import AgentEvent
+from swreview.benchmark import recording
 from swreview.benchmark.scorecard import score_run
 from swreview.benchmark.sets import BenchmarkSet
 from swreview.chat import sessions
 from swreview.report.session import SessionUsage
+from tests.unit.test_benchmark_report_page import recorded_run
 from tests.unit.test_scorecard_usage import make_usage
 from tests.unit.test_scorecard_usage import write_package as write_scored_package
 
@@ -493,3 +497,190 @@ def test_score_run_finds_each_package_s_stream_through_event_stream(
     score_run(run_dir, keys, benchmark_set)
 
     assert folders == [run_dir / "pkg-a", run_dir / "pkg-b"]
+
+
+# --- 4: read_recording reads its log once, through replay_events (T159) --------------------
+
+
+@pytest.mark.usefixtures("vocabulary")
+def test_read_recording_replays_the_folder_s_event_log_exactly_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Patched as the name `recording` calls, as `score_run`'s row patches its caller: the
+    folder's own `EVENTS_FILE_NAME`, never resolved through `event_stream`, since a recording
+    is never packed (RF-83), and with an `on_unreadable` hook, so a damaged log is never read as
+    a whole one."""
+    run = recorded_run(tmp_path)
+    calls: list[tuple[Path, bool]] = []
+    real = events.replay_events
+
+    def spy(path: Path | str, after: int = 0, **hooks: Any) -> Iterator[AgentEvent]:
+        calls.append((Path(path), callable(hooks.get("on_unreadable"))))
+        return real(path, after, **hooks)
+
+    def no_stream(folder: Path | str) -> Path:
+        pytest.fail(f"read_recording resolved {folder} through event_stream")
+
+    monkeypatch.setattr(recording, "replay_events", spy)
+    monkeypatch.setattr(events, "event_stream", no_stream)
+
+    recording.read_recording(run)
+
+    assert calls == [(run / EVENTS_FILE_NAME, True)]
+
+
+# --- 4: the structural half, no other reader of a stream under benchmark/ (T159) ------------
+
+BENCHMARK_SOURCES = sorted(Path(recording.__file__).parent.glob("*.py"))
+
+STREAM_NAMES = frozenset({"EVENTS_FILE_NAME", "PACKED_EVENTS_FILE_NAME"})
+STREAM_STRINGS = frozenset({EVENTS_FILE_NAME, PACKED_EVENTS_FILE_NAME})
+READERS = frozenset({"replay_events", "event_stream"})
+GZIP_READS = frozenset({"open", "decompress", "GzipFile"})
+
+EXEMPT_MODULES: frozenset[str] = frozenset()
+"""Modules exempt from both rules: none in this slice. The robustness slice adds `streams.py`,
+whose packing copies a stream's bytes and parses no event (T214, T215; RF-83)."""
+
+NAMED_SENTENCES: frozenset[tuple[str, str]] = frozenset({("scorecard.py", "NO_EVENT_STREAM")})
+"""Owner decision 81A: the module-level sentences that may name the stream files, by module and
+constant. Each must stay a module-level assignment whose value calls nothing, and its name is
+never used as a path (`test_every_named_sentence_is_a_sentence_that_reads_nothing`)."""
+
+PATH_CALLS = frozenset(
+    {"Path", "PurePath", "open", "replay_events", "event_stream", "read_text", "read_bytes"}
+)
+"""The calls that open, resolve or read a path: a named sentence passed to one is a path."""
+
+
+def _parents(tree: ast.AST) -> dict[ast.AST, ast.AST]:
+    return {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+
+
+def _called_name(call: ast.Call) -> str | None:
+    if isinstance(call.func, ast.Name):
+        return call.func.id
+    if isinstance(call.func, ast.Attribute):
+        return call.func.attr
+    return None
+
+
+def _calls_a_reader(function: ast.AST) -> bool:
+    return any(
+        isinstance(node, ast.Call) and _called_name(node) in READERS for node in ast.walk(function)
+    )
+
+
+def _is_stream_reference(node: ast.AST) -> bool:
+    return (
+        (isinstance(node, ast.Name) and node.id in STREAM_NAMES)
+        or (isinstance(node, ast.Attribute) and node.attr in STREAM_NAMES | {"events_path"})
+        or (isinstance(node, ast.Constant) and node.value in STREAM_STRINGS)
+    )
+
+
+def _in_named_sentence(module: str, node: ast.AST, parents: dict[ast.AST, ast.AST]) -> bool:
+    """Whether `node` lies in the value of a module-level assignment 81A names."""
+    while node in parents:
+        parent = parents[node]
+        if isinstance(parent, ast.Module):
+            return (
+                isinstance(node, ast.Assign)
+                and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+                and (module, node.targets[0].id) in NAMED_SENTENCES
+            )
+        node = parent
+    return False
+
+
+def _offences(path: Path) -> list[str]:
+    """Every reference to a stream outside a reader, and every decompression, in one module."""
+    module = path.name
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    parents = _parents(tree)
+    offences: list[str] = []
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "gzip"
+            and node.func.attr in GZIP_READS
+        ):
+            offences.append(f"{module} line {node.lineno}: calls gzip.{node.func.attr}")
+        if not _is_stream_reference(node):
+            continue
+        in_import = False
+        enclosing: ast.AST | None = None
+        cursor = node
+        while cursor in parents:
+            cursor = parents[cursor]
+            if isinstance(cursor, (ast.Import, ast.ImportFrom)):
+                in_import = True
+            if enclosing is None and isinstance(cursor, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                enclosing = cursor
+        if in_import:
+            continue
+        if enclosing is not None and _calls_a_reader(enclosing):
+            continue
+        if _in_named_sentence(module, node, parents):
+            continue
+        offences.append(
+            f"{module} line {node.lineno}: {ast.unparse(node)} outside a function that "
+            "reads through replay_events or event_stream"
+        )
+    return offences
+
+
+def test_there_are_benchmark_modules_to_read() -> None:
+    names = {path.name for path in BENCHMARK_SOURCES}
+
+    assert {"recording.py", "scorecard.py", "compare.py"} <= names
+
+
+def test_no_module_under_benchmark_reads_a_stream_but_through_the_one_reader() -> None:
+    """RF-29 and RF-83: a stream's file name, an `events_path` attribute or the files' literal
+    names appear only in an import or inside a function that reads through `replay_events` or
+    resolves through `event_stream`, and no module decompresses a stream itself."""
+    offences = [
+        offence
+        for path in BENCHMARK_SOURCES
+        if path.name not in EXEMPT_MODULES
+        for offence in _offences(path)
+    ]
+
+    assert offences == []
+
+
+@pytest.mark.parametrize("module, name", sorted(NAMED_SENTENCES))
+def test_every_named_sentence_is_a_sentence_that_reads_nothing(module: str, name: str) -> None:
+    """81A's allowance holds only while the constant is what it was allowed as: one module-level
+    assignment whose value calls nothing, its name never an operand of `/` nor an argument of a
+    call that opens, resolves or reads a path."""
+    path = Path(recording.__file__).parent / module
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    assignments = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and [target.id for target in node.targets if isinstance(target, ast.Name)] == [name]
+    ]
+    assert len(assignments) == 1, f"{module}: {name} is not one module-level assignment"
+    calls = [
+        ast.unparse(node) for node in ast.walk(assignments[0].value) if isinstance(node, ast.Call)
+    ]
+    assert calls == [], f"{module}: {name} calls {calls}"
+    parents = _parents(tree)
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Name) and node.id == name):
+            continue
+        parent = parents[node]
+        assert not (isinstance(parent, ast.BinOp) and isinstance(parent.op, ast.Div)), (
+            f"{module} line {node.lineno}: {name} is used as a path"
+        )
+        if isinstance(parent, ast.keyword):
+            parent = parents[parent]
+        assert not (isinstance(parent, ast.Call) and _called_name(parent) in PATH_CALLS), (
+            f"{module} line {node.lineno}: {name} is passed to {_called_name(parent)}"
+        )

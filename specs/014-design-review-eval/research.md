@@ -337,6 +337,14 @@ Decisions 1A to 12A were taken in the eval interview of 2026-09-28, 13A to 16A o
 - **Options**: A: the test becomes one that `pilot.json` is keyed and each entry's key is `benchmarks/answer_keys/<package_id>.json`, renamed to say so. B: write `pilot.json` without keys.
 - **Chosen**: A. Applied in `test_benchmark_sets.py`'s `test_the_committed_pilot_set_is_keyed_each_entry_s_key_its_package_s_answer_key` (each entry's key the package's answer key, read by `key_path` with no directory given); tasks.md T115 and T151.
 
+### 81A. A module-level sentence may name the stream files (2026-10-14)
+
+The number follows feature 015's 68A to 80A, since the owner's decisions are numbered across features.
+
+- **Question** (implementation, issue 1 of slice 5; tasks.md T159 and T160; `scoring.md` 11 item 4; RF-29, RF-83): T159's structural half holds every reference to `EVENTS_FILE_NAME` or `PACKED_EVENTS_FILE_NAME` under `benchmark/` to an import or a function that calls `replay_events` or `event_stream`, with no module exempt in this slice. `benchmark/scorecard.py`'s `NO_EVENT_STREAM` (`:138-141`), the key-extensions slice's `not_assessed` reason for a package with no stream, names both files in a module-level sentence and reads nothing; as worded, the test could never pass after T160, though `scoring.md` 11 asks only that no other *reader* exist. Allow it, narrow the rule, or reword the sentence?
+- **Options**: A: keep the rule and the empty module exemption as written, and add one named allowance, `("scorecard.py", "NO_EVENT_STREAM")`: a module-level sentence that may name the files, the test failing if that constant ever calls anything or is used as a path. B: narrow the rule for every module: a reference that only formats a string is no read. C: write the file names into the sentence literally (restating two constants, and editing lane S's file beyond T168). D: exempt the whole of `scorecard.py`.
+- **Chosen**: A. Applied in `test_event_lines.py`'s `NAMED_SENTENCES` and `test_every_named_sentence_is_a_sentence_that_reads_nothing` (one module-level assignment whose value calls nothing, its name never an operand of `/` nor an argument of a call that opens, resolves or reads a path), beside `test_no_module_under_benchmark_reads_a_stream_but_through_the_one_reader`; tasks.md T159.
+
 ---
 
 ## §2 The 2026-09-28 audit
