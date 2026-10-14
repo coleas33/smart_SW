@@ -982,26 +982,31 @@ public sealed class TaskPaneControl : UserControl
 
     private void RefreshOnUiThread()
     {
-        bool document = Ask(_options.DocumentPresent);
-        bool evidence = Ask(_options.EvidencePresent);
-        string? session = SessionRunDirectory;
-
-        // The profile is read from the package itself rather than remembered from the dump
-        // that wrote it: the folder the pane is showing may have been written by a previous
-        // session, by the command line, or by the other pane in a second SOLIDWORKS window.
-        //
-        // "Is a **reduced** profile", not "is a Model check" (FR-037): there are two reduced
-        // profiles now, and a standards package fails `== DumpProfile.ModelCheck`, so it would
-        // be handed to a review as full evidence and its check folder would be offered as the
-        // Extract tab's output. One boolean, and the suppression below falls out of it.
-        DumpProfile? reduced = evidence
-            ? StepStrip.ReducedProfile(RunFolders.ProfileOf(session))
-            : null;
-
-        _steps.Show(document, evidence, reduced);
-
         try
         {
+            if (IsDisposed)
+            {
+                return;
+            }
+
+            bool document = Ask(_options.DocumentPresent);
+            bool evidence = Ask(_options.EvidencePresent);
+            string? session = SessionRunDirectory;
+
+            // The profile is read from the package itself rather than remembered from the dump
+            // that wrote it: the folder the pane is showing may have been written by a previous
+            // session, by the command line, or by the other pane in a second SOLIDWORKS window.
+            //
+            // "Is a **reduced** profile", not "is a Model check" (FR-037): there are two reduced
+            // profiles now, and a standards package fails `== DumpProfile.ModelCheck`, so it would
+            // be handed to a review as full evidence and its check folder would be offered as the
+            // Extract tab's output. One boolean, and the suppression below falls out of it.
+            DumpProfile? reduced = evidence
+                ? StepStrip.ReducedProfile(RunFolders.ProfileOf(session))
+                : null;
+
+            _steps.Show(document, evidence, reduced);
+
             // Never a check folder: a full extract into it would overwrite the package its
             // own `session.json` and `report.md` describe (T084). The engineer chooses where
             // the full dump goes, which is what the Extract tab's folder box is for.
@@ -1009,7 +1014,8 @@ public sealed class TaskPaneControl : UserControl
         }
         catch (Exception)
         {
-            // The suggestion is a convenience; the engineer can always choose a folder.
+            // BeginInvoke has already returned to its caller. A failed session read or a
+            // control that closed before this callback ran must stay inside the callback.
         }
     }
 
@@ -1243,19 +1249,26 @@ public sealed class TaskPaneControl : UserControl
 
     private void PostOnUiThread(Func<WebView2?> selector, string json)
     {
-        WebView2? view = selector();
-        if (view == null || view.IsDisposed || view.CoreWebView2 == null)
-        {
-            return;
-        }
-
         try
         {
-            view.CoreWebView2.PostWebMessageAsJson(json);
+            if (IsDisposed)
+            {
+                return;
+            }
+
+            WebView2? view = selector();
+            if (view == null || view.IsDisposed)
+            {
+                return;
+            }
+
+            CoreWebView2? core = view.CoreWebView2;
+            core?.PostWebMessageAsJson(json);
         }
         catch (Exception)
         {
-            // The page navigated away or the browser process died; the host cannot help.
+            // BeginInvoke has already returned to its caller. Selecting or reading a view
+            // that closed, as well as posting to a failed browser, must stay in this callback.
         }
     }
 

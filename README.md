@@ -20,9 +20,10 @@ pilot proposal and `sw-review-architecture-proposal.md` the architecture decisio
 
 ## Current status and next steps
 
-See [the September 28 testing follow-up](docs/testing-feedback-2026-09-28.md) for the
-current drawing and Remodel fixes, crash evidence, and focused workstation retest.
-It starts from the newer `beaeb85` build; the September 20 records below are history.
+See [the October 13 testing follow-up](docs/testing-feedback-2026-10-13.md) for the
+current Review crash hardening, drawing attachment and Remodel copy fixes, and
+focused workstation retest. The [September 28 follow-up](docs/testing-feedback-2026-09-28.md)
+and September 20 records below describe earlier testing.
 
 See [the September 20 project status](docs/project-status-2026-09-20.md) for the
 earlier baseline, pilot findings, and prioritized next steps. The imported

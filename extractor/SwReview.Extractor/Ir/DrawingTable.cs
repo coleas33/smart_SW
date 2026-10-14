@@ -12,7 +12,7 @@ namespace SwReview.Extractor.Ir;
 /// <summary>
 /// contracts/ir.schema.json #/$defs/AttachedFace. One model face a drawing dimension or
 /// annotation is attached to: read through IAnnotation.GetAttachedEntities3 and
-/// IView.GetCorrespondingEntity, an edge recorded as its two adjacent faces.
+/// the owning part's IModelDocExtension.GetCorrespondingEntity2, an edge recorded as its two adjacent faces.
 /// </summary>
 public sealed class AttachedFace
 {

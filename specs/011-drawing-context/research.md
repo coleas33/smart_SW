@@ -273,7 +273,8 @@ include one of the subject's face persistent references (scoped to the subject's
 source 3 would bind to the subject (unique by value in the document). A size subject binds only a
 diameter or radius dimension or a hole callout; a position subject only a geometric tolerance
 (R2.13). The attachment is read as `IAnnotation.GetAttachedEntities3` on the dimension's
-annotation, each entity mapped to the model through `IView.GetCorrespondingEntity`, a face kept, an
+annotation, each original entity's part owner resolved before it is mapped to the model through
+that owner's `IModelDocExtension.GetCorrespondingEntity2`, a face kept, an
 edge replaced by its two adjacent faces (`IEdge.GetTwoAdjacentFaces2`, recorded `via: edge`), and
 the model entity's persistent reference taken from its owning part document - the path is probe D6,
 and for an assembly drawing the part context is reached through the entity's component, which is
@@ -716,7 +717,7 @@ record, or leaves it false and records why.
   `ISldWorks.GetDocuments`, `GetDocumentCount`; `IDrawingDoc.GetViews`, `GetSheetNames`,
   `GetCurrentSheet`, `IsDetailingMode`; `ISheet.GetTemplateName`, `GetProperties2`,
   `GetSheetFormatName`; `IView.ReferencedConfiguration`, `IsModelOutOfDate`, `IsModelLoaded`,
-  `ScaleDecimal`, `GetOrientationName`, `GetCorrespondingEntity`, `GetDisplayDimensions`,
+  `ScaleDecimal`, `GetOrientationName`, `GetDisplayDimensions`,
   `GetAnnotations`, `GetTableAnnotations`; `IDisplayDimension.GetText(Int32)`,
   `GetPrimaryPrecision2`, `GetPrimaryTolPrecision2`, `GetUseDocPrecision`, `GetUnits`,
   `GetUseDocUnits`, `IsReferenceDim`, `IsHoleCallout`, `GetHoleCalloutVariables`;
@@ -724,7 +725,9 @@ record, or leaves it false and records why.
   `IEdge.GetTwoAdjacentFaces2`; `ISFSymbol.GetSymbol`, `GetTextCount`, `GetTextAtIndex`;
   `ITableAnnotation.Type`, `Title`, `RowCount`, `ColumnCount`, `Text`;
   `IBomTableAnnotation.GetModelPathNames`; `IModelDocExtension.GetUserPreferenceInteger` and
-  `GetUserPreferenceString`; and the enum values quoted in R2.7, R2.9 and R2.12.
+  `GetUserPreferenceString`, `GetCorrespondingEntity2`; and the enum values quoted in
+  R2.7, R2.9 and R2.12. The `GetCorrespondingEntity2` ownership/direction correction was compiled
+  and tested against the same 32.5.0.48 interop on 2026-10-14 (see the correction below).
 - **The writers**: 621 grammar matches on the 24 families, 39 denied today, 2 re-modeler
   exclusions, 580 new; no collision with a gated read (R2.2). *Landed and regenerated on review
   (2026-09-23)*: 646 matches on the 28 families, 41 already denied, 2 excluded, 603 new, and the
@@ -764,7 +767,7 @@ T107).
 | D3 | `IDrawingDoc.GetViews` on a six-sheet drawing: are a non-active sheet's views returned without activation, and is the sheet-format view among them? (006 PROBE-7, from the document instead of the sheet) | R2.3, R2.5 |
 | D4 | On dimensions with their own precision and with the document's: what `GetPrimaryPrecision2` and `GetPrimaryTolPrecision2` return; whether `swDetailingLinearDimPrecision` or `swUnitsLinearDecimalPlaces` is the displayed default | R2.9 |
 | D5 | `IDimension.Tolerance` on a model-item dimension and on a drawing reference dimension: the type and limits, compared with the part's own reading | R2.7 |
-| D6 | `GetAttachedEntities3` on a diameter dimension, a hole callout and a GTol, then `IView.GetCorrespondingEntity` and the part's `GetPersistReference3`: equal to the face phase's reference for that face, for a part drawing and for an assembly drawing | R2.8, SC-010 |
+| D6 | `GetAttachedEntities3` on a diameter dimension, a hole callout and a GTol, then the owning part's `IModelDocExtension.GetCorrespondingEntity2` and `GetPersistReference3`: equal to the face phase's reference for that face, for a part drawing and for an assembly drawing | R2.8, SC-010 |
 | D7 | `IsHoleCallout`, `GetHoleCalloutVariables` and `GetText` 1 to 4 on a counterbore callout; whether any member returns the rendered text whole | R2.7 |
 | D8 | `IDimension.FullName` of a model item in the drawing against the same dimension's `FullName` read in the part | R2.8 |
 | D9 | GTol frames, datum labels and surface-finish texts through the 010 reader members on drawing annotations | R2.12 |
@@ -866,3 +869,18 @@ page would still word the drawing itself); name the model only from the review's
 The view walk now runs inside the active-document event for a drawing. The next sitting checks it on
 a drawing opened on its own, one opened after its model, and a multi-sheet drawing, with no refused
 member in the add-in log (`docs/testing-feedback-2026-09-28.md`, retest step 1).
+
+### 2026-10-14 attachment direction correction
+
+The original attachment path used `IView.GetCorrespondingEntity` in the inverse direction.
+SOLIDWORKS documents that member as model-to-drawing and identifies the owning model extension's
+`GetCorrespondingEntity2` as the drawing/assembly-to-part mapping. The adapter now resolves the
+part document from the original attachment and keeps that scope through mapping and adjacent
+face reads. `IEntity.GetComponent` cannot recover a component from an underlying part-context
+entity, so ownership is read before that context is lost. Unloaded or non-part owners and null
+mappings produce the existing attachment gap. These software corrections do not establish the
+cause of a native crash; D6 and D8 workstation validation and the binding gate remain pending.
+
+Sources: [IView.GetCorrespondingEntity](https://help.solidworks.com/2022/english/api/sldworksapi/SolidWorks.Interop.sldworks~SolidWorks.Interop.sldworks.IView~GetCorrespondingEntity.html),
+[IModelDocExtension.GetCorrespondingEntity2](https://help.solidworks.com/2019/English/api/sldworksapi/SolidWorks.Interop.sldworks~SolidWorks.Interop.sldworks.IModelDocExtension~GetCorrespondingEntity2.html),
+and [IEntity.GetComponent](https://help.solidworks.com/2019/English/api/sldworksapi/SOLIDWORKS.Interop.sldworks~SOLIDWORKS.Interop.sldworks.IEntity~GetComponent.html).
