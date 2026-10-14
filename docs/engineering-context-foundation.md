@@ -9,6 +9,11 @@ This design still describes later structures beyond that slice. Native selection
 cross-extraction rebinding and unsaved-state attestation remain workstation gates;
 broader load cases, drawing writers and structural calculations remain later work.
 
+The subsequent [native-entry slice](../specs/016-engineering-context/native-entry.md)
+implements saved-evidence preparation, pane inputs/confirmation and read-only selection
+prefill. Offline tests cover these surfaces; workstation calibration and current-model
+attestation remain open. Selection never supplies approval or source-freshness proof.
+
 ## First structure to build when authorised
 
 Use a versioned engineering-context artifact that references the existing extracted

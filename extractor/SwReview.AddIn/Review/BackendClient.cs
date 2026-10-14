@@ -149,6 +149,16 @@ public sealed class BackendClient : IBackendClient, IDisposable
             },
         };
 
+        if (request.EngineeringContext != null)
+        {
+            payload["engineering_context"] = new Dictionary<string, object?>
+            {
+                { "context_id", request.EngineeringContext.ContextId },
+                { "head_digest", request.EngineeringContext.HeadDigest },
+                { "package_sha256", request.EngineeringContext.PackageSha256 },
+            };
+        }
+
         JsonElement body = Call("POST", "/sessions", JsonSerializer.Serialize(payload));
         string? chatId = Text(body, "chat_id");
         if (string.IsNullOrEmpty(chatId))

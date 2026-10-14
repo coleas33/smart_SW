@@ -30,6 +30,11 @@ the settings file.
 | GET | `/health` | | `{status: "ok", version, providers: ["openai", "gemini"]}`; a development build also lists `"fake"` |
 | GET | `/models?provider=openai\|gemini\|fake` | | `{models: [{id, label}]}` from the provider; `fake` returns one scripted id; 502 with the provider error class on failure |
 | GET | `/labels` | | `200` with the `labels` block of `reviewer/src/swreview/report/review_words_v1.yaml`, verbatim (feature 009, `specs/009-engineer-workspace/contracts/plain-words.md` section 1, data-model section 7): `{version, status, severity, bucket, evidence_status, contact_kind, errors}` - the words the Review tab prints for each token, and one next-step sentence per error class. Token required like every route. Reads no session and writes nothing. |
+| GET | `/engineering-context/{run_id}` | | 200 saved-evidence operator snapshot, including before initialization; bounded targets, typed inputs, frame/force values, decisions and exact digests. Writes nothing. Feature 016 `contracts/pane-context.md` is normative. |
+| POST | `/engineering-context/{run_id}/init` | `{}` | 201 fixed private-store publication; 409 existing/busy context. Constructs no provider. |
+| POST | `/engineering-context/{run_id}/requirement` | typed target/text/source/assumptions plus `expected_head` | 200 publication; 400 malformed or unavailable target; 409 stale/busy context. |
+| POST | `/engineering-context/{run_id}/force` | typed target/force/unit/direction/frame/point/source/assumptions plus `expected_head` | 200 publication; unknown stays unknown; 400 malformed or unavailable target; 409 stale/busy context. |
+| POST | `/engineering-context/{run_id}/confirm` | `{expected_head, record_id, actor, expected_record_digest, expected_dependency_digest}` | 200 publication of exact explicit saved-input receipt; 400 unconfirmable inputs; 409 stale/busy context. |
 | POST | `/sessions` | `{run_dir, provider, model, effort, bridge: {pipe, secret} \| null, engineer, retry_of: chat_id \| null, standards_profile: str \| null}` | `201 {chat_id, review_session_id, not_examined}`; starts the review turn immediately. `standards_profile` is the configured profile path, passed to the reasoning side to attach `check_standards`; blank or null means no profile. An unreadable or invalid configured profile leaves the review possible and makes the standards family not evaluated, rather than refusing the review. `not_examined` is the shared `{sentence, headline, instances}` block from `report/unexamined.py`, or null when every instance was read; Review displays its `headline` (names, no ids; feature 009 T013) above the grouped findings (`<section id="findings-by-type">`, feature 013 T054; above Start here until then) as soon as the session starts, with the instances' ids in a fold, and falls back to `sentence` from a backend that sends no `headline`. `sentence` keeps the ids and is what `report.md` and both check bodies print. 400 if `run_dir` fails the path rule below or `run_dir/package.json` is missing or invalid. |
 | GET | `/sessions/{chat_id}` | | `ChatSession` state without `token` and without `bridge` (neither the HTTP token nor the bridge secret is ever echoed) |
 | GET | `/sessions/{chat_id}/events` | `Last-Event-ID` header optional | `text/event-stream`; replays from `events.jsonl` after the given id, then live. Event `id` = `seq`, `event` = `type`, `data` = JSON body. |
@@ -55,6 +60,14 @@ provider's error class name.
 
 Concurrency: one running turn per chat; the server serializes messages and evidence
 answers per chat and refuses with 409 rather than queueing silently.
+
+Since Feature 016, `POST /sessions` optionally accepts
+`engineering_context: {context_id, head_digest, package_sha256}`. Omission preserves
+the existing session/tool behavior; null, partial or stale attachments are refused
+before provider construction. Context is loaded only from the run's fixed private
+store after the exact baseline matches. A startup reservation prevents concurrent
+context edits and clears on setup failure. The [pane context contract](../../016-engineering-context/contracts/pane-context.md)
+defines the entry bodies, projections, privacy limits and saved-snapshot scope.
 
 ## Path rule for `run_dir`
 

@@ -1627,11 +1627,6 @@ def start_review(
             context.engineering_context = ContextArtifact.model_validate_json(
                 canonical_bytes(engineering_context)
             )
-            engineering_summary = build_summary(context.engineering_context, loaded)
-            write_atomic(
-                out / "engineering-context-summary.json",
-                compact_json(engineering_summary).encode("utf-8"),
-            )
         session = context.session
         if session is None:  # pragma: no cover - build_context always makes one
             raise ValueError("build_context returned a context without a review session")
@@ -1782,6 +1777,14 @@ def start_review(
         # (FR-039).
         if session.efficiency.coverage_stop:
             offered = CoverageStopTools(offered, checklist, session)
+        if context.engineering_context is not None:
+            # Live pre-run reads can append evidence to package.json. The opening
+            # prompt must assess the same resulting snapshot as later context reads.
+            engineering_summary = build_summary(context.engineering_context, context.package)
+            write_atomic(
+                out / "engineering-context-summary.json",
+                compact_json(engineering_summary).encode("utf-8"),
+            )
     except Exception:
         if bridge_client is not None:
             bridge_client.close()

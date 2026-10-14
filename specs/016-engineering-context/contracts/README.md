@@ -1,5 +1,8 @@
 # Engineering-context contract 1.0.0
 
+The [pane entry contract](pane-context.md) adds selection observations, private entry
+routes and exact explicit session attachments without changing the sidecar schema.
+
 `engineering-context.schema.json` is generated from the strict immutable models in
 `swreview.engineering_context.models`. The synchronization test compares it exactly;
 the fictional fixture covers requirements and a force in a translated/rotated frame.

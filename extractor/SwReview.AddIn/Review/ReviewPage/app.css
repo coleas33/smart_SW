@@ -1652,3 +1652,16 @@ body.view-transcript #results {
   font: inherit;
   font-size: var(--text-small);
 }
+
+.context-panel { overflow-wrap: anywhere; }
+.context-panel input, .context-panel select, .context-panel textarea { max-width: 100%; box-sizing: border-box; }
+.context-panel textarea { width: 100%; }
+.context-panel fieldset { min-width: 0; margin: 8px 0; }
+.context-vector { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.context-vector input { width: 100%; min-width: 0; }
+.context-record { margin: 12px 0; padding: 8px; border: 1px solid var(--hair); border-radius: var(--radius); }
+
+.context-panel { flex: 0 0 auto; }
+.context-panel summary { cursor: pointer; font-weight: 600; }
+#context-entry { max-height: 45vh; overflow-y: auto; }
+.context-panel .row { flex-wrap: wrap; }
