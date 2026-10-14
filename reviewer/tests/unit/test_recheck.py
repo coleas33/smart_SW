@@ -3,23 +3,31 @@
 The carried live step (T092): a re-run of a not-sent review's checks carries the first run's
 live interference outcome instead of asking SOLIDWORKS again, records one carried step where
 the first run recorded its call, and carries the drawing-read capability onto its own record
-(FR-028; SC-008; research R2.17). Every package, path and seat here is fictional.
+(FR-028; SC-008; research R2.17). The claim and the rotation (T094): `POST /sessions` with
+`recheck: true` copies the earlier record, moves its stream, adopts a re-run the backend
+finished, and leaves the earlier record whole whenever a re-run fails or is cut off (FR-041;
+RK-4; owner decision 76A). Every package, path and seat here is fictional.
 """
 
 from __future__ import annotations
 
 import json
 import shutil
+import threading
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import pytest
+from starlette.testclient import TestClient
 
 from swreview import atomic
 from swreview.agent import runner
 from swreview.agent.providers import ProviderName
 from swreview.agent.providers.deferred import DeferredProvider
 from swreview.agent.settings import ProviderSettings, pane_defaults
+from swreview.chat import server
 from swreview.ir.loader import PACKAGE_FILE_NAME, load_package, save_package
 from swreview.ir.models import EvidencePackage
 from swreview.prerun import (
@@ -30,10 +38,20 @@ from swreview.prerun import (
     PRERUN_INTERFERENCE_SETTINGS,
 )
 from swreview.report.names import plural
-from swreview.report.session import ReviewSession, load_session
+from swreview.report.session import ReviewSession, load_session, save_session
 from tests.support.prerun import LIVE_ROWS, live_prerun_package, prerun_package
 from tests.support.questions_package import build_questions_package
+from tests.support.restart import BEFORE_REPLACE, disk_at, restarted_app
 from tests.support.review_bridge import VOLUME_UNIT_GAP, ScriptedReviewBridge
+from tests.unit import test_chat_server as chat
+from tests.unit import test_waiting_answers as waiting_answers
+
+app = chat.app
+client = chat.client
+models = chat.models
+provider_control = chat.provider_control
+run_root = chat.run_root
+run_dir = chat.run_dir
 
 INTERFERENCE_CHECKS = frozenset({
     "interference",
@@ -387,3 +405,484 @@ def test_the_drawing_read_capability_is_carried_onto_the_re_runs_record(
         assert second.session.drawing_read == "opens_closed"
     finally:
         second.close()
+
+
+# --- the claim and the rotation (T094; `contracts/recheck.md` sections 2, 6 and 7) ----------
+
+
+def server_settings(
+    provider_control: chat.ProviderControl, models: chat.Models, seat: Any
+) -> dict[str, Any]:
+    """A restarted backend's settings: the first app's, with a seat that answers nothing."""
+    return {
+        "token": chat.TOKEN,
+        "allow_origin": chat.ORIGIN,
+        "provider_factory": provider_control.factory,
+        "list_models": models,
+        "bridge_factory": lambda pipe, secret: seat,
+    }
+
+
+def recheck_body(folder: Path, **overrides: Any) -> dict[str, Any]:
+    """What the host posts for `review.recheck`: the record's own folder, unticked."""
+    body: dict[str, Any] = {
+        "standards_profile": str(folder / "profile-v3.yaml"),
+        "bridge": {"pipe": "FICT-pipe", "secret": "FICT-secret"},
+        "send_when_checked": False,
+        "recheck": True,
+        **overrides,
+    }
+    return chat.session_body(folder, **body)
+
+
+def recheck(client: TestClient, folder: Path, **overrides: Any) -> Any:
+    return client.post("/sessions", json=recheck_body(folder, **overrides))
+
+
+@dataclass(frozen=True)
+class Earlier:
+    """A waiting review the first app left on disk: its folder and the bytes it wrote."""
+
+    folder: Path
+    files: dict[str, bytes]
+    record: ReviewSession
+
+    @property
+    def session_id(self) -> str:
+        return str(self.record.session_id)
+
+
+CANONICAL = ("session.json", "attention.json", "report.md", "events.jsonl")
+
+
+def earlier_review(app: Any, client: TestClient, folder: Path) -> Earlier:
+    """An unticked review through the first app, as a restart finds it on disk."""
+    waiting_answers.waiting_review(app, client, folder)
+    return Earlier(
+        folder,
+        {name: (folder / name).read_bytes() for name in CANONICAL},
+        load_session(folder / "session.json"),
+    )
+
+
+def stream_owner(path: Path) -> str | None:
+    """The `session_id` the first `session.started` of a stream names."""
+    first = path.read_text(encoding="utf-8").splitlines()[0]
+    event = json.loads(first)
+    assert event["type"] == "session.started"
+    return str(event["body"]["session_id"])
+
+
+def indexes(folder: Path) -> dict[int, set[str]]:
+    """Which rotated files each index holds: `session`, `attention`, `events`, `results`."""
+    held: dict[int, set[str]] = {}
+    patterns = {
+        "session": "session.*.json",
+        "attention": "attention.*.json",
+        "events": "events.*.jsonl",
+        "results": "tool-results.*",
+    }
+    for kind, pattern in patterns.items():
+        for path in folder.glob(pattern):
+            index = path.name.split(".")[1]
+            if index.isdigit():
+                held.setdefault(int(index), set()).add(kind)
+    return held
+
+
+@pytest.fixture
+def silent() -> ScriptedReviewBridge:
+    return silent_seat()
+
+
+def test_a_re_run_copies_the_record_moves_its_stream_and_waits_again(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+    silent: ScriptedReviewBridge,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    earlier = earlier_review(app, client, run_root / "FICT-recheck")
+    earlier_results = sorted(p.name for p in (earlier.folder / "tool-results").iterdir())
+    with restarted_app(run_root, server_settings(provider_control, models, silent)) as fresh:
+        owner = fresh.app.state.server
+        registered: list[bool] = []
+        close_waiting = runner.ReviewRun.close_waiting
+
+        def finalized(run: runner.ReviewRun) -> ReviewSession:
+            registered.append(bool(owner.chats))
+            return close_waiting(run)
+
+        monkeypatch.setattr(runner.ReviewRun, "close_waiting", finalized)
+        response = recheck(fresh, earlier.folder)
+
+        assert response.status_code == 201, response.text
+        body = response.json()
+        assert set(body) == {"chat_id", "review_session_id", "not_examined"}
+        assert registered == [False]
+        assert chat.state_of(fresh, body["chat_id"]) == "awaiting_send"
+        folder = earlier.folder
+        assert (folder / "session.1.json").read_bytes() == earlier.files["session.json"]
+        assert (folder / "attention.1.json").read_bytes() == earlier.files["attention.json"]
+        assert (folder / "events.1.jsonl").read_bytes() == earlier.files["events.jsonl"]
+        assert sorted(p.name for p in (folder / "tool-results.1").iterdir()) == earlier_results
+        assert indexes(folder) == {1: {"session", "attention", "events", "results"}}
+        rerun = load_session(folder / "session.json")
+        assert str(rerun.session_id) == body["review_session_id"] != earlier.session_id
+        assert rerun.model_status is not None and rerun.model_status.state == "not_sent"
+        assert stream_owner(folder / "events.jsonl") == body["review_session_id"]
+        assert provider_control.built == []
+        assert silent.calls == []
+
+
+def test_recheck_needs_an_unticked_start(
+    app: Any, client: TestClient, run_root: Path, provider_control: chat.ProviderControl,
+) -> None:
+    earlier = earlier_review(app, client, run_root / "FICT-recheck-ticked")
+
+    response = recheck(client, earlier.folder, send_when_checked=True)
+
+    assert response.status_code == 400, response.text
+    assert response.json()["error_class"] == "InvalidRequest"
+    assert provider_control.built == []
+
+
+@pytest.mark.parametrize("case", ["no-record", "unreadable", "deleted"])
+def test_a_folder_with_no_readable_record_is_an_unknown_review(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+    silent: ScriptedReviewBridge,
+    case: str,
+) -> None:
+    earlier = earlier_review(app, client, run_root / f"FICT-recheck-{case}")
+    if case == "no-record":
+        (earlier.folder / "session.json").unlink()
+    elif case == "unreadable":
+        (earlier.folder / "session.json").write_text("{FICT", encoding="utf-8")
+    else:
+        shutil.rmtree(earlier.folder)
+    before = sorted(str(path) for path in run_root.rglob("*"))
+    with restarted_app(run_root, server_settings(provider_control, models, silent)) as fresh:
+        response = recheck(fresh, earlier.folder)
+
+    assert response.status_code == 404, response.text
+    assert response.json()["error_class"] == "UnknownReview"
+    assert sorted(str(path) for path in run_root.rglob("*")) == before
+    assert provider_control.built == []
+
+
+@pytest.mark.parametrize("state", ["none", "sent"])
+def test_a_record_that_is_not_waiting_is_refused(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+    silent: ScriptedReviewBridge,
+    state: str,
+) -> None:
+    earlier = earlier_review(app, client, run_root / f"FICT-recheck-{state}")
+    record = earlier.record
+    if state == "none":
+        record.model_status = None
+    else:
+        assert record.model_status is not None
+        record.model_status.state = "sent"
+    save_session(record, earlier.folder / "session.json")
+    saved = (earlier.folder / "session.json").read_bytes()
+    with restarted_app(run_root, server_settings(provider_control, models, silent)) as fresh:
+        response = recheck(fresh, earlier.folder)
+
+    assert response.status_code == 409, response.text
+    assert response.json()["error_class"] == "NotWaiting"
+    assert (earlier.folder / "session.json").read_bytes() == saved
+    assert not (earlier.folder / "session.1.json").exists()
+    assert provider_control.built == []
+
+
+def test_a_running_chat_on_the_folder_is_run_dir_in_use(
+    app: Any,
+    client: TestClient,
+    run_dir: Path,
+    provider_control: chat.ProviderControl,
+) -> None:
+    provider_control.hold()
+    started = chat.start_session(client, run_dir)
+    assert provider_control.started.wait(chat.TIMEOUT_S)
+    try:
+        response = client.post(
+            "/sessions",
+            json=chat.session_body(run_dir, send_when_checked=False, recheck=True),
+        )
+        assert response.status_code == 409, response.text
+        assert response.json()["error_class"] == "RunDirInUse"
+    finally:
+        provider_control.release()
+        chat.settle(client, started["chat_id"])
+
+
+def test_a_re_run_held_in_the_backend_refuses_a_second_and_is_adopted_after(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+    silent: ScriptedReviewBridge,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The same app throughout the re-runs: what a host that gave up and asked again meets."""
+    earlier = earlier_review(app, client, run_root / "FICT-recheck-adopt")
+    with restarted_app(run_root, server_settings(provider_control, models, silent)) as fresh:
+        owner = fresh.app.state.server
+        entered, release = threading.Event(), threading.Event()
+        starts: list[Path] = []
+        starting = owner._start_review
+
+        def held(chat_session: Any, *args: Any, **kwargs: Any) -> runner.ReviewRun:
+            starts.append(chat_session.run_dir)
+            entered.set()
+            assert release.wait(chat.TIMEOUT_S), "FICT re-run barrier was never released"
+            return starting(chat_session, *args, **kwargs)
+
+        monkeypatch.setattr(owner, "_start_review", held)
+        with ThreadPoolExecutor(max_workers=1) as worker:
+            first = worker.submit(recheck, fresh, earlier.folder)
+            try:
+                assert entered.wait(chat.TIMEOUT_S)
+                second = recheck(fresh, earlier.folder)
+                assert second.status_code == 409, second.text
+                assert second.json()["error_class"] == "RunDirInUse"
+                assert starts == [earlier.folder.resolve()]
+            finally:
+                release.set()
+                answered = first.result(timeout=chat.TIMEOUT_S)
+        assert answered.status_code == 201, answered.text
+        events_before = (earlier.folder / "events.jsonl").read_bytes()
+        session_before = (earlier.folder / "session.json").read_bytes()
+
+        adopted = recheck(fresh, earlier.folder)
+
+        assert adopted.status_code == 201, adopted.text
+        assert adopted.json() == answered.json()
+        assert starts == [earlier.folder.resolve()]
+        assert len(owner.chats) == 1
+        assert (earlier.folder / "events.jsonl").read_bytes() == events_before
+        assert (earlier.folder / "session.json").read_bytes() == session_before
+        assert indexes(earlier.folder) == {1: {"session", "attention", "events", "results"}}
+    assert provider_control.built == []
+
+
+# --- failure and cut-off ---------------------------------------------------------------------
+
+
+def assert_earlier_restorable(
+    root: Path,
+    folder: Path,
+    earlier: Earlier,
+    settings: dict[str, Any],
+    provider_control: chat.ProviderControl,
+) -> dict[int, set[str]]:
+    """The folder holds the earlier record whole, a fresh app restores it, and re-runs it.
+
+    Returns the indexes the successful re-run left.
+    """
+    assert (folder / "session.json").read_bytes() == earlier.files["session.json"]
+    with restarted_app(root, settings) as fresh:
+        restored = fresh.get(f"/reviews/{folder.name}")
+        assert restored.status_code == 200, restored.text
+        assert restored.json()["read_only"] is True
+        assert [finding["id"] for finding in restored.json()["findings"]] == [
+            finding.id for finding in earlier.record.findings
+        ]
+        again = recheck(fresh, folder)
+        assert again.status_code == 201, again.text
+        assert chat.state_of(fresh, again.json()["chat_id"]) == "awaiting_send"
+    assert provider_control.built == []
+    assert (folder / "session.1.json").read_bytes() == earlier.files["session.json"]
+    assert list(folder.glob("session.*.json")) == [folder / "session.1.json"]
+    return indexes(folder)
+
+
+def test_a_re_run_that_fails_leaves_the_earlier_record_and_the_next_one_succeeds(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+    silent: ScriptedReviewBridge,
+) -> None:
+    earlier = earlier_review(app, client, run_root / "FICT-recheck-fails")
+    package = earlier.folder / "package.json"
+    good = package.read_bytes()
+    package.write_text("{FICT", encoding="utf-8")
+    settings = server_settings(provider_control, models, silent)
+    with restarted_app(run_root, settings) as fresh:
+        failed = recheck(fresh, earlier.folder)
+        assert failed.status_code == 400, failed.text
+        assert failed.json()["error_class"] == "InvalidPackage"
+        assert fresh.app.state.server.chats == {}
+    assert (earlier.folder / "session.json").read_bytes() == earlier.files["session.json"]
+    package.write_bytes(good)
+
+    held = assert_earlier_restorable(
+        run_root, earlier.folder, earlier, settings, provider_control
+    )
+
+    assert held == {1: {"session", "attention", "events", "results"}}
+
+
+def _cut_after_rotation(owner_class: Any, monkeypatch: pytest.MonkeyPatch, captured: Any) -> None:
+    rotate = owner_class._rotate_previous
+
+    def rotated(self: Any, *args: Any, **kwargs: Any) -> None:
+        rotate(self, *args, **kwargs)
+        captured()
+
+    monkeypatch.setattr(owner_class, "_rotate_previous", rotated)
+
+
+def _cut_before_finalization(
+    owner_class: Any, monkeypatch: pytest.MonkeyPatch, captured: Any
+) -> None:
+    close_waiting = runner.ReviewRun.close_waiting
+
+    def finalized(run: runner.ReviewRun) -> ReviewSession:
+        captured()
+        return close_waiting(run)
+
+    monkeypatch.setattr(runner.ReviewRun, "close_waiting", finalized)
+
+
+CUTS = {
+    "after-rotation": _cut_after_rotation,
+    "before-finalization": _cut_before_finalization,
+    BEFORE_REPLACE: None,
+}
+EXPECTED_AFTER_CUT = {
+    "after-rotation": {1: {"session", "attention", "events", "results"}},
+    "before-finalization": {
+        1: {"session", "attention", "events", "results"},
+        2: {"events", "results"},
+    },
+    BEFORE_REPLACE: {
+        1: {"session", "attention", "events", "results"},
+        2: {"events", "results"},
+    },
+}
+
+
+@pytest.mark.parametrize("point", sorted(CUTS))
+def test_a_re_run_cut_off_leaves_the_earlier_record_whole(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+    silent: ScriptedReviewBridge,
+    monkeypatch: pytest.MonkeyPatch,
+    point: str,
+) -> None:
+    earlier = earlier_review(app, client, run_root / "FICT-recheck-cut")
+    settings = server_settings(provider_control, models, silent)
+    with disk_at(earlier.folder, point) as captured:
+        place = CUTS[point]
+        if place is not None:
+            place(server.ChatServer, monkeypatch, captured)
+        with restarted_app(run_root, settings) as fresh:
+            assert recheck(fresh, earlier.folder).status_code == 201
+        monkeypatch.undo()
+        cut = captured.folder
+        assert cut.is_dir()
+        temporaries = list(cut.glob(".session.json.*.tmp"))
+        assert len(temporaries) == (1 if point == BEFORE_REPLACE else 0)
+        assert load_session(cut / "session.json") == earlier.record
+
+        held = assert_earlier_restorable(
+            captured.root, cut, earlier, settings, provider_control
+        )
+
+        assert held == EXPECTED_AFTER_CUT[point]
+        assert list(cut.glob(".session.json.*.tmp")) == temporaries
+        stray = cut / "events.2.jsonl"
+        if stray.exists():
+            assert stream_owner(stray) != earlier.session_id
+            assert not (cut / "session.2.json").exists()
+
+
+# --- the indexes -----------------------------------------------------------------------------
+
+
+def test_two_failed_re_runs_then_one_that_succeeds_keep_each_index_one_stream(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+    silent: ScriptedReviewBridge,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    earlier = earlier_review(app, client, run_root / "FICT-recheck-indexes")
+    settings = server_settings(provider_control, models, silent)
+    close_waiting = runner.ReviewRun.close_waiting
+
+    def cannot_finalize(run: runner.ReviewRun) -> ReviewSession:
+        raise OSError("FICT the run folder cannot be written")
+
+    monkeypatch.setattr(runner.ReviewRun, "close_waiting", cannot_finalize)
+    for _ in range(2):
+        with restarted_app(run_root, settings) as fresh, pytest.raises(OSError):
+            recheck(fresh, earlier.folder)
+        assert (earlier.folder / "session.json").read_bytes() == earlier.files["session.json"]
+    monkeypatch.setattr(runner.ReviewRun, "close_waiting", close_waiting)
+    with restarted_app(run_root, settings) as fresh:
+        succeeded = recheck(fresh, earlier.folder)
+        assert succeeded.status_code == 201, succeeded.text
+
+    folder = earlier.folder
+    assert indexes(folder) == {
+        1: {"session", "attention", "events", "results"},
+        2: {"events", "results"},
+        3: {"events", "results"},
+    }
+    assert stream_owner(folder / "events.1.jsonl") == earlier.session_id
+    owners = {stream_owner(folder / f"events.{n}.jsonl") for n in (2, 3)}
+    assert len(owners) == 2 and earlier.session_id not in owners
+    assert stream_owner(folder / "events.jsonl") == succeeded.json()["review_session_id"]
+    assert provider_control.built == []
+
+
+# --- nothing written early -------------------------------------------------------------------
+
+
+def test_nothing_is_written_to_the_record_before_the_finalization(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+    silent: ScriptedReviewBridge,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    earlier = earlier_review(app, client, run_root / "FICT-recheck-early")
+    seen: list[dict[str, bytes]] = []
+    close_waiting = runner.ReviewRun.close_waiting
+
+    def finalized(run: runner.ReviewRun) -> ReviewSession:
+        seen.append({
+            name: (earlier.folder / name).read_bytes()
+            for name in ("session.json", "report.md", "attention.json")
+        })
+        return close_waiting(run)
+
+    monkeypatch.setattr(runner.ReviewRun, "close_waiting", finalized)
+    with restarted_app(run_root, server_settings(provider_control, models, silent)) as fresh:
+        assert recheck(fresh, earlier.folder).status_code == 201
+
+    assert seen == [{
+        name: earlier.files[name] for name in ("session.json", "report.md", "attention.json")
+    }]

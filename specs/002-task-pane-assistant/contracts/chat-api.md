@@ -7,6 +7,18 @@ Follow-ups before Send are refused with `409 NotSent`. The flow is specified in
 The later Send and restoration changes remain specified in
 [015 recheck.md](../../015-review-send-gate/contracts/recheck.md).
 
+*Feature 015 amendment, 2026-10-14 (T095):* `POST /sessions` also accepts the optional boolean
+`recheck` (default false): the re-run of a waiting review's checks in its own `run_dir`,
+which needs `send_when_checked: false` (`400 InvalidRequest` otherwise, as for a non-boolean
+value or a `retry_of`). A live chat on the folder in `awaiting_send` is adopted: `201` with
+that chat's `{chat_id, review_session_id, not_examined}` and nothing run. A folder being set
+up (a re-run still running) or a running chat is `409 RunDirInUse`; with no live chat, a
+folder with no readable `session.json` is `404 UnknownReview` and a record with no
+`model_status`, or one already sent, is `409 NotWaiting`. The earlier `session.json` and
+`attention.json` are copied, not moved, so they stay canonical until the re-run's
+finalization replaces them; the answer is an unticked start's `201`. See
+[015 recheck.md](../../015-review-send-gate/contracts/recheck.md) sections 2, 6 and 7.
+
 *Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed by 2026-09-27 (013 T054):* the Review tab's Start here is replaced by the grouped findings list (`<section id="findings-by-type">`), so `not_examined`'s headline sits above that list; see 013 `contracts/grouped-list.md` section 5 (lands with 013 T054).
 
 One loopback service, not one per tab: `swreview chat serve` is the **reviewer backend**,

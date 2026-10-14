@@ -50,6 +50,7 @@ import hmac
 import json
 import logging
 import os
+import shutil
 from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
@@ -556,6 +557,34 @@ def _session_files(run_dir: Path) -> list[Path]:
 def _rotated(path: Path, index: int) -> Path:
     """`events.jsonl` at index 2 is `events.2.jsonl`, `session.json` is `session.2.json`."""
     return path.with_name(f"{path.stem}.{index}{path.suffix}")
+
+
+def _stream_session_id(path: Path) -> str | None:
+    """The `session_id` the first event of a stream names, or `None` for any other stream.
+
+    Only the first line is read: a `session.started` is every stream's first event. An
+    absent, empty or unreadable file, or a first line that is something else, is `None`.
+    """
+    try:
+        with path.open(encoding="utf-8") as stream:
+            first = json.loads(stream.readline())
+    except (OSError, ValueError):
+        return None
+    if not isinstance(first, dict) or first.get("type") != "session.started":
+        return None
+    body = first.get("body")
+    session_id = body.get("session_id") if isinstance(body, dict) else None
+    return session_id if isinstance(session_id, str) else None
+
+
+def _record_id(path: Path) -> str | None:
+    """The `session_id` a rotated `session.K.json` holds, or `None` when it cannot be read."""
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    session_id = record.get("session_id") if isinstance(record, dict) else None
+    return session_id if isinstance(session_id, str) else None
 
 
 def _next_free_index(run_dir: Path) -> int:
@@ -1252,10 +1281,22 @@ class ChatServer:
         send_when_checked = body.get("send_when_checked", True)
         if not isinstance(send_when_checked, bool):
             raise ChatError("send_when_checked must be a boolean")
+        recheck = body.get("recheck", False)
+        if not isinstance(recheck, bool):
+            raise ChatError("recheck must be a boolean")
+        if recheck and send_when_checked:
+            raise ChatError(
+                "recheck re-runs a waiting review's checks; send_when_checked must be false"
+            )
         run_dir = resolve_run_dir(body.get("run_dir"), self.run_root)
         retry_of = self._uuid(body.get("retry_of"), "retry_of")
+        if recheck and retry_of is not None:
+            raise ChatError("recheck re-runs the review in its own folder; it takes no retry_of")
         standards_profile = self._optional_path(body, "standards_profile")
-        self._claim_run_dir(run_dir, retry_of)
+        adopted = self._claim_run_dir(run_dir, retry_of, recheck=recheck)
+        if adopted is not None:
+            return self._created(adopted, self._run_of(adopted))
+        earlier = self._waiting_record(run_dir) if recheck else None
         settings = self._settings(body)
         bridge = body.get("bridge") or None
         chat = ChatSession(
@@ -1286,6 +1327,7 @@ class ChatServer:
                         settings,
                         standards_profile,
                         send_when_checked=False,
+                        earlier=earlier,
                     )
                 )
                 await self._open_waiting(chat, run)
@@ -1295,6 +1337,12 @@ class ChatServer:
             raise
         finally:
             self._pending_run_dirs.discard(run_dir)
+        return self._created(chat, run)
+
+    @staticmethod
+    def _created(chat: ChatSession, run: ReviewRun) -> Response:
+        """`201 {chat_id, review_session_id, not_examined}`: every start's answer, and an
+        adopted re-run's (feature 015, `contracts/recheck.md` section 7)."""
         return JSONResponse(
             {
                 "chat_id": str(chat.chat_id),
@@ -2107,7 +2155,9 @@ class ChatServer:
 
     # --- one chat per run folder -----------------------------------------------------
 
-    def _claim_run_dir(self, run_dir: Path, retry_of: UUID | None) -> None:
+    def _claim_run_dir(
+        self, run_dir: Path, retry_of: UUID | None, *, recheck: bool = False
+    ) -> ChatSession | None:
         """Refuse a run folder that is already somebody's, before a chat is built for it.
 
         `ChatSession 1 events.jsonl` (data-model section 7) is not decoration. Every run
@@ -2129,6 +2179,14 @@ class ChatServer:
         session aside, so the check's record survives as `session.1.json` rather than
         being written over, and the folder stops answering `GET /checks/{check_id}`
         because its `check.json` no longer names the session that is in it.
+
+        A re-run (feature 015, `recheck`; `contracts/recheck.md` section 2) re-runs a waiting
+        review's checks in its own folder, so the session it holds is its point, not a
+        refusal. A live chat on the folder that waits for Send is **adopted** and returned,
+        with nothing run: what a host that gave up on a re-run the backend finished meets on
+        its next try. A folder still being set up - a re-run still running is one, because
+        its chat is registered only after its finalization - stays `RunDirInUse`, as does a
+        live chat that is running.
         """
         if run_dir in self._pending_run_dirs:
             raise RunDirInUse(
@@ -2138,17 +2196,39 @@ class ChatServer:
             (chat for chat in self.chats.values() if chat.run_dir == run_dir and not chat.finished),
             None,
         )
+        if live is not None and recheck and live.state is ChatState.AWAITING_SEND:
+            return live
         if live is not None:
             raise RunDirInUse(
                 f"chat {live.chat_id} is already reviewing {run_dir}; one chat per run folder"
             )
+        if recheck:
+            return None
         if retry_of is None and _session_files(run_dir) and not is_check_folder(run_dir):
             raise InvalidRunDir(
                 f"{run_dir} already holds a review session; retry it with 'retry_of' or "
                 f"review into a new run folder"
             )
+        return None
 
-    def _rotate_previous(self, chat: ChatSession) -> None:
+    @staticmethod
+    def _waiting_record(run_dir: Path) -> ReviewSession:
+        """The earlier record a re-run carries: the folder's `session.json`, waiting.
+
+        No readable record - no folder, no file, one that does not validate - is
+        `UnknownReview`, as `GET /reviews` answers it; a record with no `model_status`, or
+        one already sent, is `NotWaiting` (`contracts/recheck.md` section 2).
+        """
+        try:
+            earlier = load_session(run_dir / SESSION_FILE_NAME)
+        except PACKAGE_ERRORS as exc:
+            raise UnknownReview(f"no review {run_dir.name!r} under the run root") from exc
+        status = earlier.model_status
+        if status is None or status.state not in {"not_sent", "send_failed"}:
+            raise NotWaiting(f"the review in {run_dir.name!r} is not waiting for Send")
+        return earlier
+
+    def _rotate_previous(self, chat: ChatSession, *, keep_record: UUID | None = None) -> None:
         """Move a retried folder's `events.jsonl` and `session.json` aside, as a pair.
 
         A retry writes into the folder the session it replaces wrote, and the two cannot
@@ -2166,7 +2246,15 @@ class ChatServer:
         session to move it with, because the record is the ranking *of* that session; left
         behind it would name the session that just went aside while sitting beside the one
         that replaced it, which is the staleness `read_attention_record` refuses.
+
+        `keep_record` is a re-run's (feature 015, `contracts/recheck.md` section 2): the
+        session id of the earlier record, which stays the canonical `session.json` until the
+        re-run's finalization replaces it, so a failed or killed re-run leaves it restorable.
+        `_rotate_kept` then decides by what the canonical stream is.
         """
+        if keep_record is not None:
+            self._rotate_kept(chat, keep_record)
+            return
         existing = _session_files(chat.run_dir)
         if not existing:
             return
@@ -2187,6 +2275,41 @@ class ChatServer:
         if results.is_dir():
             results.rename(_rotated(results, index))
 
+    def _rotate_kept(self, chat: ChatSession, record_id: UUID) -> None:
+        """A re-run's rotation: the stream moves aside, the earlier record is copied.
+
+        When `events.jsonl` is the earlier record's own stream (its `session.started` names
+        `record_id`), one free index takes copies of `session.json` and `attention.json`
+        and the moved stream and results, so that index is the session with the stream it
+        wrote. Otherwise it is a failed attempt's stream, or there is none: what is there
+        moves to its own index with no session file beside it, and the record is copied
+        only when no `session.K.json` already holds it (a stream deleted by hand). A
+        leftover `write_atomic` temporary is neither, and is passed over.
+        """
+        run_dir = chat.run_dir
+        events = run_dir / EVENTS_FILE_NAME
+        results = run_dir / TOOL_RESULTS_DIR_NAME
+        own = _stream_session_id(events) == str(record_id)
+        copied = own or not any(
+            _record_id(path) == str(record_id) for path in run_dir.glob("session.*.json")
+        )
+        if not (events.is_file() or results.is_dir() or copied):
+            return
+        index = _next_free_index(run_dir)
+        if events.is_file():
+            moved = _rotated(events, index)
+            events.rename(moved)
+            for other in self.chats.values():
+                if other.events_path == events:
+                    other.events_file = moved
+        if results.is_dir():
+            results.rename(_rotated(results, index))
+        if copied:
+            for name in (SESSION_FILE_NAME, ATTENTION_FILE_NAME):
+                kept = run_dir / name
+                if kept.is_file():
+                    shutil.copyfile(kept, _rotated(kept, index))
+
     # --- the review ------------------------------------------------------------------
 
     def _start_review(
@@ -2196,9 +2319,16 @@ class ChatServer:
         standards_profile: str | None = None,
         *,
         send_when_checked: bool = True,
+        earlier: ReviewSession | None = None,
     ) -> ReviewRun:
-        """Load the package and bind the tools. Blocking, so it runs off the event loop."""
-        self._rotate_previous(chat)
+        """Load the package and bind the tools. Blocking, so it runs off the event loop.
+
+        `earlier` is a re-run's waiting record (feature 015): its folder rotates keeping the
+        record, and `start_review` carries what the record already answered.
+        """
+        self._rotate_previous(
+            chat, keep_record=earlier.session_id if earlier is not None else None
+        )
         if send_when_checked:
             try:
                 adapter = self.provider_factory(settings)
@@ -2231,6 +2361,7 @@ class ChatServer:
                 redact=self.redact,
                 explain_findings=defaults.explain_findings,
                 send_when_checked=send_when_checked,
+                earlier=earlier,
             )
         except PACKAGE_ERRORS as exc:
             raise InvalidPackage(

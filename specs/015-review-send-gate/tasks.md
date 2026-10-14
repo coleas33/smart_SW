@@ -659,7 +659,7 @@ description: "Task list for the send-to-model checkbox"
   - `start_review(earlier=)`, passing both.
 
   **Amends 008** spec FR-008, FR-009 and FR-030, and `contracts/checks-first.md` section 2 row 1 and sections 3 and 7. Acceptance: T092 green; T007 byte-equal.
-- [ ] T094 [US4] [py] Lane B. Extend `reviewer/tests/unit/test_recheck.py` with the claim and the rotation (`contracts/recheck.md` sections 2, 6 and 7; FR-041; RK-4). Every case that stands for a restart starts from T012's `restarted_app`, and every cut-off is a folder T012's `disk_at` copied, with nothing raised (owner decision 76A).
+- [x] T094 [US4] [py] Lane B. Extend `reviewer/tests/unit/test_recheck.py` with the claim and the rotation (`contracts/recheck.md` sections 2, 6 and 7; FR-041; RK-4). Every case that stands for a restart starts from T012's `restarted_app`, and every cut-off is a folder T012's `disk_at` copied, with nothing raised (owner decision 76A).
   - **A re-run**: `POST /sessions` with `recheck: true` and `send_when_checked: false`, from a restarted app, on a folder whose `session.json` is a not-sent record:
     - copies `session.json` and `attention.json` to index N, and moves `events.jsonl` and `tool-results/`;
     - registers its chat only after its finalization, `awaiting_send`, through the same `_open_waiting` as the unticked start (owner decision 71A);
@@ -675,7 +675,7 @@ description: "Task list for the send-to-model checkbox"
   - **Nothing written early**: with nothing carried, the carry writes nothing. `session.json`, `report.md` and `attention.json` are unchanged on disk from the claim until the finalization.
 
   Acceptance: red for want of `recheck`.
-- [ ] T095 [US4] [py] Lane B. Implement in `chat/server.py`:
+- [x] T095 [US4] [py] Lane B. Implement in `chat/server.py`:
   - the `recheck` field;
   - `_claim_run_dir(..., recheck=True)` (`:2025-2060`), with the adoption and `ChatServer._rechecking`;
   - `_rotate_previous(chat, keep_record=True)` (`:2062-2099`), deciding by what the canonical stream is, and passing over a leftover `write_atomic` temporary;
