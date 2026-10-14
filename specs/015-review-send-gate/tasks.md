@@ -620,14 +620,15 @@ description: "Task list for the send-to-model checkbox"
 
   Acceptance: red for want of the failure path.
 - [x] T088 [US3] [py] Lane B. Implement the waiting branch's failure path in `agent/runner.py`: `context.session = load_session(session_path)`, one `error` (`retryable: true`), then re-raise. Release a reopened confirmed-read pipe on the failed waiting settle. Bring forward only the read-only disk Send-state forwarding prerequisite for pane section 5 (unknown count, current generic reason); full T099/T100 and the recheck action stay pending. Acceptance: T087 green; the additional disk-view cases green.
-- [ ] T089 [P] [US3] [page] Lane W. Extend `ReviewPageSendGateTests.cs` (`contracts/pane.md` sections 4 to 6; FR-020, FR-033):
+- [x] T089 [P] [US3] [page] Lane W. Extend `ReviewPageSendGateTests.cs` (`contracts/pane.md` sections 4 to 6; FR-020, FR-033):
   - While the summary has a `send` block, the questions panel's button reads "Apply answers", and its sentence is the summary's `resume_text`.
   - Applying posts `POST /evidence` and locks the panel. Until the stream settles, the status line stays "Checked by code. Not sent to the model.", Stop stays off and Send is disabled.
   - A reload during an apply shows the review waiting.
+  - **Apply settle and failure coverage** (contract clarification, 2026-10-13): Send stays disabled until the post-apply attention is accepted; an older attention cannot restore the pre-apply size or findings. A genuine apply failure before or after the session write, including a reload during the apply, draws no error card and restores the actual disk record read-only with its local failure beside Send. An older live attention, reopening the chip and a fresh failed snapshot cannot restore the failed live cache. A held disk restore keeps the waiting follow-up guard disabled in both the display and submit handler. A failed final attention read keeps Send locked until a fresh snapshot is loaded. Use actual backend captures; the read-only Send recheck action remains disabled until US4.
 
   Acceptance: red for want of the label.
-- [ ] T090 [US3] [page] Lane W. Implement the "Apply answers" label and the apply's state rule in `render.js` (`:682-685`) and `app.js`. **Amends 009** `contracts/questions.md` sections 4 and 5. Acceptance: T089 green; `ReviewPageQuestionsTests` green and unedited.
-- [ ] T091 [US3] [py] Lane G. **US3 gate**: T033's commands (from `reviewer/`, and `extractor/SwReview.sln` from the root) and the replay regeneration step over `reviewer/tests/fixtures/replay` (the runner and the pre-run moved). Nothing is committed; T118 records the outcome.
+- [x] T090 [US3] [page] Lane W. Implement the "Apply answers" label and the apply's state rule in `render.js` (`:682-685`) and `app.js`. **Amends 009** `contracts/questions.md` sections 4 and 5. Acceptance: T089 green; `ReviewPageQuestionsTests` green and unedited.
+- [x] T091 [US3] [py] Lane G. **US3 gate**: T033's commands (from `reviewer/`, and `extractor/SwReview.sln` from the root) and the replay regeneration step over `reviewer/tests/fixtures/replay` (the runner and the pre-run moved). Nothing is committed; T118 records the outcome.
 
 **Checkpoint**: an answer made while a review waits regrades it by code and changes the size sentence. A decision made while it waits stays on its finding. At Send, the model reads what code applied and nothing that code withdrew.
 
@@ -795,7 +796,7 @@ description: "Task list for the send-to-model checkbox"
     - A backend restart (an `init` naming another backend) with a live waiting review on screen restores it at once, read-only with Send (FR-042).
     - A found chip names its date when that is not today.
     - A reload while a re-run is held shows nothing of the review until the release, then shows it: never running, and never being checked again.
-  - **An apply that fails** (an `error` during an apply, with no `turn.ended`): no error card, the panel unlocked, and the review restored from its folder, read-only with Send offered, with the error's label in the Send block's failure line (`pane.md` section 5). This case is here, not in US3, because it reads this fixture.
+  - **An apply that fails** (an `error` during an apply, with no `turn.ended`): no error card, the panel unlocked, and the review restored from its folder, read-only with Send offered, with the error's label in the Send block's failure line (`pane.md` section 5). US3 T089-T090 already covers the minimal disk restore and failure display from genuine apply-failure captures; this later fixture still covers the full recheck and restart flow.
   - **A reload during an apply that then fails** (owner decision 77A; research R2.30): the page reloads while the apply runs (the snapshot's summary has the `send` block and `send_in_flight` is absent), then the apply's `error` arrives: the same as above, no error card, the rule keyed on the summary's `send` block.
 
   **Moved**:
@@ -1142,7 +1143,7 @@ Each story ends with its gate and leaves a ticked review byte-identical to the p
   - `model_status.profile` is recorded by the first run (T035), so every waiting record carries what a re-run compares.
   - The backend's `NotSent` refusal of a follow-up lands in US1 (T041), since FR-019 is US1's acceptance.
   - `recheck` is parsed, and its `400`, tested only in US4 (T094).
-  - The page's restore after a failed apply is tested in US4 (T107), because it reads the restored fixture.
+  - **Contract clarification, 2026-10-13:** US3 T089-T090 covers the disk restore and local failure display after a failed apply, including a reload during it. The minimal disk Send view is forwarded in US3; its full composed read-only reason, carry, recheck trigger and restart flow remain pending in US4 T099-T108.
   - The status-line test is renamed once, without a count (T054).
   - One more generated file, `Fixtures/review-not-sent-session.json` (T101), is the backend-written record for the host's cross-language head read (research R4.2).
   - `SessionRecord.ModelStatus` lands in US1 (T051), and the host's head reader with the marks' refresh in US2 (T073-T074), before the search that reuses the reader (T105-T106): the chip's mark is the host's record from the first unticked start (owner decision 73A).

@@ -85,8 +85,10 @@
     sending: false,
     sendAwaitingStart: false,
     sendPending: false,
+    applySummaryPending: false,
     sendError: null,
     sentSeen: Object.create(null),
+    failedApplies: Object.create(null),
     sendWhenCheckedConfirmed: true,
     sendWhenCheckedChange: 0,
     sendWhenCheckedPending: 0,
@@ -262,7 +264,7 @@
         // One raw SSE frame, read by the host. Frames for a chat this page is no longer
         // showing are dropped: a reconnect or a second review replaces the transcript, and a
         // late frame from the stream before it belongs to a session that is gone.
-        if (payload.chat_id === state.chatId && !state.sendPending) {
+        if (payload.chat_id === state.chatId && !state.sendPending && !state.failedApplies[payload.chat_id]) {
           // A pending Send holds the cursor: its acceptance reopens the durable event log
           // after establishing the sending state, including frames already queued by the host.
           // A frame is the only proof this side of the channel has that the stream really
@@ -280,7 +282,7 @@
         }
         return;
       case 'events.closed':
-        if (payload.chat_id === state.chatId && !state.sendPending) {
+        if (payload.chat_id === state.chatId && !state.sendPending && !state.failedApplies[payload.chat_id]) {
           scheduleReconnect(payload.reason || 'The event stream closed.');
         }
         return;
@@ -376,7 +378,7 @@
    * the channel.
    */
   function openStream() {
-    if (!state.chatId || state.sendPending) {
+    if (!state.chatId || state.sendPending || state.failedApplies[state.chatId]) {
       return;
     }
 
@@ -589,6 +591,10 @@
           renderTranscriptHead();
           appendCard(errorLine(body));
           loadAttention();
+          return;
+        }
+        if (state.turnRunning && state.summary && state.summary.send) {
+          restoreFailedApply(body);
           return;
         }
         setTurnRunning(false);
@@ -1098,10 +1104,10 @@
       sentence = '';
     } else if (state.reconnectTimer !== null) {
       sentence = 'Reconnecting to the review.';
+    } else if (waitingForSend() && !state.sending) {
+      sentence = 'Checked by code. Not sent to the model.';
     } else if (state.turnRunning) {
       sentence = 'The review is running.';
-    } else if (waitingForSend()) {
-      sentence = 'Checked by code. Not sent to the model.';
     } else if (questions && questions.count > 0) {
       sentence = 'Waiting for your answers.';
     } else {
@@ -1123,6 +1129,13 @@
   }
 
   function endSession(body) {
+    var applying = state.turnRunning && !state.sending && !!(state.summary && state.summary.send);
+    // The backend has settled, but its previous Send size stays unusable until the final
+    // attention arrives. Reads from earlier withdrawals cannot replace that final summary.
+    if (applying) {
+      state.applySummaryPending = true;
+      state.attentionEpoch++;
+    }
     state.sending = false;
     state.sendAwaitingStart = false;
     setTurnRunning(false);
@@ -1133,7 +1146,10 @@
     // Nothing further will be streamed; a follow-up reopens the stream from the same seq.
     closeStream();
     showStreamState('The session ended.');
-    loadAttention();
+    loadAttention(applying ? function () {
+      state.applySummaryPending = false;
+      renderSend();
+    } : null);
   }
 
   /**
@@ -1159,7 +1175,7 @@
    * `then` rather than a `catch` after it, so it answers the fetch and only the fetch: a throw
    * inside the render is a defect and is not swallowed here.
    */
-  function loadAttention() {
+  function loadAttention(onAccepted) {
     var chatId = state.chatId;
     var epoch = state.attentionEpoch;
     if (!chatId) {
@@ -1168,10 +1184,12 @@
 
     call(sessionPath('/attention'), 'GET').then(
       function (ranking) {
-        if (!ranking || state.chatId !== chatId || state.attentionEpoch !== epoch) {
+        if (!ranking || state.chatId !== chatId || state.attentionEpoch !== epoch
+            || state.failedApplies[chatId]) {
           return;
         }
         applyRanking(ranking);
+        if (typeof onAccepted === 'function') onAccepted();
       },
       function () {
         // Nothing new: Results stay as they are - for a review that has just ended, its cards
@@ -1213,14 +1231,15 @@
   }
 
   function waitingForSend() {
-    return state.sending || state.awaitingSend || !!(state.summary && state.summary.send);
+    return state.sending || state.awaitingSend || !!(state.summary && state.summary.send)
+      || !!state.failedApplies[state.chatId];
   }
 
   /** The single enabling rule used by both Send's renderer and its press. */
   function canSendToModel() {
     return !!state.chatId && !!(state.summary && state.summary.send) && !state.resultsStale
       && !isDrawing(state.documentInfo) && !state.startPending && !state.turnRunning
-      && !state.sending && !state.sendPending && state.readOnly === null;
+      && !state.sending && !state.sendPending && !state.applySummaryPending && state.readOnly === null;
   }
 
   function sendToModel() {
@@ -1370,7 +1389,7 @@
    * review. A host that does not know the row answers an error, and the page simply has no chips.
    */
   function requestSessions(thenFollow) {
-    send('sessions.list', {}).then(function (payload) {
+    return send('sessions.list', {}).then(function (payload) {
       applySessions(payload);
       if (thenFollow) {
         followActiveDocument();
@@ -1510,8 +1529,21 @@
     renderAnswers();
     renderChips();
 
+    if (state.failedApplies[chatId]) {
+      restoreFromFolder(item, epoch);
+      return;
+    }
     call(sessionPath('/snapshot'), 'GET').then(function (snapshot) {
       if (epoch === state.restoreEpoch) {
+        // A fresh page can arrive after the apply's sole error, with no local memory of it.
+        // The failed waiting cache is still unusable; the saved record is authoritative.
+        var summary = snapshot && snapshot.ranking && snapshot.ranking.summary;
+        if (snapshot && snapshot.chat_state === 'failed' && summary && summary.send
+            && snapshot.send_in_flight !== true) {
+          state.failedApplies[chatId] = { error: null };
+          restoreFromFolder(item, epoch);
+          return;
+        }
         restore(snapshot, false);
       }
     }, function (error) {
@@ -1522,20 +1554,58 @@
         showError(errorBody(error));
         return;
       }
-      call('/reviews/' + encodeURIComponent(String(item.run_id || '')), 'GET').then(function (snapshot) {
-        if (epoch === state.restoreEpoch) {
-          restore(snapshot, true);
-        }
-      }, function (failure) {
-        if (epoch !== state.restoreEpoch) {
-          return;
-        }
-        if (failure.errorClass === 'UnknownReview') {
-          cannotRestore(chatId);
-          return;
-        }
-        showError(errorBody(failure));
-      });
+      restoreFromFolder(item, epoch);
+    });
+  }
+
+  /** The shared disk fallback, also used when a waiting apply leaves a failed live cache. */
+  function restoreFromFolder(item, epoch) {
+    var chatId = String(item.chat_id || '');
+    // A newly observed failed snapshot has no summary while its saved record is read.
+    // Keep the waiting guard rendered as well as enforced by the follow-up handler.
+    if (state.failedApplies[chatId]) {
+      renderStartReview();
+      renderResultsState();
+    }
+    call('/reviews/' + encodeURIComponent(String(item.run_id || '')), 'GET').then(function (snapshot) {
+      if (epoch === state.restoreEpoch) {
+        var failed = state.failedApplies[chatId];
+        state.sendError = failed ? failed.error : null;
+        restore(snapshot, true);
+      }
+    }, function (failure) {
+      if (epoch !== state.restoreEpoch) {
+        return;
+      }
+      if (failure.errorClass === 'UnknownReview') {
+        cannotRestore(chatId);
+        return;
+      }
+      showError(errorBody(failure));
+    });
+  }
+
+  /** An apply has no terminal events on failure. Forget its live view and read the whole saved record. */
+  function restoreFailedApply(error) {
+    var chatId = state.chatId;
+    state.failedApplies[chatId] = { error: error };
+    state.attentionEpoch++;
+    closeStream();
+    setTurnRunning(false);
+    resetTranscript();
+    delete state.drafts[chatId];
+    var epoch = state.restoreEpoch;
+    var item = keptReview(chatId);
+    if (item) {
+      restoreFromFolder(item, epoch);
+      return;
+    }
+    // The host may still be answering the list requested when this review started.
+    requestSessions(false).then(function () {
+      if (epoch !== state.restoreEpoch) return;
+      var kept = keptReview(chatId);
+      if (kept) restoreFromFolder(kept, epoch);
+      else cannotRestore(chatId);
     });
   }
 
@@ -1547,6 +1617,7 @@
   function restore(snapshot, fromFolder) {
     var body = snapshot || {};
     state.restoredFromFolder = fromFolder;
+    state.applySummaryPending = false;
     state.awaitingSend = body.chat_state === 'awaiting_send';
     state.sending = body.send_in_flight === true;
     state.sendAwaitingStart = false;
@@ -1639,6 +1710,7 @@
   function forgetReview(chatId) {
     send('session.forget', { chat_id: chatId }).then(function (payload) {
       delete state.unrestorable[chatId];
+      delete state.failedApplies[chatId];
       applySessions(payload);
     }).catch(function (error) {
       showBanner(error.message);
@@ -1980,6 +2052,7 @@
     state.sending = false;
     state.sendAwaitingStart = false;
     state.sendPending = false;
+    state.applySummaryPending = false;
     state.sendError = null;
     state.questionIndex = 0;
     state.questionNote = null;
@@ -2285,7 +2358,8 @@
       questions,
       draftOf(state.chatId),
       state.questionIndex,
-      { resumeText: state.summary.resume_text, note: state.questionNote, labels: state.labels }));
+      { resumeText: state.summary.resume_text, applyAnswers: !!state.summary.send,
+        note: state.questionNote, labels: state.labels }));
     ui.questions.hidden = false;
     syncQuestionControls();
   }
@@ -2326,7 +2400,8 @@
 
   /** The panel is locked while a turn runs, a start or Send is in flight, or a review is hidden or read-only. */
   function questionsLocked() {
-    return state.turnRunning || state.startPending || state.sendPending || state.resultsStale || !state.chatId
+    return state.turnRunning || state.startPending || state.sendPending || state.applySummaryPending
+      || state.resultsStale || !state.chatId
       || state.readOnly !== null;
   }
 
@@ -2452,8 +2527,9 @@
     }
 
     var chatId = state.chatId;
+    var epoch = state.restoreEpoch;
     var items = currentQuestions();
-    state.questionNote = { text: 'Sending your answers...', bad: false };
+    state.questionNote = { text: state.summary && state.summary.send ? 'Applying your answers...' : 'Sending your answers...', bad: false };
     transcriptFromHere();
     setTurnRunning(true);
     renderQuestions();
@@ -2463,7 +2539,7 @@
       for (var index = 0; index < answers.length; index++) {
         delete draft.answers[answers[index].request_id];
       }
-      if (state.chatId !== chatId) {
+      if (state.chatId !== chatId || state.restoreEpoch !== epoch) {
         return;
       }
       state.questionNote = null;
@@ -2472,10 +2548,11 @@
         openStream();
       }
     }).catch(function (error) {
-      setTurnRunning(false);
-      if (state.chatId !== chatId) {
+      if (state.chatId !== chatId || state.restoreEpoch !== epoch) {
         return;
       }
+      state.applySummaryPending = false;
+      setTurnRunning(false);
       var answered = questionNumbered(items, error.requestId);
       if (answered) {
         delete draftOf(chatId).answers[error.requestId];
