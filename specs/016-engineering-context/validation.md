@@ -5,6 +5,12 @@ Scope: typed requirements and total applied forces, saved-snapshot binding, immu
 private storage, explicit confirmation, CLI entry and bounded read-only review context.
 No C# source, native protocol, capability switch or CAD file is changed.
 
+The full gate also exposed a pre-existing Remodel polling race. A poll could read an
+applying plan, then return a terminal job state published during that read. The follow-up
+fix snapshots state/error before reading persisted facts, and publishes the failure
+reason before the failure state. Four controlled regressions force the interleavings;
+all 90 Remodel route tests pass. No timeout or native action is changed.
+
 ## Evidence collected
 
 - Focused integration gate: 158 passed, including default registry/schema pins and
@@ -19,7 +25,12 @@ No C# source, native protocol, capability switch or CAD file is changed.
 - CLI smoke: the installed entry point lists all five context commands; a fake-provider
   review with explicit `--engineering-context` retains its bounded summary and report.
 - Ruff and Windows Git whitespace checks pass.
-- Full nonlive Python gate with required tokenizer: pending final rerun.
+- Full nonlive Python gate with required tokenizer: 15,592 passed, 4 skipped,
+  7 deselected, 2 existing warnings in 525.33 seconds. Command:
+  `SWREVIEW_REQUIRE_TOKENIZER=1 python -m pytest -m "not live"`.
+  Native integration cases skip without their saved workstation package; live provider
+  cases are excluded. No native SOLIDWORKS run or C# validation is claimed for this
+  Python-only change.
 
 Meaningful behavioral failures were recorded before fixes for force conversion/admission,
 rigid frames, missing ancestor/configuration facts, forged frames, repeated snapshot reads,

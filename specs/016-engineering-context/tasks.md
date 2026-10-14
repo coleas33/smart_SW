@@ -7,7 +7,7 @@
 - [x] T005 Record edits and exact-digest explicit confirmation receipts.
 - [x] T006 Offline context CLI and explicit review injection.
 - [x] T007 Bounded read-only LLM tools and privacy/default-surface regressions.
-- [ ] T008 End-to-end fixtures, independent review and nonlive regression gate.
+- [x] T008 End-to-end fixtures, independent review and nonlive regression gate.
 - [x] T009 Document offline delivery and the pending native selection gate.
 - [ ] T010 Native SOLIDWORKS selection/rebinding and unsaved-state verification
       (future workstation gate; excluded from the offline delivery).
