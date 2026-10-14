@@ -4,20 +4,36 @@ One shared `pint.UnitRegistry` backs every conversion so lengths and angles cann
 mixed: passing an `Angle` to a length function raises `pint.DimensionalityError`
 (FR-022, constitution Principle II). Conversions keep both the source and the converted
 quantity so a finding can cite the number as drawn and the number as calculated.
+Feature 016 admits N/kN/lbf total force magnitudes through the same registry; unknown
+force values remain in the sidecar rather than entering conversion as zero.
 """
 
 from __future__ import annotations
+
+import math
 
 import pint
 from pydantic import BaseModel, ConfigDict
 
 from swreview.ir.models import Angle, LengthUnit, Quantity
 
-__all__ = ["Converted", "as_degrees", "as_mm", "convert", "to_angle", "to_length"]
+__all__ = ["Converted", "as_degrees", "as_mm", "convert", "force_newtons", "to_angle", "to_length"]
 
 _REGISTRY = pint.UnitRegistry()
 
 _LENGTH_UNITS: tuple[str, ...] = ("mm", "in", "m")
+
+
+def force_newtons(value: float, unit: str) -> float:
+    """Convert a nonnegative finite force magnitude to newtons."""
+    if isinstance(value, bool) or not math.isfinite(value) or value < 0:
+        raise ValueError("force magnitude must be finite and nonnegative")
+    if unit not in ("N", "kN", "lbf"):
+        raise ValueError("force unit must be N, kN or lbf")
+    result = float(_REGISTRY.Quantity(value, _pint_unit(unit)).to("N").magnitude)
+    if not math.isfinite(result):
+        raise ValueError("converted force magnitude must be finite")
+    return result
 
 
 class Converted(BaseModel):

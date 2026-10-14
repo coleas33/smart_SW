@@ -236,6 +236,20 @@ def drawing_tools() -> tuple[Callable[..., Any], ...]:
     return (drawings.check_drawings, drawings.get_drawing_brief)
 
 
+def engineering_context_tools() -> tuple[Callable[..., Any], ...]:
+    """Read-only context projections, offered only for an explicitly injected snapshot.
+
+    Outside the default registrations and MCP lists, as the drawing family is. Neither
+    tool accepts paths, writes engineering records or makes a native model observation.
+    """
+    from swreview.tools import engineering_context
+
+    return (
+        engineering_context.get_engineering_context_summary,
+        engineering_context.get_engineering_context_record,
+    )
+
+
 REGISTRATIONS: tuple[Registration, ...] = (
     query_tools,
     measurement_tools,
@@ -1000,7 +1014,8 @@ class ToolRegistry:
         package carries, and a bridge call, a proposal into a plan and a standards check
         over an already-decided graded set are none of them. `get_finding` comes with
         payload slimming (feature 008), beside `compact_query`. The drawing family (feature
-        011) comes last, when the package carries drawing evidence.
+        011) follows when the package carries drawing evidence. The saved engineering
+        context readers follow only when the caller explicitly supplies a snapshot.
         """
         functions = self.functions
         if tier is not None:
@@ -1017,6 +1032,8 @@ class ToolRegistry:
             functions = (*functions, *standards_tools())
         if drawings.drawing_evidence(context.ir):
             functions = (*functions, *drawing_tools())
+        if context.engineering_context is not None:
+            functions = (*functions, *engineering_context_tools())
         return functions
 
     def dispatch(

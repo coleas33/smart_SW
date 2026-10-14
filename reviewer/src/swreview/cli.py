@@ -149,6 +149,7 @@ from swreview.checks.standards.run import (
     CarriedForward,
     run_standards_check,
 )
+from swreview.engineering_context.cli import app as engineering_context_app
 from swreview.exceptions import (
     EXCEPTIONS_FILE_NAME,
     ExceptionStore,
@@ -259,6 +260,7 @@ app.add_typer(remodel_app, name="remodel")
 app.add_typer(tokenizer_app, name="tokenizer")
 app.add_typer(drawing_app, name="drawing")
 app.add_typer(profile_app, name="profile")
+app.add_typer(engineering_context_app, name="context")
 
 FAKE_REVIEW_SCRIPT: tuple[ScriptedTurn, ...] = (
     ScriptedTurn(
@@ -782,6 +784,12 @@ def review(
             help="Grade the release standards checks in this review, against this profile.",
         ),
     ] = None,
+    engineering_context: Annotated[
+        Path | None,
+        typer.Option(
+            "--engineering-context", help="Explicit private engineering-context directory."
+        ),
+    ] = None,
     fail_tool: Annotated[
         list[str] | None,
         typer.Option("--fail-tool", help="Force a tool to fail; test hook. Repeatable."),
@@ -809,6 +817,14 @@ def review(
     )
     with _errors_as_exit_1():
         settings = _provider_settings(provider, model, effort)
+        context_options: dict[str, Any] = {}
+        if engineering_context is not None:
+            from swreview.engineering_context.workflow import store_for_package
+
+            artifact = store_for_package(engineering_context, load_package(package_dir)).load()
+            if artifact is None:
+                raise ValueError("engineering context does not exist")
+            context_options["engineering_context"] = artifact
         with _redacting(settings) as redactor:
             session = run_review(
                 package_dir,
@@ -826,6 +842,7 @@ def review(
                 bridge=bridge,
                 redact=redactor,
                 **_checklist_kwargs(checklist),
+                **context_options,
             )
             package = load_package(package_dir).package
             report_file = Path(out).resolve() / REPORT_FILE_NAME

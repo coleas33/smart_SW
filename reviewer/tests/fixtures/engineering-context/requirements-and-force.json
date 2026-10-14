@@ -1,0 +1,121 @@
+{
+  "schema_version": "1.0.0",
+  "context_id": "22222222-3333-4444-8555-666666666666",
+  "revision": 1,
+  "previous_digest": null,
+  "baseline": {
+    "package_id": "11111111-2222-4333-8444-555555555555",
+    "package_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "schema_version": "1.6.0",
+    "root_document_id": "doc:root",
+    "configuration": "Default",
+    "scope": "saved_snapshot"
+  },
+  "records": [
+    {
+      "record_id": "req:fixture",
+      "revision": 1,
+      "anchor": {
+        "anchor_id": "anchor:fixture",
+        "package_id": "11111111-2222-4333-8444-555555555555",
+        "kind": "component",
+        "entity_id": "cmp:0001",
+        "document_id": "doc:part",
+        "configuration": "Default",
+        "component_id": "cmp:0001",
+        "full_path": null,
+        "referenced_configuration": "Default",
+        "persist_ref": "ZmljdGlvbmFs",
+        "persist_ref_scope": "doc:root",
+        "transform_sha256": null,
+        "geometry_sha256": null
+      },
+      "provenance": {
+        "kind": "engineer",
+        "source": "fictional-test-input",
+        "reason": null
+      },
+      "assumptions": [
+        "Fictional offline test; no structural acceptance."
+      ],
+      "kind": "requirement",
+      "text": "Support the specified operating load."
+    },
+    {
+      "record_id": "force:fixture",
+      "revision": 1,
+      "anchor": {
+        "anchor_id": "anchor:fixture",
+        "package_id": "11111111-2222-4333-8444-555555555555",
+        "kind": "component",
+        "entity_id": "cmp:0001",
+        "document_id": "doc:part",
+        "configuration": "Default",
+        "component_id": "cmp:0001",
+        "full_path": null,
+        "referenced_configuration": "Default",
+        "persist_ref": "ZmljdGlvbmFs",
+        "persist_ref_scope": "doc:root",
+        "transform_sha256": null,
+        "geometry_sha256": null
+      },
+      "provenance": {
+        "kind": "engineer",
+        "source": "fictional-test-input",
+        "reason": null
+      },
+      "assumptions": [],
+      "kind": "applied_force",
+      "magnitude": {
+        "state": "known",
+        "value": 2.0,
+        "unit": "kN",
+        "reason": null
+      },
+      "direction": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "frame": {
+        "frame_id": "frame:fixture",
+        "document_id": "doc:root",
+        "component_id": null,
+        "transform": [
+          [
+            0.0,
+            -1.0,
+            0.0,
+            1.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0,
+            2.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            3.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ]
+      },
+      "application": "component_total",
+      "point_m": [
+        1.0,
+        0.0,
+        0.0
+      ]
+    }
+  ],
+  "confirmations": [],
+  "updated_at": "2026-10-14T00:00:00Z"
+}
