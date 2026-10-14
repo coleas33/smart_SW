@@ -667,7 +667,11 @@ public static partial class RemodelProbeExecutors
 
     private static RemodelProbeReading Probe8(RemodelProbeContext context)
     {
-        var raw = new Dictionary<string, string>(StringComparer.Ordinal);
+        var raw = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["accuracy_level"] = "default",
+            ["measurement_scope"] = "whole_part",
+        };
         bool anyMeasured = false;
         bool anyFailed = false;
 
@@ -678,8 +682,8 @@ public static partial class RemodelProbeExecutors
 
         RemodelProbeVerdict verdict = anyMeasured && !anyFailed ? RemodelProbeVerdict.Verified : RemodelProbeVerdict.Unresolved;
         raw["reason"] = verdict == RemodelProbeVerdict.Verified
-            ? "both shapes measured cleanly; the attained relative errors above are the calibration this probe exists to produce."
-            : "at least one shape's measurement was incomplete; see the per-shape status fields.";
+            ? "both default whole-part shapes measured cleanly and each override experiment was observed; only the plain readings supply attained calibration errors."
+            : "at least one plain reading or override experiment was incomplete; see the per-shape status fields.";
 
         return new RemodelProbeReading(
             verdict,
@@ -687,7 +691,18 @@ public static partial class RemodelProbeExecutors
             new[]
             {
                 SwRemodelProbeHost.Member.CreateMassProperty2,
-                SwRemodelProbeHost.Member.MassPropertySetAccuracyLevel,
+                "ClearSelection2",
+                "GetOverrideOptions",
+                "get_OverrideMass",
+                "get_OverrideCenterOfMass",
+                "get_OverrideMomentsOfInertia",
+                "IMassProperty2.SetOverrideOptions",
+                "IMassPropertyOverrideOptions.set_OverrideMass",
+                "IMassPropertyOverrideOptions.set_OverrideCenterOfMass",
+                "IMassPropertyOverrideOptions.set_OverrideMomentsOfInertia",
+                "IMassPropertyOverrideOptions.SetOverrideMassValue",
+                "IMassPropertyOverrideOptions.SetOverrideCenterOfMassValue",
+                "IMassPropertyOverrideOptions.SetOverridePrincipalMomentsOfInertia",
                 SwRemodelProbeHost.Member.MassPropertyRecalculate,
                 SwRemodelProbeHost.Member.MassPropertyGetVolume,
                 SwRemodelProbeHost.Member.MassPropertyGetSurfaceArea,
@@ -719,7 +734,13 @@ public static partial class RemodelProbeExecutors
                 return;
             }
 
-            reading.SetAccuracyLevel(RemodelGeometry.HigherAccuracy);
+            bool[]? plainFlags = OverrideFlags(reading);
+            if (plainFlags == null || plainFlags.Any(flag => flag))
+            {
+                raw[$"{label}_status"] = "plain override flags unreadable or set";
+                anyFailed = true;
+                return;
+            }
             reading.SetUseSystemUnits(true);
             bool recalculated = reading.Recalculate();
             if (!recalculated)
@@ -738,6 +759,14 @@ public static partial class RemodelProbeExecutors
             double exactVolume = AnalyticSolidMath.Volume(spec);
             double exactArea = AnalyticSolidMath.SurfaceArea(spec);
             double characteristicLength = AnalyticSolidMath.CharacteristicLength(spec);
+
+            if (!PositiveFinite(measuredVolume) || !PositiveFinite(measuredArea) || !PositiveFinite(density)
+                || !FiniteTriple(measuredCoM) || !PositiveTriple(measuredMoments))
+            {
+                raw[$"{label}_status"] = "plain measurement not positive and finite where required";
+                anyFailed = true;
+                return;
+            }
 
             raw[$"{label}_status"] = "measured";
             raw[$"{label}_volume_rel_error"] = FormatError(AnalyticSolidMath.RelativeError(measuredVolume, exactVolume));
@@ -775,6 +804,36 @@ public static partial class RemodelProbeExecutors
             }
 
             anyMeasured = true;
+            foreach (string kind in new[] { "mass", "center_of_mass", "moments" })
+            {
+                context.Host.ApplyMassPropertyOverride(part, kind);
+                IMassPropertyReading? experiment = context.Host.MeasureMassProperties(part);
+                bool[]? flags = experiment == null ? null : OverrideFlags(experiment);
+                string prefix = label + "_" + kind + "_override";
+                bool detected = flags != null && flags[0] == (kind == "mass")
+                    && flags[1] == (kind == "center_of_mass") && flags[2] == (kind == "moments");
+                raw[prefix + "_detected"] = detected ? "true" : "false";
+                if (experiment == null || flags == null)
+                {
+                    raw[prefix + "_honoured"] = "unreadable";
+                    anyFailed = true;
+                    continue;
+                }
+                experiment.SetUseSystemUnits(true);
+                if (!experiment.Recalculate())
+                {
+                    raw[prefix + "_honoured"] = "unreadable";
+                    anyFailed = true;
+                    continue;
+                }
+                bool? honoured = kind == "mass"
+                    ? SameOverride(experiment.GetMass(), RemodelProbeOverrideValues.Mass)
+                    : SameOverride(kind == "center_of_mass" ? experiment.GetCenterOfMass()
+                        : experiment.GetPrincipalMomentsOfInertia(), kind == "center_of_mass"
+                        ? RemodelProbeOverrideValues.Center() : RemodelProbeOverrideValues.Moments());
+                raw[prefix + "_honoured"] = honoured.HasValue ? (honoured.Value ? "true" : "false") : "unreadable";
+                if (!detected || !honoured.HasValue) anyFailed = true;
+            }
         }
         finally
         {
@@ -785,6 +844,26 @@ public static partial class RemodelProbeExecutors
             }
         }
     }
+
+    private static bool[]? OverrideFlags(IMassPropertyReading reading)
+    {
+        IMassPropertyOverrideReading? flags = reading.GetOverrideOptions();
+        return flags == null ? null : new[]
+        {
+            flags.GetOverrideMass(), flags.GetOverrideCenterOfMass(), flags.GetOverrideMomentsOfInertia(),
+        };
+    }
+
+    private static bool PositiveFinite(double value) => value > 0 && !double.IsInfinity(value);
+    private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
+    private static bool FiniteTriple(IReadOnlyList<double>? values) =>
+        values != null && values.Count == 3 && values.All(Finite);
+    private static bool PositiveTriple(IReadOnlyList<double>? values) =>
+        FiniteTriple(values) && values!.All(PositiveFinite);
+    private static bool? SameOverride(double measured, double expected) =>
+        Finite(measured) ? Math.Abs(measured - expected) <= Math.Abs(expected) * 1e-9 : (bool?)null;
+    private static bool? SameOverride(IReadOnlyList<double>? measured, IReadOnlyList<double> expected) =>
+        !FiniteTriple(measured) ? (bool?)null : measured!.Select((value, i) => SameOverride(value, expected[i]) == true).All(equal => equal);
 
     private static string FormatError(double value) => value.ToString("E6", CultureInfo.InvariantCulture);
 
@@ -1094,4 +1173,12 @@ public static partial class RemodelProbeExecutors
         {
         }
     }
+}
+
+/// <summary>Known SI fixture values, deliberately separate from the plain calibration readings.</summary>
+public static class RemodelProbeOverrideValues
+{
+    public const double Mass = 123.0;
+    public static double[] Center() => new[] { 0.013, 0.017, 0.019 };
+    public static double[] Moments() => new[] { 0.101, 0.202, 0.303 };
 }

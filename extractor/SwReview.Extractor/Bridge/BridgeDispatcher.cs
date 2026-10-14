@@ -1012,8 +1012,31 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
         // 6. The four settings that would otherwise open a modal on the thread the run holds.
         // They are writes to the engineer's application-wide settings, so they go through the
         // same gate every other write does, under their own two allowlist keys.
-        RemodelSystemToggles toggles = RemodelStageMarkers.Around(
-            stage, ApplyTogglesStep, () => RemodelSystemToggles.Apply(seat, _remodelGate));
+        RemodelSystemToggles? capturedToggles = null;
+        RemodelSystemToggles toggles;
+        try
+        {
+            toggles = RemodelStageMarkers.Around(
+                stage, ApplyTogglesStep,
+                () => RemodelSystemToggles.Apply(seat, _remodelGate, value => capturedToggles = value));
+        }
+        catch (Exception)
+        {
+            // No copy exists yet. A native setter may have changed a setting before throwing;
+            // keep its captured original through cleanup, and tell the pane if it remains out.
+            if (capturedToggles != null && capturedToggles.Outstanding.Count > 0)
+            {
+                var failures = new List<string>();
+                RemodelStageMarkers.Around(
+                    stage, UnwindSettingsStep, () => PutBackSettings(capturedToggles, failures));
+                Tell(new RemodelSessionEnd(
+                    RemodelSessionEnd.ReasonOpenFailed, runDirectory, copy,
+                    verified: false, failedCheck: null, tagRemoved: false, copyClosed: true,
+                    capturedToggles.Outstanding, failures));
+            }
+
+            throw;
+        }
 
         bool copyCreated = false;
         IRemodelDocument? document = null;
@@ -1109,6 +1132,7 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
             // put-back that throws fails this open, whose unwind tries it again and names it.
             RemodelStageMarkers.Around(
                 stage, RemodelSystemToggles.CommandInProgressMember, toggles.RestoreCommandInProgress);
+            RemodelStageMarkers.Around(stage, "settings.restore_idle", toggles.Restore);
 
             var session = new RemodelSession(
                 scope, document, _remodelGate, source, attestation, toggles)
@@ -1347,16 +1371,18 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     {
         RemodelRenameParams parameters = RemodelRenameParams.Read(request);
         RemodelSession session = Session();
-
-        ResolvedFeature target = session.Resolve(parameters.PersistRef);
-        session.Scope.Write(
-            NameKey, () => session.Document.SetFeatureName(target.Feature, parameters.NewName));
-
-        return new RemodelRenameResult
+        return session.WithSettings(Seat(), () =>
         {
-            PreviousName = target.Name,
-            NewName = parameters.NewName,
-        };
+            ResolvedFeature target = session.Resolve(parameters.PersistRef);
+            session.Scope.Write(
+                NameKey, () => session.Document.SetFeatureName(target.Feature, parameters.NewName));
+
+            return new RemodelRenameResult
+            {
+                PreviousName = target.Name,
+                NewName = parameters.NewName,
+            };
+        });
     }
 
     /// <summary>
@@ -1371,59 +1397,61 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     {
         RemodelReorderParams parameters = RemodelReorderParams.Read(request);
         RemodelSession session = Session();
-
-        // The tree walk comes first, and the whole of it: it is one GetFeaturesInOrder plus one
-        // GetPersistReference3 per feature, and a walk between the name reads and the move is
-        // exactly the gap in which a name stops addressing the feature it was read for.
-        IReadOnlyList<KeyValuePair<string, object>> before = RefsInOrder(session);
-        int previousIndex = IndexOf(before, parameters.FeaturePersistRef);
-
-        // The inverse, read from the tree rather than assumed: the feature goes back after the
-        // one it used to follow, or before the one it used to precede when it was first.
-        string? previousAnchor = null;
-        string? previousLocation = null;
-        if (previousIndex > 0)
+        return session.WithSettings(Seat(), () =>
         {
-            previousAnchor = before[previousIndex - 1].Key;
-            previousLocation = RemodelReorderLocations.After;
-        }
-        else if (before.Count > 1)
-        {
-            previousAnchor = before[1].Key;
-            previousLocation = RemodelReorderLocations.Before;
-        }
+            // The tree walk comes first, and the whole of it: it is one GetFeaturesInOrder plus one
+            // GetPersistReference3 per feature, and a walk between the name reads and the move is
+            // exactly the gap in which a name stops addressing the feature it was read for.
+            IReadOnlyList<KeyValuePair<string, object>> before = RefsInOrder(session);
+            int previousIndex = IndexOf(before, parameters.FeaturePersistRef);
 
-        int location = string.Equals(
-            parameters.Location, RemodelReorderLocations.Before, StringComparison.Ordinal)
-            ? MoveBefore
-            : MoveAfter;
+            // The inverse, read from the tree rather than assumed: the feature goes back after the
+            // one it used to follow, or before the one it used to precede when it was first.
+            string? previousAnchor = null;
+            string? previousLocation = null;
+            if (previousIndex > 0)
+            {
+                previousAnchor = before[previousIndex - 1].Key;
+                previousLocation = RemodelReorderLocations.After;
+            }
+            else if (before.Count > 1)
+            {
+                previousAnchor = before[1].Key;
+                previousLocation = RemodelReorderLocations.Before;
+            }
 
-        // Both refs resolved, both names read and the name-based call made in one breath: the
-        // only thing between them is VerifyTarget, which reads no name.
-        ResolvedFeature feature = session.Resolve(parameters.FeaturePersistRef);
-        ResolvedFeature anchor = session.Resolve(parameters.AnchorPersistRef);
+            int location = string.Equals(
+                parameters.Location, RemodelReorderLocations.Before, StringComparison.Ordinal)
+                ? MoveBefore
+                : MoveAfter;
 
-        bool moved = session.Scope.Write(
-            ReorderKey,
-            () => session.Document.ReorderFeature(feature.Name, anchor.Name, location));
+            // Both refs resolved, both names read and the name-based call made in one breath: the
+            // only thing between them is VerifyTarget, which reads no name.
+            ResolvedFeature feature = session.Resolve(parameters.FeaturePersistRef);
+            ResolvedFeature anchor = session.Resolve(parameters.AnchorPersistRef);
 
-        if (!moved)
-        {
-            throw new RemodelCommandError(
-                RemodelErrorCodes.ReorderRefused,
-                $"ReorderFeature('{feature.Name}', '{anchor.Name}', {location}) answered false. "
-                + "Legality was decided from the dependency graph before the call, so this is a "
-                + "contract violation: the run stops rather than retrying or searching for a "
-                + "position SOLIDWORKS would accept.");
-        }
+            bool moved = session.Scope.Write(
+                ReorderKey,
+                () => session.Document.ReorderFeature(feature.Name, anchor.Name, location));
 
-        return new RemodelReorderResult
-        {
-            PreviousAnchorPersistRef = previousAnchor,
-            PreviousLocation = previousLocation,
-            PreviousIndex = previousIndex,
-            NewIndex = IndexOf(RefsInOrder(session), parameters.FeaturePersistRef),
-        };
+            if (!moved)
+            {
+                throw new RemodelCommandError(
+                    RemodelErrorCodes.ReorderRefused,
+                    $"ReorderFeature('{feature.Name}', '{anchor.Name}', {location}) answered false. "
+                    + "Legality was decided from the dependency graph before the call, so this is a "
+                    + "contract violation: the run stops rather than retrying or searching for a "
+                    + "position SOLIDWORKS would accept.");
+            }
+
+            return new RemodelReorderResult
+            {
+                PreviousAnchorPersistRef = previousAnchor,
+                PreviousLocation = previousLocation,
+                PreviousIndex = previousIndex,
+                NewIndex = IndexOf(RefsInOrder(session), parameters.FeaturePersistRef),
+            };
+        });
     }
 
     /// <summary>
@@ -1455,10 +1483,12 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
         }
 
         RemodelSession session = Session();
-
-        return string.Equals(parameters.Op, RemodelFolderOps.Rename, StringComparison.Ordinal)
-            ? RenameFolder(session, parameters)
-            : CreateFolder(session, parameters);
+        return session.WithSettings(Seat(), () =>
+        {
+            return string.Equals(parameters.Op, RemodelFolderOps.Rename, StringComparison.Ordinal)
+                ? RenameFolder(session, parameters)
+                : CreateFolder(session, parameters);
+        });
     }
 
     private RemodelFolderResult RenameFolder(RemodelSession session, RemodelFolderParams parameters)
@@ -1644,25 +1674,27 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     {
         RemodelDescribeParams parameters = RemodelDescribeParams.Read(request);
         RemodelSession session = Session();
-
-        ResolvedFeature target = session.Resolve(parameters.PersistRef);
-        string? previous = session.Gate.Call(
-            DescriptionMember, () => session.Document.GetFeatureDescription(target.Feature));
-
-        if (previous == null)
+        return session.WithSettings(Seat(), () =>
         {
-            throw new RemodelCommandError(
-                RemodelErrorCodes.BadRequest,
-                $"the description of '{parameters.PersistRef}' could not be read, so writing one "
-                + "would leave a change with no inverse. The planner refuses a feature whose "
-                + "description is unreadable before the run starts.");
-        }
+            ResolvedFeature target = session.Resolve(parameters.PersistRef);
+            string? previous = session.Gate.Call(
+                DescriptionMember, () => session.Document.GetFeatureDescription(target.Feature));
 
-        session.Scope.Write(
-            DescriptionKey,
-            () => session.Document.SetFeatureDescription(target.Feature, parameters.Text));
+            if (previous == null)
+            {
+                throw new RemodelCommandError(
+                    RemodelErrorCodes.BadRequest,
+                    $"the description of '{parameters.PersistRef}' could not be read, so writing one "
+                    + "would leave a change with no inverse. The planner refuses a feature whose "
+                    + "description is unreadable before the run starts.");
+            }
 
-        return new RemodelDescribeResult { PreviousText = previous };
+            session.Scope.Write(
+                DescriptionKey,
+                () => session.Document.SetFeatureDescription(target.Feature, parameters.Text));
+
+            return new RemodelDescribeResult { PreviousText = previous };
+        });
     }
 
     /// <summary>
@@ -1674,33 +1706,36 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     {
         RemodelEquationParams parameters = RemodelEquationParams.Read(request);
         RemodelSession session = Session();
-        IEquationTarget equations = session.Gate.Call(EquationManagerMember, () => session.Document.Equations);
-
-        switch (parameters.Op)
+        return session.WithSettings(Seat(), () =>
         {
-            case RemodelEquationOps.Add:
-                return RemodelEquations.AddEquationVerified(
-                    session.Scope,
-                    session.Gate,
-                    equations,
-                    parameters.Index ?? -1,
-                    RequiredEquationText(parameters),
-                    parameters.WhichConfigs,
-                    null);
+            IEquationTarget equations = session.Gate.Call(EquationManagerMember, () => session.Document.Equations);
 
-            case RemodelEquationOps.Set:
-                return RemodelEquations.SetEquationVerified(
-                    session.Scope,
-                    session.Gate,
-                    equations,
-                    RequiredEquationIndex(parameters),
-                    RequiredEquationText(parameters),
-                    parameters.WhichConfigs,
-                    null);
+            switch (parameters.Op)
+            {
+                case RemodelEquationOps.Add:
+                    return RemodelEquations.AddEquationVerified(
+                        session.Scope,
+                        session.Gate,
+                        equations,
+                        parameters.Index ?? -1,
+                        RequiredEquationText(parameters),
+                        parameters.WhichConfigs,
+                        null);
 
-            default:
-                return DeleteEquation(session, equations, RequiredEquationIndex(parameters));
-        }
+                case RemodelEquationOps.Set:
+                    return RemodelEquations.SetEquationVerified(
+                        session.Scope,
+                        session.Gate,
+                        equations,
+                        RequiredEquationIndex(parameters),
+                        RequiredEquationText(parameters),
+                        parameters.WhichConfigs,
+                        null);
+
+                default:
+                    return DeleteEquation(session, equations, RequiredEquationIndex(parameters));
+            }
+        });
     }
 
     /// <summary>
@@ -1845,42 +1880,45 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     {
         RemodelRebuildParams parameters = RemodelRebuildParams.Read(request);
         RemodelSession session = Session();
-        IRemodelDocument document = session.Document;
-
-        var clock = Stopwatch.StartNew();
-        session.Scope.Write(RebuildKey, () => document.ForceRebuild(parameters.Force));
-        clock.Stop();
-
-        int rebuildErrors = session.Gate.Call(
-            WhatsWrongCountMember, document.GetWhatsWrongCount);
-        IReadOnlyList<string> whatsWrong = session.Gate.Call(
-            WhatsWrongMember, document.GetWhatsWrong);
-
-        var featureErrors = new List<RemodelFeatureError>();
-        foreach (KeyValuePair<string, object> node in RefsInOrder(session))
+        return session.WithSettings(Seat(), () =>
         {
-            object feature = node.Value;
-            bool isWarning = false;
-            int code = session.Gate.Call(
-                ErrorCodeMember, () => document.GetFeatureErrorCode(feature, out isWarning));
+            IRemodelDocument document = session.Document;
 
-            featureErrors.Add(new RemodelFeatureError
+            var clock = Stopwatch.StartNew();
+            session.Scope.Write(RebuildKey, () => document.ForceRebuild(parameters.Force));
+            clock.Stop();
+
+            int rebuildErrors = session.Gate.Call(
+                WhatsWrongCountMember, document.GetWhatsWrongCount);
+            IReadOnlyList<string> whatsWrong = session.Gate.Call(
+                WhatsWrongMember, document.GetWhatsWrong);
+
+            var featureErrors = new List<RemodelFeatureError>();
+            foreach (KeyValuePair<string, object> node in RefsInOrder(session))
             {
-                PersistRef = node.Key,
-                Name = session.Gate.Call(
-                    RemodelSession.NameMember, () => document.GetFeatureName(feature)),
-                ErrorCode = code,
-                IsWarning = isWarning,
-            });
-        }
+                object feature = node.Value;
+                bool isWarning = false;
+                int code = session.Gate.Call(
+                    ErrorCodeMember, () => document.GetFeatureErrorCode(feature, out isWarning));
 
-        return new RemodelRebuildResult
-        {
-            RebuildErrors = rebuildErrors,
-            WhatsWrong = whatsWrong,
-            ElapsedMs = clock.ElapsedMilliseconds,
-            FeatureErrors = featureErrors,
-        };
+                featureErrors.Add(new RemodelFeatureError
+                {
+                    PersistRef = node.Key,
+                    Name = session.Gate.Call(
+                        RemodelSession.NameMember, () => document.GetFeatureName(feature)),
+                    ErrorCode = code,
+                    IsWarning = isWarning,
+                });
+            }
+
+            return new RemodelRebuildResult
+            {
+                RebuildErrors = rebuildErrors,
+                WhatsWrong = whatsWrong,
+                ElapsedMs = clock.ElapsedMilliseconds,
+                FeatureErrors = featureErrors,
+            };
+        });
     }
 
     /// <summary>
@@ -1958,8 +1996,6 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     {
         RemodelSaveParams parameters = RemodelSaveParams.Read(request);
         RemodelSession session = Session();
-        RemodelScope scope = session.Scope;
-
         if (!string.Equals(parameters.Verdict, RemodelGateVerdicts.Pass, StringComparison.Ordinal)
             || session.GeometryReadings < RemodelGateVerdicts.ReadingsAVerdictNeeds)
         {
@@ -1991,59 +2027,64 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
                 });
         }
 
-        RemodelScope.AssertSaveTarget(
-            scope.CopyPath, scope.CopyPath, scope.RunDirectory, session.SourcePath);
-
-        IRemodelDocument document = session.Document;
-        int errors = 0;
-        int warnings = 0;
-        scope.Write(SaveKey, () => document.Save(RemodelCopy.SaveOptions, out errors, out warnings));
-
-        bool saveFlag = session.Gate.Call(SaveFlagMember, document.GetSaveFlag);
-
-        if (errors != 0)
+        return session.WithSettings(Seat(), () =>
         {
-            throw Failed(
-                scope.CopyPath,
-                errors,
-                warnings,
-                saveFlag,
-                $"Save3 answered error {errors} for '{scope.CopyPath}'.",
-                saved: false);
-        }
+            RemodelScope scope = session.Scope;
 
-        if ((warnings & RemodelCopy.SaveWarningRebuildError) != 0)
-        {
-            throw Failed(
-                scope.CopyPath,
-                errors,
-                warnings,
-                saveFlag,
-                $"'{scope.CopyPath}' was saved with a rebuild error warning "
-                + $"(swFileSaveWarning_RebuildError, warnings = {warnings}). The artifact is on "
-                + "disk and the run failed; this is not a success.",
-                saved: true);
-        }
+            RemodelScope.AssertSaveTarget(
+                scope.CopyPath, scope.CopyPath, scope.RunDirectory, session.SourcePath);
 
-        if (saveFlag)
-        {
-            throw Failed(
-                scope.CopyPath,
-                errors,
-                warnings,
-                saveFlag,
-                $"'{scope.CopyPath}' still reports GetSaveFlag() after the save, so SOLIDWORKS "
-                + "still considers it dirty and the file on disk is not what was measured.",
-                saved: false);
-        }
+            IRemodelDocument document = session.Document;
+            int errors = 0;
+            int warnings = 0;
+            scope.Write(SaveKey, () => document.Save(RemodelCopy.SaveOptions, out errors, out warnings));
 
-        return new RemodelSaveResult
-        {
-            Path = scope.CopyPath,
-            Errors = errors,
-            Warnings = warnings,
-            SaveFlagAfter = saveFlag,
-        };
+            bool saveFlag = session.Gate.Call(SaveFlagMember, document.GetSaveFlag);
+
+            if (errors != 0)
+            {
+                throw Failed(
+                    scope.CopyPath,
+                    errors,
+                    warnings,
+                    saveFlag,
+                    $"Save3 answered error {errors} for '{scope.CopyPath}'.",
+                    saved: false);
+            }
+
+            if ((warnings & RemodelCopy.SaveWarningRebuildError) != 0)
+            {
+                throw Failed(
+                    scope.CopyPath,
+                    errors,
+                    warnings,
+                    saveFlag,
+                    $"'{scope.CopyPath}' was saved with a rebuild error warning "
+                    + $"(swFileSaveWarning_RebuildError, warnings = {warnings}). The artifact is on "
+                    + "disk and the run failed; this is not a success.",
+                    saved: true);
+            }
+
+            if (saveFlag)
+            {
+                throw Failed(
+                    scope.CopyPath,
+                    errors,
+                    warnings,
+                    saveFlag,
+                    $"'{scope.CopyPath}' still reports GetSaveFlag() after the save, so SOLIDWORKS "
+                    + "still considers it dirty and the file on disk is not what was measured.",
+                    saved: false);
+            }
+
+            return new RemodelSaveResult
+            {
+                Path = scope.CopyPath,
+                Errors = errors,
+                Warnings = warnings,
+                SaveFlagAfter = saveFlag,
+            };
+        });
     }
 
     private static RemodelCommandError Failed(

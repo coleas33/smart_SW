@@ -67,6 +67,7 @@ public sealed class RemodelRun
     private int _planLostNotice;
     private bool _closedByPlanAgain;
     private bool _sessionClosedAtPlan;
+    private bool _sessionEnded;
 
     internal RemodelRun(
         string runDirectory, string copyPath, DateTime at, string? toolServiceAttachment)
@@ -126,6 +127,15 @@ public sealed class RemodelRun
     public bool SessionClosedAtPlan => Volatile.Read(ref _sessionClosedAtPlan);
 
     internal void MarkSessionClosedAtPlan() => Volatile.Write(ref _sessionClosedAtPlan, true);
+
+    /// <summary>
+    /// Whether the bridge answered an end of this exact run's session, including a finished run's
+    /// close. A close against an old run must never reach a newer run's session on the same pipe.
+    /// </summary>
+    public bool SessionEnded => Volatile.Read(ref _sessionEnded);
+
+    internal void MarkSessionEnded() => Volatile.Write(ref _sessionEnded, true);
+
 
     /// <summary>
     /// Whether a stop has been asked for, by `remodel.stop` or by the copy going away

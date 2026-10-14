@@ -4,7 +4,7 @@
   "assembly_version": "32.5.0.48",
   "swconst_version": "32.5.0.48",
   "product": "SOLIDWORKS 2024 SP5",
-  "generated_at": "2026-09-29T01:38:14Z",
+  "generated_at": "2026-10-14T01:15:51Z",
   "generated_by": "swreview-extract probe interop --emit-manifest",
   "members": [
     {
@@ -294,7 +294,8 @@
       "returns": "System.Void",
       "used_by": [
         "remodel.folder",
-        "remodel.geometry"
+        "remodel.geometry",
+        "PROBE-8"
       ],
       "allowlisted": true,
       "note": "around every selection-based operation, and before the whole-part geometry reading, which includes pre-selected bodies (U27)"
@@ -443,7 +444,14 @@
       "returns": "System.Void",
       "used_by": [
         "remodel.open",
-        "remodel.close"
+        "remodel.close",
+        "remodel.rename",
+        "remodel.reorder",
+        "remodel.folder",
+        "remodel.describe",
+        "remodel.equation",
+        "remodel.rebuild",
+        "remodel.save"
       ],
       "allowlisted": true,
       "note": "the three toggles 10, 77 and 329 only, restored in a finally"
@@ -462,7 +470,14 @@
       "returns": "System.Void",
       "used_by": [
         "remodel.open",
-        "remodel.close"
+        "remodel.close",
+        "remodel.rename",
+        "remodel.reorder",
+        "remodel.folder",
+        "remodel.describe",
+        "remodel.equation",
+        "remodel.rebuild",
+        "remodel.save"
       ],
       "allowlisted": true,
       "note": "a property, not a swUserPreferenceToggle_e value; it is deliberately absent from the enums block"
@@ -542,7 +557,14 @@
       "returns": "System.Boolean",
       "used_by": [
         "remodel.probe_scope",
-        "remodel.open"
+        "remodel.open",
+        "remodel.rename",
+        "remodel.reorder",
+        "remodel.folder",
+        "remodel.describe",
+        "remodel.equation",
+        "remodel.rebuild",
+        "remodel.save"
       ],
       "allowlisted": false,
       "note": "records each toggle's original value; a value that cannot be read refuses the start; U26: reads swExtRefNoPromptOrSave, which decides whether a read-only source's GetSaveFlag can be believed"
@@ -555,7 +577,14 @@
       "parameters": [],
       "returns": "System.Boolean",
       "used_by": [
-        "remodel.open"
+        "remodel.open",
+        "remodel.rename",
+        "remodel.reorder",
+        "remodel.folder",
+        "remodel.describe",
+        "remodel.equation",
+        "remodel.rebuild",
+        "remodel.save"
       ],
       "allowlisted": false,
       "note": "records the flag's original value for the finally restore"
@@ -737,7 +766,8 @@
       "parameters": [],
       "returns": "System.Object",
       "used_by": [
-        "remodel.geometry"
+        "remodel.geometry",
+        "PROBE-8"
       ],
       "allowlisted": false,
       "note": "the typed interface, not the raw Object from GetMassProperties2"
@@ -1103,13 +1133,205 @@
     },
     {
       "interface": "IMassProperty2",
+      "member": "GetOverrideOptions",
+      "kind": "method",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.Object",
+      "used_by": [
+        "remodel.geometry",
+        "PROBE-8"
+      ],
+      "allowlisted": false,
+      "note": "unreadable options fail closed; only the analytic probe configures them"
+    },
+    {
+      "interface": "IMassPropertyOverrideOptions",
+      "member": "get_OverrideMass",
+      "kind": "property-get",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.Boolean",
+      "used_by": [
+        "remodel.geometry",
+        "PROBE-8"
+      ],
+      "allowlisted": false
+    },
+    {
+      "interface": "IMassPropertyOverrideOptions",
+      "member": "get_OverrideCenterOfMass",
+      "kind": "property-get",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.Boolean",
+      "used_by": [
+        "remodel.geometry",
+        "PROBE-8"
+      ],
+      "allowlisted": false
+    },
+    {
+      "interface": "IMassPropertyOverrideOptions",
+      "member": "get_OverrideMomentsOfInertia",
+      "kind": "property-get",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.Boolean",
+      "used_by": [
+        "remodel.geometry",
+        "PROBE-8"
+      ],
+      "allowlisted": false
+    },
+    {
+      "interface": "IMassProperty2",
+      "member": "SetOverrideOptions",
+      "kind": "method",
+      "arity": 3,
+      "parameters": [
+        {
+          "name": "Options",
+          "type": "System.Object"
+        },
+        {
+          "name": "Config_option",
+          "type": "System.Int32"
+        },
+        {
+          "name": "Config_names",
+          "type": "System.Object"
+        }
+      ],
+      "returns": "System.Boolean",
+      "used_by": [
+        "PROBE-8"
+      ],
+      "allowlisted": false,
+      "note": "probe-only fixture write, never in the stage-1 allowlist"
+    },
+    {
+      "interface": "IMassPropertyOverrideOptions",
+      "member": "set_OverrideMass",
+      "kind": "property-set",
+      "arity": 1,
+      "parameters": [
+        {
+          "name": "Retval",
+          "type": "System.Boolean"
+        }
+      ],
+      "returns": "System.Void",
+      "used_by": [
+        "PROBE-8"
+      ],
+      "allowlisted": false,
+      "note": "probe-only fixture write"
+    },
+    {
+      "interface": "IMassPropertyOverrideOptions",
+      "member": "set_OverrideCenterOfMass",
+      "kind": "property-set",
+      "arity": 1,
+      "parameters": [
+        {
+          "name": "Retval",
+          "type": "System.Boolean"
+        }
+      ],
+      "returns": "System.Void",
+      "used_by": [
+        "PROBE-8"
+      ],
+      "allowlisted": false,
+      "note": "probe-only fixture write"
+    },
+    {
+      "interface": "IMassPropertyOverrideOptions",
+      "member": "set_OverrideMomentsOfInertia",
+      "kind": "property-set",
+      "arity": 1,
+      "parameters": [
+        {
+          "name": "Retval",
+          "type": "System.Boolean"
+        }
+      ],
+      "returns": "System.Void",
+      "used_by": [
+        "PROBE-8"
+      ],
+      "allowlisted": false,
+      "note": "probe-only fixture write"
+    },
+    {
+      "interface": "IMassPropertyOverrideOptions",
+      "member": "SetOverrideMassValue",
+      "kind": "method",
+      "arity": 1,
+      "parameters": [
+        {
+          "name": "Value",
+          "type": "System.Double"
+        }
+      ],
+      "returns": "System.Boolean",
+      "used_by": [
+        "PROBE-8"
+      ],
+      "allowlisted": false,
+      "note": "probe-only fixture write; known SI value"
+    },
+    {
+      "interface": "IMassPropertyOverrideOptions",
+      "member": "SetOverrideCenterOfMassValue",
+      "kind": "method",
+      "arity": 2,
+      "parameters": [
+        {
+          "name": "Value",
+          "type": "System.Object"
+        },
+        {
+          "name": "CoordinateSystemName",
+          "type": "System.String"
+        }
+      ],
+      "returns": "System.Boolean",
+      "used_by": [
+        "PROBE-8"
+      ],
+      "allowlisted": false,
+      "note": "probe-only fixture write; three known metres, default coordinate system"
+    },
+    {
+      "interface": "IMassPropertyOverrideOptions",
+      "member": "SetOverridePrincipalMomentsOfInertia",
+      "kind": "method",
+      "arity": 1,
+      "parameters": [
+        {
+          "name": "Value",
+          "type": "System.Object"
+        }
+      ],
+      "returns": "System.Boolean",
+      "used_by": [
+        "PROBE-8"
+      ],
+      "allowlisted": false,
+      "note": "probe-only fixture write; three known SI moments"
+    },
+    {
+      "interface": "IMassProperty2",
       "member": "Recalculate",
       "kind": "method",
       "arity": 0,
       "parameters": [],
       "returns": "System.Boolean",
       "used_by": [
-        "remodel.geometry"
+        "remodel.geometry",
+        "PROBE-8"
       ],
       "allowlisted": false,
       "note": "its Boolean is checked before anything is read"
@@ -1127,10 +1349,10 @@
       ],
       "returns": "System.Void",
       "used_by": [
-        "PROBE-8"
+        "adapter.tests"
       ],
       "allowlisted": false,
-      "note": "swMassPropertyAccuracyLevel_Higher = 2; not set by remodel.geometry since U27"
+      "note": "retained adapter mapping; no production command sets accuracy since T187"
     },
     {
       "interface": "IMassProperty2",
@@ -1145,10 +1367,10 @@
       ],
       "returns": "System.Void",
       "used_by": [
-        "PROBE-8"
+        "adapter.tests"
       ],
       "allowlisted": false,
-      "note": "the body PROBE-8 measures, as a DispatchWrapper array; remodel.geometry reads the whole part since U27"
+      "note": "retained adapter mapping; no production command sets selected items since T187"
     },
     {
       "interface": "IMassProperty2",
@@ -1163,7 +1385,8 @@
       ],
       "returns": "System.Void",
       "used_by": [
-        "remodel.geometry"
+        "remodel.geometry",
+        "PROBE-8"
       ],
       "allowlisted": false,
       "note": "set true BEFORE Recalculate, or the numbers come back in the document's display units (research R12)"
@@ -1176,7 +1399,8 @@
       "parameters": [],
       "returns": "System.Double",
       "used_by": [
-        "remodel.geometry"
+        "remodel.geometry",
+        "PROBE-8"
       ],
       "allowlisted": false
     },
@@ -1188,7 +1412,8 @@
       "parameters": [],
       "returns": "System.Double",
       "used_by": [
-        "remodel.geometry"
+        "remodel.geometry",
+        "PROBE-8"
       ],
       "allowlisted": false
     },
@@ -1200,7 +1425,8 @@
       "parameters": [],
       "returns": "System.Object",
       "used_by": [
-        "remodel.geometry"
+        "remodel.geometry",
+        "PROBE-8"
       ],
       "allowlisted": false
     },
@@ -1212,7 +1438,8 @@
       "parameters": [],
       "returns": "System.Object",
       "used_by": [
-        "remodel.geometry"
+        "remodel.geometry",
+        "PROBE-8"
       ],
       "allowlisted": false,
       "note": "sorted ascending by the C# side before comparison"
@@ -1225,7 +1452,8 @@
       "parameters": [],
       "returns": "System.Double",
       "used_by": [
-        "remodel.geometry"
+        "remodel.geometry",
+        "PROBE-8"
       ],
       "allowlisted": false,
       "note": "recorded and compared separately, never as geometry"
@@ -1238,7 +1466,8 @@
       "parameters": [],
       "returns": "System.Double",
       "used_by": [
-        "remodel.geometry"
+        "remodel.geometry",
+        "PROBE-8"
       ],
       "allowlisted": false,
       "note": "comes from the material, which is not geometry"

@@ -137,6 +137,8 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
     private readonly Action<string, Exception?> _report;
     private readonly Action<Action> _schedule;
     private readonly Func<bool> _busy;
+    private readonly Func<string, string, bool>? _preserveAttachment;
+    private readonly Action<IToolService> _afterStopped;
     private readonly object _lock = new object();
 
     private IToolService? _service;
@@ -153,7 +155,8 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
     /// <c>POST /sessions</c> carries - and is called with null when one stops, so that what is
     /// published is never a pipe that has been closed. Every change of <see cref="Attachment"/>
     /// is published, and <see cref="Attachment"/> already answers the new state when it is: the
-    /// Remodel tab tells the page a plan is lost from this callback (decision 24A).</param>
+    /// Remodel tab refreshes capability from this callback; lost-plan notification follows the
+    /// disposal attempt through <paramref name="afterStopped"/> (T180).</param>
     /// <param name="report">A failed start, or a document not attached to, for the pane and the
     /// add-in log. The exception is null when nothing threw: a refusal is not a failure, but it
     /// is just as invisible if it is not said.</param>
@@ -162,13 +165,19 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
     /// a remodel run. Asked by <see cref="FollowDocument"/> only, on the scheduled thread and
     /// off the lock, because the add-in's answer costs an HTTP round trip per open chat.
     /// Defaults to "never busy", which is right for a gate with no work to hold it.</param>
+    /// <param name="preserveAttachment">Whether the exact active copy still belongs to a held
+    /// planned session on this pipe. Optional; called off the lock on the scheduled thread.</param>
+    /// <param name="afterStopped">Notification after the Dispose attempt, including a thrown or
+    /// deferred cleanup. Returning from Dispose alone proves no cleanup facts.</param>
     public ToolServiceGate(
         Func<PageDocument?> activeDocument,
         Func<IToolService> start,
         Action<IToolService?> publish,
         Action<string, Exception?> report,
         Action<Action>? schedule = null,
-        Func<bool>? busy = null)
+        Func<bool>? busy = null,
+        Func<string, string, bool>? preserveAttachment = null,
+        Action<IToolService>? afterStopped = null)
     {
         _activeDocument = activeDocument ?? throw new ArgumentNullException(nameof(activeDocument));
         _start = start ?? throw new ArgumentNullException(nameof(start));
@@ -176,6 +185,8 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
         _report = report ?? throw new ArgumentNullException(nameof(report));
         _schedule = schedule ?? (work => ThreadPool.QueueUserWorkItem(_ => work()));
         _busy = busy ?? (() => false);
+        _preserveAttachment = preserveAttachment;
+        _afterStopped = afterStopped ?? (_ => { });
     }
 
     /// <summary>The running service, or null. Null is an ordinary state, not a failure.</summary>
@@ -324,10 +335,10 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
     /// engineer is told through the tool-service log rather than by a silent no-op, because
     /// this is the one case where the bridge really does keep answering about the other
     /// document. A busy question that throws counts as busy: a teardown cannot be undone. A
-    /// remodel plan waiting for Start is not such work (decision 22A): it holds nothing, the
-    /// re-attach goes ahead and throws the plan's session away, and the Remodel tab refuses
-    /// that plan's Start by name because <see cref="Attachment"/> has changed - and says so to
-    /// the engineer as soon as the old service is withdrawn, before Start (decision 24A).
+    /// remodel plan waiting for Start does not make the host busy (decision 22A). T180 preserves
+    /// its original attachment only while its exact held copy is active; an ordinary document
+    /// switch still tears it down. The Remodel tab refuses a lost plan by name, and tells the
+    /// engineer after the disposal attempt without claiming delayed cleanup succeeded.
     /// </summary>
     public void FollowDocument(string? activePath)
     {
@@ -399,9 +410,24 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
     private void FollowCore(IToolService attached, string activePath)
     {
         bool busy;
+        bool preserve = false;
         try
         {
             busy = _busy();
+            if (!busy && _preserveAttachment != null)
+            {
+                // A second document event can arrive while this follow is queued. Preserve the
+                // exact held copy only if it is active now, never from the older event's path.
+                PageDocument? current = _activeDocument();
+                if (current == null || !current.IsAttachable || SameDocument(attached.DocumentPath, current.Path))
+                {
+                    ClearStarting();
+                    return;
+                }
+
+                activePath = current.Path;
+                preserve = _preserveAttachment(activePath, attached.PipeName);
+            }
         }
         catch (Exception failure)
         {
@@ -410,13 +436,14 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
             return;
         }
 
-        if (busy)
+        if (busy || preserve)
         {
             ClearStarting();
             Log(
                 attached,
                 "not re-attaching to " + activePath
-                + ": a turn is running against " + attached.DocumentPath);
+                + (busy ? ": a turn is running against " : ": the planned copy still belongs to ")
+                + attached.DocumentPath);
             return;
         }
 
@@ -607,6 +634,17 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
         catch (Exception failure)
         {
             _report("The SwReview tool service did not stop cleanly.", failure);
+        }
+        finally
+        {
+            try
+            {
+                _afterStopped(service);
+            }
+            catch (Exception failure)
+            {
+                _report("The pane could not be told the SwReview tool service stopped.", failure);
+            }
         }
     }
 }
