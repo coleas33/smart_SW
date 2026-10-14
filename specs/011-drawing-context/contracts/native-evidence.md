@@ -97,11 +97,15 @@ the reads that need the model (the attachments below) are not attempted and one
 ### Attachments
 
 For a display dimension (through `IDisplayDimension.GetAnnotation`) or a typed annotation:
-`IAnnotation.GetAttachedEntities3`; for each entity, `IView.GetCorrespondingEntity` on the owning
-view; a face is kept, an edge becomes its two adjacent faces (`IEdge.GetTwoAdjacentFaces2`, each
-`via: edge`); for each face, the owning part document (the view's referenced document for a part
-drawing, the entity's component's document for an assembly drawing) and that document's
-`GetPersistReference3`. Faces are deduplicated by reference. Any other entity, or any step that
+`IAnnotation.GetAttachedEntities3`; for each original attachment, find its owning part document
+(the view's referenced document for a part drawing, the original entity's component's document
+for an assembly drawing), then map it through that document's
+`IModelDocExtension.GetCorrespondingEntity2`. Ownership is resolved before mapping because a
+part-context entity no longer carries the assembly component. A mapped face is kept; a mapped
+edge becomes its two adjacent part faces (`IEdge.GetTwoAdjacentFaces2`, each `via: edge`), and
+all of their references come from the same owning part's `GetPersistReference3`. No readable part
+owner or mapping means no persistent-reference call. Faces are deduplicated by reference. Any
+other entity, or any step that
 answers null or throws, adds no row; the annotation gets one `drawing_attachment` gap "{n} of {m}
 attached entities could not be tied to a model face". This path is probe D6's; nothing binds through
 it until T066 (`drawing-source.md` section 3).

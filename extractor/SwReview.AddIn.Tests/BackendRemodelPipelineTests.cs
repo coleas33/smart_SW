@@ -1088,6 +1088,169 @@ public sealed class BackendRemodelPipelineTests : IDisposable
         Assert.Empty(second.Backend.Calls);
     }
 
+    // ---- native open-copy identity and SOLIDWORKS lock files -------------------------------
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void U30PlanIgnoresTheOpenCopysSolidWorksLockFile(bool withOpenRecord)
+    {
+        var world = new World(this);
+        string runDirectory = world.RunFolder();
+        string copy = World.CopyOf(runDirectory);
+        File.WriteAllText(Path.Combine(runDirectory, "copy", "~$bracket-RMS.SLDPRT"), "lock");
+        if (withOpenRecord)
+        {
+            WriteOpenRecord(runDirectory, copy);
+        }
+
+        world.Pipeline.Plan(runDirectory, world.Reporter);
+
+        Assert.Equal(new[] { copy }, world.Seat.ActivatedOpen);
+        Assert.Equal("plan", world.Backend.Calls.Single().Route);
+        Assert.True(File.Exists(Path.Combine(runDirectory, "package-before.json")));
+    }
+
+    [Fact]
+    public void U30AfterDumpIgnoresTheOpenCopysSolidWorksLockFile()
+    {
+        var world = new World(this);
+        string runDirectory = world.RunFolder();
+        File.WriteAllText(Path.Combine(runDirectory, "copy", "~$bracket-RMS.SLDPRT"), "lock");
+        WriteOpenRecord(runDirectory, World.CopyOf(runDirectory));
+        world.Backend.StatusAt = poll => poll == 0 ? Awaiting("verifying", 0, 0) : Finished("saved", 0);
+
+        RemodelRunOutcome outcome = world.Pipeline.Run(runDirectory, world.Reporter);
+
+        Assert.Equal("saved", outcome.State);
+        Assert.Equal(new[] { World.CopyOf(runDirectory) }, world.Seat.ActivatedOpen);
+        Assert.Single(world.Backend.PackageAfterPaths);
+        Assert.True(File.Exists(Path.Combine(runDirectory, "package-after.json")));
+    }
+
+    [Fact]
+    public void U30ActivateCopyIgnoresTheSolidWorksLockFile()
+    {
+        var world = new World(this);
+        string runDirectory = world.RunFolder();
+        File.WriteAllText(Path.Combine(runDirectory, "copy", "~$bracket-RMS.sldprt"), "lock");
+        WriteOpenRecord(runDirectory, World.CopyOf(runDirectory));
+
+        world.Pipeline.ActivateCopy(runDirectory);
+
+        Assert.Equal(new[] { World.CopyOf(runDirectory) }, world.Seat.Activated);
+    }
+
+    [Fact]
+    public void U30ALockAloneDoesNotBecomeACopy()
+    {
+        var world = new World(this);
+        string runDirectory = world.RunFolder(withCopy: false);
+        Directory.CreateDirectory(Path.Combine(runDirectory, "copy"));
+        File.WriteAllText(Path.Combine(runDirectory, "copy", "~$bracket-RMS.SLDPRT"), "lock");
+
+        RemodelRefusal refusal = Assert.Throws<RemodelRefusal>(
+            () => world.Pipeline.ActivateCopy(runDirectory));
+
+        Assert.Equal("CopyDiscarded", refusal.ErrorClass);
+        Assert.Empty(world.Seat.Activated);
+    }
+
+    [Theory]
+    [InlineData("plan")]
+    [InlineData("activate")]
+    public void U30TwoRealPartsAreStillRefusedWithAnExactOpenRecordAndALock(string operation)
+    {
+        var world = new World(this);
+        string runDirectory = world.RunFolder();
+        File.WriteAllText(Path.Combine(runDirectory, "copy", "~$bracket-RMS.SLDPRT"), "lock");
+        File.WriteAllText(Path.Combine(runDirectory, "copy", "other-RMS.SLDPRT"), "another real part");
+        WriteOpenRecord(runDirectory, World.CopyOf(runDirectory));
+
+        InvalidOperationException failure = Assert.Throws<InvalidOperationException>(() =>
+        {
+            if (operation == "plan")
+            {
+                world.Pipeline.Plan(runDirectory, world.Reporter);
+            }
+            else
+            {
+                world.Pipeline.ActivateCopy(runDirectory);
+            }
+        });
+
+        Assert.Contains("holds 2 parts", failure.Message, StringComparison.Ordinal);
+        Assert.Empty(world.Seat.ActivatedOpen);
+        Assert.Empty(world.Seat.Activated);
+        Assert.Empty(world.Dump.Folders);
+        Assert.Empty(world.Backend.Calls);
+    }
+
+    [Theory]
+    [InlineData("different real part")]
+    [InlineData("source")]
+    [InlineData("lock")]
+    [InlineData("relative")]
+    [InlineData("no copy path")]
+    [InlineData("malformed")]
+    public void U30AnOpenRecordThatDoesNotNameTheExactCopyStopsBeforeAnyActivation(string how)
+    {
+        var world = new World(this);
+        string runDirectory = world.RunFolder();
+        string record = Path.Combine(runDirectory, "open.json");
+        switch (how)
+        {
+            case "different real part":
+                WriteOpenRecord(runDirectory, Path.Combine(runDirectory, "copy", "other-RMS.SLDPRT"));
+                break;
+            case "source":
+                WriteOpenRecord(runDirectory, SourcePath);
+                break;
+            case "lock":
+                WriteOpenRecord(runDirectory, Path.Combine(runDirectory, "copy", "~$bracket-RMS.SLDPRT"));
+                break;
+            case "relative":
+                WriteOpenRecord(runDirectory, "bracket-RMS.SLDPRT");
+                break;
+            case "no copy path":
+                File.WriteAllText(record, "{}");
+                break;
+            case "malformed":
+                File.WriteAllText(record, "{");
+                break;
+        }
+
+        Exception failure = Assert.ThrowsAny<Exception>(
+            () => world.Pipeline.Plan(runDirectory, world.Reporter));
+
+        Assert.DoesNotContain(SourcePath, failure.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(world.Seat.ActivatedOpen);
+        Assert.Empty(world.Dump.Folders);
+        Assert.Empty(world.Backend.Calls);
+    }
+
+    [Theory]
+    [InlineData("~$bracket-RMS.SLDPRT")]
+    [InlineData("other-RMS.SLDPRT")]
+    public void U30APlanRefusesADumpNamingAnotherPathInTheCopyFolder(string fileName)
+    {
+        var world = new World(this);
+        string runDirectory = world.RunFolder();
+        WriteOpenRecord(runDirectory, World.CopyOf(runDirectory));
+        world.Dump.DocumentPath = Path.Combine(runDirectory, "copy", fileName);
+
+        Assert.ThrowsAny<Exception>(() => world.Pipeline.Plan(runDirectory, world.Reporter));
+
+        Assert.Equal(new[] { World.CopyOf(runDirectory) }, world.Seat.ActivatedOpen);
+        Assert.False(File.Exists(Path.Combine(runDirectory, "package-before.json")));
+        Assert.True(File.Exists(Path.Combine(runDirectory, "package.json")));
+        Assert.Empty(world.Backend.Calls);
+    }
+
+    private static void WriteOpenRecord(string runDirectory, string copyPath) =>
+        File.WriteAllText(Path.Combine(runDirectory, "open.json"),
+            JsonSerializer.Serialize(new { copy_path = copyPath }));
+
     // ---- helpers ----------------------------------------------------------------------------
 
     private static RemodelRunStatus Running(

@@ -215,6 +215,101 @@ def test_a_remodel_run_that_stopped_at_the_baseline_names_what_it_did_not_reach(
     assert manifest["missing_artifacts"] == ["open.json", "package-before.json", "plan.json"]
 
 
+@pytest.mark.parametrize("run_kind", ["review", "remodel"])
+@pytest.mark.parametrize("trace_present", [False, True])
+def test_extraction_progress_is_optional_and_exported_with_normal_privacy_rules(
+    tmp_path: Path, run_kind: str, trace_present: bool
+) -> None:
+    run_dir = tmp_path / "run"
+    if run_kind == "remodel":
+        write_remodel_run(run_dir, planned=True)
+    else:
+        write_run(run_dir)
+    trace_name = "extraction-progress.jsonl"
+    if trace_present:
+        (run_dir / trace_name).write_text(
+            json.dumps({"sequence": 1, "phase": "drawing", "state": "gated",
+                        "member": "TableAnnotation.GetAttachedEntities3",
+                        "message": SECRET, "key": SHAPED_KEY}) + "\n",
+            encoding="utf-8",
+        )
+    # A similarly named neighbor and files below the run are not discovered recursively.
+    (tmp_path / trace_name).write_text("FICT-outside-run", encoding="utf-8")
+    nested = run_dir / "nested"
+    nested.mkdir()
+    (nested / trace_name).write_text("FICT-nested-trace", encoding="utf-8")
+
+    entries = read_zip(export_handoff(
+        run_dir, tmp_path / "handoff.zip", secrets=[SECRET], exported_at=STAMP
+    ))
+    manifest = json.loads(entries["handoff-manifest.json"])
+    assert manifest["run_kind"] == run_kind
+    assert manifest["missing_artifacts"] == []
+    assert (trace_name in entries) is trace_present
+    assert trace_name not in {row["path"] for row in manifest["excluded_artifacts"]}
+    joined = b"".join(entries.values())
+    assert SECRET.encode() not in joined
+    assert SHAPED_KEY.encode() not in joined
+    assert b"FICT-outside-run" not in joined
+    assert b"FICT-nested-trace" not in joined
+    assert not any(name.lower().endswith((".sldprt", ".sldasm")) for name in entries)
+    assert "settings.json" not in entries
+    if trace_present:
+        row = json.loads(entries[trace_name])
+        assert row["member"] == "TableAnnotation.GetAttachedEntities3"
+        record = next(row for row in manifest["artifacts"] if row["path"] == trace_name)
+        assert record["source"] == "run_dir"
+        assert record["sha256"] == hashlib.sha256(entries[trace_name]).hexdigest()
+        assert record["redacted"] is True
+
+
+@pytest.mark.parametrize("run_kind", ["review", "remodel"])
+def test_extraction_progress_remains_subject_to_optional_artifact_size_limit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, run_kind: str
+) -> None:
+    run_dir = tmp_path / "run"
+    if run_kind == "remodel":
+        write_remodel_run(run_dir, planned=True)
+    else:
+        write_run(run_dir)
+    trace_name = "extraction-progress.jsonl"
+    (run_dir / trace_name).write_bytes(b"x" * 4097)
+    monkeypatch.setattr(handoff, "MAX_ARTIFACT_BYTES", 4096)
+
+    entries = read_zip(export_handoff(run_dir, tmp_path / "handoff.zip", exported_at=STAMP))
+
+    manifest = json.loads(entries["handoff-manifest.json"])
+    assert trace_name not in entries
+    assert {row["path"] for row in manifest["excluded_artifacts"]} == {trace_name}
+    assert manifest["missing_artifacts"] == []
+
+
+@pytest.mark.parametrize("run_kind", ["review", "remodel"])
+def test_extraction_progress_refuses_an_artifact_that_resolves_outside_the_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, run_kind: str
+) -> None:
+    run_dir = tmp_path / "run"
+    if run_kind == "remodel":
+        write_remodel_run(run_dir, planned=True)
+    else:
+        write_run(run_dir)
+    trace = run_dir / "extraction-progress.jsonl"
+    trace.write_text("FICT-in-run", encoding="utf-8")
+    outside = tmp_path / "outside.jsonl"
+    outside.write_text("FICT-outside-run", encoding="utf-8")
+    original_resolve = Path.resolve
+
+    # Model an escaping filesystem resolution without requiring host symlink privileges.
+    def escaped_resolution(path: Path, *args: Any, **kwargs: Any) -> Path:
+        return outside if path == trace else original_resolve(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "resolve", escaped_resolution)
+    archive = tmp_path / "handoff.zip"
+    with pytest.raises(HandoffExportError, match="escapes the run directory"):
+        export_handoff(run_dir, archive, exported_at=STAMP)
+    assert not archive.exists()
+
+
 def test_a_review_run_keeps_the_review_shape(tmp_path: Path) -> None:
     run_dir = tmp_path / "run"
     write_run(run_dir)

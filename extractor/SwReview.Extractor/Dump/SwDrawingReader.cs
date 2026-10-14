@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using SolidWorks.Interop.sldworks;
+using SolidWorks.Interop.swconst;
 using SwReview.Extractor.PersistRefs;
 using SwReview.Extractor.Sw;
 
@@ -328,7 +329,10 @@ public sealed class SwDrawingReader : IDrawingReader, IDrawingReferenceSource
             ? entities
             : Array.Empty<object?>();
 
-    public object? CorrespondingEntity(object view, object entity) => AsView(view).GetCorrespondingEntity(entity);
+    // The extension maps a drawing/assembly-context entity into the owning part. The view's
+    // similarly named member runs in the opposite direction (model to drawing).
+    public object? CorrespondingEntity(object document, object entity) =>
+        ((IModelDoc2)document).Extension.GetCorrespondingEntity2(entity);
 
     public AttachedEntityKind EntityKind(object entity) => entity switch
     {
@@ -340,13 +344,13 @@ public sealed class SwDrawingReader : IDrawingReader, IDrawingReferenceSource
     public IReadOnlyList<object> AdjacentFaces(object edge) => Items(((IEdge)edge).GetTwoAdjacentFaces2());
 
     /// <summary>
-    /// The part document that owns a model face. For a part drawing that is the view's referenced
-    /// document; for an assembly drawing the face belongs to a component, whose document is asked
-    /// for (<c>IEntity.GetComponent</c>, <c>IComponent2.GetModelDoc2</c>). Every read is gated
-    /// here; a lightweight or suppressed component answers no document, and nothing is resolved to
-    /// make it answer one.
+    /// The part document that owns an original drawing attachment, before it is mapped into
+    /// part context. IEntity.GetComponent only supplies a component for assembly/drawing-context
+    /// entities; asking the mapped part face loses that context. A part drawing uses the view's
+    /// referenced document. Every read is gated; unloaded, unknown or non-part owners give no
+    /// scope, and nothing is opened or resolved to make one available.
     /// </summary>
-    public object? FaceDocument(object view, object face)
+    public object? FaceDocument(object view, object entity)
     {
         var referenced = Gate.Call("ReferencedDocument", () => AsView(view).ReferencedDocument) as IModelDoc2;
         if (referenced == null)
@@ -354,15 +358,25 @@ public sealed class SwDrawingReader : IDrawingReader, IDrawingReferenceSource
             return null;
         }
 
-        if (SwSession.KindOf(referenced, Gate) != Ir.DocumentKind.Assembly)
+        var kind = (swDocumentTypes_e)Gate.Call("GetType", () => referenced.GetType());
+        if (kind == swDocumentTypes_e.swDocPART)
         {
             return referenced;
         }
 
-        var component = Gate.Call("GetComponent", () => ((IEntity)face).GetComponent()) as IComponent2;
-        return component == null
+        if (kind != swDocumentTypes_e.swDocASSEMBLY || !(entity is IEntity attached))
+        {
+            return null;
+        }
+
+        var component = Gate.Call("GetComponent", () => attached.GetComponent()) as IComponent2;
+        var document = component == null
             ? null
             : Gate.Call("GetModelDoc2", () => component.GetModelDoc2()) as IModelDoc2;
+        return document != null
+            && Gate.Call("GetType", () => document.GetType()) == (int)swDocumentTypes_e.swDocPART
+                ? document
+                : null;
     }
 
     public object? Tolerance(object dimension) => _tolerances.Tolerance(dimension);

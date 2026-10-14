@@ -7,6 +7,7 @@ using System.Reflection;
 using SwReview.Extractor.Guard;
 using SwReview.Extractor.Ids;
 using SwReview.Extractor.Ir;
+using SwReview.Extractor.Sw;
 
 namespace SwReview.Extractor.Dump;
 
@@ -85,6 +86,7 @@ public sealed class PackageWriter
     private readonly IOpenDrawingSource? _openDrawings;
     private readonly string? _swVersion;
     private readonly string _machine;
+    private readonly SwGate? _gate;
 
     public PackageWriter(
         IComponentTreeSource components,
@@ -102,7 +104,8 @@ public sealed class PackageWriter
         string? swVersion,
         string? machine = null,
         IToleranceSource? tolerances = null,
-        IOpenDrawingSource? openDrawings = null)
+        IOpenDrawingSource? openDrawings = null,
+        SwGate? gate = null)
     {
         _components = components ?? throw new ArgumentNullException(nameof(components));
         _documents = documents ?? throw new ArgumentNullException(nameof(documents));
@@ -133,12 +136,13 @@ public sealed class PackageWriter
         // the phases above are: a build with no source wired discovers nothing, and its drawing
         // gap says which phase did not run rather than what SOLIDWORKS had open.
         _openDrawings = openDrawings;
+        _gate = gate;
         _swVersion = swVersion;
         _machine = machine ?? Environment.MachineName;
     }
 
     /// <summary>Runs every phase and writes package.json into the output directory.</summary>
-    public DumpResult Write(DumpOptions options)
+    public DumpResult Write(DumpOptions options, ExtractionProgress? progress = null)
     {
         if (options == null)
         {
@@ -150,13 +154,28 @@ public sealed class PackageWriter
             throw new ArgumentException("An output directory is required.", nameof(options));
         }
 
-        EvidencePackage package = Build(options);
-
-        Directory.CreateDirectory(options.OutputDirectory);
-        string path = Path.Combine(options.OutputDirectory, PackageFileName);
-        File.WriteAllText(path, PackageSerializer.Serialize(package));
-
-        return new DumpResult(package, path);
+        bool ownsProgress = progress == null;
+        ExtractionProgress trace = progress ?? new ExtractionProgress(options.OutputDirectory);
+        using IDisposable? observation = trace.Observe(_gate);
+        try
+        {
+            EvidencePackage package = Build(options, keyOnly: false, trace);
+            string serialized = trace.Step("serialize", () => PackageSerializer.Serialize(package));
+            string path = Path.Combine(options.OutputDirectory, PackageFileName);
+            trace.Phase("package", "before");
+            File.WriteAllText(path, serialized);
+            trace.Phase("package", "after");
+            return new DumpResult(package, path);
+        }
+        catch (Exception failure)
+        {
+            trace.Failed(failure);
+            throw;
+        }
+        finally
+        {
+            if (ownsProgress) trace.Dispose();
+        }
     }
 
     /// <summary>Runs every phase without writing anything. Used by the tests and the add-in preview.</summary>
@@ -174,12 +193,13 @@ public sealed class PackageWriter
     /// </summary>
     public EvidencePackage BuildReuseProbe(DumpOptions options) => Build(options, keyOnly: true);
 
-    private EvidencePackage Build(DumpOptions options, bool keyOnly)
+    private EvidencePackage Build(DumpOptions options, bool keyOnly, ExtractionProgress? progress = null)
     {
         var gaps = new GapCollector();
-        var phases = new PhaseLog();
+        var phases = new PhaseLog(progress);
 
-        ComponentTreeResult tree = _components.Traverse(gaps, options);
+        ComponentTreeResult tree = progress == null ? _components.Traverse(gaps, options)
+            : progress.Step("traversal", () => _components.Traverse(gaps, options));
 
         // Every id in the package is derived from the root document's path, and so is the
         // manifest's vault path. An unsaved document has neither, so it is refused here
@@ -198,10 +218,14 @@ public sealed class PackageWriter
         bool discovered = _openDrawings != null && OpenDrawingDiscovery.RunsFor(tree, options);
         if (discovered)
         {
-            tree.AttachedDrawings = OpenDrawingDiscovery.Discover(tree, _openDrawings!, options, gaps);
+            tree.AttachedDrawings = progress == null
+                ? OpenDrawingDiscovery.Discover(tree, _openDrawings!, options, gaps)
+                : progress.Step("drawing-discovery", () =>
+                    OpenDrawingDiscovery.Discover(tree, _openDrawings!, options, gaps));
         }
 
-        DumpScope scope = ScopeFor(gaps, options, tree);
+        DumpScope scope = progress == null ? ScopeFor(gaps, options, tree)
+            : progress.Step("scope", () => ScopeFor(gaps, options, tree));
 
         var package = new EvidencePackage
         {
@@ -236,7 +260,8 @@ public sealed class PackageWriter
 
         if (keyOnly)
         {
-            return Finish(package, scope, gaps, phases, options, discovered);
+            return progress == null ? Finish(package, scope, gaps, phases, options, discovered)
+                : progress.Step("finish", () => Finish(package, scope, gaps, phases, options, discovered));
         }
 
         if (!aborted)
@@ -381,7 +406,8 @@ public sealed class PackageWriter
                 package.Bodies.AddRange(_meshes.Dump(scope, meshDirectory)));
         }
 
-        return Finish(package, scope, gaps, phases, options, discovered);
+        return progress == null ? Finish(package, scope, gaps, phases, options, discovered)
+                : progress.Step("finish", () => Finish(package, scope, gaps, phases, options, discovered));
     }
 
     /// <summary>
@@ -795,6 +821,7 @@ public sealed class PackageWriter
     private static bool RunPhase(
         GapCollector gaps, PhaseLog phases, string entityKind, string description, Func<bool> phase)
     {
+        phases.Begin(entityKind);
         Stopwatch clock = Stopwatch.StartNew();
         DumpPhaseStatus status = DumpPhaseStatus.Ok;
         try
@@ -844,6 +871,10 @@ public sealed class PackageWriter
     /// </summary>
     private sealed class PhaseLog
     {
+        private readonly ExtractionProgress? _progress;
+        public PhaseLog(ExtractionProgress? progress = null) => _progress = progress;
+        public void Begin(string name) => _progress?.Phase(name, "before");
+
         private readonly Dictionary<string, DumpPhase> _rows =
             new Dictionary<string, DumpPhase>(StringComparer.Ordinal);
 
@@ -856,6 +887,8 @@ public sealed class PackageWriter
 
         public void Record(string name, long elapsedMilliseconds, DumpPhaseStatus status)
         {
+            _progress?.Phase(name, status == DumpPhaseStatus.Ok ? "after"
+                : status == DumpPhaseStatus.Aborted ? "aborted" : "failed");
             _rows[name] = new DumpPhase
             {
                 Name = name,

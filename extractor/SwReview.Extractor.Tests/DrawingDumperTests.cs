@@ -1672,10 +1672,60 @@ public class DrawingDumperTests
         Assert.Equal(DocumentIds.For(PartModelPath), face.Scope);
         Assert.Equal(AttachedVia.Face, face.Via);
         Assert.Empty(_scope.Gaps.Gaps);
-        foreach (string member in new[] { "GetAnnotation", "GetAttachedEntities3", "GetCorrespondingEntity" })
+        foreach (string member in new[] { "GetAnnotation", "GetAttachedEntities3", "GetCorrespondingEntity2" })
         {
             Assert.Contains(member, _observer.Members, StringComparer.Ordinal);
         }
+    }
+
+    [Fact]
+    public void Dump_ResolvesTheOriginalDrawingAttachmentOwnerBeforeMapping()
+    {
+        FakeDimension dimension = _reader.AddSheet("Sheet1").AddView("Drawing View1").AddDimension("D1@Sketch1");
+        dimension.Type2 = 6;
+        dimension.Attach(new FakeModelFace(PartModelPath, "RmFjZTE="));
+        FakeDrawingEntity original = dimension.Entities[0]!;
+
+        DisplayDimensionRecord record = Single(Dump()).DisplayDimensions[0];
+
+        Assert.Same(original, Assert.Single(_reader.AttachmentOwnersAsked));
+        Assert.Same(original.OwnerDocument, Assert.Single(_reader.MappingDocumentsAsked));
+        Assert.Single(record.AttachedFaces!);
+        Assert.Contains("GetCorrespondingEntity2", _observer.Members, StringComparer.Ordinal);
+        Assert.DoesNotContain("GetCorrespondingEntity", _observer.Members, StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public void Dump_AnAttachmentWithoutAnOwnerNeverMapsOrRequestsAModelReference()
+    {
+        FakeDimension dimension = _reader.AddSheet("Sheet1").AddView("Drawing View1").AddDimension("D1@Sketch1");
+        dimension.Type2 = 6;
+        dimension.Attach(new FakeModelFace(PartModelPath, "RmFjZTE="));
+        dimension.Entities[0]!.OwnerDocument = null;
+
+        DisplayDimensionRecord record = Single(Dump()).DisplayDimensions[0];
+
+        Assert.Null(record.AttachedFaces);
+        Assert.Empty(_reader.MappingDocumentsAsked);
+        Assert.DoesNotContain(_reader.ReferenceDocumentsAsked, document => document is FakeModel);
+        Assert.Contains(_scope.Gaps.Gaps, gap => gap.EntityKind == "drawing_attachment");
+    }
+
+    [Fact]
+    public void Dump_AnAttachedEdgeKeepsItsOriginalOwnerForBothModelFaces()
+    {
+        FakeDimension dimension = _reader.AddSheet("Sheet1").AddView("Drawing View1").AddDimension("D1@Sketch1");
+        dimension.Type2 = 2;
+        dimension.Attach(new FakeModelEdge(
+            new FakeModelFace(PartModelPath, "RmFjZUE="), new FakeModelFace(PartModelPath, "RmFjZUI=")));
+        object owner = dimension.Entities[0]!.OwnerDocument!;
+
+        DisplayDimensionRecord record = Single(Dump()).DisplayDimensions[0];
+
+        Assert.Equal(2, record.AttachedFaces!.Count);
+        Assert.Same(dimension.Entities[0], Assert.Single(_reader.AttachmentOwnersAsked));
+        Assert.All(_reader.ReferenceDocumentsAsked.Where(document => document is FakeModel),
+            document => Assert.Same(owner, document));
     }
 
     [Fact]
@@ -2681,9 +2731,15 @@ public class DrawingDumperTests
         public FakeDrawingEntity(object? corresponding)
         {
             Corresponding = corresponding;
+            FakeModelFace? face = corresponding as FakeModelFace
+                ?? (corresponding as FakeModelEdge)?.Faces.FirstOrDefault();
+            OwnerDocument = new FakeModel(face?.DocumentPath ?? PartModelPath);
+            OwnerFailure = face?.DocumentFailure;
         }
 
         public object? Corresponding { get; }
+        public FakeModel? OwnerDocument { get; set; }
+        public Exception? OwnerFailure { get; }
     }
 
     /// <summary>A model face: its owning part document and its persistent reference.</summary>
@@ -2898,6 +2954,9 @@ public class DrawingDumperTests
         private readonly FakeDrawing _root = new FakeDrawing(DrawingPath);
         private readonly Dictionary<object, FakeDrawing> _byDocument = new Dictionary<object, FakeDrawing>();
         private readonly List<(string Path, object Document)> _others = new List<(string, object)>();
+
+        public List<object> AttachmentOwnersAsked { get; } = new List<object>();
+        public List<object> MappingDocumentsAsked { get; } = new List<object>();
 
         public FakeDrawingReader()
         {
@@ -3278,8 +3337,11 @@ public class DrawingDumperTests
             return found.ModelPaths.TryGetValue(row, out List<string>? paths) ? paths : null;
         }
 
-        object? IDrawingReader.CorrespondingEntity(object view, object entity) =>
-            ((FakeDrawingEntity)entity).Corresponding;
+        object? IDrawingReader.CorrespondingEntity(object document, object entity)
+        {
+            MappingDocumentsAsked.Add(document);
+            return ((FakeDrawingEntity)entity).Corresponding;
+        }
 
         AttachedEntityKind IDrawingReader.EntityKind(object entity) => entity switch
         {
@@ -3291,9 +3353,15 @@ public class DrawingDumperTests
         IReadOnlyList<object> IDrawingReader.AdjacentFaces(object edge) =>
             ((FakeModelEdge)edge).Faces.Cast<object>().ToList();
 
-        object? IDrawingReader.FaceDocument(object view, object face)
+        object? IDrawingReader.FaceDocument(object view, object entity)
         {
-            var found = (FakeModelFace)face;
+            AttachmentOwnersAsked.Add(entity);
+            if (entity is FakeDrawingEntity original)
+            {
+                return original.OwnerFailure != null ? throw original.OwnerFailure : original.OwnerDocument;
+            }
+
+            var found = (FakeModelFace)entity;
             return found.DocumentFailure != null ? throw found.DocumentFailure : new FakeModel(found.DocumentPath);
         }
 
