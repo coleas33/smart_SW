@@ -642,7 +642,7 @@ description: "Task list for the send-to-model checkbox"
 
 ### The backend
 
-- [ ] T092 [P] [US4] [py] Lane B. Write `reviewer/tests/unit/test_recheck.py` with the carried live step (`contracts/recheck.md` section 3; FR-028; SC-008; research R2.17).
+- [x] T092 [P] [US4] [py] Lane B. Write `reviewer/tests/unit/test_recheck.py` with the carried live step (`contracts/recheck.md` section 3; FR-028; SC-008; research R2.17).
   - **No new bridge call**: `prerun_checks(..., carried_live=LiveOutcome.from_record(...))` makes no `bridge_interference` call with SOLIDWORKS attached. The seat is a `ScriptedReviewBridge` whose `calls` stay empty before the first request.
   - **One carried step**, recorded through `registry.record_call` at the first run's `live_detection.step_index`, with the payload `{"status": "carried", "note": CARRIED_LIVE_NOTE, "outcome": ...}` and the first run's arguments:
     - every later step index and finding citation equals the first run's;
@@ -653,7 +653,7 @@ description: "Task list for the send-to-model checkbox"
   - **The drawing-read capability**: `ToolContext.carry_drawing_read` sets the cache and `session.drawing_read`, so no ping is made, and a second re-run of that record makes zero bridge calls.
 
   Acceptance: red for want of `carried_live`.
-- [ ] T093 [US4] [py] Lane B. Implement:
+- [x] T093 [US4] [py] Lane B. Implement:
   - in `prerun.py`: `prerun_checks(carried_live=)` (`:1052`); the carried step and its `PrerunCall`; the removal of the reviewed configuration's rows when `persist_error` is set, as `_live_interference` removes them (`:1280-1281`); `CARRIED_LIVE_NOTE`; and `INTERFERENCE_ROWS_NOT_CARRIED`;
   - in `tools/context.py` (`:403-419`): `ToolContext.carry_drawing_read`;
   - `start_review(earlier=)`, passing both.

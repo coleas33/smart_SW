@@ -51,7 +51,7 @@ marks.
 
 | # | Call | When |
 |---|---|---|
-| 1 | `bridge_interference(component_ids=[], configuration=<active>, settings=PRERUN_INTERFERENCE_SETTINGS)` | `context.bridge` is set, the root is an assembly and the package has at least two components |
+| 1 | `bridge_interference(component_ids=[], configuration=<active>, settings=PRERUN_INTERFERENCE_SETTINGS)` | `context.bridge` is set, the root is an assembly and the package has at least two components; *amended by feature 015 (T093, 2026-10-14)*: a re-run of a waiting review's checks carries the first run's outcome as this step instead, with no bridge call, and records none where the first run made none (section 3) |
 | 2 | `check_rms_part()`, `check_rms_equations()`, `check_rms_assembly()` | always, unless withheld (lever 4) |
 | 3 | `check_interference_group(group_key=K)`, once per distinct group key | for every group `groups_of` enumerates, the live rows included |
 | 3b | `check_drawings()` (feature 011, *amended 2026-09-23*), after every `CODE_FIRST_CHECKS` name | when the package carries drawing evidence - a drawing record or a drawing candidate (`tools/drawings.drawing_evidence`, the condition `ToolRegistry._offered` offers it on; 011 `contracts/questions.md` section 2) |
@@ -104,6 +104,20 @@ lever 5.
 | detected groups | none beyond the calls' own | "bridge_interference(<configuration>) -> <rows> rows in <groups> groups (<settings>)" |
 
 A hang is not detectable: the pipe transport has no read timeout (research R2.23).
+
+*Amended by feature 015 (T093, 2026-10-14).* A re-run of a waiting review's checks after a
+restart (`prerun_checks(..., carried_live=LiveOutcome.from_record(earlier.live_detection))`)
+makes no live call. Where the first run recorded its call it records one carried step through
+`registry.record_call`, at the first run's `step_index`, with the first run's arguments, the
+pre-run's events and origin mark, and the payload `{"status": "carried", "note":
+CARRIED_LIVE_NOTE, "outcome": <the record>}` (plus the first run's `error` for a failed call,
+which records the same `failed` row). Every outcome above is then the first run's line and
+coverage. Rows the first run could not write are not in the folder's package, so the re-run
+removes the reviewed configuration's rows in memory as step 1 does, judges none of the dump's
+stale rows, and its `coverage.prerun.interference_rows` line is `INTERFERENCE_ROWS_NOT_CARRIED`
+in place of the not-written line. The context also carries the first run's `drawing_read`, so
+the host is not pinged. See [015 recheck.md](../../015-review-send-gate/contracts/recheck.md)
+section 3.
 
 *Landed as (T042).* The sentences count in English: "the 1 group the package already holds was
 judged", "1 detected row was dropped because ..." / "<n> detected rows were dropped because
@@ -226,6 +240,11 @@ and `PrerunResult.withheld` holds them. A call *completed* when `PrerunCall.erro
 | `bridge_interference`, `get_finding` and every other tool | never |
 
 A tool that is not in the dispatch's offered tools (withheld by tier) is never listed.
+
+*Amended by feature 015 (T093, 2026-10-14).* A re-run's carried live step (section 3) is a
+`PrerunCall` like the first run's - the same tool, arguments, step and error - so the guard's
+ledger and this table read it as they read the first run's call, and a re-run withholds the
+tools the first run withheld.
 
 **Mechanism.** `PrerunGuard.__iter__` and `__len__` leave out `prerun.withheld`; `call` is
 unchanged, so a withheld tool called anyway reaches the guard's ledger and is answered

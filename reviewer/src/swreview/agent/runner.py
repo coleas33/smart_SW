@@ -103,6 +103,7 @@ from swreview.ir.loader import LoadedPackage, load_package
 from swreview.ir.models import EvidencePackage
 from swreview.prerun import (
     RMS_PRERUN_TOOLS,
+    LiveOutcome,
     PrerunCall,
     PrerunGuard,
     PrerunResult,
@@ -1912,6 +1913,10 @@ def start_review(
         redact: Masks the run's API key out of provider error text before it is written
             to `events.jsonl` (FR-015). The caller that resolved the key builds it;
             `no_redaction` is the default because a run may legitimately have no key.
+        earlier: A re-run's earlier not-sent record (feature 015, `contracts/recheck.md`
+            section 3): its live outcome is carried as one step and its drawing-read
+            capability onto the context, so the host is asked nothing either answered.
+            Only with `send_when_checked` false.
     """
     if earlier is not None and send_when_checked:
         raise ValueError("earlier is only accepted when send_when_checked is false")
@@ -1940,6 +1945,10 @@ def start_review(
         session = context.session
         if session is None:  # pragma: no cover - build_context always makes one
             raise ValueError("build_context returned a context without a review session")
+        if earlier is not None:
+            # Feature 015 (`contracts/recheck.md` section 3): a re-run asks the host nothing
+            # its earlier record already answered.
+            context.carry_drawing_read(earlier.drawing_read)
         # Feature 008 (FR-021): every recorded step of this review - the pre-run's included -
         # keeps its full result in the run folder. Only a review sets this, so a check run
         # and MCP general chat write none.
@@ -2035,6 +2044,11 @@ def start_review(
             standards=standards_gap,
             package_dir=loaded.base_dir,
             out_dir=out,
+            carried_live=(
+                LiveOutcome.from_record(earlier.live_detection)
+                if earlier is not None and earlier.live_detection is not None
+                else None
+            ),
         )
         # A configured standards profile is review coverage even when the optional
         # pre-run/gate levers are off.  `prerun_checks` records this family when it runs;
