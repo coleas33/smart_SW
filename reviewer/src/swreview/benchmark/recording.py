@@ -23,18 +23,22 @@ review's turns and rounds from `events.jsonl`, using only the markers the log ca
   carry none, though interference findings recorded after feature 014's owner decision 40A
   cite their step.
 
+The log is read through the product's one event-line reader, `agent/events.replay_events`
+(feature 014 plan decision RF-29), the folder's own `events.jsonl` and never a packed stream,
+since a recording is never packed (RF-83). A line it cannot read, not JSON or not an event of
+the chat-events schema, is refused naming its number.
+
 A folder that is not a review is refused with one sentence naming what is missing. Reading
 writes nothing.
 """
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from swreview.agent.events import EVENTS_FILE_NAME
+from swreview.agent.events import EVENTS_FILE_NAME, replay_events
 from swreview.agent.providers import TokenUsage, usage_from_body
 from swreview.findings import Finding
 from swreview.ir.loader import PACKAGE_FILE_NAME
@@ -160,7 +164,16 @@ def read_recording(run_dir: Path | str) -> Recording:
             f"{directory} holds no {EVENTS_FILE_NAME}: it is a check folder or was written "
             "before the event log, and a check has no provider rounds to replay"
         )
-    events = _events(events_file)
+    unreadable: list[int] = []
+    events = [
+        event.model_dump(mode="json")
+        for event in replay_events(events_file, on_unreadable=unreadable.append)
+    ]
+    if unreadable:
+        raise RecordingRefused(
+            f"{events_file} line {unreadable[0]} is not a readable event (not JSON, or not an "
+            "event of the chat-events schema), so the recorded rounds cannot be read"
+        )
     if not any(event.get("type") == "usage" for event in events):
         raise RecordingRefused(
             f"{events_file} records no usage event: no provider round was recorded, so there "
@@ -190,27 +203,6 @@ def read_recording(run_dir: Path | str) -> Recording:
         ),
         setup_steps=tuple(reader.setup_steps),
     )
-
-
-def _events(path: Path) -> list[dict[str, Any]]:
-    events: list[dict[str, Any]] = []
-    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-        if not line.strip():
-            continue
-        try:
-            event = json.loads(line)
-        except json.JSONDecodeError as exc:
-            raise RecordingRefused(
-                f"{path} line {number} is not a JSON event ({exc.msg}), so the recorded rounds "
-                "cannot be read"
-            ) from exc
-        if not isinstance(event, dict) or not isinstance(event.get("body"), dict):
-            raise RecordingRefused(
-                f"{path} line {number} is not an event object with a body, so the recorded "
-                "rounds cannot be read"
-            )
-        events.append(event)
-    return events
 
 
 @dataclass
