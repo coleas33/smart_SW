@@ -679,7 +679,7 @@
 
     var actions = el('div', 'row question-actions');
     actions.appendChild(button('Skip for now', 'question-skip', 'action question-skip'));
-    actions.appendChild(button('Send answers', 'question-send', 'action primary question-send'));
+    actions.appendChild(button(more.applyAnswers ? 'Apply answers' : 'Send answers', 'question-send', 'action primary question-send'));
     if (more.resumeText) {
       actions.appendChild(el('span', 'question-resume', more.resumeText));
     }

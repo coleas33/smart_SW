@@ -333,3 +333,21 @@ On the licensed seat, with the build of this feature and the owner's key stored:
   resolves the earlier T080/T081 pending decision; the estimator and request
   prefix were not changed. US3 starts at T082; T118 remains incomplete. No
   live provider run, SOLIDWORKS sitting or partial-workflow main merge is claimed.
+
+
+- **T091 US3 answer-apply gate, 2026-10-14 UTC (T082-T091 complete):**
+  final frozen C45 candidate passed 16,014 Python tests, 5 skipped,
+  7 deselected in 393.11 s; Ruff clean; Release zero warnings/errors;
+  9,060 extractor and 2,235 add-in tests passed, none skipped. Actual parent
+  new page cases were 15 red before implementation and 15 green afterward.
+  Actual owner-mapped verification completed all three unchanged replay
+  generators, literal replay diff empty, all nine replay outputs and
+  24 held public controls raw-equal. All 2,391 frozen files stayed unchanged
+  through both full gates; protected assertions and both characterizations
+  remain unchanged. Independent exact staged review was clean. Failed Apply
+  restores the actual saved record read-only using genuine captured routes
+  and events; restored Send stays disabled until US4. The full restart,
+  carry and recheck flow begins at T092; T099/T100 and T118 remain pending.
+  No live provider run, SOLIDWORKS sitting, remodel validation or partial
+  workflow merge to main is claimed. See review-2026-10-12.md for exact
+  test-first, fixture-provenance and failure-race receipts.

@@ -188,10 +188,10 @@ internal sealed class ReviewPageDriver
         await Page.ExecuteScriptAsync("window.__fetch.routes[" + JsonSerializer.Serialize(method + " " + path) + "].hold=true;0");
     }
 
-    public async Task ReleaseRoute(string method, string path)
+    public async Task ReleaseRoute(string method, string path, bool newest = false)
     {
         await Read("var key=" + JsonSerializer.Serialize(method + " " + path) + ";var held=window.__fetch.held;"
-            + "var index=held.findIndex(function(item){return item.key===key;});"
+            + "var index=" + (newest ? "held.map(function(item){return item.key;}).lastIndexOf(key)" : "held.findIndex(function(item){return item.key===key;})") + ";"
             + "if(index<0)throw new Error('no held fetch for '+key);"
             + "window.__fetch.routes[key].hold=false;held.splice(index,1)[0].complete();return JSON.stringify({ok:true});");
         await OffscreenReviewPage.Settled(Page);

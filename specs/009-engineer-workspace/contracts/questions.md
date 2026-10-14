@@ -130,6 +130,25 @@ carry none); the draft holds one answer - the pressed button's text or what was 
 go of every button, a button pressed after typing empties the box, and Send carries the answer
 trimmed. A question without `allow_text` renders as before.
 
+*Amended 2026-10-13 by feature 015 T090:* when `summary.send` is present, the button reads
+"Apply answers" and the sentence beside it is the backend's `summary.resume_text`. It posts the
+same evidence batch, drops accepted drafts and opens the same stream. The panel locks during the
+apply; Results keeps "Checked by code. Not sent to the model.", Stop stays off, and Send to model
+stays disabled until the apply settles and its final attention summary has been accepted. An
+attention response from before that settle cannot replace the final findings or first-request
+size. If the final attention read fails, Send and the panel stay locked until Clear and reselect,
+or a reload, obtains a fresh snapshot. Reloading during the apply restores the running snapshot with
+these same waiting controls (015 `contracts/pane.md` sections 4-6).
+
+An `error` while that waiting apply runs, with no Send in flight, ends the apply without an error
+card. The pane drops the failed live view and its drafts, reads `GET /reviews/{run_id}`, and shows
+that saved record read-only. The local failure uses the usual label and class/message fold beside
+the restored Send block. This rule also applies after a reload during the apply; the disk record,
+rather than the failed live cache, decides whether the answers are still open or already applied.
+A held disk read keeps the waiting follow-up guard active. A fresh page receiving a failed waiting
+snapshot also reads the disk record; it shows a local failure fold only if it received that error,
+without inventing a persisted Apply error (015 `contracts/pane.md` section 5).
+
 ## 5. The resume cost
 
 `summary.resume_input_tokens` is `UsageLedger.last_conversation_input()`: the input tokens of the
@@ -137,6 +156,11 @@ last round before the most recent `text.done` (the explanation pass's round, aft
 never taken). `resume_text` is "Sending resumes the review once. Its last round sent {tokens} input
 tokens." with the number formatted `405,861`, or "Sending resumes the review once." when unknown.
 The disk route answers `None` and the panel is disabled there.
+
+*Amended 2026-10-13 by feature 015 T090:* a waiting run uses `send.apply_answers` for
+`resume_text`; applying answers rebuilds the opening and its first-request size without a model
+turn. The pane prints that summary sentence and size verbatim. A sent review keeps the resume
+cost and the "Send answers" action above.
 
 ## 6. Refusals
 
