@@ -607,7 +607,7 @@ description: "Task list for the send-to-model checkbox"
 
   Acceptance: red for want of the rebuild.
 - [x] T086 [US3] [py] Lane B. Implement `prerun.restated` in `prerun.py`. In `agent/runner.py`, complete T084's `_settle_waiting` with the step `review-flow.md` section 4 places between the outcomes and `_opening_changed`: replace the restated tools' calls in `_prerun` through `prerun.restated` (so T097's carry, which ends with `_settle_waiting`, restates too; owner decision 71A). Add the rebuilt branch of `opening_at_send` and `WAIT_ANSWER_LINE`. **Amends 008** `contracts/checks-first.md` section 4 (the opening rebuilt after a regrade; the wait's lines); **013** spec FR-040, `contracts/drawing-capability.md` section 6 and `contracts/part-roles.md` section 9. Acceptance: T085 green; T007 byte-equal.
-- [ ] T087 [US3] [py] Lane B. Extend `reviewer/tests/unit/test_waiting_answers.py` with an apply that fails (`contracts/review-flow.md` section 4, "An apply that fails"; FR-020; research R2.13; RK-12).
+- [x] T087 [US3] [py] Lane B. Extend `reviewer/tests/unit/test_waiting_answers.py` with an apply that fails (`contracts/review-flow.md` section 4, "An apply that fails"; FR-020; research R2.13; RK-12).
   - **Before the save**: `classify_part_roles`, the confirmed read, the Send cache's build and the finalization's `save_session` (`write_atomic`) each raising give:
     - one `error` event, and no `turn.ended` or `session.ended`;
     - the chat `failed`;
@@ -619,7 +619,7 @@ description: "Task list for the send-to-model checkbox"
   - **Shutdown during an apply** (FR-010; research R4.1): with an apply held on the chat's worker (`classify_part_roles` patched to block on an event), `ChatServer.shutdown()` writes no `turn.ended`, no `error` and no second `session.ended`, although the chat reads `running`: the session's `ended_at` is still the unticked start's, so `_finalize_on_exit` (`chat/server.py:2327-2334`) skips it through `_already_ended` (`:2337-2345`). Checked when `shutdown()` returns, before the apply is released: `session.json` is the record before the apply. This case pins today's skip and may pass before T088; it fails any later change that clears `ended_at` in the waiting branch.
 
   Acceptance: red for want of the failure path.
-- [ ] T088 [US3] [py] Lane B. Implement the waiting branch's failure path in `agent/runner.py`: `context.session = load_session(session_path)`, one `error` (`retryable: true`), then re-raise. Acceptance: T087 green.
+- [x] T088 [US3] [py] Lane B. Implement the waiting branch's failure path in `agent/runner.py`: `context.session = load_session(session_path)`, one `error` (`retryable: true`), then re-raise. Release a reopened confirmed-read pipe on the failed waiting settle. Bring forward only the read-only disk Send-state forwarding prerequisite for pane section 5 (unknown count, current generic reason); full T099/T100 and the recheck action stay pending. Acceptance: T087 green; the additional disk-view cases green.
 - [ ] T089 [P] [US3] [page] Lane W. Extend `ReviewPageSendGateTests.cs` (`contracts/pane.md` sections 4 to 6; FR-020, FR-033):
   - While the summary has a `send` block, the questions panel's button reads "Apply answers", and its sentence is the summary's `resume_text`.
   - Applying posts `POST /evidence` and locks the panel. Until the stream settles, the status line stays "Checked by code. Not sent to the model.", Stop stays off and Send is disabled.

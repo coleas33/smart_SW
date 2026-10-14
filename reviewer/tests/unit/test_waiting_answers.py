@@ -13,19 +13,22 @@ from uuid import UUID
 import pytest
 from starlette.testclient import TestClient
 
-from swreview import prerun, tokens
+from swreview import atomic, prerun, tokens
 from swreview.agent import runner
 from swreview.agent.events import replay_events
 from swreview.agent.providers.deferred import DeferredProvider
 from swreview.agent.runner import request_prefix
 from swreview.bridge.client import BridgeError
+from swreview.chat import server
 from swreview.checks.drawing_context import CANDIDATE_CONFIRM
 from swreview.report.attention import family_counts, family_of
-from swreview.report.session import load_session
+from swreview.report.session import load_session, save_session
+from swreview.report.snapshot import review_snapshot
 from swreview.report.summary import load_words
 from swreview.tools.model_view import count_findings
 from tests.support.questions_package import QuestionsPackage, build_questions_package
 from tests.support.recording_provider import RecordingProvider
+from tests.support.restart import disk_at
 from tests.support.roles_review import PIN_ID
 from tests.unit import test_chat_server as chat
 from tests.unit import test_send_gate_server as send_cases
@@ -810,3 +813,477 @@ def test_restated_keeps_a_standing_drawing_finding_returned_by_the_deduplicating
     assert rebuilt.named_finding_ids() == [finding.id for finding in initial.findings]
     assert rebuilt.calls[0].findings == initial.findings
     assert all(finding.id in rebuilt.digest() for finding in initial.findings)
+
+
+# T087: an apply failure reloads the whole committed record, without a model turn.
+
+
+@pytest.mark.parametrize(
+    "point,after_save",
+    [
+        ("classify", False), ("classify-value-error", False),
+        ("read", False), ("restate", False),
+        ("cache", False), ("replace", False),
+        ("attention", True), ("ended-event", True),
+    ],
+)
+def test_a_failed_waiting_apply_restores_the_whole_saved_record_and_releases_its_folder(
+    app: Any, client: TestClient, run_root: Path, provider_control: chat.ProviderControl,
+    monkeypatch: pytest.MonkeyPatch, point: str, after_save: bool,
+) -> None:
+    waiting = waiting_review(app, client, run_root / "FICT-failed-waiting-apply")
+    run = waiting.run
+    answer = question(waiting, drawing=point == "read")
+    before = load_session(run.session_path)
+    raw_before = run.session_path.read_bytes()
+    report_before = (run.out_dir / "report.md").read_bytes()
+    attention_before = (run.out_dir / "attention.json").read_bytes()
+    live_before = run.session
+    marker = run.sink.seq
+    secret = "FICT-apply-secret"
+    message = "FICT apply failed " + secret
+    monkeypatch.setattr(run, "redact", lambda text: text.replace(secret, "<masked>"))
+    order: list[str] = []
+    save = runner.save_session
+
+    def saved(*args: Any, **kwargs: Any) -> Any:
+        order.append("save")
+        return save(*args, **kwargs)
+
+    def refused(*args: Any, **kwargs: Any) -> Any:
+        if point == "classify-value-error":
+            raise ValueError(message)
+        raise OSError(message)
+
+    monkeypatch.setattr(runner, "save_session", saved)
+    if point in {"classify", "classify-value-error"}:
+        monkeypatch.setattr(runner, "classify_part_roles", refused)
+    elif point == "read":
+        monkeypatch.setattr(runner, "read_confirmed_candidates", refused)
+    elif point == "restate":
+        monkeypatch.setattr(run, "_restate", refused)
+    elif point == "cache":
+        monkeypatch.setattr(run, "build_send_cache", refused)
+    elif point == "replace":
+        replace = atomic.os.replace
+
+        def refused_replace(src: Any, dst: Any, *args: Any, **kwargs: Any) -> Any:
+            if Path(dst).resolve() == run.session_path.resolve():
+                refused()
+            return replace(src, dst, *args, **kwargs)
+
+        monkeypatch.setattr(atomic.os, "replace", refused_replace)
+    elif point == "attention":
+        def refused_attention(*args: Any, **kwargs: Any) -> Any:
+            order.append("attention")
+            refused()
+
+        monkeypatch.setattr(runner, "write_attention_record", refused_attention)
+    else:
+        emit = run.sink.emit
+
+        def refused_ended(event_type: Any, body: Any) -> Any:
+            if event_type == "session.ended":
+                order.append("ended-event")
+                refused()
+            return emit(event_type, body)
+
+        monkeypatch.setattr(run.sink, "emit", refused_ended)
+
+    response = apply(
+        client, waiting, (answer.id, CANDIDATE_CONFIRM if point == "read" else "All bought"),
+    )
+    assert response.status_code == 202, response.text
+    assert chat.settle(client, waiting.chat_id) == "failed"
+    saved_record = load_session(run.session_path)
+    assert run.session is not live_before
+    assert run.session == saved_record
+    assert run.session.ended_at is not None and run.awaiting_send
+    events = new_events(waiting, marker)
+    assert not any(event.type.startswith("turn.") for event in events)
+    assert not any(event.type == "session.ended" for event in events)
+    errors = [event.body for event in events if event.type == "error"]
+    error_class = "ValueError" if point == "classify-value-error" else "OSError"
+    assert errors == [{
+        "error_class": error_class, "message": "FICT apply failed <masked>", "retryable": True,
+    }]
+    assert secret not in run.events_path.read_text(encoding="utf-8")
+    assert provider_control.built == []
+    assert isinstance(run.provider, DeferredProvider)
+    assert run.messages == [] and run.turns == 0
+    app.state.server._claim_run_dir(run.out_dir.resolve(), UUID(waiting.chat_id))
+    if after_save:
+        saved_answer = next(item for item in saved_record.evidence_requests if item.id == answer.id)
+        assert saved_answer.status == "answered"
+        assert saved_record != before
+        assert order == (["save", "attention"] if point == "attention" else ["save", "ended-event"])
+        ranking = server.rank(saved_record)
+        assert (run.out_dir / "report.md").read_text(encoding="utf-8") == server.render_report(
+            saved_record, run.context.ir, ranking=ranking,
+        )
+        attention = json.loads((run.out_dir / "attention.json").read_bytes())
+        assert attention["session_id"] == str(saved_record.session_id)
+        assert attention != json.loads(attention_before)
+    else:
+        assert saved_record == before
+        assert run.session_path.read_bytes() == raw_before
+        assert all(item.status == "open" for item in saved_record.evidence_requests)
+        assert (run.out_dir / "report.md").read_bytes() == report_before
+        assert (run.out_dir / "attention.json").read_bytes() == attention_before
+        assert order == (["save"] if point == "replace" else [])
+
+
+def test_a_waiting_apply_re_raises_after_restoring_the_record_and_emitting_one_error(
+    app: Any, client: TestClient, run_root: Path, provider_control: chat.ProviderControl,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    waiting = waiting_review(app, client, run_root / "FICT-direct-apply-failure")
+    run = waiting.run
+    before = load_session(run.session_path)
+    marker = run.sink.seq
+
+    def refused(*args: Any, **kwargs: Any) -> Any:
+        raise OSError("FICT direct apply refused")
+
+    monkeypatch.setattr(run, "build_send_cache", refused)
+    with pytest.raises(OSError, match="FICT direct apply refused"):
+        run.answer_evidence_batch([(question(waiting).id, "All bought")])
+    assert run.session == before
+    errors = [event for event in new_events(waiting, marker) if event.type == "error"]
+    assert len(errors) == 1 and errors[0].body["retryable"] is True
+    assert not any(event.type.startswith("turn.") for event in new_events(waiting, marker))
+    assert provider_control.built == []
+
+
+@pytest.mark.parametrize("point", ["cache", "replace"])
+@pytest.mark.parametrize("close_failure", [False, True])
+def test_a_failed_waiting_apply_closes_its_reopened_pipe_before_releasing_the_folder(
+    pipe_app: Any, pipe_client: TestClient, run_root: Path,
+    provider_control: chat.ProviderControl, monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture, point: str, close_failure: bool,
+) -> None:
+    started = send_cases.pipe_review(pipe_client, run_root / "FICT-failed-read-apply")
+    assert started.status_code == 201, started.text
+    chat_id = str(started.json()["chat_id"])
+    owner = pipe_app.state.server
+    run = owner.chats[UUID(chat_id)].run
+    transport = pipe_app.state.pipe_transports[0]
+    request = next(
+        item for item in run.session.evidence_requests if CANDIDATE_CONFIRM in item.options
+    )
+    before = load_session(run.session_path)
+    raw_before = run.session_path.read_bytes()
+    report_before = (run.out_dir / "report.md").read_bytes()
+    marker = run.sink.seq
+    assert transport.opened == transport.closed == 1 and transport.open_pipes == 0
+    close = transport.close
+
+    def refused(*args: Any, **kwargs: Any) -> Any:
+        assert transport.open_pipes == 1
+        raise OSError("FICT failure after the confirmed read")
+
+    if point == "cache":
+        monkeypatch.setattr(run, "build_send_cache", refused)
+    else:
+        replace = atomic.os.replace
+
+        def refused_replace(src: Any, dst: Any, *args: Any, **kwargs: Any) -> Any:
+            if Path(dst).resolve() == run.session_path.resolve():
+                refused()
+            return replace(src, dst, *args, **kwargs)
+
+        monkeypatch.setattr(atomic.os, "replace", refused_replace)
+    if close_failure:
+        def close_then_raise() -> None:
+            close()
+            raise OSError("FICT secondary release failure")
+
+        monkeypatch.setattr(transport, "close", close_then_raise)
+
+    try:
+        response = pipe_client.post(
+            f"/sessions/{chat_id}/evidence",
+            json={"answers": [{"request_id": request.id, "answer": CANDIDATE_CONFIRM}]},
+        )
+        assert response.status_code == 202, response.text
+        assert chat.settle(pipe_client, chat_id) == "failed"
+        assert run.session == load_session(run.session_path) == before
+        assert run.session_path.read_bytes() == raw_before
+        assert (run.out_dir / "report.md").read_bytes() == report_before
+        events = list(replay_events(run.events_path, after=marker))
+        assert [event.body for event in events if event.type == "error"] == [{
+            "error_class": "OSError", "message": "FICT failure after the confirmed read",
+            "retryable": True,
+        }]
+        assert not any(
+            event.type.startswith("turn.") or event.type == "session.ended" for event in events
+        )
+        assert [row["command"] for row in transport.requests].count("drawing.read") == 1
+        assert transport.opened == 2
+        assert transport.opened == transport.closed and transport.open_pipes == 0
+        owner._claim_run_dir(run.out_dir.resolve(), UUID(chat_id))
+        assert provider_control.built == []
+        if close_failure:
+            assert "FICT secondary release failure" in caplog.text
+    finally:
+        # Even the pre-fix red must release its counted pipe for the fixture's teardown.
+        monkeypatch.setattr(transport, "close", close)
+        run.release_bridge()
+
+
+@pytest.mark.parametrize("case", ["empty", "repeated", "unknown", "answered"])
+def test_invalid_waiting_answer_batches_refuse_before_any_failure_event_or_record_reload(
+    app: Any, client: TestClient, run_root: Path,
+    provider_control: chat.ProviderControl, case: str,
+) -> None:
+    waiting = waiting_review(app, client, run_root / "FICT-invalid-waiting-batch")
+    run = waiting.run
+    request_id = question(waiting).id
+    if case == "answered":
+        assert apply(client, waiting, (request_id, "All bought")).status_code == 202
+        assert chat.settle(client, waiting.chat_id) == "awaiting_send"
+    submissions = {
+        "empty": [], "repeated": [(request_id, "All bought"), (request_id, "None bought")],
+        "unknown": [("ER-FICT-missing", "All bought")],
+        "answered": [(request_id, "None bought")],
+    }
+    before = send_cases.files_in(run.out_dir)
+    live_before = run.session
+    with pytest.raises((ValueError, KeyError)):
+        run.answer_evidence_batch(submissions[case])
+    assert run.session is live_before
+    assert send_cases.files_in(run.out_dir) == before
+    assert provider_control.built == []
+
+
+def test_the_disk_at_an_apply_crash_holds_the_unapplied_record_without_turn_events(
+    app: Any, client: TestClient, run_root: Path, monkeypatch: pytest.MonkeyPatch,
+    provider_control: chat.ProviderControl,
+) -> None:
+    waiting = waiting_review(app, client, run_root / "FICT-apply-crash-cut")
+    run = waiting.run
+    before = load_session(run.session_path)
+    raw_before = run.session_path.read_bytes()
+    report_before = (run.out_dir / "report.md").read_bytes()
+    marker = run.sink.seq
+    built = run.build_send_cache
+    with disk_at(run.out_dir, "after-regrade-before-apply-save") as captured:
+        def capture_before_save() -> None:
+            assert question(waiting).status == "answered"
+            assert run.session.findings != before.findings
+            captured()
+            built()
+
+        monkeypatch.setattr(run, "build_send_cache", capture_before_save)
+        assert apply(client, waiting, (question(waiting).id, "All bought")).status_code == 202
+        assert chat.settle(client, waiting.chat_id) == "awaiting_send"
+        assert load_session(captured.folder / "session.json") == before
+        assert (captured.folder / "session.json").read_bytes() == raw_before
+        assert (captured.folder / "report.md").read_bytes() == report_before
+        copied_events = list(replay_events(captured.folder / "events.jsonl", after=marker))
+        assert any(event.type == "evidence.answered" for event in copied_events)
+        assert not any(
+            event.type.startswith("turn.") or event.type in {"error", "session.ended"}
+            for event in copied_events
+        )
+        copied = load_session(captured.folder / "session.json")
+        assert all(item.status == "open" for item in copied.evidence_requests)
+    assert provider_control.built == []
+
+
+def test_shutdown_returns_with_the_unapplied_record_while_the_apply_worker_is_held(
+    app: Any, client: TestClient, run_root: Path, monkeypatch: pytest.MonkeyPatch,
+    provider_control: chat.ProviderControl,
+) -> None:
+    waiting = waiting_review(app, client, run_root / "FICT-held-apply-shutdown")
+    run = waiting.run
+    before = {
+        name: (run.out_dir / name).read_bytes()
+        for name in ("session.json", "report.md", "attention.json")
+    }
+    ended_at = run.session.ended_at
+    marker = run.sink.seq
+    entered, release = threading.Event(), threading.Event()
+    classify = runner.classify_part_roles
+
+    def held_classify(*args: Any, **kwargs: Any) -> Any:
+        entered.set()
+        assert release.wait(chat.TIMEOUT_S)
+        return classify(*args, **kwargs)
+
+    monkeypatch.setattr(runner, "classify_part_roles", held_classify)
+    worker = None
+    try:
+        assert apply(client, waiting, (question(waiting).id, "All bought")).status_code == 202
+        assert entered.wait(chat.TIMEOUT_S)
+        assert chat.state_of(client, waiting.chat_id) == "running"
+        assert run.session.ended_at == ended_at and ended_at is not None
+        worker = app.state.server._workers[UUID(waiting.chat_id)]
+        app.state.server.shutdown()
+        assert not release.is_set()
+        assert {name: (run.out_dir / name).read_bytes() for name in before} == before
+        saved = load_session(run.session_path)
+        assert all(item.status == "open" for item in saved.evidence_requests)
+        events = new_events(waiting, marker)
+        assert not any(
+            event.type.startswith("turn.") or event.type in {"error", "session.ended"}
+            for event in events
+        )
+        assert app.state.server._workers == {}
+        assert provider_control.built == []
+    finally:
+        release.set()
+        if worker is not None:
+            worker.shutdown(wait=True)
+
+
+# Minimal US3 prerequisite: disk Send-state forwarding, before US4's recheck flow.
+
+
+@pytest.mark.parametrize("failed_send", [False, True])
+def test_disk_restore_forwards_the_saved_waiting_state_without_a_live_cache_or_write(
+    app: Any, client: TestClient, run_root: Path, monkeypatch: pytest.MonkeyPatch,
+    provider_control: chat.ProviderControl, failed_send: bool,
+) -> None:
+    waiting = waiting_review(app, client, run_root / "FICT-disk-waiting-state")
+    assert provider_control.built == []
+    if failed_send:
+        factory = provider_control.factory
+
+        def refused_request(*args: Any, **kwargs: Any) -> Any:
+            raise OSError("FICT persisted Send failed")
+
+        def failed_provider(settings: Any) -> Any:
+            provider = factory(settings)
+            monkeypatch.setattr(provider, "run", refused_request)
+            return provider
+
+        monkeypatch.setattr(app.state.server, "provider_factory", failed_provider)
+        assert client.post(f"/sessions/{waiting.chat_id}/send", json={}).status_code == 202
+        assert chat.settle(client, waiting.chat_id) == "awaiting_send"
+    run = waiting.run
+    saved = load_session(run.session_path)
+    assert saved.model_status.state == ("send_failed" if failed_send else "not_sent")
+    expected_failure = None
+    if failed_send:
+        error = saved.model_status.failures[-1]
+        expected_failure = load_words().send.failed.format(
+            reason=error.reason, time=error.at.strftime("%H:%M"),
+        )
+    before = send_cases.routes.tree_state(run.out_dir)
+    builds = len(provider_control.built)
+
+    def forbidden(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("FICT disk restore tried to build or count a live request")
+
+    monkeypatch.setattr(run, "build_send_cache", forbidden)
+    monkeypatch.setattr(run, "send_input", forbidden)
+    monkeypatch.setattr(tokens, "count_tokens", forbidden)
+    # The live object now disagrees: the route must use only its whole record on disk.
+    run.session.model_status.state = "sent"
+    restored = client.get(f"/reviews/{run.out_dir.name}")
+    assert restored.status_code == 200, restored.text
+    body = restored.json()
+    assert body["read_only"] is True
+    assert body["read_only_reason"] == load_words().read_only
+    assert body["chat_state"] is None and body["last_seq"] is None
+    assert body["ranking"]["summary"]["send"] == {
+        "state": "restored", "input_tokens": None, "approximate": False,
+        "text": load_words().send.restored, "failure": expected_failure,
+        "rerun_failed_text": load_words().send.rerun_failed,
+    }
+    assert body["evidence_requests"] == [item.pane_body() for item in saved.evidence_requests]
+    assert send_cases.routes.tree_state(run.out_dir) == before
+    assert len(provider_control.built) == builds == (1 if failed_send else 0)
+
+
+@pytest.mark.parametrize("provider", ["fake", "gemini", None])
+def test_disk_restore_uses_only_the_persisted_provider_for_its_approximate_mark(
+    app: Any, client: TestClient, run_root: Path, provider_control: chat.ProviderControl,
+    provider: str | None,
+) -> None:
+    waiting = waiting_review(app, client, run_root / "FICT-disk-provider")
+    saved = load_session(waiting.run.session_path)
+    # A typed fictional record exercises provider metadata, with no Gemini adapter.
+    if provider is None:
+        saved.provider_info = None
+    else:
+        assert saved.provider_info is not None
+        saved.provider_info.provider = provider
+    save_session(saved, waiting.run.session_path)
+    before = send_cases.routes.tree_state(waiting.run.out_dir)
+    body = client.get(f"/reviews/{waiting.run.out_dir.name}").json()
+    send = body["ranking"]["summary"]["send"]
+    assert send["state"] == "restored" and send["input_tokens"] is None
+    assert send["approximate"] is (provider == "gemini")
+    assert send_cases.routes.tree_state(waiting.run.out_dir) == before
+    assert provider_control.built == []
+
+
+@pytest.mark.parametrize("after_save", [False, True])
+def test_disk_restore_after_an_apply_failure_shows_the_actual_saved_answers_and_send(
+    app: Any, client: TestClient, run_root: Path, monkeypatch: pytest.MonkeyPatch,
+    provider_control: chat.ProviderControl, after_save: bool,
+) -> None:
+    waiting = waiting_review(app, client, run_root / "FICT-disk-failed-apply")
+    request = question(waiting)
+
+    def refused(*args: Any, **kwargs: Any) -> Any:
+        raise OSError("FICT apply failed during its finalization")
+
+    monkeypatch.setattr(runner, "write_attention_record" if after_save else "save_session", refused)
+    assert apply(client, waiting, (request.id, "All bought")).status_code == 202
+    assert chat.settle(client, waiting.chat_id) == "failed"
+    saved = load_session(waiting.run.session_path)
+    before = send_cases.routes.tree_state(waiting.run.out_dir)
+    restored = client.get(f"/reviews/{waiting.run.out_dir.name}")
+    assert restored.status_code == 200, restored.text
+    body = restored.json()
+    assert body["read_only"] and body["read_only_reason"] == load_words().read_only
+    assert body["evidence_requests"] == [item.pane_body() for item in saved.evidence_requests]
+    disk_answer = next(item for item in body["evidence_requests"] if item["id"] == request.id)
+    assert disk_answer["status"] == ("answered" if after_save else "open")
+    send = body["ranking"]["summary"]["send"]
+    assert send["state"] == "restored" and send["input_tokens"] is None
+    assert send["failure"] is None  # Apply's error is not a persisted failed model request.
+    assert send_cases.routes.tree_state(waiting.run.out_dir) == before
+    assert provider_control.built == []
+
+
+@pytest.mark.parametrize("sent", [False, True])
+def test_disk_restore_keeps_legacy_and_actually_sent_review_snapshots_unchanged(
+    app: Any, client: TestClient, run_root: Path, provider_control: chat.ProviderControl,
+    sent: bool,
+) -> None:
+    folder = run_root / "FICT-disk-ordinary-review"
+    if sent:
+        waiting = waiting_review(app, client, folder)
+        assert provider_control.built == []
+        assert client.post(f"/sessions/{waiting.chat_id}/send", json={}).status_code == 202
+        chat.settle(client, waiting.chat_id)
+        run = waiting.run
+    else:
+        fixture = build_questions_package(folder)
+        app.state.server.bridge_factory = lambda pipe, secret: fixture.bridge
+        response = client.post("/sessions", json=chat.session_body(
+            folder, standards_profile=str(fixture.profile),
+            bridge={"pipe": "FICT-pipe", "secret": "FICT-secret"},
+        ))
+        assert response.status_code == 201, response.text
+        chat_id = str(response.json()["chat_id"])
+        chat.settle(client, chat_id)
+        run = app.state.server.chats[UUID(chat_id)].run
+    saved = load_session(run.session_path)
+    assert (saved.model_status is not None and saved.model_status.state == "sent") if sent else (
+        saved.model_status is None
+    )
+    before = send_cases.routes.tree_state(folder)
+    builds = len(provider_control.built)
+    response = client.get(f"/reviews/{folder.name}")
+    assert response.status_code == 200, response.text
+    assert response.json() == review_snapshot(
+        saved, run.context.ir, run_id=folder.name, read_only_reason=load_words().read_only,
+    )
+    assert "send" not in response.json()["ranking"]["summary"]
+    assert send_cases.routes.tree_state(folder) == before
+    assert len(provider_control.built) == builds == 1

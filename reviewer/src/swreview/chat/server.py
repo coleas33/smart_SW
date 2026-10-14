@@ -143,7 +143,7 @@ from swreview.report.markdown import render_report
 from swreview.report.names import component_names
 from swreview.report.session import ReviewSession, load_session
 from swreview.report.snapshot import review_snapshot
-from swreview.report.summary import load_words, review_ranking
+from swreview.report.summary import SendInput, load_words, review_ranking
 from swreview.report.titles import with_display_titles
 from swreview.report.unexamined import not_examined
 from swreview.tools.registry import TOOL_RESULTS_DIR_NAME
@@ -1749,10 +1749,20 @@ class ChatServer:
             package = load_package(review_dir).package
         except PACKAGE_ERRORS as exc:
             raise unknown from exc
+        send: SendInput | None = None
+        if session.model_status is not None and session.model_status.state in {
+            "not_sent", "send_failed",
+        }:
+            send = {
+                "state": "restored", "input_tokens": None,
+                "provider": session.provider_info.provider if session.provider_info else "",
+                "send_error": None,
+            }
         return review_snapshot(
             session,
             package,
             run_id=review_dir.name,
+            send=send,
             read_only_reason=load_words().read_only,
         )
 
@@ -2317,6 +2327,16 @@ class ChatServer:
             chat.stop_requested.clear()
             if settled is ChatState.AWAITING_SEND and chat.run is not None:
                 chat.run.release_bridge()
+            elif (settled is ChatState.FAILED and chat.run is not None
+                  and chat.run.awaiting_send):
+                try:
+                    chat.run.release_bridge()
+                except Exception as failure:  # noqa: BLE001 - preserve the apply's failure
+                    logger.warning(
+                        "releasing failed waiting chat %s failed: %s",
+                        chat.chat_id,
+                        self.redact(str(failure)),
+                    )
             # Keep the folder claimed until the report and attention record have finished
             # rendering. A retry that starts after `ended` is published could otherwise
             # rotate the session while this worker is still writing the predecessor's
