@@ -351,3 +351,15 @@ On the licensed seat, with the build of this feature and the owner's key stored:
   No live provider run, SOLIDWORKS sitting, remodel validation or partial
   workflow merge to main is claimed. See review-2026-10-12.md for exact
   test-first, fixture-provenance and failure-race receipts.
+- **T110 US4 restart gate, 2026-10-15 (T092-T110 complete):** on the frozen candidate `3bbbbe7`:
+  - Python 3.11.16, the worktree's own environment: 16,132 tests passed, 5 skipped, 7 deselected;
+  - Ruff clean;
+  - Release build: zero warnings/errors;
+  - .NET: 9,138 extractor and 2,355 add-in tests passed, none skipped.
+
+  The same not-live suite also passed 16,132 tests in isolated uv environments outside the
+  repository, on Python 3.11.16 and on 3.12.3 (CI's matrix). Grep finds no 3.12-only API in
+  `reviewer/src`, and all 199 source files compile on 3.11. The owner-mapped replay verification
+  ran all three unchanged generators with seeded inputs; the literal replay diff was empty. Owner
+  decision 93A fixes the re-run's commit point (FR-041). No live provider run or SOLIDWORKS sitting
+  is claimed. See review-2026-10-12.md.
