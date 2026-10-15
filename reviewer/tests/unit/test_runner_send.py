@@ -814,6 +814,9 @@ def test_send_preparation_changes_nothing_and_commit_withdraws_only_its_own_rows
                 assert order[-1] == "withdraw"
                 before_usage()
                 assert provider._inner._step_index == len(run.session.steps)
+                # The model's own running time (owner decision 98A item 6): the runtime adds
+                # `ended_at - sent_at` once sent, and leaves the hour of waiting out.
+                clock[0] += timedelta(minutes=7)
                 return original_run(**kwargs)
 
             monkeypatch.setattr(runner, "configure_provider", configured)
@@ -849,7 +852,7 @@ def test_send_preparation_changes_nothing_and_commit_withdraws_only_its_own_rows
                 assert restored.status_code == 200, restored.text
                 assert_restored_as_waiting(restored.json(), interrupted)
             assert run.session.model_status.checked_at == checked
-            assert run.session.timing.unattended_runtime_minutes == 2
+            assert run.session.timing.unattended_runtime_minutes == 2 + 7
             assert sum(entry.presentation for entry in provider.log) == 1
     finally:
         run.close()

@@ -22,7 +22,7 @@ import threading
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -1261,11 +1261,12 @@ def merging_seat(bridge: Any, folder: Path) -> None:
 
 
 def worked_review(
-    app: Any, client: TestClient, folder: Path, *, reject: bool = True
+    app: Any, client: TestClient, folder: Path, *, reject: bool = True, roles: bool = True
 ) -> waiting_answers.Waiting:
     """The US4 independent test's earlier record: a part-roles answer, a drawing answer whose
     read merged its drawing and moved the finding numbers, and a Reject of a finding whose
-    number moves, all made while the review waited."""
+    number moves, all made while the review waited. Without `roles`, the drawing answer alone,
+    so the record carries outcome lines and no other answer (owner decision 98A item 6)."""
     fixture = build_questions_package(folder)
     merging_seat(fixture.bridge, folder)
     app.state.server.bridge_factory = lambda pipe, secret: fixture.bridge
@@ -1281,11 +1282,11 @@ def worked_review(
     assert response.status_code == 201, response.text
     chat_id = str(response.json()["chat_id"])
     waiting = waiting_answers.Waiting(fixture, chat_id, app.state.server.chats[UUID(chat_id)])
-    role = waiting_answers.question(waiting)
     drawing = waiting_answers.question(waiting, drawing=True)
-    applied = waiting_answers.apply(
-        client, waiting, (role.id, "All bought"), (drawing.id, CANDIDATE_CONFIRM)
-    )
+    answers = [(drawing.id, CANDIDATE_CONFIRM)]
+    if roles:
+        answers.insert(0, (waiting_answers.question(waiting).id, "All bought"))
+    applied = waiting_answers.apply(client, waiting, *answers)
     assert applied.status_code == 202, applied.text
     assert chat.settle(client, chat_id) == "awaiting_send"
     assert waiting.run.session.drawing_outcomes
@@ -1423,6 +1424,90 @@ def test_the_opening_after_a_carried_answer_names_no_finding_it_withdrew(
     for outcome in rerun.session.drawing_outcomes:
         assert f"Drawing {outcome.file}: {outcome.outcome}" in opening
     assert not [q for q in rerun.session.evidence_requests if CANDIDATE_CONFIRM in q.options]
+
+
+def test_a_re_run_carrying_only_drawing_outcome_lines_sends_each_line_once(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+    silent: ScriptedReviewBridge,
+) -> None:
+    """FR-021 after a restart (owner decision 98A item 6, 88A): a record whose only answer was
+    a drawing read carries its outcome lines and nothing else, and the re-run's settle still
+    puts each line in Send's first message exactly once."""
+    waiting = worked_review(
+        app, client, run_root / "FICT-recheck-outcomes-only", reject=False, roles=False
+    )
+    folder = waiting.fixture.folder
+    earlier = load_session(folder / "session.json")
+    assert earlier.drawing_outcomes
+    with restarted_app(run_root, server_settings(provider_control, models, silent)) as fresh:
+        rerun = rerun_of(fresh, folder)
+        assert not [q for q in rerun.session.evidence_requests if q.status == "answered"], (
+            "no answer is carried, only the outcome lines"
+        )
+        assert rerun.session.drawing_outcomes == earlier.drawing_outcomes
+        provider = RecordingProvider([chat.turn("FICT sent")])
+        fresh.app.state.server.provider_factory = lambda settings: provider
+        chat_id = next(iter(fresh.app.state.server.chats))
+        assert fresh.post(f"/sessions/{chat_id}/send", json={}).status_code == 202
+        chat.settle(fresh, str(chat_id))
+
+    opening = provider.log[0].first_message["content"]
+    for outcome in earlier.drawing_outcomes:
+        line = runner.DRAWING_OUTCOME_LINE.format(file=outcome.file, outcome=outcome.outcome)
+        assert opening.count(line) == 1, line
+
+
+def test_a_re_run_keeps_a_copy_of_its_record_when_the_stream_is_gone(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+    silent: ScriptedReviewBridge,
+) -> None:
+    """FR-028, `contracts/recheck.md` section 2 (owner decision 98A, a note): an earlier record
+    whose `events.jsonl` was deleted by hand, or whose first line cannot be read, is still copied
+    aside before the re-run's finalization replaces it, with its own `attention.json`."""
+    for case in ("deleted", "unreadable"):
+        earlier = earlier_review(app, client, run_root / f"FICT-recheck-stream-{case}")
+        stream = earlier.folder / "events.jsonl"
+        if case == "deleted":
+            stream.unlink()
+        else:
+            stream.write_text("{FICT-not-an-event" + chr(10), encoding="utf-8")
+        with restarted_app(run_root, server_settings(provider_control, models, silent)) as fresh:
+            assert recheck(fresh, earlier.folder).status_code == 201
+        kept = [
+            path for path in earlier.folder.glob("session.*.json")
+            if path.read_bytes() == earlier.files["session.json"]
+        ]
+        assert len(kept) == 1, f"{case}: the earlier record is kept once"
+        index = kept[0].name.split(".")[1]
+        attention = earlier.folder / f"attention.{index}.json"
+        assert attention.read_bytes() == earlier.files["attention.json"], case
+        assert load_session(earlier.folder / "session.json").session_id != earlier.record.session_id
+
+
+def test_a_recheck_that_names_a_retry_is_refused_and_changes_nothing(
+    app: Any, client: TestClient, run_root: Path, provider_control: chat.ProviderControl,
+) -> None:
+    """`chat-api.md`'s `400 InvalidRequest` for `recheck` with `retry_of` (98A, a note)."""
+    earlier = earlier_review(app, client, run_root / "FICT-recheck-retry")
+    before = {path.name: path.read_bytes() for path in earlier.folder.iterdir() if path.is_file()}
+
+    response = recheck(client, earlier.folder, retry_of=str(UUID(int=7)))
+
+    assert response.status_code == 400, response.text
+    assert response.json()["error_class"] == "InvalidRequest"
+    assert {
+        path.name: path.read_bytes() for path in earlier.folder.iterdir() if path.is_file()
+    } == before
+    assert app.state.server._pending_run_dirs == set()
+    assert provider_control.built == []
 
 
 # --- matching cases, on the runner's carry directly ------------------------------------------
@@ -1633,6 +1718,33 @@ def test_the_timing_inputs_and_a_failed_sends_status_are_carried(bare: Any) -> N
     assert status.rechecked_from == earlier.session_id
     assert status.checked_at == checked
     assert status.document == earlier.model_status.document
+
+
+@pytest.mark.parametrize("state", ["not_sent", "send_failed"])
+def test_a_re_run_stamps_checked_at_at_its_first_finalization_whatever_it_carried(
+    bare: Any, monkeypatch: pytest.MonkeyPatch, state: str
+) -> None:
+    """data-model section 3: `checked_at` is replaced by the first finalization's end, and a
+    re-run stamps its own, a carried `send_failed` record's too (owner decision 98A, a note)."""
+    run, earlier, _ = bare
+    assert earlier.model_status is not None
+    if state == "send_failed":
+        failure = SendFailure(at=FIRST_DECIDED, error_class="FictFailure", reason="FICT refused")
+        earlier.model_status = earlier.model_status.model_copy(
+            update={"state": "send_failed", "failures": [failure]}
+        )
+    run.carry_from(earlier)
+    assert run.session.model_status.state == state
+    finalized = run.session.model_status.checked_at + timedelta(minutes=3)
+    monkeypatch.setattr(runner.events, "local_now", lambda: finalized)
+
+    run.close_waiting()
+
+    assert run.session.model_status.checked_at == finalized == run.session.ended_at
+    later = finalized + timedelta(minutes=5)
+    monkeypatch.setattr(runner.events, "local_now", lambda: later)
+    run.finalize()
+    assert run.session.model_status.checked_at == finalized, "only the first finalization stamps"
 
 
 def test_a_failed_sends_re_run_keeps_its_failure_and_a_later_send_counts_it(
