@@ -105,7 +105,13 @@ Since Feature 016, `POST /sessions` optionally accepts
 the existing session/tool behavior; null, partial or stale attachments are refused
 before provider construction. Context is loaded only from the run's fixed private
 store after the exact baseline matches. A startup reservation prevents concurrent
-context edits and clears on setup failure. The [pane context contract](../../016-engineering-context/contracts/pane-context.md)
+context edits and clears on setup failure.
+*Amended 2026-10-15 (feature 016 on feature 015, owner decision 99A):* the attachment works with
+`send_when_checked` either way; unticked, no provider is built and Send's first request carries the
+context. A review started unticked with it records it in `model_status.engineering_context`, and its
+`recheck: true` re-run reloads and validates that attachment (a changed head is `409
+EngineeringContextConflict`, nothing moved); `recheck: true` with an `engineering_context` member is
+`400 InvalidRequest`. The [pane context contract](../../016-engineering-context/contracts/pane-context.md)
 defines the entry bodies, projections, privacy limits and saved-snapshot scope.
 
 ## Path rule for `run_dir`

@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import re
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path, PureWindowsPath
 from typing import Annotated, Any, Literal
 from uuid import UUID
@@ -464,31 +464,65 @@ class EngineeringContextServer:
     async def confirm(self, request: Request) -> Response:
         return await self._write(request, ConfirmInput, workflow.approve)
 
+    def _attached(
+        self, directory: Path, attachment: ContextAttachment, *, same_package: bool, conflict: str
+    ) -> ContextArtifact:
+        """The fixed store's head, when it is exactly `attachment`'s; the one validator.
+
+        `same_package` also requires the run folder's package to be the saved baseline, as a
+        new review's start does. A waiting review's re-run (owner decision 99A) leaves it out:
+        its own live checks may have appended evidence to the package since the start, which
+        the summary marks as needing review rather than refusing.
+        """
+        safe_dir, loaded = self._load(directory.name)
+        if safe_dir.resolve() != directory.resolve():
+            raise ContextEntryRefused("The context attachment does not name this saved run.")
+        try:
+            artifact = workflow.store_for_package(self._store_dir(safe_dir), loaded).load()
+            if (
+                artifact is None
+                or artifact.context_id != attachment.context_id
+                or context_digest(artifact) != attachment.head_digest
+                or artifact.baseline.package_sha256 != attachment.package_sha256
+                or (same_package and baseline_from_package(loaded) != artifact.baseline)
+            ):
+                raise ContextEntryConflict(conflict)
+        except CONTEXT_READ_ERRORS:
+            raise ContextEntryRefused("Saved context attachment is unavailable.") from None
+        return artifact
+
     def begin_review(self, directory: Path, raw: Any, *, requested: bool) -> ContextArtifact | None:
         """Reserve entry before provider setup, validating an explicit exact attachment."""
         with self._lock:
             self._busy(directory)
             artifact = None
             if requested:
-                attachment = _typed(ContextAttachment, raw)
-                safe_dir, loaded = self._load(directory.name)
-                if safe_dir.resolve() != directory.resolve():
-                    raise ContextEntryRefused(
-                        "The context attachment does not name this saved run."
-                    )
-                try:
-                    artifact = workflow.store_for_package(self._store_dir(safe_dir), loaded).load()
-                    baseline = baseline_from_package(loaded)
-                    if (
-                        artifact is None
-                        or artifact.context_id != attachment.context_id
-                        or context_digest(artifact) != attachment.head_digest
-                        or baseline.package_sha256 != attachment.package_sha256
-                        or artifact.baseline != baseline
-                    ):
-                        raise ContextEntryConflict("Context attachment changed; inspect it again.")
-                except CONTEXT_READ_ERRORS:
-                    raise ContextEntryRefused("Saved context attachment is unavailable.") from None
+                artifact = self._attached(
+                    directory,
+                    _typed(ContextAttachment, raw),
+                    same_package=True,
+                    conflict="Context attachment changed; inspect it again.",
+                )
+            self._preparing.add(directory.resolve())
+            return artifact
+
+    def begin_recheck(self, directory: Path, recorded: Mapping[str, Any]) -> ContextArtifact:
+        """Reserve entry for a waiting review's re-run and reload the context its record names.
+
+        Owner decision 99A: the re-run carries the attachment its waiting record names. A head
+        changed since then refuses the re-run before anything in the folder moves.
+        """
+        with self._lock:
+            self._busy(directory)
+            artifact = self._attached(
+                directory,
+                _typed(ContextAttachment, dict(recorded)),
+                same_package=False,
+                conflict=(
+                    "Saved engineering context changed since this review was checked; "
+                    "start a new review with the saved context."
+                ),
+            )
             self._preparing.add(directory.resolve())
             return artifact
 
@@ -496,20 +530,21 @@ class EngineeringContextServer:
         with self._lock:
             self._preparing.discard(directory.resolve())
 
-    def validate_prepared_review(self, directory: Path, artifact: ContextArtifact) -> None:
+    def validate_prepared_review(
+        self, directory: Path, artifact: ContextArtifact, *, same_package: bool = True
+    ) -> None:
         """Recheck the saved package immediately before constructing a provider."""
         with self._lock:
-            safe_dir, loaded = self._load(directory.name)
-            try:
-                current = workflow.store_for_package(self._store_dir(safe_dir), loaded).load()
-                if (
-                    baseline_from_package(loaded) != artifact.baseline
-                    or current is None
-                    or context_digest(current) != context_digest(artifact)
-                ):
-                    raise ContextEntryConflict("Saved context changed; prepare the review again.")
-            except CONTEXT_READ_ERRORS:
-                raise ContextEntryRefused("Saved context attachment is unavailable.") from None
+            self._attached(
+                directory,
+                ContextAttachment(
+                    context_id=artifact.context_id,
+                    head_digest=context_digest(artifact),
+                    package_sha256=artifact.baseline.package_sha256,
+                ),
+                same_package=same_package,
+                conflict="Saved context changed; prepare the review again.",
+            )
 
 
 def engineering_context_routes(server: EngineeringContextServer) -> list[Route]:

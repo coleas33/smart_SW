@@ -1296,6 +1296,11 @@ class ChatServer:
         retry_of = self._uuid(body.get("retry_of"), "retry_of")
         if recheck and retry_of is not None:
             raise ChatError("recheck re-runs the review in its own folder; it takes no retry_of")
+        if recheck and "engineering_context" in body:
+            raise ChatError(
+                "recheck carries the engineering context its waiting record names; "
+                "it takes no engineering_context"
+            )
         standards_profile = self._optional_path(body, "standards_profile")
         adopted = self._claim_run_dir(run_dir, retry_of, recheck=recheck)
         if adopted is not None:
@@ -1319,8 +1324,15 @@ class ChatServer:
                 created_at=datetime.now(UTC),
             )
             chat.to(ChatState.EXTRACTING)
-            artifact = self.engineering_context.begin_review(
-                run_dir, body.get("engineering_context"), requested="engineering_context" in body
+            recorded = earlier.model_status.engineering_context if earlier is not None else None
+            artifact = (
+                self.engineering_context.begin_recheck(run_dir, recorded)
+                if recorded is not None
+                else self.engineering_context.begin_review(
+                    run_dir,
+                    body.get("engineering_context"),
+                    requested="engineering_context" in body,
+                )
             )
             try:
                 if send_when_checked:
@@ -2342,7 +2354,9 @@ class ChatServer:
         package again before any provider is built.
         """
         if engineering_context is not None:
-            self.engineering_context.validate_prepared_review(chat.run_dir, engineering_context)
+            self.engineering_context.validate_prepared_review(
+                chat.run_dir, engineering_context, same_package=earlier is None
+            )
         self._rotate_previous(
             chat, keep_record=earlier.session_id if earlier is not None else None
         )

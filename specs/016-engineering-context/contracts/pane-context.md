@@ -119,3 +119,13 @@ read reloads the package while the review waits, the summary is built again over
 reloaded package and its retained `engineering-context-summary.json` is written again, so
 the opening and later context reads assess the same snapshot.
 
+**A restored waiting review keeps its context.** A review started unticked with saved
+context records the attachment (context id, head digest, saved package digest) in its
+waiting record's `model_status.engineering_context`. After SOLIDWORKS or the backend
+restarts, its Send re-runs the checks (015 `recheck.md`), and the re-run reloads that
+context from the fixed private store and requires the same head; the folder's package may
+differ from the saved baseline by the first run's live evidence, which the summary marks as
+needing review. A head changed since then refuses the re-run with `EngineeringContextConflict`
+and leaves the earlier record and summary in place. A re-run never unlinks the retained
+summary, and the host never sends an attachment with a re-run.
+

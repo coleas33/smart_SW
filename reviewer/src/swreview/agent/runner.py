@@ -102,7 +102,7 @@ from swreview.checks.questions import asks_same
 from swreview.checks.rms.registry import RMS_FAMILY
 from swreview.drawings.evidence import DrawingIndex, file_key
 from swreview.engineering_context.brief import build_summary, compact_json
-from swreview.engineering_context.models import ContextArtifact, canonical_bytes
+from swreview.engineering_context.models import ContextArtifact, canonical_bytes, context_digest
 from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore
 from swreview.findings import Finding, finding_subject_key
 from swreview.ir.loader import LoadedPackage, load_package
@@ -146,6 +146,7 @@ from swreview.report.session import (
     KeySource,
     ModelStatus,
     ProviderInfo,
+    RecordedContextAttachment,
     RecordedProfileIdentity,
     ReviewSession,
     SendEstimate,
@@ -2237,8 +2238,11 @@ def start_review(
     out = Path(out_dir)
     engineering_summary: dict[str, Any] | None = None
     try:
-        if engineering_context is None:
-            (out / "engineering-context-summary.json").unlink(missing_ok=True)
+        if engineering_context is None and earlier is None:
+            # A first run in a reused folder never keeps another review's summary. A re-run
+            # never unlinks one: its earlier record stays canonical until the re-run's own
+            # record replaces it (015 FR-041; owner decision 99A).
+            (out / ENGINEERING_SUMMARY_FILE_NAME).unlink(missing_ok=True)
         # Before the context, which needs `emit`: what a tool writes is on the stream from
         # the first tool call, not from the end of the turn (FR-013).
         sink = EventSink(out / EVENTS_FILE_NAME, listeners=callbacks)
@@ -2384,6 +2388,7 @@ def start_review(
             session.model_status = ModelStatus(
                 state="not_sent", document=document, checked_at=events.local_now(),
                 profile=profile_identity,
+                engineering_context=recorded_attachment(context.engineering_context),
             )
             if prerun is not None and prerun.live is not None:
                 session.live_detection = prerun.live.as_record()
@@ -2461,6 +2466,17 @@ def start_review(
         standards_gap=standards_gap if standards_profile is not None else None,
         engineering_summary=engineering_summary,
     )
+
+
+def recorded_attachment(artifact: ContextArtifact | None) -> RecordedContextAttachment | None:
+    """Feature 016's attachment as a waiting record names it (owner decision 99A)."""
+    if artifact is None:
+        return None
+    return {
+        "context_id": str(artifact.context_id),
+        "head_digest": context_digest(artifact),
+        "package_sha256": artifact.baseline.package_sha256,
+    }
 
 
 def write_engineering_summary(

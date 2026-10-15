@@ -121,6 +121,31 @@
             "type": "string",
             "pattern": "^F-[0-9]+$"
           }
+        },
+        "engineering_context": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "context_id",
+            "head_digest",
+            "package_sha256"
+          ],
+          "properties": {
+            "context_id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            },
+            "head_digest": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "package_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          "description": "Feature 016 on feature 015 (owner decision 99A, 2026-10-15): the saved engineering context a review started unticked was attached with - its context id, head digest and saved package digest, never a path - so a re-run after a restart validates the same head again. Absent for a review with no saved context."
         }
       }
     },
