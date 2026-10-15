@@ -657,6 +657,75 @@ public sealed class ReviewHostTests
         }
     }
 
+    /// <summary>
+    /// T116 (owner decision 98A item 3): a review the search finds is listed and tracked, but it
+    /// is not the pane's latest run, so the check tabs' Show and the Ask tab's folder stay where
+    /// the engineer's own last run put them.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AReviewFoundBySessionsListIsTrackedWithoutBecomingTheLatestRun(bool afterACheck)
+    {
+        using (var world = new ReviewWorld())
+        {
+            var reviewed = new PageDocument(@"C:\Fictional\FICT-reopened.SLDASM", "Default");
+            world.Document = reviewed;
+            world.SavedReview(reviewed, "FICT-saved-session", "not_sent", "2026-10-12T23:41:26+09:30");
+            world.Open();
+            SessionRecord? check = afterACheck ? world.Host.TrackCheck(world.TrackedRun("model-check")) : null;
+
+            world.Receive("sessions.list", "found", new { });
+
+            JsonElement item = Assert.Single(world.Reply("sessions", "found").GetProperty("items").EnumerateArray());
+            Assert.Equal("FICT-saved-session", item.GetProperty("chat_id").GetString());
+            Assert.NotNull(world.Host.FindSession("FICT-saved-session"));
+            Assert.Same(check, world.Host.LatestSession);
+        }
+    }
+
+    /// <summary>
+    /// T116 (owner decision 98A item 4): the chip's Remove of a found review lasts for the
+    /// SOLIDWORKS session. The folder is remembered ignoring case and a trailing separator, and
+    /// the search offers nothing while its newest candidate is that folder - never an older one.
+    /// </summary>
+    [Theory]
+    [InlineData("found")]
+    [InlineData("tracked-spelt-otherwise")]
+    public void ARemovedReviewIsNotFoundAgainAndNoOlderFolderTakesItsPlace(string how)
+    {
+        using (var world = new ReviewWorld())
+        {
+            var reviewed = new PageDocument(@"C:\Fictional\FICT-reopened.SLDASM", "Default");
+            world.Document = reviewed;
+            world.SavedReview(reviewed, "FICT-older-session", "not_sent", "2026-10-11T23:41:26+09:30",
+                Stamp.AddDays(-1));
+            string newest = world.SavedReview(reviewed, "FICT-saved-session", "send_failed",
+                "2026-10-12T23:41:26+09:30");
+            world.Open();
+            if (how == "found")
+            {
+                world.Receive("sessions.list", "found", new { });
+                Assert.Equal("FICT-saved-session", Assert.Single(
+                    world.Reply("sessions", "found").GetProperty("items").EnumerateArray()).GetProperty("chat_id").GetString());
+            }
+            else
+            {
+                world.Host.TrackSession("FICT-saved-session", newest.ToUpperInvariant() + "\\", reviewed, null, "send_failed");
+            }
+
+            world.Receive("session.forget", "removed", new { chat_id = "FICT-saved-session" });
+            Assert.Empty(world.Reply("sessions", "removed").GetProperty("items").EnumerateArray());
+
+            world.Receive("sessions.list", "again", new { });
+
+            Assert.Empty(world.Reply("sessions", "again").GetProperty("items").EnumerateArray());
+            Assert.Empty(world.Host.Reviews());
+            Assert.Null(world.Host.FindSession("FICT-saved-session"));
+            Assert.Null(world.Host.FindSession("FICT-older-session"));
+        }
+    }
+
     [Fact]
     public void AReviewFoundBySessionsListCanRecheckItsSavedFolderWithoutADump()
     {
@@ -702,6 +771,8 @@ public sealed class ReviewHostTests
                 .Select(status => status.GetProperty("stage").GetString()));
             Assert.Null(world.Host.FindSession("FICT-saved-session"));
             Assert.Equal("send_failed", Assert.Single(world.Host.Reviews()).ModelStatus);
+            // Send on the found review is the engineer's own action: its re-run is the latest run.
+            Assert.Same(world.Host.FindSession("FICT-rechecked-session"), world.Host.LatestSession);
 
             world.Receive("sessions.list", "rechecked-list", new { });
 
@@ -2505,9 +2576,11 @@ public sealed class ReviewHostTests
         }
 
         /// <summary>A fictional saved review left by an earlier host, before this one opens.</summary>
-        public string SavedReview(PageDocument document, string sessionId, string state, string checkedAt)
+        public string SavedReview(
+            PageDocument document, string sessionId, string state, string checkedAt, DateTime? stamp = null)
         {
-            string directory = SwReview.AddIn.Review.RunFolders.CreateForDocument(Settings.RunRoot, document.Path, Stamp);
+            string directory = SwReview.AddIn.Review.RunFolders.CreateForDocument(
+                Settings.RunRoot, document.Path, stamp ?? Stamp);
             File.WriteAllText(Path.Combine(directory, "session.json"), JsonSerializer.Serialize(new
             {
                 session_id = sessionId,
