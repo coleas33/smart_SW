@@ -1,0 +1,49 @@
+prices_version: 1
+currency: USD
+per_tokens: 1000000
+models:
+  - provider: openai
+    model: gpt-5.6-sol
+    input:
+      price: 4.00
+      source: "https://developers.openai.com/api/docs/pricing"
+      date: 2026-10-15
+    cached_input:
+      price: 0.40
+      source: "https://developers.openai.com/api/docs/pricing"
+      date: 2026-10-15
+    output:
+      price: 20.00
+      source: "https://developers.openai.com/api/docs/pricing"
+      date: 2026-10-15
+    short_context_max_input_tokens: 272000
+  - provider: openai
+    model: gpt-5.6-terra
+    input:
+      price: 2.00
+      source: "https://developers.openai.com/api/docs/pricing"
+      date: 2026-10-15
+    cached_input:
+      price: 0.20
+      source: "https://developers.openai.com/api/docs/pricing"
+      date: 2026-10-15
+    output:
+      price: 12.00
+      source: "https://developers.openai.com/api/docs/pricing"
+      date: 2026-10-15
+    short_context_max_input_tokens: 272000
+  - provider: openai
+    model: gpt-5.6-luna
+    input:
+      price: 0.20
+      source: "https://developers.openai.com/api/docs/pricing"
+      date: 2026-10-15
+    cached_input:
+      price: 0.02
+      source: "https://developers.openai.com/api/docs/pricing"
+      date: 2026-10-15
+    output:
+      price: 1.20
+      source: "https://developers.openai.com/api/docs/pricing"
+      date: 2026-10-15
+    short_context_max_input_tokens: 272000

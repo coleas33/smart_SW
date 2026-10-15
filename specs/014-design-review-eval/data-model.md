@@ -271,7 +271,7 @@ the attempt's stop is set and never an error carrying `stop_reason` (RF-76); the
 
 **PriceTable** (`benchmark/prices.yaml`, strict): `prices_version`, `currency`, `per_tokens`,
 `models[{provider, model, input, cached_input, output}]`, each price with `source` and `date`; three
-prices per model (FR-042) and no tiers (RF-8), cache-write tokens counted and never priced. **Cost**:
+prices per model (FR-042) and no tiers (RF-8), with an optional `short_context_max_input_tokens` above which a round reads cost unknown (103A), cache-write tokens counted and never priced. **Cost**:
 amount or `null`, `missing[]`, basis notes, `synthetic`; priced per round by `price_rounds`.
 
 ## 8. The scorecard  [scoring.md 3-9; questions.md 6]
