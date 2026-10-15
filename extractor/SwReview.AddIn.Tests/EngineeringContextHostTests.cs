@@ -53,6 +53,39 @@ public sealed class EngineeringContextHostTests
         Assert.Equal("ContextExpired", world.Reply("error").GetProperty("error_class").GetString());
     }
 
+    /// <summary>
+    /// Owner decision 99A (the T116 integration review's first blocker): a context review starts
+    /// through the one session path ordinary Review uses, so an unticked box makes it wait with
+    /// nothing sent, and its reply and chip say so.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ContextReviewFollowsTheSendWhenCheckedBox(bool sendWhenChecked)
+    {
+        using var world = new World(sendWhenChecked);
+        world.Host.Receive(Message("context.prepare", new { }));
+        JsonElement prepared = world.Reply("context.prepared");
+        string contextId = Guid.NewGuid().ToString();
+        world.Host.Receive(Message("context.review", new
+        {
+            run_id = prepared.GetProperty("run_id").GetString(), context_id = contextId,
+            head_digest = new string('a', 64), package_sha256 = prepared.GetProperty("package_sha256").GetString(),
+        }));
+        NewSessionRequest request = Assert.Single(world.Backend.Created);
+        Assert.Equal(sendWhenChecked ? ReviewMode.Send : ReviewMode.Wait, request.Mode);
+        Assert.Null(request.RetryOf);
+        Assert.Equal(contextId, request.EngineeringContext!.ContextId);
+        JsonElement started = world.Reply("review.started");
+        Assert.Equal(sendWhenChecked, started.GetProperty("send_when_checked").GetBoolean());
+        Assert.Equal("chat-context", started.GetProperty("chat_id").GetString());
+        Assert.Equal(world.Dump.Directory, started.GetProperty("run_dir").GetString());
+        string ready = world.Status("ready");
+        if (sendWhenChecked) Assert.DoesNotContain("nothing was sent", ready);
+        else Assert.Equal("Checked 1 components by code; nothing was sent to the model.", ready);
+        Assert.Equal(1, world.Dump.Runs);
+    }
+
     [Theory]
     [InlineData("document")]
     [InlineData("configuration")]
@@ -183,11 +216,12 @@ public sealed class EngineeringContextHostTests
         public Action? ReadDocumentCallback;
         public PageDocument? Document = new PageDocument(@"C:\Fictional\bracket.SLDASM", "Default");
 
-        public World()
+        public World(bool sendWhenChecked = true)
         {
             System.IO.Directory.CreateDirectory(_root);
             var settings = UserSettings.Defaults();
             settings.RunRoot = Path.Combine(_root, "runs");
+            settings.SendsWhenChecked = sendWhenChecked;
             string settingsPath = Path.Combine(_root, "settings.json");
             settings.Save(settingsPath);
             Host = new ReviewHost(new ReviewHostOptions(new Channel(Messages), Backend, settingsPath)
@@ -214,6 +248,20 @@ public sealed class EngineeringContextHostTests
             }
             if (found.HasValue) return found.Value;
             throw new Xunit.Sdk.XunitException("Missing " + type + " reply: " + string.Join(" | ", Messages));
+        }
+
+        /// <summary>The text of the last `status` message posted with `state`.</summary>
+        public string Status(string state)
+        {
+            string? found = null;
+            foreach (string message in Messages)
+            {
+                JsonElement root = JsonDocument.Parse(message).RootElement;
+                if (root.GetProperty("type").GetString() != "status") continue;
+                JsonElement payload = root.GetProperty("payload");
+                if (payload.GetProperty("stage").GetString() == state) found = payload.GetProperty("message").GetString();
+            }
+            return found ?? throw new Xunit.Sdk.XunitException("Missing " + state + " status: " + string.Join(" | ", Messages));
         }
 
         public void Dispose()

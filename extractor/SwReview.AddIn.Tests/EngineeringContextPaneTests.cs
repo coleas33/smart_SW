@@ -290,6 +290,72 @@ public sealed class EngineeringContextPaneTests
         });
     }
 
+    /// <summary>
+    /// Owner decision 99A (the T116 integration review's first and fourth findings): saved context
+    /// cannot be edited or reviewed while a review waits for Send, while its Send is being
+    /// accepted, or while a restored review is checked again; and the context start is refused
+    /// by the same guard ordinary Review has.
+    /// </summary>
+    [Fact]
+    public void ContextControlsAreRefusedWhileAReviewWaitsOrItsSendIsPending()
+    {
+        WaitingReviewFixture waiting = WaitingReviewFixture.Read();
+        ReviewPageDriver.Run(driver =>
+        {
+            waiting.Configure(driver);
+            Configure(driver, Snapshot(Requirement()));
+        }, async driver =>
+        {
+            await driver.Settle();
+            Assert.True(await Bool(driver.Page, ContextOff), "a waiting review on screen holds the context panel");
+            await driver.Click("clear-review");
+            await Prepare(driver);
+            Assert.False(await Bool(driver.Page, "document.getElementById('context-review').disabled"));
+            await driver.Read("document.querySelector(\"[data-chat-id='chat-1']\").click();return JSON.stringify({ok:true});");
+            await driver.Settle();
+            Assert.True(await Bool(driver.Page, ContextOff), "the waiting review is shown again");
+            await driver.HoldRoute("POST", "/sessions/chat-1/send", 202, "{}");
+            await ReviewPageRecheckTests.PressSend(driver);
+            Assert.True(await Bool(driver.Page, ContextOff), "a Send whose acceptance is held");
+            await driver.Page.ExecuteScriptAsync("document.getElementById('context-review').click();0");
+            await OffscreenReviewPage.Settled(driver.Page);
+            Assert.Empty(driver.Posted("context.review"));
+            Assert.Empty(driver.Posted("review.start"));
+        });
+    }
+
+    [Fact]
+    public void ContextControlsAreRefusedWhileARestoredReviewIsCheckedAgain()
+    {
+        RestoredReviewFixture restored = RestoredReviewFixture.Read();
+        ReviewPageDriver.Run(driver =>
+        {
+            restored.Configure(driver);
+            Configure(driver, Snapshot(Requirement()));
+            driver.HoldReviewRecheck = true;
+        }, async driver =>
+        {
+            await driver.Settle();
+            Assert.True(await Bool(driver.Page, ContextOff), "a restored waiting review holds the context panel");
+            await driver.Click("clear-review");
+            await Prepare(driver);
+            await driver.Read("document.querySelector(\"[data-chat-id='" + RestoredReviewFixture.EarlierChat + "']\").click();return JSON.stringify({ok:true});");
+            await driver.Settle();
+            await ReviewPageRecheckTests.PressSend(driver);
+            Assert.Single(driver.Posted("review.recheck"));
+            Assert.True(await Bool(driver.Page, ContextOff), "a re-run in flight");
+            await driver.Page.ExecuteScriptAsync("document.getElementById('context-review').click();0");
+            await OffscreenReviewPage.Settled(driver.Page);
+            Assert.Empty(driver.Posted("context.review"));
+            await driver.ReleaseReviewRecheck();
+            Assert.True(await Bool(driver.Page, ContextOff), "the re-run's chat waits for Send");
+        });
+    }
+
+    /// <summary>Every context control that edits, prepares or reviews is off.</summary>
+    private const string ContextOff = "['context-prepare','context-selection','context-save','context-new','context-review']"
+        + ".every(function(id){return document.getElementById(id).disabled;})";
+
     [Fact]
     public void LegacyPrivateLabelsCannotBeEditedOrConfirmedFromThePublicPane()
     {
