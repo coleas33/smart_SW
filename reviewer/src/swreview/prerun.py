@@ -1484,10 +1484,20 @@ def _carried_interference(
     the reviewed configuration's rows are removed from the in-memory package as
     `_live_interference` removes them before its call, so the dump's stale rows are not
     judged; a failed call keeps them, as the first run put them back.
+
+    Every later step and finding citation is the first run's only if the carried step lands at
+    the first run's index, so a pre-run that holds any other number of steps by then is refused
+    before anything is recorded (owner decision 87A).
     """
     carried = CarriedLiveOutcome(**asdict(live))
     if live.step_index is None:
         return carried
+    recorded = len(context.require_session().steps)
+    if recorded != live.step_index:
+        raise RuntimeError(
+            f"the carried live step would be step {recorded}, but the first run recorded its "
+            f"call as step {live.step_index}"
+        )
     if live.error is None and live.persist_error is not None:
         package = context.ir
         package.interferences[:] = [

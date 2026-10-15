@@ -1330,9 +1330,7 @@ class ChatServer:
                         earlier=earlier,
                     )
                 )
-                if earlier is not None:
-                    await self._carry(chat, run, earlier)
-                await self._open_waiting(chat, run)
+                await self._open_waiting(chat, run, earlier)
         except Exception:
             if chat.state is ChatState.EXTRACTING:
                 chat.to(ChatState.FAILED)
@@ -2379,21 +2377,20 @@ class ChatServer:
         run.check_presentation_cancelled = check_presentation_cancelled
         return run
 
-    async def _carry(self, chat: ChatSession, run: ReviewRun, earlier: ReviewSession) -> None:
-        """A re-run's carry, on the thread pool, before `_open_waiting` finalizes (015)."""
-        try:
-            await run_in_threadpool(run.carry_from, earlier)
-        except Exception:
-            with contextlib.suppress(Exception):
-                run.close()
-            chat.to(ChatState.FAILED)
-            raise
+    async def _open_waiting(
+        self, chat: ChatSession, run: ReviewRun, earlier: ReviewSession | None = None
+    ) -> None:
+        """Save both views before publishing a waiting run on the event loop.
 
-    async def _open_waiting(self, chat: ChatSession, run: ReviewRun) -> None:
-        """Save both views before publishing a waiting run on the event loop."""
+        A re-run's carry (feature 015, `earlier`) runs first, in the same thread function, so a
+        carry that raises takes the one failure path a failed finalization takes (owner
+        decision 87A): the run closed, the chat `failed` and never registered.
+        """
 
         def close_and_render() -> None:
             try:
+                if earlier is not None:
+                    run.carry_from(earlier)
                 run.close_waiting()
                 self._render_run(run, chat.report_path, chat.run_dir)
                 run.release_bridge()
