@@ -3064,6 +3064,10 @@ def benchmark_report(
     """
     with _errors_as_exit_1():
         built = report_page.build_report(run_dirs, out)
+    for removed in built.removed:
+        typer.echo(f"removed {removed}, left by an earlier build")
+    for warning in built.warnings:
+        typer.echo(f"warning: {warning}", err=True)
     typer.echo(f"wrote {built.index} ({built.transcripts} transcripts)")
 
 

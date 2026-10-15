@@ -30,8 +30,10 @@ from __future__ import annotations
 import html
 import json
 import os
+import re
+import secrets
 import shutil
-import tempfile
+import stat
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -151,6 +153,8 @@ UNREADABLE_FROM = "the event log is unreadable from line {line}"
 MALFORMED_FROM = "{run}/{package}: the event log is unreadable from seq {seq}"
 """A body the walk cannot read, read as an unreadable line is (owner decision 83A)."""
 NOT_IN_THE_LOG = "this turn is not in the event log"
+NOT_SHOWN = "not shown: the log is unreadable before this turn"
+"""A recorded turn past a log that stopped early, at a damaged body or an unreadable line (91A)."""
 EXPLANATION_PASS = "explanation pass"
 CODE_BEFORE_THE_FIRST_TURN = "Code before the first turn"
 UNSTORED: dict[UnstoredReason, str] = {
@@ -177,7 +181,10 @@ WINDOWS_RESERVED = frozenset(
 """The device names Windows reserves, with or without an extension."""
 
 BUILDING = ".building"
-"""The suffix of the sibling folder a build is written into before it is swapped in (83A)."""
+"""The suffix of the sibling folder a build is written into before it is put in place (83A)."""
+
+PREVIOUS = ".previous"
+"""The suffix a previous report is moved aside under while the build is moved in (83A, 91A)."""
 
 KEY_GUARD_REASON = "a run folder under it is never read by the report"
 """The reason the key guard's refusal names for a run folder under a key path."""
@@ -201,6 +208,10 @@ class ReportBuilt:
 
     index: Path
     transcripts: int
+    removed: tuple[Path, ...] = ()
+    """The siblings an earlier, killed build left, removed before this one (91A)."""
+    warnings: tuple[str, ...] = ()
+    """What this build left and could not remove, its report being in place (91A)."""
 
 
 @dataclass(frozen=True)
@@ -263,9 +274,15 @@ def build_report(
     scorecard's; nothing is written into a run folder; no build time is written, so two builds
     are byte-identical.
 
-    The pages are written into a new sibling folder of `out` and swapped in once all are written,
-    so a build that fails part-way, on an `OSError` such as a path too long included, leaves a
-    previous report as it was and no sibling behind (owner decision 83A).
+    The pages are written into a new sibling folder of `out` and put in place once all are
+    written, so a build that fails part-way, on an `OSError` such as a path too long included,
+    leaves a previous report as it was (owner decision 83A). In place means moved: the previous
+    report aside, the build in, the previous one removed. Where `out` is or holds the working
+    folder, or is a link, or the move fails, the build is copied into `out` instead, replacing
+    its contents (owner decision 91A). Removing the old report is best effort: one that cannot be
+    removed is named in `ReportBuilt.warnings`, the new report being in place; siblings a killed
+    build left are removed first and named in `ReportBuilt.removed`. The build needs write
+    access to `out`'s parent.
     """
     out = Path(out)
     paths = distinct_run_dirs(run_dirs)
@@ -294,8 +311,12 @@ def build_report(
             if entry is not None and entry.path not in legends:
                 legends[entry.path] = _legend(entry, root=root)
 
-    out.parent.mkdir(parents=True, exist_ok=True)
-    building = Path(tempfile.mkdtemp(dir=out.parent, prefix=f".{out.name}.", suffix=BUILDING))
+    target = out.resolve()
+    in_place = _in_place(out, target)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    removed, stuck = _remove_orphans(target)
+    building = _sibling(target, BUILDING)
+    building.mkdir()
     try:
         _write_page(building / INDEX_FILE, _index_page(runs))
         written = 0
@@ -304,11 +325,16 @@ def build_report(
                 page = _transcript_page(run, score, _legend_of(run, score, legends))
                 _write_page(building / Path(*run.transcript(score.package_id).split("/")), page)
                 written += 1
-        _swap_in(building, out)
+        leftover = _place(building, target, in_place=in_place)
     except BaseException:
-        shutil.rmtree(building, ignore_errors=True)
+        _remove(building)
         raise
-    return ReportBuilt(index=out / INDEX_FILE, transcripts=written)
+    return ReportBuilt(
+        index=target / INDEX_FILE,
+        transcripts=written,
+        removed=removed,
+        warnings=stuck + (() if leftover is None else (_leftover_warning(leftover),)),
+    )
 
 
 def _legend_of(run: _Run, score: PackageScore, legends: dict[Path, _Legend]) -> _Legend:
@@ -325,20 +351,101 @@ def _legend_of(run: _Run, score: PackageScore, legends: dict[Path, _Legend]) -> 
     return legends[entry.path]
 
 
-def _swap_in(built: Path, out: Path) -> None:
-    """Put the finished build where `out` is. A previous report, or an empty folder, is moved
-    aside first and removed only once the build is in place; a failed move puts it back."""
-    if not out.exists():
-        built.rename(out)
-        return
-    previous = built.with_name(built.name.removesuffix(BUILDING) + ".previous")
-    out.rename(previous)
+def _sibling(target: Path, suffix: str) -> Path:
+    """A new folder name beside `target`: `.<name>.<random>` and the suffix. Made with
+    `Path.mkdir`, never `tempfile.mkdtemp`, whose mode 0o700 becomes a Windows ACL closed to
+    everyone but the owner from Python 3.12.4 on (owner decision 91A)."""
+    return target.with_name(f".{target.name}.{secrets.token_hex(8)}{suffix}")
+
+
+def _in_place(out: Path, target: Path) -> bool:
+    """Whether the build is copied into `out` rather than moved: `out` is a link, whose target
+    the copy updates, or is or holds the working folder, which cannot be moved (91A)."""
+    if out.is_symlink() or out.is_junction():
+        return True
+    return target.exists() and Path.cwd().resolve().is_relative_to(target)
+
+
+def _place(built: Path, target: Path, *, in_place: bool) -> Path | None:
+    """Put the finished build at `target`; the folder this left and could not remove, if any.
+
+    Moved when it can be: a previous report, or an empty folder, aside, the build in, the
+    previous one removed. Copied in place when `in_place`, when the previous report cannot be
+    moved aside, or when the build cannot be moved in, the previous report then moved back first
+    (owner decision 91A).
+    """
+    if in_place:
+        _copy_in_place(built, target)
+        return _remove(built)
+    if not target.exists():
+        built.rename(target)
+        return None
+    previous = _sibling(target, PREVIOUS)
     try:
-        built.rename(out)
-    except BaseException:
-        previous.rename(out)
-        raise
-    shutil.rmtree(previous)
+        target.rename(previous)
+    except OSError:
+        _copy_in_place(built, target)
+        return _remove(built)
+    try:
+        built.rename(target)
+    except OSError:
+        previous.rename(target)
+        _copy_in_place(built, target)
+        return _remove(built)
+    return _remove(previous)
+
+
+def _copy_in_place(built: Path, target: Path) -> None:
+    """Replace `target`'s report with the build's, keeping the folder itself; not atomic."""
+    transcripts = target / TRANSCRIPTS_DIR
+    if transcripts.is_dir():
+        shutil.rmtree(transcripts, onexc=_writable)
+    if (built / TRANSCRIPTS_DIR).is_dir():
+        shutil.copytree(built / TRANSCRIPTS_DIR, transcripts)
+    shutil.copyfile(built / INDEX_FILE, target / INDEX_FILE)
+
+
+def _writable(function: Any, name: str, error: BaseException) -> None:
+    """`shutil.rmtree`'s retry for a read-only file or folder: clear the flag, try once more."""
+    os.chmod(name, stat.S_IWRITE)
+    function(name)
+
+
+def _remove(folder: Path) -> Path | None:
+    """Remove a folder this command wrote, read-only flags cleared; best effort: the folder
+    when it could not be removed, else `None`."""
+    try:
+        shutil.rmtree(folder, onexc=_writable)
+    except OSError:
+        return folder
+    return None
+
+
+def _remove_orphans(target: Path) -> tuple[tuple[Path, ...], tuple[str, ...]]:
+    """The siblings a killed build of `target` left (`.<name>.<random>.building` or
+    `.previous`), each removed, best effort: those removed, and a warning for each that was not,
+    both to be named (91A)."""
+    left = re.compile(
+        rf"\.{re.escape(target.name)}\.[0-9a-z_]+(?:{re.escape(BUILDING)}|{re.escape(PREVIOUS)})"
+    )
+    if not target.parent.is_dir():
+        return (), ()
+    orphans = sorted(
+        child
+        for child in target.parent.iterdir()
+        if left.fullmatch(child.name) and child.is_dir() and not child.is_symlink()
+    )
+    stuck = [orphan for orphan in orphans if _remove(orphan) is not None]
+    removed = tuple(orphan for orphan in orphans if orphan not in stuck)
+    return removed, tuple(
+        f"could not remove {orphan}, left by an earlier build; remove it by hand"
+        for orphan in stuck
+    )
+
+
+def _leftover_warning(leftover: Path) -> str:
+    what = "the previous report" if leftover.name.endswith(PREVIOUS) else "this build's copy"
+    return f"could not remove {leftover}, {what}; the new report is in place, so remove it by hand"
 
 
 def _refuse_package_ids_that_name_no_file(run: Path, scorecard: Scorecard) -> None:
@@ -782,6 +889,7 @@ def _transcript_page(run: _Run, score: PackageScore, legend: _Legend) -> list[st
         message_note=prompts_note,
         points={point.after_turn: point for point in answer_log.points} if answer_log else {},
         reasoning=run.reasoning_label,
+        stopped_early=malformed is not None or bool(unreadable),
     )
     lines += walk.render(events)
     if malformed is not None:
@@ -888,6 +996,7 @@ class _LogWalk:
         message_note: str,
         points: dict[int, AnswerPoint],
         reasoning: str,
+        stopped_early: bool = False,
     ) -> None:
         self.folder = folder
         self.session = session
@@ -896,6 +1005,8 @@ class _LogWalk:
         self.message_note = message_note
         self.points = points
         self.reasoning = reasoning
+        self.stopped_early = stopped_early
+        """The log stopped at a damaged body or an unreadable line, before its end."""
         self.questions = (
             {request.id: request.question or request.what for request in session.evidence_requests}
             if session is not None
@@ -965,11 +1076,13 @@ class _LogWalk:
         self._flush_coverage()
 
     def _sent_past_the_log(self, first: int) -> None:
-        """The recorded messages of turns the log does not reach: an attempt cut short."""
+        """The recorded messages of turns the log does not reach: an attempt cut short, or a
+        log that stopped early before them (owner decision 91A)."""
+        label = NOT_SHOWN if self.stopped_early else NOT_IN_THE_LOG
         for number in range(first, len(self.messages or [])):
             self.lines.append(f"<h3>Turn {_e(format_count(number))}</h3>")
             self.lines.append(f"<pre>{_e(self._message(number))}</pre>")
-            self.lines.append(_note(NOT_IN_THE_LOG))
+            self.lines.append(_note(label))
 
     def _message(self, number: int) -> str:
         if self.messages is None:
