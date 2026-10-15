@@ -56,6 +56,7 @@ from pydantic import ConfigDict, Field
 
 from swreview import atomic
 from swreview.agent import events
+from swreview.agent.providers.retry import RetryPolicy
 from swreview.agent.settings import MODEL_VIEW_OFF, EfficiencySettings, ModelViewSettings
 from swreview.benchmark import answers, prices, scrub
 from swreview.benchmark import attempt as attempt_driver
@@ -192,6 +193,18 @@ class RunProvenance(ReviewModel):
     """How many answer turns each review could take after its opening turn
     (`contracts/scripted-answers.md` 4); `None`, "not recorded", in a record older than the
     field, never the default 3."""
+
+    package_time_limit_s: int | None = None
+    """The per-package wall clock W; absent means "not recorded", never the default."""
+
+    stream_activity_window_s: int | None = None
+    """The stream activity window A at the wall-clock limit; absent means "not recorded"."""
+
+    stop_grace_s: int | None = None
+    """The stop grace G before an unresponsive worker is abandoned; absent means "not recorded"."""
+
+    retry_policy: RetryPolicy | None = None
+    """The request retry policy applied to every attempt; absent means "not recorded"."""
 
 
 @dataclass(frozen=True)

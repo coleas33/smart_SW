@@ -88,8 +88,9 @@ from swreview.agent.settings import (
     redact,
 )
 from swreview.agent.settings import pane_defaults as pane_defaults_for
-from swreview.benchmark import answers, report_page, scrub, set_summary, sets
+from swreview.benchmark import answers, prices, report_page, scrub, set_summary, sets
 from swreview.benchmark.answers import DEFAULT_MAX_ANSWER_TURNS
+from swreview.benchmark.attempt import STOP_GRACE_S, STREAM_ACTIVITY_WINDOW_S
 from swreview.benchmark.compare import (
     carry_sign_offs,
     committed_sign_off_sources,
@@ -2635,6 +2636,13 @@ def benchmark_run(
             "the opening turn only.",
         ),
     ] = DEFAULT_MAX_ANSWER_TURNS,
+    package_time_limit: Annotated[
+        int,
+        typer.Option(
+            "--package-time-limit", min=1, metavar="MINUTES",
+            help="Wall-clock limit per package, in minutes.",
+        ),
+    ] = 60,
     json_output: JsonFlag = False,
 ) -> None:
     """Review every package in the set, with answer keys unreadable."""
@@ -2706,6 +2714,14 @@ def benchmark_run(
                 ),
                 root=root,
             )
+            # Row 6's price entry: the scripted provider's cost is synthetic.
+            if study in (PANE_STUDY, PRIVATE_PANE_STUDY) and provider != ProviderName.FAKE:
+                if prices.price_entry(prices.load_prices(), provider, settings.model) is None:
+                    raise ValueError(
+                        f"no price for {provider.value} {settings.model} in benchmark/prices.yaml: "
+                        "a pane study's cost must be known (SC-008); add the entry with its "
+                        "source and date"
+                    )
             # Row 7, P-3.
             if declares_a_study:
                 _refuse_a_set_too_small_to_gate(benchmark_set, set_too_small_override)
@@ -2743,6 +2759,10 @@ def benchmark_run(
                     prompt_digest=sha256_of(prompt_file),
                     tree_dirty=dirty,
                     max_answer_turns=max_answer_turns,
+                    package_time_limit_s=package_time_limit * 60,
+                    stream_activity_window_s=STREAM_ACTIVITY_WINDOW_S,
+                    stop_grace_s=STOP_GRACE_S,
+                    retry_policy=BENCHMARK_RETRY,
                 ),
             )
             def package_done(
@@ -2775,6 +2795,7 @@ def benchmark_run(
                 model_view=resolved.model_view,
                 standards_profile=standards_profile,
                 max_answer_turns=max_answer_turns,
+                package_time_limit_s=package_time_limit * 60,
                 redact=redactor,
                 on_package_done=package_done,
             )

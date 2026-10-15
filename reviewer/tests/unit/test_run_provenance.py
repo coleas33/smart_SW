@@ -433,8 +433,18 @@ def slice_3_runs(tmp_path: Path) -> list[SliceRun]:
     return [(["--max-answer-turns", "0"], {"max_answer_turns": 0}), ([], {"max_answer_turns": 3})]
 
 
-SLICE_RUNS = {2: slice_2_runs, 3: slice_3_runs}
-"""Each slice's runs and the fields it lands, by slice number. Lane B6 adds slice 6 (T201); each
+def slice_6_runs(tmp_path: Path) -> list[SliceRun]:
+    """T201: the default wall clock, activity window, stop grace and request retry policy."""
+    return [([], {
+        "package_time_limit_s": 3600,
+        "stream_activity_window_s": 600,
+        "stop_grace_s": 900,
+        "retry_policy": {"retries": 5, "initial_delay_s": 2.0, "max_delay_s": 60.0},
+    })]
+
+
+SLICE_RUNS = {2: slice_2_runs, 3: slice_3_runs, 6: slice_6_runs}
+"""Each slice's runs and the fields it lands, by slice number (T201 adds slice 6); each
 slice asserts its own fields and nothing about another slice's."""
 
 
@@ -498,6 +508,10 @@ NOT_RECORDED: tuple[str, ...] = (
     "inert_settings",
     "prompt_digest",
     "tree_dirty",
+    "package_time_limit_s",
+    "stream_activity_window_s",
+    "stop_grace_s",
+    "retry_policy",
 )
 """The new fields a record older than feature 014 reads as `None`, "not recorded"."""
 

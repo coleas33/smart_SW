@@ -250,7 +250,14 @@ MUST_MATCH: tuple[str, ...] = tuple(
 """Every other field of the record, in its own order: a field added later must match until
 someone exempts it by name."""
 
-NOT_RECORDED_WHEN_ABSENT: tuple[str, ...] = ("max_answer_turns",)
+NOT_RECORDED_WHEN_ABSENT: tuple[str, ...] = (
+    "max_answer_turns",
+    # Slice 6's robustness fields (T202; provenance.md 4): absent only in an older record.
+    "package_time_limit_s",
+    "stream_activity_window_s",
+    "stop_grace_s",
+    "retry_policy",
+)
 """The fields whose absence can only mean a record an older build wrote, so a refusal quotes an
 absent one "not recorded" (owner decision 47A). Every other field's value is quoted as it is:
 a schema-2 record's `profile_digest` of `None` means no profile, a `commit` of `None` that git

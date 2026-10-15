@@ -47,12 +47,13 @@ from swreview.agent.settings import (
     MODEL_VIEW_OFF,
     MODEL_VIEW_PANE,
     PANE_STUDY,
+    PRIVATE_PANE_STUDY,
     WORKSTATION_LEVERS,
     EfficiencySettings,
     ProviderSettings,
     pane_defaults,
 )
-from swreview.benchmark import answers
+from swreview.benchmark import answers, prices
 from swreview.benchmark.case_file import CaseFile
 from swreview.benchmark.runner import PROVENANCE_FILE, AttemptRequest, preflight_set, run_benchmark
 from swreview.checks.standards.profile import ProfileInvalid, ProfileUnreadable, load_profile
@@ -438,6 +439,120 @@ def test_a_package_id_attempts_is_refused(
 
 
 # --- 3. what declares a study for P-3 (PP-6) ----------------------------------------
+
+
+def test_a_package_time_limit_below_one_is_a_usage_error(
+    tmp_path: Path, tmp_package_dir: Path, reviews: list[dict[str, Any]]
+) -> None:
+    """T201: zero minutes is refused by the option's range before anything is written."""
+    set_path = one_package_set(tmp_path, tmp_package_dir)
+    out = tmp_path / "runs" / "zero-limit"
+
+    result = benchmark_run(set_path, out, "--package-time-limit", "0")
+
+    assert result.exit_code == 2
+    assert "--package-time-limit" in result.stderr
+    assert "x>=1" in result.stderr
+    assert reviews == []
+    assert not out.exists()
+
+
+def test_the_typed_package_time_limit_is_recorded_as_package_time_limit_s(
+    tmp_path: Path,
+    tmp_package_dir: Path,
+    reviews: list[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """T201: the typed minutes become seconds both on disk and at the attempt driver."""
+    set_path = one_package_set(tmp_path, tmp_package_dir)
+    out = tmp_path / "runs" / "two-minutes"
+    limits: list[float] = []
+    original = cli.run_benchmark
+
+    def spy(*args: Any, **kwargs: Any) -> list[Path]:
+        limits.append(kwargs["package_time_limit_s"])
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(cli, "run_benchmark", spy)
+
+    result = benchmark_run(set_path, out, "--package-time-limit", "2")
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert read_record(out)["package_time_limit_s"] == 120
+    assert limits == [120]
+    assert len(reviews) == 1
+
+
+@pytest.mark.parametrize("study", [PANE_STUDY, PRIVATE_PANE_STUDY])
+@pytest.mark.parametrize("scenario", ["missing", "priced", "lever", "synthetic"])
+def test_a_pane_study_refuses_a_model_the_price_table_cannot_price(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    reviews: list[dict[str, Any]],
+    study: str,
+    scenario: str,
+) -> None:
+    """T201, RF-79: known cost before a pane study; lever and synthetic controls pass.
+
+    Owner decision 94A: OpenAI and the scripted provider cover this row; no Gemini case.
+    """
+    from tests.unit.test_benchmark_run_pane_study import EXAMPLE, OFF_ARM, checkout, point_at
+    from tests.unit.test_cli import RecordingProvider
+
+    root = tmp_path / "checkout"
+    set_path = checkout(root)
+    point_at(root, monkeypatch)
+    monkeypatch.setenv("OPENAI_API_KEY", "fictional-openai-key")
+    built: list[RecordingProvider] = []
+
+    def factory(
+        settings: ProviderSettings, efficiency: EfficiencySettings | None = None
+    ) -> RecordingProvider:
+        adapter = RecordingProvider(
+            settings=settings, efficiency=efficiency, script=[ScriptedTurn(text="done")]
+        )
+        built.append(adapter)
+        return adapter
+
+    monkeypatch.setattr(cli, "provider_factory", factory)
+    table = prices.PriceTable.model_validate({
+        "prices_version": 1,
+        "currency": "USD",
+        "per_tokens": 1_000_000,
+        "models": [{
+            "provider": "openai",
+            "model": "fictional-priced",
+            **{name: {
+                "price": rate,
+                "source": "https://example.test/openai/pricing",
+                "date": "2026-10-01",
+            } for name, rate in (("input", 2.0), ("cached_input", 0.5), ("output", 10.0))},
+        }],
+    })
+    monkeypatch.setattr(prices, "load_prices", lambda: table)
+    provider = "fake" if scenario == "synthetic" else "openai"
+    model = "fictional-priced" if scenario == "priced" else "fictional-unpriced"
+    actual_study = "tool_tiers" if scenario == "lever" else study
+    out = tmp_path / "runs" / scenario
+
+    result = invoke(
+        "benchmark", "run", "--set", str(set_path), "--out", str(out),
+        "--provider", provider, "--model", model, "--study", actual_study,
+        *OFF_ARM, "--standards-profile", str(root / EXAMPLE),
+    )
+
+    assert len(built) == 1
+    if scenario == "missing":
+        assert result.exit_code == 1, result.stdout + result.stderr
+        assert one_line(result) == (
+            "error: ValueError: no price for openai fictional-unpriced in benchmark/prices.yaml: "
+            "a pane study's cost must be known (SC-008); add the entry with its source and date"
+        )
+        assert reviews == []
+        assert not out.exists()
+    else:
+        assert result.exit_code == 0, result.stdout + result.stderr
+        assert len(reviews) == 1
 
 
 @pytest.mark.parametrize("switch", ["--pane-defaults", "--payload-slimming", "--history-pruning"])
