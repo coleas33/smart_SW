@@ -432,3 +432,15 @@ def test_92a_a_note_survives_a_message_cut_to_one_line_s_length() -> None:
     assert line.endswith(
         "…; the prompts record could not be rewritten: OSError: a fictional full disk"
     )
+
+
+def test_96a_long_notes_are_cut_so_the_line_stays_bounded() -> None:
+    """Owner decision 96A: the notes are cut as the message is, so one line stays bounded."""
+    error = ValueError("a fictional refusal")
+    error.add_note("n" * (cli.MESSAGE_LENGTH * 3))
+
+    line = cli._one_line(error)
+
+    assert line.startswith("ValueError: a fictional refusal; nnn")
+    assert line.endswith("…")
+    assert len(line) <= 2 * cli.MESSAGE_LENGTH + len("ValueError: ; ")

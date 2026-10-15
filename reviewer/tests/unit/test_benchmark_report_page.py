@@ -28,6 +28,7 @@ import shutil
 import stat
 import subprocess
 import tempfile
+import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
@@ -1808,14 +1809,25 @@ def test_91a_the_sibling_folder_is_made_without_mkdtemp(
 ) -> None:
     """`tempfile.mkdtemp` makes its folder with mode 0o700, which Python 3.12.4 and later turn
     into a Windows ACL closed to everyone but the owner, SYSTEM and Administrators; the build
-    makes its own with `Path.mkdir`, so the folder takes its parent's permissions."""
+    makes its own with `Path.mkdir`, so the folder takes its parent's permissions. The one
+    folder made beside `--out` is made by `Path.mkdir` and carries this command's own name
+    (owner decision 96A: the test bites)."""
+    made: list[str] = []
+    real = Path.mkdir
+
+    def mkdir(self: Path, *args: Any, **kwargs: Any) -> None:
+        made.append(self.name)
+        real(self, *args, **kwargs)
 
     def refuse(*args: Any, **kwargs: Any) -> str:
         raise AssertionError("the build made its folder with tempfile.mkdtemp")
 
+    monkeypatch.setattr(Path, "mkdir", mkdir)
     monkeypatch.setattr(tempfile, "mkdtemp", refuse)
 
     assert build_report([report_runs.off], tmp_path / "report").transcripts == 3
+    [sibling] = sorted({name for name in made if name.startswith(".report.")})
+    assert re.fullmatch(r"\.report\.[0-9a-f]{16}\.building", sibling), sibling
 
 
 def test_91a_out_as_the_working_folder_is_rebuilt_in_place(
@@ -1906,14 +1918,18 @@ def test_91a_an_old_report_that_cannot_be_removed_is_named_and_the_build_still_s
 def test_91a_siblings_an_earlier_build_left_are_removed_and_named(
     report_runs: Runs, tmp_path: Path
 ) -> None:
+    """Edited for owner decision 96A: an orphan is swept only when it holds a report, is at
+    least ten minutes old, and, being a previous report, sits beside a report."""
     out = tmp_path / "report"
+    build_report([report_runs.off], out)
     orphans = [tmp_path / ".report.0123abcd.building", tmp_path / ".report.4567ef01.previous"]
     for orphan in orphans:
         (orphan / "transcripts").mkdir(parents=True)
+        _age(orphan)
     unrelated = tmp_path / ".report.notes"
     unrelated.mkdir()
 
-    result = report(str(report_runs.off), "--out", str(out))
+    result = report(str(report_runs.on), "--out", str(out))
 
     assert result.exit_code == 0, result.stdout + result.stderr
     assert result.stdout.splitlines()[:2] == [
@@ -2007,6 +2023,7 @@ def test_91a_a_sibling_an_earlier_build_left_that_cannot_be_removed_is_named(
     out = tmp_path / "report"
     orphan = tmp_path / ".report.0123abcd.building"
     orphan.mkdir()
+    _age(orphan)
     real = shutil.rmtree
 
     def rmtree(path: Any, *args: Any, **kwargs: Any) -> None:
@@ -2096,3 +2113,284 @@ def test_95a_a_read_only_file_in_the_previous_report_is_still_removed(
 
     assert not (out / "transcripts" / "off").exists()
     assert _siblings(out) == []
+
+
+# --- owner decision 96A: never delete anything that is not ours --------------------------------
+
+
+def _age(folder: Path, seconds: float = 3600.0) -> None:
+    """Make `folder` and everything beneath it look `seconds` old."""
+    then = time.time() - seconds
+    for path in [folder, *folder.rglob("*")]:
+        os.utime(path, (then, then))
+
+
+def _report_like(folder: Path) -> Path:
+    """A folder holding what a build writes: a tagged `index.html` and a `transcripts/`."""
+    (folder / "transcripts" / "off").mkdir(parents=True)
+    (folder / "index.html").write_text(
+        f"<html>{report_page.GENERATOR_TAG}</html>", encoding="utf-8"
+    )
+    return folder
+
+
+@pytest.mark.parametrize(
+    ("name", "ours"),
+    [
+        (".report.0123456789abcdef.building", True),
+        (".report.0123456789abcdef.previous", True),
+        (".report.abcdefgh.previous", True),
+        (".report.a1_b2c3d.building", True),
+        (".report.old.previous", False),
+        (".report.0123456789ABCDEF.building", False),
+        (".report.0123456789abcdef0.building", False),
+        (".report.abcdefghi.previous", False),
+        (".report.0123456789abcdef.previous.txt", False),
+        (".reports.0123456789abcdef.building", False),
+        ("report.0123456789abcdef.building", False),
+    ],
+)
+def test_96a_only_this_command_s_own_sibling_names_are_considered(name: str, ours: bool) -> None:
+    """Its own random part (16 hexadecimal digits) or an earlier `mkdtemp` part (8 of
+    `[a-z0-9_]`), then `.building` or `.previous`, and nothing else."""
+    assert bool(report_page._build_sibling("report").fullmatch(name)) is ours
+
+
+def test_96a_a_sibling_holding_a_foreign_file_survives_and_is_named(
+    report_runs: Runs, tmp_path: Path
+) -> None:
+    """A user's `.report.old.previous` is not even considered; one named as an old `mkdtemp`
+    sibling but holding a file this command did not write is kept and named."""
+    out = tmp_path / "report"
+    build_report([report_runs.off], out)
+    theirs = tmp_path / ".report.old.previous"
+    theirs.mkdir()
+    (theirs / "notes.txt").write_text("the engineer's notes", encoding="utf-8")
+    named = _report_like(tmp_path / ".report.abcdefgh.previous")
+    (named / "notes.txt").write_text("the engineer's notes", encoding="utf-8")
+    (named / "notes.txt").chmod(stat.S_IREAD)
+    for folder in (theirs, named):
+        _age(folder)
+
+    built = build_report([report_runs.on], out)
+
+    assert (theirs / "notes.txt").read_text(encoding="utf-8") == "the engineer's notes"
+    assert (named / "notes.txt").is_file()
+    assert built.removed == ()
+    assert built.warnings == (f"kept {named}: it holds files this command did not write",)
+
+
+def test_96a_a_sibling_changed_within_ten_minutes_is_kept_and_named(
+    report_runs: Runs, tmp_path: Path
+) -> None:
+    out = tmp_path / "report"
+    build_report([report_runs.off], out)
+    fresh = _report_like(tmp_path / ".report.0123456789abcdef.building")
+
+    built = build_report([report_runs.on], out)
+
+    assert fresh.is_dir()
+    assert built.warnings == (
+        f"kept {fresh}: it changed within the last 10 minutes, so another build may be writing it",
+    )
+
+
+def test_96a_a_previous_report_beside_no_report_is_kept_as_maybe_the_only_copy(
+    report_runs: Runs, tmp_path: Path
+) -> None:
+    out = tmp_path / "report"
+    previous = _report_like(tmp_path / ".report.0123456789abcdef.previous")
+    _age(previous)
+
+    built = build_report([report_runs.off], out)
+
+    assert previous.is_dir()
+    assert built.warnings == (
+        f"kept {previous}: {out} holds no report, so this may be the only copy of the previous one",
+    )
+
+
+@pytest.mark.skipif(os.name != "nt", reason="a junction is a Windows folder link")
+def test_96a_a_junction_named_as_a_sibling_is_never_followed_or_removed(
+    report_runs: Runs, tmp_path: Path
+) -> None:
+    out = tmp_path / "report"
+    build_report([report_runs.off], out)
+    elsewhere = _report_like(tmp_path / "elsewhere")
+    _age(elsewhere)
+    link = tmp_path / ".report.0123456789abcdef.previous"
+    _junction(link, elsewhere)
+
+    built = build_report([report_runs.on], out)
+
+    assert report_page._is_junction(link)
+    assert (elsewhere / "index.html").is_file()
+    assert built.removed == () and built.warnings == ()
+
+
+def _renames(
+    monkeypatch: pytest.MonkeyPatch, fail: Callable[[Path, Path], BaseException | None]
+) -> list[tuple[str, str]]:
+    """`Path.rename` raising what `fail` returns for a move, else moving; the moves made."""
+    real = Path.rename
+    moves: list[tuple[str, str]] = []
+
+    def rename(self: Path, target: Any) -> Path:
+        failure = fail(self, Path(target))
+        moves.append((self.name, Path(target).name))
+        if failure is not None:
+            raise failure
+        return real(self, target)
+
+    monkeypatch.setattr(Path, "rename", rename)
+    return moves
+
+
+def test_96a_a_previous_report_that_cannot_be_moved_aside_is_rebuilt_in_place(
+    report_runs: Runs, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    out = tmp_path / "report"
+    build_report([report_runs.off], out)
+    _renames(
+        monkeypatch,
+        lambda source, to: (
+            PermissionError("in use")
+            if source.name == out.name and to.name.endswith(".previous")
+            else None
+        ),
+    )
+
+    build_report([report_runs.on], out)
+
+    assert (out / "transcripts" / "on" / f"{CASE_A}.html").is_file()
+    assert not (out / "transcripts" / "off").exists()
+    assert sorted(path.name for path in out.iterdir()) == ["index.html", "transcripts"]
+    assert _siblings(out) == []
+
+
+def test_96a_a_previous_report_that_cannot_be_moved_back_is_refused_marked_and_kept(
+    report_runs: Runs, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    out = tmp_path / "report"
+    build_report([report_runs.off], out)
+    before = snapshot(out)
+    moves = _renames(
+        monkeypatch,
+        lambda source, to: (
+            PermissionError("in use") if to.name == out.name and source.name != out.name else None
+        ),
+    )
+
+    with pytest.raises(report_page.ReportError) as refused:
+        build_report([report_runs.on], out)
+
+    [aside] = [to for source, to in moves if source == out.name]
+    previous = tmp_path / aside
+    assert str(refused.value) == (
+        f"the previous report was moved aside to {previous} and could not be moved back to "
+        f"{out.resolve()}; move it back by hand"
+    )
+    assert not out.exists()
+    assert {
+        name: data for name, data in snapshot(previous).items() if name != report_page.STRANDED_FILE
+    } == before
+    assert (previous / report_page.STRANDED_FILE).is_file()
+    assert [name for name in _siblings(out) if name.endswith(".building")] == []
+
+    monkeypatch.undo()
+    _age(previous)
+    built = build_report([report_runs.on], out)
+    built_again = build_report([report_runs.on], out)
+
+    for warnings in (built.warnings, built_again.warnings):
+        assert warnings == (
+            f"kept {previous}: a build moved this previous report aside and could not move it "
+            "back; move it back by hand",
+        )
+    assert previous.is_dir()
+
+
+def test_96a_an_interrupted_move_in_puts_the_previous_report_back(
+    report_runs: Runs, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    out = tmp_path / "report"
+    build_report([report_runs.off], out)
+    before = snapshot(out)
+    _renames(
+        monkeypatch,
+        lambda source, to: (
+            KeyboardInterrupt()
+            if source.name.endswith(".building") and to.name == out.name
+            else None
+        ),
+    )
+
+    with pytest.raises(KeyboardInterrupt):
+        build_report([report_runs.on], out)
+
+    assert snapshot(out) == before
+    assert _siblings(out) == []
+
+
+def test_96a_an_in_place_copy_that_fails_leaves_the_previous_report_readable(
+    report_runs: Runs, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    out = tmp_path / "report"
+    build_report([report_runs.off], out)
+    before = snapshot(out)
+    monkeypatch.chdir(out)
+
+    def copytree(*args: Any, **kwargs: Any) -> None:
+        raise OSError("a fictional full disk")
+
+    monkeypatch.setattr(shutil, "copytree", copytree)
+
+    with pytest.raises(OSError, match="full disk"):
+        build_report([report_runs.on], Path("."))
+
+    assert snapshot(out) == before
+    assert sorted(path.name for path in out.iterdir()) == ["index.html", "transcripts"]
+
+
+@pytest.mark.skipif(os.name != "nt", reason="a junction is a Windows folder link")
+def test_96a_a_transcripts_folder_that_is_a_link_is_refused(
+    report_runs: Runs, tmp_path: Path
+) -> None:
+    out = tmp_path / "report"
+    build_report([report_runs.off], out)
+    elsewhere = tmp_path / "elsewhere"
+    shutil.move(str(out / "transcripts"), str(elsewhere))
+    _junction(out / "transcripts", elsewhere)
+    held = snapshot(elsewhere)
+
+    with pytest.raises(report_page.ReportError) as refused:
+        build_report([report_runs.on], out)
+
+    assert str(refused.value) == (
+        f"{out / 'transcripts'} is a link; the report replaces that folder and will not write "
+        "through a link: remove the link, or choose another folder"
+    )
+    assert snapshot(elsewhere) == held
+
+
+def test_96a_a_folder_still_there_after_removal_is_never_reported_removed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    folder = tmp_path / "stays"
+    folder.mkdir()
+    monkeypatch.setattr(report_page, "_rmtree", lambda path: None)
+
+    assert report_page._remove(folder) == folder
+
+
+def test_96a_off_windows_a_read_only_entry_s_error_stands(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A file's own mode never stops its removal off Windows, so nothing is chmodded there, and
+    the error, in either handler's form, is raised as it was."""
+    monkeypatch.setattr(report_page.os, "name", "posix")
+    error = PermissionError("a fictional denial")
+    retried: list[str] = []
+
+    for form in (error, (PermissionError, error, None)):
+        with pytest.raises(PermissionError, match="fictional denial"):
+            report_page._writable(retried.append, "entry", form)
+    assert retried == []
