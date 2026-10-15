@@ -2320,9 +2320,10 @@ def _review_fn(
     session returned. `run_review` stays the `review` command's one-turn form.
 
     The package's `prompts.json` (`report_page.write_prompts_record`; feature 014
-    `contracts/benchmark-run.md` 12, FR-057) is written before the first turn and again in the
-    `finally`, so an attempt that raised still records what it sent first; the run is closed
-    even when that second write raises. Only a benchmark attempt writes it (INT-1).
+    `contracts/benchmark-run.md` 12, FR-057) is written before the first turn and again when the
+    review ends, however it ends, so an attempt that raised still records what it sent first; the
+    run is closed whatever the second write does (`_rewrite_prompts_and_close`). Only a benchmark
+    attempt writes it (INT-1).
 
     The redaction is per package too, rather than left to `benchmark_run`: a library
     caller that reaches this through `benchmark.runner`'s default `review_fn` gets the
@@ -2350,12 +2351,30 @@ def _review_fn(
             answers.drive_review(
                 run, attempt.case_file, max_answer_turns=attempt.max_answer_turns
             )
-        finally:
-            try:
-                report_page.write_prompts_record(run, session_out_dir)
-            finally:
-                run.close()
+        except BaseException as failure:
+            _rewrite_prompts_and_close(run, session_out_dir, failure)
+            raise
+        _rewrite_prompts_and_close(run, session_out_dir, None)
         return run.session
+
+
+def _rewrite_prompts_and_close(run: Any, folder: Path, failure: BaseException | None) -> None:
+    """The prompts record's second write, then `run.close()`, whatever the write does.
+
+    The write's own error is raised only when the review did not fail. When it did, the review's
+    failure stays the one raised, and the write's error is added to it as a note, so neither is
+    lost (feature 014 owner decision 86A).
+    """
+    try:
+        report_page.write_prompts_record(run, folder)
+    except Exception as error:
+        if failure is None:
+            raise
+        failure.add_note(
+            f"the prompts record could not be rewritten: {type(error).__name__}: {error}"
+        )
+    finally:
+        run.close()
 
 
 def _refuse_a_folder_in_use(out: Path) -> None:

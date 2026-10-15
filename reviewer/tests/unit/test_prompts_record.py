@@ -14,6 +14,8 @@ history it was sent.
   them.
 - `test_a_turn_that_raises_still_leaves_its_record`: the `finally` write.
 - `test_the_pane_writes_no_prompts_record`: only a benchmark attempt writes it.
+- `test_86a_*` (owner decision 86A): when the review itself failed, a failed second write is a
+  note on that failure, which stays the one raised; otherwise it is raised.
 
 `test_an_abandoned_attempt_still_records_its_opening` is the robustness slice's (T195): it needs
 the attempt's worker.
@@ -33,7 +35,14 @@ import swreview.chat.server as chat_server
 from swreview import atomic, cli
 from swreview.agent.providers import AgentEvent, TurnResult
 from swreview.agent.providers.fake import FakeProvider, ScriptedTurn
-from swreview.agent.runner import REGRADED_LINE, answers_message, run_review, start_review
+from swreview.agent.providers.openai_provider import OpenAIProviderError
+from swreview.agent.runner import (
+    REGRADED_LINE,
+    ReviewRun,
+    answers_message,
+    run_review,
+    start_review,
+)
 from swreview.agent.settings import MODEL_VIEW_OFF, EfficiencySettings, ProviderSettings
 from swreview.benchmark import report_page
 from swreview.benchmark.case_file import CaseFile
@@ -327,3 +336,70 @@ def test_the_pane_writes_no_prompts_record(tmp_path: Path) -> None:
         for offence in _names_the_record(path)
     ]
     assert offences == []
+
+
+# --- owner decision 86A: the second write never hides the review's own failure --------------
+
+
+class ProviderErrorRaising(PromptsProvider):
+    """Raises a provider's own error on its opening turn, after keeping what it was sent."""
+
+    def run(self, **kwargs: Any) -> TurnResult:
+        self.systems.append(kwargs["system"])
+        self.sent.append([dict(message) for message in kwargs["messages"]])
+        raise OpenAIProviderError(
+            "a fictional rate limit", error_class="RateLimitError", retryable=True
+        )
+
+
+def _second_write_fails(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """`write_prompts_record` raises an `OSError` on its second call; `ReviewRun.close` is
+    recorded. The returned list names each, in order."""
+    calls: list[str] = []
+    real_write, real_close = report_page.write_prompts_record, ReviewRun.close
+
+    def write(run: Any, folder: Path) -> None:
+        calls.append("write")
+        if calls.count("write") == 2:
+            raise OSError("a fictional full disk")
+        real_write(run, folder)
+
+    def close(self: ReviewRun) -> None:
+        calls.append("close")
+        real_close(self)
+
+    monkeypatch.setattr(report_page, "write_prompts_record", write)
+    monkeypatch.setattr(ReviewRun, "close", close)
+    return calls
+
+
+def test_86a_a_provider_error_is_raised_and_the_failed_rewrite_is_a_note_on_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    package_dir = tmp_path / "package"
+    save_package(build_package(), package_dir)
+    install(monkeypatch, tmp_path / "out", kind=ProviderErrorRaising)
+    calls = _second_write_fails(monkeypatch)
+
+    with pytest.raises(OpenAIProviderError) as raised:
+        review(package_dir, tmp_path / "out", attempt())
+
+    assert str(raised.value) == "a fictional rate limit"
+    assert calls == ["write", "write", "close"]
+    assert raised.value.__notes__ == [
+        "the prompts record could not be rewritten: OSError: a fictional full disk"
+    ]
+
+
+def test_86a_with_no_failure_in_flight_the_failed_rewrite_is_raised(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    package_dir = tmp_path / "package"
+    save_package(build_package(), package_dir)
+    install(monkeypatch, tmp_path / "out", ScriptedTurn(text="Reviewed."))
+    calls = _second_write_fails(monkeypatch)
+
+    with pytest.raises(OSError, match="^a fictional full disk$"):
+        review(package_dir, tmp_path / "out", attempt())
+
+    assert calls == ["write", "write", "close"]
