@@ -11,6 +11,7 @@ saved context cannot change while a review that carries it is set up or waits (s
 from __future__ import annotations
 
 import json
+import shutil
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -29,6 +30,7 @@ from swreview.engineering_context.models import context_digest
 from swreview.ir.loader import load_package
 from swreview.report.session import load_session
 from tests.support.contracts import contract_validator
+from tests.support.questions_package import build_questions_package
 from tests.support.recording_provider import RecordingProvider
 from tests.support.restart import BEFORE_REPLACE, disk_at, restarted_app
 from tests.support.restored import assert_restored_as_waiting
@@ -452,3 +454,80 @@ def test_an_edit_while_a_re_run_is_set_up_is_refused(
         body = recheck_cases.recheck_body(run_dir, standards_profile=None, bridge=None)
 
         edit_refused_while_held(fresh, run_dir, body, attachment, entered, release)
+
+
+# --- the verifier's probes (owner decisions 105A-109A, 2026-10-15) ----------------------------
+
+
+@pytest.mark.usefixtures("vocabulary")
+def test_probe_ticked_equals_unticked_send_with_context(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    tmp_path: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+) -> None:
+    """A ticked context review's first request and an unticked one's Send are byte-identical,
+    with the engineering block exactly once (SC-004 with saved context)."""
+    folder = run_root / "FICT-probe-tick"
+    fixture = build_questions_package(folder)
+    app.state.server.bridge_factory = lambda pipe, secret: fixture.bridge
+    attachment = attachment_of(client, folder)
+    saved = tmp_path / "saved"
+    shutil.copytree(folder, saved)
+    body = {
+        "standards_profile": str(fixture.profile),
+        "bridge": {"pipe": "FICT-pipe", "secret": "FICT-secret"},
+        "engineering_context": attachment,
+    }
+    ticked = RecordingProvider([chat.turn("FICT sent")])
+    app.state.server.provider_factory = lambda chosen: ticked
+    started = chat.start_session(client, folder, send_when_checked=True, **body)
+    chat.settle(client, started["chat_id"])
+
+    shutil.rmtree(folder)
+    shutil.copytree(saved, folder)
+    unticked = RecordingProvider([chat.turn("FICT sent")])
+    seat = build_questions_package(tmp_path / "seat-only").bridge
+    settings = recheck_cases.server_settings(provider_control, models, seat)
+    settings["provider_factory"] = lambda chosen: unticked
+    with restarted_app(run_root, settings) as fresh:
+        waiting = chat.start_session(fresh, folder, send_when_checked=False, **body)
+        assert chat.state_of(fresh, waiting["chat_id"]) == "awaiting_send"
+        assert unticked.log == []
+        assert fresh.post(f"/sessions/{waiting['chat_id']}/send", json={}).status_code == 202
+        chat.settle(fresh, waiting["chat_id"])
+
+    first, sent = ticked.log[0], unticked.log[0]
+    assert first.system == sent.system
+    assert first.encoded_tools == sent.encoded_tools
+    assert first.first_message == sent.first_message
+    assert first.first_message["content"].count(ENGINEERING_LEAD) == 1
+    recheck_cases.assert_sent_alike(ticked.log, unticked.log)
+
+
+@pytest.mark.usefixtures("vocabulary")
+def test_probe_a_re_run_with_context_sends_what_the_live_review_would_have_sent(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    tmp_path: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+) -> None:
+    """SC-008 with saved context: nothing answered, a re-run after a restart sends byte for byte
+    what the live waiting review sends, the engineering block once."""
+    waiting = waiting_with_context(app, client, run_root / "FICT-probe-sc008")
+    live = waiting.run
+    settings = recheck_cases.server_settings(
+        provider_control, models, recheck_cases.silent_seat()
+    )
+    sent, resent, rerun = recheck_cases.sent_live_and_after_a_re_run(
+        app, client, run_root, tmp_path / "saved", waiting, settings
+    )
+
+    assert rerun._send_cache.opening == live._send_cache.opening
+    recheck_cases.assert_sent_alike(sent, resent)
+    assert sent[0].first_message["content"].count(ENGINEERING_LEAD) == 1
+

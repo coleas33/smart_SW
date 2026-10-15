@@ -35,3 +35,10 @@
       edited while a review that carries it waits for Send").
 - [x] T021 Final gate on Python 3.11 and 3.12, Release build, .NET and the replay check
       ([receipt](validation.md#adaptation-to-feature-015s-send-gate--2026-10-15)).
+- [x] T022 001's review-session schema accepts a finding that names its document scope in a
+      non-empty `inputs` (the hygiene checks' root-document findings), and a whole pane
+      review's `session.json`, ticked or unticked, with or without context, validates
+      (owner decision 109A; no finding reader or writer changed).
+- [x] T023 The verifier's two probes kept as tests (ticked and unticked Send with context are
+      byte-identical; a re-run with context sends what the live review would have), and
+      Remodel's awaiting rule held once (`chat/remodel._awaiting`; the verifier's note).

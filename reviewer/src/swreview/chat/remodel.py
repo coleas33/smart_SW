@@ -413,7 +413,7 @@ class RemodelJob:
 
     @property
     def awaiting(self) -> str | None:
-        return "package_after" if self.state == JOB_AWAITING else None
+        return _awaiting(self.state)
 
     @property
     def live(self) -> bool:
@@ -452,6 +452,12 @@ def _changes(run_dir: Path) -> tuple[ChangeRecord, ...]:
         except ValidationError:
             continue
     return tuple(records)
+
+
+def _awaiting(state: str) -> str | None:
+    """What a job in `state` waits for: the after-dump while it awaits one, else nothing. One rule
+    for the job's own property and for a poll, which reads the state it captured first."""
+    return "package_after" if state == JOB_AWAITING else None
 
 
 def _plan_facts(run_dir: Path) -> tuple[str | None, int]:
@@ -1013,7 +1019,7 @@ class RemodelServer:
             "changes_total": total,
             "changes_applied": applied,
             "current": current,
-            "awaiting": "package_after" if state == JOB_AWAITING else None,
+            "awaiting": _awaiting(state),
             "error": error,
         }
 
