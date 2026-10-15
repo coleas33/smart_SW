@@ -28,7 +28,8 @@ from __future__ import annotations
 import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from time import perf_counter
+from threading import Event
+from time import perf_counter, sleep
 from typing import Any, TypeVar
 
 from swreview.agent.providers import (
@@ -165,11 +166,28 @@ class ScriptedTurn:
     refused: one turn has one shape.
     """
 
+    fails: ProviderError | None = None
+    """Raise this instance on the closing request, after any completed rounds."""
+
+    hang: Event | None = None
+    """Wait for this event before emitting anything from the turn."""
+
+    stop_reason: str | None = None
+    """Report a provider stop and return a turn ending `error`."""
+
+    served_model: str | None = None
+    """The served id on every usage event of this turn, when scripted."""
+
+    delta_interval_s: float = 0.0
+    """Seconds to sleep between the closing text's deltas."""
+
     def __post_init__(self) -> None:
         if self.tool_calls and self.rounds:
             raise ValueError(
                 "a scripted turn takes `tool_calls` or `rounds`, not both: one turn has one shape"
             )
+        if self.stop_reason is not None and self.end_reason != "error":
+            raise ValueError('stop_reason requires end_reason="error"')
 
 
 _ScriptedResponse = TypeVar("_ScriptedResponse", ScriptedTurn, ScriptedRound)
@@ -235,6 +253,7 @@ class FakeProvider:
         model: str,
         explanation_script: Sequence[ScriptedTurn] = (),
         clock: Callable[[], float] = perf_counter,
+        sleep: Callable[[float], None] = sleep,
         _presentation: bool = False,
     ) -> None:
         self.model = model
@@ -245,6 +264,7 @@ class FakeProvider:
         self._explanation_script = tuple(explanation_script)
         self._presentation = _presentation
         self._clock = clock
+        self._sleep = sleep
         self._turn_index = 0
         self._step_index = 0
         self._call_index = 0
@@ -284,6 +304,7 @@ class FakeProvider:
             script=self._explanation_script,
             model=self.model,
             clock=self._clock,
+            sleep=self._sleep,
             _presentation=True,
         )
         if self._retry_policy is not None:
@@ -307,22 +328,19 @@ class FakeProvider:
         turn = self._next_turn()
         history = [dict(message) for message in messages]
         self.round_usage = []
+        if turn.hang is not None:
+            turn.hang.wait()
         if turn.rounds:
             return self._run_rounds(turn, history, tools, max_steps, on_event)
         turn = self._respond(turn, on_event)
         steps = 0
-        self.round_usage = [turn.usage] if turn.usage is not None else []
-        if turn.usage is not None:
-            # Before the scripted calls run, which is where a real adapter emits it: the
-            # response for the round is in hand and the tools it asked for have not been
-            # dispatched yet.
-            on_event(
-                "usage",
-                usage_body(
-                    turn.usage, round_index=0, provider=self.name, model=self.model,
-                    retries=self._request_retries,
-                ),
-            )
+        # Before the scripted calls run, which is where a real adapter emits it: the
+        # response for the round is in hand and the tools it asked for have not been
+        # dispatched yet.
+        self._emit_usage(
+            turn.usage, 0, on_event,
+            served_model=turn.served_model, stop_reason=turn.stop_reason,
+        )
 
         dispatched: list[tuple[ToolCallRequest, ToolCallResult]] = []
         for scripted in turn.tool_calls:
@@ -335,8 +353,7 @@ class FakeProvider:
             steps += 1
         _append_round(history, dispatched, one_round=turn.one_round)
 
-        self._say(turn.text, history, on_event)
-        return TurnResult(reason=turn.end_reason, text=turn.text, steps=steps, messages=history)
+        return self._finish(turn, history, steps, on_event)
 
     def _run_rounds(
         self,
@@ -357,7 +374,9 @@ class FakeProvider:
             if steps >= max_steps:
                 return TurnResult(reason="max_steps", text="", steps=steps, messages=history)
             scripted_round = self._respond(scripted_round, on_event)
-            self._emit_usage(scripted_round.usage, round_index, on_event)
+            self._emit_usage(
+                scripted_round.usage, round_index, on_event, served_model=turn.served_model,
+            )
             dispatched: list[tuple[ToolCallRequest, ToolCallResult]] = []
             for scripted in scripted_round.calls:
                 if steps >= max_steps:
@@ -368,21 +387,29 @@ class FakeProvider:
                 steps += 1
             _append_round(history, dispatched, one_round=True)
         turn = self._respond(turn, on_event)
-        self._emit_usage(turn.usage, len(turn.rounds), on_event)
-        self._say(turn.text, history, on_event)
-        return TurnResult(reason=turn.end_reason, text=turn.text, steps=steps, messages=history)
+        self._emit_usage(
+            turn.usage, len(turn.rounds), on_event,
+            served_model=turn.served_model, stop_reason=turn.stop_reason,
+        )
+        return self._finish(turn, history, steps, on_event)
 
     def _emit_usage(
-        self, usage: TokenUsage | None, round_index: int, on_event: EventCallback
+        self, usage: TokenUsage | None, round_index: int, on_event: EventCallback,
+        *, served_model: str | None = None, stop_reason: str | None = None,
     ) -> None:
         if usage is None:
             return
         self.round_usage.append(usage)
+        retries = self._request_retries
+        if stop_reason is not None and retries is not None:
+            # The final error reports this request's retries; count them only once.
+            retries = 0
         on_event(
             "usage",
             usage_body(
                 usage, round_index=round_index, provider=self.name, model=self.model,
-                retries=self._request_retries,
+                served_model=served_model,
+                retries=retries,
             ),
         )
 
@@ -390,15 +417,17 @@ class FakeProvider:
         self, scripted: _ScriptedResponse, on_event: EventCallback
     ) -> _ScriptedResponse:
         """Return one scripted model response before its usage and tools are processed."""
+        if isinstance(scripted, ScriptedTurn) and scripted.fails is not None:
+            raise scripted.fails
         return scripted
 
     def _respond(
         self, scripted: _ScriptedResponse, on_event: EventCallback
     ) -> _ScriptedResponse:
         self._request_retries = None
-        if self._retry_policy is None:
-            return self._response(scripted, on_event)
         try:
+            if self._retry_policy is None:
+                return self._response(scripted, on_event)
             response, self._request_retries = retry.run_request(
                 lambda emit: self._response(scripted, emit),
                 policy=self._retry_policy,
@@ -413,18 +442,40 @@ class FakeProvider:
                     message=str(error),
                     retryable=error.retryable,
                     stop_reason=error.stop_reason,
-                    retries=error.retries,
+                    retries=error.retries if self._retry_policy is not None else None,
                 ),
             )
             raise
         return response
 
-    @staticmethod
-    def _say(text: str, history: list[dict[str, Any]], on_event: EventCallback) -> None:
+    def _finish(
+        self, turn: ScriptedTurn, history: list[dict[str, Any]], steps: int,
+        on_event: EventCallback,
+    ) -> TurnResult:
+        if turn.stop_reason is not None:
+            on_event(
+                "error",
+                error_body(
+                    error_class="ProviderError",
+                    message=f"scripted provider stopped the turn: {turn.stop_reason}",
+                    retryable=False,
+                    stop_reason=turn.stop_reason,
+                    retries=self._request_retries,
+                ),
+            )
+        self._say(turn.text, history, on_event, delta_interval_s=turn.delta_interval_s)
+        return TurnResult(reason=turn.end_reason, text=turn.text, steps=steps, messages=history)
+
+    def _say(
+        self, text: str, history: list[dict[str, Any]], on_event: EventCallback,
+        *, delta_interval_s: float = 0.0,
+    ) -> None:
         """Stream the closing text, if any, and record it as the turn's last message."""
         if not text:
             return
-        for delta in _DELTA.findall(text):
+        for index, delta in enumerate(_DELTA.findall(text)):
+            if index and delta_interval_s > 0:
+                self._sleep(delta_interval_s)
             on_event("text.delta", {"text": delta})
         on_event("text.done", {"text": text})
         history.append({"role": "assistant", "content": text})

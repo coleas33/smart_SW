@@ -107,6 +107,8 @@ class ProviderError(RuntimeError):
 
     retryable: bool = False
     stop_reason: str | None = None
+    retries: int | None = None
+    retry_after_s: float | None = None
 
     @property
     def error_class(self) -> str:
