@@ -71,6 +71,12 @@ it opens the stream (whose events end at `session.ended`, and whose `loadAttenti
 Send block) and shows the waiting status at once, from `review.started` until the summary arrives. The "Before this review" panel and its sentence ("No review tokens have been used.")
 are unchanged; the box's value is read at "Review available evidence" (FR-003).
 
+*Amended 2026-10-15 (feature 016 lands on this feature, owner decision 99A):* 016's
+`context.review` starts through the same `CreateReviewSession`, with the box read as above and
+its saved-context attachment passed by name, so its reply, record and status are the ones this
+section gives. The page's context panel is refused while `startPending`, `turnRunning`,
+`awaitingSend`, `sendPending` or `rechecking` holds (016 `contracts/pane-context.md`).
+
 ## 3. The Send block
 
 **Markup**: `<section id="send" class="send-panel" aria-label="Send to model" hidden></section>` in

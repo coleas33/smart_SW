@@ -53,6 +53,23 @@ section 9 reads only a bounded head). 001 `review-session.schema.json` gains, ne
   "properties": { "file": { "type": "string" }, "outcome": { "type": "string" } } }
 ```
 
+*Amended 2026-10-15 (feature 016 lands on this feature, owner decision 99A):* `ModelStatus` gains
+an optional `engineering_context`, omitted when null, written only by a review started unticked
+with saved engineering context:
+
+```json
+"engineering_context": { "type": "object", "additionalProperties": false,
+  "required": ["context_id", "head_digest", "package_sha256"],
+  "properties": { "context_id": { "type": "string", "format": "uuid" },
+                  "head_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+                  "package_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" } } }
+```
+
+It names the attachment the review was started with - no path - so a re-run carries and validates
+it again (`recheck.md` section 2). A re-run sets its own from what it validated, and the carry
+leaves it as is. A review without saved context writes nothing new, byte for byte. 001
+`review-session.schema.json` is amended to match.
+
 `checked_at` is required even before the first save: setup constructs the in-memory model status
 with `local_now()` after the checks, and the first finalization replaces that provisional value
 with its end before writing `session.json`. A waiting apply keeps the first finalization's value;

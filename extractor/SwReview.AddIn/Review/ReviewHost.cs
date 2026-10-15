@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Threading;
+using SwReview.AddIn.EngineeringContext;
 using System.Text.Json;
 using SwReview.AddIn.Settings;
 
@@ -145,6 +148,15 @@ public sealed class SessionRecord
     public string? ModelStatus { get; set; }
 
     /// <summary>
+    /// Feature 016's saved context this review was started with, or null for an ordinary review:
+    /// what a Retry of it re-attaches in its own folder (owner decision 108A).
+    /// </summary>
+    public EngineeringContextAttachment? EngineeringContext { get; set; }
+
+    /// <summary>The extraction a context review was started on, for a Retry's ready status.</summary>
+    public DumpSummary? ContextExtraction { get; set; }
+
+    /// <summary>
     /// Whether this run is a Model check.
     ///
     /// Stated rather than inferred from a null chat id, because what the any-turn-running scan
@@ -204,6 +216,9 @@ public sealed class ReviewHostOptions
     /// which is a state the pane really has: the Task Pane exists before the first document.
     /// </summary>
     public IReviewDump? Dump { get; set; }
+
+    /// <summary>Read-only selection prefill against prepared saved evidence; never freshness proof.</summary>
+    public IEngineeringSelectionCapture? EngineeringSelection { get; set; }
 
     /// <summary>Show in SOLIDWORKS. Null for the same reason as <see cref="Dump"/>.</summary>
     public IEntityResolver? EntityResolver { get; set; }
@@ -322,6 +337,21 @@ public sealed class ReviewHost : IDisposable
 
     private UserSettings _settings;
     private string? _settingsError;
+    private PreparedContext? _preparedContext;
+    private long _contextGeneration;
+
+    private sealed class PreparedContext
+    {
+        public PreparedContext(string directory, string sha256, PageDocument document, long generation, DumpSummary summary)
+        { Directory = directory; Sha256 = sha256; Document = document; Generation = generation; Summary = summary; }
+        public string Directory { get; }
+        public string RunId => Path.GetFileName(Directory);
+        public string Sha256 { get; }
+        public PageDocument Document { get; }
+        public long Generation { get; }
+        /// <summary>The extraction's counts, for the ready status of a review of this package.</summary>
+        public DumpSummary Summary { get; }
+    }
 
     public ReviewHost(ReviewHostOptions options)
     {
@@ -666,7 +696,11 @@ public sealed class ReviewHost : IDisposable
     /// Tells the page which document the pane is looking at now, or that there is none.
     /// Called by the add-in's active-document notifications (pane-host-messages.md).
     /// </summary>
-    public void DocumentChanged() => Post("document.changed", DocumentPayload(_options.CurrentDocument()));
+    public void DocumentChanged()
+    {
+        ExpirePreparedContext();
+        Post("document.changed", DocumentPayload(_options.CurrentDocument()));
+    }
 
     public void Dispose()
     {
@@ -720,6 +754,18 @@ public sealed class ReviewHost : IDisposable
 
             case "models.list":
                 ListModels(id, payload);
+                return;
+
+            case "context.prepare":
+                PrepareContext(id);
+                return;
+
+            case "context.selection":
+                CaptureContextSelection(id, payload);
+                return;
+
+            case "context.review":
+                ReviewContext(id, payload);
                 return;
 
             case "review.prepare":
@@ -786,6 +832,8 @@ public sealed class ReviewHost : IDisposable
             { "providers", Providers() },
             { "document", DocumentPayload(document) },
             { "review_preparation", _options.PrepareReview != null },
+            { "engineering_context", _options.Dump != null },
+            { "engineering_selection", _options.EngineeringSelection != null },
         });
 
         ReportSettingsProblems(key);
@@ -1281,8 +1329,171 @@ public sealed class ReviewHost : IDisposable
         return DrawingSentence(drawing.Path, models);
     }
 
+    private long ExpirePreparedContext()
+    {
+        long generation = Interlocked.Increment(ref _contextGeneration);
+        _preparedContext = null;
+        return generation;
+    }
+
+    private static bool SameDocument(PageDocument? current, PageDocument saved) =>
+        current != null
+        && string.Equals(current.Path, saved.Path, StringComparison.OrdinalIgnoreCase)
+        && string.Equals(current.Configuration, saved.Configuration, StringComparison.Ordinal);
+
+    private static string PackageSha256(string directory)
+    {
+        using (var algorithm = SHA256.Create())
+        {
+            byte[] digest = algorithm.ComputeHash(File.ReadAllBytes(Path.Combine(directory, "package.json")));
+            return BitConverter.ToString(digest).Replace("-", "").ToLowerInvariant();
+        }
+    }
+
+    private bool ContextReady(string? id)
+    {
+        if (AnyTurnRunning())
+        {
+            SendError(id, "TurnRunning", "Stop the running review before changing engineering context.", true);
+            return false;
+        }
+        if (_options.Backend.Endpoint == null)
+        {
+            SendError(id, "BackendUnavailable", "The review backend is not running yet.", true);
+            return false;
+        }
+        return true;
+    }
+
+    private void PrepareContext(string? id)
+    {
+        long generation = ExpirePreparedContext();
+        _preparationId = null;
+        _preparedDocument = null;
+        if (!ContextReady(id)) return;
+        PageDocument? document = _options.CurrentDocument();
+        if (document == null || !document.IsAttachable)
+        {
+            SendError(id, "NoDocument", "Open a saved part or assembly to extract context evidence.", true);
+            return;
+        }
+        if (_options.Dump == null)
+        {
+            SendError(id, "NotAttached", "Evidence extraction is not available in this host.", true);
+            return;
+        }
+        try
+        {
+            string directory = RunFolders.CreateForDocument(_settings.RunRoot, document.Path, _options.Now());
+            PostStatus("extracting", "Extracting saved evidence for engineering context; no review tokens used.");
+            DumpSummary summary = _options.Dump.Run(directory, message => PostStatus("extracting", message));
+            if (!SameDocument(_options.CurrentDocument(), document)
+                || generation != Interlocked.Read(ref _contextGeneration))
+            {
+                SendError(id, "ContextExpired", "The active document or configuration changed. Extract context evidence again.", true);
+                return;
+            }
+            var prepared = new PreparedContext(directory, PackageSha256(directory), document, generation, summary);
+            if (generation != Interlocked.Read(ref _contextGeneration))
+            {
+                SendError(id, "ContextExpired", "The document changed during evidence extraction. Extract context evidence again.", true);
+                return;
+            }
+            _preparedContext = prepared;
+            Send("context.prepared", id, new Dictionary<string, object?>
+            {
+                { "run_id", prepared.RunId }, { "package_sha256", prepared.Sha256 },
+                { "document", DocumentPayload(document) },
+            });
+            PostStatus("ready", "Context evidence extracted; no review tokens used.");
+        }
+        catch (Exception)
+        {
+            _preparedContext = null;
+            SendError(id, "ContextPreparationFailed", "Context evidence could not be extracted. Check the log and try again.", true);
+        }
+    }
+
+    private PreparedContext? CurrentContext(string? id, JsonElement payload)
+    {
+        if (!ContextReady(id)) return null;
+        PreparedContext? prepared = _preparedContext;
+        if (prepared == null || prepared.Generation != Interlocked.Read(ref _contextGeneration)
+            || !string.Equals(Text(payload, "run_id"), prepared.RunId, StringComparison.Ordinal)
+            || !SameDocument(_options.CurrentDocument(), prepared.Document)
+            || !string.Equals(Text(payload, "package_sha256"), prepared.Sha256, StringComparison.Ordinal))
+        {
+            _preparedContext = null;
+            SendError(id, "ContextExpired", "Saved context evidence no longer matches this document. Extract context evidence again.", true);
+            return null;
+        }
+        try
+        {
+            if (PackageSha256(prepared.Directory) == prepared.Sha256
+                && prepared.Generation == Interlocked.Read(ref _contextGeneration)
+                && ReferenceEquals(_preparedContext, prepared)) return prepared;
+        }
+        catch (Exception) { }
+        _preparedContext = null;
+        SendError(id, "ContextExpired", "The saved evidence changed. Extract context evidence again.", true);
+        return null;
+    }
+
+    private void CaptureContextSelection(string? id, JsonElement payload)
+    {
+        PreparedContext? prepared = CurrentContext(id, payload);
+        if (prepared == null) return;
+        if (_options.EngineeringSelection == null)
+        {
+            SendError(id, "SelectionUnavailable", "Selection entry is unavailable. Choose a saved target from the list.", false);
+            return;
+        }
+        EngineeringSelectionObservation observation;
+        try { observation = _options.EngineeringSelection.Capture(prepared.Directory, prepared.Sha256); }
+        catch (Exception)
+        {
+            SendError(id, "SelectionUnavailable", "The selection could not be read. Choose a saved target from the list.", true);
+            return;
+        }
+        if (!ReferenceEquals(_preparedContext, prepared))
+        {
+            SendError(id, "ContextExpired", "The document changed while reading the selection. Extract context evidence again.", true);
+            return;
+        }
+        if (CurrentContext(id, payload) == null) return;
+        if (!string.Equals(observation.PackageSha256, prepared.Sha256, StringComparison.Ordinal))
+        {
+            SendError(id, "SelectionUnavailable", "The selection did not match this saved evidence.", true);
+            return;
+        }
+        Send("context.selected", id, observation);
+    }
+
+    private static bool IsDigest(string? text) => text != null && text.Length == 64
+        && text.All(character => (character >= '0' && character <= '9') || (character >= 'a' && character <= 'f'));
+
+    private void ReviewContext(string? id, JsonElement payload)
+    {
+        PreparedContext? prepared = CurrentContext(id, payload);
+        if (prepared == null) return;
+        string? contextId = Text(payload, "context_id");
+        string? head = Text(payload, "head_digest");
+        if (!Guid.TryParse(contextId, out _) || !IsDigest(head))
+        {
+            SendError(id, "InvalidContext", "Inspect the saved context before starting its review.", false);
+            return;
+        }
+        // Owner decision 99A: the one session path every review takes, so the box decides Send or
+        // Wait here as it does for review.start, and the record, status and reply say which.
+        bool started = CreateReviewSession(prepared.Document, prepared.Directory, null,
+            _settings.SendsWhenChecked ? ReviewMode.Send : ReviewMode.Wait, id, prepared.Summary,
+            attachment: new EngineeringContextAttachment(contextId!, head!, prepared.Sha256));
+        if (started) _preparedContext = null;
+    }
+
     private void PrepareReview(string? id)
     {
+        ExpirePreparedContext();
         _preparationId = null;
         _preparedDocument = null;
         PageDocument? document = _options.CurrentDocument();
@@ -1337,6 +1548,7 @@ public sealed class ReviewHost : IDisposable
     /// </summary>
     private void StartReview(string? id, JsonElement payload)
     {
+        ExpirePreparedContext();
         PageDocument? document = _options.CurrentDocument();
         if (document == null)
         {
@@ -1370,6 +1582,14 @@ public sealed class ReviewHost : IDisposable
                 SendError(id, "PreparationExpired", "The active document or configuration changed. Check component availability again.", true);
                 return;
             }
+        }
+
+        string? retryOf = Blank(Text(payload, "retry_of"));
+        SessionRecord? retried = retryOf == null ? null : FindSession(retryOf);
+        if (retried?.EngineeringContext != null)
+        {
+            RetryContextReview(id, document, retried);
+            return;
         }
 
         if (_options.Dump == null)
@@ -1426,6 +1646,31 @@ public sealed class ReviewHost : IDisposable
             _settings.SendsWhenChecked ? ReviewMode.Send : ReviewMode.Wait, id, summary);
     }
 
+    /// <summary>
+    /// Owner decision 108A: Retry on a failed context review. Its saved context lives in the
+    /// review's own run folder, so nothing is extracted again: the same attachment (context id,
+    /// head and saved package digest) is posted with that folder and the failed chat as
+    /// `retry_of`, through the one gated session path, Send or Wait from the box. The backend
+    /// validates the head again and refuses a changed context with its conflict.
+    /// </summary>
+    private void RetryContextReview(string? id, PageDocument document, SessionRecord retried)
+    {
+        if (!document.IsSameDocument(retried.Document))
+        {
+            SendError(id, "ReviewNotActive", "Open or switch to the reviewed document and configuration before retrying its review with saved context.", retryable: true);
+            return;
+        }
+        if (!BackendReady(id))
+        {
+            return;
+        }
+
+        CreateReviewSession(retried.Document, retried.RunDirectory, retried.ChatId,
+            _settings.SendsWhenChecked ? ReviewMode.Send : ReviewMode.Wait, id,
+            retried.ContextExtraction ?? new DumpSummary(retried.RunDirectory, 0, 0),
+            attachment: retried.EngineeringContext);
+    }
+
     private bool CanReviewDocument(PageDocument document, string? id)
     {
         if (document.Kind != "drawing") return true;
@@ -1464,25 +1709,29 @@ public sealed class ReviewHost : IDisposable
 
     /// <param name="replacing">The record a re-run replaces (`ReviewMode.Recheck` only): its
     /// place in the list and its own model status are kept, even if it was forgotten meanwhile.</param>
-    private void CreateReviewSession(
+    /// <param name="attachment">Feature 016's saved context for this review, or null (owner decision
+    /// 99A: a context review starts here like any other).</param>
+    /// <returns>Whether the session was created; false after a refusal already answered.</returns>
+    private bool CreateReviewSession(
         PageDocument? document, string runDirectory, string? previousChatId, ReviewMode mode,
-        string? id, DumpSummary summary, SessionRecord? replacing = null)
+        string? id, DumpSummary summary, SessionRecord? replacing = null,
+        EngineeringContextAttachment? attachment = null)
     {
         PageDocument? active = mode == ReviewMode.Recheck ? _options.CurrentDocument() : document;
         if (active != null && !CanReviewDocument(active, id))
         {
-            return;
+            return false;
         }
         if (mode == ReviewMode.Recheck)
         {
             if (active == null || !active.IsSameDocument(document))
             {
                 SendError(id, "ReviewNotActive", "Open or switch to the reviewed document and configuration before checking its saved evidence again.", retryable: true);
-                return;
+                return false;
             }
             if (!BackendReady(id))
             {
-                return;
+                return false;
             }
 
             // A recheck replaces this tracked chat; a fresh start instead sends the earlier
@@ -1504,7 +1753,9 @@ public sealed class ReviewHost : IDisposable
                 // FR-028: the page's Retry on an error card starts a fresh chat that says
                 // which one it is replacing, so the pair can be read back in the run folder.
                 mode == ReviewMode.Recheck ? null : previousChatId,
-                Blank(_settings.StandardsProfilePath), mode));
+                Blank(_settings.StandardsProfilePath),
+                mode: mode,
+                engineeringContext: attachment));
         }
         catch (Exception failure)
         {
@@ -1522,6 +1773,8 @@ public sealed class ReviewHost : IDisposable
         Publish(new SessionRecord(handle.ChatId, runDirectory, document, new DateTimeOffset(_options.Now()))
         {
             ModelStatus = modelStatus,
+            EngineeringContext = attachment ?? replacing?.EngineeringContext,
+            ContextExtraction = attachment != null ? summary : replacing?.ContextExtraction,
         }, makeLatest: true, replacing);
         PostStatus("ready", mode == ReviewMode.Recheck
             ? "Checked the saved evidence again; nothing was sent to the model."
@@ -1541,6 +1794,7 @@ public sealed class ReviewHost : IDisposable
         if (mode == ReviewMode.Recheck) reply["previous_chat_id"] = previousChatId;
         else reply["send_when_checked"] = mode == ReviewMode.Send;
         Send(mode == ReviewMode.Recheck ? "review.rechecked" : "review.started", id, reply);
+        return true;
     }
 
     // ---- plumbing -----------------------------------------------------------------------

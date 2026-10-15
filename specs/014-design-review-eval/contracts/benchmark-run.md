@@ -191,6 +191,7 @@ which keywords a function receives behind their values.
 | `efficiency`, `model_view` | `pane_defaults(provider)` | `ResolvedReview` | equal under `--pane-defaults` |
 | `explain_findings` | `defaults.explain_findings` | `ResolvedReview` | equal under `--pane-defaults` with nothing typed |
 | `standards_profile` | the add-in's profile | `--standards-profile` | equal when the same file is named |
+| `engineering_context` (016) | default `None` | default `None` | compared semantic input; neither surface automatically attaches a context. Explicit attachment initially belongs to the offline `review` CLI, outside pane/benchmark parity. |
 | `max_steps` | default (`DEFAULT_MAX_STEPS`) | default | equal |
 | `package_dir`, `out_dir` (positional) | `chat.run_dir` for both (`:2121-2123`): the pane reviews in place | the package folder and `attempts/<package>/<n>/` | transport: reviewing in place and reviewing into another folder behave the same offline, with no bridge and so no live-row write-back into the package |
 | `key_source`, `retry_of`, `bridge`, `pipe_name`, `bridge_secret`, `bridge_factory`, `callbacks`, `redact` | the pane's | the benchmark's; `bridge=False` always; `redact` the key redactor composed with `without_local_paths` (section 10) | transport; `bridge` is recorded as `live_tools` and shown, never must-match (PP-9) |

@@ -413,7 +413,7 @@ class RemodelJob:
 
     @property
     def awaiting(self) -> str | None:
-        return "package_after" if self.state == JOB_AWAITING else None
+        return _awaiting(self.state)
 
     @property
     def live(self) -> bool:
@@ -423,8 +423,8 @@ class RemodelJob:
         self.state = JOB_FINISHED
 
     def fail(self, message: str) -> None:
-        self.state = JOB_FAILED
         self.error = message
+        self.state = JOB_FAILED
 
 
 # --- reading the run folder ----------------------------------------------------------------
@@ -452,6 +452,12 @@ def _changes(run_dir: Path) -> tuple[ChangeRecord, ...]:
         except ValidationError:
             continue
     return tuple(records)
+
+
+def _awaiting(state: str) -> str | None:
+    """What a job in `state` waits for: the after-dump while it awaits one, else nothing. One rule
+    for the job's own property and for a poll, which reads the state it captured first."""
+    return "package_after" if state == JOB_AWAITING else None
 
 
 def _plan_facts(run_dir: Path) -> tuple[str | None, int]:
@@ -982,6 +988,11 @@ class RemodelServer:
         return job
 
     def _state(self, job: RemodelJob) -> dict[str, Any]:
+        # The worker publishes a terminal state only after the run finalized its files.
+        # Capture it before reading those files: a transition during this poll must not
+        # pair the new terminal state with a plan read before finalization.
+        state = job.state
+        error = job.error
         plan_state, total = _plan_facts(job.run_dir)
         records = _changes(job.run_dir)
         # What landed, counted from the records themselves. The `save` is not a planned
@@ -1003,13 +1014,13 @@ class RemodelServer:
             }
         )
         return {
-            "state": job.state,
+            "state": state,
             "plan_state": plan_state,
             "changes_total": total,
             "changes_applied": applied,
             "current": current,
-            "awaiting": job.awaiting,
-            "error": job.error,
+            "awaiting": _awaiting(state),
+            "error": error,
         }
 
     def _deliver(self, job: RemodelJob, path: str) -> None:
