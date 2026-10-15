@@ -25,6 +25,7 @@ from typing import Any, get_args
 from uuid import NAMESPACE_URL, uuid5
 
 from swreview.agent.providers import EffortMapping, ProviderName, TokenUsage
+from swreview.agent.providers.retry import BENCHMARK_RETRY, RetryPolicy
 from swreview.agent.settings import (
     DEFAULT_MODELS,
     INERT_SETTINGS,
@@ -223,6 +224,10 @@ class RunSpec:
     max_answer_turns: int | None = 3
     """The answer-turn bound, `benchmark run`'s default; `None` writes a record older than the
     field, which holds none (feature 014 T096, on lane A3's behalf)."""
+    package_time_limit_s: int | None = 3600
+    stream_activity_window_s: int | None = 600
+    stop_grace_s: int | None = 900
+    retry_policy: RetryPolicy | None = BENCHMARK_RETRY
     standards_stamps: tuple[str, ...] = ()
     """The profile stamps this run's standards findings carry (`profile_stamp`): one
     `standards.*` finding per stamp in every package's session."""
@@ -262,6 +267,10 @@ class RunSpec:
             prompt_digest=self.prompt_digest,
             tree_dirty=self.tree_dirty,
             max_answer_turns=self.max_answer_turns,
+            package_time_limit_s=self.package_time_limit_s,
+            stream_activity_window_s=self.stream_activity_window_s,
+            stop_grace_s=self.stop_grace_s,
+            retry_policy=self.retry_policy,
         )
 
 

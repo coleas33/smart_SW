@@ -1234,6 +1234,14 @@ MUST_MATCH_CHANGES: list[tuple[str, dict[str, Any], str]] = [
     ("prompt_digest", {"prompt_digest": "9" * 64}, "prompt_digest"),
     ("tree_dirty", {"tree_dirty": True}, "tree_dirty"),
     ("max_answer_turns", {"max_answer_turns": 0}, "max_answer_turns"),
+    ("package_time_limit_s", {"package_time_limit_s": 120}, "package_time_limit_s"),
+    ("stream_activity_window_s", {"stream_activity_window_s": 300}, "stream_activity_window_s"),
+    ("stop_grace_s", {"stop_grace_s": 450}, "stop_grace_s"),
+    (
+        "retry_policy",
+        {"retry_policy": {"retries": 2, "initial_delay_s": 1.0, "max_delay_s": 30.0}},
+        "retry_policy",
+    ),
 ]
 """Each field a lever study holds equal, the change that moves it on one run, and the name its
 refusal reads: `efficiency` flag by flag (`contracts/provenance.md` 4)."""
@@ -1374,7 +1382,34 @@ def test_a_record_older_than_the_bound_against_one_recording_3_reads_not_recorde
         f"{dirs[0]} and {dirs[1]} cannot be placed in one comparison: max_answer_turns differs "
         "(not recorded against 3)"
     )
-    assert NOT_RECORDED_WHEN_ABSENT == ("max_answer_turns",)
+    # Edited deliberately for feature 014 T202 (2026-10-15): slice 6's robustness fields join.
+    assert NOT_RECORDED_WHEN_ABSENT == (
+        "max_answer_turns",
+        "package_time_limit_s",
+        "stream_activity_window_s",
+        "stop_grace_s",
+        "retry_policy",
+    )
+
+
+@pytest.mark.parametrize("pair", sorted(PAIRS))
+def test_a_record_older_than_slice_6_reads_its_robustness_field_not_recorded(
+    tmp_path: Path, pair: str
+) -> None:
+    """T202, provenance.md 4: a record written before slice 6 holds no `package_time_limit_s`,
+    which a refusal quotes "not recorded", never `None`."""
+    first, second = PAIRS[pair]
+    dirs = write_study(tmp_path, [first, second])
+    # As an older build wrote it: the field absent, not null.
+    record_path = dirs[0] / PROVENANCE_FILE
+    record = json.loads(record_path.read_text(encoding="utf-8"))
+    del record["package_time_limit_s"]
+    record_path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+
+    assert refusal_of(dirs) == (
+        f"{dirs[0]} and {dirs[1]} cannot be placed in one comparison: package_time_limit_s "
+        "differs (not recorded against 3600)"
+    )
 
 
 def test_a_lever_study_whose_arms_differ_in_another_lever_is_refused(tmp_path: Path) -> None:
