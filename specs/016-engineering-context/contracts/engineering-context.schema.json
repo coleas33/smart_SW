@@ -340,6 +340,19 @@
           "default": "saved_snapshot",
           "title": "Scope",
           "type": "string"
+        },
+        "without_live_interference_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Without Live Interference Sha256"
         }
       },
       "required": [

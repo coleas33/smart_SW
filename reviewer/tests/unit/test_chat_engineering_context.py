@@ -400,8 +400,9 @@ def test_checks_first_reassesses_attached_context_before_the_opening_prompt(
     run = app.state.server.chats[UUID(started["chat_id"])].run
     current = build_summary(run.context.engineering_context, run.context.package)
     assert current["records"][0]["decision"] == "confirmed"
-    assert current["records"][0]["binding"] == "mismatch"
-    assert current["records"][0]["needs_review"] is True
+    # Owner decision 107A: the live check's rewrite of the package keeps the input matched.
+    assert current["records"][0]["binding"] == "matched_snapshot"
+    assert current["records"][0]["needs_review"] is False
     retained = json.loads((run_dir / "engineering-context-summary.json").read_text())
     assert retained == current
     assert compact_json(current) in run.opening_message

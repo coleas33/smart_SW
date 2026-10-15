@@ -13,7 +13,9 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    SerializerFunctionWrapHandler,
     StringConstraints,
+    model_serializer,
     model_validator,
 )
 
@@ -51,6 +53,18 @@ class EvidenceBaseline(ContextModel):
     root_document_id: Label
     configuration: Label
     scope: Literal["saved_snapshot"] = "saved_snapshot"
+    without_live_interference_sha256: Digest | None = None
+    """Owner decision 107A: the package's digest without what the review's live interference
+    check rewrites - the active configuration's interference rows and the check's gaps - so
+    that rewrite alone keeps saved inputs matched. Absent on a context saved before it, which
+    then compares exact bytes only; omitted when absent, so its digests are unchanged."""
+
+    @model_serializer(mode="wrap")
+    def _omit_absent_live_digest(self, handler: SerializerFunctionWrapHandler) -> dict:
+        data = handler(self)
+        if self.without_live_interference_sha256 is None:
+            data.pop("without_live_interference_sha256", None)
+        return data
 
 
 class TargetAnchor(ContextModel):

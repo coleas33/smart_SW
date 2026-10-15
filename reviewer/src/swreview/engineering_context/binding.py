@@ -21,6 +21,7 @@ from swreview.ir.loader import (
     PACKAGE_FILE_NAME,
     AnswerKeyAccessError,
     LoadedPackage,
+    merged_package_text,
     reject_answer_key_path,
 )
 from swreview.ir.models import ComponentInstance, EvidencePackage
@@ -127,6 +128,63 @@ def _saved_snapshot(loaded: LoadedPackage) -> tuple[bytes, EvidencePackage]:
     return raw, saved
 
 
+LIVE_INTERFERENCE_GAP_KINDS = frozenset({"interference", "interference_volume_unit"})
+"""The gap kinds the host's live interference check reports (`InterferenceRunner.GapEntityKind`
+and `VolumeUnitGapEntityKind`), which `ir.loader.append_interference_run` appends."""
+
+
+def _without_live_interference(package: EvidencePackage, configuration: str) -> str:
+    """The package's canonical digest without what the live interference check rewrites.
+
+    Owner decision 107A: the check replaces the active configuration's interference rows and
+    appends its gaps, and its raw rewrite also respells values, so the comparison is of the
+    parsed package with exactly those removed; every other row, gap and field still counts.
+    """
+    data = package.model_dump(mode="json")
+    data["interferences"] = [
+        row for row in data["interferences"] if row.get("configuration") != configuration
+    ]
+    data["gaps"] = [
+        gap for gap in data["gaps"] if gap.get("entity_kind") not in LIVE_INTERFERENCE_GAP_KINDS
+    ]
+    return _digest(data)
+
+
+def same_saved_package(saved: EvidenceBaseline, current: EvidenceBaseline) -> bool:
+    """Whether `current` is exactly the saved package: its bytes and identity.
+
+    The live-free digest is derived from the bytes, so it is not compared here, and a context
+    saved before owner decision 107A compares as it always did.
+    """
+    absent = {"without_live_interference_sha256": None}
+    return saved.model_copy(update=absent) == current.model_copy(update=absent)
+
+
+def _written_by_live_check(raw: bytes) -> bool:
+    """Whether `raw` is spelled as `append_interference_run` writes a merged package."""
+    try:
+        text = raw.decode("utf-8")
+        return text == merged_package_text(json.loads(text))
+    except ValueError:
+        return False
+
+
+def same_apart_from_live_interference(
+    saved: EvidenceBaseline, current: EvidenceBaseline, raw: bytes
+) -> bool:
+    """The exact saved package, or (owner decision 107A) the same package apart from the rows
+    and gaps a review's live interference check rewrote: `raw`, the current bytes, are spelled
+    as that check writes them and nothing else differs. Any other change, a re-spelling
+    included, is not."""
+    if same_saved_package(saved, current):
+        return True
+    return (
+        saved.without_live_interference_sha256 is not None
+        and saved.model_copy(update={"package_sha256": current.package_sha256}) == current
+        and _written_by_live_check(raw)
+    )
+
+
 def baseline_from_package(loaded: LoadedPackage) -> EvidenceBaseline:
     """Attest exact saved package bytes; this observes no currently open CAD document."""
     raw, package = _saved_snapshot(loaded)
@@ -146,6 +204,7 @@ def _baseline_from_snapshot(package: EvidencePackage, raw: bytes) -> EvidenceBas
         package_id=package.package_id, package_sha256=hashlib.sha256(raw).hexdigest(),
         schema_version=package.schema_version, root_document_id=root.document_id,
         configuration=configuration,
+        without_live_interference_sha256=_without_live_interference(package, configuration),
     )
 
 
@@ -281,16 +340,16 @@ def assess_binding(
         current = _baseline_from_snapshot(package, raw)
     except (ValueError, OSError, AnswerKeyAccessError):
         return BindingAssessment(status="unresolved", reasons=("saved_snapshot_unavailable",))
-    return _assess_anchor_snapshot(anchor, baseline, current, package)
+    return _assess_anchor_snapshot(anchor, baseline, current, package, raw)
 
 
 def _assess_anchor_snapshot(
     anchor: TargetAnchor, baseline: EvidenceBaseline, current: EvidenceBaseline,
-    package: EvidencePackage,
+    package: EvidencePackage, raw: bytes,
 ) -> BindingAssessment:
     if current.package_id != baseline.package_id or anchor.package_id != baseline.package_id:
         return BindingAssessment(status="unresolved", reasons=("package_changed",))
-    if current != baseline:
+    if not same_apart_from_live_interference(baseline, current, raw):
         return BindingAssessment(status="mismatch", reasons=("package_digest_changed",))
     try:
         unavailable = _unavailable(anchor, package)
@@ -396,16 +455,16 @@ def assess_records_binding(
         )
         return {record.record_id: unavailable for record in records}
     return {
-        record.record_id: _assess_record_snapshot(record, baseline, current, package)
+        record.record_id: _assess_record_snapshot(record, baseline, current, package, raw)
         for record in records
     }
 
 
 def _assess_record_snapshot(
     record: EngineeringRecord, baseline: EvidenceBaseline, current: EvidenceBaseline,
-    package: EvidencePackage,
+    package: EvidencePackage, raw: bytes,
 ) -> BindingAssessment:
-    assessment = _assess_anchor_snapshot(record.anchor, baseline, current, package)
+    assessment = _assess_anchor_snapshot(record.anchor, baseline, current, package, raw)
     if assessment.status != "matched_snapshot" or not isinstance(record, AppliedForceRecord):
         return assessment
     if record.frame is None:

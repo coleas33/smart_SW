@@ -27,7 +27,7 @@ from swreview.agent import runner
 from swreview.agent.runner import request_prefix
 from swreview.engineering_context.brief import build_summary, compact_json
 from swreview.engineering_context.models import context_digest
-from swreview.ir.loader import load_package
+from swreview.ir.loader import load_package, save_package
 from swreview.report.session import load_session
 from tests.support.contracts import contract_validator
 from tests.support.questions_package import build_questions_package
@@ -531,3 +531,42 @@ def test_probe_a_re_run_with_context_sends_what_the_live_review_would_have_sent(
     recheck_cases.assert_sent_alike(sent, resent)
     assert sent[0].first_message["content"].count(ENGINEERING_LEAD) == 1
 
+
+
+# --- owner decision 107A: the live interference check keeps saved inputs matched ---------------
+
+
+@pytest.mark.parametrize("ticked", [True, False], ids=["ticked", "unticked"])
+def test_saved_inputs_stay_matched_after_the_live_interference_check(
+    app: Any, client: TestClient, run_root: Path, ticked: bool
+) -> None:
+    folder = run_root / "FICT-context-live"
+    fixture = build_questions_package(folder)
+    app.state.server.bridge_factory = lambda pipe, secret: fixture.bridge
+    attachment = attachment_of(client, folder)
+    before = (folder / "package.json").read_bytes()
+
+    started = chat.start_session(
+        client,
+        folder,
+        send_when_checked=ticked,
+        standards_profile=str(fixture.profile),
+        bridge={"pipe": "FICT-pipe", "secret": "FICT-secret"},
+        engineering_context=attachment,
+    )
+    chat.settle(client, started["chat_id"])
+
+    assert [name for name, _ in fixture.bridge.calls].count("interference") == 1
+    assert (folder / "package.json").read_bytes() != before
+    summary = json.loads((folder / SUMMARY_FILE).read_text(encoding="utf-8"))
+    assert [row["binding"] for row in summary["records"]] == ["matched_snapshot"]
+    assert [row["needs_review"] for row in summary["records"]] == [False]
+    panel = client.get(ctx.endpoint(folder)).json()["records"]
+    assert [row["binding"]["status"] for row in panel] == ["matched_snapshot"]
+
+    package = load_package(folder).package
+    package.components[0].transform[0][3] += 0.25
+    save_package(package, folder)
+    panel = client.get(ctx.endpoint(folder)).json()["records"]
+    assert [row["binding"]["status"] for row in panel] == ["mismatch"]
+    assert panel[0]["binding"]["reasons"] == ["package_digest_changed"]

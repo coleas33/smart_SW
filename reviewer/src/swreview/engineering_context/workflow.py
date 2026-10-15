@@ -14,6 +14,7 @@ from swreview.engineering_context.binding import (
     baseline_from_package,
     force_in_root,
     frame_from_package,
+    same_saved_package,
 )
 from swreview.engineering_context.models import (
     AppliedForceRecord,
@@ -61,7 +62,7 @@ def _current(package_dir: Path, directory: Path, expected_head: str):
         raise ValueError("initialize the context before adding records")
     if context_digest(artifact) != expected_head:
         raise ValueError("context head changed; inspect it before retrying")
-    if baseline_from_package(loaded) != artifact.baseline:
+    if not same_saved_package(artifact.baseline, baseline_from_package(loaded)):
         raise ValueError("saved evidence changed; create a new context for the new snapshot")
     return loaded, store, artifact
 

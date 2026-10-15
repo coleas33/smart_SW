@@ -42,3 +42,7 @@
 - [x] T023 The verifier's two probes kept as tests (ticked and unticked Send with context are
       byte-identical; a re-run with context sends what the live review would have), and
       Remodel's awaiting rule held once (`chat/remodel._awaiting`; the verifier's note).
+- [x] T024 Saved inputs stay matched after the review's live interference check rewrites the
+      package: the baseline records the package's digest without that check's rows and gaps,
+      and binding accepts exactly that rewrite in the check's own spelling; any other change
+      is a mismatch (owner decision 107A; the verifier's 29A).

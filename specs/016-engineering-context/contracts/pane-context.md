@@ -123,11 +123,24 @@ the opening and later context reads assess the same snapshot.
 context records the attachment (context id, head digest, saved package digest) in its
 waiting record's `model_status.engineering_context`. After SOLIDWORKS or the backend
 restarts, its Send re-runs the checks (015 `recheck.md`), and the re-run reloads that
-context from the fixed private store and requires the same head; the folder's package may
-differ from the saved baseline by the first run's live evidence, which the summary marks as
-needing review. A head changed since then refuses the re-run with `EngineeringContextConflict`
+context from the fixed private store and requires the same head; the folder's
+package may differ from the saved baseline by the first run's live evidence or a confirmed
+drawing read, which the summary assesses as any review's does. A head changed since then refuses the re-run with `EngineeringContextConflict`
 and leaves the earlier record and summary in place. A re-run never unlinks the retained
 summary, and the host never sends an attachment with a re-run.
+
+**The live check keeps inputs matched** (owner decision 107A). Every saved input of an
+assembly review used to read `mismatch: package_digest_changed`, because the review's live
+interference check rewrites `package.json`. The saved baseline now also records
+`without_live_interference_sha256`, the parsed package's digest without the active
+configuration's interference rows and without the check's gap kinds (`interference`,
+`interference_volume_unit`). A package whose bytes differ from the baseline still matches
+when that digest is equal and its bytes are spelled exactly as `append_interference_run`
+writes them (`ir.loader.merged_package_text`); any other change - geometry, a document field,
+another gap, another configuration's rows or a re-spelling - is still a mismatch. A context
+saved before this decision has no such digest and compares exact bytes, as before; the field
+is omitted when absent, so its digests are unchanged. Edits, a new review's attachment and
+the CLI still require the exact saved package.
 
 **No edit under a review that carries it.** Context entry answers 409 while a review of the
 folder is being set up, extracts, runs, waits for the engineer or waits for Send, because

@@ -16,6 +16,8 @@ and supply it as bounded read-only context to a review. CAD evidence remains imm
    scoped persistent reference and dependency fingerprints. Only an exact saved
    package match can report `matched_snapshot`; it never verifies the live CAD model.
    Missing, suppressed, inconsistent and changed evidence requires review.
+   *Amended 2026-10-15 (owner decision 107A):* the saved package as the review's own live
+   interference check rewrote it, and nothing else, also matches.
 3. Rigid right-handed frames rotate direction and translate points. Checked software
    converts units and preserves force magnitude. Reflected, scaled, nonfinite and
    projective transforms are refused. This provides context, without a solver verdict.
