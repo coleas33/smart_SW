@@ -363,3 +363,22 @@ On the licensed seat, with the build of this feature and the owner's key stored:
   ran all three unchanged generators with seeded inputs; the literal replay diff was empty. Owner
   decision 93A fixes the re-run's commit point (FR-041). No live provider run or SOLIDWORKS sitting
   is claimed. See review-2026-10-12.md.
+- **T117 the 014 merge and T118 final gate, 2026-10-15:** on the merge commit `d1e26ff` (`main` at
+  `6c942ee`, 014 slice 5, merged in with no conflicts and nothing regenerated):
+  - Python 3.11.16, the worktree's own environment: 16,307 tests passed, 5 skipped, 7 deselected;
+  - Python 3.12.3, an isolated uv environment outside the repository: the same 16,307 passed,
+    5 skipped, 7 deselected;
+  - Ruff clean;
+  - Release build, not incremental: zero warnings/errors;
+  - .NET: 9,138 extractor and 2,364 add-in tests passed, none skipped.
+
+  The five ticked goldens, the prefix characterization, the pane fixture and the pane parity pass as
+  committed. The owner-mapped replay verification ran all three unchanged generators with seeded
+  inputs, and the literal replay diff was empty. Scenarios 1 to 7 ran by their commands, all green.
+  Scenarios 1 and 2 also ran by hand against a scratch backend: an unticked start waited with its
+  size sentence, the record was `not_sent` and the report said so; Send answered 202, and the record
+  became `sent`, with one `session.sent` and one turn. Scenario 4's perf run gave a ticked start of
+  3.65 s, an unticked start of 3.87 s (0.20 s of added work) and a re-run with a carry of 4.09 s. All
+  three are under R2.17's figures, and the re-run fits inside 30 s, so R2.17's one 30 s rule stands.
+  The phase gates T033, T057, T081, T091 and T110 are recorded above. No live provider run or
+  SOLIDWORKS sitting is claimed; T119 is the seat's. See review-2026-10-12.md.
