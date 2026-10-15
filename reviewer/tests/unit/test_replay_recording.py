@@ -11,12 +11,17 @@ not a review is refused in one sentence naming what is missing.
 
 from __future__ import annotations
 
+import builtins
+import io
 import json
+import os
 import shutil
 from pathlib import Path
+from typing import Any
 
 import pytest
 
+from swreview.agent.events import EVENTS_FILE_NAME
 from swreview.agent.providers import TokenUsage
 from swreview.agent.providers.fake import ScriptedToolCall
 from swreview.agent.settings import EfficiencySettings
@@ -371,6 +376,87 @@ def test_a_benchmark_run_root_is_refused_with_its_sentence(
 
     assert "benchmark" in message
     assert "some-package" in message
+
+
+@pytest.mark.parametrize("state", ["not_sent", "send_failed", "sent"])
+@pytest.mark.parametrize("events_state", ["present", "missing", "broken"])
+def test_a_review_started_waiting_is_refused_before_the_events_are_read(
+    tmp_path: Path,
+    package_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    state: str,
+    events_state: str,
+) -> None:
+    folder = recorded(tmp_path, package_dir, [TurnPlan(rounds=((SUMMARY,),))])
+    session_file = folder / "session.json"
+    session = json.loads(session_file.read_text(encoding="utf-8"))
+    session["model_status"] = {
+        "state": state,
+        "document": {"path": "FICT-assembly.SLDASM", "configuration": "Default"},
+        "checked_at": session["started_at"],
+    }
+    if state == "send_failed":
+        session["model_status"]["failures"] = [
+            {"at": session["started_at"], "error_class": "RuntimeError", "reason": "FICT-failed"}
+        ]
+    elif state == "sent":
+        session["model_status"]["sent_at"] = session["started_at"]
+    session_file.write_text(json.dumps(session), encoding="utf-8")
+    events = folder / "events.jsonl"
+    if events_state == "missing":
+        events.unlink()
+    elif events_state == "broken":
+        events.write_text("{FICT-not-json\n", encoding="utf-8")
+
+    guard_event_reads(monkeypatch, folder)
+    if state == "sent":
+        expected = (
+            f"{folder} was sent to the model after waiting for Send; "
+            "the replay reads only reviews sent when their checks finished"
+        )
+    else:
+        expected = f"{folder} was never sent to the model, so it has no model turn to replay"
+
+    assert refusal(folder) == expected
+
+
+class EventsRead(Exception):
+    """The sentinel: something opened a folder's event log while `guard_event_reads` held."""
+
+
+def guard_event_reads(monkeypatch: pytest.MonkeyPatch, folder: Path) -> None:
+    """Make every open of `folder`'s event log raise `EventsRead`, whichever reader opens it.
+
+    Patched at the two openers every reader reaches - `io.open`, behind `Path.open` and
+    `Path.read_text`, and `builtins.open`, behind `gzip.open` - rather than at the reader's
+    private helper, which feature 014's slice 5 replaces with `replay_events` (owner decision
+    100A). The test holds before and after that merge.
+    """
+    events_file = (folder / EVENTS_FILE_NAME).resolve()
+
+    def guarded(opener: Any) -> Any:
+        def open_(file: Any, *args: Any, **kwargs: Any) -> Any:
+            if isinstance(file, (str, os.PathLike)):
+                path = Path(file).resolve()
+                if path.parent == events_file.parent and path.name.startswith(EVENTS_FILE_NAME):
+                    raise EventsRead(str(path))
+            return opener(file, *args, **kwargs)
+
+        return open_
+
+    monkeypatch.setattr(io, "open", guarded(io.open))
+    monkeypatch.setattr(builtins, "open", guarded(builtins.open))
+
+
+def test_the_event_read_sentinel_catches_the_recording_reader(
+    tmp_path: Path, package_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The guard is not vacuous: reading a ticked recording, which the replay reads, trips it."""
+    folder = recorded(tmp_path, package_dir, [TurnPlan(rounds=((SUMMARY,),))])
+    guard_event_reads(monkeypatch, folder)
+
+    with pytest.raises(EventsRead):
+        read_recording(folder)
 
 
 def test_a_check_folder_with_no_event_log_is_refused(tmp_path: Path, package_dir: Path) -> None:

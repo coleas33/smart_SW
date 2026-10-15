@@ -418,6 +418,19 @@ class ToolContext:
                 self.session.drawing_read = self._drawing_read  # type: ignore[assignment]
         return self._drawing_read
 
+    def carry_drawing_read(self, value: str | None) -> None:
+        """Take a re-run's first-run capability instead of asking the host (feature 015).
+
+        Sets the cached answer and `ReviewSession.drawing_read`, as `drawing_read_mode` does
+        when it asks, so the host is not pinged and the re-run's own record keeps the value
+        for a later re-run of it (`contracts/recheck.md` section 3). `None` leaves it lazy.
+        """
+        if value is None:
+            return
+        self._drawing_read = value
+        if self.session is not None:
+            self.session.drawing_read = value  # type: ignore[assignment]
+
     def component(self, component_id: str) -> ComponentInstance | None:
         return self._components.get(component_id)
 

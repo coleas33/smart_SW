@@ -131,6 +131,8 @@ public sealed class BackendClient : IBackendClient, IDisposable
         var payload = new Dictionary<string, object?>
         {
             { "run_dir", request.RunDirectory },
+            { "send_when_checked", request.Mode == ReviewMode.Send },
+            { "recheck", request.Mode == ReviewMode.Recheck },
             { "provider", request.Provider },
             { "model", request.Model },
             { "effort", request.Effort },

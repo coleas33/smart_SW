@@ -238,6 +238,15 @@ class ProviderSettings(BaseModel):
         return self
 
     @property
+    def has_credential(self) -> bool:
+        """Whether Send has a resolved key or a supported keyless provider."""
+        return (
+            self.api_key is not None
+            or self.provider is ProviderName.FAKE
+            or self.enterprise is not None
+        )
+
+    @property
     def secrets(self) -> tuple[str, ...]:
         """Every value that must never appear in a log line, an error or a file."""
         if self.api_key is None:

@@ -241,6 +241,11 @@ def _append_round(
         history.append(_tool_message(request, result))
 
 
+def effort_mapping_for(model: str, effort: EffortLevel) -> EffortMapping:
+    """Every level is available: the fake does no thinking to budget."""
+    return EffortMapping(requested=effort, provider_param=EFFORT_PARAM, provider_value=effort)
+
+
 class FakeProvider:
     """The scripted provider. `providers.get("fake")` returns this class."""
 
@@ -281,8 +286,7 @@ class FakeProvider:
         """
 
     def effort_mapping(self, effort: EffortLevel) -> EffortMapping:
-        """Every level is available: the fake does no thinking to budget."""
-        return EffortMapping(requested=effort, provider_param=EFFORT_PARAM, provider_value=effort)
+        return effort_mapping_for(self.model, effort)
 
     def use_retry(
         self, policy: retry.RetryPolicy, *, stop_requested: Callable[[], bool]

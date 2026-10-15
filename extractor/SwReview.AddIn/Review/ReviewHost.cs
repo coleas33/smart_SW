@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Text.Json;
 using SwReview.AddIn.Settings;
@@ -69,6 +70,20 @@ public sealed class PageDocument
     /// guessing.
     /// </summary>
     public bool IsAttachable => Kind == "part" || Kind == "assembly";
+
+    /// <summary>
+    /// Whether <paramref name="path"/> and <paramref name="configuration"/> name this document:
+    /// the path compared ignoring case, as Windows names one file however it is spelled, and
+    /// the configuration exactly, as SOLIDWORKS names configurations (feature 015). The one rule
+    /// a re-run's binding and the search for a review never sent both use.
+    /// </summary>
+    public bool IsSameDocument(string? path, string? configuration) =>
+        string.Equals(path, Path, StringComparison.OrdinalIgnoreCase)
+        && string.Equals(configuration, Configuration, StringComparison.Ordinal);
+
+    /// <summary><see cref="IsSameDocument(string?, string?)"/> of another document; never null.</summary>
+    public bool IsSameDocument(PageDocument? other) =>
+        other != null && IsSameDocument(other.Path, other.Configuration);
 }
 
 /// <summary>
@@ -126,6 +141,9 @@ public sealed class SessionRecord
     /// <summary>When the review was tracked (`ReviewHostOptions.Now`); null for a check.</summary>
     public DateTimeOffset? StartedAt { get; }
 
+    /// <summary>Set while this record has not been sent to the model.</summary>
+    public string? ModelStatus { get; set; }
+
     /// <summary>
     /// Whether this run is a Model check.
     ///
@@ -165,6 +183,9 @@ public sealed class ReviewHostOptions
 
     /// <summary>The open document, asked for fresh each time; SOLIDWORKS owns the answer.</summary>
     public Func<PageDocument?> CurrentDocument { get; set; } = () => null;
+
+    /// <summary>The bounded session head opener; null uses the shared replace-safe opener.</summary>
+    public Func<string, Stream>? OpenSessionHead { get; set; }
 
     /// <summary>Read only the component census before a paid review; no run folder or model call.</summary>
     public Func<ReviewPreparation>? PrepareReview { get; set; }
@@ -276,6 +297,14 @@ public sealed class ReviewHost : IDisposable
 
     /// <summary>Guards <see cref="_sessions"/>; see the threading note in the class remarks.</summary>
     private readonly object _sessionsLock = new object();
+
+    /// <summary>
+    /// The run folders of reviews the engineer removed (the chip's Remove), as
+    /// <see cref="SameFolder"/> spells them and compared ignoring case. Kept for the SOLIDWORKS
+    /// session, like the records, so the search never offers a removed review again (feature
+    /// 015, owner decision 98A item 4). Guarded by <see cref="_sessionsLock"/>.
+    /// </summary>
+    private readonly HashSet<string> _forgottenFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     private readonly PaneActions _actions;
 
     /// <summary>
@@ -375,21 +404,50 @@ public sealed class ReviewHost : IDisposable
     /// the SOLIDWORKS session, not the backend process: a settings save restarts the backend and
     /// keeps every record.
     /// </summary>
-    public void TrackSession(string chatId, string runDirectory, PageDocument? document, DateTimeOffset? startedAt)
+    public void TrackSession(string chatId, string runDirectory, PageDocument? document, DateTimeOffset? startedAt) =>
+        TrackSession(chatId, runDirectory, document, startedAt, null);
+
+    /// <summary>Publishes the review with its model mark already set. A check pump may make
+    /// another record latest immediately afterward, so metadata belongs to this record.</summary>
+    public void TrackSession(
+        string chatId, string runDirectory, PageDocument? document, DateTimeOffset? startedAt, string? modelStatus)
     {
         if (chatId == null)
         {
             throw new ArgumentNullException(nameof(chatId));
         }
 
-        var record = new SessionRecord(chatId, runDirectory, document, startedAt);
+        Publish(new SessionRecord(chatId, runDirectory, document, startedAt) { ModelStatus = modelStatus }, makeLatest: true);
+    }
+
+    /// <summary>
+    /// Tracks <paramref name="record"/>, and when <paramref name="makeLatest"/> makes it the
+    /// latest run. With <paramref name="replacing"/> still tracked, the record takes its place in
+    /// the list (a re-run, feature 015); otherwise any record of the same chat id is dropped and
+    /// this one appended. A review the search found is not made latest (owner decision 98A item
+    /// 3): the check tabs' Show and the Ask tab's folder read <see cref="LatestSession"/>, and a
+    /// search the page runs on every document change must not move them to another document.
+    /// </summary>
+    private void Publish(SessionRecord record, bool makeLatest, SessionRecord? replacing = null)
+    {
         lock (_sessionsLock)
         {
-            _sessions.RemoveAll(session => session.ChatId == chatId);
-            _sessions.Add(record);
+            int index = replacing == null ? -1 : _sessions.IndexOf(replacing);
+            if (index >= 0)
+            {
+                _sessions[index] = record;
+            }
+            else
+            {
+                _sessions.RemoveAll(session => session.ChatId == record.ChatId);
+                _sessions.Add(record);
+            }
         }
 
-        LatestSession = record;
+        if (makeLatest)
+        {
+            LatestSession = record;
+        }
     }
 
     /// <summary>
@@ -408,7 +466,8 @@ public sealed class ReviewHost : IDisposable
     /// <summary>
     /// Forgets one review's record - the chip's Remove, for a review that can no longer be
     /// restored. `LatestSession` is cleared when it was that record, so nothing resolves against
-    /// a record that is gone. Answers whether there was such a review.
+    /// a record that is gone. Its run folder is remembered, so the search does not find it again
+    /// (owner decision 98A item 4). Answers whether there was such a review.
     /// </summary>
     public bool ForgetSession(string chatId)
     {
@@ -422,6 +481,7 @@ public sealed class ReviewHost : IDisposable
             }
 
             _sessions.Remove(record);
+            _forgottenFolders.Add(SameFolder(record.RunDirectory));
         }
 
         if (ReferenceEquals(LatestSession, record))
@@ -614,6 +674,7 @@ public sealed class ReviewHost : IDisposable
         lock (_sessionsLock)
         {
             _sessions.Clear();
+            _forgottenFolders.Clear();
         }
 
         LatestSession = null;
@@ -649,6 +710,10 @@ public sealed class ReviewHost : IDisposable
                 SendSettings("settings", id);
                 return;
 
+            case "send_when_checked.save":
+                SaveSendWhenChecked(id, payload);
+                return;
+
             case "settings.save":
                 Save(id, payload);
                 return;
@@ -665,7 +730,12 @@ public sealed class ReviewHost : IDisposable
                 StartReview(id, payload);
                 return;
 
+            case "review.recheck":
+                RecheckReview(id, payload);
+                return;
+
             case "sessions.list":
+                FindNotSentReview();
                 SendReviews(id);
                 return;
 
@@ -905,9 +975,10 @@ public sealed class ReviewHost : IDisposable
             next.SetApiKey(null);
         }
 
-        next.Save(_options.SettingsPath);
-        _settings = next;
-        _settingsError = null;
+        if (!PersistSettings(next, id))
+        {
+            return;
+        }
 
         ResolvedApiKey key = next.ResolveApiKey(_options.Environment);
         string? restartFailure = null;
@@ -932,6 +1003,38 @@ public sealed class ReviewHost : IDisposable
         {
             PostStatus("error", restartFailure);
         }
+    }
+
+    private void SaveSendWhenChecked(string? id, JsonElement payload)
+    {
+        bool? value = PagePayload.Flag(payload, "send_when_checked");
+        if (!value.HasValue)
+        {
+            SendError(id, "InvalidRequest", "send_when_checked must be true or false", retryable: false);
+            return;
+        }
+        UserSettings next = Clone(_settings);
+        next.SendsWhenChecked = value.Value;
+        if (PersistSettings(next, id))
+        {
+            Send("send_when_checked.saved", id, new { send_when_checked = next.SendsWhenChecked });
+        }
+    }
+
+    private bool PersistSettings(UserSettings next, string? id)
+    {
+        try
+        {
+            next.Save(_options.SettingsPath);
+        }
+        catch (Exception failure)
+        {
+            SendError(id, "SettingNotSaved", failure.Message, retryable: false);
+            return false;
+        }
+        _settings = next;
+        _settingsError = null;
+        return true;
     }
 
     private void ReportSettingsProblems(ResolvedApiKey key)
@@ -1022,21 +1125,55 @@ public sealed class ReviewHost : IDisposable
     // ---- the review list (feature 009 User Story 6) -------------------------------------
 
     /// <summary>
-    /// `sessions.list`: every review this host started, in the order tracked, with what its chip
+    /// The search behind `sessions.list` (feature 015, contracts/recheck.md section 9): a waiting
+    /// review of the active part or assembly, tracked without becoming the latest run. A found
+    /// folder the engineer removed is offered no more; since the search reads only the newest
+    /// candidate and never falls back, that leaves nothing, never an older review (98A item 4).
+    /// </summary>
+    private void FindNotSentReview()
+    {
+        PageDocument? document = _options.CurrentDocument();
+        if (document == null || !document.IsAttachable) return;
+        if (Reviews().Any(record => document.IsSameDocument(record.Document))) return;
+
+        SessionRecord? found = RunFolders.FindNotSentReview(_settings.RunRoot, document, _options.OpenSessionHead);
+        if (found == null) return;
+        lock (_sessionsLock)
+        {
+            if (_forgottenFolders.Contains(SameFolder(found.RunDirectory))) return;
+        }
+
+        Publish(found, makeLatest: false);
+    }
+
+    /// <summary>
+    /// `sessions.list`: every review this host tracks, including a found waiting review, with what its chip
     /// names - `{chat_id, run_id, run_dir, path, configuration, started_at}` - and no check or
     /// remodel record (contracts/sessions.md section 2). `started_at` is ISO 8601 with its offset;
     /// what the host does not know is null rather than invented.
     /// </summary>
     private void SendReviews(string? id)
     {
+        IReadOnlyList<SessionRecord> reviews = Reviews();
+        foreach (SessionRecord record in reviews)
+        {
+            if (record.ModelStatus == null) continue;
+            JsonElement? status = RunFolders.ReadModelStatus(record.RunDirectory, _options.OpenSessionHead);
+            if (status.HasValue && status.Value.TryGetProperty("state", out JsonElement state)
+                && state.ValueKind == JsonValueKind.String && state.GetString() == "sent")
+            {
+                record.ModelStatus = null;
+            }
+        }
         Send("sessions", id, new Dictionary<string, object?>
         {
-            { "items", Reviews().Select(ReviewItem).ToArray() },
+            { "items", reviews.Select(ReviewItem).ToArray() },
         });
     }
 
-    private static Dictionary<string, object?> ReviewItem(SessionRecord record) =>
-        new Dictionary<string, object?>
+    private static Dictionary<string, object?> ReviewItem(SessionRecord record)
+    {
+        var item = new Dictionary<string, object?>
         {
             { "chat_id", record.ChatId },
             { "run_id", record.RunId },
@@ -1048,6 +1185,9 @@ public sealed class ReviewHost : IDisposable
                 record.StartedAt?.ToString("yyyy-MM-dd'T'HH:mm:sszzz", CultureInfo.InvariantCulture)
             },
         };
+        if (record.ModelStatus != null) item["model_status"] = record.ModelStatus;
+        return item;
+    }
 
     /// <summary>
     /// `session.forget {chat_id}`: removes that review's record and answers the list without it.
@@ -1212,9 +1352,8 @@ public sealed class ReviewHost : IDisposable
         // Before the dump, whatever the preparation says: the extraction's attach reads a
         // drawing (feature 011), so the Review tab refuses one here rather than extracting it
         // as the design under review (contracts/attach.md section 3).
-        if (document.Kind == "drawing")
+        if (!CanReviewDocument(document, id))
         {
-            SendError(id, "DrawingActive", DrawingGuidance(document), retryable: true);
             return;
         }
 
@@ -1243,14 +1382,8 @@ public sealed class ReviewHost : IDisposable
             return;
         }
 
-        if (_options.Backend.Endpoint == null)
+        if (!BackendReady(id))
         {
-            SendError(
-                id,
-                "BackendUnavailable",
-                "the review backend is not running yet, so there is nowhere to send the review. "
-                + "Check the log, then press Review again.",
-                retryable: true);
             return;
         }
 
@@ -1289,9 +1422,78 @@ public sealed class ReviewHost : IDisposable
             return;
         }
 
+        CreateReviewSession(document, runDirectory, Blank(Text(payload, "retry_of")),
+            _settings.SendsWhenChecked ? ReviewMode.Send : ReviewMode.Wait, id, summary);
+    }
+
+    private bool CanReviewDocument(PageDocument document, string? id)
+    {
+        if (document.Kind != "drawing") return true;
+        SendError(id, "DrawingActive", DrawingGuidance(document), retryable: true);
+        return false;
+    }
+
+    private void RecheckReview(string? id, JsonElement payload)
+    {
+        string? chatId = Blank(Text(payload, "chat_id"));
+        if (chatId == null)
+        {
+            SendError(id, "InvalidRequest", "the message needs a chat_id.", retryable: false);
+            return;
+        }
+
+        SessionRecord? record = FindSession(chatId);
+        if (record == null || record.IsCheck)
+        {
+            SendError(id, "UnknownChat", _runs.UnknownMessage(chatId), retryable: false);
+            return;
+        }
+
+        CreateReviewSession(record.Document, record.RunDirectory, chatId, ReviewMode.Recheck, id,
+            new DumpSummary(record.RunDirectory, 0, 0), replacing: record);
+    }
+
+    private bool BackendReady(string? id)
+    {
+        if (_options.Backend.Endpoint != null) return true;
+        SendError(id, "BackendUnavailable",
+            "the review backend is not running yet, so there is nowhere to send the review. "
+            + "Check the log, then press Review again.", retryable: true);
+        return false;
+    }
+
+    /// <param name="replacing">The record a re-run replaces (`ReviewMode.Recheck` only): its
+    /// place in the list and its own model status are kept, even if it was forgotten meanwhile.</param>
+    private void CreateReviewSession(
+        PageDocument? document, string runDirectory, string? previousChatId, ReviewMode mode,
+        string? id, DumpSummary summary, SessionRecord? replacing = null)
+    {
+        PageDocument? active = mode == ReviewMode.Recheck ? _options.CurrentDocument() : document;
+        if (active != null && !CanReviewDocument(active, id))
+        {
+            return;
+        }
+        if (mode == ReviewMode.Recheck)
+        {
+            if (active == null || !active.IsSameDocument(document))
+            {
+                SendError(id, "ReviewNotActive", "Open or switch to the reviewed document and configuration before checking its saved evidence again.", retryable: true);
+                return;
+            }
+            if (!BackendReady(id))
+            {
+                return;
+            }
+
+            // A recheck replaces this tracked chat; a fresh start instead sends the earlier
+            // chat id as retry_of. Rechecks never ask the backend for a fresh retry.
+            PostStatus("checking", "Checking the saved evidence again...");
+        }
         ChatSessionHandle handle;
         try
         {
+            // CreateSession checks the current endpoint. If the backend stopped during the
+            // dump, its refusal follows the same error status and reply path as any request.
             handle = _options.Backend.CreateSession(new NewSessionRequest(
                 runDirectory,
                 _settings.Provider,
@@ -1301,8 +1503,8 @@ public sealed class ReviewHost : IDisposable
                 _options.Bridge,
                 // FR-028: the page's Retry on an error card starts a fresh chat that says
                 // which one it is replacing, so the pair can be read back in the run folder.
-                Blank(Text(payload, "retry_of")),
-                Blank(_settings.StandardsProfilePath)));
+                mode == ReviewMode.Recheck ? null : previousChatId,
+                Blank(_settings.StandardsProfilePath), mode));
         }
         catch (Exception failure)
         {
@@ -1315,19 +1517,30 @@ public sealed class ReviewHost : IDisposable
 
         // The document captured before the dump, and the moment the review was tracked: what its
         // chip in the pane names (feature 009 FR-020).
-        TrackSession(handle.ChatId, runDirectory, document, new DateTimeOffset(_options.Now()));
-
-        PostStatus("ready", ReadyMessage(summary.Components, summary.Gaps, summary.Unexamined));
+        string? modelStatus = mode == ReviewMode.Recheck ? replacing?.ModelStatus
+            : mode == ReviewMode.Send ? null : "not_sent";
+        Publish(new SessionRecord(handle.ChatId, runDirectory, document, new DateTimeOffset(_options.Now()))
+        {
+            ModelStatus = modelStatus,
+        }, makeLatest: true, replacing);
+        PostStatus("ready", mode == ReviewMode.Recheck
+            ? "Checked the saved evidence again; nothing was sent to the model."
+            : mode == ReviewMode.Send
+                ? ReadyMessage(summary.Components, summary.Gaps, summary.Unexamined)
+                : $"Checked {summary.Components} components by code; nothing was sent to the model.");
 
         // `document` is the one captured before the dump, not whichever is active now: the
         // review is of what was extracted, and the page binds what it shows to this (U8).
-        Send("review.started", id, new Dictionary<string, object?>
+        var reply = new Dictionary<string, object?>
         {
             { "chat_id", handle.ChatId },
             { "run_dir", runDirectory },
             { "not_examined", handle.NotExamined },
             { "document", DocumentPayload(document) },
-        });
+        };
+        if (mode == ReviewMode.Recheck) reply["previous_chat_id"] = previousChatId;
+        else reply["send_when_checked"] = mode == ReviewMode.Send;
+        Send(mode == ReviewMode.Recheck ? "review.rechecked" : "review.started", id, reply);
     }
 
     // ---- plumbing -----------------------------------------------------------------------
@@ -1383,6 +1596,7 @@ public sealed class ReviewHost : IDisposable
         return new Dictionary<string, object?>
         {
             { "version", settings.Version },
+            { "send_when_checked", settings.SendsWhenChecked },
             { "provider", settings.Provider },
             { "model", settings.Model },
             { "effort", settings.Effort },

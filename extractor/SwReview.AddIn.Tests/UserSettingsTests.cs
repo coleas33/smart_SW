@@ -127,6 +127,83 @@ public sealed class UserSettingsTests
         }
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("null")]
+    [InlineData("true")]
+    [InlineData("false")]
+    [InlineData("\"bad\"")]
+    [InlineData("17")]
+    public void SendWhenCheckedKeepsBooleansAndDefaultsBadOrMissingTokens(string? token)
+    {
+        using (var temp = new TempDirectory())
+        {
+            UserSettings baseline = UserSettings.Defaults();
+            baseline.SetApiKey(OpenAiKey);
+            baseline.RunRoot = temp.File("runs");
+            string json = baseline.ToJson();
+            if (token != null) json = json.Insert(json.LastIndexOf('}'), ",\n  \"send_when_checked\": " + token + "\n");
+            string path = temp.File("settings.json");
+            File.WriteAllText(path, json, Encoding.UTF8);
+            SettingsLoadResult result = UserSettings.Load(path, BuildMode.Release);
+            bool bad = token == "\"bad\"" || token == "17";
+            Assert.Equal(token != "false", result.Settings.SendsWhenChecked);
+            Assert.Equal(bad ? $"send_when_checked '{token}' is not true or false; ticked is in use." : null, result.Error);
+            Assert.Equal(baseline.Provider, result.Settings.Provider);
+            Assert.Equal(baseline.Model, result.Settings.Model);
+            Assert.Equal(baseline.RunRoot, result.Settings.RunRoot);
+            Assert.Equal(baseline.ApiKeyProtected, result.Settings.ApiKeyProtected);
+            result.Settings.Save(path);
+            string saved = File.ReadAllText(path, Encoding.UTF8);
+            SettingsContract.AssertValid(saved);
+            if (bad || token == null || token == "null") Assert.DoesNotContain("send_when_checked", saved);
+            else Assert.Contains("\"send_when_checked\": " + token, saved);
+        }
+    }
+
+    [Fact]
+    public void SendWhenCheckedHasOneHeldTokenAndOneSettableBoolean()
+    {
+        UserSettings settings = UserSettings.Defaults();
+        Assert.Null(settings.SendWhenCheckedValue);
+        Assert.True(settings.SendsWhenChecked);
+        settings.SendsWhenChecked = false;
+        Assert.False(settings.SendsWhenChecked);
+        SettingsContract.AssertValid(settings.ToJson());
+        settings.SendsWhenChecked = true;
+        Assert.True(settings.SendsWhenChecked);
+        SettingsContract.AssertValid(settings.ToJson());
+        Assert.DoesNotContain(typeof(UserSettings).GetProperties(), member => member.PropertyType == typeof(bool?));
+        SettingsContract.AssertInvalid(settings.ToJson().Replace("\"send_when_checked\": true", "\"send_when_checked\": \"bad\""));
+    }
+
+    [Fact]
+    public void TheHostCloneKeepsTheHeldToken()
+    {
+        UserSettings original = UserSettings.Defaults();
+        original.SendsWhenChecked = false;
+        var cloneMethod = typeof(SwReview.AddIn.Review.ReviewHost).GetMethod(
+            "Clone", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Assert.NotNull(cloneMethod);
+        var clone = (UserSettings)cloneMethod!.Invoke(null, new object[] { original })!;
+        Assert.False(clone.SendsWhenChecked);
+        Assert.Equal(original.SendWhenCheckedValue!.Value.GetRawText(), clone.SendWhenCheckedValue!.Value.GetRawText());
+        Assert.Equal(original.ToJson(), clone.ToJson());
+    }
+
+    [Fact]
+    public void AnOldSettingsFileSavesToItsOwnBytes()
+    {
+        using (var temp = new TempDirectory())
+        {
+            string path = temp.File("settings.json");
+            UserSettings.Defaults().Save(path);
+            byte[] before = File.ReadAllBytes(path);
+            UserSettings.Load(path, BuildMode.Release).Settings.Save(path);
+            Assert.Equal(before, File.ReadAllBytes(path));
+        }
+    }
+
     // ---- round trip -------------------------------------------------------------------
 
     [Fact]
@@ -136,6 +213,7 @@ public sealed class UserSettingsTests
         {
             string path = temp.File("settings.json");
             UserSettings saved = UserSettings.Defaults();
+            saved.SendsWhenChecked = false;
             saved.Provider = "gemini";
             saved.Model = "gemini-3.5-flash";
             saved.Effort = "xhigh";
@@ -169,6 +247,7 @@ public sealed class UserSettingsTests
             Assert.Equal(@"C:\Users\pilot\.local\bin\uv.exe", loaded.Python);
             Assert.Equal(saved.RunRoot, loaded.RunRoot);
             Assert.Equal(saved.ApiKeyProtected, loaded.ApiKeyProtected);
+            Assert.False(loaded.SendsWhenChecked);
         }
     }
 

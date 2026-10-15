@@ -1,5 +1,7 @@
 # Contract: One Review per Model, Kept
 
+*Feature 015 amendment notice, 2026-10-08:* Planned amendments for the waiting state and marks, restoration and found reviews are specified in [015 pane.md](../../015-review-send-gate/contracts/pane.md), [015 recheck.md](../../015-review-send-gate/contracts/recheck.md).
+
 Normative for FR-020 to FR-023, SC-005 and the session edge cases.
 
 ## 1. The host's record
@@ -33,6 +35,13 @@ run_id=<run folder name>, usage=run.usage_ledger, chat_state=chat.state, last_se
 (data-model section 8). It computes and writes nothing (as the attention route).
 `404 UnknownChat` for a chat this backend does not hold.
 
+*Amended by feature 015 T070*: the live snapshot optionally carries
+`send_in_flight: true` while the accepted Send is in progress, from its `202` until
+the first completed model round reports `usage`, or until a pre-usage guard or
+request failure returns it to waiting. The flag clears before that `usage` or
+`error` event is emitted. The key is omitted otherwise, including idle waiting
+and ticked chats, disk restoration and `review_snapshot` at its default.
+
 ## 4. The run folder
 
 `GET /reviews/{run_id}` → `200` with `review_snapshot(load_session(...), load_package(...).package,
@@ -41,6 +50,13 @@ resolved by `resolve_run_dir` as `check_id` is. `404 UnknownReview`, with no rea
 the route probe the workstation, when: the rule refuses the name; the folder does not exist; it holds
 no `session.json`; it holds a `check.json` (a check folder); either file cannot be read. It writes
 nothing: every file under the folder has the same bytes and modification time before and after.
+
+*Amended by feature 015 T100* (2026-10-14): the body is `report/snapshot.restored_snapshot`. A
+record whose `model_status.state` is `not_sent` or `send_failed` is read-only with
+`read_only_reason` the words file's `read_only_lead`, a space, and `send.restored_line` dated with
+`checked_at`'s stored wall clock (`YYYY-MM-DD HH:MM`, never converted), and its summary carries the
+`restored` Send block; every other record is answered as above
+([015 recheck.md](../../015-review-send-gate/contracts/recheck.md) section 8).
 
 ## 5. The chips and choosing one
 
@@ -83,6 +99,19 @@ check hosts would honour a `run_id` the same way (their pages send none); `RunPa
 each folder's id maps, so alternating Show between a review and a check parses neither package
 again.
 
+*Amended by feature 015 T055*: a chip whose host item carries `model_status` adds " · not sent".
+The mark belongs to the host record, so it is present before a chip is chosen after a page reload.
+Clear review and Review again keep a waiting review's marked chip; choosing it reads its waiting
+snapshot, with no running turn and Stop off.
+
+*Amended by feature 015 T106*: `sessions.list` can also find a waiting review after SOLIDWORKS
+reopens. The found item is a tracked review: `chat_id` is its top-level `session_id`, `run_id`
+and `run_dir` name its saved folder, `path` and `configuration` come from
+`model_status.document`, `started_at` is `model_status.checked_at` with its stored wall clock
+and offset, and `model_status` is `not_sent` or `send_failed`. Choosing it uses the same snapshot
+and run-folder restoration above. Its host record accepts a recheck of that chat id, and a second
+list keeps the same single record.
+
 ## 6. Returning to a document
 
 On `document.changed`, and after `init`: when no turn runs and no start is in flight, the shown
@@ -91,6 +120,33 @@ list holds a review of that document, the page shows the **last** such item in t
 through `showReview`. Otherwise the landed binding applies: the shown review hides behind the stale
 line, with Stop still enabled while a turn runs. The stale line gains nothing when a chip exists,
 because this rule would already have shown it.
+
+*Amended by feature 015 T106*: before answering `sessions.list`, the host searches for a waiting
+review only when the active document is a part or assembly and it holds no review of that path
+(ignoring case) and configuration (exactly). It first enumerates folder names matching
+`<yyyyMMdd-HHmmss>-<DocumentName(path)>` with an optional numeric `-N` collision suffix, skipping
+`-check`, `-standards` and `-remodel` folders, and selects the newest timestamp, then ordinal
+name. Only that folder's `session.json` is opened, once, for a bounded 65,536-byte head read of
+`session_id` and `model_status`. The state must be `not_sent` or `send_failed`, and its document
+must match the active path and configuration. A newest candidate that is sent, has no readable
+head or names another document offers nothing; an older waiting review is never substituted.
+An unreadable root also offers nothing, without an error. The found record joins the host's
+list before its existing marked-record refresh and answer, so it participates in the return
+and restoration rules above.
+
+*Amended by feature 015 T108* (2026-10-15):
+- **The chips (section 5).** A chip whose item carries `model_status` prints its `started_at` as
+  stored - the wall clock of the string, never converted to this machine's zone - with its date
+  first, "YYYY-MM-DD HH:MM", when that date is not today on this machine. Only a review found
+  after SOLIDWORKS reopens can have another day; every other chip is today's and prints as before.
+  While a restored review's Send re-runs its checks, the chips are disabled.
+- **Returning to a document (section 6).** `document.changed` follows with the list the page holds,
+  then asks `sessions.list` again and follows its answer by the same rule, so a review the host
+  finds only now is shown: restored from its folder, read-only, with Send offered.
+- **A restarted backend.** An `init` whose token differs from the one the page holds names another
+  backend. A live waiting review on screen is then restored from its folder at once, read-only with
+  Send offered (015 FR-042). A review that was not waiting keeps this section's rule: restored when
+  chosen.
 
 ## 7. The configuration change
 

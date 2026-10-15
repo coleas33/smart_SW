@@ -618,3 +618,24 @@ stage-1 allowlist and its pinned five overriding keys are unchanged). Of the thr
 seat that the open neither changes, saves nor locks the drawing and leaves the engineer's window
 where it was (feature 011 T077); while it is false a closed drawing is refused and an already-open
 one is still read.
+
+## T187: override calibration fixtures (2026-10-13)
+
+`remodel.geometry` adds only `GetOverrideOptions`, `get_OverrideMass`,
+`get_OverrideCenterOfMass` and `get_OverrideMomentsOfInertia` reads. No override writer joins
+the stage-1 allowlist. The newly encountered bare writers denied by `ReadOnlyGuard` are
+`SetOverrideOptions`, `set_OverrideCenterOfMass`, `set_OverrideMomentsOfInertia`,
+`SetOverrideCenterOfMassValue` and `SetOverridePrincipalMomentsOfInertia`; the mass flag and
+value writers were already denied. Every qualified spelling is denied there too.
+
+Only `RemodelProbeGuard` exempts these seven qualified keys for PROBE-8's own analytic parts:
+`IMassProperty2.SetOverrideOptions`, `IMassPropertyOverrideOptions.set_OverrideMass`,
+`IMassPropertyOverrideOptions.set_OverrideCenterOfMass`,
+`IMassPropertyOverrideOptions.set_OverrideMomentsOfInertia`,
+`IMassPropertyOverrideOptions.SetOverrideMassValue`,
+`IMassPropertyOverrideOptions.SetOverrideCenterOfMassValue` and
+`IMassPropertyOverrideOptions.SetOverridePrincipalMomentsOfInertia`. The throwaway command
+refuses any open engineer document before creating a part. It configures only known SI values
+for the current configuration, checks both value-set and apply booleans, measures through a
+fresh whole-part/default object, and closes/deletes each analytic part in `finally` without
+saving any override. Nothing broadens the review or stage-1 write surface.

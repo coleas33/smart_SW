@@ -189,7 +189,8 @@ public sealed class RemodelSystemToggles
     /// Reads all four, then sets all four. Nothing is set unless every original value was read,
     /// and nothing stays set if any set fails.
     /// </summary>
-    public static RemodelSystemToggles Apply(IRemodelToggleHost host, SwGate gate)
+    public static RemodelSystemToggles Apply(
+        IRemodelToggleHost host, SwGate gate, Action<RemodelSystemToggles>? captured = null)
     {
         if (host == null)
         {
@@ -214,6 +215,7 @@ public sealed class RemodelSystemToggles
             "ISldWorks.CommandInProgress");
 
         var applied = new RemodelSystemToggles(host, gate, originals, commandInProgress);
+        captured?.Invoke(applied);
         applied.Suppress();
         return applied;
     }
@@ -313,9 +315,9 @@ public sealed class RemodelSystemToggles
     }
 
     /// <summary>
-    /// Puts <c>CommandInProgress</c> alone back to its original value, leaving the three dialog
-    /// toggles holding the run's value for the rest of the session (U27, default taken
-    /// 2026-09-28, the owner may revise; research R5.6's amendment). <c>remodel.open</c> calls it
+    /// Puts <c>CommandInProgress</c> alone back to its original value (U27, research R5.6).
+    /// T180 then restores the three dialog toggles before open publishes its idle session.
+    /// <c>remodel.open</c> calls it
     /// once its own sequence of calls is done: the API help says to set the flag before a
     /// sequence and back after it, and that it affects only out-of-process applications, so a
     /// flag left true between commands was never doing the job it was set for.
@@ -336,32 +338,39 @@ public sealed class RemodelSystemToggles
     }
 
     /// <summary>
-    /// Turns the three dialogs off and the command flag on, putting back anything that already
-    /// landed if one of them fails.
+    /// Turns the three dialogs off and the command flag on, retaining originals for every
+    /// attempted native setter and putting them back if suppression fails.
     /// </summary>
     private void Suppress()
     {
-        var landed = new List<int>(ToggleArray.Length);
         try
         {
             foreach (int toggle in ToggleArray)
             {
-                _gate.Call(ToggleMember, () => _host.SetUserPreferenceToggle(toggle, false));
-                landed.Add(toggle);
-                _pendingToggles.Add(toggle);
+                _gate.Call(ToggleMember, () =>
+                {
+                    _pendingToggles.Add(toggle);
+                    _host.SetUserPreferenceToggle(toggle, false);
+                });
             }
 
-            _gate.Call(CommandInProgressMember, () => _host.SetCommandInProgress(true));
-            _pendingCommandInProgress = true;
-        }
-        catch (Exception)
-        {
-            foreach (int toggle in landed)
+            _gate.Call(CommandInProgressMember, () =>
             {
-                PutBack(
-                    ToggleMember,
-                    () => _host.SetUserPreferenceToggle(toggle, _originalToggles[toggle]));
-                _pendingToggles.Remove(toggle);
+                _pendingCommandInProgress = true;
+                _host.SetCommandInProgress(true);
+            });
+        }
+        catch (Exception primary)
+        {
+            try
+            {
+                Restore();
+            }
+            catch (Exception restoration)
+            {
+                throw new AggregateException(
+                    "application setting suppression failed and its originals could not all be restored",
+                    primary, restoration);
             }
 
             throw;

@@ -24,6 +24,18 @@ internal static class PagePayload
         return value.ValueKind == JsonValueKind.String ? value.GetString() : null;
     }
 
+    /// <summary>A JSON boolean, or null when absent or of another kind.</summary>
+    public static bool? Flag(JsonElement element, string name)
+    {
+        if (element.ValueKind != JsonValueKind.Object
+            || !element.TryGetProperty(name, out JsonElement value)
+            || (value.ValueKind != JsonValueKind.True && value.ValueKind != JsonValueKind.False))
+        {
+            return null;
+        }
+        return value.GetBoolean();
+    }
+
     /// <summary>Trimmed, or null when there was nothing but whitespace.</summary>
     public static string? Blank(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value!.Trim();

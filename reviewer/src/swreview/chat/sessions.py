@@ -6,7 +6,9 @@ machine can be read (and tested) without an ASGI client.
 **The state machine is data-model section 3 and nothing else.** `idle -> extracting ->
 running -> (waiting_engineer <-> running)* -> ended`, `ended -> running` when the engineer
 sends a follow-up or answers an evidence request on a session whose previous turn already
-ended (FR-006), any state `-> failed`, and `failed` terminal - its only exit is a new
+ended (FR-006), `extracting -> awaiting_send -> running` for an unsent review, with a failed
+Send or applied answers returning `running -> awaiting_send`, any state `-> failed`, and
+`failed` terminal - its only exit is a new
 `ChatSession` carrying `retry_of`. `TRANSITIONS` below is the whole rule, and `to()` is
 the only way to move; a transition it does not name raises rather than being tolerated,
 because the pane draws its buttons from this state and a state nobody can reach from the
@@ -45,11 +47,8 @@ from swreview.agent.providers import AgentEvent, EventType
 from swreview.agent.runner import EVENTS_FILE_NAME, EventSink, ReviewRun
 from swreview.benchmark.timing import timing_with
 from swreview.findings import Finding
-from swreview.report.attention import rank
-from swreview.report.attention_record import write_attention_record
 from swreview.report.dispositions import REPORT_FILE_NAME, set_disposition
-from swreview.report.markdown import render_report
-from swreview.report.session import Timing, save_session
+from swreview.report.session import Timing
 
 __all__ = [
     "ChatSession",
@@ -69,6 +68,7 @@ class ChatState(StrEnum):
 
     IDLE = "idle"
     EXTRACTING = "extracting"
+    AWAITING_SEND = "awaiting_send"
     RUNNING = "running"
     WAITING_ENGINEER = "waiting_engineer"
     ENDED = "ended"
@@ -77,9 +77,12 @@ class ChatState(StrEnum):
 
 TRANSITIONS: Mapping[ChatState, frozenset[ChatState]] = {
     ChatState.IDLE: frozenset({ChatState.EXTRACTING, ChatState.FAILED}),
-    ChatState.EXTRACTING: frozenset({ChatState.RUNNING, ChatState.FAILED}),
+    ChatState.EXTRACTING: frozenset(
+        {ChatState.RUNNING, ChatState.AWAITING_SEND, ChatState.FAILED}
+    ),
+    ChatState.AWAITING_SEND: frozenset({ChatState.RUNNING, ChatState.FAILED}),
     ChatState.RUNNING: frozenset(
-        {ChatState.WAITING_ENGINEER, ChatState.ENDED, ChatState.FAILED}
+        {ChatState.AWAITING_SEND, ChatState.WAITING_ENGINEER, ChatState.ENDED, ChatState.FAILED}
     ),
     ChatState.WAITING_ENGINEER: frozenset(
         {ChatState.RUNNING, ChatState.ENDED, ChatState.FAILED}
@@ -314,7 +317,7 @@ def record_disposition(
     same validated transition is applied to the session the run is holding, and the file
     and the report are rendered from that.
 
-    The ranking is computed here and handed to both writes rather than the folder being
+    The views are written by the run's `write_views` rather than the folder being
     re-rendered through `rerender_run_folder`, for the same reason: the run is holding the
     package (`run.context.ir`) and the session, and re-reading the folder to recover what
     is already in hand would be a second read that can only lose. One `rank` call serves
@@ -324,22 +327,9 @@ def record_disposition(
     Raises `KeyError` for an unknown finding id and `ValueError` for an unknown decision or
     a transition the state machine forbids; nothing is written on either path.
     """
-    session = run.session
-    finding = set_disposition(session, finding_id, decision, note, by)
-    save_session(session, run.session_path)
-    ranking = rank(session)
-    (run.out_dir / REPORT_FILE_NAME).write_text(
-        render_report(session, run.context.ir, ranking=ranking), encoding="utf-8"
-    )
-    write_attention_record(run.out_dir, ranking, session.session_id)
-    disposition = finding.disposition
-    run.sink.emit(
-        "disposition",
-        {
-            "finding_id": finding.id,
-            "disposition": disposition.model_dump(mode="json") if disposition else None,
-        },
-    )
+    finding = set_disposition(run.session, finding_id, decision, note, by)
+    run.write_views(save=True, best_effort=False)
+    run.announce_disposition(finding)
     return finding
 
 
@@ -362,8 +352,8 @@ def record_timing_live(
     would be gone after the engineer's next message. The values are applied to the session
     the run is holding, and the file and the report are rendered from that.
 
-    The report and `attention.json` are written from one `rank` call over that session,
-    exactly as `record_disposition` writes them and for the reason given there.
+    The report and `attention.json` are written by the run's `write_views`, from one `rank`
+    call over that session, exactly as `record_disposition` writes them.
 
     No event is emitted: timing is the engineer's own bookkeeping, not something the review
     did (`contracts/timing.md` section 3). Raises `pydantic.ValidationError` for a negative
@@ -377,10 +367,5 @@ def record_timing_live(
         verification=verification,
         false_alarms=false_alarms,
     )
-    save_session(session, run.session_path)
-    ranking = rank(session)
-    (run.out_dir / REPORT_FILE_NAME).write_text(
-        render_report(session, run.context.ir, ranking=ranking), encoding="utf-8"
-    )
-    write_attention_record(run.out_dir, ranking, session.session_id)
+    run.write_views(save=True, best_effort=False)
     return session.timing

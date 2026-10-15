@@ -1,5 +1,7 @@
 # Local review handoff export
 
+*Feature 015 amendment notice, 2026-10-08:* Planned amendments for the handoff record are specified in [015 records.md](../../015-review-send-gate/contracts/records.md).
+
 `swreview handoff <run-dir> --out <archive.zip>` creates one local ZIP for an engineer to
 inspect or attach manually. The command accepts one review or partial Remodel run folder and refuses
 to overwrite an existing archive or place the archive inside that folder.
@@ -42,6 +44,13 @@ each included artifact's byte count and SHA-256, and missing or excluded artifac
 package and report may retain real-design paths as engineering evidence, and so may a Remodel
 run's `open.json`, `source-attestation.json`, `plan.json`, packages and `remodel.log` (the source's
 and the copy's paths); those paths are references only and their native targets are not copied.
+
+The manifest's session summary carries `model_status` beside `provider_info` when the session
+has a non-null model status. Only its state is copied: `not_sent`, `send_failed` or `sent`;
+document, profile, timestamps, estimates, failures and opening finding ids are not copied into
+the summary. The key is absent when the session's `model_status` is missing or null, as for a
+review sent at once. A non-mapping value, missing `state`, or non-string or unknown state is
+shown as `"model_status": null` and does not fail the export.
 
 Configured secret values are redacted with the product redactor, and the known provider-key
 shapes are masked in text artifacts. This is a best-effort detector and never proves that

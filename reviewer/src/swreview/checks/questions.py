@@ -13,6 +13,11 @@ a drawing (`tools/drawings._is_confirmed_candidate`) - so a question that differ
 is a different question. The model's questions are guarded by a looser rule, the subset rule of
 `report/session.covering_requests` (`contracts/re-ask-guard.md` section 3), which never reads
 code questions.
+
+`asks_same` is the identity for an answer carried onto a new question: the question,
+options and entity ids in order. The part-roles answer and confirmed drawing read use
+it too. It never reads the answer or status; each caller keeps its own action guards.
+Unlike `already_asked`, this identity reads options rather than `what`.
 """
 
 from __future__ import annotations
@@ -22,7 +27,7 @@ from dataclasses import dataclass
 
 from swreview.report.session import EvidenceRequest
 
-__all__ = ["QuestionSpec", "already_asked"]
+__all__ = ["QuestionSpec", "already_asked", "asks_same"]
 
 
 @dataclass(frozen=True)
@@ -41,6 +46,17 @@ class QuestionSpec:
     allow_text: bool = False
     """Whether the pane offers a text box beside the options (`EvidenceRequest.allow_text`):
     true for the part-roles question only, whose answer may name the bought parts."""
+
+
+def asks_same(
+    earlier: EvidenceRequest | QuestionSpec, new: EvidenceRequest | QuestionSpec
+) -> bool:
+    """Whether two questions have exactly the same words, options and ordered ids."""
+    return (
+        earlier.question == new.question
+        and tuple(earlier.options) == tuple(new.options)
+        and tuple(earlier.entity_ids) == tuple(new.entity_ids)
+    )
 
 
 def already_asked(requests: Iterable[EvidenceRequest], spec: QuestionSpec) -> bool:

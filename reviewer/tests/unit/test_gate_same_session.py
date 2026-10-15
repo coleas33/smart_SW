@@ -198,17 +198,18 @@ def test_the_stream_still_opens_with_session_started(tmp_path: Any) -> None:
 # --- 3. no new event type ---------------------------------------------------------------------
 
 
-def test_a_gated_run_emits_no_event_type_outside_the_sixteen(tmp_path: Any) -> None:
+def test_a_gated_run_emits_no_event_type_outside_the_seventeen(tmp_path: Any) -> None:
     """FR-032. The gate is a message, not a protocol.
 
     Edited deliberately on 2026-09-23 (feature 011 T092): the contract's fifteenth type,
     `coverage.withdrawn`, is the coverage a restating check withdrew - not the gate's - and the
     gate still adds none. Edited deliberately again on 2026-09-26 (feature 013 T038): the
-    sixteenth, `finding.withdrawn`, is the finding a regrade withdrew - not the gate's either."""
+    sixteenth, `finding.withdrawn`, is the finding a regrade withdrew - not the gate's either.
+    Edited on 2026-10-12 (015 T064): session.sent is Send's seventeenth type, not the gate's."""
     gated(tmp_path)
 
     emitted = {event["type"] for event in events_of(tmp_path, "gated")}
 
     assert emitted
     assert emitted <= SCHEMA_EVENT_TYPES
-    assert len(SCHEMA_EVENT_TYPES) == 16
+    assert len(SCHEMA_EVENT_TYPES) == 17

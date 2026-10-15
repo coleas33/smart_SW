@@ -1,5 +1,7 @@
 # Contract: The Answer Batch
 
+*Feature 015 amendment, 2026-10-13 (T084):* A review waiting for Send applies answers by code and finalizes again without a model turn. The shared `_apply_answers` performs steps 1, 2 and 2a; `_settle_waiting` retains confirmed drawing outcomes, and `close_waiting` rebuilds its Send cache on the worker before finalization. Step 3 below applies to a review already sent. The opening rebuild is specified in [015 review-flow.md](../../015-review-send-gate/contracts/review-flow.md) section 5 and lands with T086.
+
 *Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed by 2026-09-27 (013 T038, T089):* a part-roles answer regrades before the resumed turn and may withdraw findings (`finding.withdrawn`), and a confirmed drawing read's outcomes become lines of the resumed message; see 013 `contracts/part-roles.md` section 9 and `contracts/drawing-capability.md` section 6.
 
 Normative for answering several open evidence requests in one submission (FR-025, SC-005).

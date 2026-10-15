@@ -87,6 +87,7 @@ __all__ = [
     "MalformedArgumentsError",
     "OpenAIProvider",
     "OpenAIProviderError",
+    "effort_mapping_for",
     "tool_param",
     "usage_of",
 ]
@@ -238,6 +239,20 @@ def _cache_diagnostic(response: Response) -> dict[str, Any] | None:
     if diagnostic is None:
         return None
     return diagnostic.model_dump(mode="json", exclude_unset=True)
+
+
+def effort_mapping_for(model: str, effort: EffortLevel) -> EffortMapping:
+    """The adapter's effort rule, available without a key or SDK client."""
+    matches = [prefix for prefix in EFFORT_BY_MODEL if model.startswith(prefix)]
+    offered = EFFORT_BY_MODEL[max(matches, key=len)] if matches else None
+    if offered is not None and effort not in offered:
+        available = ", ".join(sorted(offered))
+        raise EffortNotSupportedError(
+            f"model {model!r} does not offer {EFFORT_PARAM} {effort!r}; "
+            f"it offers {available}. Choose one of those rather than accepting a "
+            "silently weaker run."
+        )
+    return EffortMapping(requested=effort, provider_param=EFFORT_PARAM, provider_value=effort)
 
 
 class OpenAIProvider:
@@ -407,23 +422,7 @@ class OpenAIProvider:
     # --- effort -----------------------------------------------------------------------
 
     def effort_mapping(self, effort: EffortLevel) -> EffortMapping:
-        """What `effort` becomes for this model, or `EffortNotSupportedError`."""
-        offered = self._offered_levels()
-        if offered is not None and effort not in offered:
-            available = ", ".join(sorted(offered))
-            raise EffortNotSupportedError(
-                f"model {self.model!r} does not offer {EFFORT_PARAM} {effort!r}; "
-                f"it offers {available}. Choose one of those rather than accepting a "
-                "silently weaker run."
-            )
-        return EffortMapping(requested=effort, provider_param=EFFORT_PARAM, provider_value=effort)
-
-    def _offered_levels(self) -> frozenset[str] | None:
-        """The levels this model offers, or `None` when the model is not in the table."""
-        matches = [prefix for prefix in EFFORT_BY_MODEL if self.model.startswith(prefix)]
-        if not matches:
-            return None
-        return EFFORT_BY_MODEL[max(matches, key=len)]
+        return effort_mapping_for(self.model, effort)
 
     # --- the turn ---------------------------------------------------------------------
 

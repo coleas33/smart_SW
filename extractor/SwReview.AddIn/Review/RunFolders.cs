@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using System.Text.Json;
 using SwReview.Extractor.Dump;
 
 namespace SwReview.AddIn.Review;
@@ -23,6 +24,114 @@ namespace SwReview.AddIn.Review;
 /// </summary>
 public static class RunFolders
 {
+    /// <summary>The top-level model status in the bounded head, or no readable answer.</summary>
+    public static JsonElement? ReadModelStatus(string? runDirectory, Func<string, Stream>? openHead = null) =>
+        ReadSessionHead(runDirectory, openHead, readSessionId: false, out _);
+
+    private static JsonElement? ReadSessionHead(
+        string? runDirectory, Func<string, Stream>? openHead, bool readSessionId, out string? sessionId)
+    {
+        sessionId = null;
+        if (string.IsNullOrWhiteSpace(runDirectory)) return null;
+        try
+        {
+            byte[] head;
+            using (Stream stream = (openHead ?? OpenSessionHead)(Path.Combine(runDirectory!, "session.json")))
+            {
+                head = PackageIndex.FillHead(stream, 65536);
+            }
+            var reader = new Utf8JsonReader(head, isFinalBlock: false, state: default);
+            while (reader.Read())
+            {
+                if (reader.TokenType != JsonTokenType.PropertyName || reader.CurrentDepth != 1) continue;
+                if (readSessionId && reader.ValueTextEquals("session_id"))
+                {
+                    if (reader.Read() && reader.TokenType == JsonTokenType.String)
+                    {
+                        sessionId = reader.GetString();
+                    }
+                    continue;
+                }
+                if (!reader.ValueTextEquals("model_status")) continue;
+                if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject) return null;
+                if (!JsonDocument.TryParseValue(ref reader, out JsonDocument? status)) return null;
+                using (status) { return status.RootElement.Clone(); }
+            }
+        }
+        catch (Exception)
+        {
+            // A missing, replaced, half-written or unreadable head keeps the existing mark.
+        }
+        return null;
+    }
+
+    internal static Stream OpenSessionHead(string path) => new FileStream(
+        path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+
+    /// <summary>
+    /// A waiting review of this document, from the newest matching review folder only.
+    /// Names decide the candidate before its one bounded session head is opened; a sent,
+    /// missing or unreadable head never falls back to an older waiting review. Nothing throws.
+    /// </summary>
+    public static SessionRecord? FindNotSentReview(
+        string? runRoot, PageDocument document, Func<string, Stream>? openHead = null)
+    {
+        if (string.IsNullOrWhiteSpace(runRoot)) return null;
+        try
+        {
+            string label = "-" + DocumentName(document.Path);
+            string? newest = null;
+            DateTime newestStamp = DateTime.MinValue;
+            foreach (string directory in Directory.EnumerateDirectories(runRoot))
+            {
+                string name = Path.GetFileName(directory);
+                DateTime? stamp = TimestampOf(name);
+                if (stamp == null || CarriesSuffix(name, CheckSuffix)
+                    || CarriesSuffix(name, StandardsSuffix) || CarriesSuffix(name, RemodelSuffix)) continue;
+
+                string stem = name.Substring(0, TimestampFormat.Length) + label;
+                if (!string.Equals(name, stem, StringComparison.OrdinalIgnoreCase)
+                    && !(name.StartsWith(stem + "-", StringComparison.OrdinalIgnoreCase)
+                        && name.LastIndexOf('-') == stem.Length && CarriesSuffix(name, label))) continue;
+
+                if (newest == null || stamp.Value > newestStamp
+                    || (stamp.Value == newestStamp && string.CompareOrdinal(name, Path.GetFileName(newest)) > 0))
+                {
+                    newest = directory;
+                    newestStamp = stamp.Value;
+                }
+            }
+            if (newest == null) return null;
+
+            JsonElement? status = ReadSessionHead(newest, openHead, readSessionId: true, out string? sessionId);
+            if (!status.HasValue || string.IsNullOrWhiteSpace(sessionId)) return null;
+            JsonElement value = status.Value;
+            string? state = HeadText(value, "state");
+            if (state != "not_sent" && state != "send_failed") return null;
+            if (!value.TryGetProperty("document", out JsonElement saved)
+                || saved.ValueKind != JsonValueKind.Object) return null;
+            string? path = HeadText(saved, "path");
+            string? configuration = HeadText(saved, "configuration");
+            if (!document.IsSameDocument(path, configuration)) return null;
+            if (!DateTimeOffset.TryParse(HeadText(value, "checked_at"), CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out DateTimeOffset checkedAt)) return null;
+
+            return new SessionRecord(sessionId!, newest, new PageDocument(path!, configuration), checkedAt)
+            {
+                ModelStatus = state,
+            };
+        }
+        catch (Exception)
+        {
+            // A root or head that cannot be read offers no review.
+            return null;
+        }
+    }
+
+    private static string? HeadText(JsonElement value, string name) =>
+        value.TryGetProperty(name, out JsonElement member) && member.ValueKind == JsonValueKind.String
+            ? member.GetString() : null;
+
     /// <summary>
     /// How much of the document name the folder may spend. `meshes\&lt;body id&gt;.glb` goes
     /// underneath it and .NET Framework 4.8 still enforces MAX_PATH by default, so a 200

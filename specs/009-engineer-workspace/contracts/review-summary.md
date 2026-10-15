@@ -1,5 +1,7 @@
 # Contract: The Review Summary
 
+*Feature 015 amendment notice, 2026-10-08:* Planned amendments for the Send block, its words are specified in [015 pane.md](../../015-review-send-gate/contracts/pane.md), [015 words.md](../../015-review-send-gate/contracts/words.md).
+
 *Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed by 2026-09-27 (013 T034, T046, T050, T093):* ten goals, each naming a finding group (Standards split from Hygiene); the summary block keeps the headline, a tally, the questions, the parts not loaded, the drawings and bought-parts lines and a not-reached line, while the goal lines move under their groups; `ReviewRanking` gains `groups`; see 013 `contracts/grouped-list.md`.
 
 Normative for FR-007 to FR-012, SC-001 and SC-002's backend half.
@@ -21,6 +23,18 @@ issues and whose fold the passes; `ReviewRanking` carries the same `groups`. Thr
 | `GET /reviews/{run_id}` | the run folder's `session.json` and `package.json` | none |
 
 `attention.json`, the Model check and Standards bodies, and `report.md` do not carry it.
+
+*Feature 015 amendment landed 2026-10-12 (T044–T045):* `review_ranking` and
+`review_summary` accept the optional keyword `send=None`. A waiting run supplies cached
+`{state, input_tokens, provider, send_error}`; a restored waiting review supplies state
+`restored` and an unknown count. `ReviewSummary.send` is omitted when absent, preserving the
+previous ranking bytes. When present it holds exactly `{state, input_tokens, approximate,
+text, failure, rerun_failed_text}` (015 `contracts/pane.md` section 3); it carries no session
+id or restored line. Its sentences come from the words file, and `resume_text` is
+`send.apply_answers` while it is present. `tokens_text` is the shared thousands formatter
+for this first-request sentence and the previous resume sentence. A failure uses the
+stored wall clock, with a prepare failure taking precedence over the latest recorded
+failed first request.
 
 ## 2. The groups
 

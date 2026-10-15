@@ -82,6 +82,117 @@ internal sealed class ReviewPageDriver
     /// <summary>Holds the `review.start` reply back until <see cref="ReleaseReviewStart"/>: a start in flight.</summary>
     public bool HoldReviewStart { get; set; }
 
+    public object? PreparationReply { get; set; }
+
+    /// <summary>
+    /// The token `init` hands out. Changing it before a re-init is a backend that restarted: the
+    /// page must not reuse a chat the old backend held (feature 015, FR-042).
+    /// </summary>
+    public string BackendToken { get; set; } = Token;
+
+    /// <summary>
+    /// What `review.recheck` answers (feature 015 T107): given the re-run chat id the page sent,
+    /// the `review.rechecked` payload. The driver then replaces that chat's `Sessions` item with the
+    /// new chat id, as the host replaces its record. Null leaves the message unanswered.
+    /// </summary>
+    public Func<string, Dictionary<string, object?>>? RecheckReply { get; set; }
+
+    /// <summary>What `review.recheck` answers instead, when set: an `error` payload.</summary>
+    public object? RecheckError { get; set; }
+
+    /// <summary>
+    /// Holds the `review.recheck` reply until <see cref="ReleaseReviewRecheck"/>: a re-run in
+    /// flight. Unlike <see cref="HoldReviewStart"/>, every message the page posts after it is
+    /// queued too and answered in order on release, as the host's one pump does.
+    /// </summary>
+    public bool HoldReviewRecheck { get; set; }
+
+    private (string Id, string ChatId)? _heldRecheck;
+
+    /// <summary>Answers a held `review.recheck`, then every message queued behind it, in order.</summary>
+    public async Task ReleaseReviewRecheck()
+    {
+        Assert.True(_heldRecheck != null, "no review.recheck was held.");
+        HoldReviewRecheck = false;
+        var held = _heldRecheck!.Value;
+        _heldRecheck = null;
+        AnswerRecheck(held.Id, held.ChatId);
+        while (_heldMessages.Count > 0)
+        {
+            var queued = _heldMessages.Dequeue();
+            Answer(queued.Type, queued.Id, queued.Payload);
+        }
+        await OffscreenReviewPage.Settled(Page);
+    }
+
+    /// <summary>
+    /// Reloads the page while a re-run is held: its `ready` waits in the queue behind the re-run,
+    /// as it would behind the host's pump, so the page shows nothing of the review until the
+    /// release. The fetch stub and <see cref="InitialRoutes"/> are put back once the new page has
+    /// asked, before anything answers it.
+    /// </summary>
+    public async Task ReloadWhileRecheckHeld()
+    {
+        Assert.True(_heldRecheck != null, "no review.recheck is held.");
+        int readies = Posted("ready").Length;
+        Page.Reload();
+        await Until(() => Posted("ready").Length > readies, "sent ready after the reload");
+        await Page.ExecuteScriptAsync(FetchStub);
+        foreach ((string method, string path, int status, string body) in InitialRoutes)
+        {
+            await Route(method, path, status, body);
+        }
+    }
+
+    public async Task Reload()
+    {
+        _booted = false;
+        _readyId = null;
+        Page.Reload();
+        await BootAsync();
+    }
+
+    /// <summary>Holds actual sessions.list reply ids to test a list that crossed a usage event.</summary>
+    public bool HoldSessions { get; set; }
+
+    private readonly Queue<string> _heldSessions = new Queue<string>();
+
+    public async Task ReleaseSessions()
+    {
+        Assert.NotEmpty(_heldSessions);
+        HoldSessions = false;
+        Reply("sessions", _heldSessions.Dequeue(), new { items = Sessions.ToArray() });
+        await OffscreenReviewPage.Settled(Page);
+    }
+
+    public bool SendWhenChecked { get; set; } = true;
+
+    public string KeySource { get; set; } = "settings";
+
+    public object? SendWhenCheckedSaveError { get; set; }
+
+    public bool HoldSendWhenCheckedSave { get; set; }
+
+    private readonly Queue<(string Id, bool Value)> _heldBoxSaves = new Queue<(string, bool)>();
+
+    private readonly Queue<(string Type, string Id, JsonElement Payload)> _heldMessages =
+        new Queue<(string, string, JsonElement)>();
+
+    public async Task ReleaseSendWhenCheckedSave(object? error = null)
+    {
+        Assert.NotEmpty(_heldBoxSaves);
+        var held = _heldBoxSaves.Dequeue();
+        AnswerBoxSave(held.Id, held.Value, error);
+        await OffscreenReviewPage.Settled(Page);
+    }
+
+    public async Task ChangeSendWhenChecked(bool value)
+    {
+        await Page.ExecuteScriptAsync("var box=document.getElementById('send-when-checked');box.checked="
+            + (value ? "true" : "false") + ";box.dispatchEvent(new Event('change'));0");
+        await OffscreenReviewPage.Settled(Page);
+    }
+
     private string? _heldStart;
 
     /// <summary>Answers a held `review.start` and lets the page react.</summary>
@@ -92,6 +203,11 @@ internal sealed class ReviewPageDriver
         string id = _heldStart!;
         _heldStart = null;
         Reply("review.started", id, ReviewStarted?.Invoke(_starts) ?? DefaultStarted(_starts));
+        while (_heldMessages.Count > 0)
+        {
+            var held = _heldMessages.Dequeue();
+            Answer(held.Type, held.Id, held.Payload);
+        }
         await OffscreenReviewPage.Settled(Page);
     }
 
@@ -124,6 +240,22 @@ internal sealed class ReviewPageDriver
         Page.ExecuteScriptAsync(
             "window.__fetch.routes[" + JsonSerializer.Serialize(method + " " + path) + "] = {status: "
             + status + ", body: " + bodyJson + "};0");
+
+    /// <summary>Holds an actual routed fetch response, retaining the body it captured at the call.</summary>
+    public async Task HoldRoute(string method, string path, int status, string bodyJson)
+    {
+        await Route(method, path, status, bodyJson);
+        await Page.ExecuteScriptAsync("window.__fetch.routes[" + JsonSerializer.Serialize(method + " " + path) + "].hold=true;0");
+    }
+
+    public async Task ReleaseRoute(string method, string path, bool newest = false)
+    {
+        await Read("var key=" + JsonSerializer.Serialize(method + " " + path) + ";var held=window.__fetch.held;"
+            + "var index=" + (newest ? "held.map(function(item){return item.key;}).lastIndexOf(key)" : "held.findIndex(function(item){return item.key===key;})") + ";"
+            + "if(index<0)throw new Error('no held fetch for '+key);"
+            + "window.__fetch.routes[key].hold=false;held.splice(index,1)[0].complete();return JSON.stringify({ok:true});");
+        await OffscreenReviewPage.Settled(Page);
+    }
 
     /// <summary>Makes a route reject the way an unreachable backend does.</summary>
     public Task Fail(string method, string path) =>
@@ -420,6 +552,16 @@ var h = {
             _posted.Add(new PostedMessage(type, payload));
         }
 
+        if (_heldStart != null || _heldRecheck != null)
+        {
+            _heldMessages.Enqueue((type, id, payload));
+            return;
+        }
+        Answer(type, id, payload);
+    }
+
+    private void Answer(string type, string id, JsonElement payload)
+    {
         switch (type)
         {
             case "ready":
@@ -436,6 +578,11 @@ var h = {
 
             case "models.list":
                 Reply("models", id, new { provider = "openai", models = new object[0] });
+                return;
+
+            case "review.prepare":
+                Assert.NotNull(PreparationReply);
+                Reply("review.prepared", id, PreparationReply!);
                 return;
 
             case "review.start":
@@ -455,8 +602,23 @@ var h = {
                 Reply("review.started", id, ReviewStarted?.Invoke(_starts) ?? DefaultStarted(_starts));
                 return;
 
+            case "review.recheck":
+                string recheckOf = payload.ValueKind == JsonValueKind.Object
+                    && payload.TryGetProperty("chat_id", out JsonElement rechecked)
+                        ? rechecked.GetString() ?? string.Empty
+                        : string.Empty;
+                if (HoldReviewRecheck)
+                {
+                    _heldRecheck = (id, recheckOf);
+                    return;
+                }
+
+                AnswerRecheck(id, recheckOf);
+                return;
+
             case "sessions.list":
-                Reply("sessions", id, new { items = Sessions.ToArray() });
+                if (HoldSessions) _heldSessions.Enqueue(id);
+                else Reply("sessions", id, new { items = Sessions.ToArray() });
                 return;
 
             case "session.forget":
@@ -470,6 +632,12 @@ var h = {
 
             case "entity.show":
                 Reply("entity.shown", id, new { ok = true, state_code = 0, message = "ok", full_path = "Pin-A-1" });
+                return;
+
+            case "send_when_checked.save":
+                bool send = payload.GetProperty("send_when_checked").GetBoolean();
+                if (HoldSendWhenCheckedSave) _heldBoxSaves.Enqueue((id, send));
+                else AnswerBoxSave(id, send, SendWhenCheckedSaveError);
                 return;
 
             case "settings.save":
@@ -487,9 +655,44 @@ var h = {
         }
     }
 
+    private void AnswerRecheck(string id, string chatId)
+    {
+        if (RecheckError != null)
+        {
+            Reply("error", id, RecheckError);
+            return;
+        }
+
+        if (RecheckReply == null)
+        {
+            return;
+        }
+
+        Dictionary<string, object?> reply = RecheckReply(chatId);
+        int index = Sessions.FindIndex(item => Equals(item["chat_id"], chatId));
+        if (index >= 0)
+        {
+            var replaced = new Dictionary<string, object?>(Sessions[index]) { ["chat_id"] = reply["chat_id"] };
+            Sessions[index] = replaced;
+        }
+
+        Reply("review.rechecked", id, reply);
+    }
+
+    private void AnswerBoxSave(string id, bool value, object? error)
+    {
+        if (error != null) Reply("error", id, error);
+        else
+        {
+            SendWhenChecked = value;
+            Reply("send_when_checked.saved", id, new { send_when_checked = value });
+        }
+    }
+
     private object DefaultStarted(int press) => new Dictionary<string, object?>
     {
         { "chat_id", "chat-" + press },
+        { "send_when_checked", SendWhenChecked },
         { "run_dir", @"C:\SwReviewRuns\20260923-101500-bracket-" + press },
         { "document", Document },
     };
@@ -500,17 +703,19 @@ var h = {
     private object Init() => new
     {
         backend = new { port = 51999, origin = Origin },
-        token = Token,
+        token = BackendToken,
         settings = Settings(),
-        key_source = "settings",
+        key_source = KeySource,
         run_root = @"C:\SwReviewRuns",
         providers = new[] { "openai", "gemini" },
         document = Document,
+        review_preparation = PreparationReply != null,
     };
 
-    private static object Settings() => new
+    private object Settings() => new
     {
         version = 1,
+        send_when_checked = SendWhenChecked,
         provider = "openai",
         model = "gpt-5.6",
         effort = "high",
@@ -529,7 +734,7 @@ var h = {
     private const string FetchStub = @"
 (function () {
   var origin = '" + Origin + @"';
-  window.__fetch = { calls: [], routes: {} };
+  window.__fetch = { calls: [], routes: {}, held: [] };
   window.fetch = function (url, request) {
     var method = (request && request.method) || 'GET';
     var path = String(url);
@@ -550,11 +755,17 @@ var h = {
       route = { status: 404, body: { error_class: 'NotFound', message: 'no route ' + path, retryable: false } };
     }
     var text = route.body === undefined || route.body === null ? '' : JSON.stringify(route.body);
-    return Promise.resolve({
+    var response = {
       ok: route.status >= 200 && route.status < 300,
       status: route.status,
       text: function () { return Promise.resolve(text); }
-    });
+    };
+    if (route.hold) {
+      return new Promise(function (resolve) {
+        window.__fetch.held.push({ key: method + ' ' + path, complete: function () { resolve(response); } });
+      });
+    }
+    return Promise.resolve(response);
   };
 }());0";
 

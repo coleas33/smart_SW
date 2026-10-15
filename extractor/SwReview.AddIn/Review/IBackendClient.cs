@@ -38,6 +38,9 @@ public sealed class BridgeConfig
     public string Secret { get; }
 }
 
+/// <summary>The mutually exclusive review start modes.</summary>
+public enum ReviewMode { Send, Wait, Recheck }
+
 /// <summary>The `POST /sessions` body (chat-api.md).</summary>
 public sealed class NewSessionRequest
 {
@@ -49,7 +52,8 @@ public sealed class NewSessionRequest
         string engineer,
         BridgeConfig? bridge,
         string? retryOf,
-        string? standardsProfilePath = null)
+        string? standardsProfilePath = null,
+        ReviewMode mode = ReviewMode.Send)
     {
         RunDirectory = runDirectory ?? throw new ArgumentNullException(nameof(runDirectory));
         Provider = provider ?? throw new ArgumentNullException(nameof(provider));
@@ -59,6 +63,7 @@ public sealed class NewSessionRequest
         Bridge = bridge;
         RetryOf = retryOf;
         StandardsProfilePath = standardsProfilePath;
+        Mode = mode;
     }
 
     /// <summary>`run_dir`: the folder the dump was just written into.</summary>
@@ -83,6 +88,8 @@ public sealed class NewSessionRequest
     /// setting is blank. The backend owns loading and validating the file.
     /// </summary>
     public string? StandardsProfilePath { get; }
+
+    public ReviewMode Mode { get; }
 }
 
 /// <summary>What `POST /sessions` returns: `201 {chat_id, review_session_id, not_examined}`.</summary>

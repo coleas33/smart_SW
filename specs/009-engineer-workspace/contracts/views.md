@@ -1,5 +1,7 @@
 # Contract: Results or Transcript
 
+*Feature 015 amendment notice, 2026-10-08:* Planned amendments for the Send block and status line are specified in [015 pane.md](../../015-review-send-gate/contracts/pane.md).
+
 *Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed by 2026-09-27 (013 T054, T110):* Results holds the grouped findings list in place of Start here, Show all and the flat card list, and a model answer opens with its basis line; see 013 `contracts/grouped-list.md` section 5 and `contracts/sources.md` section 3.
 
 Normative for FR-017 to FR-019 and SC-006.
@@ -47,14 +49,29 @@ class="type-row">` per row, a group's goal lines after its rows, the checked fol
 `#findings`, the holding list. The summary's goal lines live under their groups. Collapse all
 shuts every row and every card's fold, and leaves the groups as they are.
 
+*Feature 015 amendment landed 2026-10-12 (T044–T045):* the Send block immediately after
+`#summary` is another exception to the Results view's token-count rule: its backend
+`send.text` names the first request's counted input tokens, with no encoding name. It
+prints an unknown-count sentence when no number is available and calls a Gemini count
+approximate. The page reads the count and sentence; it computes neither (015
+`contracts/pane.md` section 3 and `contracts/estimate.md`).
+
+
+*Feature 015 clarification landed 2026-10-12 (T075–T076):* first usage after Send
+clears the waiting guard and chip mark immediately. Follow-up controls then use the existing
+turn, document and read-only guards, so an active turn still disables them until it ends
+(015 `contracts/pane.md` sections 3, 6 and 8).
+
 ## 3. The status line
 
 `#results-state` reads, from page state alone:
 
 | State | Words |
 |---|---|
+| a restored waiting review's Send is re-running its checks (feature 015 T108) | "Checking the saved evidence again." |
 | a turn is running and the stream is live | "The review is running." |
 | a reconnect is pending | "Reconnecting to the review." |
+| no turn running, a review waiting for Send (before open questions) | "Checked by code. Not sent to the model." |
 | no turn running, open questions in the summary | "Waiting for your answers." |
 | no turn running, a chat shown | "The review has finished." |
 | no chat | nothing (the line is hidden) |

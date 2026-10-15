@@ -158,13 +158,13 @@ public sealed class RemodelHost : IDisposable
     ///
     /// In the engineer's words, like <see cref="NoSeatMessage"/>: no command, none of the
     /// build's plumbing, and no path - the source's least of all, since nothing after the copy
-    /// may name it. It says nothing was changed, because nothing was, and it names the button
+    /// may name it. It reassures only about the engineer's original part, and names the button
     /// that is the way back by the label the page gives it.
     /// </summary>
     public const string SessionLostMessage =
         "This plan can no longer be started. The add-in reconnected to SOLIDWORKS after the plan "
         + "was made, which happens when the active document changes, and the plan did not carry "
-        + "over to the new connection. " + NothingWasChanged + " Make your part the active "
+        + "over to the new connection. " + PartNotChanged + " Make your part the active "
         + "document and press Remodel a copy to plan again.";
 
     /// <summary>
@@ -181,7 +181,7 @@ public sealed class RemodelHost : IDisposable
     /// </summary>
     public const string PlanLostMessage =
         "This plan was made before SOLIDWORKS switched documents, so it can no longer be "
-        + "started. " + NothingWasChanged + " Make your part the active document and press Plan "
+        + "started. " + PartNotChanged + " Make your part the active document and press Plan "
         + "again.";
 
     /// <summary>
@@ -206,7 +206,7 @@ public sealed class RemodelHost : IDisposable
     /// </summary>
     public const string PlanClosedMessage =
         "This plan was set aside when a new plan was asked for, so it can no longer be started. "
-        + NothingWasChanged + " Make your part the active document and press Plan again.";
+        + PartNotChanged + " Make your part the active document and press Plan again.";
 
     /// <summary>
     /// What `remodel.plan` answers when the active document is one of the re-modeler's own copies
@@ -218,8 +218,8 @@ public sealed class RemodelHost : IDisposable
         + "the active document and press Remodel a copy again.";
 
     /// <summary>
-    /// The one sentence <see cref="SessionLostMessage"/> and <see cref="PlanLostMessage"/> share:
-    /// the same condition, told at two moments, reassures the engineer in the same words.
+    /// The full no-change reassurance for refusals before any copy change. Loss and cleanup
+    /// notices instead use <see cref="PartNotChanged"/>, because cleanup may be late or incomplete.
     /// </summary>
     private const string NothingWasChanged = "Nothing was changed: not your part and not the copy.";
 
@@ -332,6 +332,7 @@ public sealed class RemodelHost : IDisposable
     private readonly RemodelHostOptions _options;
     private readonly PaneActions _actions;
     private readonly List<RemodelRun> _runs = new List<RemodelRun>();
+    private readonly object _runsLock = new object();
 
     /// <summary>A plan or a run is in flight. One per host.</summary>
     private volatile bool _busy;
@@ -380,7 +381,16 @@ public sealed class RemodelHost : IDisposable
     }
 
     /// <summary>The runs this host planned, oldest first.</summary>
-    public IReadOnlyList<RemodelRun> Runs => _runs;
+    public IReadOnlyList<RemodelRun> Runs
+    {
+        get
+        {
+            lock (_runsLock)
+            {
+                return _runs.ToArray();
+            }
+        }
+    }
 
     /// <summary>
     /// 004 T172: whether Start may run in this build. While false, `remodel.start` is refused
@@ -422,9 +432,12 @@ public sealed class RemodelHost : IDisposable
         }
 
         string normalized = trimmed.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        return _runs.FirstOrDefault(run =>
-            string.Equals(run.RunDirectory, normalized, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(run.RunId, normalized, StringComparison.OrdinalIgnoreCase));
+        lock (_runsLock)
+        {
+            return _runs.FirstOrDefault(run =>
+                string.Equals(run.RunDirectory, normalized, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(run.RunId, normalized, StringComparison.OrdinalIgnoreCase));
+        }
     }
 
     /// <summary>Handles one message from the page. Never throws.</summary>
@@ -542,21 +555,59 @@ public sealed class RemodelHost : IDisposable
     /// detaches. It uses the existing document message so no new page protocol row is needed.
     ///
     /// It is also where this host sees a re-attach (decision 24A): the add-in calls it each time
-    /// its gate withdraws a service and each time a new one listens, so after the refresh it
-    /// asks whether that just cost the plan on screen its session, and tells the page at once
-    /// if it did (<see cref="AnnounceLostPlan"/>).
+    /// its gate withdraws a service and each time a new one listens. A withdrawal refreshes only
+    /// capability; after the Dispose attempt the gate allows the lost-plan notice. Explicit
+    /// same-attachment session endings also use the same loss predicate.
     /// </summary>
-    public void RefreshAvailability()
+    public void RefreshAvailability(bool announceLostPlan = true)
     {
         Post("document.changed", DocumentPayloadWithCapability(_options.CurrentDocument()));
-        AnnounceLostPlan();
+        if (announceLostPlan)
+        {
+            AnnounceLostPlan();
+        }
+    }
+
+    /// <summary>
+    /// T180: preserve only a planned copy whose exact held session belongs to this attachment.
+    /// A path merely under copy/ is never sufficient, nor is a copy from a completed or closed run.
+    /// </summary>
+    public bool KeepCopyAttachment(string activePath, string? attachment)
+    {
+        RemodelRun? run = LatestRun;
+        return run != null
+            && run.Phase == RemodelRunPhase.Planned
+            && !run.CopyDiscarded
+            && HoldsItsSession(run, attachment)
+            && SamePath(run.CopyPath, activePath);
+    }
+
+    private static bool SamePath(string? left, string? right)
+    {
+        if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right))
+        {
+            return false;
+        }
+
+        try
+        {
+            return string.Equals(
+                Path.GetFullPath(left).TrimEnd('\\', '/'),
+                Path.GetFullPath(right).TrimEnd('\\', '/'),
+                StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 
     /// <summary>
     /// What a teardown that ended a remodel session left behind, told to the page (004 T167):
     /// one `status {stage: "error"}` carrying <see cref="SessionEndedMessage"/>, and nothing at
     /// all when everything was put back and the copy was closed, because then the plan is lost
-    /// exactly as decision 24A already tells the page, and "Nothing was changed" is true.
+    /// exactly as decision 24A already tells the page. Loss words promise only that the original
+    /// part was not changed; a late or incomplete teardown cannot justify a broader promise.
     ///
     /// The add-in calls <see cref="SessionEnded(RemodelSessionEnd)"/> from
     /// `ToolServiceOptions.RemodelSessionEnded`, which reads the bridge routine's outcome onto the
@@ -580,8 +631,32 @@ public sealed class RemodelHost : IDisposable
     /// <see cref="SessionEndedMessage(RemodelSessionEnd)"/>'s; null and an ending of no session
     /// are nothing. Never throws, for the reason the three-fact seam gives.
     /// </summary>
-    public void SessionEnded(RemodelSessionEnd? outcome) =>
+    public void SessionEnded(RemodelSessionEnd? outcome)
+    {
+        if (outcome != null && outcome.HadSession)
+        {
+            // A late teardown belongs only to the known run and copy it actually names. It must
+            // not invalidate a newer plan merely because that plan is now the latest one.
+            RemodelRun? run = FindRun(outcome.RunDirectory);
+            if (run != null && SamePath(run.CopyPath, outcome.CopyPath))
+            {
+                run.MarkSessionEnded();
+            }
+        }
+
         PostWhatWasLeft(() => SessionEndedMessage(outcome));
+        if (outcome != null && outcome.HadSession)
+        {
+            RemodelRun? ended = FindRun(outcome.RunDirectory);
+            if (ended != null && SamePath(ended.CopyPath, outcome.CopyPath)
+                && SameAttachment(ended.ToolServiceAttachment, _options.ToolServiceAttachment()))
+            {
+                // Explicit closes on the current service can notify now. A withdrawn service
+                // waits for the gate's afterStopped callback, after its Dispose attempt.
+                AnnounceLostPlan();
+            }
+        }
+    }
 
     /// <summary>
     /// The one post both seams make: the status error when there are words, nothing when there
@@ -718,8 +793,11 @@ public sealed class RemodelHost : IDisposable
 
     public void Dispose()
     {
-        _runs.Clear();
-        LatestRun = null;
+        lock (_runsLock)
+        {
+            _runs.Clear();
+            LatestRun = null;
+        }
         _active = null;
     }
 
@@ -1439,7 +1517,7 @@ public sealed class RemodelHost : IDisposable
             return;
         }
 
-        if (!SameAttachment(run.ToolServiceAttachment, _options.ToolServiceAttachment()))
+        if (run.SessionEnded || !SameAttachment(run.ToolServiceAttachment, _options.ToolServiceAttachment()))
         {
             _actions.SendError(id, "SessionLost", SessionLostMessage, retryable: false);
             return;
@@ -1488,6 +1566,7 @@ public sealed class RemodelHost : IDisposable
     private void Execute(IRemodelPipeline pipeline, RemodelRun run)
     {
         RemodelRunOutcome outcome;
+        string? closeProblem = null;
         try
         {
             PostStatus("judging", "Running the plan against the copy...");
@@ -1510,12 +1589,31 @@ public sealed class RemodelHost : IDisposable
         }
         finally
         {
+            if (HoldsItsSession(run, _options.ToolServiceAttachment()))
+            {
+                CloseAnswer closed = CloseSession(pipeline, run.RunDirectory, out Exception? notAnswered);
+                if (closed != CloseAnswer.NotAnswered)
+                {
+                    run.MarkSessionEnded();
+                }
+                else
+                {
+                    closeProblem = "The run ended, but the SOLIDWORKS bridge did not answer its close. "
+                        + "The copy may still be open; the report and saved artifacts are kept. "
+                        + notAnswered!.Message;
+                }
+            }
+
             run.Phase = RemodelRunPhase.Finished;
             _active = null;
             _busy = false;
         }
 
-        if (outcome.State == "failed")
+        if (closeProblem != null)
+        {
+            PostStatus("error", closeProblem);
+        }
+        else if (outcome.State == "failed")
         {
             PostStatus("error", "The run ended without saving the copy. The report says why.");
         }
@@ -1556,12 +1654,13 @@ public sealed class RemodelHost : IDisposable
     /// so that a `remodel.close` - which names no run and closes whatever session the bridge holds
     /// - would reach its session and nobody else's: made on the attachment listening now
     /// (<see cref="SameAttachment"/>, T168), not closed by planning again (004 T173) and not closed
-    /// by the host at the plan while Start is switched off (004 T176). One predicate for Discard's
-    /// close and planning again's.
+    /// by the host at the plan while Start is switched off (004 T176), and not ended since then
+    /// (T180). One predicate for Discard, planning again, finished-run close and copy preservation.
     /// </summary>
     private static bool HoldsItsSession(RemodelRun run, string? attachmentNow) =>
         !run.ClosedByPlanAgain
         && !run.SessionClosedAtPlan
+        && !run.SessionEnded
         && SameAttachment(run.ToolServiceAttachment, attachmentNow);
 
     /// <summary>
@@ -1581,6 +1680,7 @@ public sealed class RemodelHost : IDisposable
         && run.Phase == RemodelRunPhase.Planned
         && !run.CopyDiscarded
         && (run.ClosedByPlanAgain
+            || (run.SessionEnded && !run.SessionClosedAtPlan)
             || !SameAttachment(run.ToolServiceAttachment, _options.ToolServiceAttachment()));
 
     /// <summary>
@@ -1994,8 +2094,11 @@ public sealed class RemodelHost : IDisposable
     private RemodelRun Track(string runDirectory, string copyPath, string? toolServiceAttachment)
     {
         var run = new RemodelRun(runDirectory, copyPath, _options.Now(), toolServiceAttachment);
-        _runs.Add(run);
-        LatestRun = run;
+        lock (_runsLock)
+        {
+            _runs.Add(run);
+            LatestRun = run;
+        }
         _options.RegisterLatestRun(runDirectory);
         return run;
     }
