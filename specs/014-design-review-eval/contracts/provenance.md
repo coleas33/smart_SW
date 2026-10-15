@@ -380,7 +380,7 @@ working copies until those files are checked out again; the test below says so b
 ### 6.6 The committable-folder test (§8.8; round 3, RR3-5)
 
 A scanner in `reviewer/tests/support/local_paths.py` reads every file, JSON as strings so
-escaping hides nothing, and flags:
+escaping hides nothing, and flags (*amended 2026-10-15, owner decision 104A:* a path separator directly after exactly `<run>`, `<repo>`, `<tmp>` or `<home>`, the scrub's placeholders, is not a rooted or UNC path):
 
 - a path under the checkout root, the user profile folder or the temporary folder, all known when
   the test runs, compared case-insensitively with either separator;

@@ -287,6 +287,11 @@ def _text_offences(file: Path, text: str) -> list[Offence]:
     position = 0
     while (start := _PATH_START.search(text, position)) is not None:
         end = _path_end(text, start.end())
+        if _anchor_reason(start) in (ROOTED_PATH, UNC_PATH) and text[: start.start()].endswith(
+            ("<run>", "<repo>", "<tmp>", "<home>")
+        ):
+            position = start.end()
+            continue
         if not _overlaps(spans, start.start(), end) and not _fictional(text[start.start() : end]):
             spans.append((start.start(), end, _anchor_reason(start)))
         position = end
