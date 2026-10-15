@@ -762,13 +762,16 @@
    * they are still one press away. The one shape every error surface on this page uses when the
    * labels are there: the error card, a card's status line, the questions panel, the settings save.
    */
-  function plainError(error, labels) {
+  function plainError(error, labels, text) {
     var body = error || {};
     var errorClass = String(body.error_class || 'Error');
     var message = String(body.message || '');
 
     var block = el('div', 'plain-error');
-    block.appendChild(el('p', 'plain-error-text', labelOf(labels, 'errors', errorClass, message || errorClass)));
+    // `text`, when given, is the backend's own sentence for what failed (a re-run's,
+    // feature 015); the class's label otherwise.
+    block.appendChild(el('p', 'plain-error-text',
+      text ? String(text) : labelOf(labels, 'errors', errorClass, message || errorClass)));
 
     var fold = el('details', 'error-fold');
     fold.appendChild(el('summary', 'error-fold-head', 'Details'));
@@ -1165,7 +1168,7 @@
     block.appendChild(action);
     block.appendChild(el('p', 'send-text', String(send.text || '')));
     if (extras && extras.error) {
-      block.appendChild(plainError(extras.error, extras.labels));
+      block.appendChild(plainError(extras.error, extras.labels, extras.errorText));
     } else if (send.failure) {
       block.appendChild(el('p', 'note bad', String(send.failure)));
     }

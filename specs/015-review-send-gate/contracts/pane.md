@@ -218,6 +218,10 @@ with Send offered. A draft answer typed before the restart is dropped with the l
 
 ## 8. The chips
 
+*Landed as* (T108, 2026-10-15): the page has no separate "found" flag; it dates a chip whose
+`sessions` item carries `model_status`, from the stored wall clock of `started_at`. Only a found
+review can have another day, so this is the rule below.
+
 009 `sessions.md` section 5, amended: a chip's label gains " · not sent" while its `sessions` item
 carries `model_status` and the chat is not in `state.sentSeen`. The mark comes from the host's record
 alone (owner decision 73A; data-model section 9): the host sets it at an unticked start, keeps it

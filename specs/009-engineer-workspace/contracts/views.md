@@ -68,6 +68,7 @@ turn, document and read-only guards, so an active turn still disables them until
 
 | State | Words |
 |---|---|
+| a restored waiting review's Send is re-running its checks (feature 015 T108) | "Checking the saved evidence again." |
 | a turn is running and the stream is live | "The review is running." |
 | a reconnect is pending | "Reconnecting to the review." |
 | no turn running, a review waiting for Send (before open questions) | "Checked by code. Not sent to the model." |

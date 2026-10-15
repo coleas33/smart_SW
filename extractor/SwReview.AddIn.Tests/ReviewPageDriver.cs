@@ -84,6 +84,66 @@ internal sealed class ReviewPageDriver
 
     public object? PreparationReply { get; set; }
 
+    /// <summary>
+    /// The token `init` hands out. Changing it before a re-init is a backend that restarted: the
+    /// page must not reuse a chat the old backend held (feature 015, FR-042).
+    /// </summary>
+    public string BackendToken { get; set; } = Token;
+
+    /// <summary>
+    /// What `review.recheck` answers (feature 015 T107): given the re-run chat id the page sent,
+    /// the `review.rechecked` payload. The driver then replaces that chat's `Sessions` item with the
+    /// new chat id, as the host replaces its record. Null leaves the message unanswered.
+    /// </summary>
+    public Func<string, Dictionary<string, object?>>? RecheckReply { get; set; }
+
+    /// <summary>What `review.recheck` answers instead, when set: an `error` payload.</summary>
+    public object? RecheckError { get; set; }
+
+    /// <summary>
+    /// Holds the `review.recheck` reply until <see cref="ReleaseReviewRecheck"/>: a re-run in
+    /// flight. Unlike <see cref="HoldReviewStart"/>, every message the page posts after it is
+    /// queued too and answered in order on release, as the host's one pump does.
+    /// </summary>
+    public bool HoldReviewRecheck { get; set; }
+
+    private (string Id, string ChatId)? _heldRecheck;
+
+    /// <summary>Answers a held `review.recheck`, then every message queued behind it, in order.</summary>
+    public async Task ReleaseReviewRecheck()
+    {
+        Assert.True(_heldRecheck != null, "no review.recheck was held.");
+        HoldReviewRecheck = false;
+        var held = _heldRecheck!.Value;
+        _heldRecheck = null;
+        AnswerRecheck(held.Id, held.ChatId);
+        while (_heldMessages.Count > 0)
+        {
+            var queued = _heldMessages.Dequeue();
+            Answer(queued.Type, queued.Id, queued.Payload);
+        }
+        await OffscreenReviewPage.Settled(Page);
+    }
+
+    /// <summary>
+    /// Reloads the page while a re-run is held: its `ready` waits in the queue behind the re-run,
+    /// as it would behind the host's pump, so the page shows nothing of the review until the
+    /// release. The fetch stub and <see cref="InitialRoutes"/> are put back once the new page has
+    /// asked, before anything answers it.
+    /// </summary>
+    public async Task ReloadWhileRecheckHeld()
+    {
+        Assert.True(_heldRecheck != null, "no review.recheck is held.");
+        int readies = Posted("ready").Length;
+        Page.Reload();
+        await Until(() => Posted("ready").Length > readies, "sent ready after the reload");
+        await Page.ExecuteScriptAsync(FetchStub);
+        foreach ((string method, string path, int status, string body) in InitialRoutes)
+        {
+            await Route(method, path, status, body);
+        }
+    }
+
     public async Task Reload()
     {
         _booted = false;
@@ -492,7 +552,7 @@ var h = {
             _posted.Add(new PostedMessage(type, payload));
         }
 
-        if (_heldStart != null)
+        if (_heldStart != null || _heldRecheck != null)
         {
             _heldMessages.Enqueue((type, id, payload));
             return;
@@ -542,6 +602,20 @@ var h = {
                 Reply("review.started", id, ReviewStarted?.Invoke(_starts) ?? DefaultStarted(_starts));
                 return;
 
+            case "review.recheck":
+                string recheckOf = payload.ValueKind == JsonValueKind.Object
+                    && payload.TryGetProperty("chat_id", out JsonElement rechecked)
+                        ? rechecked.GetString() ?? string.Empty
+                        : string.Empty;
+                if (HoldReviewRecheck)
+                {
+                    _heldRecheck = (id, recheckOf);
+                    return;
+                }
+
+                AnswerRecheck(id, recheckOf);
+                return;
+
             case "sessions.list":
                 if (HoldSessions) _heldSessions.Enqueue(id);
                 else Reply("sessions", id, new { items = Sessions.ToArray() });
@@ -581,6 +655,30 @@ var h = {
         }
     }
 
+    private void AnswerRecheck(string id, string chatId)
+    {
+        if (RecheckError != null)
+        {
+            Reply("error", id, RecheckError);
+            return;
+        }
+
+        if (RecheckReply == null)
+        {
+            return;
+        }
+
+        Dictionary<string, object?> reply = RecheckReply(chatId);
+        int index = Sessions.FindIndex(item => Equals(item["chat_id"], chatId));
+        if (index >= 0)
+        {
+            var replaced = new Dictionary<string, object?>(Sessions[index]) { ["chat_id"] = reply["chat_id"] };
+            Sessions[index] = replaced;
+        }
+
+        Reply("review.rechecked", id, reply);
+    }
+
     private void AnswerBoxSave(string id, bool value, object? error)
     {
         if (error != null) Reply("error", id, error);
@@ -605,7 +703,7 @@ var h = {
     private object Init() => new
     {
         backend = new { port = 51999, origin = Origin },
-        token = Token,
+        token = BackendToken,
         settings = Settings(),
         key_source = KeySource,
         run_root = @"C:\SwReviewRuns",

@@ -69,6 +69,14 @@ public sealed class ReviewPageDefaultViewScanTests
             string visible = (await driver.Read("return JSON.stringify({ok:true,text:h.visibleText(document.getElementById('results'))});")).GetProperty("text").GetString()!;
             AssertNoneVisible(tokens, visible);
         });
+        // 015 T107, moved: the restored waiting review too, read-only from its folder.
+        RestoredReviewFixture restored = RestoredReviewFixture.Read();
+        ReviewPageDriver.Run(restored.Configure, async driver =>
+        {
+            string visible = (await driver.Read("return JSON.stringify({ok:true,text:h.visibleText(document.getElementById('results'))});")).GetProperty("text").GetString()!;
+            Assert.Contains(restored.Restored.GetProperty("read_only_reason").GetString()!, visible);
+            AssertNoneVisible(tokens, visible);
+        });
     }
 
     [Fact]

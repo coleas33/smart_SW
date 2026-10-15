@@ -121,6 +121,17 @@ public sealed class ReviewPageViewsTests
             await waiting.Start(driver);
             Assert.Equal("Checked by code. Not sent to the model.", (await driver.Read(ReadState)).GetProperty("state").GetString());
         });
+        // 015 T107, moved: a restored review's Send re-running its checks.
+        RestoredReviewFixture restored = RestoredReviewFixture.Read();
+        ReviewPageDriver.Run(driver =>
+        {
+            restored.Configure(driver);
+            driver.HoldReviewRecheck = true;
+        }, async driver =>
+        {
+            await ReviewPageRecheckTests.PressSend(driver);
+            Assert.Equal("Checking the saved evidence again.", (await driver.Read(ReadState)).GetProperty("state").GetString());
+        });
     }
 
     [Fact]

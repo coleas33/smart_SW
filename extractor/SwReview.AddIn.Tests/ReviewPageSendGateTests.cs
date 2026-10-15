@@ -1016,6 +1016,8 @@ return JSON.stringify({ok:true,count:controls.length,locked:Array.from(controls)
             await PressApply(driver);
             await PressSend(driver);
             Assert.Equal(calls, (await driver.Calls()).Length);
+            // 015 T108: Send re-runs the restored review first; this driver leaves it unanswered.
+            Assert.Equal("chat-1", Assert.Single(driver.Posted("review.recheck")).GetProperty("chat_id").GetString());
         });
     }
 
@@ -1200,7 +1202,8 @@ return JSON.stringify({ok:true,count:controls.length,locked:Array.from(controls)
         Assert.True(state.GetProperty("stopOff").GetBoolean());
         Assert.True(state.GetProperty("followupOff").GetBoolean());
         Assert.True(state.GetProperty("sendShown").GetBoolean());
-        Assert.True(state.GetProperty("sendOff").GetBoolean()); // US4 owns the read-only recheck action.
+        // 015 T108, moved deliberately: a restored waiting review offers Send, which re-runs it.
+        Assert.False(state.GetProperty("sendOff").GetBoolean());
         Assert.Equal("Checked by code. Not sent to the model.", state.GetProperty("status").GetString());
         Assert.Contains(disk.GetProperty("ranking").GetProperty("summary").GetProperty("send").GetProperty("text").GetString()!, state.GetProperty("sendText").GetString());
         if (showFailure)
