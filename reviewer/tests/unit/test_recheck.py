@@ -30,10 +30,12 @@ from uuid import UUID
 
 import pytest
 import yaml
+from pydantic_core import to_jsonable_python
 from starlette.testclient import TestClient
 
 from swreview import atomic, tokens
 from swreview.agent import runner
+from swreview.agent.events import EventSink
 from swreview.agent.providers import ProviderName
 from swreview.agent.providers.deferred import DeferredProvider
 from swreview.agent.runner import request_prefix
@@ -51,6 +53,7 @@ from swreview.prerun import (
     LIVE_INTERFERENCE_TOOL,
     PRERUN_INTERFERENCE_SETTINGS,
 )
+from swreview.report.attention_record import StaleAttentionRecord, read_attention_record
 from swreview.report.names import plural
 from swreview.report.session import (
     DrawingOutcome,
@@ -60,6 +63,7 @@ from swreview.report.session import (
     load_session,
     save_session,
 )
+from swreview.report.snapshot import restored_snapshot
 from tests.support.prerun import LIVE_ROWS, live_prerun_package, prerun_package
 from tests.support.questions_package import build_questions_package
 from tests.support.recording_provider import RecordedRequest, RecordingProvider
@@ -1011,6 +1015,139 @@ def test_a_re_run_cut_off_leaves_the_earlier_record_whole(
         if stray.exists():
             assert stream_owner(stray) != earlier.session_id
             assert not (cut / "session.2.json").exists()
+
+
+# --- after the commit point (owner decision 93A) --------------------------------------------
+#
+# The atomic replace of `session.json` is the re-run's commit point. Past it the re-run is
+# complete: the new waiting record is canonical, and a restarted backend restores it read-only
+# with Send. What follows the replace - `attention.json`, then `session.ended` - can still fail
+# or be cut off. `GET /reviews` never reads `attention.json`: it ranks from `session.json`, so a
+# record left behind by the earlier session cannot make the restore inconsistent, and
+# `read_attention_record` flags it by its session id. The next re-run writes it again and never
+# copies it to an index beside a record it does not rank.
+
+
+def _at_attention(monkeypatch: pytest.MonkeyPatch, hook: Any) -> None:
+    write = runner.write_attention_record
+
+    def placed(*args: Any, **kwargs: Any) -> None:
+        hook()
+        write(*args, **kwargs)
+
+    monkeypatch.setattr(runner, "write_attention_record", placed)
+
+
+def _at_session_ended(monkeypatch: pytest.MonkeyPatch, hook: Any) -> None:
+    emit = EventSink.emit
+
+    def placed(self: EventSink, event_type: Any, body: Any) -> Any:
+        if event_type == "session.ended":
+            hook()
+        return emit(self, event_type, body)
+
+    monkeypatch.setattr(EventSink, "emit", placed)
+
+
+AFTER_COMMIT = {"attention": _at_attention, "session-ended": _at_session_ended}
+
+
+def assert_committed_and_restorable(
+    root: Path,
+    folder: Path,
+    earlier: Earlier,
+    settings: dict[str, Any],
+    provider_control: chat.ProviderControl,
+    point: str,
+) -> None:
+    """The folder's canonical record is the re-run's; a fresh app restores it with Send, from
+    `session.json` alone, and its Send's re-run succeeds and pairs every index correctly."""
+    record = load_session(folder / "session.json")
+    assert record.session_id != earlier.record.session_id, "past the commit point"
+    assert record.model_status is not None and record.model_status.state == "not_sent"
+    assert record.model_status.rechecked_from == earlier.record.session_id
+    assert (folder / "session.1.json").read_bytes() == earlier.files["session.json"]
+    if point == "attention":
+        with pytest.raises(StaleAttentionRecord):
+            read_attention_record(folder)
+    else:
+        assert read_attention_record(folder).session_id == record.session_id
+    with restarted_app(root, settings) as fresh:
+        restored = fresh.get(f"/reviews/{folder.name}")
+        assert restored.status_code == 200, restored.text
+        assert_restored_as_waiting(restored.json(), record)
+        assert restored.json() == to_jsonable_python(
+            restored_snapshot(record, load_package(folder).package, run_id=folder.name)
+        ), "ranked from session.json, whatever attention.json holds"
+        again = recheck(fresh, folder)
+        assert again.status_code == 201, again.text
+        assert chat.state_of(fresh, again.json()["chat_id"]) == "awaiting_send"
+    assert provider_control.built == []
+    newest = load_session(folder / "session.json")
+    assert newest.model_status is not None
+    assert newest.model_status.rechecked_from == record.session_id
+    assert read_attention_record(folder).session_id == newest.session_id, "written again"
+    for kept in folder.glob("attention.*.json"):
+        index = kept.name.split(".")[1]
+        assert server._record_id(kept) == server._record_id(folder / f"session.{index}.json"), (
+            f"{kept.name} ranks a session other than the one beside it"
+        )
+
+
+@pytest.mark.parametrize("point", sorted(AFTER_COMMIT))
+def test_a_re_run_that_fails_after_its_commit_point_is_complete_and_restorable(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+    silent: ScriptedReviewBridge,
+    monkeypatch: pytest.MonkeyPatch,
+    point: str,
+) -> None:
+    earlier = earlier_review(app, client, run_root / f"FICT-recheck-committed-{point}")
+    settings = server_settings(provider_control, models, silent)
+
+    def fails() -> None:
+        raise OSError("FICT the run folder cannot be written")
+
+    AFTER_COMMIT[point](monkeypatch, fails)
+    with restarted_app(run_root, settings, raise_server_exceptions=False) as fresh:
+        failed = recheck(fresh, earlier.folder)
+        assert failed.status_code == 500
+        assert fresh.app.state.server.chats == {}
+        assert fresh.app.state.server._pending_run_dirs == set()
+    monkeypatch.undo()
+
+    assert_committed_and_restorable(
+        run_root, earlier.folder, earlier, settings, provider_control, point
+    )
+
+
+@pytest.mark.parametrize("point", sorted(AFTER_COMMIT))
+def test_a_re_run_cut_off_after_its_commit_point_is_complete_and_restorable(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+    silent: ScriptedReviewBridge,
+    monkeypatch: pytest.MonkeyPatch,
+    point: str,
+) -> None:
+    """A kill, as the folder `disk_at` copies at that point (owner decision 76A)."""
+    earlier = earlier_review(app, client, run_root / f"FICT-recheck-cut-committed-{point}")
+    settings = server_settings(provider_control, models, silent)
+    with disk_at(earlier.folder, f"after-commit-{point}") as captured:
+        AFTER_COMMIT[point](monkeypatch, captured)
+        with restarted_app(run_root, settings) as fresh:
+            assert recheck(fresh, earlier.folder).status_code == 201
+        monkeypatch.undo()
+        assert captured.folder.is_dir()
+
+        assert_committed_and_restorable(
+            captured.root, captured.folder, earlier, settings, provider_control, point
+        )
 
 
 # --- the indexes -----------------------------------------------------------------------------
