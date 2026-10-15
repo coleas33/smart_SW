@@ -31,6 +31,7 @@ import html
 import json
 import os
 import shutil
+import tempfile
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -146,6 +147,9 @@ SESSION_UNREADABLE = "the session is unreadable"
 ANSWER_LOG_UNREADABLE = "the answer log is unreadable"
 NO_EVENTS = "no events were recorded"
 UNREADABLE_FROM = "the event log is unreadable from line {line}"
+MALFORMED_FROM = "{run}/{package}: the event log is unreadable from seq {seq}"
+"""A body the walk cannot read, read as an unreadable line is (owner decision 83A)."""
+NOT_IN_THE_LOG = "this turn is not in the event log"
 EXPLANATION_PASS = "explanation pass"
 CODE_BEFORE_THE_FIRST_TURN = "Code before the first turn"
 UNSTORED: dict[UnstoredReason, str] = {
@@ -155,6 +159,9 @@ UNSTORED: dict[UnstoredReason, str] = {
     "other_call": "a result recorded for another call",
 }
 """Each `Unstored` reason as the transcript names it (`report.md` 5), never guessed."""
+
+BUILDING = ".building"
+"""The suffix of the sibling folder a build is written into before it is swapped in (83A)."""
 
 KEY_GUARD_REASON = "a run folder under it is never read by the report"
 """The reason the key guard's refusal names for a run folder under a key path."""
@@ -236,6 +243,10 @@ def build_report(
     key guard's message, and a package folder holding both stream forms with `event_stream`'s,
     before anything is written too. Every number is the scorecard's; nothing is written into a run
     folder; no build time is written, so two builds are byte-identical.
+
+    The pages are written into a new sibling folder of `out` and swapped in once all are written,
+    so a build that fails part-way, on an `OSError` such as a path too long included, leaves a
+    previous report as it was and no sibling behind (owner decision 83A).
     """
     out = Path(out)
     paths = distinct_run_dirs(run_dirs)
@@ -261,29 +272,51 @@ def build_report(
             if entry is not None and entry.path not in legends:
                 legends[entry.path] = _legend(entry, root=root)
 
-    if (out / TRANSCRIPTS_DIR).is_dir():
-        shutil.rmtree(out / TRANSCRIPTS_DIR)
-    out.mkdir(parents=True, exist_ok=True)
-    index = out / INDEX_FILE
-    _write_page(index, _index_page(runs))
-    written = 0
-    for run in runs:
-        for score in run.scorecard.per_package:
-            entry = run.entries.get(score.package_id)
-            if run.no_legend is not None:
-                legend = _Legend(names=None, note=run.no_legend)
-            elif entry is None:
-                legend = _Legend(
-                    names=None,
-                    note=f"the saved set names no package {score.package_id}, so no component "
-                    "names are shown",
-                )
-            else:
-                legend = legends[entry.path]
-            page = _transcript_page(run, score, legend)
-            _write_page(out / Path(*run.transcript(score.package_id).split("/")), page)
-            written += 1
-    return ReportBuilt(index=index, transcripts=written)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    building = Path(tempfile.mkdtemp(dir=out.parent, prefix=f".{out.name}.", suffix=BUILDING))
+    try:
+        _write_page(building / INDEX_FILE, _index_page(runs))
+        written = 0
+        for run in runs:
+            for score in run.scorecard.per_package:
+                page = _transcript_page(run, score, _legend_of(run, score, legends))
+                _write_page(building / Path(*run.transcript(score.package_id).split("/")), page)
+                written += 1
+        _swap_in(building, out)
+    except BaseException:
+        shutil.rmtree(building, ignore_errors=True)
+        raise
+    return ReportBuilt(index=out / INDEX_FILE, transcripts=written)
+
+
+def _legend_of(run: _Run, score: PackageScore, legends: dict[Path, _Legend]) -> _Legend:
+    """The package's legend, or why the run shows none."""
+    if run.no_legend is not None:
+        return _Legend(names=None, note=run.no_legend)
+    entry = run.entries.get(score.package_id)
+    if entry is None:
+        return _Legend(
+            names=None,
+            note=f"the saved set names no package {score.package_id}, so no component names "
+            "are shown",
+        )
+    return legends[entry.path]
+
+
+def _swap_in(built: Path, out: Path) -> None:
+    """Put the finished build where `out` is. A previous report, or an empty folder, is moved
+    aside first and removed only once the build is in place; a failed move puts it back."""
+    if not out.exists():
+        built.rename(out)
+        return
+    previous = built.with_name(built.name.removesuffix(BUILDING) + ".previous")
+    out.rename(previous)
+    try:
+        built.rename(out)
+    except BaseException:
+        previous.rename(out)
+        raise
+    shutil.rmtree(previous)
 
 
 def _refuse_a_foreign_out(out: Path) -> None:
@@ -628,7 +661,8 @@ def _transcript_page(run: _Run, score: PackageScore, legend: _Legend) -> list[st
     prompts, prompts_note = _read_prompts(folder)
     answer_log, log_note = _read_answer_log(folder)
     unreadable: list[int] = []
-    events = list(replay_events(run.streams[score.package_id], on_unreadable=unreadable.append))
+    logged = list(replay_events(run.streams[score.package_id], on_unreadable=unreadable.append))
+    events, malformed = _readable_prefix(logged)
     back = "../" * (len(run.name.split("/")) + 1) + INDEX_FILE
 
     lines = [*_page(f"{score.package_id} in {run.name}"), f"<h1>{_e(score.package_id)}</h1>"]
@@ -665,7 +699,11 @@ def _transcript_page(run: _Run, score: PackageScore, legend: _Legend) -> list[st
         reasoning=run.reasoning_label,
     )
     lines += walk.render(events)
-    if unreadable:
+    if malformed is not None:
+        lines.append(
+            _note(MALFORMED_FROM.format(run=run.name, package=score.package_id, seq=malformed))
+        )
+    elif unreadable:
         lines.append(_note(UNREADABLE_FROM.format(line=unreadable[0])))
     elif not events:
         lines.append(_note(NO_EVENTS))
@@ -673,6 +711,31 @@ def _transcript_page(run: _Run, score: PackageScore, legend: _Legend) -> list[st
     lines += _final_state(score, session, session_note, events)
     lines += ["</body>", "</html>"]
     return lines
+
+
+def _readable_prefix(events: list[AgentEvent]) -> tuple[list[AgentEvent], int | None]:
+    """The events before the first whose body the walk cannot read, with that event's `seq`, or
+    every event and `None` (owner decision 83A): a call's step that is not an integer, a round
+    whose counts do not read, a coverage row whose item is not an object."""
+    for index, event in enumerate(events):
+        if not _readable_body(event):
+            return events[:index], event.seq
+    return events, None
+
+
+def _readable_body(event: AgentEvent) -> bool:
+    body = event.body
+    if event.type in ("tool.started", "tool.finished"):
+        step = body.get("step_index")
+        return isinstance(step, int) and not isinstance(step, bool)
+    if event.type == "usage":
+        try:
+            usage_from_body(body)
+        except (KeyError, ValueError):
+            return False
+    if event.type == "coverage":
+        return isinstance(body.get("item", {}), dict)
+    return True
 
 
 def _note(text: str | None) -> str:
@@ -761,20 +824,22 @@ class _LogWalk:
 
     def render(self, events: list[AgentEvent]) -> list[str]:
         """Each turn ends at its `turn.ended`; the events after the last one are an open turn
-        when they hold a round, else what followed the last turn."""
+        when they hold a round or no turn ended, else what followed the last turn. Turn 0's
+        message is always shown, and each recorded message past the last logged turn is listed
+        (owner decision 83A)."""
         turns: list[list[AgentEvent]] = [[]]
         for event in events:
             turns[-1].append(event)
             if event.type == "turn.ended":
                 turns.append([])
         after = turns.pop()
-        if any(event.type == "usage" for event in after):
+        if not turns or any(event.type == "usage" for event in after):
             turns.append(after)
             after = []
         for number, turn in enumerate(turns):
             self._turn(number, turn)
-        if turns:
-            self._unscripted_on_its_own(len(turns) - 1)
+        self._unscripted_on_its_own(len(turns) - 1)
+        self._sent_past_the_log(len(turns))
         if after:
             self.lines.append("<h3>After the last turn</h3>")
             for event in after:
@@ -813,6 +878,13 @@ class _LogWalk:
                 self._event(event)
         self._flush_calls()
         self._flush_coverage()
+
+    def _sent_past_the_log(self, first: int) -> None:
+        """The recorded messages of turns the log does not reach: an attempt cut short."""
+        for number in range(first, len(self.messages or [])):
+            self.lines.append(f"<h3>Turn {_e(format_count(number))}</h3>")
+            self.lines.append(f"<pre>{_e(self._message(number))}</pre>")
+            self.lines.append(_note(NOT_IN_THE_LOG))
 
     def _message(self, number: int) -> str:
         if self.messages is None:
@@ -862,10 +934,10 @@ class _LogWalk:
             usage = _tokens(usage_from_body(body), self.reasoning)
             self.lines.append(f"<h4>{_e(label)}</h4><p>{_e(usage)}</p>")
         elif event.type == "tool.started":
-            step = int(body["step_index"])
+            step = body["step_index"]
             self.calls[step] = _Call(step, str(body.get("tool")), body.get("arguments") or {})
         elif event.type == "tool.finished":
-            call = self.calls.pop(int(body["step_index"]), None)
+            call = self.calls.pop(body["step_index"], None)
             if call is not None:
                 self._call(call, body)
         elif event.type in ("finding", "finding.withdrawn"):
