@@ -162,16 +162,26 @@ public sealed class RemodelPlanEndToEndTests
     {
         using (var world = new PlanWorld())
         {
-            // Putting a toggle back (its original value, true) fails.
-            world.Solidworks.Application.Handle("SetUserPreferenceToggle", arguments =>
+            // Open restores its idle values before returning. Create genuine pending cleanup
+            // through a scoped rebuild after the plan exists, immediately before its close.
+            world.Backend.BeforeClose = () =>
             {
-                if ((bool)arguments[1]!)
+                world.Solidworks.Application.Handle("SetUserPreferenceToggle", arguments =>
                 {
-                    throw new InvalidOperationException("the setting could not be written");
-                }
+                    if ((bool)arguments[1]!)
+                    {
+                        throw new InvalidOperationException("the setting could not be written");
+                    }
 
-                return null;
-            });
+                    return null;
+                });
+                int rebuilds = world.Solidworks.Copy.Document.Calls.Count(call => call.Member == "ForceRebuild3");
+                PipeReply command = world.Remodel(RemodelCommands.Rebuild, new { force = false });
+                Assert.Equal(BridgeStatus.Error, command.Status);
+                Assert.Equal(rebuilds + 1, world.Solidworks.Copy.Document.Calls.Count(call => call.Member == "ForceRebuild3"));
+                Assert.True(world.Solidworks.CopyOpen);
+                Assert.Empty(world.StatusErrors(0));
+            };
 
             world.Receive("remodel.plan", "p1");
 
@@ -427,6 +437,8 @@ public sealed class RemodelPlanEndToEndTests
 
         public int StartRuns { get; private set; }
 
+        public Action? BeforeClose { get; set; }
+
         public RemodelProbeReply Probe(RemodelProbeRequest request)
         {
             _log.Add("backend:probe");
@@ -482,6 +494,7 @@ public sealed class RemodelPlanEndToEndTests
 
         public void Close(RemodelCloseRequest request)
         {
+            BeforeClose?.Invoke();
             _log.Add("backend:close");
             Answered(request.Bridge, RemodelCommands.Close, new { discard_copy = request.DiscardCopy });
         }

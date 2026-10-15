@@ -32,7 +32,8 @@ import zipfile
 from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args
+from uuid import UUID
 
 from pydantic import SecretStr
 
@@ -40,6 +41,8 @@ from swreview.agent.settings import MASK, redact
 from swreview.benchmark.runner import PROVENANCE_FILE, SAVED_SET_FILE
 from swreview.ir.loader import reject_answer_key_path
 from swreview.report.attention import EXPLANATION_UNAVAILABLE
+from swreview.report.attention_record import StaleAttentionRecord, read_attention_record
+from swreview.report.session import ModelStatus
 from swreview.secrets import KEY_SHAPES
 
 __all__ = [
@@ -170,6 +173,11 @@ def export_handoff(
     run directory is used and a non-checkout simply records unknown build identity.
     ``exported_at`` is injectable so a manifest and ZIP can be reproduced in tests or by
     an archival caller that already has an export timestamp.
+
+    Reports and attention records naming another session than ``session.json`` are
+    excluded and named in the manifest. A legacy report without a ``- Session:`` line
+    is exported as today; malformed records that cannot establish identity retain their
+    existing export handling, as do runs without a readable session id.
     """
     source = _checked_run_dir(run_dir)
     run_root = _benchmark_run_root(source)
@@ -277,6 +285,7 @@ def _collect(
     excluded: list[dict[str, str]] = []
     redacted_files: list[str] = []
     detector_hits: dict[str, list[str]] = {name: [] for name, _ in _SHAPE_DETECTORS}
+    session_artifacts: dict[str, bytes] = {}
     total = 0
     for relative, folder in selected:
         path = folder / relative
@@ -341,6 +350,22 @@ def _collect(
         total += len(data)
         files.append((relative, data, len(data), changed))
         sources[relative] = _FROM_RUN_DIR if folder == source else _FROM_RUN_ROOT
+        if relative in ("session.json", "attention.json", "report.md"):
+            session_artifacts[relative] = raw
+    stale = _stale_session_artifacts(session_artifacts)
+    if stale:
+        files = [item for item in files if item[0] not in stale]
+        for relative in stale:
+            sources.pop(relative)
+        excluded.extend(
+            {"path": relative, "reason": "names another session than session.json"}
+            for relative in sorted(stale)
+        )
+        redacted_files = [name for name in redacted_files if name not in stale]
+        detector_hits = {
+            detector: [name for name in names if name not in stale]
+            for detector, names in detector_hits.items()
+        }
     scan = {
         "method": "configured secret substrings and provider-key shape detectors",
         "configured_values_checked": bool(tuple(secrets)),
@@ -349,6 +374,47 @@ def _collect(
         "coverage": "best_effort_unknown_secrets_may_remain",
     }
     return files, sources, missing, excluded, scan
+
+
+def _session_uuid(value: Any) -> UUID | None:
+    if isinstance(value, str):
+        try:
+            return UUID(value)
+        except ValueError:
+            pass
+    return None
+
+
+def _stale_session_artifacts(artifacts: Mapping[str, bytes]) -> set[str]:
+    """Check the original bounded bytes, before redaction can change their session ids.
+
+    The attention reader owns its stale-session comparison. Give it only the captured
+    bytes so it cannot read unbounded files or a later re-run's replacements. Malformed
+    records keep the existing export handling when identity cannot be established.
+    """
+    session = _json_object_bytes(artifacts.get("session.json"))
+    session_id = _session_uuid(session.get("session_id")) if session is not None else None
+    if session_id is None:
+        return set()
+    stale: set[str] = set()
+    if "attention.json" in artifacts:
+        try:
+            with tempfile.TemporaryDirectory(prefix="swreview-handoff-") as directory:
+                snapshot = Path(directory)
+                for name in ("session.json", "attention.json"):
+                    (snapshot / name).write_bytes(artifacts[name])
+                read_attention_record(snapshot)
+        except StaleAttentionRecord:
+            stale.add("attention.json")
+        except (OSError, ValueError, RecursionError):
+            pass
+    for line in artifacts.get("report.md", b"").decode("utf-8").splitlines():
+        if line.startswith("- Session:"):
+            report_id = _session_uuid(line.removeprefix("- Session:").strip())
+            if report_id is not None and report_id != session_id:
+                stale.add("report.md")
+                break
+    return stale
 
 
 def _sanitize(text: str, secrets: Iterable[str | SecretStr | None]) -> tuple[str, dict[str, bool]]:
@@ -408,12 +474,21 @@ def _json_object_bytes(data: bytes | None) -> dict[str, Any] | None:
         return None
     try:
         value = json.loads(data.decode("utf-8"))
-    except (UnicodeDecodeError, ValueError):
+    except (UnicodeDecodeError, ValueError, RecursionError):
         return None
     return value if isinstance(value, dict) else None
 
 
+# The states a session's model_status may hold, read from the one model that defines them.
+_MODEL_STATES: tuple[str, ...] = get_args(ModelStatus.model_fields["state"].annotation)
+
+
 def _session_summary(session: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    """Carry only a recognized model-status state beside the provider information.
+
+    Missing or null model status adds no key. A non-mapping status or missing, non-string
+    or unknown state adds model_status=None without blocking the export.
+    """
     if session is None:
         return None
     coverage = session.get("coverage")
@@ -450,11 +525,16 @@ def _session_summary(session: Mapping[str, Any] | None) -> dict[str, Any] | None
         for key in ("provider", "model", "effort_mapping", "key_source")
         if isinstance(provider, Mapping) and key in provider
     }
+    model_status = session.get("model_status")
+    model_state = model_status.get("state") if isinstance(model_status, Mapping) else None
+    if not isinstance(model_state, str) or model_state not in _MODEL_STATES:
+        model_state = None
     return {
         key: session.get(key)
         for key in ("session_id", "package_id", "design_id", "started_at", "ended_at", "model")
     } | {
         "provider_info": provider_safe or None,
+        **({"model_status": model_state} if model_status is not None else {}),
         "efficiency": session.get("efficiency"),
         "model_view": session.get("model_view"),
         "explanations": {

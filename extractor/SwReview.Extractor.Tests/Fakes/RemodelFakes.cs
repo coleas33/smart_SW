@@ -83,6 +83,16 @@ public sealed class FakeMassProperty : IMassPropertyReading
 
     public bool RecalculateAnswer { get; set; } = true;
 
+    public bool OverrideMass { get; set; }
+
+    public bool OverrideCenterOfMass { get; set; }
+
+    public bool OverrideMomentsOfInertia { get; set; }
+
+    public bool OverrideOptionsUnreadable { get; set; }
+
+    public Exception? OverrideReadFailure { get; set; }
+
     public double Volume { get; set; } = 0.00123456789;
 
     public double SurfaceArea { get; set; } = 0.0456;
@@ -100,6 +110,22 @@ public sealed class FakeMassProperty : IMassPropertyReading
     {
         Called(nameof(SetAccuracyLevel));
         AccuracyLevel = accuracyLevel;
+    }
+
+    public IMassPropertyOverrideReading? GetOverrideOptions()
+    {
+        Called(nameof(GetOverrideOptions));
+        if (OverrideReadFailure != null) throw OverrideReadFailure;
+        return OverrideOptionsUnreadable ? null : new OverrideReading(this);
+    }
+
+    private sealed class OverrideReading : IMassPropertyOverrideReading
+    {
+        private readonly FakeMassProperty _owner;
+        public OverrideReading(FakeMassProperty owner) => _owner = owner;
+        public bool GetOverrideMass() { _owner.Called(nameof(GetOverrideMass)); return _owner.OverrideMass; }
+        public bool GetOverrideCenterOfMass() { _owner.Called(nameof(GetOverrideCenterOfMass)); return _owner.OverrideCenterOfMass; }
+        public bool GetOverrideMomentsOfInertia() { _owner.Called(nameof(GetOverrideMomentsOfInertia)); return _owner.OverrideMomentsOfInertia; }
     }
 
     public void SetSelectedItems(IReadOnlyList<object> bodies)

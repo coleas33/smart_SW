@@ -272,22 +272,7 @@ public static class PackageIndex
                 FileAccess.Read,
                 FileShare.ReadWrite))
             {
-                head = new byte[HeadBytes];
-
-                // A stream may hand back less than it was asked for without being at its end,
-                // so the head is filled rather than read once.
-                int filled = 0;
-                int read;
-                while (filled < head.Length
-                    && (read = file.Read(head, filled, head.Length - filled)) > 0)
-                {
-                    filled += read;
-                }
-
-                if (filled < head.Length)
-                {
-                    Array.Resize(ref head, filled);
-                }
+                head = FillHead(file, HeadBytes);
             }
         }
         catch (IOException)
@@ -317,6 +302,21 @@ public static class PackageIndex
             // not a broken one: the caller asks again when the dump ends.
             return PackageHead.Unknown;
         }
+    }
+
+    /// <summary>Fill at most the requested head, accounting for short stream reads.</summary>
+    public static byte[] FillHead(Stream stream, int maxBytes)
+    {
+        byte[] head = new byte[maxBytes];
+        int filled = 0;
+        int read;
+        while (filled < head.Length
+            && (read = stream.Read(head, filled, head.Length - filled)) > 0)
+        {
+            filled += read;
+        }
+        if (filled < head.Length) Array.Resize(ref head, filled);
+        return head;
     }
 
     /// <summary>

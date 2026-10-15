@@ -1897,3 +1897,48 @@ managed exception could reach the top of a thread in the SOLIDWORKS process.
 - None of the three lenses' findings is refuted. One recommendation is not taken as written: the
   general lens's option A, splitting the reading counter, is not needed once `POST /remodel/open`
   refuses an unusable baseline (R16.1).
+
+### T180 extractor implementation preparation (2026-10-13)
+
+The scoped-settings portion of T180 uses the already proposed default: all four application
+settings are restored before Plan becomes idle; validated change/rebuild/save commands capture
+and restore the engineer's current values around each sequence. This supersedes the held-dialog
+part of R5.6 and R16.2, without claiming a result for native PROBE-1. It adds no allowlist key,
+source write, reopening of the source, or change to the geometry profile.
+
+The fake-seat acceptance cases observe the suppressed values inside each actual guarded command,
+then the restored idle values, including an idle change after Plan. They cover body failure,
+invalid target, invalid Save verdict, unfinished restoration retry/refusal, and suppression failure
+reported before any copy exists. The old Open marker/setting sequence expectations change only for
+the added idle restore; clean teardown expectations make no redundant writes. Existing teardown
+failure cases now first cause a real command restoration to fail, so they still require the same
+outstanding-setting names, copy/verification outcomes, failure order, breaker bypass and retry.
+The setter begins its pending tracking inside the guarded native call, so a guard refusal never
+creates a spurious cleanup failure. A setter that throws is conservatively treated as attempted.
+
+This is implementation preparation on a fake seat. T180's add-in lifecycle half, actual Plan with
+source attestation, native blocking-probe verdicts, and the Start enablement decision remain to be
+integrated and verified; no enabling flag or task completion is asserted here.
+
+### R17.1 T187 preparation: matching calibration and override protection (2026-10-13)
+
+The whole-part/default reading introduced for U27 is retained. PROBE-8 now uses the same fresh
+`CreateMassProperty2` path, clearing selection and setting system units before recalculation,
+without accuracy or body-selection setters. Plain readings require readable false override
+flags and finite usable quantities before recording attained errors. Mass, centre-of-mass and
+principal-moment overrides are then applied independently to each throwaway analytic part; their
+known SI values and all setter booleans are checked, and detection/honouring is recorded from a
+fresh whole-part reading. The overridden readings never calibrate a tolerance. A complete probe
+records a finite differing value as not honoured; unknown flags, values or failed native calls
+leave it unresolved. Every analytic part is closed and deleted even on failure, with no save
+after fixture overrides.
+
+`remodel.geometry` now checks `GetOverrideOptions` and its three typed Boolean getters before
+recalculation or measured getters. Any set flag or unreadable options produce an unusable
+reading, and a throwing read remains an error. The probe is the only writer of these overrides;
+its seven qualified fixture exemptions do not enter the stage-1 allowlist, and the newly
+encountered writers are denied by the read-only guard. The installed interop signatures are
+reflected and the frozen manifest regenerated. These are code and fake-test preparations, not
+native behavior evidence. T187/T039/T138 and publishing calibration remain pending until the seat
+ledger exists and its attained errors meet the gate's bounds. This preparation changes neither
+production switch.

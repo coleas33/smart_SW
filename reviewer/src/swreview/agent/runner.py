@@ -41,6 +41,7 @@ injectable for the same reason: `--bridge` needs a workstation, a unit test does
 from __future__ import annotations
 
 import json
+import logging
 from collections import Counter
 from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
@@ -49,6 +50,8 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
+from swreview import tokens
+from swreview.agent import events
 from swreview.agent.checklist import FINDING_BUCKET, SYSTEM_PROMPT_FILE, Checklist, load_checklist
 from swreview.agent.events import (
     DEFAULT_MAX_STEPS,
@@ -56,6 +59,7 @@ from swreview.agent.events import (
     EventListener,
     EventSink,
     UsageLedger,
+    emit_error,
     emit_turn_failed,
     no_redaction,
     utc_now,
@@ -68,11 +72,13 @@ from swreview.agent.providers import (
     ModelViewAware,
     PriorReasoningAware,
     PromptCacheAware,
+    ProviderName,
     ProviderTool,
     ToolCallResult,
     ToolSet,
     TurnResult,
 )
+from swreview.agent.providers.deferred import DeferredProvider
 from swreview.agent.providers.schema import ToolSpec
 from swreview.agent.settings import (
     MODEL_VIEW_OFF,
@@ -90,16 +96,20 @@ from swreview.atomic import write_atomic
 from swreview.bridge.client import DEFAULT_PIPE_NAME, BridgeClient
 from swreview.carry_over import carry_over_findings, stamp_carry_over_keys
 from swreview.checks import part_roles
+from swreview.checks.drawing_context import CANDIDATE_CONFIRM
 from swreview.checks.provenance import PROVENANCE_CHECK, close_provenance
+from swreview.checks.questions import asks_same
 from swreview.checks.rms.registry import RMS_FAMILY
+from swreview.drawings.evidence import DrawingIndex, file_key
 from swreview.engineering_context.brief import build_summary, compact_json
 from swreview.engineering_context.models import ContextArtifact, canonical_bytes
 from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore
-from swreview.findings import Finding
+from swreview.findings import Finding, finding_subject_key
 from swreview.ir.loader import LoadedPackage, load_package
 from swreview.ir.models import EvidencePackage
 from swreview.prerun import (
     RMS_PRERUN_TOOLS,
+    LiveOutcome,
     PrerunCall,
     PrerunGuard,
     PrerunResult,
@@ -109,13 +119,21 @@ from swreview.prerun import (
     prerun_checks,
     recorded_call,
 )
+from swreview.prerun import (
+    restated as restated_prerun,
+)
+from swreview.prerun import (
+    returned_finding_ids as _returned_finding_ids,
+)
 from swreview.report.attention import rank
 from swreview.report.attention_record import write_attention_record
+from swreview.report.dispositions import REPORT_FILE_NAME, set_disposition
 from swreview.report.explanations import (
     explanation_signature,
     generate_explanations,
     keep_explained,
 )
+from swreview.report.markdown import render_report
 from swreview.report.names import plural
 from swreview.report.session import (
     CLOSEOUT_CHECK,
@@ -123,16 +141,23 @@ from swreview.report.session import (
     CoverageBucket,
     CoverageItem,
     CoverageScope,
+    DrawingOutcome,
     EvidenceRequest,
     KeySource,
+    ModelStatus,
     ProviderInfo,
+    RecordedProfileIdentity,
     ReviewSession,
+    SendEstimate,
+    SendFailure,
     cut_short_reason,
     latest_answered,
+    load_session,
     save_session,
 )
+from swreview.report.snapshot import root_document
 from swreview.report.sources import answer_basis
-from swreview.report.summary import load_words
+from swreview.report.summary import SendInput, load_words
 from swreview.tools.checks_mechanical import (
     attach_part_roles,
     check_hygiene,
@@ -159,6 +184,9 @@ PROFILE_CHECK = "coverage.extractor_profile"
 ANSWERED_BUT_OPEN = "{title}: still open after {request_id} was answered: '{answer}'"
 """Finalization's reason for an item still open after its blocking request was answered
 (feature 013, `contracts/re-ask-guard.md` section 3): the answer stands, quoted."""
+
+NOT_SENT_ITEM = "{title}: not reviewed, because the review was not sent to the model"
+NOT_SENT_SUFFIX = "; the review was not sent to the model"
 
 REDUCED_PROFILE_SKIPPED = (
     "the evidence was written by the {profile!r} dump profile: the {phases} phases were "
@@ -604,11 +632,24 @@ def closeout_item(review: ReviewSession, package: EvidencePackage) -> CoverageIt
     )
 
 
+def withdraw_finalization(review: ReviewSession, written: list[CoverageItem]) -> None:
+    """Withdraw only the rows this run's prior finalization appended, by identity."""
+    review.coverage.unresolved[:] = [
+        item for item in review.coverage.unresolved if all(item is not stale for stale in written)
+    ]
+    review.coverage.checked[:] = [
+        item for item in review.coverage.checked if all(item is not stale for stale in written)
+    ]
+    written.clear()
+
+
+
 def finalize_session(
     context: ToolContext,
     started: datetime,
     *,
     written: list[CoverageItem] | None = None,
+    first: bool = False,
 ) -> ReviewSession:
     """Close out the session: open requests, open checklist items, timing, end time.
 
@@ -625,16 +666,14 @@ def finalize_session(
             coverage rather than a duplicate of it (rule 1). Items *anything else* wrote -
             a `mark_coverage` call, a truncated or cut-short turn - are never touched.
             Pass the same list on every call; omitting it finalizes as a one-shot.
+        first: This is the run's first finalization, which replaces a waiting model status's
+            provisional `checked_at` with its end (data-model section 3). A re-run's is its
+            own first, whatever state it carried (owner decision 98A); a later waiting apply
+            or a Send's turn keeps the first end.
     """
     review = context.session
     previous = written if written is not None else []
-    review.coverage.unresolved[:] = [
-        item for item in review.coverage.unresolved if all(item is not stale for stale in previous)
-    ]
-    review.coverage.checked[:] = [
-        item for item in review.coverage.checked if all(item is not stale for stale in previous)
-    ]
-    previous.clear()
+    withdraw_finalization(review, previous)
 
     # Feature 013 (`contracts/tokens.md` section 1): the close-out is code's, written first so
     # the item is closed before the open items are counted, and rebuilt like every row here.
@@ -672,6 +711,15 @@ def finalize_session(
             if answered is not None
             else f"{item.title}: the review ended without a finding or a coverage entry for it"
         )
+        if (
+            review.model_status is not None
+            and review.model_status.state != "sent"
+            and item.owner == "model"
+        ):
+            if answered is not None:
+                reason += NOT_SENT_SUFFIX
+            else:
+                reason = NOT_SENT_ITEM.format(title=item.title)
         previous.append(_unresolved(review, item.id, reason))
 
     stamp_carry_over_keys(
@@ -680,12 +728,22 @@ def finalize_session(
         efficiency=review.efficiency if review.efficiency is not None else EfficiencySettings(),
     )
 
-    ended = datetime.now(UTC)
+    status = review.model_status
+    ended = events.local_now() if status is not None else datetime.now(UTC)
+    if status is not None:
+        if first:
+            status.checked_at = ended
+        runtime = (status.checked_at - started).total_seconds() / 60.0
+        if status.state == "sent" and status.sent_at is not None:
+            runtime += (ended - status.sent_at).total_seconds() / 60.0
+    else:
+        runtime = (ended - started).total_seconds() / 60.0
     review.ended_at = ended
-    review.timing = review.timing.replace(
-        unattended_runtime_minutes=(ended - started).total_seconds() / 60.0
-    )
+    review.timing = review.timing.replace(unattended_runtime_minutes=runtime)
     return review
+
+
+INTERRUPTED_SEND = "the backend stopped before the model answered"
 
 
 # --- lever 7: the coverage-driven stop ---------------------------------------------------
@@ -952,6 +1010,56 @@ DRAWING_OUTCOME_LINE = "Drawing {file}: {outcome}"
 included, so the model never re-reads unchanged evidence to learn what happened."""
 
 
+WAIT_ANSWER_LINE = (
+    "{request_id} ({question}) was answered before this review was sent: {answer}. "
+    "The checks above were graded again by code with this answer."
+)
+"""One opening line per code question answered while waiting, never a resumed instruction."""
+
+
+RECHECK_CHECK = "coverage.recheck"
+"""The one unresolved coverage row a re-run names what it could not carry in (feature 015,
+`contracts/recheck.md` section 5)."""
+
+NOT_CARRIED = "Not carried from the earlier check run: {items}."
+NOT_CARRIED_ANSWER_GONE = "the answer to {id} (its question is no longer asked)"
+NOT_CARRIED_ANSWER_MANY = "the answer to {id} (it matches more than one question)"
+NOT_CARRIED_ANSWER_SHARED = "the answer to {id} (another answer matches the same question)"
+NOT_CARRIED_ANSWER_PARTIAL = (
+    "the answer to {id} (part of its drawing read was refused or failed, so its question is "
+    "asked again)"
+)
+NOT_CARRIED_DECISION_GONE = "the {decision} of {id} (its finding is no longer raised)"
+NOT_CARRIED_DECISION_MANY = "the {decision} of {id} (it matches more than one finding)"
+NOT_CARRIED_DECISION_SHARED = "the {decision} of {id} (another decision matches the same finding)"
+NOT_CARRIED_DRAWING = (
+    "the outcome of the drawing read for {id} (the read that merged its drawing did not finish)"
+)
+NOT_CARRIED_PROFILE = (
+    "the Standards profile it was graded with (the profile in Settings has changed since; "
+    "this check of the saved evidence graded with the new one)"
+)
+"""`coverage.recheck`'s reason and its items (`contracts/words.md` section 4): each item names
+an earlier id, never a path, and the items are joined with "; " in the carry's order."""
+
+DECISION_NOUNS = {"accepted": "Accept", "rejected": "Reject", "deferred": "Defer"}
+"""How a decision is named in a `coverage.recheck` item: "the Reject of F-007"."""
+
+
+def _same_profile(
+    now: RecordedProfileIdentity | None, before: RecordedProfileIdentity | None
+) -> bool:
+    """One Standards profile at both runs: the same file however its Windows path is spelled
+    (`file_key`, case and separator ignored; owner decision 90A) with the same digest, or none
+    at either."""
+    if now is None or before is None:
+        return now is None and before is None
+    return (
+        file_key(now["path"]) == file_key(before["path"])
+        and now["sha256"] == before["sha256"]
+    )
+
+
 def drawing_outcome_lines(read: Sequence[ConfirmedRead]) -> list[str]:
     """`DRAWING_OUTCOME_LINE` for each drawing file a confirmed read asked for, in the
     question's order: `read_confirmed_candidates` answers one `ConfirmedRead` per distinct
@@ -967,6 +1075,14 @@ class RolesRegrade:
 
     request_id: str
     unmatched: tuple[tuple[CoverageBucket, CoverageItem], ...] = ()
+
+
+@dataclass(frozen=True)
+class AppliedAnswers:
+    """Drawing outcomes and bought-part withdrawals from applying an answer batch."""
+
+    read: tuple[ConfirmedRead, ...]
+    withdrawn_by_answer: tuple[str, ...]
 
 
 def unmatched_rows(
@@ -985,16 +1101,6 @@ def unmatched_rows(
     return (("unresolved", item),)
 
 
-def _returned_finding_ids(call: PrerunCall) -> list[str]:
-    """The finding ids a restated call returned without adding them: a de-duplicating check
-    (`check_drawings`) hands back the id of a finding the session already holds."""
-    payload = call.payload if isinstance(call.payload, Mapping) else {}
-    returned = payload.get("finding_ids")
-    if not isinstance(returned, list):
-        return []
-    return [item for item in returned if isinstance(item, str)]
-
-
 def _restated_tool_of(finding: Finding, restated_steps: Mapping[int, str]) -> str | None:
     """The restated check whose earlier step `finding` cites, or `None`.
 
@@ -1010,6 +1116,15 @@ def _restated_tool_of(finding: Finding, restated_steps: Mapping[int, str]) -> st
 
 
 # --- one review in flight ----------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class SendCache:
+    """One completed preparation of the first request, kept until Send reads it."""
+
+    opening: str
+    estimate: SendEstimate
+    named_ids: list[str]
 
 
 class ReviewRun:
@@ -1040,6 +1155,9 @@ class ReviewRun:
         prerun_guard: PrerunGuard | None = None,
         profile: Any | None = None,
         profile_refusal: str | None = None,
+        awaiting_send: bool = False,
+        prerun: PrerunResult | None = None,
+        standards_gap: Any | None = None,
     ) -> None:
         self.context = context
         self.provider = provider
@@ -1070,6 +1188,8 @@ class ReviewRun:
         self.started = context.session.started_at
         self._bridge = bridge
         self._finalized: list[CoverageItem] = []
+        # Whether `finalize` has run: only the first stamps a waiting `checked_at` (98A).
+        self._finalized_once = False
         self._coverage_stop = tools if isinstance(tools, CoverageStopTools) else None
         """Lever 7's wrapper when this run has it, `None` when it does not.
 
@@ -1098,6 +1218,9 @@ class ReviewRun:
         self._profile_refusal = profile_refusal
         """The standards profile `start_review` loaded, or the loader's refusal: the part-roles
         answer classifies the parts again with them (`_regrade_roles`)."""
+        self.awaiting_send = awaiting_send
+        self._prerun = prerun
+        self._standards_gap = standards_gap
         self._explanation_allowed = False
         self._pending_turn_end: str | None = None
         self.check_presentation_cancelled: Callable[[], None] = lambda: None
@@ -1106,6 +1229,13 @@ class ReviewRun:
         first of `session.steps` the next answer's basis counts. It starts at 0, so turn 1 counts
         the pre-run's checks, and it advances only when a turn that answered ends, so a restated
         check counts in its answer turn and a stopped turn's steps roll into the next answer."""
+        self._send_cache: SendCache | None = None
+        self._send_error: SendFailure | None = None
+        self._send_in_flight = False
+        self._sent_at: datetime | None = None
+        self._interrupted_send: SendFailure | None = None
+        self._opening_changed = False
+        self._restated_calls: tuple[PrerunCall, ...] = ()
         self._answered = False
         """Whether the turn running now has emitted a `text.done`."""
 
@@ -1165,13 +1295,60 @@ class ReviewRun:
         resumed turn re-runs replaces its earlier verdict rather than adding a second one
         (rule 3).
         """
+        if self.awaiting_send:
+            requests = self._answer_requests(answers)
+            try:
+                applied = self._apply_answer_requests(answers, requests)
+                self._settle_waiting(applied)
+                return self.close_waiting()
+            except Exception as exc:
+                self.context.session = load_session(self.session_path)
+                emit_error(self.sink, exc, self.redact)
+                raise
+        applied = self._apply_answers(answers)
+        message = answers_message(answers)
+        if applied.withdrawn_by_answer:
+            message += "\n" + REGRADED_LINE.format(ids=", ".join(applied.withdrawn_by_answer))
+        outcomes = drawing_outcome_lines(applied.read)
+        if outcomes:
+            message = "\n".join(outcomes) + "\n\n" + message
+        # Taken only after `_restate` returns, so a withdrawal can never shift a restated
+        # finding into the earlier part, where it would stay as a duplicate under a new id.
+        before = len(self.session.findings)
+        self._ask(message)
+        for finding in _reconcile_reruns(self.session, before):
+            self.sink.emit("finding", self.context.finding_body(finding))
+        return self.finalize()
+
+    def _apply_answers(
+        self, answers: Sequence[tuple[str, str]], *, read_drawings: bool = True
+    ) -> AppliedAnswers:
+        """Validate and apply answers by code, before the caller chooses its next turn.
+
+        Confirmed drawings are read before the part-roles regrade, then one restatement
+        reconciles all affected checks. A restored review's carry can skip drawing reads
+        while using the same validation, answer events and regrade.
+        """
+        requests = self._answer_requests(answers)
+        return self._apply_answer_requests(answers, requests, read_drawings=read_drawings)
+
+    def _answer_requests(self, answers: Sequence[tuple[str, str]]) -> list[EvidenceRequest]:
+        """Validate the whole batch without changing the record or emitting an event."""
         if not answers:
             raise ValueError("an answer batch needs at least one answer")
         repeated = repeated_request_id(answers)
         if repeated is not None:
             raise ValueError(REPEATED_ANSWER.format(request_id=repeated))
-        requests = [answerable(self.session, request_id) for request_id, _ in answers]
+        return [answerable(self.session, request_id) for request_id, _ in answers]
 
+    def _apply_answer_requests(
+        self,
+        answers: Sequence[tuple[str, str]],
+        requests: Sequence[EvidenceRequest],
+        *,
+        read_drawings: bool = True,
+    ) -> AppliedAnswers:
+        """Apply a validated batch through the shared answer, read and regrade path."""
         for request, (request_id, answer) in zip(requests, answers, strict=True):
             request.status = "answered"
             request.answer = answer
@@ -1186,10 +1363,12 @@ class ReviewRun:
         # parts again. (3) Then one `_restate` restates the union of what changed, each tool
         # once, and reconciles its own calls. Every other answer does nothing here.
         package = self.context.package
-        read = read_confirmed_candidates(self.context, requests, self.out_dir)
+        read = (
+            read_confirmed_candidates(self.context, requests, self.out_dir)
+            if read_drawings else []
+        )
         # Feature 013 (`contracts/drawing-capability.md` section 6): each file's outcome,
         # refusals included, reaches the model - one line per file the read asked for.
-        outcomes = drawing_outcome_lines(read)
         reasons: dict[str, str] = {}
         if self.context.package is not package:
             reasons[DRAWINGS_TOOL] = DRAWING_WITHDRAWAL
@@ -1199,23 +1378,209 @@ class ReviewRun:
             bought = BOUGHT_WITHDRAWAL.format(request_id=regrade.request_id)
             reasons = {tool: reasons.get(tool, bought) for tool in ROLES_RESTATED}
         withdrawn = self._restate(reasons)
-        message = answers_message(answers)
+        by_answer: list[str] = []
         if regrade is not None:
             by_answer = [finding_id for finding_id, reason in withdrawn if reason == bought]
             record_part_roles_rows(self.context, withdrawn=by_answer)
             for bucket, item in regrade.unmatched:
                 self.context.record_coverage(bucket, item)
-            if by_answer:
-                message += "\n" + REGRADED_LINE.format(ids=", ".join(by_answer))
-        if outcomes:
-            message = "\n".join(outcomes) + "\n\n" + message
-        # Taken only after `_restate` returns, so a withdrawal can never shift a restated
-        # finding into the earlier part, where it would stay as a duplicate under a new id.
-        before = len(self.session.findings)
-        self._ask(message)
-        for finding in _reconcile_reruns(self.session, before):
-            self.sink.emit("finding", self.context.finding_body(finding))
-        return self.finalize()
+        return AppliedAnswers(read=tuple(read), withdrawn_by_answer=tuple(by_answer))
+
+    def announce_disposition(self, finding: Finding) -> None:
+        """The `disposition` event of a decision just set on `finding` (owner decision 72A).
+
+        The one announcement both a live decision (`chat/sessions.record_disposition`) and a
+        re-run's carried decision (`carry_from`) make, so no second writer of the event exists.
+        """
+        disposition = finding.disposition
+        self.sink.emit(
+            "disposition",
+            {
+                "finding_id": finding.id,
+                "disposition": disposition.model_dump(mode="json") if disposition else None,
+            },
+        )
+
+    def carry_from(self, earlier: ReviewSession) -> None:
+        """Carry a waiting review's earlier record onto this re-run, in memory only.
+
+        Feature 015 (`contracts/recheck.md` section 4). Nothing is carried by number: each
+        answered code question onto the one question that `asks_same` (applied by code through
+        `_apply_answers` with no drawing read), each decision onto the one finding with the same
+        `finding_subject_key` (through `set_disposition` at its first time, announced as a live
+        decision is), the drawing outcome lines verbatim, the four human timing inputs and the
+        model status. What cannot be carried is named once in one `coverage.recheck` row.
+        Nothing is written: no `save_session`, no report; `_open_waiting`'s finalization is the
+        re-run's one write. When answers or outcome lines were carried, it ends as the waiting
+        apply does, with `_settle_waiting`, so the opening at Send is rebuilt from them.
+        """
+        session = self.session
+        named: list[str] = []
+        index = DrawingIndex.for_package(self.context.ir)
+        answers, answered_at = self._carried_answers(earlier, named, index)
+        applied = (
+            self._apply_answers(answers, read_drawings=False)
+            if answers else AppliedAnswers(read=(), withdrawn_by_answer=())
+        )
+        for request in session.evidence_requests:
+            if request.id in answered_at:
+                request.answered_at = answered_at[request.id]
+        self._carry_decisions(earlier, named)
+        session.drawing_outcomes = [outcome.model_copy() for outcome in earlier.drawing_outcomes]
+        named.extend(self._lost_drawing_outcomes(earlier, index))
+        session.timing = session.timing.replace(
+            baseline_minutes=earlier.timing.baseline_minutes,
+            assisted_supervision_minutes=earlier.timing.assisted_supervision_minutes,
+            assisted_verification_minutes=earlier.timing.assisted_verification_minutes,
+            false_alarm_handling_minutes=earlier.timing.false_alarm_handling_minutes,
+        )
+        status, before = session.model_status, earlier.model_status
+        if status is not None and before is not None:
+            if not _same_profile(status.profile, before.profile):
+                named.append(NOT_CARRIED_PROFILE)
+            session.model_status = status.model_copy(
+                update={
+                    "state": before.state,
+                    "document": before.document,
+                    "failures": [failure.model_copy() for failure in before.failures],
+                    "rechecked_from": earlier.session_id,
+                }
+            )
+        if named:
+            self.context.record_coverage(
+                "unresolved",
+                CoverageItem(
+                    check=RECHECK_CHECK,
+                    scope=CoverageScope(),
+                    reason=NOT_CARRIED.format(items="; ".join(named)),
+                    error=None,
+                ),
+            )
+        if answers or session.drawing_outcomes:
+            self._settle_waiting(applied)
+
+    def _carried_answers(
+        self, earlier: ReviewSession, named: list[str], index: DrawingIndex
+    ) -> tuple[list[tuple[str, str]], dict[str, datetime | None]]:
+        """Each earlier answer's one matching open question here, in answer order.
+
+        A drawing candidate question whose drawing the earlier read merged is not asked again;
+        its answer is not named, because its outcome line is what carries. One whose read merged
+        some of its documents' drawings and was refused or failed for the rest is asked again
+        over the rest, a narrower question no earlier answer asks the same as, so its answer is
+        named as such (FR-029; owner decision 90A). Two earlier answers
+        that match one question carry neither, and each is named (owner decision 89A, 72A's rule
+        for decisions).
+        """
+        answered = sorted(
+            (request for request in earlier.evidence_requests if request.status == "answered"),
+            key=lambda request: (
+                request.answered_at.timestamp()
+                if request.answered_at is not None else float("-inf")
+            ),
+        )
+        matched = {
+            request.id: [
+                new for new in self.session.evidence_requests
+                if new.status == "open" and asks_same(request, new)
+            ]
+            for request in answered
+        }
+        shared = Counter(matches[0].id for matches in matched.values() if len(matches) == 1)
+        answers: list[tuple[str, str]] = []
+        answered_at: dict[str, datetime | None] = {}
+        for request in answered:
+            matches = matched[request.id]
+            if len(matches) > 1:
+                named.append(NOT_CARRIED_ANSWER_MANY.format(id=request.id))
+            elif matches and shared[matches[0].id] > 1:
+                named.append(NOT_CARRIED_ANSWER_SHARED.format(id=request.id))
+            elif matches:
+                answers.append((matches[0].id, str(request.answer)))
+                answered_at[matches[0].id] = request.answered_at
+            else:
+                merged, asked_again = self._drawing_read_of(request, index)
+                if not merged:
+                    named.append(NOT_CARRIED_ANSWER_GONE.format(id=request.id))
+                elif asked_again:
+                    named.append(NOT_CARRIED_ANSWER_PARTIAL.format(id=request.id))
+        return answers, answered_at
+
+    def _carry_decisions(self, earlier: ReviewSession, named: list[str]) -> None:
+        """Each earlier decision onto the one finding with its subject key (72A)."""
+        session = self.session
+        by_key: dict[Any, list[Finding]] = {}
+        for finding in session.findings:
+            by_key.setdefault(finding_subject_key(finding), []).append(finding)
+        decided = [finding for finding in earlier.findings if finding.disposition is not None]
+        target: dict[str, str] = {}
+        for finding in decided:
+            matches = by_key.get(finding_subject_key(finding), [])
+            if len(matches) == 1:
+                target[finding.id] = matches[0].id
+        shared = Counter(target.values())
+        for finding in decided:
+            disposition = finding.disposition
+            assert disposition is not None  # `decided` holds only decided findings
+            words = {"decision": DECISION_NOUNS[disposition.decision], "id": finding.id}
+            matches = by_key.get(finding_subject_key(finding), [])
+            if not matches:
+                named.append(NOT_CARRIED_DECISION_GONE.format(**words))
+            elif len(matches) > 1:
+                named.append(NOT_CARRIED_DECISION_MANY.format(**words))
+            elif shared[target[finding.id]] > 1:
+                named.append(NOT_CARRIED_DECISION_SHARED.format(**words))
+            else:
+                carried = set_disposition(
+                    session, target[finding.id], disposition.decision, disposition.note,
+                    disposition.by, at=disposition.at,
+                )
+                self.announce_disposition(carried)
+
+    @staticmethod
+    def _drawing_read_of(request: EvidenceRequest, index: DrawingIndex) -> tuple[bool, bool]:
+        """`(merged, asked_again)` of an earlier drawing candidate question: whether its read
+        merged a drawing of any of its documents, and whether any of them still has a candidate
+        row, which the re-run asks about again. `(False, False)` for any other question.
+
+        What is asked again is counted by candidate row, not by drawing: one candidate file can
+        sit beside two documents of one stem (013 T083), and its merge removes every row of the
+        path while the drawing's views show the first document only.
+        """
+        if CANDIDATE_CONFIRM not in request.options or not request.entity_ids:
+            return False, False
+        merged = any(index.drawings_of(document_id) for document_id in request.entity_ids)
+        asked_again = any(
+            index.candidate_of(document_id) is not None for document_id in request.entity_ids
+        )
+        return merged, asked_again
+
+    def _lost_drawing_outcomes(self, earlier: ReviewSession, index: DrawingIndex) -> list[str]:
+        """Earlier open drawing questions whose drawings an unfinished read merged, all of them
+        or some (R2.13; owner decision 90A), with no outcome line for any merged file."""
+        named_files = {outcome.file for outcome in earlier.drawing_outcomes}
+        lost: list[str] = []
+        for request in earlier.evidence_requests:
+            if request.status != "open" or not self._drawing_read_of(request, index)[0]:
+                continue
+            files = {
+                index.file_name_of(drawing)
+                for document_id in request.entity_ids
+                for drawing in index.drawings_of(document_id)
+            }
+            if not files & named_files:
+                lost.append(NOT_CARRIED_DRAWING.format(id=request.id))
+        return lost
+
+    def _settle_waiting(self, applied: AppliedAnswers) -> None:
+        """Keep confirmed outcomes for Send and mark the opening as changed by code."""
+        self.session.drawing_outcomes.extend(
+            DrawingOutcome(file=item.file_name, outcome=item.outcome) for item in applied.read
+        )
+        self._prerun = restated_prerun(
+            self._prerun, self.context, self._restated_calls, self._standards_gap
+        )
+        self._opening_changed = True
 
     def _regrade_roles(self, answered: Sequence[EvidenceRequest]) -> RolesRegrade | None:
         """Classify the parts again when `answered` holds the part-roles question (013).
@@ -1255,6 +1620,7 @@ class ReviewRun:
         adapter numbers the resumed turn's calls after it. Then `_reconcile_restated` folds and
         withdraws. Returns every withdrawn finding's `(id, reason)`, in session order.
         """
+        self._restated_calls = ()
         dispatch = self._dispatch
         if dispatch is None or not reasons:
             return []
@@ -1278,7 +1644,9 @@ class ReviewRun:
                 self._prerun_guard.answer_repeats_with(call)
             calls.append(call)
         self.provider.start_steps_at(len(session.steps))
-        return self._reconcile_restated(mark, restated_steps, calls, reasons)
+        withdrawn = self._reconcile_restated(mark, restated_steps, calls, reasons)
+        self._restated_calls = tuple(calls)
+        return withdrawn
 
     def _reconcile_restated(
         self,
@@ -1331,6 +1699,135 @@ class ReviewRun:
                 [finding_id for finding_id, why in stale if why == reason], reason
             )
         return stale
+
+    def attach_provider(self, provider: AgentProvider) -> None:
+        """Configure an adapter before installing it, keeping the existing step offsets."""
+        configure_provider(provider, self.session)
+        if self.session.steps:
+            provider.start_steps_at(len(self.session.steps))
+
+    def send(self, build_adapter: Callable[[], AgentProvider]) -> ReviewSession:
+        """Prepare the adapter without writes, then record and play the cached opening."""
+        before = (
+            self.session.model_status.model_copy(deep=True) if self.session.model_status else None
+        )
+        self._send_in_flight = True
+        self._send_error = None
+        try:
+            adapter = build_adapter()
+            self.attach_provider(adapter)
+            cache = self._send_cache
+            if cache is None:
+                raise ValueError("Send needs the waiting run's prepared cache")
+            body = {
+                "provider": adapter.name,
+                "model": adapter.model,
+                "effort_mapping": adapter.effort_mapping(self.effort).model_dump(mode="json"),
+                "estimate": cache.estimate.model_dump(mode="json"),
+            }
+            self.sink.emit("session.sent", body)
+            status = self.session.model_status
+            if status is None:
+                raise ValueError("Send needs a waiting model status")
+            self._interrupted_send = SendFailure(
+                at=events.local_now(), error_class="Interrupted", reason=INTERRUPTED_SEND
+            )
+            status.state = "send_failed"
+            status.failures.append(self._interrupted_send)
+            self.write_views(save=True, best_effort=True)
+            withdraw_finalization(self.session, self._finalized)
+            self.provider = adapter
+            self.awaiting_send = False
+            self._sent_at = events.local_now()
+        except Exception as exc:
+            self.session.model_status = before
+            self.awaiting_send = True
+            self._send_in_flight = False
+            self._send_error = SendFailure(
+                at=events.local_now(), error_class=type(exc).__name__, reason=self.redact(str(exc))
+            )
+            try:
+                emit_error(self.sink, exc, self.redact)
+            except Exception as failure:
+                logging.getLogger(__name__).warning(
+                    "reporting Send preparation failure failed: %s", self.redact(str(failure))
+                )
+            return self.session
+        try:
+            return self._say(cache.opening)
+        except Exception:
+            if self.awaiting_send:
+                return self.session
+            raise
+
+    def opening_at_send(self) -> str:
+        """The frozen opening, or the same builder over the applied code evidence."""
+        if not self._opening_changed:
+            return self.opening_message
+        opening = _opening_message(
+            self._prerun, self.session, self.context.ir,
+            standards_gap=self._standards_gap, roles=review_roles(self.context),
+        )
+        lines = [
+            DRAWING_OUTCOME_LINE.format(file=item.file, outcome=item.outcome)
+            for item in self.session.drawing_outcomes
+        ]
+        answered = sorted(
+            (request for request in self.session.evidence_requests
+             if request.source == "code" and request.status == "answered"),
+            key=lambda request: (
+                (request.answered_at.timestamp()
+                 if request.answered_at is not None else float("-inf")),
+                request.id,
+            ),
+        )
+        lines.extend(
+            WAIT_ANSWER_LINE.format(
+                request_id=request.id, question=request.question or request.what,
+                answer=request.answer,
+            )
+            for request in answered
+        )
+        if not lines:
+            return opening
+        prefix = opening.removesuffix(OPENING_MESSAGE)
+        return prefix + "\n".join(lines) + "\n\n" + OPENING_MESSAGE
+
+    def first_request_estimate(self) -> int | None:
+        """Count the first request locally, with the tools offered to the adapter."""
+        prefix = request_prefix(self.system, self.tools, self.opening_at_send())
+        try:
+            return tokens.count_tokens(prefix)
+        except tokens.TokenizerUnavailable:
+            return None
+
+    def build_send_cache(self) -> None:
+        """Prepare every field before replacing the previous complete cache."""
+        opening = self.opening_at_send()
+        estimate = SendEstimate(
+            input_tokens=self.first_request_estimate(),
+            encoding=tokens.TOKENIZER_NAME,
+            approximate=self.provider.name == ProviderName.GEMINI,
+        )
+        named_ids = self._prerun.named_finding_ids() if self._prerun is not None else []
+        self._send_cache = SendCache(opening=opening, estimate=estimate, named_ids=named_ids)
+
+    def send_input(self) -> SendInput:
+        """Read the waiting summary's already-prepared values without rebuilding them."""
+        cache = self._send_cache
+        if cache is None:
+            raise ValueError("a waiting summary needs a prepared Send cache")
+        return {
+            "state": "waiting",
+            "input_tokens": cache.estimate.input_tokens,
+            "provider": self.provider.name,
+            "send_error": self._send_error,
+        }
+
+    def close_waiting(self) -> ReviewSession:
+        """Build the cache on the caller's worker, then write the checked review."""
+        self.build_send_cache()
+        return self.finalize()
 
     def finalize(self) -> ReviewSession:
         """Close the session out, write `session.json` and `attention.json`, and say so.
@@ -1386,7 +1883,10 @@ class ReviewRun:
             reason = self._pending_turn_end
             self._pending_turn_end = None
             self.sink.emit("turn.ended", {"reason": reason})
-        session = finalize_session(self.context, self.started, written=self._finalized)
+        session = finalize_session(
+            self.context, self.started, written=self._finalized, first=not self._finalized_once
+        )
+        self._finalized_once = True
         ranking = rank(session)
         # Before `save_session`, and recomputed from the whole ledger on every call, the
         # same rule finalization itself follows: finalizing twice is finalizing once.
@@ -1404,6 +1904,41 @@ class ReviewRun:
             body["usage"] = session.usage.model_dump(mode="json")
         self.sink.emit("session.ended", body)
         return session
+
+    def write_views(self, *, save: bool, best_effort: bool) -> None:
+        """Save the held session when `save`, then write `report.md` and `attention.json`.
+
+        The one sequence every live writer of a review's views follows (owner decision 98A,
+        FR-032): a disposition or minutes recorded on a live review, Send's two mid-turn saves,
+        the pane's render after every turn, a shutdown and a re-run that raised past its commit
+        point. Both views come from one `rank` call over the session just saved, so the report
+        an engineer opens and the record beside it never name another session or another
+        order (research R2.7).
+
+        `save` raises whatever it meets: the record is the commitment. With `best_effort`, a
+        ranking or a view that would not write is logged and never raised, because the record
+        is already on disk and losing a turn or a shutdown over its report is the wrong trade;
+        without it, it raises, for a caller that answers the engineer's own write.
+        """
+        if save:
+            save_session(self.session, self.session_path)
+        try:
+            ranking = rank(self.session)
+            (self.out_dir / REPORT_FILE_NAME).write_text(
+                render_report(self.session, self.context.ir, ranking=ranking), encoding="utf-8"
+            )
+            write_attention_record(self.out_dir, ranking, self.session.session_id)
+        except Exception as exc:
+            if not best_effort:
+                raise
+            logging.getLogger(__name__).warning(
+                "rendering %s failed: %s", self.out_dir / REPORT_FILE_NAME, self.redact(str(exc))
+            )
+
+    def release_bridge(self) -> None:
+        """Close the live transport while retaining its client for a later request."""
+        if self.context.bridge is not None:
+            self.context.bridge.close()
 
     def close(self) -> None:
         """Release what the run holds open. Only the live bridge needs it today."""
@@ -1457,6 +1992,23 @@ class ReviewRun:
             # The redaction, the `error_body` shape and the `turn.ended` that closes the
             # turn are `agent/events.py`'s, shared with the re-model run (004 T106); what
             # is this run's own is what follows - finalize, then re-raise.
+            before_first_round = self._send_in_flight and self.usage_ledger.current_round_count == 0
+            if before_first_round:
+                status = self.session.model_status
+                assert status is not None
+                failure = SendFailure(
+                    at=events.local_now(),
+                    error_class=type(exc).__name__,
+                    reason=self.redact(str(exc)),
+                )
+                status.failures = [
+                    failure if item is self._interrupted_send else item for item in status.failures
+                ]
+                status.state = "send_failed"
+                self.messages = []
+                self.awaiting_send = True
+                self._send_in_flight = False
+                self.provider = DeferredProvider(self.provider.name, self.provider.model)
             self._explanation_allowed = False
             self._close_basis()
             emit_turn_failed(self.sink, exc, self.redact)
@@ -1488,6 +2040,18 @@ class ReviewRun:
         model's text. Every other event reaches the sink unchanged, and the explanation pass,
         which never calls this, gets no basis.
         """
+        if event_type == "usage" and self._send_in_flight:
+            status = self.session.model_status
+            assert status is not None and self._send_cache is not None
+            status.state = "sent"
+            status.sent_at = self._sent_at
+            status.estimate = self._send_cache.estimate
+            status.opening_finding_ids = list(self._send_cache.named_ids)
+            status.failures = [
+                failure for failure in status.failures if failure is not self._interrupted_send
+            ]
+            self._send_in_flight = False
+            self.write_views(save=True, best_effort=True)
         if event_type == "text.done":
             steps = self.session.steps[self._basis_from :]
             body = {**body, "basis": answer_basis(steps, self.context.ir, load_words())}
@@ -1516,6 +2080,35 @@ class ReviewRun:
 # --- entry points ---------------------------------------------------------------------
 
 
+def request_prefix(system: str, tools: Iterable[ProviderTool], opening: str) -> str:
+    """Render the shared prefix measured by replay and the first-request estimate."""
+    schemas = [
+        {"name": tool.name, "description": tool.description, "parameters": tool.schema}
+        for tool in tools
+    ]
+    return system + json.dumps(schemas) + opening
+
+
+def configure_provider(provider: AgentProvider, session: ReviewSession) -> None:
+    """Apply this session's optional adapter settings once, in their original order."""
+    if isinstance(provider, ModelViewAware):
+        provider.use_model_view(session.model_view)
+    efficiency = session.efficiency
+    if (
+        efficiency is not None
+        and efficiency.prompt_cache_key
+        and isinstance(provider, PromptCacheAware)
+    ):
+        # The session id is the cache key for the whole conversation, across every turn.
+        provider.use_prompt_cache(str(session.session_id))
+    if (
+        efficiency is not None
+        and efficiency.drop_prior_reasoning
+        and isinstance(provider, PriorReasoningAware)
+    ):
+        provider.drop_prior_reasoning()
+
+
 def start_review(
     package_dir: Path | str,
     out_dir: Path | str,
@@ -1539,6 +2132,8 @@ def start_review(
     callbacks: Iterable[EventListener] = (),
     redact: Callable[[str], str] = no_redaction,
     explain_findings: bool = False,
+    send_when_checked: bool = True,
+    earlier: ReviewSession | None = None,
 ) -> ReviewRun:
     """Prepare a review of `package_dir` writing into `out_dir`; play it with `start()`.
 
@@ -1597,7 +2192,13 @@ def start_review(
         redact: Masks the run's API key out of provider error text before it is written
             to `events.jsonl` (FR-015). The caller that resolved the key builds it;
             `no_redaction` is the default because a run may legitimately have no key.
+        earlier: A re-run's earlier not-sent record (feature 015, `contracts/recheck.md`
+            section 3): its live outcome is carried as one step and its drawing-read
+            capability onto the context, so the host is asked nothing either answered.
+            Only with `send_when_checked` false.
     """
+    if earlier is not None and send_when_checked:
+        raise ValueError("earlier is only accepted when send_when_checked is false")
     loaded = load_package(package_dir)
     checklist = load_checklist()
     chosen_model = model if model is not None else provider.model
@@ -1630,6 +2231,10 @@ def start_review(
         session = context.session
         if session is None:  # pragma: no cover - build_context always makes one
             raise ValueError("build_context returned a context without a review session")
+        if earlier is not None:
+            # Feature 015 (`contracts/recheck.md` section 3): a re-run asks the host nothing
+            # its earlier record already answered.
+            context.carry_drawing_read(earlier.drawing_read)
         # Feature 008 (FR-021): every recorded step of this review - the pre-run's included -
         # keeps its full result in the run folder. Only a review sets this, so a check run
         # and MCP general chat write none.
@@ -1652,10 +2257,7 @@ def start_review(
         # carry their origin marks, whatever the levers; a session without it predates them.
         session.origin_marks = ORIGIN_MARKS_VERSION
         session.model_view = model_view if model_view is not None else MODEL_VIEW_OFF
-        if isinstance(provider, ModelViewAware):
-            # Feature 008, read once, here, like lever 3's cache key: the settings the
-            # session records are the settings the adapter sends with (research R2.33).
-            provider.use_model_view(session.model_view)
+        configure_provider(provider, session)
         if checks_first(session.efficiency):
             # Feature 008: a review that runs its checks first shows the modelling-practice
             # findings as one folded group. A plain session value, set once here, so the
@@ -1666,17 +2268,6 @@ def start_review(
         # where this run's evidence comes from, and the one place the lever is turned into
         # that statement is `ExtractionSettings.for_efficiency`.
         context.extraction = ExtractionSettings.for_efficiency(session.efficiency)
-        if session.efficiency.prompt_cache_key and isinstance(provider, PromptCacheAware):
-            # Lever 3, read **once**, here: a flag re-read per turn could change the
-            # request mid-session, and the cache key is the one thing that must not move
-            # while the session lasts. The session id rather than anything this process
-            # made up, because the pane restarts the backend on a settings save and
-            # resumes this same run folder (contracts/levers.md, lever 3).
-            provider.use_prompt_cache(str(session.session_id))
-        if session.efficiency.drop_prior_reasoning and isinstance(provider, PriorReasoningAware):
-            # Lever 14 (feature 013), read once here like lever 3: earlier turns' reasoning
-            # leaves each request; the history keeps it. Inert on an adapter without it.
-            provider.drop_prior_reasoning()
         # The stream opens before anything is written to it. Everything below this line
         # emits - partial evidence writes coverage, lever 11a writes carried findings, and
         # lever 5's pre-run writes a tool call, two findings and coverage of its own - and
@@ -1693,6 +2284,7 @@ def start_review(
                 "provider": str(provider.name),
                 "model": chosen_model,
                 "effort_mapping": effort_mapping.model_dump(mode="json"),
+                **({"send_when_checked": False} if not send_when_checked else {}),
             },
         )
         record_partial_evidence(session, loaded.package)
@@ -1738,6 +2330,11 @@ def start_review(
             standards=standards_gap,
             package_dir=loaded.base_dir,
             out_dir=out,
+            carried_live=(
+                LiveOutcome.from_record(earlier.live_detection)
+                if earlier is not None and earlier.live_detection is not None
+                else None
+            ),
         )
         # A configured standards profile is review coverage even when the optional
         # pre-run/gate levers are off.  `prerun_checks` records this family when it runs;
@@ -1747,6 +2344,23 @@ def start_review(
             context.record_coverage("skipped", standards_gap.coverage_item())
         if prerun is None:
             record_part_roles_rows(context)
+        if not send_when_checked:
+            document = root_document(loaded.package)
+            if document is None:
+                raise ValueError("the package has no reviewed root document")
+            profile_identity = None
+            if loaded_profile.path is not None:
+                profile_identity = {
+                    "path": loaded_profile.path,
+                    "sha256": loaded_profile.profile.identity.sha256
+                    if loaded_profile.profile is not None else None,
+                }
+            session.model_status = ModelStatus(
+                state="not_sent", document=document, checked_at=events.local_now(),
+                profile=profile_identity,
+            )
+            if prerun is not None and prerun.live is not None:
+                session.live_detection = prerun.live.as_record()
         if session.steps:
             # Setup wrote steps - today only the pre-run does - so the adapter numbers its
             # own calls from there rather than from 0. `tool.started.step_index` identifies
@@ -1820,6 +2434,9 @@ def start_review(
         prerun_guard=guard,
         profile=loaded_profile.profile,
         profile_refusal=profile_refusal,
+        awaiting_send=not send_when_checked,
+        prerun=prerun,
+        standards_gap=standards_gap if standards_profile is not None else None,
     )
 
 

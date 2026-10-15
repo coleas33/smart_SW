@@ -969,9 +969,9 @@ public class SwReviewAddIn : ISwAddin
             {
                 reviewOptions.Bridge = service?.ReviewBridge;
 
-                // The Remodel tab's capability, and the one way it hears of a re-attach: a
-                // plan made on the service going away is told to the page here (decision 24A).
-                _remodelHost?.RefreshAvailability();
+                // Withdraw the backend capability before disposing the old service. T180 defers
+                // the plan-loss notice to afterStopped so cleanup issues can be reported first.
+                _remodelHost?.RefreshAvailability(announceLostPlan: service != null);
             },
             Report,
             schedule: null,
@@ -979,7 +979,9 @@ public class SwReviewAddIn : ISwAddin
             // (docs/pane-findings-2026-09-16.md, finding 1). Both read late: the remodel host is
             // built after this gate is, and either can be gone by the time the question is asked.
             busy: () => (_reviewHost != null && _reviewHost.AnyTurnRunning())
-                || (_remodelHost != null && _remodelHost.RunInProgress));
+                || (_remodelHost != null && _remodelHost.RunInProgress),
+            preserveAttachment: (path, attachment) => _remodelHost?.KeepCopyAttachment(path, attachment) == true,
+            afterStopped: _ => _remodelHost?.RefreshAvailability());
     }
 
     private void StartBackend(UserSettings settings, ResolvedApiKey key)

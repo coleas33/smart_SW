@@ -10,14 +10,16 @@
     "seq": { "type": "integer", "minimum": 1 },
     "at": { "type": "string", "format": "date-time" },
     "type": {
-      "enum": ["session.started", "text.delta", "text.done", "tool.started", "tool.finished", "finding", "finding.withdrawn", "evidence.requested", "evidence.answered", "disposition", "coverage", "coverage.withdrawn", "usage", "turn.ended", "session.ended", "error"]
+      "enum": ["session.started", "session.sent", "text.delta", "text.done", "tool.started", "tool.finished", "finding", "finding.withdrawn", "evidence.requested", "evidence.answered", "disposition", "coverage", "coverage.withdrawn", "usage", "turn.ended", "session.ended", "error"]
     },
     "body": { "type": "object" }
   },
   "allOf": [
     { "if": { "properties": { "type": { "const": "session.started" } } },
       "then": { "properties": { "body": { "type": "object", "additionalProperties": false, "required": ["session_id", "package_id", "provider", "model", "effort_mapping"],
-        "properties": { "session_id": { "type": "string" }, "package_id": { "type": "string" }, "provider": { "enum": ["openai", "gemini", "fake"] }, "model": { "type": "string" },
+        "properties": {
+          "send_when_checked": { "const": false, "description": "Feature 015: present only for a review started with the box unticked." },
+          "session_id": { "type": "string" }, "package_id": { "type": "string" }, "provider": { "enum": ["openai", "gemini", "fake"] }, "model": { "type": "string" },
           "effort_mapping": { "type": "object", "additionalProperties": false, "required": ["requested", "provider_param", "provider_value"], "properties": { "requested": { "type": "string" }, "provider_param": { "type": "string" }, "provider_value": { "type": ["string", "integer"] } } } } } } } },
     { "if": { "properties": { "type": { "const": "text.delta" } } },
       "then": { "properties": { "body": { "type": "object", "additionalProperties": false, "required": ["text"], "properties": { "text": { "type": "string" } } } } } },
@@ -73,6 +75,12 @@
       "then": { "properties": { "body": { "type": "object", "additionalProperties": false, "required": ["ended_at", "timing"],
         "properties": { "ended_at": { "type": "string", "format": "date-time" }, "timing": { "$ref": "https://smart-sw.local/contracts/review-session.schema.json#/$defs/Timing" },
           "usage": { "$ref": "https://smart-sw.local/contracts/review-session.schema.json#/$defs/SessionUsage", "description": "What the session cost, summed under the one rule SessionUsage defines, so the pane does not own a second one (feature 005). Optional: absent when no round reported usage, and absent on every stream written before this feature" } } } } } },
+    { "if": { "properties": { "type": { "const": "session.sent" } } },
+      "then": { "properties": { "body": { "type": "object", "additionalProperties": false,
+        "required": ["provider", "model", "effort_mapping"], "properties": {
+          "provider": { "enum": ["openai", "gemini", "fake"] }, "model": { "type": "string" },
+          "effort_mapping": { "type": "object", "additionalProperties": false, "required": ["requested", "provider_param", "provider_value"], "properties": { "requested": { "type": "string" }, "provider_param": { "type": "string" }, "provider_value": { "type": ["string", "integer"] } } },
+          "estimate": { "$ref": "https://smart-sw.local/contracts/review-session.schema.json#/$defs/SendEstimate" } } } } } },
     { "if": { "properties": { "type": { "const": "error" } } },
       "then": { "properties": { "body": { "type": "object", "additionalProperties": false, "required": ["error_class", "message", "retryable"],
         "properties": { "error_class": { "type": "string" }, "message": { "type": "string" }, "retryable": { "type": "boolean" } } } } } }

@@ -83,6 +83,11 @@ def utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+def local_now() -> datetime:
+    """An aware local wall clock, read through this module for model-status timestamps."""
+    return datetime.now(UTC).astimezone()
+
+
 EventListener = Callable[[AgentEvent], None]
 """A live consumer of the stream: the chat server's SSE fan-out, a CLI trace, a test."""
 

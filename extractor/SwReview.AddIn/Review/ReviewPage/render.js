@@ -679,7 +679,7 @@
 
     var actions = el('div', 'row question-actions');
     actions.appendChild(button('Skip for now', 'question-skip', 'action question-skip'));
-    actions.appendChild(button('Send answers', 'question-send', 'action primary question-send'));
+    actions.appendChild(button(more.applyAnswers ? 'Apply answers' : 'Send answers', 'question-send', 'action primary question-send'));
     if (more.resumeText) {
       actions.appendChild(el('span', 'question-resume', more.resumeText));
     }
@@ -762,13 +762,16 @@
    * they are still one press away. The one shape every error surface on this page uses when the
    * labels are there: the error card, a card's status line, the questions panel, the settings save.
    */
-  function plainError(error, labels) {
+  function plainError(error, labels, text) {
     var body = error || {};
     var errorClass = String(body.error_class || 'Error');
     var message = String(body.message || '');
 
     var block = el('div', 'plain-error');
-    block.appendChild(el('p', 'plain-error-text', labelOf(labels, 'errors', errorClass, message || errorClass)));
+    // `text`, when given, is the backend's own sentence for what failed (a re-run's,
+    // feature 015); the class's label otherwise.
+    block.appendChild(el('p', 'plain-error-text',
+      text ? String(text) : labelOf(labels, 'errors', errorClass, message || errorClass)));
 
     var fold = el('details', 'error-fold');
     fold.appendChild(el('summary', 'error-fold-head', 'Details'));
@@ -1157,6 +1160,29 @@
     return group;
   }
 
+  /** The backend owns every word and count of the waiting review's Send block. */
+  function sendBlock(send, extras) {
+    var block = el('div');
+    var action = button('Send to model', 'send', 'primary');
+    action.disabled = !!(extras && extras.disabled);
+    block.appendChild(action);
+    block.appendChild(el('p', 'send-text', String(send.text || '')));
+    // The failure line is a status region, so a refusal or a failed attempt is announced as
+    // the box's own note is (feature 015, owner decision 98A); its class stays in the fold.
+    var failure = null;
+    if (extras && extras.error) {
+      failure = plainError(extras.error, extras.labels, extras.errorText);
+      failure.querySelector('.plain-error-text').setAttribute('role', 'status');
+    } else if (send.failure) {
+      failure = el('p', 'note bad', String(send.failure));
+      failure.setAttribute('role', 'status');
+    }
+    if (failure) {
+      block.appendChild(failure);
+    }
+    return block;
+  }
+
   // ---- the running usage line (feature 005 T016a) --------------------------------------
 
   /**
@@ -1244,6 +1270,7 @@
     typeGroups: typeGroups,
     findingExplanation: findingExplanation,
     summaryBlock: summaryBlock,
+    sendBlock: sendBlock,
     contactList: contactList,
     notExaminedHeadline: notExaminedHeadline,
     reviewChips: reviewChips,

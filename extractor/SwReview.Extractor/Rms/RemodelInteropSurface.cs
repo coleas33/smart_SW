@@ -282,7 +282,7 @@ public static class RemodelInteropSurface
             .WithUsedBy("remodel.open", "remodel.rebuild")
             .WithNote("one rebuild call, one meaning; EditRebuild3 is excluded"),
         Call("IModelDoc2", "ClearSelection2", Method, "System.Void", true, "All")
-            .WithUsedBy("remodel.folder", "remodel.geometry")
+            .WithUsedBy("remodel.folder", "remodel.geometry", "PROBE-8")
             .WithNote("around every selection-based operation, and before the whole-part geometry "
                 + "reading, which includes pre-selected bodies (U27)"),
         Call("IModelDoc2", "Save3", Method, "System.Boolean", true, "Options", "Errors", "Warnings")
@@ -313,10 +313,14 @@ public static class RemodelInteropSurface
         // swUserPreferenceToggle_e value, so it needs its own key.
         Call("ISldWorks", "SetUserPreferenceToggle", Method, "System.Void", true,
             "UserPreferenceValue", "OnFlag")
-            .WithUsedBy("remodel.open", "remodel.close")
+            .WithUsedBy("remodel.open", "remodel.close",
+                "remodel.rename", "remodel.reorder", "remodel.folder", "remodel.describe",
+                "remodel.equation", "remodel.rebuild", "remodel.save")
             .WithNote("the three toggles 10, 77 and 329 only, restored in a finally"),
         Call("ISldWorks", "set_CommandInProgress", PropertySet, "System.Void", true, "VbControl")
-            .WithUsedBy("remodel.open", "remodel.close")
+            .WithUsedBy("remodel.open", "remodel.close",
+                "remodel.rename", "remodel.reorder", "remodel.folder", "remodel.describe",
+                "remodel.equation", "remodel.rebuild", "remodel.save")
             .WithNote("a property, not a swUserPreferenceToggle_e value; it is deliberately absent from "
                 + "the enums block"),
 
@@ -346,12 +350,16 @@ public static class RemodelInteropSurface
                 + "closed through the same open request"),
         Call("ISldWorks", "GetUserPreferenceToggle", Method, "System.Boolean", false,
             "UserPreferenceToggle")
-            .WithUsedBy("remodel.probe_scope", "remodel.open")
+            .WithUsedBy("remodel.probe_scope", "remodel.open",
+                "remodel.rename", "remodel.reorder", "remodel.folder", "remodel.describe",
+                "remodel.equation", "remodel.rebuild", "remodel.save")
             .WithNote("records each toggle's original value; a value that cannot be read refuses the "
                 + "start; U26: reads swExtRefNoPromptOrSave, which decides whether a read-only "
                 + "source's GetSaveFlag can be believed"),
         Call("ISldWorks", "get_CommandInProgress", PropertyGet, "System.Boolean", false)
-            .WithUsedBy("remodel.open")
+            .WithUsedBy("remodel.open",
+                "remodel.rename", "remodel.reorder", "remodel.folder", "remodel.describe",
+                "remodel.equation", "remodel.rebuild", "remodel.save")
             .WithNote("records the flag's original value for the finally restore"),
 
         Call("IModelDoc2", "GetPathName", Method, "System.String", false)
@@ -396,7 +404,7 @@ public static class RemodelInteropSurface
             .WithUsedBy("remodel.rename", "remodel.reorder", "remodel.folder", "remodel.describe")
             .WithNote("the ByRef error code is read on every resolve"),
         Call("IModelDocExtension", "CreateMassProperty2", Method, "System.Object", false)
-            .WithUsedBy("remodel.geometry")
+            .WithUsedBy("remodel.geometry", "PROBE-8")
             .WithNote("the typed interface, not the raw Object from GetMassProperties2"),
         Call("IModelDocExtension", "get_CustomPropertyManager", PropertyGet,
             "SolidWorks.Interop.sldworks.CustomPropertyManager", false, "ConfigName")
@@ -479,37 +487,62 @@ public static class RemodelInteropSurface
             .WithUsedBy("remodel.geometry")
             .WithNote("edge_count, compared exactly"),
 
+        Call("IMassProperty2", "GetOverrideOptions", Method, "System.Object", false)
+            .WithUsedBy("remodel.geometry", "PROBE-8")
+            .WithNote("unreadable options fail closed; only the analytic probe configures them"),
+        Call("IMassPropertyOverrideOptions", "get_OverrideMass", PropertyGet, "System.Boolean", false)
+            .WithUsedBy("remodel.geometry", "PROBE-8"),
+        Call("IMassPropertyOverrideOptions", "get_OverrideCenterOfMass", PropertyGet, "System.Boolean", false)
+            .WithUsedBy("remodel.geometry", "PROBE-8"),
+        Call("IMassPropertyOverrideOptions", "get_OverrideMomentsOfInertia", PropertyGet, "System.Boolean", false)
+            .WithUsedBy("remodel.geometry", "PROBE-8"),
+        Call("IMassProperty2", "SetOverrideOptions", Method, "System.Boolean", false,
+            "Options", "Config_option", "Config_names")
+            .WithUsedBy("PROBE-8").WithNote("probe-only fixture write, never in the stage-1 allowlist"),
+        Call("IMassPropertyOverrideOptions", "set_OverrideMass", PropertySet, "System.Void", false, "Retval")
+            .WithUsedBy("PROBE-8").WithNote("probe-only fixture write"),
+        Call("IMassPropertyOverrideOptions", "set_OverrideCenterOfMass", PropertySet, "System.Void", false, "Retval")
+            .WithUsedBy("PROBE-8").WithNote("probe-only fixture write"),
+        Call("IMassPropertyOverrideOptions", "set_OverrideMomentsOfInertia", PropertySet, "System.Void", false, "Retval")
+            .WithUsedBy("PROBE-8").WithNote("probe-only fixture write"),
+        Call("IMassPropertyOverrideOptions", "SetOverrideMassValue", Method, "System.Boolean", false, "Value")
+            .WithUsedBy("PROBE-8").WithNote("probe-only fixture write; known SI value"),
+        Call("IMassPropertyOverrideOptions", "SetOverrideCenterOfMassValue", Method, "System.Boolean", false,
+            "Value", "CoordinateSystemName")
+            .WithUsedBy("PROBE-8").WithNote("probe-only fixture write; three known metres, default coordinate system"),
+        Call("IMassPropertyOverrideOptions", "SetOverridePrincipalMomentsOfInertia", Method, "System.Boolean", false, "Value")
+            .WithUsedBy("PROBE-8").WithNote("probe-only fixture write; three known SI moments"),
+
         Call("IMassProperty2", "Recalculate", Method, "System.Boolean", false)
-            .WithUsedBy("remodel.geometry")
+            .WithUsedBy("remodel.geometry", "PROBE-8")
             .WithNote("its Boolean is checked before anything is read"),
         Call("IMassProperty2", "set_AccuracyLevel", PropertySet, "System.Void", false, "Retval")
-            .WithUsedBy("PROBE-8")
-            .WithNote("swMassPropertyAccuracyLevel_Higher = 2; not set by remodel.geometry since U27"),
+            .WithUsedBy("adapter.tests")
+            .WithNote("retained adapter mapping; no production command sets accuracy since T187"),
         Call("IMassProperty2", "set_SelectedItems", PropertySet, "System.Void", false, "Retval")
-            .WithUsedBy("PROBE-8")
-            .WithNote("the body PROBE-8 measures, as a DispatchWrapper array; remodel.geometry reads "
-                + "the whole part since U27"),
+            .WithUsedBy("adapter.tests")
+            .WithNote("retained adapter mapping; no production command sets selected items since T187"),
 
         // Set before Recalculate, or the numbers come back in the document's display units
         // and the reading's own field names (volume_m3, mass_kg) are wrong (research R12).
         Call("IMassProperty2", "set_UseSystemUnits", PropertySet, "System.Void", false, "Retval")
-            .WithUsedBy("remodel.geometry")
+            .WithUsedBy("remodel.geometry", "PROBE-8")
             .WithNote("set true BEFORE Recalculate, or the numbers come back in the document's display "
                 + "units (research R12)"),
         Call("IMassProperty2", "get_Volume", PropertyGet, "System.Double", false)
-            .WithUsedBy("remodel.geometry"),
+            .WithUsedBy("remodel.geometry", "PROBE-8"),
         Call("IMassProperty2", "get_SurfaceArea", PropertyGet, "System.Double", false)
-            .WithUsedBy("remodel.geometry"),
+            .WithUsedBy("remodel.geometry", "PROBE-8"),
         Call("IMassProperty2", "get_CenterOfMass", PropertyGet, "System.Object", false)
-            .WithUsedBy("remodel.geometry"),
+            .WithUsedBy("remodel.geometry", "PROBE-8"),
         Call("IMassProperty2", "get_PrincipalMomentsOfInertia", PropertyGet, "System.Object", false)
-            .WithUsedBy("remodel.geometry")
+            .WithUsedBy("remodel.geometry", "PROBE-8")
             .WithNote("sorted ascending by the C# side before comparison"),
         Call("IMassProperty2", "get_Mass", PropertyGet, "System.Double", false)
-            .WithUsedBy("remodel.geometry")
+            .WithUsedBy("remodel.geometry", "PROBE-8")
             .WithNote("recorded and compared separately, never as geometry"),
         Call("IMassProperty2", "get_Density", PropertyGet, "System.Double", false)
-            .WithUsedBy("remodel.geometry")
+            .WithUsedBy("remodel.geometry", "PROBE-8")
             .WithNote("comes from the material, which is not geometry"),
 
         // The two reads AssertFolderSelection makes, and nothing else.

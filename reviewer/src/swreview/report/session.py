@@ -10,6 +10,7 @@ plain dictionaries by the tools and the runner, so ISO strings are accepted for
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterable, Sequence
 from datetime import datetime
 from itertools import pairwise
@@ -19,6 +20,7 @@ from uuid import UUID
 
 from annotated_types import Len
 from pydantic import (
+    ConfigDict,
     Field,
     SerializerFunctionWrapHandler,
     StringConstraints,
@@ -26,7 +28,9 @@ from pydantic import (
     model_serializer,
     model_validator,
 )
+from typing_extensions import TypedDict
 
+from swreview import atomic
 from swreview.agent.providers import EffortMapping, TokenUsage, TurnEndReason
 from swreview.agent.settings import EfficiencySettings, ModelViewSettings
 from swreview.findings import Finding, ReviewModel, Source, omit_at_default
@@ -60,6 +64,85 @@ class ProviderInfo(ReviewModel):
     model: str
     effort_mapping: EffortMapping
     key_source: KeySource
+
+
+class ReviewedDocument(TypedDict):
+    """The root document binding already used by the review snapshot."""
+
+    __pydantic_config__ = ConfigDict(extra="forbid", strict=True)
+    path: str
+    configuration: str
+
+
+class RecordedProfileIdentity(TypedDict):
+    """The profile path and loaded digest; a refused profile has no digest."""
+
+    __pydantic_config__ = ConfigDict(extra="forbid", strict=True)
+    path: str
+    sha256: Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")] | None
+
+
+class SendFailure(ReviewModel):
+    """A failed attempt, with its redacted reason and original wall clock."""
+
+    at: datetime = Field(strict=False)
+    error_class: str
+    reason: str
+
+
+class SendEstimate(ReviewModel):
+    """The cached first-request count; unknown is distinct from zero."""
+
+    input_tokens: int | None = Field(ge=0)
+    encoding: Literal["o200k_base"]
+    approximate: bool
+
+
+class ModelStatus(ReviewModel):
+    """Whether a review started unticked has made or completed a model request."""
+
+    state: Literal["not_sent", "send_failed", "sent"]
+    document: ReviewedDocument
+    checked_at: datetime = Field(strict=False)
+    profile: RecordedProfileIdentity | None = None
+    rechecked_from: UUID | None = Field(default=None, strict=False)
+    failures: list[SendFailure] = Field(default_factory=list)
+    sent_at: datetime | None = Field(default=None, strict=False)
+    estimate: SendEstimate | None = None
+    opening_finding_ids: list[Annotated[str, StringConstraints(pattern=r"^F-[0-9]+$")]] = Field(
+        default_factory=list
+    )
+
+    @model_serializer(mode="wrap")
+    def _omit_unused_send_fields(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data = omit_when_null(handler, self, "profile", "rechecked_from", "sent_at", "estimate")
+        if not self.failures:
+            data.pop("failures", None)
+        if not self.opening_finding_ids:
+            data.pop("opening_finding_ids", None)
+        return data
+
+
+class LiveDetectionRecord(ReviewModel):
+    """The complete first pre-run's live outcome, carried after a restart."""
+
+    configuration: str
+    settings: dict[str, Any]
+    step_index: int | None = None
+    not_attempted: Literal["no_bridge", "not_assembly"] | None = None
+    groups: int = Field(default=0, ge=0)
+    rows_detected: int = Field(default=0, ge=0)
+    rows_added: int = Field(default=0, ge=0)
+    rows_collided: int = Field(default=0, ge=0)
+    error: str | None = None
+    persist_error: str | None = None
+
+
+class DrawingOutcome(ReviewModel):
+    """The outcome of one confirmed drawing read while a review waited."""
+
+    file: str
+    outcome: str
 
 
 class InvestigationStep(ReviewModel):
@@ -521,6 +604,7 @@ class ReviewSession(ReviewModel):
     ended_at: datetime | None = Field(default=None, strict=False)
     model: str
     provider_info: ProviderInfo | None = None
+    model_status: ModelStatus | None = None
     retry_of: UUID | None = Field(default=None, strict=False)
     reused_from: str | None = None
     """The run folder this run's evidence was copied from, mirrored off the package.
@@ -620,6 +704,8 @@ class ReviewSession(ReviewModel):
     `contracts/drawing-capability.md` section 2), read once, lazily, when a custom document
     has a drawing candidate; recorded so a summary re-rendered later says the same. `None`
     when it was never asked, and omitted then, so older sessions keep their bytes."""
+    live_detection: LiveDetectionRecord | None = None
+    drawing_outcomes: list[DrawingOutcome] = Field(default_factory=list)
     coverage: Coverage = Field(default_factory=Coverage)
     timing: Timing
 
@@ -628,6 +714,12 @@ class ReviewSession(ReviewModel):
         self, handler: SerializerFunctionWrapHandler
     ) -> dict[str, Any]:
         data = handler(self)
+        if self.model_status is None:
+            data.pop("model_status", None)
+        if self.live_detection is None:
+            data.pop("live_detection", None)
+        if not self.drawing_outcomes:
+            data.pop("drawing_outcomes", None)
         if self.origin_marks is None:
             data.pop("origin_marks", None)
         if not self.finding_explanations:
@@ -697,5 +789,7 @@ def save_session(session: ReviewSession, path: Path | str) -> Path:
     """Write a `session.json` file, creating its directory when needed."""
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(session.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    # Match the text writer's old platform newlines before the byte-only replace.
+    data = (session.model_dump_json(indent=2) + "\n").replace("\n", os.linesep).encode("utf-8")
+    atomic.write_atomic(target, data)
     return target

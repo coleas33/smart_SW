@@ -164,6 +164,9 @@ internal sealed class StandInSolidworks
 
     public InteropRecorder<IMassProperty2> MassProperty { get; } = new InteropRecorder<IMassProperty2>();
 
+    public InteropRecorder<IMassPropertyOverrideOptions> MassPropertyOverrides { get; } =
+        new InteropRecorder<IMassPropertyOverrideOptions>();
+
     private static bool Same(string? path, string? other) =>
         path != null && other != null && string.Equals(path, other, StringComparison.OrdinalIgnoreCase);
 
@@ -271,7 +274,12 @@ internal sealed class StandInSolidworks
                 return 0;
             });
         Equations.Answer("GetCount", 1).Answer("get_Equation", "\"w\" = 120");
+        MassPropertyOverrides
+            .Answer("get_OverrideMass", false)
+            .Answer("get_OverrideCenterOfMass", false)
+            .Answer("get_OverrideMomentsOfInertia", false);
         MassProperty
+            .Answer("GetOverrideOptions", MassPropertyOverrides.Instance)
             .Answer("Recalculate", true)
             .Answer("get_Volume", 0.000125)
             .Answer("get_SurfaceArea", 0.015)

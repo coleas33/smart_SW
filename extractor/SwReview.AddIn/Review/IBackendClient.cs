@@ -52,6 +52,9 @@ public sealed class EngineeringContextAttachment
     public string PackageSha256 { get; }
 }
 
+/// <summary>The mutually exclusive review start modes.</summary>
+public enum ReviewMode { Send, Wait, Recheck }
+
 /// <summary>The `POST /sessions` body (chat-api.md).</summary>
 public sealed class NewSessionRequest
 {
@@ -64,6 +67,7 @@ public sealed class NewSessionRequest
         BridgeConfig? bridge,
         string? retryOf,
         string? standardsProfilePath = null,
+        ReviewMode mode = ReviewMode.Send,
         EngineeringContextAttachment? engineeringContext = null)
     {
         RunDirectory = runDirectory ?? throw new ArgumentNullException(nameof(runDirectory));
@@ -74,6 +78,7 @@ public sealed class NewSessionRequest
         Bridge = bridge;
         RetryOf = retryOf;
         StandardsProfilePath = standardsProfilePath;
+        Mode = mode;
         EngineeringContext = engineeringContext;
     }
 
@@ -99,6 +104,8 @@ public sealed class NewSessionRequest
     /// setting is blank. The backend owns loading and validating the file.
     /// </summary>
     public string? StandardsProfilePath { get; }
+
+    public ReviewMode Mode { get; }
 
     /// <summary>The exact saved context selected for this review, or null for an ordinary review.</summary>
     public EngineeringContextAttachment? EngineeringContext { get; }

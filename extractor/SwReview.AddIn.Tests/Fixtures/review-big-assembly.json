@@ -16931,7 +16931,12 @@
       "UnknownMessage": "The add-in did not understand the page. Close and reopen the task pane.",
       "UnknownModel": "That model is not offered by the provider. Choose another model in Settings.",
       "UnknownProvider": "That provider is not available. Choose another provider in Settings.",
-      "UnknownReview": "That review's run folder can no longer be read. Remove its chip, or review the model again."
+      "UnknownReview": "That review's run folder can no longer be read. Remove its chip, or review the model again.",
+      "NoCredential": "No key is available, so nothing was sent. Save a key in Settings; the review keeps waiting.",
+      "NotSent": "This review has not been sent to the model, so it takes no follow-up yet. Press Send to model first.",
+      "NotWaiting": "This review is not waiting to be sent. Reload it to see where it stands.",
+      "ReviewNotActive": "This review is of another document. Open that document in SOLIDWORKS, then try again.",
+      "SettingNotSaved": "The settings could not be saved, so the stored settings stand."
     }
   }
 }

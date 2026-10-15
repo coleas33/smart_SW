@@ -75,7 +75,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated, Any, Literal, get_args
+from typing import Annotated, Any, Literal, TypeVar, get_args
 
 from pydantic import Field, ValidationError
 
@@ -121,6 +121,10 @@ question columns. A scorecard without the field was scored under version 1. Pinn
 
 SCORECARD_FILE = "scorecard.json"
 """What `benchmark score` writes into a run folder, and `read_scorecard` reads."""
+
+Number = TypeVar("Number", int, float)
+"""What `sum_or_none` adds: token counts, or a wall clock's seconds (feature 014
+`contracts/report.md` 4)."""
 
 NOT_ASSESSED = "not assessed"
 """What a column the key gives nothing to grade renders as: a key with no entry of the list the
@@ -866,7 +870,7 @@ def _score_package(
     )
 
 
-def _sum_or_none(values: Iterable[int | None]) -> int | None:
+def sum_or_none(values: Iterable[Number | None]) -> Number | None:
     """Add the counts, unless any one of them is unknown, in which case so is the sum.
 
     The same rule `SessionUsage.summed` applies one level down, over the rounds of one
@@ -881,7 +885,7 @@ def _sum_or_none(values: Iterable[int | None]) -> int | None:
 
 def _token_totals(per_package: Sequence[PackageScore], field: str) -> int | None:
     """One `TokenUsage` count summed over packages; a package with no usage is unknown."""
-    return _sum_or_none(
+    return sum_or_none(
         getattr(score.usage, field) if score.usage is not None else None for score in per_package
     )
 
@@ -889,7 +893,7 @@ def _token_totals(per_package: Sequence[PackageScore], field: str) -> int | None
 def _sum_assessed(values: Iterable[int | None]) -> int | None:
     """Add the counts of the packages that assess a column; `None` when none does.
 
-    Not `_sum_or_none`'s rule, and deliberately: a `None` here is a package whose key gives the
+    Not `sum_or_none`'s rule, and deliberately: a `None` here is a package whose key gives the
     column nothing to grade, not a number that went unreported, so it is left out of the sum
     rather than making it unknown (`scoring.md` 7)."""
     assessed = [value for value in values if value is not None]
@@ -1015,7 +1019,7 @@ def _aggregate(per_package: Sequence[PackageScore], answer_keys: Sequence[Answer
         output_tokens=_token_totals(per_package, "output_tokens"),
         reasoning_tokens=_token_totals(per_package, "reasoning_tokens"),
         total_tokens=_token_totals(per_package, "total_tokens"),
-        round_trips=_sum_or_none(score.round_trips for score in per_package),
+        round_trips=sum_or_none(score.round_trips for score in per_package),
         median_seconds_to_first_finding=(
             statistics.median(first_finding_times) if first_finding_times else None
         ),

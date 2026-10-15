@@ -150,8 +150,22 @@ def _render_title(session: ReviewSession) -> list[str]:
         f"# Design Review Report: {session.design_id}",
         "",
         f"- Session: {session.session_id}",
-        f"- Model: {session.model}",
     ]
+    status = session.model_status
+    if status is None or status.state == "sent":
+        lines.append(f"- Model: {session.model}")
+    elif status.state == "not_sent":
+        lines.append("- Model: not sent to the model (checked by code only)")
+    elif status.failures:
+        last = status.failures[-1]
+        lines.append(
+            "- Model: not sent to the model; the last attempt failed at "
+            f"{_fmt_dt(last.at)}: {last.reason}"
+        )
+    else:
+        lines.append(
+            "- Model: not sent to the model; the last attempt failed (details unavailable)"
+        )
     lines.extend(_render_provider_info(session))
     lines.append(f"- Started: {_fmt_dt(session.started_at)}")
     lines.append(f"- Ended: {_fmt_dt(session.ended_at)}")
@@ -166,14 +180,24 @@ def _render_provider_info(session: ReviewSession) -> list[str]:
     """
     lines: list[str] = []
     info = session.provider_info
-    if info is not None:
+    status = session.model_status
+    if info is not None and (status is None or status.state == "sent"):
         mapping = info.effort_mapping
         lines.append(
             f"- Provider: {info.provider} (effort {mapping.requested} sent as "
             f"{mapping.provider_param}={mapping.provider_value}; key from {info.key_source})"
         )
+    if status is not None and status.state == "sent":
+        lines.append(
+            f"- Sent to the model: {_fmt_dt(status.sent_at)} "
+            f"(checks finished {_fmt_dt(status.checked_at)})"
+        )
+        if status.failures:
+            lines.append(f"- Earlier attempts that failed: {len(status.failures)}")
     if session.retry_of is not None:
         lines.append(f"- Retry of session: {session.retry_of}")
+    if status is not None and status.rechecked_from is not None:
+        lines.append(f"- Checked again from session: {status.rechecked_from}")
     if session.reused_from is not None:
         # Lever 9: the evidence was copied from an earlier run rather than dumped for this
         # one. A reader deciding how much to trust a finding needs that on the first screen,

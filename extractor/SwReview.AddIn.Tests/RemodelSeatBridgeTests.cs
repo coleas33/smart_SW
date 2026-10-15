@@ -70,6 +70,20 @@ public sealed class RemodelSeatBridgeTests : IDisposable
     {
         byte[] sourceBefore = File.ReadAllBytes(_sourcePath);
         SwBridgeDispatcher dispatcher = Dispatcher();
+        void AssertIdleAfter(int commands)
+        {
+            Assert.Equal(
+                Enumerable.Range(0, commands).SelectMany(_ => new[] { true, false }),
+                _solidworks.Application.Calls.Where(call => call.Member == "set_CommandInProgress")
+                    .Select(call => (bool)call.Arguments[0]!));
+            foreach (int toggle in RemodelSystemToggles.SuppressedToggles)
+            {
+                Assert.Equal(
+                    Enumerable.Range(0, commands).SelectMany(_ => new[] { false, true }),
+                    _solidworks.Application.Calls.Where(call => call.Member == "SetUserPreferenceToggle"
+                        && (int)call.Arguments[0]! == toggle).Select(call => (bool)call.Arguments[1]!));
+            }
+        }
 
         var probe = Ok<RemodelProbeScopeResult>(dispatcher.Dispatch(Request(RemodelCommands.ProbeScope, new { source_path = _sourcePath })));
         Assert.Equal(1, probe.ScopeSignals!.DocumentType);
@@ -92,6 +106,7 @@ public sealed class RemodelSeatBridgeTests : IDisposable
         Assert.Null(open.SourceAttestation!.VaultPath);
         Assert.True(File.Exists(_copyPath));
         Assert.Equal(RunId, _solidworks.Tag);
+        AssertIdleAfter(1);
 
         var snapshot = Ok<RemodelSnapshotResult>(dispatcher.Dispatch(Request(RemodelCommands.Snapshot, new { })));
         Assert.Equal(new[] { PersistRefCodec.Encode(StandInSolidworks.BossRef), PersistRefCodec.Encode(StandInSolidworks.CutRef) }, snapshot.Order);
@@ -102,15 +117,21 @@ public sealed class RemodelSeatBridgeTests : IDisposable
             RemodelCommands.Rename, new { persist_ref = PersistRefCodec.Encode(StandInSolidworks.CutRef), new_name = "Cut-Pocket1" })));
         Assert.Equal("Cut-Extrude1", rename.PreviousName);
         Assert.Equal(new object?[] { "Cut-Pocket1" }, Assert.Single(_solidworks.Cut.Calls, call => call.Member == "set_Name").Arguments);
+        AssertIdleAfter(2);
 
         var geometry = Ok<GeometryReading>(dispatcher.Dispatch(Request(RemodelCommands.Geometry, new { })));
         Assert.Equal(RemodelGeometry.StatusOk, geometry.Status);
         Assert.Equal(0.000125, geometry.VolumeM3);
         Assert.Equal("6061-T6", geometry.MaterialName);
+        Assert.Contains("GetOverrideOptions", _solidworks.MassProperty.Members);
+        Assert.Equal(new[] { "get_OverrideMass", "get_OverrideCenterOfMass", "get_OverrideMomentsOfInertia" },
+            _solidworks.MassPropertyOverrides.Members);
+        AssertIdleAfter(2);
 
         var rebuild = Ok<RemodelRebuildResult>(dispatcher.Dispatch(Request(RemodelCommands.Rebuild, new { force = false })));
         Assert.Equal(0, rebuild.RebuildErrors);
         Assert.Equal(2, rebuild.FeatureErrors.Count);
+        AssertIdleAfter(3);
 
         var close = Ok<RemodelCloseResult>(dispatcher.Dispatch(Request(RemodelCommands.Close, new { discard_copy = false })));
         Assert.True(close.Closed);
@@ -136,14 +157,13 @@ public sealed class RemodelSeatBridgeTests : IDisposable
         Assert.Null(_solidworks.Tag);
         Assert.DoesNotContain("Save3", _solidworks.Copy.Document.Members);
 
-        // The four settings were set and put back: CommandInProgress true during the open and back
-        // at its end (U27, default taken 2026-09-28), the three toggles back at the close.
-        List<object?[]> commandInProgress = _solidworks.Application.Calls.Where(call => call.Member == "set_CommandInProgress").Select(call => call.Arguments).ToList();
-        Assert.Equal(new[] { new object?[] { true }, new object?[] { false } }, commandInProgress);
+        // T180 restores all four idle values after Open, Rename and Rebuild. Read-only
+        // geometry and a close with no pending restore send no additional setting writes.
+        AssertIdleAfter(3);
         int flagBack = _solidworks.Application.Calls.FindLastIndex(call => call.Member == "set_CommandInProgress");
         int closed = _solidworks.Application.Calls.FindIndex(call => call.Member == "CloseDoc");
         Assert.True(flagBack < closed, "CommandInProgress was still true when the copy was closed.");
-        Assert.Equal("SetUserPreferenceToggle", _solidworks.Application.Calls.Last(call => call.Member.StartsWith("Set", StringComparison.Ordinal) || call.Member.StartsWith("set_", StringComparison.Ordinal)).Member);
+        Assert.Equal("set_CommandInProgress", _solidworks.Application.Calls.Last(call => call.Member.StartsWith("Set", StringComparison.Ordinal) || call.Member.StartsWith("set_", StringComparison.Ordinal)).Member);
     }
 
     /// <summary>A source SOLIDWORKS does not have open is refused, and the seat does not open it to answer.</summary>

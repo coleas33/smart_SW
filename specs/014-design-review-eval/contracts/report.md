@@ -145,7 +145,10 @@ repetition:
 
 1. **Header**: run, package, arm, repetition, status, requested and responding model, usage, cost,
    wall clock, and a link back to the index.
-2. **The system prompt as sent**, then the component legend (section 2).
+2. **The system prompt as sent**, then the component legend (section 2). A folder with no
+   `prompts.json` reads "not recorded" in its place and in each user message's; one whose
+   `prompts.json` does not validate reads "the prompts record is unreadable" in the same
+   places, and is not refused (owner decision 85A).
 3. **The log, in its own order**, grouped into turns at each `turn.ended`:
    - before the first `usage`: "Code before the first turn": the pre-run's and set-up's calls;
    - each turn opens with its user message as sent (the opening message first); an answer turn also
@@ -184,21 +187,76 @@ the shape `_events` handed it. The reader is stricter than `_events`: a line tha
 but not an `AgentEvent` (`seq` at least 1, `at` a datetime, a known `type`, no extra field) is now
 refused there too. The page stops at such a line and says
 "the event log is unreadable from line N" (a process stopped mid-write), showing everything before
-it.
+it. A line the reader reads whose body the walk cannot (a call's step that is not an integer, a
+round whose counts do not read, a coverage row whose item is not an object) stops the page the same
+way: "<run>/<package>: the event log is unreadable from seq N" (owner decision 83A). Each recorded
+user message past the log's last turn is still shown, under its turn: "this turn is not in the
+event log" when the log ended there, "not shown: the log is unreadable before this turn" when it
+stopped early (83A, 91A).
 
 **Full results** are read through `tools/registry.read_stored_result(run_dir, session_id, step)`,
 the one reader beside the one writer, which the replay and the questions reader call too (plan
 decision RF-30): its `text`, the file's raw text, is embedded escaped, not parsed and re-indented. An
 `Unstored` answer is named, never guessed: `missing` reads "full result not stored", `other_session`
 (a file whose `session_id` differs from the session's, `tools/registry.py:407-414`) "a stale result
-from another session in this folder", `unreadable` "the stored result is unreadable". Every recorded
-string is escaped; a finding text holding markup renders as text.
+from another session in this folder", `unreadable` "the stored result is unreadable", and
+`other_call` (an envelope naming another step) "a result recorded for another call" (owner decision
+85A). Every recorded string is escaped; a finding text holding markup renders as text.
 
 ## 6. The output folder
 
 - `--out` is required. Absent or empty: created and written. Holding a previous report, whose
-  `index.html` carries `<meta name="generator" content="swreview benchmark report">`: its
-  `transcripts/` folder is removed and both are written anew. Holding anything else: refused.
+  `index.html` carries `<meta name="generator" content="swreview benchmark report">`: replaced
+  whole. Holding anything else: refused.
+- The build is written into a new sibling folder of `--out`, `.<name>.<random>.building` (16
+  hexadecimal digits), made with `Path.mkdir`, and put in place once every page is written: the
+  previous report moved aside as `.<name>.<random>.previous`, the build moved in, the previous
+  report removed. A build that fails part-way leaves the previous report as it was (owner decision
+  83A). When the build cannot be moved in, the previous report is moved back first, on any
+  exception, an interruption included; if that move fails too, the build is refused naming where
+  the previous report now is, and a file is written into that folder so that no later build
+  removes it (owner decision 96A). The build therefore needs write access to `--out`'s parent.
+- **The in-place fallback.** Where `--out` is or holds the working folder (`--out .`), or is a
+  junction or a symbolic link, or the previous report cannot be moved aside, or the build cannot be
+  moved in (the previous report moved back first), the build is copied into `--out` instead, so a
+  link's target is the one updated (owner decision 91A). What it guarantees (96A): the build is
+  first copied beside the report, as `transcripts.new` and `index.html.new`, so a copy that fails
+  leaves the previous report whole and readable, the staged copies removed; then `transcripts/` is
+  renamed aside to `transcripts.old`, `transcripts.new` into its place (renamed back on a failure),
+  `index.html.new` over `index.html`, and `transcripts.old` removed, only when this build renamed
+  `transcripts/` to it (owner decision 101A). Each staging name is made exclusively, a folder with
+  `mkdir` and a file opened `"xb"`, so one someone else made, before or after the check, is refused
+  and never touched. On any exception the old `transcripts/` is put back; on an `OSError` or a
+  refusal, not a kill, the staging names this build made, and only those, are removed, so the
+  previous report stays whole and the next build is not refused for them (101A). A staging name is
+  never part of a report, and this command deletes one only in that case, when this same build
+  made it exclusively (97A, 101A): an `--out` holding `transcripts.new`, `transcripts.old` or
+  `index.html.new`, as a file, a folder or a link, is refused on one line naming every one found
+  and saying to delete them or move them elsewhere, so an in-place copy that was killed is cleaned
+  up by hand. Before the build is moved in, the folder just moved aside as the previous report is
+  read again: anything in it but a tagged `index.html` and `transcripts/`, written after `--out`
+  was checked, has the folder moved back and the build refused, naming it (101A).
+  A `transcripts/` that is itself a link is refused (section 7).
+- **Clean-up never removes what is not ours** (96A). Removing the previous report, and this
+  build's own folder after an in-place copy, is best effort, read-only flags cleared on Windows: a
+  folder still there afterwards is never reported removed; it is named on one warning line, and
+  the command still exits 0, its report being in place. Before a build, the folders a killed build
+  left beside `--out` are swept, each named: only a real folder (no link, no junction) named
+  `.<name>.` then 16 hexadecimal digits, or an earlier build's 8 characters of `[a-z0-9_]`, then
+  `.building` or `.previous`, is considered; it is removed only when it holds nothing but a report
+  (`index.html` carrying the generator tag, and `transcripts/`; no staging name), nothing in it
+  changed within the last ten minutes (another build may be writing it; chosen over detecting a
+  folder held open, which Windows reports only to a removal; junctions inside it are not followed,
+  97A), it is not a previous report a build could not move back, and, being a previous report,
+  `--out` holds a report beside it. Any other is kept and named on a warning line, one holding a
+  staging name with the instruction to delete it by hand, and one that cannot be read with "could
+  not read it" and the error (97A).
+- **A previous report a build could not move back** is marked with a file,
+  `STRANDED-by-swreview-benchmark-report.txt`, which says to move the report back by hand and then
+  delete the file; a folder holding it is never swept. An `--out` holding it (the report moved
+  back with its mark) is refused, saying to delete the file and build again: the simpler of
+  allowing the name or refusing it (97A). When the mark cannot be written, the refusal says so
+  and names the folder.
 - Every link is relative; run folders are named relative to their common parent. The page holds no
   local absolute path, and FR-051's committable-folder test runs over a page built from committed
   studies. A page built over private runs carries private paths and data and stays outside the
@@ -214,11 +272,24 @@ string is escaped; a finding text holding markup renders as text.
 | A run folder or package path lies under a key path | the key guard's own message (`ir/loader.py:46-62`) |
 | `--out` holds files this command did not write | the folder, and to choose an empty one |
 | A package or attempt folder holds both `events.jsonl` and `events.jsonl.gz`, a pack that did not finish | `event_stream`'s message: the folder, and to run `swreview benchmark pack` on its run again (`provenance.md` 6.7) |
+| Two or more run folders, one in the home folder, whose common parent is the home folder or above it, so their names would carry the home folder's own folders (owner decisions 84A, 92A: a lone run folder is named by its own name and never refused for it, and where the platform names no home folder there is none to guard) | the run folder, the common parent, and to copy the run folders under one study folder |
+| `--out` is a run folder or lies in one (84A) | the folder, the run folder, and to choose a folder outside it |
+| `--out`'s `transcripts/` is a link (owner decision 96A) | the link, and to remove it or choose another folder |
+| The build cannot be moved into place and the previous report cannot be moved back (96A) | where the previous report now is, and to move it back by hand; and, when it could not be marked against removal, that, and to move it back before building again (97A) |
+| `--out` holds a staging name, `transcripts.new`, `transcripts.old` or `index.html.new` (owner decision 97A) | every such name found (101A), that it may be what an interrupted build left or the user's, that this command never deletes it, and to delete it or move it elsewhere |
+| A file or folder is written into `--out` while the build runs, found in the folder moved aside as the previous report (owner decision 101A) | what was written, that it is left in place with the previous report and nothing was replaced, and to move it elsewhere and build again |
+| `--out` holds the mark of a previous report a build could not move back (97A) | the file, and, once the report is moved back by hand, to delete it and build again |
+| The run folders lie on different drives, so they have no common parent to be named relative to (owner decision 85A) | that, and to copy them under one folder |
+| A scored package's id cannot name a file: empty, a path separator, `.` or `..`, a character or a device name Windows refuses, a trailing dot or space; or two ids are one file name when case-folded (84A) | the run folder, the id or ids, and why |
 
 Not refused, each shown as section 4 or 5 says: a folder written before `prompts.json`, missing
 usage, a failed repetition, a missing package, an unreadable tail of the event log (a truncated or
-corrupt packed stream included), a missing or stale tool result, a folder with no provenance. A
-packed folder is read as its plain form was (owner decision 28A).
+corrupt packed stream included) or a body the walk cannot read, each shown as "unreadable from
+line N" or "from seq N"; a recorded message past the log's end ("this turn is not in the event
+log", or "not shown: the log is unreadable before this turn"); a missing or stale tool result; a
+folder with no provenance; a previous report or a killed build's sibling that cannot be removed,
+named on a warning line (section 6). A packed folder is read as its plain form was (owner decision
+28A).
 
 ## 8. Performance (SC-009)
 
@@ -232,6 +303,13 @@ smaller build. "Pilot-size" is fixed for the test as 40 calls per transcript wit
 envelope; no templating library. Should the pilot's real sizes break the budget, the alternative is
 linking each result to its file in the run folder rather than embedding it, which the owner decides
 (it moves the page away from "one self-contained transcript").
+
+Owner decision 82A (2026-10-14) kept embedding: the budget measures the report's own work. On the
+development machine the first open of each freshly written file costs about 6.6 ms under Windows
+Defender real-time scanning, so a build at once over the freshly written fixture took 242.7 s for
+its about 37,600 stored results; the perf fixture therefore opens each stored result once before
+the timed build, and R-18 measured about 26 s. A first build over freshly written run folders on
+that machine still pays the scanning on top.
 
 ## 9. Tests
 
@@ -297,7 +375,8 @@ contract adds, in `reviewer/tests/unit/test_benchmark_report_page.py`:
 - R-18 section 8's 940 transcripts, their streams packed, build in under 60 seconds and every link on
   the index resolves to a page (SC-009; RF-46; 28A). The perf fixture writes each stream packed with
   `gzip.compress(data, compresslevel=9, mtime=0)`, `provenance.md` 6.7's rule, since `benchmark pack`
-  lands after this slice.
+  lands after this slice, and opens each stored result once before the timed build (owner decision
+  82A, section 8).
 
 ## 10. Defaults this contract takes
 

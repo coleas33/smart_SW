@@ -143,6 +143,7 @@ def test_a_follow_up_takes_an_ended_session_back_to_running(chat: ChatSession) -
     [
         (),
         (ChatState.EXTRACTING,),
+        (ChatState.EXTRACTING, ChatState.AWAITING_SEND),
         (ChatState.EXTRACTING, ChatState.RUNNING),
         (ChatState.EXTRACTING, ChatState.RUNNING, ChatState.WAITING_ENGINEER),
         (ChatState.EXTRACTING, ChatState.RUNNING, ChatState.ENDED),
@@ -177,6 +178,11 @@ def test_failed_is_terminal(chat: ChatSession, target: ChatState) -> None:
         ((), ChatState.RUNNING),
         ((ChatState.EXTRACTING,), ChatState.IDLE),
         ((ChatState.EXTRACTING,), ChatState.WAITING_ENGINEER),
+        ((ChatState.EXTRACTING, ChatState.AWAITING_SEND), ChatState.IDLE),
+        ((ChatState.EXTRACTING, ChatState.AWAITING_SEND), ChatState.EXTRACTING),
+        ((ChatState.EXTRACTING, ChatState.AWAITING_SEND), ChatState.AWAITING_SEND),
+        ((ChatState.EXTRACTING, ChatState.AWAITING_SEND), ChatState.WAITING_ENGINEER),
+        ((ChatState.EXTRACTING, ChatState.AWAITING_SEND), ChatState.ENDED),
         ((ChatState.EXTRACTING, ChatState.RUNNING), ChatState.RUNNING),
         ((ChatState.EXTRACTING, ChatState.RUNNING), ChatState.EXTRACTING),
         ((ChatState.EXTRACTING, ChatState.RUNNING, ChatState.ENDED), ChatState.EXTRACTING),
@@ -205,6 +211,26 @@ def test_a_second_turn_cannot_start_while_one_is_running(chat: ChatSession) -> N
 
     with pytest.raises(InvalidTransitionError):
         chat.to(ChatState.RUNNING)
+
+
+def test_an_unsent_chat_waits_holds_its_folder_and_reports_the_state(chat: ChatSession) -> None:
+    assert ChatState.AWAITING_SEND == "awaiting_send"
+    chat.to(ChatState.EXTRACTING)
+    chat.to(ChatState.AWAITING_SEND)
+    assert not chat.finished
+    assert chat.public()["state"] == "awaiting_send"
+
+
+def test_a_send_can_run_and_return_to_waiting_then_fail(chat: ChatSession) -> None:
+    for state in (
+        ChatState.EXTRACTING,
+        ChatState.AWAITING_SEND,
+        ChatState.RUNNING,
+        ChatState.AWAITING_SEND,
+        ChatState.FAILED,
+    ):
+        chat.to(state)
+        assert chat.state is state
 
 
 # --- what the pane is told ----------------------------------------------------------

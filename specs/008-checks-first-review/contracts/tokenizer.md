@@ -1,5 +1,7 @@
 # Contract: The Tokenizer
 
+*Feature 015 amendment notice, 2026-10-08:* Planned amendments for the Send estimate are specified in [015 estimate.md](../../015-review-send-gate/contracts/estimate.md).
+
 Normative for `reviewer/src/swreview/tokens.py`, `swreview tokenizer fetch`, and where the
 vocabulary lives (FR-003, FR-026). Amended 2026-09-23: the vocabulary is **not** vendored into the
 repository; it is fetched once into a per-user cache (research R2.7).
@@ -11,6 +13,12 @@ count this feature prints or records - the replay's rounds, a step's `result_tok
 largest results - comes from `count_tokens(text) -> int` over exactly the text the adapter sends
 (`tool_result_text`, `model-view.md` section 6), and every surface that prints one names the
 encoding. A Gemini recording is priced with the same encoding and labelled a shape comparison.
+
+*Feature 015 amendment landed 2026-10-12 (T044–T045):* the pane's Send sentence is an
+exception to naming the encoding on every surface. Its cached first-request count uses
+this same encoding, but the sentence names no encoding and calls a Gemini count
+approximate because Gemini counts tokens its own way (015 `contracts/estimate.md`
+sections 3 and 4). An unavailable count remains `None`, shown with no number.
 
 ## 2. The vocabulary lives in a per-user cache, never in the repository
 

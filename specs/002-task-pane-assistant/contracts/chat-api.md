@@ -1,10 +1,39 @@
 # Reviewer Backend API
 
+*Feature 015 amendment, 2026-10-12 (T041):* `POST /sessions` accepts the optional boolean
+`send_when_checked` (default true); false saves a checks-only review in `awaiting_send`.
+Follow-ups before Send are refused with `409 NotSent`. The flow is specified in
+[015 review-flow.md](../../015-review-send-gate/contracts/review-flow.md).
+The later Send and restoration changes remain specified in
+[015 recheck.md](../../015-review-send-gate/contracts/recheck.md).
+
+*Feature 015 amendment, 2026-10-14 (T095):* `POST /sessions` also accepts the optional boolean
+`recheck` (default false): the re-run of a waiting review's checks in its own `run_dir`,
+which needs `send_when_checked: false` (`400 InvalidRequest` otherwise, as for a non-boolean
+value or a `retry_of`). A live chat on the folder in `awaiting_send` is adopted: `201` with
+that chat's `{chat_id, review_session_id, not_examined}` and nothing run. A folder being set
+up (a re-run still running) or a running chat is `409 RunDirInUse`; with no live chat, a
+folder with no readable `session.json` is `404 UnknownReview` and a record with no
+`model_status`, or one already sent, is `409 NotWaiting`. The earlier `session.json` and
+`attention.json` are copied, not moved, so they stay canonical until the re-run's
+finalization replaces them; the answer is an unticked start's `201`. See
+[015 recheck.md](../../015-review-send-gate/contracts/recheck.md) sections 2, 6 and 7.
+
+*Feature 015 amendment, 2026-10-14 (T100):* `GET /reviews/{run_id}` restores a record whose
+`model_status.state` is `not_sent` or `send_failed` read-only as every record, with its own
+`read_only_reason`: the words file's `read_only_lead`, a space, and `send.restored_line` with
+`{when}` the stored `checked_at` wall clock (`YYYY-MM-DD HH:MM`, never converted), never
+`read_only_off`. Its summary carries the `send` block `{state: "restored", input_tokens: null,
+approximate, text: send.restored, failure, rerun_failed_text}`, with no `session_id`. Every other
+record keeps the words file's `read_only` sentence and no block. Still writes nothing. See
+[015 recheck.md](../../015-review-send-gate/contracts/recheck.md) section 8.
+
 *Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed by 2026-09-27 (013 T054):* the Review tab's Start here is replaced by the grouped findings list (`<section id="findings-by-type">`), so `not_examined`'s headline sits above that list; see 013 `contracts/grouped-list.md` section 5 (lands with 013 T054).
 
 One loopback service, not one per tab: `swreview chat serve` is the **reviewer backend**,
-and it serves **checks as well as chats**. The `/sessions/*` routes run a review turn
-through a provider; the `/checks/*` routes grade a design without one - against the
+and it serves **checks as well as chats**. A ticked `/sessions` start runs a review turn
+through a provider; an unticked start runs the code checks and waits for Send without
+building a provider client or requiring a key. The `/checks/*` routes grade a design - against the
 Resilient Modeling rules (feature 003, User Story 6) or against a standards profile
 (feature 006, User Story 3) - and construct no provider, read no key and make no
 network call at all. Everything below - the handshake, the token, the origin rules, the
@@ -35,10 +64,10 @@ the settings file.
 | POST | `/engineering-context/{run_id}/requirement` | typed target/text/source/assumptions plus `expected_head` | 200 publication; 400 malformed or unavailable target; 409 stale/busy context. |
 | POST | `/engineering-context/{run_id}/force` | typed target/force/unit/direction/frame/point/source/assumptions plus `expected_head` | 200 publication; unknown stays unknown; 400 malformed or unavailable target; 409 stale/busy context. |
 | POST | `/engineering-context/{run_id}/confirm` | `{expected_head, record_id, actor, expected_record_digest, expected_dependency_digest}` | 200 publication of exact explicit saved-input receipt; 400 unconfirmable inputs; 409 stale/busy context. |
-| POST | `/sessions` | `{run_dir, provider, model, effort, bridge: {pipe, secret} \| null, engineer, retry_of: chat_id \| null, standards_profile: str \| null}` | `201 {chat_id, review_session_id, not_examined}`; starts the review turn immediately. `standards_profile` is the configured profile path, passed to the reasoning side to attach `check_standards`; blank or null means no profile. An unreadable or invalid configured profile leaves the review possible and makes the standards family not evaluated, rather than refusing the review. `not_examined` is the shared `{sentence, headline, instances}` block from `report/unexamined.py`, or null when every instance was read; Review displays its `headline` (names, no ids; feature 009 T013) above the grouped findings (`<section id="findings-by-type">`, feature 013 T054; above Start here until then) as soon as the session starts, with the instances' ids in a fold, and falls back to `sentence` from a backend that sends no `headline`. `sentence` keeps the ids and is what `report.md` and both check bodies print. 400 if `run_dir` fails the path rule below or `run_dir/package.json` is missing or invalid. |
+| POST | `/sessions` | `{run_dir, provider, model, effort, bridge: {pipe, secret} \| null, engineer, retry_of: chat_id \| null, standards_profile: str \| null, send_when_checked?: boolean}` | `201 {chat_id, review_session_id, not_examined}`; starts the review turn immediately when `send_when_checked` is true or absent. False runs the code checks, builds the Send cache, finalizes and renders the record, then registers the chat in `awaiting_send`, without a provider request. A non-boolean value is `400 InvalidRequest` naming `send_when_checked`. `standards_profile` is the configured profile path, passed to the reasoning side to attach `check_standards`; blank or null means no profile. An unreadable or invalid configured profile leaves the review possible and makes the standards family not evaluated, rather than refusing the review. `not_examined` is the shared `{sentence, headline, instances}` block from `report/unexamined.py`, or null when every instance was read; Review displays its `headline` (names, no ids; feature 009 T013) above the grouped findings (`<section id="findings-by-type">`, feature 013 T054; above Start here until then) as soon as the session starts, with the instances' ids in a fold, and falls back to `sentence` from a backend that sends no `headline`. `sentence` keeps the ids and is what `report.md` and both check bodies print. 400 if `run_dir` fails the path rule below or `run_dir/package.json` is missing or invalid. |
 | GET | `/sessions/{chat_id}` | | `ChatSession` state without `token` and without `bridge` (neither the HTTP token nor the bridge secret is ever echoed) |
 | GET | `/sessions/{chat_id}/events` | `Last-Event-ID` header optional | `text/event-stream`; replays from `events.jsonl` after the given id, then live. Event `id` = `seq`, `event` = `type`, `data` = JSON body. |
-| POST | `/sessions/{chat_id}/messages` | `{text}` | 202; appends a user turn and runs, including on a session whose previous turn already ended (`ended → running`, see data-model section 3). 409 if a turn is running. |
+| POST | `/sessions/{chat_id}/messages` | `{text}` | 202; appends a user turn and runs, including on a session whose previous turn already ended (`ended → running`, see data-model section 3). 409 if a turn is running; `409 NotSent` while the run waits for Send, without changing the review. |
 | POST | `/sessions/{chat_id}/evidence/{request_id}` | `{answer}` | 202; marks answered, resumes. 404 unknown request; 409 already answered. Both refusal bodies carry `request_id` naming the request beside `error_class`, `message` and `retryable` (feature 009 T042), as the batch route's will; no other error body has the key. |
 | POST | `/sessions/{chat_id}/evidence` | `{answers: [{request_id, answer}, ...]}` | 202; every named request answered, one `evidence.answered` each in submission order, and the review resumes **once** (feature 008, `specs/008-checks-first-review/contracts/answer-batch.md`, normative). Checked in this order, and a refusal changes nothing: `404 UnknownChat`; `400 InvalidRequest` naming the index or the repeated id when `answers` is not a non-empty list of objects each with a non-empty string `request_id` and a non-empty string `answer`, or names one id twice; `409 TurnRunning` / `SessionFailed`; then every id, `404 UnknownEvidenceRequest` / `409 AlreadyAnswered` naming the first failing id. Some of the open requests may be answered; the rest stay open. The single-answer route above stays and uses the same validator (`runner.answerable`). No new event type. |
 | POST | `/sessions/{chat_id}/findings/{finding_id}/disposition` | `{decision, note, by}` | 200 with the `Finding`; 409 on an illegal transition. Re-renders `report.md`. |
@@ -47,7 +76,7 @@ the settings file.
 | GET | `/sessions/{chat_id}/report` | | `text/markdown` of `report.md` |
 | GET | `/sessions/{chat_id}/attention` | | `200` with the `Ranking` of `specs/007-attention-policy-gate/contracts/attention.md` section 4 **minus `session_id`** - the same block the two check results carry in their `attention` key. Computed from the **live** session the run is holding on every call, so a disposition recorded a moment ago is in it; it **writes nothing**, not `report.md` and not `attention.json`, because a page refresh must not refresh the record of the order the engineer was shown. A review that produced no findings answers `200` with `rows: []` and `empty_reason` set rather than an empty list alone, so the Review tab's pinned panel can say there is nothing to start with and why (feature 007 FR-023, FR-024). Since feature 009 (T015) the body is a `ReviewRanking`: that `Ranking` unchanged plus one `summary` key, the Review tab's summary computed from the same live session and the run's package (`specs/009-engineer-workspace/contracts/review-summary.md`); neither check body nor `attention.json` carries it. `404 UnknownChat`. |
 | GET | `/sessions/{chat_id}/snapshot` | | `200` with `report/snapshot.review_snapshot` of the run this backend holds (feature 009, `specs/009-engineer-workspace/contracts/sessions.md` section 3, data-model section 8): `{run_id, read_only: false, read_only_reason: null, chat_state, last_seq, document, findings, evidence_requests, coverage, ranking, not_examined}` - the live session's findings and requests in session order as their stream bodies, the coverage flattened bucket by bucket as `coverage` event bodies, the `ReviewRanking` with its summary (resume cost from the run's ledger), the chat's state and the sink's last `seq`. Computes and **writes nothing**. `404 UnknownChat`. |
-| GET | `/reviews/{run_id}` | | `200` with the same snapshot read-only from the run folder `run_id` names under the run root (sessions.md section 4): `session.json` and `package.json` loaded, the ranking and summary recomputed in memory with no ledger (`resume_input_tokens: null`), `read_only: true` with the words file's `read_only` sentence, `chat_state` and `last_seq` null. `run_id` goes through the `run_dir` path rule as `check_id` does. `404 UnknownReview`, naming only the id, for a name the rule refuses, a missing folder, a folder with no `session.json`, a check folder (`check.json`), or a file that cannot be read or does not validate. **Writes nothing**: every file under the folder keeps its bytes and modification time. |
+| GET | `/reviews/{run_id}` | | `200` with the same snapshot read-only from the run folder `run_id` names under the run root (sessions.md section 4): `session.json` and `package.json` loaded, the ranking and summary recomputed in memory with no ledger (`resume_input_tokens: null`), `read_only: true` with the words file's `read_only` sentence (a record that waits for Send: its dated line and `restored` Send block, feature 015 T100), `chat_state` and `last_seq` null. `run_id` goes through the `run_dir` path rule as `check_id` does. `404 UnknownReview`, naming only the id, for a name the rule refuses, a missing folder, a folder with no `session.json`, a check folder (`check.json`), or a file that cannot be read or does not validate. **Writes nothing**: every file under the folder keeps its bytes and modification time. |
 | POST | `/checks/rms` | `{run_dir, scope: "part" \| "equations" \| "all", document_id: str \| null, standards_profile?: str \| null}` | `201 CheckResult` (feature 003 `contracts/model-check.md`; with a `standards_profile`, since feature 013 T148, the body also carries `bought_parts`). Runs synchronously: no provider, no network call, no turn, and no chat is registered for the folder. 400 when `run_dir` fails the path rule, when `run_dir/package.json` is missing or invalid (`InvalidPackage`), when the package carries no feature rows (`EmptyFeatureTree`), when the carry-forward candidate cannot be parsed (`UnreadableExceptions`), or when `scope` is `"assembly"` (`ScopeNotAvailable`) |
 | POST | `/checks/standards` | `{run_dir, profile_path: str}` | `201 StandardsResult` (feature 006 `contracts/standards-check.md`, the normative source for this row and the two below). Runs synchronously for the same reasons as `/checks/rms`: no provider, no key, no network call, no turn, and no chat is registered for the folder. **There is no `scope`**: every standards check runs on every run, the document kinds decide which apply, and a body carrying one is refused rather than quietly answered. 400 when `run_dir` fails the path rule, when `run_dir/package.json` is missing or invalid (`InvalidPackage`), when the package does not record the phases the standards checks read (`MissingStandardsPhases`), when the root document has no recorded kind or no path (`UngradableRoot`), when `profile_path` is absent, unreadable or not configured (`ProfileUnreadable`), when the profile parses and fails its schema (`ProfileInvalid`), or when the carry-forward candidate cannot be parsed (`UnreadableExceptions`) |
 | GET | `/checks/{check_id}` | | `200` re-read from that check run folder - the recorded `session.json` and `check.json`, with nothing evaluated and nothing written, so a refresh cannot overwrite a recorded disposition; `404 UnknownCheck` when the run root holds no such folder, no check ran in it, or its session is no longer the one its record names. The answer is **the record's own family shape**: a `CheckResult` for a folder whose `check.json` carries `family: "rms"` or no `family` at all, a `StandardsResult` for `family: "standards"`. Neither family ever answers for the other: the route answers in the record's own family shape, and a page reads back only the ids its own evaluation route produced - handed the other family's shape it renders nothing it cannot read |
@@ -60,6 +89,16 @@ provider's error class name.
 
 Concurrency: one running turn per chat; the server serializes messages and evidence
 answers per chat and refuses with 409 rather than queueing silently.
+
+One chat owns each run folder. Before setup's first await, both ticked and unticked starts
+reserve its resolved path: an overlapping start on the same folder is `409 RunDirInUse`
+before another setup or provider build, while another folder may start independently.
+The pending reservation is released on failure and after registration; an unfinished
+registered chat, including `awaiting_send`, continues to hold the folder. A failed start
+registers no chat, and existing on-disk Retry rules still apply to any files it left.
+An unticked start is registered only after its cache, finalization and render finish, so
+shutdown cannot finalize that unregistered run concurrently. Stop and graceful shutdown
+write nothing for a finalized waiting review; its state remains `awaiting_send`.
 
 Since Feature 016, `POST /sessions` optionally accepts
 `engineering_context: {context_id, head_digest, package_sha256}`. Omission preserves
@@ -150,8 +189,39 @@ A running turn owns process state that is not on disk, so:
 
 - `settings.save` in the pane MUST NOT restart the backend while a turn is running; the host
   refuses with `error {error_class: "TurnRunning"}` and the page offers Save again when the
-  turn ends (`pane-host-messages.md`).
+  turn ends (`pane-host-messages.md`). A review at `awaiting_send` has no running turn, so
+  Save is accepted there. A failed settings write is `SettingNotSaved`, with the stored
+  settings unchanged. The Review box saves its setting without a restart or turn check.
 - On any shutdown signal the server finalizes every live chat before exiting: it writes
   `turn.ended {reason: "error"}` when a turn was mid-flight, then `session.ended` with an
   `ended_at`, and saves `session.json`. A session is never left without an ended time
   (FR-008), including the provider-failure path that raises out of the runner.
+
+
+## Feature 015 Send route (T061/T064, 2026-10-12)
+
+`POST /sessions/{chat_id}/send` accepts an empty body (other keys ignored) and returns 202
+with the running chat view. It refuses, in order: UnknownChat (404), SessionFailed,
+TurnRunning, NotWaiting, NoCredential (each 409). The last checks the existing settings
+resolver's usable credential, including scripted and Gemini enterprise configurations.
+Refusals change nothing. Validation, awaiting_send -> running, the in-flight flag and worker
+submission have no intervening await on the event loop. The adapter factory and Send execute
+on that chat's single worker, so another Send or answer encounters running. The first usage
+marks the persisted review sent; a Stop during a successful held build reaches the ordinary
+tool-boundary stop. Preparation guards and first-request rollback are specified by feature015
+`contracts/review-flow.md` section 6 and implemented by T066; they are not a new refusal after 202.
+
+
+Feature 015 T066 completes the Send guard: the rollback model-status snapshot is taken before
+the factory; pre-request failure restores it in memory without saving, clears the in-flight
+marker before its error, and returns to awaiting_send. A first request failure before any usage
+replaces this attempt's Interrupted entry with its redacted failure, empties history and restores
+the DeferredProvider before the error/turn-ended/finalization sequence. Existing earlier failure
+history remains. A completed round retains today's fatal-error behavior. Settling awaiting_send
+releases the retained bridge transport; the worker finally clears Stop after success or failure.
+
+
+Feature 015 T068 serializes a waiting review's disposition/timing write on the same one-thread
+executor its Send and answers use. The route awaits the write while leaving awaiting_send and
+Stop untouched; a subsequently accepted Send or answer queues behind it. A failed write answers
+its existing error and does not cancel queued work. Other chat states retain run_in_threadpool.

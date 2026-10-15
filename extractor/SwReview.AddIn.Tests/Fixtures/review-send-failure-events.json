@@ -1,0 +1,58 @@
+{
+  "source_fixture_sha256": "e15bdc9a1e2beb0d455bf2d06eb447a11701053fa7e1247fc85ddaa379aaa6cb",
+  "events": [
+    {
+      "seq": 123,
+      "at": "2026-10-09T12:00:00Z",
+      "type": "session.sent",
+      "body": {
+        "provider": "fake",
+        "model": "fake-1",
+        "effort_mapping": {
+          "requested": "high",
+          "provider_param": "fake.effort",
+          "provider_value": "high"
+        },
+        "estimate": {
+          "input_tokens": 12905,
+          "encoding": "o200k_base",
+          "approximate": false
+        }
+      }
+    },
+    {
+      "seq": 124,
+      "at": "2026-10-09T12:00:00Z",
+      "type": "error",
+      "body": {
+        "error_class": "FixtureRequestError",
+        "message": "FICT scripted first request failed",
+        "retryable": true
+      }
+    },
+    {
+      "seq": 125,
+      "at": "2026-10-09T12:00:00Z",
+      "type": "turn.ended",
+      "body": {
+        "reason": "error"
+      }
+    },
+    {
+      "seq": 126,
+      "at": "2026-10-09T12:00:00Z",
+      "type": "session.ended",
+      "body": {
+        "ended_at": "2026-10-09T12:00:00+00:00",
+        "timing": {
+          "baseline_minutes": null,
+          "assisted_supervision_minutes": 0.0,
+          "assisted_verification_minutes": 0.0,
+          "false_alarm_handling_minutes": 0.0,
+          "unattended_runtime_minutes": 0.0,
+          "net_saved_minutes": null
+        }
+      }
+    }
+  ]
+}

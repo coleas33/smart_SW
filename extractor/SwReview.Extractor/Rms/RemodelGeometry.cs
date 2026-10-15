@@ -6,6 +6,14 @@ using SwReview.Extractor.Sw;
 
 namespace SwReview.Extractor.Rms;
 
+/// <summary>The three override flags; their values, not overridden mass data, decide usability.</summary>
+public interface IMassPropertyOverrideReading
+{
+    bool GetOverrideMass();
+    bool GetOverrideCenterOfMass();
+    bool GetOverrideMomentsOfInertia();
+}
+
 /// <summary>
 /// The typed <c>IMassProperty2</c>, as the geometry reading addresses it. One member per
 /// VERIFIED interop call, so the reading is testable without a SOLIDWORKS seat.
@@ -18,16 +26,18 @@ namespace SwReview.Extractor.Rms;
 /// </summary>
 public interface IMassPropertyReading
 {
+    /// <summary><c>IMassProperty2.GetOverrideOptions()</c>; null is unreadable, never no overrides.</summary>
+    IMassPropertyOverrideReading? GetOverrideOptions();
+
     /// <summary>
-    /// <c>IMassProperty2.set_AccuracyLevel</c>; always <c>Higher = 2</c>. PROBE-8 sets it; the
-    /// copy's reading does not (U27, default taken 2026-09-28, the owner may revise), until
-    /// PROBE-8 has run it on a seat.
+    /// <c>IMassProperty2.set_AccuracyLevel</c>; retained for adapter tests at <c>Higher = 2</c>.
+    /// Neither PROBE-8 nor the copy's reading sets accuracy (T187).
     /// </summary>
     void SetAccuracyLevel(int accuracyLevel);
 
     /// <summary>
-    /// <c>IMassProperty2.set_SelectedItems</c>: the solid bodies, and nothing else. PROBE-8 sets
-    /// it on its throwaway part; the copy's reading measures the whole part instead (U27).
+    /// <c>IMassProperty2.set_SelectedItems</c>: retained for adapter tests over solid bodies.
+    /// PROBE-8 and the copy's reading both measure the whole part without selection (T187).
     /// </summary>
     void SetSelectedItems(IReadOnlyList<object> bodies);
 
@@ -119,7 +129,9 @@ public interface IGeometrySource
 /// reading needs guards a selected-body one did not, and each fails closed: more than one solid
 /// body is not measured at all; the caller clears the copy's selection first, because
 /// pre-selected bodies are included; and a volume that is not positive and finite is not a
-/// reading.
+/// reading. T187 also checks the typed override options and all three flags before recalculation:
+/// any override or unreadable options ends the reading without measured values; a throwing read
+/// remains an error. PROBE-8 now calibrates this same fresh whole-part/default path.
 ///
 /// Three rules the shape encodes, each with its own test:
 ///
@@ -138,7 +150,7 @@ public static class RemodelGeometry
 {
     /// <summary>
     /// <c>swMassPropertyAccuracyLevel_e.swMassPropertyAccuracyLevel_Higher</c> (VERIFIED value 2):
-    /// what PROBE-8 measures at. The copy's reading sets no accuracy (U27).
+    /// retained adapter constant. PROBE-8 and the copy's reading set no accuracy (T187).
     /// </summary>
     public const int HigherAccuracy =
         (int)swMassPropertyAccuracyLevel_e.swMassPropertyAccuracyLevel_Higher;
@@ -149,7 +161,8 @@ public static class RemodelGeometry
     /// <summary>
     /// <c>swMassPropertiesStatus_e.swMassPropertiesStatus_UnknownError</c> (VERIFIED value 1):
     /// the mass property could not be built, <c>Recalculate()</c> answered false, the part has
-    /// more than one solid body, or the volume read back was not positive and finite. The typed
+    /// more than one solid body, override options are unreadable or any override is set, or
+    /// the volume read back was not positive and finite. The typed
     /// interface carries no status member of its own (VERIFIED absence on 32.5.0.48), so the
     /// status is read off what the calls answered rather than out of a field that is not there.
     /// </summary>
@@ -179,6 +192,10 @@ public static class RemodelGeometry
     private const string EdgeCountMember = "GetEdgeCount";
     private const string MaterialMember = "GetMaterialPropertyName2";
     private const string CreateMember = "CreateMassProperty2";
+    private const string OverrideOptionsMember = "GetOverrideOptions";
+    private const string OverrideMassMember = "get_OverrideMass";
+    private const string OverrideCenterMember = "get_OverrideCenterOfMass";
+    private const string OverrideMomentsMember = "get_OverrideMomentsOfInertia";
     private const string UseSystemUnitsMember = "set_UseSystemUnits";
     private const string RecalculateMember = "Recalculate";
     private const string VolumeMember = "get_Volume";
@@ -262,6 +279,24 @@ public static class RemodelGeometry
         IMassPropertyReading? properties = Call(gate, CreateMember, document.CreateMassProperty, stage);
         if (properties == null)
         {
+            reading.Status = StatusUnknownError;
+            return reading;
+        }
+
+        IMassPropertyOverrideReading? overrides = Call(gate, OverrideOptionsMember, properties.GetOverrideOptions, stage);
+        if (overrides == null)
+        {
+            reading.Status = StatusUnknownError;
+            return reading;
+        }
+
+        bool massOverride = Call(gate, OverrideMassMember, overrides.GetOverrideMass, stage);
+        bool centerOverride = Call(gate, OverrideCenterMember, overrides.GetOverrideCenterOfMass, stage);
+        bool momentsOverride = Call(gate, OverrideMomentsMember, overrides.GetOverrideMomentsOfInertia, stage);
+        if (massOverride || centerOverride || momentsOverride)
+        {
+            // Document overrides can conceal a geometry change. No overridden number enters
+            // either side of the gate; an unreadable flag throws instead of guessing false.
             reading.Status = StatusUnknownError;
             return reading;
         }

@@ -25,7 +25,6 @@ The driver makes no network call and needs no key and no SOLIDWORKS unless its c
 
 from __future__ import annotations
 
-import json
 import re
 import shutil
 import tempfile
@@ -38,6 +37,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from swreview.agent import runner
 from swreview.agent.providers import (
     FRAMING_TOKENS,
     ProviderTool,
@@ -356,11 +356,7 @@ def _prefix(run: ReviewRun) -> str:
     difference their settings make; the provider's own rendering of the schemas is not seen
     here, which is why the replay calibrates the prefix to the recorded first round.
     """
-    tools = [
-        {"name": tool.name, "description": tool.description, "parameters": tool.schema}
-        for tool in run.tools
-    ]
-    return run.system + json.dumps(tools) + run.opening_message
+    return runner.request_prefix(run.system, run.tools, run.opening_message)
 
 
 def _play(run: ReviewRun, turns: Sequence[TurnPlan]) -> PlayedReview:

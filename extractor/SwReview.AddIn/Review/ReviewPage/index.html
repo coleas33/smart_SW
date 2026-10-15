@@ -96,6 +96,7 @@
     <button type="button" id="save-settings">Save</button>
     <span id="save-state" class="note" role="status"></span>
   </div>
+  <p id="waiting-settings-note" class="note" hidden></p>
 </section>
 
 <!--
@@ -159,6 +160,8 @@
     <button type="button" id="open-folder" disabled>Open run folder</button>
     <button type="button" id="open-log">View log</button>
   </div>
+  <label class="check send-when-checked"><input type="checkbox" id="send-when-checked"> Send to the model when the checks finish</label>
+  <p id="send-when-checked-note" class="note bad" role="status" hidden></p>
 </section>
 
 <!--
@@ -203,6 +206,7 @@
   none leaves the page exactly as it was (FR-030).
 -->
 <section id="summary" class="panel summary-panel" aria-label="Review summary" hidden></section>
+<section id="send" class="send-panel" aria-label="Send to model" hidden></section>
 
 <!--
   Questions for you (feature 009 User Story 4): what the review cannot see and only the engineer

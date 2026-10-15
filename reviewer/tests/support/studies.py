@@ -8,15 +8,15 @@ themselves.
 
 The aggregate here is built **by hand**, deliberately: a builder that called the
 scorer's own `_aggregate` would assert the code against itself. The null rule it applies
-is stated once in `_sum_or_none` below and is the same rule the scorer applies - any null
-in any package makes that total null, never a partial sum.
+is the scorer's own `sum_or_none`, imported rather than restated (feature 014 owner decision
+85A) - any null in any package makes that total null, never a partial sum.
 """
 
 from __future__ import annotations
 
 import json
 from collections import Counter
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -62,6 +62,7 @@ from swreview.benchmark.scorecard import (
     RecallByProducer,
     RecallByTag,
     Scorecard,
+    sum_or_none,
 )
 from swreview.checks.standards.document import DATA_CARD_COMPLETE
 from swreview.checks.standards.report import PROFILE_LIMIT
@@ -370,11 +371,6 @@ def step_tools(spec: PackageSpec) -> list[str]:
     return [spec.tool_names[index % len(spec.tool_names)] for index in range(spec.tool_calls)]
 
 
-def _sum_or_none(values: Iterable[int | None]) -> int | None:
-    collected = list(values)
-    return None if any(value is None for value in collected) else sum(collected)  # type: ignore[arg-type]
-
-
 def package_score(spec: PackageSpec) -> PackageScore:
     usage = spec.usage()
     timing = spec.timing()
@@ -486,14 +482,14 @@ def scorecard(spec: RunSpec) -> Scorecard:
             ),
             median_net_saved_minutes=median(timed) if timed else None,
             packages_with_timing=len(timed),
-            input_tokens=_sum_or_none(package.input_tokens for package in spec.packages),
-            cached_input_tokens=_sum_or_none(
+            input_tokens=sum_or_none(package.input_tokens for package in spec.packages),
+            cached_input_tokens=sum_or_none(
                 package.cached_input_tokens for package in spec.packages
             ),
-            output_tokens=_sum_or_none(package.output_tokens for package in spec.packages),
-            reasoning_tokens=_sum_or_none(package.reasoning_tokens for package in spec.packages),
-            total_tokens=_sum_or_none(package.total_tokens for package in spec.packages),
-            round_trips=_sum_or_none(package.rounds for package in spec.packages),
+            output_tokens=sum_or_none(package.output_tokens for package in spec.packages),
+            reasoning_tokens=sum_or_none(package.reasoning_tokens for package in spec.packages),
+            total_tokens=sum_or_none(package.total_tokens for package in spec.packages),
+            round_trips=sum_or_none(package.rounds for package in spec.packages),
             median_seconds_to_first_finding=None,
             packages_with_usage=sum(1 for score in per_package if score.usage is not None),
             detected=sum(len(score.matched_defect_ids) for score in per_package),

@@ -100,6 +100,7 @@ EffortLevel = Literal["low", "medium", "high", "xhigh"]
 
 EventType = Literal[
     "session.started",
+    "session.sent",
     "text.delta",
     "text.done",
     "tool.started",
