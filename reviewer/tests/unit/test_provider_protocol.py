@@ -451,3 +451,100 @@ def test_no_adapter_shapes_the_tool_event_pair_itself() -> None:
     )
 
     assert offenders == []
+
+
+# --- optional provider evidence on event bodies (T172) ----------------------------------
+
+
+@pytest.fixture
+def reported_usage() -> providers.TokenUsage:
+    return providers.TokenUsage(
+        input_tokens=12043,
+        cached_input_tokens=10240,
+        cache_write_tokens=1803,
+        output_tokens=512,
+        reasoning_tokens=448,
+        tool_result_input_tokens=None,
+        total_tokens=12555,
+        latency_s=4.31,
+    )
+
+
+@pytest.mark.parametrize("optional", [{}, {"served_model": None, "retries": None}])
+def test_usage_body_preserves_the_legacy_body_and_key_order(
+    reported_usage: providers.TokenUsage, optional: dict[str, Any]
+) -> None:
+    expected = {**valid_bodies()["usage"], "model": "fict-model-a"}
+
+    body = providers.usage_body(
+        reported_usage, round_index=0, provider="openai", model="fict-model-a", **optional
+    )
+
+    assert body == expected
+    assert list(body.items()) == list(expected.items())
+
+
+@pytest.mark.parametrize("optional", [{}, {"stop_reason": None, "retries": None}])
+def test_error_body_preserves_the_legacy_body_and_key_order(optional: dict[str, Any]) -> None:
+    expected = valid_bodies()["error"]
+
+    body = providers.error_body(**expected, **optional)
+
+    assert body == expected
+    assert list(body.items()) == list(expected.items())
+
+
+@pytest.mark.parametrize(
+    "optional",
+    [
+        {"served_model": "fict-model-a-2026-10-01"},
+        {"retries": 0},
+        {"served_model": "fict-model-a-2026-10-01", "retries": 2},
+        {"served_model": None, "retries": 0},
+        {"served_model": "", "retries": None},
+    ],
+)
+def test_usage_body_carries_optional_provider_fields(
+    reported_usage: providers.TokenUsage, optional: dict[str, Any]
+) -> None:
+    body = providers.usage_body(
+        reported_usage, round_index=0, provider="openai", model="fict-model-a", **optional
+    )
+
+    assert body == {
+        **valid_bodies()["usage"],
+        "model": "fict-model-a",
+        **{key: value for key, value in optional.items() if value is not None},
+    }
+
+
+@pytest.mark.parametrize(
+    "optional",
+    [
+        {"stop_reason": "SAFETY"},
+        {"retries": 0},
+        {"stop_reason": "SAFETY", "retries": 0},
+        {"stop_reason": None, "retries": 0},
+        {"stop_reason": "", "retries": None},
+    ],
+)
+def test_error_body_carries_optional_provider_fields(optional: dict[str, Any]) -> None:
+    body = providers.error_body(**valid_bodies()["error"], **optional)
+
+    assert body == {
+        **valid_bodies()["error"],
+        **{key: value for key, value in optional.items() if value is not None},
+    }
+
+
+def test_usage_from_body_ignores_optional_provider_fields(
+    reported_usage: providers.TokenUsage,
+) -> None:
+    body = {
+        **valid_bodies()["usage"],
+        "model": "fict-model-a",
+        "served_model": "fict-model-a-2026-10-01",
+        "retries": 2,
+    }
+
+    assert providers.usage_from_body(body) == reported_usage

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://smart-sw.local/contracts/chat-events.schema.json",
   "title": "ChatEvent",
-  "description": "One line of events.jsonl and one server-sent event. Bodies reuse feature 001 review-session definitions.",
+  "description": "One line of events.jsonl and one server-sent event. Bodies reuse feature 001 review-session definitions. Amended by feature 014: usage optionally carries served_model and retries, and error optionally carries stop_reason and retries; older bodies remain valid.",
   "type": "object",
   "additionalProperties": false,
   "required": ["seq", "at", "type", "body"],
@@ -52,7 +52,7 @@
         "properties": { "checks": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } }, "buckets": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["checked", "skipped", "unresolved", "failed", "out_of_scope"] } } } } } } },
     { "if": { "properties": { "type": { "const": "usage" } } },
       "then": { "properties": { "body": { "type": "object", "additionalProperties": false,
-        "description": "What one model round trip cost, emitted by the adapter once per request (feature 005). Every count is nullable because a field the endpoint omitted is unknown, not zero, and the two providers' sub-counts nest differently and are never summed across them. Required is every field: the event is new, so there is no older producer to keep valid.",
+        "description": "What one model round trip cost, emitted by the adapter once per request (feature 005). Every token count is nullable because a field the endpoint omitted is unknown, not zero, and the two providers' sub-counts nest differently and are never summed across them. The original fields remain required; feature 014's served_model and retries are optional so older bodies remain valid.",
         "required": ["round_index", "provider", "model", "input_tokens", "cached_input_tokens", "cache_write_tokens", "output_tokens", "reasoning_tokens", "tool_result_input_tokens", "total_tokens", "latency_s", "cache_diagnostic"],
         "properties": {
           "round_index": { "type": "integer", "minimum": 0, "description": "The adapter's own per-turn counter, zero-based and reset each turn, the convention tool.started.step_index already uses. No turn number is carried: turns are delimited by the turn.ended events" },
@@ -66,7 +66,9 @@
           "tool_result_input_tokens": { "type": ["integer", "null"], "minimum": 0, "description": "Gemini only; the same tokens are already inside input_tokens on OpenAI" },
           "total_tokens": { "type": ["integer", "null"], "minimum": 0 },
           "latency_s": { "type": "number", "minimum": 0, "description": "Wall clock of the one request, measured by the adapter. Never null" },
-          "cache_diagnostic": { "type": ["object", "null"], "description": "OpenAI's prompt-cache outcome for this round, recorded verbatim; null on Gemini, null on fake, and null on OpenAI whenever prompt_cache_options.comparison_response_id was not sent" } } } } } },
+          "cache_diagnostic": { "type": ["object", "null"], "description": "OpenAI's prompt-cache outcome for this round, recorded verbatim; null on Gemini, null on fake, and null on OpenAI whenever prompt_cache_options.comparison_response_id was not sent" },
+          "served_model": { "type": "string", "description": "Feature 014: the model id the provider reports answered this round, omitted when it reported none" },
+          "retries": { "type": "integer", "minimum": 0, "description": "Feature 014: the failed tries before this round's request succeeded, written only under a retry policy, which only benchmark attempts set" } } } } } },
     { "if": { "properties": { "type": { "const": "turn.ended" } } },
       "then": { "properties": { "body": { "type": "object", "additionalProperties": false, "required": ["reason"], "properties": { "reason": { "enum": ["end", "max_steps", "error", "stopped", "truncated"] } } } } } },
     { "if": { "properties": { "type": { "const": "session.ended" } } },
@@ -75,6 +77,8 @@
           "usage": { "$ref": "https://smart-sw.local/contracts/review-session.schema.json#/$defs/SessionUsage", "description": "What the session cost, summed under the one rule SessionUsage defines, so the pane does not own a second one (feature 005). Optional: absent when no round reported usage, and absent on every stream written before this feature" } } } } } },
     { "if": { "properties": { "type": { "const": "error" } } },
       "then": { "properties": { "body": { "type": "object", "additionalProperties": false, "required": ["error_class", "message", "retryable"],
-        "properties": { "error_class": { "type": "string" }, "message": { "type": "string" }, "retryable": { "type": "boolean" } } } } } }
+        "properties": { "error_class": { "type": "string" }, "message": { "type": "string" }, "retryable": { "type": "boolean" },
+          "stop_reason": { "type": "string", "description": "Feature 014: a stop the provider itself reported, a Gemini finish reason, an OpenAI incomplete reason or failure code, context_length_exceeded or input_token_limit" },
+          "retries": { "type": "integer", "minimum": 0, "description": "Feature 014: the tries made for the request that failed, written only under a retry policy" } } } } } }
   ]
 }
