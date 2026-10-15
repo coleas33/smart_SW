@@ -522,9 +522,11 @@ def _refuse_a_foreign_out(out: Path) -> None:
 def _relative_names(paths: Sequence[Path]) -> list[str]:
     """Each run folder relative to the common parent of the folders' parents.
 
-    Refused when there is none (two drives), and when a run folder lies in the home folder while
-    the common parent is the home folder or above it: the names would then carry the home
-    folder's own folders, `Users/<name>/AppData/...` (owner decision 84A).
+    Refused when there is none (two drives), and when two or more run folders, one in the home
+    folder, have the home folder or a folder above it as their common parent: the names would then
+    carry the home folder's own folders, `Users/<name>/AppData/...` (owner decision 84A). A lone
+    run folder is named by its own name, and is never refused for it; nor is any where the
+    platform names no home folder (owner decision 92A).
     """
     resolved = [path.resolve() for path in paths]
     try:
@@ -534,8 +536,8 @@ def _relative_names(paths: Sequence[Path]) -> list[str]:
             "the run folders have no common parent (they lie on different drives); "
             "copy them under one folder first"
         ) from None
-    home = Path.home().resolve()
-    if home.is_relative_to(common):
+    home = _home()
+    if home is not None and len(resolved) > 1 and home.is_relative_to(common):
         for path, full in zip(paths, resolved, strict=True):
             if full.is_relative_to(home):
                 raise ReportError(
@@ -544,6 +546,14 @@ def _relative_names(paths: Sequence[Path]) -> list[str]:
                     "the run folders under one study folder first"
                 )
     return [path.relative_to(common).as_posix() for path in resolved]
+
+
+def _home() -> Path | None:
+    """The home folder, or `None` where the platform names none: then none is guarded (92A)."""
+    try:
+        return Path.home().resolve()
+    except RuntimeError:
+        return None
 
 
 def _read_run(path: Path, name: str, scorecard: Scorecard, *, root: Path) -> _Run:

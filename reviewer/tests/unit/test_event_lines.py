@@ -693,14 +693,38 @@ def _sentence_names(module: str, tree: ast.AST) -> set[str]:
     while grew:
         grew = False
         for node in ast.walk(tree):
-            if not isinstance(node, ast.Assign):
+            bound = _binding(node)
+            if bound is None:
                 continue
-            if any(_names_a_sentence(part, names) for part in ast.walk(node.value)):
-                for target in node.targets:
-                    if isinstance(target, ast.Name) and target.id not in names:
-                        names.add(target.id)
+            targets, value = bound
+            if any(_names_a_sentence(part, names) for part in ast.walk(value)):
+                for name in (name for target in targets for name in _bound_names(target)):
+                    if name not in names:
+                        names.add(name)
                         grew = True
     return names
+
+
+def _binding(node: ast.AST) -> tuple[list[ast.expr], ast.expr] | None:
+    """An assignment's targets and value: plain, annotated, or a walrus (owner decision 92A)."""
+    if isinstance(node, ast.Assign):
+        return list(node.targets), node.value
+    if isinstance(node, ast.AnnAssign) and node.value is not None:
+        return [node.target], node.value
+    if isinstance(node, ast.NamedExpr):
+        return [node.target], node.value
+    return None
+
+
+def _bound_names(target: ast.expr) -> list[str]:
+    """The names a target binds: a name, or each name of a tuple or list, starred included."""
+    if isinstance(target, ast.Name):
+        return [target.id]
+    if isinstance(target, (ast.Tuple, ast.List)):
+        return [name for element in target.elts for name in _bound_names(element)]
+    if isinstance(target, ast.Starred):
+        return _bound_names(target.value)
+    return []
 
 
 def _sentence_offences(module: str, source: str) -> list[str]:
@@ -890,3 +914,27 @@ def test_the_report_replays_each_transcript_s_stream_once_found_through_event_st
     assert built.transcripts == len(expected) == 4
     assert folders == expected
     assert replayed == [(folder / EVENTS_FILE_NAME, True) for folder in expected]
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "from swreview.benchmark.scorecard import NO_EVENT_STREAM\n"
+        "REASON: str = NO_EVENT_STREAM\n"
+        "def where():\n"
+        "    return open(REASON)\n",
+        "from swreview.benchmark.scorecard import NO_EVENT_STREAM\n"
+        "REASON, OTHER = NO_EVENT_STREAM, 1\n"
+        "def where():\n"
+        "    return open(REASON)\n",
+        "from swreview.benchmark.scorecard import NO_EVENT_STREAM\n"
+        "def where():\n"
+        "    if (reason := NO_EVENT_STREAM):\n"
+        "        return open(reason)\n",
+    ],
+    ids=["annotated", "tuple-target", "walrus"],
+)
+def test_92a_the_alias_walk_follows_annotated_tuple_and_walrus_bindings(source: str) -> None:
+    found = _sentence_offences("probe.py", source)
+
+    assert found and all("is passed to open" in line for line in found), found
