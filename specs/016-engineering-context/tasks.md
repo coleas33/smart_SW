@@ -33,3 +33,5 @@
       "folder being set up" registry (015's `_pending_run_dirs`) for every start mode, and
       `awaiting_send` counted as busy (99A; T116 integration review, "saved context can be
       edited while a review that carries it waits for Send").
+- [x] T021 Final gate on Python 3.11 and 3.12, Release build, .NET and the replay check
+      ([receipt](validation.md#adaptation-to-feature-015s-send-gate--2026-10-15)).
