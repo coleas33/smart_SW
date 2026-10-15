@@ -377,6 +377,14 @@ From the adversarial review of slice 5.
 - **Options**: A: fix all five. B: leave them.
 - **Chosen**: A. (3) `test_85a_*` assert independent literals: each case's tags line (the shared builder's `fict-b` entry now `represents` R-1 and AF-2), the totals and an `unknown` row over a study run with one package unmeasured, and "thoughts" over a Gemini run. (4) `test_85a_run_folders_on_two_drives_are_refused` and a row in `report.md` 7; `report.md` 5 names `other_call` and the unreadable record, and 8 and R-18 record 82A's warm-up. (6) `test_event_lines.py` walks every module under `benchmark/` for each name a named sentence goes by (its own, `import ... as`, and every name assigned from one) and fails on one anywhere in a path call's arguments, an f-string's included, or as an operand of `/`; the structural rule folds constant concatenations and f-strings, and follows `gzip` by any imported name; each is held by a probe test. (7) R-9 accepts exactly as many planted closing tags as the pages hold, each in `fict-a`'s transcript, and nothing else. (12) `recording.round_kind` and `recording.bracketing_step` are the two rules, imported by the report; `studies.py` imports `scorecard.sum_or_none`; `cli.py` reaches `build_report` through its one `report_page` import. Tasks.md T159, T165 and T169.
 
+### 86A. The second prompts write never hides the review's failure; an empty sum deferred (2026-10-14)
+
+From the adversarial review of slice 5.
+
+- **Question** (review issues 8 and 11; tasks.md T162, T209): (8) `cli._review_fn` rewrote `prompts.json` in a `finally`, so a write that raised, an `OSError` say, replaced the review's own failure, a provider's error, as the exception the run saw; (11) `scorecard.sum_or_none([])` returns 0, a measurement, for a run with no package to sum, which no run can have until the robustness slice lets every package of a run fail (INT-9).
+- **Options**: (8) A: raise the write's error only when no failure is in flight, and otherwise keep the review's failure as the one raised. B: leave it. (11) A: fix it now. B: defer it to the slice where an empty `per_package` first becomes possible.
+- **Chosen**: (8) A. Applied in `cli._rewrite_prompts_and_close`: the second write, then `run.close()` whatever it does; its error is raised only when the review did not fail, and is otherwise added to the review's failure as a note, so neither is lost. Tests `test_86a_*` in `test_prompts_record.py` (a provider error with a failing rewrite; a failing rewrite alone); tasks.md T162. (11) B, the owner's deferral: recorded on tasks.md T209, the robustness slice's scorer run fields, where an empty `per_package` lands.
+
 ---
 
 ## §2 The 2026-09-28 audit
