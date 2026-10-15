@@ -2386,13 +2386,7 @@ class ChatServer:
                 f"{chat.run_dir} is not a readable evidence package: "
                 f"{type(exc).__name__}: {self.redact(str(exc))}"
             ) from exc
-        run.tools = StoppableTools(run.tools, chat.stop_requested)
-
-        def check_presentation_cancelled() -> None:
-            if chat.stop_requested.is_set():
-                raise TurnStopped()
-
-        run.check_presentation_cancelled = check_presentation_cancelled
+        run.bind_stop(chat.stop_requested)
         return run
 
     async def _open_waiting(

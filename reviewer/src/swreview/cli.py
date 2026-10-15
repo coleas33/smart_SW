@@ -63,7 +63,6 @@ from swreview.agent.providers.retry import BENCHMARK_RETRY
 from swreview.agent.runner import (
     DEFAULT_MAX_STEPS,
     SESSION_FILE_NAME,
-    StoppableTools,
     TurnStopped,
     load_exceptions,
     run_review,
@@ -89,7 +88,7 @@ from swreview.agent.settings import (
     redact,
 )
 from swreview.agent.settings import pane_defaults as pane_defaults_for
-from swreview.benchmark import answers, report_page, set_summary, sets
+from swreview.benchmark import answers, report_page, scrub, set_summary, sets
 from swreview.benchmark.answers import DEFAULT_MAX_ANSWER_TURNS
 from swreview.benchmark.compare import (
     carry_sign_offs,
@@ -114,7 +113,6 @@ from swreview.benchmark.runner import (
     preflight_set,
     profile_is_example,
     run_benchmark,
-    scrub_message,
     sha256_of,
     tree_dirty,
     write_provenance,
@@ -618,11 +616,11 @@ def _one_line(exc: BaseException) -> str:
     prompts-record rewrite (feature 014 owner decision 86A) is never lost (owner decision 92A);
     the notes are cut to the same length, so the line stays bounded (owner decision 96A).
     """
-    text = " ".join(str(exc).split())
+    text = scrub.one_line(exc)
     if isinstance(exc, KeyError):
         text = text.strip("'")
     line = f"{type(exc).__name__}: {_cut(text)}"
-    notes = "; ".join(" ".join(str(note).split()) for note in getattr(exc, "__notes__", ()))
+    notes = "; ".join(scrub.one_line(note) for note in getattr(exc, "__notes__", ()))
     return f"{line}; {_cut(notes)}" if notes else line
 
 
@@ -643,7 +641,8 @@ def _errors_as_exit_1(*also: type[BaseException]) -> Iterator[None]:
     try:
         yield
     except (*HANDLED_ERRORS, *also) as exc:
-        typer.echo(f"error: {_one_line(exc)}", err=True)
+        message = "interrupted (Ctrl-C)" if isinstance(exc, KeyboardInterrupt) else _one_line(exc)
+        typer.echo(f"error: {message}", err=True)
         raise typer.Exit(1) from exc
 
 
@@ -2370,7 +2369,9 @@ def _review_fn(
             adapter.use_retry(BENCHMARK_RETRY, stop_requested=attempt.stop.is_set)
 
         def scrubbed(text: str) -> str:
-            return scrub_message(redactor(text), run_dir=attempt.run_dir)
+            return scrub.without_local_paths(
+                redactor(text), run_dir=attempt.run_dir, root=attempt.root,
+            )
 
         run = start_review(
             package_dir,
@@ -2387,13 +2388,7 @@ def _review_fn(
             callbacks=[attempt.listener],
             redact=scrubbed,
         )
-        run.tools = StoppableTools(run.tools, attempt.stop)
-
-        def check_stopped() -> None:
-            if attempt.stop.is_set():
-                raise TurnStopped()
-
-        run.check_presentation_cancelled = check_stopped
+        run.bind_stop(attempt.stop)
         try:
             report_page.write_prompts_record(run, session_out_dir)
             try:
@@ -2753,7 +2748,10 @@ def benchmark_run(
             def package_done(
                 *, package_id: str, kind: str, class_: str | None,
                 stop_reason: str | None, error_class: str | None, retries: int,
+                promotion_error: str | None = None,
             ) -> None:
+                if promotion_error is not None:
+                    typer.echo(f"{package_id}: promotion failed: {promotion_error}", err=True)
                 if json_output:
                     return
                 line = f"{package_id}: {kind}"
@@ -2782,7 +2780,9 @@ def benchmark_run(
             )
 
     status = load_run_status(run_dir)
-    assert status is not None
+    if status is None:
+        typer.echo("error: benchmark run status is missing", err=True)
+        raise typer.Exit(1)
     promoted = {directory.name: directory for directory in package_dirs}
     payload = {
         "set": str(Path(set_file).resolve()),
@@ -2818,7 +2818,10 @@ def benchmark_run(
         ref.package_id for ref in benchmark_set.packages if ref.package_id not in promoted
     ]
     if unpromoted:
-        typer.echo(f"error: promotion incomplete: {', '.join(unpromoted)}", err=True)
+        typer.echo(
+            f"error: promotion incomplete: {', '.join(unpromoted)}; "
+            f"run swreview benchmark resume {run_dir}", err=True,
+        )
         raise typer.Exit(1)
 
 

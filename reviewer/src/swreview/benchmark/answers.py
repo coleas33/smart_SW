@@ -441,7 +441,7 @@ def drive_review(
     open (`no_open_questions`, no point recorded), nothing has a delivery (`all_unscripted`: an
     unscripted question gets nothing, D3), or `max_answer_turns` answer turns have been played
     (`bound_reached`: the deliveries held, nothing sent; QA-3). A requested stop is checked
-    before each answer point and sends nothing (`stopped`; INT-7).
+    before the opening turn and each answer point and sends nothing (`stopped`; INT-7).
 
     How each turn ended is read off `run.sink`, since `start` and `answer_evidence_batch` return
     the session, not the turn's result. The log is written in a `finally`, so a turn that raises
@@ -491,6 +491,9 @@ def _answer_points(
     """The opening turn, then one answer point after each turn until one stops the review,
     returning why. `points` gains each point as it is recorded, so a turn that raises leaves
     the points before it for the log."""
+    if stop_requested():
+        run.end_stopped()
+        return "stopped"
     run.start()
     played = 0
     while True:

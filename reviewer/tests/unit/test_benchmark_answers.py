@@ -45,7 +45,7 @@ from pydantic import ValidationError
 import swreview
 from swreview import atomic
 from swreview.agent.events import replay_events
-from swreview.agent.providers import TurnEndReason, TurnResult
+from swreview.agent.providers import AgentEvent, TurnEndReason, TurnResult
 from swreview.agent.providers.fake import ScriptedToolCall, ScriptedTurn
 from swreview.agent.runner import EVIDENCE_CHECK, ReviewRun, answers_message, start_review
 from swreview.benchmark import answers, case_file
@@ -975,12 +975,17 @@ def test_drive_review_requires_the_stop_requested_keyword(tmp_path: Path) -> Non
 
 
 def test_a_stop_before_an_answer_point_sends_nothing_and_writes_the_log(tmp_path: Path) -> None:
-    """T191: the one scripted turn is all that may be requested after the stop is set."""
+    """T191: a stop after the opening turn sends no answer and still writes its log."""
     provider = scripted(turn(FIT_QUESTION))
     out = tmp_path / "run" / PACKAGE_ID
     stop = threading.Event()
-    stop.set()
     run = start_review(package_folder(tmp_path), out, provider=provider, bridge=False)
+
+    def stop_after_opening(event: AgentEvent) -> None:
+        if event.type == "turn.ended":
+            stop.set()
+
+    run.sink.add_listener(stop_after_opening)
     try:
         log = drive_review(
             run,

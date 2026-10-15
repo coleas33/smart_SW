@@ -9,6 +9,12 @@ from pathlib import Path
 from swreview.benchmark.sets import REPO_ROOT
 
 
+def one_line(value: object, *, preserve_spacing: bool = False) -> str:
+    """Flatten messages, preserving path spacing until local paths have been scrubbed."""
+    text = str(value)
+    return " ".join(text.splitlines() if preserve_spacing else text.split())
+
+
 def without_local_paths(
     text: str, *, run_dir: Path | str, root: Path | str = REPO_ROOT
 ) -> str:
