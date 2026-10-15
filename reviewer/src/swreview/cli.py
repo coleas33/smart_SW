@@ -99,6 +99,7 @@ from swreview.benchmark.compare import (
 )
 from swreview.benchmark.recording import RecordingRefused, read_recording
 from swreview.benchmark.replay import render_replay_lines, replay_recording
+from swreview.benchmark.report_page import build_report
 from swreview.benchmark.runner import (
     EXAMPLE_PROFILE,
     PROVENANCE_SCHEMA,
@@ -3023,6 +3024,29 @@ def benchmark_compare(
     _emit(payload, lines, json_output)
     if refused or drifted:
         raise typer.Exit(1)
+
+
+@benchmark_app.command("report")
+def benchmark_report(
+    run_dirs: Annotated[
+        list[Path], typer.Argument(help="Scored run directories, of one study or several.")
+    ],
+    out: Annotated[
+        Path,
+        typer.Option("--out", help="An empty folder, or one holding a previous report."),
+    ],
+) -> None:
+    """Build one static page and a transcript per package run; contacts no provider.
+
+    Every number on the page is its scorecard's, and each transcript shows the system prompt and
+    every message the attempt sent, its log in order and its final state (feature 014
+    `contracts/report.md`). It takes no key option and reads no key (FR-047). Every refusal is
+    one line and exit 1: a run folder named twice, under a key path, unscored or scored under
+    other rules, or an `--out` holding files this command did not write.
+    """
+    with _errors_as_exit_1():
+        built = build_report(run_dirs, out)
+    typer.echo(f"wrote {built.index} ({built.transcripts} transcripts)")
 
 
 # --- chat serve ------------------------------------------------------------------

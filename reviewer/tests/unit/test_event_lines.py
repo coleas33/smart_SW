@@ -26,10 +26,11 @@ pinned here, as `scoring.md` 11's `test_event_lines.py` numbers it:
    path; a folder holding both is an unfinished pack and is refused.
 
 4. **One call per reader's unit.** A spy on it sees exactly one call per package from
-   `score_run` (T086) and one per `read_recording` (T159); the report's and `attempt_facts`'
-   rows land with their callers (T166, T187). The structural half (T159): no other reader of
-   `events.jsonl` under `benchmark/`, and no module there decompresses a stream itself; a
-   module-level sentence the owner named may name the files (owner decision 81A).
+   `score_run` (T086), one per `read_recording` (T159) and one per transcript page the report
+   writes (T166); `attempt_facts`' row lands with its caller (T187). The structural half
+   (T159): no other reader of `events.jsonl` under `benchmark/`, and no module there
+   decompresses a stream itself; a module-level sentence the owner named may name the files
+   (owner decision 81A).
 
 6's `score_run` spy (T086): `score_run` finds each package's stream through `event_stream`.
 """
@@ -55,11 +56,12 @@ from swreview.agent.events import (
     replay_events,
 )
 from swreview.agent.providers import AgentEvent
-from swreview.benchmark import recording
+from swreview.benchmark import recording, report_page
 from swreview.benchmark.scorecard import score_run
 from swreview.benchmark.sets import BenchmarkSet
 from swreview.chat import sessions
 from swreview.report.session import SessionUsage
+from tests.support.studies import PackageSpec, RunSpec, write_run
 from tests.unit.test_benchmark_report_page import recorded_run
 from tests.unit.test_scorecard_usage import make_usage
 from tests.unit.test_scorecard_usage import write_package as write_scored_package
@@ -684,3 +686,40 @@ def test_every_named_sentence_is_a_sentence_that_reads_nothing(module: str, name
         assert not (isinstance(parent, ast.Call) and _called_name(parent) in PATH_CALLS), (
             f"{module} line {node.lineno}: {name} is passed to {_called_name(parent)}"
         )
+
+
+# --- 4: the report reads each package's stream once, found through event_stream (T166) -----
+
+
+def test_the_report_replays_each_transcript_s_stream_once_found_through_event_stream(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Over two scored run folders `studies.write_run` writes: each spy sees exactly one call per
+    transcript page, `event_stream` given the package folder and `replay_events` the path it
+    returned and an `on_unreadable` hook."""
+    packages = (PackageSpec(package_id="pkg-a"), PackageSpec(package_id="pkg-b"))
+    runs = [
+        write_run(tmp_path / "runs", RunSpec(run=name, arm=arm, packages=packages))
+        for name, arm in (("off-1", "off"), ("on-1", "on"))
+    ]
+    folders: list[Path] = []
+    replayed: list[tuple[Path, bool]] = []
+    real_stream, real_replay = events.event_stream, events.replay_events
+
+    def stream_spy(folder: Path | str) -> Path:
+        folders.append(Path(folder))
+        return real_stream(folder)
+
+    def replay_spy(path: Path | str, after: int = 0, **hooks: Any) -> Iterator[AgentEvent]:
+        replayed.append((Path(path), callable(hooks.get("on_unreadable"))))
+        return real_replay(path, after, **hooks)
+
+    monkeypatch.setattr(report_page, "event_stream", stream_spy)
+    monkeypatch.setattr(report_page, "replay_events", replay_spy)
+
+    built = report_page.build_report(runs, tmp_path / "report")
+
+    expected = [run / package.package_id for run in runs for package in packages]
+    assert built.transcripts == len(expected) == 4
+    assert folders == expected
+    assert replayed == [(folder / EVENTS_FILE_NAME, True) for folder in expected]
