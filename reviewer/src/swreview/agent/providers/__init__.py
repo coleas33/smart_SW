@@ -48,6 +48,7 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal, Protocol, runtime_che
 from pydantic import BaseModel, ConfigDict, Field
 
 if TYPE_CHECKING:  # pragma: no cover - the settings module imports this one
+    from swreview.agent.providers.retry import RetryPolicy
     from swreview.agent.settings import ModelViewSettings
 
 __all__ = [
@@ -66,6 +67,7 @@ __all__ = [
     "ProviderError",
     "ProviderName",
     "ProviderTool",
+    "RetryAware",
     "TokenUsage",
     "ToolCallRequest",
     "ToolCallResult",
@@ -525,6 +527,17 @@ class AgentProvider(Protocol):
         adapter numbers steps, and an adapter that quietly did not would corrupt provenance
         rather than merely forgo a saving.
         """
+        ...
+
+
+@runtime_checkable
+class RetryAware(Protocol):
+    """An adapter that can retry requests under an explicitly supplied policy."""
+
+    def use_retry(
+        self, policy: RetryPolicy, *, stop_requested: Callable[[], bool]
+    ) -> None:
+        """Use the policy for requests, checking the attempt's stop before retries."""
         ...
 
 

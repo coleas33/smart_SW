@@ -29,12 +29,13 @@ import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from time import perf_counter
-from typing import Any
+from typing import Any, TypeVar
 
 from swreview.agent.providers import (
     EffortLevel,
     EffortMapping,
     EventCallback,
+    ProviderError,
     ProviderName,
     TokenUsage,
     ToolCallRequest,
@@ -43,8 +44,10 @@ from swreview.agent.providers import (
     TurnEndReason,
     TurnResult,
     call_tool,
+    error_body,
     model_payload,
     register,
+    retry,
     usage_body,
 )
 
@@ -169,6 +172,9 @@ class ScriptedTurn:
             )
 
 
+_ScriptedResponse = TypeVar("_ScriptedResponse", ScriptedTurn, ScriptedRound)
+
+
 def _assistant_message(requests: Sequence[ToolCallRequest]) -> dict[str, Any]:
     """One assistant turn asking for these calls, in the order it asked for them."""
     return {
@@ -242,6 +248,9 @@ class FakeProvider:
         self._turn_index = 0
         self._step_index = 0
         self._call_index = 0
+        self._retry_policy: retry.RetryPolicy | None = None
+        self._stop_requested: Callable[[], bool] = lambda: False
+        self._request_retries: int | None = None
         self.round_usage: list[TokenUsage] = []
         """This turn's round trips, one record each. Reset by `run()`.
 
@@ -255,6 +264,13 @@ class FakeProvider:
         """Every level is available: the fake does no thinking to budget."""
         return EffortMapping(requested=effort, provider_param=EFFORT_PARAM, provider_value=effort)
 
+    def use_retry(
+        self, policy: retry.RetryPolicy, *, stop_requested: Callable[[], bool]
+    ) -> None:
+        """Retry this adapter's individual requests until the attempt asks it to stop."""
+        self._retry_policy = policy
+        self._stop_requested = stop_requested
+
     def for_presentation(self, max_output_tokens: int) -> FakeProvider:
         """Return a fresh scripted adapter for the optional presentation pass.
 
@@ -264,12 +280,15 @@ class FakeProvider:
         """
         if max_output_tokens <= 0:
             raise ValueError(f"max_output_tokens must be positive, got {max_output_tokens!r}")
-        return FakeProvider(
+        presentation = FakeProvider(
             script=self._explanation_script,
             model=self.model,
             clock=self._clock,
             _presentation=True,
         )
+        if self._retry_policy is not None:
+            presentation.use_retry(self._retry_policy, stop_requested=self._stop_requested)
+        return presentation
 
     def run(
         self,
@@ -287,8 +306,10 @@ class FakeProvider:
         # steps must still consume its ordinary scripted turn.
         turn = self._next_turn()
         history = [dict(message) for message in messages]
+        self.round_usage = []
         if turn.rounds:
             return self._run_rounds(turn, history, tools, max_steps, on_event)
+        turn = self._respond(turn, on_event)
         steps = 0
         self.round_usage = [turn.usage] if turn.usage is not None else []
         if turn.usage is not None:
@@ -298,7 +319,8 @@ class FakeProvider:
             on_event(
                 "usage",
                 usage_body(
-                    turn.usage, round_index=0, provider=self.name, model=self.model
+                    turn.usage, round_index=0, provider=self.name, model=self.model,
+                    retries=self._request_retries,
                 ),
             )
 
@@ -334,6 +356,7 @@ class FakeProvider:
         for round_index, scripted_round in enumerate(turn.rounds):
             if steps >= max_steps:
                 return TurnResult(reason="max_steps", text="", steps=steps, messages=history)
+            scripted_round = self._respond(scripted_round, on_event)
             self._emit_usage(scripted_round.usage, round_index, on_event)
             dispatched: list[tuple[ToolCallRequest, ToolCallResult]] = []
             for scripted in scripted_round.calls:
@@ -344,6 +367,7 @@ class FakeProvider:
                 dispatched.append((request, self._call(request, tools, on_event)))
                 steps += 1
             _append_round(history, dispatched, one_round=True)
+        turn = self._respond(turn, on_event)
         self._emit_usage(turn.usage, len(turn.rounds), on_event)
         self._say(turn.text, history, on_event)
         return TurnResult(reason=turn.end_reason, text=turn.text, steps=steps, messages=history)
@@ -356,8 +380,44 @@ class FakeProvider:
         self.round_usage.append(usage)
         on_event(
             "usage",
-            usage_body(usage, round_index=round_index, provider=self.name, model=self.model),
+            usage_body(
+                usage, round_index=round_index, provider=self.name, model=self.model,
+                retries=self._request_retries,
+            ),
         )
+
+    def _response(
+        self, scripted: _ScriptedResponse, on_event: EventCallback
+    ) -> _ScriptedResponse:
+        """Return one scripted model response before its usage and tools are processed."""
+        return scripted
+
+    def _respond(
+        self, scripted: _ScriptedResponse, on_event: EventCallback
+    ) -> _ScriptedResponse:
+        self._request_retries = None
+        if self._retry_policy is None:
+            return self._response(scripted, on_event)
+        try:
+            response, self._request_retries = retry.run_request(
+                lambda emit: self._response(scripted, emit),
+                policy=self._retry_policy,
+                stop_requested=self._stop_requested,
+                on_event=on_event,
+            )
+        except ProviderError as error:
+            on_event(
+                "error",
+                error_body(
+                    error_class=error.error_class,
+                    message=str(error),
+                    retryable=error.retryable,
+                    stop_reason=error.stop_reason,
+                    retries=error.retries,
+                ),
+            )
+            raise
+        return response
 
     @staticmethod
     def _say(text: str, history: list[dict[str, Any]], on_event: EventCallback) -> None:
