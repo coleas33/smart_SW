@@ -41,7 +41,7 @@ import re
 import sys
 import zipfile
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -104,6 +104,7 @@ from swreview.benchmark.recording import RecordingRefused, read_recording
 from swreview.benchmark.replay import render_replay_lines, replay_recording
 from swreview.benchmark.runner import (
     EXAMPLE_PROFILE,
+    PROVENANCE_FILE,
     PROVENANCE_SCHEMA,
     SAVED_SET_FILE,
     AttemptRequest,
@@ -113,6 +114,7 @@ from swreview.benchmark.runner import (
     load_run_status,
     preflight_set,
     profile_is_example,
+    resume_benchmark,
     run_benchmark,
     sha256_of,
     tree_dirty,
@@ -2362,12 +2364,12 @@ def _review_fn(
     same guarantee as one that came through the command line (FR-015).
     """
     settings = ProviderSettings.from_env(provider=provider, model=model, effort=effort)
-    adapter = run_start.take() if run_start is not None else None
+    adapter = run_start.take() if run_start is not None else attempt.adapter
     with _redacting(settings) as redactor:
         if adapter is None:
             adapter = provider_factory(settings, efficiency)
         if isinstance(adapter, providers.RetryAware):
-            adapter.use_retry(BENCHMARK_RETRY, stop_requested=attempt.stop.is_set)
+            adapter.use_retry(attempt.retry_policy, stop_requested=attempt.stop.is_set)
 
         def scrubbed(text: str) -> str:
             return scrub.without_local_paths(
@@ -2385,6 +2387,7 @@ def _review_fn(
             model_view=attempt.model_view,
             standards_profile=attempt.standards_profile,
             explain_findings=explain_findings,
+            **({"max_steps": attempt.max_steps} if attempt.max_steps is not None else {}),
             bridge=False,
             callbacks=[attempt.listener],
             redact=scrubbed,
@@ -2431,12 +2434,14 @@ def _refuse_a_folder_in_use(out: Path) -> None:
 
     A second run into one folder would append a second session with duplicate sequence
     numbers to every package's stream, so anything already there - a file in the folder, or
-    a file where the folder would be - is refused before any review. The message names no
-    command: `benchmark resume`, which the robustness slice adds with its pointer, does not
-    exist yet.
+    a file where the folder would be - is refused before any review, with the command that
+    can continue an existing run.
     """
     if out.exists() and (not out.is_dir() or any(out.iterdir())):
-        raise FileExistsError(f"{out} is not empty; choose a new folder")
+        raise FileExistsError(
+            f"{out} is not empty; resume a run with `swreview benchmark resume {out}`, "
+            "or choose a new folder"
+        )
 
 
 def _private_packages(benchmark_set: BenchmarkSet, *, root: Path) -> list[str]:
@@ -2583,6 +2588,110 @@ def _refuse_a_set_too_small_to_gate(benchmark_set: BenchmarkSet, override: bool)
         f"never computes and this study can gate nothing; pass "
         f"--i-know-the-set-is-too-small for a smoke test, which is recorded with the run"
     )
+
+
+def _benchmark_package_done(json_output: bool) -> Callable[..., None]:
+    """Print an attempt's outcome, or its promotion failure, as one whole line."""
+    def package_done(
+        *, package_id: str, kind: str, class_: str | None,
+        stop_reason: str | None, error_class: str | None, retries: int,
+        promotion_error: str | None = None,
+    ) -> None:
+        if promotion_error is not None:
+            typer.echo(f"{package_id}: promotion failed: {promotion_error}", err=True)
+            return
+        if json_output:
+            return
+        line = f"{package_id}: {kind}"
+        if class_ is not None:
+            line += f" {class_}"
+        if stop_reason is not None:
+            line += f" ({stop_reason})"
+        elif kind == "infrastructure":
+            line += f" ({error_class or class_}, {retries} retries)"
+        typer.echo(line)
+
+    return package_done
+
+
+def _benchmark_result(
+    run_dir: Path,
+    *,
+    set_file: Path,
+    benchmark_set: BenchmarkSet,
+    provider: str,
+    model: str,
+    package_ids: Sequence[str],
+    json_output: bool,
+) -> None:
+    """Emit the attempted packages' JSON and check completion across the whole saved set."""
+    status = load_run_status(run_dir)
+    if status is None:
+        typer.echo("error: benchmark run status is missing", err=True)
+        raise typer.Exit(1)
+    rows = {
+        package_id: package.attempts[-1]
+        for package_id, package in status.packages.items()
+        if package.attempts
+    }
+    promoted = {
+        package_id: run_dir / package_id
+        for package_id, package in status.packages.items()
+        if package.kept_attempt is not None
+        and any(
+            row.attempt == package.kept_attempt and row.folder == package_id
+            for row in package.attempts
+        )
+        and (run_dir / package_id).is_dir()
+    }
+    payload = {
+        "set": str(set_file.resolve()),
+        "benchmark_set": benchmark_set.name,
+        "out_dir": str(run_dir),
+        "saved_set_file": str(run_dir / SAVED_SET_FILE),
+        "provenance_file": str(run_dir / PROVENANCE_FILE),
+        "provider": provider,
+        "model": model,
+        "packages": [
+            {
+                "package_id": package_id,
+                **({"out_dir": str(promoted[package_id])} if package_id in promoted else {}),
+                "kind": rows[package_id].kind,
+                "class": rows[package_id].class_,
+                "stop_reason": rows[package_id].stop_reason,
+                "attempts": len(status.packages[package_id].attempts),
+            }
+            for package_id in package_ids
+            if package_id in rows
+        ],
+    }
+    if json_output:
+        _emit(payload, [], True)
+    failures = [
+        ref.package_id for ref in benchmark_set.packages
+        if ref.package_id in rows and rows[ref.package_id].kind == "infrastructure"
+    ]
+    unpromoted = [
+        ref.package_id for ref in benchmark_set.packages
+        if ref.package_id in rows
+        and ref.package_id not in promoted and ref.package_id not in failures
+    ]
+    unreached = [ref.package_id for ref in benchmark_set.packages if ref.package_id not in rows]
+    problems: list[str] = []
+    if failures:
+        problems.append(f"infrastructure failures: {', '.join(failures)}")
+    if unpromoted:
+        problems.append(f"promotion incomplete: {', '.join(unpromoted)}")
+    if unreached:
+        problems.append(f"packages not attempted: {', '.join(unreached)}")
+    problems.extend(
+        row.message for row in rows.values()
+        if row.class_ == "served_model_changed" and row.message is not None
+    )
+    if problems:
+        problems.append(f"run swreview benchmark resume {run_dir}")
+        typer.echo(f"error: {'; '.join(problems)}", err=True)
+        raise typer.Exit(1)
 
 
 @benchmark_app.command("run")
@@ -2732,7 +2841,7 @@ def benchmark_run(
             run_dir.mkdir(parents=True, exist_ok=True)
             saved_set = run_dir / SAVED_SET_FILE
             atomic.write_atomic(saved_set, benchmark_set.saved_form(root=root))
-            provenance_file = write_provenance(
+            write_provenance(
                 run_dir,
                 RunProvenance(
                     commit=commit,
@@ -2765,25 +2874,7 @@ def benchmark_run(
                     retry_policy=BENCHMARK_RETRY,
                 ),
             )
-            def package_done(
-                *, package_id: str, kind: str, class_: str | None,
-                stop_reason: str | None, error_class: str | None, retries: int,
-                promotion_error: str | None = None,
-            ) -> None:
-                if promotion_error is not None:
-                    typer.echo(f"{package_id}: promotion failed: {promotion_error}", err=True)
-                if json_output:
-                    return
-                line = f"{package_id}: {kind}"
-                if class_ is not None:
-                    line += f" {class_}"
-                if stop_reason is not None:
-                    line += f" ({stop_reason})"
-                elif kind == "infrastructure":
-                    line += f" ({error_class or class_}, {retries} retries)"
-                typer.echo(line)
-
-            package_dirs = run_benchmark(
+            run_benchmark(
                 preflighted,
                 out,
                 provider=settings.provider.value,
@@ -2797,53 +2888,82 @@ def benchmark_run(
                 max_answer_turns=max_answer_turns,
                 package_time_limit_s=package_time_limit * 60,
                 redact=redactor,
-                on_package_done=package_done,
+                on_package_done=_benchmark_package_done(json_output),
             )
 
-    status = load_run_status(run_dir)
-    if status is None:
-        typer.echo("error: benchmark run status is missing", err=True)
-        raise typer.Exit(1)
-    promoted = {directory.name: directory for directory in package_dirs}
-    payload = {
-        "set": str(Path(set_file).resolve()),
-        "benchmark_set": benchmark_set.name,
-        "out_dir": str(Path(out).resolve()),
-        "saved_set_file": str(saved_set),
-        "provenance_file": str(provenance_file),
-        "provider": settings.provider.value,
-        "model": settings.model,
-        "packages": [
-            {
-                "package_id": ref.package_id,
-                **({"out_dir": str(promoted[ref.package_id])}
-                   if ref.package_id in promoted else {}),
-                "kind": status.packages[ref.package_id].attempts[-1].kind,
-                "class": status.packages[ref.package_id].attempts[-1].class_,
-                "stop_reason": status.packages[ref.package_id].attempts[-1].stop_reason,
-                "attempts": len(status.packages[ref.package_id].attempts),
-            }
-            for ref in benchmark_set.packages
-        ],
-    }
-    if json_output:
-        _emit(payload, [], True)
-    failures = [
-        ref.package_id for ref in benchmark_set.packages
-        if status.packages[ref.package_id].attempts[-1].kind == "infrastructure"
-    ]
-    if failures:
-        typer.echo(f"error: infrastructure failures: {', '.join(failures)}", err=True)
-        raise typer.Exit(1)
-    unpromoted = [
-        ref.package_id for ref in benchmark_set.packages if ref.package_id not in promoted
-    ]
-    if unpromoted:
-        typer.echo(
-            f"error: promotion incomplete: {', '.join(unpromoted)}; "
-            f"run swreview benchmark resume {run_dir}", err=True,
+    _benchmark_result(
+        run_dir, set_file=set_file, benchmark_set=benchmark_set,
+        provider=settings.provider.value, model=settings.model,
+        package_ids=[ref.package_id for ref in benchmark_set.packages],
+        json_output=json_output,
+    )
+
+
+@benchmark_app.command("resume")
+def benchmark_resume(
+    run_dir: Annotated[Path, typer.Argument(help="A benchmark run directory to continue.")],
+    standards_profile: Annotated[
+        Path | None,
+        typer.Option(
+            "--standards-profile",
+            help="The profile used by the recorded run; its digest must match.",
+        ),
+    ] = None,
+    json_output: JsonFlag = False,
+) -> None:
+    """Continue infrastructure failures and unfinished promotions from a recorded run."""
+    run_dir = run_dir.resolve()
+    root = sets.REPO_ROOT
+    before: dict[str, int] = {}
+    records: list[RunProvenance] = []
+    run_start: RunStartAdapter | None = None
+
+    def redact_run(text: str) -> str:
+        return text
+
+    with (
+        _errors_as_exit_1(ProfileUnreadable, ProfileInvalid, KeyboardInterrupt),
+        ExitStack() as stack,
+    ):
+        def provider_preflight(record: RunProvenance) -> None:
+            nonlocal run_start, redact_run
+            settings = _provider_settings(
+                ProviderName(record.provider), record.model, Effort(record.effort),
+            )
+            redact_run = stack.enter_context(_redacting(settings))
+            adapter = provider_factory(settings, record.efficiency)
+            adapter.effort_mapping(settings.effort)
+            run_start = RunStartAdapter(adapter)
+            records.append(record)
+            status = load_run_status(run_dir)
+            if status is not None:
+                before.update(
+                    (package_id, len(package.attempts))
+                    for package_id, package in status.packages.items()
+                )
+
+        def review(package_dir: Path, session_out_dir: Path, **options: Any) -> Any:
+            return _review_fn(package_dir, session_out_dir, run_start=run_start, **options)
+
+        resume_benchmark(
+            run_dir, review_fn=review, root=root, standards_profile=standards_profile,
+            on_package_done=_benchmark_package_done(json_output),
+            on_preflight=provider_preflight, redact=lambda text: redact_run(text),
         )
-        raise typer.Exit(1)
+        benchmark_set = sets.load_saved_set(run_dir / SAVED_SET_FILE, root=root)
+        status = load_run_status(run_dir)
+        attempted = [
+            ref.package_id for ref in benchmark_set.packages
+            if status is not None and ref.package_id in status.packages
+            and len(status.packages[ref.package_id].attempts) > before.get(ref.package_id, 0)
+        ]
+
+    record = records[0]
+    _benchmark_result(
+        run_dir, set_file=run_dir / SAVED_SET_FILE, benchmark_set=benchmark_set,
+        provider=record.provider, model=record.model, package_ids=attempted,
+        json_output=json_output,
+    )
 
 
 def _benchmark_set_for(run_dir: Path, set_file: Path | None, *, root: Path) -> BenchmarkSet:

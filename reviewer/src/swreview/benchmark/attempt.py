@@ -46,11 +46,13 @@ class AttemptListener:
         provider: ProviderName | str,
         requested_model: str,
         clock: Callable[[], float] = time.monotonic,
+        run_served_models: tuple[str, ...] = (),
     ) -> None:
         self.stop = stop
         self.provider = provider
         self.requested_model = requested_model
         self.clock = clock
+        self.run_served_models = run_served_models
         self.last_event_at: float | None = None
         self.turn_end_reasons: list[str] = []
         self._tools_in_progress: set[int] = set()
@@ -118,6 +120,15 @@ class AttemptListener:
                                 message=(
                                     f"served model {served!r} is outside the aliases for "
                                     f"requested model {self.requested_model!r}"
+                                ),
+                            ))
+                            self.stop.set()
+                        elif self.run_served_models and served not in self.run_served_models:
+                            self._record(AttemptOutcome(
+                                "infrastructure", "served_model_changed",
+                                message=(
+                                    f"served model {served!r} differs from the run's kept "
+                                    f"responding models {', '.join(self.run_served_models)}"
                                 ),
                             ))
                             self.stop.set()

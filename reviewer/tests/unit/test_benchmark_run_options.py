@@ -261,8 +261,8 @@ def test_a_non_empty_out_folder_is_refused(
     tmp_path: Path, tmp_package_dir: Path, reviews: list[dict[str, Any]]
 ) -> None:
     """Row 1: a second run into one folder would append a second session with duplicate
-    sequence numbers. The parity slice's message names no command: `benchmark resume` does not
-    exist yet (its pointer is lane B6's). An empty folder, or none, is a fresh run."""
+    sequence numbers. The message points to resume; an empty folder, or none, is a fresh run.
+    """
     set_path = one_package_set(tmp_path, tmp_package_dir)
     used = tmp_path / "runs" / "used"
     used.mkdir(parents=True)
@@ -275,8 +275,10 @@ def test_a_non_empty_out_folder_is_refused(
 
         assert result.exit_code == 1, out
         line = one_line(result)
-        assert line.endswith(f"{out} is not empty; choose a new folder"), line
-        assert "swreview" not in line and "resume" not in line
+        assert line.endswith(
+            f"{out} is not empty; resume a run with `swreview benchmark resume {out}`, "
+            "or choose a new folder"
+        ), line
     assert reviews == []
     assert sorted(path.name for path in used.iterdir()) == ["notes.txt"]
     assert occupied.read_text(encoding="utf-8") == "not a folder\n"
@@ -285,6 +287,29 @@ def test_a_non_empty_out_folder_is_refused(
     empty.mkdir()
     assert benchmark_run(set_path, empty).exit_code == 0
     assert len(reviews) == 1
+
+
+def test_a_non_empty_out_folder_names_resume(
+    tmp_path: Path, tmp_package_dir: Path, reviews: list[dict[str, Any]]
+) -> None:
+    """RUN-04: the refusal gives the exact command that can continue an existing run."""
+    set_path = one_package_set(tmp_path, tmp_package_dir)
+    out = tmp_path / "runs" / "resume-here"
+    out.mkdir(parents=True)
+    notes = out / "notes.txt"
+    original = b"fict earlier run\n"
+    notes.write_bytes(original)
+
+    result = benchmark_run(set_path, out)
+
+    assert result.exit_code == 1
+    assert one_line(result).endswith(
+        f"{out} is not empty; resume a run with `swreview benchmark resume {out}`, "
+        "or choose a new folder"
+    )
+    assert reviews == []
+    assert sorted(path.name for path in out.iterdir()) == ["notes.txt"]
+    assert notes.read_bytes() == original
 
 
 def refusal_line(error: type[Exception], path: Path) -> str:
