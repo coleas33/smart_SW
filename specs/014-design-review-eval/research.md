@@ -361,6 +361,14 @@ From the adversarial review of slice 5 (`7ecd724..66ef249`); 015 numbers its own
 - **Options**: (1) A: read such a body as an unreadable line is read, "the event log is unreadable from seq N" naming the run and package, everything before it shown; and write each build into a temporary sibling folder swapped in once complete, so any failure, an `OSError` such as a path too long included, leaves the previous report intact. B: refuse the build naming the run and package, deleting nothing first. (2) A: always show turn 0's message and list each recorded message past the last logged turn. B: leave them out.
 - **Chosen**: A for both, fixed now. Applied in `benchmark/report_page.py`: `_readable_prefix` stops the walk at the first body it cannot read (a call's step that is not an integer, a round whose counts do not read, a coverage row whose item is not an object) and the page names it as `MALFORMED_FROM`; `build_report` writes into a `.<out>.<random>.building` sibling and `_swap_in` moves a previous report aside, puts the build in place, then removes the old one, putting it back if the move fails; `_LogWalk.render` always shows turn 0 and `_sent_past_the_log` lists the rest with "this turn is not in the event log". Tests `test_83a_*` in `test_benchmark_report_page.py`; tasks.md T169.
 
+### 84A. Three more refusals (2026-10-14)
+
+From the adversarial review of slice 5.
+
+- **Question** (review issues 5, 9 and 10; tasks.md T165, T169; `report.md` 6 and 7): (5) run folders are named relative to the common parent of their parents, so two run folders in the home folder whose common parent is the home folder or above it are named through it (`Users/<name>/AppData/...`), on the page and in its links; (9) an `--out` at or under a run folder writes into that run folder; (10) a package id is used as a folder and a file name unchecked, so one holding a separator, `..` or a name Windows reserves writes elsewhere or fails, and two ids that differ only in case are one file on a case-insensitive file system.
+- **Options**: A: refuse all three before anything is written, each with a row in `report.md` 7's table and a test. B: rename (strip the home folder's part, write next to the run folder, escape the ids).
+- **Chosen**: A. Applied in `benchmark/report_page.py`: `_relative_names` refuses a run folder in the home folder when the common parent is the home folder or above it; `_refuse_an_out_in_a_run_folder`; `_refuse_package_ids_that_name_no_file` with `_why_no_file_name` (empty, a path separator, `.`, `..` anywhere, a character Windows refuses or a control character, a trailing dot or space, a device name Windows reserves with or without an extension) and the case-folded collision. Three rows in `report.md` 7. Tests `test_84a_*` in `test_benchmark_report_page.py`; tasks.md T169.
+
 ---
 
 ## §2 The 2026-09-28 audit

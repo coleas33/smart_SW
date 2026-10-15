@@ -1563,3 +1563,123 @@ def test_83a_messages_sent_past_the_last_logged_turn_are_listed(
     for number in (1, 2):
         heading = page.index_of("h3", f"Turn {number}")
         assert page.blocks[heading + 2] == ("p", "this turn is not in the event log")
+
+
+# --- owner decision 84A: three more refusals ------------------------------------------------
+
+
+def test_84a_run_folders_named_through_the_home_folder_are_refused(
+    report_runs: Runs, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Run folders in the home folder whose common parent is the home folder or above it would
+    be named through it (`Users/<name>/AppData/...`); refused, nothing written."""
+    home = tmp_path / "home"
+    monkeypatch.setattr(Path, "home", lambda: home)
+    off = copy_run(report_runs.off, home / "study-a" / "off")
+    on = copy_run(report_runs.on, home / "study-b" / "on")
+    out = tmp_path / "report"
+
+    with pytest.raises(report_page.ReportError) as refused:
+        build_report([off, on], out)
+
+    assert str(refused.value) == (
+        f"{off} lies in the home folder and the run folders' common parent {home} is at or above "
+        "it, so the report would name the home folder's folders; copy the run folders under one "
+        "study folder first"
+    )
+    assert not out.exists()
+
+
+def test_84a_run_folders_under_one_study_folder_in_the_home_folder_are_not_refused(
+    report_runs: Runs, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = tmp_path / "home"
+    monkeypatch.setattr(Path, "home", lambda: home)
+    study = home / "study"
+    runs = [copy_run(report_runs.off, study / "off"), copy_run(report_runs.on, study / "on")]
+    elsewhere = [
+        copy_run(report_runs.off, tmp_path / "elsewhere" / "a" / "off"),
+        copy_run(report_runs.on, tmp_path / "elsewhere" / "b" / "on"),
+    ]
+
+    assert build_report(runs, tmp_path / "in-home").transcripts == 6
+    assert build_report(elsewhere, tmp_path / "outside-home").transcripts == 6
+    hrefs = Page(tmp_path / "outside-home" / "index.html").hrefs
+    assert "transcripts/a/off/fict-a.html" in hrefs
+
+
+@pytest.mark.parametrize("inside", ["the-run-folder", "under-it"])
+def test_84a_an_out_at_or_under_a_run_folder_is_refused(
+    report_runs: Runs, tmp_path: Path, inside: str
+) -> None:
+    run = copy_run(report_runs.off, tmp_path / "runs" / "off")
+    out = run if inside == "the-run-folder" else run / "report"
+    before = snapshot(run)
+
+    with pytest.raises(report_page.ReportError) as refused:
+        build_report([run], out)
+
+    assert str(refused.value) == (
+        f"{out} lies in the run folder {run}; the report writes nothing into a run folder: "
+        "choose a folder outside it"
+    )
+    assert snapshot(run) == before
+
+
+def _rename_package(run: Path, old: str, new: str) -> None:
+    """The scorecard names `old` as `new`, which no package folder holds."""
+    card = json.loads((run / "scorecard.json").read_bytes())
+    for score in card["per_package"]:
+        if score["package_id"] == old:
+            score["package_id"] = new
+    (run / "scorecard.json").write_text(json.dumps(card), encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    ("package_id", "reason"),
+    [
+        ("", "it is empty"),
+        ("sub/fict-a", "it holds a path separator"),
+        ("sub\\fict-a", "it holds a path separator"),
+        ("..", "it holds '..'"),
+        ("fict..a", "it holds '..'"),
+        ("fict:a", "it holds a character Windows does not allow in a file name"),
+        ("fict?a", "it holds a character Windows does not allow in a file name"),
+        ("fict\ta", "it holds a character Windows does not allow in a file name"),
+        ("fict-a.", "it ends in a dot or a space"),
+        ("fict-a ", "it ends in a dot or a space"),
+        ("CON", "it is a name Windows reserves"),
+        ("lpt1.case", "it is a name Windows reserves"),
+        ("Aux", "it is a name Windows reserves"),
+    ],
+)
+def test_84a_a_package_id_that_cannot_name_a_file_is_refused(
+    report_runs: Runs, tmp_path: Path, package_id: str, reason: str
+) -> None:
+    run = copy_run(report_runs.off, tmp_path / "runs" / "off")
+    _rename_package(run, CASE_A, package_id)
+    out = tmp_path / "report"
+
+    with pytest.raises(report_page.ReportError) as refused:
+        build_report([run], out)
+
+    assert str(refused.value) == (
+        f"{run}: package id {package_id!r} cannot name a transcript file: {reason}"
+    )
+    assert not out.exists()
+
+
+def test_84a_package_ids_one_file_name_when_case_folded_are_refused(
+    report_runs: Runs, tmp_path: Path
+) -> None:
+    run = copy_run(report_runs.off, tmp_path / "runs" / "off")
+    _rename_package(run, CASE_B, "FICT-A")
+    out = tmp_path / "report"
+
+    with pytest.raises(report_page.ReportError) as refused:
+        build_report([run], out)
+
+    assert str(refused.value) == (
+        f"{run}: package ids 'fict-a' and 'FICT-A' are one file name where case is not told apart"
+    )
+    assert not out.exists()
