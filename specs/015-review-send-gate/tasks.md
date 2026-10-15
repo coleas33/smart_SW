@@ -823,8 +823,8 @@ description: "Task list for the send-to-model checkbox"
 
 **Purpose**: the last record that names a provider, the seat's step, the contracts as landed, the adversarial review, and the final gate.
 
-- [ ] T111 [P] [py] Lane R. Extend `reviewer/tests/unit/test_handoff.py` (`contracts/records.md` section 7; research R2.24; owner decision 73A, this plan's question 2 kept). The handoff bundle's session summary gains `model_status` (its state) when the session carries one, beside `provider_info`, and nothing else in the export moves. A ticked session's bundle is unchanged. Acceptance: red for want of the key.
-- [ ] T112 [py] Lane R. Implement it in `_session_summary` in `handoff.py` (`:360-401`). **Amends 002** `contracts/handoff-export.md`. Acceptance: T111 green.
+- [x] T111 [P] [py] Lane R. Extend `reviewer/tests/unit/test_handoff.py` (`contracts/records.md` section 7; research R2.24; owner decision 73A, this plan's question 2 kept). The handoff bundle's session summary gains `model_status` (its state) when the session carries one, beside `provider_info`, and nothing else in the export moves. A ticked session's bundle is unchanged. Acceptance: red for want of the key.
+- [x] T112 [py] Lane R. Implement it in `_session_summary` in `handoff.py` (`:360-401`). **Amends 002** `contracts/handoff-export.md`. Acceptance: T111 green.
 - [ ] T113 [P] [py] Lane S. Add `"015-review-send-gate"` to `PACKAGES` in `reviewer/tests/support/seat_tasks.py`, and to its docstring. `test_workstation_test_plan.py` and `test_workstation_handover.py` go red, naming 015 T119 as unplaced. Acceptance: red for want of the step.
 - [ ] T114 [doc] Lane S. Place T119 in the sitting's three documents:
   - `docs/test-plan-2026-09-27/workstation-test-plan.md` gains step 4.10, "A, unticked, then Send [015 T119]", with quickstart Scenario 8's seven steps (no design name or number), the reopen of SOLIDWORKS while a review waits and the big assembly's timings included;
