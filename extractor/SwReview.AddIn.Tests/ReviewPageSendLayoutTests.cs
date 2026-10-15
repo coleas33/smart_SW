@@ -82,6 +82,55 @@ return JSON.stringify({ok:true,text:line.textContent,wholeNoteInView:h.inView(li
         });
     }
 
+    /// <summary>
+    /// T109 acceptance (feature 015 User Story 4), after T108's page code: the restored big
+    /// assembly, read-only with its restored line under the status line and the restored
+    /// sentence; and the same after a failed re-run, with its `rerun_failed` line beside Send.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ARestoredReviewKeepsTheHeadlineTallyNotReachedAndSendInside300By600(bool rerunFailed)
+    {
+        RestoredReviewFixture fixture = RestoredReviewFixture.Read("review-waiting-big-assembly.json");
+        JsonElement send = fixture.Restored.GetProperty("ranking").GetProperty("summary").GetProperty("send");
+        ReviewPageDriver.Run(driver =>
+        {
+            fixture.Configure(driver);
+            if (rerunFailed)
+            {
+                driver.RecheckError = new { error_class = "InvalidPackage", message = "FICT the saved package cannot be read", retryable = false };
+            }
+        }, async driver =>
+        {
+            if (rerunFailed)
+            {
+                await ReviewPageRecheckTests.PressSend(driver);
+            }
+            await ReviewPageSummaryAcceptanceTests.NarrowPane(driver);
+            JsonElement measured = await driver.Read(ReadGeometry);
+            JsonElement lines = await driver.Read(@"
+var reason=document.getElementById('read-only');var failure=document.querySelector('#send .plain-error-text');
+return JSON.stringify({ok:true,reason:reason.textContent,reasonShown:h.rendered(reason),
+ reasonHeight:reason.getBoundingClientRect().height,sendText:document.getElementById('send').textContent,
+ failure:failure?failure.textContent:null,failureInView:h.inView(failure)});");
+            _output.WriteLine((rerunFailed ? "Restored after a failed re-run " : "Restored ") + measured.GetRawText());
+            _output.WriteLine("Lines " + lines.GetRawText());
+            Assert.True(lines.GetProperty("reasonShown").GetBoolean());
+            Assert.Equal(fixture.Restored.GetProperty("read_only_reason").GetString(), lines.GetProperty("reason").GetString());
+            Assert.Contains(send.GetProperty("text").GetString()!, lines.GetProperty("sendText").GetString());
+            if (rerunFailed)
+            {
+                Assert.Equal(send.GetProperty("rerun_failed_text").GetString(), lines.GetProperty("failure").GetString());
+            }
+            Assert.True(measured.GetProperty("headlineInView").GetBoolean(), measured.ToString());
+            Assert.True(measured.GetProperty("tallyInView").GetBoolean(), measured.ToString());
+            Assert.True(measured.GetProperty("notReachedInView").GetBoolean(), measured.ToString());
+            Assert.True(measured.GetProperty("sendInView").GetBoolean(), measured.ToString());
+            Assert.True(measured.GetProperty("sendSlack").GetDouble() >= 0, measured.ToString());
+        });
+    }
+
     [Theory]
     [InlineData(260)]
     [InlineData(300)]

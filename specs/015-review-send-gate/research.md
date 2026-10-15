@@ -1257,6 +1257,21 @@ directly below it. This measures the US1 waiting state; the later failed-Send an
 states remain their own acceptance work. Parent integration regenerates the accepted T053
 fixtures and requires raw equality with this preview before its final pane/full gate.
 
+**T109 restored measurement, 2026-10-15.** The backend-generated `restored` snapshot of
+`review-waiting-big-assembly.json` (T102) was played into the T108 page at 300 by 600, restored
+from its folder after a restart, both as it stands and after a failed re-run. No layout rule was
+changed. The restored line under the status line is 81.6 px high. The proxy above was measured
+with about 70 px.
+
+| State | Not-reached slack to fold | Send button slack to fold |
+|---|---|---|
+| restored | 112.265625 px | 65.875 px |
+| restored after a failed re-run | 112.265625 px | 65.875 px |
+
+The failed re-run's line sits under Send and below the fold; ordinary scrolling reaches it, as it
+does for T077's failure line. The headline, tally, not-reached line and Send are inside the
+viewport in both states, so research R2.21's end state (an owner question) is not reached.
+
 ### R2.22 Where the words live
 
 **Decision**: every sentence the Send block, the summary and the questions panel print comes from
