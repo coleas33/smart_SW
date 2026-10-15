@@ -18,3 +18,8 @@
       ([final receipt](offline-gate-native-entry.md)).
 - [ ] T015 Native selection calibration and source-freshness attestation on the workstation
       (remains pending; no cross-extraction approval carry-forward in this slice).
+- [x] T016 Merge `main` (015's send gate) on top of 016 and regenerate the waiting pane
+      fixtures with 016's labels, 016 landing second (owner decision 99A; 015 T117 note).
+- [x] T017 Context review through 015's one `CreateReviewSession`, Send or Wait from the
+      box, and the page's context controls busy while a review waits, sends or is checked
+      again (99A; T116 integration review, blocker "the context start skips the Send gate").

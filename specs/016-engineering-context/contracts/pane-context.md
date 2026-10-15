@@ -92,3 +92,21 @@ Existing checks-first live reads can append interference evidence to the package
 The opening summary and its saved artifact must therefore be reassessed after pre-run
 checks. A changed baseline retains the historical confirmation and marks its binding /
 applicability as needing review; it never silently carries approval to the new evidence.
+
+## On feature 015's send gate (owner decision 99A, 2026-10-15)
+
+016 was written before 015's send gate and started reviews on its own path. The T116
+integration review of 015 found three blockers and a should-fix for whichever landed
+second; 016 lands second and adapts here.
+
+**The start goes through the gate.** `context.review` starts through the host's one
+`CreateReviewSession`, the path `review.start` takes, with `ReviewMode.Send` when "Send to
+the model when the checks finish" is ticked and `ReviewMode.Wait` when it is not; the
+attachment is threaded into `NewSessionRequest` by name. An unticked context review runs
+the checks with nothing sent, and its record, chip, ready status and `review.started`
+reply (`send_when_checked: false`) are those of any unticked review. The page refuses
+every context control - prepare, selection, save, new input, confirm and review - while
+a review starts, runs a turn, waits for Send, has its Send accepted or is checked again
+(`startPending`, `turnRunning`, `awaitingSend`, `sendPending`, `rechecking`), and the
+context start meets the same guard ordinary Review has.
+

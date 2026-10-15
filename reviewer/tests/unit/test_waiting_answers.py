@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -56,7 +57,15 @@ class Waiting:
         return self.held.run
 
 
-def waiting_review(app: Any, client: TestClient, folder: Path) -> Waiting:
+def waiting_review(
+    app: Any,
+    client: TestClient,
+    folder: Path,
+    *,
+    attach: Callable[[Path], dict[str, Any]] | None = None,
+) -> Waiting:
+    """An unticked review of the questions package; `attach` adds body fields once it is
+    written (feature 016's engineering context, owner decision 99A)."""
     fixture = build_questions_package(folder)
     app.state.server.bridge_factory = lambda pipe, secret: fixture.bridge
     response = client.post(
@@ -66,6 +75,7 @@ def waiting_review(app: Any, client: TestClient, folder: Path) -> Waiting:
             standards_profile=str(fixture.profile),
             bridge={"pipe": "FICT-pipe", "secret": "FICT-secret"},
             send_when_checked=False,
+            **(attach(folder) if attach is not None else {}),
         ),
     )
     assert response.status_code == 201, response.text

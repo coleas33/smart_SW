@@ -982,7 +982,8 @@ public sealed class ReviewHostTests
                 {
                     create.Invoke(world.Host, new object?[] { world.Document, run, null, ReviewMode.Wait,
                         "race-" + i, new DumpSummary(Path.Combine(run, "package.json"), 12, 0, null),
-                        null /* replacing: none for a fresh start */ });
+                        null /* replacing: none for a fresh start */,
+                        null /* attachment: no saved engineering context (feature 016) */ });
                 }
             }
             finally

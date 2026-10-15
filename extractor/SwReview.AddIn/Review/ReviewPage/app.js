@@ -3190,7 +3190,12 @@
 
     contextPane = window.SwReviewEngineeringContext.create({
       send: send, call: call,
-      busy: function () { return state.startPending || state.turnRunning; },
+      // Owner decision 99A: no context edit or context review while a review is being started,
+      // runs a turn, waits for Send, has its Send accepted or is checked again.
+      busy: function () {
+        return state.startPending || state.turnRunning || state.sendPending || state.rechecking
+          || state.awaitingSend;
+      },
       ready: function () { return !!state.backend && !!state.token; },
       document: function () { return state.documentInfo; },
       startReview: function (request) { return startReviewRequest('context.review', request); }
