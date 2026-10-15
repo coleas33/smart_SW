@@ -338,3 +338,175 @@ def test_every_emitted_event_validates_against_the_contract() -> None:
     assert set(sink.types) == {"usage", "tool.started", "tool.finished", "text.delta", "text.done"}
     for event in sink.serialized():
         validator.validate(event)
+
+
+class _TransientFakeResponseError(providers.ProviderError):
+    retryable = True
+
+
+class _RetryingFakeProvider(FakeProvider):
+    """A request fails at the response boundary, before its usage or tools run."""
+
+    def __init__(
+        self,
+        *,
+        script: tuple[ScriptedTurn, ...],
+        failures: dict[int, providers.ProviderError],
+        delta_before_failure: bool = False,
+    ) -> None:
+        super().__init__(script=script, model="fict-model-a-2026-10-01", clock=frozen_clock)
+        self.failures = failures
+        self.delta_before_failure = delta_before_failure
+        self.responses: list[Any] = []
+
+    def _response(self, scripted: Any, on_event: providers.EventCallback) -> Any:
+        self.responses.append(scripted)
+        failure = self.failures.get(len(self.responses))
+        if failure is not None:
+            if self.delta_before_failure:
+                on_event("text.delta", {"text": "already visible"})
+            raise failure
+        return super()._response(scripted, on_event)
+
+
+def test_fake_retry_keeps_completed_requests_and_tools_outside_the_loop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from swreview.agent.providers import retry
+    from swreview.agent.providers.fake import SYNTHETIC_USAGE, ScriptedRound
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(retry, "sleep", sleeps.append)
+    monkeypatch.setattr(retry, "uniform", lambda low, high: high)
+    first = ScriptedRound((ScriptedToolCall("list_components", {"n": 1}),), SYNTHETIC_USAGE)
+    second = ScriptedRound((ScriptedToolCall("list_components", {"n": 2}),), SYNTHETIC_USAGE)
+    closing = ScriptedTurn(text="done", rounds=(first, second))
+    fake = _RetryingFakeProvider(
+        script=(closing,), failures={2: _TransientFakeResponseError("try again")}
+    )
+    fake.use_retry(
+        retry.RetryPolicy(retries=2, initial_delay_s=0.5, max_delay_s=2.0),
+        stop_requested=lambda: False,
+    )
+    tool = FakeTool(name="list_components")
+
+    result, sink = run(fake, [tool])
+
+    assert fake.responses == [first, second, second, closing]
+    assert [arguments for arguments, _ in tool.calls] == [{"n": 1}, {"n": 2}]
+    assert [body["round_index"] for body in sink.bodies("usage")] == [0, 1, 2]
+    assert [body["retries"] for body in sink.bodies("usage")] == [0, 1, 0]
+    assert sink.bodies("error") == []
+    assert sink.bodies("text.delta") == [{"text": "done"}]
+    assert result.steps == 2
+    assert len([message for message in result.messages if message["role"] == "tool"]) == 2
+    assert sleeps == [0.5]
+
+
+def test_fake_retry_emits_one_final_error_with_the_retry_count(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from swreview.agent.providers import retry
+
+    monkeypatch.setattr(retry, "sleep", lambda delay: None)
+    failure = _TransientFakeResponseError("still busy")
+    fake = _RetryingFakeProvider(
+        script=(ScriptedTurn(text="unreached"),), failures=dict.fromkeys((1, 2, 3), failure)
+    )
+    fake.use_retry(
+        retry.RetryPolicy(retries=2, initial_delay_s=0.5, max_delay_s=2.0),
+        stop_requested=lambda: False,
+    )
+    sink = Sink()
+
+    with pytest.raises(_TransientFakeResponseError, match="still busy") as raised:
+        run(fake, [], sink=sink)
+
+    assert raised.value is failure
+    assert len(fake.responses) == 3
+    assert sink.types == ["error"]
+    assert sink.bodies("error") == [{
+        "error_class": "_TransientFakeResponseError",
+        "message": "still busy",
+        "retryable": True,
+        "retries": 2,
+    }]
+    assert failure.retries == 2
+
+
+@pytest.mark.parametrize("blocker", ["first_delta", "attempt_stop", "provider_stop"])
+def test_fake_retry_respects_request_delta_and_stop_boundaries(
+    monkeypatch: pytest.MonkeyPatch, blocker: str,
+) -> None:
+    from swreview.agent.providers import retry
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(retry, "sleep", sleeps.append)
+    failure = _TransientFakeResponseError("request failed")
+    if blocker == "provider_stop":
+        failure.stop_reason = "content_filter"
+    fake = _RetryingFakeProvider(
+        script=(ScriptedTurn(text="unreached"),),
+        failures={1: failure},
+        delta_before_failure=blocker == "first_delta",
+    )
+    fake.use_retry(
+        retry.RetryPolicy(retries=3, initial_delay_s=0.5, max_delay_s=2.0),
+        stop_requested=lambda: blocker == "attempt_stop",
+    )
+    sink = Sink()
+
+    with pytest.raises(_TransientFakeResponseError) as raised:
+        run(fake, [], sink=sink)
+
+    assert raised.value is failure
+    assert len(fake.responses) == 1
+    assert sleeps == []
+    assert sink.bodies("usage") == []
+    assert len(sink.bodies("error")) == 1
+    assert sink.bodies("error")[0]["retries"] == 0
+    expected_deltas = [{"text": "already visible"}] if blocker == "first_delta" else []
+    assert sink.bodies("text.delta") == expected_deltas
+
+
+def test_fake_presentation_keeps_the_retry_policy_and_stop_callback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from swreview.agent.providers import retry
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(retry, "sleep", sleeps.append)
+    primary = FakeProvider(
+        script=(ScriptedTurn(text="review"),),
+        explanation_script=(ScriptedTurn(text="presentation"),),
+        model="fict-model-a-2026-10-01",
+        clock=frozen_clock,
+    )
+    stopped = False
+    primary.use_retry(
+        retry.RetryPolicy(retries=2, initial_delay_s=0.5, max_delay_s=2.0),
+        stop_requested=lambda: stopped,
+    )
+    presentation = primary.for_presentation(2048)
+    assert isinstance(presentation, providers.RetryAware)
+    _, successful = run(presentation, [])
+    assert successful.bodies("usage")[0]["retries"] == 0
+
+    stopped = True
+    failure = _TransientFakeResponseError("presentation busy")
+    requests: list[ScriptedTurn] = []
+
+    def fail_response(self: FakeProvider, scripted: ScriptedTurn, on_event: Any) -> ScriptedTurn:
+        requests.append(scripted)
+        raise failure
+
+    monkeypatch.setattr(FakeProvider, "_response", fail_response)
+    sink = Sink()
+    with pytest.raises(_TransientFakeResponseError) as raised:
+        run(primary.for_presentation(2048), [], sink=sink)
+
+    assert raised.value is failure
+    assert len(requests) == 1
+    assert sleeps == []
+    assert sink.bodies("error")[0]["retries"] == 0
+    assert primary._turn_index == 0

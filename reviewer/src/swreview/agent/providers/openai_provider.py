@@ -44,6 +44,9 @@ import json
 import logging
 import re
 from collections.abc import Callable, Collection, Mapping, Sequence
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
+from math import isfinite
 from time import perf_counter
 from typing import Any
 
@@ -55,6 +58,7 @@ from swreview.agent.providers import (
     EffortLevel,
     EffortMapping,
     EventCallback,
+    EventType,
     ProviderError,
     ProviderName,
     ProviderTool,
@@ -72,6 +76,7 @@ from swreview.agent.providers import (
     usage_body,
 )
 from swreview.agent.providers.pruning import prune_history
+from swreview.agent.providers.retry import RetryPolicy, run_request
 from swreview.agent.providers.schema import strictify
 from swreview.agent.settings import ModelViewSettings, output_ceiling, redact
 
@@ -291,6 +296,9 @@ class OpenAIProvider:
         self._client = client if client is not None else OpenAI(api_key=api_key, base_url=base_url)
         self._api_key = api_key if api_key else str(getattr(self._client, "api_key", "") or "")
         self._clock = clock
+        self._retry_policy: RetryPolicy | None = None
+        self._stop_requested: Callable[[], bool] = lambda: False
+        self._request_retries: int | None = None
         self._step_index = 0
         self.prompt_cache_key: str | None = None
         """This session's cache name, or `None` while lever 3 is off - which is the
@@ -322,7 +330,7 @@ class OpenAIProvider:
         normal cache and parallel-call settings off; all response, step and usage state
         belongs to the returned adapter.
         """
-        return OpenAIProvider(
+        adapter = OpenAIProvider(
             model=self.model,
             max_output_tokens=max_output_tokens,
             parallel_tool_calls=False,
@@ -330,6 +338,17 @@ class OpenAIProvider:
             client=self._client,
             clock=self._clock,
         )
+        if self._retry_policy is not None:
+            adapter.use_retry(self._retry_policy, stop_requested=self._stop_requested)
+        return adapter
+
+    def use_retry(
+        self, policy: RetryPolicy, *, stop_requested: Callable[[], bool]
+    ) -> None:
+        """Use request retries that can observe the attempt's stop."""
+        self._client = self._client.with_options(max_retries=0)
+        self._retry_policy = policy
+        self._stop_requested = stop_requested
 
     # --- the prompt cache (feature 005, lever 3) ---------------------------------------
 
@@ -451,6 +470,13 @@ class OpenAIProvider:
             # tool calls take is outside the latency this records.
             recorded = usage_of(response, latency_s=max(self._clock() - started, 0.0))
             self.round_usage.append(recorded)
+            retries = self._request_retries
+            if self._retry_policy is not None and response.status == "incomplete":
+                reason = response.incomplete_details.reason if response.incomplete_details else None
+                if reason != "max_output_tokens":
+                    # Keep billed usage; the failed request's retries belong to its
+                    # final error, so summing event counts does not count them twice.
+                    retries = 0
             # Straight onto the stream, before this round's tool calls are dispatched. The
             # sink appends and closes per event, so a round that is paid for is on disk
             # even if the next one raises and no `TurnResult` is ever built.
@@ -463,6 +489,7 @@ class OpenAIProvider:
                     model=self.model,
                     cache_diagnostic=_cache_diagnostic(response),
                     served_model=getattr(response, "model", None),
+                    retries=retries,
                 ),
             )
             raw_output = [
@@ -559,26 +586,60 @@ class OpenAIProvider:
                     "comparison_response_id": self._last_response_id
                 }
 
-        try:
-            final = self._stream(request, on_event)
-        except openai.BadRequestError as refused:
-            resend = self._with_reasoning_kept(request, visible, refused)
-            if resend is None:
-                raise self._mapped(refused, on_event) from refused
-            try:
-                final = self._stream(resend, on_event)
-            except openai.OpenAIError as exc:
-                raise self._mapped(exc, on_event) from exc
-        except openai.OpenAIError as exc:
-            raise self._mapped(exc, on_event) from exc
+        self._request_retries = None
 
-        if final is None:
-            raise self._raise_error(
-                "the response stream ended without response.completed or response.incomplete",
-                error_class="IncompleteStreamError",
-                retryable=True,
-                on_event=on_event,
-            )
+        def attempt(emit: EventCallback) -> Response:
+            nonlocal request
+            emitted_delta = False
+
+            def stream_event(kind: EventType, body: Mapping[str, Any]) -> None:
+                nonlocal emitted_delta
+                if kind == "text.delta":
+                    emitted_delta = True
+                emit(kind, body)
+
+            try:
+                final = self._stream(request, stream_event)
+            except openai.BadRequestError as refused:
+                if self._retry_policy is not None and (
+                    emitted_delta or self._stop_requested()
+                ):
+                    raise self._mapped(refused, stream_event) from refused
+                resend = self._with_reasoning_kept(request, visible, refused)
+                if resend is None:
+                    raise self._mapped(refused, stream_event) from refused
+                if self._retry_policy is not None and self._stop_requested():
+                    raise self._mapped(refused, stream_event) from refused
+                request = resend
+                try:
+                    final = self._stream(request, stream_event)
+                except openai.OpenAIError as exc:
+                    raise self._mapped(exc, stream_event) from exc
+            except openai.OpenAIError as exc:
+                raise self._mapped(exc, stream_event) from exc
+
+            if final is None:
+                raise self._raise_error(
+                    "the response stream ended without response.completed or response.incomplete",
+                    error_class="IncompleteStreamError",
+                    retryable=True,
+                    on_event=stream_event,
+                )
+            return final
+
+        if self._retry_policy is None:
+            final = attempt(on_event)
+        else:
+            try:
+                final, self._request_retries = run_request(
+                    attempt,
+                    policy=self._retry_policy,
+                    stop_requested=self._stop_requested,
+                    on_event=on_event,
+                )
+            except ProviderError as error:
+                self._emit_error(error, on_event, retries=error.retries)
+                raise
         # After the round succeeded, so the next round in this turn is compared against
         # the response that actually landed. A round that raised leaves the previous id
         # in place: it is still the last prefix the service saw from us.
@@ -648,13 +709,16 @@ class OpenAIProvider:
         reason = response.incomplete_details.reason if response.incomplete_details else None
         if reason == "max_output_tokens":
             return True
-        raise self._raise_error(
+        error = self._raise_error(
             f"the response ended incomplete: {reason}",
             error_class="IncompleteResponseError",
             retryable=False,
             stop_reason=reason or "unset",
             on_event=on_event,
         )
+        if self._retry_policy is not None:
+            self._emit_error(error, on_event, retries=self._request_retries)
+        raise error
 
     def _finish(
         self,
@@ -709,7 +773,7 @@ class OpenAIProvider:
         return redact(text, [self._api_key])
 
     def _mapped(self, exc: openai.OpenAIError, on_event: EventCallback) -> OpenAIProviderError:
-        """One `openai` exception, named, classified, redacted, and announced."""
+        """One library exception, named, classified and redacted."""
         if isinstance(exc, OpenAIProviderError):  # pragma: no cover - defensive
             return exc
         if isinstance(exc, openai.APIConnectionError | openai.RateLimitError):
@@ -732,13 +796,16 @@ class OpenAIProvider:
             }
         ):
             stop_reason = exc.code
-        return self._raise_error(
+        error = self._raise_error(
             str(exc),
             error_class=type(exc).__name__,
             retryable=retryable,
             stop_reason=stop_reason,
             on_event=on_event,
         )
+        if self._retry_policy is not None and isinstance(exc, openai.APIStatusError):
+            error.retry_after_s = _retry_after_s(exc.response.headers.get("retry-after"))
+        return error
 
     def _failed(self, response: Response, on_event: EventCallback) -> OpenAIProviderError:
         message = response.error.message if response.error else "the response failed"
@@ -761,20 +828,54 @@ class OpenAIProvider:
         on_event: EventCallback,
         stop_reason: str | None = None,
     ) -> OpenAIProviderError:
-        """Build the error and emit it: the runner's own `error` event cannot classify it."""
+        """Build a redacted error; a policy defers emission until the final failure."""
         redacted = self._redact(message)
-        on_event(
-            "error",
-            error_body(
-                error_class=error_class,
-                message=redacted,
-                retryable=retryable,
-                stop_reason=stop_reason,
-            ),
-        )
+        if self._retry_policy is None:
+            on_event(
+                "error",
+                error_body(
+                    error_class=error_class,
+                    message=redacted,
+                    retryable=retryable,
+                    stop_reason=stop_reason,
+                ),
+            )
         error = OpenAIProviderError(redacted, error_class=error_class, retryable=retryable)
         error.stop_reason = stop_reason
         return error
+
+    def _emit_error(
+        self, error: ProviderError, on_event: EventCallback, *, retries: int | None
+    ) -> None:
+        """Announce only a request's final failure under a policy."""
+        error.retries = retries
+        on_event(
+            "error",
+            error_body(
+                error_class=error.error_class,
+                message=str(error),
+                retryable=error.retryable,
+                stop_reason=error.stop_reason,
+                retries=retries,
+            ),
+        )
+
+
+def _retry_after_s(value: str | None) -> float | None:
+    """Read seconds or an HTTP date; an invalid header adds no delay."""
+    if value is None:
+        return None
+    try:
+        delay = float(value)
+    except ValueError:
+        try:
+            at = parsedate_to_datetime(value)
+            if at.tzinfo is None:
+                at = at.replace(tzinfo=UTC)
+            delay = (at - datetime.now(UTC)).total_seconds()
+        except (TypeError, ValueError, OverflowError):
+            return None
+    return max(delay, 0.0) if isfinite(delay) else None
 
 
 # --- history encoding -------------------------------------------------------------------
