@@ -667,7 +667,7 @@ Every price has its source and date. Prices are filled from the providers' publi
 the table lands, never guessed; a model with no entry reads cost unknown. Three prices per model,
 as FR-042 fixes, and no tiers: no default model (`agent/settings.py:103-107`) is shown to need
 them, and a model whose public price is tiered gets no entry, so its cost reads unknown naming it,
-until a commit adds tiers with their test (plan decision RF-8). **Cache-write tokens**
+until a commit adds tiers with their test (plan decision RF-8). *Amended 2026-10-15 (owner decisions 102A, 103A):* an entry may carry `short_context_max_input_tokens`, the last input count its prices apply to; a round whose input exceeds it is cost unknown, named "`<model>`: long-context tier, not priced". The OpenAI default `gpt-5.6` is not on the pricing page, so the table enters its variants `gpt-5.6-sol`, `-terra` and `-luna` at their short-context prices with 272000, and a round is priced by the variant its served id names. Gemini has no entry (94A). **Cache-write tokens**
 (`TokenUsage.cache_write_tokens`, OpenAI only, `agent/providers/__init__.py:167`) have no price of
 the three: they are shown as a count and never priced, and the cost's basis says so whenever a round
 reports a non-zero count. This settles D10's open column (plan decision INT-5,
