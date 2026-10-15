@@ -10,7 +10,8 @@ three callers:
   chat's state and the stream's last seq, so a page reloaded mid-turn can reopen the
   stream where the snapshot ends);
 - `GET /reviews/{run_id}`, from a run folder after a backend restart, read-only with the
-  words file's reason;
+  words file's reason (`restored_snapshot`; a record that waits for Send is dated and
+  carries its `restored` Send block, feature 015);
 - the page fixture `tests/fixtures/pane/generate_pane_fixture.py` writes.
 
 Pure: it reads its arguments (and, through the summary, the words file) and writes
@@ -25,7 +26,7 @@ from pydantic_core import to_jsonable_python
 
 from swreview.ir.models import EvidencePackage
 from swreview.report.names import component_names
-from swreview.report.summary import COVERAGE_BUCKETS, review_ranking
+from swreview.report.summary import COVERAGE_BUCKETS, load_words, review_ranking
 from swreview.report.titles import pane_finding
 from swreview.report.unexamined import not_examined
 
@@ -34,7 +35,13 @@ if TYPE_CHECKING:  # pragma: no cover - imported for annotations only
     from swreview.report.session import ReviewSession
     from swreview.report.summary import SendInput
 
-__all__ = ["review_snapshot", "root_document"]
+__all__ = ["WAITING_STATES", "restored_snapshot", "review_snapshot", "root_document"]
+
+WAITING_STATES = frozenset({"not_sent", "send_failed"})
+"""The `model_status` states of a record that waits for Send (feature 015)."""
+
+WHEN_FORMAT = "%Y-%m-%d %H:%M"
+"""`{when}` of `send.restored_line`: the stored wall clock, never converted (015 records.md 1)."""
 
 
 def review_snapshot(
@@ -80,6 +87,33 @@ def review_snapshot(
     if send_in_flight:
         snapshot["send_in_flight"] = True
     return snapshot
+
+
+def restored_snapshot(
+    session: ReviewSession, package: EvidencePackage, *, run_id: str
+) -> dict[str, Any]:
+    """`GET /reviews/{run_id}`'s body: the record read-only, as restored from its run folder.
+
+    Every record is read-only with feature 009's sentence (`Words.read_only`), except one
+    that waits for Send (`not_sent` or `send_failed`; feature 015 `contracts/recheck.md`
+    section 8, owner decisions 68A and 73A). Its reason is the words file's
+    `read_only_lead`, a space, and `send.restored_line` dated with `checked_at`'s stored wall
+    clock - 009's second sentence is not in it - and its summary carries the `restored` Send
+    block, with no count, from the persisted provider alone.
+    """
+    words = load_words()
+    status = session.model_status
+    if status is None or status.state not in WAITING_STATES:
+        return review_snapshot(session, package, run_id=run_id, read_only_reason=words.read_only)
+    send: SendInput = {
+        "state": "restored",
+        "input_tokens": None,
+        "provider": session.provider_info.provider if session.provider_info else "",
+        "send_error": None,
+    }
+    when = status.checked_at.strftime(WHEN_FORMAT)
+    reason = f"{words.read_only_lead} {words.send.restored_line.format(when=when)}"
+    return review_snapshot(session, package, run_id=run_id, send=send, read_only_reason=reason)
 
 
 def root_document(package: EvidencePackage) -> dict[str, str] | None:

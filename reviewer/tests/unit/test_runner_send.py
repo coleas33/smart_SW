@@ -719,6 +719,7 @@ def test_send_preparation_changes_nothing_and_commit_withdraws_only_its_own_rows
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from tests.support.restart import disk_at, restarted_app
+    from tests.support.restored import assert_restored_as_waiting
     from tests.unit import test_chat_server as chat_cases
 
     clock = [CHECKED]
@@ -838,6 +839,15 @@ def test_send_preparation_changes_nothing_and_commit_withdraws_only_its_own_rows
                 restored = fresh.get(f"/reviews/{after_usage.folder.name}")
                 assert restored.status_code == 200, restored.text
                 assert restored.json()["read_only"] is True
+            # 015 T099: the copy a kill before the first usage leaves is restored as the
+            # `send_failed` record it holds, read-only with its dated line and Send.
+            with restarted_app(
+                before_usage.root,
+                {"token": chat_cases.TOKEN, "allow_origin": chat_cases.ORIGIN, "development": True},
+            ) as fresh:
+                restored = fresh.get(f"/reviews/{before_usage.folder.name}")
+                assert restored.status_code == 200, restored.text
+                assert_restored_as_waiting(restored.json(), interrupted)
             assert run.session.model_status.checked_at == checked
             assert run.session.timing.unattended_runtime_minutes == 2
             assert sum(entry.presentation for entry in provider.log) == 1

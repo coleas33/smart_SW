@@ -143,8 +143,8 @@ from swreview.report.dispositions import DECISIONS, REPORT_FILE_NAME, find_findi
 from swreview.report.markdown import render_report
 from swreview.report.names import component_names
 from swreview.report.session import ReviewSession, load_session
-from swreview.report.snapshot import review_snapshot
-from swreview.report.summary import SendInput, load_words, review_ranking
+from swreview.report.snapshot import WAITING_STATES, restored_snapshot, review_snapshot
+from swreview.report.summary import load_words, review_ranking
 from swreview.report.titles import with_display_titles
 from swreview.report.unexamined import not_examined
 from swreview.tools.registry import TOOL_RESULTS_DIR_NAME
@@ -1802,22 +1802,7 @@ class ChatServer:
             package = load_package(review_dir).package
         except PACKAGE_ERRORS as exc:
             raise unknown from exc
-        send: SendInput | None = None
-        if session.model_status is not None and session.model_status.state in {
-            "not_sent", "send_failed",
-        }:
-            send = {
-                "state": "restored", "input_tokens": None,
-                "provider": session.provider_info.provider if session.provider_info else "",
-                "send_error": None,
-            }
-        return review_snapshot(
-            session,
-            package,
-            run_id=review_dir.name,
-            send=send,
-            read_only_reason=load_words().read_only,
-        )
+        return restored_snapshot(session, package, run_id=review_dir.name)
 
     def _family_of(self, check_dir: Path) -> str:
         """The family whose check `check_dir` holds, from the record's own stamp.
@@ -2230,7 +2215,7 @@ class ChatServer:
         except PACKAGE_ERRORS as exc:
             raise UnknownReview(f"no review {run_dir.name!r} under the run root") from exc
         status = earlier.model_status
-        if status is None or status.state not in {"not_sent", "send_failed"}:
+        if status is None or status.state not in WAITING_STATES:
             raise NotWaiting(f"the review in {run_dir.name!r} is not waiting for Send")
         return earlier
 

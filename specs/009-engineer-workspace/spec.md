@@ -180,7 +180,7 @@ Everywhere in the engineer's default view, internal vocabulary gives way to word
 **Sessions (User Story 6)**
 
 - **FR-020**: Every finished review in the SOLIDWORKS session MUST be kept as a chip naming its document, configuration and time, and choosing it MUST restore its results without a new review.
-- **FR-021**: A review whose live conversation is gone MUST be restorable read-only from its run folder, with the reason shown and follow-up and dispositions disabled.
+- **FR-021**: A review whose live conversation is gone MUST be restorable read-only from its run folder, with the reason shown and follow-up and dispositions disabled. A review that waits for Send (feature 015) is restored read-only too, its reason the first sentence of this read-only line and the date and time its checks ran, with Send its one control (feature 015 T100, 2026-10-14; [recheck](../015-review-send-gate/contracts/recheck.md) section 8).
 - **FR-022**: A configuration switch within the reviewed document MUST hide a review of another configuration.
 - **FR-023**: Show in SOLIDWORKS MUST resolve against the review currently shown, never against whichever run happened to be latest.
 

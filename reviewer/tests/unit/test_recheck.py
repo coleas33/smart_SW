@@ -64,6 +64,7 @@ from tests.support.prerun import LIVE_ROWS, live_prerun_package, prerun_package
 from tests.support.questions_package import build_questions_package
 from tests.support.recording_provider import RecordedRequest, RecordingProvider
 from tests.support.restart import BEFORE_REPLACE, disk_at, restarted_app
+from tests.support.restored import assert_restored_as_waiting
 from tests.support.review_bridge import VOLUME_UNIT_GAP, ScriptedReviewBridge
 from tests.support.roles_review import PLATE_ID
 from tests.unit import test_chat_server as chat
@@ -816,16 +817,14 @@ def assert_earlier_restorable(
 ) -> dict[int, set[str]]:
     """The folder holds the earlier record whole, a fresh app restores it, and re-runs it.
 
+    The restore is the earlier record's, read-only with its dated line and Send (T099).
     Returns the indexes the successful re-run left.
     """
     assert (folder / "session.json").read_bytes() == earlier.files["session.json"]
     with restarted_app(root, settings) as fresh:
         restored = fresh.get(f"/reviews/{folder.name}")
         assert restored.status_code == 200, restored.text
-        assert restored.json()["read_only"] is True
-        assert [finding["id"] for finding in restored.json()["findings"]] == [
-            finding.id for finding in earlier.record.findings
-        ]
+        assert_restored_as_waiting(restored.json(), earlier.record)
         again = recheck(fresh, folder)
         assert again.status_code == 201, again.text
         assert chat.state_of(fresh, again.json()["chat_id"]) == "awaiting_send"
