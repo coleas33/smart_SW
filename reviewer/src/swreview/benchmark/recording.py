@@ -34,6 +34,7 @@ writes nothing.
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -52,12 +53,30 @@ __all__ = [
     "RecordedTurn",
     "Recording",
     "RecordingRefused",
+    "bracketing_step",
     "read_recording",
+    "round_kind",
 ]
 
 UNCOMMITTED_ENDS = frozenset({"stopped", "error"})
 """Turn ends the runner keeps no history for: the turn raised instead of returning, so the next
 turn's request does not carry it."""
+
+
+def round_kind(text_done: bool) -> Literal["main", "presentation"]:
+    """A round's kind, by its position alone: a `usage` after its turn's `text.done` is the
+    presentation request (the explanation pass), any other a main round. The replay's reader and
+    the report's walk both read rounds so (feature 014 owner decision 85A)."""
+    return "presentation" if text_done else "main"
+
+
+def bracketing_step(open_steps: Collection[int]) -> int | None:
+    """The step a `finding` or `finding.withdrawn` event belongs to: the one call whose
+    `tool.started`/`tool.finished` bracket is open, or `None` when no call or several are."""
+    if len(open_steps) != 1:
+        return None
+    [step] = open_steps
+    return step
 
 
 class RecordingRefused(ValueError):
@@ -247,10 +266,9 @@ class _EventReader:
             self._turn = _OpenTurn(answers=self._answers, rounds=[])
             self._answers = []
         main = [r for r in self._turn.rounds if r["kind"] == "main"]
-        presentation = self._turn.text_done
         self._turn.rounds.append(
             {
-                "kind": "presentation" if presentation else "main",
+                "kind": round_kind(self._turn.text_done),
                 "index": len(main),
                 "usage": usage_from_body(body),
                 "calls": [],
@@ -276,8 +294,8 @@ class _EventReader:
         finding_id = body.get("id")
         if not isinstance(finding_id, str) or finding_id in self.finding_steps:
             return
-        if len(self._open_calls) == 1:
-            [step] = self._open_calls
+        step = bracketing_step(self._open_calls)
+        if step is not None:
             self.finding_steps[finding_id] = step
 
     def _ended(self, reason: str) -> None:

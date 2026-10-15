@@ -52,12 +52,13 @@ from swreview.checks.standards.profile import load_profile
 from swreview.ir.loader import PACKAGE_FILE_NAME, AnswerKeyAccessError, load_package, save_package
 from swreview.report.names import component_names
 from swreview.tools.registry import TOOL_RESULTS_DIR_NAME
-from tests.support import local_paths, roles_review
+from tests.support import local_paths, roles_review, studies
 from tests.support.answer_keys import write_key
 from tests.support.packages import build_package
 from tests.support.prerun import prerun_package
 from tests.support.replay import record_scripted_review
 from tests.support.scripted_answers import FIT, ask, case_file, turn
+from tests.support.studies import PackageSpec, RunSpec, write_run
 from tests.unit.test_benchmark_answers_roles import ALL_BOUGHT, FIT_ANSWER, PIN_1, PLATE_1
 from tests.unit.test_replay_recording import SUMMARY
 
@@ -324,7 +325,7 @@ def scored_report_runs(folder: Path) -> Runs:
     set_path = folder / "set.json"
     entries = [
         {"package_id": CASE_A, "path": str(packages / CASE_A), "held_out": True},
-        {"package_id": CASE_B, "path": str(packages / CASE_B)},
+        {"package_id": CASE_B, "path": str(packages / CASE_B), "represents": ["R-1", "AF-2"]},
         {
             "package_id": ROLES,
             "path": str(roles_dir),
@@ -1118,15 +1119,23 @@ def test_r8_the_report_opens_no_key_and_no_case_file(
 
 def test_r9_the_output_holds_no_local_path_and_every_link_is_relative(off_report: Path) -> None:
     """FR-051's test, over every file the build wrote. The scanner reads one thing that is no
-    path as a rooted one: the closing tag of R-13's planted markup, escaped (`&lt;/script&gt;`),
-    which names no folder; every other offence fails the test."""
+    path as a rooted one: the closing tag of R-13's planted markup, escaped (`&lt;/script&gt;`).
+    Exactly as many of those as the pages hold are let through, each in `fict-a`'s transcript,
+    and nothing else (owner decision 85A)."""
+    planted = sum(
+        page.read_text(encoding="utf-8").count("&lt;/script&gt;")
+        for page in off_report.rglob("*.html")
+    )
     offences = local_paths.scan_folder(off_report)
     markup = [
         offence
         for offence in offences
-        if offence.reason == local_paths.ROOTED_PATH and offence.text.startswith("/script&gt")
+        if offence.reason == local_paths.ROOTED_PATH
+        and offence.text.startswith("/script&gt")
+        and offence.file.name == f"{CASE_A}.html"
     ]
-    assert markup, "the planted markup is in the transcripts"
+    assert planted > 0
+    assert len(markup) == planted
     assert [offence for offence in offences if offence not in markup] == []
     for page_path in off_report.rglob("*.html"):
         for href in Page(page_path).hrefs:
@@ -1683,3 +1692,99 @@ def test_84a_package_ids_one_file_name_when_case_folded_are_refused(
         f"{run}: package ids 'fict-a' and 'FICT-A' are one file name where case is not told apart"
     )
     assert not out.exists()
+
+
+# --- owner decision 85A: independent literals, the two-drive refusal, shared rules ----------
+
+
+def _tags_line(page: Page, package_id: str) -> str:
+    return page.blocks[page.index_of("h2", package_id) + 1][1]
+
+
+def test_85a_each_case_s_tags_count_known_defects_by_tag_and_producer(off_report: Path) -> None:
+    page = Page(off_report / "index.html")
+
+    assert _tags_line(page, CASE_A) == (
+        "held out: model-produced 1, code-produced 0; tuned on: model-produced 0, code-produced 1"
+    )
+    assert _tags_line(page, CASE_B) == (
+        "held out: model-produced 0, code-produced 0; tuned on: model-produced 1, code-produced 0; "
+        "represents R-1, AF-2"
+    )
+    assert _tags_line(page, ROLES) == (
+        "held out: model-produced 0, code-produced 0; tuned on: model-produced 1, code-produced 0"
+    )
+
+
+def test_85a_a_total_names_how_many_packages_reported_nothing_and_a_cell_reads_unknown(
+    tmp_path: Path,
+) -> None:
+    unmeasured = PackageSpec(
+        package_id="pkg-b", input_tokens=None, total_tokens=None, wall_clock_s=None
+    )
+    run = write_run(
+        tmp_path / "runs",
+        RunSpec(run="off-1", packages=(PackageSpec(package_id="pkg-a"), unmeasured)),
+    )
+    out = tmp_path / "report"
+
+    build_report([run], out)
+
+    page = Page(out / "index.html")
+    assert page.table("Totals").rows[1] == [
+        "off-1",
+        "2",
+        "unknown (1 of 2 packages report no usage)",
+        "unknown (1 of 2 packages report no wall clock)",
+    ]
+    [row] = page.table("pkg-b").rows[1:]
+    assert row[5:7] == ["unknown", "unknown"]
+
+
+def test_85a_gemini_s_reasoning_tokens_are_named_thoughts(tmp_path: Path) -> None:
+    run = write_run(tmp_path / "runs", RunSpec(run="off-1", provider="gemini"))
+    out = tmp_path / "report"
+
+    build_report([run], out)
+
+    [row] = Page(out / "index.html").table("rms-part").rows[1:]
+    assert row[5] == (
+        "input 400000; cached input 320000; output 18000; thoughts 16000; cache-write unknown"
+    )
+
+
+def test_85a_run_folders_on_two_drives_are_refused(
+    report_runs: Runs, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two drives have no common path (`os.path.commonpath` raises), so no run folder could be
+    named relative to one."""
+
+    def two_drives(paths: Any) -> str:
+        raise ValueError("Paths don't have the same drive")
+
+    monkeypatch.setattr(os.path, "commonpath", two_drives)
+    out = tmp_path / "report"
+
+    with pytest.raises(report_page.ReportError) as refused:
+        build_report([report_runs.off, report_runs.on], out)
+
+    assert str(refused.value) == (
+        "the run folders have no common parent (they lie on different drives); copy them under "
+        "one folder first"
+    )
+    assert not out.exists()
+
+
+def test_85a_the_report_reads_rounds_and_brackets_by_the_replay_s_rules() -> None:
+    """Shared, never restated: the explanation pass and the finding under the one open call."""
+    assert report_page.round_kind is recording.round_kind
+    assert report_page.bracketing_step is recording.bracketing_step
+    assert recording.round_kind(True) == "presentation"
+    assert recording.round_kind(False) == "main"
+    assert recording.bracketing_step({7: "call"}) == 7
+    assert recording.bracketing_step({}) is None
+    assert recording.bracketing_step({3: "a", 4: "b"}) is None
+
+
+def test_85a_the_study_builder_sums_by_the_scorer_s_rule() -> None:
+    assert studies.sum_or_none is scorecard.sum_or_none

@@ -45,6 +45,7 @@ from swreview.agent.runner import SESSION_FILE_NAME
 from swreview.benchmark.answers import AnswerLog, AnswerPoint, read_answer_log
 from swreview.benchmark.compare import distinct_run_dirs, format_count
 from swreview.benchmark.origins import MODEL_ORIGINS
+from swreview.benchmark.recording import bracketing_step, round_kind
 from swreview.benchmark.runner import SAVED_SET_FILE, RunProvenance, load_provenance
 from swreview.benchmark.scorecard import (
     NOT_ASSESSED,
@@ -1013,7 +1014,7 @@ class _LogWalk:
             self._flush_calls()
             self.rounds += 1
             label = f"Round {format_count(self.rounds)}"
-            if self.text_done:
+            if round_kind(self.text_done) == "presentation":
                 label += f": {EXPLANATION_PASS}"
             usage = _tokens(usage_from_body(body), self.reasoning)
             self.lines.append(f"<h4>{_e(label)}</h4><p>{_e(usage)}</p>")
@@ -1026,9 +1027,9 @@ class _LogWalk:
                 self._call(call, body)
         elif event.type in ("finding", "finding.withdrawn"):
             line = _finding_line(event)
-            if len(self.calls) == 1:
-                [call] = self.calls.values()
-                call.under.append(line)
+            step = bracketing_step(self.calls)
+            if step is not None:
+                self.calls[step].under.append(line)
             else:
                 self.lines.append(f"<p>{line}</p>")
         elif event.type == "text.done":
