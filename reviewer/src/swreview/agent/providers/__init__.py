@@ -307,7 +307,14 @@ EventCallback = Callable[[EventType, Mapping[str, Any]], None]
 """How an adapter emits: the runner's sink stamps `seq` and `at` and writes the event."""
 
 
-def error_body(*, error_class: str, message: str, retryable: bool) -> dict[str, Any]:
+def error_body(
+    *,
+    error_class: str,
+    message: str,
+    retryable: bool,
+    stop_reason: str | None = None,
+    retries: int | None = None,
+) -> dict[str, Any]:
     """The one shape a failure is reported in.
 
     These three fields are the `error` event body of `chat-events.schema.json` *and* the
@@ -318,8 +325,16 @@ def error_body(*, error_class: str, message: str, retryable: bool) -> dict[str, 
 
     `message` arrives already redacted: masking is the caller's job because only the
     caller knows which secret was in reach (FR-015).
+
+    `stop_reason` records a stop the provider reported; `retries` records the request's
+    retries under a policy. Both are omitted when unknown, preserving older bodies.
     """
-    return {"error_class": error_class, "message": message, "retryable": retryable}
+    body = {"error_class": error_class, "message": message, "retryable": retryable}
+    if stop_reason is not None:
+        body["stop_reason"] = stop_reason
+    if retries is not None:
+        body["retries"] = retries
+    return body
 
 
 def usage_body(
@@ -329,6 +344,8 @@ def usage_body(
     provider: ProviderName | str,
     model: str,
     cache_diagnostic: Mapping[str, Any] | None = None,
+    served_model: str | None = None,
+    retries: int | None = None,
 ) -> dict[str, Any]:
     """The one shape a model round trip's cost is reported in.
 
@@ -353,14 +370,23 @@ def usage_body(
             `None` on Gemini and on the fake always, and `None` on OpenAI whenever
             `prompt_cache_options.comparison_response_id` was not sent - which is every
             round of a lever-3-off run, and the first round of every turn.
+        served_model: The model id the provider reported answered this round, omitted
+            when it reported none.
+        retries: Failed tries before this request succeeded, written only under a retry
+            policy. `None` omits the field; zero records that no retry was needed.
     """
-    return {
+    body = {
         "round_index": round_index,
         "provider": str(provider),
         "model": model,
         **usage.model_dump(mode="json"),
         "cache_diagnostic": dict(cache_diagnostic) if cache_diagnostic is not None else None,
     }
+    if served_model is not None:
+        body["served_model"] = served_model
+    if retries is not None:
+        body["retries"] = retries
+    return body
 
 
 def usage_from_body(body: Mapping[str, Any]) -> TokenUsage:

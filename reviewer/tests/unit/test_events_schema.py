@@ -461,3 +461,80 @@ def test_an_evidence_request_without_the_short_form_still_validates() -> None:
 )
 def test_a_short_form_past_its_limits_fails_the_contract(short_form: dict[str, Any]) -> None:
     assert not contract_validator(EVENTS_CONTRACT).is_valid(evidence_event(**short_form))
+
+
+# --- optional provider evidence (T172) ---------------------------------------------------
+
+
+def provider_event(event_type: str, fields: dict[str, Any]) -> dict[str, Any]:
+    """Literal bodies keep schema validation independent of the body builders."""
+    bodies = {
+        "usage": {
+            "round_index": 0,
+            "provider": "openai",
+            "model": "fict-model-a",
+            "input_tokens": 12,
+            "cached_input_tokens": 4,
+            "cache_write_tokens": None,
+            "output_tokens": 5,
+            "reasoning_tokens": 2,
+            "tool_result_input_tokens": None,
+            "total_tokens": 17,
+            "latency_s": 0.25,
+            "cache_diagnostic": None,
+        },
+        "error": {
+            "error_class": "FictionalProviderError",
+            "message": "stopped",
+            "retryable": False,
+        },
+    }
+    return {
+        "seq": 1,
+        "at": "2026-10-01T12:00:00Z",
+        "type": event_type,
+        "body": {**bodies[event_type], **fields},
+    }
+
+
+@pytest.mark.parametrize(
+    ("event_type", "fields"),
+    [
+        ("usage", {}),
+        ("usage", {"served_model": "fict-model-a-2026-10-01"}),
+        ("usage", {"retries": 0}),
+        ("usage", {"served_model": "fict-model-a-2026-10-01", "retries": 2}),
+        ("error", {}),
+        ("error", {"stop_reason": "SAFETY"}),
+        ("error", {"retries": 0}),
+        ("error", {"stop_reason": "SAFETY", "retries": 0}),
+    ],
+)
+def test_optional_provider_event_fields_validate(event_type: str, fields: dict[str, Any]) -> None:
+    contract_validator(EVENTS_CONTRACT).validate(provider_event(event_type, fields))
+
+
+@pytest.mark.parametrize(
+    ("event_type", "fields", "rule"),
+    [
+        ("usage", {"retries": -1}, "minimum"),
+        ("error", {"retries": -1}, "minimum"),
+        ("usage", {"retries": 0.5}, "type"),
+        ("error", {"retries": 0.5}, "type"),
+        ("usage", {"retries": None}, "type"),
+        ("error", {"retries": None}, "type"),
+        ("usage", {"served_model": 42}, "type"),
+        ("usage", {"served_model": None}, "type"),
+        ("error", {"stop_reason": 42}, "type"),
+        ("error", {"stop_reason": None}, "type"),
+        ("usage", {"unexpected": 1}, "additionalProperties"),
+        ("error", {"unexpected": 1}, "additionalProperties"),
+    ],
+)
+def test_invalid_optional_provider_event_fields_fail_the_contract(
+    event_type: str, fields: dict[str, Any], rule: str
+) -> None:
+    with pytest.raises(SchemaValidationError) as caught:
+        contract_validator(EVENTS_CONTRACT).validate(provider_event(event_type, fields))
+
+    assert caught.value.validator == rule
