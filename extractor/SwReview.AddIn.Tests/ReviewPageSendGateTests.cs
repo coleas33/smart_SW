@@ -416,9 +416,12 @@ public sealed class ReviewPageSendGateTests
             else
             {
                 await fixture.Start(driver);
+                Assert.Contains("The checks ended at 2026-10-09T12:00:00+00:00. Nothing was sent to the model.",
+                    (await driver.Read(ReadSendState)).GetProperty("transcript").GetString());
                 await AcceptSend(driver, "chat-1");
                 await PressSend(driver);
                 seq = 2;
+                await driver.Push("chat-1", ++seq, "session.sent", SentEvent);
             }
             await driver.RouteAttention("chat-1", failed.GetProperty("ranking").GetRawText());
             await driver.ClearCalls();
@@ -435,7 +438,12 @@ public sealed class ReviewPageSendGateTests
                 await driver.Settle();
                 JsonElement settled = await driver.Read(ReadSendState);
                 AssertWaitingFailure(settled, failed, true);
-                Assert.Contains("The turn ended: error.", settled.GetProperty("transcript").GetString());
+                string transcript = settled.GetProperty("transcript").GetString()!;
+                Assert.Contains("The turn ended: error.", transcript);
+                // T116 (owner decision 98A item 5): the request reached the provider, so the
+                // attempt's end never says nothing was sent.
+                Assert.Contains("The session ended at 2026-10-12T12:00:00+00:00.", transcript);
+                Assert.DoesNotContain("The checks ended at 2026-10-12T12:00:00+00:00", transcript);
             }
             await AcceptSend(driver, "chat-1");
             await PressSend(driver);
@@ -540,6 +548,136 @@ public sealed class ReviewPageSendGateTests
             Assert.Contains(" · not sent", confirmed.GetProperty("first").GetString());
             Assert.DoesNotContain("not sent", confirmed.GetProperty("second").GetString());
         });
+    }
+
+    /// <summary>
+    /// T116 (owner decision 98A item 5): a replay prints the lines the live stream printed. The
+    /// checks' own end says nothing was sent; an end after a `session.sent` never does, whatever
+    /// the page shows now - a review waiting again after a failed attempt, or one that was sent.
+    /// </summary>
+    [Theory]
+    [InlineData("waiting-after-a-failed-attempt")]
+    [InlineData("sent")]
+    public void ATranscriptReplayDecidesNothingWasSentFromTheStream(string kind)
+    {
+        WaitingReviewFixture fixture = WaitingReviewFixture.Read();
+        JsonElement failed = fixture.Root.GetProperty("failed_send");
+        string snapshot = failed.GetRawText();
+        if (kind == "sent")
+        {
+            var node = System.Text.Json.Nodes.JsonNode.Parse(snapshot)!;
+            node["chat_state"] = "ended";
+            node["last_seq"] = 6;
+            node["ranking"]!["summary"]!["send"] = null;
+            snapshot = node.ToJsonString();
+        }
+        ReviewPageDriver.Run(driver =>
+        {
+            fixture.Configure(driver);
+            driver.InitialRoutes.RemoveAll(route => route.Path == "/sessions/chat-1/snapshot");
+            driver.InitialRoutes.Add(("GET", "/sessions/chat-1/snapshot", 200, snapshot));
+        }, async driver =>
+        {
+            await driver.Click("view-transcript");
+            await driver.Push("chat-1", 1, "session.started", "{\"send_when_checked\":false}");
+            await driver.Push("chat-1", 2, "session.ended", "{\"ended_at\":\"2026-10-09T11:00:00+00:00\"}");
+            if (kind == "sent")
+            {
+                await driver.Push("chat-1", 3, "session.sent", SentEvent);
+                await driver.Push("chat-1", 4, "usage", UsageEvent);
+                await driver.Push("chat-1", 5, "turn.ended", "{\"reason\":\"end\"}");
+                await driver.Push("chat-1", 6, "session.ended", "{\"ended_at\":\"2026-10-09T12:00:00+00:00\"}");
+            }
+            else
+            {
+                foreach (JsonElement item in SendFailureEvents().EnumerateArray())
+                    await PushFixtureEvent(driver, item);
+            }
+            await driver.Settle();
+            string transcript = (await driver.Read(ReadSendState)).GetProperty("transcript").GetString()!;
+            Assert.Contains("The checks ended at 2026-10-09T11:00:00+00:00. Nothing was sent to the model.", transcript);
+            Assert.Contains("The session ended at 2026-10-09T12:00:00+00:00.", transcript);
+            Assert.DoesNotContain("The checks ended at 2026-10-09T12:00:00+00:00", transcript);
+            Assert.DoesNotContain("The session ended at 2026-10-09T11:00:00+00:00", transcript);
+        });
+    }
+
+    /// <summary>
+    /// T116 (98A, a note): Send keeps keyboard focus through its rebuild, and its failure line,
+    /// a refusal's or a failed attempt's, is a status region a screen reader announces.
+    /// </summary>
+    [Fact]
+    public void SendKeepsKeyboardFocusAndItsFailureLineIsAnnounced()
+    {
+        WaitingReviewFixture fixture = WaitingReviewFixture.Read();
+        ReviewPageDriver.Run(fixture.Configure, async driver =>
+        {
+            await fixture.Start(driver);
+            await driver.Route("POST", "/sessions/chat-1/send", 409, JsonSerializer.Serialize(new
+            {
+                error_class = "NoCredential", message = "FICT-refusal", retryable = false,
+            }));
+            await driver.Read("var b=document.querySelector('#send [data-action=send]');b.focus();b.click();return JSON.stringify({ok:true});");
+            await driver.Settle();
+            JsonElement refused = await driver.Read(ReadSendFocus);
+            Assert.True(refused.GetProperty("focused").GetBoolean());
+            Assert.Equal(fixture.Root.GetProperty("labels").GetProperty("errors").GetProperty("NoCredential").GetString(),
+                refused.GetProperty("status").GetString());
+        });
+        JsonElement failed = fixture.Root.GetProperty("failed_send");
+        ReviewPageDriver.Run(driver =>
+        {
+            fixture.Configure(driver);
+            driver.InitialRoutes.RemoveAll(route => route.Path == "/sessions/chat-1/snapshot");
+            driver.InitialRoutes.Add(("GET", "/sessions/chat-1/snapshot", 200, failed.GetRawText()));
+        }, async driver =>
+        {
+            Assert.Equal(failed.GetProperty("ranking").GetProperty("summary").GetProperty("send").GetProperty("failure").GetString(),
+                (await driver.Read(ReadSendFocus)).GetProperty("status").GetString());
+        });
+    }
+
+    /// <summary>
+    /// T116 (98A, a note): the Settings line says a save keeps the waiting review only while
+    /// the review waits; from Send's press to its first usage a save is refused (FR-027).
+    /// </summary>
+    [Fact]
+    public void TheSettingsWaitingLineIsWithdrawnWhileASendIsInFlight()
+    {
+        WaitingReviewFixture fixture = WaitingReviewFixture.Read();
+        ReviewPageDriver.Run(fixture.Configure, async driver =>
+        {
+            await fixture.Start(driver);
+            JsonElement waiting = await driver.Read(ReadSettingsNote);
+            Assert.False(waiting.GetProperty("hidden").GetBoolean());
+            Assert.StartsWith("Saving restarts the backend.", waiting.GetProperty("text").GetString());
+            await driver.HoldRoute("POST", "/sessions/chat-1/send", 202, "{}");
+            await PressSend(driver);
+            JsonElement held = await driver.Read(ReadSettingsNote);
+            Assert.True(held.GetProperty("hidden").GetBoolean());
+            Assert.Equal("", held.GetProperty("text").GetString());
+            await driver.ReleaseRoute("POST", "/sessions/chat-1/send");
+            await driver.Settle();
+            JsonElement sending = await driver.Read(ReadSettingsNote);
+            Assert.True(sending.GetProperty("hidden").GetBoolean());
+            Assert.Equal("", sending.GetProperty("text").GetString());
+        });
+    }
+
+    private const string ReadSendFocus = @"
+var send=document.getElementById('send');var active=document.activeElement;var status=send.querySelector('[role=status]');
+return JSON.stringify({ok:true,focused:!!active&&send.contains(active)&&active.getAttribute('data-action')==='send',
+ status:status?status.textContent:null});";
+
+    private const string ReadSettingsNote = @"
+var note=document.getElementById('waiting-settings-note');
+return JSON.stringify({ok:true,hidden:note.hidden,text:note.textContent});";
+
+    private static JsonElement SendFailureEvents()
+    {
+        string folder = System.IO.Path.Combine(AppContext.BaseDirectory, "Fixtures");
+        return JsonDocument.Parse(System.IO.File.ReadAllText(System.IO.Path.Combine(folder, "review-send-failure-events.json")))
+            .RootElement.GetProperty("events").Clone();
     }
 
     [Theory]
@@ -772,7 +910,10 @@ return JSON.stringify({ok:true,count:controls.length,locked:Array.from(controls)
             await driver.Settle();
             JsonElement priorEnd = await driver.Read(ReadSendState);
             Assert.Contains("The turn ended: error.", priorEnd.GetProperty("transcript").GetString());
-            Assert.Contains("The checks ended at " + events[3].GetProperty("body").GetProperty("ended_at").GetString() + ". Nothing was sent to the model.", priorEnd.GetProperty("transcript").GetString());
+            // T116 (owner decision 98A item 5), moved deliberately: the previous attempt's end
+            // came after its `session.sent`, so it is the session's end, never "Nothing was sent".
+            Assert.Contains("The session ended at " + events[3].GetProperty("body").GetProperty("ended_at").GetString() + ".", priorEnd.GetProperty("transcript").GetString());
+            Assert.DoesNotContain("Nothing was sent to the model.", priorEnd.GetProperty("transcript").GetString());
             Assert.Equal("The review is running.", priorEnd.GetProperty("status").GetString());
             Assert.False(priorEnd.GetProperty("stopOff").GetBoolean());
             Assert.False(priorEnd.GetProperty("sendShown").GetBoolean());

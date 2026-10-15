@@ -80,11 +80,11 @@ that commit's fixture diff reviewed for added keys only - research R2.25):
 | "Apply answers" | the questions panel's button while a review waits |
 | "Not sent to the model yet: press Send to model first" | the follow-up box's placeholder while a review waits |
 | " · not sent" | a chip's mark, from the host's `sessions` item (owner decision 73A) |
-| "Saving restarts the backend. The waiting review stays, and its Send checks its saved evidence again first." | the Settings section while a review waits (owner decision 68A) |
+| "Saving restarts the backend. The waiting review stays, and its Send checks its saved evidence again first." | the Settings section while a review waits and no Send is in flight (owner decision 68A; 98A) |
 | "Checking the saved evidence again; save when it is done." | the Settings section while a re-run is in flight |
 | "No key is stored. With the box ticked a review fails until one is entered; with it unticked the code checks run and Send waits for a key." | the key note, no key stored (replaces today's) |
 | "Checked by code only: nothing is sent to the model until Send to model is pressed." | the Transcript's first line of an unticked review |
-| "The checks ended at {ended_at}. Nothing was sent to the model." | the Transcript at `session.ended` while the review waits |
+| "The checks ended at {ended_at}. Nothing was sent to the model." | the Transcript at an unticked stream's `session.ended` that no `session.sent` came before (98A; `pane.md` section 10) |
 | "Sending to {provider} {model} ({requested} -> {param}={value})" and " - first request {n} input tokens" | the Transcript at `session.sent`, which is written before the attempt's record and can precede a failure (owner decision 72A) |
 
 ## 3. Words the model reads: `reviewer/src/swreview/agent/runner.py` and `prerun.py`

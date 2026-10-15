@@ -1167,10 +1167,18 @@
     action.disabled = !!(extras && extras.disabled);
     block.appendChild(action);
     block.appendChild(el('p', 'send-text', String(send.text || '')));
+    // The failure line is a status region, so a refusal or a failed attempt is announced as
+    // the box's own note is (feature 015, owner decision 98A); its class stays in the fold.
+    var failure = null;
     if (extras && extras.error) {
-      block.appendChild(plainError(extras.error, extras.labels, extras.errorText));
+      failure = plainError(extras.error, extras.labels, extras.errorText);
+      failure.querySelector('.plain-error-text').setAttribute('role', 'status');
     } else if (send.failure) {
-      block.appendChild(el('p', 'note bad', String(send.failure)));
+      failure = el('p', 'note bad', String(send.failure));
+      failure.setAttribute('role', 'status');
+    }
+    if (failure) {
+      block.appendChild(failure);
     }
     return block;
   }
