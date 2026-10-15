@@ -69,6 +69,17 @@ review of that document and the orphan's folder is its newest, the found-review 
 (`recheck.md` section 2); otherwise - a Retry made a newer folder - it is never offered, and it is released at the
 next backend restart.
 
+*Landed as* (T041, T095-T098, T104 and owner decision 87A; T115, 2026-10-15):
+- **The tail's signature.** It is `_open_waiting(chat, run, earlier=None)`. For a re-run, its
+  thread function calls `run.carry_from(earlier)` first, then `close_waiting()`, the render and
+  `release_bridge()`. A carry that raises takes the same failure path as a finalization that
+  raises (`recheck.md` section 4's *Landed as*).
+- **The held folder.** From the claim to the 201, every start holds its folder in
+  `ChatServer._pending_run_dirs` (`recheck.md` section 2's *Landed as*).
+- **The timeout.** There is no `TimeoutFor` or `ChecksOnlyTimeout`. T098's larger measured
+  re-run, 8.8 s, fits inside 30 s, so every call keeps the client's 30 s `CallTimeout`, an
+  unticked start's included (research R2.17).
+
 No provider request of any kind is made, and none will be until Send (FR-006, FR-007, SC-001). The
 explanation pass is not attempted: it follows only a turn that ended `end` (`runner.py:1333`, `1449`).
 
@@ -214,6 +225,12 @@ persisted failed-Send history; no live cache or request count is read or built. 
 writes nothing and retains today's read-only reason. Legacy and sent records keep their
 existing snapshots. This prerequisite does not implement a re-run, carry, or the composed
 dated reason: T099/T100 and the remainder of US4 stay pending.
+
+*Landed as* (T100, T108, T115, 2026-10-15): the prerequisite above is superseded.
+- `GET /reviews` answers `report/snapshot.restored_snapshot`. A waiting record's
+  `read_only_reason` is the composed dated line (`recheck.md` section 8).
+- The page's restore of a failed apply offers Send, which re-runs the review (`pane.md` section
+  5's *Landed as*).
 
 **A drawing merged before the failure.** A confirmed read merges its drawing into the folder's
 `package.json` before the regrade; its outcome line reaches `session.json` only with the

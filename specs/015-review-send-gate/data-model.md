@@ -76,6 +76,11 @@ it was before the apply (`contracts/review-flow.md` section 4). A re-run's claim
 chat on its folder that is `awaiting_send` instead of refusing it, and refuses a folder whose re-run
 is still running: `ChatServer._rechecking: set[Path]` holds each re-run's folder from its claim to its
 answer, because its chat is registered only after its finalization (`contracts/recheck.md` section 2).
+*Landed as* (T095, owner decision 90A; T115, 2026-10-15): there is no `_rechecking`. The existing
+`ChatServer._pending_run_dirs` already holds every start's folder from its claim to its answer, and
+the claim checks it first. A re-run's folder is added to it before the earlier record is read on the
+thread pool (`_waiting_record`), so a second claim made while that read awaits is `RunDirInUse`
+(research R8).
 
 Which the page shows - "waiting" or "running" - is read from the summary's `send` block (section 6),
 present exactly while `run.awaiting_send`, which is true from the checks' end until step 7 of a Send's
@@ -103,7 +108,7 @@ and, after a reload, from the snapshot's `send_in_flight` (section 6; owner deci
 | `build_send_cache()` | method | builds `_send_cache` from `opening_at_send()` and `first_request_estimate()`; called only by `close_waiting()`, on a worker, never by a route |
 | `opening_at_send()` | method | the frozen opening, or the rebuilt one when `_opening_changed` (`contracts/review-flow.md` section 5); called only by `build_send_cache` |
 | `first_request_estimate()` | method | section 7; called only by `build_send_cache` |
-| `carry_from(earlier)` | method | the re-run's carry (`contracts/recheck.md` section 4); in memory only, it writes nothing; it ends with `_settle_waiting(applied)` |
+| `carry_from(earlier)` | method | the re-run's carry (`contracts/recheck.md` section 4); in memory only, it writes nothing; it ends with `_settle_waiting(applied)` only when it carried answers or drawing outcome lines (*Landed as*, owner decision 88A; T115, 2026-10-15): a decision or a timing input carried alone leaves the opening as it was. `ChatServer._open_waiting(chat, run, earlier)` calls it inside its thread function, before `close_waiting()` (87A) |
 
 `withdraw_finalization(review, written)` (`agent/runner.py`, new module function): the withdrawal
 `finalize_session` makes at its start of the rows a previous finalization appended (`runner.py:619-627`),
@@ -249,6 +254,19 @@ one write of `session.json`. Items not carried are named in one unresolved cover
 `coverage.recheck`. No id map leaves the backend: Send is the only re-run trigger, so nothing on the
 page refers to an earlier id once the re-run answers (owner decision 68A).
 
+*Landed as* (owner decisions 89A and 90A, research R8; T115, 2026-10-15):
+- **An answered code question.** It is also not carried when another earlier answer matches the
+  same one re-run question. Neither is carried, and each is named.
+- **A partial drawing read.** An answered drawing-candidate question whose read merged a drawing
+  for some of its documents, while a candidate row remains for another, is asked again over the
+  rest. Its answer is named as a partial read. "Some" is counted by candidate row, not by drawing.
+- **A lost outcome.** It is named for an open question whose unfinished read merged some of its
+  drawings, as well as all of them.
+- **The Standards profile.** It differs when the paths differ as `drawings.evidence.file_key`
+  compares them (case and separator ignored), or the sha256 differs.
+- **The drawing index.** `carry_from` builds one `DrawingIndex` for all of these.
+- **The words.** They are `contracts/words.md` section 4.
+
 ## 9. The host's records (C#, `Review/ReviewHost.cs`)
 
 `SessionRecord` gains `ModelStatus: string?` - `not_sent` or `send_failed` while the review waits for
@@ -283,6 +301,21 @@ research R2.17, RK-10): when the larger re-run timed by `tests/perf/test_send_ga
 is that re-run with its stated margin (three times it, rounded up to the next 30 s: a default the
 owner may revise, research R2.17).
 
+*Landed as* (T051, T103-T106, T115, 2026-10-15):
+- **The shared body.** It is `CreateReviewSession(document, runDirectory, previousChatId, mode, id,
+  summary, replacing = null)`. `review.recheck` passes the tracked record as `replacing`.
+- **The binding.** It is `PageDocument.IsSameDocument(path, configuration)`, with an overload
+  that takes another document: the path ignoring case and the configuration exactly. The
+  re-run's binding, the host's check that it already tracks a review of the active document, and
+  `RunFolders.FindNotSentReview` all use it. A fourth copy in `StartReview`'s preparation check
+  predates 015 and was left as it was.
+- **The record.** Records are published through `Publish(record, replacing)`, which
+  `TrackSession` uses too. A re-run's record takes `replacing`'s place in the list while
+  `replacing` is tracked; otherwise any record of its chat id is dropped and it is appended. Its
+  `ModelStatus` is `replacing`'s own.
+- **The timeout.** T098 measured the larger re-run at 8.8 s, inside 30 s, so `TimeoutFor` and
+  `ChecksOnlyTimeout` were removed and every call keeps `CallTimeout` (research R2.17).
+
 `RunFolders.ReadModelStatus(runDirectory, openHead)` reads the top-level `model_status` of a folder's
 `session.json` within its first 64 KiB with `Utf8JsonReader` and stops there. `openHead` is injectable;
 its default opens a `FileStream` with `FileShare.ReadWrite | FileShare.Delete`, so the backend's
@@ -290,6 +323,11 @@ its default opens a `FileStream` with `FileShare.ReadWrite | FileShare.Delete`, 
 buffer through `PackageIndex.FillHead(stream, maxBytes)`, the bounded fill loop extracted from
 `PackageIndex.HeadOf` (`extractor/SwReview.Extractor/Dump/PackageIndex.cs:266-291`), which both readers
 call. `RunFolders.FindNotSentReview` (the search) takes the same `openHead`.
+
+*Landed as* (T105-T106, T115, 2026-10-15): both readers go through one private head reader,
+`ReadSessionHead`. The search's read also takes the top-level `session_id`, the found record's
+chat id, within the same 64 KiB. A head with no `session_id`, or with a `checked_at` that does not
+parse, offers nothing. `openHead` is optional (`null` is the default opener).
 
 ## 10. Page state (`Review/ReviewPage/app.js`)
 

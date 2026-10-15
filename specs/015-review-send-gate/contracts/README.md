@@ -49,3 +49,22 @@ added one row (009's words table, 73A) and removed none.
 
 Feature 014 is not merged; its overlap with this feature is research R3's merge note, not an
 amendment. No contract of features 003 to 007, 010 or 012 moves.
+
+*Landed as* (T115, 2026-10-15): every row above has its amendment text in the owning document, not
+only T001's note. Each was checked against the code as landed:
+- **001.** Schema and README: T013-T014.
+- **002.** Spec FR-006: T041. `chat-api.md`: T041, T049, T061 and T064, T066, T068, T095, T100.
+  `data-model.md` sections 3 and 4: T017-T018, T032. `pane-host-messages.md`: T049, T051,
+  T055, T074, T104, T106, T108. `settings.schema.json`: T032. `chat-events.schema.json` and
+  its README: T035, T064. `handoff-export.md`: T111-T112.
+- **008.** Spec FR-008, FR-009 and FR-030, and `checks-first.md` sections 1 to 4 and 7: T035,
+  T086, T093. `answer-batch.md`: T084. `cost.md` and `tokenizer.md`: T044-T045. `replay.md`:
+  T052-T053, T079.
+- **009.** Spec FR-015 and FR-021. `sessions.md` sections 3 to 6: T055, T070, T100, T106,
+  T108. `views.md`: T044-T045, T055, T075-T076, T108. `questions.md`: T090.
+  `review-summary.md`: T044-T045. `data-model.md`'s words table: T030.
+- **011.** `confirmed-open.md`: T084.
+- **013.** Spec FR-040, `drawing-capability.md` section 6 and `part-roles.md` section 9: T086.
+
+Where the code had to differ from a 015 contract, that contract carries a dated *Landed as* note at
+the place it differs.

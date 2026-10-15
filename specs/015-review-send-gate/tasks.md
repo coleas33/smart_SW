@@ -677,8 +677,8 @@ description: "Task list for the send-to-model checkbox"
   Acceptance: red for want of `recheck`.
 - [x] T095 [US4] [py] Lane B. Implement in `chat/server.py`:
   - the `recheck` field;
-  - `_claim_run_dir(..., recheck=True)` (`:2025-2060`), with the adoption and `ChatServer._rechecking`;
-  - `_rotate_previous(chat, keep_record=True)` (`:2062-2099`), deciding by what the canonical stream is, and passing over a leftover `write_atomic` temporary;
+  - `_claim_run_dir(..., recheck=True)` (`:2025-2060`), with the adoption and `ChatServer._rechecking`; *landed as* the existing `ChatServer._pending_run_dirs`, no second set (C47; research R8; T115, 2026-10-15);
+  - `_rotate_previous(chat, keep_record=True)` (`:2062-2099`; *landed as* `keep_record=<the earlier record's session_id>`, T115), deciding by what the canonical stream is, and passing over a leftover `write_atomic` temporary;
   - the re-run path of `create_session`: `start_review` with the earlier record, then T041's `_open_waiting` (`close_waiting` through `write_atomic`, `_render_run`, `release_bridge`, then register), and its `201` as an unticked start's.
 
   **Amends 002** `contracts/chat-api.md` (`POST /sessions`' `recheck`). Acceptance: T094 green; T007 byte-equal.
@@ -832,7 +832,7 @@ description: "Task list for the send-to-model checkbox"
   - `workstation-handover.md` gives T119 its place in the sitting.
 
   Acceptance: T113 green.
-- [ ] T115 [doc] Lane C. Reconcile the contracts with what landed:
+- [x] T115 [doc] Lane C. Reconcile the contracts with what landed:
   - Where code had to differ, each 015 contract in `specs/015-review-send-gate/contracts/` gets a dated "*Landed as*" note.
   - Each row of `contracts/README.md`'s amendments table now has its amendment text in place, not only T001's note.
   - Research R2.21 holds the measured figures from T056, T077 and T109.

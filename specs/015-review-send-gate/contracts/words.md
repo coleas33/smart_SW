@@ -107,8 +107,19 @@ messages (`ANSWER_MESSAGE`, `ANSWERS_MESSAGE`) are not used for a review that wa
 | `NOT_CARRIED` (`runner.py`) | "Not carried from the earlier check run: {items}." with items "the answer to {id} (its question is no longer asked)", "the answer to {id} (it matches more than one question)", "the {decision} of {id} (its finding is no longer raised)", "the {decision} of {id} (it matches more than one finding)", "the {decision} of {id} (another decision matches the same finding)", "the outcome of the drawing read for {id} (the read that merged its drawing did not finish)", and "the Standards profile it was graded with (the profile in Settings has changed since; this check of the saved evidence graded with the new one)" - the drawing outcome and the profile added on the second review, 2026-10-09, and the decision another decision shares a finding with by owner decision 72A; no item names a path | the re-run's `coverage.recheck` row |
 | `INTERRUPTED_SEND` (`runner.py`) | "the backend stopped before the model answered" | a Send attempt's reason until its outcome is known |
 | `CARRIED_LIVE_NOTE` (`prerun.py`) | "ran when the checks first ran; this check of the saved evidence carried its outcome and did not ask SOLIDWORKS again" | the `note` of a re-run's carried live-detection step (`recheck.md` section 3), read in the step's result and the Transcript's tool line |
+| `NOT_CARRIED_ANSWER_SHARED` (`runner.py`; owner decision 89A, landed 2026-10-14) | "the answer to {id} (another answer matches the same question)" | a `NOT_CARRIED` item: two earlier answers match one re-run question, so neither is carried (`recheck.md` section 4) |
+| `NOT_CARRIED_ANSWER_PARTIAL` (`runner.py`; owner decision 90A, landed 2026-10-14) | "the answer to {id} (part of its drawing read was refused or failed, so its question is asked again)" | a `NOT_CARRIED` item: the earlier read merged some of the question's drawings, and the re-run asks again about the rest (`recheck.md` section 4) |
 | report header (`markdown.py`) | "- Model: not sent to the model (checked by code only)"; "- Model: not sent to the model; the last attempt failed at {at}: {reason}"; "- Sent to the model: {sent_at} (checks finished {checked_at})"; "- Earlier attempts that failed: {n}"; "- Checked again from session: {id}" | `records.md` section 4 |
 | recording refusals (`benchmark/recording.py`) | "{RUN_DIR} was never sent to the model, so it has no model turn to replay"; "{RUN_DIR} was sent to the model after waiting for Send; the replay reads only reviews sent when their checks finished" | `records.md` section 6 |
+
+*Landed as* (T097 and owner decisions 89A and 90A, research R8; T115, 2026-10-15):
+- **One constant per item.** `NOT_CARRIED` is the sentence, and each item is its own constant in
+  `runner.py`: `NOT_CARRIED_ANSWER_GONE`, `_ANSWER_MANY`, `_ANSWER_SHARED`, `_ANSWER_PARTIAL`,
+  `_DECISION_GONE`, `_DECISION_MANY`, `_DECISION_SHARED`, `_DRAWING` and `_PROFILE`. The items
+  are joined with "; " in the carry's order.
+- **The decision's name.** `{decision}` is the decision's noun from `DECISION_NOUNS` ("Accept",
+  "Reject", "Defer"), so an item reads "the Reject of F-007". It is not the stored value
+  ("rejected").
 
 ## 5. Words the host writes: `extractor/SwReview.AddIn/Review/ReviewHost.cs`
 

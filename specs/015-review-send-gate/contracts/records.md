@@ -140,12 +140,25 @@ session carries one, beside `provider_info`; nothing else in the bundle moves. 0
 `contracts/handoff-export.md` gains the key. The owner kept this (plan question 2, answered by 73A):
 otherwise the export would be the last record that names a provider for a review never sent.
 
+*Landed as* (T111-T112, T115, 2026-10-15): this section named no rule for a value that cannot be
+read, so the code chose one.
+- A non-mapping `model_status`, or a missing, non-string or unknown `state`, exports as
+  `"model_status": null` and does not fail the export, as an unreadable `provider_info` does.
+- A missing or null `model_status` adds no key.
+- The known states are read from `ModelStatus`'s own field (`get_args`), not restated.
+- 002 `contracts/handoff-export.md` states this.
+
 ## 8. The atomic write
 
 `save_session` writes through `atomic.write_atomic(path, bytes)`: the encoded JSON to a temporary in
 the session's own folder, then `os.replace`. The bytes are unchanged; a crash mid-write leaves the
 previous file whole. The helper is feature 014's (`reviewer/src/swreview/atomic.py`): imported when
 014 is on `main`, otherwise added with 014's exact name, signature and body (research R3).
+
+*Landed as* (owner decision 93A, T115, 2026-10-15): for a re-run, this replace of `session.json`
+is the commit point. Before it the earlier record stays canonical. After it the re-run is complete,
+even if writing `attention.json` or emitting `session.ended` then fails or is cut off
+(`recheck.md` section 2).
 
 ## 9. Tests
 
