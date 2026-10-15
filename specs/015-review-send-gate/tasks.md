@@ -718,7 +718,7 @@ description: "Task list for the send-to-model checkbox"
 
 ### The restored fixtures
 
-- [ ] T101 [P] [US4] [py] Lane G. Extend `reviewer/tests/unit/test_pane_waiting_fixtures.py`, with every clock pinned:
+- [x] T101 [P] [US4] [py] Lane G. Extend `reviewer/tests/unit/test_pane_waiting_fixtures.py`, with every clock pinned:
   - `extractor/SwReview.AddIn.Tests/Fixtures/review-waiting-restored.json`, from T006's package, holds two snapshots:
     - `restored`: the run-folder snapshot of the record, with nothing answered: read-only, its `read_only_reason` the composed restored line (`read_only_lead`, a space, the dated `send.restored_line`; owner decision 73A), and the `restored` Send block;
     - `rechecked`: the re-run's `POST /sessions` answer and the re-run's live snapshot, which the page shows before it posts Send. No id maps and no snapshot of an answered record: the page re-keys nothing (owner decision 68A).
@@ -726,7 +726,7 @@ description: "Task list for the send-to-model checkbox"
   - `extractor/SwReview.AddIn.Tests/Fixtures/review-not-sent-session.json` is the earlier record's `session.json`, as `save_session` wrote it, for the host's cross-language head-reader case (research R4.2). Its name matches the test project's `Fixtures\review-*.json` Content glob (`SwReview.AddIn.Tests.csproj:180`), so it is copied to the output folder the add-in tests read from (`ReviewFixture.cs:189`), and the project file is not edited. As `test_pane_drawing_fixture.py:105-111` does, the test asserts each generated file's path ends `SwReview.AddIn.Tests/Fixtures/review-*.json`.
 
   **Moved**: the hygiene list gains `review-waiting-restored.json` and `review-not-sent-session.json`. Acceptance: red for want of the files.
-- [ ] T102 [US4] [py] Lane G. Extend `generate_waiting_fixtures.py` to write them, `review-not-sent-session.json` included, into `extractor/SwReview.AddIn.Tests/Fixtures/`; regenerate. Acceptance: T101 green; the hygiene test green; after `dotnet build`, `review-not-sent-session.json` is in the test project's output `Fixtures` folder.
+- [x] T102 [US4] [py] Lane G. Extend `generate_waiting_fixtures.py` to write them, `review-not-sent-session.json` included, into `extractor/SwReview.AddIn.Tests/Fixtures/`; regenerate. Acceptance: T101 green; the hygiene test green; after `dotnet build`, `review-not-sent-session.json` is in the test project's output `Fixtures` folder.
 
 ### The host
 

@@ -1,0 +1,2029 @@
+{
+  "session_id": "00000000-0000-4000-8000-000000000002",
+  "package_id": "01000000-0000-4000-8000-000000000010",
+  "design_id": "dsn:fict",
+  "started_at": "2026-10-09T12:00:00Z",
+  "ended_at": "2026-10-09T12:00:00Z",
+  "model": "fake-1",
+  "provider_info": {
+    "provider": "fake",
+    "model": "fake-1",
+    "effort_mapping": {
+      "requested": "high",
+      "provider_param": "fake.effort",
+      "provider_value": "high"
+    },
+    "key_source": "none"
+  },
+  "model_status": {
+    "state": "not_sent",
+    "document": {
+      "path": "C:\\FictionalVault\\Vault\\FICT-7000.SLDASM",
+      "configuration": "Default"
+    },
+    "checked_at": "2026-10-09T12:00:00Z",
+    "profile": {
+      "path": "C:\\FictionalVault\\fict-waiting\\profile-v3.yaml",
+      "sha256": "422705b42e7648fbb36bb3d672f4be8d226b7c7ba6e035db2180bb946b481309"
+    }
+  },
+  "retry_of": null,
+  "reused_from": null,
+  "efficiency": {
+    "trim_tool_descriptions": false,
+    "tool_tiers": false,
+    "prompt_cache_key": false,
+    "gemini_explicit_cache": false,
+    "prerun_checks": true,
+    "parallel_tool_calls": false,
+    "coverage_stop": false,
+    "package_reuse": false,
+    "lazy_meshes": false,
+    "carry_over_rms": false,
+    "procedural_gate": false,
+    "compact_queries": false,
+    "withhold_prerun_tools": true,
+    "drop_prior_reasoning": true
+  },
+  "origin_marks": 1,
+  "usage": null,
+  "withheld_checks": [],
+  "steps": [
+    {
+      "index": 0,
+      "tool": "bridge_interference",
+      "arguments": {
+        "component_ids": [],
+        "configuration": "Default",
+        "settings": {
+          "treat_coincident_as_interference": true,
+          "treat_subassemblies_as_components": true,
+          "include_multibody": true,
+          "ignore_hidden": false,
+          "fastener_folder_treatment": "include"
+        }
+      },
+      "result_summary": "{\"status\":\"computed\",\"configuration\":\"Default\",\"interferences\":[],\"added_to_package\":0,\"gaps\":[\"IInterference.Volume unit assumed m3; verify on workstation\"]}",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.0,
+      "result_bytes": 167,
+      "result_tokens": 44,
+      "origin_mark": "prerun"
+    },
+    {
+      "index": 1,
+      "tool": "check_rms_part",
+      "arguments": {},
+      "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-001\",\"check\":\"rms.folders.present\",\"title\":\"missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q\\u2026\",\"status\":\"suspected\",\"seve…",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.0,
+      "result_bytes": 4036,
+      "result_tokens": 1209,
+      "origin_mark": "prerun"
+    },
+    {
+      "index": 2,
+      "tool": "check_rms_equations",
+      "arguments": {},
+      "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-003\",\"check\":\"rms.params.global_variables_present\",\"title\":\"the equation manager holds no equations\",\"status\":\"demonstrated\",\"severity\":\"medium\",\"component_i…",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.0,
+      "result_bytes": 3930,
+      "result_tokens": 1058,
+      "origin_mark": "prerun"
+    },
+    {
+      "index": 3,
+      "tool": "check_rms_assembly",
+      "arguments": {},
+      "result_summary": "{\"status\":\"recorded\",\"findings\":[],\"subjects\":{},\"coverage\":[{\"bucket\":\"skipped\",\"check\":\"rms.assembly.mates_to_reference_geometry\"},{\"bucket\":\"skipped\",\"check\":\"rms.assembly.first_component_fixed\"},…",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.0,
+      "result_bytes": 442,
+      "result_tokens": 126,
+      "origin_mark": "prerun"
+    },
+    {
+      "index": 4,
+      "tool": "check_joints",
+      "arguments": {},
+      "result_summary": "{\"status\":\"recorded\",\"findings\":0,\"by_status\":{},\"finding_ids\":[],\"coverage\":{\"checked\":0,\"skipped\":1,\"unresolved\":0},\"joints\":{\"total\":0,\"by_kind\":{}},\"pattern_groups\":0,\"candidates\":0,\"recognised_f…",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.0,
+      "result_bytes": 261,
+      "result_tokens": 95,
+      "origin_mark": "prerun"
+    },
+    {
+      "index": 5,
+      "tool": "check_mass_material",
+      "arguments": {},
+      "result_summary": "{\"status\":\"recorded\",\"findings\":2,\"by_status\":{\"unresolved\":2},\"finding_ids\":[\"F-007\",\"F-008\"],\"coverage\":{\"checked\":0,\"skipped\":1,\"unresolved\":0},\"documents\":3}",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.0,
+      "result_bytes": 179,
+      "result_tokens": 68,
+      "origin_mark": "prerun"
+    },
+    {
+      "index": 6,
+      "tool": "check_hygiene",
+      "arguments": {},
+      "result_summary": "{\"status\":\"recorded\",\"findings\":6,\"by_status\":{\"demonstrated\":6},\"finding_ids\":[\"F-009\",\"F-010\",\"F-011\",\"F-012\",\"F-013\",\"F-014\"],\"coverage\":{\"checked\":2,\"skipped\":0,\"unresolved\":0},\"documents\":3,\"pro…",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.0,
+      "result_bytes": 240,
+      "result_tokens": 95,
+      "origin_mark": "prerun"
+    },
+    {
+      "index": 7,
+      "tool": "check_threads",
+      "arguments": {},
+      "result_summary": "{\"status\":\"recorded\",\"findings\":0,\"by_status\":{},\"finding_ids\":[],\"coverage\":{\"checked\":0,\"skipped\":1,\"unresolved\":0},\"threads\":0,\"coarse\":0}",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.0,
+      "result_bytes": 159,
+      "result_tokens": 60,
+      "origin_mark": "prerun"
+    },
+    {
+      "index": 8,
+      "tool": "check_drawings",
+      "arguments": {},
+      "result_summary": "{\"status\":\"recorded\",\"drawings\":0,\"candidates\":1,\"questions\":1,\"findings\":0,\"finding_ids\":[],\"states\":{\"attached\":0,\"candidate\":1,\"absent\":2,\"bought\":0},\"coverage\":{\"checked\":0,\"skipped\":0,\"unresolve…",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.0,
+      "result_bytes": 232,
+      "result_tokens": 91,
+      "origin_mark": "prerun"
+    },
+    {
+      "index": 9,
+      "tool": "check_standards",
+      "arguments": {},
+      "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-015\",\"check\":\"standards.document.data_card_complete\",\"title\":\"the data card of FICT-7001.SLDPRT is not complete, read from the document's con\\u2026\",\"status\"…",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.0,
+      "result_bytes": 5521,
+      "result_tokens": 1522,
+      "origin_mark": "prerun"
+    }
+  ],
+  "evidence_requests": [
+    {
+      "id": "ER-001",
+      "what": "Parts no rule tells apart: FICT-KALO-PIN.SLDPRT",
+      "why": "Bought parts are not graded for modelling practice or hygiene. Answer to regrade this review now.",
+      "entity_ids": [
+        "doc:0003"
+      ],
+      "status": "open",
+      "answer": null,
+      "answered_at": null,
+      "question": "Are these bought parts? Until you answer, they are graded for modelling practice and hygiene.",
+      "options": [
+        "All bought",
+        "None bought"
+      ],
+      "allow_text": true,
+      "source": "code"
+    },
+    {
+      "id": "ER-002",
+      "what": "The same-name drawing FICT-7001.SLDDRW, beside a reviewed file and not open",
+      "why": "Fits, stacks and callouts stay unresolved without a drawing. The review opens a file only when you confirm it, read-only, and closes it again.",
+      "entity_ids": [
+        "doc:0002"
+      ],
+      "status": "open",
+      "answer": null,
+      "answered_at": null,
+      "question": "A drawing with the same name sits beside 1 reviewed file(s) but is not open. Should the review read it?",
+      "options": [
+        "Yes, open it read-only and read it",
+        "Review without it",
+        "It is not the right drawing"
+      ],
+      "blocks": "drawing.manufacturing_inputs",
+      "source": "code"
+    }
+  ],
+  "findings": [
+    {
+      "id": "F-001",
+      "check": "rms.folders.present",
+      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q…",
+      "status": "suspected",
+      "severity": "low",
+      "component_ids": [
+        "cmp:0001"
+      ],
+      "drawing_locations": [],
+      "provenance": [
+        {
+          "document_id": "doc:0002",
+          "vault_path": "C:\\FictionalVault\\Vault\\FICT-7001.SLDPRT",
+          "vault_version": 1,
+          "revision": null,
+          "configuration": "Default",
+          "local_modified": false,
+          "export_method": "native"
+        }
+      ],
+      "configuration": "Default",
+      "observed": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Quarantine",
+      "requirement": "Every one of the six groups exists as a folder.",
+      "inputs": [],
+      "calculation": null,
+      "tool_result_ids": [
+        1
+      ],
+      "coverage_limits": [],
+      "recommended_action": "Add the missing group folders and move the features that belong in them.",
+      "group": null,
+      "capture_ids": [],
+      "disposition": null,
+      "exception_id": null
+    },
+    {
+      "id": "F-002",
+      "check": "rms.folders.present",
+      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q…",
+      "status": "suspected",
+      "severity": "low",
+      "component_ids": [
+        "cmp:0002",
+        "cmp:0003"
+      ],
+      "drawing_locations": [],
+      "provenance": [
+        {
+          "document_id": "doc:0003",
+          "vault_path": "C:\\FictionalVault\\Vault\\FICT-KALO-PIN.SLDPRT",
+          "vault_version": 1,
+          "revision": null,
+          "configuration": "Default",
+          "local_modified": false,
+          "export_method": "native"
+        }
+      ],
+      "configuration": "Default",
+      "observed": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Quarantine",
+      "requirement": "Every one of the six groups exists as a folder.",
+      "inputs": [],
+      "calculation": null,
+      "tool_result_ids": [
+        1
+      ],
+      "coverage_limits": [
+        "may be a bought part: neither the part-number convention nor a bought-part rule decides it; asked in ER-001"
+      ],
+      "recommended_action": "Add the missing group folders and move the features that belong in them.",
+      "group": null,
+      "capture_ids": [],
+      "disposition": null,
+      "exception_id": null
+    },
+    {
+      "id": "F-003",
+      "check": "rms.params.global_variables_present",
+      "title": "the equation manager holds no equations",
+      "status": "demonstrated",
+      "severity": "medium",
+      "component_ids": [
+        "cmp:0001"
+      ],
+      "drawing_locations": [],
+      "provenance": [
+        {
+          "document_id": "doc:0002",
+          "vault_path": "C:\\FictionalVault\\Vault\\FICT-7001.SLDPRT",
+          "vault_version": 1,
+          "revision": null,
+          "configuration": "Default",
+          "local_modified": false,
+          "export_method": "native"
+        }
+      ],
+      "configuration": "Default",
+      "observed": "the equation manager holds no equations",
+      "requirement": "At least one global variable exists.",
+      "inputs": [],
+      "calculation": null,
+      "tool_result_ids": [
+        2
+      ],
+      "coverage_limits": [],
+      "recommended_action": "Name the part's driving values as global variables in the equation manager, and drive the dimensions from them.",
+      "group": null,
+      "capture_ids": [],
+      "disposition": null,
+      "exception_id": null
+    },
+    {
+      "id": "F-004",
+      "check": "rms.params.dimensions_driven_by_equations",
+      "title": "the equation manager holds no equations",
+      "status": "suspected",
+      "severity": "low",
+      "component_ids": [
+        "cmp:0001"
+      ],
+      "drawing_locations": [],
+      "provenance": [
+        {
+          "document_id": "doc:0002",
+          "vault_path": "C:\\FictionalVault\\Vault\\FICT-7001.SLDPRT",
+          "vault_version": 1,
+          "revision": null,
+          "configuration": "Default",
+          "local_modified": false,
+          "export_method": "native"
+        }
+      ],
+      "configuration": "Default",
+      "observed": "the equation manager holds no equations",
+      "requirement": "At least one dimension is driven by an equation.",
+      "inputs": [],
+      "calculation": null,
+      "tool_result_ids": [
+        2
+      ],
+      "coverage_limits": [],
+      "recommended_action": "Drive the dimensions that carry the design intent from the global variables.",
+      "group": null,
+      "capture_ids": [],
+      "disposition": null,
+      "exception_id": null
+    },
+    {
+      "id": "F-005",
+      "check": "rms.params.global_variables_present",
+      "title": "the equation manager holds no equations",
+      "status": "demonstrated",
+      "severity": "medium",
+      "component_ids": [
+        "cmp:0002",
+        "cmp:0003"
+      ],
+      "drawing_locations": [],
+      "provenance": [
+        {
+          "document_id": "doc:0003",
+          "vault_path": "C:\\FictionalVault\\Vault\\FICT-KALO-PIN.SLDPRT",
+          "vault_version": 1,
+          "revision": null,
+          "configuration": "Default",
+          "local_modified": false,
+          "export_method": "native"
+        }
+      ],
+      "configuration": "Default",
+      "observed": "the equation manager holds no equations",
+      "requirement": "At least one global variable exists.",
+      "inputs": [],
+      "calculation": null,
+      "tool_result_ids": [
+        2
+      ],
+      "coverage_limits": [
+        "may be a bought part: neither the part-number convention nor a bought-part rule decides it; asked in ER-001"
+      ],
+      "recommended_action": "Name the part's driving values as global variables in the equation manager, and drive the dimensions from them.",
+      "group": null,
+      "capture_ids": [],
+      "disposition": null,
+      "exception_id": null
+    },
+    {
+      "id": "F-006",
+      "check": "rms.params.dimensions_driven_by_equations",
+      "title": "the equation manager holds no equations",
+      "status": "suspected",
+      "severity": "low",
+      "component_ids": [
+        "cmp:0002",
+        "cmp:0003"
+      ],
+      "drawing_locations": [],
+      "provenance": [
+        {
+          "document_id": "doc:0003",
+          "vault_path": "C:\\FictionalVault\\Vault\\FICT-KALO-PIN.SLDPRT",
+          "vault_version": 1,
+          "revision": null,
+          "configuration": "Default",
+          "local_modified": false,
+          "export_method": "native"
+        }
+      ],
+      "configuration": "Default",
+      "observed": "the equation manager holds no equations",
+      "requirement": "At least one dimension is driven by an equation.",
+      "inputs": [],
+      "calculation": null,
+      "tool_result_ids": [
+        2
+      ],
+      "coverage_limits": [
+        "may be a bought part: neither the part-number convention nor a bought-part rule decides it; asked in ER-001"
+      ],
+      "recommended_action": "Drive the dimensions that carry the design intent from the global variables.",
+      "group": null,
+      "capture_ids": [],
+      "disposition": null,
+      "exception_id": null
+    },
+    {
+      "id": "F-007",
+      "check": "mass.material_assigned",
+      "title": "whether the mass of FICT-7001.SLDPRT is overridden (it has no material, and the…",
+      "status": "unresolved",
+      "severity": "medium",
+      "component_ids": [
+        "cmp:0001"
+      ],
+      "drawing_locations": [],
+      "provenance": [
+        {
+          "document_id": "doc:0002",
+          "vault_path": "C:\\FictionalVault\\Vault\\FICT-7001.SLDPRT",
+          "vault_version": 1,
+          "revision": null,
+          "configuration": "Default",
+          "local_modified": false,
+          "export_method": "native"
+        }
+      ],
+      "configuration": "Default",
+      "observed": "whether the mass of FICT-7001.SLDPRT is overridden (it has no material, and the override read left a mass_override gap: IMassProperty.OverrideMass could not be read) is unknown; the check did not run",
+      "requirement": "every part carries a material, or its mass is deliberately overridden, so its mass and centre of mass are not SOLIDWORKS' no-material default",
+      "inputs": [
+        "doc:0002"
+      ],
+      "calculation": null,
+      "tool_result_ids": [
+        5
+      ],
+      "coverage_limits": [
+        "mass.material_assigned not evaluated: whether the mass of FICT-7001.SLDPRT is overridden (it has no material, and the override read left a mass_override gap: IMassProperty.OverrideMass could not be read) is unknown"
+      ],
+      "recommended_action": "Assign a material to FICT-7001.SLDPRT, or override its mass deliberately, then re-run the review.",
+      "group": null,
+      "capture_ids": [],
+      "disposition": null,
+      "exception_id": null
+    },
+    {
+      "id": "F-008",
+      "check": "mass.material_assigned",
+      "title": "whether the mass of FICT-KALO-PIN.SLDPRT is overridden (it has no material, and…",
+      "status": "unresolved",
+      "severity": "medium",
+      "component_ids": [
+        "cmp:0002",
+        "cmp:0003"
+      ],
+      "drawing_locations": [],
+      "provenance": [
+        {
+          "document_id": "doc:0003",
+          "vault_path": "C:\\FictionalVault\\Vault\\FICT-KALO-PIN.SLDPRT",
+          "vault_version": 1,
+          "revision": null,
+          "configuration": "Default",
+          "local_modified": false,
+          "export_method": "native"
+        }
+      ],
+      "configuration": "Default",
+      "observed": "whether the mass of FICT-KALO-PIN.SLDPRT is overridden (it has no material, and the override read left a mass_override gap: IMassProperty.OverrideMass could not be read) is unknown; the check did not run",
+      "requirement": "every part carries a material, or its mass is deliberately overridden, so its mass and centre of mass are not SOLIDWORKS' no-material default",
+      "inputs": [
+        "doc:0003"
+      ],
+      "calculation": null,
+      "tool_result_ids": [
+        5
+      ],
+      "coverage_limits": [
+        "mass.material_assigned not evaluated: whether the mass of FICT-KALO-PIN.SLDPRT is overridden (it has no material, and the override read left a mass_override gap: IMassProperty.OverrideMass could not be read) is unknown"
+      ],
+      "recommended_action": "Assign a material to FICT-KALO-PIN.SLDPRT, or override its mass deliberately, then re-run the review.",
+      "group": null,
+      "capture_ids": [],
+      "disposition": null,
+      "exception_id": null
+    },
+    {
+      "id": "F-009",
+      "check": "hygiene.part_number_matches_file",
+      "title": "FICT-7000.SLDASM has no Meridian Part Ref",
+      "status": "demonstrated",
+      "severity": "low",
+      "component_ids": [],
+      "drawing_locations": [],
+      "provenance": [
+        {
+          "document_id": "doc:0001",
+          "vault_path": "C:\\FictionalVault\\Vault\\FICT-7000.SLDASM",
+          "vault_version": 1,
+          "revision": null,
+          "configuration": "Default",
+          "local_modified": false,
+          "export_method": "native"
+        }
+      ],
+      "configuration": "Default",
+      "observed": "FICT-7000.SLDASM has no Meridian Part Ref",
+      "requirement": "a model's part-number property is its file name's stem",
+      "inputs": [
+        "doc:0001"
+      ],
+      "calculation": null,
+      "tool_result_ids": [
+        6
+      ],
+      "coverage_limits": [],
+      "recommended_action": "Set the Meridian Part Ref of FICT-7000.SLDASM to its file name, or rename the file.",
+      "group": null,
+      "capture_ids": [],
+      "disposition": null,
+      "exception_id": null
+    },
+    {
+      "id": "F-010",
+      "check": "hygiene.part_number_matches_file",
+      "title": "FICT-7001.SLDPRT has no Meridian Part Ref",
+      "status": "demonstrated",
+      "severity": "low",
+      "component_ids": [
+        "cmp:0001"
+      ],
+      "drawing_locations": [],
+      "provenance": [
+        {
+          "document_id": "doc:0002",
+          "vault_path": "C:\\FictionalVault\\Vault\\FICT-7001.SLDPRT",
+          "vault_version": 1,
+          "revision": null,
+          "configuration": "Default",
+          "local_modified": false,
+          "export_method": "native"
+        }
+      ],
+      "configuration": "Default",
+      "observed": "FICT-7001.SLDPRT has no Meridian Part Ref",
+      "requirement": "a model's part-number property is its file name's stem",
+      "inputs": [
+        "doc:0002"
+      ],
+      "calculation": null,
+      "tool_result_ids": [
+        6
+      ],
+      "coverage_limits": [],
+      "recommended_action": "Set the Meridian Part Ref of FICT-7001.SLDPRT to its file name, or rename the file.",
+      "group": null,
+      "capture_ids": [],
+      "disposition": null,
+      "exception_id": null
+    },
+    {
+      "id": "F-011",
+      "check": "hygiene.part_number_matches_file",
+      "title": "FICT-KALO-PIN.SLDPRT has no Meridian Part Ref",
+      "status": "demonstrated",
+      "severity": "low",
+      "component_ids": [
+        "cmp:0002",
+        "cmp:0003"
+      ],
+      "drawing_locations": [],
+      "provenance": [
+        {
+          "document_id": "doc:0003",
+          "vault_path": "C:\\FictionalVault\\Vault\\FICT-KALO-PIN.SLDPRT",
+          "vault_version": 1,
+          "revision": null,
+          "configuration": "Default",
+          "local_modified": false,
+          "export_method": "native"
+        }
+      ],
+      "configuration": "Default",
+      "observed": "FICT-KALO-PIN.SLDPRT has no Meridian Part Ref",
+      "requirement": "a model's part-number property is its file name's stem",
+      "inputs": [
+        "doc:0003"
+      ],
+      "calculation": null,
+      "tool_result_ids": [
+        6
+      ],
+      "coverage_limits": [
+        "may be a bought part: neither the part-number convention nor a bought-part rule decides it; asked in ER-001"
+      ],
+      "recommended_action": "Set the Meridian Part Ref of FICT-KALO-PIN.SLDPRT to its file name, or rename the file.",
+      "group": null,
+      "capture_ids": [],
+      "disposition": null,
+      "exception_id": null
+    },
+    {
+      "id": "F-012",
+      "check": "hygiene.revision_present",
+      "title": "FICT-7000.SLDASM carries no MeridianRev",
+      "status": "demonstrated",
+      "severity": "low",
+      "component_ids": [],
+      "drawing_locations": [],
+      "provenance": [
+        {
+          "document_id": "doc:0001",
+          "vault_path": "C:\\FictionalVault\\Vault\\FICT-7000.SLDASM",
+          "vault_version": 1,
+          "revision": null,
+          "configuration": "Default",
+          "local_modified": false,
+          "export_method": "native"
+        }
+      ],
+      "configuration": "Default",
+      "observed": "FICT-7000.SLDASM carries no MeridianRev",
+      "requirement": "every part and assembly carries its revision",
+      "inputs": [
+        "doc:0001"
+      ],
+      "calculation": null,
+      "tool_result_ids": [
+        6
+      ],
+      "coverage_limits": [],
+      "recommended_action": "Give FICT-7000.SLDASM its MeridianRev.",
+      "group": null,
+      "capture_ids": [],
+      "disposition": null,
+      "exception_id": null
+    },
+    {
+      "id": "F-013",
+      "check": "hygiene.revision_present",
+      "title": "FICT-7001.SLDPRT carries no MeridianRev",
+      "status": "demonstrated",
+      "severity": "low",
+      "component_ids": [
+        "cmp:0001"
+      ],
+      "drawing_locations": [],
+      "provenance": [
+        {
+          "document_id": "doc:0002",
+          "vault_path": "C:\\FictionalVault\\Vault\\FICT-7001.SLDPRT",
+          "vault_version": 1,
+          "revision": null,
+          "configuration": "Default",
+          "local_modified": false,
+          "export_method": "native"
+        }
+      ],
+      "configuration": "Default",
+      "observed": "FICT-7001.SLDPRT carries no MeridianRev",
+      "requirement": "every part and assembly carries its revision",
+      "inputs": [
+        "doc:0002"
+      ],
+      "calculation": null,
+      "tool_result_ids": [
+        6
+      ],
+      "coverage_limits": [],
+      "recommended_action": "Give FICT-7001.SLDPRT its MeridianRev.",
+      "group": null,
+      "capture_ids": [],
+      "disposition": null,
+      "exception_id": null
+    },
+    {
+      "id": "F-014",
+      "check": "hygiene.revision_present",
+      "title": "FICT-KALO-PIN.SLDPRT carries no MeridianRev",
+      "status": "demonstrated",
+      "severity": "low",
+      "component_ids": [
+        "cmp:0002",
+        "cmp:0003"
+      ],
+      "drawing_locations": [],
+      "provenance": [
+        {
+          "document_id": "doc:0003",
+          "vault_path": "C:\\FictionalVault\\Vault\\FICT-KALO-PIN.SLDPRT",
+          "vault_version": 1,
+          "revision": null,
+          "configuration": "Default",
+          "local_modified": false,
+          "export_method": "native"
+        }
+      ],
+      "configuration": "Default",
+      "observed": "FICT-KALO-PIN.SLDPRT carries no MeridianRev",
+      "requirement": "every part and assembly carries its revision",
+      "inputs": [
+        "doc:0003"
+      ],
+      "calculation": null,
+      "tool_result_ids": [
+        6
+      ],
+      "coverage_limits": [
+        "may be a bought part: neither the part-number convention nor a bought-part rule decides it; asked in ER-001"
+      ],
+      "recommended_action": "Give FICT-KALO-PIN.SLDPRT its MeridianRev.",
+      "group": null,
+      "capture_ids": [],
+      "disposition": null,
+      "exception_id": null
+    },
+    {
+      "id": "F-015",
+      "check": "standards.document.data_card_complete",
+      "title": "the data card of FICT-7001.SLDPRT is not complete, read from the document's con…",
+      "status": "demonstrated",
+      "severity": "medium",
+      "component_ids": [
+        "cmp:0001"
+      ],
+      "drawing_locations": [],
+      "provenance": [
+        {
+          "document_id": "doc:0002",
+          "vault_path": "C:\\FictionalVault\\Vault\\FICT-7001.SLDPRT",
+          "vault_version": 1,
+          "revision": null,
+          "configuration": "Default",
+          "local_modified": false,
+          "export_method": "native"
+        }
+      ],
+      "configuration": "Default",
+      "observed": "the data card of FICT-7001.SLDPRT is not complete, read from the document's configuration-independent custom properties: 'Meridian Item Id' is absent from the card; 'Short Note' is absent from the card; 'Plating Spec' is absent from the card; 'Raw Stock Code' is absent from the card",
+      "requirement": "The data card is complete on every document whose file name follows the part-number convention.",
+      "inputs": [
+        "property property:Meridian Item Id Meridian Item Id persist_ref=none scope=doc:0002",
+        "property property:Short Note Short Note persist_ref=none scope=doc:0002",
+        "property property:Plating Spec Plating Spec persist_ref=none scope=doc:0002",
+        "property property:Raw Stock Code Raw Stock Code persist_ref=none scope=doc:0002"
+      ],
+      "calculation": null,
+      "tool_result_ids": [
+        9
+      ],
+      "coverage_limits": [
+        "profile:profile-v3.yaml sha256:422705b42e7648fbb36bb3d672f4be8d226b7c7ba6e035db2180bb946b481309",
+        "configuration Default"
+      ],
+      "recommended_action": "Fill the data-card fields the release checklist requires, in the document's configuration-independent custom properties.",
+      "group": null,
+      "capture_ids": [],
+      "disposition": null,
+      "exception_id": null
+    }
+  ],
+  "explanations_enabled": true,
+  "model_view": {
+    "payload_slimming": true,
+    "history_pruning": true,
+    "prune_after_rounds": 2
+  },
+  "folded_families": [
+    "rms"
+  ],
+  "drawing_read": "opens_closed",
+  "live_detection": {
+    "configuration": "Default",
+    "settings": {
+      "treat_coincident_as_interference": true,
+      "treat_subassemblies_as_components": true,
+      "include_multibody": true,
+      "ignore_hidden": false,
+      "fastener_folder_treatment": "include"
+    },
+    "step_index": 0,
+    "not_attempted": null,
+    "groups": 0,
+    "rows_detected": 0,
+    "rows_added": 0,
+    "rows_collided": 0,
+    "error": null,
+    "persist_error": null
+  },
+  "coverage": {
+    "checked": [
+      {
+        "check": "provenance",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0001",
+            "doc:0002",
+            "doc:0003"
+          ]
+        },
+        "reason": "Reviewed as open in SOLIDWORKS: 3 documents, each at its own path in its active configuration; revision read on 0 of 3. The open files are taken as the latest: vault version and local modification are not read and never asked. A missing revision is reported by the hygiene checks.",
+        "error": null
+      },
+      {
+        "check": "rms.grouping.all_features_in_a_group",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0002",
+            "doc:0003"
+          ]
+        },
+        "reason": "2 document(s)",
+        "error": null
+      },
+      {
+        "check": "rms.refs.direction",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0002",
+            "doc:0003"
+          ]
+        },
+        "reason": "2 document(s)",
+        "error": null
+      },
+      {
+        "check": "rms.intent.every_feature_described",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0002",
+            "doc:0003"
+          ]
+        },
+        "reason": "2 document(s)",
+        "error": null
+      },
+      {
+        "check": "rms.sketches.fully_defined",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0002",
+            "doc:0003"
+          ]
+        },
+        "reason": "2 document(s)",
+        "error": null
+      },
+      {
+        "check": "rms.sketches.not_over_defined",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0002",
+            "doc:0003"
+          ]
+        },
+        "reason": "2 document(s)",
+        "error": null
+      },
+      {
+        "check": "rms.sketches.one_sketch_per_feature",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0002",
+            "doc:0003"
+          ]
+        },
+        "reason": "2 document(s)",
+        "error": null
+      },
+      {
+        "check": "modeling.resilience",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0001",
+            "doc:0002",
+            "doc:0003"
+          ]
+        },
+        "reason": "12 checked, 26 skipped, 0 unresolved rule result(s) over 3 document(s); 6 finding(s)",
+        "error": null
+      },
+      {
+        "check": "mass.material",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "0 checked, 1 skipped coverage item(s) over 3 document(s); 2 finding(s)",
+        "error": null
+      },
+      {
+        "check": "hygiene.duplicate_part_number",
+        "scope": {
+          "component_ids": [
+            "cmp:0001",
+            "cmp:0002",
+            "cmp:0003"
+          ],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "3 documents: the part number is theirs alone",
+        "error": null
+      },
+      {
+        "check": "hygiene.duplicate_description",
+        "scope": {
+          "component_ids": [
+            "cmp:0001",
+            "cmp:0002",
+            "cmp:0003"
+          ],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "3 documents: the description is theirs alone",
+        "error": null
+      },
+      {
+        "check": "hygiene",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "2 checked, 0 skipped coverage item(s) over 3 document(s); 6 finding(s)",
+        "error": null
+      },
+      {
+        "check": "standards.assembly.not_hidden",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0001"
+          ]
+        },
+        "reason": "1 document(s)",
+        "error": null
+      },
+      {
+        "check": "interference",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "live detection over Default found no interference (treat_coincident_as_interference=true, treat_subassemblies_as_components=true, include_multibody=true, ignore_hidden=false, fastener_folder_treatment=include); interference.static evaluated the components as modelled in one configuration; clearance across any motion path was not established",
+        "error": null
+      },
+      {
+        "check": "coverage.closeout",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "Closed by code when the review ended: 2 open evidence requests are listed as unresolved coverage (coverage.evidence_request); the package records 4 gaps: 3 tool error, 1 unsupported",
+        "error": null
+      }
+    ],
+    "skipped": [
+      {
+        "check": "rms.folders.ordered",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0002",
+            "doc:0003"
+          ]
+        },
+        "reason": "2 document(s): doc:0002: fewer than two groups; doc:0003: fewer than two groups",
+        "error": null
+      },
+      {
+        "check": "rms.groups.no_solids_in_ref_or_construction",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0002",
+            "doc:0003"
+          ]
+        },
+        "reason": "2 document(s): doc:0002: no Reference or Construction group; doc:0003: no Reference or Construction group",
+        "error": null
+      },
+      {
+        "check": "rms.core.shell_last",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0002",
+            "doc:0003"
+          ]
+        },
+        "reason": "2 document(s): doc:0002: no Core group; doc:0003: no Core group",
+        "error": null
+      },
+      {
+        "check": "rms.detail.holes_last",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0002",
+            "doc:0003"
+          ]
+        },
+        "reason": "2 document(s): doc:0002: no Detail group; doc:0003: no Detail group",
+        "error": null
+      },
+      {
+        "check": "rms.modify.transform_before_replicate",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0002",
+            "doc:0003"
+          ]
+        },
+        "reason": "2 document(s): doc:0002: no Modify group; doc:0003: no Modify group",
+        "error": null
+      },
+      {
+        "check": "rms.quarantine.chamfers_before_fillets",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0002",
+            "doc:0003"
+          ]
+        },
+        "reason": "2 document(s): doc:0002: no Quarantine group; doc:0003: no Quarantine group",
+        "error": null
+      },
+      {
+        "check": "rms.quarantine.largest_fillet_first",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0002",
+            "doc:0003"
+          ]
+        },
+        "reason": "2 document(s): doc:0002: no Quarantine group; doc:0003: no Quarantine group",
+        "error": null
+      },
+      {
+        "check": "rms.quarantine.only_fillets_and_chamfers",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0002",
+            "doc:0003"
+          ]
+        },
+        "reason": "2 document(s): doc:0002: no Quarantine group; doc:0003: no Quarantine group",
+        "error": null
+      },
+      {
+        "check": "rms.refs.quarantine_has_no_children",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0002",
+            "doc:0003"
+          ]
+        },
+        "reason": "2 document(s): doc:0002: no Quarantine group; doc:0003: no Quarantine group",
+        "error": null
+      },
+      {
+        "check": "rms.detail.no_internal_references",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0002",
+            "doc:0003"
+          ]
+        },
+        "reason": "2 document(s): doc:0002: no Detail group; doc:0003: no Detail group",
+        "error": null
+      },
+      {
+        "check": "rms.detail.individually_suppressible",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0002",
+            "doc:0003"
+          ]
+        },
+        "reason": "2 document(s): doc:0002: no Detail group; doc:0003: no Detail group",
+        "error": null
+      },
+      {
+        "check": "rms.assembly.mates_to_reference_geometry",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0001"
+          ]
+        },
+        "reason": "1 document(s): doc:0001: the root assembly has no mates",
+        "error": null
+      },
+      {
+        "check": "rms.assembly.first_component_fixed",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0001"
+          ]
+        },
+        "reason": "1 document(s): doc:0001: the root assembly has no child components",
+        "error": null
+      },
+      {
+        "check": "rms.assembly.mate_chain_depth",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0001"
+          ]
+        },
+        "reason": "1 document(s): doc:0001: the root assembly has no mates",
+        "error": null
+      },
+      {
+        "check": "rms.assembly.toolbox_parts_not_configurations",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0001"
+          ]
+        },
+        "reason": "1 document(s): doc:0001: no Toolbox component",
+        "error": null
+      },
+      {
+        "check": "joint.map",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "no hole was extracted",
+        "error": null
+      },
+      {
+        "check": "mass.coverage",
+        "scope": {
+          "component_ids": [
+            "cmp:0001",
+            "cmp:0002",
+            "cmp:0003"
+          ],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "0 components were not read (lightweight 0, suppressed 0, not opened 0); 0 bodies could not be read; 2 parts have no material class with a density range or no volume",
+        "error": null
+      },
+      {
+        "check": "thread.pitch",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "no tapped hole, cosmetic thread or fastener in the package states a thread",
+        "error": null
+      },
+      {
+        "check": "standards.assembly.mate_references",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0001"
+          ]
+        },
+        "reason": "1 document(s): doc:0001: no mates",
+        "error": null
+      },
+      {
+        "check": "standards.assembly.one_fixed",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0001"
+          ]
+        },
+        "reason": "1 document(s): doc:0001: the document records no immediate child components",
+        "error": null
+      },
+      {
+        "check": "standards.assembly.fully_mated",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0001"
+          ]
+        },
+        "reason": "1 document(s): doc:0001: the document records no immediate child components",
+        "error": null
+      },
+      {
+        "check": "standards.part.sketches_fully_defined",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0002",
+            "doc:0003"
+          ]
+        },
+        "reason": "2 document(s): doc:0002: the part records no sketches; doc:0003: the part records no sketches",
+        "error": null
+      },
+      {
+        "check": "standards.part.cut_list_excluded",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0002",
+            "doc:0003"
+          ]
+        },
+        "reason": "2 document(s): doc:0002: the part records no cut-list items, which is not the same as every item being excluded (difference aa); doc:0003: the part records no cut-list items, which is not the same as every item being excluded (difference aa)",
+        "error": null
+      },
+      {
+        "check": "standards.document.data_card_complete",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0003"
+          ]
+        },
+        "reason": "1 document(s): doc:0003: the file name FICT-KALO-PIN.SLDPRT does not follow the profile's part-number convention (part_number.pattern), so it carries no data card this check can test",
+        "error": null
+      },
+      {
+        "check": "coverage.prerun.fit",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "no interface was evaluated: `check_fit` needs two drawing dimensions identified as the bore and the shaft of one interface, which nothing in the package says.",
+        "error": null
+      },
+      {
+        "check": "coverage.prerun.axial_stack",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "no stack was evaluated: `check_axial_stack` needs an ordered list of dimensions with signs and the gap they set, which nothing in the package says.",
+        "error": null
+      }
+    ],
+    "unresolved": [
+      {
+        "check": "rms.assembly.no_sibling_in_context_refs",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "external references not extracted",
+        "error": null
+      },
+      {
+        "check": "rms.assembly.positions_driven_by_globals",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "assembly equations not extracted",
+        "error": null
+      },
+      {
+        "check": "rms.assembly.mates_described",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "mate descriptions not extracted",
+        "error": null
+      },
+      {
+        "check": "rms.assembly.subassemblies",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "subassembly mates not extracted; assembly rules evaluated for the root document only",
+        "error": null
+      },
+      {
+        "check": "drawing.context",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": [
+            "doc:0001"
+          ]
+        },
+        "reason": "no drawing named FICT-7000.SLDDRW sits beside it",
+        "error": null
+      },
+      {
+        "check": "drawing.context",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": [
+            "doc:0002"
+          ]
+        },
+        "reason": "a drawing with its name sits beside it (candidate)",
+        "error": null
+      },
+      {
+        "check": "drawing.context",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": [
+            "doc:0003"
+          ]
+        },
+        "reason": "no drawing named FICT-KALO-PIN.SLDDRW sits beside it (may be a bought part)",
+        "error": null
+      },
+      {
+        "check": "drawing.manufacturing_inputs",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": [
+            "doc:0001",
+            "doc:0002",
+            "doc:0003"
+          ]
+        },
+        "reason": "No attached drawing shows a custom part or assembly - FICT-7000.SLDASM: no drawing named FICT-7000.SLDDRW sits beside it; FICT-7001.SLDPRT: a drawing with its name sits beside it (candidate); FICT-KALO-PIN.SLDPRT: no drawing named FICT-KALO-PIN.SLDDRW sits beside it (may be a bought part)",
+        "error": null
+      },
+      {
+        "check": "standards.assembly.not_exploded",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0001"
+          ]
+        },
+        "reason": "1 document(s): doc:0001: the exploded state of FICT-7000.SLDASM was not read; the dump recorded no gap for it",
+        "error": null
+      },
+      {
+        "check": "standards.assembly.rebuild_errors",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0001"
+          ]
+        },
+        "reason": "1 document(s): doc:0001: the rebuild-error count of FICT-7000.SLDASM was not read, and a per-feature error code is not a substitute for it: the document count also covers mate errors that no feature carries; the dump recorded no gap for it",
+        "error": null
+      },
+      {
+        "check": "standards.assembly.not_transparent",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0001"
+          ]
+        },
+        "reason": "1 document(s): doc:0001: the transparency polarity is unsettled: PROBE-2 has not settled which recorded value means transparent on this build, so no component of any assembly can be graded against this check and none is reported as compliant",
+        "error": null
+      },
+      {
+        "check": "standards.part.rebuild_errors",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0002",
+            "doc:0003"
+          ]
+        },
+        "reason": "2 document(s): doc:0002: doc:0002 FICT-7001.SLDPRT: the rebuild-error count of FICT-7001.SLDPRT was not read; the dump recorded no gap for it; doc:0003: doc:0003 FICT-KALO-PIN.SLDPRT: the rebuild-error count of FICT-KALO-PIN.SLDPRT was not read; the dump recorded no gap for it",
+        "error": null
+      },
+      {
+        "check": "standards.part.material_assigned",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0002",
+            "doc:0003"
+          ]
+        },
+        "reason": "2 document(s): doc:0002: FICT-7001.SLDPRT has no configuration 'Fabricated', which is the profile's material configuration; the material recorded is the one in 'Default'; doc:0003: FICT-KALO-PIN.SLDPRT has no configuration 'Fabricated', which is the profile's material configuration; the material recorded is the one in 'Default'",
+        "error": null
+      },
+      {
+        "check": "standards.document.data_card_complete",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0001"
+          ]
+        },
+        "reason": "1 document(s): doc:0001: no component instance for doc:0001",
+        "error": null
+      },
+      {
+        "check": "standards.release",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0001",
+            "doc:0002",
+            "doc:0003"
+          ]
+        },
+        "reason": "not_ready; 1 error, 0 warning and 0 waived finding(s); 1 checked, 8 skipped, 8 unresolved and 30 out-of-scope (check, document) pair(s); unresolved: standards.assembly.not_exploded, standards.assembly.rebuild_errors, standards.assembly.not_transparent, standards.part.rebuild_errors, standards.part.material_assigned, standards.document.data_card_complete; no drawing graded",
+        "error": null
+      },
+      {
+        "check": "coverage.prerun.maybe_bought",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": [
+            "doc:0003"
+          ]
+        },
+        "reason": "FICT-KALO-PIN.SLDPRT graded; each finding says it may be bought; asked in ER-001; do not ask for their drawings",
+        "error": null
+      },
+      {
+        "check": "coverage.evidence_request",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "ER-001 is still open: Parts no rule tells apart: FICT-KALO-PIN.SLDPRT",
+        "error": null
+      },
+      {
+        "check": "coverage.evidence_request",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "ER-002 is still open: The same-name drawing FICT-7001.SLDDRW, beside a reviewed file and not open",
+        "error": null
+      },
+      {
+        "check": "interfaces.fit",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "Fits and clearances at mating interfaces: not reviewed, because the review was not sent to the model",
+        "error": null
+      },
+      {
+        "check": "interfaces.stack",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "Axial stacks and gaps: not reviewed, because the review was not sent to the model",
+        "error": null
+      },
+      {
+        "check": "fasteners",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "Fastener joints: not reviewed, because the review was not sent to the model",
+        "error": null
+      },
+      {
+        "check": "holes.alignment",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "Hole alignment across mating parts: not reviewed, because the review was not sent to the model",
+        "error": null
+      }
+    ],
+    "failed": [],
+    "out_of_scope": [
+      {
+        "check": "rms.drawing.model_items_preferred",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "drawing-owned vs model dimensions not extracted; advisory by decision",
+        "error": null
+      },
+      {
+        "check": "rms.advisory.structural_vs_cosmetic_fillets",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "judgement-only; not decidable from extracted data",
+        "error": null
+      },
+      {
+        "check": "rms.advisory.core_shaping_cuts",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "judgement-only; not decidable from extracted data",
+        "error": null
+      },
+      {
+        "check": "rms.advisory.description_quality",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "judgement-only; not decidable from extracted data",
+        "error": null
+      },
+      {
+        "check": "rms.advisory.sketch_plane_choice",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "judgement-only; sketch planes not extracted",
+        "error": null
+      },
+      {
+        "check": "rms.advisory.avoid_multibody",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "judgement-only; body intent not decidable",
+        "error": null
+      },
+      {
+        "check": "standards.assembly.not_exploded",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0002",
+            "doc:0003"
+          ]
+        },
+        "reason": "2 document(s): doc:0002 is a part document and this check grades a assembly one; doc:0003 is a part document and this check grades a assembly one",
+        "error": null
+      },
+      {
+        "check": "standards.assembly.rebuild_errors",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0002",
+            "doc:0003"
+          ]
+        },
+        "reason": "2 document(s): doc:0002 is a part document and this check grades a assembly one; doc:0003 is a part document and this check grades a assembly one",
+        "error": null
+      },
+      {
+        "check": "standards.assembly.mate_references",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0002",
+            "doc:0003"
+          ]
+        },
+        "reason": "2 document(s): doc:0002 is a part document and this check grades a assembly one; doc:0003 is a part document and this check grades a assembly one",
+        "error": null
+      },
+      {
+        "check": "standards.assembly.one_fixed",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0002",
+            "doc:0003"
+          ]
+        },
+        "reason": "2 document(s): doc:0002 is a part document and this check grades a assembly one; doc:0003 is a part document and this check grades a assembly one",
+        "error": null
+      },
+      {
+        "check": "standards.assembly.fully_mated",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0002",
+            "doc:0003"
+          ]
+        },
+        "reason": "2 document(s): doc:0002 is a part document and this check grades a assembly one; doc:0003 is a part document and this check grades a assembly one",
+        "error": null
+      },
+      {
+        "check": "standards.assembly.not_transparent",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0002",
+            "doc:0003"
+          ]
+        },
+        "reason": "2 document(s): doc:0002 is a part document and this check grades a assembly one; doc:0003 is a part document and this check grades a assembly one",
+        "error": null
+      },
+      {
+        "check": "standards.assembly.not_hidden",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0002",
+            "doc:0003"
+          ]
+        },
+        "reason": "2 document(s): doc:0002 is a part document and this check grades a assembly one; doc:0003 is a part document and this check grades a assembly one",
+        "error": null
+      },
+      {
+        "check": "standards.part.sketches_fully_defined",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0001"
+          ]
+        },
+        "reason": "1 document(s): doc:0001 is a assembly document and this check grades a part one",
+        "error": null
+      },
+      {
+        "check": "standards.part.rebuild_errors",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0001"
+          ]
+        },
+        "reason": "1 document(s): doc:0001 is a assembly document and this check grades a part one",
+        "error": null
+      },
+      {
+        "check": "standards.part.material_assigned",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0001"
+          ]
+        },
+        "reason": "1 document(s): doc:0001 is a assembly document and this check grades a part one",
+        "error": null
+      },
+      {
+        "check": "standards.part.cut_list_excluded",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0001"
+          ]
+        },
+        "reason": "1 document(s): doc:0001 is a assembly document and this check grades a part one",
+        "error": null
+      },
+      {
+        "check": "standards.drawing.dimensions_not_overridden",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0001",
+            "doc:0002",
+            "doc:0003"
+          ]
+        },
+        "reason": "3 document(s): doc:0001 is a assembly document and this check grades a drawing one; doc:0002 is a part document and this check grades a drawing one; doc:0003 is a part document and this check grades a drawing one",
+        "error": null
+      },
+      {
+        "check": "standards.drawing.annotations_not_dangling",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0001",
+            "doc:0002",
+            "doc:0003"
+          ]
+        },
+        "reason": "3 document(s): doc:0001 is a assembly document and this check grades a drawing one; doc:0002 is a part document and this check grades a drawing one; doc:0003 is a part document and this check grades a drawing one",
+        "error": null
+      },
+      {
+        "check": "standards.drawing.revision_matches",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0001",
+            "doc:0002",
+            "doc:0003"
+          ]
+        },
+        "reason": "3 document(s): doc:0001 is a assembly document and this check grades a drawing one; doc:0002 is a part document and this check grades a drawing one; doc:0003 is a part document and this check grades a drawing one",
+        "error": null
+      },
+      {
+        "check": "standards.drawing.no_itar_statement",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:0001",
+            "doc:0002",
+            "doc:0003"
+          ]
+        },
+        "reason": "3 document(s): doc:0001 is a assembly document and this check grades a drawing one; doc:0002 is a part document and this check grades a drawing one; doc:0003 is a part document and this check grades a drawing one",
+        "error": null
+      }
+    ]
+  },
+  "timing": {
+    "baseline_minutes": null,
+    "assisted_supervision_minutes": 0.0,
+    "assisted_verification_minutes": 0.0,
+    "false_alarm_handling_minutes": 0.0,
+    "unattended_runtime_minutes": 0.0,
+    "net_saved_minutes": null
+  }
+}
