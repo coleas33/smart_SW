@@ -28,7 +28,8 @@ from swreview.report.summary import load_words
 from swreview.tools.model_view import count_findings
 from tests.support.questions_package import QuestionsPackage, build_questions_package
 from tests.support.recording_provider import RecordingProvider
-from tests.support.restart import disk_at
+from tests.support.restart import disk_at, restarted_app
+from tests.support.restored import assert_restored_as_waiting, restored_reason
 from tests.support.roles_review import PIN_ID
 from tests.unit import test_chat_server as chat
 from tests.unit import test_send_gate_server as send_cases
@@ -1088,6 +1089,12 @@ def test_the_disk_at_an_apply_crash_holds_the_unapplied_record_without_turn_even
         )
         copied = load_session(captured.folder / "session.json")
         assert all(item.status == "open" for item in copied.evidence_requests)
+        # 015 T099: a restarted backend restores the copy as the record before the apply.
+        settings = {"token": chat.TOKEN, "allow_origin": chat.ORIGIN, "development": True}
+        with restarted_app(captured.root, settings) as fresh:
+            restored = fresh.get(f"/reviews/{captured.folder.name}")
+        assert restored.status_code == 200, restored.text
+        assert_restored_as_waiting(restored.json(), before)
     assert provider_control.built == []
 
 
@@ -1185,7 +1192,8 @@ def test_disk_restore_forwards_the_saved_waiting_state_without_a_live_cache_or_w
     assert restored.status_code == 200, restored.text
     body = restored.json()
     assert body["read_only"] is True
-    assert body["read_only_reason"] == load_words().read_only
+    # 015 T100, moved deliberately: a waiting record's line is composed (owner decision 73A).
+    assert body["read_only_reason"] == restored_reason(saved)
     assert body["chat_state"] is None and body["last_seq"] is None
     assert body["ranking"]["summary"]["send"] == {
         "state": "restored", "input_tokens": None, "approximate": False,
@@ -1239,7 +1247,8 @@ def test_disk_restore_after_an_apply_failure_shows_the_actual_saved_answers_and_
     restored = client.get(f"/reviews/{waiting.run.out_dir.name}")
     assert restored.status_code == 200, restored.text
     body = restored.json()
-    assert body["read_only"] and body["read_only_reason"] == load_words().read_only
+    # 015 T100, moved deliberately: a waiting record's line is composed (owner decision 73A).
+    assert body["read_only"] and body["read_only_reason"] == restored_reason(saved)
     assert body["evidence_requests"] == [item.pane_body() for item in saved.evidence_requests]
     disk_answer = next(item for item in body["evidence_requests"] if item["id"] == request.id)
     assert disk_answer["status"] == ("answered" if after_save else "open")

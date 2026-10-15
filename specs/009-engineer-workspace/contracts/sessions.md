@@ -51,6 +51,13 @@ the route probe the workstation, when: the rule refuses the name; the folder doe
 no `session.json`; it holds a `check.json` (a check folder); either file cannot be read. It writes
 nothing: every file under the folder has the same bytes and modification time before and after.
 
+*Amended by feature 015 T100* (2026-10-14): the body is `report/snapshot.restored_snapshot`. A
+record whose `model_status.state` is `not_sent` or `send_failed` is read-only with
+`read_only_reason` the words file's `read_only_lead`, a space, and `send.restored_line` dated with
+`checked_at`'s stored wall clock (`YYYY-MM-DD HH:MM`, never converted), and its summary carries the
+`restored` Send block; every other record is answered as above
+([015 recheck.md](../../015-review-send-gate/contracts/recheck.md) section 8).
+
 ## 5. The chips and choosing one
 
 `<nav id="review-chips">` under the header: one chip per `sessions` item in the host's order, reading

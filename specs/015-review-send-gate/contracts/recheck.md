@@ -282,6 +282,9 @@ persisted model status and provider metadata, reports no input count, and retain
 current generic read-only reason. The composed dated reason, restart/carry/recheck tests
 and actions, and T099/T100 remain pending; this prerequisite does not complete US4.
 
+*Landed as* (T099-T100, 2026-10-14): `report/snapshot.restored_snapshot` composes the reason and
+the block; `_read_review` answers it. `{when}` is `checked_at.strftime("%Y-%m-%d %H:%M")`.
+
 ## 9. Finding a waiting review after SOLIDWORKS reopens
 
 `sessions.list`, before it answers, runs `FindNotSentReview` when the active document is a part or an
