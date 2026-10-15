@@ -24,6 +24,7 @@ from starlette.testclient import TestClient
 
 from swreview import atomic, tokens
 from swreview.agent import runner
+from swreview.agent.providers.fake import FakeProvider
 from swreview.agent.runner import request_prefix
 from swreview.engineering_context.brief import build_summary, compact_json
 from swreview.engineering_context.models import context_digest
@@ -570,3 +571,171 @@ def test_saved_inputs_stay_matched_after_the_live_interference_check(
     panel = client.get(ctx.endpoint(folder)).json()["records"]
     assert [row["binding"]["status"] for row in panel] == ["mismatch"]
     assert panel[0]["binding"]["reasons"] == ["package_digest_changed"]
+
+
+# --- owner decisions 105A and 108A: a re-run's identity check, and Retry re-attaches ------------
+
+PANEL = "Engineering context panel"
+
+
+@pytest.mark.parametrize("changed", ["package_id", "configuration"])
+def test_a_re_run_refuses_a_package_whose_identity_changed(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+    changed: str,
+) -> None:
+    """Owner decision 105A: the recorded head, context id and saved package digest, and also
+    the saved baseline's package id, root document and configuration."""
+    folder = run_root / "FICT-context-identity"
+    waiting_with_context(app, client, folder)
+    package = load_package(folder).package
+    if changed == "package_id":
+        package.package_id = UUID("01000000-0000-4000-8000-0000000000ff")
+    else:
+        root = next(d for d in package.documents if d.document_id == "doc:0001")
+        root.configurations = ["FICT-Other"]
+        root.active_configuration = "FICT-Other"
+        package.design.active_configuration = "FICT-Other"
+    save_package(package, folder)
+    before = {path.name: path.read_bytes() for path in folder.iterdir() if path.is_file()}
+    settings = recheck_cases.server_settings(
+        provider_control, models, recheck_cases.silent_seat()
+    )
+    with restarted_app(run_root, settings) as fresh:
+        refused = recheck_cases.recheck(fresh, folder)
+
+    assert refused.status_code == 409, refused.text
+    assert refused.json()["error_class"] == "EngineeringContextConflict"
+    assert {path.name: path.read_bytes() for path in folder.iterdir() if path.is_file()} == before
+
+
+class FailingProvider(FakeProvider):
+    """A provider whose first request fails, as a ticked review's can."""
+
+    def run(self, **kwargs: Any) -> Any:
+        raise RuntimeError("FICT the first request failed")
+
+
+def context_review_failed(
+    app: Any, client: TestClient, folder: Path
+) -> tuple[dict[str, Any], dict[str, Any], Any]:
+    """A ticked context review of the questions package whose first request failed: its
+    attachment, its `POST /sessions` answer and its fixture. The app's provider factory is
+    put back afterwards."""
+    fixture = build_questions_package(folder)
+    app.state.server.bridge_factory = lambda pipe, secret: fixture.bridge
+    attachment = attachment_of(client, folder)
+    factory = app.state.server.provider_factory
+    app.state.server.provider_factory = lambda settings: FailingProvider(
+        script=[], model=settings.model
+    )
+    started = chat.start_session(
+        client,
+        folder,
+        send_when_checked=True,
+        standards_profile=str(fixture.profile),
+        bridge={"pipe": "FICT-pipe", "secret": "FICT-secret"},
+        engineering_context=attachment,
+    )
+    assert chat.settle(client, started["chat_id"]) == "failed"
+    app.state.server.provider_factory = factory
+    return attachment, started, fixture
+
+
+@pytest.mark.parametrize("ticked", [True, False], ids=["ticked", "unticked"])
+def test_a_retry_of_a_context_review_re_attaches_its_context_in_its_folder(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    tmp_path: Path,
+    provider_control: chat.ProviderControl,
+    ticked: bool,
+) -> None:
+    """Owner decision 108A: the host retries a context review in its own folder with the same
+    attachment; its package carries the first run's live rows, and the head is what counts."""
+    folder = run_root / "FICT-context-retry"
+    attachment, first, fixture = context_review_failed(app, client, folder)
+    seat = build_questions_package(tmp_path / "seat").bridge
+    app.state.server.bridge_factory = lambda pipe, secret: seat
+    built = len(provider_control.built)
+
+    response = client.post(
+        "/sessions",
+        json=chat.session_body(
+            folder,
+            retry_of=first["chat_id"],
+            send_when_checked=ticked,
+            standards_profile=str(fixture.profile),
+            bridge={"pipe": "FICT-pipe", "secret": "FICT-secret"},
+            engineering_context=attachment,
+        ),
+    )
+
+    assert response.status_code == 201, response.text
+    chat_id = response.json()["chat_id"]
+    held = app.state.server.chats[UUID(chat_id)]
+    assert str(held.run.context.engineering_context.context_id) == attachment["context_id"]
+    assert_block_once(held.run.opening_message, folder)
+    if ticked:
+        chat.settle(client, chat_id)
+        assert len(provider_control.built) == built + 1
+    else:
+        assert chat.state_of(client, chat_id) == "awaiting_send"
+        assert len(provider_control.built) == built
+    assert str(load_session(folder / "session.json").retry_of) == first["review_session_id"]
+
+
+def test_a_retry_after_its_context_changed_is_refused_toward_the_panel(
+    client: TestClient, run_dir: Path, provider_control: chat.ProviderControl
+) -> None:
+    attachment = attachment_of(client, run_dir)
+    first = chat.start_session(client, run_dir, engineering_context=attachment)
+    chat.settle(client, first["chat_id"])
+    edited = client.post(
+        ctx.endpoint(run_dir, "/requirement"),
+        json=ctx.requirement(attachment, text="FICT revised load."),
+    )
+    assert edited.status_code == 200, edited.text
+    session = (run_dir / "session.json").read_bytes()
+    built = len(provider_control.built)
+
+    refused = client.post(
+        "/sessions",
+        json=chat.session_body(
+            run_dir, retry_of=first["chat_id"], engineering_context=attachment
+        ),
+    )
+
+    assert refused.status_code == 409, refused.text
+    assert refused.json()["error_class"] == "EngineeringContextConflict"
+    assert PANEL in refused.json()["message"]
+    assert (run_dir / "session.json").read_bytes() == session
+    assert len(provider_control.built) == built
+
+
+def test_the_re_run_refusal_names_the_panel_not_an_impossible_action(
+    client: TestClient,
+    run_dir: Path,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+) -> None:
+    attachment = attachment_of(client, run_dir)
+    chat.start_session(client, run_dir, send_when_checked=False, engineering_context=attachment)
+    settings = recheck_cases.server_settings(
+        provider_control, models, recheck_cases.silent_seat()
+    )
+    with restarted_app(run_root, settings) as fresh:
+        fresh.post(
+            ctx.endpoint(run_dir, "/requirement"),
+            json=ctx.requirement(attachment, text="FICT revised load."),
+        )
+        refused = recheck_cases.recheck(fresh, run_dir, standards_profile=None, bridge=None)
+
+    assert refused.status_code == 409, refused.text
+    message = refused.json()["message"]
+    assert PANEL in message
+    assert "start a new review with the saved context" not in message

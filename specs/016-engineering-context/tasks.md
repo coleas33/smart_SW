@@ -46,3 +46,12 @@
       package: the baseline records the package's digest without that check's rows and gaps,
       and binding accepts exactly that rewrite in the check's own spelling; any other change
       is a mismatch (owner decision 107A; the verifier's 29A).
+- [x] T025 A re-run or Retry carrying saved context also requires the baseline's package id,
+      root document and configuration; its validation stays the head, context id and saved
+      package digest (owner decision 105A; the verifier's 26A). The panel's strict lock is
+      kept as built (106A; 27A).
+- [x] T026 Retry on a failed context review re-attaches the same saved context in its own run
+      folder through the one gated `CreateReviewSession`, and a context changed since is
+      refused toward the Engineering context panel (owner decision 108A; 30A). The refusal's
+      message and the `EngineeringContextConflict` label name an action that exists (the
+      verifier's note).

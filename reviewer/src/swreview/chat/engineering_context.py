@@ -77,6 +77,19 @@ class ContextEntryConflict(ContextEntryRefused):
     error_class = "EngineeringContextConflict"
 
 
+CONTEXT_CHANGED_SINCE_START = (
+    "The saved engineering context changed after this review started, so the review cannot "
+    "carry it. Extract context evidence again in the Engineering context panel and review with "
+    "the inputs entered there."
+)
+"""Owner decisions 105A and 108A: a re-run's or Retry's refusal names an action that exists."""
+
+
+def _identity(baseline: Any) -> tuple[Any, ...]:
+    """The saved package's identity a carried context still requires (owner decision 105A)."""
+    return (baseline.package_id, baseline.root_document_id, baseline.configuration)
+
+
 class UnknownContextRun(ContextEntryRefused):
     status = 404
     error_class = "UnknownEngineeringContextRun"
@@ -483,24 +496,25 @@ class EngineeringContextServer:
         """The fixed store's head, when it is exactly `attachment`'s; the one validator.
 
         `same_package` also requires the run folder's package to be the saved baseline, as a
-        new review's start does. A waiting review's re-run (owner decision 99A) leaves it out:
-        its own live checks may have appended evidence to the package since the start, which
-        the summary marks as needing review rather than refusing.
+        new review's start does. A context carried into a waiting review's re-run or a failed
+        review's Retry (owner decisions 99A, 105A and 108A) leaves the bytes out - the earlier
+        run's live checks or a confirmed drawing read may have changed the package since, which
+        the summary assesses - but still requires the baseline's package id, root document and
+        configuration.
         """
         safe_dir, loaded = self._load(directory.name)
         if safe_dir.resolve() != directory.resolve():
             raise ContextEntryRefused("The context attachment does not name this saved run.")
         try:
             artifact = workflow.store_for_package(self._store_dir(safe_dir), loaded).load()
+            current = baseline_from_package(loaded)
             if (
                 artifact is None
                 or artifact.context_id != attachment.context_id
                 or context_digest(artifact) != attachment.head_digest
                 or artifact.baseline.package_sha256 != attachment.package_sha256
-                or (
-                    same_package
-                    and not same_saved_package(artifact.baseline, baseline_from_package(loaded))
-                )
+                or (same_package and not same_saved_package(artifact.baseline, current))
+                or _identity(artifact.baseline) != _identity(current)
             ):
                 raise ContextEntryConflict(conflict)
         except CONTEXT_READ_ERRORS:
@@ -525,21 +539,20 @@ class EngineeringContextServer:
                 conflict="Context attachment changed; inspect it again.",
             )
 
-    def recheck_attachment(self, directory: Path, recorded: Mapping[str, Any]) -> ContextArtifact:
-        """Reload and validate the context a waiting review's record names, for its re-run.
+    def carried_attachment(self, directory: Path, raw: Mapping[str, Any]) -> ContextArtifact:
+        """Reload and validate the context a review carries again in its own folder.
 
-        Owner decision 99A: the re-run carries the attachment its waiting record names. A head
-        changed since then refuses the re-run before anything in the folder moves.
+        A waiting review's re-run carries what its record names (owner decision 99A); a failed
+        context review's Retry carries what the host recorded at its start (108A). A head
+        changed since then refuses before anything in the folder moves, naming the one action
+        left: new context evidence from the Engineering context panel.
         """
         with self._lock:
             return self._attached(
                 directory,
-                _typed(ContextAttachment, dict(recorded)),
+                _typed(ContextAttachment, dict(raw)),
                 same_package=False,
-                conflict=(
-                    "Saved engineering context changed since this review was checked; "
-                    "start a new review with the saved context."
-                ),
+                conflict=CONTEXT_CHANGED_SINCE_START,
             )
 
     def validate_prepared_review(

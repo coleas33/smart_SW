@@ -1324,7 +1324,9 @@ class ChatServer:
                 created_at=datetime.now(UTC),
             )
             chat.to(ChatState.EXTRACTING)
-            artifact = await run_in_threadpool(self._attachment_of, run_dir, body, earlier)
+            artifact = await run_in_threadpool(
+                self._attachment_of, run_dir, body, earlier, retry_of
+            )
             try:
                 if send_when_checked:
                     run = await run_in_threadpool(
@@ -2219,13 +2221,18 @@ class ChatServer:
         return None
 
     def _attachment_of(
-        self, run_dir: Path, body: Mapping[str, Any], earlier: ReviewSession | None
+        self,
+        run_dir: Path,
+        body: Mapping[str, Any],
+        earlier: ReviewSession | None,
+        retry_of: UUID | None,
     ) -> ContextArtifact | None:
         """Feature 016's saved context for this start, validated; None for a review without.
 
         A blocking read under the context lock, so the route runs it on the thread pool. A
-        re-run carries what its waiting record names (owner decision 99A); any other start
-        carries what its body names, exactly.
+        re-run carries what its waiting record names (owner decision 99A) and a Retry in the
+        same folder what its body names (108A), each by its head; a new start carries what its
+        body names, exactly.
         """
         recorded = (
             earlier.model_status.engineering_context
@@ -2233,9 +2240,12 @@ class ChatServer:
             else None
         )
         if recorded is not None:
-            return self.engineering_context.recheck_attachment(run_dir, recorded)
+            return self.engineering_context.carried_attachment(run_dir, recorded)
+        requested = "engineering_context" in body
+        if requested and retry_of is not None and isinstance(body["engineering_context"], dict):
+            return self.engineering_context.carried_attachment(run_dir, body["engineering_context"])
         return self.engineering_context.review_attachment(
-            run_dir, body.get("engineering_context"), requested="engineering_context" in body
+            run_dir, body.get("engineering_context"), requested=requested
         )
 
     @staticmethod
@@ -2364,7 +2374,9 @@ class ChatServer:
         """
         if engineering_context is not None:
             self.engineering_context.validate_prepared_review(
-                chat.run_dir, engineering_context, same_package=earlier is None
+                chat.run_dir,
+                engineering_context,
+                same_package=earlier is None and chat.retry_of is None,
             )
         self._rotate_previous(
             chat, keep_record=earlier.session_id if earlier is not None else None
