@@ -2602,3 +2602,183 @@ def test_97a_the_marker_says_to_delete_itself_once_the_report_is_moved_back(
         f"{out.resolve()} and could not move it back. Move it back by hand, then delete this "
         "file; no build removes this folder while it holds this file.\n"
     )
+
+
+# --- owner decision 101A: what was moved aside, exclusive staging, OSError clean-up -----------
+
+
+def _held(out: Path) -> tuple[list[str], list[str]]:
+    """What `out` holds, and what lies beside it under its build names."""
+    return sorted(path.name for path in out.iterdir()), _siblings(out)
+
+
+def test_101a_a_file_written_into_out_during_the_build_is_kept_and_the_build_refused(
+    report_runs: Runs, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Written after the folder was checked: moved aside with the previous report, it is moved
+    back with it, named, and nothing is replaced."""
+    out = tmp_path / "report"
+    build_report([report_runs.off], out)
+    before = snapshot(out)
+    real = report_page._place
+
+    def place(built: Path, target: Path, *, in_place: bool) -> tuple[Path, ...]:
+        (target / "notes.txt").write_text("the engineer's notes", encoding="utf-8")
+        return real(built, target, in_place=in_place)
+
+    monkeypatch.setattr(report_page, "_place", place)
+
+    with pytest.raises(report_page.ReportError) as refused:
+        build_report([report_runs.on], out)
+
+    assert str(refused.value) == (
+        f"{out.resolve()} gained notes.txt while the report was being built; it is left in place "
+        "with the previous report, and nothing was replaced: move it elsewhere and build again"
+    )
+    assert (out / "notes.txt").read_text(encoding="utf-8") == "the engineer's notes"
+    assert {name: data for name, data in snapshot(out).items() if name != "notes.txt"} == before
+    assert _siblings(out) == []
+
+
+def _plant_after_the_last_check(
+    monkeypatch: pytest.MonkeyPatch, out: Path, name: str, checks: int
+) -> None:
+    """`name` appears in `out` just after the `checks`-th staging check returns clear: between
+    the in-place copy's check and its own creation of the name."""
+    real = report_page._staging_held
+    seen: list[int] = []
+
+    def held_then_plant(folder: Path) -> list[str]:
+        found = real(folder)
+        seen.append(1)
+        if len(seen) == checks and Path(folder).resolve() == out.resolve():
+            _plant(out, name)
+        return found
+
+    monkeypatch.setattr(report_page, "_staging_held", held_then_plant)
+
+
+@pytest.mark.parametrize("name", ["transcripts.new", "index.html.new"])
+def test_101a_a_staging_name_made_by_someone_else_after_the_check_is_never_touched(
+    report_runs: Runs, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, name: str
+) -> None:
+    """The copy makes each staging name exclusively, so one that appeared after the check is
+    refused, kept, and what this call made already is removed."""
+    out = tmp_path / "report"
+    build_report([report_runs.off], out)
+    before = snapshot(out)
+    monkeypatch.chdir(out)
+    _plant_after_the_last_check(monkeypatch, out, name, checks=2)
+
+    with pytest.raises(report_page.ReportError) as refused:
+        build_report([report_runs.on], Path("."))
+
+    assert str(refused.value) == _staging_refusal(out.resolve() / name)
+    planted = out / name
+    notes = planted / "notes.txt" if planted.is_dir() else planted
+    assert notes.read_text(encoding="utf-8") == "the engineer's notes"
+    assert {key: data for key, data in snapshot(out).items() if not key.startswith(name)} == before
+    assert _held(out) == (sorted(["index.html", "transcripts", name]), [])
+
+
+def test_101a_a_transcripts_old_this_build_did_not_make_is_never_removed(
+    report_runs: Runs, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A report holding only its index: no `transcripts/` to rename aside, so a
+    `transcripts.old` that appears during the copy is not this build's."""
+    out = tmp_path / "report"
+    build_report([report_runs.off], out)
+    shutil.rmtree(out / "transcripts")
+    monkeypatch.chdir(out)
+    real = shutil.copytree
+
+    def copytree(source: Any, destination: Any, *args: Any, **kwargs: Any) -> Any:
+        copied = real(source, destination, *args, **kwargs)
+        if Path(destination).name == "transcripts.new":
+            _plant(out, "transcripts.old")
+        return copied
+
+    monkeypatch.setattr(shutil, "copytree", copytree)
+
+    built = build_report([report_runs.on], Path("."))
+
+    assert (out / "transcripts.old" / "notes.txt").is_file()
+    assert built.warnings == ()
+    assert (out / "transcripts" / "on" / f"{CASE_A}.html").is_file()
+
+
+@pytest.mark.parametrize(
+    "fails",
+    ["transcripts-aside", "staged-in", "index-replace"],
+)
+def test_101a_an_os_error_in_an_in_place_copy_leaves_the_previous_report_and_nothing_staged(
+    report_runs: Runs, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fails: str
+) -> None:
+    """Not a kill: the previous report is whole, the names this call made are gone, and the
+    next build is not refused for them."""
+    out = tmp_path / "report"
+    build_report([report_runs.off], out)
+    before = snapshot(out)
+    monkeypatch.chdir(out)
+    if fails == "index-replace":
+
+        def replace(source: Any, destination: Any) -> None:
+            raise PermissionError(13, "index.html is open", str(destination))
+
+        monkeypatch.setattr(report_page.os, "replace", replace)
+    else:
+        moved = "transcripts" if fails == "transcripts-aside" else "transcripts.new"
+        _renames(
+            monkeypatch,
+            lambda source, to: (
+                PermissionError(13, "in use", str(source))
+                if source.name == moved and source.parent == out.resolve()
+                else None
+            ),
+        )
+
+    with pytest.raises(OSError):
+        build_report([report_runs.on], Path("."))
+
+    monkeypatch.undo()
+    assert snapshot(out) == before
+    assert _held(out) == (["index.html", "transcripts"], [])
+    assert build_report([report_runs.on], out).warnings == ()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="a file held open without delete sharing is Windows")
+def test_101a_a_transcript_held_open_leaves_the_previous_report_and_the_next_build_works(
+    report_runs: Runs, tmp_path: Path
+) -> None:
+    """Held open by Python's `open` (no `FILE_SHARE_DELETE`): the folder cannot be moved aside,
+    the in-place copy cannot rename `transcripts/` aside either; the previous report stays whole
+    and nothing this build staged is left behind."""
+    out = tmp_path / "report"
+    build_report([report_runs.off], out)
+    before = snapshot(out)
+    held = next((out / "transcripts").rglob("*.html"))
+
+    with held.open("rb"), pytest.raises(OSError):
+        build_report([report_runs.on], out)
+
+    assert snapshot(out) == before
+    assert _held(out) == (["index.html", "transcripts"], [])
+    assert build_report([report_runs.on], out).warnings == ()
+
+
+def test_101a_every_staging_name_found_is_named_on_the_one_refusal(
+    report_runs: Runs, tmp_path: Path
+) -> None:
+    out = tmp_path / "report"
+    build_report([report_runs.off], out)
+    for name in ("index.html.new", "transcripts.old"):
+        _plant(out, name)
+
+    with pytest.raises(report_page.ReportError) as refused:
+        build_report([report_runs.on], out)
+
+    assert str(refused.value) == (
+        f"{out} holds transcripts.old, index.html.new, names this command stages an in-place copy "
+        "under, so they may be what an interrupted build left, or yours; this command never "
+        "deletes them: delete them, or move them elsewhere, and build again"
+    )

@@ -189,7 +189,8 @@ BUILDING = ".building"
 STAGED = (f"{TRANSCRIPTS_DIR}.new", f"{TRANSCRIPTS_DIR}.old", f"{INDEX_FILE}.new")
 """The names an in-place copy stages beside a report before renaming them into place (owner
 decision 96A). A copy that was killed may leave them, and so may a user: a folder holding one is
-refused, never cleared, and this command never deletes one it did not just make (97A)."""
+refused, never cleared; this command deletes one only when this same call made it exclusively and
+then met an `OSError` or a refusal (97A, 101A)."""
 
 STRANDED_FILE = "STRANDED-by-swreview-benchmark-report.txt"
 """Written into a previous report a build moved aside and could not move back, so that no later
@@ -403,6 +404,15 @@ def _place(built: Path, target: Path, *, in_place: bool) -> tuple[Path, ...]:
         target.rename(previous)
     except OSError:
         return _left(_copy_in_place(built, target), _remove(built))
+    strays = _strays(previous)
+    if strays:
+        refusal = ReportError(
+            f"{target} gained {', '.join(strays)} while the report was being built; it is left in "
+            "place with the previous report, and nothing was replaced: move it elsewhere and "
+            "build again"
+        )
+        _move_back(previous, target, refusal)
+        raise refusal
     try:
         built.rename(target)
     except BaseException as failure:
@@ -411,6 +421,18 @@ def _place(built: Path, target: Path, *, in_place: bool) -> tuple[Path, ...]:
             raise
         return _left(_copy_in_place(built, target), _remove(built))
     return _left(_remove(previous))
+
+
+def _strays(folder: Path) -> list[str]:
+    """What a folder just moved aside as the previous report holds that this command did not
+    write there, written after `--out` was checked (owner decision 101A): any name but
+    `index.html` and `transcripts/`, and either of those when it is not what this command
+    writes. Empty when the folder is empty or a report."""
+    names = sorted(child.name for child in folder.iterdir())
+    strays = [name for name in names if name not in (INDEX_FILE, TRANSCRIPTS_DIR)]
+    if strays or _holds_a_report(folder, index_required=False):
+        return strays
+    return names
 
 
 def _left(*folders: Path | None) -> tuple[Path, ...]:
@@ -448,39 +470,76 @@ def _copy_in_place(built: Path, target: Path) -> Path | None:
     """Replace `target`'s report with the build's, keeping the folder itself (owner decision 96A);
     the old transcripts' folder, when it could not be removed afterwards.
 
-    The build is copied beside the report first, as `transcripts.new` and `index.html.new`, so a
-    copy that fails leaves the previous report whole and readable; then the old `transcripts/` is
-    renamed aside to `transcripts.old`, `transcripts.new` into its place (renamed back on a
-    failure), `index.html.new` over `index.html`, and `transcripts.old` removed, best effort. The
-    renames are separate steps, not one: a failure between them can leave one build's index
-    beside the other's transcripts. A staging name already there is refused, never cleared
-    (97A): one an interrupted copy left is deleted by hand, as the refusal says.
+    The build is copied beside the report first, as `transcripts.new` and `index.html.new`, each
+    made exclusively (a folder made with `mkdir`, a file opened `"xb"`), so a name someone else
+    made, before or after the check, is refused and never touched (owner decisions 97A, 101A).
+    Then the old `transcripts/` is renamed aside to `transcripts.old`, `transcripts.new` into its
+    place, and `index.html.new` over `index.html`; `transcripts.old` is removed, best effort, only
+    when this call renamed `transcripts/` to it. On any exception the old `transcripts/` is put
+    back; on an `OSError` or a refusal, not a kill, the staging names this call made, and only
+    those, are removed too, so the previous report stays whole and the next build is not refused
+    for them (101A). A kill can still leave them, and the next build then refuses, naming them.
     """
     staged = _staging_held(target)
     if staged:
-        raise ReportError(_staging_refusal(target / staged[0]))
+        raise ReportError(_staging_refusal(target, staged))
     staged_transcripts, old_transcripts, staged_index = (target / name for name in STAGED)
-    try:
-        if (built / TRANSCRIPTS_DIR).is_dir():
-            shutil.copytree(built / TRANSCRIPTS_DIR, staged_transcripts)
-        else:
-            staged_transcripts.mkdir()
-        shutil.copyfile(built / INDEX_FILE, staged_index)
-    except BaseException:
-        _remove(staged_transcripts)
-        staged_index.unlink(missing_ok=True)
-        raise
     transcripts = target / TRANSCRIPTS_DIR
-    if transcripts.exists():
-        transcripts.rename(old_transcripts)
+    made: list[Path] = []  # the staging names this call made, exclusively: all it may remove
+    aside = False  # whether this call renamed `transcripts/` to `transcripts.old`
     try:
+        _make_exclusively(staged_transcripts, target, made)
+        if (built / TRANSCRIPTS_DIR).is_dir():
+            shutil.copytree(built / TRANSCRIPTS_DIR, staged_transcripts, dirs_exist_ok=True)
+        _make_exclusively(staged_index, target, made, copy_of=built / INDEX_FILE)
+        if transcripts.exists():
+            transcripts.rename(old_transcripts)
+            aside = True
         staged_transcripts.rename(transcripts)
-    except BaseException:
-        if old_transcripts.exists():
+        made.remove(staged_transcripts)
+        try:
+            os.replace(staged_index, target / INDEX_FILE)
+        except BaseException:
+            transcripts.rename(staged_transcripts)
+            made.append(staged_transcripts)
+            raise
+        made.remove(staged_index)
+    except BaseException as failure:
+        if aside and not os.path.lexists(transcripts):
             old_transcripts.rename(transcripts)
+            aside = False
+        if isinstance(failure, (OSError, ReportError)):
+            for path in made:
+                _remove_made(path)
         raise
-    os.replace(staged_index, target / INDEX_FILE)
-    return _remove(old_transcripts)
+    return _remove(old_transcripts) if aside else None
+
+
+def _make_exclusively(
+    path: Path, target: Path, made: list[Path], *, copy_of: Path | None = None
+) -> None:
+    """Make the staging name `path`, a folder, or a file holding `copy_of`'s bytes, failing if
+    anything is already there; refused naming it then, and recorded in `made` once made."""
+    try:
+        if copy_of is None:
+            path.mkdir()
+        else:
+            handle = path.open("xb")
+    except FileExistsError:
+        raise ReportError(_staging_refusal(target, [path.name])) from None
+    made.append(path)
+    if copy_of is not None:
+        with handle, copy_of.open("rb") as source:
+            shutil.copyfileobj(source, handle)
+
+
+def _remove_made(path: Path) -> None:
+    """Remove a staging name this call made, best effort."""
+    if path.is_dir() and not path.is_symlink():
+        _remove(path)
+    else:
+        with contextlib.suppress(OSError):
+            path.unlink()
 
 
 def _is_junction(path: Path) -> bool:
@@ -581,8 +640,8 @@ def _why_kept(sibling: Path, target: Path) -> str | None:
     staged = _staging_held(sibling)
     if staged:
         return (
-            f"it holds {staged[0]}, a name an in-place copy stages under; delete it by hand if an "
-            "interrupted build left it"
+            f"it holds {', '.join(staged)}, a name an in-place copy stages under; delete it by "
+            "hand if an interrupted build left it"
         )
     if not _holds_a_report(sibling, index_required=False):
         return "it holds files this command did not write"
@@ -689,7 +748,7 @@ def _refuse_a_foreign_out(out: Path) -> None:
             )
         staged = _staging_held(out)
         if staged:
-            raise ReportError(_staging_refusal(out / staged[0]))
+            raise ReportError(_staging_refusal(out, staged))
         if (out / STRANDED_FILE).exists():
             raise ReportError(
                 f"{out / STRANDED_FILE} marks a previous report a build could not move back; if "
@@ -705,11 +764,18 @@ def _staging_held(folder: Path) -> list[str]:
     return [name for name in STAGED if os.path.lexists(folder / name)]
 
 
-def _staging_refusal(path: Path) -> str:
+def _staging_refusal(folder: Path, names: Sequence[str]) -> str:
+    """The one line refusing a folder holding staging names, every one found named (101A)."""
+    if len(names) == 1:
+        return (
+            f"{folder / names[0]} is a name this command stages an in-place copy under, so it may "
+            "be what an interrupted build left, or yours; this command never deletes it: delete "
+            "it, or move it elsewhere, and build again"
+        )
     return (
-        f"{path} is a name this command stages an in-place copy under, so it may be what an "
-        "interrupted build left, or yours; this command never deletes it: delete it, or move it "
-        "elsewhere, and build again"
+        f"{folder} holds {', '.join(names)}, names this command stages an in-place copy under, so "
+        "they may be what an interrupted build left, or yours; this command never deletes them: "
+        "delete them, or move them elsewhere, and build again"
     )
 
 
