@@ -134,6 +134,7 @@ from swreview.checks.standards.run import (
     read_standards_check,
     run_standards_check,
 )
+from swreview.engineering_context.models import ContextArtifact
 from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore, ReviewException
 from swreview.ir.loader import load_package
 from swreview.ir.models import EvidencePackage, UnsupportedSchemaVersionError
@@ -1236,6 +1237,10 @@ class ChatServer:
         self.chats: dict[UUID, ChatSession] = {}
         self._workers: dict[UUID, ThreadPoolExecutor] = {}
         self._pending_run_dirs: set[Path] = set()
+        # The separate route module reuses ChatError after this module is loaded.
+        from swreview.chat.engineering_context import EngineeringContextServer
+
+        self.engineering_context = EngineeringContextServer(self)
 
     def redact(self, text: str) -> str:
         """Mask every configured key out of anything headed for the page or a log."""
@@ -1291,6 +1296,11 @@ class ChatServer:
         retry_of = self._uuid(body.get("retry_of"), "retry_of")
         if recheck and retry_of is not None:
             raise ChatError("recheck re-runs the review in its own folder; it takes no retry_of")
+        if recheck and "engineering_context" in body:
+            raise ChatError(
+                "recheck carries the engineering context its waiting record names; "
+                "it takes no engineering_context"
+            )
         standards_profile = self._optional_path(body, "standards_profile")
         adopted = self._claim_run_dir(run_dir, retry_of, recheck=recheck)
         if adopted is not None:
@@ -1314,10 +1324,19 @@ class ChatServer:
                 created_at=datetime.now(UTC),
             )
             chat.to(ChatState.EXTRACTING)
+            artifact = await run_in_threadpool(
+                self._attachment_of, run_dir, body, earlier, retry_of
+            )
             try:
                 if send_when_checked:
                     run = await run_in_threadpool(
-                        self._start_review, chat, settings, standards_profile
+                        partial(
+                            self._start_review,
+                            chat,
+                            settings,
+                            standards_profile,
+                            engineering_context=artifact,
+                        )
                     )
                     chat.attach(run)
                     self.chats[chat.chat_id] = chat
@@ -1332,6 +1351,7 @@ class ChatServer:
                             standards_profile,
                             send_when_checked=False,
                             earlier=earlier,
+                            engineering_context=artifact,
                         )
                     )
                     await self._open_waiting(chat, run, earlier)
@@ -2200,6 +2220,34 @@ class ChatServer:
             )
         return None
 
+    def _attachment_of(
+        self,
+        run_dir: Path,
+        body: Mapping[str, Any],
+        earlier: ReviewSession | None,
+        retry_of: UUID | None,
+    ) -> ContextArtifact | None:
+        """Feature 016's saved context for this start, validated; None for a review without.
+
+        A blocking read under the context lock, so the route runs it on the thread pool. A
+        re-run carries what its waiting record names (owner decision 99A) and a Retry in the
+        same folder what its body names (108A), each by its head; a new start carries what its
+        body names, exactly.
+        """
+        recorded = (
+            earlier.model_status.engineering_context
+            if earlier is not None and earlier.model_status is not None
+            else None
+        )
+        if recorded is not None:
+            return self.engineering_context.carried_attachment(run_dir, recorded)
+        requested = "engineering_context" in body
+        if requested and retry_of is not None and isinstance(body["engineering_context"], dict):
+            return self.engineering_context.carried_attachment(run_dir, body["engineering_context"])
+        return self.engineering_context.review_attachment(
+            run_dir, body.get("engineering_context"), requested=requested
+        )
+
     @staticmethod
     def _waiting_record(run_dir: Path) -> ReviewSession:
         """The earlier record a re-run carries: the folder's `session.json`, waiting. A blocking
@@ -2315,12 +2363,21 @@ class ChatServer:
         *,
         send_when_checked: bool = True,
         earlier: ReviewSession | None = None,
+        engineering_context: ContextArtifact | None = None,
     ) -> ReviewRun:
         """Load the package and bind the tools. Blocking, so it runs off the event loop.
 
         `earlier` is a re-run's waiting record (feature 015): its folder rotates keeping the
         record, and `start_review` carries what the record already answered.
+        `engineering_context` is feature 016's exact attachment, validated against the saved
+        package again before any provider is built.
         """
+        if engineering_context is not None:
+            self.engineering_context.validate_prepared_review(
+                chat.run_dir,
+                engineering_context,
+                same_package=earlier is None and chat.retry_of is None,
+            )
         self._rotate_previous(
             chat, keep_record=earlier.session_id if earlier is not None else None
         )
@@ -2336,6 +2393,9 @@ class ChatServer:
         # first, payload slimming and history pruning since 2026-09-22 - and recorded on the
         # session like any other run's. Feature 014 (PP-1): the explanation pass too.
         defaults = pane_defaults(settings.provider)
+        context_options = (
+            {"engineering_context": engineering_context} if engineering_context is not None else {}
+        )
         try:
             run = start_review(
                 chat.run_dir,
@@ -2357,6 +2417,7 @@ class ChatServer:
                 explain_findings=defaults.explain_findings,
                 send_when_checked=send_when_checked,
                 earlier=earlier,
+                **context_options,
             )
         except PACKAGE_ERRORS as exc:
             raise InvalidPackage(
@@ -2682,6 +2743,7 @@ def create_app(
     # module's door - `ChatError`, `resolve_run_dir`, `PACKAGE_ERRORS` - without the two
     # importing each other. The Remodel routes are a separate module because a re-model is
     # not a chat: no turn, no evidence request, no disposition (`backend-remodel.md`).
+    from swreview.chat.engineering_context import engineering_context_routes
     from swreview.chat.remodel import RemodelServer, remodel_routes
 
     remodel = RemodelServer(
@@ -2735,6 +2797,7 @@ def create_app(
         Route("/sessions/{chat_id}/snapshot", server.snapshot, methods=["GET"]),
         # A finished review restored read-only from its run folder, by name (feature 009).
         Route("/reviews/{run_id}", server.read_review, methods=["GET"]),
+        *engineering_context_routes(server.engineering_context),
         # The Model check tab (`contracts/model-check.md`) and the Standards tab
         # (`contracts/standards-check.md`). The two literal paths are listed first so they
         # are matched before the `{check_id}` pattern that follows them; the read and the

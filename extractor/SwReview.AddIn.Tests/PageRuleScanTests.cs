@@ -119,6 +119,20 @@ public sealed class PageRuleScanTests
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
             {
+                // The backend already classified this saved-evidence binding. The page
+                // renders that classification as a label; it computes neither a binding
+                // decision nor an order among engineering records or findings.
+                "Review/ReviewPage/engineering-context.js|binding.status === 'matched_snapshot'",
+                "which saved-evidence binding label is shown"
+            },
+            {
+                // Native selection may prefill an entry only after the host reports one
+                // unique saved target. This checks a selection observation's outcome, not
+                // finding status or priority; it never reorders any displayed record.
+                "Review/ReviewPage/engineering-context.js|observation.status !== 'matched_saved_target'",
+                "whether native selection may prefill one saved target"
+            },
+            {
                 // `bucketOfFinding` in web/shared/check-page.js: an accepted rule is drawn in
                 // the `checked` chip rather than the `failed` one, because the rule layer
                 // already decided that and the page reports it rather than re-deciding it.

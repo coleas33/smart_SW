@@ -41,6 +41,13 @@ records the remaining evaluation/send-gate work and preparation for automated dr
 engineer-confirmed load context and later Simulation integration. It is documentation only.
 The [September roadmap](docs/roadmap-2026-09-22.md) and its research estimates remain history.
 
+Feature 016 provides [engineering context](specs/016-engineering-context/quickstart.md):
+requirements and applied forces, immutable revisions, explicit confirmation and bounded
+read-only context for reviews. The Review pane prepares saved evidence, accepts inputs
+and attaches an exact context revision; a read-only selection adapter can prefill saved
+targets. Native selection calibration, freshness/rebinding and automated drawing writers
+remain pending workstation/later roadmap gates.
+
 ## Layout
 
 ```text

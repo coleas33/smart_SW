@@ -1,0 +1,764 @@
+{
+  "$defs": {
+    "AppliedForceRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "record_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,79}$",
+          "title": "Record Id",
+          "type": "string"
+        },
+        "revision": {
+          "maximum": 2147483647,
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "anchor": {
+          "$ref": "#/$defs/TargetAnchor"
+        },
+        "provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "assumptions": {
+          "default": [],
+          "items": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Assumptions",
+          "type": "array"
+        },
+        "kind": {
+          "const": "applied_force",
+          "default": "applied_force",
+          "title": "Kind",
+          "type": "string"
+        },
+        "magnitude": {
+          "$ref": "#/$defs/ForceQuantity"
+        },
+        "direction": {
+          "anyOf": [
+            {
+              "maxItems": 3,
+              "minItems": 3,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Direction"
+        },
+        "frame": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CoordinateFrame"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "application": {
+          "enum": [
+            "component_total",
+            "face_total"
+          ],
+          "title": "Application",
+          "type": "string"
+        },
+        "point_m": {
+          "anyOf": [
+            {
+              "maxItems": 3,
+              "minItems": 3,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Point M"
+        }
+      },
+      "required": [
+        "record_id",
+        "revision",
+        "anchor",
+        "provenance",
+        "magnitude",
+        "application"
+      ],
+      "title": "AppliedForceRecord",
+      "type": "object"
+    },
+    "ConfirmationReceipt": {
+      "additionalProperties": false,
+      "properties": {
+        "receipt_id": {
+          "format": "uuid",
+          "title": "Receipt Id",
+          "type": "string"
+        },
+        "record_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,79}$",
+          "title": "Record Id",
+          "type": "string"
+        },
+        "record_revision": {
+          "maximum": 2147483647,
+          "minimum": 1,
+          "title": "Record Revision",
+          "type": "integer"
+        },
+        "record_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Record Digest",
+          "type": "string"
+        },
+        "dependency_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Dependency Digest",
+          "type": "string"
+        },
+        "actor": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Actor",
+          "type": "string"
+        },
+        "confirmed_at": {
+          "format": "date-time",
+          "title": "Confirmed At",
+          "type": "string"
+        },
+        "decision": {
+          "default": "confirmed",
+          "enum": [
+            "confirmed",
+            "rejected"
+          ],
+          "title": "Decision",
+          "type": "string"
+        }
+      },
+      "required": [
+        "receipt_id",
+        "record_id",
+        "record_revision",
+        "record_digest",
+        "dependency_digest",
+        "actor",
+        "confirmed_at"
+      ],
+      "title": "ConfirmationReceipt",
+      "type": "object"
+    },
+    "CoordinateFrame": {
+      "additionalProperties": false,
+      "properties": {
+        "frame_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,79}$",
+          "title": "Frame Id",
+          "type": "string"
+        },
+        "document_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Document Id",
+          "type": "string"
+        },
+        "component_id": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Component Id"
+        },
+        "transform": {
+          "maxItems": 4,
+          "minItems": 4,
+          "prefixItems": [
+            {
+              "maxItems": 4,
+              "minItems": 4,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "maxItems": 4,
+              "minItems": 4,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "maxItems": 4,
+              "minItems": 4,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "maxItems": 4,
+              "minItems": 4,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            }
+          ],
+          "title": "Transform",
+          "type": "array"
+        }
+      },
+      "required": [
+        "frame_id",
+        "document_id",
+        "transform"
+      ],
+      "title": "CoordinateFrame",
+      "type": "object"
+    },
+    "EvidenceBaseline": {
+      "additionalProperties": false,
+      "properties": {
+        "package_id": {
+          "format": "uuid",
+          "title": "Package Id",
+          "type": "string"
+        },
+        "package_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Package Sha256",
+          "type": "string"
+        },
+        "schema_version": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "root_document_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Root Document Id",
+          "type": "string"
+        },
+        "configuration": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Configuration",
+          "type": "string"
+        },
+        "scope": {
+          "const": "saved_snapshot",
+          "default": "saved_snapshot",
+          "title": "Scope",
+          "type": "string"
+        },
+        "without_live_interference_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Without Live Interference Sha256"
+        }
+      },
+      "required": [
+        "package_id",
+        "package_sha256",
+        "schema_version",
+        "root_document_id",
+        "configuration"
+      ],
+      "title": "EvidenceBaseline",
+      "type": "object"
+    },
+    "ForceQuantity": {
+      "additionalProperties": false,
+      "properties": {
+        "state": {
+          "enum": [
+            "known",
+            "unknown"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        },
+        "unit": {
+          "enum": [
+            "N",
+            "kN",
+            "lbf"
+          ],
+          "title": "Unit",
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        }
+      },
+      "required": [
+        "state",
+        "unit"
+      ],
+      "title": "ForceQuantity",
+      "type": "object"
+    },
+    "Provenance": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "engineer",
+            "extracted",
+            "catalogue",
+            "derived",
+            "ai_proposal",
+            "unknown"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "source": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        }
+      },
+      "required": [
+        "kind",
+        "source"
+      ],
+      "title": "Provenance",
+      "type": "object"
+    },
+    "RequirementRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "record_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,79}$",
+          "title": "Record Id",
+          "type": "string"
+        },
+        "revision": {
+          "maximum": 2147483647,
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "anchor": {
+          "$ref": "#/$defs/TargetAnchor"
+        },
+        "provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "assumptions": {
+          "default": [],
+          "items": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Assumptions",
+          "type": "array"
+        },
+        "kind": {
+          "const": "requirement",
+          "default": "requirement",
+          "title": "Kind",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "record_id",
+        "revision",
+        "anchor",
+        "provenance",
+        "text"
+      ],
+      "title": "RequirementRecord",
+      "type": "object"
+    },
+    "TargetAnchor": {
+      "additionalProperties": false,
+      "properties": {
+        "anchor_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,79}$",
+          "title": "Anchor Id",
+          "type": "string"
+        },
+        "package_id": {
+          "format": "uuid",
+          "title": "Package Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "document",
+            "component",
+            "face"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "entity_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Entity Id",
+          "type": "string"
+        },
+        "document_id": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Document Id"
+        },
+        "configuration": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Configuration"
+        },
+        "component_id": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Component Id"
+        },
+        "full_path": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Full Path"
+        },
+        "referenced_configuration": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Referenced Configuration"
+        },
+        "persist_ref": {
+          "anyOf": [
+            {
+              "contentEncoding": "base64",
+              "description": "IModelDocExtension.GetPersistReference3 bytes, base64",
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Persist Ref"
+        },
+        "persist_ref_scope": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Persist Ref Scope"
+        },
+        "transform_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Transform Sha256"
+        },
+        "geometry_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Geometry Sha256"
+        }
+      },
+      "required": [
+        "anchor_id",
+        "package_id",
+        "kind",
+        "entity_id"
+      ],
+      "title": "TargetAnchor",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "context_id": {
+      "format": "uuid",
+      "title": "Context Id",
+      "type": "string"
+    },
+    "revision": {
+      "maximum": 2147483647,
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "previous_digest": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Previous Digest"
+    },
+    "baseline": {
+      "$ref": "#/$defs/EvidenceBaseline"
+    },
+    "records": {
+      "default": [],
+      "items": {
+        "discriminator": {
+          "mapping": {
+            "applied_force": "#/$defs/AppliedForceRecord",
+            "requirement": "#/$defs/RequirementRecord"
+          },
+          "propertyName": "kind"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/RequirementRecord"
+          },
+          {
+            "$ref": "#/$defs/AppliedForceRecord"
+          }
+        ]
+      },
+      "maxItems": 500,
+      "title": "Records",
+      "type": "array"
+    },
+    "confirmations": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ConfirmationReceipt"
+      },
+      "maxItems": 5000,
+      "title": "Confirmations",
+      "type": "array"
+    },
+    "updated_at": {
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "context_id",
+    "revision",
+    "baseline",
+    "updated_at"
+  ],
+  "title": "ContextArtifact",
+  "type": "object"
+}

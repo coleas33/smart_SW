@@ -40,6 +40,7 @@
   var render = window.SwReviewRender;
   var docs = window.SwReviewDocument;
   var attention = window.SwReviewAttention;
+  var contextPane = null;
 
   /**
    * How many chat events are kept in memory (T041). The transcript on screen is built as the
@@ -259,6 +260,7 @@
         return;
       case 'document.changed':
         clearPreparation();
+        if (contextPane) contextPane.invalidate('Document changed. Extract context evidence again.');
         state.documentInfo = payload && payload.path ? payload : null;
         renderDocument();
         renderBinding();
@@ -1946,6 +1948,7 @@
   }
 
   function prepareReview(retryOf) {
+    if (contextPane) contextPane.invalidate();
     if (isDrawing(state.documentInfo)) {
       return;
     }
@@ -1998,9 +2001,16 @@
   }
 
   function startReview(retryOf, preparationId) {
+    if (contextPane) contextPane.invalidate();
+    var request = retryOf ? { retry_of: retryOf } : {};
+    if (preparationId) request.preparation_id = preparationId;
+    return startReviewRequest('review.start', request).catch(function () {});
+  }
+
+  function startReviewRequest(type, request) {
     if (state.startPending || state.turnRunning || state.sendPending || state.rechecking
         || isDrawing(state.documentInfo)) {
-      return;
+      return Promise.reject(new Error('A review is already running or the active document cannot be reviewed.'));
     }
 
     // A refused new extraction has no Send block. The waiting review remains in the host's
@@ -2021,11 +2031,7 @@
     renderStartReview();
     showStreamState('');
 
-    var request = retryOf ? { retry_of: retryOf } : {};
-    if (preparationId) {
-      request.preparation_id = preparationId;
-    }
-    send('review.start', request).then(function (payload) {
+    return send(type, request).then(function (payload) {
       resetTranscript();
       state.chatId = payload.chat_id;
       state.awaitingSend = payload.send_when_checked === false;
@@ -2042,6 +2048,9 @@
       requestSessions(false);
     }).catch(function (error) {
       showError(errorBody(error));
+      state.startPending = false;
+      renderStartReview();
+      throw error;
     }).then(function () {
       state.startPending = false;
       renderStartReview();
@@ -2071,6 +2080,7 @@
     }
     ui.clearReview.disabled = !canClearReview();
     syncQuestionControls();
+    if (contextPane) contextPane.refreshControls();
   }
 
   /**
@@ -3015,6 +3025,7 @@
       state.runRoot = payload.run_root || null;
       state.documentInfo = payload.document || null;
       state.preparationAvailable = payload.review_preparation === true;
+      if (contextPane) contextPane.configure(payload.engineering_context, payload.engineering_selection);
       renderSettings(payload.settings, payload.key_source);
       renderDocument();
       renderBinding();
@@ -3176,6 +3187,19 @@
     ui.collapseFindings.addEventListener('click', collapseFindings);
     ui.questions.addEventListener('click', onQuestionsClick);
     ui.questions.addEventListener('input', onQuestionsInput);
+
+    contextPane = window.SwReviewEngineeringContext.create({
+      send: send, call: call,
+      // Owner decision 99A: no context edit or context review while a review is being started,
+      // runs a turn, waits for Send, has its Send accepted or is checked again.
+      busy: function () {
+        return state.startPending || state.turnRunning || state.sendPending || state.rechecking
+          || state.awaitingSend;
+      },
+      ready: function () { return !!state.backend && !!state.token; },
+      document: function () { return state.documentInfo; },
+      startReview: function (request) { return startReviewRequest('context.review', request); }
+    });
 
     // The head states its counts before a single event has arrived, so a pane that has just
     // opened says "0 tool calls" rather than a head with nothing in it.

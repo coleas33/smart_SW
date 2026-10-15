@@ -1731,3 +1731,105 @@ def test_every_route_of_the_contract_answers_something(
         assert response.headers["content-type"].startswith("application/json")
         seen.add((method, path))
     assert seen == DOCUMENTED_ROUTES
+
+
+@pytest.mark.parametrize("outcome", ["failed", "finished", "truncated"])
+def test_a_poll_spanning_finalization_never_pairs_terminal_state_with_old_plan(
+    client: TestClient,
+    run_dir: Path,
+    source: Path,
+    app: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    outcome: str,
+) -> None:
+    """Hold a poll after its plan read while the actual worker finalizes the run.
+
+    This forces the interleaving behind the timeout failure without changing a sleep or
+    timeout: the failure releases the existing rendezvous through its abandon event.
+    """
+    calibrated(monkeypatch)
+    expected_plan = "saved" if outcome == "finished" else outcome
+    planned(client, run_dir, source)
+    if outcome == "truncated":
+        _limit_to_one_change(run_dir)
+    job_id = str(start(client, run_dir).json()["job_id"])
+    wait_for(client, job_id, lambda state: state["awaiting"] == "package_after")
+    server = app.state.remodel
+    job = server.jobs[job_id]
+    captured = threading.Event()
+    release_poll = threading.Event()
+    completed = threading.Event()
+    original_facts = remodel_routes._plan_facts
+    original_terminal = job.fail if outcome == "failed" else job.finish
+    polled: list[dict[str, Any]] = []
+    errors: list[BaseException] = []
+
+    def hold_first_plan_read(directory: Path) -> tuple[str | None, int]:
+        facts = original_facts(directory)
+        if directory == run_dir and not captured.is_set():
+            assert facts[0] == "applying"
+            captured.set()
+            assert release_poll.wait(WAIT_S), "the controlled poll was never released"
+        return facts
+
+    def publish_terminal(*args: Any) -> None:
+        original_terminal(*args)
+        completed.set()
+
+    def poll() -> None:
+        try:
+            polled.append(server._state(job))
+        except BaseException as error:
+            errors.append(error)
+
+    monkeypatch.setattr(remodel_routes, "_plan_facts", hold_first_plan_read)
+    monkeypatch.setattr(job, "fail" if outcome == "failed" else "finish", publish_terminal)
+    reader = threading.Thread(target=poll)
+    reader.start()
+    try:
+        assert captured.wait(WAIT_S), "the poll never captured the applying plan"
+        if outcome == "failed":
+            job.abandon()
+        else:
+            assert deliver_package_after(client, job_id, run_dir).status_code == 200
+        assert completed.wait(WAIT_S), "the worker never finalized its plan and log"
+        assert original_facts(run_dir)[0] == expected_plan
+        records = read_changes(run_dir / CHANGES_FILE_NAME)
+        assert records, "finalization must preserve changes that landed"
+        if outcome != "failed":
+            assert records[-1].kind == "save"
+            assert records[-1].status == "applied"
+    finally:
+        release_poll.set()
+        reader.join(WAIT_S)
+    assert not reader.is_alive()
+    assert not errors, errors
+    assert len(polled) == 1
+    # This response began while the worker was awaiting its dump. The next poll, rather
+    # than stale facts from this poll, may claim the finalized terminal state.
+    assert polled[0]["state"] == "awaiting_package_after"
+    assert polled[0]["awaiting"] == "package_after"
+    assert polled[0]["plan_state"] == "applying"
+    terminal = status_of(client, job_id)
+    assert terminal["state"] == ("failed" if outcome == "failed" else "finished")
+    assert terminal["plan_state"] == expected_plan
+    assert terminal["awaiting"] is None
+    if outcome == "failed":
+        assert "package-after" in terminal["error"].lower()
+    else:
+        assert terminal["error"] is None
+
+
+def test_failed_job_publishes_its_reason_before_the_terminal_state() -> None:
+    observed: list[str | None] = []
+
+    class ObservedJob(remodel_routes.RemodelJob):
+        def __setattr__(self, name: str, value: Any) -> None:
+            super().__setattr__(name, value)
+            if name == "state" and value == "failed":
+                observed.append(self.error)
+
+    job = ObservedJob(job_id="observed", run_dir=Path("."))
+    job.fail("The after-dump never arrived")
+
+    assert observed == ["The after-dump never arrived"]

@@ -18,6 +18,36 @@ public sealed class BackendClientSessionBodyTests
     [InlineData(ReviewMode.Recheck, false, true)]
     public async Task TheModeTravelsAsTheTwoBooleanFieldsOnTheWire(ReviewMode mode, bool send, bool recheck)
     {
+        JsonElement body = await Posted(Request(mode));
+        Assert.Equal(send, body.GetProperty("send_when_checked").GetBoolean());
+        Assert.Equal(recheck, body.GetProperty("recheck").GetBoolean());
+        Assert.Equal(@"C:\Fictional\FICT-run", body.GetProperty("run_dir").GetString());
+        Assert.False(body.TryGetProperty("engineering_context", out _));
+    }
+
+    /// <summary>
+    /// Owner decision 99A: an unticked context review posts `send_when_checked: false` beside its
+    /// attachment, so the backend waits with nothing sent.
+    /// </summary>
+    [Fact]
+    public async Task AnUntickedContextReviewPostsTheWaitModeBesideItsAttachment()
+    {
+        string contextId = Guid.NewGuid().ToString();
+        JsonElement body = await Posted(new NewSessionRequest(
+            @"C:\Fictional\FICT-run", "openai", "fictional", "high", "FICT-engineer", null, null,
+            mode: ReviewMode.Wait,
+            engineeringContext: new EngineeringContextAttachment(contextId, new string('a', 64), new string('b', 64))));
+        Assert.False(body.GetProperty("send_when_checked").GetBoolean());
+        Assert.False(body.GetProperty("recheck").GetBoolean());
+        JsonElement attachment = body.GetProperty("engineering_context");
+        Assert.Equal(contextId, attachment.GetProperty("context_id").GetString());
+        Assert.Equal(new string('a', 64), attachment.GetProperty("head_digest").GetString());
+        Assert.Equal(new string('b', 64), attachment.GetProperty("package_sha256").GetString());
+    }
+
+    /// <summary>Posts `request` through the real client to a loopback listener; returns the body.</summary>
+    private static async Task<JsonElement> Posted(NewSessionRequest request)
+    {
         using (HttpListener listener = LoopbackPort.StartListener(out int port))
         using (var stub = new StubBackend())
         using (var supervisor = new BackendSupervisor(() => false))
@@ -47,19 +77,14 @@ public sealed class BackendClientSessionBodyTests
             });
             using (var client = new BackendClient(supervisor, Path.GetDirectoryName(stub.LogPath)!, null))
             {
-                ChatSessionHandle handle = client.CreateSession(Request(mode));
+                ChatSessionHandle handle = client.CreateSession(request);
                 Assert.Equal("chat-1", handle.ChatId);
                 Assert.Same(received, await Task.WhenAny(received, Task.Delay(TimeSpan.FromSeconds(5))));
                 var wire = await received;
                 Assert.Equal("POST", wire.method);
                 Assert.Equal("/sessions", wire.path);
                 Assert.Equal("Bearer " + StubBackend.DefaultToken, wire.authorization);
-                using (JsonDocument body = JsonDocument.Parse(wire.body))
-                {
-                    Assert.Equal(send, body.RootElement.GetProperty("send_when_checked").GetBoolean());
-                    Assert.Equal(recheck, body.RootElement.GetProperty("recheck").GetBoolean());
-                    Assert.Equal(@"C:\Fictional\FICT-run", body.RootElement.GetProperty("run_dir").GetString());
-                }
+                using (JsonDocument body = JsonDocument.Parse(wire.body)) return body.RootElement.Clone();
             }
         }
     }

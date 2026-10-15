@@ -119,6 +119,38 @@
   <button type="button" id="view-transcript" aria-pressed="false">Transcript</button>
 </nav>
 
+<details id="engineering-context" class="panel context-panel" aria-labelledby="context-heading" hidden>
+  <summary id="context-heading">Engineering context</summary>
+  <p class="note">Requirements and total forces apply to saved evidence. Confirming them does not verify the current model or calculate structural safety.</p>
+  <div class="row">
+    <button type="button" id="context-prepare">Extract context evidence</button>
+    <button type="button" id="context-selection" disabled>Use selected component or face</button>
+    <button type="button" id="context-refresh" disabled>Refresh saved inputs</button>
+  </div>
+  <p id="context-state" role="status"></p>
+  <div id="context-entry" hidden>
+    <div class="field"><label for="context-target">Saved target</label><select id="context-target"></select></div>
+    <div class="field"><label for="context-kind">Input</label><select id="context-kind"><option value="requirement">Requirement</option><option value="applied_force">Total applied force</option></select></div>
+    <div class="field"><label for="context-id">Input name</label><input id="context-id" type="text" maxlength="80" value="requirement:1"><span class="note">Use a short label without spaces.</span></div>
+    <div class="field" id="context-requirement-fields"><label for="context-text">Requirement</label><textarea id="context-text" maxlength="2048" rows="3"></textarea></div>
+    <fieldset id="context-force-fields" hidden>
+      <legend>Total force</legend>
+      <div class="field"><label for="context-magnitude">Magnitude (leave blank if unknown)</label><input id="context-magnitude" type="number" min="0" step="any"><select id="context-unit" aria-label="Force unit"><option>N</option><option>kN</option><option>lbf</option></select></div>
+      <div class="field"><label for="context-unknown">Reason when magnitude is unknown</label><input id="context-unknown" type="text" maxlength="2048"></div>
+      <div class="field"><label>Direction in the chosen frame</label><div class="context-vector"><input id="context-dx" type="number" step="any" aria-label="Direction X"><input id="context-dy" type="number" step="any" aria-label="Direction Y"><input id="context-dz" type="number" step="any" aria-label="Direction Z"></div></div>
+      <div class="field"><label for="context-frame">Saved coordinate frame</label><select id="context-frame"></select></div>
+      <div class="field"><label>Application point in metres (optional)</label><div class="context-vector"><input id="context-px" type="number" step="any" aria-label="Point X"><input id="context-py" type="number" step="any" aria-label="Point Y"><input id="context-pz" type="number" step="any" aria-label="Point Z"></div></div>
+      <p class="note">This is a total force on the component or face. Its distribution is unspecified.</p>
+    </fieldset>
+    <div class="field"><label for="context-provenance">Input source</label><select id="context-provenance"><option value="engineer">Engineer</option><option value="ai_proposal">AI proposal</option></select></div>
+    <div class="field"><label for="context-assumptions">Assumptions (one per line)</label><textarea id="context-assumptions" rows="2"></textarea></div>
+    <div class="row"><button type="button" id="context-new">New input</button><button type="button" id="context-save">Save new draft input</button></div>
+    <div class="field"><label for="context-actor">Your name for confirmation</label><input id="context-actor" type="text" maxlength="256" autocomplete="off"></div>
+    <div id="context-records" aria-label="Saved engineering inputs"></div>
+    <button type="button" id="context-review" class="primary" disabled>Review with saved context</button>
+  </div>
+</details>
+
 <section id="session" class="session">
   <div class="row">
     <button type="button" id="start-review" class="primary" disabled>Review</button>
@@ -265,6 +297,7 @@
 <script src="../../shared/document.js"></script>
 <script src="../../shared/attention.js"></script>
 <script src="render.js"></script>
+<script src="engineering-context.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

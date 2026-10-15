@@ -60,6 +60,10 @@ internal sealed class ReviewPageDriver
     /// <summary>The `review.started` payload for the nth press (1-based), or null for the default.</summary>
     public Func<int, object>? ReviewStarted { get; set; }
 
+    /// <summary>Optional saved-evidence context replies for the same Review page.</summary>
+    public object? ContextPrepared { get; set; }
+    public object? ContextSelected { get; set; }
+
     /// <summary>The items `sessions.list` and `session.forget` answer with, in the host's order.</summary>
     public List<Dictionary<string, object?>> Sessions { get; } = new List<Dictionary<string, object?>>();
 
@@ -580,11 +584,22 @@ var h = {
                 Reply("models", id, new { provider = "openai", models = new object[0] });
                 return;
 
+            case "context.prepare":
+                Reply(ContextPrepared == null ? "error" : "context.prepared", id,
+                    ContextPrepared ?? new { error_class = "ContextUnavailable", message = "No context evidence.", retryable = false });
+                return;
+
+            case "context.selection":
+                Reply(ContextSelected == null ? "error" : "context.selected", id,
+                    ContextSelected ?? new { error_class = "SelectionUnavailable", message = "No selected target.", retryable = false });
+                return;
+
             case "review.prepare":
                 Assert.NotNull(PreparationReply);
                 Reply("review.prepared", id, PreparationReply!);
                 return;
 
+            case "context.review":
             case "review.start":
                 _starts++;
                 if (ReviewStartError != null)
@@ -706,6 +721,8 @@ var h = {
         token = BackendToken,
         settings = Settings(),
         key_source = KeySource,
+        engineering_context = ContextPrepared != null,
+        engineering_selection = ContextSelected != null,
         run_root = @"C:\SwReviewRuns",
         providers = new[] { "openai", "gemini" },
         document = Document,

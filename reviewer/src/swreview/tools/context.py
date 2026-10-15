@@ -28,7 +28,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from swreview.agent.checklist import Checklist, load_checklist
@@ -60,6 +60,9 @@ from swreview.report.session import (
     Timing,
 )
 from swreview.report.titles import pane_finding
+
+if TYPE_CHECKING:
+    from swreview.engineering_context.models import ContextArtifact
 
 
 def error_result(message: str) -> dict[str, str]:
@@ -178,6 +181,10 @@ class ToolContext:
     per context by `tools/checks_mechanical.joint_analysis` and read by `check_joints` and
     the interference tool's thread-model rule. Typed loosely, like `bridge`, so the tool
     context does not import the checks that fill it."""
+    engineering_context: ContextArtifact | None = None
+    """Feature 016's explicitly supplied engineering-context snapshot. No tool searches
+    the filesystem for one, resolves native references or confirms an engineering input.
+    A context without a snapshot offers exactly the pre-existing tool surface."""
     _drawing_read: str | None = field(default=None, init=False, repr=False)
     """What `drawing_read_mode` answered, once asked (feature 013)."""
 

@@ -148,6 +148,7 @@ re-run first, `recheck.md`).
 | Timing | `POST /sessions/{id}/timing` | as the decision route: `record_timing_live` on the chat's worker on a waiting chat; today's path otherwise |
 | Follow-up | `POST /sessions/{id}/messages` | `409 NotSent` while `run.awaiting_send` (a follow-up would reach the model with no opening; FR-019) |
 | Stop | `POST /sessions/{id}/stop` | unchanged code: the session has an `ended_at`, so nothing is written, no event, no model call (FR-025); during a decision or timing write the chat reads `awaiting_send`, so the same holds; during an apply, and while Send's adapter is built, the chat reads `running`, so the flag is set - see "The stop flag" below |
+| Edit saved engineering context | `POST /engineering-context/{run_id}/...` | *Amended 2026-10-15 (feature 016, owner decision 99A):* `409 EngineeringContextConflict` ("in use by a running review") while a chat on that run folder is `awaiting_send`, as while one is set up (the folder in `_pending_run_dirs`), extracting, running or waiting for the engineer: Send plays the context snapshot taken at the start, so it cannot change under a waiting review |
 | Shutdown | lifespan | unchanged code: a finalized session is skipped; nothing is written (FR-010) |
 
 **The stop flag** (owner decision 69A, replacing the tasks review's hand-cleared flag). The stop route
@@ -255,6 +256,14 @@ snapshot routes, which compute on the event loop and never write, and `send` onl
 no route builds an opening or counts a token.
 
 `ReviewRun.opening_at_send()`, called only by `build_send_cache()`:
+
+*Amended 2026-10-15 (feature 016 lands on this feature, owner decision 99A):* `start_review` and
+`opening_at_send` both call `_opening_message` through `runner._review_opening(prerun, context,
+standards_gap=..., engineering_summary=...)`, so the rebuilt opening has every input the frozen one
+had. Feature 016's engineering summary is held by `ReviewRun`; a review with saved context keeps
+its "Engineer-supplied inputs" block, once, before the wait's lines, and the summary is built again
+over the package only when a confirmed read reloaded it. Without saved context the builder's
+output is unchanged, byte for byte (T007 and T008 stay green, unedited).
 
 - **nothing applied while waiting** (`_opening_changed` false): `self.opening_message`, the opening
   frozen at setup, byte for byte (SC-004; for a re-run, SC-008);
