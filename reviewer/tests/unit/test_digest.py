@@ -25,7 +25,7 @@ from pathlib import Path
 
 import pytest
 
-from swreview.benchmark import digest, runner
+from swreview.benchmark import digest, runner, sets
 from swreview.benchmark.digest import canonical_sha256, sha256_of
 
 STANDARD_LIBRARY_ONLY = {"__future__", "hashlib", "json", "pathlib"}
@@ -33,6 +33,36 @@ STANDARD_LIBRARY_ONLY = {"__future__", "hashlib", "json", "pathlib"}
 
 
 # --- sha256_of: a file's raw bytes ------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "data",
+    [b"", b"abc", b"\x00\xff\x80", b"first\r\nsecond\r\n", b"first\nsecond\n"],
+    ids=["empty", "known", "binary", "crlf", "lf"],
+)
+def test_sha256_of_bytes_is_the_sha256_of_the_given_bytes(data: bytes) -> None:
+    assert digest.sha256_of_bytes(data) == hashlib.sha256(data).hexdigest()
+
+
+def test_sha256_of_calls_the_one_raw_bytes_digest_once_per_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data = [b"first\r\nfile\r\n", b"second\nfile\n"]
+    paths = [tmp_path / "crlf.md", tmp_path / "lf.md"]
+    for path, content in zip(paths, data, strict=True):
+        path.write_bytes(content)
+    expected = [digest.sha256_of_bytes(path.read_bytes()) for path in paths]
+    real_digest = digest.sha256_of_bytes
+    calls: list[bytes] = []
+
+    def watched(content: bytes) -> str:
+        calls.append(content)
+        return real_digest(content)
+
+    monkeypatch.setattr(digest, "sha256_of_bytes", watched)
+    for number, path in enumerate((paths[0], str(paths[1]))):
+        assert digest.sha256_of(path) == expected[number]
+        assert calls == data[: number + 1]
 
 
 def test_sha256_of_is_the_sha256_of_the_file_s_raw_bytes(tmp_path: Path) -> None:
@@ -104,6 +134,7 @@ def test_a_value_json_cannot_hold_is_refused_never_stringified() -> None:
 
 def test_the_runner_re_exports_the_one_sha256_of_not_a_copy() -> None:
     assert runner.sha256_of is digest.sha256_of
+    assert sets.sha256_of is digest.sha256_of
 
 
 def test_the_digest_module_imports_the_standard_library_only() -> None:
