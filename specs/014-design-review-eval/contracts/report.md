@@ -223,12 +223,19 @@ from another session in this folder", `unreadable` "the stored result is unreada
   first copied beside the report, as `transcripts.new` and `index.html.new`, so a copy that fails
   leaves the previous report whole and readable, the staged copies removed; then `transcripts/` is
   renamed aside to `transcripts.old`, `transcripts.new` into its place (renamed back on a failure),
-  `index.html.new` over `index.html`, and `transcripts.old` removed. Those renames are separate
-  steps, not one: a failure between them can leave one build's index beside the other's
-  transcripts. A staging name is never part of a report and is never deleted unless this build
-  just made it (owner decision 97A): an `--out` holding `transcripts.new`, `transcripts.old` or
-  `index.html.new`, as a file, a folder or a link, is refused on one line naming it and saying to
-  delete it or move it elsewhere, so an in-place copy that was interrupted is cleaned up by hand.
+  `index.html.new` over `index.html`, and `transcripts.old` removed, only when this build renamed
+  `transcripts/` to it (owner decision 101A). Each staging name is made exclusively, a folder with
+  `mkdir` and a file opened `"xb"`, so one someone else made, before or after the check, is refused
+  and never touched. On any exception the old `transcripts/` is put back; on an `OSError` or a
+  refusal, not a kill, the staging names this build made, and only those, are removed, so the
+  previous report stays whole and the next build is not refused for them (101A). A staging name is
+  never part of a report, and this command deletes one only in that case, when this same build
+  made it exclusively (97A, 101A): an `--out` holding `transcripts.new`, `transcripts.old` or
+  `index.html.new`, as a file, a folder or a link, is refused on one line naming every one found
+  and saying to delete them or move them elsewhere, so an in-place copy that was killed is cleaned
+  up by hand. Before the build is moved in, the folder just moved aside as the previous report is
+  read again: anything in it but a tagged `index.html` and `transcripts/`, written after `--out`
+  was checked, has the folder moved back and the build refused, naming it (101A).
   A `transcripts/` that is itself a link is refused (section 7).
 - **Clean-up never removes what is not ours** (96A). Removing the previous report, and this
   build's own folder after an in-place copy, is best effort, read-only flags cleared on Windows: a
@@ -269,7 +276,8 @@ from another session in this folder", `unreadable` "the stored result is unreada
 | `--out` is a run folder or lies in one (84A) | the folder, the run folder, and to choose a folder outside it |
 | `--out`'s `transcripts/` is a link (owner decision 96A) | the link, and to remove it or choose another folder |
 | The build cannot be moved into place and the previous report cannot be moved back (96A) | where the previous report now is, and to move it back by hand; and, when it could not be marked against removal, that, and to move it back before building again (97A) |
-| `--out` holds a staging name, `transcripts.new`, `transcripts.old` or `index.html.new` (owner decision 97A) | the name, that it may be what an interrupted build left or the user's, that this command never deletes it, and to delete it or move it elsewhere |
+| `--out` holds a staging name, `transcripts.new`, `transcripts.old` or `index.html.new` (owner decision 97A) | every such name found (101A), that it may be what an interrupted build left or the user's, that this command never deletes it, and to delete it or move it elsewhere |
+| A file or folder is written into `--out` while the build runs, found in the folder moved aside as the previous report (owner decision 101A) | what was written, that it is left in place with the previous report and nothing was replaced, and to move it elsewhere and build again |
 | `--out` holds the mark of a previous report a build could not move back (97A) | the file, and, once the report is moved back by hand, to delete it and build again |
 | The run folders lie on different drives, so they have no common parent to be named relative to (owner decision 85A) | that, and to copy them under one folder |
 | A scored package's id cannot name a file: empty, a path separator, `.` or `..`, a character or a device name Windows refuses, a trailing dot or space; or two ids are one file name when case-folded (84A) | the run folder, the id or ids, and why |
