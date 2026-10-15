@@ -2,6 +2,8 @@
 
 *Feature 015 amendment notice, 2026-10-08:* Planned amendments for the handoff record are specified in [015 records.md](../../015-review-send-gate/contracts/records.md).
 
+*Amended 2026-10-15 by owner decision 23A:* When `session.json` supplies a readable session id, selected `attention.json` and `report.md` records naming another session are omitted and listed in the existing `excluded_artifacts` manifest entries as `{"path": "<filename>", "reason": "names another session than session.json"}`. Matching records keep their bytes; older reports without a `- Session:` line, malformed records whose identity cannot be established, and runs without a readable session id retain their existing export handling.
+
 `swreview handoff <run-dir> --out <archive.zip>` creates one local ZIP for an engineer to
 inspect or attach manually. The command accepts one review or partial Remodel run folder and refuses
 to overwrite an existing archive or place the archive inside that folder.
