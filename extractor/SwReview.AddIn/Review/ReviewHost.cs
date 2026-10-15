@@ -687,6 +687,7 @@ public sealed class ReviewHost : IDisposable
                 return;
 
             case "sessions.list":
+                FindNotSentReview();
                 SendReviews(id);
                 return;
 
@@ -1075,8 +1076,23 @@ public sealed class ReviewHost : IDisposable
 
     // ---- the review list (feature 009 User Story 6) -------------------------------------
 
+    private void FindNotSentReview()
+    {
+        PageDocument? document = _options.CurrentDocument();
+        if (document == null || (document.Kind != "part" && document.Kind != "assembly")) return;
+        if (Reviews().Any(record => record.Document != null
+            && string.Equals(record.Document.Path, document.Path, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(record.Document.Configuration, document.Configuration, StringComparison.Ordinal))) return;
+
+        SessionRecord? found = RunFolders.FindNotSentReview(_settings.RunRoot, document, _options.OpenSessionHead);
+        if (found != null)
+        {
+            TrackSession(found.ChatId!, found.RunDirectory, found.Document, found.StartedAt, found.ModelStatus);
+        }
+    }
+
     /// <summary>
-    /// `sessions.list`: every review this host started, in the order tracked, with what its chip
+    /// `sessions.list`: every review this host tracks, including a found waiting review, with what its chip
     /// names - `{chat_id, run_id, run_dir, path, configuration, started_at}` - and no check or
     /// remodel record (contracts/sessions.md section 2). `started_at` is ISO 8601 with its offset;
     /// what the host does not know is null rather than invented.

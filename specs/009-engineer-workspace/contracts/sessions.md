@@ -104,6 +104,14 @@ The mark belongs to the host record, so it is present before a chip is chosen af
 Clear review and Review again keep a waiting review's marked chip; choosing it reads its waiting
 snapshot, with no running turn and Stop off.
 
+*Amended by feature 015 T106*: `sessions.list` can also find a waiting review after SOLIDWORKS
+reopens. The found item is a tracked review: `chat_id` is its top-level `session_id`, `run_id`
+and `run_dir` name its saved folder, `path` and `configuration` come from
+`model_status.document`, `started_at` is `model_status.checked_at` with its stored wall clock
+and offset, and `model_status` is `not_sent` or `send_failed`. Choosing it uses the same snapshot
+and run-folder restoration above. Its host record accepts a recheck of that chat id, and a second
+list keeps the same single record.
+
 ## 6. Returning to a document
 
 On `document.changed`, and after `init`: when no turn runs and no start is in flight, the shown
@@ -112,6 +120,19 @@ list holds a review of that document, the page shows the **last** such item in t
 through `showReview`. Otherwise the landed binding applies: the shown review hides behind the stale
 line, with Stop still enabled while a turn runs. The stale line gains nothing when a chip exists,
 because this rule would already have shown it.
+
+*Amended by feature 015 T106*: before answering `sessions.list`, the host searches for a waiting
+review only when the active document is a part or assembly and it holds no review of that path
+(ignoring case) and configuration (exactly). It first enumerates folder names matching
+`<yyyyMMdd-HHmmss>-<DocumentName(path)>` with an optional numeric `-N` collision suffix, skipping
+`-check`, `-standards` and `-remodel` folders, and selects the newest timestamp, then ordinal
+name. Only that folder's `session.json` is opened, once, for a bounded 65,536-byte head read of
+`session_id` and `model_status`. The state must be `not_sent` or `send_failed`, and its document
+must match the active path and configuration. A newest candidate that is sent, has no readable
+head or names another document offers nothing; an older waiting review is never substituted.
+An unreadable root also offers nothing, without an error. The found record joins the host's
+list before its existing marked-record refresh and answer, so it participates in the return
+and restoration rules above.
 
 ## 7. The configuration change
 

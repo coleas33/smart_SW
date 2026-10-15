@@ -89,11 +89,24 @@ cancels any URL outside `https://swreview.invalid/`.
 | `entity.show` | `{persist_ref, persist_ref_scope, component_id, chat_id?}` | Resolve through the tool service, select and zoom on the application thread; reply `entity.shown {ok, state_code, message, full_path \| null}` — on a reference that no longer resolves, `full_path` carries the component's full path so the engineer can find it by hand (spec Edge Cases). With `chat_id` - the Review page always sends the chat it shows (feature 009 FR-023) - the ids are looked up in that chat's run folder, resolved from the host's own record through the same lookup `report.open` uses, and a `chat_id` the host never recorded is refused as `report.open` refuses one; without it they are looked up in the pane's latest run, as the check tabs' Show always has. The check hosts read their own `run_id` the same way; their pages send none. |
 | `report.open` | `{chat_id}` | Open `report.md` in the default app; reply `ok`. |
 | `folder.open` | `{chat_id}` | Open that session's run folder; reply `ok`. |
-| `sessions.list` | `{}` | Reply `sessions {items: [{chat_id, run_id, run_dir, path, configuration, started_at}]}`: every review this host started, in the order it tracked them, and never a check or remodel record (feature 009 FR-020, its `contracts/sessions.md` sections 1-2). `path` and `configuration` are the document `review.started` named, `run_id` the run folder's name, `started_at` ISO 8601 with its offset from when the review was tracked; null where the host does not know. The records live for the SOLIDWORKS session, not the backend process: a settings save keeps every one. Feature 015 T074: `model_status` is present only for a waiting record. Before replying, only marked records get one bounded `session.json` head read each; a head whose `model_status.state` says `sent` clears the mark, and a missing or unreadable head keeps it. The default reader shares the file for reads, writes and replacement. |
+| `sessions.list` | `{}` | Reply `sessions {items: [{chat_id, run_id, run_dir, path, configuration, started_at}]}`: every review this host tracks, in the order it tracked them, and never a check or remodel record (feature 009 FR-020, its `contracts/sessions.md` sections 1-2). `path` and `configuration` are the document `review.started` named, or a found review's `model_status.document`; `run_id` is the run folder's name. `started_at` is ISO 8601 with its offset from when the review was tracked, or a found review's stored `checked_at`; null where the host does not know. The records live for the SOLIDWORKS session, not the backend process: a settings save keeps every one. Feature 015 T074: `model_status` is present only for a waiting record. After the search below and before replying, only marked records get one bounded `session.json` head read each; a head whose `model_status.state` says `sent` clears the mark, and a missing or unreadable head keeps it. The default reader shares the file for reads, writes and replacement. |
 | `session.forget` | `{chat_id}` | Remove that review's record and reply `sessions {items}` without it; the pane's latest run is cleared if it was that record. A `chat_id` the host never recorded - a check record has none - is refused exactly as `report.open` refuses one, `error {error_class: "UnknownChat"}`, and nothing is removed; no `chat_id` is `InvalidRequest`. |
 | `log.open` | `{}` | Open the log folder; reply `ok`. |
 | `events.open` | `{chat_id, last_event_id \| null}` | Read `GET /sessions/{chat_id}/events` in the host and post every frame back as `events.frame`. Stops any stream this host was already reading. No reply: what the page is waiting for is frames. `error {error_class: "InvalidRequest"}` when no `chat_id` is given. |
 | `events.close` | `{}` | Stop the host's reader. No reply. |
+
+*Amended by feature 015 T106*: before `sessions.list` answers, an active part or assembly with no
+tracked review of its path (ignoring case) and configuration (exactly) triggers a waiting-review
+search. Only folder names matching `<yyyyMMdd-HHmmss>-<DocumentName(path)>`, optionally followed
+by a numeric `-N` collision suffix, are candidates; `-check`, `-standards` and `-remodel` folders
+are skipped. The newest timestamp, then ordinal name, selects one folder. Its `session.json` is
+opened once, reading at most 65,536 bytes to the top-level `session_id` and `model_status`; no
+other candidate's file is opened. A `not_sent` or `send_failed` state whose document matches the
+active path and configuration becomes a tracked review: `chat_id` is `session_id`, `started_at`
+is `checked_at` with its stored wall clock and offset, and `model_status` is the state. This
+record can be restored and rechecked like any tracked review, and another list adds no duplicate.
+A newer sent, missing, unreadable or mismatched head offers nothing, without falling back to an
+older folder; an unreadable run root also offers nothing.
 
 `report.open` and `folder.open` resolve the path from the host's own session record keyed by
 `chat_id`; the page never supplies a path. `log.open` uses the host's log folder. Every
