@@ -297,6 +297,14 @@ public sealed class ReviewHost : IDisposable
 
     /// <summary>Guards <see cref="_sessions"/>; see the threading note in the class remarks.</summary>
     private readonly object _sessionsLock = new object();
+
+    /// <summary>
+    /// The run folders of reviews the engineer removed (the chip's Remove), as
+    /// <see cref="SameFolder"/> spells them and compared ignoring case. Kept for the SOLIDWORKS
+    /// session, like the records, so the search never offers a removed review again (feature
+    /// 015, owner decision 98A item 4). Guarded by <see cref="_sessionsLock"/>.
+    /// </summary>
+    private readonly HashSet<string> _forgottenFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     private readonly PaneActions _actions;
 
     /// <summary>
@@ -409,15 +417,18 @@ public sealed class ReviewHost : IDisposable
             throw new ArgumentNullException(nameof(chatId));
         }
 
-        Publish(new SessionRecord(chatId, runDirectory, document, startedAt) { ModelStatus = modelStatus });
+        Publish(new SessionRecord(chatId, runDirectory, document, startedAt) { ModelStatus = modelStatus }, makeLatest: true);
     }
 
     /// <summary>
-    /// Tracks <paramref name="record"/> as the latest review. With <paramref name="replacing"/>
-    /// still tracked, the record takes its place in the list (a re-run, feature 015); otherwise
-    /// any record of the same chat id is dropped and this one appended.
+    /// Tracks <paramref name="record"/>, and when <paramref name="makeLatest"/> makes it the
+    /// latest run. With <paramref name="replacing"/> still tracked, the record takes its place in
+    /// the list (a re-run, feature 015); otherwise any record of the same chat id is dropped and
+    /// this one appended. A review the search found is not made latest (owner decision 98A item
+    /// 3): the check tabs' Show and the Ask tab's folder read <see cref="LatestSession"/>, and a
+    /// search the page runs on every document change must not move them to another document.
     /// </summary>
-    private void Publish(SessionRecord record, SessionRecord? replacing = null)
+    private void Publish(SessionRecord record, bool makeLatest, SessionRecord? replacing = null)
     {
         lock (_sessionsLock)
         {
@@ -433,7 +444,10 @@ public sealed class ReviewHost : IDisposable
             }
         }
 
-        LatestSession = record;
+        if (makeLatest)
+        {
+            LatestSession = record;
+        }
     }
 
     /// <summary>
@@ -452,7 +466,8 @@ public sealed class ReviewHost : IDisposable
     /// <summary>
     /// Forgets one review's record - the chip's Remove, for a review that can no longer be
     /// restored. `LatestSession` is cleared when it was that record, so nothing resolves against
-    /// a record that is gone. Answers whether there was such a review.
+    /// a record that is gone. Its run folder is remembered, so the search does not find it again
+    /// (owner decision 98A item 4). Answers whether there was such a review.
     /// </summary>
     public bool ForgetSession(string chatId)
     {
@@ -466,6 +481,7 @@ public sealed class ReviewHost : IDisposable
             }
 
             _sessions.Remove(record);
+            _forgottenFolders.Add(SameFolder(record.RunDirectory));
         }
 
         if (ReferenceEquals(LatestSession, record))
@@ -658,6 +674,7 @@ public sealed class ReviewHost : IDisposable
         lock (_sessionsLock)
         {
             _sessions.Clear();
+            _forgottenFolders.Clear();
         }
 
         LatestSession = null;
@@ -1107,17 +1124,26 @@ public sealed class ReviewHost : IDisposable
 
     // ---- the review list (feature 009 User Story 6) -------------------------------------
 
+    /// <summary>
+    /// The search behind `sessions.list` (feature 015, contracts/recheck.md section 9): a waiting
+    /// review of the active part or assembly, tracked without becoming the latest run. A found
+    /// folder the engineer removed is offered no more; since the search reads only the newest
+    /// candidate and never falls back, that leaves nothing, never an older review (98A item 4).
+    /// </summary>
     private void FindNotSentReview()
     {
         PageDocument? document = _options.CurrentDocument();
-        if (document == null || (document.Kind != "part" && document.Kind != "assembly")) return;
+        if (document == null || !document.IsAttachable) return;
         if (Reviews().Any(record => document.IsSameDocument(record.Document))) return;
 
         SessionRecord? found = RunFolders.FindNotSentReview(_settings.RunRoot, document, _options.OpenSessionHead);
-        if (found != null)
+        if (found == null) return;
+        lock (_sessionsLock)
         {
-            TrackSession(found.ChatId!, found.RunDirectory, found.Document, found.StartedAt, found.ModelStatus);
+            if (_forgottenFolders.Contains(SameFolder(found.RunDirectory))) return;
         }
+
+        Publish(found, makeLatest: false);
     }
 
     /// <summary>
@@ -1496,7 +1522,7 @@ public sealed class ReviewHost : IDisposable
         Publish(new SessionRecord(handle.ChatId, runDirectory, document, new DateTimeOffset(_options.Now()))
         {
             ModelStatus = modelStatus,
-        }, replacing);
+        }, makeLatest: true, replacing);
         PostStatus("ready", mode == ReviewMode.Recheck
             ? "Checked the saved evidence again; nothing was sent to the model."
             : mode == ReviewMode.Send
