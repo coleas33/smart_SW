@@ -36,8 +36,10 @@ installation, live checks, and comparable efficiency experiments. A local test r
 `swreview handoff <run-dir> --out <new-archive.zip>`; the archive includes a manifest of
 missing artifacts and retains design paths, so inspect it before sharing.
 
-Ideas researched but not yet planned, with their estimates, are listed at the end of
-[the roadmap](docs/roadmap-2026-09-22.md#later-researched-ideas).
+The [current future-capabilities roadmap](docs/future-capabilities-roadmap-2026-10-14.md)
+records the remaining evaluation/send-gate work and preparation for automated drawings,
+engineer-confirmed load context and later Simulation integration. It is documentation only.
+The [September roadmap](docs/roadmap-2026-09-22.md) and its research estimates remain history.
 
 ## Layout
 

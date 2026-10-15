@@ -409,7 +409,7 @@ class LeverDecision(ReviewModel):
 
     worst_case_defects_lost: int | None
     """`adoption.Verdict.worst_case_defects_lost`: `0` where the comparison ran and found
-    nothing, `None` where it never ran. Rendered through `_count`, so an absent number
+    nothing, `None` where it never ran. Rendered through `format_count`, so an absent number
     reads `unknown` and never `0` (RK-1)."""
 
     lost_defect_ids: list[str]
@@ -1256,7 +1256,7 @@ def compare_runs(
     its raw rows and no decision row.
     """
     checkout = sets.REPO_ROOT if root is None else root
-    loaded = [_load_run(path, root=checkout) for path in _distinct(run_dirs)]
+    loaded = [_load_run(path, root=checkout) for path in distinct_run_dirs(run_dirs)]
     if committed_ledger:
         for run in loaded:
             _refuse_for_the_committed_ledger(run, root=checkout)
@@ -1280,7 +1280,7 @@ def compare_runs(
     )
 
 
-def _distinct(run_dirs: Sequence[Path | str]) -> list[Path]:
+def distinct_run_dirs(run_dirs: Sequence[Path | str]) -> list[Path]:
     """The resolved run directories, refusing a folder named more than once.
 
     One folder passed three times is **one** measurement, and the adoption rule's
@@ -1337,7 +1337,7 @@ def write_ledger(ledger: Ledger, out_dir: Path | str) -> tuple[Path, Path]:
 # --- rendering ---------------------------------------------------------------------
 
 
-def _count(value: float | None) -> str:
+def format_count(value: float | None) -> str:
     """A reported number, or `unknown`. Never `0`, never a blank cell (RK-1)."""
     if value is None:
         return UNKNOWN
@@ -1360,9 +1360,9 @@ def _off_on(stat: OffOn) -> str:
     absent and the contributing row count stated where nulls were skipped."""
     delta = UNKNOWN if stat.delta_pct is None else f"{stat.delta_pct:+.1%}"
     return (
-        f"{_count(stat.off_median)} ({_count(stat.off_min)}-{_count(stat.off_max)}, "
-        f"n={stat.off_rows}) -> {_count(stat.on_median)} ({_count(stat.on_min)}-"
-        f"{_count(stat.on_max)}, n={stat.on_rows}), {delta}"
+        f"{format_count(stat.off_median)} ({format_count(stat.off_min)}-"
+        f"{format_count(stat.off_max)}, n={stat.off_rows}) -> {format_count(stat.on_median)} "
+        f"({format_count(stat.on_min)}-{format_count(stat.on_max)}, n={stat.on_rows}), {delta}"
     )
 
 
@@ -1490,30 +1490,30 @@ def _run_line(row: RunRow) -> str:
         _profile_cell(row),
         _yes_no(row.live_tools),
         row.package_id,
-        _count(row.input_tokens),
-        _count(row.cached_input_tokens),
-        _count(row.uncached_input_tokens),
-        _count(row.output_tokens),
-        _count(row.reasoning_tokens),
-        _count(row.tool_result_input_tokens),
-        _count(row.total_tokens),
-        _count(row.rounds),
-        _count(row.tool_calls),
+        format_count(row.input_tokens),
+        format_count(row.cached_input_tokens),
+        format_count(row.uncached_input_tokens),
+        format_count(row.output_tokens),
+        format_count(row.reasoning_tokens),
+        format_count(row.tool_result_input_tokens),
+        format_count(row.total_tokens),
+        format_count(row.rounds),
+        format_count(row.tool_calls),
         _share(row.cached_input_share),
-        _count(row.wall_clock_s),
-        _count(row.seconds_to_first_finding),
-        _count(row.valid_findings),
-        _count(row.missed_known_defects),
-        _count(row.flagged),
-        _count(row.flagged_below_expected),
-        _count(row.status_mismatches),
-        _count(row.cleared),
-        _count(row.false_alarms),
+        format_count(row.wall_clock_s),
+        format_count(row.seconds_to_first_finding),
+        format_count(row.valid_findings),
+        format_count(row.missed_known_defects),
+        format_count(row.flagged),
+        format_count(row.flagged_below_expected),
+        format_count(row.status_mismatches),
+        format_count(row.cleared),
+        format_count(row.false_alarms),
         fmt_assessed(row.contradictions),
         fmt_assessed(row.confirmations),
-        _count(row.unresolved_count),
-        _count(row.unresolved_because_withheld),
-        _count(row.unresolved_other),
+        format_count(row.unresolved_count),
+        format_count(row.unresolved_because_withheld),
+        format_count(row.unresolved_other),
         _mix(row.coverage_bucket_mix),
         fmt_origins(row.findings_by_origin, separator=" / "),
         fmt_origins(row.false_alarms_by_origin, separator=" / "),
@@ -1528,7 +1528,7 @@ def _counter_cell(counter: LeverCounter) -> str:
     fit and stack counts fell. Both render the same way - after the medians, by name - so
     a reader scanning the column sees the gate's verdict without opening the JSON.
     """
-    cell = f"{counter.name}: {_count(counter.off)} -> {_count(counter.on)}"
+    cell = f"{counter.name}: {format_count(counter.off)} -> {format_count(counter.on)}"
     if counter.dropped_tools:
         cell += "; no longer called: " + ", ".join(counter.dropped_tools)
     if counter.fell_in_runs:
@@ -1577,7 +1577,7 @@ def _lever_line(row: LeverDecision) -> str:
         _off_on(row.recall_held_out),
         _recall_by_producer(row),
         _off_on(row.median_net_saved_minutes),
-        _count(row.worst_case_defects_lost),
+        format_count(row.worst_case_defects_lost),
         _counter_cell(row.lever_counter),
         row.decision if row.decision is not None else UNKNOWN,
         SIGNED if row.owner_signed_off else UNSIGNED,
