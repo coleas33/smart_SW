@@ -2157,7 +2157,8 @@ each is noted on the task lines it touches, no task box is ticked for it, and
 - **Chosen**: (a) the paths compare through `drawings.evidence.file_key`, the codebase's one rule for
   one Windows file however it is spelled, with the digest compared exactly; (b) `carry_from` builds
   the index once and passes it to both; (c) `_waiting_record` runs on the thread pool, as the claim's
-  other blocking reads do; (d) such an answer is named "the answer to {id} (part of its drawing read
+  other blocking reads do, with the folder held in `_pending_run_dirs` from the claim on, since a
+  second claim could otherwise pass while the read awaits; (d) such an answer is named "the answer to {id} (part of its drawing read
   was refused or failed, so its question is asked again)". The re-run asks the narrower question
   afresh with no new read, and the earlier outcome lines are carried as they stand. The same partial
   read is applied to an open question: an unfinished read that merged some of its drawings and not

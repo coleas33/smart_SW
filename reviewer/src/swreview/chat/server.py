@@ -1296,45 +1296,50 @@ class ChatServer:
         adopted = self._claim_run_dir(run_dir, retry_of, recheck=recheck)
         if adopted is not None:
             return self._created(adopted, self._run_of(adopted))
-        earlier = self._waiting_record(run_dir) if recheck else None
-        settings = self._settings(body)
-        bridge = body.get("bridge") or None
-        chat = ChatSession(
-            run_dir=run_dir,
-            provider=settings.provider.value,
-            model=settings.model,
-            effort=settings.effort,
-            engineer=str(body.get("engineer") or ""),
-            retry_of=retry_of,
-            token=self.token,
-            bridge=bridge,
-            created_at=datetime.now(UTC),
-        )
-        chat.to(ChatState.EXTRACTING)
+        # Held from the claim on: the earlier record's read awaits the thread pool, and a second
+        # claim of the folder meanwhile must meet `RunDirInUse` (owner decision 90A).
         self._pending_run_dirs.add(run_dir)
         try:
-            if send_when_checked:
-                run = await run_in_threadpool(self._start_review, chat, settings, standards_profile)
-                chat.attach(run)
-                self.chats[chat.chat_id] = chat
-                chat.to(ChatState.RUNNING)
-                self._submit(chat, run.start)
-            else:
-                run = await run_in_threadpool(
-                    partial(
-                        self._start_review,
-                        chat,
-                        settings,
-                        standards_profile,
-                        send_when_checked=False,
-                        earlier=earlier,
+            earlier = await run_in_threadpool(self._waiting_record, run_dir) if recheck else None
+            settings = self._settings(body)
+            bridge = body.get("bridge") or None
+            chat = ChatSession(
+                run_dir=run_dir,
+                provider=settings.provider.value,
+                model=settings.model,
+                effort=settings.effort,
+                engineer=str(body.get("engineer") or ""),
+                retry_of=retry_of,
+                token=self.token,
+                bridge=bridge,
+                created_at=datetime.now(UTC),
+            )
+            chat.to(ChatState.EXTRACTING)
+            try:
+                if send_when_checked:
+                    run = await run_in_threadpool(
+                        self._start_review, chat, settings, standards_profile
                     )
-                )
-                await self._open_waiting(chat, run, earlier)
-        except Exception:
-            if chat.state is ChatState.EXTRACTING:
-                chat.to(ChatState.FAILED)
-            raise
+                    chat.attach(run)
+                    self.chats[chat.chat_id] = chat
+                    chat.to(ChatState.RUNNING)
+                    self._submit(chat, run.start)
+                else:
+                    run = await run_in_threadpool(
+                        partial(
+                            self._start_review,
+                            chat,
+                            settings,
+                            standards_profile,
+                            send_when_checked=False,
+                            earlier=earlier,
+                        )
+                    )
+                    await self._open_waiting(chat, run, earlier)
+            except Exception:
+                if chat.state is ChatState.EXTRACTING:
+                    chat.to(ChatState.FAILED)
+                raise
         finally:
             self._pending_run_dirs.discard(run_dir)
         return self._created(chat, run)
@@ -2213,7 +2218,8 @@ class ChatServer:
 
     @staticmethod
     def _waiting_record(run_dir: Path) -> ReviewSession:
-        """The earlier record a re-run carries: the folder's `session.json`, waiting.
+        """The earlier record a re-run carries: the folder's `session.json`, waiting. A blocking
+        read, so the route runs it on the thread pool (owner decision 90A).
 
         No readable record - no folder, no file, one that does not validate - is
         `UnknownReview`, as `GET /reviews` answers it; a record with no `model_status`, or

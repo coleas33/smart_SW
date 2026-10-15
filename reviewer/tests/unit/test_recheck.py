@@ -14,6 +14,7 @@ package, path and seat here is fictional.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import shutil
@@ -28,6 +29,7 @@ from typing import Any
 from uuid import UUID
 
 import pytest
+import yaml
 from starlette.testclient import TestClient
 
 from swreview import atomic, tokens
@@ -38,7 +40,7 @@ from swreview.agent.runner import request_prefix
 from swreview.agent.settings import ProviderSettings, pane_defaults
 from swreview.chat import server
 from swreview.chat.sessions import ChatState
-from swreview.checks.drawing_context import CANDIDATE_CONFIRM
+from swreview.checks.drawing_context import CANDIDATE_CONFIRM, CANDIDATE_OPTIONS
 from swreview.findings import Disposition, Finding, finding_subject_key
 from swreview.ir.loader import PACKAGE_FILE_NAME, load_package, save_package
 from swreview.ir.models import EvidencePackage
@@ -51,6 +53,7 @@ from swreview.prerun import (
 )
 from swreview.report.names import plural
 from swreview.report.session import (
+    DrawingOutcome,
     EvidenceRequest,
     ReviewSession,
     SendFailure,
@@ -623,6 +626,81 @@ def test_a_folder_with_no_readable_record_is_an_unknown_review(
     assert response.json()["error_class"] == "UnknownReview"
     assert sorted(str(path) for path in run_root.rglob("*")) == before
     assert provider_control.built == []
+
+
+def test_the_earlier_record_is_read_off_the_event_loop(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+    silent: ScriptedReviewBridge,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Owner decision 90A: the claim's read of the waiting record is a blocking read, so it runs
+    on the thread pool as the route's other blocking reads do."""
+    earlier = earlier_review(app, client, run_root / "FICT-recheck-off-loop")
+    on_loop: list[bool] = []
+    loading = server.load_session
+
+    def watched(path: Path, *args: Any, **kwargs: Any) -> ReviewSession:
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            on_loop.append(False)
+        else:
+            on_loop.append(True)
+        return loading(path, *args, **kwargs)
+
+    monkeypatch.setattr(server, "load_session", watched)
+    with restarted_app(run_root, server_settings(provider_control, models, silent)) as fresh:
+        assert recheck(fresh, earlier.folder).status_code == 201
+
+    assert on_loop and not any(on_loop)
+
+
+def test_a_second_re_run_while_the_first_reads_its_record_is_run_dir_in_use(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+    silent: ScriptedReviewBridge,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The record's read awaits the thread pool (owner decision 90A), so the folder is held from
+    the claim on: a second re-run sent meanwhile meets `RunDirInUse`, as one sent while the first
+    is being set up does, and reads nothing."""
+    earlier = earlier_review(app, client, run_root / "FICT-recheck-read-held")
+    entered, release = threading.Event(), threading.Event()
+    reads: list[Path] = []
+    reading = server.ChatServer._waiting_record
+
+    def held(run_dir: Path) -> ReviewSession:
+        reads.append(run_dir)
+        if len(reads) == 1:
+            entered.set()
+            assert release.wait(chat.TIMEOUT_S), "FICT record barrier was never released"
+        return reading(run_dir)
+
+    monkeypatch.setattr(server.ChatServer, "_waiting_record", staticmethod(held))
+    with (
+        restarted_app(run_root, server_settings(provider_control, models, silent)) as fresh,
+        ThreadPoolExecutor(max_workers=1) as worker,
+    ):
+        first = worker.submit(recheck, fresh, earlier.folder)
+        try:
+            assert entered.wait(chat.TIMEOUT_S)
+            second = recheck(fresh, earlier.folder)
+            assert second.status_code == 409, second.text
+            assert second.json()["error_class"] == "RunDirInUse"
+            assert reads == [earlier.folder.resolve()]
+        finally:
+            release.set()
+            answered = first.result(timeout=chat.TIMEOUT_S)
+        assert answered.status_code == 201, answered.text
+        assert fresh.app.state.server._pending_run_dirs == set()
+    assert indexes(earlier.folder) == {1: {"session", "attention", "events", "results"}}
 
 
 @pytest.mark.parametrize("state", ["none", "sent"])
@@ -1453,6 +1531,14 @@ def earlier_with_profile(
     return waiting_answers.Waiting(fixture, chat_id, app.state.server.chats[UUID(chat_id)])
 
 
+def without_data_card_properties(text: str) -> str:
+    """The profile with a data card that asks for no property, so the new profile no longer
+    raises the data-card finding."""
+    document = yaml.safe_load(text)
+    document["data_card"]["properties"] = []
+    return yaml.safe_dump(document, sort_keys=False)
+
+
 @pytest.mark.parametrize("case", PROFILE_CASES)
 def test_a_changed_profile_grades_with_the_new_one_and_is_named(
     app: Any,
@@ -1466,12 +1552,23 @@ def test_a_changed_profile_grades_with_the_new_one_and_is_named(
     folder = run_root / f"FICT-recheck-profile-{case}"
     waiting = earlier_with_profile(app, client, folder, profile=case != "added")
     profile = waiting.fixture.profile
+    rejected: str | None = None
+    if case in {"another-file", "edited"}:
+        # Owner decision 87A: a decided finding the new profile no longer raises is named.
+        finding = next(f for f in waiting.run.session.findings if f.check == REJECTED_CHECK)
+        decided_now = client.post(
+            f"/sessions/{waiting.chat_id}/findings/{finding.id}/disposition",
+            json={"decision": "rejected", "note": "FICT engineer decision"},
+        )
+        assert decided_now.status_code == 200, decided_now.text
+        rejected = finding.id
     now: Path | None = profile
     if case == "another-file":
         now = folder / "FICT-profile-b.yaml"
-        shutil.copyfile(profile, now)
+        now.write_text(without_data_card_properties(profile.read_text("utf-8")), "utf-8")
     elif case == "edited":
-        profile.write_text(profile.read_text(encoding="utf-8") + "# FICT edit\n", "utf-8")
+        edited = without_data_card_properties(profile.read_text("utf-8")) + "# FICT edit\n"
+        profile.write_text(edited, "utf-8")
     elif case == "removed":
         now = None
     with restarted_app(run_root, server_settings(provider_control, models, silent)) as fresh:
@@ -1488,8 +1585,46 @@ def test_a_changed_profile_grades_with_the_new_one_and_is_named(
     rows = recheck_row(rerun.session)
     if case == "unchanged":
         assert rows == []
+    elif rejected is not None:
+        assert rows == [
+            runner.NOT_CARRIED.format(
+                items="; ".join([
+                    f"the Reject of {rejected} (its finding is no longer raised)",
+                    runner.NOT_CARRIED_PROFILE,
+                ])
+            )
+        ]
+        assert not [f for f in rerun.session.findings if f.check == REJECTED_CHECK]
+        assert not [f for f in rerun.session.findings if f.disposition is not None]
     else:
         assert rows == [runner.NOT_CARRIED.format(items=runner.NOT_CARRIED_PROFILE)]
+
+
+@pytest.mark.parametrize("digest", ["same", "other"])
+def test_a_profile_path_spelled_with_other_capitals_is_the_same_profile(
+    bare: Any, digest: str
+) -> None:
+    """Owner decision 90A: the path compares as `file_key` compares a Windows path, case and
+    separator ignored; the digest compares exactly."""
+    run, earlier, _ = bare
+    assert earlier.model_status is not None and run.session.model_status is not None
+    earlier.model_status = earlier.model_status.model_copy(
+        update={"profile": {"path": "C:\\FICT\\Standards\\Profile-V3.yaml", "sha256": "a" * 64}}
+    )
+    run.session.model_status = run.session.model_status.model_copy(
+        update={
+            "profile": {
+                "path": "c:/fict/standards/PROFILE-v3.YAML",
+                "sha256": "a" * 64 if digest == "same" else "b" * 64,
+            }
+        }
+    )
+
+    run.carry_from(earlier)
+
+    assert recheck_row(run.session) == (
+        [] if digest == "same" else [runner.NOT_CARRIED.format(items=runner.NOT_CARRIED_PROFILE)]
+    )
 
 
 # --- what T087's failures leave --------------------------------------------------------------
@@ -1515,6 +1650,99 @@ def test_an_open_drawing_question_an_unfinished_read_merged_is_named_once(
     assert recheck_row(rerun.session) == [
         runner.NOT_CARRIED.format(items=runner.NOT_CARRIED_DRAWING.format(id=drawing.id))
     ]
+
+
+def _candidate(
+    request_id: str, entity_ids: list[str], *, answer: str | None = None
+) -> EvidenceRequest:
+    """A drawing candidate question over `entity_ids`, as `candidate_question` asks it."""
+    return EvidenceRequest(
+        id=request_id,
+        what="FICT same-name drawings",
+        why="FICT reason",
+        entity_ids=entity_ids,
+        question=f"A drawing with the same name sits beside {len(entity_ids)} reviewed file(s)",
+        options=list(CANDIDATE_OPTIONS),
+        source="code",
+        status="answered" if answer is not None else "open",
+        answer=answer,
+        answered_at=FIRST_DECIDED if answer is not None else None,
+    )
+
+
+@pytest.fixture
+def two_candidates(tmp_path: Path) -> Any:
+    """A re-run over two candidate drawings, the first merged by the earlier read and the second
+    refused, with its earlier record; findings and questions are set by each case."""
+    package = confirmed.candidates_package(2)
+    folder = package_folder(tmp_path, package)
+    read, refused = (candidate.document_id for candidate in package.drawing_candidates)
+    confirmed.merged(folder, read)()
+    run = checks_only(folder, None)
+    earlier = run.session.model_copy(deep=True)
+    for session in (run.session, earlier):
+        session.findings[:] = []
+        session.evidence_requests[:] = []
+    yield run, earlier, read, refused
+    run.close()
+
+
+@pytest.mark.parametrize("status", ["answered", "open"])
+def test_a_read_that_merged_some_drawings_and_was_refused_for_the_rest_is_named(
+    two_candidates: Any, status: str
+) -> None:
+    """Owner decision 90A, FR-029's rule for a refused or failed read: the question is asked again
+    over the refused file, a narrower question no earlier answer asks the same as. An answered
+    question's answer is named so; an open one's merged file has no outcome line in the
+    record, so the lost outcome is named as R2.13 names it."""
+    run, earlier, read, refused = two_candidates
+    run.session.evidence_requests[:] = [_candidate("ER-001", [refused])]
+    answered = status == "answered"
+    earlier.evidence_requests[:] = [
+        _candidate("ER-002", [read, refused], answer=CANDIDATE_CONFIRM if answered else None)
+    ]
+    if answered:
+        earlier.drawing_outcomes = [
+            DrawingOutcome(file="FICT-KALO-8001.SLDDRW", outcome="opened read-only and read"),
+            DrawingOutcome(file="FICT-KALO-8002.SLDDRW", outcome="FICT the host refused it"),
+        ]
+
+    run.carry_from(earlier)
+
+    item = (
+        "the answer to ER-002 (part of its drawing read was refused or failed, so its question "
+        "is asked again)"
+        if answered else runner.NOT_CARRIED_DRAWING.format(id="ER-002")
+    )
+    assert recheck_row(run.session) == [runner.NOT_CARRIED.format(items=item)]
+    (asked,) = run.session.evidence_requests
+    assert (asked.id, asked.status, asked.answer) == ("ER-001", "open", None)
+    assert run.session.drawing_outcomes == earlier.drawing_outcomes
+
+
+def test_a_carry_builds_the_drawing_index_once(
+    two_candidates: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Owner decision 90A: one index per carry, however many earlier drawing questions."""
+    run, earlier, read, refused = two_candidates
+    earlier.evidence_requests[:] = [
+        _candidate("ER-002", [read, refused], answer="FICT no"),
+        _candidate("ER-003", [read], answer="FICT no"),
+        _candidate("ER-004", [refused]),
+        _candidate("ER-005", [read]),
+    ]
+    built: list[Any] = []
+    building = runner.DrawingIndex.for_package
+
+    def counted(package: Any) -> Any:
+        built.append(package)
+        return building(package)
+
+    monkeypatch.setattr(runner.DrawingIndex, "for_package", counted)
+
+    run.carry_from(earlier)
+
+    assert len(built) == 1
 
 
 # --- SC-008 and the size sent ----------------------------------------------------------------
