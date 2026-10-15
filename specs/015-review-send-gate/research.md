@@ -2295,3 +2295,33 @@ each is noted on the task lines it touches, no task box is ticked for it, and
   unchanged; the `handoff.py` catch-up with `main`; the pane-fixture regeneration
   (`review-big-assembly.json`) done by whichever of 015 and 016 lands second, its snapshot part
   byte-equal and its labels the union; and the conflicts the integration reviewer listed.
+
+### 105A-109A. The adversarial check of 016 on 015, and its follow-ups (2026-10-15)
+
+- **Question** (the owner's 26A, 27A and 29A-31A): the adversarial check of `10cecf3..2ab8043`
+  (016 adapted on `main`, 99A) answered MERGE-READY: no path gets saved context to a provider
+  before Send. It raised five points for 016's branch before the merge to `main`.
+- **Chosen**, each landed test-first on `016-adapt-015`:
+  - **105A** (26A): the carried check of a re-run stays as built - the recorded head, context id
+    and saved package digest, not the folder's package - and also requires the saved baseline's
+    package id, root document and configuration. `recheck.md` section 2 is amended.
+  - **106A** (27A): the strict lock stays: the context panel is disabled while any review is
+    shown waiting, and the backend refuses context edits per folder.
+  - **107A** (29A): the live interference check rewrites `package.json`, so every saved input of
+    an assembly review read `mismatch: package_digest_changed`. The saved baseline also records
+    the package's digest without the active configuration's interference rows and the check's
+    gaps; binding accepts exactly that rewrite in the check's own spelling, and any other change
+    is still a mismatch (016 `pane-context.md`).
+  - **108A** (30A): Retry on a failed context review re-attaches the same saved context in its own
+    run folder through the one gated `CreateReviewSession` (no new extraction), Send or Wait from
+    the box; a context changed since is refused with a line that points to the Engineering
+    context panel. 002 `pane-host-messages.md` and `chat-api.md` are amended.
+  - **109A** (31A): 001's review-session schema accepts a finding that names its document scope
+    in a non-empty `inputs` (the hygiene checks' root-document findings), and a whole pane
+    review's `session.json` validates. No finding reader changes.
+  - Also: the verifier's two probes are tests (a ticked context review's first request equals an
+    unticked one's Send; a re-run with context sends what the live review would have); the
+    re-run refusal's wording and the `EngineeringContextConflict` label name an action that
+    exists; Remodel's awaiting rule is held once.
+
+  016's `tasks.md` (T022-T026) and `validation.md` record each with its commit and gate.

@@ -93,3 +93,26 @@ Gate on `6e48e3e`:
 Still open: T010 and T015, the SOLIDWORKS workstation gates. No SOLIDWORKS run, live model
 call or paid request was made.
 
+
+## Owner decisions 105A-109A on the adversarial check — 2026-10-15
+
+The adversarial check of `10cecf3..2ab8043` answered MERGE-READY: no path gets saved context
+to a provider before Send. The owner's follow-ups, each test-first and gate-green:
+
+| Decision | Commit | What |
+|---|---|---|
+| 109A (31A) | `51e7b9f` | 001's `Finding` accepts a document scope in a non-empty `inputs`; a whole pane review's `session.json`, ticked or unticked, with or without context, validates. Also the verifier's two probes as tests and Remodel's awaiting rule held once |
+| 107A (29A) | `3ab02ee` | the baseline's `without_live_interference_sha256`; the live check's own rewrite keeps saved inputs matched, any other change mismatches |
+| 105A (26A), 106A (27A), 108A (30A) | `9bafa80` | the carried check also requires package id, root document and configuration; the strict lock kept; Retry re-attaches the same context in its folder through the gated path; the refusal and the `EngineeringContextConflict` label point to the Engineering context panel |
+
+Gate on `9bafa80`:
+- Python 3.11.16 (the worktree's environment), not live: **16,567 passed, 6 skipped,
+  7 deselected**; Ruff clean.
+- Python 3.11.16 and 3.12.3, each `uv run --isolated` outside the repository with
+  `PYTHONDONTWRITEBYTECODE=1` and `-p no:cacheprovider`: **16,567 passed, 6 skipped,
+  7 deselected** each.
+- Release build: zero warnings and errors. .NET: **9,138 extractor and 2,456 add-in tests**,
+  none skipped.
+- Replay regeneration unchanged and its `git diff` empty; T007 and T008 green and unedited.
+
+Still open: T010 and T015, the SOLIDWORKS workstation gates.
