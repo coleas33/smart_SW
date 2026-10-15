@@ -28,15 +28,23 @@ BEFORE_REPLACE = "before-replace"
 
 
 @contextmanager
-def restarted_app(run_root: Path, settings: Mapping[str, Any]) -> Iterator[TestClient]:
-    """A fresh create_app over this root, authenticated as its configured pane."""
+def restarted_app(
+    run_root: Path, settings: Mapping[str, Any], *, raise_server_exceptions: bool = True
+) -> Iterator[TestClient]:
+    """A fresh create_app over this root, authenticated as its configured pane.
+
+    With `raise_server_exceptions` false, an unexpected failure is answered as the pane meets
+    it, Starlette's bare `500`, rather than raised into the test.
+    """
     options = {**settings, "run_root": run_root}
     app = create_app(**options)
     headers = {
         "Authorization": f"Bearer {settings['token']}",
         "Origin": settings["allow_origin"],
     }
-    with TestClient(app, headers=headers) as client:
+    with TestClient(
+        app, headers=headers, raise_server_exceptions=raise_server_exceptions
+    ) as client:
         yield client
 
 

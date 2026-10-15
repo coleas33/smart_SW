@@ -1014,6 +1014,7 @@ RECHECK_CHECK = "coverage.recheck"
 NOT_CARRIED = "Not carried from the earlier check run: {items}."
 NOT_CARRIED_ANSWER_GONE = "the answer to {id} (its question is no longer asked)"
 NOT_CARRIED_ANSWER_MANY = "the answer to {id} (it matches more than one question)"
+NOT_CARRIED_ANSWER_SHARED = "the answer to {id} (another answer matches the same question)"
 NOT_CARRIED_DECISION_GONE = "the {decision} of {id} (its finding is no longer raised)"
 NOT_CARRIED_DECISION_MANY = "the {decision} of {id} (it matches more than one finding)"
 NOT_CARRIED_DECISION_SHARED = "the {decision} of {id} (another decision matches the same finding)"
@@ -1433,7 +1434,9 @@ class ReviewRun:
         """Each earlier answer's one matching open question here, in answer order.
 
         A drawing candidate question whose drawing the earlier read merged is not asked again;
-        its answer is not named, because its outcome line is what carries.
+        its answer is not named, because its outcome line is what carries. Two earlier answers
+        that match one question carry neither, and each is named (owner decision 89A, 72A's rule
+        for decisions).
         """
         answered = sorted(
             (request for request in earlier.evidence_requests if request.status == "answered"),
@@ -1442,18 +1445,25 @@ class ReviewRun:
                 if request.answered_at is not None else float("-inf")
             ),
         )
-        answers: list[tuple[str, str]] = []
-        answered_at: dict[str, datetime | None] = {}
-        for request in answered:
-            matches = [
+        matched = {
+            request.id: [
                 new for new in self.session.evidence_requests
                 if new.status == "open" and asks_same(request, new)
             ]
-            if len(matches) == 1 and matches[0].id not in answered_at:
+            for request in answered
+        }
+        shared = Counter(matches[0].id for matches in matched.values() if len(matches) == 1)
+        answers: list[tuple[str, str]] = []
+        answered_at: dict[str, datetime | None] = {}
+        for request in answered:
+            matches = matched[request.id]
+            if len(matches) > 1:
+                named.append(NOT_CARRIED_ANSWER_MANY.format(id=request.id))
+            elif matches and shared[matches[0].id] > 1:
+                named.append(NOT_CARRIED_ANSWER_SHARED.format(id=request.id))
+            elif matches:
                 answers.append((matches[0].id, str(request.answer)))
                 answered_at[matches[0].id] = request.answered_at
-            elif matches:
-                named.append(NOT_CARRIED_ANSWER_MANY.format(id=request.id))
             elif not self._drawing_merged(request):
                 named.append(NOT_CARRIED_ANSWER_GONE.format(id=request.id))
         return answers, answered_at

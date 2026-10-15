@@ -37,6 +37,7 @@ from swreview.agent.providers.deferred import DeferredProvider
 from swreview.agent.runner import request_prefix
 from swreview.agent.settings import ProviderSettings, pane_defaults
 from swreview.chat import server
+from swreview.chat.sessions import ChatState
 from swreview.checks.drawing_context import CANDIDATE_CONFIRM
 from swreview.findings import Disposition, Finding, finding_subject_key
 from swreview.ir.loader import PACKAGE_FILE_NAME, load_package, save_package
@@ -428,6 +429,33 @@ def test_the_drawing_read_capability_is_carried_onto_the_re_runs_record(
         second.close()
 
 
+def test_a_carried_step_that_would_land_off_the_first_runs_index_is_refused(
+    tmp_path: Path,
+) -> None:
+    """Owner decision 87A: every later step and citation is the first run's only if the carried
+    step lands where the first run recorded its call, so a re-run whose pre-run holds any other
+    number of steps by then is refused before anything is recorded or asked."""
+    folder = package_folder(tmp_path, live_prerun_package())
+    first = checks_only(folder, ScriptedReviewBridge(results={"interference": [live_answer()]}))
+    earlier = waited(first)
+    set_aside(folder)
+    live = earlier.live_detection
+    assert live is not None and live.step_index is not None
+    moved = earlier.model_copy(
+        update={"live_detection": live.model_copy(update={"step_index": live.step_index + 1})}
+    )
+    seat = silent_seat()
+
+    with pytest.raises(RuntimeError) as refused:
+        checks_only(folder, seat, earlier=moved)
+
+    assert str(refused.value) == (
+        f"the carried live step would be step {live.step_index}, but the first run recorded "
+        f"its call as step {live.step_index + 1}"
+    )
+    assert seat.calls == []
+
+
 # --- the claim and the rotation (T094; `contracts/recheck.md` sections 2, 6 and 7) ----------
 
 
@@ -755,6 +783,65 @@ def test_a_re_run_that_fails_leaves_the_earlier_record_and_the_next_one_succeeds
     )
 
     assert held == {1: {"session", "attention", "events", "results"}}
+
+
+def test_a_carry_that_raises_fails_the_re_run_and_the_next_one_succeeds(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+    silent: ScriptedReviewBridge,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Owner decision 87A: the carry runs inside `_open_waiting`'s one failure path, so a carry
+    that raises closes its run once, leaves the chat `failed` and unregistered and the earlier
+    record byte-equal, answers the pane's bare 500, and the next re-run succeeds."""
+    earlier = earlier_review(app, client, run_root / "FICT-recheck-carry-fails")
+    settings = server_settings(provider_control, models, silent)
+    attempts: list[Any] = []
+    closed: list[runner.ReviewRun] = []
+    closing = runner.ReviewRun.close
+
+    def refused(run: runner.ReviewRun, record: ReviewSession) -> None:
+        raise RuntimeError("FICT the carry cannot be made")
+
+    def counted(run: runner.ReviewRun) -> None:
+        closed.append(run)
+        closing(run)
+
+    monkeypatch.setattr(runner.ReviewRun, "carry_from", refused)
+    monkeypatch.setattr(runner.ReviewRun, "close", counted)
+    with restarted_app(run_root, settings, raise_server_exceptions=False) as fresh:
+        owner = fresh.app.state.server
+        starting = owner._start_review
+
+        def captured(chat_session: Any, *args: Any, **kwargs: Any) -> runner.ReviewRun:
+            attempts.append(chat_session)
+            return starting(chat_session, *args, **kwargs)
+
+        monkeypatch.setattr(owner, "_start_review", captured)
+        failed = recheck(fresh, earlier.folder)
+
+        assert failed.status_code == 500
+        assert failed.text == "Internal Server Error"
+        assert owner.chats == {}
+        assert owner._pending_run_dirs == set()
+        (attempt,) = attempts
+        assert attempt.state is ChatState.FAILED
+        assert attempt.run is None
+        assert len(closed) == 1
+    assert (earlier.folder / "session.json").read_bytes() == earlier.files["session.json"]
+    monkeypatch.undo()
+
+    held = assert_earlier_restorable(
+        run_root, earlier.folder, earlier, settings, provider_control
+    )
+
+    assert held == {
+        1: {"session", "attention", "events", "results"},
+        2: {"events", "results"},
+    }
 
 
 def _cut_after_rotation(owner_class: Any, monkeypatch: pytest.MonkeyPatch, captured: Any) -> None:
@@ -1217,6 +1304,33 @@ def test_an_answer_is_carried_onto_the_question_that_asks_the_same_under_a_new_n
     assert moved.answered_at == FIRST_DECIDED
     assert (other.id, other.status, other.answer) == ("ER-002", "open", None)
     assert recheck_row(run.session) == []
+
+
+def test_two_earlier_answers_meeting_one_question_carry_neither_and_name_each(
+    bare: Any,
+) -> None:
+    """Owner decision 89A, 72A's rule for answers: neither answer is carried, each is named, and
+    the question stays open for the engineer to answer after Send."""
+    run, earlier, _ = bare
+    run.session.evidence_requests[:] = [_request("ER-001", "FICT asked once now?")]
+    earlier.evidence_requests[:] = [
+        _request("ER-004", "FICT asked once now?", answer="FICT yes"),
+        _request("ER-006", "FICT asked once now?", answer="FICT no"),
+    ]
+
+    run.carry_from(earlier)
+
+    (question,) = run.session.evidence_requests
+    assert (question.status, question.answer, question.answered_at) == ("open", None, None)
+    assert recheck_row(run.session) == [
+        runner.NOT_CARRIED.format(
+            items="; ".join([
+                "the answer to ER-004 (another answer matches the same question)",
+                "the answer to ER-006 (another answer matches the same question)",
+            ])
+        )
+    ]
+    assert run._opening_changed is False
 
 
 def test_each_unmatched_or_ambiguous_item_is_named_once_in_one_row(bare: Any) -> None:
