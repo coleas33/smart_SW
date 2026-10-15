@@ -19,9 +19,14 @@ import json
 from pathlib import Path
 
 
+def sha256_of_bytes(data: bytes) -> str:
+    """The sha256 of raw bytes, shared by files and packed event streams."""
+    return hashlib.sha256(data).hexdigest()
+
+
 def sha256_of(path: Path | str) -> str:
     """The sha256 of a file's bytes, for the set-file and checklist digests."""
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    return sha256_of_bytes(Path(path).read_bytes())
 
 
 def canonical_sha256(value: object) -> str:
