@@ -2077,3 +2077,89 @@ margin and interim 30 s; 72A's rule that neither of two decisions meeting one fi
 - **Chosen**: A. The same reader serves 73A's refresh of the marked records. Applied in: R2.20, R4.2,
   RK-6; plan.md's performance goals; spec FR-030; data-model section 9; `contracts/recheck.md`
   section 9; the search's tasks and the head reader's.
+
+## R8. Owner decisions of the US4 code review (2026-10-14)
+
+An adversarial review of T092 to T098 (commits `3dffcd3` to `44bcd27`) found no blocker. It
+found gaps in what the tests prove and a few small defects, and offered the owner one option per
+group, numbered 5A to 8A in its notes, which are held outside the repository. The owner took each
+on 2026-10-14. They are numbered here 87A to 90A, the next numbers no branch uses (feature 014
+records 83A to 86A at the same time). They are review follow-ups to T092 to T098, not new tasks:
+each is noted on the task lines it touches, no task box is ticked for it, and
+`review-2026-10-12.md` records each commit group that lands them.
+
+### 87A. Every test gap the review found in the carry is closed now (2026-10-14)
+
+- **Question** (the review's 5A): six places where the tests of T092 to T098 proved less than their
+  task lines say. (1) SC-008's "numbers that move": the worked review moved no number, so a carry by
+  number would pass it. (2) SC-008's byte identity compared the prepared Send cache, not what was
+  sent. (4) The profile cases named a changed profile but no decision whose finding the new profile
+  no longer raises. (5) A carry that raises had no test, and its failure path was a second copy of
+  `_open_waiting`'s. (8) Nothing checked that the carried live step lands at the first run's
+  `step_index`. (14) The perf test defined `ONE_RULE_S` and never asserted it.
+- **Chosen**: fix all six now. (1) The worked review's merged drawing raises a finding that the
+  re-run numbers ahead of the others. The test then shows the numbers differ, and that the Reject and
+  the answers land on their own items, with one bare-runner case that carries ER-005's answer onto
+  the re-run's ER-001 by `asks_same`. (2) Send is pressed on the live waiting review and again after
+  its re-run, each through `RecordingProvider`, and the two provider logs are compared entry by
+  entry, every request of Send's first turn (T096). (4) The another-file and edited profile cases
+  carry a Reject of a finding the new profile no longer raises, named not carried. (5) A test shows a
+  carry that raises leaves the chat `failed` and unregistered, `session.json` byte-equal to the
+  earlier record and the error body pinned, and that the next re-run succeeds; the carry runs inside
+  `_open_waiting`'s thread function, so one failure path serves both. (8) An explicit guard in
+  `_carried_interference` refuses a carried step that would not land at `live.step_index`, with a
+  test. (14) The perf test asserts the re-run fits inside `ONE_RULE_S`, the decision T104 relies on.
+
+### 88A. A carry settles the waiting opening only when it carried answers or outcome lines (2026-10-14)
+
+- **Question** (the review's 6A): `carry_from` calls `_settle_waiting` only when answers or drawing
+  outcome lines were carried (C48's deviation 5), where `contracts/recheck.md` section 4 and
+  data-model section 3 say the carry always ends with it.
+- **Chosen**: the deviation stays: a decision or a timing input carried alone leaves the opening
+  as it was, as a decision made while a live review waits does. A test shows that with the gate on
+  and only a Reject carried, every request of Send's first turn is the live waiting review's. The
+  contracts are not edited now. T115 makes these reconciliations, each as a dated "*Landed as*"
+  note:
+  - `contracts/recheck.md` section 4 and data-model section 3 (`carry_from`'s row): the carry ends
+    with `_settle_waiting(applied)` only when it carried answers or drawing outcome lines (88A).
+  - `contracts/recheck.md` section 2, data-model section 2 (`:77`) and tasks.md T095 (`:680`): the
+    folder a re-run holds from its claim to its answer is the existing
+    `ChatServer._pending_run_dirs`, not a new `ChatServer._rechecking` (C47).
+  - `contracts/recheck.md` section 4's first paragraph: the server runs `carry_from` inside
+    `_open_waiting`'s thread function, before `close_waiting`, not as a separate call on the thread
+    pool between `_start_review` and `_open_waiting` (87A item 5).
+  - `contracts/recheck.md` section 4 step 7: a profile counts as another path only when the paths
+    differ as `drawings.evidence.file_key` compares Windows paths, case and separator ignored (90A).
+  - `contracts/words.md` section 4 (`NOT_CARRIED`): a decision is named by its noun, "the Reject of
+    F-007" (`DECISION_NOUNS`), not by the stored "rejected" (C48); and the two items added by 89A and
+    90A: "the answer to {id} (another answer matches the same question)" and "the answer to {id}
+    (part of its drawing read was refused or failed, so its question is asked again)".
+
+### 89A. Two earlier answers that match one question: neither is carried, both are named (2026-10-14)
+
+- **Question** (the review's 7A): `_carried_answers` carried the first of two earlier answers that
+  match one re-run question. It named the second "it matches more than one question", which is not
+  true. 72A's rule for decisions is that neither is carried and each is named.
+- **Chosen**: the same rule as 72A. Neither answer is carried, and each is named, "the answer to
+  {id} (another answer matches the same question)", in the words of 72A's decision item. The question
+  stays open, so the engineer answers it after Send. The words live beside the other `NOT_CARRIED`
+  items in `agent/runner.py`, as 72A's do. T115 adds them to `contracts/words.md` section 4 (88A).
+
+### 90A. Four small fixes to the carry and the claim (2026-10-14)
+
+- **Question** (the review's 8A): (a) the profile path was compared case-sensitively, so a Windows
+  path spelled with other capitals was named as a changed profile; (b) the drawing index was
+  rebuilt for every earlier request (`_drawing_merged`, `_lost_drawing_outcomes`); (c)
+  `_waiting_record` read `session.json` on the event loop; (d) an earlier drawing question over
+  several documents whose read merged some of their drawings and was refused or failed for the
+  rest was named "its question is no longer asked", though FR-029's rule for a refused or failed
+  read is that its question is asked again.
+- **Chosen**: (a) the paths compare through `drawings.evidence.file_key`, the codebase's one rule for
+  one Windows file however it is spelled, with the digest compared exactly; (b) `carry_from` builds
+  the index once and passes it to both; (c) `_waiting_record` runs on the thread pool, as the claim's
+  other blocking reads do; (d) such an answer is named "the answer to {id} (part of its drawing read
+  was refused or failed, so its question is asked again)". The re-run asks the narrower question
+  afresh with no new read, and the earlier outcome lines are carried as they stand. The same partial
+  read is applied to an open question: an unfinished read that merged some of its drawings and not
+  the others is named by R2.13's lost-outcome item, as one that merged all of them is. Each has a
+  test.
