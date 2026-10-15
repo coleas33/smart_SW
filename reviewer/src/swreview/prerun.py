@@ -1487,7 +1487,8 @@ def _carried_interference(
 
     Every later step and finding citation is the first run's only if the carried step lands at
     the first run's index, so a pre-run that holds any other number of steps by then is refused
-    before anything is recorded (owner decision 87A).
+    before the carried step is recorded or the seat asked (owner decision 87A). By then
+    `session.started` and the pre-run's coverage and provenance events are already written.
     """
     carried = CarriedLiveOutcome(**asdict(live))
     if live.step_index is None:

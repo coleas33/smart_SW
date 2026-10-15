@@ -1488,10 +1488,10 @@ class ReviewRun:
                 answers.append((matches[0].id, str(request.answer)))
                 answered_at[matches[0].id] = request.answered_at
             else:
-                merged, documents = self._merged_documents(request, index)
-                if merged == 0:
+                merged, asked_again = self._drawing_read_of(request, index)
+                if not merged:
                     named.append(NOT_CARRIED_ANSWER_GONE.format(id=request.id))
-                elif merged < documents:
+                elif asked_again:
                     named.append(NOT_CARRIED_ANSWER_PARTIAL.format(id=request.id))
         return answers, answered_at
 
@@ -1527,13 +1527,22 @@ class ReviewRun:
                 self.announce_disposition(carried)
 
     @staticmethod
-    def _merged_documents(request: EvidenceRequest, index: DrawingIndex) -> tuple[int, int]:
-        """`(documents that now have a drawing, documents)` of an earlier drawing candidate
-        question; `(0, 0)` for any other question."""
+    def _drawing_read_of(request: EvidenceRequest, index: DrawingIndex) -> tuple[bool, bool]:
+        """`(merged, asked_again)` of an earlier drawing candidate question: whether its read
+        merged a drawing of any of its documents, and whether any of them still has a candidate
+        row, which the re-run asks about again. `(False, False)` for any other question.
+
+        What is asked again is counted by candidate row, not by drawing: one candidate file can
+        sit beside two documents of one stem (013 T083), and its merge removes every row of the
+        path while the drawing's views show the first document only.
+        """
         if CANDIDATE_CONFIRM not in request.options or not request.entity_ids:
-            return 0, 0
-        merged = sum(1 for document_id in request.entity_ids if index.drawings_of(document_id))
-        return merged, len(request.entity_ids)
+            return False, False
+        merged = any(index.drawings_of(document_id) for document_id in request.entity_ids)
+        asked_again = any(
+            index.candidate_of(document_id) is not None for document_id in request.entity_ids
+        )
+        return merged, asked_again
 
     def _lost_drawing_outcomes(self, earlier: ReviewSession, index: DrawingIndex) -> list[str]:
         """Earlier open drawing questions whose drawings an unfinished read merged, all of them
@@ -1541,7 +1550,7 @@ class ReviewRun:
         named_files = {outcome.file for outcome in earlier.drawing_outcomes}
         lost: list[str] = []
         for request in earlier.evidence_requests:
-            if request.status != "open" or self._merged_documents(request, index)[0] == 0:
+            if request.status != "open" or not self._drawing_read_of(request, index)[0]:
                 continue
             files = {
                 index.file_name_of(drawing)
