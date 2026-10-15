@@ -95,10 +95,13 @@ from swreview.agent.withheld_wording import (
 from swreview.bridge.client import DEFAULT_PIPE_NAME, BridgeClient
 from swreview.carry_over import carry_over_findings, stamp_carry_over_keys
 from swreview.checks import part_roles
+from swreview.checks.drawing_context import CANDIDATE_CONFIRM
 from swreview.checks.provenance import PROVENANCE_CHECK, close_provenance
+from swreview.checks.questions import asks_same
 from swreview.checks.rms.registry import RMS_FAMILY
+from swreview.drawings.evidence import DrawingIndex
 from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore
-from swreview.findings import Finding
+from swreview.findings import Finding, finding_subject_key
 from swreview.ir.loader import LoadedPackage, load_package
 from swreview.ir.models import EvidencePackage
 from swreview.prerun import (
@@ -121,6 +124,7 @@ from swreview.prerun import (
 )
 from swreview.report.attention import rank
 from swreview.report.attention_record import write_attention_record
+from swreview.report.dispositions import set_disposition
 from swreview.report.explanations import (
     explanation_signature,
     generate_explanations,
@@ -1003,6 +1007,30 @@ WAIT_ANSWER_LINE = (
 """One opening line per code question answered while waiting, never a resumed instruction."""
 
 
+RECHECK_CHECK = "coverage.recheck"
+"""The one unresolved coverage row a re-run names what it could not carry in (feature 015,
+`contracts/recheck.md` section 5)."""
+
+NOT_CARRIED = "Not carried from the earlier check run: {items}."
+NOT_CARRIED_ANSWER_GONE = "the answer to {id} (its question is no longer asked)"
+NOT_CARRIED_ANSWER_MANY = "the answer to {id} (it matches more than one question)"
+NOT_CARRIED_DECISION_GONE = "the {decision} of {id} (its finding is no longer raised)"
+NOT_CARRIED_DECISION_MANY = "the {decision} of {id} (it matches more than one finding)"
+NOT_CARRIED_DECISION_SHARED = "the {decision} of {id} (another decision matches the same finding)"
+NOT_CARRIED_DRAWING = (
+    "the outcome of the drawing read for {id} (the read that merged its drawing did not finish)"
+)
+NOT_CARRIED_PROFILE = (
+    "the Standards profile it was graded with (the profile in Settings has changed since; "
+    "this check of the saved evidence graded with the new one)"
+)
+"""`coverage.recheck`'s reason and its items (`contracts/words.md` section 4): each item names
+an earlier id, never a path, and the items are joined with "; " in the carry's order."""
+
+DECISION_NOUNS = {"accepted": "Accept", "rejected": "Reject", "deferred": "Defer"}
+"""How a decision is named in a `coverage.recheck` item: "the Reject of F-007"."""
+
+
 def drawing_outcome_lines(read: Sequence[ConfirmedRead]) -> list[str]:
     """`DRAWING_OUTCOME_LINE` for each drawing file a confirmed read asked for, in the
     question's order: `read_confirmed_candidates` answers one `ConfirmedRead` per distinct
@@ -1326,6 +1354,164 @@ class ReviewRun:
             for bucket, item in regrade.unmatched:
                 self.context.record_coverage(bucket, item)
         return AppliedAnswers(read=tuple(read), withdrawn_by_answer=tuple(by_answer))
+
+    def announce_disposition(self, finding: Finding) -> None:
+        """The `disposition` event of a decision just set on `finding` (owner decision 72A).
+
+        The one announcement both a live decision (`chat/sessions.record_disposition`) and a
+        re-run's carried decision (`carry_from`) make, so no second writer of the event exists.
+        """
+        disposition = finding.disposition
+        self.sink.emit(
+            "disposition",
+            {
+                "finding_id": finding.id,
+                "disposition": disposition.model_dump(mode="json") if disposition else None,
+            },
+        )
+
+    def carry_from(self, earlier: ReviewSession) -> None:
+        """Carry a waiting review's earlier record onto this re-run, in memory only.
+
+        Feature 015 (`contracts/recheck.md` section 4). Nothing is carried by number: each
+        answered code question onto the one question that `asks_same` (applied by code through
+        `_apply_answers` with no drawing read), each decision onto the one finding with the same
+        `finding_subject_key` (through `set_disposition` at its first time, announced as a live
+        decision is), the drawing outcome lines verbatim, the four human timing inputs and the
+        model status. What cannot be carried is named once in one `coverage.recheck` row.
+        Nothing is written: no `save_session`, no report; `_open_waiting`'s finalization is the
+        re-run's one write. When answers or outcome lines were carried, it ends as the waiting
+        apply does, with `_settle_waiting`, so the opening at Send is rebuilt from them.
+        """
+        session = self.session
+        named: list[str] = []
+        answers, answered_at = self._carried_answers(earlier, named)
+        applied = (
+            self._apply_answers(answers, read_drawings=False)
+            if answers else AppliedAnswers(read=(), withdrawn_by_answer=())
+        )
+        for request in session.evidence_requests:
+            if request.id in answered_at:
+                request.answered_at = answered_at[request.id]
+        self._carry_decisions(earlier, named)
+        session.drawing_outcomes = [outcome.model_copy() for outcome in earlier.drawing_outcomes]
+        named.extend(self._lost_drawing_outcomes(earlier))
+        session.timing = session.timing.replace(
+            baseline_minutes=earlier.timing.baseline_minutes,
+            assisted_supervision_minutes=earlier.timing.assisted_supervision_minutes,
+            assisted_verification_minutes=earlier.timing.assisted_verification_minutes,
+            false_alarm_handling_minutes=earlier.timing.false_alarm_handling_minutes,
+        )
+        status, before = session.model_status, earlier.model_status
+        if status is not None and before is not None:
+            if status.profile != before.profile:
+                named.append(NOT_CARRIED_PROFILE)
+            session.model_status = status.model_copy(
+                update={
+                    "state": before.state,
+                    "document": before.document,
+                    "failures": [failure.model_copy() for failure in before.failures],
+                    "rechecked_from": earlier.session_id,
+                }
+            )
+        if named:
+            self.context.record_coverage(
+                "unresolved",
+                CoverageItem(
+                    check=RECHECK_CHECK,
+                    scope=CoverageScope(),
+                    reason=NOT_CARRIED.format(items="; ".join(named)),
+                    error=None,
+                ),
+            )
+        if answers or session.drawing_outcomes:
+            self._settle_waiting(applied)
+
+    def _carried_answers(
+        self, earlier: ReviewSession, named: list[str]
+    ) -> tuple[list[tuple[str, str]], dict[str, datetime | None]]:
+        """Each earlier answer's one matching open question here, in answer order.
+
+        A drawing candidate question whose drawing the earlier read merged is not asked again;
+        its answer is not named, because its outcome line is what carries.
+        """
+        answered = sorted(
+            (request for request in earlier.evidence_requests if request.status == "answered"),
+            key=lambda request: (
+                request.answered_at.timestamp()
+                if request.answered_at is not None else float("-inf")
+            ),
+        )
+        answers: list[tuple[str, str]] = []
+        answered_at: dict[str, datetime | None] = {}
+        for request in answered:
+            matches = [
+                new for new in self.session.evidence_requests
+                if new.status == "open" and asks_same(request, new)
+            ]
+            if len(matches) == 1 and matches[0].id not in answered_at:
+                answers.append((matches[0].id, str(request.answer)))
+                answered_at[matches[0].id] = request.answered_at
+            elif matches:
+                named.append(NOT_CARRIED_ANSWER_MANY.format(id=request.id))
+            elif not self._drawing_merged(request):
+                named.append(NOT_CARRIED_ANSWER_GONE.format(id=request.id))
+        return answers, answered_at
+
+    def _carry_decisions(self, earlier: ReviewSession, named: list[str]) -> None:
+        """Each earlier decision onto the one finding with its subject key (72A)."""
+        session = self.session
+        by_key: dict[Any, list[Finding]] = {}
+        for finding in session.findings:
+            by_key.setdefault(finding_subject_key(finding), []).append(finding)
+        decided = [finding for finding in earlier.findings if finding.disposition is not None]
+        target: dict[str, str] = {}
+        for finding in decided:
+            matches = by_key.get(finding_subject_key(finding), [])
+            if len(matches) == 1:
+                target[finding.id] = matches[0].id
+        shared = Counter(target.values())
+        for finding in decided:
+            disposition = finding.disposition
+            assert disposition is not None  # `decided` holds only decided findings
+            words = {"decision": DECISION_NOUNS[disposition.decision], "id": finding.id}
+            matches = by_key.get(finding_subject_key(finding), [])
+            if not matches:
+                named.append(NOT_CARRIED_DECISION_GONE.format(**words))
+            elif len(matches) > 1:
+                named.append(NOT_CARRIED_DECISION_MANY.format(**words))
+            elif shared[target[finding.id]] > 1:
+                named.append(NOT_CARRIED_DECISION_SHARED.format(**words))
+            else:
+                carried = set_disposition(
+                    session, target[finding.id], disposition.decision, disposition.note,
+                    disposition.by, at=disposition.at,
+                )
+                self.announce_disposition(carried)
+
+    def _drawing_merged(self, request: EvidenceRequest) -> bool:
+        """An earlier drawing candidate question whose every document now has a drawing."""
+        if CANDIDATE_CONFIRM not in request.options or not request.entity_ids:
+            return False
+        index = DrawingIndex.for_package(self.context.ir)
+        return all(index.drawings_of(document_id) for document_id in request.entity_ids)
+
+    def _lost_drawing_outcomes(self, earlier: ReviewSession) -> list[str]:
+        """Earlier open drawing questions whose drawing an unfinished read merged (R2.13)."""
+        index = DrawingIndex.for_package(self.context.ir)
+        named_files = {outcome.file for outcome in earlier.drawing_outcomes}
+        lost: list[str] = []
+        for request in earlier.evidence_requests:
+            if request.status != "open" or not self._drawing_merged(request):
+                continue
+            files = {
+                index.file_name_of(drawing)
+                for document_id in request.entity_ids
+                for drawing in index.drawings_of(document_id)
+            }
+            if not files & named_files:
+                lost.append(NOT_CARRIED_DRAWING.format(id=request.id))
+        return lost
 
     def _settle_waiting(self, applied: AppliedAnswers) -> None:
         """Keep confirmed outcomes for Send and mark the opening as changed by code."""

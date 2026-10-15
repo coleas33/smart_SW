@@ -338,14 +338,7 @@ def record_disposition(
         render_report(session, run.context.ir, ranking=ranking), encoding="utf-8"
     )
     write_attention_record(run.out_dir, ranking, session.session_id)
-    disposition = finding.disposition
-    run.sink.emit(
-        "disposition",
-        {
-            "finding_id": finding.id,
-            "disposition": disposition.model_dump(mode="json") if disposition else None,
-        },
-    )
+    run.announce_disposition(finding)
     return finding
 
 

@@ -1330,6 +1330,8 @@ class ChatServer:
                         earlier=earlier,
                     )
                 )
+                if earlier is not None:
+                    await self._carry(chat, run, earlier)
                 await self._open_waiting(chat, run)
         except Exception:
             if chat.state is ChatState.EXTRACTING:
@@ -2376,6 +2378,16 @@ class ChatServer:
 
         run.check_presentation_cancelled = check_presentation_cancelled
         return run
+
+    async def _carry(self, chat: ChatSession, run: ReviewRun, earlier: ReviewSession) -> None:
+        """A re-run's carry, on the thread pool, before `_open_waiting` finalizes (015)."""
+        try:
+            await run_in_threadpool(run.carry_from, earlier)
+        except Exception:
+            with contextlib.suppress(Exception):
+                run.close()
+            chat.to(ChatState.FAILED)
+            raise
 
     async def _open_waiting(self, chat: ChatSession, run: ReviewRun) -> None:
         """Save both views before publishing a waiting run on the event loop."""
