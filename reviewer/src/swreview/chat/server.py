@@ -578,7 +578,7 @@ def _stream_session_id(path: Path) -> str | None:
 
 
 def _record_id(path: Path) -> str | None:
-    """The `session_id` a rotated `session.K.json` holds, or `None` when it cannot be read."""
+    """The `session_id` a session or attention record holds, or `None` when it cannot be read."""
     try:
         record = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -2276,6 +2276,11 @@ class ChatServer:
         moves to its own index with no session file beside it, and the record is copied
         only when no `session.K.json` already holds it (a stream deleted by hand). A
         leftover `write_atomic` temporary is neither, and is passed over.
+
+        Each file is copied only when it is the record's own. An `attention.json` naming
+        another session - the earlier one's, left when a re-run failed or was cut off after
+        its commit point and before its own ranking was written (owner decision 93A) - is not
+        copied beside a record it does not rank; this re-run's finalization writes it again.
         """
         run_dir = chat.run_dir
         events = run_dir / EVENTS_FILE_NAME
@@ -2298,7 +2303,7 @@ class ChatServer:
         if copied:
             for name in (SESSION_FILE_NAME, ATTENTION_FILE_NAME):
                 kept = run_dir / name
-                if kept.is_file():
+                if kept.is_file() and _record_id(kept) == str(record_id):
                     shutil.copyfile(kept, _rotated(kept, index))
 
     # --- the review ------------------------------------------------------------------

@@ -2164,3 +2164,22 @@ each is noted on the task lines it touches, no task box is ticked for it, and
   read is applied to an open question: an unfinished read that merged some of its drawings and not
   the others is named by R2.13's lost-outcome item, as one that merged all of them is. Each has a
   test.
+
+### 93A. The re-run's commit point is the atomic replace of its `session.json` (2026-10-15)
+
+- **Question** (the open finding of `review-2026-10-12.md`, "FR-041 after the re-run's session
+  replacement"): the re-run's finalization saves `session.json`, then writes `attention.json`, then
+  emits `session.ended`. FR-041 promised that any failed or cut-off re-run leaves the earlier record,
+  which a failure or kill after the save cannot keep. Option one: the atomic replace is the commit
+  point, and past it the re-run is complete. Option two: a staging and recovery protocol keeps the
+  earlier record canonical until every write completes.
+- **Chosen**: option one. Before the replace, the earlier record stays canonical, as built and tested
+  in T094-T095. After it, the re-run is complete, and the new waiting record is canonical and
+  restorable with Send. FR-041 and `contracts/recheck.md` section 2 state the commit point. A
+  failure and a kill (copied with `disk_at`, 76A) after the save, while `attention.json` is written
+  and while `session.ended` is emitted, each restore the new record from a backend started afresh.
+  `attention.json` left by the earlier session is handled by recomputing, the simplest of the
+  options: `GET /reviews` already ranks from `session.json` and never reads it;
+  `read_attention_record` flags it by its session id. The next re-run's rotation copies a canonical
+  file to an index only when it is the record's own, and its finalization writes `attention.json`
+  again.

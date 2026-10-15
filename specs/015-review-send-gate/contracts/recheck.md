@@ -120,6 +120,19 @@ canonical `events.jsonl` and `tool-results/`, the failed attempt's partial strea
 nothing when it was cut off before its first event. The next re-run moves those to their own index
 (the second case above). Nothing is sent, and nothing needs recovering.
 
+**The commit point** (owner decision 93A, 2026-10-15). The re-run's finalization writes
+`session.json` first, through `write_atomic`'s `os.replace`; that replace is the commit point.
+Everything above holds before it. After it the re-run is complete and its new waiting record is
+canonical: a failure or a kill after it - while `attention.json` is written, or while
+`session.ended` is emitted - leaves the new record, which `GET /reviews` restores read-only with
+Send offered, which FR-030 offers after a reopen, and whose Send re-runs it (its `rechecked_from`
+names the earlier record, kept at index N). `attention.json` may then still be the earlier
+session's ranking. It is never read for the restore - `GET /reviews` ranks from `session.json`
+alone (section 8) - and `read_attention_record` refuses it by its session id
+(`StaleAttentionRecord`). The next re-run's rotation copies each canonical file to an index only when
+it is the record's own, so that ranking is not kept beside a record it does not rank, and the
+re-run's finalization writes `attention.json` again.
+
 ## 3. What the re-run runs
 
 `start_review(..., send_when_checked=False, earlier=<the earlier record>)`, as an unticked review
