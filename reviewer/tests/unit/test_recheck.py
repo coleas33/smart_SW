@@ -6,28 +6,39 @@ the first run recorded its call, and carries the drawing-read capability onto it
 (FR-028; SC-008; research R2.17). The claim and the rotation (T094): `POST /sessions` with
 `recheck: true` copies the earlier record, moves its stream, adopts a re-run the backend
 finished, and leaves the earlier record whole whenever a re-run fails or is cut off (FR-041;
-RK-4; owner decision 76A). Every package, path and seat here is fictional.
+RK-4; owner decision 76A). The carry (T096): answers, decisions, outcome lines, timing and
+the model status carried by identity, never by number, and what is not carried named once
+(FR-021, FR-023, FR-029, FR-032; SC-005, SC-008; owner decisions 71A, 72A and 78A). Every
+package, path and seat here is fictional.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import threading
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
+from uuid import UUID
 
 import pytest
 from starlette.testclient import TestClient
 
-from swreview import atomic
+from swreview import atomic, tokens
 from swreview.agent import runner
 from swreview.agent.providers import ProviderName
 from swreview.agent.providers.deferred import DeferredProvider
+from swreview.agent.runner import request_prefix
 from swreview.agent.settings import ProviderSettings, pane_defaults
 from swreview.chat import server
+from swreview.checks.drawing_context import CANDIDATE_CONFIRM
+from swreview.findings import Disposition, Finding, finding_subject_key
 from swreview.ir.loader import PACKAGE_FILE_NAME, load_package, save_package
 from swreview.ir.models import EvidencePackage
 from swreview.prerun import (
@@ -38,13 +49,23 @@ from swreview.prerun import (
     PRERUN_INTERFERENCE_SETTINGS,
 )
 from swreview.report.names import plural
-from swreview.report.session import ReviewSession, load_session, save_session
+from swreview.report.session import (
+    EvidenceRequest,
+    ReviewSession,
+    SendFailure,
+    load_session,
+    save_session,
+)
 from tests.support.prerun import LIVE_ROWS, live_prerun_package, prerun_package
 from tests.support.questions_package import build_questions_package
+from tests.support.recording_provider import RecordingProvider
 from tests.support.restart import BEFORE_REPLACE, disk_at, restarted_app
 from tests.support.review_bridge import VOLUME_UNIT_GAP, ScriptedReviewBridge
+from tests.support.roles_review import PLATE_ID
 from tests.unit import test_chat_server as chat
+from tests.unit import test_confirmed_drawing_read as confirmed
 from tests.unit import test_waiting_answers as waiting_answers
+from tests.unit.test_prerun_digest import template_finding
 
 app = chat.app
 client = chat.client
@@ -886,3 +907,505 @@ def test_nothing_is_written_to_the_record_before_the_finalization(
     assert seen == [{
         name: earlier.files[name] for name in ("session.json", "report.md", "attention.json")
     }]
+
+
+# --- the carry (T096; `contracts/recheck.md` sections 4 and 5) -------------------------------
+
+
+def merging_seat(bridge: Any, folder: Path) -> None:
+    """Make the fixture's seat merge the plate's drawing on its confirmed read, as the host
+    does (`test_confirmed_drawing_read.merged`), so the read moves what the package holds."""
+    read = confirmed.merged(folder, PLATE_ID)
+    bridge._results["drawing_read"] = deque([lambda arguments: read()])
+
+
+def worked_review(
+    app: Any, client: TestClient, folder: Path, *, reject: bool = True
+) -> waiting_answers.Waiting:
+    """The US4 independent test's earlier record: a part-roles answer, a drawing answer whose
+    read merged its drawing, and a Reject, all made while the review waited."""
+    fixture = build_questions_package(folder)
+    merging_seat(fixture.bridge, folder)
+    app.state.server.bridge_factory = lambda pipe, secret: fixture.bridge
+    response = client.post(
+        "/sessions",
+        json=chat.session_body(
+            folder,
+            standards_profile=str(fixture.profile),
+            bridge={"pipe": "FICT-pipe", "secret": "FICT-secret"},
+            send_when_checked=False,
+        ),
+    )
+    assert response.status_code == 201, response.text
+    chat_id = str(response.json()["chat_id"])
+    waiting = waiting_answers.Waiting(fixture, chat_id, app.state.server.chats[UUID(chat_id)])
+    role = waiting_answers.question(waiting)
+    drawing = waiting_answers.question(waiting, drawing=True)
+    applied = waiting_answers.apply(
+        client, waiting, (role.id, "All bought"), (drawing.id, CANDIDATE_CONFIRM)
+    )
+    assert applied.status_code == 202, applied.text
+    assert chat.settle(client, chat_id) == "awaiting_send"
+    assert waiting.run.session.drawing_outcomes
+    if reject:
+        finding = waiting.run.session.findings[-1]
+        decided = client.post(
+            f"/sessions/{chat_id}/findings/{finding.id}/disposition",
+            json={"decision": "rejected", "note": "FICT engineer decision"},
+        )
+        assert decided.status_code == 200, decided.text
+    return waiting
+
+
+def rerun_of(fresh: TestClient, folder: Path, **overrides: Any) -> runner.ReviewRun:
+    response = recheck(fresh, folder, **overrides)
+    assert response.status_code == 201, response.text
+    held = fresh.app.state.server.chats[UUID(response.json()["chat_id"])]
+    return held.run
+
+
+def decided(session: ReviewSession) -> dict[Any, Any]:
+    return {
+        finding_subject_key(finding): finding.disposition
+        for finding in session.findings
+        if finding.disposition is not None
+    }
+
+
+def recheck_row(session: ReviewSession) -> list[str]:
+    return [item.reason for item in session.coverage.unresolved if item.check == "coverage.recheck"]
+
+
+def test_the_independent_test_carries_every_answer_decision_and_outcome_by_identity(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+    silent: ScriptedReviewBridge,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    waiting = worked_review(app, client, run_root / "FICT-recheck-worked")
+    folder = waiting.fixture.folder
+    earlier = load_session(folder / "session.json")
+    package = (folder / "package.json").read_bytes()
+    on_disk = {name: (folder / name).read_bytes() for name in ("session.json", "report.md")}
+    seen: list[dict[str, bytes]] = []
+    close_waiting = runner.ReviewRun.close_waiting
+
+    def finalized(run: runner.ReviewRun) -> ReviewSession:
+        seen.append({name: (folder / name).read_bytes() for name in on_disk})
+        return close_waiting(run)
+
+    monkeypatch.setattr(runner.ReviewRun, "close_waiting", finalized)
+    with restarted_app(run_root, server_settings(provider_control, models, silent)) as fresh:
+        rerun = rerun_of(fresh, folder)
+
+    session = rerun.session
+    assert silent.calls == []
+    assert (folder / "package.json").read_bytes() == package
+    assert seen == [on_disk]
+    earlier_answers = {
+        (q.question, tuple(q.options), tuple(q.entity_ids)): (q.answer, q.answered_at)
+        for q in earlier.evidence_requests if q.status == "answered"
+    }
+    carried_answers = {
+        (q.question, tuple(q.options), tuple(q.entity_ids)): (q.answer, q.answered_at)
+        for q in session.evidence_requests if q.status == "answered"
+    }
+    assert carried_answers
+    assert set(carried_answers.items()) <= set(earlier_answers.items())
+    assert not [q for q in session.evidence_requests if CANDIDATE_CONFIRM in q.options]
+    assert decided(session) == decided(earlier) != {}
+    assert session.drawing_outcomes == earlier.drawing_outcomes
+    assert recheck_row(session) == []
+    assert session.model_status is not None
+    assert str(session.model_status.rechecked_from) == str(earlier.session_id)
+    assert provider_control.built == []
+
+
+def test_the_opening_after_a_carried_answer_names_no_finding_it_withdrew(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+    silent: ScriptedReviewBridge,
+) -> None:
+    waiting = worked_review(app, client, run_root / "FICT-recheck-opening", reject=False)
+    folder = waiting.fixture.folder
+    role = waiting_answers.question(waiting)
+    with restarted_app(run_root, server_settings(provider_control, models, silent)) as fresh:
+        rerun = rerun_of(fresh, folder)
+        withdrawn = {
+            event["body"]["finding_id"]
+            for event in chat.events_of(folder)
+            if event["type"] == "finding.withdrawn"
+        }
+        provider = RecordingProvider([chat.turn("FICT sent")])
+        fresh.app.state.server.provider_factory = lambda settings: provider
+        chat_id = next(iter(fresh.app.state.server.chats))
+        assert fresh.post(f"/sessions/{chat_id}/send", json={}).status_code == 202
+        chat.settle(fresh, str(chat_id))
+
+    opening = provider.log[0].first_message["content"]
+    standing = {finding.id for finding in rerun.session.findings}
+    named = set(rerun._prerun.named_finding_ids())
+    assert withdrawn
+    assert not withdrawn & named
+    assert named <= standing
+    assert all(f" {finding_id}" not in opening for finding_id in withdrawn - standing)
+    assert opening == rerun._send_cache.opening == rerun.opening_at_send()
+    carried_role = next(q for q in rerun.session.evidence_requests if q.question == role.question)
+    assert opening.count(waiting_answers.wait_line(carried_role)) == 1
+    for outcome in rerun.session.drawing_outcomes:
+        assert f"Drawing {outcome.file}: {outcome.outcome}" in opening
+    assert not [q for q in rerun.session.evidence_requests if CANDIDATE_CONFIRM in q.options]
+
+
+# --- matching cases, on the runner's carry directly ------------------------------------------
+
+
+def coaxial(finding_id: str, hole: str, decision: str | None = None) -> Finding:
+    """A `hole.coaxiality` finding on one pair of components, told apart by its hole input."""
+    finding = template_finding().model_copy(
+        update={
+            "id": finding_id,
+            "check": "hole.coaxiality",
+            "component_ids": ["cmp:0002", "cmp:0003"],
+            "inputs": [hole],
+            "configuration": "Default",
+        }
+    )
+    if decision is not None:
+        finding = finding.model_copy(
+            update={
+                "disposition": Disposition(
+                    decision=decision, note="FICT note", by="FICT engineer", at=FIRST_DECIDED
+                )
+            }
+        )
+    return finding
+
+
+FIRST_DECIDED = datetime(2026, 10, 9, 8, 30, tzinfo=UTC)
+
+
+@pytest.fixture
+def bare(tmp_path: Path) -> Any:
+    """A re-run's run with findings and questions set by hand, and its earlier record."""
+    folder = package_folder(tmp_path, live_prerun_package())
+    run = checks_only(folder, None)
+    earlier = run.session.model_copy(deep=True)
+    run.session.findings[:] = []
+    run.session.evidence_requests[:] = []
+    earlier.findings[:] = []
+    earlier.evidence_requests[:] = []
+    events: list[tuple[str, dict[str, Any]]] = []
+    run.sink.add_listener(lambda event: events.append((event.type, dict(event.body))))
+    yield run, earlier, events
+    run.close()
+
+
+def test_two_coaxial_findings_on_one_pair_carry_the_reject_onto_its_own(bare: Any) -> None:
+    run, earlier, events = bare
+    run.session.findings[:] = [coaxial("F-001", "hol:0001"), coaxial("F-002", "hol:0002")]
+    earlier.findings[:] = [
+        coaxial("F-007", "hol:0001"), coaxial("F-008", "hol:0002", "rejected"),
+    ]
+
+    run.carry_from(earlier)
+
+    assert run.session.findings[0].disposition is None
+    carried = run.session.findings[1].disposition
+    assert carried is not None and carried.decision == "rejected"
+    assert carried.at == FIRST_DECIDED and carried.note == "FICT note"
+    assert [body for kind, body in events if kind == "disposition"] == [
+        {"finding_id": "F-002", "disposition": carried.model_dump(mode="json")}
+    ]
+    assert recheck_row(run.session) == []
+
+
+def test_two_earlier_decisions_meeting_one_finding_carry_neither_and_name_each(
+    bare: Any,
+) -> None:
+    run, earlier, events = bare
+    run.session.findings[:] = [coaxial("F-001", "hol:0001")]
+    earlier.findings[:] = [
+        coaxial("F-007", "hol:0001", "rejected"), coaxial("F-008", "hol:0001", "accepted"),
+    ]
+
+    run.carry_from(earlier)
+
+    assert run.session.findings[0].disposition is None
+    assert not [kind for kind, _ in events if kind == "disposition"]
+    assert recheck_row(run.session) == [
+        runner.NOT_CARRIED.format(
+            items="; ".join([
+                "the Reject of F-007 (another decision matches the same finding)",
+                "the Accept of F-008 (another decision matches the same finding)",
+            ])
+        )
+    ]
+
+
+def _request(request_id: str, question: str, *, answer: str | None = None) -> EvidenceRequest:
+    return EvidenceRequest(
+        id=request_id,
+        what=f"FICT {question}",
+        why="FICT reason",
+        entity_ids=["cmp:0002"],
+        question=question,
+        options=["FICT yes", "FICT no"],
+        source="code",
+        status="answered" if answer is not None else "open",
+        answer=answer,
+        answered_at=FIRST_DECIDED if answer is not None else None,
+    )
+
+
+def test_each_unmatched_or_ambiguous_item_is_named_once_in_one_row(bare: Any) -> None:
+    run, earlier, _ = bare
+    run.session.findings[:] = [coaxial("F-001", "hol:0001"), coaxial("F-002", "hol:0001")]
+    run.session.evidence_requests[:] = [
+        _request("ER-001", "FICT asked twice?"), _request("ER-002", "FICT asked twice?"),
+    ]
+    earlier.findings[:] = [
+        coaxial("F-007", "hol:0009", "rejected"), coaxial("F-008", "hol:0001", "deferred"),
+    ]
+    earlier.evidence_requests[:] = [
+        _request("ER-005", "FICT no longer asked?", answer="FICT yes"),
+        _request("ER-006", "FICT asked twice?", answer="FICT no"),
+    ]
+
+    run.carry_from(earlier)
+
+    assert recheck_row(run.session) == [
+        runner.NOT_CARRIED.format(
+            items="; ".join([
+                "the answer to ER-005 (its question is no longer asked)",
+                "the answer to ER-006 (it matches more than one question)",
+                "the Reject of F-007 (its finding is no longer raised)",
+                "the Defer of F-008 (it matches more than one finding)",
+            ])
+        )
+    ]
+    assert all(q.status == "open" for q in run.session.evidence_requests)
+    assert all(f.disposition is None for f in run.session.findings)
+
+
+def test_the_timing_inputs_and_a_failed_sends_status_are_carried(bare: Any) -> None:
+    run, earlier, _ = bare
+    earlier.timing = earlier.timing.replace(
+        baseline_minutes=45.0,
+        assisted_supervision_minutes=6.0,
+        assisted_verification_minutes=9.0,
+        false_alarm_handling_minutes=2.0,
+    )
+    assert earlier.model_status is not None
+    failure = SendFailure(at=FIRST_DECIDED, error_class="FictFailure", reason="FICT refused")
+    earlier.model_status = earlier.model_status.model_copy(
+        update={"state": "send_failed", "failures": [failure]}
+    )
+    checked = run.session.model_status.checked_at
+
+    run.carry_from(earlier)
+
+    timing = run.session.timing
+    assert (
+        timing.baseline_minutes, timing.assisted_supervision_minutes,
+        timing.assisted_verification_minutes, timing.false_alarm_handling_minutes,
+    ) == (45.0, 6.0, 9.0, 2.0)
+    status = run.session.model_status
+    assert status.state == "send_failed" and status.failures == [failure]
+    assert status.rechecked_from == earlier.session_id
+    assert status.checked_at == checked
+    assert status.document == earlier.model_status.document
+
+
+def test_a_failed_sends_re_run_keeps_its_failure_and_a_later_send_counts_it(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+    silent: ScriptedReviewBridge,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    waiting = waiting_answers.waiting_review(app, client, run_root / "FICT-recheck-failed")
+    refused = RecordingProvider([chat.turn("unused")])
+
+    def refusal(**kwargs: Any) -> Any:
+        raise RuntimeError("FICT first request refused")
+
+    monkeypatch.setattr(refused._inner, "run", refusal)
+    monkeypatch.setattr(app.state.server, "provider_factory", lambda settings: refused)
+    assert client.post(f"/sessions/{waiting.chat_id}/send", json={}).status_code == 202
+    assert chat.settle(client, waiting.chat_id) == "awaiting_send"
+    folder = waiting.fixture.folder
+    assert load_session(folder / "session.json").model_status.state == "send_failed"
+    with restarted_app(run_root, server_settings(provider_control, models, silent)) as fresh:
+        rerun = rerun_of(fresh, folder)
+        assert rerun.session.model_status.state == "send_failed"
+        assert len(rerun.session.model_status.failures) == 1
+        provider = RecordingProvider([chat.turn("FICT sent")])
+        fresh.app.state.server.provider_factory = lambda settings: provider
+        chat_id = next(iter(fresh.app.state.server.chats))
+        assert fresh.post(f"/sessions/{chat_id}/send", json={}).status_code == 202
+        chat.settle(fresh, str(chat_id))
+
+    report = (folder / "report.md").read_text(encoding="utf-8")
+    assert "- Earlier attempts that failed: 1" in report
+    assert f"- Checked again from session: {waiting.run.session.session_id}" in report
+
+
+# --- the Standards profile -------------------------------------------------------------------
+
+
+PROFILE_CASES = ("unchanged", "another-file", "edited", "added", "removed")
+
+
+def earlier_with_profile(
+    app: Any, client: TestClient, folder: Path, *, profile: bool
+) -> waiting_answers.Waiting:
+    fixture = build_questions_package(folder)
+    app.state.server.bridge_factory = lambda pipe, secret: fixture.bridge
+    response = client.post(
+        "/sessions",
+        json=chat.session_body(
+            folder,
+            standards_profile=str(fixture.profile) if profile else None,
+            bridge={"pipe": "FICT-pipe", "secret": "FICT-secret"},
+            send_when_checked=False,
+        ),
+    )
+    assert response.status_code == 201, response.text
+    chat_id = str(response.json()["chat_id"])
+    return waiting_answers.Waiting(fixture, chat_id, app.state.server.chats[UUID(chat_id)])
+
+
+@pytest.mark.parametrize("case", PROFILE_CASES)
+def test_a_changed_profile_grades_with_the_new_one_and_is_named(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+    silent: ScriptedReviewBridge,
+    case: str,
+) -> None:
+    folder = run_root / f"FICT-recheck-profile-{case}"
+    waiting = earlier_with_profile(app, client, folder, profile=case != "added")
+    profile = waiting.fixture.profile
+    now: Path | None = profile
+    if case == "another-file":
+        now = folder / "FICT-profile-b.yaml"
+        shutil.copyfile(profile, now)
+    elif case == "edited":
+        profile.write_text(profile.read_text(encoding="utf-8") + "# FICT edit\n", "utf-8")
+    elif case == "removed":
+        now = None
+    with restarted_app(run_root, server_settings(provider_control, models, silent)) as fresh:
+        rerun = rerun_of(fresh, folder, standards_profile=str(now) if now else None)
+
+    status = rerun.session.model_status
+    if now is None:
+        assert status.profile is None
+        assert "profile" not in status.model_dump(mode="json")
+    else:
+        assert status.profile == {
+            "path": str(now), "sha256": hashlib.sha256(now.read_bytes()).hexdigest(),
+        }
+    rows = recheck_row(rerun.session)
+    if case == "unchanged":
+        assert rows == []
+    else:
+        assert rows == [runner.NOT_CARRIED.format(items=runner.NOT_CARRIED_PROFILE)]
+
+
+# --- what T087's failures leave --------------------------------------------------------------
+
+
+def test_an_open_drawing_question_an_unfinished_read_merged_is_named_once(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+    silent: ScriptedReviewBridge,
+) -> None:
+    waiting = waiting_answers.waiting_review(app, client, run_root / "FICT-recheck-lost")
+    folder = waiting.fixture.folder
+    drawing = waiting_answers.question(waiting, drawing=True)
+    confirmed.merged(folder, PLATE_ID)()
+    with restarted_app(run_root, server_settings(provider_control, models, silent)) as fresh:
+        rerun = rerun_of(fresh, folder)
+
+    assert not [q for q in rerun.session.evidence_requests if CANDIDATE_CONFIRM in q.options]
+    assert rerun.session.drawing_outcomes == []
+    assert recheck_row(rerun.session) == [
+        runner.NOT_CARRIED.format(items=runner.NOT_CARRIED_DRAWING.format(id=drawing.id))
+    ]
+
+
+# --- SC-008 and the size sent ----------------------------------------------------------------
+
+
+@pytest.mark.usefixtures("vocabulary")
+def test_with_nothing_answered_the_first_request_is_the_live_waiting_reviews(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+    silent: ScriptedReviewBridge,
+) -> None:
+    waiting = waiting_answers.waiting_review(app, client, run_root / "FICT-recheck-sc008")
+    live = waiting.run
+    with restarted_app(run_root, server_settings(provider_control, models, silent)) as fresh:
+        rerun = rerun_of(fresh, waiting.fixture.folder)
+
+    assert silent.calls == []
+    assert rerun.system == live.system
+    assert rerun._send_cache.opening == live._send_cache.opening
+    assert request_prefix(rerun.system, rerun.tools, rerun._send_cache.opening) == (
+        request_prefix(live.system, live.tools, live._send_cache.opening)
+    )
+    assert rerun._send_cache.estimate == live._send_cache.estimate
+
+
+@pytest.mark.usefixtures("vocabulary")
+def test_the_size_shown_after_a_re_run_is_the_size_sent(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+    silent: ScriptedReviewBridge,
+) -> None:
+    waiting = worked_review(app, client, run_root / "FICT-recheck-size")
+    folder = waiting.fixture.folder
+    with restarted_app(run_root, server_settings(provider_control, models, silent)) as fresh:
+        rerun = rerun_of(fresh, folder)
+        chat_id = str(next(iter(fresh.app.state.server.chats)))
+        summary = fresh.get(f"/sessions/{chat_id}/snapshot").json()["ranking"]["summary"]
+        shown = summary["send"]["input_tokens"]
+        provider = RecordingProvider([chat.turn("FICT sent")])
+        fresh.app.state.server.provider_factory = lambda settings: provider
+        marker = rerun.sink.seq
+        assert fresh.post(f"/sessions/{chat_id}/send", json={}).status_code == 202
+        chat.settle(fresh, chat_id)
+
+    recorded = provider.log[0]
+    specs = [
+        SimpleNamespace(name=row["name"], description=row["description"], schema=row["parameters"])
+        for row in recorded.tool_specs
+    ]
+    prefix = request_prefix(recorded.system, specs, recorded.first_message["content"])
+    estimate = next(
+        event["body"]["estimate"]["input_tokens"]
+        for event in chat.events_of(folder)
+        if event["type"] == "session.sent" and event["seq"] > marker
+    )
+    assert tokens.count_tokens(prefix) == shown == estimate
+    assert load_session(folder / "session.json").model_status.estimate.input_tokens == shown
