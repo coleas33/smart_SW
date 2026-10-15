@@ -177,6 +177,11 @@ QUOTED: tuple[tuple[str, str], ...] = (
     ("Sending resumes the review once.", "reviewer/src/swreview/report/review_words_v1.yaml"),
     (READ_ONLY_SENTENCE, "reviewer/src/swreview/report/review_words_v1.yaml"),
     # The page's own words.
+    ("Checked by code. Not sent to the model.",
+     "extractor/SwReview.AddIn/Review/ReviewPage/app.js"),
+    ("Send to the model when the checks finish",
+     "extractor/SwReview.AddIn/Review/ReviewPage/index.html"),
+    ("Send to model", "extractor/SwReview.AddIn/Review/ReviewPage/render.js"),
     ("The review has finished.", "extractor/SwReview.AddIn/Review/ReviewPage/app.js"),
     ("Waiting for your answers.", "extractor/SwReview.AddIn/Review/ReviewPage/app.js"),
     ("This review is of ", "extractor/SwReview.AddIn/Review/ReviewPage/app.js"),
@@ -1724,7 +1729,9 @@ def test_the_time_estimate_is_the_sum_of_its_steps(plan: str) -> None:
     live test at step 2.7 is 5 of them, edited deliberately with its follow-ups), step 4's by 50
     and step 5.1 to 5.4's by `FEATURE_013_IN_STEP_5`, which the decision 18A range leaves out.
     The retest of 2026-09-28's U25 to U27 (edited deliberately) adds about 35 more: step 4's row by
-    15 minutes (step 4.9) and step 5.1 to 5.4's by `RETEST_2026_09_28_IN_STEP_5`."""
+    15 minutes (step 4.9) and step 5.1 to 5.4's by `RETEST_2026_09_28_IN_STEP_5`. Feature 015
+    (015 T114, decision 4A, 2026-10-14, edited deliberately) adds 35 minutes to step 4's row
+    for the unticked review, Send, restarts and timings at step 4.10."""
     section = plan[plan.index("## How long it takes") : plan.index("## 0. Before the sitting")]
     rows = re.findall(r"^\| ([^|]+) \| [^|]+ \| ([^|]+) \|$", section, re.MULTILINE)[1:]
     [(hours, mins)] = re.findall(r"About \*\*(\d+) hours(?: (\d+) minutes)? at the seat", section)
@@ -1737,7 +1744,7 @@ def test_the_time_estimate_is_the_sum_of_its_steps(plan: str) -> None:
         estimates["5.1 to 5.4"] - 35 - FEATURE_013_IN_STEP_5 - RETEST_2026_09_28_IN_STEP_5
     )
     assert 30 <= estimates["5.6"] + (estimates["1"] - 50) + decision_18a_in_step_5 <= 45
-    assert (estimates["2"], estimates["4"]) == (40, 255)
+    assert (estimates["2"], estimates["4"]) == (40, 290)
 
 
 def powershell_parse_errors(sources: dict[str, str], folder: Path) -> str:
