@@ -55,3 +55,5 @@
       refused toward the Engineering context panel (owner decision 108A; 30A). The refusal's
       message and the `EngineeringContextConflict` label name an action that exists (the
       verifier's note).
+- [x] T027 Final gate for 105A-109A on Python 3.11 and 3.12, Release build, .NET and the
+      replay check ([receipt](validation.md#owner-decisions-105a-109a-on-the-adversarial-check--2026-10-15)).
