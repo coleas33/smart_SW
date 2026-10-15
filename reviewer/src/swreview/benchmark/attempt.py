@@ -10,6 +10,7 @@ from dataclasses import dataclass, replace
 from typing import Literal
 
 from swreview.agent.providers import AgentEvent, ProviderError, ProviderName, usage_from_body
+from swreview.benchmark.scrub import one_line
 from swreview.benchmark.served import aliases
 
 STREAM_ACTIVITY_WINDOW_S = 600
@@ -32,10 +33,6 @@ class AttemptOutcome:
     error_class: str | None = None
     message: str | None = None
     stream_active_at_limit: bool | None = None
-
-
-def _one_line(value: object) -> str:
-    return " ".join(str(value).splitlines())
 
 
 class AttemptListener:
@@ -71,9 +68,12 @@ class AttemptListener:
         with self._lock:
             return tuple(self._conditions)
 
-    def _record(self, condition: AttemptOutcome) -> None:
+    def _record(self, condition: AttemptOutcome, *, index: int | None = None) -> None:
         with self._lock:
-            self._conditions.append(condition)
+            if index is None:
+                self._conditions.append(condition)
+            else:
+                self._conditions.insert(index, condition)
 
     def __call__(self, event: AgentEvent) -> None:
         try:
@@ -87,6 +87,8 @@ class AttemptListener:
                 elif event.type == "turn.ended":
                     reason = body["reason"]
                     self.turn_end_reasons.append(reason)
+                    if reason == "stopped":
+                        self._tools_in_progress.clear()
                     if reason in {"max_steps", "truncated"}:
                         self._record(AttemptOutcome("behavioural", reason))
                 elif event.type == "error" and body.get("stop_reason") is not None:
@@ -97,7 +99,10 @@ class AttemptListener:
                         self._record(AttemptOutcome(
                             "behavioural", "provider_stop", stop_reason=body["stop_reason"],
                             error_class=body.get("error_class"),
-                            message=_one_line(body["message"]) if "message" in body else None,
+                            message=(
+                                one_line(body["message"], preserve_spacing=True)
+                                if "message" in body else None
+                            ),
                         ))
                 elif event.type == "usage":
                     usage_from_body(body)
@@ -118,7 +123,10 @@ class AttemptListener:
         except Exception as error:
             self._record(AttemptOutcome(
                 "infrastructure", "internal_error", error_class=type(error).__name__,
-                message=f"attempt listener {type(error).__name__}: {_one_line(error)}",
+                message=(
+                    f"attempt listener {type(error).__name__}: "
+                    f"{one_line(error, preserve_spacing=True)}"
+                ),
             ))
             self.stop.set()
 
@@ -131,7 +139,7 @@ class AttemptListener:
 
 def _exception_condition(error: BaseException, listener: AttemptListener) -> AttemptOutcome:
     error_class = getattr(error, "error_class", type(error).__name__)
-    message = _one_line(error)
+    message = one_line(error, preserve_spacing=True)
     if isinstance(error, ProviderError):
         reason = error.stop_reason
         if reason is None and listener.round_answered:
@@ -193,16 +201,19 @@ def run_attempt(
     deadline = clock() + limit_s
     grace_deadline: float | None = None
     active_at_limit: bool | None = None
+    limit_condition: AttemptOutcome | None = None
+    limit_condition_index = 0
 
     def reach_limit(now: float) -> None:
-        nonlocal active_at_limit, grace_deadline
+        nonlocal active_at_limit, grace_deadline, limit_condition, limit_condition_index
         if grace_deadline is None and now >= deadline:
             active_at_limit = listener.stream_active(now, activity_window_s)
-            listener._record(AttemptOutcome(
+            limit_condition = AttemptOutcome(
                 "behavioural" if active_at_limit else "infrastructure",
                 "wall_clock" if active_at_limit else "wall_clock_silent",
                 message="package wall clock limit reached",
-            ))
+            )
+            limit_condition_index = len(listener.conditions)
             stop.set()
             grace_deadline = deadline + grace_s
 
@@ -214,9 +225,15 @@ def run_attempt(
         )
 
     def finish(error: BaseException | None, completed_at: float) -> AttemptOutcome:
+        # A worker can finish before the deadline and still be waiting to queue
+        # its result when the driver observes the limit.
+        if completed_at < deadline:
+            return _classify(listener, error, None)
         reach_limit(completed_at)
         if grace_deadline is not None and completed_at > grace_deadline:
             return abandoned()
+        if limit_condition is not None:
+            listener._record(limit_condition, index=limit_condition_index)
         return _classify(listener, error, active_at_limit)
 
     worker = threading.Thread(target=work, daemon=True)

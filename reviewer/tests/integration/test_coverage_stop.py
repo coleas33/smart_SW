@@ -45,7 +45,9 @@ from swreview.agent import runner
 from swreview.agent.checklist import load_checklist
 from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
 from swreview.agent.providers.openai_provider import OpenAIProvider
-from swreview.agent.settings import EfficiencySettings, efficiency_from_levers
+from swreview.agent.settings import EfficiencySettings, ProviderSettings, efficiency_from_levers
+from swreview.chat import server as chat_server
+from swreview.chat.sessions import ChatSession
 from swreview.tools.registry import ToolDispatch
 from tests.support.toolsets import toolset
 from tests.unit.test_gemini_provider import FakeTool, call_part, chunk, text_part
@@ -232,15 +234,41 @@ def test_the_stop_withdraws_the_tools_for_the_next_round(
 @pytest.mark.parametrize("surface", ["attempt", "pane"])
 @respx.mock
 def test_the_stop_wrapper_keeps_the_withdrawal(
-    tmp_package_dir: Path, tmp_path: Path, surface: str
+    tmp_package_dir: Path, tmp_path: Path, surface: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """RF-63: both surfaces preserve withdrawal; Gemini is deferred under 94A."""
     service = Service(script_with_one_call_to_spare())
     stop = threading.Event()
     run = start(tmp_package_dir, tmp_path / surface, service, efficiency=ON)
-    run.tools = runner.StoppableTools(run.tools, stop)
+    bind_stop = runner.ReviewRun.bind_stop
+    bound: list[threading.Event] = []
+
+    def record_binding(review: runner.ReviewRun, requested: threading.Event) -> None:
+        bound.append(requested)
+        bind_stop(review, requested)
+
+    monkeypatch.setattr(runner.ReviewRun, "bind_stop", record_binding)
+    if surface == "pane":
+        server = chat_server.ChatServer(
+            token="fictional-launch-token",
+            allow_origin="https://swreview.invalid",
+            run_root=tmp_path,
+            provider_factory=lambda _: run.provider,
+            list_models=lambda _: [],
+            secrets=(),
+        )
+        chat = ChatSession(run_dir=tmp_package_dir, stop_requested=stop)
+        monkeypatch.setattr(chat_server, "start_review", lambda *args, **kwargs: run)
+        assert server._start_review(chat, ProviderSettings(provider="openai", model=MODEL)) is run
+    else:
+        run.bind_stop(stop)
     try:
         run.start()
+        assert bound == [stop]
+        stop.set()
+        with pytest.raises(runner.TurnStopped):
+            run.check_presentation_cancelled()
+        stop.clear()
     finally:
         run.close()
 

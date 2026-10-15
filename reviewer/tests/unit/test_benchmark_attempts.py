@@ -433,6 +433,16 @@ def test_a_malformed_usage_body_records_an_internal_error_without_escaping_the_l
     assert "KeyError" in outcome.message and "input_tokens" in outcome.message
 
 
+def test_stopping_a_turn_clears_its_unfinished_tools() -> None:
+    _stop, listener, sink = _attempt_listener_control()
+    sink.emit("tool.started", {"step_index": 0})
+    assert listener.stream_active(1000, 10) is True
+
+    sink.emit("turn.ended", {"reason": "stopped"})
+
+    assert listener.stream_active(1000, 10) is False
+
+
 @pytest.mark.parametrize("grace_s", [0.0, 1.0])
 def test_a_returned_worker_is_collected_before_a_late_deadline_check(
     monkeypatch: pytest.MonkeyPatch, grace_s: float,
@@ -465,6 +475,56 @@ def test_a_returned_worker_is_collected_before_a_late_deadline_check(
     assert (outcome.kind, outcome.class_) == ("completed", None)
     assert outcome.stream_active_at_limit is None
     assert not stop.is_set()
+
+
+@pytest.mark.parametrize("active", [False, True])
+def test_a_worker_finished_before_the_limit_is_completed_when_its_result_is_not_yet_queued(
+    monkeypatch: pytest.MonkeyPatch, active: bool,
+) -> None:
+    from swreview.benchmark import attempt
+
+    ready_to_queue, release_queue = threading.Event(), threading.Event()
+    real_put, real_get = attempt.queue.Queue.put, attempt.queue.Queue.get
+    clock_calls = 0
+    observed_conditions: list[Any] = []
+    stop, listener, sink = _attempt_listener_control()
+    if active:
+        sink.emit("text.delta", {"text": "FICT activity before completion."})
+
+    def clock() -> float:
+        nonlocal clock_calls
+        if threading.current_thread() is not threading.main_thread():
+            return 0.5
+        clock_calls += 1
+        if clock_calls == 1:
+            return 0.0
+        assert ready_to_queue.wait(1)
+        return 1.0
+
+    def put(self: Any, item: Any, *args: Any, **kwargs: Any) -> None:
+        ready_to_queue.set()
+        assert release_queue.wait(1)
+        real_put(self, item, *args, **kwargs)
+
+    def get(self: Any, block: bool = True, timeout: float | None = None) -> Any:
+        observed_conditions.extend(listener.conditions)
+        assert stop.is_set()
+        release_queue.set()
+        return real_get(self, block=block, timeout=timeout)
+
+    monkeypatch.setattr(attempt.queue.Queue, "put", put)
+    monkeypatch.setattr(attempt.queue.Queue, "get", get)
+    try:
+        outcome = attempt.run_attempt(
+            lambda: None, stop=stop, listener=listener, limit_s=1, grace_s=1, clock=clock,
+        )
+    finally:
+        release_queue.set()
+
+    assert (outcome.kind, outcome.class_) == ("completed", None)
+    assert outcome.stream_active_at_limit is None
+    assert listener.conditions == ()
+    assert observed_conditions == []
 
 
 @pytest.mark.parametrize(
@@ -865,6 +925,17 @@ def test_a_gemini_request_error_before_any_answered_round_stays_a_provider_error
 def test_classification_reads_the_adapters_error_body_not_the_runners(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float]
 ) -> None:
+    real_response = FakeProvider._response
+    response_calls = 0
+
+    def retried_response(self: FakeProvider, scripted: Any, on_event: EventCallback) -> Any:
+        nonlocal response_calls
+        response_calls += 1
+        if response_calls <= 2:
+            raise TransientError("fict request temporarily busy")
+        return real_response(self, scripted, on_event)
+
+    monkeypatch.setattr(FakeProvider, "_response", retried_response)
     preflighted = prepare_driver_set(tmp_path)
     install_driver_providers(
         monkeypatch, [[ScriptedTurn(text="", fails=provider_stop("content_filter"))]]
@@ -873,10 +944,10 @@ def test_classification_reads_the_adapters_error_body_not_the_runners(
     driver_run(preflighted, out)
     errors = [event.body for event in driver_events(out / "fict-a") if event.type == "error"]
     assert len(errors) == 2
-    assert errors[0]["stop_reason"] == "content_filter" and errors[0]["retries"] == 0
+    assert errors[0]["stop_reason"] == "content_filter" and errors[0]["retries"] == 2
     assert "stop_reason" not in errors[1] and "retries" not in errors[1]
     assert driver_row(out)["class"] == "provider_stop"
-    assert runner.attempt_facts(out / "fict-a").retries == 0
+    assert runner.attempt_facts(out / "fict-a").retries == len(driver_sleeps) == 2
 
 
 def test_a_step_limit_is_a_behavioural_stop_and_its_session_is_finalized(

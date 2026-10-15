@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 from collections import Counter
 from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
@@ -1300,6 +1301,16 @@ class ReviewRun:
     @property
     def events_path(self) -> Path:
         return self.out_dir / EVENTS_FILE_NAME
+
+    def bind_stop(self, stop: threading.Event) -> None:
+        """Apply one stop signal to tool dispatch and the presentation pass."""
+        self.tools = StoppableTools(self.tools, stop)
+
+        def check_stopped() -> None:
+            if stop.is_set():
+                raise TurnStopped()
+
+        self.check_presentation_cancelled = check_stopped
 
     # --- turns --------------------------------------------------------------------
 

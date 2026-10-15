@@ -50,7 +50,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Annotated, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Protocol
 
 from pydantic import ConfigDict, Field
 
@@ -80,6 +80,17 @@ if TYPE_CHECKING:
     from swreview.checks.standards.profile import StandardsProfile
 
 ReviewFn = Callable[..., Any]
+
+
+class PackageDoneCallback(Protocol):
+    """The facts printed after one attempt, including a kept folder's failed rename."""
+
+    def __call__(
+        self, *, package_id: str, kind: AttemptKind, class_: AttemptClass | None,
+        stop_reason: str | None, error_class: str | None, retries: int,
+        promotion_error: str | None,
+    ) -> None: ...
+
 
 PROVENANCE_FILE = "run-provenance.json"
 """Where the provenance record sits: beside the `benchmark-set.json` the run already
@@ -372,6 +383,7 @@ class AttemptRequest:
     stop: threading.Event
     listener: AttemptListener
     run_dir: Path
+    root: Path = REPO_ROOT
 
 
 RUN_STATUS_FILE = "run-status.json"
@@ -416,12 +428,6 @@ def _write_run_status(run_dir: Path, status: RunStatus) -> None:
         run_dir / RUN_STATUS_FILE,
         (status.model_dump_json(indent=2, by_alias=True) + "\n").encode("utf-8"),
     )
-
-
-def scrub_message(text: str, *, run_dir: Path, root: Path = REPO_ROOT) -> str:
-    """Scrub a message of local paths; an account with no home folder is handled by the scrub
-    itself (owner decisions 92A, 104A)."""
-    return scrub.without_local_paths(text, run_dir=run_dir, root=root)
 
 
 @dataclass(frozen=True)
@@ -597,7 +603,7 @@ def run_benchmark(
     stream_activity_window_s: float = attempt_driver.STREAM_ACTIVITY_WINDOW_S,
     stop_grace_s: float = attempt_driver.STOP_GRACE_S,
     redact: Callable[[str], str] = events.no_redaction,
-    on_package_done: Callable[..., None] | None = None,
+    on_package_done: PackageDoneCallback | None = None,
     clock: Callable[[], float] = time.monotonic,
 ) -> list[Path]:
     """Review every package of the preflighted set into `out_dir`.
@@ -635,6 +641,11 @@ def run_benchmark(
     active_review_fn = review_fn if review_fn is not None else _default_review_fn
     out_dir = Path(out_dir)
 
+    def sanitize_message(text: str) -> str:
+        return scrub.one_line(scrub.without_local_paths(
+            redact(text), run_dir=out_dir, root=preflighted.root,
+        ))
+
     provenance = load_provenance(out_dir)
     profile_digest = (
         provenance.profile_digest if provenance is not None else None
@@ -666,6 +677,7 @@ def run_benchmark(
             stop=stop,
             listener=listener,
             run_dir=out_dir,
+            root=preflighted.root,
         )
         row = AttemptStatus(
             attempt=1, started_at=datetime.now(UTC),
@@ -708,12 +720,10 @@ def run_benchmark(
         row.class_ = outcome.class_
         row.stop_reason = outcome.stop_reason
         row.error_class = outcome.error_class
-        row.message = (
-            scrub_message(redact(outcome.message), run_dir=out_dir, root=preflighted.root)
-            if outcome.message is not None else None
-        )
+        row.message = sanitize_message(outcome.message) if outcome.message is not None else None
         row.stream_active_at_limit = outcome.stream_active_at_limit
         facts_folder = package_out_dir
+        promotion_error: str | None = None
         if outcome.kind in ("completed", "behavioural"):
             _record_unattended_runtime(package_out_dir, (clock() - started) / 60.0)
             package_status.kept_attempt = row.attempt
@@ -724,9 +734,10 @@ def run_benchmark(
                 package_out_dir.rename(promoted)
             except OSError as error:
                 row.folder = package_out_dir.relative_to(out_dir).as_posix()
-                row.message = scrub_message(
-                    redact(" ".join(str(error).split())), run_dir=out_dir,
-                    root=preflighted.root,
+                promotion_error = sanitize_message(str(error))
+                row.message = "; ".join(
+                    message for message in (row.message, f"promotion failed: {promotion_error}")
+                    if message is not None
                 )
                 _write_run_status(out_dir, status)
             else:
@@ -739,6 +750,7 @@ def run_benchmark(
                 package_id=ref.package_id, kind=row.kind, class_=row.class_,
                 stop_reason=row.stop_reason, error_class=row.error_class,
                 retries=attempt_facts(facts_folder).retries,
+                promotion_error=promotion_error,
             )
 
     return package_dirs

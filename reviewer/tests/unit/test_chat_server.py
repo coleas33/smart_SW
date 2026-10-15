@@ -44,6 +44,7 @@ from uuid import UUID, uuid4
 
 import anyio
 import pytest
+from starlette.requests import Request
 from starlette.testclient import TestClient
 
 from swreview.agent.providers import AgentEvent, AgentProvider, ProviderName
@@ -57,7 +58,7 @@ from swreview.agent.settings import (
     pane_efficiency,
 )
 from swreview.chat.server import SESSION_FILES, _sse, build_provider, create_app
-from swreview.chat.sessions import ChatState
+from swreview.chat.sessions import ChatSession, ChatState
 from swreview.ir.loader import save_package
 from swreview.prerun import DIGEST_HEADER, RMS_PRERUN_TOOLS
 from swreview.report.attention import rank
@@ -1961,6 +1962,45 @@ def test_the_report_is_served_as_markdown(
 
 
 # --- stopping ------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("state", [ChatState.RUNNING, ChatState.WAITING_ENGINEER])
+def test_the_panes_stop_uses_the_review_runs_stopped_end(
+    app: Any,
+    run_dir: Path,
+    provider_control: ProviderControl,
+    monkeypatch: pytest.MonkeyPatch,
+    state: ChatState,
+) -> None:
+    """Both an interrupted turn and an idle Stop use the shared stopped finalizer."""
+    provider_control.script = [turn("never finished", call("get_package_summary"))]
+    server = app.state.server
+    chat = ChatSession(run_dir=run_dir, state=state)
+    run = server._start_review(chat, ProviderSettings(provider="fake", model=MODEL))
+    chat.run = run
+    server.chats[chat.chat_id] = chat
+    stopped: list[Any] = []
+    end_stopped = run.end_stopped
+
+    def record_stopped() -> Any:
+        stopped.append(run)
+        return end_stopped()
+
+    monkeypatch.setattr(run, "end_stopped", record_stopped)
+    request = Request({"type": "http", "path_params": {"chat_id": str(chat.chat_id)}})
+    try:
+        response = anyio.run(server.stop, request)
+        if state is ChatState.RUNNING:
+            server._play(chat, run.start)
+
+        assert response.status_code == 202
+        assert stopped == [run]
+        assert chat.state is ChatState.ENDED
+        assert run.session.ended_at is not None
+        ended = [event for event in events_of(run_dir) if event["type"] == "turn.ended"]
+        assert ended[-1]["body"]["reason"] == "stopped"
+    finally:
+        run.close()
 
 
 def test_stop_ends_the_turn_at_the_next_tool_boundary_and_the_session_with_it(
