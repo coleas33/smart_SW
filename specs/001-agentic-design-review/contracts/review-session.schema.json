@@ -436,7 +436,8 @@
         "source": { "enum": ["code", "model"], "description": "Who wrote this finding (feature 013, contracts/sources.md section 1): code for every check, model for record_drawing_finding. Added to properties and left out of required, and omitted when code, the finding's usual author, so a session written before the field still validates and keeps its bytes" }
       },
       "allOf": [
-        { "anyOf": [{ "properties": { "component_ids": { "minItems": 1 } } }, { "properties": { "drawing_locations": { "minItems": 1 } } }] },
+        { "$comment": "Amended 2026-10-15 (owner decision 109A): a finding about a whole document - the hygiene checks' findings on the root document carry no component and no drawing location - names its document scope in a non-empty inputs, beside its provenance, which is always non-empty.",
+          "anyOf": [{ "properties": { "component_ids": { "minItems": 1 } } }, { "properties": { "drawing_locations": { "minItems": 1 } } }, { "properties": { "inputs": { "minItems": 1 } } }] },
         { "if": { "properties": { "status": { "enum": ["demonstrated", "checked_within_scope"] } } },
           "then": { "anyOf": [{ "properties": { "calculation": { "type": "object" } } }, { "properties": { "tool_result_ids": { "minItems": 1 } } }] } },
         { "if": { "properties": { "status": { "const": "unresolved" } } },
