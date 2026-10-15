@@ -15,9 +15,8 @@ Over the same package, with the same `--model` and `--effort`, the two calls dif
 5.1's transport rows; every other `start_review` argument is classified as compared, so one added
 later fails the test until it is classified. The two sessions' levers, model view, explanations
 and provider facts less the key's source are equal. The benchmark reviews through `_review_fn`,
-which starts the review with `start_review` and plays it through `drive_review` (T101), wrapping
-nothing yet; the one stoppable tool set both wrap their tools in joins this file with lane B6
-(T189).
+which starts the review with `start_review` and plays it through `drive_review` (T101). The pane
+and benchmark share the stoppable tool wrapper and the replay's stopped close-out (T189).
 """
 
 from __future__ import annotations
@@ -33,9 +32,13 @@ from typer.testing import CliRunner
 
 import swreview.chat.server as chat_server
 from swreview import cli
+from swreview.agent import runner as agent_runner
+from swreview.agent.events import event_stream, replay_events
 from swreview.agent.providers import ProviderName
-from swreview.agent.runner import start_review
+from swreview.agent.providers.fake import ScriptedToolCall
+from swreview.agent.runner import ReviewRun, start_review
 from swreview.agent.settings import pane_defaults
+from swreview.benchmark.replay import TurnPlan, play_review
 from swreview.ir.loader import save_package
 from swreview.report.session import ReviewSession, load_session
 from tests.support.packages import build_package
@@ -193,3 +196,113 @@ def test_a_pane_defaults_attempt_starts_reviews_as_the_pane_does(
     assert settings_of(benchmark_session) == settings_of(pane_session)
     assert benchmark_session.efficiency == pane_defaults(ProviderName.FAKE).efficiency
     assert benchmark_session.explanations_enabled is True
+
+
+def test_benchmark_and_pane_attempts_wrap_tools_in_the_one_stoppable_tools(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """T189, RF-3 and RF-33: both surfaces wrap, and replay uses the shared close-out."""
+    pane_runs: list[ReviewRun] = []
+    benchmark_runs: list[ReviewRun] = []
+
+    def capture(runs: list[ReviewRun]) -> Any:
+        def capturing_start_review(*args: Any, **kwargs: Any) -> ReviewRun:
+            run = start_review(*args, **kwargs)
+            runs.append(run)
+            return run
+
+        return capturing_start_review
+
+    monkeypatch.setattr(chat_server, "start_review", capture(pane_runs))
+    monkeypatch.setattr(cli, "start_review", capture(benchmark_runs))
+    run_root = tmp_path / "pane-runs"
+    pane_folder = run_root / "20261015-120000-cover"
+    save_package(build_package(), pane_folder)
+    app = chat_server.create_app(
+        token=TOKEN,
+        allow_origin=ORIGIN,
+        run_root=run_root,
+        provider_factory=ProviderControl().factory,
+        list_models=lambda _: [],
+    )
+    headers = {"Authorization": f"Bearer {TOKEN}", "Origin": ORIGIN}
+    with TestClient(app, headers=headers) as client:
+        chat = start_session(client, pane_folder)
+        settle(client, chat["chat_id"])
+    [pane_run] = pane_runs
+    assert isinstance(pane_run.tools, agent_runner.StoppableTools)
+
+    stopped: list[ReviewRun] = []
+    close_out: list[tuple[ReviewRun, str]] = []
+    end_stopped = ReviewRun.end_stopped
+    cancel_presentation = ReviewRun.cancel_presentation
+    finalize = ReviewRun.finalize
+
+    def ending(run: ReviewRun) -> Any:
+        stopped.append(run)
+        return end_stopped(run)
+
+    def cancelling(run: ReviewRun) -> None:
+        close_out.append((run, "cancel_presentation"))
+        cancel_presentation(run)
+
+    def finalizing(run: ReviewRun) -> Any:
+        close_out.append((run, "finalize"))
+        return finalize(run)
+
+    monkeypatch.setattr(ReviewRun, "end_stopped", ending)
+    monkeypatch.setattr(ReviewRun, "cancel_presentation", cancelling)
+    monkeypatch.setattr(ReviewRun, "finalize", finalizing)
+    package_dir = tmp_path / "package"
+    save_package(build_package(), package_dir)
+    replay_folder = tmp_path / "replay"
+    play_review(
+        package_dir,
+        replay_folder,
+        [
+            TurnPlan(
+                rounds=((ScriptedToolCall("get_package_summary"),),),
+                end_reason="stopped",
+                stop_at_last_call=True,
+            )
+        ],
+    )
+    [replayed_run] = stopped
+    assert [action for run, action in close_out if run is replayed_run] == [
+        "cancel_presentation",
+        "finalize",
+    ]
+    assert [
+        event.body
+        for event in replay_events(event_stream(replay_folder))
+        if event.type == "turn.ended"
+    ] == [{"reason": "stopped"}]
+
+    set_path = tmp_path / "set.json"
+    set_path.write_text(
+        json.dumps(
+            {
+                "name": "stop-parity",
+                "packages": [{"package_id": "cover", "path": str(package_dir)}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    result = CliRunner().invoke(
+        cli.app,
+        [
+            "benchmark",
+            "run",
+            "--set",
+            str(set_path),
+            "--out",
+            str(tmp_path / "benchmark"),
+            "--provider",
+            "fake",
+            "--model",
+            MODEL,
+        ],
+    )
+    assert result.exit_code == 0, result.stdout + result.stderr
+    [benchmark_run] = benchmark_runs
+    assert isinstance(benchmark_run.tools, agent_runner.StoppableTools)

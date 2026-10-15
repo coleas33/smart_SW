@@ -143,7 +143,9 @@ def drive(
         **options,
     )
     try:
-        log = drive_review(run, case, max_answer_turns=max_answer_turns)
+        log = drive_review(
+            run, case, max_answer_turns=max_answer_turns, stop_requested=lambda: False
+        )
     finally:
         run.close()
     return Driven(run=run, provider=provider, log=log, events=events)

@@ -29,7 +29,8 @@ No network: the only commands run here either refuse before any adapter is built
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+import threading
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -57,6 +58,7 @@ from swreview.agent.settings import (
     pane_efficiency,
 )
 from swreview.benchmark import answers
+from swreview.benchmark.attempt import AttemptListener
 from swreview.benchmark.runner import AttemptRequest, preflight_set, run_benchmark
 from swreview.report.session import ReviewSession, load_session
 
@@ -678,12 +680,17 @@ def test_cli_review_fn_passes_the_settings_through(
         seen.append(options["efficiency"])
         return start_review(package_dir, out_dir, **options)
 
-    def fake_drive_review(run: ReviewRun, case_file: Any, *, max_answer_turns: int) -> None:
+    def fake_drive_review(
+        run: ReviewRun, case_file: Any, *, max_answer_turns: int,
+        stop_requested: Callable[[], bool],
+    ) -> None:
+        assert not stop_requested()
         return None
 
     monkeypatch.setattr(cli, "start_review", fake_start_review)
     monkeypatch.setattr(answers, "drive_review", fake_drive_review)
 
+    stop = threading.Event()
     cli._review_fn(
         tmp_package_dir,
         tmp_path / "out",
@@ -692,7 +699,10 @@ def test_cli_review_fn_passes_the_settings_through(
         effort="high",
         efficiency=efficiency,
         attempt=AttemptRequest(
-            model_view=MODEL_VIEW_OFF, standards_profile=None, case_file=None, max_answer_turns=0
+            model_view=MODEL_VIEW_OFF, standards_profile=None, case_file=None, max_answer_turns=0,
+            stop=stop,
+            listener=AttemptListener(stop, provider="fake", requested_model="fake-scripted"),
+            run_dir=tmp_path / "out",
         ),
     )
 

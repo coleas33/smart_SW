@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import dataclasses
 import gzip
+import json
+import threading
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Any
@@ -11,12 +13,14 @@ from typing import Any
 import pytest
 
 from swreview.agent import events
+from swreview.agent import runner as agent_runner
 from swreview.agent.providers import (
     AgentEvent,
     EventCallback,
     ProviderError,
     TokenUsage,
     retry,
+    tools_withdrawn,
     usage_body,
 )
 from swreview.agent.providers.fake import (
@@ -246,3 +250,1387 @@ def test_an_attempt_with_no_stream_has_empty_unpaid_facts(tmp_path: Path) -> Non
     assert facts.retries == 0
     assert facts.stop_reasons == []
     assert facts.paid is False
+
+
+def test_the_stop_wrapper_forwards_tools_withdrawn() -> None:
+    """RF-18: wrapping a set preserves its withdrawal, including its absence."""
+
+    class Withdrawable:
+        def __init__(self, withdrawn: bool) -> None:
+            self.withdrawn = withdrawn
+
+        def tools_withdrawn(self) -> bool:
+            return self.withdrawn
+
+    stop = threading.Event()
+    for withdrawn in (False, True):
+        assert (
+            tools_withdrawn(agent_runner.StoppableTools(Withdrawable(withdrawn), stop)) is withdrawn
+        )
+    assert tools_withdrawn(agent_runner.StoppableTools(object(), stop)) is False
+
+
+def _attempt_listener_control() -> tuple[threading.Event, Any, events.EventSink]:
+    from swreview.benchmark import attempt
+
+    stop = threading.Event()
+    listener = attempt.AttemptListener(
+        stop,
+        provider="openai",
+        requested_model=MODEL,
+        clock=lambda: 0.0,
+    )
+    return stop, listener, events.EventSink(listeners=[listener])
+
+
+def test_infrastructure_wins_over_a_later_behavioural_stop() -> None:
+    from swreview.benchmark import attempt
+
+    stop, listener, sink = _attempt_listener_control()
+    sink.emit("turn.ended", {"reason": "max_steps"})
+    wrong = "fict-other-model-2026-10-01"
+    sink.emit(
+        "usage",
+        usage_body(
+            FIRST,
+            round_index=0,
+            provider="openai",
+            model=MODEL,
+            served_model=wrong,
+        ),
+    )
+    outcome = attempt.run_attempt(lambda: None, stop=stop, listener=listener, limit_s=10)
+    assert (outcome.kind, outcome.class_) == ("infrastructure", "wrong_model")
+    assert MODEL in outcome.message and wrong in outcome.message
+    assert stop.is_set()
+
+    stop, listener, sink = _attempt_listener_control()
+    sink.emit("turn.ended", {"reason": "max_steps"})
+    failure = ProviderError("fict service connection failed")
+
+    def failed_body() -> None:
+        raise failure
+
+    outcome = attempt.run_attempt(failed_body, stop=stop, listener=listener, limit_s=10)
+    assert (outcome.kind, outcome.class_) == ("infrastructure", "provider_error")
+    assert outcome.error_class == "ProviderError"
+    assert outcome.message == str(failure)
+
+
+def test_the_first_behavioural_stop_wins() -> None:
+    from swreview.benchmark import attempt
+
+    stop, listener, sink = _attempt_listener_control()
+    sink.emit("turn.ended", {"reason": "max_steps"})
+    outcome = attempt.run_attempt(
+        lambda: stop.wait(1),
+        stop=stop,
+        listener=listener,
+        limit_s=0,
+        grace_s=1,
+        clock=lambda: 0.0,
+    )
+    assert stop.is_set()
+    assert (outcome.kind, outcome.class_) == ("behavioural", "max_steps")
+    assert outcome.stream_active_at_limit is True
+
+
+def test_the_inferred_overflow_is_recognised_by_type() -> None:
+    """94A defers Gemini adapter variants; T193 explicitly retains this type inference."""
+    from swreview.agent.providers.gemini_provider import GeminiRequestError
+    from swreview.agent.providers.openai_provider import OpenAIProviderError
+    from swreview.benchmark import attempt
+
+    message = "gemini 400 FICT request refused"
+    cases = (
+        (
+            OpenAIProviderError(message, error_class="GeminiRequestError", retryable=False),
+            True,
+            "infrastructure",
+            "provider_error",
+            None,
+        ),
+        (
+            GeminiRequestError(message),
+            True,
+            "behavioural",
+            "provider_stop",
+            "input_token_limit_inferred",
+        ),
+        (GeminiRequestError(message), False, "infrastructure", "provider_error", None),
+    )
+    for failure, answered, kind, class_, reason in cases:
+        stop, listener, sink = _attempt_listener_control()
+        if answered:
+            sink.emit("usage", usage_body(FIRST, round_index=0, provider="openai", model=MODEL))
+
+        def failed_body(failure: ProviderError = failure) -> None:
+            raise failure
+
+        outcome = attempt.run_attempt(failed_body, stop=stop, listener=listener, limit_s=10)
+        assert (outcome.kind, outcome.class_, outcome.stop_reason) == (kind, class_, reason)
+        assert outcome.message == message
+
+
+def test_the_driver_waits_in_short_slices_so_an_interrupt_is_seen(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from swreview.benchmark import attempt
+
+    now = [0.0]
+    stop = threading.Event()
+    release, entered, returned = threading.Event(), threading.Event(), threading.Event()
+    listener = attempt.AttemptListener(
+        stop,
+        provider="openai",
+        requested_model=MODEL,
+        clock=lambda: now[0],
+    )
+    timeouts: list[float] = []
+
+    def body() -> None:
+        entered.set()
+        release.wait(1)
+        returned.set()
+
+    def wait(_queue: Any, block: bool = True, timeout: float | None = None) -> Any:
+        assert entered.wait(1)
+        assert timeout is not None
+        timeouts.append(timeout)
+        now[0] += timeout
+        if len(timeouts) == 3:
+            raise KeyboardInterrupt
+        raise attempt.queue.Empty
+
+    monkeypatch.setattr(attempt.queue.Queue, "get", wait)
+    try:
+        with pytest.raises(KeyboardInterrupt):
+            attempt.run_attempt(
+                body,
+                stop=stop,
+                listener=listener,
+                limit_s=10,
+                clock=lambda: now[0],
+            )
+    finally:
+        release.set()
+
+    assert returned.wait(1)
+    assert timeouts == [attempt.WAIT_SLICE_S] * 3
+    assert all(timeout <= attempt.WAIT_SLICE_S for timeout in timeouts)
+    assert stop.is_set()
+
+
+def test_a_malformed_usage_body_records_an_internal_error_without_escaping_the_listener() -> None:
+    from swreview.benchmark import attempt
+
+    stop, listener, sink = _attempt_listener_control()
+    sink.emit("usage", {})
+    assert stop.is_set()
+    outcome = attempt.run_attempt(lambda: None, stop=stop, listener=listener, limit_s=10)
+    assert (outcome.kind, outcome.class_) == ("infrastructure", "internal_error")
+    assert outcome.error_class == "KeyError"
+    assert "KeyError" in outcome.message and "input_tokens" in outcome.message
+
+
+@pytest.mark.parametrize("grace_s", [0.0, 1.0])
+def test_a_returned_worker_is_collected_before_a_late_deadline_check(
+    monkeypatch: pytest.MonkeyPatch, grace_s: float,
+) -> None:
+    from swreview.benchmark import attempt
+
+    queued = threading.Event()
+    real_put = attempt.queue.Queue.put
+    clock_calls = 0
+
+    def put(self: Any, item: Any, *args: Any, **kwargs: Any) -> None:
+        real_put(self, item, *args, **kwargs)
+        queued.set()
+
+    def clock() -> float:
+        nonlocal clock_calls
+        if threading.current_thread() is not threading.main_thread():
+            return 0.0
+        clock_calls += 1
+        if clock_calls == 1:
+            return 0.0
+        assert queued.wait(1)
+        return 2.0
+
+    monkeypatch.setattr(attempt.queue.Queue, "put", put)
+    stop, listener, _sink = _attempt_listener_control()
+    outcome = attempt.run_attempt(
+        lambda: None, stop=stop, listener=listener, limit_s=1, grace_s=grace_s, clock=clock,
+    )
+    assert (outcome.kind, outcome.class_) == ("completed", None)
+    assert outcome.stream_active_at_limit is None
+    assert not stop.is_set()
+
+
+@pytest.mark.parametrize(
+    ("active", "grace_s", "kind", "class_"),
+    [
+        (False, 5.0, "infrastructure", "wall_clock_silent"),
+        (True, 5.0, "behavioural", "wall_clock"),
+        (True, 0.5, "infrastructure", "abandoned"),
+    ],
+)
+def test_a_blocking_wait_returning_after_the_deadline_observes_the_limit(
+    monkeypatch: pytest.MonkeyPatch, active: bool, grace_s: float, kind: str, class_: str,
+) -> None:
+    from swreview.benchmark import attempt
+
+    now = [0.0]
+    release = threading.Event()
+    stop, listener, sink = _attempt_listener_control()
+    if active:
+        sink.emit("text.delta", {"text": "FICT activity before the deadline."})
+    real_get = attempt.queue.Queue.get
+
+    def get(self: Any, block: bool = True, timeout: float | None = None) -> Any:
+        if not block:
+            return real_get(self, block=False)
+        now[0] = 2.0
+        release.set()
+        return real_get(self, timeout=1)
+
+    monkeypatch.setattr(attempt.queue.Queue, "get", get)
+    try:
+        outcome = attempt.run_attempt(
+            lambda: release.wait(1), stop=stop, listener=listener, limit_s=1,
+            activity_window_s=5, grace_s=grace_s, clock=lambda: now[0],
+        )
+    finally:
+        release.set()
+    assert (outcome.kind, outcome.class_) == (kind, class_)
+    assert outcome.stream_active_at_limit is active
+    assert stop.is_set()
+
+
+# --- T194: classification through the real benchmark body -----------------------------
+
+
+def prepare_driver_set(
+    folder: Path, ids: Sequence[str] = ("fict-a",), *, held_out: bool = False
+) -> runner.PreflightedSet:
+    """An offline set over the questions fixture, preflighted through the public seam."""
+    from swreview.agent.checklist import load_checklist
+    from swreview.ir.loader import save_package
+    from tests.unit.test_benchmark_questions import PACKAGE
+
+    entries = []
+    for package_id in ids:
+        package_dir = folder / "packages" / package_id
+        save_package(PACKAGE, package_dir)
+        entries.append({"package_id": package_id, "path": str(package_dir), "held_out": held_out})
+    source = folder / "set.json"
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_bytes((json.dumps({"name": "fict-driver", "packages": entries}) + "\n").encode())
+    return runner.preflight_set(source, None, load_checklist())
+
+
+def install_driver_providers(
+    monkeypatch: pytest.MonkeyPatch,
+    scripts: Sequence[Sequence[ScriptedTurn]],
+    *,
+    kind: type[FakeProvider] = FakeProvider,
+    **provider_options: Any,
+) -> list[FakeProvider]:
+    """Every attempt gets its own adapter; retries sleep only into the test's list."""
+    from swreview import cli
+
+    built: list[FakeProvider] = []
+
+    def factory(settings: Any, efficiency: Any = None) -> FakeProvider:
+        adapter = kind(script=scripts[len(built)], model=settings.model, **provider_options)
+        built.append(adapter)
+        return adapter
+
+    monkeypatch.setattr(cli, "provider_factory", factory)
+    return built
+
+
+def driver_run(
+    preflighted: runner.PreflightedSet,
+    out: Path,
+    *,
+    provider: str = "fake",
+    model: str = MODEL,
+    **options: Any,
+) -> list[Path]:
+    from swreview import cli
+
+    return runner.run_benchmark(
+        preflighted,
+        out,
+        provider=provider,
+        model=model,
+        effort="high",
+        review_fn=cli._review_fn,
+        **options,
+    )
+
+
+def driver_status(out: Path) -> dict[str, Any]:
+    return json.loads((out / "run-status.json").read_bytes())
+
+
+def driver_row(out: Path, package_id: str = "fict-a") -> dict[str, Any]:
+    return driver_status(out)["packages"][package_id]["attempts"][-1]
+
+
+def driver_events(folder: Path) -> list[AgentEvent]:
+    return list(events.replay_events(events.event_stream(folder)))
+
+
+def provider_stop(reason: str) -> ProviderError:
+    from swreview.agent.providers.openai_provider import OpenAIProviderError
+
+    error = OpenAIProviderError("fict provider stopped", error_class="FictStop", retryable=True)
+    error.stop_reason = reason
+    return error
+
+
+@pytest.fixture
+def driver_sleeps(monkeypatch: pytest.MonkeyPatch) -> list[float]:
+    sleeps: list[float] = []
+    monkeypatch.setattr(retry, "sleep", sleeps.append)
+    monkeypatch.setattr(retry, "uniform", lambda low, high: high / 2)
+    return sleeps
+
+
+@pytest.fixture
+def failed_driver_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float]
+) -> Path:
+    preflighted = prepare_driver_set(tmp_path, ("fict-a", "fict-b", "fict-c"))
+    install_driver_providers(
+        monkeypatch,
+        [
+            [ScriptedTurn(text="", fails=TransientError("fict exhausted request"))],
+            [ScriptedTurn(text="Reviewed second.")],
+            [ScriptedTurn(text="Reviewed third.")],
+        ],
+    )
+    out = tmp_path / "run"
+    driver_run(preflighted, out)
+    return out
+
+
+def test_a_provider_error_after_retries_is_an_infrastructure_failure_with_its_exact_retry_count(
+    failed_driver_run: Path, driver_sleeps: list[float]
+) -> None:
+    out = failed_driver_run
+    row = driver_row(out)
+    assert (row["kind"], row["class"], row["error_class"]) == (
+        "infrastructure",
+        "provider_error",
+        "TransientError",
+    )
+    assert row["folder"] == "attempts/fict-a/1"
+    folder = out / row["folder"]
+    assert folder.is_dir() and not (out / "fict-a").exists()
+    errors = [event.body for event in driver_events(folder) if event.type == "error"]
+    assert errors[0]["retries"] == retry.BENCHMARK_RETRY.retries == 5
+    assert runner.attempt_facts(folder).retries == 5
+    assert len(driver_sleeps) == 5
+
+
+def test_the_other_packages_complete(failed_driver_run: Path) -> None:
+    for package_id in ("fict-b", "fict-c"):
+        row = driver_row(failed_driver_run, package_id)
+        assert (row["kind"], row["class"], row["folder"]) == ("completed", None, package_id)
+        assert driver_status(failed_driver_run)["packages"][package_id]["kept_attempt"] == 1
+        assert (failed_driver_run / package_id / "session.json").is_file()
+        assert not (failed_driver_run / "attempts" / package_id / "1").exists()
+
+
+def test_a_gemini_safety_stop_is_a_behavioural_provider_stop_with_its_reason(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float]
+) -> None:
+    """94A: exercise the returned SAFETY stop on the scripted provider; Gemini deferred."""
+    from swreview.report.session import load_session
+
+    preflighted = prepare_driver_set(tmp_path)
+    install_driver_providers(
+        monkeypatch, [[ScriptedTurn(text="", stop_reason="SAFETY", end_reason="error")]]
+    )
+    out = tmp_path / "run"
+    assert driver_run(preflighted, out) == [out / "fict-a"]
+    row = driver_row(out)
+    assert (row["kind"], row["class"], row["stop_reason"]) == (
+        "behavioural",
+        "provider_stop",
+        "SAFETY",
+    )
+    assert load_session(out / "fict-a" / "session.json").ended_at is not None
+    assert driver_sleeps == []
+
+
+def test_an_openai_content_filter_stop_is_a_behavioural_provider_stop_with_its_reason(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float]
+) -> None:
+    from swreview.report.session import load_session
+
+    preflighted = prepare_driver_set(tmp_path)
+    install_driver_providers(
+        monkeypatch, [[ScriptedTurn(text="", fails=provider_stop("content_filter"))]]
+    )
+    out = tmp_path / "run"
+    assert driver_run(preflighted, out) == [out / "fict-a"]
+    assert (driver_row(out)["kind"], driver_row(out)["class"], driver_row(out)["stop_reason"]) == (
+        "behavioural",
+        "provider_stop",
+        "content_filter",
+    )
+    assert load_session(out / "fict-a" / "session.json").ended_at is not None
+    assert driver_sleeps == []
+
+
+@pytest.mark.parametrize(
+    ("provider_name", "reason"),
+    [("fake", "FICT_LATER_STOP"), ("fake", "unset"), ("openai", "unset")],
+)
+def test_an_unnamed_stop_reason_on_either_provider_is_a_provider_stop_with_its_reason(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float],
+    provider_name: str, reason: str,
+) -> None:
+    """94A: OpenAI and scripted stops are covered; Gemini finish reasons are deferred."""
+    preflighted = prepare_driver_set(tmp_path)
+    out = tmp_path / "run"
+    if provider_name == "fake":
+        turn = (
+            ScriptedTurn(text="", fails=provider_stop(reason))
+            if reason == "unset"
+            else ScriptedTurn(text="", stop_reason=reason, end_reason="error")
+        )
+        install_driver_providers(monkeypatch, [[turn]])
+        folders = driver_run(preflighted, out)
+    else:
+        import respx
+
+        from swreview import cli
+        from tests.unit.test_provider_retry import URL, _provider, _response, _stream
+
+        adapter = _provider()
+        monkeypatch.setenv("OPENAI_API_KEY", "fict-offline-key")
+        monkeypatch.setattr(cli, "provider_factory", lambda *args, **kwargs: adapter)
+        response = _stream({
+            "type": "response.incomplete", "sequence_number": 9,
+            "response": _response(status="incomplete", incomplete_details=None),
+        })
+        with respx.mock(assert_all_called=True) as router:
+            route = router.post(URL).mock(return_value=response)
+            folders = driver_run(preflighted, out, provider="openai")
+            assert route.call_count == 1
+    assert folders == [out / "fict-a"]
+    row = driver_row(out)
+    assert (row["kind"], row["class"], row["stop_reason"]) == (
+        "behavioural",
+        "provider_stop",
+        reason,
+    )
+    assert driver_sleeps == []
+
+
+@pytest.mark.parametrize(
+    ("shape", "code", "kind", "class_", "retries"),
+    [
+        ("failed", "invalid_prompt", "behavioural", "provider_stop", 0),
+        ("http", "bio_policy", "behavioural", "provider_stop", 0),
+        ("failed", "server_error", "infrastructure", "provider_error", 5),
+    ],
+)
+def test_an_openai_policy_failure_is_a_provider_stop_and_never_retried(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    driver_sleeps: list[float],
+    shape: str,
+    code: str,
+    kind: str,
+    class_: str,
+    retries: int,
+) -> None:
+    import respx
+
+    from swreview import cli
+    from tests.unit.test_provider_retry import URL, _failed, _http_error, _provider
+
+    adapter = _provider()
+    monkeypatch.setenv("OPENAI_API_KEY", "fict-offline-key")
+    monkeypatch.setattr(cli, "provider_factory", lambda *args, **kwargs: adapter)
+    preflighted = prepare_driver_set(tmp_path)
+    with respx.mock(assert_all_called=True) as router:
+        route = router.post(URL).mock(
+            side_effect=lambda request: (
+                _failed(code) if shape == "failed" else _http_error(400, code=code)
+            )
+        )
+        out = tmp_path / "run"
+        driver_run(preflighted, out, provider="openai")
+        assert route.call_count == retries + 1
+    row = driver_row(out)
+    assert (row["kind"], row["class"]) == (kind, class_)
+    assert row["stop_reason"] == (code if kind == "behavioural" else None)
+    assert len(driver_sleeps) == runner.attempt_facts(out / row["folder"]).retries == retries
+
+
+@pytest.mark.parametrize("provider_name", ["openai", "fake"])
+def test_a_context_overflow_is_a_provider_stop(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float],
+    provider_name: str,
+) -> None:
+    """94A: OpenAI and scripted overflows; Gemini input_token_limit is deferred."""
+    preflighted = prepare_driver_set(tmp_path)
+    out = tmp_path / "run"
+    if provider_name == "fake":
+        install_driver_providers(
+            monkeypatch, [[ScriptedTurn(text="", fails=provider_stop("context_length_exceeded"))]]
+        )
+        folders = driver_run(preflighted, out)
+    else:
+        import respx
+
+        from swreview import cli
+        from tests.unit.test_provider_retry import URL, _http_error, _provider
+
+        adapter = _provider()
+        monkeypatch.setenv("OPENAI_API_KEY", "fict-offline-key")
+        monkeypatch.setattr(cli, "provider_factory", lambda *args, **kwargs: adapter)
+        with respx.mock(assert_all_called=True) as router:
+            route = router.post(URL).mock(
+                side_effect=lambda request: _http_error(400, code="context_length_exceeded")
+            )
+            folders = driver_run(preflighted, out, provider="openai")
+            assert route.call_count == 1
+    assert folders == [out / "fict-a"]
+    row = driver_row(out)
+    assert (row["kind"], row["class"], row["stop_reason"]) == (
+        "behavioural",
+        "provider_stop",
+        "context_length_exceeded",
+    )
+    assert driver_sleeps == []
+
+
+def test_an_unrecognised_gemini_request_error_after_an_answered_round_is_an_inferred_overflow(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float]
+) -> None:
+    """26A's type inference stays covered on the scripted provider under 94A."""
+    from swreview.agent.providers.gemini_provider import GeminiRequestError
+
+    preflighted = prepare_driver_set(tmp_path)
+    install_driver_providers(
+        monkeypatch,
+        [
+            [
+                ScriptedTurn(
+                    text="",
+                    rounds=(ScriptedRound((ScriptedToolCall("list_components"),), FIRST),),
+                    fails=GeminiRequestError("gemini 400 FICT request refused"),
+                )
+            ]
+        ],
+    )
+    out = tmp_path / "run"
+    assert driver_run(preflighted, out) == [out / "fict-a"]
+    row = driver_row(out)
+    assert (row["kind"], row["class"], row["stop_reason"]) == (
+        "behavioural",
+        "provider_stop",
+        "input_token_limit_inferred",
+    )
+    assert row["message"] == "gemini 400 FICT request refused"
+
+
+def test_a_gemini_request_error_before_any_answered_round_stays_a_provider_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float]
+) -> None:
+    """26A's negative inference case uses a scripted error; Gemini calls deferred by 94A."""
+    from swreview.agent.providers.gemini_provider import GeminiRequestError
+
+    preflighted = prepare_driver_set(tmp_path)
+    install_driver_providers(
+        monkeypatch,
+        [[ScriptedTurn(text="", fails=GeminiRequestError("gemini 400 FICT request refused"))]],
+    )
+    out = tmp_path / "run"
+    assert driver_run(preflighted, out) == []
+    assert (driver_row(out)["kind"], driver_row(out)["class"]) == (
+        "infrastructure",
+        "provider_error",
+    )
+
+
+def test_classification_reads_the_adapters_error_body_not_the_runners(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float]
+) -> None:
+    preflighted = prepare_driver_set(tmp_path)
+    install_driver_providers(
+        monkeypatch, [[ScriptedTurn(text="", fails=provider_stop("content_filter"))]]
+    )
+    out = tmp_path / "run"
+    driver_run(preflighted, out)
+    errors = [event.body for event in driver_events(out / "fict-a") if event.type == "error"]
+    assert len(errors) == 2
+    assert errors[0]["stop_reason"] == "content_filter" and errors[0]["retries"] == 0
+    assert "stop_reason" not in errors[1] and "retries" not in errors[1]
+    assert driver_row(out)["class"] == "provider_stop"
+    assert runner.attempt_facts(out / "fict-a").retries == 0
+
+
+def test_a_step_limit_is_a_behavioural_stop_and_its_session_is_finalized(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float]
+) -> None:
+    from swreview.agent.runner import DEFAULT_MAX_STEPS
+    from swreview.benchmark.answers import read_answer_log
+    from swreview.report.session import load_session
+
+    preflighted = prepare_driver_set(tmp_path)
+    built = install_driver_providers(
+        monkeypatch,
+        [
+            [
+                ScriptedTurn(
+                    text="",
+                    tool_calls=(ScriptedToolCall("list_components"),) * (DEFAULT_MAX_STEPS + 1),
+                )
+            ]
+        ],
+    )
+    out = tmp_path / "run"
+    assert driver_run(preflighted, out) == [out / "fict-a"]
+    assert (driver_row(out)["kind"], driver_row(out)["class"]) == ("behavioural", "max_steps")
+    assert load_session(out / "fict-a" / "session.json").ended_at is not None
+    assert built[0]._turn_index == 1
+    assert read_answer_log(out / "fict-a").ended == "turn_did_not_end"
+
+
+def test_reaching_the_answer_turn_bound_is_completed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float]
+) -> None:
+    from swreview.agent.checklist import load_checklist
+    from swreview.benchmark.answers import read_answer_log
+    from tests.support.scripted_answers import ask, turn
+    from tests.unit.test_benchmark_case_file import case, case_file_set, item_answer
+    from tests.unit.test_benchmark_questions import FIT, PIN_1, PLATE_1
+
+    preflighted = runner.preflight_set(
+        case_file_set(tmp_path, case(item_answer())), None, load_checklist()
+    )
+    package_id = preflighted.benchmark_set.packages[0].package_id
+    built = install_driver_providers(monkeypatch, [[turn(ask(PLATE_1, PIN_1, item=FIT))]])
+    out = tmp_path / "run"
+    assert driver_run(preflighted, out, max_answer_turns=0) == [out / package_id]
+    assert driver_row(out, package_id)["kind"] == "completed"
+    assert read_answer_log(out / package_id).ended == "bound_reached"
+    assert built[0]._turn_index == 1
+
+
+def test_an_internal_error_is_an_infrastructure_failure_and_the_set_goes_on(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float]
+) -> None:
+    from swreview import cli
+
+    preflighted = prepare_driver_set(tmp_path, ("fict-a", "fict-b"))
+    install_driver_providers(monkeypatch, [[ScriptedTurn(text="")], [ScriptedTurn(text="Done.")]])
+    real_start = cli.start_review
+
+    def start(package_dir: Path, out_dir: Path, **options: Any) -> ReviewRun:
+        if package_dir.name == "fict-a":
+            raise ValueError("fict setup bug")
+        return real_start(package_dir, out_dir, **options)
+
+    monkeypatch.setattr(cli, "start_review", start)
+    out = tmp_path / "run"
+    assert driver_run(preflighted, out) == [out / "fict-b"]
+    assert (driver_row(out)["kind"], driver_row(out)["class"], driver_row(out)["error_class"]) == (
+        "infrastructure",
+        "internal_error",
+        "ValueError",
+    )
+    assert driver_row(out, "fict-b")["kind"] == "completed"
+
+
+def test_ctrl_c_records_the_attempt_interrupted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float]
+) -> None:
+    from typer.testing import CliRunner
+
+    from swreview import cli
+    from swreview.benchmark import attempt
+
+    preflighted = prepare_driver_set(tmp_path)
+    release = threading.Event()
+    observed: list[runner.AttemptRequest] = []
+    entered = threading.Event()
+    real_body = cli._review_fn
+
+    def body(*args: Any, **kwargs: Any) -> Any:
+        observed.append(kwargs["attempt"])
+        entered.set()
+        return real_body(*args, **kwargs)
+
+    def interrupted(self: Any, block: bool = True, timeout: float | None = None) -> Any:
+        assert entered.wait(1)
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(cli, "_review_fn", body)
+    install_driver_providers(monkeypatch, [[ScriptedTurn(text="", hang=release)]])
+    monkeypatch.setattr(attempt.queue.Queue, "get", interrupted)
+    out = tmp_path / "run"
+    try:
+        with pytest.raises(KeyboardInterrupt):
+            driver_run(preflighted, out)
+        row = driver_row(out)
+        assert (row["kind"], row["class"]) == ("infrastructure", "interrupted")
+        assert row["ended_at"].endswith("Z")
+        assert observed[0].stop.is_set()
+        install_driver_providers(monkeypatch, [[ScriptedTurn(text="", hang=release)]])
+        result = CliRunner().invoke(
+            cli.app,
+            [
+                "benchmark",
+                "run",
+                "--set",
+                str(tmp_path / "set.json"),
+                "--out",
+                str(tmp_path / "cli-run"),
+                "--provider",
+                "fake",
+            ],
+        )
+        assert result.exit_code == 1
+        assert driver_row(tmp_path / "cli-run")["class"] == "interrupted"
+    finally:
+        release.set()
+
+
+# --- T195: served ids and real, short wall clocks --------------------------------------
+
+
+@pytest.mark.parametrize("provider_name", ["openai", "fake"])
+def test_a_served_model_outside_the_aliases_fails_the_attempt_at_the_next_tool_boundary(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    driver_sleeps: list[float],
+    provider_name: str,
+) -> None:
+    """94A: the OpenAI alias rule and scripted adapter replace the Gemini variant."""
+    preflighted = prepare_driver_set(tmp_path)
+    built = install_driver_providers(
+        monkeypatch,
+        [
+            [
+                ScriptedTurn(
+                    text="Unreached.",
+                    served_model="fict-other-2026-10-01",
+                    tool_calls=(ScriptedToolCall("list_components"),),
+                )
+            ]
+        ],
+    )
+    monkeypatch.setenv("OPENAI_API_KEY", "fict-offline-key")
+    out = tmp_path / "run"
+    assert driver_run(preflighted, out, provider=provider_name) == []
+    row = driver_row(out)
+    assert (row["kind"], row["class"]) == ("infrastructure", "wrong_model")
+    assert MODEL in row["message"] and "fict-other-2026-10-01" in row["message"]
+    folder = out / row["folder"]
+    assert len(runner.attempt_facts(folder).rounds) == 1
+    assert built[0]._turn_index == 1
+    recorded = driver_events(folder)
+    assert not any(event.type == "tool.finished" for event in recorded)
+    assert any(
+        event.type == "turn.ended" and event.body["reason"] == "stopped" for event in recorded
+    )
+
+
+def test_a_dated_snapshot_is_within_the_aliases(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float]
+) -> None:
+    """94A: a dated OpenAI id, reported by the offline scripted provider."""
+    monkeypatch.setenv("OPENAI_API_KEY", "fict-offline-key")
+    preflighted = prepare_driver_set(tmp_path)
+    install_driver_providers(
+        monkeypatch,
+        [[ScriptedTurn(text="Reviewed.", served_model="fict-base-2026-10-01")]],
+    )
+    out = tmp_path / "run"
+    assert driver_run(preflighted, out, provider="openai", model="fict-base") == [out / "fict-a"]
+    assert driver_row(out)["kind"] == "completed"
+
+
+def test_an_unreported_served_model_fails_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float]
+) -> None:
+    preflighted = prepare_driver_set(tmp_path)
+    install_driver_providers(monkeypatch, [[ScriptedTurn(text="Reviewed.")]])
+    out = tmp_path / "run"
+    assert driver_run(preflighted, out) == [out / "fict-a"]
+    assert driver_row(out)["kind"] == "completed"
+    assert runner.attempt_facts(out / "fict-a").served_models == []
+
+
+class ToolAfterTextProvider(FakeProvider):
+    """A scripted response's streamed text followed by its tool dispatch, as a real stream."""
+
+    def run(self, **options: Any) -> Any:
+        result = super().run(**options)
+        options["tools"].call("list_components", {}, call_id="fict-boundary")
+        return result
+
+
+def short_clock(**overrides: float) -> dict[str, float]:
+    return {
+        "package_time_limit_s": 0.25,
+        "stream_activity_window_s": 0.03,
+        "stop_grace_s": 0.8,
+        **overrides,
+    }
+
+
+def test_a_silent_stream_at_the_wall_clock_is_an_infrastructure_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float]
+) -> None:
+    preflighted = prepare_driver_set(tmp_path)
+    release = threading.Event()
+
+    class TimedSilentProvider(FakeProvider):
+        def run(self, **options: Any) -> Any:
+            timer = threading.Timer(0.45, release.set)
+            timer.daemon = True
+            timer.start()
+            return super().run(**options)
+
+    install_driver_providers(
+        monkeypatch,
+        [[ScriptedTurn(text="", hang=release, tool_calls=(ScriptedToolCall("list_components"),))]],
+        kind=TimedSilentProvider,
+    )
+    out = tmp_path / "run"
+    try:
+        assert driver_run(preflighted, out, **short_clock()) == []
+    finally:
+        release.set()
+    row = driver_row(out)
+    assert (row["kind"], row["class"], row["stream_active_at_limit"]) == (
+        "infrastructure",
+        "wall_clock_silent",
+        False,
+    )
+    assert (out / "attempts/fict-a/1").is_dir() and not (out / "fict-a").exists()
+
+
+def test_an_active_stream_at_the_wall_clock_is_a_behavioural_stop_not_re_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float]
+) -> None:
+    from swreview.report.session import load_session
+
+    preflighted = prepare_driver_set(tmp_path)
+    install_driver_providers(
+        monkeypatch,
+        [[ScriptedTurn(text=" ".join(["fict"] * 30), delta_interval_s=0.015)]],
+        kind=ToolAfterTextProvider,
+    )
+    ended: list[ReviewRun] = []
+    real_end = ReviewRun.end_stopped
+
+    def end(run: ReviewRun) -> None:
+        ended.append(run)
+        real_end(run)
+
+    monkeypatch.setattr(ReviewRun, "end_stopped", end)
+    out = tmp_path / "run"
+    assert driver_run(preflighted, out, **short_clock(stream_activity_window_s=0.1)) == [
+        out / "fict-a"
+    ]
+    row = driver_row(out)
+    assert (row["kind"], row["class"], row["stream_active_at_limit"]) == (
+        "behavioural",
+        "wall_clock",
+        True,
+    )
+    assert len(ended) == 1
+    assert load_session(out / "fict-a/session.json").ended_at is not None
+    assert driver_status(out)["packages"]["fict-a"]["kept_attempt"] == 1
+
+
+def test_a_tool_in_progress_at_the_wall_clock_counts_as_activity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float]
+) -> None:
+    from swreview import cli
+
+    preflighted = prepare_driver_set(tmp_path)
+    release = threading.Event()
+    real_start = cli.start_review
+    timers: list[threading.Timer] = []
+
+    def start(*args: Any, **options: Any) -> ReviewRun:
+        run = real_start(*args, **options)
+        tools = run.tools
+
+        class SlowTool:
+            def __iter__(self) -> Any:
+                return iter(tools)
+
+            def __len__(self) -> int:
+                return len(tools)
+
+            def call(self, name: str, arguments: Any, call_id: str = "") -> Any:
+                timer = threading.Timer(0.45, release.set)
+                timer.daemon = True
+                timers.append(timer)
+                timer.start()
+                release.wait()
+                return tools.call(name, arguments, call_id)
+
+        run.tools = SlowTool()
+        return run
+
+    monkeypatch.setattr(cli, "start_review", start)
+    install_driver_providers(
+        monkeypatch,
+        [[ScriptedTurn(text="", tool_calls=(ScriptedToolCall("list_components"),))]],
+    )
+    out = tmp_path / "run"
+    try:
+        assert driver_run(preflighted, out, **short_clock()) == [out / "fict-a"]
+    finally:
+        release.set()
+        for timer in timers:
+            timer.cancel()
+    row = driver_row(out)
+    assert (row["kind"], row["class"], row["stream_active_at_limit"]) == (
+        "behavioural",
+        "wall_clock",
+        True,
+    )
+
+
+def test_a_worker_that_does_not_return_within_the_grace_is_abandoned_and_never_promoted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float]
+) -> None:
+    preflighted = prepare_driver_set(tmp_path, ("fict-a", "fict-b"))
+    release = threading.Event()
+    built = install_driver_providers(
+        monkeypatch,
+        [
+            [ScriptedTurn(text=" ".join(["fict"] * 100), delta_interval_s=0.02)],
+            [ScriptedTurn(text="Reviewed next.")],
+        ],
+        kind=ToolAfterTextProvider,
+        sleep=lambda delay: release.wait(delay),
+    )
+    out = tmp_path / "run"
+    try:
+        assert driver_run(preflighted, out, **short_clock(stop_grace_s=0.04)) == [out / "fict-b"]
+        row = driver_row(out)
+        assert (row["kind"], row["class"]) == ("infrastructure", "abandoned")
+        assert row["folder"] == "attempts/fict-a/1"
+        assert (out / row["folder"]).is_dir() and not (out / "fict-a").exists()
+        assert driver_row(out, "fict-b")["kind"] == "completed"
+        assert len(built) == 2
+    finally:
+        release.set()
+
+
+def test_a_hung_attempt_is_abandoned_and_the_process_still_exits(tmp_path: Path) -> None:
+    """RF-50: a daemon worker blocked on an event cannot hold interpreter shutdown."""
+    import subprocess
+    import sys
+    import textwrap
+    import time
+
+    script = textwrap.dedent("""
+        import sys
+        import threading
+        from pathlib import Path
+        from swreview import cli
+        from swreview.agent.providers.fake import FakeProvider, ScriptedTurn
+        from tests.unit.test_benchmark_attempts import prepare_driver_set, driver_run
+        folder = Path(sys.argv[1])
+        cli.provider_factory = lambda settings, efficiency=None: FakeProvider(
+            script=[ScriptedTurn(text="", hang=threading.Event())], model=settings.model
+        )
+        driver_run(prepare_driver_set(folder), folder / "run",
+                   package_time_limit_s=.15, stream_activity_window_s=.02, stop_grace_s=.05)
+    """)
+    started = time.monotonic()
+    result = subprocess.run(
+        [sys.executable, "-c", script, str(tmp_path)],
+        capture_output=True,
+        text=True,
+        timeout=8,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert time.monotonic() - started < 8
+    assert driver_row(tmp_path / "run")["class"] == "abandoned"
+    assert not (tmp_path / "run/fict-a").exists()
+
+
+def test_the_wall_clock_stops_answer_turns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float]
+) -> None:
+    from swreview.agent.checklist import load_checklist
+    from swreview.benchmark.answers import read_answer_log
+    from swreview.checks.standards.profile import load_profile
+    from tests.support import roles_review
+    from tests.unit.test_benchmark_case_file import case, case_file_set, roles_answer
+
+    profile = roles_review.write_profile(tmp_path)
+    preflighted = runner.preflight_set(
+        case_file_set(tmp_path, case(roles_answer())), load_profile(profile), load_checklist()
+    )
+    package_id = preflighted.benchmark_set.packages[0].package_id
+    built = install_driver_providers(
+        monkeypatch, [[ScriptedTurn(text=" ".join(["fict"] * 30), delta_interval_s=0.015)]]
+    )
+    out = tmp_path / "run"
+    assert driver_run(
+        preflighted, out, standards_profile=profile, **short_clock(stream_activity_window_s=0.1)
+    ) == [out / package_id]
+    assert driver_row(out, package_id)["class"] == "wall_clock"
+    assert read_answer_log(out / package_id).ended == "stopped"
+    assert built[0]._turn_index == 1
+    assert not any(event.type == "evidence.answered" for event in driver_events(out / package_id))
+
+
+# --- T196: records, promotion, scrubbing and command output ----------------------------
+
+
+def test_an_internal_error_naming_a_local_path_records_no_local_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float]
+) -> None:
+    from tests.support.local_paths import scan_folder
+
+    preflighted = prepare_driver_set(tmp_path)
+    out = tmp_path / "run"
+
+    class BrokenProvider(FakeProvider):
+        def run(self, **options: Any) -> Any:
+            raise PermissionError(f"cannot read {out / 'attempts/fict-a/1/private.txt'}")
+
+    install_driver_providers(monkeypatch, [[ScriptedTurn(text="")]], kind=BrokenProvider)
+    assert driver_run(preflighted, out) == []
+    row = driver_row(out)
+    assert (row["kind"], row["class"], row["error_class"]) == (
+        "infrastructure",
+        "internal_error",
+        "PermissionError",
+    )
+    assert "<run>/attempts/fict-a/1/private.txt" in row["message"].replace("\\", "/")
+    errors = [event.body for event in driver_events(out / row["folder"]) if event.type == "error"]
+    assert errors and all(
+        "<run>/attempts/fict-a/1/private.txt" in body["message"].replace("\\", "/")
+        for body in errors
+    )
+    assert scan_folder(out) == []
+
+
+def test_an_adapter_error_naming_a_local_path_is_found_by_the_scanner(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float]
+) -> None:
+    from tests.support.local_paths import scan_folder
+
+    preflighted = prepare_driver_set(tmp_path)
+    out = tmp_path / "run"
+    message = f"fict adapter cannot read {out / 'attempts/fict-a/1/private.txt'}"
+    install_driver_providers(monkeypatch, [[ScriptedTurn(text="", fails=TransientError(message))]])
+    driver_run(preflighted, out)
+    row = driver_row(out)
+    folder = out / row["folder"]
+    errors = [event.body for event in driver_events(folder) if event.type == "error"]
+    assert errors[0]["message"] == message
+    assert str(out) not in errors[1]["message"]
+    assert "<run>" in row["message"]
+    assert any(offence.file == events.event_stream(folder) for offence in scan_folder(out))
+
+
+def test_a_profile_changed_between_attempts_stops_the_run_with_exit_1_naming_both_digests(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float]
+) -> None:
+    from typer.testing import CliRunner
+
+    from swreview import cli
+    from swreview.benchmark.digest import sha256_of
+    from swreview.checks.standards.profile import display_digest
+    from tests.unit.test_run_provenance import example_profile_copy
+
+    prepare_driver_set(tmp_path, ("fict-a", "fict-b"))
+    install_driver_providers(
+        monkeypatch, [[ScriptedTurn(text="Reviewed first.")], [ScriptedTurn(text="Unreached.")]]
+    )
+    profile = example_profile_copy(tmp_path / "profiles")
+    recorded = sha256_of(profile)
+    real_body = cli._review_fn
+    reviewed: list[str] = []
+
+    def body(package_dir: Path, out_dir: Path, **options: Any) -> Any:
+        reviewed.append(package_dir.name)
+        result = real_body(package_dir, out_dir, **options)
+        profile.write_bytes(profile.read_bytes() + b"\n# fict changed profile\n")
+        return result
+
+    monkeypatch.setattr(cli, "_review_fn", body)
+    out = tmp_path / "run"
+    result = CliRunner().invoke(
+        cli.app,
+        [
+            "benchmark",
+            "run",
+            "--set",
+            str(tmp_path / "set.json"),
+            "--out",
+            str(out),
+            "--provider",
+            "fake",
+            "--standards-profile",
+            str(profile),
+        ],
+    )
+    assert result.exit_code == 1, result.stdout + result.stderr
+    assert reviewed == ["fict-a"]
+    line = result.stderr.strip()
+    assert display_digest(recorded) in line and display_digest(sha256_of(profile)) in line
+    assert str(tmp_path) not in line and str(profile) not in line
+    assert not (out / "attempts/fict-b/1").exists()
+
+
+def test_a_kept_attempt_is_promoted_by_one_rename_and_a_failed_one_stays(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float]
+) -> None:
+    preflighted = prepare_driver_set(tmp_path, ("fict-a", "fict-b", "fict-c"))
+    install_driver_providers(
+        monkeypatch,
+        [
+            [ScriptedTurn(text="Reviewed.")],
+            [ScriptedTurn(text="", fails=TransientError("fict exhausted request"))],
+            [ScriptedTurn(text="", stop_reason="SAFETY", end_reason="error")],
+        ],
+    )
+    renamed: list[tuple[Path, Path]] = []
+    real_rename = Path.rename
+    out = tmp_path / "run"
+
+    def rename(path: Path, target: Any) -> Path:
+        target = Path(target)
+        if path.parent.parent.name == "attempts":
+            package_id = path.parent.name
+            row = driver_row(out, package_id)
+            assert row["kind"] in ("completed", "behavioural")
+            assert row["folder"] == package_id
+            assert driver_status(out)["packages"][package_id]["kept_attempt"] == 1
+            renamed.append((path, target))
+        return real_rename(path, target)
+
+    monkeypatch.setattr(Path, "rename", rename)
+    assert driver_run(preflighted, out) == [out / "fict-a", out / "fict-c"]
+    assert renamed == [
+        (out / "attempts/fict-a/1", out / "fict-a"),
+        (out / "attempts/fict-c/1", out / "fict-c"),
+    ]
+    failed = driver_row(out, "fict-b")
+    assert failed["folder"] == "attempts/fict-b/1"
+    assert (out / failed["folder"]).is_dir()
+
+
+def test_every_record_is_written_atomically_with_lf_bytes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float]
+) -> None:
+    from typer.testing import CliRunner
+
+    from swreview import atomic, cli
+
+    prepare_driver_set(tmp_path)
+    install_driver_providers(monkeypatch, [[ScriptedTurn(text="Reviewed.")]])
+    written: list[tuple[Path, bytes]] = []
+    real_write = atomic.write_atomic
+
+    def write(path: Path, data: bytes) -> None:
+        written.append((Path(path), data))
+        real_write(path, data)
+
+    monkeypatch.setattr(atomic, "write_atomic", write)
+    out = tmp_path / "run"
+    result = CliRunner().invoke(
+        cli.app,
+        [
+            "benchmark",
+            "run",
+            "--set",
+            str(tmp_path / "set.json"),
+            "--out",
+            str(out),
+            "--provider",
+            "fake",
+        ],
+    )
+    assert result.exit_code == 0, result.stdout + result.stderr
+    names = {
+        "run-provenance.json",
+        "benchmark-set.json",
+        "run-status.json",
+        "prompts.json",
+        "answer-log.json",
+        "attention.json",
+    }
+    assert names <= {path.name for path, data in written}
+    for path, data in written:
+        if path.name in names:
+            assert data.endswith(b"\n") and b"\r" not in data, path
+            promoted = out / "fict-a" / path.name if path.parent.name == "1" else path
+            assert promoted.read_bytes().endswith(b"\n")
+            assert b"\r" not in promoted.read_bytes()
+
+
+def test_an_offline_run_without_the_tokenizer_vocabulary_refuses_nothing_and_counts_read_unknown(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float]
+) -> None:
+    from typer.testing import CliRunner
+
+    from swreview import cli, tokens
+    from swreview.report.session import load_session
+    from tests.support.answer_keys import write_key
+
+    prepare_driver_set(tmp_path)
+    install_driver_providers(
+        monkeypatch,
+        [[ScriptedTurn(text="Reviewed.", tool_calls=(ScriptedToolCall("list_components"),))]],
+    )
+    write_key(tmp_path / "answer_keys", "fict-a")
+
+    def missing() -> Any:
+        raise tokens.TokenizerUnavailable("fict offline vocabulary unavailable")
+
+    monkeypatch.setattr(tokens, "load_encoding", missing)
+    tokens.encoding.cache_clear()
+    out = tmp_path / "run"
+    invoke = CliRunner().invoke
+    try:
+        result = invoke(
+            cli.app,
+            [
+                "benchmark",
+                "run",
+                "--set",
+                str(tmp_path / "set.json"),
+                "--out",
+                str(out),
+                "--provider",
+                "fake",
+            ],
+        )
+        assert result.exit_code == 0, result.stdout + result.stderr
+        scored = invoke(
+            cli.app,
+            ["benchmark", "score", str(out), "--answer-keys", str(tmp_path / "answer_keys")],
+        )
+        assert scored.exit_code == 0, scored.stdout + scored.stderr
+        reported = invoke(
+            cli.app, ["benchmark", "report", str(out), "--out", str(tmp_path / "report")]
+        )
+        assert reported.exit_code == 0, reported.stdout + reported.stderr
+        session = load_session(out / "fict-a/session.json")
+        assert session.steps
+        assert all(step.result_tokens is None for step in session.steps)
+        stored = json.loads((out / "fict-a/session.json").read_bytes())["steps"]
+        assert all(step.get("result_tokens") is None for step in stored)
+    finally:
+        tokens.encoding.cache_clear()
+
+
+@pytest.mark.parametrize("json_output", [False, True])
+@pytest.mark.parametrize("fails", [False, True])
+def test_run_prints_one_line_per_package_and_json_carries_each_outcome(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    driver_sleeps: list[float],
+    json_output: bool,
+    fails: bool,
+) -> None:
+    """94A: the returned SAFETY stop is scripted; no Gemini adapter is built."""
+    from typer.testing import CliRunner
+
+    from swreview import cli
+
+    prepare_driver_set(tmp_path, ("fict-a", "fict-b", "fict-c"))
+    install_driver_providers(
+        monkeypatch,
+        [
+            [ScriptedTurn(text="Reviewed.")],
+            [ScriptedTurn(text="", stop_reason="SAFETY", end_reason="error")],
+            [ScriptedTurn(text="", fails=TransientError("fict exhausted request"))]
+            if fails
+            else [ScriptedTurn(text="Reviewed last.")],
+        ],
+    )
+    out = tmp_path / "run"
+    result = CliRunner().invoke(
+        cli.app,
+        [
+            "benchmark",
+            "run",
+            "--set",
+            str(tmp_path / "set.json"),
+            "--out",
+            str(out),
+            "--provider",
+            "fake",
+            *(["--json"] if json_output else []),
+        ],
+    )
+    assert result.exit_code == (1 if fails else 0), result.stdout + result.stderr
+    assert result.stderr.splitlines() == (
+        ["error: infrastructure failures: fict-c"] if fails else []
+    )
+    if json_output:
+        payload = json.loads(result.stdout)
+        rows = payload["packages"]
+        assert [
+            (row["package_id"], row["kind"], row["class"], row["stop_reason"], row["attempts"])
+            for row in rows
+        ] == [
+            ("fict-a", "completed", None, None, 1),
+            ("fict-b", "behavioural", "provider_stop", "SAFETY", 1),
+            ("fict-c", "infrastructure", "provider_error", None, 1)
+            if fails
+            else ("fict-c", "completed", None, None, 1),
+        ]
+        assert rows[0]["out_dir"] == str(out / "fict-a")
+        assert rows[1]["out_dir"] == str(out / "fict-b")
+    else:
+        assert result.stdout.splitlines() == [
+            "fict-a: completed",
+            "fict-b: behavioural provider_stop (SAFETY)",
+            "fict-c: infrastructure provider_error (TransientError, 5 retries)"
+            if fails
+            else "fict-c: completed",
+        ]
+
+
+def test_no_home_folder_still_scrubs_the_run_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float]
+) -> None:
+    """104A/92A: a missing account home never prevents scrubbing run/repo/tmp."""
+    from tests.support.local_paths import scan_folder
+
+    preflighted = prepare_driver_set(tmp_path)
+    out = tmp_path / "run"
+
+    class BrokenProvider(FakeProvider):
+        def run(self, **options: Any) -> Any:
+            raise PermissionError(f"cannot read {out / 'attempts/fict-a/1/private.txt'}")
+
+    install_driver_providers(monkeypatch, [[ScriptedTurn(text="")]], kind=BrokenProvider)
+
+    def no_home(cls: type[Path]) -> Path:
+        raise RuntimeError("fict account has no home folder")
+
+    monkeypatch.setattr(Path, "home", classmethod(no_home))
+    assert driver_run(preflighted, out) == []
+    row = driver_row(out)
+    assert row["error_class"] == "PermissionError"
+    assert "<run>" in row["message"] and str(out) not in row["message"]
+    assert scan_folder(out) == []

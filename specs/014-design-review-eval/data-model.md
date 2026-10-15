@@ -206,7 +206,8 @@ Must-match across a study: every field but `rep`, `started_at`, `live_tools`, `j
 review function as its one new keyword, `attempt`, beside `provider`, `model`, `effort`,
 `efficiency` and `explain_findings` (still forwarded only when true): `model_view` and
 `standards_profile` (slice 2), `case_file` (the loaded `CaseFile` or `None`) and `max_answer_turns`
-(slice 3), `stop` (slice 6, the attempt's stop event).
+(slice 3), `stop` (slice 6, the attempt's stop event), `listener` (the attempt's
+`AttemptListener`) and `run_dir` (the run folder, used to scrub local paths; T198).
 
 **RunStatus** (`<run>/run-status.json`, the driver's one scheduling thread only, through
 `write_atomic`; packages in set order whatever order they end in, owner decision 36A): `run_status_version`

@@ -1,7 +1,8 @@
 """Run the reviewer over every package in a benchmark set (T096, runner half).
 
 This module iterates `swreview.benchmark.sets.BenchmarkSet.packages` and calls a
-review function per package, writing its output under `<out_dir>/<package_id>/`. It
+review function per attempt under `attempts/<package_id>/<n>/`, promoting kept output
+to `<out_dir>/<package_id>/`. It
 never opens an answer key, and it refuses - a second time, on top of
 `swreview.benchmark.sets.load_set` - to pass a package path that resolves under
 `benchmarks/answer_keys/` (constitution Principle VI, FR-025): defense in depth, not
@@ -42,20 +43,23 @@ between the two.
 from __future__ import annotations
 
 import subprocess
+import threading
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Annotated, Any, Literal
 
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
 from swreview import atomic
 from swreview.agent import events
 from swreview.agent.settings import MODEL_VIEW_OFF, EfficiencySettings, ModelViewSettings
-from swreview.benchmark import answers, prices
+from swreview.benchmark import answers, prices, scrub
+from swreview.benchmark import attempt as attempt_driver
+from swreview.benchmark.attempt import AttemptClass, AttemptKind, AttemptListener
 from swreview.benchmark.case_file import CaseFile
 from swreview.benchmark.digest import sha256_of as sha256_of
 from swreview.benchmark.sets import (
@@ -66,6 +70,7 @@ from swreview.benchmark.sets import (
     load_set,
     path_form,
 )
+from swreview.checks.standards.profile import display_digest
 from swreview.findings import ReviewModel
 from swreview.ir.loader import PACKAGE_FILE_NAME, load_package, reject_answer_key_path
 from swreview.report.session import load_session, save_session
@@ -364,6 +369,60 @@ class AttemptRequest:
     """How many answer turns the review may take after its opening turn, the same for every
     package (`contracts/scripted-answers.md` 4)."""
 
+    stop: threading.Event
+    listener: AttemptListener
+    run_dir: Path
+
+
+RUN_STATUS_FILE = "run-status.json"
+
+
+class AttemptStatus(ReviewModel):
+    """The driver's facts about one attempt; stream facts stay in its event stream."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    attempt: int = Field(ge=1)
+    started_at: datetime
+    ended_at: datetime | None = None
+    resumed: bool = False
+    kind: AttemptKind | None = None
+    class_: AttemptClass | None = Field(default=None, alias="class")
+    stop_reason: str | None = None
+    error_class: str | None = None
+    message: str | None = None
+    stream_active_at_limit: bool | None = None
+    folder: str
+
+
+class PackageStatus(ReviewModel):
+    kept_attempt: int | None = Field(default=None, ge=1)
+    attempts: list[AttemptStatus] = Field(default_factory=list)
+
+
+class RunStatus(ReviewModel):
+    run_status_version: Literal[1] = 1
+    packages: dict[str, PackageStatus] = Field(default_factory=dict)
+
+
+def load_run_status(run_dir: Path | str) -> RunStatus | None:
+    """Read the driver's record, or return None for a folder predating attempts."""
+    path = Path(run_dir) / RUN_STATUS_FILE
+    return RunStatus.model_validate_json(path.read_bytes()) if path.is_file() else None
+
+
+def _write_run_status(run_dir: Path, status: RunStatus) -> None:
+    atomic.write_atomic(
+        run_dir / RUN_STATUS_FILE,
+        (status.model_dump_json(indent=2, by_alias=True) + "\n").encode("utf-8"),
+    )
+
+
+def scrub_message(text: str, *, run_dir: Path, root: Path = REPO_ROOT) -> str:
+    """Scrub a message of local paths; an account with no home folder is handled by the scrub
+    itself (owner decisions 92A, 104A)."""
+    return scrub.without_local_paths(text, run_dir=run_dir, root=root)
+
 
 @dataclass(frozen=True)
 class PreflightedSet:
@@ -534,10 +593,16 @@ def run_benchmark(
     model_view: ModelViewSettings = MODEL_VIEW_OFF,
     standards_profile: Path | None = None,
     max_answer_turns: int = answers.DEFAULT_MAX_ANSWER_TURNS,
+    package_time_limit_s: float = 3600,
+    stream_activity_window_s: float = attempt_driver.STREAM_ACTIVITY_WINDOW_S,
+    stop_grace_s: float = attempt_driver.STOP_GRACE_S,
+    redact: Callable[[str], str] = events.no_redaction,
+    on_package_done: Callable[..., None] | None = None,
+    clock: Callable[[], float] = time.monotonic,
 ) -> list[Path]:
     """Review every package of the preflighted set into `out_dir`.
 
-    Calls `review_fn(package_dir, out_dir/package_id, provider=provider, model=model,
+    Calls `review_fn(package_dir, out_dir/attempts/package_id/1, provider=provider, model=model,
     effort=effort, efficiency=efficiency, attempt=AttemptRequest(...))` per package
     (default: `_default_review_fn`), then records unattended runtime for that package.
     Returns the list of per-package output directories, in benchmark-set order.
@@ -570,32 +635,110 @@ def run_benchmark(
     active_review_fn = review_fn if review_fn is not None else _default_review_fn
     out_dir = Path(out_dir)
 
+    provenance = load_provenance(out_dir)
+    profile_digest = (
+        provenance.profile_digest if provenance is not None else None
+    )
+    if standards_profile is not None and profile_digest is None:
+        profile_digest = sha256_of(standards_profile)
+    status = RunStatus()
     package_dirs: list[Path] = []
     for ref in preflighted.benchmark_set.packages:
+        if standards_profile is not None:
+            current_digest = sha256_of(standards_profile)
+            if current_digest != profile_digest:
+                raise ValueError(
+                    "standards profile changed: recorded "
+                    f"{display_digest(profile_digest)}, current {display_digest(current_digest)}"
+                )
         _reject_answer_key_path(ref.path)
-        package_out_dir = out_dir / ref.package_id
+        package_out_dir = out_dir / ATTEMPTS_FOLDER / ref.package_id / "1"
         _reject_answer_key_path(package_out_dir)
         package_out_dir.mkdir(parents=True, exist_ok=True)
 
-        started = time.perf_counter()
-        active_review_fn(
-            ref.path,
-            package_out_dir,
-            provider=provider,
-            model=model,
-            effort=effort,
-            efficiency=efficiency,
-            **({"explain_findings": True} if explain_findings else {}),
-            attempt=AttemptRequest(
-                model_view=model_view,
-                standards_profile=standards_profile,
-                case_file=preflighted.case_files[ref.package_id],
-                max_answer_turns=max_answer_turns,
-            ),
+        stop = threading.Event()
+        listener = AttemptListener(stop, provider=provider, requested_model=model, clock=clock)
+        request = AttemptRequest(
+            model_view=model_view,
+            standards_profile=standards_profile,
+            case_file=preflighted.case_files[ref.package_id],
+            max_answer_turns=max_answer_turns,
+            stop=stop,
+            listener=listener,
+            run_dir=out_dir,
         )
-        elapsed_minutes = (time.perf_counter() - started) / 60.0
+        row = AttemptStatus(
+            attempt=1, started_at=datetime.now(UTC),
+            folder=package_out_dir.relative_to(out_dir).as_posix(),
+        )
+        package_status = PackageStatus(attempts=[row])
+        status.packages[ref.package_id] = package_status
+        _write_run_status(out_dir, status)
 
-        _record_unattended_runtime(package_out_dir, elapsed_minutes)
-        package_dirs.append(package_out_dir)
+        def body(
+            package_dir: Path = ref.path,
+            folder: Path = package_out_dir,
+            request: AttemptRequest = request,
+        ) -> Any:
+            # Bind per-attempt inputs: an abandoned daemon may outlive this loop iteration.
+            return active_review_fn(
+                package_dir, folder, provider=provider, model=model, effort=effort,
+                efficiency=efficiency,
+                **({"explain_findings": True} if explain_findings else {}),
+                attempt=request,
+            )
+
+        started = clock()
+        try:
+            outcome = attempt_driver.run_attempt(
+                body, stop=stop, listener=listener, limit_s=package_time_limit_s,
+                activity_window_s=stream_activity_window_s, grace_s=stop_grace_s,
+                clock=clock,
+            )
+        except KeyboardInterrupt:
+            stop.set()
+            row.kind = "infrastructure"
+            row.class_ = "interrupted"
+            row.ended_at = datetime.now(UTC)
+            _write_run_status(out_dir, status)
+            raise
+
+        row.ended_at = datetime.now(UTC)
+        row.kind = outcome.kind
+        row.class_ = outcome.class_
+        row.stop_reason = outcome.stop_reason
+        row.error_class = outcome.error_class
+        row.message = (
+            scrub_message(redact(outcome.message), run_dir=out_dir, root=preflighted.root)
+            if outcome.message is not None else None
+        )
+        row.stream_active_at_limit = outcome.stream_active_at_limit
+        facts_folder = package_out_dir
+        if outcome.kind in ("completed", "behavioural"):
+            _record_unattended_runtime(package_out_dir, (clock() - started) / 60.0)
+            package_status.kept_attempt = row.attempt
+            row.folder = ref.package_id
+            _write_run_status(out_dir, status)
+            promoted = out_dir / ref.package_id
+            try:
+                package_out_dir.rename(promoted)
+            except OSError as error:
+                row.folder = package_out_dir.relative_to(out_dir).as_posix()
+                row.message = scrub_message(
+                    redact(" ".join(str(error).split())), run_dir=out_dir,
+                    root=preflighted.root,
+                )
+                _write_run_status(out_dir, status)
+            else:
+                facts_folder = promoted
+                package_dirs.append(promoted)
+        else:
+            _write_run_status(out_dir, status)
+        if on_package_done is not None:
+            on_package_done(
+                package_id=ref.package_id, kind=row.kind, class_=row.class_,
+                stop_reason=row.stop_reason, error_class=row.error_class,
+                retries=attempt_facts(facts_folder).retries,
+            )
 
     return package_dirs

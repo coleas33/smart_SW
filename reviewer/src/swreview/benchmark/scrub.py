@@ -14,12 +14,16 @@ def without_local_paths(
 ) -> str:
     """Replace local folders, as spelled and resolved, longest first in any path spelling."""
     folders: dict[str, str] = {}
-    for folder, replacement in (
+    known = [
         (Path(run_dir), "<run>"),
         (Path(root), "<repo>"),
         (Path(tempfile.gettempdir()), "<tmp>"),
-        (Path.home(), "<home>"),
-    ):
+    ]
+    try:
+        known.append((Path.home(), "<home>"))
+    except RuntimeError:
+        pass  # an account with no home folder has none to scrub (owner decisions 92A, 104A)
+    for folder, replacement in known:
         for form in (folder, folder.resolve()):
             if form.parent != form:
                 folders.setdefault(str(form), replacement)

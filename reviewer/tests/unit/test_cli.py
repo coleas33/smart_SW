@@ -22,6 +22,7 @@ import logging
 import re
 import shutil
 import subprocess
+import threading
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -46,6 +47,7 @@ from swreview.agent.settings import (
 )
 from swreview.benchmark import answers, sets
 from swreview.benchmark.answers import ANSWER_LOG_VERSION, AnswerLog, read_answer_log
+from swreview.benchmark.attempt import AttemptListener
 from swreview.benchmark.case_file import CaseFile
 from swreview.benchmark.runner import EXAMPLE_PROFILE, SAVED_SET_FILE, AttemptRequest
 from swreview.benchmark.scorecard import read_scorecard, score_run
@@ -2762,11 +2764,14 @@ def spy_on_the_attempt_body(
         return run
 
     def recording_drive_review(
-        run: ReviewRun, case_file: CaseFile | None, *, max_answer_turns: int
+        run: ReviewRun, case_file: CaseFile | None, *, max_answer_turns: int,
+        stop_requested: Callable[[], bool],
     ) -> Any:
         body.order.append("drive_review")
         body.driven.append((run, case_file, max_answer_turns))
-        return drive(run, case_file, max_answer_turns=max_answer_turns)
+        return drive(
+            run, case_file, max_answer_turns=max_answer_turns, stop_requested=stop_requested
+        )
 
     def recording_close(run: ReviewRun) -> None:
         body.order.append("close")
@@ -2797,6 +2802,8 @@ def test_review_fn_starts_the_review_and_plays_it_through_the_driver(
     profile = REPO_ROOT / EXAMPLE_PROFILE
     efficiency = EfficiencySettings(tool_tiers=True)
     out = tmp_path / "attempt"
+    stop = threading.Event()
+    listener = AttemptListener(stop, provider="fake", requested_model="fake-1")
 
     session = cli._review_fn(
         tmp_package_dir,
@@ -2810,6 +2817,9 @@ def test_review_fn_starts_the_review_and_plays_it_through_the_driver(
             standards_profile=profile,
             case_file=case_file,
             max_answer_turns=2,
+            stop=stop,
+            listener=listener,
+            run_dir=out,
         ),
     )
 
@@ -2827,6 +2837,7 @@ def test_review_fn_starts_the_review_and_plays_it_through_the_driver(
         "standards_profile": profile,
         "explain_findings": False,
         "bridge": False,
+        "callbacks": [listener],
     }
     assert callable(options["redact"])
     [(driven_run, driven_case_file, bound)] = body.driven
@@ -2857,12 +2868,14 @@ def test_review_fn_closes_the_run_when_the_driver_raises(
         pass
 
     def failing_drive_review(
-        run: ReviewRun, case_file: CaseFile | None, *, max_answer_turns: int
+        run: ReviewRun, case_file: CaseFile | None, *, max_answer_turns: int,
+        stop_requested: Callable[[], bool],
     ) -> Any:
         raise DriverFailed
 
     fake_provider()
     body = spy_on_the_attempt_body(monkeypatch, drive=failing_drive_review)
+    stop = threading.Event()
 
     with pytest.raises(DriverFailed):
         cli._review_fn(
@@ -2876,6 +2889,9 @@ def test_review_fn_closes_the_run_when_the_driver_raises(
                 standards_profile=None,
                 case_file=None,
                 max_answer_turns=0,
+                stop=stop,
+                listener=AttemptListener(stop, provider="fake", requested_model="fake-1"),
+                run_dir=tmp_path / "attempt",
             ),
         )
 

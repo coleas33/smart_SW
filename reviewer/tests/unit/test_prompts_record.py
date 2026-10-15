@@ -24,7 +24,9 @@ the attempt's worker.
 from __future__ import annotations
 
 import ast
+import dataclasses
 import json
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -122,18 +124,29 @@ def install(
 
 
 def attempt(case_file: CaseFile | None = None, profile: Path | None = None) -> AttemptRequest:
+    from swreview.benchmark.attempt import AttemptListener
+
+    stop = threading.Event()
     return AttemptRequest(
         model_view=MODEL_VIEW_OFF,
         standards_profile=profile,
         case_file=case_file,
         max_answer_turns=3,
+        stop=stop,
+        listener=AttemptListener(stop, provider="fake", requested_model="fake-1"),
+        run_dir=Path("."),
     )
 
 
 def review(package_dir: Path, out: Path, request: AttemptRequest) -> Any:
     """`_review_fn` as `run_benchmark` calls it."""
     return cli._review_fn(
-        package_dir, out, provider="fake", model="fake-1", effort="high", attempt=request
+        package_dir,
+        out,
+        provider="fake",
+        model="fake-1",
+        effort="high",
+        attempt=dataclasses.replace(request, run_dir=out.parent),
     )
 
 
@@ -171,6 +184,40 @@ def test_the_system_prompt_and_opening_message_are_recorded_as_sent(
     assert at_first == {"prompts_version": 1, "system": system, "user_messages": [opening]}
     assert recorded(out) == {"prompts_version": 1, "system": system, "user_messages": [opening]}
     assert [path for path in writes if path.name == PROMPTS_FILE] == [out / PROMPTS_FILE] * 2
+
+
+def test_an_abandoned_attempt_still_records_its_opening(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """T195/RF-50: the opening is durable before a worker enters a silent stream."""
+    from tests.unit.test_benchmark_attempts import driver_row, driver_run, prepare_driver_set
+
+    preflighted = prepare_driver_set(tmp_path)
+    out = tmp_path / "run"
+    folder = out / "attempts/fict-a/1"
+    release = threading.Event()
+    built = install(monkeypatch, folder, ScriptedTurn(text="", hang=release))
+    try:
+        assert (
+            driver_run(
+                preflighted,
+                out,
+                package_time_limit_s=0.25,
+                stream_activity_window_s=0.03,
+                stop_grace_s=0.05,
+            )
+            == []
+        )
+        assert driver_row(out)["class"] == "abandoned"
+        [provider] = built
+        assert recorded(folder) == {
+            "prompts_version": 1,
+            "system": provider.systems[0],
+            "user_messages": [provider.user_message(0)],
+        }
+        assert not (out / "fict-a").exists()
+    finally:
+        release.set()
 
 
 def test_every_answer_turn_message_is_recorded_byte_for_byte(
