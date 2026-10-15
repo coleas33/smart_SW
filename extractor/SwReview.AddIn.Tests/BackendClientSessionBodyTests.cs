@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Net;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -64,13 +65,22 @@ public sealed class BackendClientSessionBodyTests
     }
 
     [Fact]
-    public void TimeoutsSelectChecksOnlyForWaitOrRecheckWithoutWaiting()
+    public void EveryModeUsesTheThirtySecondCallTimeoutWithoutWaiting()
     {
-        Assert.Equal(TimeSpan.FromSeconds(30), BackendClient.TimeoutFor(null));
-        Assert.Equal(BackendClient.TimeoutFor(null), BackendClient.ChecksOnlyTimeout);
-        Assert.Equal(BackendClient.TimeoutFor(null), BackendClient.TimeoutFor(Request(ReviewMode.Send)));
-        Assert.Equal(BackendClient.ChecksOnlyTimeout, BackendClient.TimeoutFor(Request(ReviewMode.Wait)));
-        Assert.Equal(BackendClient.ChecksOnlyTimeout, BackendClient.TimeoutFor(Request(ReviewMode.Recheck)));
+        const BindingFlags staticMembers = BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
+        Type client = typeof(BackendClient);
+        FieldInfo timeout = Assert.IsAssignableFrom<FieldInfo>(client.GetField("CallTimeout", staticMembers));
+        Assert.Equal(TimeSpan.FromSeconds(30), Assert.IsType<TimeSpan>(timeout.GetValue(null)));
+        Assert.Null(client.GetField("ChecksOnlyTimeout", staticMembers));
+        Assert.Null(client.GetMethod("TimeoutFor", staticMembers));
+
+        // The wire theory exercises Send, Wait and Recheck through this one call path.
+        // With no timeout argument, all three use the same 30-second bound.
+        MethodInfo call = Assert.IsAssignableFrom<MethodInfo>(client.GetMethod("Call", BindingFlags.Instance | BindingFlags.NonPublic));
+        Assert.Collection(call.GetParameters(),
+            parameter => Assert.Equal(typeof(string), parameter.ParameterType),
+            parameter => Assert.Equal(typeof(string), parameter.ParameterType),
+            parameter => Assert.Equal(typeof(string), parameter.ParameterType));
         Assert.Equal(ReviewMode.Send, new NewSessionRequest("run", "openai", "fictional", "high", "FICT-engineer", null, null).Mode);
     }
 
