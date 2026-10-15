@@ -2149,6 +2149,9 @@ each is noted on the task lines it touches, no task box is ticked for it, and
     F-007" (`DECISION_NOUNS`), not by the stored "rejected" (C48); and the two items added by 89A and
     90A: "the answer to {id} (another answer matches the same question)" and "the answer to {id}
     (part of its drawing read was refused or failed, so its question is asked again)".
+  - *Made by T115, 2026-10-15.* Each reconciliation above is a dated *Landed as* note in
+    `contracts/recheck.md` sections 2 and 4, `contracts/words.md` section 4, and data-model
+    sections 2, 3 and 8. tasks.md T095 carries the landed name beside the planned one.
 
 ### 89A. Two earlier answers that match one question: neither is carried, both are named (2026-10-14)
 

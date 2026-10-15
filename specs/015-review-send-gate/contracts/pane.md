@@ -177,6 +177,15 @@ failure history, while retaining today's generic read-only reason. The page may 
 local apply-error label and fold with that block; the restored Send action stays unavailable
 until US4's recheck path exists. This does not complete T099/T100 or the composed dated line.
 
+*Landed as* (T100, T108, T115, 2026-10-15): the sequence above is complete and superseded.
+- A failed apply's restore is section 7's restored review. Its reason is the composed dated line
+  that T100's backend gives, and its Send is enabled and posts `review.recheck`.
+- `ReviewPageSendGateTests` (`AssertFailedApplyRestored`) moved deliberately: the restore offers
+  Send.
+- Its fixture's `restored` snapshots still carry 009's whole sentence as `read_only_reason`. That
+  sentence is what the route answered when the capture was made (section 13's *Landed as*). The
+  page prints whatever reason the snapshot gives, so the case still holds.
+
 ## 6. The follow-up box and Stop
 
 While the summary has a `send` block, or no `usage` of this review has arrived after its Send, the
@@ -303,6 +312,11 @@ SC-007 reads.
 | `review.start` (amended) | as today | the stored `send_when_checked` goes to `POST /sessions`; `review.started` carries `send_when_checked`. |
 | `sessions.list` (amended) | `{}` | first looks for a waiting review of the active document (`recheck.md` section 9), and refreshes every record whose `ModelStatus` is set with one bounded head read each; items carry `model_status` for every record that waits for Send - an unticked start's, a re-run's, a found one's (owner decision 73A). |
 
+*Landed as* (T104, T108, T115, 2026-10-15): `review.recheck`'s call keeps the one 30 s rule, the
+client's `CallTimeout`. T098's measured re-run, 8.8 s, fits inside 30 s, so `ChecksOnlyTimeout`
+and `TimeoutFor` were removed (research R2.17; `recheck.md` section 1's *Landed as*). 002
+`pane-host-messages.md` holds the rows as landed.
+
 Host to page: `status` gains the stage `checking`. `ReviewPageContractTests` holds both new rows to the
 page's sends (its rules 1 and 2), so each new row lands in the commit where the page first posts it,
 never with its host handler alone (tasks T055 and T108).
@@ -332,3 +346,22 @@ drawing-candidate question: `waiting`, `sending` - the live snapshot while a Sen
 `review-waiting-restored.json` (the same package: `restored`, and `rechecked`, the re-run's
 `POST /sessions` answer with the re-run's live snapshot) for `ReviewPageRecheckTests`; and `review-waiting-big-assembly.json` (`waiting`, `failed_send`,
 `restored`) for `ReviewPageSendLayoutTests` only.
+
+*Landed as* (T089-T090, T101-T102, T107-T108, T115, 2026-10-15):
+- **`rechecked`.** In `review-waiting-restored.json` it is `{answer, snapshot}`. `answer` is the
+  re-run's `POST /sessions` body, its three keys exactly. `snapshot` is the new chat's live
+  `awaiting_send` snapshot, with the Send block and its counted size.
+- **The driver's re-run.** The driver answers `review.recheck` through `RecheckReply`, which the
+  test builds from that fixture. It replaces the review's `sessions` item with the new chat id,
+  as the host replaces its record. `RecheckError` is its error mode.
+- **A fourth generated fixture.** `generate_waiting_fixtures.py` also writes
+  `review-not-sent-session.json`, a not-sent `session.json` as `save_session` writes it. The
+  host's `RunFoldersNotSentTests` reads it (`recheck.md` section 9).
+- **A captured fixture.** `review-waiting-apply-failure.json` (C45, US3) has no committed
+  generator. It holds untouched route captures, its clocks pinned before capture, made before
+  T100. Its two `restored` snapshots therefore carry 009's whole read-only sentence as
+  `read_only_reason`, where today's backend composes `read_only_lead` and the dated
+  `send.restored_line`. It is left as captured. Editing a capture by hand would break research
+  R2.25 and the fixture's recorded hashes, and regenerating it would need a generator, which is
+  code. The page prints the reason it is given, and the cases that read this fixture assert only
+  that.

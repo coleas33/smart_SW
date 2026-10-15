@@ -1937,7 +1937,7 @@ before its restarts.
      backend), then Send.
 
    The unticked-start timings are for information only: the bound is set from the re-run. If a
-   seat re-run exceeds the one-call rule, or a third of `ChecksOnlyTimeout` where that is used,
+   seat re-run takes longer than 30 s, the one timeout every host call keeps (research R2.17),
    report it to the owner: the bound is set again by R2.17's rule in a follow-up, recorded in
    R2.17 and RK-10.
 

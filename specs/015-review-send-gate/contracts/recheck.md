@@ -60,6 +60,24 @@ the big assembly on the seat. If the host gives up anyway, the backend may still
 and hold its chat waiting; the next `review.recheck` adopts that chat (section 2), so the review is
 never left refused until a restart.
 
+*Landed as* (T098, T103-T104, T115, 2026-10-15):
+- **The timeout.** T098 measured the larger re-run at 8.8 s on the thousand-group package, inside
+  30 s (research R2.17). So T104 removed `TimeoutFor` and `ChecksOnlyTimeout`: one 30 s rule,
+  the client's `CallTimeout`, covers every call, a re-run's included.
+  `BackendClientSessionBodyTests` pins that neither member exists. The seat's re-run timings
+  (T119) set the bound again by R2.17's rule if one exceeds 30 s.
+- **The shared body.** It is `CreateReviewSession(document, runDirectory, previousChatId, mode, id,
+  summary, replacing)`. `review.recheck` passes the tracked record as `replacing`, and
+  `retry_of` is sent as null for a re-run.
+- **The binding.** It is `PageDocument.IsSameDocument`: the path ignoring case and the
+  configuration exactly. The search (section 9) uses the same rule, and so does the host's check
+  that it already tracks a review of the active document.
+- **The record.** It is replaced through `Publish(record, replacing)`, the step `TrackSession`
+  uses too. While `replacing` is still tracked, the new record takes its place in the list.
+  Otherwise any record of the new chat id is dropped and the new one appended. The new record's
+  `ModelStatus` is `replacing`'s own, so a `send_failed` record forgotten during its re-run is
+  tracked again as `send_failed`.
+
 The page sends `review.recheck` only for a restored waiting review, and only as the first step of
 its Send (`pane.md` section 7; owner decision 68A). While it is in flight, the host's pump is busy
 with it, so a Settings save the page could still send would be handled after it; the page refuses
@@ -119,6 +137,19 @@ earlier record, whole); their copies and the earlier record's own stream at inde
 canonical `events.jsonl` and `tool-results/`, the failed attempt's partial stream and results, or
 nothing when it was cut off before its first event. The next re-run moves those to their own index
 (the second case above). Nothing is sent, and nothing needs recovering.
+
+*Landed as* (T094-T095 and owner decision 90A, T115, 2026-10-15):
+- **The held folder.** There is no `ChatServer._rechecking` set. The folder is held in the
+  existing `ChatServer._pending_run_dirs`, which already held every start's folder from its claim
+  to its answer. `_claim_run_dir` checks that set first, so a second claim of a folder whose
+  re-run still runs is `409 RunDirInUse` (C47, research R8).
+- **The record read.** `create_session` adds the folder to `_pending_run_dirs` right after the
+  claim. It then reads the earlier record (`_waiting_record`) on the thread pool, so a second
+  claim made while the read awaits is refused too (90A). A refusal from that read releases the
+  folder.
+- **The rotation.** It is `_rotate_previous(chat, keep_record=<the earlier record's
+  session_id>)`, not `keep_record=True`. It hands over to `_rotate_kept`, which compares that id
+  with the stream's first event and with each `session.K.json`.
 
 **The commit point** (owner decision 93A, 2026-10-15). The re-run's finalization writes
 `session.json` first, through `write_atomic`'s `os.replace`; that replace is the commit point.
@@ -186,6 +217,10 @@ review started now would; only the pre-run's live call is skipped (FR-028). With
 the same provider and model and SOLIDWORKS attached as at the first run, the first request is the
 live waiting review's, byte for byte (SC-008).
 
+*Landed as* (owner decision 87A item 8, T115, 2026-10-15): the carried step's index is pinned by a
+test and also guarded. `prerun._carried_interference` refuses a carried step that would not land at
+`live.step_index`, before the step is recorded or the seat is asked.
+
 ## 4. What is carried, and how it is matched
 
 `ReviewRun.carry_from(earlier)`, called by the re-run path of `create_session` on the thread pool,
@@ -247,6 +282,36 @@ finding a carried part-roles answer withdrew (FR-023, SC-005 on the restart path
 section 5) and its wait lines are the earlier answers' and outcome lines. `_open_waiting` then runs
 `close_waiting()`, which builds the Send cache and finalizes (`review-flow.md` section 1).
 
+*Landed as* (T096-T097 and owner decisions 87A to 90A, research R8; T115, 2026-10-15):
+- **Where the carry runs** (87A item 5). The server does not call `carry_from` as a separate step
+  on the thread pool between `start_review` and `_open_waiting`, and there is no `_carry`.
+  `_open_waiting(chat, run, earlier)` calls `run.carry_from(earlier)` inside its thread function,
+  before `close_waiting()`. A carry that raises therefore takes the one failure path a failed
+  finalization takes: the run is closed, and the chat is `failed` and never registered.
+- **When the carry settles** (88A). The carry ends with `_settle_waiting(applied)` only when it
+  carried answers or drawing outcome lines. A decision or a timing input carried alone leaves the
+  opening as it was, as a decision made while a live review waits does. With only a Reject
+  carried, every request of Send's first turn is the live waiting review's, and
+  `_opening_changed` stays false. Tests pin both.
+- **Two answers on one question** (89A, step 1). When two earlier answers each match the same
+  re-run question and nothing else, neither is carried. Each is named "the answer to {id}
+  (another answer matches the same question)", and the question stays open for after Send. This
+  is 72A's rule for decisions.
+- **A partial drawing read** (90A (d), steps 1 and 6). An earlier drawing-candidate question can
+  be answered with a read that merged a drawing for some of its documents, while a candidate row
+  remains for another (the read was refused or failed for the rest). The re-run asks the narrower
+  question again, with no new read, and names the answer "the answer to {id} (part of its drawing
+  read was refused or failed, so its question is asked again)". The earlier outcome lines are
+  carried as they stand. "Some" is counted by candidate row, not by drawing: one drawing file
+  beside two documents of one stem, read whole, is not a partial read (`_drawing_read_of`). An
+  **open** question whose unfinished read merged some of its drawings is named by step 6's
+  lost-outcome item, as one that merged all of them is.
+- **The drawing index** (90A (b)). `carry_from` builds one `DrawingIndex` and passes it to both
+  the answer match and the lost-outcome search.
+- **The profile** (90A (a), step 7). "Another path" means the paths differ as
+  `drawings.evidence.file_key` compares Windows paths, ignoring case and separator. The digest
+  is compared exactly (`runner._same_profile`).
+
 ## 5. What is not carried is named
 
 One unresolved coverage row, check `coverage.recheck`, when anything is not carried, reason
@@ -255,6 +320,11 @@ One unresolved coverage row, check `coverage.recheck`, when anything is not carr
 a decision that matches more than one item, a decision another earlier decision shares its finding
 with (section 4.2, 72A), a drawing outcome an unfinished read lost (section 4.6), and a changed
 Standards profile (section 4.7). No row when everything carried.
+
+*Landed as* (owner decisions 89A and 90A, T115, 2026-10-15): the list has two more items. One is an
+answer that another earlier answer shares its one matching question with (neither is carried). The
+other is an answer whose drawing read was partial, so its question is asked again (section 4's
+*Landed as*). The items' words are `words.md` section 4.
 
 ## 6. Failure
 
@@ -330,6 +400,21 @@ bytes shows it never reads beyond the cap. The 2 s bound on such a root stays a 
 development machine (FR-030, default bound). Nothing here throws: an unreadable root or file offers
 nothing.
 
+*Landed as* (T105-T106, T115, 2026-10-15):
+- **The head read.** The search reads the one head through the reader `ReadModelStatus` shares
+  (`RunFolders.ReadSessionHead`, private). It takes the top-level `session_id` as well as
+  `model_status`, within the same 65,536 bytes, and stops at `model_status`.
+  `ReadModelStatus(runDirectory, openHead = null)` reads `model_status` alone.
+- **What offers nothing.** A head with no `session_id`, a `document` that is not an object, or a
+  `checked_at` that does not parse offers nothing.
+- **The match.** The document is matched by `PageDocument.IsSameDocument` (section 1's
+  *Landed as*). The found record's document is the one stored in `model_status.document`.
+- **When the search runs.** The host runs it only for an active part or assembly with no tracked
+  review that `IsSameDocument` matches. It adds the found record through `TrackSession`, before
+  the marks are refreshed.
+- **The cross-language check.** `RunFoldersNotSentTests` reads T102's backend-written
+  `review-not-sent-session.json` through both readers.
+
 **The kept records' marks** (73A). `sessions.list` also refreshes every record this host tracks
 whose `ModelStatus` is set - an unticked start's, a re-run's, a found review's - with the same
 `ReadModelStatus`, one bounded read each, and clears the mark of a record whose file now says
@@ -352,6 +437,10 @@ screen from its folder at once when it was a live waiting review (FR-042): read-
 line, the sentence without a number, and Send offered, which re-runs it (68A). A review that was not waiting keeps
 feature 009's rule. A Settings save made while a review waits is not refused (FR-027); the Settings
 section said beforehand what it would do (`pane.md` section 9).
+
+*Landed as* (T108, T115, 2026-10-15): the page tells another backend by the token alone. An `init`
+whose `token` differs from the one the page holds is a restart; the port is not compared. Every
+backend start makes a new token.
 
 ## 11. Tests
 
