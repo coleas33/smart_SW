@@ -27,6 +27,7 @@ are the robustness slice's (T216, T217).
 
 from __future__ import annotations
 
+import contextlib
 import html
 import json
 import os
@@ -35,6 +36,7 @@ import secrets
 import shutil
 import stat
 import sys
+import time
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -184,6 +186,19 @@ WINDOWS_RESERVED = frozenset(
 BUILDING = ".building"
 """The suffix of the sibling folder a build is written into before it is put in place (83A)."""
 
+STAGED = (f"{TRANSCRIPTS_DIR}.new", f"{TRANSCRIPTS_DIR}.old", f"{INDEX_FILE}.new")
+"""The names an in-place copy stages beside a report before renaming them into place; a copy that
+was killed may leave them, and a report may hold them (owner decision 96A)."""
+
+STRANDED_FILE = "STRANDED-by-swreview-benchmark-report.txt"
+"""Written into a previous report a build moved aside and could not move back, so that no later
+build's sweep takes it for its own and removes it (96A)."""
+
+ORPHAN_MIN_AGE_S = 600
+"""A build's sibling changed within this many seconds is never swept: another build may be
+writing it. Chosen over detecting a folder held open by another build, which Windows does not
+report without trying to remove it (96A)."""
+
 PREVIOUS = ".previous"
 """The suffix a previous report is moved aside under while the build is moved in (83A, 91A)."""
 
@@ -280,10 +295,11 @@ def build_report(
     leaves a previous report as it was (owner decision 83A). In place means moved: the previous
     report aside, the build in, the previous one removed. Where `out` is or holds the working
     folder, or is a link, or the move fails, the build is copied into `out` instead, replacing
-    its contents (owner decision 91A). Removing the old report is best effort: one that cannot be
-    removed is named in `ReportBuilt.warnings`, the new report being in place; siblings a killed
-    build left are removed first and named in `ReportBuilt.removed`. The build needs write
-    access to `out`'s parent.
+    its contents (owner decision 91A), staged beside them first (96A). Removing the old report
+    is best effort: one that cannot be removed is named in `ReportBuilt.warnings`, the new report
+    being in place. Folders a killed build left are swept first, only those that are ours by name,
+    contents and age (`_remove_orphans`, 96A), named in `ReportBuilt.removed`, any kept named in
+    `ReportBuilt.warnings`. The build needs write access to `out`'s parent.
     """
     out = Path(out)
     paths = distinct_run_dirs(run_dirs)
@@ -371,9 +387,10 @@ def _place(built: Path, target: Path, *, in_place: bool) -> Path | None:
     """Put the finished build at `target`; the folder this left and could not remove, if any.
 
     Moved when it can be: a previous report, or an empty folder, aside, the build in, the
-    previous one removed. Copied in place when `in_place`, when the previous report cannot be
-    moved aside, or when the build cannot be moved in, the previous report then moved back first
-    (owner decision 91A).
+    previous one removed. Copied in place when `in_place`, or when the previous report cannot be
+    moved aside (owner decision 91A). When the build cannot be moved in, the previous report is
+    moved back first, on any exception, an interruption included; then an `OSError` falls back to
+    the copy and anything else is raised (owner decision 96A).
     """
     if in_place:
         _copy_in_place(built, target)
@@ -389,21 +406,71 @@ def _place(built: Path, target: Path, *, in_place: bool) -> Path | None:
         return _remove(built)
     try:
         built.rename(target)
-    except OSError:
-        previous.rename(target)
+    except BaseException as failure:
+        _move_back(previous, target, failure)
+        if not isinstance(failure, OSError):
+            raise
         _copy_in_place(built, target)
         return _remove(built)
     return _remove(previous)
 
 
+def _move_back(previous: Path, target: Path, failure: BaseException) -> None:
+    """Put the previous report back at `target`. When that fails too, mark it so that no later
+    build's sweep removes it, and refuse, naming where it is (owner decision 96A)."""
+    try:
+        previous.rename(target)
+    except OSError:
+        with contextlib.suppress(OSError):
+            (previous / STRANDED_FILE).write_bytes(
+                (
+                    f"swreview benchmark report moved the previous report in this folder aside "
+                    f"from {target} and could not move it back. Move it back by hand; no build "
+                    "removes this folder.\n"
+                ).encode()
+            )
+        raise ReportError(
+            f"the previous report was moved aside to {previous} and could not be moved back to "
+            f"{target}; move it back by hand"
+        ) from failure
+
+
 def _copy_in_place(built: Path, target: Path) -> None:
-    """Replace `target`'s report with the build's, keeping the folder itself; not atomic."""
+    """Replace `target`'s report with the build's, keeping the folder itself (owner decision 96A).
+
+    The build is copied beside the report first, as `transcripts.new` and `index.html.new`, so a
+    copy that fails leaves the previous report whole and readable; then the old `transcripts/` is
+    renamed aside to `transcripts.old`, `transcripts.new` into its place (renamed back on a
+    failure), `index.html.new` over `index.html`, and `transcripts.old` removed, best effort. The
+    renames are separate steps, not one: a failure between them can leave one build's index
+    beside the other's transcripts, which the next build replaces.
+    """
+    staged_transcripts, old_transcripts, staged_index = (target / name for name in STAGED)
+    for stale in (staged_transcripts, old_transcripts):
+        if os.path.lexists(stale):
+            _rmtree(stale)
+    staged_index.unlink(missing_ok=True)
+    try:
+        if (built / TRANSCRIPTS_DIR).is_dir():
+            shutil.copytree(built / TRANSCRIPTS_DIR, staged_transcripts)
+        else:
+            staged_transcripts.mkdir()
+        shutil.copyfile(built / INDEX_FILE, staged_index)
+    except BaseException:
+        _remove(staged_transcripts)
+        staged_index.unlink(missing_ok=True)
+        raise
     transcripts = target / TRANSCRIPTS_DIR
-    if transcripts.is_dir():
-        _rmtree(transcripts)
-    if (built / TRANSCRIPTS_DIR).is_dir():
-        shutil.copytree(built / TRANSCRIPTS_DIR, transcripts)
-    shutil.copyfile(built / INDEX_FILE, target / INDEX_FILE)
+    if transcripts.exists():
+        transcripts.rename(old_transcripts)
+    try:
+        staged_transcripts.rename(transcripts)
+    except BaseException:
+        if old_transcripts.exists():
+            old_transcripts.rename(transcripts)
+        raise
+    os.replace(staged_index, target / INDEX_FILE)
+    _remove(old_transcripts)
 
 
 def _is_junction(path: Path) -> bool:
@@ -442,34 +509,83 @@ def _writable(function: Any, name: str, error: Any) -> None:
 
 def _remove(folder: Path) -> Path | None:
     """Remove a folder this command wrote, read-only flags cleared; best effort: the folder
-    when it could not be removed, else `None`."""
-    try:
+    when it is still there afterwards, else `None`, never reporting a removal that did not
+    happen (owner decision 96A)."""
+    with contextlib.suppress(OSError):
         _rmtree(folder)
-    except OSError:
-        return folder
-    return None
+    return folder if os.path.lexists(folder) else None
+
+
+def _build_sibling(name: str) -> re.Pattern[str]:
+    """The names this command gives the folders beside an `--out` named `name`: its own random
+    part, 16 hexadecimal digits, or an earlier build's `tempfile.mkdtemp` part, 8 of
+    `[a-z0-9_]`, then `.building` or `.previous`; nothing else (owner decision 96A)."""
+    return re.compile(
+        rf"\.{re.escape(name)}\.(?:[0-9a-f]{{16}}|[a-z0-9_]{{8}})"
+        rf"(?:{re.escape(BUILDING)}|{re.escape(PREVIOUS)})"
+    )
 
 
 def _remove_orphans(target: Path) -> tuple[tuple[Path, ...], tuple[str, ...]]:
-    """The siblings a killed build of `target` left (`.<name>.<random>.building` or
-    `.previous`), each removed, best effort: those removed, and a warning for each that was not,
-    both to be named (91A)."""
-    left = re.compile(
-        rf"\.{re.escape(target.name)}\.[0-9a-z_]+(?:{re.escape(BUILDING)}|{re.escape(PREVIOUS)})"
-    )
+    """The folders a killed build of `target` left beside it, swept, best effort: those removed,
+    and a warning for each kept or not removable, both to be named (owner decisions 91A, 96A).
+
+    Only a real folder (no link, no junction) named as `_build_sibling` names them is considered,
+    and one is removed only when `_why_kept` finds no reason to keep it.
+    """
     if not target.parent.is_dir():
         return (), ()
-    orphans = sorted(
-        child
-        for child in target.parent.iterdir()
-        if left.fullmatch(child.name) and child.is_dir() and not child.is_symlink()
-    )
-    stuck = [orphan for orphan in orphans if _remove(orphan) is not None]
-    removed = tuple(orphan for orphan in orphans if orphan not in stuck)
-    return removed, tuple(
-        f"could not remove {orphan}, left by an earlier build; remove it by hand"
-        for orphan in stuck
-    )
+    pattern = _build_sibling(target.name)
+    removed: list[Path] = []
+    warnings: list[str] = []
+    for child in sorted(target.parent.iterdir()):
+        if not pattern.fullmatch(child.name):
+            continue
+        if child.is_symlink() or _is_junction(child) or not child.is_dir():
+            continue
+        reason = _why_kept(child, target)
+        if reason is not None:
+            warnings.append(f"kept {child}: {reason}")
+        elif _remove(child) is None:
+            removed.append(child)
+        else:
+            warnings.append(
+                f"could not remove {child}, left by an earlier build; remove it by hand"
+            )
+    return tuple(removed), tuple(warnings)
+
+
+def _why_kept(sibling: Path, target: Path) -> str | None:
+    """Why a folder named as a build's sibling is not swept, or `None` (owner decision 96A): it
+    is a previous report a build could not move back; it holds anything but a report; it changed
+    within `ORPHAN_MIN_AGE_S`; or it is a previous report while `target` holds none, so it may be
+    the only copy."""
+    if (sibling / STRANDED_FILE).exists():
+        return (
+            "a build moved this previous report aside and could not move it back; move it back "
+            "by hand"
+        )
+    if not _holds_a_report(sibling, index_required=False):
+        return "it holds files this command did not write"
+    if time.time() - _youngest(sibling) < ORPHAN_MIN_AGE_S:
+        return (
+            f"it changed within the last {ORPHAN_MIN_AGE_S // 60} minutes, so another build may "
+            "be writing it"
+        )
+    if sibling.name.endswith(PREVIOUS) and not (
+        target.is_dir() and _holds_a_report(target, index_required=True)
+    ):
+        return f"{target} holds no report, so this may be the only copy of the previous one"
+    return None
+
+
+def _youngest(folder: Path) -> float:
+    """The latest modification time of `folder` and of everything beneath it, links unfollowed."""
+    youngest = os.lstat(folder).st_mtime
+    for parent, folders, files in os.walk(folder):
+        for name in (*folders, *files):
+            youngest = max(youngest, os.lstat(os.path.join(parent, name)).st_mtime)
+    return youngest
 
 
 def _leftover_warning(leftover: Path) -> str:
@@ -527,25 +643,40 @@ def _refuse_an_out_in_a_run_folder(out: Path, runs: Sequence[Path]) -> None:
 
 
 def _refuse_a_foreign_out(out: Path) -> None:
-    """`--out` is absent, empty, or a previous report: only an `index.html` carrying the
-    generator tag and, optionally, `transcripts/` (`report.md` 6)."""
+    """`--out` is absent, empty, or a previous report (`_holds_a_report`, its `index.html`
+    required); a `transcripts/` that is a link is refused on its own line (`report.md` 6, 7)."""
     if not out.exists():
         return
-    refusal = ReportError(f"{out} holds files this command did not write; choose an empty folder")
-    if not out.is_dir():
-        raise refusal
-    held = {child.name for child in out.iterdir()}
-    if not held:
-        return
-    index = out / INDEX_FILE
-    if (
-        INDEX_FILE not in held
-        or not held <= {INDEX_FILE, TRANSCRIPTS_DIR}
-        or not index.is_file()
-        or (TRANSCRIPTS_DIR in held and not (out / TRANSCRIPTS_DIR).is_dir())
-        or GENERATOR_TAG.encode("utf-8") not in index.read_bytes()
-    ):
-        raise refusal
+    if out.is_dir():
+        transcripts = out / TRANSCRIPTS_DIR
+        if transcripts.is_symlink() or _is_junction(transcripts):
+            raise ReportError(
+                f"{transcripts} is a link; the report replaces that folder and will not write "
+                "through a link: remove the link, or choose another folder"
+            )
+        if not any(out.iterdir()) or _holds_a_report(out, index_required=True):
+            return
+    raise ReportError(f"{out} holds files this command did not write; choose an empty folder")
+
+
+def _holds_a_report(folder: Path, *, index_required: bool) -> bool:
+    """Whether `folder` holds only what this command writes: an `index.html` carrying the
+    generator tag (needed only when `index_required`), a `transcripts/` that is a folder and no
+    link, and an in-place copy's staged names (owner decision 96A)."""
+    held = {child.name for child in folder.iterdir()}
+    if not held <= {INDEX_FILE, TRANSCRIPTS_DIR, *STAGED}:
+        return False
+    index = folder / INDEX_FILE
+    if INDEX_FILE in held:
+        if not index.is_file() or GENERATOR_TAG.encode("utf-8") not in index.read_bytes():
+            return False
+    elif index_required:
+        return False
+    for name in (TRANSCRIPTS_DIR, *STAGED[:2]):
+        path = folder / name
+        if name in held and (path.is_symlink() or _is_junction(path) or not path.is_dir()):
+            return False
+    return True
 
 
 def _relative_names(paths: Sequence[Path]) -> list[str]:

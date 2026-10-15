@@ -208,18 +208,37 @@ from another session in this folder", `unreadable` "the stored result is unreada
 - `--out` is required. Absent or empty: created and written. Holding a previous report, whose
   `index.html` carries `<meta name="generator" content="swreview benchmark report">`: replaced
   whole. Holding anything else: refused.
-- The build is written into a new sibling folder of `--out`, `.<name>.<random>.building`, made with
-  `Path.mkdir`, and put in place once every page is written: the previous report moved aside as
-  `.<name>.<random>.previous`, the build moved in, the previous report removed. A build that fails
-  part-way leaves the previous report as it was (owner decision 83A). Where `--out` is or holds the
-  working folder (`--out .`), or is a junction or a symbolic link, or a move fails (a folder another
-  process holds), the build is copied into `--out` in place instead, replacing its report, so a
-  link's target is the one updated (owner decision 91A). The build therefore needs write access to
-  `--out`'s parent.
-- Removing the previous report, and this build's own folder after an in-place copy, is best effort,
-  read-only flags cleared: one that cannot be removed is named on one warning line, and the command
-  still exits 0, its report being in place. Siblings of either kind a killed build left are removed
-  first, best effort, each named (91A).
+- The build is written into a new sibling folder of `--out`, `.<name>.<random>.building` (16
+  hexadecimal digits), made with `Path.mkdir`, and put in place once every page is written: the
+  previous report moved aside as `.<name>.<random>.previous`, the build moved in, the previous
+  report removed. A build that fails part-way leaves the previous report as it was (owner decision
+  83A). When the build cannot be moved in, the previous report is moved back first, on any
+  exception, an interruption included; if that move fails too, the build is refused naming where
+  the previous report now is, and a file is written into that folder so that no later build
+  removes it (owner decision 96A). The build therefore needs write access to `--out`'s parent.
+- **The in-place fallback.** Where `--out` is or holds the working folder (`--out .`), or is a
+  junction or a symbolic link, or the previous report cannot be moved aside, or the build cannot be
+  moved in (the previous report moved back first), the build is copied into `--out` instead, so a
+  link's target is the one updated (owner decision 91A). What it guarantees (96A): the build is
+  first copied beside the report, as `transcripts.new` and `index.html.new`, so a copy that fails
+  leaves the previous report whole and readable, the staged copies removed; then `transcripts/` is
+  renamed aside to `transcripts.old`, `transcripts.new` into its place (renamed back on a failure),
+  `index.html.new` over `index.html`, and `transcripts.old` removed. Those renames are separate
+  steps, not one: a failure between them can leave one build's index beside the other's
+  transcripts, which the next build replaces. A report holding the staged names is still a previous
+  report. A `transcripts/` that is itself a link is refused (section 7).
+- **Clean-up never removes what is not ours** (96A). Removing the previous report, and this
+  build's own folder after an in-place copy, is best effort, read-only flags cleared on Windows: a
+  folder still there afterwards is never reported removed; it is named on one warning line, and
+  the command still exits 0, its report being in place. Before a build, the folders a killed build
+  left beside `--out` are swept, each named: only a real folder (no link, no junction) named
+  `.<name>.` then 16 hexadecimal digits, or an earlier build's 8 characters of `[a-z0-9_]`, then
+  `.building` or `.previous`, is considered; it is removed only when it holds nothing but a report
+  (`index.html` carrying the generator tag, `transcripts/`, the staged names), nothing in it changed
+  within the last ten minutes (another build may be writing it; chosen over detecting a folder held
+  open, which Windows reports only to a removal), it is not a previous report a build could not
+  move back, and, being a previous report, `--out` holds a report beside it. Any other is kept and
+  named on a warning line.
 - Every link is relative; run folders are named relative to their common parent. The page holds no
   local absolute path, and FR-051's committable-folder test runs over a page built from committed
   studies. A page built over private runs carries private paths and data and stays outside the
@@ -237,6 +256,8 @@ from another session in this folder", `unreadable` "the stored result is unreada
 | A package or attempt folder holds both `events.jsonl` and `events.jsonl.gz`, a pack that did not finish | `event_stream`'s message: the folder, and to run `swreview benchmark pack` on its run again (`provenance.md` 6.7) |
 | Two or more run folders, one in the home folder, whose common parent is the home folder or above it, so their names would carry the home folder's own folders (owner decisions 84A, 92A: a lone run folder is named by its own name and never refused for it, and where the platform names no home folder there is none to guard) | the run folder, the common parent, and to copy the run folders under one study folder |
 | `--out` is a run folder or lies in one (84A) | the folder, the run folder, and to choose a folder outside it |
+| `--out`'s `transcripts/` is a link (owner decision 96A) | the link, and to remove it or choose another folder |
+| The build cannot be moved into place and the previous report cannot be moved back (96A) | where the previous report now is, and to move it back by hand |
 | The run folders lie on different drives, so they have no common parent to be named relative to (owner decision 85A) | that, and to copy them under one folder |
 | A scored package's id cannot name a file: empty, a path separator, `.` or `..`, a character or a device name Windows refuses, a trailing dot or space; or two ids are one file name when case-folded (84A) | the run folder, the id or ids, and why |
 

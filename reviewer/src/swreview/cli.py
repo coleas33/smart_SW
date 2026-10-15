@@ -608,15 +608,20 @@ def _one_line(exc: BaseException) -> str:
     """An exception as a single, bounded line: stderr stays greppable.
 
     Its notes follow the message, after the message is cut to length, so a note such as a failed
-    prompts-record rewrite (feature 014 owner decision 86A) is never lost (owner decision 92A).
+    prompts-record rewrite (feature 014 owner decision 86A) is never lost (owner decision 92A);
+    the notes are cut to the same length, so the line stays bounded (owner decision 96A).
     """
     text = " ".join(str(exc).split())
     if isinstance(exc, KeyError):
         text = text.strip("'")
-    if len(text) > MESSAGE_LENGTH:
-        text = text[: MESSAGE_LENGTH - 1] + "…"
-    notes = [" ".join(str(note).split()) for note in getattr(exc, "__notes__", ())]
-    return "; ".join([f"{type(exc).__name__}: {text}", *notes])
+    line = f"{type(exc).__name__}: {_cut(text)}"
+    notes = "; ".join(" ".join(str(note).split()) for note in getattr(exc, "__notes__", ()))
+    return f"{line}; {_cut(notes)}" if notes else line
+
+
+def _cut(text: str) -> str:
+    """`text`, cut to `MESSAGE_LENGTH` characters with an ellipsis when longer."""
+    return text if len(text) <= MESSAGE_LENGTH else text[: MESSAGE_LENGTH - 1] + "…"
 
 
 @contextmanager
