@@ -54,6 +54,7 @@ from swreview.agent.providers import (
     EffortLevel,
     EffortMapping,
     EventCallback,
+    ProviderError,
     ProviderName,
     TokenUsage,
     ToolCallRequest,
@@ -149,7 +150,7 @@ class UnsupportedEffortError(ValueError):
     """The requested effort has no representation on this model. Never downgraded."""
 
 
-class GeminiProviderError(RuntimeError):
+class GeminiProviderError(ProviderError):
     """A Gemini API failure, mapped and redacted. `retryable` is what the pane offers."""
 
     retryable: ClassVar[bool] = True

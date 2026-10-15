@@ -55,6 +55,7 @@ from swreview.agent.providers import (
     EffortLevel,
     EffortMapping,
     EventCallback,
+    ProviderError,
     ProviderName,
     ProviderTool,
     TokenUsage,
@@ -134,7 +135,7 @@ item linked to one that was not sent. A refusal that names reasoning but no item
 model does not offer, `reasoning.effort` - is not one of them."""
 
 
-class OpenAIProviderError(RuntimeError):
+class OpenAIProviderError(ProviderError):
     """A provider failure, named and classified, with the key already redacted.
 
     `error_class` is the `openai` exception this came from, so a reader of `events.jsonl`
@@ -461,6 +462,7 @@ class OpenAIProvider:
                     provider=self.name,
                     model=self.model,
                     cache_diagnostic=_cache_diagnostic(response),
+                    served_model=getattr(response, "model", None),
                 ),
             )
             raw_output = [
@@ -650,6 +652,7 @@ class OpenAIProvider:
             f"the response ended incomplete: {reason}",
             error_class="IncompleteResponseError",
             retryable=False,
+            stop_reason=reason or "unset",
             on_event=on_event,
         )
 
@@ -715,29 +718,63 @@ class OpenAIProvider:
             retryable = exc.status_code >= 500
         else:
             retryable = False
+        stop_reason = None
+        if (
+            isinstance(exc, openai.APIStatusError)
+            and exc.status_code == 400
+            and exc.code
+            in {
+                "invalid_prompt",
+                "bio_policy",
+                "misalignment_policy_violation",
+                "image_content_policy_violation",
+                "context_length_exceeded",
+            }
+        ):
+            stop_reason = exc.code
         return self._raise_error(
             str(exc),
             error_class=type(exc).__name__,
             retryable=retryable,
+            stop_reason=stop_reason,
             on_event=on_event,
         )
 
     def _failed(self, response: Response, on_event: EventCallback) -> OpenAIProviderError:
         message = response.error.message if response.error else "the response failed"
+        code = response.error.code if response.error else None
+        stop_reason = code if code not in (None, "server_error", "rate_limit_exceeded") else None
         return self._raise_error(
-            message, error_class="ResponseFailedError", retryable=True, on_event=on_event
+            message,
+            error_class="ResponseFailedError",
+            retryable=True,
+            stop_reason=stop_reason,
+            on_event=on_event,
         )
 
     def _raise_error(
-        self, message: str, *, error_class: str, retryable: bool, on_event: EventCallback
+        self,
+        message: str,
+        *,
+        error_class: str,
+        retryable: bool,
+        on_event: EventCallback,
+        stop_reason: str | None = None,
     ) -> OpenAIProviderError:
         """Build the error and emit it: the runner's own `error` event cannot classify it."""
         redacted = self._redact(message)
         on_event(
             "error",
-            error_body(error_class=error_class, message=redacted, retryable=retryable),
+            error_body(
+                error_class=error_class,
+                message=redacted,
+                retryable=retryable,
+                stop_reason=stop_reason,
+            ),
         )
-        return OpenAIProviderError(redacted, error_class=error_class, retryable=retryable)
+        error = OpenAIProviderError(redacted, error_class=error_class, retryable=retryable)
+        error.stop_reason = stop_reason
+        return error
 
 
 # --- history encoding -------------------------------------------------------------------

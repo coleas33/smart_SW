@@ -31,6 +31,7 @@ import pytest
 import respx
 from openai import OpenAI
 
+from swreview.agent import providers
 from swreview.agent.providers import (
     AgentEvent,
     AgentProvider,
@@ -876,3 +877,224 @@ def test_the_api_key_never_reaches_the_error_message_or_the_error_event() -> Non
     assert KEY not in str(caught.value)
     assert MASK in caught.value.message
     assert KEY not in json.dumps(sink.one("error"))
+
+
+# --- served model and provider stops (T174) ---------------------------------------------
+
+
+def test_openai_provider_errors_keep_their_existing_constructor() -> None:
+    error = OpenAIProviderError(
+        "fict provider failure", error_class="FictServiceError", retryable=True
+    )
+
+    assert isinstance(error, providers.ProviderError)
+    assert error.args == ("fict provider failure",)
+    assert str(error) == error.message == "fict provider failure"
+    assert error.error_class == "FictServiceError"
+    assert error.retryable is True
+    assert error.stop_reason is None
+
+
+@respx.mock
+def test_every_usage_body_carries_its_responses_served_model() -> None:
+    served = ["fict-model-a-2026-10-01", "fict-model-a-2026-10-02"]
+    replies = [completed(function_call_item()), completed(message_item("fict answer"))]
+    for reply, model in zip(replies, served, strict=True):
+        reply["response"]["model"] = model
+    respx.post(RESPONSES_URL).mock(side_effect=[stream_response(reply) for reply in replies])
+
+    _, sink = run(make_provider(model="fict-model-a"), tools=[FakeTool(name="get_component")])
+
+    usages = sink.bodies("usage")
+    assert [body["served_model"] for body in usages] == served
+    assert [body["model"] for body in usages] == ["fict-model-a", "fict-model-a"]
+    assert all("retries" not in event.body for event in sink.events)
+
+
+@pytest.mark.parametrize("missing", [False, True], ids=["null", "absent"])
+@respx.mock
+def test_an_unreported_served_model_is_omitted(missing: bool) -> None:
+    reply = completed()
+    if missing:
+        del reply["response"]["model"]
+    else:
+        reply["response"]["model"] = None
+    respx.post(RESPONSES_URL).mock(return_value=stream_response(reply))
+
+    _, sink = run(make_provider(model="fict-model-a"))
+
+    assert sink.one("usage")["model"] == "fict-model-a"
+    assert "served_model" not in sink.one("usage")
+    assert "retries" not in sink.one("usage")
+
+
+@pytest.mark.parametrize(
+    "details",
+    [{"reason": "content_filter"}, {"reason": "fict_stop"}, {"reason": None}, None],
+    ids=["content_filter", "other", "null_reason", "no_details"],
+)
+@respx.mock
+def test_an_incomplete_response_carries_its_provider_stop(
+    details: dict[str, Any] | None,
+) -> None:
+    reply = incomplete()
+    reply["response"]["model"] = "fict-model-a-2026-10-01"
+    reply["response"]["incomplete_details"] = details
+    respx.post(RESPONSES_URL).mock(return_value=stream_response(reply))
+    sink = Sink()
+
+    with pytest.raises(OpenAIProviderError) as caught:
+        run(make_provider(model="fict-model-a"), sink=sink)
+
+    reason = details["reason"] if details else None
+    message = f"the response ended incomplete: {reason}"
+    assert sink.types == ["usage", "error"]
+    assert sink.one("error") == {
+        "error_class": "IncompleteResponseError",
+        "message": message,
+        "retryable": False,
+        "stop_reason": reason or "unset",
+    }
+    assert isinstance(caught.value, providers.ProviderError)
+    assert str(caught.value) == caught.value.message == message
+    assert caught.value.error_class == "IncompleteResponseError"
+    assert caught.value.retryable is False
+    assert caught.value.stop_reason == sink.one("error")["stop_reason"]
+
+
+@respx.mock
+def test_the_output_ceiling_adds_no_provider_stop() -> None:
+    reply = incomplete()
+    reply["response"]["model"] = "fict-model-a-2026-10-01"
+    respx.post(RESPONSES_URL).mock(return_value=stream_response(reply))
+
+    result, sink = run(make_provider(model="fict-model-a"))
+
+    assert result.reason == "truncated"
+    assert sink.types == ["usage"]
+    assert sink.one("usage")["served_model"] == "fict-model-a-2026-10-01"
+    assert "stop_reason" not in sink.one("usage")
+    assert "retries" not in sink.one("usage")
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        "invalid_prompt",
+        "bio_policy",
+        "misalignment_policy_violation",
+        "image_content_policy_violation",
+        "fict_policy",
+        "server_error",
+        "rate_limit_exceeded",
+        None,
+    ],
+)
+@respx.mock
+def test_a_failed_response_carries_only_a_reported_provider_stop(code: str | None) -> None:
+    response = response_payload([], status="failed")
+    response["model"] = "fict-model-a-2026-10-01"
+    response["error"] = {"code": code, "message": "fict response failure"}
+    respx.post(RESPONSES_URL).mock(
+        return_value=stream_response(
+            {"type": "response.failed", "sequence_number": 9, "response": response}
+        )
+    )
+    sink = Sink()
+
+    with pytest.raises(OpenAIProviderError) as caught:
+        run(make_provider(model="fict-model-a"), sink=sink)
+
+    stop = code if code not in (None, "server_error", "rate_limit_exceeded") else None
+    expected = {
+        "error_class": "ResponseFailedError",
+        "message": "fict response failure",
+        "retryable": True,
+    }
+    if stop is not None:
+        expected["stop_reason"] = stop
+    assert sink.types == ["error"]
+    assert sink.one("error") == expected
+    assert isinstance(caught.value, providers.ProviderError)
+    assert str(caught.value) == caught.value.message == "fict response failure"
+    assert caught.value.error_class == "ResponseFailedError"
+    assert caught.value.retryable is True
+    assert caught.value.stop_reason == stop
+
+
+@respx.mock
+def test_a_failed_response_without_error_keeps_its_fallback() -> None:
+    response = response_payload([], status="failed")
+    response["model"] = "fict-model-a-2026-10-01"
+    respx.post(RESPONSES_URL).mock(
+        return_value=stream_response(
+            {"type": "response.failed", "sequence_number": 9, "response": response}
+        )
+    )
+    sink = Sink()
+
+    with pytest.raises(OpenAIProviderError) as caught:
+        run(make_provider(model="fict-model-a"), sink=sink)
+
+    assert sink.types == ["error"]
+    assert sink.one("error") == {
+        "error_class": "ResponseFailedError",
+        "message": "the response failed",
+        "retryable": True,
+    }
+    assert isinstance(caught.value, providers.ProviderError)
+    assert str(caught.value) == "the response failed"
+    assert caught.value.retryable is True
+    assert caught.value.stop_reason is None
+
+
+@pytest.mark.parametrize(
+    ("status", "code", "stop", "error_class", "retryable"),
+    [
+        (400, "invalid_prompt", "invalid_prompt", "BadRequestError", False),
+        (400, "bio_policy", "bio_policy", "BadRequestError", False),
+        (
+            400,
+            "misalignment_policy_violation",
+            "misalignment_policy_violation",
+            "BadRequestError",
+            False,
+        ),
+        (
+            400,
+            "image_content_policy_violation",
+            "image_content_policy_violation",
+            "BadRequestError",
+            False,
+        ),
+        (400, "context_length_exceeded", "context_length_exceeded", "BadRequestError", False),
+        (400, "fict_code", None, "BadRequestError", False),
+        (400, None, None, "BadRequestError", False),
+        (401, "invalid_prompt", None, "AuthenticationError", False),
+        (429, "bio_policy", None, "RateLimitError", True),
+        (500, "context_length_exceeded", None, "InternalServerError", True),
+    ],
+)
+@respx.mock
+def test_only_the_named_400_codes_carry_a_provider_stop(
+    status: int, code: str | None, stop: str | None, error_class: str, retryable: bool
+) -> None:
+    payload = {"error": {"message": "fict request refusal", "code": code}}
+    route = respx.post(RESPONSES_URL).mock(return_value=httpx.Response(status, json=payload))
+    sink = Sink()
+
+    with pytest.raises(OpenAIProviderError) as caught:
+        run(make_provider(model="fict-model-a"), sink=sink)
+
+    message = f"Error code: {status} - {payload}"
+    expected = {"error_class": error_class, "message": message, "retryable": retryable}
+    if stop is not None:
+        expected["stop_reason"] = stop
+    assert route.call_count == 1
+    assert sink.types == ["error"]
+    assert sink.one("error") == expected
+    assert isinstance(caught.value, providers.ProviderError)
+    assert str(caught.value) == caught.value.message == message
+    assert caught.value.error_class == error_class
+    assert caught.value.retryable is retryable
+    assert caught.value.stop_reason == stop
