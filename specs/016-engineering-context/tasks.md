@@ -26,3 +26,6 @@
 - [x] T018 One opening builder input: the summary lives on the review run, so 015's opening
       rebuilt at Send keeps the engineering block, rebuilt over a reloaded package (99A;
       T116 integration review, blocker "the rebuilt Send opening drops the context").
+- [x] T019 The waiting record names its attachment, and a restored review's re-run reloads
+      and validates it, never unlinking the summary before its commit point (99A; T116
+      integration review, "a restored waiting review's re-run drops its engineering context").

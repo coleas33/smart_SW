@@ -82,6 +82,22 @@ class RecordedProfileIdentity(TypedDict):
     sha256: Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")] | None
 
 
+class RecordedContextAttachment(TypedDict):
+    """Feature 016's saved engineering context a waiting review carries (owner decision 99A).
+
+    The exact attachment the review was started with - digests and the context id, no path -
+    so a re-run after a restart validates the same head again rather than losing it.
+    """
+
+    __pydantic_config__ = ConfigDict(extra="forbid", strict=True)
+    context_id: Annotated[
+        str,
+        StringConstraints(pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"),
+    ]
+    head_digest: Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
+    package_sha256: Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
+
+
 class SendFailure(ReviewModel):
     """A failed attempt, with its redacted reason and original wall clock."""
 
@@ -112,10 +128,14 @@ class ModelStatus(ReviewModel):
     opening_finding_ids: list[Annotated[str, StringConstraints(pattern=r"^F-[0-9]+$")]] = Field(
         default_factory=list
     )
+    engineering_context: RecordedContextAttachment | None = None
+    """Feature 016 (owner decision 99A): the saved context this review was started with."""
 
     @model_serializer(mode="wrap")
     def _omit_unused_send_fields(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
-        data = omit_when_null(handler, self, "profile", "rechecked_from", "sent_at", "estimate")
+        data = omit_when_null(
+            handler, self, "profile", "rechecked_from", "sent_at", "estimate", "engineering_context"
+        )
         if not self.failures:
             data.pop("failures", None)
         if not self.opening_finding_ids:

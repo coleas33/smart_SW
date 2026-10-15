@@ -13,18 +13,26 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
+from uuid import UUID
 
 import pytest
 from starlette.testclient import TestClient
 
-from swreview import tokens
+from swreview import atomic, tokens
 from swreview.agent import runner
 from swreview.agent.runner import request_prefix
 from swreview.engineering_context.brief import build_summary, compact_json
+from swreview.engineering_context.models import context_digest
 from swreview.ir.loader import load_package
+from swreview.report.session import load_session
+from tests.support.contracts import contract_validator
 from tests.support.recording_provider import RecordingProvider
+from tests.support.restart import BEFORE_REPLACE, disk_at, restarted_app
+from tests.support.restored import assert_restored_as_waiting
 from tests.unit import test_chat_engineering_context as ctx
 from tests.unit import test_chat_server as chat
+from tests.unit import test_recheck as recheck_cases
 from tests.unit import test_waiting_answers as waiting_cases
 
 app = chat.app
@@ -37,6 +45,7 @@ run_dir = chat.run_dir
 ENGINEERING_LEAD = "Engineer-supplied inputs for the saved evidence snapshot follow as JSON data."
 """The first sentence of the opening's engineering block (`runner._opening_message`)."""
 SUMMARY_FILE = "engineering-context-summary.json"
+SESSION_SCHEMA = "https://smart-sw.local/contracts/review-session.schema.json"
 
 
 def attachment_of(client: TestClient, folder: Path, entity_id: str = "cmp:0001") -> dict[str, Any]:
@@ -189,3 +198,157 @@ def test_a_reloaded_package_rebuilds_the_summary_the_opening_and_its_file_carry(
     assert json.loads((folder / SUMMARY_FILE).read_text(encoding="utf-8")) == current
     assert run.opening_at_send() == opening
 
+
+# --- should-fix C: a restored waiting review's re-run carries its attachment -----------------
+
+
+def test_the_waiting_record_names_its_attachment(
+    app: Any, client: TestClient, run_root: Path
+) -> None:
+    folder = run_root / "FICT-context-recorded"
+    waiting = waiting_with_context(app, client, folder)
+    artifact = waiting.run.context.engineering_context
+    written = json.loads((folder / "session.json").read_text(encoding="utf-8"))
+
+    model_status = contract_validator("review-session.schema.json").evolve(
+        schema={"$ref": f"{SESSION_SCHEMA}#/$defs/ModelStatus"}
+    )
+    model_status.validate(written["model_status"])
+    assert written["model_status"]["engineering_context"] == {
+        "context_id": str(artifact.context_id),
+        "head_digest": context_digest(artifact),
+        "package_sha256": artifact.baseline.package_sha256,
+    }
+
+
+def test_a_restored_context_review_rechecks_with_its_context_and_sends_it(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    folder = run_root / "FICT-context-rechecked"
+    waiting = waiting_with_context(app, client, folder)
+    earlier = load_session(folder / "session.json")
+    summary = (folder / SUMMARY_FILE).read_bytes()
+    seat = recheck_cases.silent_seat()
+    settings = recheck_cases.server_settings(provider_control, models, seat)
+    with restarted_app(run_root, settings) as fresh:
+        restored = fresh.get(f"/reviews/{folder.name}")
+        assert restored.status_code == 200, restored.text
+        assert_restored_as_waiting(restored.json(), earlier)
+
+        response = recheck_cases.recheck(fresh, folder)
+
+        assert response.status_code == 201, response.text
+        chat_id = response.json()["chat_id"]
+        held = fresh.app.state.server.chats[UUID(chat_id)]
+        assert held.run.context.engineering_context == waiting.run.context.engineering_context
+        assert_block_once(held.run.opening_message, folder)
+        assert (folder / SUMMARY_FILE).read_bytes() == summary
+        status = load_session(folder / "session.json").model_status
+        assert status is not None
+        assert status.engineering_context == earlier.model_status.engineering_context
+        assert status.rechecked_from == earlier.session_id
+
+        opening = sent_opening(fresh.app, fresh, chat_id, monkeypatch)
+
+    assert_block_once(opening, folder)
+    assert provider_control.built == []
+    assert seat.calls == []
+
+
+def test_a_changed_head_refuses_the_re_run_and_leaves_the_folder(
+    client: TestClient,
+    run_dir: Path,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+) -> None:
+    """A part with no live check keeps its package, so its saved context can be edited after a
+    restart; the re-run then refuses before anything in the folder moves."""
+    attachment = attachment_of(client, run_dir)
+    started = chat.start_session(
+        client, run_dir, send_when_checked=False, engineering_context=attachment
+    )
+    assert chat.state_of(client, started["chat_id"]) == "awaiting_send"
+    before = {path.name: path.read_bytes() for path in run_dir.iterdir() if path.is_file()}
+    assert SUMMARY_FILE in before
+    settings = recheck_cases.server_settings(
+        provider_control, models, recheck_cases.silent_seat()
+    )
+    with restarted_app(run_root, settings) as fresh:
+        edited = fresh.post(
+            ctx.endpoint(run_dir, "/requirement"),
+            json=ctx.requirement(attachment, text="FICT revised load."),
+        )
+        assert edited.status_code == 200, edited.text
+
+        refused = recheck_cases.recheck(fresh, run_dir, standards_profile=None, bridge=None)
+
+        assert refused.status_code == 409, refused.text
+        assert refused.json()["error_class"] == "EngineeringContextConflict"
+        assert fresh.app.state.server.chats == {}
+        assert fresh.app.state.server._pending_run_dirs == set()
+    after = {path.name: path.read_bytes() for path in run_dir.iterdir() if path.is_file()}
+    assert after == before
+    assert provider_control.built == []
+
+
+def test_a_recheck_takes_no_attachment_of_its_own(
+    app: Any, client: TestClient, run_root: Path
+) -> None:
+    folder = run_root / "FICT-context-own"
+    waiting_with_context(app, client, folder)
+    before = (folder / "session.json").read_bytes()
+
+    refused = recheck_cases.recheck(
+        client, folder, engineering_context={"context_id": "FICT", "head_digest": "FICT"}
+    )
+
+    assert refused.status_code == 400, refused.text
+    assert refused.json()["error_class"] == "InvalidRequest"
+    assert (folder / "session.json").read_bytes() == before
+
+
+@pytest.mark.parametrize("cut", ["raises", BEFORE_REPLACE])
+def test_a_re_run_stopped_at_its_record_replace_keeps_the_summary_and_record(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+    cut: str,
+) -> None:
+    """Before the re-run's commit point (015 FR-041) the earlier record and its summary stand,
+    whether the replace raises or the run is cut off there (copied with `disk_at`)."""
+    folder = run_root / "FICT-context-cut"
+    waiting_with_context(app, client, folder)
+    record = (folder / "session.json").read_bytes()
+    summary = (folder / SUMMARY_FILE).read_bytes()
+    settings = recheck_cases.server_settings(
+        provider_control, models, recheck_cases.silent_seat()
+    )
+    if cut == BEFORE_REPLACE:
+        with disk_at(folder, BEFORE_REPLACE) as captured:
+            with restarted_app(run_root, settings) as fresh:
+                assert recheck_cases.recheck(fresh, folder).status_code == 201
+            assert (captured.folder / "session.json").read_bytes() == record
+            assert (captured.folder / SUMMARY_FILE).read_bytes() == summary
+        return
+    held_replace = atomic.os.replace
+
+    def refused(src: Any, dst: Any, *args: Any, **kwargs: Any) -> None:
+        if Path(dst).name == "session.json":
+            raise OSError("FICT the record could not be replaced")
+        held_replace(src, dst, *args, **kwargs)
+
+    with (
+        patch.object(atomic.os, "replace", refused),
+        restarted_app(run_root, settings, raise_server_exceptions=False) as fresh,
+    ):
+        assert recheck_cases.recheck(fresh, folder).status_code == 500
+    assert (folder / "session.json").read_bytes() == record
+    assert (folder / SUMMARY_FILE).read_bytes() == summary
