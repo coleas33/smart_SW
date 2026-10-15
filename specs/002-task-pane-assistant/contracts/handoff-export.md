@@ -45,6 +45,13 @@ package and report may retain real-design paths as engineering evidence, and so 
 run's `open.json`, `source-attestation.json`, `plan.json`, packages and `remodel.log` (the source's
 and the copy's paths); those paths are references only and their native targets are not copied.
 
+The manifest's session summary carries `model_status` beside `provider_info` when the session
+has a non-null model status. Only its state is copied: `not_sent`, `send_failed` or `sent`;
+document, profile, timestamps, estimates, failures and opening finding ids are not copied into
+the summary. The key is absent when the session's `model_status` is missing or null, as for a
+review sent at once. A non-mapping value, missing `state`, or non-string or unknown state is
+shown as `"model_status": null` and does not fail the export.
+
 Configured secret values are redacted with the product redactor, and the known provider-key
 shapes are masked in text artifacts. This is a best-effort detector and never proves that
 unknown or undiscoverable secrets are absent. UTF-8 text is required for selected records;
