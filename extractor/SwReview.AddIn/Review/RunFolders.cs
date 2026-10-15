@@ -112,8 +112,7 @@ public static class RunFolders
                 || saved.ValueKind != JsonValueKind.Object) return null;
             string? path = HeadText(saved, "path");
             string? configuration = HeadText(saved, "configuration");
-            if (!string.Equals(path, document.Path, StringComparison.OrdinalIgnoreCase)
-                || !string.Equals(configuration, document.Configuration, StringComparison.Ordinal)) return null;
+            if (!document.IsSameDocument(path, configuration)) return null;
             if (!DateTimeOffset.TryParse(HeadText(value, "checked_at"), CultureInfo.InvariantCulture,
                 DateTimeStyles.None, out DateTimeOffset checkedAt)) return null;
 
