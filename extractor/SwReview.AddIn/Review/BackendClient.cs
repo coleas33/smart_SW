@@ -38,14 +38,6 @@ public sealed class BackendClient : IBackendClient, IDisposable
     /// <summary>Long enough for a cold `uv run` model list, short enough to not hang the pane.</summary>
     private static readonly TimeSpan CallTimeout = TimeSpan.FromSeconds(30);
 
-    /// <summary>Owner measurement T098 may extend this bound for saved-evidence checks.</summary>
-    public static readonly TimeSpan ChecksOnlyTimeout = CallTimeout;
-
-    public static TimeSpan TimeoutFor(NewSessionRequest? request) =>
-        request != null && (request.Mode == ReviewMode.Wait || request.Mode == ReviewMode.Recheck)
-            ? ChecksOnlyTimeout : CallTimeout;
-
-
     private readonly BackendSupervisor _supervisor;
     private readonly string _logFolder;
     private readonly JobObject? _job;
@@ -159,7 +151,7 @@ public sealed class BackendClient : IBackendClient, IDisposable
             },
         };
 
-        JsonElement body = Call("POST", "/sessions", JsonSerializer.Serialize(payload), TimeoutFor(request));
+        JsonElement body = Call("POST", "/sessions", JsonSerializer.Serialize(payload));
         string? chatId = Text(body, "chat_id");
         if (string.IsNullOrEmpty(chatId))
         {
@@ -295,7 +287,7 @@ public sealed class BackendClient : IBackendClient, IDisposable
 
     // ---- one HTTP call --------------------------------------------------------------------
 
-    private JsonElement Call(string method, string path, string? body, TimeSpan? timeout = null)
+    private JsonElement Call(string method, string path, string? body)
     {
         BackendEndpoint? endpoint = Endpoint;
         if (endpoint == null)
@@ -306,8 +298,8 @@ public sealed class BackendClient : IBackendClient, IDisposable
 
         var request = (HttpWebRequest)WebRequest.Create(endpoint.Origin + path);
         request.Method = method;
-        request.Timeout = (int)(timeout ?? CallTimeout).TotalMilliseconds;
-        request.ReadWriteTimeout = (int)(timeout ?? CallTimeout).TotalMilliseconds;
+        request.Timeout = (int)CallTimeout.TotalMilliseconds;
+        request.ReadWriteTimeout = (int)CallTimeout.TotalMilliseconds;
         // Never ask a corporate proxy about 127.0.0.1: it cannot help and it costs seconds.
         request.Proxy = null;
         request.Headers["Authorization"] = "Bearer " + endpoint.Token;

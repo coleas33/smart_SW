@@ -121,7 +121,7 @@ of those, and it would invite the next change to remove the redaction as a contr
 
 | type | payload |
 |------|---------|
-| `status` | `{stage: "extracting" \| "backend_starting" \| "ready" \| "error", message}` |
+| `status` | `{stage: "extracting" \| "backend_starting" \| "checking" \| "ready" \| "error", message}`. Checking saved evidence again posts `checking` with "Checking the saved evidence again...", then `ready` with "Checked the saved evidence again; nothing was sent to the model." on success. |
 | `document.changed` | `{path, configuration, kind, drawing_guidance?} \| null` when the active document changes - and, since feature 009 (FR-022), when the active document's configuration changes: the add-in follows the active part's or assembly's `ActiveConfigChangePostNotify` and runs the same fan-out, so every host posts this with the new configuration. *`kind` and a drawing's `drawing_guidance` added 2026-09-28 (U25), as `init`'s* |
 | `backend.stopped` | `{exit_code, log_path}` |
 | `events.frame` | `{chat_id, frame}` — one raw SSE frame, the text between blank lines, redacted of every configured secret and with its line endings normalised to `\n`; unparsed otherwise |

@@ -682,6 +682,10 @@ public sealed class ReviewHost : IDisposable
                 StartReview(id, payload);
                 return;
 
+            case "review.recheck":
+                RecheckReview(id, payload);
+                return;
+
             case "sessions.list":
                 SendReviews(id);
                 return;
@@ -1358,6 +1362,26 @@ public sealed class ReviewHost : IDisposable
         return false;
     }
 
+    private void RecheckReview(string? id, JsonElement payload)
+    {
+        string? chatId = Blank(Text(payload, "chat_id"));
+        if (chatId == null)
+        {
+            SendError(id, "InvalidRequest", "the message needs a chat_id.", retryable: false);
+            return;
+        }
+
+        SessionRecord? record = FindSession(chatId);
+        if (record == null || record.IsCheck)
+        {
+            SendError(id, "UnknownChat", _runs.UnknownMessage(chatId), retryable: false);
+            return;
+        }
+
+        CreateReviewSession(record.Document, record.RunDirectory, chatId, ReviewMode.Recheck, id,
+            new DumpSummary(record.RunDirectory, 0, 0));
+    }
+
     private bool BackendReady(string? id)
     {
         if (_options.Backend.Endpoint != null) return true;
@@ -1368,12 +1392,33 @@ public sealed class ReviewHost : IDisposable
     }
 
     private void CreateReviewSession(
-        PageDocument document, string runDirectory, string? retryOf, ReviewMode mode,
+        PageDocument? document, string runDirectory, string? previousChatId, ReviewMode mode,
         string? id, DumpSummary summary)
     {
-        if (!CanReviewDocument(document, id))
+        PageDocument? active = mode == ReviewMode.Recheck ? _options.CurrentDocument() : document;
+        if (active != null && !CanReviewDocument(active, id))
         {
             return;
+        }
+        SessionRecord? previous = null;
+        if (mode == ReviewMode.Recheck)
+        {
+            if (active == null || document == null
+                || !string.Equals(active.Path, document.Path, StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(active.Configuration, document.Configuration, StringComparison.Ordinal))
+            {
+                SendError(id, "ReviewNotActive", "Open or switch to the reviewed document and configuration before checking its saved evidence again.", retryable: true);
+                return;
+            }
+            if (!BackendReady(id))
+            {
+                return;
+            }
+
+            // A recheck replaces this tracked chat; a fresh start instead sends the earlier
+            // chat id as retry_of. Rechecks never ask the backend for a fresh retry.
+            previous = FindSession(previousChatId!);
+            PostStatus("checking", "Checking the saved evidence again...");
         }
         ChatSessionHandle handle;
         try
@@ -1389,7 +1434,7 @@ public sealed class ReviewHost : IDisposable
                 _options.Bridge,
                 // FR-028: the page's Retry on an error card starts a fresh chat that says
                 // which one it is replacing, so the pair can be read back in the run folder.
-                retryOf,
+                mode == ReviewMode.Recheck ? null : previousChatId,
                 Blank(_settings.StandardsProfilePath), mode));
         }
         catch (Exception failure)
@@ -1403,22 +1448,44 @@ public sealed class ReviewHost : IDisposable
 
         // The document captured before the dump, and the moment the review was tracked: what its
         // chip in the pane names (feature 009 FR-020).
-        TrackSession(handle.ChatId, runDirectory, document, new DateTimeOffset(_options.Now()),
-            mode == ReviewMode.Send ? null : "not_sent");
-        PostStatus("ready", mode == ReviewMode.Send
-            ? ReadyMessage(summary.Components, summary.Gaps, summary.Unexamined)
-            : $"Checked {summary.Components} components by code; nothing was sent to the model.");
+        DateTimeOffset startedAt = new DateTimeOffset(_options.Now());
+        if (previous != null)
+        {
+            var record = new SessionRecord(handle.ChatId, runDirectory, document, startedAt)
+            {
+                ModelStatus = previous.ModelStatus,
+            };
+            lock (_sessionsLock)
+            {
+                int index = _sessions.IndexOf(previous);
+                if (index >= 0) _sessions[index] = record;
+                else _sessions.Add(record);
+            }
+            LatestSession = record;
+        }
+        else
+        {
+            TrackSession(handle.ChatId, runDirectory, document, startedAt,
+                mode == ReviewMode.Send ? null : "not_sent");
+        }
+        PostStatus("ready", mode == ReviewMode.Recheck
+            ? "Checked the saved evidence again; nothing was sent to the model."
+            : mode == ReviewMode.Send
+                ? ReadyMessage(summary.Components, summary.Gaps, summary.Unexamined)
+                : $"Checked {summary.Components} components by code; nothing was sent to the model.");
 
         // `document` is the one captured before the dump, not whichever is active now: the
         // review is of what was extracted, and the page binds what it shows to this (U8).
-        Send("review.started", id, new Dictionary<string, object?>
+        var reply = new Dictionary<string, object?>
         {
             { "chat_id", handle.ChatId },
-            { "send_when_checked", mode == ReviewMode.Send },
             { "run_dir", runDirectory },
             { "not_examined", handle.NotExamined },
             { "document", DocumentPayload(document) },
-        });
+        };
+        if (mode == ReviewMode.Recheck) reply["previous_chat_id"] = previousChatId;
+        else reply["send_when_checked"] = mode == ReviewMode.Send;
+        Send(mode == ReviewMode.Recheck ? "review.rechecked" : "review.started", id, reply);
     }
 
     // ---- plumbing -----------------------------------------------------------------------
