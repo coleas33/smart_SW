@@ -25,6 +25,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import tempfile
 from collections.abc import Callable, Iterator
@@ -1840,14 +1841,11 @@ def test_91a_a_junction_s_target_is_rebuilt_in_place(report_runs: Runs, tmp_path
     target = tmp_path / "target"
     build_report([report_runs.off], target)
     link = tmp_path / "link"
-    made = subprocess.run(
-        ["cmd", "/c", "mklink", "/J", str(link), str(target)], capture_output=True, check=False
-    )
-    assert made.returncode == 0, made.stderr
+    _junction(link, target)
 
     build_report([report_runs.on], link)
 
-    assert link.is_junction()
+    assert report_page._is_junction(link)
     assert (target / "transcripts" / "on" / f"{CASE_A}.html").is_file()
     assert not (target / "transcripts" / "off").exists()
 
@@ -2055,3 +2053,46 @@ def test_92a_with_no_home_folder_there_is_none_to_guard(
     monkeypatch.setattr(Path, "home", no_home)
 
     assert build_report([report_runs.off, report_runs.on], tmp_path / "report").transcripts == 6
+
+
+# --- owner decision 95A: Python 3.11 ----------------------------------------------------------
+
+
+def _junction(link: Path, target: Path) -> None:
+    made = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(link), str(target)], capture_output=True, check=False
+    )
+    assert made.returncode == 0, made.stderr
+
+
+@pytest.mark.skipif(os.name != "nt", reason="a junction is a Windows folder link")
+def test_95a_a_junction_is_known_without_path_is_junction(
+    report_runs: Runs, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Python 3.11 has no `Path.is_junction`: the build reads the mount-point reparse tag
+    instead, and still updates the junction's target in place."""
+    target = tmp_path / "target"
+    build_report([report_runs.off], target)
+    link = tmp_path / "link"
+    _junction(link, target)
+    monkeypatch.delattr(Path, "is_junction", raising=False)
+
+    build_report([report_runs.on], link)
+
+    assert report_page._is_junction(link)
+    assert not report_page._is_junction(target)
+    assert (target / "transcripts" / "on" / f"{CASE_A}.html").is_file()
+
+
+def test_95a_a_read_only_file_in_the_previous_report_is_still_removed(
+    report_runs: Runs, tmp_path: Path
+) -> None:
+    out = tmp_path / "report"
+    build_report([report_runs.off], out)
+    held = out / "transcripts" / "off" / f"{CASE_A}.html"
+    held.chmod(stat.S_IREAD)
+
+    build_report([report_runs.on], out)
+
+    assert not (out / "transcripts" / "off").exists()
+    assert _siblings(out) == []
