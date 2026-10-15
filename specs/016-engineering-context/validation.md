@@ -51,3 +51,45 @@ SOLIDWORKS engineer UI remain T010 on the other machine. Offline `matched_snapsh
 is historical evidence, never verification of live CAD state. Automated drawing output,
 pressure/moment/support/load-case modeling and structural acceptance are later features.
 Existing drawing-open, drawing numerical-binding and Remodel Start switches stay unchanged.
+
+## Adaptation to feature 015's send gate — 2026-10-15
+
+Branch `016-adapt-015`, from `016-engineering-context` (`769432e`), with `main` (`10cecf3`:
+015's send gate, 014 slice 5 and 23A) merged as `15c3793`, per owner decision 99A (015
+research R8). Each commit group landed test-first and gate-green; the T116 integration
+review's findings, as fixed:
+
+| Finding | Fix | Red-first tests |
+|---|---|---|
+| The context start skips the Send gate (blocker) | `3bef74f`: one `CreateReviewSession`, Send or Wait from the box; page busy takes 015's flags | host theory, wire body, two page tests |
+| The rebuilt Send opening drops the context (blocker) | `5bb44b0`: one opening builder input, `runner._review_opening`; summary on `ReviewRun` | answered-wait opening and estimate; reloaded package |
+| A restored review's re-run drops its context (should-fix) | `e8c167c`: `model_status.engineering_context`; re-run reloads and validates it; no unlink | record and schema; restart re-run and Send; changed head; cut at the replace |
+| Context editable while a review waits (should-fix) | `6e48e3e`: `awaiting_send` busy; one registry, `_pending_run_dirs` | edit while waiting; edit during the record read |
+
+The merge's textual conflicts were resolved as the reviewer listed them, with
+`engineering_context` keyword-only on `_start_review` and passed by name. `9bac682`
+regenerated the three waiting pane fixtures with 016's labels (snapshot part byte-equal,
+labels the union) and moved `review-send-failure-events.json`'s pin of
+`review-waiting.json`'s sha256; `review-big-assembly.json` regenerated unchanged.
+
+A re-run validates the recorded head, context id and saved package digest, not the folder's
+package against the saved baseline: the first run's live interference check appends to
+`package.json`, so requiring the baseline would refuse every re-run of an assembly review
+with live checks. The summary marks that change as needing review, as at the start.
+
+Gate on `6e48e3e`:
+- Python 3.11.16 (the worktree's environment), `SWREVIEW_REQUIRE_TOKENIZER=1`, not live:
+  **16,543 passed, 6 skipped, 7 deselected**; Ruff clean.
+- Python 3.11.16 and 3.12.3, each `uv run --isolated` outside the repository with
+  `PYTHONDONTWRITEBYTECODE=1` and `-p no:cacheprovider`: **16,543 passed, 6 skipped,
+  7 deselected** each; no 3.12-only API.
+- Release build: zero warnings and errors. .NET: **9,138 extractor and 2,448 add-in tests**,
+  none skipped.
+- Replay regeneration: all three generators unchanged; `git diff --exit-code --
+  reviewer/tests/fixtures/replay` empty.
+- 015's pins T007 (`test_ticked_review_golden`) and T008
+  (`test_request_prefix_characterization`) green and unedited.
+
+Still open: T010 and T015, the SOLIDWORKS workstation gates. No SOLIDWORKS run, live model
+call or paid request was made.
+
