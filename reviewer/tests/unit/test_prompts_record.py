@@ -403,3 +403,32 @@ def test_86a_with_no_failure_in_flight_the_failed_rewrite_is_raised(
         review(package_dir, tmp_path / "out", attempt())
 
     assert calls == ["write", "write", "close"]
+
+
+def test_92a_the_one_line_error_carries_the_failed_rewrite_s_note(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The command line prints a refusal as one line; 86A's note is on it, never lost."""
+    package_dir = tmp_path / "package"
+    save_package(build_package(), package_dir)
+    install(monkeypatch, tmp_path / "out", kind=ProviderErrorRaising)
+    _second_write_fails(monkeypatch)
+
+    with pytest.raises(OpenAIProviderError) as raised:
+        review(package_dir, tmp_path / "out", attempt())
+
+    assert cli._one_line(raised.value) == (
+        "OpenAIProviderError: a fictional rate limit; the prompts record could not be rewritten: "
+        "OSError: a fictional full disk"
+    )
+
+
+def test_92a_a_note_survives_a_message_cut_to_one_line_s_length() -> None:
+    error = ValueError("x" * (cli.MESSAGE_LENGTH + 50))
+    error.add_note("the prompts record could not be rewritten: OSError: a fictional full disk")
+
+    line = cli._one_line(error)
+
+    assert line.endswith(
+        "…; the prompts record could not be rewritten: OSError: a fictional full disk"
+    )

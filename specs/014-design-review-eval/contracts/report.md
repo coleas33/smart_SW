@@ -235,7 +235,7 @@ from another session in this folder", `unreadable` "the stored result is unreada
 | A run folder or package path lies under a key path | the key guard's own message (`ir/loader.py:46-62`) |
 | `--out` holds files this command did not write | the folder, and to choose an empty one |
 | A package or attempt folder holds both `events.jsonl` and `events.jsonl.gz`, a pack that did not finish | `event_stream`'s message: the folder, and to run `swreview benchmark pack` on its run again (`provenance.md` 6.7) |
-| A run folder lies in the home folder and the run folders' common parent is the home folder or above it, so their names would carry the home folder's own folders (owner decision 84A) | the run folder, the common parent, and to copy the run folders under one study folder |
+| Two or more run folders, one in the home folder, whose common parent is the home folder or above it, so their names would carry the home folder's own folders (owner decisions 84A, 92A: a lone run folder is named by its own name and never refused for it, and where the platform names no home folder there is none to guard) | the run folder, the common parent, and to copy the run folders under one study folder |
 | `--out` is a run folder or lies in one (84A) | the folder, the run folder, and to choose a folder outside it |
 | The run folders lie on different drives, so they have no common parent to be named relative to (owner decision 85A) | that, and to copy them under one folder |
 | A scored package's id cannot name a file: empty, a path separator, `.` or `..`, a character or a device name Windows refuses, a trailing dot or space; or two ids are one file name when case-folded (84A) | the run folder, the id or ids, and why |

@@ -605,13 +605,18 @@ def _redacting(settings: ProviderSettings) -> Iterator[Callable[[str], str]]:
 
 
 def _one_line(exc: BaseException) -> str:
-    """An exception as a single, bounded line: stderr stays greppable."""
+    """An exception as a single, bounded line: stderr stays greppable.
+
+    Its notes follow the message, after the message is cut to length, so a note such as a failed
+    prompts-record rewrite (feature 014 owner decision 86A) is never lost (owner decision 92A).
+    """
     text = " ".join(str(exc).split())
     if isinstance(exc, KeyError):
         text = text.strip("'")
     if len(text) > MESSAGE_LENGTH:
         text = text[: MESSAGE_LENGTH - 1] + "…"
-    return f"{type(exc).__name__}: {text}"
+    notes = [" ".join(str(note).split()) for note in getattr(exc, "__notes__", ())]
+    return "; ".join([f"{type(exc).__name__}: {text}", *notes])
 
 
 @contextmanager

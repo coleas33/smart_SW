@@ -2026,3 +2026,32 @@ def test_91a_a_sibling_an_earlier_build_left_that_cannot_be_removed_is_named(
     )
     assert orphan.is_dir()
     assert (out / "index.html").is_file()
+
+
+# --- owner decision 92A: a lone run folder, and no home folder --------------------------------
+
+
+def test_92a_a_lone_run_folder_in_the_home_folder_is_not_refused(
+    report_runs: Runs, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One run folder is named by its own name alone, whatever its parent: only two or more need
+    a common parent, so only they are refused at or above the home folder (84A, 92A)."""
+    home = tmp_path / "home"
+    monkeypatch.setattr(Path, "home", lambda: home)
+    lone = copy_run(report_runs.off, home / "off")
+
+    built = build_report([lone], tmp_path / "report")
+
+    assert built.transcripts == 3
+    assert "transcripts/off/fict-a.html" in Page(tmp_path / "report" / "index.html").hrefs
+
+
+def test_92a_with_no_home_folder_there_is_none_to_guard(
+    report_runs: Runs, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def no_home() -> Path:
+        raise RuntimeError("Could not determine home directory.")
+
+    monkeypatch.setattr(Path, "home", no_home)
+
+    assert build_report([report_runs.off, report_runs.on], tmp_path / "report").transcripts == 6
