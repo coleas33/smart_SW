@@ -646,6 +646,7 @@ def finalize_session(
     started: datetime,
     *,
     written: list[CoverageItem] | None = None,
+    first: bool = False,
 ) -> ReviewSession:
     """Close out the session: open requests, open checklist items, timing, end time.
 
@@ -662,6 +663,10 @@ def finalize_session(
             coverage rather than a duplicate of it (rule 1). Items *anything else* wrote -
             a `mark_coverage` call, a truncated or cut-short turn - are never touched.
             Pass the same list on every call; omitting it finalizes as a one-shot.
+        first: This is the run's first finalization, which replaces a waiting model status's
+            provisional `checked_at` with its end (data-model section 3). A re-run's is its
+            own first, whatever state it carried (owner decision 98A); a later waiting apply
+            or a Send's turn keeps the first end.
     """
     review = context.session
     previous = written if written is not None else []
@@ -723,7 +728,7 @@ def finalize_session(
     status = review.model_status
     ended = events.local_now() if status is not None else datetime.now(UTC)
     if status is not None:
-        if review.ended_at is None and status.state == "not_sent":
+        if first:
             status.checked_at = ended
         runtime = (status.checked_at - started).total_seconds() / 60.0
         if status.state == "sent" and status.sent_at is not None:
@@ -1180,6 +1185,8 @@ class ReviewRun:
         self.started = context.session.started_at
         self._bridge = bridge
         self._finalized: list[CoverageItem] = []
+        # Whether `finalize` has run: only the first stamps a waiting `checked_at` (98A).
+        self._finalized_once = False
         self._coverage_stop = tools if isinstance(tools, CoverageStopTools) else None
         """Lever 7's wrapper when this run has it, `None` when it does not.
 
@@ -1873,7 +1880,10 @@ class ReviewRun:
             reason = self._pending_turn_end
             self._pending_turn_end = None
             self.sink.emit("turn.ended", {"reason": reason})
-        session = finalize_session(self.context, self.started, written=self._finalized)
+        session = finalize_session(
+            self.context, self.started, written=self._finalized, first=not self._finalized_once
+        )
+        self._finalized_once = True
         ranking = rank(session)
         # Before `save_session`, and recomputed from the whole ledger on every call, the
         # same rule finalization itself follows: finalizing twice is finalizing once.
