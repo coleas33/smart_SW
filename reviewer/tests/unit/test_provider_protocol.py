@@ -548,3 +548,32 @@ def test_usage_from_body_ignores_optional_provider_fields(
     }
 
     assert providers.usage_from_body(body) == reported_usage
+
+
+def test_provider_errors_keep_runtime_error_construction_and_defaults() -> None:
+    error_type = providers.ProviderError
+    assert issubclass(error_type, RuntimeError)
+    assert "__init__" not in error_type.__dict__
+    assert "ProviderError" in providers.__all__
+
+    error = error_type("fict provider failure")
+    assert error.args == ("fict provider failure",)
+    assert str(error) == "fict provider failure"
+    assert error.error_class == "ProviderError"
+    assert error.retryable is False
+    assert error.stop_reason is None
+
+    class FictProviderError(error_type):
+        pass
+
+    named = FictProviderError("fict subclass failure")
+    assert named.error_class == "FictProviderError"
+    named.error_class = "FictServiceError"
+    named.retryable = True
+    named.stop_reason = "fict_stop"
+    assert named.error_class == "FictServiceError"
+    assert named.retryable is True
+    assert named.stop_reason == "fict_stop"
+    assert FictProviderError("another failure").error_class == "FictProviderError"
+    assert error.retryable is False
+    assert error.stop_reason is None

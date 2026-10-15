@@ -63,6 +63,7 @@ __all__ = [
     "EventType",
     "ModelViewAware",
     "PromptCacheAware",
+    "ProviderError",
     "ProviderName",
     "ProviderTool",
     "TokenUsage",
@@ -93,6 +94,25 @@ class ProviderName(StrEnum):
     OPENAI = "openai"
     GEMINI = "gemini"
     FAKE = "fake"
+
+
+class ProviderError(RuntimeError):
+    """A provider failure with shared classification and an optional reported stop.
+
+    Adapters keep their existing constructors and retry judgments. An error without an
+    explicit service class is named for its Python class.
+    """
+
+    retryable: bool = False
+    stop_reason: str | None = None
+
+    @property
+    def error_class(self) -> str:
+        return getattr(self, "_error_class", type(self).__name__)
+
+    @error_class.setter
+    def error_class(self, value: str) -> None:
+        self._error_class = value
 
 
 EffortLevel = Literal["low", "medium", "high", "xhigh"]

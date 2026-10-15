@@ -80,6 +80,9 @@ BODY_FIELDS: tuple[str, ...] = (
 )
 """Every field of the body, in the order contracts/usage.md section 5 prints them."""
 
+OPTIONAL_FIELDS: tuple[str, ...] = ("served_model", "retries")
+"""Feature 014 T173's optional keys, written after the others and only when known."""
+
 
 def usage_bodies(sink: Any) -> list[dict[str, Any]]:
     return sink.bodies("usage")
@@ -381,7 +384,13 @@ def test_geminis_round_index_restarts_at_zero_on_the_next_turn() -> None:
 
 @respx.mock
 def test_all_three_producers_build_the_same_body_shape() -> None:
-    """One builder, so the event cannot become three shapes of itself (constitution V)."""
+    """One builder, so the event cannot become three shapes of itself (constitution V).
+
+    Edited deliberately for feature 014 T175 (2026-10-15): `served_model` and `retries` are
+    optional by contract, so a producer that reports a served model (OpenAI) writes one key
+    more than one that does not (Gemini under decision 94A, the fake unless scripted). The
+    shared builder still makes one shape: the required fields match exactly, in order, and
+    any optional key follows them in `OPTIONAL_FIELDS`' order."""
     respx.post(RESPONSES_URL).mock(
         side_effect=responses(
             stream_response(with_usage(completed(message_item("done")), small_block()))
@@ -404,7 +413,12 @@ def test_all_three_producers_build_the_same_body_shape() -> None:
         list(one_usage(gemini_sink)),
         list(usage_bodies(fake_run(ScriptedTurn(text="done")))[0]),
     ]
-    assert shapes[0] == shapes[1] == shapes[2] == list(BODY_FIELDS)
+    for shape in shapes:
+        required, optional = shape[: len(BODY_FIELDS)], shape[len(BODY_FIELDS) :]
+        assert required == list(BODY_FIELDS)
+        assert optional == [key for key in OPTIONAL_FIELDS if key in optional]
+    assert shapes[0][len(BODY_FIELDS) :] == ["served_model"]
+    assert shapes[1] == shapes[2] == list(BODY_FIELDS)
 
 
 def test_the_body_carries_every_token_usage_field_and_no_turn_number() -> None:

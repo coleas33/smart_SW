@@ -1288,6 +1288,66 @@ def test_the_stream_replays_the_file_and_then_the_live_events(
         assert "seq" not in event["data"]
 
 
+def test_the_pane_stream_carries_the_served_model(
+    run_root: Path,
+    run_dir: Path,
+    models: Models,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import respx
+
+    from swreview.agent.providers.openai_provider import OpenAIProvider
+    from tests.unit.test_openai_provider import (
+        KEY,
+        RESPONSES_URL,
+        completed,
+        make_client,
+        message_item,
+        stream_response,
+    )
+
+    requested_model = "fict-model-a"
+    served_model = "fict-model-a-2026-10-01"
+    monkeypatch.setenv("OPENAI_API_KEY", KEY)
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    final = completed(message_item("The review is complete."))
+    final["response"]["model"] = served_model
+
+    with make_client() as sdk_client, respx.mock() as router:
+        route = router.post(RESPONSES_URL).mock(return_value=stream_response(final))
+
+        def factory(settings: ProviderSettings) -> AgentProvider:
+            return OpenAIProvider(model=settings.model, api_key=KEY, client=sdk_client)
+
+        app = create_app(
+            token=TOKEN,
+            allow_origin=ORIGIN,
+            run_root=run_root,
+            provider_factory=factory,
+            list_models=models,
+            secrets=(),
+        )
+        with TestClient(
+            app, headers={"Authorization": f"Bearer {TOKEN}", "Origin": ORIGIN}
+        ) as pane:
+            chat_id = start_session(pane, run_dir, provider="openai", model=requested_model)[
+                "chat_id"
+            ]
+            assert settle(pane, chat_id) == ChatState.ENDED.value
+            events = read_stream(app, f"/sessions/{chat_id}/events", count=len(events_of(run_dir)))
+
+        assert route.called
+        assert all(
+            json.loads(call.request.content)["model"] == requested_model for call in route.calls
+        )
+
+    usages = [event["data"] for event in events if event["event"] == "usage"]
+    assert usages
+    assert all(body["model"] == requested_model for body in usages)
+    assert all(body["served_model"] == served_model for body in usages)
+    assert all("retries" not in event["data"] for event in events)
+
+
 def test_the_contract_sample_is_what_the_producer_writes_byte_for_byte() -> None:
     """The recorded closing pair, `turn.ended` then `session.ended`, exactly as `_sse` writes it.
 

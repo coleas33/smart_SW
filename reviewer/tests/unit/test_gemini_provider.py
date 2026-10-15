@@ -36,7 +36,9 @@ from swreview.agent.providers.gemini_provider import (
     LEVEL_PARAM,
     NATIVE_CONTENT_KEY,
     GeminiAuthError,
+    GeminiBlockedTurnError,
     GeminiProvider,
+    GeminiProviderError,
     GeminiRateLimitError,
     GeminiRequestError,
     GeminiServerError,
@@ -823,6 +825,30 @@ def server_error(code: int, message: str) -> errors.ServerError:
 
 
 @pytest.mark.parametrize(
+    ("error_type", "retryable"),
+    [
+        (GeminiProviderError, True),
+        (GeminiAuthError, False),
+        (GeminiRateLimitError, True),
+        (GeminiRequestError, False),
+        (GeminiServerError, True),
+        (GeminiBlockedTurnError, False),
+    ],
+)
+def test_gemini_errors_keep_their_message_only_constructors(
+    error_type: type[GeminiProviderError], retryable: bool
+) -> None:
+    error = error_type("fict provider failure")
+
+    assert isinstance(error, providers.ProviderError)
+    assert error.args == ("fict provider failure",)
+    assert str(error) == "fict provider failure"
+    assert error.error_class == error_type.__name__
+    assert error.retryable is retryable
+    assert error.stop_reason is None
+
+
+@pytest.mark.parametrize(
     ("raised", "expected", "retryable"),
     [
         (client_error(401, "UNAUTHENTICATED", "API key not valid"), GeminiAuthError, False),
@@ -836,7 +862,7 @@ def test_provider_errors_are_mapped_named_and_reported(
 ) -> None:
     adapter, _ = build(raised)
     sink = Sink()
-    with pytest.raises(expected):
+    with pytest.raises(expected) as caught:
         run(adapter, [], sink=sink)
 
     assert sink.types == ["error"]
@@ -844,6 +870,12 @@ def test_provider_errors_are_mapped_named_and_reported(
     assert body["error_class"] == expected.__name__
     assert body["retryable"] is retryable
     assert body["message"]
+    assert isinstance(caught.value, providers.ProviderError)
+    assert caught.value.error_class == expected.__name__
+    assert caught.value.retryable is retryable
+    assert caught.value.stop_reason is None
+    assert body["message"] == str(caught.value)
+    assert set(body) == {"error_class", "message", "retryable"}
 
 
 def test_the_key_is_redacted_out_of_the_error_it_is_reported_in() -> None:
