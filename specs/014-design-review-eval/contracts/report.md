@@ -187,7 +187,12 @@ the shape `_events` handed it. The reader is stricter than `_events`: a line tha
 but not an `AgentEvent` (`seq` at least 1, `at` a datetime, a known `type`, no extra field) is now
 refused there too. The page stops at such a line and says
 "the event log is unreadable from line N" (a process stopped mid-write), showing everything before
-it.
+it. A line the reader reads whose body the walk cannot (a call's step that is not an integer, a
+round whose counts do not read, a coverage row whose item is not an object) stops the page the same
+way: "<run>/<package>: the event log is unreadable from seq N" (owner decision 83A). Each recorded
+user message past the log's last turn is still shown, under its turn: "this turn is not in the
+event log" when the log ended there, "not shown: the log is unreadable before this turn" when it
+stopped early (83A, 91A).
 
 **Full results** are read through `tools/registry.read_stored_result(run_dir, session_id, step)`,
 the one reader beside the one writer, which the replay and the questions reader call too (plan
@@ -201,8 +206,20 @@ from another session in this folder", `unreadable` "the stored result is unreada
 ## 6. The output folder
 
 - `--out` is required. Absent or empty: created and written. Holding a previous report, whose
-  `index.html` carries `<meta name="generator" content="swreview benchmark report">`: its
-  `transcripts/` folder is removed and both are written anew. Holding anything else: refused.
+  `index.html` carries `<meta name="generator" content="swreview benchmark report">`: replaced
+  whole. Holding anything else: refused.
+- The build is written into a new sibling folder of `--out`, `.<name>.<random>.building`, made with
+  `Path.mkdir`, and put in place once every page is written: the previous report moved aside as
+  `.<name>.<random>.previous`, the build moved in, the previous report removed. A build that fails
+  part-way leaves the previous report as it was (owner decision 83A). Where `--out` is or holds the
+  working folder (`--out .`), or is a junction or a symbolic link, or a move fails (a folder another
+  process holds), the build is copied into `--out` in place instead, replacing its report, so a
+  link's target is the one updated (owner decision 91A). The build therefore needs write access to
+  `--out`'s parent.
+- Removing the previous report, and this build's own folder after an in-place copy, is best effort,
+  read-only flags cleared: one that cannot be removed is named on one warning line, and the command
+  still exits 0, its report being in place. Siblings of either kind a killed build left are removed
+  first, best effort, each named (91A).
 - Every link is relative; run folders are named relative to their common parent. The page holds no
   local absolute path, and FR-051's committable-folder test runs over a page built from committed
   studies. A page built over private runs carries private paths and data and stays outside the
@@ -225,8 +242,12 @@ from another session in this folder", `unreadable` "the stored result is unreada
 
 Not refused, each shown as section 4 or 5 says: a folder written before `prompts.json`, missing
 usage, a failed repetition, a missing package, an unreadable tail of the event log (a truncated or
-corrupt packed stream included), a missing or stale tool result, a folder with no provenance. A
-packed folder is read as its plain form was (owner decision 28A).
+corrupt packed stream included) or a body the walk cannot read, each shown as "unreadable from
+line N" or "from seq N"; a recorded message past the log's end ("this turn is not in the event
+log", or "not shown: the log is unreadable before this turn"); a missing or stale tool result; a
+folder with no provenance; a previous report or a killed build's sibling that cannot be removed,
+named on a warning line (section 6). A packed folder is read as its plain form was (owner decision
+28A).
 
 ## 8. Performance (SC-009)
 

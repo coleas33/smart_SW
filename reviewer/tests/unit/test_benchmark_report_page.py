@@ -25,6 +25,8 @@ import json
 import os
 import re
 import shutil
+import subprocess
+import tempfile
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
@@ -1788,3 +1790,239 @@ def test_85a_the_report_reads_rounds_and_brackets_by_the_replay_s_rules() -> Non
 
 def test_85a_the_study_builder_sums_by_the_scorer_s_rule() -> None:
     assert studies.sum_or_none is scorecard.sum_or_none
+
+
+# --- owner decision 91A: fall back, never fail ----------------------------------------------
+
+
+def _siblings(out: Path) -> list[str]:
+    """Every name beside `out` that a build of `out` writes or leaves."""
+    return sorted(
+        path.name for path in out.parent.iterdir() if path.name.startswith(f".{out.name}.")
+    )
+
+
+def test_91a_the_sibling_folder_is_made_without_mkdtemp(
+    report_runs: Runs, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`tempfile.mkdtemp` makes its folder with mode 0o700, which Python 3.12.4 and later turn
+    into a Windows ACL closed to everyone but the owner, SYSTEM and Administrators; the build
+    makes its own with `Path.mkdir`, so the folder takes its parent's permissions."""
+
+    def refuse(*args: Any, **kwargs: Any) -> str:
+        raise AssertionError("the build made its folder with tempfile.mkdtemp")
+
+    monkeypatch.setattr(tempfile, "mkdtemp", refuse)
+
+    assert build_report([report_runs.off], tmp_path / "report").transcripts == 3
+
+
+def test_91a_out_as_the_working_folder_is_rebuilt_in_place(
+    report_runs: Runs, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`--out .`: the folder cannot be moved aside while it is the working folder, so the build
+    is copied into it in place; nothing is left beside it."""
+    out = tmp_path / "report"
+    build_report([report_runs.off], out)
+    monkeypatch.chdir(out)
+
+    built = build_report([report_runs.on], Path("."))
+
+    assert built.index.resolve() == (out / "index.html").resolve()
+    assert (out / "transcripts" / "on" / f"{CASE_A}.html").is_file()
+    assert not (out / "transcripts" / "off").exists()
+    assert _siblings(out) == []
+    assert [path.name for path in tmp_path.iterdir() if path.name.startswith(".")] == []
+
+
+@pytest.mark.skipif(os.name != "nt", reason="a junction is a Windows folder link")
+def test_91a_a_junction_s_target_is_rebuilt_in_place(report_runs: Runs, tmp_path: Path) -> None:
+    target = tmp_path / "target"
+    build_report([report_runs.off], target)
+    link = tmp_path / "link"
+    made = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(link), str(target)], capture_output=True, check=False
+    )
+    assert made.returncode == 0, made.stderr
+
+    build_report([report_runs.on], link)
+
+    assert link.is_junction()
+    assert (target / "transcripts" / "on" / f"{CASE_A}.html").is_file()
+    assert not (target / "transcripts" / "off").exists()
+
+
+def test_91a_a_failed_move_into_place_restores_the_previous_report_and_builds_in_place(
+    report_runs: Runs, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The previous report is moved aside, the build's move into place fails: the previous one
+    is moved back, and the build is copied into it in place."""
+    out = tmp_path / "report"
+    build_report([report_runs.off], out)
+    real = Path.rename
+    moves: list[tuple[str, str]] = []
+
+    def rename(self: Path, target: Any) -> Path:
+        moves.append((self.name, Path(target).name))
+        if self.name.endswith(".building") and Path(target).name == out.name:
+            raise PermissionError(f"{target}: in use")
+        return real(self, target)
+
+    monkeypatch.setattr(Path, "rename", rename)
+
+    build_report([report_runs.on], out)
+
+    aside = moves[0][1]
+    assert moves[0][0] == out.name and aside.endswith(".previous")
+    assert (aside, out.name) in moves, "the previous report was moved back"
+    assert (out / "transcripts" / "on" / f"{CASE_A}.html").is_file()
+    assert not (out / "transcripts" / "off").exists()
+    assert _siblings(out) == []
+
+
+def test_91a_an_old_report_that_cannot_be_removed_is_named_and_the_build_still_succeeds(
+    report_runs: Runs, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    out = tmp_path / "report"
+    assert report(str(report_runs.off), "--out", str(out)).exit_code == 0
+    real = shutil.rmtree
+
+    def rmtree(path: Any, *args: Any, **kwargs: Any) -> None:
+        if str(path).endswith(".previous"):
+            raise PermissionError(f"{path}: in use")
+        real(path, *args, **kwargs)
+
+    monkeypatch.setattr(shutil, "rmtree", rmtree)
+
+    result = report(str(report_runs.on), "--out", str(out))
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    [leftover] = [name for name in _siblings(out) if name.endswith(".previous")]
+    assert one_line(result) == (
+        f"warning: could not remove {out.parent / leftover}, the previous report; the new "
+        "report is in place, so remove it by hand"
+    )
+    assert (out / "transcripts" / "on" / f"{CASE_A}.html").is_file()
+
+
+def test_91a_siblings_an_earlier_build_left_are_removed_and_named(
+    report_runs: Runs, tmp_path: Path
+) -> None:
+    out = tmp_path / "report"
+    orphans = [tmp_path / ".report.0123abcd.building", tmp_path / ".report.4567ef01.previous"]
+    for orphan in orphans:
+        (orphan / "transcripts").mkdir(parents=True)
+    unrelated = tmp_path / ".report.notes"
+    unrelated.mkdir()
+
+    result = report(str(report_runs.off), "--out", str(out))
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert result.stdout.splitlines()[:2] == [
+        f"removed {orphan}, left by an earlier build" for orphan in orphans
+    ]
+    assert not any(orphan.exists() for orphan in orphans)
+    assert unrelated.is_dir()
+
+
+@pytest.mark.parametrize(
+    ("package_id", "kind", "edit"),
+    [
+        (ROLES, "coverage", lambda body: body.update(item="a sentence")),
+        (ROLES, "usage", lambda body: body.update(input_tokens=[])),
+        (CASE_A, "tool.started", lambda body: body.update(step_index="0")),
+        (CASE_A, "tool.finished", lambda body: body.update(step_index=True)),
+    ],
+    ids=["coverage-item-not-an-object", "usage-count-a-list", "step-a-string", "step-a-bool"],
+)
+def test_91a_each_damaged_body_stops_the_log_and_nothing_after_it_is_shown(
+    report_runs: Runs,
+    tmp_path: Path,
+    package_id: str,
+    kind: str,
+    edit: Callable[[dict[str, Any]], None],
+) -> None:
+    run = copy_run(report_runs.off, tmp_path / "runs" / "damaged")
+    seq = _rewrite_event(run / package_id / EVENTS_FILE_NAME, kind, edit)
+    later = [
+        event for event in stream(run, package_id) if event.seq > seq and event.type == "text.done"
+    ]
+    assert later, "a text is logged after the damage"
+    out = tmp_path / "report"
+
+    build_report([run], out)
+
+    page = transcript(out, "damaged", package_id)
+    assert f"damaged/{package_id}: the event log is unreadable from seq {seq}" in notes(page)
+    assert all(event.body["text"] not in page.texts("pre") for event in later)
+
+
+def test_91a_turns_past_an_unreadable_log_are_named_not_shown(
+    report_runs: Runs, tmp_path: Path
+) -> None:
+    """The log is cut inside the first answer: turn 0 is shown whole, and the two answer turns'
+    recorded messages are named as not shown, since the log stops before them."""
+    run = copy_run(report_runs.off, tmp_path / "runs" / "cut")
+    log = run / ROLES / EVENTS_FILE_NAME
+    lines = log.read_text(encoding="utf-8").splitlines()
+    cut = next(i for i, line in enumerate(lines) if json.loads(line)["type"] == "evidence.answered")
+    lines[cut] = lines[cut][: len(lines[cut]) // 2]
+    log.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    out = tmp_path / "report"
+
+    build_report([run], out)
+
+    page = transcript(out, "cut", ROLES)
+    for number in (1, 2):
+        heading = page.index_of("h3", f"Turn {number}")
+        assert page.blocks[heading + 2] == (
+            "p",
+            "not shown: the log is unreadable before this turn",
+        )
+
+
+def test_91a_the_false_alarm_cell_reads_the_deciding_count_then_the_others(
+    report_runs: Runs, tmp_path: Path
+) -> None:
+    """Literals: the roles row as scored, and a copy whose first false alarm is model-made."""
+    run = copy_run(report_runs.off, tmp_path / "runs" / "model")
+    card = json.loads((run / "scorecard.json").read_bytes())
+    [roles] = [score for score in card["per_package"] if score["package_id"] == ROLES]
+    first = roles["false_alarm_finding_ids"][0]
+    roles["finding_origins"][first] = "model"
+    (run / "scorecard.json").write_text(json.dumps(card), encoding="utf-8")
+    out = tmp_path / "report"
+
+    build_report([report_runs.off, run], out)
+
+    rows = Page(out / "index.html").table(ROLES).rows[1:]
+    assert [row[4] for row in rows] == [
+        "0 deciding; others: regrade 3, regrade, tuned-on 1",
+        "1 deciding; others: regrade 2, regrade, tuned-on 1",
+    ]
+    assert Page(out / "index.html").table(CASE_A).rows[1][4] == "0 deciding; no others"
+
+
+def test_91a_a_sibling_an_earlier_build_left_that_cannot_be_removed_is_named(
+    report_runs: Runs, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    out = tmp_path / "report"
+    orphan = tmp_path / ".report.0123abcd.building"
+    orphan.mkdir()
+    real = shutil.rmtree
+
+    def rmtree(path: Any, *args: Any, **kwargs: Any) -> None:
+        if Path(path) == orphan:
+            raise PermissionError(f"{path}: in use")
+        real(path, *args, **kwargs)
+
+    monkeypatch.setattr(shutil, "rmtree", rmtree)
+
+    result = report(str(report_runs.off), "--out", str(out))
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert one_line(result) == (
+        f"warning: could not remove {orphan}, left by an earlier build; remove it by hand"
+    )
+    assert orphan.is_dir()
+    assert (out / "index.html").is_file()
