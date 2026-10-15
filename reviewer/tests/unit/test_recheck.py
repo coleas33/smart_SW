@@ -438,7 +438,8 @@ def test_a_carried_step_that_would_land_off_the_first_runs_index_is_refused(
 ) -> None:
     """Owner decision 87A: every later step and citation is the first run's only if the carried
     step lands where the first run recorded its call, so a re-run whose pre-run holds any other
-    number of steps by then is refused before anything is recorded or asked."""
+    number of steps by then is refused before the carried step is recorded or the seat asked.
+    By then `session.started` and the pre-run's coverage and provenance events are written."""
     folder = package_folder(tmp_path, live_prerun_package())
     first = checks_only(folder, ScriptedReviewBridge(results={"interference": [live_answer()]}))
     earlier = waited(first)
@@ -623,9 +624,16 @@ def test_a_folder_with_no_readable_record_is_an_unknown_review(
     with restarted_app(run_root, server_settings(provider_control, models, silent)) as fresh:
         response = recheck(fresh, earlier.folder)
 
-    assert response.status_code == 404, response.text
-    assert response.json()["error_class"] == "UnknownReview"
-    assert sorted(str(path) for path in run_root.rglob("*")) == before
+        assert response.status_code == 404, response.text
+        assert response.json()["error_class"] == "UnknownReview"
+        assert sorted(str(path) for path in run_root.rglob("*")) == before
+        # 87A: the refusal released the folder it claimed, so the same backend re-runs it once
+        # its record is readable again.
+        assert fresh.app.state.server._pending_run_dirs == set()
+        if case != "deleted":
+            (earlier.folder / "session.json").write_bytes(earlier.files["session.json"])
+        again = recheck(fresh, earlier.folder)
+        assert again.status_code == (404 if case == "deleted" else 201), again.text
     assert provider_control.built == []
 
 
@@ -726,10 +734,16 @@ def test_a_record_that_is_not_waiting_is_refused(
     with restarted_app(run_root, server_settings(provider_control, models, silent)) as fresh:
         response = recheck(fresh, earlier.folder)
 
-    assert response.status_code == 409, response.text
-    assert response.json()["error_class"] == "NotWaiting"
-    assert (earlier.folder / "session.json").read_bytes() == saved
-    assert not (earlier.folder / "session.1.json").exists()
+        assert response.status_code == 409, response.text
+        assert response.json()["error_class"] == "NotWaiting"
+        assert (earlier.folder / "session.json").read_bytes() == saved
+        assert not (earlier.folder / "session.1.json").exists()
+        # 87A: the refusal released the folder it claimed, so the same backend re-runs it once
+        # its record waits again.
+        assert fresh.app.state.server._pending_run_dirs == set()
+        (earlier.folder / "session.json").write_bytes(earlier.files["session.json"])
+        again = recheck(fresh, earlier.folder)
+        assert again.status_code == 201, again.text
     assert provider_control.built == []
 
 
@@ -1669,19 +1683,28 @@ def _candidate(
     )
 
 
-@pytest.fixture
-def two_candidates(tmp_path: Path) -> Any:
-    """A re-run over two candidate drawings, the first merged by the earlier read and the second
-    refused, with its earlier record; findings and questions are set by each case."""
-    package = confirmed.candidates_package(2)
+def merged_rerun(
+    tmp_path: Path, package: EvidencePackage, read: str
+) -> tuple[runner.ReviewRun, ReviewSession]:
+    """A re-run over `package` once the earlier read merged `read`'s drawing, with its earlier
+    record; findings and questions are set by each case."""
     folder = package_folder(tmp_path, package)
-    read, refused = (candidate.document_id for candidate in package.drawing_candidates)
     confirmed.merged(folder, read)()
     run = checks_only(folder, None)
     earlier = run.session.model_copy(deep=True)
     for session in (run.session, earlier):
         session.findings[:] = []
         session.evidence_requests[:] = []
+    return run, earlier
+
+
+@pytest.fixture
+def two_candidates(tmp_path: Path) -> Any:
+    """A re-run over two candidate drawings, the first merged by the earlier read and the second
+    refused, with its earlier record; findings and questions are set by each case."""
+    package = confirmed.candidates_package(2)
+    read, refused = (candidate.document_id for candidate in package.drawing_candidates)
+    run, earlier = merged_rerun(tmp_path, package, read)
     yield run, earlier, read, refused
     run.close()
 
@@ -1717,6 +1740,43 @@ def test_a_read_that_merged_some_drawings_and_was_refused_for_the_rest_is_named(
     (asked,) = run.session.evidence_requests
     assert (asked.id, asked.status, asked.answer) == ("ER-001", "open", None)
     assert run.session.drawing_outcomes == earlier.drawing_outcomes
+
+
+@pytest.mark.parametrize("status", ["answered", "open"])
+def test_one_drawing_file_beside_two_documents_read_whole_is_not_a_partial_read(
+    tmp_path: Path, status: str
+) -> None:
+    """013 T083: a part and an assembly of one stem share one candidate file, so a read that
+    merged it covers both, though only the first shows in the drawing's views. Nothing is asked
+    again. An answered question is carried as its outcome line and not named; an open one's
+    merged file has no outcome line, so the lost outcome is named as R2.13 names it."""
+    run, earlier = merged_rerun(tmp_path, confirmed.shared_stem_package(), "doc:0001")
+    try:
+        assert run.context.ir.drawing_candidates == [], "the merge removed both rows"
+        answered = status == "answered"
+        earlier.evidence_requests[:] = [
+            _candidate(
+                "ER-001", ["doc:0001", "doc:0002"],
+                answer=CANDIDATE_CONFIRM if answered else None,
+            )
+        ]
+        if answered:
+            earlier.drawing_outcomes = [
+                DrawingOutcome(
+                    file=f"{confirmed.SHARED}.SLDDRW", outcome="opened read-only and read"
+                )
+            ]
+
+        run.carry_from(earlier)
+
+        assert run.session.evidence_requests == [], "nothing is asked again"
+        assert recheck_row(run.session) == (
+            [] if answered
+            else [runner.NOT_CARRIED.format(items=runner.NOT_CARRIED_DRAWING.format(id="ER-001"))]
+        )
+        assert run.session.drawing_outcomes == earlier.drawing_outcomes
+    finally:
+        run.close()
 
 
 def test_a_carry_builds_the_drawing_index_once(
@@ -1827,8 +1887,10 @@ def test_a_carried_reject_alone_leaves_the_first_request_the_live_waiting_review
     silent: ScriptedReviewBridge,
 ) -> None:
     """Owner decision 88A: a carry of decisions alone does not settle the waiting opening, as a
-    decision made while a live review waits does not, so with the gate on and only a Reject
-    carried, Send's requests are the live waiting review's."""
+    decision made while a live review waits does not: `_opening_changed` stays false. Send's
+    requests are then the live waiting review's. That comparison alone does not pin the rule:
+    the opening reads no disposition, so an opening settled anyway rebuilds the same bytes
+    here; the flag is what pins it."""
     waiting = waiting_answers.waiting_review(app, client, run_root / "FICT-recheck-reject")
     finding = next(f for f in waiting.run.session.findings if f.check == REJECTED_CHECK)
     decided_now = client.post(
@@ -1848,6 +1910,7 @@ def test_a_carried_reject_alone_leaves_the_first_request_the_live_waiting_review
     assert not [q for q in rerun.session.evidence_requests if q.status == "answered"]
     assert rerun.session.drawing_outcomes == []
     assert recheck_row(rerun.session) == []
+    assert rerun._opening_changed is False, "a decision-only carry does not settle (88A)"
     assert_sent_alike(sent, resent)
 
 

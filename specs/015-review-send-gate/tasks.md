@@ -658,7 +658,7 @@ description: "Task list for the send-to-model checkbox"
   - in `tools/context.py` (`:403-419`): `ToolContext.carry_drawing_read`;
   - `start_review(earlier=)`, passing both.
 
-  **Amends 008** spec FR-008, FR-009 and FR-030, and `contracts/checks-first.md` section 2 row 1 and sections 3 and 7. Acceptance: T092 green; T007 byte-equal. Review follow-up 2026-10-14 (owner decision 87A, research R8): `_carried_interference` refuses, with a `RuntimeError` and before anything is recorded, a carried step that would not land at `live.step_index`; `test_recheck.py` pins it.
+  **Amends 008** spec FR-008, FR-009 and FR-030, and `contracts/checks-first.md` section 2 row 1 and sections 3 and 7. Acceptance: T092 green; T007 byte-equal. Review follow-up 2026-10-14 (owner decision 87A, research R8): `_carried_interference` refuses, with a `RuntimeError` and before the carried step is recorded or the seat asked (`session.started` and the pre-run's coverage and provenance events are already written), a carried step that would not land at `live.step_index`; `test_recheck.py` pins it.
 - [x] T094 [US4] [py] Lane B. Extend `reviewer/tests/unit/test_recheck.py` with the claim and the rotation (`contracts/recheck.md` sections 2, 6 and 7; FR-041; RK-4). Every case that stands for a restart starts from T012's `restarted_app`, and every cut-off is a folder T012's `disk_at` copied, with nothing raised (owner decision 76A).
   - **A re-run**: `POST /sessions` with `recheck: true` and `send_when_checked: false`, from a restarted app, on a folder whose `session.json` is a not-sent record:
     - copies `session.json` and `attention.json` to index N, and moves `events.jsonl` and `tool-results/`;
