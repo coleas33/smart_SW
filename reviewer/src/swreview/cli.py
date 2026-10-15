@@ -99,7 +99,6 @@ from swreview.benchmark.compare import (
 )
 from swreview.benchmark.recording import RecordingRefused, read_recording
 from swreview.benchmark.replay import render_replay_lines, replay_recording
-from swreview.benchmark.report_page import build_report
 from swreview.benchmark.runner import (
     EXAMPLE_PROFILE,
     PROVENANCE_SCHEMA,
@@ -3045,7 +3044,7 @@ def benchmark_report(
     other rules, or an `--out` holding files this command did not write.
     """
     with _errors_as_exit_1():
-        built = build_report(run_dirs, out)
+        built = report_page.build_report(run_dirs, out)
     typer.echo(f"wrote {built.index} ({built.transcripts} transcripts)")
 
 

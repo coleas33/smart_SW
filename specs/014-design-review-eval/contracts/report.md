@@ -145,7 +145,10 @@ repetition:
 
 1. **Header**: run, package, arm, repetition, status, requested and responding model, usage, cost,
    wall clock, and a link back to the index.
-2. **The system prompt as sent**, then the component legend (section 2).
+2. **The system prompt as sent**, then the component legend (section 2). A folder with no
+   `prompts.json` reads "not recorded" in its place and in each user message's; one whose
+   `prompts.json` does not validate reads "the prompts record is unreadable" in the same
+   places, and is not refused (owner decision 85A).
 3. **The log, in its own order**, grouped into turns at each `turn.ended`:
    - before the first `usage`: "Code before the first turn": the pre-run's and set-up's calls;
    - each turn opens with its user message as sent (the opening message first); an answer turn also
@@ -191,8 +194,9 @@ the one reader beside the one writer, which the replay and the questions reader 
 decision RF-30): its `text`, the file's raw text, is embedded escaped, not parsed and re-indented. An
 `Unstored` answer is named, never guessed: `missing` reads "full result not stored", `other_session`
 (a file whose `session_id` differs from the session's, `tools/registry.py:407-414`) "a stale result
-from another session in this folder", `unreadable` "the stored result is unreadable". Every recorded
-string is escaped; a finding text holding markup renders as text.
+from another session in this folder", `unreadable` "the stored result is unreadable", and
+`other_call` (an envelope naming another step) "a result recorded for another call" (owner decision
+85A). Every recorded string is escaped; a finding text holding markup renders as text.
 
 ## 6. The output folder
 
@@ -216,6 +220,7 @@ string is escaped; a finding text holding markup renders as text.
 | A package or attempt folder holds both `events.jsonl` and `events.jsonl.gz`, a pack that did not finish | `event_stream`'s message: the folder, and to run `swreview benchmark pack` on its run again (`provenance.md` 6.7) |
 | A run folder lies in the home folder and the run folders' common parent is the home folder or above it, so their names would carry the home folder's own folders (owner decision 84A) | the run folder, the common parent, and to copy the run folders under one study folder |
 | `--out` is a run folder or lies in one (84A) | the folder, the run folder, and to choose a folder outside it |
+| The run folders lie on different drives, so they have no common parent to be named relative to (owner decision 85A) | that, and to copy them under one folder |
 | A scored package's id cannot name a file: empty, a path separator, `.` or `..`, a character or a device name Windows refuses, a trailing dot or space; or two ids are one file name when case-folded (84A) | the run folder, the id or ids, and why |
 
 Not refused, each shown as section 4 or 5 says: a folder written before `prompts.json`, missing
@@ -235,6 +240,13 @@ smaller build. "Pilot-size" is fixed for the test as 40 calls per transcript wit
 envelope; no templating library. Should the pilot's real sizes break the budget, the alternative is
 linking each result to its file in the run folder rather than embedding it, which the owner decides
 (it moves the page away from "one self-contained transcript").
+
+Owner decision 82A (2026-10-14) kept embedding: the budget measures the report's own work. On the
+development machine the first open of each freshly written file costs about 6.6 ms under Windows
+Defender real-time scanning, so a build at once over the freshly written fixture took 242.7 s for
+its about 37,600 stored results; the perf fixture therefore opens each stored result once before
+the timed build, and R-18 measured about 26 s. A first build over freshly written run folders on
+that machine still pays the scanning on top.
 
 ## 9. Tests
 
@@ -300,7 +312,8 @@ contract adds, in `reviewer/tests/unit/test_benchmark_report_page.py`:
 - R-18 section 8's 940 transcripts, their streams packed, build in under 60 seconds and every link on
   the index resolves to a page (SC-009; RF-46; 28A). The perf fixture writes each stream packed with
   `gzip.compress(data, compresslevel=9, mtime=0)`, `provenance.md` 6.7's rule, since `benchmark pack`
-  lands after this slice.
+  lands after this slice, and opens each stored result once before the timed build (owner decision
+  82A, section 8).
 
 ## 10. Defaults this contract takes
 

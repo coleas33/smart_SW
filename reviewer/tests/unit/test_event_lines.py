@@ -531,7 +531,7 @@ def test_read_recording_replays_the_folder_s_event_log_exactly_once(
     assert calls == [(run / EVENTS_FILE_NAME, True)]
 
 
-# --- 4: the structural half, no other reader of a stream under benchmark/ (T159) ------------
+# --- 4: the structural half, no other reader of a stream under benchmark/ (T159, 81A, 85A) --
 
 BENCHMARK_SOURCES = sorted(Path(recording.__file__).parent.glob("*.py"))
 
@@ -546,13 +546,16 @@ whose packing copies a stream's bytes and parses no event (T214, T215; RF-83).""
 
 NAMED_SENTENCES: frozenset[tuple[str, str]] = frozenset({("scorecard.py", "NO_EVENT_STREAM")})
 """Owner decision 81A: the module-level sentences that may name the stream files, by module and
-constant. Each must stay a module-level assignment whose value calls nothing, and its name is
-never used as a path (`test_every_named_sentence_is_a_sentence_that_reads_nothing`)."""
+constant. Each must stay a module-level assignment whose value calls nothing, and no module uses
+it, by any name, as a path (owner decision 85A)."""
+
+SENTENCES = frozenset(name for _, name in NAMED_SENTENCES)
 
 PATH_CALLS = frozenset(
     {"Path", "PurePath", "open", "replay_events", "event_stream", "read_text", "read_bytes"}
 )
-"""The calls that open, resolve or read a path: a named sentence passed to one is a path."""
+"""The calls that open, resolve or read a path: a named sentence anywhere in their arguments is a
+path."""
 
 
 def _parents(tree: ast.AST) -> dict[ast.AST, ast.AST]:
@@ -573,12 +576,54 @@ def _calls_a_reader(function: ast.AST) -> bool:
     )
 
 
+def _folded(node: ast.AST) -> str | None:
+    """The string an expression of constants spells: a string constant, a `+` of two, or an
+    f-string holding constants only (owner decision 85A); `None` for anything else."""
+    if isinstance(node, ast.Constant):
+        return node.value if isinstance(node.value, str) else None
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        left, right = _folded(node.left), _folded(node.right)
+        return left + right if left is not None and right is not None else None
+    if isinstance(node, ast.JoinedStr):
+        parts = [_folded(value) for value in node.values]
+        return "".join(part for part in parts if part is not None) if None not in parts else None
+    return None
+
+
 def _is_stream_reference(node: ast.AST) -> bool:
     return (
         (isinstance(node, ast.Name) and node.id in STREAM_NAMES)
         or (isinstance(node, ast.Attribute) and node.attr in STREAM_NAMES | {"events_path"})
-        or (isinstance(node, ast.Constant) and node.value in STREAM_STRINGS)
+        or (
+            isinstance(node, (ast.Constant, ast.BinOp, ast.JoinedStr))
+            and _folded(node) in STREAM_STRINGS
+        )
     )
+
+
+def _gzip_names(tree: ast.AST) -> tuple[set[str], dict[str, str]]:
+    """The names the module binds to `gzip`, and to each of its reading functions, by any
+    import: `import gzip as gz`, `from gzip import open as gopen` (owner decision 85A)."""
+    modules: set[str] = set()
+    functions: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            modules |= {alias.asname or alias.name for alias in node.names if alias.name == "gzip"}
+        elif isinstance(node, ast.ImportFrom) and node.module == "gzip":
+            for alias in node.names:
+                if alias.name in GZIP_READS:
+                    functions[alias.asname or alias.name] = alias.name
+    return modules, functions
+
+
+def _decompression(call: ast.Call, modules: set[str], functions: dict[str, str]) -> str | None:
+    """The `gzip` reading function `call` calls, by whatever name, or `None`."""
+    func = call.func
+    if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
+        return func.attr if func.value.id in modules and func.attr in GZIP_READS else None
+    if isinstance(func, ast.Name):
+        return functions.get(func.id)
+    return None
 
 
 def _in_named_sentence(module: str, node: ast.AST, parents: dict[ast.AST, ast.AST]) -> bool:
@@ -596,21 +641,17 @@ def _in_named_sentence(module: str, node: ast.AST, parents: dict[ast.AST, ast.AS
     return False
 
 
-def _offences(path: Path) -> list[str]:
+def _offences_in(module: str, source: str) -> list[str]:
     """Every reference to a stream outside a reader, and every decompression, in one module."""
-    module = path.name
-    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    tree = ast.parse(source, filename=module)
     parents = _parents(tree)
+    modules, functions = _gzip_names(tree)
     offences: list[str] = []
     for node in ast.walk(tree):
-        if (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and isinstance(node.func.value, ast.Name)
-            and node.func.value.id == "gzip"
-            and node.func.attr in GZIP_READS
-        ):
-            offences.append(f"{module} line {node.lineno}: calls gzip.{node.func.attr}")
+        if isinstance(node, ast.Call):
+            read = _decompression(node, modules, functions)
+            if read is not None:
+                offences.append(f"{module} line {node.lineno}: calls gzip.{read}")
         if not _is_stream_reference(node):
             continue
         in_import = False
@@ -635,6 +676,69 @@ def _offences(path: Path) -> list[str]:
     return offences
 
 
+def _names_a_sentence(node: ast.AST, names: set[str]) -> bool:
+    return (isinstance(node, ast.Name) and node.id in names) or (
+        isinstance(node, ast.Attribute) and node.attr in SENTENCES
+    )
+
+
+def _sentence_names(module: str, tree: ast.AST) -> set[str]:
+    """Every name a named sentence goes by in `module`: its own in its module, each import of it
+    under any name, and each name assigned a value that holds one of those (owner decision 85A)."""
+    names = {name for owner, name in NAMED_SENTENCES if owner == module}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            names |= {alias.asname or alias.name for alias in node.names if alias.name in SENTENCES}
+    grew = True
+    while grew:
+        grew = False
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Assign):
+                continue
+            if any(_names_a_sentence(part, names) for part in ast.walk(node.value)):
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and target.id not in names:
+                        names.add(target.id)
+                        grew = True
+    return names
+
+
+def _sentence_offences(module: str, source: str) -> list[str]:
+    """Every use of a named sentence, by any name, as a path: an operand of `/`, or anywhere in
+    the arguments of a call that opens, resolves or reads a path, an f-string's included."""
+    tree = ast.parse(source, filename=module)
+    names = _sentence_names(module, tree)
+    parents = _parents(tree)
+    offences: list[str] = []
+    for node in ast.walk(tree):
+        is_use = _names_a_sentence(node, names) and not (
+            isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Load)
+        )
+        if not is_use:
+            continue
+        child, cursor = node, parents.get(node)
+        while cursor is not None and not isinstance(cursor, ast.stmt):
+            if isinstance(cursor, ast.BinOp) and isinstance(cursor.op, ast.Div):
+                offences.append(
+                    f"{module} line {node.lineno}: {ast.unparse(node)} is used as a path"
+                )
+            if (
+                isinstance(cursor, ast.Call)
+                and child is not cursor.func
+                and _called_name(cursor) in PATH_CALLS
+            ):
+                offences.append(
+                    f"{module} line {node.lineno}: {ast.unparse(node)} is passed to "
+                    f"{_called_name(cursor)}"
+                )
+            child, cursor = cursor, parents.get(cursor)
+    return offences
+
+
+def _source(path: Path) -> str:
+    return path.read_text(encoding="utf-8")
+
+
 def test_there_are_benchmark_modules_to_read() -> None:
     names = {path.name for path in BENCHMARK_SOURCES}
 
@@ -642,26 +746,27 @@ def test_there_are_benchmark_modules_to_read() -> None:
 
 
 def test_no_module_under_benchmark_reads_a_stream_but_through_the_one_reader() -> None:
-    """RF-29 and RF-83: a stream's file name, an `events_path` attribute or the files' literal
-    names appear only in an import or inside a function that reads through `replay_events` or
-    resolves through `event_stream`, and no module decompresses a stream itself."""
+    """RF-29 and RF-83: a stream's file name, an `events_path` attribute or the files' names,
+    literal or spelled by constants, appear only in an import or inside a function that reads
+    through `replay_events` or resolves through `event_stream`, and no module decompresses a
+    stream itself, under any name it imports `gzip` by."""
     offences = [
         offence
         for path in BENCHMARK_SOURCES
         if path.name not in EXEMPT_MODULES
-        for offence in _offences(path)
+        for offence in _offences_in(path.name, _source(path))
     ]
 
     assert offences == []
 
 
 @pytest.mark.parametrize("module, name", sorted(NAMED_SENTENCES))
-def test_every_named_sentence_is_a_sentence_that_reads_nothing(module: str, name: str) -> None:
-    """81A's allowance holds only while the constant is what it was allowed as: one module-level
-    assignment whose value calls nothing, its name never an operand of `/` nor an argument of a
-    call that opens, resolves or reads a path."""
+def test_every_named_sentence_is_one_module_level_assignment_calling_nothing(
+    module: str, name: str
+) -> None:
+    """81A's allowance holds only while the constant is what it was allowed as."""
     path = Path(recording.__file__).parent / module
-    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    tree = ast.parse(_source(path), filename=str(path))
     assignments = [
         node
         for node in tree.body
@@ -673,19 +778,81 @@ def test_every_named_sentence_is_a_sentence_that_reads_nothing(module: str, name
         ast.unparse(node) for node in ast.walk(assignments[0].value) if isinstance(node, ast.Call)
     ]
     assert calls == [], f"{module}: {name} calls {calls}"
-    parents = _parents(tree)
-    for node in ast.walk(tree):
-        if not (isinstance(node, ast.Name) and node.id == name):
-            continue
-        parent = parents[node]
-        assert not (isinstance(parent, ast.BinOp) and isinstance(parent.op, ast.Div)), (
-            f"{module} line {node.lineno}: {name} is used as a path"
-        )
-        if isinstance(parent, ast.keyword):
-            parent = parents[parent]
-        assert not (isinstance(parent, ast.Call) and _called_name(parent) in PATH_CALLS), (
-            f"{module} line {node.lineno}: {name} is passed to {_called_name(parent)}"
-        )
+
+
+def test_no_module_under_benchmark_uses_a_named_sentence_as_a_path() -> None:
+    """Owner decision 85A: every module, every name the sentence goes by."""
+    offences = [
+        offence
+        for path in BENCHMARK_SOURCES
+        for offence in _sentence_offences(path.name, _source(path))
+    ]
+
+    assert offences == []
+
+
+@pytest.mark.parametrize(
+    ("source", "offence"),
+    [
+        ("import gzip as gz\ndef read(path):\n    return gz.open(path)\n", "calls gzip.open"),
+        (
+            "from gzip import decompress as inflate\ndef read(data):\n    return inflate(data)\n",
+            "calls gzip.decompress",
+        ),
+        ('NAME = "events" + ".jsonl"\n', "outside a function"),
+        ('NAME = "events.json" + "l" + ".gz"\n', "outside a function"),
+        ('NAME = f"events.jsonl"\n', "outside a function"),
+    ],
+    ids=["gzip-as", "from-gzip-as", "concatenated", "concatenated-packed", "f-string"],
+)
+def test_the_structural_rule_sees_through_aliases_and_concatenations(
+    source: str, offence: str
+) -> None:
+    found = _offences_in("probe.py", source)
+
+    assert found and all(offence in line for line in found), found
+
+
+@pytest.mark.parametrize(
+    ("source", "offence"),
+    [
+        (
+            "from pathlib import Path\n"
+            "from swreview.benchmark.scorecard import NO_EVENT_STREAM as reason\n"
+            "def where():\n"
+            '    return Path(f"{reason}")\n',
+            "is passed to Path",
+        ),
+        (
+            "from swreview.benchmark import scorecard\n"
+            "def where(folder):\n"
+            "    return folder / scorecard.NO_EVENT_STREAM\n",
+            "is used as a path",
+        ),
+        (
+            "from swreview.benchmark.scorecard import NO_EVENT_STREAM\n"
+            "REASON = NO_EVENT_STREAM\n"
+            "def where():\n"
+            '    return open(f"x-{REASON}")\n',
+            "is passed to open",
+        ),
+    ],
+    ids=["imported-as", "attribute", "assigned-alias"],
+)
+def test_a_named_sentence_used_as_a_path_is_found_by_any_name(source: str, offence: str) -> None:
+    found = _sentence_offences("probe.py", source)
+
+    assert found and all(offence in line for line in found), found
+
+
+def test_a_named_sentence_returned_as_a_reason_is_no_path() -> None:
+    source = (
+        "from swreview.benchmark.scorecard import NO_EVENT_STREAM\n"
+        "def why():\n"
+        "    return None, NO_EVENT_STREAM\n"
+    )
+
+    assert _sentence_offences("probe.py", source) == []
 
 
 # --- 4: the report reads each package's stream once, found through event_stream (T166) -----
