@@ -30,7 +30,8 @@ from __future__ import annotations
 
 import json
 import shutil
-from collections.abc import Sequence
+import threading
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -210,7 +211,13 @@ def test_benchmark_run_resolves_pane_defaults_model_view_and_profile_through_rev
     [review] = reviews
     assert review["efficiency"] == pane.efficiency
     assert review["attempt"] == AttemptRequest(
-        model_view=pane.model_view, standards_profile=profile, case_file=None, max_answer_turns=3
+        model_view=pane.model_view,
+        standards_profile=profile,
+        case_file=None,
+        max_answer_turns=3,
+        stop=review["attempt"].stop,
+        listener=review["attempt"].listener,
+        run_dir=out,
     )
     assert "explain_findings" not in review
 
@@ -486,7 +493,7 @@ def test_provenance_and_saved_set_exist_before_the_first_review(
     def review_reading_the_run_folder(
         package_dir: Path, session_out_dir: Path, **_keywords: Any
     ) -> None:
-        run_dir = session_out_dir.parent
+        run_dir = _keywords["attempt"].run_dir
         on_disk.append(
             ((run_dir / PROVENANCE_FILE).is_file(), (run_dir / SAVED_SET_FILE).is_file())
         )
@@ -525,6 +532,8 @@ def test_run_benchmark_hands_the_review_function_the_model_view_and_the_profile(
     calls: list[dict[str, Any]] = []
 
     def review_fn(package_dir: Path, session_out_dir: Path, **keywords: Any) -> None:
+        assert isinstance(keywords["attempt"].stop, threading.Event)
+        assert not keywords["attempt"].stop.is_set()
         calls.append(keywords)
 
     run_benchmark(
@@ -549,6 +558,14 @@ def test_run_benchmark_hands_the_review_function_the_model_view_and_the_profile(
         explain_findings=True,
     )
 
+    assert len({id(call["attempt"].stop) for call in calls}) == len(calls) == 4
+    assert [call["attempt"].run_dir for call in calls] == [
+        tmp_path / "with-attempt",
+        tmp_path / "with-attempt",
+        tmp_path / "defaults",
+        tmp_path / "defaults",
+    ]
+
     typed: dict[str, Any] = {
         "provider": "fake",
         "model": "fake-1",
@@ -572,11 +589,16 @@ def test_run_benchmark_hands_the_review_function_the_model_view_and_the_profile(
         "standards_profile": None,
         "max_answer_turns": 3,
     }
+
+    def transport(index: int) -> dict[str, Any]:
+        request = calls[index]["attempt"]
+        return {"stop": request.stop, "listener": request.listener, "run_dir": request.run_dir}
+
     assert calls == [
-        {**typed, "attempt": AttemptRequest(**typed_attempt, case_file=loaded)},
-        {**typed, "attempt": AttemptRequest(**typed_attempt, case_file=None)},
-        {**untyped, "attempt": AttemptRequest(**untyped_attempt, case_file=loaded)},
-        {**untyped, "attempt": AttemptRequest(**untyped_attempt, case_file=None)},
+        {**typed, "attempt": AttemptRequest(**typed_attempt, **transport(0), case_file=loaded)},
+        {**typed, "attempt": AttemptRequest(**typed_attempt, **transport(1), case_file=None)},
+        {**untyped, "attempt": AttemptRequest(**untyped_attempt, **transport(2), case_file=loaded)},
+        {**untyped, "attempt": AttemptRequest(**untyped_attempt, **transport(3), case_file=None)},
     ]
     assert calls[0]["attempt"].case_file is preflighted.case_files[PACKAGE_ID]
 
@@ -588,17 +610,28 @@ def test_run_benchmark_hands_the_review_function_the_model_view_and_the_profile(
         return start_review(package_dir, out_dir, **options)
 
     def recording_drive_review(
-        run: ReviewRun, case_file: CaseFile | None, *, max_answer_turns: int
+        run: ReviewRun,
+        case_file: CaseFile | None,
+        *,
+        max_answer_turns: int,
+        stop_requested: Callable[[], bool],
     ) -> None:
+        assert stop_requested.__self__ is attempt.stop
         driven.append((run, case_file, max_answer_turns))
 
     monkeypatch.setattr(cli, "start_review", recording_start_review)
     monkeypatch.setattr(answers, "drive_review", recording_drive_review)
+    from swreview.benchmark.attempt import AttemptListener
+
+    stop = threading.Event()
     attempt = AttemptRequest(
         model_view=MODEL_VIEW_PANE,
         standards_profile=profile,
         case_file=loaded,
         max_answer_turns=1,
+        stop=stop,
+        listener=AttemptListener(stop, provider="fake", requested_model="fake-1"),
+        run_dir=tmp_path,
     )
 
     cli._review_fn(

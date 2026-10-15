@@ -178,7 +178,9 @@ forwarded only when true (`benchmark/runner.py:243-251`), plus one new keyword, 
 slices: `model_view` and `standards_profile` (the parity slice, so `_review_fn` passes both to the
 review and SC-003's parity test compares like with like), `case_file` (the `CaseFile`
 `preflight_set` loaded, or `None`) and `max_answer_turns` (the scripted-answers slice), and `stop`
-(the robustness slice: the attempt's stop event, read by `use_retry` and `drive_review`).
+(the robustness slice: the attempt's stop event, read by `use_retry` and `drive_review`),
+`listener` (the attempt's `AttemptListener`, passed as a review callback) and `run_dir`
+(the run folder used by the body's path scrub; T198).
 `run_benchmark` gains the matching keyword parameters. Each new input is one field of one value, so
 an injected review function needs one keyword more, whatever the values; forwarding each only when it
 differed from a default would pass the stop and the bound on every benchmark run anyway, and hide

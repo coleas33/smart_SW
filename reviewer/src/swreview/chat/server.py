@@ -51,7 +51,7 @@ import json
 import logging
 import os
 import shutil
-from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from functools import partial
@@ -77,7 +77,6 @@ from swreview.agent.providers import (
     AgentEvent,
     AgentProvider,
     ProviderName,
-    ToolCallResult,
     error_body,
 )
 from swreview.agent.providers.deferred import DeferredProvider
@@ -88,6 +87,8 @@ from swreview.agent.runner import (
     SESSION_FILE_NAME,
     EvidenceAlreadyAnsweredError,
     ReviewRun,
+    StoppableTools,
+    TurnStopped,
     UnknownEvidenceRequestError,
     answerable,
     repeated_request_id,
@@ -446,45 +447,6 @@ class ProfileRefused(ChatError):
     def __init__(self, exc: ProfileError) -> None:
         super().__init__(str(exc))
         self.error_class = exc.error_class
-
-
-# --- stopping a turn ---------------------------------------------------------------------
-
-
-class TurnStopped(BaseException):
-    """`POST /stop` reached this chat; raised at the next tool boundary.
-
-    A `BaseException` on purpose. The runner turns any `Exception` out of a turn into
-    `error` plus `turn.ended {reason: "error"}` and a failed session, which is the right
-    answer for a provider that blew up and the wrong one for an engineer who pressed Stop:
-    the contract says the turn ends with `reason: "stopped"` and the session ends cleanly.
-    Passing outside the `Exception` hierarchy is what lets the worker say so itself.
-    """
-
-
-class StoppableTools:
-    """The run's `ToolSet` with one question asked between calls: has Stop been pressed?
-
-    A turn is a blocking call inside a provider SDK, so it cannot be cancelled from
-    outside; what it does do, repeatedly, is come back here to run a tool. That is the
-    "next tool boundary" the contract promises, and it is the only place where stopping
-    costs nothing: no half-written tool result, no partial finding.
-    """
-
-    def __init__(self, tools: Any, stop: Any) -> None:
-        self.tools = tools
-        self.stop = stop
-
-    def __iter__(self) -> Iterator[Any]:
-        return iter(self.tools)
-
-    def __len__(self) -> int:
-        return len(self.tools)
-
-    def call(self, name: str, arguments: Mapping[str, Any], call_id: str = "") -> ToolCallResult:
-        if self.stop.is_set():
-            raise TurnStopped(f"the engineer stopped this turn before {name!r} ran")
-        return self.tools.call(name, arguments, call_id)
 
 
 # --- the timing body (`007-attention-policy-gate/contracts/timing.md` section 3) ---------
@@ -2623,8 +2585,10 @@ class ChatServer:
         A turn that raised `TurnStopped` at a tool boundary and a chat that was not
         running when Stop arrived end the same way, so they end in the same three lines.
         """
-        chat.emit("turn.ended", {"reason": "stopped"})
-        self._finalize_run(chat)
+        if chat.run is not None:
+            chat.run.end_stopped()
+        else:
+            chat.emit("turn.ended", {"reason": "stopped"})
         if settle:
             self._settle(chat, ChatState.ENDED)
 

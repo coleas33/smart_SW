@@ -51,7 +51,7 @@ from typing import Any
 from uuid import UUID
 
 from swreview import tokens
-from swreview.agent import events
+from swreview.agent import events, providers
 from swreview.agent.checklist import FINDING_BUCKET, SYSTEM_PROMPT_FILE, Checklist, load_checklist
 from swreview.agent.events import (
     DEFAULT_MAX_STEPS,
@@ -176,6 +176,45 @@ from swreview.tools.registry import (
     ToolRegistry,
 )
 from swreview.tools.session import record_question
+
+
+class TurnStopped(BaseException):
+    """A stop was requested; raised at the next tool boundary.
+
+    A `BaseException` on purpose. The runner turns any `Exception` out of a turn into
+    `error` plus `turn.ended {reason: "error"}` and a failed session, while a requested
+    stop ends the turn with `reason: "stopped"` and the session cleanly. Passing outside
+    the `Exception` hierarchy lets the caller close the stopped turn itself.
+    """
+
+
+class StoppableTools:
+    """The run's `ToolSet` with the stop checked between calls.
+
+    A turn is a blocking call inside a provider SDK, so it cannot be cancelled from
+    outside; what it does do, repeatedly, is come back here to run a tool. That is the
+    next tool boundary, before a tool writes a result or a finding.
+    """
+
+    def __init__(self, tools: Any, stop: Any) -> None:
+        self.tools = tools
+        self.stop = stop
+
+    def __iter__(self) -> Iterator[Any]:
+        return iter(self.tools)
+
+    def __len__(self) -> int:
+        return len(self.tools)
+
+    def call(self, name: str, arguments: Mapping[str, Any], call_id: str = "") -> ToolCallResult:
+        if self.stop.is_set():
+            raise TurnStopped(f"the engineer stopped this turn before {name!r} ran")
+        return self.tools.call(name, arguments, call_id)
+
+    def tools_withdrawn(self) -> bool:
+        """Preserve the inner set's request to withdraw tools for the next round."""
+        return providers.tools_withdrawn(self.tools)
+
 
 SESSION_FILE_NAME = "session.json"
 ENGINEERING_SUMMARY_FILE_NAME = "engineering-context-summary.json"
@@ -1854,6 +1893,12 @@ class ReviewRun:
     def close_waiting(self) -> ReviewSession:
         """Build the cache on the caller's worker, then write the checked review."""
         self.build_send_cache()
+        return self.finalize()
+
+    def end_stopped(self) -> ReviewSession:
+        """Close a stopped turn through the pane, attempt and replay's shared path."""
+        self.sink.emit("turn.ended", {"reason": "stopped"})
+        self.cancel_presentation()
         return self.finalize()
 
     def finalize(self) -> ReviewSession:

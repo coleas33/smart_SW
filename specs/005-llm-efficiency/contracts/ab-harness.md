@@ -593,6 +593,12 @@ an older record lacks reads as not recorded, and the record names **no path**: n
 nor its folder, the set file's, a package's or the output folder's. Which of these fields must match
 across a study is 014 `contracts/provenance.md` section 4, with compare's cross-checks.
 
+*Amended 2026-10-15 by feature 014 (T198; its `contracts/benchmark-run.md` 4, 9 and 10):*
+a failed package no longer stops the set. Every attempt runs under
+`attempts/<package>/<n>/` and is recorded in `run-status.json`; a completed or behavioural
+outcome is recorded first, then promoted by one rename. Infrastructure failures remain
+under `attempts/`, and the command exits 1 after trying the set.
+
 ### 10.2 `set_digest` is the digest of the saved copy
 
 The sha256 of the `benchmark-set.json` the run saved, **not** of the file `--set` named.

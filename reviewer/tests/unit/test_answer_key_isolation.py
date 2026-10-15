@@ -155,7 +155,7 @@ def test_run_benchmark_never_passes_an_answer_key_path(tmp_path: Path) -> None:
     package_path, session_out_dir, provider, model, effort = calls[0]
     assert "answer_keys" not in {part.lower() for part in package_path.parts}
     assert package_path == package_dir.resolve()
-    assert session_out_dir == out_dir / "pkg-1"
+    assert session_out_dir == out_dir / "attempts" / "pkg-1" / "1"
     assert provider == "openai"
     assert model == "gpt-5.6"
     assert effort == "high"

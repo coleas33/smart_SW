@@ -34,7 +34,7 @@ This module imports no answer-key module (runs never read keys, FR-032), and not
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from itertools import combinations
 from pathlib import Path
@@ -79,9 +79,8 @@ DEFAULT_MAX_ANSWER_TURNS = 3
 Ended = Literal[
     "no_open_questions", "all_unscripted", "bound_reached", "turn_did_not_end", "stopped"
 ]
-"""Why the driver stopped answering (`scripted-answers.md` 3 and 5). `stopped`, the attempt's
-stop set at an answer point, is part of the format now and written only once US7 gives the
-driver its stop (plan decision INT-7)."""
+"""Why the driver stopped answering (`scripted-answers.md` 3 and 5). `stopped` records the
+attempt's stop set at an answer point (plan decision INT-7)."""
 
 UnscriptedReason = Literal["no_answer", "ambiguous", "names_nothing"]
 """Why an open request was given nothing at a point (`questions.md` 3): no entry asks within it,
@@ -422,7 +421,11 @@ class _Delivery:
 
 
 def drive_review(
-    run: ReviewRun, case_file: CaseFile | None, *, max_answer_turns: int
+    run: ReviewRun,
+    case_file: CaseFile | None,
+    *,
+    max_answer_turns: int,
+    stop_requested: Callable[[], bool],
 ) -> AnswerLog:
     """Play `run` as the pane's engineer would, answering its questions from `case_file`, and
     write its answer log into `run.out_dir` (sections 3 to 5; QA-1 to QA-4, QA-8, QA-9, RF-13).
@@ -437,7 +440,8 @@ def drive_review(
     first point where the last turn did not end normally (`turn_did_not_end`, D2), nothing is
     open (`no_open_questions`, no point recorded), nothing has a delivery (`all_unscripted`: an
     unscripted question gets nothing, D3), or `max_answer_turns` answer turns have been played
-    (`bound_reached`: the deliveries held, nothing sent; QA-3).
+    (`bound_reached`: the deliveries held, nothing sent; QA-3). A requested stop is checked
+    before each answer point and sends nothing (`stopped`; INT-7).
 
     How each turn ended is read off `run.sink`, since `start` and `answer_evidence_batch` return
     the session, not the turn's result. The log is written in a `finally`, so a turn that raises
@@ -460,7 +464,9 @@ def drive_review(
     points: list[AnswerPoint] = []
     ended: Ended = "turn_did_not_end"
     try:
-        ended = _answer_points(run, case_file, points, turn_ends, max_answer_turns)
+        ended = _answer_points(
+            run, case_file, points, turn_ends, max_answer_turns, stop_requested
+        )
     finally:
         delivered = {one.entry for point in points for one in point.sent}
         log = AnswerLog(
@@ -480,6 +486,7 @@ def _answer_points(
     points: list[AnswerPoint],
     turn_ends: Sequence[TurnEndReason],
     max_answer_turns: int,
+    stop_requested: Callable[[], bool],
 ) -> Ended:
     """The opening turn, then one answer point after each turn until one stops the review,
     returning why. `points` gains each point as it is recorded, so a turn that raises leaves
@@ -489,6 +496,8 @@ def _answer_points(
     while True:
         if not turn_ends or turn_ends[-1] != "end":
             return "turn_did_not_end"
+        if stop_requested():
+            return "stopped"
         requests = open_evidence_requests(run.session)
         if not requests:
             return "no_open_questions"

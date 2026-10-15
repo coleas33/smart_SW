@@ -31,11 +31,13 @@ OpenAI adapter over a replayed transport - so marking it would only mean never r
 from __future__ import annotations
 
 import json
+import threading
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Any
 
 import httpx
+import pytest
 import respx
 from google.genai import types
 
@@ -224,6 +226,25 @@ def test_the_stop_withdraws_the_tools_for_the_next_round(
     run = start(tmp_package_dir, tmp_path / "on", service, efficiency=ON)
     run.start()
 
+    assert service.tool_choices == [*[None] * ITEMS, "none"]
+
+
+@pytest.mark.parametrize("surface", ["attempt", "pane"])
+@respx.mock
+def test_the_stop_wrapper_keeps_the_withdrawal(
+    tmp_package_dir: Path, tmp_path: Path, surface: str
+) -> None:
+    """RF-63: both surfaces preserve withdrawal; Gemini is deferred under 94A."""
+    service = Service(script_with_one_call_to_spare())
+    stop = threading.Event()
+    run = start(tmp_package_dir, tmp_path / surface, service, efficiency=ON)
+    run.tools = runner.StoppableTools(run.tools, stop)
+    try:
+        run.start()
+    finally:
+        run.close()
+
+    assert not stop.is_set()
     assert service.tool_choices == [*[None] * ITEMS, "none"]
 
 

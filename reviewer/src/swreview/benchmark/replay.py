@@ -56,7 +56,7 @@ from swreview.agent.providers.fake import (
     ScriptedTurn,
 )
 from swreview.agent.providers.pruning import prunable, prune_history, result_stub
-from swreview.agent.runner import ReviewRun, answers_message, start_review
+from swreview.agent.runner import ReviewRun, TurnStopped, answers_message, start_review
 from swreview.agent.settings import (
     MODEL_VIEW_OFF,
     EfficiencySettings,
@@ -252,14 +252,6 @@ class PlayedReview:
     (feature 008 FR-030) - which the adapters prune with, so the replay does too."""
 
 
-class _Stop(BaseException):
-    """Raised at a tool boundary to stop a turn, as the pane's `TurnStopped` is.
-
-    A `BaseException`, like `TurnStopped`: the runner turns an `Exception` out of a turn into a
-    failed turn, and a stopped one is not a failure.
-    """
-
-
 class _RecordingTools:
     """The run's `ToolSet`, recording every result in order and stopping where it is told to."""
 
@@ -278,7 +270,7 @@ class _RecordingTools:
     def call(self, name: str, arguments: Mapping[str, Any], call_id: str = "") -> ToolCallResult:
         index = len(self.played)
         if self.stop_at is not None and index == self.stop_at:
-            raise _Stop(f"stopped before {name!r}")
+            raise TurnStopped(f"stopped before {name!r}")
         step = len(self.run.session.steps)
         result = self.tools.call(name, arguments, call_id)
         self.played.append(
@@ -447,10 +439,8 @@ def _drive(run: ReviewRun, plan: TurnPlan) -> bool:
             run.answer_evidence(request_id, answer)
         else:
             run.answer_evidence_batch(plan.answers)
-    except _Stop:
-        # What the pane's `_end_stopped` does when `TurnStopped` reaches it.
-        run.sink.emit("turn.ended", {"reason": "stopped"})
-        run.finalize()
+    except TurnStopped:
+        run.end_stopped()
         return True
     return False
 

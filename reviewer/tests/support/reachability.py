@@ -55,6 +55,7 @@ import hashlib
 import importlib
 import json
 import tempfile
+import threading
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -73,10 +74,12 @@ from swreview.agent.providers import (
     TurnResult,
 )
 from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
+from swreview.agent.runner import StoppableTools
 from swreview.agent.settings import DEFAULT_EFFORT, DEFAULT_MODELS
 from swreview.benchmark import matching, scorecard
 from swreview.benchmark.answer_key import load_answer_key
 from swreview.benchmark.answer_key_model import REFERENCE_KEYED_CHECKS, AnswerKey, ReferenceKind
+from swreview.benchmark.attempt import AttemptListener
 from swreview.benchmark.digest import sha256_of
 from swreview.benchmark.origins import MODEL_ORIGINS
 from swreview.benchmark.runner import EXAMPLE_PROFILE, AttemptRequest
@@ -151,6 +154,8 @@ def code_only_calls(tools: ToolSet) -> tuple[ToolCall, ...]:
     whose tools carry the review's context. The plan is asked of that context and dispatch, the
     ones the pre-run read, so a check offered, or planned, on a condition is decided as the
     review decided it."""
+    if isinstance(tools, StoppableTools):
+        tools = tools.tools
     if not isinstance(tools, prerun.PrerunGuard):
         raise ValueError("leg (a) runs under the pane defaults, whose pre-run guards the tools")
     dispatch: ToolDispatch = tools.tools
@@ -232,6 +237,7 @@ def _review(
         prune_after=None,
         explain_findings=False,
     )
+    stop = threading.Event()
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(cli, "provider_factory", lambda settings, efficiency=None: model)
         session: ReviewSession = cli._review_fn(
@@ -247,6 +253,9 @@ def _review(
                 standards_profile=REPO_ROOT / EXAMPLE_PROFILE,
                 case_file=None,
                 max_answer_turns=0,
+                stop=stop,
+                listener=AttemptListener(stop, provider="fake", requested_model=MODEL),
+                run_dir=folder,
             ),
         )
     score = scorecard._score_package(

@@ -34,6 +34,7 @@ import json
 import re
 import subprocess
 import sys
+import threading
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, get_args
@@ -89,8 +90,7 @@ from tests.unit.test_benchmark_questions import (
 )
 
 ENDED = ("no_open_questions", "all_unscripted", "bound_reached", "turn_did_not_end", "stopped")
-"""`ended`'s five values (`scripted-answers.md` 5): `stopped` is in the format now and written
-only once US7 gives the driver its stop (INT-7)."""
+"""`ended`'s five values (`scripted-answers.md` 5), including the attempt's stop (INT-7)."""
 
 UNSCRIPTED_REASONS = ("no_answer", "ambiguous", "names_nothing")
 
@@ -951,12 +951,52 @@ def test_a_negative_bound_is_refused_before_any_turn(tmp_path: Path) -> None:
 
     try:
         with pytest.raises(ValueError, match="max_answer_turns"):
-            drive_review(run, None, max_answer_turns=-1)
+            drive_review(run, None, max_answer_turns=-1, stop_requested=lambda: False)
     finally:
         run.close()
 
     assert provider.sent == []
     assert not (out / ANSWER_LOG_FILE_NAME).exists()
+
+
+def test_drive_review_requires_the_stop_requested_keyword(tmp_path: Path) -> None:
+    """T191, INT-7: every caller deliberately supplies the attempt's stop predicate."""
+    provider = scripted(turn())
+    out = tmp_path / "run" / PACKAGE_ID
+    run = start_review(package_folder(tmp_path), out, provider=provider, bridge=False)
+    try:
+        with pytest.raises(TypeError, match="stop_requested"):
+            drive_review(run, None, max_answer_turns=3)
+    finally:
+        run.close()
+
+    assert provider.sent == []
+    assert not (out / ANSWER_LOG_FILE_NAME).exists()
+
+
+def test_a_stop_before_an_answer_point_sends_nothing_and_writes_the_log(tmp_path: Path) -> None:
+    """T191: the one scripted turn is all that may be requested after the stop is set."""
+    provider = scripted(turn(FIT_QUESTION))
+    out = tmp_path / "run" / PACKAGE_ID
+    stop = threading.Event()
+    stop.set()
+    run = start_review(package_folder(tmp_path), out, provider=provider, bridge=False)
+    try:
+        log = drive_review(
+            run,
+            case(tmp_path, (A_1, A_2)),
+            max_answer_turns=3,
+            stop_requested=stop.is_set,
+        )
+    finally:
+        run.close()
+
+    assert len(provider.sent) == 1
+    assert [(request.status, request.answer) for request in run.session.evidence_requests] == [
+        ("open", None)
+    ]
+    assert log == log_of([], "stopped", ["A-1", "A-2"])
+    assert read_answer_log(out) == log
 
 
 # --- steps_before against the event stream (scripted-answers.md 5; questions.md 1) --------------
