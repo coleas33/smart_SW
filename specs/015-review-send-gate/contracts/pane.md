@@ -256,6 +256,9 @@ first." (owner decision 68A) While a re-run is in flight, Save is disabled and t
 (`describeKeySource('none')`) becomes "No key is stored. With the box ticked a review fails until one
 is entered; with it unticked the code checks run and Send waits for a key."
 
+*Landed as* (T116, owner decision 98A, 2026-10-15): the waiting line is not shown while a Send is
+in flight (from its press to its first usage), when a save is refused (FR-027).
+
 ## 10. The Transcript
 
 Page words, live and in a transcript replay:
@@ -267,6 +270,13 @@ Page words, live and in a transcript replay:
 | `session.sent` | "Sending to {provider} {model} ({requested} -> {param}={value})", and " - first request {n} input tokens" when its estimate counted one; the effort part shared with `describeStart`. It reads "Sending": `session.sent` is written before the attempt's record, which can still fail (owner decision 72A) |
 
 Every other line is today's, the failed attempt's `error` line and "The turn ended: error." included.
+
+*Landed as* (T116, owner decision 98A item 5, 2026-10-15): "while the review waits" is decided from
+the stream, not from the page's state: the line is printed for a `session.ended` of a stream whose
+`session.started` was unticked and on which no `session.sent` came before it. A failed attempt's
+end, after its `session.sent`, reads "The session ended at {ended_at}.". A restore that joins a
+stream part-way seeds the two facts from the snapshot (`chat_state`, the summary's `send`,
+`send_in_flight`); a replay reads them from the stream's start.
 
 ## 11. The layout budget
 

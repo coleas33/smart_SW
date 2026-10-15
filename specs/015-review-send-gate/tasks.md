@@ -838,7 +838,7 @@ description: "Task list for the send-to-model checkbox"
   - Research R2.21 holds the measured figures from T056, T077 and T109.
 
   Documents only.
-- [ ] T116 [doc] Lane C. Adversarial review (62A). An Opus reviewer who wrote none of the code reads the branch's whole diff against `spec.md`, the contracts and this list. The reviewer hunts for:
+- [x] T116 [doc] Lane C. Adversarial review (62A). An Opus reviewer who wrote none of the code reads the branch's whole diff against `spec.md`, the contracts and this list. The reviewer hunts for:
   - any path that reaches a provider before Send (SC-001);
   - any byte a ticked review changes (FR-035);
   - any record that says sent or not sent wrongly (FR-032);
@@ -850,6 +850,7 @@ description: "Task list for the send-to-model checkbox"
   - any company value or local path (FR-039).
 
   Each finding is either fixed test-first in the task that owns the file (one commit each, every commit passing the gate), or recorded in `research.md` as a default the owner may revise. Acceptance: the review's findings are each fixed or recorded.
+  Done 2026-10-15 (owner decisions 98A, 99A and 100A, research R8): every confirmed finding in 015's own code and tests fixed test-first in four commit groups; the 016 integration recorded as a plan, nothing of 016 edited; T117 rewritten; what is recorded rather than fixed is in `review-2026-10-12.md`, "T116 closed".
 - [ ] T117 [py] Lane G. **Only when feature 014 is on `main` before this branch merges** (research R3; RK-8). Rewritten 2026-10-15 by owner decision 100A (research R8), from the T116 integration review, which merged this branch with 014 slice 5 (`014-design-review-eval`) and with 016 in scratch trees. In the merge commit:
   - **no golden or fixture regeneration for the slice-5 merge.** Slice 5 touches neither `agent/runner.py` nor the pane fixture, and the merged code must pass T007's five goldens, `test_request_prefix_characterization`, `test_pane_fixture` and `test_benchmark_pane_parity` as committed, unchanged. A difference there is a defect to explain or fix, never a file to regenerate;
   - `test_replay_recording.py` needs nothing: since 100A it guards the event read through a sentinel on the openers, not the private `recording._events` slice 5 removes (verified green on the merged tree);

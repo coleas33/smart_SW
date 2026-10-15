@@ -91,6 +91,14 @@
     // contracts/pane.md section 7): every other action waits for it.
     rechecking: false,
     sentSeen: Object.create(null),
+    // What the stream on screen has said so far (feature 015, owner decision 98A item 5): its
+    // `session.started` was unticked, and a `session.sent` came after it. The Transcript's
+    // "Nothing was sent" line is decided from these, live and in a replay alike, and never from
+    // what the page shows now. A restore seeds them for a stream it joins part-way.
+    streamChecksOnly: false,
+    streamSent: false,
+    // Send had keyboard focus when its block was last rebuilt (`renderSend`).
+    sendFocus: false,
     failedApplies: Object.create(null),
     sendWhenCheckedConfirmed: true,
     sendWhenCheckedChange: 0,
@@ -520,10 +528,13 @@
     var body = event.body || {};
     switch (event.type) {
       case 'session.started':
+        state.streamChecksOnly = body.send_when_checked === false;
+        state.streamSent = false;
         appendCard(render.textBlock('system', describeStart(body)));
         return;
       case 'session.sent':
         state.sendAwaitingStart = false;
+        state.streamSent = true;
         appendCard(render.textBlock('system', describeSent(body)));
         return;
       case 'text.delta':
@@ -685,8 +696,13 @@
         + 'report.md in the run folder is written by the backend and is unaffected.'));
   }
 
+  /**
+   * The Transcript's line for `session.ended`: "Nothing was sent" only for an unticked review's
+   * end that no `session.sent` on its stream came before (contracts/pane.md section 10). A
+   * failed attempt reached the provider, so its end is the session's.
+   */
   function describeEnd(body) {
-    return waitingForSend()
+    return state.streamChecksOnly && !state.streamSent
       ? 'The checks ended at ' + (body.ended_at || 'now') + '. Nothing was sent to the model.'
       : 'The session ended at ' + (body.ended_at || 'now') + '.';
   }
@@ -1294,6 +1310,12 @@
   }
 
   function renderSend() {
+    // The block is rebuilt, so keyboard focus on Send is carried to the new button (98A). It
+    // stays owed while the button cannot take it - disabled from the press to the reply - and
+    // nothing else has focus.
+    var active = document.activeElement;
+    var onSend = !!active && ui.send.contains(active) && active.getAttribute('data-action') === 'send';
+    state.sendFocus = onSend || (state.sendFocus && (!active || active === document.body));
     render.clear(ui.send);
     var block = state.summary && state.summary.send;
     ui.send.hidden = !block || state.sending;
@@ -1304,12 +1326,17 @@
         // A re-run that failed prints the backend's own sentence for it, its class in the fold.
         errorText: state.sendError && state.sendError.rerun ? block.rerun_failed_text : null
       }));
+      var button = ui.send.querySelector('[data-action="send"]');
+      if (state.sendFocus && button && !button.disabled && !ui.send.hidden) button.focus();
     }
+    // Only while the review waits: from Send's press to its first usage a save is refused
+    // (FR-027), so the line would promise what the host will not do (98A).
+    var waitingNote = waitingForSend() && !state.sending && !state.sendPending;
     ui.waitingSettingsNote.textContent = state.rechecking
       ? 'Checking the saved evidence again; save when it is done.'
-      : waitingForSend()
+      : waitingNote
         ? 'Saving restarts the backend. The waiting review stays, and its Send checks its saved evidence again first.' : '';
-    ui.waitingSettingsNote.hidden = !state.rechecking && !waitingForSend();
+    ui.waitingSettingsNote.hidden = !state.rechecking && !waitingNote;
     ui.save.disabled = state.rechecking;
     renderStartReview();
   }
@@ -1735,6 +1762,12 @@
     state.awaitingSend = body.chat_state === 'awaiting_send';
     state.sending = body.send_in_flight === true;
     state.sendAwaitingStart = false;
+    // A stream joined part-way: it waits for Send unless a Send is in flight (98A item 5). A
+    // Transcript replay reads from the start and its `session.started` sets these again.
+    var waits = state.awaitingSend
+      || !!(body.ranking && body.ranking.summary && body.ranking.summary.send);
+    state.streamChecksOnly = waits || state.sending;
+    state.streamSent = state.sending;
     state.readOnly = body.read_only ? String(body.read_only_reason || '') : null;
     state.snapshotLastSeq = typeof body.last_seq === 'number' ? body.last_seq : 0;
 

@@ -32,6 +32,13 @@ public sealed class ReviewPageDefaultViewScanTests
 
     private static readonly Lazy<JsonElement> Titles = new Lazy<JsonElement>(DriveTitles);
 
+    /// <summary>The raw status and bucket tokens no default view prints.</summary>
+    private static readonly string[] RawTokens =
+    {
+        "checked_within_scope", "out_of_scope", "not_reached", "not_applicable", "within_scope", "waiting_engineer",
+        "awaiting_send", "not_sent", "send_failed",
+    };
+
     private static readonly Regex CheckIdShape = new Regex(@"^[a-z]+(\.[a-z0-9_]+)+$", RegexOptions.Compiled);
 
     private static readonly Regex PartId = new Regex(@"cmp:[0-9]{4,}", RegexOptions.Compiled);
@@ -55,11 +62,7 @@ public sealed class ReviewPageDefaultViewScanTests
     public void NoRawStatusOrBucketTokenIsVisible()
     {
         string text = Visible.Value;
-        string[] tokens =
-        {
-            "checked_within_scope", "out_of_scope", "not_reached", "not_applicable", "within_scope", "waiting_engineer",
-            "awaiting_send", "not_sent", "send_failed",
-        };
+        string[] tokens = RawTokens;
 
         AssertNoneVisible(tokens, text);
         WaitingReviewFixture waiting = WaitingReviewFixture.Read();
@@ -77,6 +80,73 @@ public sealed class ReviewPageDefaultViewScanTests
             Assert.Contains(restored.Restored.GetProperty("read_only_reason").GetString()!, visible);
             AssertNoneVisible(tokens, visible);
         });
+    }
+
+    /// <summary>
+    /// T116 (owner decision 98A, a note): contracts/pane.md section 13's worst cases for the
+    /// waiting fixtures - a failed attempt's line, a refused Send beside the block, and a restored
+    /// review whose re-run failed - print no raw state token and no error class name outside a
+    /// shut fold.
+    /// </summary>
+    [Fact]
+    public void TheSendBlocksFailureStatesShowNoRawTokenOrErrorClass()
+    {
+        WaitingReviewFixture waiting = WaitingReviewFixture.Read();
+        string[] classes = waiting.Root.GetProperty("labels").GetProperty("errors").EnumerateObject()
+            .Select(entry => entry.Name).Concat(new[] { "FixtureRequestError", "FICTSendRefusal" }).ToArray();
+        JsonElement failed = waiting.Root.GetProperty("failed_send");
+        ReviewPageDriver.Run(driver =>
+        {
+            waiting.Configure(driver);
+            driver.InitialRoutes.RemoveAll(route => route.Path == "/sessions/chat-1/snapshot");
+            driver.InitialRoutes.Add(("GET", "/sessions/chat-1/snapshot", 200, failed.GetRawText()));
+        }, async driver =>
+        {
+            string visible = await VisibleResults(driver);
+            Assert.Contains(failed.GetProperty("ranking").GetProperty("summary").GetProperty("send").GetProperty("failure").GetString()!, visible);
+            AssertNoneVisible(RawTokens, visible);
+            AssertNoneVisible(classes, visible);
+        });
+        foreach (string refusal in new[] { "NoCredential", "FICTSendRefusal" })
+        {
+            ReviewPageDriver.Run(waiting.Configure, async driver =>
+            {
+                await waiting.Start(driver);
+                await driver.Route("POST", "/sessions/chat-1/send", 409, JsonSerializer.Serialize(new
+                {
+                    error_class = refusal, message = "FICT the Send was refused", retryable = false,
+                }));
+                await PressSend(driver);
+                string visible = await VisibleResults(driver);
+                Assert.Contains("Send to model", visible);
+                AssertNoneVisible(RawTokens, visible);
+                AssertNoneVisible(classes, visible);
+            });
+        }
+        RestoredReviewFixture restored = RestoredReviewFixture.Read();
+        ReviewPageDriver.Run(driver =>
+        {
+            restored.Configure(driver);
+            driver.RecheckError = new { error_class = "InvalidPackage", message = "FICT the saved package cannot be read", retryable = false };
+        }, async driver =>
+        {
+            await PressSend(driver);
+            string visible = await VisibleResults(driver);
+            Assert.Contains(restored.Restored.GetProperty("ranking").GetProperty("summary").GetProperty("send")
+                .GetProperty("rerun_failed_text").GetString()!, visible);
+            AssertNoneVisible(RawTokens, visible);
+            AssertNoneVisible(classes, visible);
+        });
+    }
+
+    private static async System.Threading.Tasks.Task<string> VisibleResults(ReviewPageDriver driver) =>
+        (await driver.Read("return JSON.stringify({ok:true,text:h.visibleText(document.getElementById('results'))});"))
+            .GetProperty("text").GetString()!;
+
+    private static async System.Threading.Tasks.Task PressSend(ReviewPageDriver driver)
+    {
+        await driver.Read("var send=document.querySelector('#send [data-action=send]');if(send)send.click();return JSON.stringify({ok:true});");
+        await driver.Settle();
     }
 
     [Fact]
