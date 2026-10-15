@@ -770,7 +770,7 @@ description: "Task list for the send-to-model checkbox"
 
 ### The page
 
-- [ ] T107 [US4] [page] Lane W. Write `extractor/SwReview.AddIn.Tests/ReviewPageRecheckTests.cs` on `review-waiting-restored.json` (`contracts/pane.md` sections 4, 5 and 7 to 9; `contracts/recheck.md` sections 7 and 10; FR-027, FR-030, FR-031, FR-033, FR-041, FR-042; owner decision 68A). As test infrastructure, make `ReviewPageDriver.cs`:
+- [x] T107 [US4] [page] Lane W. Write `extractor/SwReview.AddIn.Tests/ReviewPageRecheckTests.cs` on `review-waiting-restored.json` (`contracts/pane.md` sections 4, 5 and 7 to 9; `contracts/recheck.md` sections 7 and 10; FR-027, FR-030, FR-031, FR-033, FR-041, FR-042; owner decision 68A). As test infrastructure, make `ReviewPageDriver.cs`:
   - answer `review.recheck` with the fixture's `rechecked` body, with an error mode taking a given class;
   - offer `HoldReviewRecheck` and `ReleaseReviewRecheck`. A held re-run queues every later page message and answers them in order on release, as the host's one pump does.
 
@@ -804,7 +804,7 @@ description: "Task list for the send-to-model checkbox"
   - `ReviewPageDefaultViewScanTests.NoRawStatusOrBucketTokenIsVisible` runs on `review-waiting-restored.json` too.
 
   Acceptance: red for want of the restored flow.
-- [ ] T108 [US4] [page] Lane W. Implement in `app.js` and `render.js`:
+- [x] T108 [US4] [page] Lane W. Implement in `app.js` and `render.js`:
   - the restored review: read-only, as feature 009 shows a restored review, with the Send block's Send enabled (owner decision 68A);
   - `state.rechecking`, and a restored review's Send: `review.recheck`, then the new chat shown and `POST /sessions/{chat_id}/send`, with no re-keying;
   - the re-run's status-line state, and the refusals while a re-run runs;

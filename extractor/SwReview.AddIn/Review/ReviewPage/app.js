@@ -87,6 +87,9 @@
     sendPending: false,
     applySummaryPending: false,
     sendError: null,
+    // A restored waiting review's Send is re-running its checks (`review.recheck`, feature 015
+    // contracts/pane.md section 7): every other action waits for it.
+    rechecking: false,
     sentSeen: Object.create(null),
     failedApplies: Object.create(null),
     sendWhenCheckedConfirmed: true,
@@ -252,6 +255,9 @@
         renderDocument();
         renderBinding();
         followActiveDocument();
+        // A review the host finds for this document only now (feature 015, FR-030): ask again,
+        // and follow its answer by the same rule.
+        requestSessions(true);
         return;
       case 'backend.stopped':
         state.backend = null;
@@ -1102,6 +1108,8 @@
     var sentence = '';
     if (!state.chatId) {
       sentence = '';
+    } else if (state.rechecking) {
+      sentence = 'Checking the saved evidence again.';
     } else if (state.reconnectTimer !== null) {
       sentence = 'Reconnecting to the review.';
     } else if (waitingForSend() && !state.sending) {
@@ -1235,15 +1243,29 @@
       || !!state.failedApplies[state.chatId];
   }
 
+  /**
+   * A waiting review restored read-only from its run folder (feature 015, owner decision 68A):
+   * its Send block is the backend's `restored` one, and Send is the one control it offers.
+   */
+  function restoredSend() {
+    return state.readOnly !== null && !!(state.summary && state.summary.send
+      && state.summary.send.state === 'restored');
+  }
+
   /** The single enabling rule used by both Send's renderer and its press. */
   function canSendToModel() {
     return !!state.chatId && !!(state.summary && state.summary.send) && !state.resultsStale
       && !isDrawing(state.documentInfo) && !state.startPending && !state.turnRunning
-      && !state.sending && !state.sendPending && !state.applySummaryPending && state.readOnly === null;
+      && !state.sending && !state.sendPending && !state.applySummaryPending && !state.rechecking
+      && (state.readOnly === null || restoredSend());
   }
 
   function sendToModel() {
     if (!canSendToModel()) {
+      return;
+    }
+    if (restoredSend()) {
+      recheckThenSend();
       return;
     }
     var chatId = state.chatId;
@@ -1278,13 +1300,83 @@
     if (block) {
       ui.send.appendChild(render.sendBlock(block, {
         disabled: !canSendToModel(),
-        error: state.sendError, labels: state.labels
+        error: state.sendError, labels: state.labels,
+        // A re-run that failed prints the backend's own sentence for it, its class in the fold.
+        errorText: state.sendError && state.sendError.rerun ? block.rerun_failed_text : null
       }));
     }
-    ui.waitingSettingsNote.textContent = waitingForSend()
-      ? 'Saving restarts the backend. The waiting review stays, and its Send checks its saved evidence again first.' : '';
-    ui.waitingSettingsNote.hidden = !waitingForSend();
+    ui.waitingSettingsNote.textContent = state.rechecking
+      ? 'Checking the saved evidence again; save when it is done.'
+      : waitingForSend()
+        ? 'Saving restarts the backend. The waiting review stays, and its Send checks its saved evidence again first.' : '';
+    ui.waitingSettingsNote.hidden = !state.rechecking && !waitingForSend();
+    ui.save.disabled = state.rechecking;
     renderStartReview();
+  }
+
+  /**
+   * A restored waiting review's Send (feature 015, contracts/pane.md section 7): the host re-runs
+   * its checks from its own folder (`review.recheck`), then the re-run's chat is shown from its
+   * snapshot - a live waiting review - and sent as any waiting review is. Nothing is re-keyed: a
+   * read-only review holds no draft and no pending action; its pins follow it. While the re-run
+   * runs, Save, Review, the chips and Send are refused and there is no Stop. A re-run that fails
+   * leaves the review read-only with Send offered and its line beside Send, with no Retry; a folder
+   * that is gone is feature 009's "can no longer be restored".
+   */
+  function recheckThenSend() {
+    var previous = state.chatId;
+    state.rechecking = true;
+    state.sendError = null;
+    renderRechecking();
+    send('review.recheck', { chat_id: previous }).then(function (payload) {
+      state.rechecking = false;
+      var chatId = String(payload.chat_id || '');
+      if (state.pinned[previous]) {
+        state.pinned[chatId] = state.pinned[previous];
+        delete state.pinned[previous];
+      }
+      delete state.failedApplies[previous];
+      showRechecked(chatId, payload);
+    }, function (error) {
+      state.rechecking = false;
+      if (error.errorClass === 'UnknownReview') {
+        cannotRestore(previous);
+      } else {
+        state.sendError = { error_class: error.errorClass, message: error.message, rerun: true };
+      }
+      renderRechecking();
+    });
+  }
+
+  /** Everything the re-run state changes: the status line, the Settings line, the controls, the chips. */
+  function renderRechecking() {
+    renderSend();
+    renderResultsState();
+    renderChips();
+  }
+
+  /** The re-run's chat on screen, from its own snapshot, then sent. */
+  function showRechecked(chatId, payload) {
+    closeStream();
+    resetTranscript();
+    state.chatId = chatId;
+    state.runDir = payload.run_dir || state.runDir;
+    state.reviewed = payload.document || state.reviewed;
+    state.lastSeq = 0;
+    state.transcriptLoaded = false;
+    var epoch = state.restoreEpoch;
+    renderSession();
+    renderBinding();
+    renderAnswers();
+    // The host replaced the re-run review's record: its chip now names this chat.
+    requestSessions(false);
+    call(sessionPath('/snapshot'), 'GET').then(function (snapshot) {
+      if (epoch !== state.restoreEpoch || state.chatId !== chatId) return;
+      restore(snapshot, false);
+      sendToModel();
+    }, function (error) {
+      if (epoch === state.restoreEpoch && state.chatId === chatId) showError(errorBody(error));
+    });
   }
 
   /**
@@ -1431,12 +1523,22 @@
       ui.chips.appendChild(render.reviewChips(chips));
     }
     ui.chips.hidden = !chips.length;
+    var buttons = ui.chips.querySelectorAll('[data-action="review-chip"]');
+    for (var chip = 0; chip < buttons.length; chip++) {
+      buttons[chip].disabled = state.rechecking;
+    }
   }
 
-  /** "bracket.sldasm [Default] 10:15": the file and configuration, then the page's own clock. */
+  /**
+   * "bracket.sldasm [Default] 10:15": the file and configuration, then the page's own clock. A
+   * waiting review's chip (one whose item carries `model_status`, feature 015) prints its stored
+   * wall clock as stored, never converted, and its date first when that is not today on this
+   * machine - which only a review found after SOLIDWORKS reopens can be (contracts/pane.md
+   * section 8).
+   */
   function chipLabel(item) {
     var label = docs.label(reviewDocument(item)) || String(item.run_id || '');
-    var clock = clockOf(item.started_at);
+    var clock = item.model_status ? storedClockOf(item.started_at) : clockOf(item.started_at);
     label = clock ? label + ' ' + clock : label;
     return item.model_status && !state.sentSeen[String(item.chat_id || '')]
       ? label + ' · not sent' : label;
@@ -1448,6 +1550,18 @@
       return '';
     }
     return twoDigits(when.getHours()) + ':' + twoDigits(when.getMinutes());
+  }
+
+  /** "HH:MM", or "YYYY-MM-DD HH:MM" when not today: the time's own digits, its offset ignored. */
+  function storedClockOf(startedAt) {
+    var stored = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})/.exec(String(startedAt || ''));
+    if (!stored) {
+      return clockOf(startedAt);
+    }
+    var now = new Date();
+    var today = now.getFullYear() + '-' + twoDigits(now.getMonth() + 1) + '-' + twoDigits(now.getDate());
+    var time = stored[2] + ':' + stored[3];
+    return stored[1] === today ? time : stored[1] + ' ' + time;
   }
 
   function twoDigits(value) {
@@ -1477,7 +1591,7 @@
    * a sort.
    */
   function followActiveDocument() {
-    if (state.turnRunning || state.startPending || state.sendPending) {
+    if (state.turnRunning || state.startPending || state.sendPending || state.rechecking) {
       return;
     }
     if (state.chatId && docs.same(state.reviewed, state.documentInfo)) {
@@ -1506,7 +1620,7 @@
    * shows no review.
    */
   function showReview(chatId) {
-    if (state.turnRunning || state.startPending || state.sendPending) {
+    if (state.turnRunning || state.startPending || state.sendPending || state.rechecking) {
       return;
     }
     var item = keptReview(chatId);
@@ -1806,7 +1920,7 @@
       startReview(retryOf);
       return;
     }
-    if (state.startPending || state.turnRunning || state.sendPending) {
+    if (state.startPending || state.turnRunning || state.sendPending || state.rechecking) {
       return;
     }
     clearPreparation();
@@ -1851,7 +1965,8 @@
   }
 
   function startReview(retryOf, preparationId) {
-    if (state.startPending || state.turnRunning || state.sendPending || isDrawing(state.documentInfo)) {
+    if (state.startPending || state.turnRunning || state.sendPending || state.rechecking
+        || isDrawing(state.documentInfo)) {
       return;
     }
 
@@ -1909,8 +2024,8 @@
    * pressable again (FR-030).
    */
   function renderStartReview() {
-    ui.startReview.disabled = state.startPending || state.turnRunning || state.sendPending || !state.documentInfo
-      || isDrawing(state.documentInfo);
+    ui.startReview.disabled = state.startPending || state.turnRunning || state.sendPending || state.rechecking
+      || !state.documentInfo || isDrawing(state.documentInfo);
     var followupDisabled = state.startPending || state.turnRunning || state.sendPending || !!state.preparation
       || !state.chatId || state.resultsStale || state.readOnly !== null || waitingForSend();
     ui.followupText.disabled = followupDisabled;
@@ -1931,7 +2046,8 @@
    * pointing at nothing - while the backend goes on spending tokens on it.
    */
   function canClearReview() {
-    return !!state.chatId && !state.turnRunning && !state.startPending && !state.sendPending;
+    return !!state.chatId && !state.turnRunning && !state.startPending && !state.sendPending
+      && !state.rechecking;
   }
 
   /**
@@ -2787,6 +2903,9 @@
   }
 
   function saveSettings() {
+    if (state.rechecking) {
+      return;
+    }
     var payload = {
       provider: currentProvider(),
       model: ui.model.value,
@@ -2849,7 +2968,14 @@
     }
 
     state.initPending = true;
+    var heldToken = state.token;
     send('ready', {}).then(function (payload) {
+      // Another token is another backend (a Settings save, or a restart after it stopped): no
+      // chat of the old one survives. A live waiting review on screen is restored from its folder
+      // at once, read-only with Send offered (feature 015 FR-042, contracts/pane.md section 7).
+      var restarted = !!heldToken && !!payload.token && payload.token !== heldToken;
+      var waiting = restarted && !!state.chatId && state.readOnly === null && waitingForSend()
+        && !state.sending && !state.sendPending;
       state.providers = payload.providers || state.providers;
       state.backend = payload.backend || null;
       state.token = payload.token || null;
@@ -2865,6 +2991,11 @@
       }
       if (state.backend) {
         loadLabels();
+      }
+      if (waiting) {
+        var shown = state.chatId;
+        state.chatId = null;
+        showReview(shown);
       }
       // The reviews the host kept for this SOLIDWORKS session, and - a page reloaded with one of
       // them open - that review shown again (contracts/sessions.md sections 5 and 6).

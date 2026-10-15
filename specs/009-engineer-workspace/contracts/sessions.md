@@ -134,6 +134,20 @@ An unreadable root also offers nothing, without an error. The found record joins
 list before its existing marked-record refresh and answer, so it participates in the return
 and restoration rules above.
 
+*Amended by feature 015 T108* (2026-10-15):
+- **The chips (section 5).** A chip whose item carries `model_status` prints its `started_at` as
+  stored - the wall clock of the string, never converted to this machine's zone - with its date
+  first, "YYYY-MM-DD HH:MM", when that date is not today on this machine. Only a review found
+  after SOLIDWORKS reopens can have another day; every other chip is today's and prints as before.
+  While a restored review's Send re-runs its checks, the chips are disabled.
+- **Returning to a document (section 6).** `document.changed` follows with the list the page holds,
+  then asks `sessions.list` again and follows its answer by the same rule, so a review the host
+  finds only now is shown: restored from its folder, read-only, with Send offered.
+- **A restarted backend.** An `init` whose token differs from the one the page holds names another
+  backend. A live waiting review on screen is then restored from its folder at once, read-only with
+  Send offered (015 FR-042). A review that was not waiting keeps this section's rule: restored when
+  chosen.
+
 ## 7. The configuration change
 
 `ActiveConfigurationWatch` follows the active document: on every `ActiveDocChangeNotify` it
