@@ -24,6 +24,8 @@ from swreview.agent.settings import pane_defaults
 from swreview.bridge.client import PROTOCOL_VERSION, BridgeClient
 from swreview.chat import server
 from swreview.chat.sessions import ChatSession, ChatState
+from swreview.report.attention import rank
+from swreview.report.markdown import render_report
 from swreview.report.session import CoverageItem, CoverageScope, SendFailure, load_session
 from tests.support.questions_package import build_questions_package
 from tests.support.recording_provider import RecordingProvider
@@ -49,7 +51,7 @@ def test_the_shared_renderer_writes_the_same_report_and_attention_as_a_ticked_ch
     expected = {name: (run_dir / name).read_bytes() for name in ("report.md", "attention.json")}
     for name in expected:
         (run_dir / name).unlink()
-    app.state.server._render_run(held.run, held.report_path, run_dir)
+    app.state.server._render_run(held.run)
     assert {name: (run_dir / name).read_bytes() for name in expected} == expected
 
 
@@ -69,12 +71,12 @@ def test_a_ranking_or_write_failure_is_logged_and_never_raises(
         raise OSError("FICT-secondary-render-failure")
 
     if point == "rank":
-        monkeypatch.setattr(server, "rank", refused)
+        monkeypatch.setattr(runner, "rank", refused)
     elif point == "report":
         monkeypatch.setattr(Path, "write_text", refused)
     else:
-        monkeypatch.setattr(server, "write_attention_record", refused)
-    app.state.server._render_run(held.run, held.report_path, run_dir)
+        monkeypatch.setattr(runner, "write_attention_record", refused)
+    app.state.server._render_run(held.run)
     assert "FICT-secondary-render-failure" in caplog.text
 
 
@@ -90,7 +92,7 @@ def test_render_report_retains_its_no_run_guard_and_delegates_once(
     app.state.server._render_report(ChatSession())
     assert calls == []
     app.state.server._render_report(held)
-    assert calls == [(held.run, held.report_path, held.run_dir)]
+    assert calls == [(held.run,)]
 
 
 # T040: checks-only setup is finalized before publication and owns its pending folder.
@@ -141,11 +143,11 @@ def test_no_key_start_finalizes_and_renders_before_registering_the_chat(
         calls.append(("close", threading.get_ident()))
         return close_waiting(run)
 
-    def rendered(run: ReviewRun, report_path: Path, directory: Path) -> None:
+    def rendered(run: ReviewRun) -> None:
         assert owner.chats == {}
         assert run.session.ended_at is not None
         calls.append(("render", threading.get_ident()))
-        render_run(run, report_path, directory)
+        render_run(run)
 
     monkeypatch.setattr(ReviewRun, "build_send_cache", counted_cache)
     monkeypatch.setattr(ReviewRun, "close_waiting", closed_waiting)
@@ -456,6 +458,53 @@ def test_the_waiting_tail_is_not_visible_to_shutdown_until_it_is_finished(
     assert held.run.session.ended_at is not None
     assert owner._pending_run_dirs == set()
     assert provider_control.built == []
+
+
+def test_a_shutdown_during_sends_first_turn_leaves_a_report_that_says_sent(
+    app: Any,
+    client: TestClient,
+    run_dir: Path,
+    provider_control: chat.ProviderControl,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FR-032 (owner decision 98A item 1): SOLIDWORKS closing while Send's first turn runs
+    finalizes the sent record, and its report and attention record are rendered from it."""
+    from swreview.agent.providers import usage_body
+    from swreview.agent.providers.fake import SYNTHETIC_USAGE
+    from swreview.report.attention_record import read_attention_record
+
+    chat_id = waiting_chat(client, run_dir)
+    held = app.state.server.chats[UUID(chat_id)]
+    provider = RecordingProvider((), clock=lambda: 0.0)
+    used, release = threading.Event(), threading.Event()
+
+    def request(**kwargs: Any) -> Any:
+        kwargs["on_event"](
+            "usage",
+            usage_body(
+                SYNTHETIC_USAGE, round_index=0, provider=provider.name, model=provider.model
+            ),
+        )
+        used.set()
+        assert release.wait(chat.TIMEOUT_S), "FICT-shutdown barrier was never released"
+        raise RuntimeError("FICT the process went away")
+
+    monkeypatch.setattr(provider._inner, "run", request)
+    monkeypatch.setattr(app.state.server, "provider_factory", lambda settings: provider)
+    try:
+        assert client.post(f"/sessions/{chat_id}/send", json={}).status_code == 202
+        assert used.wait(chat.TIMEOUT_S), "Send's first request never reported its usage"
+        app.state.server.shutdown()
+        record = load_session(run_dir / "session.json")
+        assert record.model_status is not None and record.model_status.state == "sent"
+        assert record.ended_at is not None, "the shutdown finalized the sent record"
+        report = (run_dir / "report.md").read_text(encoding="utf-8")
+        assert report == render_report(record, held.run.context.ir, ranking=rank(record))
+        assert f"- Model: {record.model}" in report
+        assert "not sent to the model" not in report
+        assert read_attention_record(run_dir).session_id == record.session_id
+    finally:
+        release.set()
 
 
 def test_follow_up_before_send_is_not_sent_and_changes_nothing(

@@ -124,12 +124,13 @@ from swreview.prerun import (
 )
 from swreview.report.attention import rank
 from swreview.report.attention_record import write_attention_record
-from swreview.report.dispositions import set_disposition
+from swreview.report.dispositions import REPORT_FILE_NAME, set_disposition
 from swreview.report.explanations import (
     explanation_signature,
     generate_explanations,
     keep_explained,
 )
+from swreview.report.markdown import render_report
 from swreview.report.names import plural
 from swreview.report.session import (
     CLOSEOUT_CHECK,
@@ -1723,7 +1724,7 @@ class ReviewRun:
             )
             status.state = "send_failed"
             status.failures.append(self._interrupted_send)
-            save_session(self.session, self.session_path)
+            self.write_views(save=True, best_effort=True)
             withdraw_finalization(self.session, self._finalized)
             self.provider = adapter
             self.awaiting_send = False
@@ -1891,6 +1892,36 @@ class ReviewRun:
         self.sink.emit("session.ended", body)
         return session
 
+    def write_views(self, *, save: bool, best_effort: bool) -> None:
+        """Save the held session when `save`, then write `report.md` and `attention.json`.
+
+        The one sequence every live writer of a review's views follows (owner decision 98A,
+        FR-032): a disposition or minutes recorded on a live review, Send's two mid-turn saves,
+        the pane's render after every turn, a shutdown and a re-run that raised past its commit
+        point. Both views come from one `rank` call over the session just saved, so the report
+        an engineer opens and the record beside it never name another session or another
+        order (research R2.7).
+
+        `save` raises whatever it meets: the record is the commitment. With `best_effort`, a
+        ranking or a view that would not write is logged and never raised, because the record
+        is already on disk and losing a turn or a shutdown over its report is the wrong trade;
+        without it, it raises, for a caller that answers the engineer's own write.
+        """
+        if save:
+            save_session(self.session, self.session_path)
+        try:
+            ranking = rank(self.session)
+            (self.out_dir / REPORT_FILE_NAME).write_text(
+                render_report(self.session, self.context.ir, ranking=ranking), encoding="utf-8"
+            )
+            write_attention_record(self.out_dir, ranking, self.session.session_id)
+        except Exception as exc:
+            if not best_effort:
+                raise
+            logging.getLogger(__name__).warning(
+                "rendering %s failed: %s", self.out_dir / REPORT_FILE_NAME, self.redact(str(exc))
+            )
+
     def release_bridge(self) -> None:
         """Close the live transport while retaining its client for a later request."""
         if self.context.bridge is not None:
@@ -2007,7 +2038,7 @@ class ReviewRun:
                 failure for failure in status.failures if failure is not self._interrupted_send
             ]
             self._send_in_flight = False
-            save_session(self.session, self.session_path)
+            self.write_views(save=True, best_effort=True)
         if event_type == "text.done":
             steps = self.session.steps[self._basis_from :]
             body = {**body, "basis": answer_basis(steps, self.context.ir, load_words())}
