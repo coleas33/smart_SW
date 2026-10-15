@@ -1435,3 +1435,131 @@ def test_r14_builds_over_the_same_folders_are_byte_identical(
     build_report([report_runs.off, report_runs.on], other)
 
     assert snapshot(out) == first == snapshot(other)
+
+
+# --- owner decision 83A: a damaged body, a failed build, and every message sent --------------
+
+
+def _rewrite_event(log: Path, kind: str, edit: Callable[[dict[str, Any]], None]) -> int:
+    """Apply `edit` to the body of the log's first `kind` event; its `seq`."""
+    lines = log.read_text(encoding="utf-8").splitlines()
+    for index, line in enumerate(lines):
+        event = json.loads(line)
+        if event["type"] == kind:
+            edit(event["body"])
+            lines[index] = json.dumps(event)
+            log.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            return int(event["seq"])
+    raise AssertionError(f"no {kind} event in {log}")
+
+
+@pytest.mark.parametrize(
+    ("package_id", "kind", "field"),
+    [(CASE_A, "tool.started", "step_index"), (ROLES, "usage", "input_tokens")],
+    ids=["a-call-with-no-step", "a-round-missing-a-count"],
+)
+def test_83a_a_malformed_body_reads_unreadable_from_its_seq_naming_the_run_and_package(
+    report_runs: Runs, tmp_path: Path, package_id: str, kind: str, field: str
+) -> None:
+    """A body the walk cannot read is an unreadable line: what precedes it is shown, the log
+    stops there, and nothing raises."""
+    run = copy_run(report_runs.off, tmp_path / "runs" / "malformed")
+    seq = _rewrite_event(run / package_id / EVENTS_FILE_NAME, kind, lambda body: body.pop(field))
+    out = tmp_path / "report"
+
+    build_report([run], out)
+
+    page = transcript(out, "malformed", package_id)
+    assert f"malformed/{package_id}: the event log is unreadable from seq {seq}" in notes(page)
+    assert page.index_of("h3", "Turn 0") > 0
+
+
+def _snapshot_tree(folder: Path) -> dict[str, bytes | None]:
+    """Every file's bytes and every folder, by relative path."""
+    return {
+        path.relative_to(folder).as_posix(): (path.read_bytes() if path.is_file() else None)
+        for path in folder.rglob("*")
+    }
+
+
+def test_83a_a_build_that_fails_part_way_leaves_the_previous_report_as_it_was(
+    report_runs: Runs, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The build writes into a sibling folder and swaps it in, so an `OSError` part-way (a path
+    too long, say) leaves the previous report whole and no sibling behind."""
+    parent = tmp_path / "reports"
+    out = parent / "report"
+    build_report([report_runs.off], out)
+    before = _snapshot_tree(parent)
+    real = report_page._write_page
+    written: list[Path] = []
+
+    def fail_on_the_third(path: Path, lines: list[str]) -> None:
+        written.append(path)
+        if len(written) == 3:
+            raise OSError(f"{path}: the file name is too long")
+        real(path, lines)
+
+    monkeypatch.setattr(report_page, "_write_page", fail_on_the_third)
+
+    with pytest.raises(OSError, match="too long"):
+        build_report([report_runs.on], out)
+
+    assert _snapshot_tree(parent) == before
+    assert all(out not in path.parents for path in written)
+
+
+def test_83a_a_first_build_that_fails_leaves_no_folder(
+    report_runs: Runs, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    parent = tmp_path / "reports"
+    parent.mkdir()
+
+    def fail(path: Path, lines: list[str]) -> None:
+        raise OSError(f"{path}: the file name is too long")
+
+    monkeypatch.setattr(report_page, "_write_page", fail)
+
+    with pytest.raises(OSError):
+        build_report([report_runs.off], parent / "report")
+
+    assert list(parent.iterdir()) == []
+
+
+def _turn_message(page: Page, number: int) -> tuple[str, str]:
+    return page.blocks[page.index_of("h3", f"Turn {number}") + 1]
+
+
+def test_83a_turn_0_s_message_is_shown_when_no_event_was_recorded(
+    report_runs: Runs, tmp_path: Path
+) -> None:
+    run = copy_run(report_runs.off, tmp_path / "runs" / "silent")
+    (run / CASE_A / EVENTS_FILE_NAME).unlink()
+    out = tmp_path / "report"
+
+    build_report([run], out)
+
+    page = transcript(out, "silent", CASE_A)
+    assert _turn_message(page, 0) == ("pre", prompts(run, CASE_A)["user_messages"][0])
+    assert "no events were recorded" in notes(page)
+
+
+def test_83a_messages_sent_past_the_last_logged_turn_are_listed(
+    report_runs: Runs, tmp_path: Path
+) -> None:
+    """The log stops after turn 0; the record holds the two answer turns' messages too."""
+    run = copy_run(report_runs.off, tmp_path / "runs" / "short")
+    log = run / ROLES / EVENTS_FILE_NAME
+    lines = log.read_text(encoding="utf-8").splitlines()
+    first_end = next(i for i, line in enumerate(lines) if json.loads(line)["type"] == "turn.ended")
+    log.write_text("\n".join(lines[: first_end + 1]) + "\n", encoding="utf-8")
+    sent = prompts(run, ROLES)["user_messages"]
+    out = tmp_path / "report"
+
+    build_report([run], out)
+
+    page = transcript(out, "short", ROLES)
+    assert [_turn_message(page, number)[1] for number in range(3)] == sent
+    for number in (1, 2):
+        heading = page.index_of("h3", f"Turn {number}")
+        assert page.blocks[heading + 2] == ("p", "this turn is not in the event log")
