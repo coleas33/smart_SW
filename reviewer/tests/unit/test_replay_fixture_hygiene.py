@@ -71,7 +71,7 @@ FILES = ("package.json", "session.json", "events.jsonl")
 PANE = "pane"
 """The pane fixture's label among the committed fixtures the string checks read."""
 PANE_GENERATOR = FIXTURES.parent / "pane" / "generate_pane_fixture.py"
-WAITING_NAMES = ("waiting", "waiting-big-assembly")
+WAITING_NAMES = ("waiting", "waiting-big-assembly", "waiting-restored", "not-sent-session")
 WAITING_GENERATOR = FIXTURES.parent / "pane" / "generate_waiting_fixtures.py"
 FORBIDDEN_WORDS = (
     "_LIBRARY",

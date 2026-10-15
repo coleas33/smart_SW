@@ -1,4 +1,11 @@
-"""T052: waiting page acceptance uses fresh snapshots from the actual unticked backend."""
+"""T052: waiting page acceptance uses fresh snapshots from the actual unticked backend.
+
+015 T101: the restored fixtures. `review-waiting-restored.json` holds the not-sent record as a
+restarted backend restores it from its run folder (`restored`) and that record's re-run
+(`rechecked`: the `POST /sessions` answer and the re-run's live snapshot); the big-assembly
+fixture gains `restored`; and `review-not-sent-session.json` is the record's `session.json`
+as `save_session` wrote it, for the host's cross-language head read (research R4.2).
+"""
 
 from __future__ import annotations
 
@@ -11,9 +18,10 @@ from typing import Any
 import pytest
 
 from swreview.agent.settings import ProviderSettings
-from swreview.report.session import load_session
+from swreview.report.session import ReviewSession, load_session, save_session
 from swreview.report.summary import load_words
 from tests.support.mechanical import load_generator
+from tests.support.restored import assert_restored_as_waiting
 from tests.support.roles_review import PIN_ID, PLATE_ID
 from tests.support.scramble import FICTIONAL_ROOT
 
@@ -21,13 +29,16 @@ REPO = Path(__file__).resolve().parents[3]
 GENERATOR = REPO / "reviewer/tests/fixtures/pane/generate_waiting_fixtures.py"
 WRITE_COMMAND = "uv run python tests/fixtures/pane/generate_waiting_fixtures.py --write"
 NAMES = ("waiting", "waiting-big-assembly")
+RESTORED = "waiting-restored"
+SESSION = "not-sent-session"
+FILES = (*NAMES, RESTORED, SESSION)
 TARGETS = {
     name: REPO / "extractor/SwReview.AddIn.Tests/Fixtures" / f"review-{name}.json"
-    for name in NAMES
+    for name in FILES
 }
 
 
-@pytest.mark.parametrize("name", NAMES)
+@pytest.mark.parametrize("name", FILES)
 def test_each_waiting_fixture_is_committed(name: str) -> None:
     assert TARGETS[name].is_file(), f"{TARGETS[name].name} is missing; run `{WRITE_COMMAND}`"
 
@@ -92,7 +103,9 @@ def test_the_live_snapshot_and_labels_have_the_exact_us2_shape(
     keys = ["labels", "waiting"]
     if name == "waiting":
         keys.append("sending")
-    assert list(fixture) == [*keys, "failed_send"]
+    # 015 T101, moved deliberately: the big-assembly fixture gains `restored`.
+    restored = ["restored"] if name == "waiting-big-assembly" else []
+    assert list(fixture) == [*keys, "failed_send", *restored]
     assert fixture["labels"] == load_words().labels.model_dump(mode="json")
     waiting = fixture["waiting"]
     assert waiting["run_id"] == f"fict-{name}"
@@ -141,6 +154,14 @@ def test_both_waiting_fixtures_are_in_the_existing_hygiene_scan() -> None:
     from tests.unit import test_replay_fixture_hygiene as hygiene
 
     for name in NAMES:
+        assert hygiene.committed_files(name) == (TARGETS[name],)
+
+
+def test_the_restored_fixtures_are_in_the_existing_hygiene_scan() -> None:
+    """015 T101, moved: the hygiene list gains the two restored files."""
+    from tests.unit import test_replay_fixture_hygiene as hygiene
+
+    for name in (RESTORED, SESSION):
         assert hygiene.committed_files(name) == (TARGETS[name],)
 
 
@@ -215,3 +236,114 @@ def test_sending_is_the_live_snapshot_while_the_first_request_is_held(
     assert sending["send_in_flight"] is True
     assert sending["read_only"] is False
     assert before["last_seq"] < sending["last_seq"] < failed["last_seq"]
+
+
+# --- 015 T101: the restored fixtures -------------------------------------------------------
+
+
+@pytest.mark.parametrize("name", FILES)
+def test_each_file_is_written_where_the_add_in_tests_copy_it(
+    name: str, generator: ModuleType
+) -> None:
+    """The add-in test project copies `Fixtures/review-*.json` to its output folder."""
+    target = Path(generator.TARGETS[name])
+    assert target.parts[-3:-1] == ("SwReview.AddIn.Tests", "Fixtures")
+    assert target.name.startswith("review-") and target.suffix == ".json"
+
+
+@pytest.mark.parametrize("name", (RESTORED, SESSION))
+def test_each_restored_file_equals_fresh_backend_bytes(
+    name: str, generator: ModuleType, generated: dict[str, Any]
+) -> None:
+    assert TARGETS[name].read_bytes() == generator.target_bytes(name, generated), (
+        f"{TARGETS[name].name} differs from fresh backend bytes; run `{WRITE_COMMAND}` "
+        "from reviewer/ and commit the result"
+    )
+
+
+def the_record(generated: dict[str, Any]) -> ReviewSession:
+    return ReviewSession.model_validate_json(generated[SESSION])
+
+
+def committed_or_fresh(source: str, name: str, generated: dict[str, Any]) -> dict[str, Any]:
+    if source == "committed":
+        return json.loads(TARGETS[name].read_bytes())
+    return generated[name]
+
+
+def test_the_session_file_is_the_not_sent_record_as_save_session_wrote_it(
+    generator: ModuleType, generated: dict[str, Any], tmp_path: Path
+) -> None:
+    record = the_record(generated)
+    status = record.model_status
+    assert status is not None and status.state == "not_sent"
+    assert status.checked_at == generator.PINNED
+    assert status.document == generated["waiting"]["waiting"]["document"]
+    assert status.document["path"].startswith(FICTIONAL_ROOT)
+    assert status.profile is not None and status.profile["path"].startswith(FICTIONAL_ROOT)
+    assert len(record.evidence_requests) == 2
+    assert all(item.status == "open" for item in record.evidence_requests), "nothing answered"
+    assert save_session(record, tmp_path / "session.json").read_bytes() == generated[SESSION]
+
+
+@pytest.mark.parametrize("source", ("committed", "fresh"))
+def test_restored_is_the_not_sent_record_from_its_run_folder(
+    source: str, generated: dict[str, Any]
+) -> None:
+    """Owner decisions 68A and 73A: read-only, the composed dated line, the `restored` block."""
+    fixture = committed_or_fresh(source, RESTORED, generated)
+    assert list(fixture) == ["labels", "restored", "rechecked"]
+    assert fixture["labels"] == load_words().labels.model_dump(mode="json")
+    restored = fixture["restored"]
+    waiting = generated["waiting"]["waiting"]
+    assert_restored_as_waiting(restored, the_record(generated))
+    assert restored["read_only_reason"] == (
+        "The backend restarted, so this review is shown from its run folder. "
+        "Its checks ran 2026-10-09 12:00; Send checks the saved evidence again first."
+    )
+    assert restored["run_id"] == waiting["run_id"]
+    assert restored["document"] == waiting["document"]
+    assert restored["findings"] == waiting["findings"]
+    assert restored["evidence_requests"] == waiting["evidence_requests"]
+
+
+@pytest.mark.parametrize("source", ("committed", "fresh"))
+def test_rechecked_is_the_re_runs_answer_and_live_waiting_snapshot(
+    source: str, generated: dict[str, Any]
+) -> None:
+    """No id maps and no answered record: the page re-keys nothing (owner decision 68A)."""
+    rechecked = committed_or_fresh(source, RESTORED, generated)["rechecked"]
+    assert list(rechecked) == ["answer", "snapshot"]
+    answer, snapshot = rechecked["answer"], rechecked["snapshot"]
+    assert list(answer) == ["chat_id", "review_session_id", "not_examined"]
+    assert answer["review_session_id"] != str(the_record(generated).session_id)
+    waiting = generated["waiting"]["waiting"]
+    assert snapshot["run_id"] == waiting["run_id"]
+    assert snapshot["chat_state"] == "awaiting_send"
+    assert snapshot["read_only"] is False and snapshot["read_only_reason"] is None
+    assert "send_in_flight" not in snapshot
+    assert snapshot["findings"] == waiting["findings"]
+    assert snapshot["evidence_requests"] == waiting["evidence_requests"]
+    assert snapshot["ranking"]["summary"]["send"] == waiting["ranking"]["summary"]["send"], (
+        "SC-008: the re-run of an unanswered record counts the live review's first request"
+    )
+
+
+@pytest.mark.parametrize("source", ("committed", "fresh"))
+def test_the_big_assembly_restored_is_its_record_read_only_with_send(
+    source: str, generated: dict[str, Any]
+) -> None:
+    fixture = committed_or_fresh(source, "waiting-big-assembly", generated)
+    restored, waiting = fixture["restored"], fixture["waiting"]
+    words = load_words()
+    assert restored["read_only"] is True
+    assert restored["read_only_reason"] == (
+        f"{words.read_only_lead} {words.send.restored_line.format(when='2026-10-09 12:00')}"
+    )
+    assert restored["chat_state"] is None and restored["last_seq"] is None
+    assert restored["run_id"] == waiting["run_id"]
+    assert restored["findings"] == waiting["findings"]
+    send = restored["ranking"]["summary"]["send"]
+    assert (send["state"], send["input_tokens"], send["failure"]) == ("restored", None, None)
+    assert send["text"] == words.send.restored
+    assert send["rerun_failed_text"] == words.send.rerun_failed
