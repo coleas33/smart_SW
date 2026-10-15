@@ -206,6 +206,7 @@ alias in the shell it runs in; every `uv run` command runs from `<repo>\reviewer
 | Steps 3 to 6, the probes D1 to D13 | step 7 (011 T066) | T066 compares D6 and D8 with T064's D4 and D5 on the same drawing |
 | Step 8's probe D14 | step 8's pane review (T077) | the pane half is read against the probe's answers |
 | Step 11 (008 T102) | step 12 (T104) | T104 presses Retry on T102's run folder |
+| Steps 13 and 14, then 013 T143 (the test plan's step 4.8) | step 22 (015 T119; step 4.10), before step 5.1 | its restarts come after the review chips have been read |
 | everything else but step 21 | step 18 (009 T082) | it builds an older commit, then returns to `main` |
 | everything, step 18 included | step 21 (004 T033 to T039), then only the handoff | a refuted PROBE-1 can leave a "Cannot reorder" box holding SOLIDWORKS, and PROBE-1 asks for one on purpose |
 
@@ -374,7 +375,7 @@ row per step and task id. The development machine moves each answer into the res
     Pass: `1 passed` and no `SKIPPED` line. A skip proves nothing; a refused key or an unreachable
     API fails with its own sentence and is setup, not the protocol failure. After a Ctrl+C, close
     the window to drop the key.
-16. **Evidence.** Zip the whole run folders of steps 1, 3 to 14 and 20 (their `tool-results\`
+16. **Evidence.** Zip the whole run folders of steps 1, 3 to 14, 20 and 22 (their `tool-results\`
     included), the dump folders of step 2, the probe `--out` folders (step 21's three among them)
     and the logs into the handover
     folder (runbook section 8; the test plan's step 6.3); not `swreview handoff`, which leaves
@@ -443,6 +444,21 @@ row per step and task id. The development machine moves each answer into the res
     per run its exit code and `probes:` line, each `BLOCKING` line up to its colon, every box,
     the verdicts; the answers files `capabilities\remodel-<version>.yaml` and the logs stay in
     their folders under `<handover folder>\probes` and travel with it.
+
+22. **015 T119: the small assembly, unticked, then Send** (the test plan's step 4.10), after
+    013 T143 at step 4.8 and before step 5.1. This needs a seat build with feature 015 installed,
+    US4 included, and the owner's key stored; without that build, skip it and record the reason
+    in its Results row. Follow step 4.10's seven items: the box still unticked after SOLIDWORKS
+    closes and reopens; the checks waiting with nothing sent and no Stop; a part-roles answer
+    applied while waiting, if one is raised; then Send and its records (zero model rounds before
+    Send, one extraction, no withdrawn finding named in the opening, and whether the size sentence
+    carried a number). Close and reopen SOLIDWORKS while another review waits: it comes back
+    read-only, its chip dated and marked not sent, with Send offered. Time the unticked start and
+    the re-run before the first request on the small assembly and the big assembly, against the
+    bound research R2.17 records, with no second extraction. Record: each pass or fail, the
+    question's absence or its withdrawn ids and any folded-family limit, the Send records, the
+    restored review and the four timings, in 015 T119's row and step 4.10's record; stamps and
+    letters only, no design name, number or path. Its run folders travel with step 16's evidence.
 
 ## 4. After the sitting, on the development machine
 

@@ -162,7 +162,7 @@ the running SOLIDWORKS directly and need neither the add-in nor the pane.
 
 ## How long it takes
 
-About **13 hours 25 minutes at the seat**, best planned as two days: day 1 steps 1 to 3, day 2
+About **14 hours at the seat**, best planned as two days: day 1 steps 1 to 3, day 2
 steps 4 to 6. The four earlier tasks the owner added (decision 15A) take about 25 minutes of it,
 inside steps 3.1, 4.1, 4.5, 5.1 and 5.2; feature 004's three items (decision 18A) about 40
 minutes more: the FeatureWorks record at step 1.7 (5 minutes), the owner's parts at step 5.1 (10
@@ -171,8 +171,10 @@ handoff; feature 013's seat tasks and the census about 1 hour 35 minutes more: t
 version 4 at step 2.6 (15 minutes), lever 14's live test at step 2.7 (5 minutes), A's two reviews of step 4.8 (40 minutes, 10 more with Q), the
 census's four Model checks at step 5.1 (10 minutes) and 013 T144 at step 5.2 (10 minutes); the
 retest of 2026-09-28's U25 to U27 about 35 minutes more: step 4.9 (15 minutes) and step 5.3's items A
-to C and the read-only option (20 minutes). The next sitting, which runs the retest first and then
-starts at step 2.4 after its update, needs about 12 hours 55 minutes. Keep
+to C and the read-only option (20 minutes); feature 015's unticked review and Send at step 4.10
+about 35 minutes more (decision 4A): two SOLIDWORKS restarts, the waiting review sent, and the big
+assembly's unticked review and timings. The next sitting, which runs the retest first and then
+starts at step 2.4 after its update, needs about 13 hours 30 minutes. Keep
 SOLIDWORKS open from step 4.1 to step 4.5 on day 2:
 the review chips of steps 4.4 and 4.5 live only as long as the SOLIDWORKS session. Before the
 sitting, allow **half a day** to find and note documents C to N, Q and S, and the components of
@@ -184,7 +186,7 @@ A and B step 3.1 asks about (section 0.2), while the owner names the parts P; a 
 | 1 | Update, gates, health checks (registration only on a new machine), the FeatureWorks record | 55 min |
 | 2 | Profile and key, the profile's version 4, and lever 14's live test | 40 min |
 | 3 | Dumps and the Standards probe of A and B, probes D1 to D14 and one pane review, with the fingerprints | 3 h 55 min |
-| 4 | The pane reviews, with the findings by type, the timing of A's review, A again with the version 4 profile, and a drawing active | 4 h 15 min |
+| 4 | The pane reviews, with the findings by type, the timing of A's review, A again with the version 4 profile, a drawing active, and A unticked then sent, with B's timings | 4 h 50 min |
 | 5.1 to 5.4 | Model check on J, on the owner's parts and on the census's parts, Standards (each with its Start here block) and on A-plate's drawing, Remodel (the retest's box and crash capture first), the Gemini test | 1 h 25 min |
 | 5.5 | The older build and back: two builds, two SOLIDWORKS restarts, two reviews of A | 1 h |
 | 5.6 | The re-modeler probes: three runs with no document open, and the three options checked | 25 min |
@@ -1892,6 +1894,56 @@ reads open drawings whose views show the model.`, and it never says
 
 Record: each pass or fail; for items 1 and 5 the line with letters in place of names (J, J's
 drawing, C); the review's run folder stamp and letter.
+
+### 4.10 A, unticked, then Send [015 T119]
+
+This step needs a seat build with feature 015 installed, US4 included, and the owner's key stored
+in Settings. Without that build, skip this step and record the reason in its Results row. Run it
+after step 4.8, before step 5.1: the review chips of steps 4.4 and 4.5 have already been read
+before its restarts.
+
+1. In the Review tab, untick `Send to the model when the checks finish`; close and reopen
+   SOLIDWORKS. Pass: the box is still unticked.
+2. Open the small assembly (A) and make it active; press **Review** (step 4's box, item 1, if the
+   unresolved-components panel appears). Pass: the checks run, the status line reads
+   `Checked by code. Not sent to the model.`, the Send block shows its sentence, **Stop** is not
+   offered, and the run folder's `session.json` says `not_sent`. Record whether the sentence
+   carries a number, and whether the tokenizer vocabulary is on the seat: only then is a number
+   expected.
+3. If the checks raise the part-roles question, answer it while the review waits. Pass: the
+   findings it withdraws leave the list and the sentence is recounted. If they raise none, record
+   that: the withdrawal is then proven on the fixture only (SC-005). If every finding it withdrew
+   is in a folded family (counted in the opening, never named), record that too: item 4's named-ids
+   check is then trivially true and proves nothing about them.
+4. Press `Send to model`. Pass: the review runs as a review sent at once and completes; the run
+   folder holds one extraction in total, `model_status.opening_finding_ids` names none of the
+   findings the answer withdrew, and the report says when it was sent.
+5. Record in the Results row: zero model rounds before Send (every `usage` event follows
+   `session.sent`), one extraction, the named ids, and whether the sentence carried a number.
+6. **Close SOLIDWORKS while a review waits.** Press **Review** again with the box still unticked
+   and wait until the review waits; close SOLIDWORKS; reopen it and open the small assembly.
+   Pass: the Review tab brings the review back from its run folder, read-only, its chip dated and
+   marked not sent, with Send offered. Record that it came back with Send.
+7. Record four timings, each inside one host call, against the bound research R2.17 records
+   (owner decision 70A; RK-10):
+   - how long item 2's unticked `POST /sessions` took, from the backend log or else between the
+     host's last extraction status and its ready status; an unticked start posts no checking
+     status;
+   - how long the re-run takes: press **Send to model** on the review item 6 brought back. Record
+     how long the re-run before the first request took, from the backend log or between the
+     host's checking and ready statuses, and that the run folder still holds one extraction;
+   - the same two timings on the big assembly (B): an unticked review of it, then SOLIDWORKS
+     closed and reopened (or Settings saved without changing anything, which restarts the
+     backend), then Send.
+
+   The unticked-start timings are for information only: the bound is set from the re-run. If a
+   seat re-run exceeds the one-call rule, or a third of `ChecksOnlyTimeout` where that is used,
+   report it to the owner: the bound is set again by R2.17's rule in a follow-up, recorded in
+   R2.17 and RK-10.
+
+Record: each pass or fail, each run folder's stamp and letter, the records of items 3 and 5, the
+restored review and the four timings. No design name, number or path goes in the findings
+document.
 
 ### 5.1 Model check, on J and on the owner's parts [007 T059; 004 T003]
 
