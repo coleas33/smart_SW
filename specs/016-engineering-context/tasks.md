@@ -23,3 +23,6 @@
 - [x] T017 Context review through 015's one `CreateReviewSession`, Send or Wait from the
       box, and the page's context controls busy while a review waits, sends or is checked
       again (99A; T116 integration review, blocker "the context start skips the Send gate").
+- [x] T018 One opening builder input: the summary lives on the review run, so 015's opening
+      rebuilt at Send keeps the engineering block, rebuilt over a reloaded package (99A;
+      T116 integration review, blocker "the rebuilt Send opening drops the context").

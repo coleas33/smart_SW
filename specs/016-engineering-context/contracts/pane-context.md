@@ -110,3 +110,12 @@ a review starts, runs a turn, waits for Send, has its Send accepted or is checke
 (`startPending`, `turnRunning`, `awaitingSend`, `sendPending`, `rechecking`), and the
 context start meets the same guard ordinary Review has.
 
+**The opening at Send keeps the context.** The summary is held by the review run, and the
+opening frozen at setup and the opening 015 rebuilds at Send after a waiting answer come
+from one call with the same inputs (`runner._review_opening`), so the "Engineer-supplied
+inputs" block is in Send's first request exactly once, before the wait's answer lines and
+the opening instruction, and the size shown beside Send counts it. When a confirmed drawing
+read reloads the package while the review waits, the summary is built again over the
+reloaded package and its retained `engineering-context-summary.json` is written again, so
+the opening and later context reads assess the same snapshot.
+
