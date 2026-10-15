@@ -216,6 +216,30 @@ public sealed class RunFoldersNotSentTests : IDisposable
         Assert.True(watch.Elapsed < TimeSpan.FromSeconds(2), "FICT 500-folder search took " + watch.Elapsed);
     }
 
+    [Fact]
+    public void TheBackendsOwnSavedRecordIsReadByTheHeadReader()
+    {
+        // T102's fixture: the not-sent record as the backend's own `save_session` wrote it,
+        // copied beside the tests by the project's `Fixtures/review-*.json` Content item.
+        string fixture = Path.Combine(AppContext.BaseDirectory, "Fixtures", "review-not-sent-session.json");
+        Assert.True(File.Exists(fixture), "review-not-sent-session.json was not copied next to the test assembly; "
+            + "regenerate it with `uv run python tests/fixtures/pane/generate_waiting_fixtures.py --write` from reviewer/.");
+        var document = new PageDocument(@"C:\FictionalVault\Vault\FICT-7000.SLDASM", "Default");
+        string folder = RunFolders.CreateForDocument(_root, document.Path, new DateTime(2026, 10, 9, 12, 0, 0));
+        File.Copy(fixture, Path.Combine(folder, "session.json"));
+
+        JsonElement status = Assert.IsType<JsonElement>(RunFolders.ReadModelStatus(folder));
+        SessionRecord found = Assert.IsType<SessionRecord>(Find(_root, document));
+
+        Assert.Equal("not_sent", status.GetProperty("state").GetString());
+        Assert.Equal(folder, found.RunDirectory);
+        Assert.Equal("00000000-0000-4000-8000-000000000002", found.ChatId);
+        Assert.Equal("not_sent", found.ModelStatus);
+        Assert.Equal(document.Path, found.Document!.Path);
+        Assert.Equal("Default", found.Document.Configuration);
+        Assert.Equal(new DateTimeOffset(2026, 10, 9, 12, 0, 0, TimeSpan.Zero), found.StartedAt);
+    }
+
     private string Save(string name, string state = "not_sent", string? path = null, string configuration = "FICT-Default")
     {
         string folder = Path.Combine(_root, name);

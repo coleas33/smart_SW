@@ -552,6 +552,34 @@ public sealed class ReviewHostTests
         }
     }
 
+    [Theory]
+    [InlineData("not_sent")]
+    [InlineData("send_failed")]
+    public void ARecordForgottenDuringItsRecheckIsTrackedAgainWithItsOwnModelStatus(string modelStatus)
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Document = new PageDocument(@"C:\Fictional\FICT-assembly.SLDASM", "Default");
+            world.Backend.NextChatId = "FICT-rechecked";
+            world.Open();
+            string run = world.TrackedRun("FICT-earlier");
+            world.Host.TrackSession("FICT-earlier", run, world.Document, new DateTimeOffset(Stamp), modelStatus);
+            world.Host.TrackSession("FICT-other", world.TrackedRun("FICT-other"));
+            SessionRecord other = world.Host.FindSession("FICT-other")!;
+            world.Backend.OnCreate = _ => Assert.True(world.Host.ForgetSession("FICT-earlier"));
+
+            world.Receive("review.recheck", "recheck", new { chat_id = "FICT-earlier" });
+
+            SessionRecord replacement = world.Host.FindSession("FICT-rechecked")!;
+            Assert.NotNull(replacement);
+            Assert.Equal(modelStatus, replacement.ModelStatus);
+            Assert.Equal(new[] { other, replacement }, world.Host.Sessions);
+            Assert.Same(replacement, world.Host.LatestSession);
+            Assert.Equal("FICT-earlier",
+                world.Reply("review.rechecked", "recheck").GetProperty("previous_chat_id").GetString());
+        }
+    }
+
     [Fact]
     public void ReviewRecheckKeepsItsRecordAndReportsTheBackendsOwnRefusal()
     {
@@ -882,7 +910,8 @@ public sealed class ReviewHostTests
                 for (int i = 0; i < 2000; i++)
                 {
                     create.Invoke(world.Host, new object?[] { world.Document, run, null, ReviewMode.Wait,
-                        "race-" + i, new DumpSummary(Path.Combine(run, "package.json"), 12, 0, null) });
+                        "race-" + i, new DumpSummary(Path.Combine(run, "package.json"), 12, 0, null),
+                        null /* replacing: none for a fresh start */ });
                 }
             }
             finally

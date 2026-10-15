@@ -70,6 +70,20 @@ public sealed class PageDocument
     /// guessing.
     /// </summary>
     public bool IsAttachable => Kind == "part" || Kind == "assembly";
+
+    /// <summary>
+    /// Whether <paramref name="path"/> and <paramref name="configuration"/> name this document:
+    /// the path compared ignoring case, as Windows names one file however it is spelled, and
+    /// the configuration exactly, as SOLIDWORKS names configurations (feature 015). The one rule
+    /// a re-run's binding and the search for a review never sent both use.
+    /// </summary>
+    public bool IsSameDocument(string? path, string? configuration) =>
+        string.Equals(path, Path, StringComparison.OrdinalIgnoreCase)
+        && string.Equals(configuration, Configuration, StringComparison.Ordinal);
+
+    /// <summary><see cref="IsSameDocument(string?, string?)"/> of another document; never null.</summary>
+    public bool IsSameDocument(PageDocument? other) =>
+        other != null && IsSameDocument(other.Path, other.Configuration);
 }
 
 /// <summary>
@@ -395,11 +409,28 @@ public sealed class ReviewHost : IDisposable
             throw new ArgumentNullException(nameof(chatId));
         }
 
-        var record = new SessionRecord(chatId, runDirectory, document, startedAt) { ModelStatus = modelStatus };
+        Publish(new SessionRecord(chatId, runDirectory, document, startedAt) { ModelStatus = modelStatus });
+    }
+
+    /// <summary>
+    /// Tracks <paramref name="record"/> as the latest review. With <paramref name="replacing"/>
+    /// still tracked, the record takes its place in the list (a re-run, feature 015); otherwise
+    /// any record of the same chat id is dropped and this one appended.
+    /// </summary>
+    private void Publish(SessionRecord record, SessionRecord? replacing = null)
+    {
         lock (_sessionsLock)
         {
-            _sessions.RemoveAll(session => session.ChatId == chatId);
-            _sessions.Add(record);
+            int index = replacing == null ? -1 : _sessions.IndexOf(replacing);
+            if (index >= 0)
+            {
+                _sessions[index] = record;
+            }
+            else
+            {
+                _sessions.RemoveAll(session => session.ChatId == record.ChatId);
+                _sessions.Add(record);
+            }
         }
 
         LatestSession = record;
@@ -1080,9 +1111,7 @@ public sealed class ReviewHost : IDisposable
     {
         PageDocument? document = _options.CurrentDocument();
         if (document == null || (document.Kind != "part" && document.Kind != "assembly")) return;
-        if (Reviews().Any(record => record.Document != null
-            && string.Equals(record.Document.Path, document.Path, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(record.Document.Configuration, document.Configuration, StringComparison.Ordinal))) return;
+        if (Reviews().Any(record => document.IsSameDocument(record.Document))) return;
 
         SessionRecord? found = RunFolders.FindNotSentReview(_settings.RunRoot, document, _options.OpenSessionHead);
         if (found != null)
@@ -1395,7 +1424,7 @@ public sealed class ReviewHost : IDisposable
         }
 
         CreateReviewSession(record.Document, record.RunDirectory, chatId, ReviewMode.Recheck, id,
-            new DumpSummary(record.RunDirectory, 0, 0));
+            new DumpSummary(record.RunDirectory, 0, 0), replacing: record);
     }
 
     private bool BackendReady(string? id)
@@ -1407,21 +1436,20 @@ public sealed class ReviewHost : IDisposable
         return false;
     }
 
+    /// <param name="replacing">The record a re-run replaces (`ReviewMode.Recheck` only): its
+    /// place in the list and its own model status are kept, even if it was forgotten meanwhile.</param>
     private void CreateReviewSession(
         PageDocument? document, string runDirectory, string? previousChatId, ReviewMode mode,
-        string? id, DumpSummary summary)
+        string? id, DumpSummary summary, SessionRecord? replacing = null)
     {
         PageDocument? active = mode == ReviewMode.Recheck ? _options.CurrentDocument() : document;
         if (active != null && !CanReviewDocument(active, id))
         {
             return;
         }
-        SessionRecord? previous = null;
         if (mode == ReviewMode.Recheck)
         {
-            if (active == null || document == null
-                || !string.Equals(active.Path, document.Path, StringComparison.OrdinalIgnoreCase)
-                || !string.Equals(active.Configuration, document.Configuration, StringComparison.Ordinal))
+            if (active == null || !active.IsSameDocument(document))
             {
                 SendError(id, "ReviewNotActive", "Open or switch to the reviewed document and configuration before checking its saved evidence again.", retryable: true);
                 return;
@@ -1433,7 +1461,6 @@ public sealed class ReviewHost : IDisposable
 
             // A recheck replaces this tracked chat; a fresh start instead sends the earlier
             // chat id as retry_of. Rechecks never ask the backend for a fresh retry.
-            previous = FindSession(previousChatId!);
             PostStatus("checking", "Checking the saved evidence again...");
         }
         ChatSessionHandle handle;
@@ -1464,26 +1491,12 @@ public sealed class ReviewHost : IDisposable
 
         // The document captured before the dump, and the moment the review was tracked: what its
         // chip in the pane names (feature 009 FR-020).
-        DateTimeOffset startedAt = new DateTimeOffset(_options.Now());
-        if (previous != null)
+        string? modelStatus = mode == ReviewMode.Recheck ? replacing?.ModelStatus
+            : mode == ReviewMode.Send ? null : "not_sent";
+        Publish(new SessionRecord(handle.ChatId, runDirectory, document, new DateTimeOffset(_options.Now()))
         {
-            var record = new SessionRecord(handle.ChatId, runDirectory, document, startedAt)
-            {
-                ModelStatus = previous.ModelStatus,
-            };
-            lock (_sessionsLock)
-            {
-                int index = _sessions.IndexOf(previous);
-                if (index >= 0) _sessions[index] = record;
-                else _sessions.Add(record);
-            }
-            LatestSession = record;
-        }
-        else
-        {
-            TrackSession(handle.ChatId, runDirectory, document, startedAt,
-                mode == ReviewMode.Send ? null : "not_sent");
-        }
+            ModelStatus = modelStatus,
+        }, replacing);
         PostStatus("ready", mode == ReviewMode.Recheck
             ? "Checked the saved evidence again; nothing was sent to the model."
             : mode == ReviewMode.Send
