@@ -10,6 +10,7 @@ import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 import pytest
 
@@ -19,6 +20,10 @@ from swreview.agent.settings import pane_defaults
 from swreview.benchmark.runner import PROVENANCE_FILE, RunProvenance
 from swreview.checks.standards.profile import load_profile
 from swreview.handoff import HandoffExportError, export_handoff
+from swreview.report.attention import rank
+from swreview.report.attention_record import StaleAttentionRecord, write_attention_record
+from swreview.report.markdown import render_report
+from swreview.report.session import ModelStatus, ReviewSession, Timing, save_session
 from tests.support.local_paths import scan_file
 from tests.unit.test_benchmark_run_options import SAVED_SET_FILE, two_package_set
 from tests.unit.test_run_provenance import (
@@ -613,3 +618,396 @@ def test_each_artifact_record_names_the_folder_it_was_read_from(
     records = manifest_of(entries)["artifacts"]
     assert PROVENANCE_FILE in {record["path"] for record in records}
     assert {record["source"] for record in records} == {"run_dir"}
+
+
+# --- the model-status summary (feature 015 T111) -----------------------------------
+
+
+@pytest.fixture
+def model_status_run(tmp_path: Path) -> tuple[Path, dict[str, Any]]:
+    run_dir = tmp_path / "FICT-run"
+    write_run(run_dir)
+    (run_dir / "package.json").write_text(
+        json.dumps({
+            "design_id": "FICT-model-status",
+            "source": r"C:\Fictional\FICT-assembly.SLDASM",
+        }),
+        encoding="utf-8",
+    )
+    session = json.loads((run_dir / "session.json").read_text(encoding="utf-8"))
+    session["design_id"] = "FICT-model-status"
+    session["provider_info"]["effort_mapping"] = {
+        "requested": "low", "provider_param": "FICT-effort", "provider_value": "FICT-low",
+    }
+    return run_dir, session
+
+
+def ticked_session_summary() -> dict[str, Any]:
+    """Today's complete summary, including its construction order, for the fictional run."""
+    return {
+        "session_id": "00000000-0000-0000-0000-000000000001",
+        "package_id": "00000000-0000-0000-0000-000000000002",
+        "design_id": "FICT-model-status",
+        "started_at": "2026-09-20T14:00:00Z",
+        "ended_at": "2026-09-20T14:01:00Z",
+        "model": SECRET,
+        "provider_info": {
+            "provider": "fake",
+            "model": "fake-scripted",
+            "effort_mapping": {
+                "requested": "low", "provider_param": "FICT-effort", "provider_value": "FICT-low",
+            },
+            "key_source": "none",
+        },
+        "efficiency": {"prompt_cache_key": False, "coverage_stop": True},
+        "model_view": None,
+        "explanations": {"enabled": True, "fingerprint": "a" * 64, "count": 1},
+        "coverage_counts": {
+            "checked": 1, "skipped": 0, "unresolved": 0, "failed": 0, "out_of_scope": 0,
+        },
+        "coverage_status": "valid",
+        "evidence_request_counts": {"open": 1, "answered": 0},
+        "evidence_request_status": "valid",
+        "usage": {"rounds": 2, "turns": 1},
+    }
+
+
+@pytest.mark.parametrize("state", ["not_sent", "send_failed", "sent"])
+def test_the_session_summary_carries_only_the_model_status_state_beside_provider_info(
+    tmp_path: Path, model_status_run: tuple[Path, dict[str, Any]], state: str,
+) -> None:
+    """015 records section 7: the summary gains only the state; provider information stays."""
+    run_dir, session = model_status_run
+    session["model_status"] = {
+        "state": state,
+        "document": {
+            "path": r"C:\Fictional\FICT-assembly.SLDASM", "configuration": "FICT-default",
+        },
+        "checked_at": "2026-09-20T14:00:30Z",
+        "profile": {"path": r"C:\Fictional\FICT-profile.yaml", "sha256": "b" * 64},
+        "rechecked_from": "00000000-0000-0000-0000-000000000003",
+        "failures": [{
+            "at": "2026-09-20T14:00:40Z",
+            "error_class": "RuntimeError",
+            "reason": "FICT-send-failure",
+        }],
+        "sent_at": "2026-09-20T14:00:45Z",
+        "estimate": {"input_tokens": 123, "encoding": "o200k_base", "approximate": False},
+        "opening_finding_ids": ["F-001"],
+    }
+    (run_dir / "session.json").write_text(json.dumps(session), encoding="utf-8")
+
+    entries = read_zip(export_handoff(run_dir, tmp_path / "FICT-handoff.zip", exported_at=STAMP))
+    summary = manifest_of(entries)["session_summary"]
+
+    assert summary["model_status"] == state
+    expected = ticked_session_summary()
+    assert summary == expected | {"model_status": state}
+    assert summary["provider_info"] == session["provider_info"]
+    # Manifest JSON sorts keys; pin the summary's insertion order before serialization.
+    expected_keys = list(expected)
+    expected_keys.insert(expected_keys.index("provider_info") + 1, "model_status")
+    constructed = handoff._session_summary(session)
+    assert constructed is not None
+    assert list(constructed) == expected_keys
+
+
+@pytest.mark.parametrize("status_present", [False, True], ids=["missing", "null"])
+def test_the_ticked_session_summary_is_unchanged_without_model_status(
+    tmp_path: Path, model_status_run: tuple[Path, dict[str, Any]], status_present: bool,
+) -> None:
+    """Missing and null model status leave the whole sent-at-once summary unchanged."""
+    run_dir, session = model_status_run
+    if status_present:
+        session["model_status"] = None
+    (run_dir / "session.json").write_text(json.dumps(session), encoding="utf-8")
+
+    entries = read_zip(export_handoff(run_dir, tmp_path / "FICT-handoff.zip", exported_at=STAMP))
+
+    expected = ticked_session_summary()
+    assert manifest_of(entries)["session_summary"] == expected
+    constructed = handoff._session_summary(session)
+    assert constructed is not None
+    assert constructed == expected
+    assert list(constructed) == list(expected)
+
+
+@pytest.mark.parametrize("model_status", [
+    pytest.param("sent", id="non_mapping_string"),
+    pytest.param([], id="non_mapping_list"),
+    pytest.param(False, id="non_mapping_false"),
+    pytest.param({}, id="missing_state"),
+    pytest.param({"state": None}, id="null_state"),
+    pytest.param({"state": 7}, id="numeric_state"),
+    pytest.param({"state": ["sent"]}, id="list_state"),
+    pytest.param({"state": {"value": "sent"}}, id="mapping_state"),
+    pytest.param({"state": "FICT-unknown"}, id="unknown_state"),
+])
+def test_a_malformed_model_status_is_null_in_the_summary_and_does_not_block_export(
+    tmp_path: Path, model_status_run: tuple[Path, dict[str, Any]], model_status: Any,
+) -> None:
+    """A non-mapping status or missing, non-string or unknown state exports as null,
+    mirroring provider_info's unreadable value; its presence does not fail the export."""
+    run_dir, session = model_status_run
+    session["model_status"] = model_status
+    (run_dir / "session.json").write_text(json.dumps(session), encoding="utf-8")
+
+    entries = read_zip(export_handoff(run_dir, tmp_path / "FICT-handoff.zip", exported_at=STAMP))
+    summary = manifest_of(entries)["session_summary"]
+
+    assert summary["model_status"] is None
+    expected = ticked_session_summary()
+    assert summary == expected | {"model_status": None}
+    assert summary["provider_info"] == session["provider_info"]
+    expected_keys = list(expected)
+    expected_keys.insert(expected_keys.index("provider_info") + 1, "model_status")
+    constructed = handoff._session_summary(session)
+    assert constructed is not None
+    assert list(constructed) == expected_keys
+
+
+# --- session consistency after a re-run's commit point (015, decision 23A) ----------
+
+
+@pytest.fixture
+def session_artifact_run(tmp_path: Path) -> tuple[Path, ReviewSession]:
+    run_dir = tmp_path / "FICT-session-run"
+    session = ReviewSession(
+        session_id=UUID("aaaaaaaa-0000-0000-0000-000000000001"),
+        package_id=UUID("aaaaaaaa-0000-0000-0000-000000000002"),
+        design_id="FICT-session-check",
+        started_at=STAMP,
+        model="FICT-scripted",
+        timing=Timing(
+            baseline_minutes=0.0,
+            assisted_supervision_minutes=0.0,
+            assisted_verification_minutes=0.0,
+            false_alarm_handling_minutes=0.0,
+            unattended_runtime_minutes=0.0,
+        ),
+    )
+    save_session(session, run_dir / "session.json")
+    write_attention_record(run_dir, rank(session), session.session_id)
+    (run_dir / "report.md").write_bytes(render_report(session).encode("utf-8"))
+    (run_dir / "package.json").write_bytes(b'{"design_id": "FICT-session-check"}\n')
+    (run_dir / "events.jsonl").write_bytes(b'{"type": "FICT-finished"}\n')
+    return run_dir, session
+
+
+@pytest.mark.parametrize("state", [None, "not_sent", "send_failed", "sent"], ids=[
+    "older-or-ticked", "not_sent", "send_failed", "sent",
+])
+def test_matching_session_artifacts_keep_the_entire_bundle_byte_identical(
+    tmp_path: Path, session_artifact_run: tuple[Path, ReviewSession],
+    monkeypatch: pytest.MonkeyPatch, state: str | None,
+) -> None:
+    run_dir, session = session_artifact_run
+    if state is not None:
+        session.model_status = ModelStatus.model_validate({
+            "state": state,
+            "document": {"path": r"C:\Fictional\FICT-part.SLDPRT", "configuration": "FICT"},
+            "checked_at": STAMP,
+        })
+    save_session(session, run_dir / "session.json")
+    # Preserve original CRLF, whitespace and JSON formatting, rather than re-rendering.
+    report = render_report(session).replace("\n", "\r\n").encode("utf-8")
+    (run_dir / "report.md").write_bytes(report)
+    originals = {path.name: path.read_bytes() for path in run_dir.iterdir()}
+    archive = export_handoff(run_dir, tmp_path / "FICT-matching.zip", exported_at=STAMP)
+    entries = read_zip(archive)
+    assert {name: entries[name] for name in originals} == originals
+    assert manifest_of(entries)["excluded_artifacts"] == []
+    # The pre-23A collector output is the expected complete ZIP, including its manifest.
+    monkeypatch.setattr(handoff, "_collect", lambda *args, **kwargs: (
+        [(name, originals[name], len(originals[name]), False)
+         for name in handoff.REQUIRED_ARTIFACTS],
+        dict.fromkeys(originals, "run_dir"), [], [], {
+            "method": "configured secret substrings and provider-key shape detectors",
+            "configured_values_checked": False,
+            "redacted_files": [], "shape_hits": {},
+            "coverage": "best_effort_unknown_secrets_may_remain",
+        },
+    ))
+    expected = export_handoff(run_dir, tmp_path / "FICT-before.zip", exported_at=STAMP)
+    assert archive.read_bytes() == expected.read_bytes()
+
+
+@pytest.mark.parametrize("stale", [
+    pytest.param(("attention.json",), id="attention"),
+    pytest.param(("report.md",), id="report"),
+    pytest.param(("attention.json", "report.md"), id="both"),
+])
+@pytest.mark.parametrize("remodel", [False, True], ids=["review", "remodel"])
+def test_artifacts_from_the_previous_session_are_excluded_and_named(
+    tmp_path: Path, session_artifact_run: tuple[Path, ReviewSession],
+    stale: tuple[str, ...], remodel: bool,
+) -> None:
+    run_dir, session = session_artifact_run
+    if remodel:
+        (run_dir / "open.json").write_bytes(b'{"path": "C:\\\\Fictional\\\\FICT-part.SLDPRT"}')
+    other = session.model_copy(update={
+        "session_id": UUID("bbbbbbbb-0000-0000-0000-000000000001"),
+    })
+    if "attention.json" in stale:
+        write_attention_record(run_dir, rank(other), other.session_id)
+    if "report.md" in stale:
+        (run_dir / "report.md").write_bytes(render_report(other).encode("utf-8"))
+    originals = {path.name: path.read_bytes() for path in run_dir.iterdir()}
+
+    entries = read_zip(export_handoff(run_dir, tmp_path / "FICT-stale.zip", exported_at=STAMP))
+
+    # Remodel's allowlist has no attention record, so only a selected stale file is named.
+    selected_stale = set(stale) - ({"attention.json"} if remodel else set())
+    manifest = manifest_of(entries)
+    assert selected_stale.isdisjoint(entries)
+    assert {row["path"] for row in manifest["artifacts"]}.isdisjoint(selected_stale)
+    assert sorted(manifest["excluded_artifacts"], key=lambda row: row["path"]) == [
+        {"path": name, "reason": "names another session than session.json"}
+        for name in sorted(selected_stale)
+    ]
+    assert selected_stale.isdisjoint(manifest["missing_artifacts"])
+    for name in {"session.json", "report.md", "attention.json"} & set(entries):
+        assert entries[name] == originals[name]
+
+
+def test_a_legacy_report_without_a_session_line_is_exported_unchanged(
+    tmp_path: Path, session_artifact_run: tuple[Path, ReviewSession],
+) -> None:
+    run_dir, _ = session_artifact_run
+    report = b"# FICT-legacy report\r\nNo session header in this format.\r\n"
+    (run_dir / "report.md").write_bytes(report)
+
+    entries = read_zip(export_handoff(run_dir, tmp_path / "FICT-legacy.zip", exported_at=STAMP))
+
+    assert entries["report.md"] == report
+    assert manifest_of(entries)["excluded_artifacts"] == []
+
+
+@pytest.mark.parametrize("session_bytes", [
+    pytest.param(None, id="missing"),
+    pytest.param(b"\xff", id="non_utf8"),
+    pytest.param(b"{", id="invalid_json"),
+    pytest.param(b"[]", id="non_object"),
+    pytest.param(b'{"session_id": null}', id="null_id"),
+    pytest.param(b'{"session_id": []}', id="list_id"),
+    pytest.param(b'{"session_id": "FICT-invalid"}', id="invalid_id"),
+    pytest.param(b'{"FICT":' * 1100 + b"0" + b"}" * 1100, id="deeply_nested"),
+])
+def test_without_a_readable_session_the_other_artifacts_are_exported_as_before(
+    tmp_path: Path, session_artifact_run: tuple[Path, ReviewSession], session_bytes: bytes | None,
+) -> None:
+    run_dir, _ = session_artifact_run
+    if session_bytes is None:
+        (run_dir / "session.json").unlink()
+    else:
+        (run_dir / "session.json").write_bytes(session_bytes)
+    originals = {name: (run_dir / name).read_bytes() for name in ("attention.json", "report.md")}
+
+    entries = read_zip(export_handoff(run_dir, tmp_path / "FICT-no-session.zip", exported_at=STAMP))
+
+    assert {name: entries[name] for name in originals} == originals
+    assert manifest_of(entries)["excluded_artifacts"] == []
+
+
+@pytest.mark.parametrize(("name", "data"), [
+    ("attention.json", b"{"),
+    ("attention.json", b"[]"),
+    ("attention.json", b'{"session_id": []}'),
+    ("report.md", b"# FICT-malformed\n- Session: \n"),
+    ("report.md", b"# FICT-malformed\n- Session: FICT-invalid\n"),
+])
+def test_malformed_session_artifacts_do_not_block_export(
+    tmp_path: Path, session_artifact_run: tuple[Path, ReviewSession], name: str, data: bytes,
+) -> None:
+    run_dir, _ = session_artifact_run
+    (run_dir / name).write_bytes(data)
+
+    entries = read_zip(export_handoff(run_dir, tmp_path / "FICT-malformed.zip", exported_at=STAMP))
+
+    if name in entries:
+        assert entries[name] == data
+    else:
+        assert any(row["path"] == name and row["reason"] for row in
+                   manifest_of(entries)["excluded_artifacts"])
+
+
+def test_session_identity_is_checked_before_redaction(
+    tmp_path: Path, session_artifact_run: tuple[Path, ReviewSession],
+) -> None:
+    run_dir, session = session_artifact_run
+    other_id = UUID("bbbbbbbb-0000-0000-0000-000000000001")
+    write_attention_record(run_dir, rank(session), other_id)
+    (run_dir / "report.md").write_bytes(f"- Session: {other_id}\n".encode())
+
+    entries = read_zip(export_handoff(
+        run_dir, tmp_path / "FICT-redacted.zip", exported_at=STAMP,
+        secrets=[str(session.session_id), str(other_id)],
+    ))
+
+    assert "attention.json" not in entries
+    assert "report.md" not in entries
+    assert len(manifest_of(entries)["excluded_artifacts"]) == 2
+
+
+def test_the_attention_readers_stale_exception_is_named_in_the_manifest(
+    tmp_path: Path, session_artifact_run: tuple[Path, ReviewSession],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_dir, _ = session_artifact_run
+
+    def stale_record(directory: Path) -> None:
+        raise StaleAttentionRecord("FICT-stale record")
+
+    monkeypatch.setattr(handoff, "read_attention_record", stale_record, raising=False)
+
+    entries = read_zip(export_handoff(run_dir, tmp_path / "FICT-reader.zip", exported_at=STAMP))
+
+    assert "attention.json" not in entries
+    assert manifest_of(entries)["excluded_artifacts"] == [{
+        "path": "attention.json", "reason": "names another session than session.json",
+    }]
+
+
+def test_a_report_with_the_same_uuid_spelled_in_uppercase_is_kept(
+    tmp_path: Path, session_artifact_run: tuple[Path, ReviewSession],
+) -> None:
+    run_dir, session = session_artifact_run
+    report = f"# FICT-report\n- Session: {str(session.session_id).upper()}\n".encode()
+    (run_dir / "report.md").write_bytes(report)
+
+    entries = read_zip(export_handoff(run_dir, tmp_path / "FICT-uppercase.zip", exported_at=STAMP))
+
+    assert entries["report.md"] == report
+    assert manifest_of(entries)["excluded_artifacts"] == []
+
+
+def test_attention_is_checked_against_the_bytes_collected_for_the_bundle(
+    tmp_path: Path, session_artifact_run: tuple[Path, ReviewSession],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_dir, session = session_artifact_run
+    other = session.model_copy(update={
+        "session_id": UUID("bbbbbbbb-0000-0000-0000-000000000001"),
+    })
+    write_attention_record(run_dir, rank(other), other.session_id)
+    report = (run_dir / "report.md").read_bytes()
+    original_session = (run_dir / "session.json").read_bytes()
+    sanitize = handoff._sanitize
+
+    def replace_source_files(text: str, secrets: Any) -> tuple[str, dict[str, bool]]:
+        # Another re-run replaces the source after its old bytes were collected.
+        if text == report.decode():
+            save_session(other, run_dir / "session.json")
+            (run_dir / "report.md").write_bytes(render_report(other).encode())
+        return sanitize(text, secrets)
+
+    monkeypatch.setattr(handoff, "_sanitize", replace_source_files)
+
+    entries = read_zip(export_handoff(run_dir, tmp_path / "FICT-snapshot.zip", exported_at=STAMP))
+
+    assert entries["session.json"] == original_session
+    assert entries["report.md"] == report
+    assert "attention.json" not in entries
+    assert manifest_of(entries)["excluded_artifacts"] == [{
+        "path": "attention.json", "reason": "names another session than session.json",
+    }]

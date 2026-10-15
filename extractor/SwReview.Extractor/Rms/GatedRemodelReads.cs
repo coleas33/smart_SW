@@ -82,6 +82,13 @@ public sealed class GatedMassPropertyReading : IMassPropertyReading
     }
 
     /// <inheritdoc />
+    public IMassPropertyOverrideReading? GetOverrideOptions()
+    {
+        IMassPropertyOverrideReading? options = _gate.Call("GetOverrideOptions", _massProperty.GetOverrideOptions);
+        return options == null ? null : new GatedMassPropertyOverrideReading(_gate, options);
+    }
+
+    /// <inheritdoc />
     public void SetAccuracyLevel(int accuracyLevel) =>
         _gate.Call(SwRemodelProbeHost.Member.MassPropertySetAccuracyLevel, () => _massProperty.SetAccuracyLevel(accuracyLevel));
 
@@ -120,4 +127,21 @@ public sealed class GatedMassPropertyReading : IMassPropertyReading
     /// <inheritdoc />
     public double GetDensity() =>
         _gate.Call(SwRemodelProbeHost.Member.MassPropertyGetDensity, () => _massProperty.GetDensity());
+}
+
+/// <summary>The probe's gate around each override flag, once per native read.</summary>
+public sealed class GatedMassPropertyOverrideReading : IMassPropertyOverrideReading
+{
+    private readonly SwGate _gate;
+    private readonly IMassPropertyOverrideReading _options;
+
+    public GatedMassPropertyOverrideReading(SwGate gate, IMassPropertyOverrideReading options)
+    {
+        _gate = gate ?? throw new ArgumentNullException(nameof(gate));
+        _options = options ?? throw new ArgumentNullException(nameof(options));
+    }
+
+    public bool GetOverrideMass() => _gate.Call("get_OverrideMass", _options.GetOverrideMass);
+    public bool GetOverrideCenterOfMass() => _gate.Call("get_OverrideCenterOfMass", _options.GetOverrideCenterOfMass);
+    public bool GetOverrideMomentsOfInertia() => _gate.Call("get_OverrideMomentsOfInertia", _options.GetOverrideMomentsOfInertia);
 }

@@ -1,5 +1,7 @@
 # Contract: Part Roles - Custom, Bought or Unclear
 
+*Feature 015 amendment, 2026-10-13 (T086):* A part-roles answer while waiting applies and regrades by code without a model turn. It rebuilds the Send digest from standing findings and the current roles, adds the wait-answer line only to the opening, and omits the resumed turn’s withdrawal/re-run instruction. Section 9 and [015 review-flow.md](../../015-review-send-gate/contracts/review-flow.md) sections 4 and 5 govern the two paths.
+
 Normative for FR-005 to FR-014 and User Story 1. Research R2.3 to R2.11, R3 C4, C6, C10.
 Amends feature 003's `contracts/rules.md` (grading scope; the mates rule) and `contracts/tools.md`;
 feature 008's `contracts/checks-first.md` sections 1 and 4 and `contracts/answer-batch.md` section 1;
@@ -341,6 +343,14 @@ The page draws the two buttons and a text box whose placeholder is the words fil
 `questions.text_placeholder` ("Or name the bought ones, separated by commas").
 
 ## 9. Answers and the regrade
+
+*Amended by feature 015 (T086, 2026-10-13).* `_apply_answers` shares the validation, marking,
+confirmed read, roles regrade and restatement below. While waiting, `_settle_waiting` retains
+outcomes and rebuilds the pre-run through `prerun.restated`; `close_waiting` rebuilds its Send
+cache and finalizes, with no `_ask` or `REGRADED_LINE`. At Send the opening names standing
+findings only, carries the current folded-family counts and one `WAIT_ANSWER_LINE` per
+answered code question in `answered_at`, then id order. A sent review keeps the resumed path
+below byte for byte.
 
 In `answer_evidence_batch` (`agent/runner.py:864`), after the answers are marked (008
 `answer-batch.md` step 2) and before the resumed turn, `answered_roles(request, spec, package)` reads

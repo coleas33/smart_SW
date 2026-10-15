@@ -64,6 +64,8 @@ listeners, never what it reviews with."""
 
 COMPARED = frozenset(
     {
+        "send_when_checked",
+        "earlier",
         "model",
         "effort",
         "efficiency",
@@ -183,6 +185,8 @@ def test_a_pane_defaults_attempt_starts_reviews_as_the_pane_does(
     [pane_call] = pane_calls
     [benchmark_call] = benchmark_calls
     assert what_it_reviews_with(benchmark_call) == what_it_reviews_with(pane_call)
+    assert pane_call["send_when_checked"] is True and benchmark_call["send_when_checked"] is True
+    assert pane_call["earlier"] is None and benchmark_call["earlier"] is None
 
     pane_session = load_session(pane_run / "session.json")
     benchmark_session = load_session(out / "cover" / "session.json")

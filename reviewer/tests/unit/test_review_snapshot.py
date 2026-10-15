@@ -18,6 +18,7 @@ for all three:
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import pytest
@@ -26,8 +27,8 @@ from pydantic_core import to_jsonable_python
 from swreview.ir.loader import load_package
 from swreview.ir.models import EvidencePackage
 from swreview.report.names import component_names
-from swreview.report.session import ReviewSession, load_session
-from swreview.report.snapshot import review_snapshot
+from swreview.report.session import ModelStatus, ReviewSession, SendFailure, load_session
+from swreview.report.snapshot import restored_snapshot, review_snapshot
 from swreview.report.summary import load_words, review_ranking
 from swreview.report.titles import pane_finding
 from swreview.report.unexamined import not_examined
@@ -201,3 +202,114 @@ def test_two_calls_give_the_same_bytes_and_mutate_nothing(
     assert as_bytes(first) == as_bytes(second)
     assert session.model_dump_json() == session_before
     assert package.model_dump_json() == package_before
+
+
+@pytest.mark.parametrize("in_flight", [False, True])
+def test_send_in_flight_is_additive_only_when_true_and_default_keeps_old_bytes(
+    session: ReviewSession, package: EvidencePackage, in_flight: bool
+) -> None:
+    before = session.model_dump(mode="json")
+    default = review_snapshot(session, package, run_id=RUN_ID)
+    explicit = review_snapshot(session, package, run_id=RUN_ID, send_in_flight=in_flight)
+
+    assert "send_in_flight" not in default
+    if in_flight:
+        assert explicit.pop("send_in_flight") is True
+    else:
+        assert "send_in_flight" not in explicit
+    assert as_bytes(explicit) == as_bytes(default)
+    assert session.model_dump(mode="json") == before
+
+
+# --- feature 015 T099: a record restored from its run folder (`contracts/recheck.md` section 8)
+
+CHECKED = datetime(2026, 10, 9, 14, 30, 59, tzinfo=timezone(timedelta(hours=2)))
+"""A fictional `checked_at` two hours east of UTC: its line reads 14:30, never 12:30."""
+
+
+def with_status(session: ReviewSession, state: str, **fields: Any) -> ReviewSession:
+    status = ModelStatus(
+        state=state,
+        document={"path": "C:\Fictional\FICT-cover.SLDASM", "configuration": "Default"},
+        checked_at=CHECKED,
+        **fields,
+    )
+    return session.model_copy(update={"model_status": status})
+
+
+@pytest.mark.parametrize("state", ["not_sent", "send_failed"])
+def test_a_waiting_record_restores_with_the_composed_line_and_the_restored_block(
+    session: ReviewSession, package: EvidencePackage, state: str
+) -> None:
+    """Owner decisions 68A and 73A: 009's first sentence, then the dated Send sentence."""
+    words = load_words()
+    failures = [
+        SendFailure(
+            at=CHECKED + timedelta(minutes=5), error_class="FICTError", reason="FICT refused"
+        )
+    ]
+    record = with_status(session, state, failures=failures if state == "send_failed" else [])
+
+    restored = restored_snapshot(record, package, run_id=RUN_ID)
+
+    assert set(restored) == KEYS
+    assert restored["read_only"] is True
+    assert restored["read_only_reason"] == (
+        "The backend restarted, so this review is shown from its run folder. "
+        "Its checks ran 2026-10-09 14:30; Send checks the saved evidence again first."
+    )
+    assert restored["read_only_reason"] == (
+        f"{words.read_only_lead} {words.send.restored_line.format(when='2026-10-09 14:30')}"
+    )
+    assert words.read_only_off not in restored["read_only_reason"]
+    send = restored["ranking"]["summary"]["send"]
+    assert send == {
+        "state": "restored",
+        "input_tokens": None,
+        "approximate": False,
+        "text": words.send.restored,
+        "failure": (
+            words.send.failed.format(reason="FICT refused", time="14:35")
+            if state == "send_failed"
+            else None
+        ),
+        "rerun_failed_text": words.send.rerun_failed,
+    }
+    assert "session_id" not in send
+    assert restored == review_snapshot(
+        record,
+        package,
+        run_id=RUN_ID,
+        send={"state": "restored", "input_tokens": None, "provider": "", "send_error": None},
+        read_only_reason=restored["read_only_reason"],
+    )
+
+
+@pytest.mark.parametrize("state", ["sent", None])
+def test_a_sent_or_unmarked_record_restores_with_todays_sentence_and_no_block(
+    session: ReviewSession, package: EvidencePackage, state: str | None
+) -> None:
+    record = session if state is None else with_status(session, state)
+
+    restored = restored_snapshot(record, package, run_id=RUN_ID)
+
+    assert restored == review_snapshot(
+        record, package, run_id=RUN_ID, read_only_reason=load_words().read_only
+    )
+    assert restored["read_only_reason"] == (
+        "The backend restarted, so this review is shown from its run folder. "
+        "Follow-ups, decisions and answers are off."
+    )
+    assert "send" not in restored["ranking"]["summary"]
+
+
+def test_restoring_a_waiting_record_mutates_nothing(
+    session: ReviewSession, package: EvidencePackage
+) -> None:
+    record = with_status(session, "not_sent")
+    before = record.model_dump_json()
+
+    first = restored_snapshot(record, package, run_id=RUN_ID)
+
+    assert as_bytes(first) == as_bytes(restored_snapshot(record, package, run_id=RUN_ID))
+    assert record.model_dump_json() == before

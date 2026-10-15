@@ -35,6 +35,7 @@ from swreview.checks.drawing_context import (
     candidate_question,
     run_drawing_context,
 )
+from swreview.checks.questions import asks_same
 from swreview.checks.result import DocumentResult
 from swreview.drawings.brief import BriefRefused, build_brief
 from swreview.drawings.evidence import DrawingIndex
@@ -252,9 +253,7 @@ def _is_confirmed_candidate(request: EvidenceRequest, spec: QuestionSpec | None)
         spec is not None
         and request.status == "answered"
         and request.answer == CANDIDATE_CONFIRM
-        and request.question == spec.question
-        and tuple(request.options) == spec.options
-        and tuple(request.entity_ids) == spec.entity_ids
+        and asks_same(request, spec)
     )
 
 

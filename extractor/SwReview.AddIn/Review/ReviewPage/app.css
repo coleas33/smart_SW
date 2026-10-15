@@ -1665,3 +1665,14 @@ body.view-transcript #results {
 .context-panel summary { cursor: pointer; font-weight: 600; }
 #context-entry { max-height: 45vh; overflow-y: auto; }
 .context-panel .row { flex-wrap: wrap; }
+
+.send-panel {
+  padding: 8px 12px;
+  border-top: 1px solid var(--hair);
+}
+
+.send-text {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: var(--text-small);
+}

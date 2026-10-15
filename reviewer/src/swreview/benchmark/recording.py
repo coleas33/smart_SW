@@ -23,18 +23,23 @@ review's turns and rounds from `events.jsonl`, using only the markers the log ca
   carry none, though interference findings recorded after feature 014's owner decision 40A
   cite their step.
 
+The log is read through the product's one event-line reader, `agent/events.replay_events`
+(feature 014 plan decision RF-29), the folder's own `events.jsonl` and never a packed stream,
+since a recording is never packed (RF-83). A line it cannot read, not JSON or not an event of
+the chat-events schema, is refused naming its number.
+
 A folder that is not a review is refused with one sentence naming what is missing. Reading
 writes nothing.
 """
 
 from __future__ import annotations
 
-import json
+from collections.abc import Collection
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from swreview.agent.events import EVENTS_FILE_NAME
+from swreview.agent.events import EVENTS_FILE_NAME, replay_events
 from swreview.agent.providers import TokenUsage, usage_from_body
 from swreview.findings import Finding
 from swreview.ir.loader import PACKAGE_FILE_NAME
@@ -48,12 +53,30 @@ __all__ = [
     "RecordedTurn",
     "Recording",
     "RecordingRefused",
+    "bracketing_step",
     "read_recording",
+    "round_kind",
 ]
 
 UNCOMMITTED_ENDS = frozenset({"stopped", "error"})
 """Turn ends the runner keeps no history for: the turn raised instead of returning, so the next
 turn's request does not carry it."""
+
+
+def round_kind(text_done: bool) -> Literal["main", "presentation"]:
+    """A round's kind, by its position alone: a `usage` after its turn's `text.done` is the
+    presentation request (the explanation pass), any other a main round. The replay's reader and
+    the report's walk both read rounds so (feature 014 owner decision 85A)."""
+    return "presentation" if text_done else "main"
+
+
+def bracketing_step(open_steps: Collection[int]) -> int | None:
+    """The step a `finding` or `finding.withdrawn` event belongs to: the one call whose
+    `tool.started`/`tool.finished` bracket is open, or `None` when no call or several are."""
+    if len(open_steps) != 1:
+        return None
+    [step] = open_steps
+    return step
 
 
 class RecordingRefused(ValueError):
@@ -154,13 +177,32 @@ def read_recording(run_dir: Path | str) -> Recording:
         session_file = run_folder_session(directory)
     except (FileNotFoundError, ValueError) as exc:
         raise RecordingRefused(str(exc)) from exc
+    session = load_session(session_file)
+    if session.model_status is not None:
+        if session.model_status.state == "sent":
+            raise RecordingRefused(
+                f"{directory} was sent to the model after waiting for Send; "
+                "the replay reads only reviews sent when their checks finished"
+            )
+        raise RecordingRefused(
+            f"{directory} was never sent to the model, so it has no model turn to replay"
+        )
     events_file = directory / EVENTS_FILE_NAME
     if not events_file.is_file():
         raise RecordingRefused(
             f"{directory} holds no {EVENTS_FILE_NAME}: it is a check folder or was written "
             "before the event log, and a check has no provider rounds to replay"
         )
-    events = _events(events_file)
+    unreadable: list[int] = []
+    events = [
+        event.model_dump(mode="json")
+        for event in replay_events(events_file, on_unreadable=unreadable.append)
+    ]
+    if unreadable:
+        raise RecordingRefused(
+            f"{events_file} line {unreadable[0]} is not a readable event (not JSON, or not an "
+            "event of the chat-events schema), so the recorded rounds cannot be read"
+        )
     if not any(event.get("type") == "usage" for event in events):
         raise RecordingRefused(
             f"{events_file} records no usage event: no provider round was recorded, so there "
@@ -172,7 +214,6 @@ def read_recording(run_dir: Path | str) -> Recording:
             f"{directory} holds no {PACKAGE_FILE_NAME}: the replay re-runs the recorded calls "
             "against the package and cannot without it"
         )
-    session = load_session(session_file)
     reader = _EventReader()
     for event in events:
         reader.read(event)
@@ -190,27 +231,6 @@ def read_recording(run_dir: Path | str) -> Recording:
         ),
         setup_steps=tuple(reader.setup_steps),
     )
-
-
-def _events(path: Path) -> list[dict[str, Any]]:
-    events: list[dict[str, Any]] = []
-    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-        if not line.strip():
-            continue
-        try:
-            event = json.loads(line)
-        except json.JSONDecodeError as exc:
-            raise RecordingRefused(
-                f"{path} line {number} is not a JSON event ({exc.msg}), so the recorded rounds "
-                "cannot be read"
-            ) from exc
-        if not isinstance(event, dict) or not isinstance(event.get("body"), dict):
-            raise RecordingRefused(
-                f"{path} line {number} is not an event object with a body, so the recorded "
-                "rounds cannot be read"
-            )
-        events.append(event)
-    return events
 
 
 @dataclass
@@ -255,10 +275,9 @@ class _EventReader:
             self._turn = _OpenTurn(answers=self._answers, rounds=[])
             self._answers = []
         main = [r for r in self._turn.rounds if r["kind"] == "main"]
-        presentation = self._turn.text_done
         self._turn.rounds.append(
             {
-                "kind": "presentation" if presentation else "main",
+                "kind": round_kind(self._turn.text_done),
                 "index": len(main),
                 "usage": usage_from_body(body),
                 "calls": [],
@@ -284,8 +303,8 @@ class _EventReader:
         finding_id = body.get("id")
         if not isinstance(finding_id, str) or finding_id in self.finding_steps:
             return
-        if len(self._open_calls) == 1:
-            [step] = self._open_calls
+        step = bracketing_step(self._open_calls)
+        if step is not None:
             self.finding_steps[finding_id] = step
 
     def _ended(self, reason: str) -> None:

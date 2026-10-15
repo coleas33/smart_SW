@@ -320,9 +320,8 @@ public class RemodelFinishHandlerTests : IDisposable
 
         _harness.Dispatch(RemodelCommands.Close, "{}");
 
-        Assert.Equal(
-            new[] { "10=False", "77=False", "329=False" },
-            _harness.Seat.ToggleWrites);
+        // T180: the successful open/commands restored their idle values already.
+        Assert.Empty(_harness.Seat.ToggleWrites);
     }
 
     [Fact]
@@ -374,9 +373,8 @@ public class RemodelFinishHandlerTests : IDisposable
         Assert.Contains("check 2", response.Error!, StringComparison.Ordinal);
 
         Assert.Empty(_harness.Seat.Closed);
-        Assert.Equal(
-            new[] { "10=False", "77=False", "329=False" },
-            _harness.Seat.ToggleWrites);
+        // T180: the successful open/commands restored their idle values already.
+        Assert.Empty(_harness.Seat.ToggleWrites);
         AssertTheSessionIsOverAndTheNextOpenGoesThrough();
     }
 
@@ -461,8 +459,12 @@ public class RemodelFinishHandlerTests : IDisposable
     [Fact]
     public void Close_WhoseRestoreFailsPartWay_IsCloseIncomplete_NamingTheSettingStillSet()
     {
-        // A toggle, since CommandInProgress went back at the open (U27).
+        // T180: create a real command whose current idle original cannot be restored.
+        // Close must retry that retained original, and still name it if the retry fails.
         _harness.Seat.FailingWrites.Add("77=False");
+        Assert.Equal(BridgeStatus.Error, _harness.Dispatch(
+            RemodelCommands.Rename,
+            "{\"persist_ref\":\"ref:fillet\",\"new_name\":\"Fillet-Edge1\"}").Status);
 
         BridgeResponse response = _harness.Dispatch(RemodelCommands.Close, "{}");
 
@@ -495,9 +497,8 @@ public class RemodelFinishHandlerTests : IDisposable
 
         Assert.True(result.Closed);
         Assert.Equal(_harness.CopyPath, Assert.Single(_harness.Seat.Closed));
-        Assert.Equal(
-            new[] { "10=False", "77=False", "329=False" },
-            _harness.Seat.ToggleWrites);
+        // T180: the successful open/commands restored their idle values already.
+        Assert.Empty(_harness.Seat.ToggleWrites);
     }
 
     [Fact]

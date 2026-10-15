@@ -1242,9 +1242,8 @@ public sealed class RemodelHostTests
         Assert.Equal(
             "This plan can no longer be started. The add-in reconnected to SOLIDWORKS after the "
             + "plan was made, which happens when the active document changes, and the plan did "
-            + "not carry over to the new connection. Nothing was changed: not your part and not "
-            + "the copy. Make your part the active document and press Remodel a copy to plan "
-            + "again.",
+            + "not carry over to the new connection. Your part was not changed. Make your part the "
+            + "active document and press Remodel a copy to plan again.",
             RemodelHost.SessionLostMessage);
 
         AssertPlainWords(RemodelHost.SessionLostMessage);
@@ -1705,13 +1704,13 @@ public sealed class RemodelHostTests
     {
         Assert.Equal(
             "This plan was made before SOLIDWORKS switched documents, so it can no longer be "
-            + "started. Nothing was changed: not your part and not the copy. Make your part the "
-            + "active document and press Plan again.",
+            + "started. Your part was not changed. Make your part the active document and press Plan "
+            + "again.",
             RemodelHost.PlanLostMessage);
 
-        const string nothingWasChanged = "Nothing was changed: not your part and not the copy.";
-        Assert.Contains(nothingWasChanged, RemodelHost.PlanLostMessage, StringComparison.Ordinal);
-        Assert.Contains(nothingWasChanged, RemodelHost.SessionLostMessage, StringComparison.Ordinal);
+        const string originalWasNotChanged = "Your part was not changed.";
+        Assert.Contains(originalWasNotChanged, RemodelHost.PlanLostMessage, StringComparison.Ordinal);
+        Assert.Contains(originalWasNotChanged, RemodelHost.SessionLostMessage, StringComparison.Ordinal);
 
         AssertPlainWords(RemodelHost.PlanLostMessage);
     }
@@ -2460,10 +2459,11 @@ public sealed class RemodelHostTests
             string again = world.Reply("remodel.planned", "p2").GetProperty("run_dir").GetString()!;
 
             world.Receive("remodel.discard_copy", "d1", new { run_dir = world.ExpectedRunDirectory });
-            world.Receive("remodel.start", "s2", new { run_dir = again });
-
             world.Reply("ok", "d1");
             Assert.Equal(0, world.Pipeline.Count("close"));
+
+            world.Receive("remodel.start", "s2", new { run_dir = again });
+            Assert.Equal(new[] { again }, world.Pipeline.Closed);
             world.Reply("remodel.started", "s2");
             Assert.Equal(1, world.Pipeline.Count("run"));
         }
@@ -4314,7 +4314,7 @@ public sealed class RemodelHostTests
     }
 
     [Fact]
-    public void PlanningAfterTheEarlierRunFinishedOrItsCopyWasDiscardedClosesNothing()
+    public void PlanningAfterTheEarlierRunFinishedOrItsCopyWasDiscardedClosesNoOtherSession()
     {
         using (var world = new RemodelWorld())
         {
@@ -4332,7 +4332,7 @@ public sealed class RemodelHostTests
             world.Receive("remodel.plan", "p3", new { });
             world.Reply("remodel.planned", "p3");
 
-            Assert.Single(world.Pipeline.Closed);
+            Assert.Equal(new[] { world.ExpectedRunDirectory, second }, world.Pipeline.Closed);
             Assert.Empty(world.AllPosted("remodel.plan_lost"));
         }
     }
@@ -4395,7 +4395,7 @@ public sealed class RemodelHostTests
     {
         string sentence = RemodelHost.PlanClosedMessage;
 
-        Assert.Contains("Nothing was changed", sentence, StringComparison.Ordinal);
+        Assert.Contains("Your part was not changed", sentence, StringComparison.Ordinal);
         Assert.Contains("Plan again", sentence, StringComparison.Ordinal);
         Assert.DoesNotContain("remodel.", sentence, StringComparison.Ordinal);
         Assert.DoesNotContain("\\", sentence, StringComparison.Ordinal);
@@ -4483,6 +4483,326 @@ public sealed class RemodelHostTests
         "{\"seq\":" + seq + ",\"at\":\"2026-09-16T14:22:31.481Z\",\"kind\":\"reorder\","
         + "\"subject\":{\"feature_id\":\"feat:0042\",\"name\":\"Fillet3\","
         + "\"persist_ref\":\"cGVyc2lzdC1yZWY=\"},\"status\":\"" + status + "\"}";
+
+
+    // ---- T180: held-copy attachment and teardown lifetime --------------------------------
+
+    [Fact]
+    public void T180ExactHeldCopyActivationKeepsTheOriginalAttachmentAndStartSession()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Pipeline.HoldsTheBridgeSession = true;
+            world.Open();
+            using (ToolServiceGate gate = world.AttachLifecycleGate())
+            {
+                gate.EnsureStarted();
+                world.Receive("remodel.plan", "p1", new { });
+                IToolService original = gate.Service!;
+                Assert.False(world.Host.RunInProgress);
+
+                world.SwitchTo(gate, world.ExpectedCopyPath.ToUpperInvariant());
+
+                Assert.Same(original, gate.Service);
+                Assert.False(((FakeToolService)original).Disposed);
+                Assert.Empty(world.AllPosted("remodel.plan_lost"));
+                world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+                world.Reply("remodel.started", "s1");
+                Assert.Equal(1, world.Pipeline.Count("run"));
+            }
+        }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void T180QueuedFollowUsesTheCurrentDocumentForExactCopyPreservation(bool finishesOnOtherDocument)
+    {
+        using (var world = new RemodelWorld())
+        {
+            var queued = new Queue<Action>();
+            world.Open();
+            using (ToolServiceGate gate = world.AttachLifecycleGate(scheduler: work => queued.Enqueue(work)))
+            {
+                gate.EnsureStarted();
+                queued.Dequeue()();
+                world.Receive("remodel.plan", "p1", new { });
+                IToolService original = gate.Service!;
+                string other = @"C:\parts\another.SLDPRT";
+                world.SwitchTo(gate, finishesOnOtherDocument ? world.ExpectedCopyPath : other);
+                world.SwitchTo(gate, finishesOnOtherDocument ? other : world.ExpectedCopyPath);
+                Assert.Single(queued);
+
+                queued.Dequeue()();
+
+                Assert.Equal(finishesOnOtherDocument, ((FakeToolService)original).Disposed);
+                if (finishesOnOtherDocument)
+                {
+                    Assert.NotSame(original, gate.Service);
+                    Assert.Equal(other, gate.DocumentPath);
+                    Assert.Single(world.AllPosted("remodel.plan_lost"));
+                }
+                else
+                {
+                    Assert.Same(original, gate.Service);
+                    Assert.Empty(world.AllPosted("remodel.plan_lost"));
+                }
+            }
+        }
+    }
+
+    [Theory]
+    [InlineData("another-copy")]
+    [InlineData("another-run")]
+    [InlineData("another-attachment")]
+    [InlineData("no-attachment")]
+    public void T180PreservationRequiresTheExactHeldCopyAndOriginalAttachment(string mismatch)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            string copy = world.ExpectedCopyPath;
+            string? attachment = world.Attachment;
+            Assert.True(world.KeepCopyAttachment(copy, attachment));
+            if (mismatch == "another-copy") copy = Path.Combine(Path.GetDirectoryName(copy)!, "other-RMS.SLDPRT");
+            if (mismatch == "another-run") copy = Path.Combine(world.RunRoot, "other-remodel", "copy", "bracket-RMS.SLDPRT");
+            if (mismatch == "another-attachment") attachment = "swreview-another-attachment";
+            if (mismatch == "no-attachment") attachment = null;
+
+            Assert.False(world.KeepCopyAttachment(copy, attachment));
+        }
+    }
+
+    [Theory]
+    [InlineData("unplanned")]
+    [InlineData("closed-at-plan")]
+    [InlineData("discarded")]
+    [InlineData("finished")]
+    public void T180APlanWhichNoLongerHoldsASessionCannotPreserveAnAttachment(string state)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.StartValidated = state != "closed-at-plan";
+            world.Open();
+            if (state != "unplanned") world.Receive("remodel.plan", "p1", new { });
+            if (state == "discarded") world.Receive("remodel.discard_copy", "d1", new { run_dir = world.ExpectedRunDirectory });
+            if (state == "finished") world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            Assert.False(world.KeepCopyAttachment(world.ExpectedCopyPath, world.Attachment));
+        }
+    }
+
+    [Fact]
+    public void T180WithdrawalPrecedesDisposeAndPlanNoticeFollowsTheActualCleanupReport()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            using (ToolServiceGate gate = world.AttachLifecycleGate(() =>
+            {
+                Assert.Null(world.PublishedService);
+                Assert.Null(world.AttachmentNow);
+                Assert.Empty(world.AllPosted("remodel.plan_lost"));
+                world.Host.SessionEnded(world.EndOutcome(copyClosed: false));
+            }))
+            {
+                gate.EnsureStarted();
+                world.Receive("remodel.plan", "p1", new { });
+                world.Lifecycle.Clear();
+                world.SwitchTo(gate, @"C:\parts\another.SLDPRT");
+
+                Assert.Equal(new[] { "withdraw", "dispose", "stopped", "publish" }, world.Lifecycle);
+                JsonElement notice = Assert.Single(world.AllPosted("remodel.plan_lost"));
+                Assert.DoesNotContain("not the copy", notice.GetProperty("message").GetString()!);
+                Assert.Contains("Your part was not changed", notice.GetProperty("message").GetString()!);
+                int loss = world.IndexOf("remodel.plan_lost");
+                Assert.Contains(world.Posted.Take(loss), line => line.Contains("The copy may still be open"));
+                world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+                Assert.Equal("SessionLost", world.ErrorClass("s1"));
+                Assert.DoesNotContain("not the copy", world.Reply("error", "s1").GetProperty("message").GetString()!);
+                Assert.Equal(0, world.Pipeline.Count("run"));
+            }
+        }
+    }
+
+    [Fact]
+    public void T180DisposeFailureStillPostsALossWithoutClaimingTheCopyWasUntouched()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            using (ToolServiceGate gate = world.AttachLifecycleGate(() => throw new IOException("fictional stop failure")))
+            {
+                gate.EnsureStarted();
+                world.Receive("remodel.plan", "p1", new { });
+                world.Lifecycle.Clear();
+                world.SwitchTo(gate, @"C:\parts\another.SLDPRT");
+
+                Assert.Equal(new[] { "withdraw", "dispose", "stopped", "publish" }, world.Lifecycle);
+                string words = Assert.Single(world.AllPosted("remodel.plan_lost")).GetProperty("message").GetString()!;
+                Assert.DoesNotContain("not the copy", words);
+                Assert.Contains("Your part was not changed", words);
+            }
+        }
+    }
+
+    [Fact]
+    public void T180LateCleanupReportsItsFactsWithoutChangingTheNewestPlanOrRepeatingLoss()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            using (ToolServiceGate gate = world.AttachLifecycleGate())
+            {
+                gate.EnsureStarted();
+                world.Receive("remodel.plan", "p1", new { });
+                RemodelRun first = world.Host.LatestRun!;
+                world.SwitchTo(gate, @"C:\parts\another.SLDPRT");
+                string words = Assert.Single(world.AllPosted("remodel.plan_lost")).GetProperty("message").GetString()!;
+                Assert.DoesNotContain("not the copy", words);
+                world.Receive("remodel.plan", "p2", new { });
+                RemodelRun latest = world.Host.LatestRun!;
+                Assert.True(world.KeepCopyAttachment(latest.CopyPath, gate.Attachment));
+
+                world.Host.SessionEnded(world.EndOutcome(copyClosed: false, run: first));
+
+                Assert.Same(latest, world.Host.LatestRun);
+                Assert.True(world.KeepCopyAttachment(latest.CopyPath, gate.Attachment));
+                Assert.Single(world.AllPosted("remodel.plan_lost"));
+                Assert.Contains(world.AllPosted("status"), status => status.GetProperty("message").GetString()!.Contains("The copy may still be open"));
+            }
+        }
+    }
+
+    [Theory]
+    [InlineData("saved")]
+    [InlineData("truncated")]
+    [InlineData("failed")]
+    public void T180FinishedRunClosesBeforeReleasingBusyAndKeepsEverySavedArtifact(string state)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Pipeline.HoldsTheBridgeSession = true;
+            world.Pipeline.RunState = state;
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Pipeline.DuringRun = _ => world.WriteRunArtifacts();
+            string[]? saved = null;
+            world.Pipeline.DuringClose = () =>
+            {
+                Assert.True(world.Host.RunInProgress);
+                Assert.Equal(RemodelRunPhase.Running, world.Host.LatestRun!.Phase);
+                saved = RemodelWorld.Snapshot(world.ExpectedRunDirectory);
+            };
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            Assert.Equal(1, world.Pipeline.Count("close"));
+            Assert.False(world.Pipeline.SessionOpen);
+            Assert.False(world.Host.RunInProgress);
+            Assert.Equal(saved, RemodelWorld.Snapshot(world.ExpectedRunDirectory));
+            world.Pipeline.DuringClose = null;
+            world.Receive("remodel.plan", "p2", new { });
+            world.Reply("remodel.planned", "p2");
+            Assert.Equal(2, world.Pipeline.Count("copy"));
+            Assert.Equal(1, world.Pipeline.Count("close"));
+        }
+    }
+
+    [Theory]
+    [InlineData("run")]
+    [InlineData("copy")]
+    [InlineData("exact")]
+    public void T180CleanupOnlyEndsTheKnownRunWhoseCopyItActuallyNames(string match)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            RemodelRun run = world.Host.LatestRun!;
+            Assert.True(world.KeepCopyAttachment(run.CopyPath, world.Attachment));
+            var outcome = new RemodelSessionEnd(
+                RemodelSessionEnd.ReasonToolServiceStopped,
+                match == "run" ? Path.Combine(world.RunRoot, "unknown-remodel") : run.RunDirectory,
+                match == "copy" ? Path.Combine(run.RunDirectory, "copy", "unknown.SLDPRT") : run.CopyPath,
+                verified: true, failedCheck: null, tagRemoved: true, copyClosed: true,
+                settingsOutstanding: new string[0], failures: new string[0]);
+
+            world.Host.SessionEnded(outcome);
+
+            Assert.Equal(match != "exact", world.KeepCopyAttachment(run.CopyPath, world.Attachment));
+            world.Receive("ready", "r1", new { });
+            JsonElement loss = world.Reply("init", "r1").GetProperty("latest_run").GetProperty("plan_lost");
+            if (match == "exact")
+            {
+                Assert.Equal(RemodelHost.PlanLostMessage, loss.GetString());
+                Assert.Single(world.AllPosted("remodel.plan_lost"));
+                world.Receive("remodel.start", "s1", new { run_dir = run.RunDirectory });
+                Assert.Equal("SessionLost", world.ErrorClass("s1"));
+                Assert.Equal(0, world.Pipeline.Count("run"));
+            }
+            else
+            {
+                Assert.Equal(JsonValueKind.Null, loss.ValueKind);
+                Assert.Empty(world.AllPosted("remodel.plan_lost"));
+            }
+        }
+    }
+
+    [Fact]
+    public void T180AClosedFinishedRunDoesNotCloseTheNewWaitingPlanWhenDiscarded()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Pipeline.HoldsTheBridgeSession = true;
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            RemodelRun first = world.Host.LatestRun!;
+            world.Pipeline.DuringRun = _ => world.WriteRunArtifacts();
+            world.Receive("remodel.start", "s1", new { run_dir = first.RunDirectory });
+            world.Receive("remodel.plan", "p2", new { });
+            world.Reply("remodel.planned", "p2");
+            RemodelRun next = world.Host.LatestRun!;
+            Assert.True(world.Pipeline.SessionOpen);
+            int closes = world.Pipeline.Count("close");
+
+            world.Receive("remodel.discard_copy", "d1", new { run_dir = first.RunDirectory });
+
+            world.Reply("ok", "d1");
+            Assert.True(world.Pipeline.SessionOpen);
+            Assert.Equal(closes, world.Pipeline.Count("close"));
+            Assert.True(world.KeepCopyAttachment(next.CopyPath, world.Attachment));
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void T180FinishedCloseFailureIsTruthfulAndOnlyAnAnsweredCloseReleasesSession(bool answered)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Pipeline.HoldsTheBridgeSession = true;
+            world.Pipeline.CloseFailure = answered
+                ? new RemodelRefusal("CloseIncomplete", "fictional close left settings", true)
+                : new RemodelRefusal("BridgeUnavailable", "fictional bridge timeout", true);
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Pipeline.DuringRun = _ => world.WriteRunArtifacts();
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            Assert.Equal(1, world.Pipeline.Count("close"));
+            Assert.Equal(!answered, world.Pipeline.SessionOpen);
+            Assert.False(world.Host.RunInProgress);
+            Assert.True(File.Exists(world.ExpectedCopyPath));
+            if (!answered)
+            {
+                Assert.Contains(world.AllPosted("status"), status => status.GetProperty("message").GetString()!.Contains("did not answer"));
+            }
+        }
+    }
 
     private sealed class RemodelWorld : IDisposable
     {
@@ -4622,6 +4942,72 @@ public sealed class RemodelHostTests
         /// <see cref="RemodelHost.RunInProgress"/>, and from here on the attachment the host
         /// reads is the gate's. It starts inline, so an assertion can follow the call.
         /// </summary>
+        public List<string> Lifecycle { get; } = new List<string>();
+
+        public IToolService? PublishedService { get; private set; }
+
+        public string? AttachmentNow => _gate != null ? _gate.Attachment : Attachment;
+
+        public bool KeepCopyAttachment(string path, string? attachment)
+        {
+            // Compile against the pre-fix public surface, then exercise the optional seam when present.
+            System.Reflection.MethodInfo? keep = typeof(RemodelHost).GetMethod("KeepCopyAttachment");
+            return keep != null && (bool)keep.Invoke(Host, new object?[] { path, attachment })!;
+        }
+
+        private void RefreshLifecycleAvailability(bool announce)
+        {
+            System.Reflection.MethodInfo? refresh = typeof(RemodelHost).GetMethod(
+                "RefreshAvailability", new[] { typeof(bool) });
+            if (refresh == null) Host.RefreshAvailability();
+            else refresh.Invoke(Host, new object[] { announce });
+        }
+
+        public RemodelSessionEnd EndOutcome(bool copyClosed, RemodelRun? run = null)
+        {
+            run = run ?? Host.LatestRun!;
+            return new RemodelSessionEnd(
+                RemodelSessionEnd.ReasonToolServiceStopped, run.RunDirectory, run.CopyPath,
+                verified: true, failedCheck: null, tagRemoved: true, copyClosed: copyClosed,
+                settingsOutstanding: new string[0],
+                failures: copyClosed ? new string[0] : new[] { "fictional copy remains open" });
+        }
+
+        public ToolServiceGate AttachLifecycleGate(Action? cleanup = null, Action<Action>? scheduler = null)
+        {
+            Func<PageDocument?> document = () => Document;
+            Func<IToolService> start = () => new FakeToolService(++_services, Document!.Path)
+            {
+                DuringDispose = () =>
+                {
+                    Lifecycle.Add("dispose");
+                    cleanup?.Invoke();
+                },
+            };
+            Action<IToolService?> publish = service =>
+            {
+                PublishedService = service;
+                Lifecycle.Add(service == null ? "withdraw" : "publish");
+                RefreshLifecycleAvailability(service != null);
+            };
+            Action<string, Exception?> report = (what, failure) => { };
+            Action<Action> schedule = scheduler ?? (work => work());
+            Func<bool> busy = () => Host.RunInProgress;
+            Func<string, string, bool> preserve = (path, attachment) => KeepCopyAttachment(path, attachment);
+            Action<IToolService> stopped = _ =>
+            {
+                Lifecycle.Add("stopped");
+                RefreshLifecycleAvailability(true);
+            };
+            System.Reflection.ConstructorInfo? constructor = typeof(ToolServiceGate).GetConstructors()
+                .SingleOrDefault(candidate => candidate.GetParameters().Length == 8);
+            _gate = constructor == null
+                ? new ToolServiceGate(document, start, publish, report, schedule, busy)
+                : (ToolServiceGate)constructor.Invoke(new object[]
+                    { document, start, publish, report, schedule, busy, preserve, stopped });
+            return _gate;
+        }
+
         public ToolServiceGate AttachGate()
         {
             _gate = new ToolServiceGate(

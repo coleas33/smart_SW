@@ -140,6 +140,8 @@ Everywhere in the engineer's default view, internal vocabulary gives way to word
 
 ## Requirements *(mandatory)*
 
+*Feature 015 amendment notice, 2026-10-08:* Planned amendments to FR-015 and FR-021 are specified in [015 review-flow.md](../015-review-send-gate/contracts/review-flow.md), [015 recheck.md](../015-review-send-gate/contracts/recheck.md), [015 pane.md](../015-review-send-gate/contracts/pane.md).
+
 ### Functional Requirements
 
 *Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed by 2026-09-27 (013 T050, T108):* FR-007, FR-009, FR-010 and SC-001 (the summary block, the grouped findings list in place of the goal groups and the modelling-practice fold; 013 T050) and FR-019 (a follow-up answer opens with its basis line; 013 T108) change; see 013 `contracts/grouped-list.md` and `contracts/sources.md`.
@@ -166,7 +168,7 @@ Everywhere in the engineer's default view, internal vocabulary gives way to word
 
 - **FR-013**: The review MUST be able to ask a question in a short form (at most 140 characters), with up to five offered answers and the check goal it blocks, in addition to today's longer description.
 - **FR-014**: Open questions MUST appear above Start here one at a time with a pager, their offered answers or a text box, and "Skip for now".
-- **FR-015**: Answers MUST be sent together as one submission that resumes the review once; skipped questions MUST stay open and unresolved; nothing may be filled in for an unanswered question.
+- **FR-015**: Answers MUST be sent together as one submission. A review already sent resumes once; a review waiting for Send applies the answers by code, finalizes again and keeps waiting without a model turn (feature 015 T084, 2026-10-13; [review flow](../015-review-send-gate/contracts/review-flow.md) section 4). Skipped questions MUST stay open and unresolved; nothing may be filled in for an unanswered question.
 - **FR-016**: Before sending, the pane MUST state the approximate cost of resuming, from the last round's measured input size.
 
 **Results or Transcript (User Story 5)**
@@ -178,7 +180,7 @@ Everywhere in the engineer's default view, internal vocabulary gives way to word
 **Sessions (User Story 6)**
 
 - **FR-020**: Every finished review in the SOLIDWORKS session MUST be kept as a chip naming its document, configuration and time, and choosing it MUST restore its results without a new review.
-- **FR-021**: A review whose live conversation is gone MUST be restorable read-only from its run folder, with the reason shown and follow-up and dispositions disabled.
+- **FR-021**: A review whose live conversation is gone MUST be restorable read-only from its run folder, with the reason shown and follow-up and dispositions disabled. A review that waits for Send (feature 015) is restored read-only too, its reason the first sentence of this read-only line and the date and time its checks ran, with Send its one control (feature 015 T100, 2026-10-14; [recheck](../015-review-send-gate/contracts/recheck.md) section 8).
 - **FR-022**: A configuration switch within the reviewed document MUST hide a review of another configuration.
 - **FR-023**: Show in SOLIDWORKS MUST resolve against the review currently shown, never against whichever run happened to be latest.
 

@@ -86,7 +86,7 @@ from swreview.agent.settings import (
     redact,
 )
 from swreview.agent.settings import pane_defaults as pane_defaults_for
-from swreview.benchmark import answers, set_summary, sets
+from swreview.benchmark import answers, report_page, set_summary, sets
 from swreview.benchmark.answers import DEFAULT_MAX_ANSWER_TURNS
 from swreview.benchmark.compare import (
     carry_sign_offs,
@@ -607,13 +607,23 @@ def _redacting(settings: ProviderSettings) -> Iterator[Callable[[str], str]]:
 
 
 def _one_line(exc: BaseException) -> str:
-    """An exception as a single, bounded line: stderr stays greppable."""
+    """An exception as a single, bounded line: stderr stays greppable.
+
+    Its notes follow the message, after the message is cut to length, so a note such as a failed
+    prompts-record rewrite (feature 014 owner decision 86A) is never lost (owner decision 92A);
+    the notes are cut to the same length, so the line stays bounded (owner decision 96A).
+    """
     text = " ".join(str(exc).split())
     if isinstance(exc, KeyError):
         text = text.strip("'")
-    if len(text) > MESSAGE_LENGTH:
-        text = text[: MESSAGE_LENGTH - 1] + "…"
-    return f"{type(exc).__name__}: {text}"
+    line = f"{type(exc).__name__}: {_cut(text)}"
+    notes = "; ".join(" ".join(str(note).split()) for note in getattr(exc, "__notes__", ()))
+    return f"{line}; {_cut(notes)}" if notes else line
+
+
+def _cut(text: str) -> str:
+    """`text`, cut to `MESSAGE_LENGTH` characters with an ellipsis when longer."""
+    return text if len(text) <= MESSAGE_LENGTH else text[: MESSAGE_LENGTH - 1] + "…"
 
 
 @contextmanager
@@ -2336,6 +2346,12 @@ def _review_fn(
     3; QA-1). The run is closed in a `finally`, as `run_review` closes it, and the final
     session returned. `run_review` stays the `review` command's one-turn form.
 
+    The package's `prompts.json` (`report_page.write_prompts_record`; feature 014
+    `contracts/benchmark-run.md` 12, FR-057) is written before the first turn and again when the
+    review ends, however it ends, so an attempt that raised still records what it sent first; the
+    run is closed whatever the second write does (`_rewrite_prompts_and_close`). Only a benchmark
+    attempt writes it (INT-1).
+
     The redaction is per package too, rather than left to `benchmark_run`: a library
     caller that reaches this through `benchmark.runner`'s default `review_fn` gets the
     same guarantee as one that came through the command line (FR-015).
@@ -2358,12 +2374,34 @@ def _review_fn(
             redact=redactor,
         )
         try:
+            report_page.write_prompts_record(run, session_out_dir)
             answers.drive_review(
                 run, attempt.case_file, max_answer_turns=attempt.max_answer_turns
             )
-        finally:
-            run.close()
+        except BaseException as failure:
+            _rewrite_prompts_and_close(run, session_out_dir, failure)
+            raise
+        _rewrite_prompts_and_close(run, session_out_dir, None)
         return run.session
+
+
+def _rewrite_prompts_and_close(run: Any, folder: Path, failure: BaseException | None) -> None:
+    """The prompts record's second write, then `run.close()`, whatever the write does.
+
+    The write's own error is raised only when the review did not fail. When it did, the review's
+    failure stays the one raised, and the write's error is added to it as a note, so neither is
+    lost (feature 014 owner decision 86A).
+    """
+    try:
+        report_page.write_prompts_record(run, folder)
+    except Exception as error:
+        if failure is None:
+            raise
+        failure.add_note(
+            f"the prompts record could not be rewritten: {type(error).__name__}: {error}"
+        )
+    finally:
+        run.close()
 
 
 def _refuse_a_folder_in_use(out: Path) -> None:
@@ -3031,6 +3069,33 @@ def benchmark_compare(
     _emit(payload, lines, json_output)
     if refused or drifted:
         raise typer.Exit(1)
+
+
+@benchmark_app.command("report")
+def benchmark_report(
+    run_dirs: Annotated[
+        list[Path], typer.Argument(help="Scored run directories, of one study or several.")
+    ],
+    out: Annotated[
+        Path,
+        typer.Option("--out", help="An empty folder, or one holding a previous report."),
+    ],
+) -> None:
+    """Build one static page and a transcript per package run; contacts no provider.
+
+    Every number on the page is its scorecard's, and each transcript shows the system prompt and
+    every message the attempt sent, its log in order and its final state (feature 014
+    `contracts/report.md`). It takes no key option and reads no key (FR-047). Every refusal is
+    one line and exit 1: a run folder named twice, under a key path, unscored or scored under
+    other rules, or an `--out` holding files this command did not write.
+    """
+    with _errors_as_exit_1():
+        built = report_page.build_report(run_dirs, out)
+    for removed in built.removed:
+        typer.echo(f"removed {removed}, left by an earlier build")
+    for warning in built.warnings:
+        typer.echo(f"warning: {warning}", err=True)
+    typer.echo(f"wrote {built.index} ({built.transcripts} transcripts)")
 
 
 # --- chat serve ------------------------------------------------------------------

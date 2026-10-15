@@ -69,6 +69,7 @@ public sealed class PageMessageTests
             Assert.Equal("Default", init.GetProperty("document").GetProperty("configuration").GetString());
 
             JsonElement settings = init.GetProperty("settings");
+            Assert.True(settings.GetProperty("send_when_checked").GetBoolean());
             Assert.False(settings.TryGetProperty("api_key_protected", out _));
             world.AssertNothingPostedContains(Key);
             world.AssertNothingPostedContains(world.Settings.ApiKeyProtected!);
@@ -180,6 +181,102 @@ public sealed class PageMessageTests
 
             Assert.Equal("env", world.Reply("settings", "req-7").GetProperty("key_source").GetString());
             world.AssertNothingPostedContains(Key);
+        }
+    }
+
+    [Fact]
+    public void ABoxSavePersistsWithoutRestartEvenDuringATurnAndPreservesEveryOtherField()
+    {
+        using (var world = new HostWorld())
+        {
+            world.Settings.SetApiKey(Key);
+            world.Settings.TerminalCli = "gemini";
+            world.Settings.Save(world.SettingsPath);
+            world.Open();
+            world.Host.TrackSession("chat-1", world.Settings.RunRoot);
+            world.Backend.RunningTurns.Add("chat-1");
+            world.Receive("send_when_checked.save", "box", new { send_when_checked = false });
+            Assert.False(world.Reply("send_when_checked.saved", "box").GetProperty("send_when_checked").GetBoolean());
+            Assert.Equal(0, world.Backend.Restarts);
+            UserSettings stored = UserSettings.Load(world.SettingsPath, BuildMode.Development).Settings;
+            Assert.False(stored.SendsWhenChecked);
+            stored.SendWhenCheckedValue = null;
+            Assert.Equal(world.Settings.ToJson(), stored.ToJson());
+            world.Receive("settings.get", "get", new { });
+            Assert.False(world.Reply("settings", "get").GetProperty("settings").GetProperty("send_when_checked").GetBoolean());
+            world.AssertNothingPostedContains(Key);
+        }
+    }
+
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("{\"send_when_checked\":null}")]
+    [InlineData("{\"send_when_checked\":\"false\"}")]
+    [InlineData("{\"send_when_checked\":0}")]
+    public void ABoxSaveRequiresAJsonBoolean(string payload)
+    {
+        using (var world = new HostWorld())
+        {
+            world.Open();
+            byte[] before = File.ReadAllBytes(world.SettingsPath);
+            world.Receive("send_when_checked.save", "bad", JsonDocument.Parse(payload).RootElement);
+            Assert.Equal("InvalidRequest", world.Reply("error", "bad").GetProperty("error_class").GetString());
+            Assert.Equal(before, File.ReadAllBytes(world.SettingsPath));
+            Assert.Equal(0, world.Backend.Restarts);
+        }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void EitherSettingsWriterReportsAFailedWriteAndKeepsTheStoredSettings(bool box)
+    {
+        using (var world = new HostWorld())
+        {
+            world.Open();
+            File.Delete(world.SettingsPath);
+            Directory.CreateDirectory(world.SettingsPath);
+            world.Receive(box ? "send_when_checked.save" : "settings.save", "fail", box ? (object)new { send_when_checked = false } : Save(effort: "low"));
+            Assert.Equal("SettingNotSaved", world.Reply("error", "fail").GetProperty("error_class").GetString());
+            Assert.Equal(0, world.Backend.Restarts);
+            world.Receive("settings.get", "get", new { });
+            JsonElement settings = world.Reply("settings", "get").GetProperty("settings");
+            Assert.True(settings.GetProperty("send_when_checked").GetBoolean());
+            Assert.Equal("high", settings.GetProperty("effort").GetString());
+        }
+    }
+
+    [Fact]
+    public void ABoxSaveClearsTheLoadProblemAsASettingsSaveDoes()
+    {
+        using (var world = new HostWorld())
+        {
+            File.WriteAllText(world.SettingsPath, world.Settings.ToJson().Replace("\"effort\": \"high\"", "\"effort\": \"invalid\""));
+            world.Open();
+            world.Receive("ready", "ready", new { });
+            Assert.Equal("error", world.LastPosted("status").GetProperty("stage").GetString());
+            world.Receive("send_when_checked.save", "box", new { send_when_checked = false });
+            world.Reply("send_when_checked.saved", "box");
+            Assert.Null(UserSettings.Load(world.SettingsPath, BuildMode.Development).Error);
+            world.Posted.Clear();
+            world.Receive("settings.get", "get", new { });
+            world.Reply("settings", "get");
+            Assert.DoesNotContain(world.Posted, message => JsonDocument.Parse(message).RootElement.GetProperty("type").GetString() == "status");
+        }
+    }
+
+    [Fact]
+    public void SettingsSaveKeepsTheHeldFalseTokenAndAcceptsAWaitingReview()
+    {
+        using (var world = new HostWorld())
+        {
+            world.Settings.SendsWhenChecked = false;
+            world.Open();
+            world.Host.TrackSession("waiting", world.Settings.RunRoot);
+            world.Receive("settings.save", "save", Save(effort: "low"));
+            Assert.False(world.Reply("settings.saved", "save").GetProperty("settings").GetProperty("send_when_checked").GetBoolean());
+            Assert.False(UserSettings.Load(world.SettingsPath, BuildMode.Development).Settings.SendsWhenChecked);
+            Assert.Equal(1, world.Backend.Restarts);
         }
     }
 

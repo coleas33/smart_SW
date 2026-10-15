@@ -447,18 +447,24 @@ review dump's `PropertyDumper` makes on every part and the one sequence proven o
 copy's selection cleared first through the allowlisted `IModelDoc2.ClearSelection2(true)` behind
 `VerifyTarget` (pre-selected bodies are included in a whole-part mass property), then
 `IPartDoc.GetBodies2` for the solid and sheet counts, the material, the face and edge counts,
-`CreateMassProperty2()`, `UseSystemUnits = true`, `Recalculate()` and the getters - with **no
+`CreateMassProperty2()`, `GetOverrideOptions()` and all three override flag getters,
+`UseSystemUnits = true`, `Recalculate()` and the getters - with **no
 `set_AccuracyLevel` and no `set_SelectedItems`**, the two calls no seat had run when SOLIDWORKS
 exited during the first baseline reading; `set_SelectedItems` was handed a plain `object[]`, which
 the SOLIDWORKS programming guide ("IDispatch Object Arrays as Input in .NET") says must be a
-`DispatchWrapper` array, and PROBE-8, the one caller left, now wraps it. `accuracy_level` is
+`DispatchWrapper` array. T187 calibrates PROBE-8 through the same whole-part/default path;
+neither production measurement sets selected bodies or accuracy. `accuracy_level` is
 `null`: the reading set none, and SOLIDWORKS's default applied. The guards a whole-part reading
 needs fail closed: a part with other than one solid body is counted and not measured (status
 `UnknownError`, `recalculated` false); a volume that is not positive and finite ends the reading
 with status `UnknownError` and nothing recorded; `Recalculate()` false is unchanged. Every call is
 marked in `remodel.log` before it starts and after it answers (`command=remodel.geometry
-stage=before <member>`). A mass, centre-of-mass or moment override is **not** yet detected (R16.5,
-T187). The original sequence, kept for the record, follows.
+stage=before <member>`). T187 rejects any mass, centre-of-mass or moment override before
+recalculation or measured getters: `UnknownError`, `recalculated` false and every measured field
+null. Missing override options have that same result; a throwing native flag read is an error,
+never a fallback to numbers. This adds read members only to `remodel.geometry`. Its live validation
+and publication of a calibrated profile still require T187/T039 seat evidence. The original
+sequence, kept for the record, follows.
 
 The reading uses the typed interface, not the raw `Object` from `GetMassProperties2`, whose flat
 `double[]` index layout is not discoverable by reflection and has changed across API generations:
@@ -501,11 +507,25 @@ Rules this shape encodes, each with a test:
   constant is in any other unit and that no comparison mixes an absolute with a relative bound.
 
 Tolerance profiles, in one pure function, neither of which ships until **PROBE-8** has measured
-the attained error against a part of exactly known analytic volume (a box and a cylinder) at
-`swMassPropertyAccuracyLevel_Higher` and recorded it (*amended 2026-09-28, U27:* the copy's
-reading now sets no accuracy, so when PROBE-8 has run, either the reading sets
-`swMassPropertyAccuracyLevel_Higher` again or PROBE-8 calibrates at the default; T187 decides): a tolerance that has never been compared
-against a known answer does not ship.
+the attained error against a box and cylinder of exactly known analytic geometry at the
+same whole-part/default accuracy as the gate, and recorded it (T187). PROBE-8 clears selection,
+sets system units before recalculation, and sets neither accuracy nor selected items. Its plain
+readings require all override flags false and usable finite measurements; those alone supply the
+calibration errors. Each shape then receives three independent known SI override experiments,
+unsaved: mass, centre of mass and principal moments. Each records whether its flag was detected
+and whether the fresh whole-part getter honoured the known value. Unreadable flags or values,
+failed setter/recalculation answers, or an undetected flag leave the probe unresolved. An observed
+finite value that differs is recorded as `honoured: false`, without claiming it matched. These
+experiments never supply calibration errors. The part is closed and deleted in `finally`.
+
+The live command is `swreview-extract probe remodel --probe PROBE-8 --out <new external folder>
+--acknowledge-throwaway-part`, with SOLIDWORKS running and no document open. It writes its
+capabilities ledger after completion; inspect the `accuracy_level: default`,
+`measurement_scope: whole_part`, both shapes' four attained-error fields and all six pairs of
+`*_override_detected`/`*_override_honoured` readings. `verified` means the measurements and
+experiments completed, not that the error meets IDENTITY's bounds. Neither tolerance profile is
+published or the calibrated guard removed by this implementation. A tolerance that has never
+been compared against a known answer does not ship.
 
 | Profile | volume_rel | area_rel | com_rel | moment_rel | face_count | body_count | Used by |
 |---------|-----------|----------|---------|------------|------------|------------|---------|
@@ -803,3 +823,31 @@ member before the guard judges it, so the test is not "the gated set contains on
 keys". One test asserts that a remodel request's `refused=` set is empty and that every gated key
 on `ReadOnlyGuard`'s denied surface - every key that needed the allowlist to pass - is on the
 stage-1 allowlist (`guard-allowlist.md`).
+
+### T180 extractor settings lifetime (2026-10-13)
+
+The held, tagged Plan copy remains a valid bridge session, but it holds no application settings
+while waiting for Start. `remodel.open` restores `CommandInProgress` and the three dialog toggles
+before publishing that session. This replaces the earlier rule that the dialog toggles stayed
+suppressed until Close; the tagged-copy, source-attestation and target checks remain the same.
+
+In a validated build, `remodel.rename`, `remodel.reorder`, `remodel.folder`, `remodel.describe`,
+`remodel.equation`, `remodel.rebuild` and `remodel.save` scope suppression to their own API sequence.
+After finishing any previously unfinished restoration and verifying the held copy, each sequence
+reads all four **current** idle values before setting any, suppresses the three dialogs and sets
+`CommandInProgress`, and restores those captured values in a `finally`. Each original write still
+verifies its target immediately before the write. Parameter refusals and a failed or missing Save
+geometry verdict happen before fresh suppression; no settings are changed for those refusals.
+
+A guard or open circuit that refuses a setter has attempted no native settings write. Once a
+native setter begins, its original remains pending even if the setter changes the value and then
+throws. Suppression attempts restoration of every pending original; a body failure and a cleanup
+failure are both reported. The session retains unfinished originals for the next cleanup and
+refuses to overwrite them with a new capture. Close retries only pending originals, even with an
+open circuit, and reports any remaining setting by its existing stable name. A clean idle Close
+makes no settings writes. If initial suppression fails before a copy exists, its retained cleanup
+outcome still reaches the existing end-of-session callback; no copy is opened or saved.
+
+The Start switch remains off. These fake-seat tests do not establish that `CommandInProgress`
+suppresses the reorder modal; native PROBE-1 and the other enabling prerequisites still apply.
+The add-in attachment, notice and completed-run lifecycle are the other half of T180.

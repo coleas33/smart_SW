@@ -766,7 +766,10 @@ public sealed class ToolServiceWiringTests
 
         Match publish = Regex.Match(gate, @"service => \{(?<body>[^}]*)\}");
         Assert.True(publish.Success, "CreateToolServiceGate's publish callback is no longer a block lambda over `service`.");
-        Assert.Contains("_remodelHost?.RefreshAvailability();", publish.Groups["body"].Value, StringComparison.Ordinal);
+        Assert.Contains("reviewOptions.Bridge = service?.ReviewBridge;", publish.Groups["body"].Value, StringComparison.Ordinal);
+        Assert.Contains("_remodelHost?.RefreshAvailability(announceLostPlan: service != null);", publish.Groups["body"].Value, StringComparison.Ordinal);
+        Assert.Contains("preserveAttachment: (path, attachment) => _remodelHost?.KeepCopyAttachment(path, attachment) == true", gate, StringComparison.Ordinal);
+        Assert.Contains("afterStopped: _ => _remodelHost?.RefreshAvailability()", gate, StringComparison.Ordinal);
         Assert.Contains("(_remodelHost != null && _remodelHost.RunInProgress)", gate, StringComparison.Ordinal);
     }
 
@@ -1864,7 +1867,19 @@ public sealed class ToolServiceWiringTests
     {
         using (var world = new SeatedHostWorld())
         {
+            foreach (int toggle in RemodelSystemToggles.SuppressedToggles)
+            {
+                world.Seat.SetUserPreferenceToggle(toggle, true);
+            }
+            world.Seat.ToggleWrites.Clear();
             world.PlanOnTheSeat();
+            foreach (int toggle in RemodelSystemToggles.SuppressedToggles)
+            {
+                Assert.Equal(new[] { toggle + "=False", toggle + "=True" },
+                    world.OpenToggleWrites.Where(write => write.StartsWith(toggle + "=", StringComparison.Ordinal)));
+                Assert.True(world.Seat.GetUserPreferenceToggle(toggle));
+            }
+            Assert.False(world.Seat.CommandInProgress);
 
             world.App.RunOnApplicationThread(world.Host.Dispose);
 
@@ -1874,11 +1889,13 @@ public sealed class ToolServiceWiringTests
             Assert.Equal(world.App.ThreadId, ending.ThreadId);
             Assert.False(ending.PipeHadStopped, "the teardown ran after the pipe server was disposed");
 
-            // The copy closed unsaved and the three toggles back; CommandInProgress went back at
-            // the open already (U27), so the teardown does not write it.
+            // Open already restored all four idle values (T180). Teardown closes unsaved,
+            // changing none of them and sending no redundant setting writes.
             Assert.Equal(world.CopyPath, Assert.Single(world.Seat.Closed));
             Assert.DoesNotContain(nameof(RemodelFakes.FakeRemodelDocument.Save), world.Copy.Members);
-            Assert.Equal(new[] { "10=False", "77=False", "329=False" }, world.Seat.ToggleWrites);
+            Assert.Empty(world.Seat.ToggleWrites);
+            Assert.All(RemodelSystemToggles.SuppressedToggles, toggle => Assert.True(world.Seat.GetUserPreferenceToggle(toggle)));
+            Assert.False(world.Seat.CommandInProgress);
             Assert.True(File.Exists(world.CopyPath));
 
             string teardown = Assert.Single(world.LogLines, line => line.Contains("remodel teardown"));
@@ -1914,6 +1931,10 @@ public sealed class ToolServiceWiringTests
         using (var world = new SeatedHostWorld())
         {
             world.PlanOnTheSeat();
+            world.LeaveACommandRestorePending();
+            world.Seat.FailingWrites.Clear();
+            world.Seat.ToggleWrites.Clear();
+            world.Copy.Members.Clear();
 
             world.Host.Dispose();
 
@@ -1927,6 +1948,9 @@ public sealed class ToolServiceWiringTests
                 StringComparison.Ordinal);
             Assert.Contains(" target=" + world.CopyPath, teardown, StringComparison.Ordinal);
             Assert.DoesNotContain("failures=", teardown, StringComparison.Ordinal);
+            Assert.Equal(new[] { "329=True" }, world.Seat.ToggleWrites);
+            Assert.True(world.Seat.GetUserPreferenceToggle(RemodelSystemToggles.WarnSaveUpdateErrors));
+            Assert.False(world.Seat.CommandInProgress);
             Assert.DoesNotContain(world.Host.RemodelSecret, LiveFile.ReadAllText(world.Host.LogPath), StringComparison.Ordinal);
 
             // One line, the same one, in the run folder beside the plan it ended.
@@ -1942,8 +1966,9 @@ public sealed class ToolServiceWiringTests
         using (var world = new SeatedHostWorld())
         {
             world.PlanOnTheSeat();
+            world.LeaveACommandRestorePending();
+            world.Seat.ToggleWrites.Clear();
             world.Seat.CloseFailure = new System.Runtime.InteropServices.COMException("CloseDoc refused");
-            world.Seat.FailingWrites.Add("329=False");
 
             world.Host.Dispose();
 
@@ -1951,6 +1976,8 @@ public sealed class ToolServiceWiringTests
             Assert.False(outcome.Succeeded);
             Assert.False(outcome.CopyClosed);
             Assert.Equal(new[] { "swWarnSaveUpdateErrors" }, outcome.SettingsOutstanding);
+            Assert.Equal(new[] { "329=True" }, world.Seat.ToggleWrites);
+            Assert.False(world.Seat.CommandInProgress);
 
             string teardown = Assert.Single(world.LogLines, line => line.Contains("remodel teardown"));
             Assert.Contains(" copy_closed=false ", teardown, StringComparison.Ordinal);
@@ -2426,6 +2453,8 @@ public sealed class ToolServiceWiringTests
 
         public RemodelFakes.FakeRemodelSeat Seat { get; }
 
+        public string[] OpenToggleWrites { get; private set; } = new string[0];
+
         /// <summary>Makes the clock throw from here on, so the teardown throws after the routine.</summary>
         public bool ClockFails { get; set; }
 
@@ -2463,8 +2492,23 @@ public sealed class ToolServiceWiringTests
             Host.BindRemodelRun(RunDirectory);
             PipeReply opened = Open(Probe());
             Assert.True(opened.Status == BridgeStatus.Ok, "remodel.open answered: " + opened.Error);
+            OpenToggleWrites = Seat.ToggleWrites.ToArray();
             Seat.ToggleWrites.Clear();
             Copy.Members.Clear();
+        }
+
+        /// <summary>A real scoped command fails to restore the engineer's new idle value.</summary>
+        public void LeaveACommandRestorePending()
+        {
+            Seat.SetUserPreferenceToggle(RemodelSystemToggles.WarnSaveUpdateErrors, true);
+            Seat.ToggleWrites.Clear();
+            Seat.FailingWrites.Add("329=True");
+            PipeReply rebuild = Remodel(RemodelCommands.Rebuild, new { force = false });
+            Assert.Equal(BridgeStatus.Error, rebuild.Status);
+            Assert.Contains(nameof(RemodelFakes.FakeRemodelDocument.ForceRebuild), Copy.Members);
+            Assert.False(Seat.GetUserPreferenceToggle(RemodelSystemToggles.WarnSaveUpdateErrors));
+            Assert.False(Seat.CommandInProgress);
+            Assert.Empty(Told);
         }
 
         public string Probe()

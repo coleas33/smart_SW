@@ -41,14 +41,14 @@ from __future__ import annotations
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from functools import cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, TypedDict
 
 import yaml
-from pydantic import model_validator
+from pydantic import Field, SerializerFunctionWrapHandler, model_serializer, model_validator
 
 from swreview.drawings.evidence import file_key, file_name, id_order
 from swreview.findings import Finding, FindingStatus, ReviewModel, Severity
-from swreview.ir.models import Document, EvidencePackage
+from swreview.ir.models import Document, EvidencePackage, omit_when_null
 from swreview.report.attention import (
     SUPPRESSED_STATUS,
     Policy,
@@ -81,7 +81,7 @@ from swreview.report.unexamined import not_examined
 
 if TYPE_CHECKING:  # pragma: no cover - imported for annotations only, never at run time
     from swreview.agent.events import UsageLedger
-    from swreview.report.session import CoverageItem, EvidenceRequest, ReviewSession
+    from swreview.report.session import CoverageItem, EvidenceRequest, ReviewSession, SendFailure
 
 __all__ = [
     "BOUGHT_PARTS_CHECK",
@@ -103,6 +103,9 @@ __all__ = [
     "QuestionView",
     "ReviewRanking",
     "ReviewSummary",
+    "SendBlock",
+    "SendInput",
+    "SendWords",
     "SummaryGroup",
     "Tally",
     "Words",
@@ -115,6 +118,7 @@ __all__ = [
     "load_words",
     "review_ranking",
     "review_summary",
+    "tokens_text",
 ]
 
 WORDS_FILE = Path(__file__).parent / "review_words_v1.yaml"
@@ -281,7 +285,28 @@ class ResumeWords(ReviewModel):
     without: str
 
     def of(self, tokens: int | None) -> str:
-        return self.without if tokens is None else self.with_tokens.format(tokens=f"{tokens:,}")
+        if tokens is None:
+            return self.without
+        return self.with_tokens.format(tokens=tokens_text(tokens))
+
+
+def tokens_text(tokens: int) -> str:
+    """The one count spelling for the resume and first-request sentences."""
+    return f"{tokens:,}"
+
+
+class SendWords(ReviewModel):
+    """The waiting review's Send sentences (feature 015, its words contract)."""
+
+    first_request: str
+    first_request_approximate: str
+    without: str
+    restored: str
+    failed: str
+    not_started: str
+    apply_answers: str
+    restored_line: str
+    rerun_failed: str
 
 
 class Labels(ReviewModel):
@@ -319,8 +344,10 @@ class Words(ReviewModel):
     drawings: DrawingsWords
     contacts: CountWords
     resume: ResumeWords
+    send: SendWords
     answer_basis: AnswerBasisWords
-    read_only: str
+    read_only_lead: str
+    read_only_off: str
     goal_states: dict[GoalState, str]
     goal_reasons: dict[GoalReason, str]
     goals: list[Goal]
@@ -329,6 +356,11 @@ class Words(ReviewModel):
     finding_group_checked: CheckedFoldWords
     finding_group_text: FindingGroupText
     labels: Labels
+
+    @property
+    def read_only(self) -> str:
+        """Feature 009's unchanged sentence, composed from its two recorded words."""
+        return f"{self.read_only_lead} {self.read_only_off}"
 
     @model_validator(mode="after")
     def _every_goal_names_a_listed_group(self) -> Words:
@@ -453,6 +485,24 @@ class ContactList(ReviewModel):
     items: list[ContactView]
 
 
+class SendInput(TypedDict):
+    """Only the cached values a waiting run supplies to its read-only routes."""
+
+    state: Literal["waiting", "restored"]
+    input_tokens: int | None
+    provider: str
+    send_error: SendFailure | None
+
+
+class SendBlock(ReviewModel):
+    state: Literal["waiting", "restored"]
+    input_tokens: int | None = Field(ge=0)
+    approximate: bool
+    text: str
+    failure: str | None
+    rerun_failed_text: str | None
+
+
 class ReviewSummary(ReviewModel):
     version: str
     headline: str
@@ -469,6 +519,11 @@ class ReviewSummary(ReviewModel):
     component_names: dict[str, str]
     resume_input_tokens: int | None
     resume_text: str
+    send: SendBlock | None = None
+
+    @model_serializer(mode="wrap")
+    def _omit_absent_send(self, handler: SerializerFunctionWrapHandler) -> dict[str, object]:
+        return omit_when_null(handler, self, "send")
 
 
 class ReviewRanking(Ranking):
@@ -499,6 +554,7 @@ def review_ranking(
     package: EvidencePackage | None,
     *,
     usage: UsageLedger | None = None,
+    send: SendInput | None = None,
 ) -> ReviewRanking:
     """`rank(session)` with its summary and its findings by type: what the attention,
     snapshot and disk routes answer.
@@ -512,7 +568,9 @@ def review_ranking(
     policy = load_policy()
     ranking = with_display_titles(rank(session, policy), session.findings, names)
     groups = findings_by_type(session, package, load_words(), policy)
-    return ReviewRanking.of(ranking, review_summary(groups, session, package, usage=usage), groups)
+    return ReviewRanking.of(
+        ranking, review_summary(groups, session, package, usage=usage, send=send), groups
+    )
 
 
 def review_summary(
@@ -521,6 +579,7 @@ def review_summary(
     package: EvidencePackage | None,
     *,
     usage: UsageLedger | None = None,
+    send: SendInput | None = None,
 ) -> ReviewSummary:
     """The summary of one review (contracts/review-summary.md sections 2 to 4, as feature 013
     amended them).
@@ -560,7 +619,35 @@ def review_summary(
         contacts=contacts_of(session, names),
         component_names=names,
         resume_input_tokens=tokens,
-        resume_text=words.resume.of(tokens),
+        resume_text=words.send.apply_answers if send is not None else words.resume.of(tokens),
+        send=_send_block(session, send, words) if send is not None else None,
+    )
+
+
+def _send_block(session: ReviewSession, send: SendInput, words: Words) -> SendBlock:
+    restored = send["state"] == "restored"
+    tokens = None if restored else send["input_tokens"]
+    approximate = send["provider"] == "gemini"
+    if restored:
+        text = words.send.restored
+    elif tokens is None:
+        text = words.send.without
+    else:
+        template = words.send.first_request_approximate if approximate else words.send.first_request
+        text = template.format(tokens=tokens_text(tokens))
+    failure = None
+    error = send["send_error"]
+    status = session.model_status
+    if error is not None:
+        failure = words.send.not_started.format(
+            reason=error.reason, time=error.at.strftime("%H:%M")
+        )
+    elif status is not None and status.state == "send_failed" and status.failures:
+        error = status.failures[-1]
+        failure = words.send.failed.format(reason=error.reason, time=error.at.strftime("%H:%M"))
+    return SendBlock(
+        state=send["state"], input_tokens=tokens, approximate=approximate, text=text,
+        failure=failure, rerun_failed_text=words.send.rerun_failed if restored else None,
     )
 
 

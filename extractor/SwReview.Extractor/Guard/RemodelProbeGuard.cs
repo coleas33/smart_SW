@@ -96,6 +96,15 @@ public sealed class RemodelProbeGuard : ICallGuard
         // anything but a feature this probe run itself built, and never un-suppressed
         // afterward: the part is discarded (or kept for inspection with --keep-part) either way.
         "SetSuppression2",
+
+        // T187: known override fixtures on the probe's own analytic parts, discarded unsaved.
+        "IMassProperty2.SetOverrideOptions",
+        "IMassPropertyOverrideOptions.set_OverrideMass",
+        "IMassPropertyOverrideOptions.set_OverrideCenterOfMass",
+        "IMassPropertyOverrideOptions.set_OverrideMomentsOfInertia",
+        "IMassPropertyOverrideOptions.SetOverrideMassValue",
+        "IMassPropertyOverrideOptions.SetOverrideCenterOfMassValue",
+        "IMassPropertyOverrideOptions.SetOverridePrincipalMomentsOfInertia",
     };
 
     /// <summary>

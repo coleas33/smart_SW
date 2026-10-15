@@ -112,6 +112,7 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 | 4.9 | 011 T110: J's drawing after J's review: whose review it is and the drawing's line, no Review invitation, Retry starts nothing | | | |
 | 4.9 | 011 T110: back on J, its review shown again | | | |
 | 4.9 | 011 T110: C on its own: its model named, or one named and the others counted; no `could not be read` line today | | | |
+| 4.10 | 015 T119: A unticked, Send, the waiting review restored, and A's and B's timings | | | |
 | 5.1 | Model check on J | | | |
 | 5.1 | 007 T059: Start here above the chips on Model check, against `report.md`'s | | | |
 | 5.1 | 004 T003: Model check packages of the owner's parts P-1 to P-5 | | | |
@@ -169,6 +170,8 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 ### 4.8 A again, with the version 4 profile, and Q
 
 ### 4.9 A drawing active (the retest of U25)
+
+### 4.10 A, unticked, then Send
 
 ### 5. The other tabs, the Gemini test, the older build
 

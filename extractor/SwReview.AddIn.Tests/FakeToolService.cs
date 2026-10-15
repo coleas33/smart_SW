@@ -72,8 +72,11 @@ internal sealed class FakeToolService : IToolService
         }
     }
 
+    public Action? DuringDispose { get; set; }
+
     public void Dispose()
     {
+        DuringDispose?.Invoke();
         DisposedThreadId = Thread.CurrentThread.ManagedThreadId;
         Disposed = true;
     }

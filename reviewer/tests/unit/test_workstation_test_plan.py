@@ -90,6 +90,12 @@ RESULT_ROW = re.compile(
 )
 """A row of the results sheet: step, task, and the three cells the engineer fills in."""
 
+READ_ONLY_SENTENCE = (
+    "The backend restarted, so this review is shown from its run folder. Follow-ups, decisions "
+    "and answers are off."
+)
+"""The same literal product sentence, now composed from two words-file keys by feature 015."""
+
 QUOTED: tuple[tuple[str, str], ...] = (
     # The update script and the registration.
     ("failed with exit code", "extractor/tools/update-workstation.ps1"),
@@ -169,9 +175,13 @@ QUOTED: tuple[tuple[str, str], ...] = (
     ("not reached", "reviewer/src/swreview/report/review_words_v1.yaml"),
     ("size-for-size contacts", "reviewer/src/swreview/report/review_words_v1.yaml"),
     ("Sending resumes the review once.", "reviewer/src/swreview/report/review_words_v1.yaml"),
-    ("The backend restarted, so this review is shown from its run folder. Follow-ups, decisions "
-     "and answers are off.", "reviewer/src/swreview/report/review_words_v1.yaml"),
+    (READ_ONLY_SENTENCE, "reviewer/src/swreview/report/review_words_v1.yaml"),
     # The page's own words.
+    ("Checked by code. Not sent to the model.",
+     "extractor/SwReview.AddIn/Review/ReviewPage/app.js"),
+    ("Send to the model when the checks finish",
+     "extractor/SwReview.AddIn/Review/ReviewPage/index.html"),
+    ("Send to model", "extractor/SwReview.AddIn/Review/ReviewPage/render.js"),
     ("The review has finished.", "extractor/SwReview.AddIn/Review/ReviewPage/app.js"),
     ("Waiting for your answers.", "extractor/SwReview.AddIn/Review/ReviewPage/app.js"),
     ("This review is of ", "extractor/SwReview.AddIn/Review/ReviewPage/app.js"),
@@ -773,7 +783,13 @@ def test_every_sentence_the_plan_quotes_is_the_products(
     plan: str, sentence: str, source: str
 ) -> None:
     assert sentence in plan
-    assert sentence in (REPO / source).read_text(encoding="utf-8")
+    if (
+        source == "reviewer/src/swreview/report/review_words_v1.yaml"
+        and sentence == READ_ONLY_SENTENCE
+    ):
+        assert load_words().read_only == sentence
+    else:
+        assert sentence in (REPO / source).read_text(encoding="utf-8")
 
 
 def test_every_one_liner_compiles_and_holds_no_double_quote(plan: str) -> None:
@@ -1713,7 +1729,9 @@ def test_the_time_estimate_is_the_sum_of_its_steps(plan: str) -> None:
     live test at step 2.7 is 5 of them, edited deliberately with its follow-ups), step 4's by 50
     and step 5.1 to 5.4's by `FEATURE_013_IN_STEP_5`, which the decision 18A range leaves out.
     The retest of 2026-09-28's U25 to U27 (edited deliberately) adds about 35 more: step 4's row by
-    15 minutes (step 4.9) and step 5.1 to 5.4's by `RETEST_2026_09_28_IN_STEP_5`."""
+    15 minutes (step 4.9) and step 5.1 to 5.4's by `RETEST_2026_09_28_IN_STEP_5`. Feature 015
+    (015 T114, decision 4A, 2026-10-14, edited deliberately) adds 35 minutes to step 4's row
+    for the unticked review, Send, restarts and timings at step 4.10."""
     section = plan[plan.index("## How long it takes") : plan.index("## 0. Before the sitting")]
     rows = re.findall(r"^\| ([^|]+) \| [^|]+ \| ([^|]+) \|$", section, re.MULTILINE)[1:]
     [(hours, mins)] = re.findall(r"About \*\*(\d+) hours(?: (\d+) minutes)? at the seat", section)
@@ -1726,7 +1744,7 @@ def test_the_time_estimate_is_the_sum_of_its_steps(plan: str) -> None:
         estimates["5.1 to 5.4"] - 35 - FEATURE_013_IN_STEP_5 - RETEST_2026_09_28_IN_STEP_5
     )
     assert 30 <= estimates["5.6"] + (estimates["1"] - 50) + decision_18a_in_step_5 <= 45
-    assert (estimates["2"], estimates["4"]) == (40, 255)
+    assert (estimates["2"], estimates["4"]) == (40, 290)
 
 
 def powershell_parse_errors(sources: dict[str, str], folder: Path) -> str:

@@ -11,6 +11,7 @@ denylist - over this file as well as over the replay fixtures.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from types import ModuleType
 from typing import Any
@@ -122,3 +123,24 @@ def test_its_titles_are_the_ones_a_person_reads(
 def test_the_document_path_sits_under_the_fictional_root(fixture: dict[str, Any]) -> None:
     """Every other drive path in the file is `test_replay_fixture_hygiene.py`'s to refuse."""
     assert fixture["document"]["path"].startswith(FICTIONAL_ROOT)
+
+
+# Captured before 015's words change: the original snapshot bytes, excluding labels.
+# Both platform newline spellings are pinned rather than translated during this test.
+SNAPSHOT_PREFIX_SHA256 = {
+    "LF": "c46877e04f3dec7101a8b859c83635813700a2ab174204dd7ecf7073c19d5525",
+    "CRLF": "b1a5d80d3340f1bb0e5e8ac5609f70fff6d618997b3773e52240d88af17a5850",
+}
+
+
+def test_only_the_five_added_error_labels_change_in_the_pane_fixture(
+    generator: ModuleType, fixture: dict[str, Any]
+) -> None:
+    from tests.unit.test_review_words import SEND_ERRORS
+
+    raw = generator.TARGET.read_bytes()
+    before_labels, labels = raw.split(b'  "labels": {', 1)
+    assert labels
+    spelling = "CRLF" if b"\r\n" in before_labels else "LF"
+    assert hashlib.sha256(before_labels).hexdigest() == SNAPSHOT_PREFIX_SHA256[spelling]
+    assert {key: fixture["labels"]["errors"].get(key) for key in SEND_ERRORS} == SEND_ERRORS

@@ -44,11 +44,13 @@ request it failed on cannot carry the key back to the page.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import hmac
 import json
 import logging
 import os
+import shutil
 from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
@@ -78,6 +80,7 @@ from swreview.agent.providers import (
     ToolCallResult,
     error_body,
 )
+from swreview.agent.providers.deferred import DeferredProvider
 from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
 from swreview.agent.runner import (
     EVENTS_FILE_NAME,
@@ -136,12 +139,11 @@ from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore, ReviewExce
 from swreview.ir.loader import load_package
 from swreview.ir.models import EvidencePackage, UnsupportedSchemaVersionError
 from swreview.report.attention import rank
-from swreview.report.attention_record import ATTENTION_FILE_NAME, write_attention_record
+from swreview.report.attention_record import ATTENTION_FILE_NAME
 from swreview.report.dispositions import DECISIONS, REPORT_FILE_NAME, find_finding
-from swreview.report.markdown import render_report
 from swreview.report.names import component_names
 from swreview.report.session import ReviewSession, load_session
-from swreview.report.snapshot import review_snapshot
+from swreview.report.snapshot import WAITING_STATES, restored_snapshot, review_snapshot
 from swreview.report.summary import load_words, review_ranking
 from swreview.report.titles import with_display_titles
 from swreview.report.unexamined import not_examined
@@ -298,6 +300,23 @@ class RunDirInUse(ChatError):
 
     status = 409
     error_class = "RunDirInUse"
+
+
+class NotWaiting(ChatError):
+    status = 409
+    error_class = "NotWaiting"
+
+
+class NoCredential(ChatError):
+    status = 409
+    error_class = "NoCredential"
+
+
+class NotSent(ChatError):
+    """A follow-up needs the opening request, which an unsent review has not made."""
+
+    status = 409
+    error_class = "NotSent"
 
 
 class AlreadyAnswered(EvidenceRefusal):
@@ -538,6 +557,34 @@ def _session_files(run_dir: Path) -> list[Path]:
 def _rotated(path: Path, index: int) -> Path:
     """`events.jsonl` at index 2 is `events.2.jsonl`, `session.json` is `session.2.json`."""
     return path.with_name(f"{path.stem}.{index}{path.suffix}")
+
+
+def _stream_session_id(path: Path) -> str | None:
+    """The `session_id` the first event of a stream names, or `None` for any other stream.
+
+    Only the first line is read: a `session.started` is every stream's first event. An
+    absent, empty or unreadable file, or a first line that is something else, is `None`.
+    """
+    try:
+        with path.open(encoding="utf-8") as stream:
+            first = json.loads(stream.readline())
+    except (OSError, ValueError):
+        return None
+    if not isinstance(first, dict) or first.get("type") != "session.started":
+        return None
+    body = first.get("body")
+    session_id = body.get("session_id") if isinstance(body, dict) else None
+    return session_id if isinstance(session_id, str) else None
+
+
+def _record_id(path: Path) -> str | None:
+    """The `session_id` a session or attention record holds, or `None` when it cannot be read."""
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    session_id = record.get("session_id") if isinstance(record, dict) else None
+    return session_id if isinstance(session_id, str) else None
 
 
 def _next_free_index(run_dir: Path) -> int:
@@ -1189,6 +1236,7 @@ class ChatServer:
         self.secrets = tuple(secrets) if secrets is not None else environment_secrets()
         self.chats: dict[UUID, ChatSession] = {}
         self._workers: dict[UUID, ThreadPoolExecutor] = {}
+        self._pending_run_dirs: set[Path] = set()
         # The separate route module reuses ChatError after this module is loaded.
         from swreview.chat.engineering_context import EngineeringContextServer
 
@@ -1234,48 +1282,96 @@ class ChatServer:
 
     async def create_session(self, request: Request) -> Response:
         body = await self._json(request)
+        send_when_checked = body.get("send_when_checked", True)
+        if not isinstance(send_when_checked, bool):
+            raise ChatError("send_when_checked must be a boolean")
+        recheck = body.get("recheck", False)
+        if not isinstance(recheck, bool):
+            raise ChatError("recheck must be a boolean")
+        if recheck and send_when_checked:
+            raise ChatError(
+                "recheck re-runs a waiting review's checks; send_when_checked must be false"
+            )
         run_dir = resolve_run_dir(body.get("run_dir"), self.run_root)
         retry_of = self._uuid(body.get("retry_of"), "retry_of")
+        if recheck and retry_of is not None:
+            raise ChatError("recheck re-runs the review in its own folder; it takes no retry_of")
         standards_profile = self._optional_path(body, "standards_profile")
-        self._claim_run_dir(run_dir, retry_of)
-        settings = self._settings(body)
-        bridge = body.get("bridge") or None
-        chat = ChatSession(
-            run_dir=run_dir,
-            provider=settings.provider.value,
-            model=settings.model,
-            effort=settings.effort,
-            engineer=str(body.get("engineer") or ""),
-            retry_of=retry_of,
-            token=self.token,
-            bridge=bridge,
-            created_at=datetime.now(UTC),
-        )
-        chat.to(ChatState.EXTRACTING)
-        artifact = self.engineering_context.begin_review(
-            run_dir, body.get("engineering_context"), requested="engineering_context" in body
-        )
+        adopted = self._claim_run_dir(run_dir, retry_of, recheck=recheck)
+        if adopted is not None:
+            return self._created(adopted, self._run_of(adopted))
+        # Held from the claim on: the earlier record's read awaits the thread pool, and a second
+        # claim of the folder meanwhile must meet `RunDirInUse` (owner decision 90A).
+        self._pending_run_dirs.add(run_dir)
         try:
-            if artifact is None:
-                run = await run_in_threadpool(self._start_review, chat, settings, standards_profile)
-            else:
-                run = await run_in_threadpool(
-                    self._start_review, chat, settings, standards_profile, artifact
-                )
-            chat.attach(run)
-            self.chats[chat.chat_id] = chat
-            chat.to(ChatState.RUNNING)
-            self._submit(chat, run.start)
-            return JSONResponse(
-                {
-                    "chat_id": str(chat.chat_id),
-                    "review_session_id": str(chat.review_session_id),
-                    "not_examined": to_jsonable_python(not_examined(run.context.ir)),
-                },
-                status_code=201,
+            earlier = await run_in_threadpool(self._waiting_record, run_dir) if recheck else None
+            settings = self._settings(body)
+            bridge = body.get("bridge") or None
+            chat = ChatSession(
+                run_dir=run_dir,
+                provider=settings.provider.value,
+                model=settings.model,
+                effort=settings.effort,
+                engineer=str(body.get("engineer") or ""),
+                retry_of=retry_of,
+                token=self.token,
+                bridge=bridge,
+                created_at=datetime.now(UTC),
             )
+            chat.to(ChatState.EXTRACTING)
+            artifact = self.engineering_context.begin_review(
+                run_dir, body.get("engineering_context"), requested="engineering_context" in body
+            )
+            try:
+                if send_when_checked:
+                    run = await run_in_threadpool(
+                        partial(
+                            self._start_review,
+                            chat,
+                            settings,
+                            standards_profile,
+                            engineering_context=artifact,
+                        )
+                    )
+                    chat.attach(run)
+                    self.chats[chat.chat_id] = chat
+                    chat.to(ChatState.RUNNING)
+                    self._submit(chat, run.start)
+                else:
+                    run = await run_in_threadpool(
+                        partial(
+                            self._start_review,
+                            chat,
+                            settings,
+                            standards_profile,
+                            send_when_checked=False,
+                            earlier=earlier,
+                            engineering_context=artifact,
+                        )
+                    )
+                    await self._open_waiting(chat, run, earlier)
+            except Exception:
+                if chat.state is ChatState.EXTRACTING:
+                    chat.to(ChatState.FAILED)
+                raise
+            finally:
+                self.engineering_context.end_review_preparation(run_dir)
         finally:
-            self.engineering_context.end_review_preparation(run_dir)
+            self._pending_run_dirs.discard(run_dir)
+        return self._created(chat, run)
+
+    @staticmethod
+    def _created(chat: ChatSession, run: ReviewRun) -> Response:
+        """`201 {chat_id, review_session_id, not_examined}`: every start's answer, and an
+        adopted re-run's (feature 015, `contracts/recheck.md` section 7)."""
+        return JSONResponse(
+            {
+                "chat_id": str(chat.chat_id),
+                "review_session_id": str(chat.review_session_id),
+                "not_examined": to_jsonable_python(not_examined(run.context.ir)),
+            },
+            status_code=201,
+        )
 
     async def get_session(self, request: Request) -> Response:
         return JSONResponse(self._chat(request).public())
@@ -1309,7 +1405,14 @@ class ChatServer:
         """
         run = self._run_of(self._chat(request))
         return JSONResponse(
-            to_jsonable_python(review_ranking(run.session, run.context.ir, usage=run.usage_ledger))
+            to_jsonable_python(
+                review_ranking(
+                    run.session,
+                    run.context.ir,
+                    usage=run.usage_ledger,
+                    send=run.send_input() if run.awaiting_send else None,
+                )
+            )
         )
 
     async def snapshot(self, request: Request) -> Response:
@@ -1328,7 +1431,9 @@ class ChatServer:
             run.context.ir,
             run_id=chat.run_dir.name,
             usage=run.usage_ledger,
+            send=run.send_input() if run.awaiting_send else None,
             chat_state=chat.state.value,
+            send_in_flight=run._send_in_flight,
             last_seq=run.sink.seq,
         )
         return JSONResponse(to_jsonable_python(body))
@@ -1371,6 +1476,23 @@ class ChatServer:
 
         return EventSourceResponse(stream())
 
+    async def send_review(self, request: Request) -> Response:
+        """Reserve a waiting review on the event loop; build and send on its own worker."""
+        chat = self._chat(request)
+        self._require_idle(chat)
+        run = self._run_of(chat)
+        if not run.awaiting_send:
+            raise NotWaiting("this review is not waiting for Send")
+        settings = self._settings(
+            {"provider": chat.provider, "model": chat.model, "effort": chat.effort}
+        )
+        if not settings.has_credential:
+            raise NoCredential("this review needs a usable model credential before Send")
+        chat.to(ChatState.RUNNING)
+        run._send_in_flight = True
+        self._submit(chat, partial(run.send, partial(self.provider_factory, settings)))
+        return JSONResponse(chat.public(), status_code=202)
+
     async def post_message(self, request: Request) -> Response:
         chat = self._chat(request)
         body = await self._json(request)
@@ -1379,6 +1501,8 @@ class ChatServer:
             raise ChatError("a message needs a non-empty 'text'")
         self._require_idle(chat)
         run = self._run_of(chat)
+        if run.awaiting_send:
+            raise NotSent("this review has not been sent to the model; press Send to model first")
         chat.to(ChatState.RUNNING)
         self._submit(chat, partial(run.continue_session, text))
         return JSONResponse(chat.public(), status_code=202)
@@ -1467,16 +1591,16 @@ class ChatServer:
         run = self._run_of(chat)
         finding_id = request.path_params["finding_id"]
         try:
-            finding = await run_in_threadpool(
-                partial(
-                    record_disposition,
-                    run,
-                    finding_id,
-                    decision=decision,
-                    note=str(body.get("note") or ""),
-                    by=str(body.get("by") or chat.engineer),
-                )
+            execute = self._on_worker if chat.state is ChatState.AWAITING_SEND else None
+            action = partial(
+                record_disposition,
+                run,
+                finding_id,
+                decision=decision,
+                note=str(body.get("note") or ""),
+                by=str(body.get("by") or chat.engineer),
             )
+            finding = await execute(chat, action) if execute else await run_in_threadpool(action)
         except KeyError as exc:
             raise UnknownFinding(f"no finding {finding_id!r} in this session") from exc
         except ValueError as exc:
@@ -1495,7 +1619,11 @@ class ChatServer:
         inputs = _timing_inputs(await self._json(request))
         self._require_idle(chat)
         run = self._run_of(chat)
-        recorded = await run_in_threadpool(partial(record_timing_live, run, **inputs))
+        action = partial(record_timing_live, run, **inputs)
+        recorded = (
+            await self._on_worker(chat, action)
+            if chat.state is ChatState.AWAITING_SEND else await run_in_threadpool(action)
+        )
         return JSONResponse(recorded.model_dump(mode="json"))
 
     async def stop(self, request: Request) -> Response:
@@ -1690,12 +1818,7 @@ class ChatServer:
             package = load_package(review_dir).package
         except PACKAGE_ERRORS as exc:
             raise unknown from exc
-        return review_snapshot(
-            session,
-            package,
-            run_id=review_dir.name,
-            read_only_reason=load_words().read_only,
-        )
+        return restored_snapshot(session, package, run_id=review_dir.name)
 
     def _family_of(self, check_dir: Path) -> str:
         """The family whose check `check_dir` holds, from the record's own stamp.
@@ -2038,7 +2161,9 @@ class ChatServer:
 
     # --- one chat per run folder -----------------------------------------------------
 
-    def _claim_run_dir(self, run_dir: Path, retry_of: UUID | None) -> None:
+    def _claim_run_dir(
+        self, run_dir: Path, retry_of: UUID | None, *, recheck: bool = False
+    ) -> ChatSession | None:
         """Refuse a run folder that is already somebody's, before a chat is built for it.
 
         `ChatSession 1 events.jsonl` (data-model section 7) is not decoration. Every run
@@ -2060,22 +2185,57 @@ class ChatServer:
         session aside, so the check's record survives as `session.1.json` rather than
         being written over, and the folder stops answering `GET /checks/{check_id}`
         because its `check.json` no longer names the session that is in it.
+
+        A re-run (feature 015, `recheck`; `contracts/recheck.md` section 2) re-runs a waiting
+        review's checks in its own folder, so the session it holds is its point, not a
+        refusal. A live chat on the folder that waits for Send is **adopted** and returned,
+        with nothing run: what a host that gave up on a re-run the backend finished meets on
+        its next try. A folder still being set up - a re-run still running is one, because
+        its chat is registered only after its finalization - stays `RunDirInUse`, as does a
+        live chat that is running.
         """
+        if run_dir in self._pending_run_dirs:
+            raise RunDirInUse(
+                f"a chat is already being set up in {run_dir}; one chat per run folder"
+            )
         live = next(
             (chat for chat in self.chats.values() if chat.run_dir == run_dir and not chat.finished),
             None,
         )
+        if live is not None and recheck and live.state is ChatState.AWAITING_SEND:
+            return live
         if live is not None:
             raise RunDirInUse(
                 f"chat {live.chat_id} is already reviewing {run_dir}; one chat per run folder"
             )
+        if recheck:
+            return None
         if retry_of is None and _session_files(run_dir) and not is_check_folder(run_dir):
             raise InvalidRunDir(
                 f"{run_dir} already holds a review session; retry it with 'retry_of' or "
                 f"review into a new run folder"
             )
+        return None
 
-    def _rotate_previous(self, chat: ChatSession) -> None:
+    @staticmethod
+    def _waiting_record(run_dir: Path) -> ReviewSession:
+        """The earlier record a re-run carries: the folder's `session.json`, waiting. A blocking
+        read, so the route runs it on the thread pool (owner decision 90A).
+
+        No readable record - no folder, no file, one that does not validate - is
+        `UnknownReview`, as `GET /reviews` answers it; a record with no `model_status`, or
+        one already sent, is `NotWaiting` (`contracts/recheck.md` section 2).
+        """
+        try:
+            earlier = load_session(run_dir / SESSION_FILE_NAME)
+        except PACKAGE_ERRORS as exc:
+            raise UnknownReview(f"no review {run_dir.name!r} under the run root") from exc
+        status = earlier.model_status
+        if status is None or status.state not in WAITING_STATES:
+            raise NotWaiting(f"the review in {run_dir.name!r} is not waiting for Send")
+        return earlier
+
+    def _rotate_previous(self, chat: ChatSession, *, keep_record: UUID | None = None) -> None:
         """Move a retried folder's `events.jsonl` and `session.json` aside, as a pair.
 
         A retry writes into the folder the session it replaces wrote, and the two cannot
@@ -2093,7 +2253,15 @@ class ChatServer:
         session to move it with, because the record is the ranking *of* that session; left
         behind it would name the session that just went aside while sitting beside the one
         that replaced it, which is the staleness `read_attention_record` refuses.
+
+        `keep_record` is a re-run's (feature 015, `contracts/recheck.md` section 2): the
+        session id of the earlier record, which stays the canonical `session.json` until the
+        re-run's finalization replaces it, so a failed or killed re-run leaves it restorable.
+        `_rotate_kept` then decides by what the canonical stream is.
         """
+        if keep_record is not None:
+            self._rotate_kept(chat, keep_record)
+            return
         existing = _session_files(chat.run_dir)
         if not existing:
             return
@@ -2114,6 +2282,46 @@ class ChatServer:
         if results.is_dir():
             results.rename(_rotated(results, index))
 
+    def _rotate_kept(self, chat: ChatSession, record_id: UUID) -> None:
+        """A re-run's rotation: the stream moves aside, the earlier record is copied.
+
+        When `events.jsonl` is the earlier record's own stream (its `session.started` names
+        `record_id`), one free index takes copies of `session.json` and `attention.json`
+        and the moved stream and results, so that index is the session with the stream it
+        wrote. Otherwise it is a failed attempt's stream, or there is none: what is there
+        moves to its own index with no session file beside it, and the record is copied
+        only when no `session.K.json` already holds it (a stream deleted by hand). A
+        leftover `write_atomic` temporary is neither, and is passed over.
+
+        Each file is copied only when it is the record's own. An `attention.json` naming
+        another session - the earlier one's, left when a re-run failed or was cut off after
+        its commit point and before its own ranking was written (owner decision 93A) - is not
+        copied beside a record it does not rank; this re-run's finalization writes it again.
+        """
+        run_dir = chat.run_dir
+        events = run_dir / EVENTS_FILE_NAME
+        results = run_dir / TOOL_RESULTS_DIR_NAME
+        own = _stream_session_id(events) == str(record_id)
+        copied = own or not any(
+            _record_id(path) == str(record_id) for path in run_dir.glob("session.*.json")
+        )
+        if not (events.is_file() or results.is_dir() or copied):
+            return
+        index = _next_free_index(run_dir)
+        if events.is_file():
+            moved = _rotated(events, index)
+            events.rename(moved)
+            for other in self.chats.values():
+                if other.events_path == events:
+                    other.events_file = moved
+        if results.is_dir():
+            results.rename(_rotated(results, index))
+        if copied:
+            for name in (SESSION_FILE_NAME, ATTENTION_FILE_NAME):
+                kept = run_dir / name
+                if kept.is_file() and _record_id(kept) == str(record_id):
+                    shutil.copyfile(kept, _rotated(kept, index))
+
     # --- the review ------------------------------------------------------------------
 
     def _start_review(
@@ -2121,16 +2329,30 @@ class ChatServer:
         chat: ChatSession,
         settings: ProviderSettings,
         standards_profile: str | None = None,
+        *,
+        send_when_checked: bool = True,
+        earlier: ReviewSession | None = None,
         engineering_context: ContextArtifact | None = None,
     ) -> ReviewRun:
-        """Load the package and bind the tools. Blocking, so it runs off the event loop."""
+        """Load the package and bind the tools. Blocking, so it runs off the event loop.
+
+        `earlier` is a re-run's waiting record (feature 015): its folder rotates keeping the
+        record, and `start_review` carries what the record already answered.
+        `engineering_context` is feature 016's exact attachment, validated against the saved
+        package again before any provider is built.
+        """
         if engineering_context is not None:
             self.engineering_context.validate_prepared_review(chat.run_dir, engineering_context)
-        self._rotate_previous(chat)
-        try:
-            adapter = self.provider_factory(settings)
-        except Exception as exc:
-            raise ProviderFailed.wrapping(exc) from exc
+        self._rotate_previous(
+            chat, keep_record=earlier.session_id if earlier is not None else None
+        )
+        if send_when_checked:
+            try:
+                adapter = self.provider_factory(settings)
+            except Exception as exc:
+                raise ProviderFailed.wrapping(exc) from exc
+        else:
+            adapter = DeferredProvider.for_settings(settings)
         bridge = chat.bridge or {}
         # Feature 008: the pane's levers and model view are decided in one place - checks
         # first, payload slimming and history pruning since 2026-09-22 - and recorded on the
@@ -2158,6 +2380,8 @@ class ChatServer:
                 callbacks=[chat.publish],
                 redact=self.redact,
                 explain_findings=defaults.explain_findings,
+                send_when_checked=send_when_checked,
+                earlier=earlier,
                 **context_options,
             )
         except PACKAGE_ERRORS as exc:
@@ -2173,6 +2397,41 @@ class ChatServer:
 
         run.check_presentation_cancelled = check_presentation_cancelled
         return run
+
+    async def _open_waiting(
+        self, chat: ChatSession, run: ReviewRun, earlier: ReviewSession | None = None
+    ) -> None:
+        """Save both views before publishing a waiting run on the event loop.
+
+        A re-run's carry (feature 015, `earlier`) runs first, in the same thread function, so a
+        carry that raises takes the one failure path a failed finalization takes (owner
+        decision 87A): the run closed, the chat `failed` and never registered.
+        """
+
+        def close_and_render() -> None:
+            try:
+                if earlier is not None:
+                    run.carry_from(earlier)
+                run.close_waiting()
+                self._render_run(run)
+                run.release_bridge()
+            except Exception:
+                # Past the commit point (93A) the record on disk is this run's, so its report
+                # is rendered from it before the failure is raised (owner decision 98A item 2).
+                if _record_id(run.session_path) == str(run.session.session_id):
+                    self._render_run(run)
+                with contextlib.suppress(Exception):
+                    run.close()
+                raise
+
+        try:
+            await run_in_threadpool(close_and_render)
+        except Exception:
+            chat.to(ChatState.FAILED)
+            raise
+        chat.attach(run)
+        self.chats[chat.chat_id] = chat
+        chat.to(ChatState.AWAITING_SEND)
 
     def _review_retry_of(self, chat: ChatSession) -> UUID | None:
         """The *review session* the retried *chat* wrote, when this backend still holds it."""
@@ -2196,15 +2455,23 @@ class ChatServer:
 
     # --- the worker ------------------------------------------------------------------
 
-    def _submit(self, chat: ChatSession, action: Callable[[], Any]) -> None:
-        """Run one turn on this chat's own thread. One thread per chat, one turn at a time."""
+    def _worker(self, chat: ChatSession) -> ThreadPoolExecutor:
+        """The shared serial executor for this chat's turns and waiting writes."""
         worker = self._workers.get(chat.chat_id)
         if worker is None:
             worker = ThreadPoolExecutor(
                 max_workers=1, thread_name_prefix=f"chat-{chat.chat_id.hex[:8]}"
             )
             self._workers[chat.chat_id] = worker
-        worker.submit(self._play, chat, action)
+        return worker
+
+    def _submit(self, chat: ChatSession, action: Callable[[], Any]) -> None:
+        """Run one turn on this chat's own thread. One thread per chat, one turn at a time."""
+        self._worker(chat).submit(self._play, chat, action)
+
+    async def _on_worker(self, chat: ChatSession, action: Callable[[], Any]) -> Any:
+        """Await a waiting write without changing its chat's state or stop flag."""
+        return await asyncio.wrap_future(self._worker(chat).submit(action))
 
     def _play(self, chat: ChatSession, action: Callable[[], Any]) -> None:
         """One turn, and the state it leaves the chat in. This never raises."""
@@ -2219,9 +2486,22 @@ class ChatServer:
             self._close_out(chat, exc)
             settled = ChatState.FAILED
         else:
-            settled = ChatState.WAITING_ENGINEER if chat.open_requests else ChatState.ENDED
+            settled = (ChatState.AWAITING_SEND if chat.run is not None and chat.run.awaiting_send
+                       else ChatState.WAITING_ENGINEER if chat.open_requests else ChatState.ENDED)
         finally:
             chat.stop_requested.clear()
+            if settled is ChatState.AWAITING_SEND and chat.run is not None:
+                chat.run.release_bridge()
+            elif (settled is ChatState.FAILED and chat.run is not None
+                  and chat.run.awaiting_send):
+                try:
+                    chat.run.release_bridge()
+                except Exception as failure:  # noqa: BLE001 - preserve the apply's failure
+                    logger.warning(
+                        "releasing failed waiting chat %s failed: %s",
+                        chat.chat_id,
+                        self.redact(str(failure)),
+                    )
             # Keep the folder claimed until the report and attention record have finished
             # rendering. A retry that starts after `ended` is published could otherwise
             # rotate the session while this worker is still writing the predecessor's
@@ -2292,16 +2572,15 @@ class ChatServer:
         run = chat.run
         if run is None:
             return
-        try:
-            ranking = rank(run.session)
-            chat.report_path.write_text(
-                render_report(run.session, run.context.ir, ranking=ranking), encoding="utf-8"
-            )
-            write_attention_record(chat.run_dir, ranking, run.session.session_id)
-        except Exception as exc:  # noqa: BLE001 - see below
-            # A report that would not render is not a reason to lose the session: the
-            # session file is already written and `report` answers 404 until it is there.
-            logger.warning("rendering %s failed: %s", chat.report_path, self.redact(str(exc)))
+        self._render_run(run)
+
+    def _render_run(self, run: ReviewRun) -> None:
+        """Write both review views from one ranking, logging secondary failures.
+
+        A report that would not render is not a reason to lose the session: the session file
+        is already written and `report` answers 404 until it is there (`write_views`).
+        """
+        run.write_views(save=False, best_effort=True)
 
     def _end_stopped(self, chat: ChatSession, *, settle: bool = True) -> None:
         """How a stopped chat closes, wherever the stop was noticed.
@@ -2353,6 +2632,9 @@ class ChatServer:
         if chat.state is ChatState.RUNNING:
             chat.emit("turn.ended", {"reason": "error"})
         self._finalize_run(chat)
+        # `_play`'s render may never run once the workers are let go, so the closing record's
+        # report is rendered here (FR-032; owner decision 98A item 1).
+        self._render_report(chat)
         self._settle(chat, ChatState.ENDED)
         chat.run.close()
 
@@ -2455,6 +2737,7 @@ def create_app(
         Route("/sessions", server.create_session, methods=["POST"]),
         Route("/sessions/{chat_id}", server.get_session, methods=["GET"]),
         Route("/sessions/{chat_id}/events", server.events, methods=["GET"]),
+        Route("/sessions/{chat_id}/send", server.send_review, methods=["POST"]),
         Route("/sessions/{chat_id}/messages", server.post_message, methods=["POST"]),
         Route(
             "/sessions/{chat_id}/evidence/{request_id}",

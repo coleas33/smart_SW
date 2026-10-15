@@ -49,12 +49,12 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from time import perf_counter
 from typing import TYPE_CHECKING, Any, Literal
 
-from swreview.agent.providers import ToolCallRequest, ToolCallResult, call_tool
+from swreview.agent.providers import ToolCallRequest, ToolCallResult, ToolSet, call_tool
 from swreview.agent.settings import EfficiencySettings, checks_first
 from swreview.checks.fastener_identity import joint_map_with_fasteners
 from swreview.checks.interference import STATIC_SCOPE_LIMIT
@@ -85,13 +85,19 @@ from swreview.report.attention import (
     start_here_lines,
 )
 from swreview.report.names import plural
-from swreview.report.session import Contact, CoverageItem, CoverageScope, StepMark
+from swreview.report.session import (
+    Contact,
+    CoverageItem,
+    CoverageScope,
+    LiveDetectionRecord,
+    StepMark,
+)
 from swreview.tools import checks_mechanical
 from swreview.tools.checks_interference import groups_of
 from swreview.tools.context import ToolContext
 from swreview.tools.drawings import DRAWINGS_TOOL, drawing_evidence
 from swreview.tools.model_view import check_digest, count_findings
-from swreview.tools.registry import RecordedTool, ToolDispatch, record_call
+from swreview.tools.registry import RecordedTool, RecordingSink, ToolDispatch, record_call
 
 if TYPE_CHECKING:  # a standards module; see `_deferred` below
     from swreview.checks.standards.profile import ReviewProfile
@@ -138,6 +144,8 @@ __all__ = [
     "prerun_tools",
     "recorded_call",
     "repeat_key",
+    "restated",
+    "returned_finding_ids",
     "withheld_tools",
 ]
 
@@ -197,6 +205,21 @@ INTERFERENCE_CLEAN = "live detection over {configuration} found no interference 
 """The interference family's sentences under checks first (`contracts/checks-first.md`
 section 3): each is a coverage item's reason and a digest line, so the report and the model
 read one claim. `INTERFERENCE_NOT_REPORTED` is the pre-008 sentence, unchanged."""
+
+INTERFERENCE_ROWS_NOT_CARRIED = (
+    "{rows} live detection found when the checks first ran were never written to "
+    "package.json, so this check of the saved evidence could not judge them"
+)
+"""A re-run's interference rows line when the first run could not write its detected rows
+(feature 015, `contracts/recheck.md` section 3): the rows existed only in the first run's
+memory, so the re-run judges none of them and says so in place of the not-written line."""
+
+CARRIED_LIVE_NOTE = (
+    "ran when the checks first ran; this check of the saved evidence carried its outcome "
+    "and did not ask SOLIDWORKS again"
+)
+"""The `note` of a re-run's carried live-detection step (feature 015, `contracts/recheck.md`
+section 3), read in the step's result and the Transcript's tool line."""
 
 INTERFERENCE_ROWS_CHECK_FAMILY = "interference_rows"
 """The family a failed write of the detected rows is counted under:
@@ -482,6 +505,15 @@ class LiveOutcome:
     error: str | None = None
     persist_error: str | None = None
 
+    def as_record(self) -> LiveDetectionRecord:
+        """Carry every live outcome field into the restart-safe session record."""
+        return LiveDetectionRecord(**asdict(self))
+
+    @classmethod
+    def from_record(cls, record: LiveDetectionRecord) -> LiveOutcome:
+        """Restore the same outcome without making another live call."""
+        return cls(**record.model_dump())
+
     @property
     def succeeded(self) -> bool:
         """The call was made and answered; a failed write does not undo what it found."""
@@ -501,6 +533,16 @@ class LiveOutcome:
             f"{plural(self.rows_added, 'row')} in {plural(self.groups, 'group')} "
             f"({_settings_text(self.settings)})"
         )
+
+
+@dataclass(frozen=True)
+class CarriedLiveOutcome(LiveOutcome):
+    """A re-run's live outcome, carried from the first run's record, not detected now.
+
+    Feature 015 (`contracts/recheck.md` section 3). The same fields, recorded the same way;
+    only the rows line differs, because rows the first run could not write are not in the
+    folder's package for the re-run to judge (`INTERFERENCE_ROWS_NOT_CARRIED`).
+    """
 
 
 DIGEST_ID_CAP = 20
@@ -579,7 +621,13 @@ class PrerunResult:
                 lines.append(_collapsed_line(tool, calls))
         return lines
 
-    def _finding_lines(self) -> list[str]:
+    def named_finding_ids(self) -> list[str]:
+        """The ids the digest names, selected by its own render loop."""
+        ids: list[str] = []
+        self._finding_lines(named_ids=ids)
+        return ids
+
+    def _finding_lines(self, *, named_ids: list[str] | None = None) -> list[str]:
         """One line per folded family or per check and status, in recording order."""
         grouped: dict[tuple[str, str], list[Finding]] = {}
         for finding in self.findings:
@@ -593,9 +641,64 @@ class PrerunResult:
                 continue
             ids = [finding.id for finding in findings]
             more = len(ids) - DIGEST_ID_CAP
-            named = ", ".join(ids[:DIGEST_ID_CAP]) + (f", and {more} more" if more > 0 else "")
+            shown = ids[:DIGEST_ID_CAP]
+            if named_ids is not None:
+                named_ids.extend(shown)
+            named = ", ".join(shown) + (f", and {more} more" if more > 0 else "")
             lines.append(f"  {check} - {len(ids)} {status}: {named}")
         return lines
+
+
+def returned_finding_ids(call: PrerunCall) -> list[str]:
+    """The finding ids a restated call returned without adding them: a de-duplicating check
+    (`check_drawings`) hands back the id of a finding the session already holds."""
+    payload = call.payload if isinstance(call.payload, Mapping) else {}
+    returned = payload.get("finding_ids")
+    if not isinstance(returned, list):
+        return []
+    return [item for item in returned if isinstance(item, str)]
+
+
+
+def restated(
+    prerun: PrerunResult | None,
+    context: ToolContext,
+    calls: Sequence[PrerunCall],
+    standards: NotEvaluated | None = None,
+) -> PrerunResult | None:
+    """Replace restated calls with the standing findings they now cite, in place.
+
+    A regrade reconciles a new verdict onto an earlier id before this runs, so the raw
+    call's findings are not the digest's source. The session's standing findings are.
+    """
+    if prerun is None or not calls:
+        return prerun
+    session = context.require_session()
+    replacements: dict[str, PrerunCall] = {}
+    for call in calls:
+        returned = set(returned_finding_ids(call))
+        replacements[call.tool] = replace(
+            call,
+            findings=tuple(
+                finding for finding in session.findings
+                if (finding.carried_over_from is None
+                    and call.step_index in finding.tool_result_ids)
+                or finding.id in returned
+            ),
+        )
+    withheld = [
+        (family.check.removeprefix(PRERUN_CHECK_PREFIX), family.reason)
+        for family in prerun.not_evaluated
+        if family.check.removeprefix(PRERUN_CHECK_PREFIX) in prerun_tools()
+    ]
+    return replace(
+        prerun,
+        calls=tuple(replacements.get(call.tool, call) for call in prerun.calls),
+        not_evaluated=not_evaluated_families(
+            context.ir, withheld, standards, live=prerun.live,
+            roles=checks_mechanical.review_roles(context),
+        ),
+    )
 
 
 def _collapsed_line(tool: str, calls: Sequence[PrerunCall]) -> str:
@@ -1025,11 +1128,16 @@ def _interference_families(
             _interference(INTERFERENCE_COLLIDED.format(rows=rows), bucket="unresolved")
         )
     if live.persist_error is not None:
+        reason = (
+            INTERFERENCE_ROWS_NOT_CARRIED.format(rows=plural(live.rows_added, "row"))
+            if isinstance(live, CarriedLiveOutcome)
+            else INTERFERENCE_NOT_WRITTEN.format(error=live.persist_error)
+        )
         families.append(
             NotEvaluated(
                 check=f"{PRERUN_CHECK_PREFIX}{INTERFERENCE_ROWS_CHECK_FAMILY}",
                 label="interference",
-                reason=INTERFERENCE_NOT_WRITTEN.format(error=live.persist_error),
+                reason=reason,
                 bucket="unresolved",
             )
         )
@@ -1057,6 +1165,7 @@ def prerun_checks(
     standards: NotEvaluated | None = None,
     package_dir: Path | None = None,
     out_dir: Path | None = None,
+    carried_live: LiveOutcome | None = None,
 ) -> PrerunResult | None:
     """Run the self-enumerating checks into `context`'s session, or `None` with the flag off.
 
@@ -1084,6 +1193,9 @@ def prerun_checks(
             rows are merged from (feature 008, FR-009).
         out_dir: The run folder the merged `package.json` is written to - the package's own
             folder in the pane, `--out` on the command line, whose input is never written.
+        carried_live: A re-run's first-run live outcome (feature 015, `contracts/recheck.md`
+            section 3), carried as one recorded step where the first run made its call, with
+            no bridge call; `None` detects live, as every other review does.
 
     Returns:
         What was run and what was not, so the caller can render the digest or the brief, or
@@ -1094,7 +1206,11 @@ def prerun_checks(
 
     session = context.require_session()
     calls: list[PrerunCall] = []
-    live = _live_interference(context, tools, calls, package_dir=package_dir, out_dir=out_dir)
+    live = (
+        _live_interference(context, tools, calls, package_dir=package_dir, out_dir=out_dir)
+        if carried_live is None
+        else _carried_interference(context, tools, calls, carried_live)
+    )
     for name, arguments in planned_calls(context, tools):
         calls.append(_prerun_call(context, tools, name, arguments, len(calls)))
 
@@ -1202,7 +1318,7 @@ def _prerun_call(
 
 def recorded_call(
     context: ToolContext,
-    tools: ToolDispatch,
+    tools: ToolSet,
     name: str,
     arguments: Mapping[str, Any],
     *,
@@ -1329,6 +1445,87 @@ def _live_interference(
         rows_collided=max(0, rows_detected - len(added)),
         persist_error=_persist_rows(package_dir, out_dir, configuration, added, new_gaps),
     )
+
+
+class _CarriedAnswer:
+    """The carried live call's answer, recorded through `registry.record_call` as the guard
+    records a repeat: one real step, no dispatch, no finding (`contracts/recheck.md` section
+    3). A first call that failed is carried with its error, so the session sink records the
+    same `failed` row the first run's call did."""
+
+    def __init__(self, sink: RecordingSink, payload: Mapping[str, Any], error: str | None):
+        self.sink = sink
+        self.payload = dict(payload)
+        self.error = error
+
+    def call(self, name: str, arguments: Mapping[str, Any], call_id: str = "") -> ToolCallResult:
+        record_call(
+            self.sink,
+            tool=name,
+            arguments=arguments,
+            payload=self.payload,
+            elapsed_s=0.0,
+            error=self.error,
+        )
+        return ToolCallResult(
+            call_id=call_id, payload=self.payload, is_error=self.error is not None
+        )
+
+
+def _carried_interference(
+    context: ToolContext, tools: ToolDispatch, calls: list[PrerunCall], live: LiveOutcome
+) -> LiveOutcome:
+    """A re-run's first call: the first run's live outcome, carried and never asked again.
+
+    A call never attempted made no step and records none. Otherwise one step is recorded at
+    the point the first run recorded its call, so its index is the first run's, through
+    `recorded_call` - the events and the mark every pre-run step has - answered by
+    `_CarriedAnswer` rather than the dispatch. When the first run could not write its rows,
+    the reviewed configuration's rows are removed from the in-memory package as
+    `_live_interference` removes them before its call, so the dump's stale rows are not
+    judged; a failed call keeps them, as the first run put them back.
+
+    Every later step and finding citation is the first run's only if the carried step lands at
+    the first run's index, so a pre-run that holds any other number of steps by then is refused
+    before the carried step is recorded or the seat asked (owner decision 87A). By then
+    `session.started` and the pre-run's coverage and provenance events are already written.
+    """
+    carried = CarriedLiveOutcome(**asdict(live))
+    if live.step_index is None:
+        return carried
+    recorded = len(context.require_session().steps)
+    if recorded != live.step_index:
+        raise RuntimeError(
+            f"the carried live step would be step {recorded}, but the first run recorded its "
+            f"call as step {live.step_index}"
+        )
+    if live.error is None and live.persist_error is not None:
+        package = context.ir
+        package.interferences[:] = [
+            row for row in package.interferences if row.configuration != live.configuration
+        ]
+    payload: dict[str, Any] = {
+        "status": "carried",
+        "note": CARRIED_LIVE_NOTE,
+        "outcome": live.as_record().model_dump(mode="json"),
+    }
+    if live.error is not None:
+        payload["error"] = live.error
+    calls.append(
+        recorded_call(
+            context,
+            _CarriedAnswer(tools.sink, payload, live.error),
+            LIVE_INTERFERENCE_TOOL,
+            {
+                "component_ids": [],
+                "configuration": live.configuration,
+                "settings": dict(live.settings),
+            },
+            call_id=f"prerun_{len(calls) + 1}",
+            mark="prerun",
+        )
+    )
+    return carried
 
 
 def _keep_new_gaps_once(package: EvidencePackage, gaps_before: int) -> list[Gap]:

@@ -14,12 +14,18 @@ modification time. And the disk route takes a caller-supplied name, so it goes t
 same path rule as `run_dir` and `check_id`, and every refusal - a name the rule refuses, no
 such folder, no session, a check folder, an unreadable file - is the same `404 UnknownReview`
 naming only the id, so the route cannot be used to probe the workstation.
+
+Feature 015 T099 (`contracts/recheck.md` section 8): a record that waits for Send - its
+`model_status` `not_sent` or `send_failed` - is restored read-only as every record is, with
+its own line (009's first sentence, then the dated Send sentence; owner decision 73A) and
+the `restored` Send block (68A). Every other record keeps today's sentence.
 """
 
 from __future__ import annotations
 
 import json
 import shutil
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -33,10 +39,12 @@ from swreview.chat.server import UnknownReview, create_app
 from swreview.ir.loader import load_package
 from swreview.report.attention import load_policy, rank
 from swreview.report.finding_groups import findings_by_type
-from swreview.report.session import load_session
+from swreview.report.session import SendFailure, load_session, save_session
 from swreview.report.snapshot import review_snapshot
 from swreview.report.summary import load_words
 from tests.support.attention import CHECK_FOLDER
+from tests.support.restart import restarted_app
+from tests.support.restored import assert_restored_as_waiting
 from tests.unit import test_chat_server as chat
 from tests.unit.test_chat_server import (
     DRAWING_FINDING_ARGUMENTS,
@@ -301,7 +309,71 @@ def test_a_package_that_does_not_validate_is_unknown(
     assert_unknown_review(client.get(f"/reviews/{run_dir.name}"), run_root)
 
 
-# --- 4. the door ----------------------------------------------------------------------------
+# --- 4. a record that waits for Send (feature 015 T099) ----------------------------------------
+
+EAST_OF_UTC = timezone(timedelta(hours=2))
+
+
+def restart_settings(provider_control: ProviderControl, models: Any) -> dict[str, Any]:
+    return {
+        "token": TOKEN,
+        "allow_origin": ORIGIN,
+        "provider_factory": provider_control.factory,
+        "list_models": models,
+    }
+
+
+@pytest.mark.parametrize("state", ["not_sent", "send_failed"])
+def test_a_waiting_record_restores_read_only_with_its_dated_line_and_send(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: ProviderControl,
+    models: Any,
+    state: str,
+) -> None:
+    """From a restarted backend: the composed line, dated with the stored wall clock (never
+    converted to this machine's zone), the `restored` block, and nothing written."""
+    # Imported here: test_waiting_answers imports test_send_gate_server, which reads this
+    # module's `finished_chat` when it loads.
+    from tests.unit.test_waiting_answers import waiting_review
+
+    folder = run_root / f"FICT-restored-{state}"
+    waiting_review(app, client, folder)
+    record = load_session(folder / "session.json")
+    assert record.model_status is not None and record.model_status.state == "not_sent"
+    record.model_status.checked_at = datetime(2026, 10, 9, 14, 30, tzinfo=EAST_OF_UTC)
+    if state == "send_failed":
+        record.model_status.state = "send_failed"
+        record.model_status.failures = [
+            SendFailure(
+                at=datetime(2026, 10, 9, 15, 5, tzinfo=EAST_OF_UTC),
+                error_class="FICTError",
+                reason="FICT the provider refused",
+            )
+        ]
+    save_session(record, folder / "session.json")
+    before = tree_state(folder)
+
+    with restarted_app(run_root, restart_settings(provider_control, models)) as fresh:
+        response = fresh.get(f"/reviews/{folder.name}")
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert_restored_as_waiting(body, record)
+    assert body["read_only_reason"].endswith(
+        "Its checks ran 2026-10-09 14:30; Send checks the saved evidence again first."
+    )
+    failure = body["ranking"]["summary"]["send"]["failure"]
+    if state == "send_failed":
+        assert failure is not None and "FICT the provider refused (15:05)" in failure
+    else:
+        assert failure is None
+    assert tree_state(folder) == before, "the route writes nothing"
+    assert provider_control.built == []
+
+
+# --- 5. the door ----------------------------------------------------------------------------
 
 
 def test_both_routes_are_in_the_door_tests_census() -> None:
