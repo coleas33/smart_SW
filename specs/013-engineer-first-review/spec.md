@@ -177,6 +177,8 @@ A drawing's revision table, bill of materials and hole tables live on each sheet
 
 ## Requirements *(mandatory)*
 
+*Feature 015 amendment notice, 2026-10-08:* Planned amendments to FR-040 are specified in [015 review-flow.md](../015-review-send-gate/contracts/review-flow.md).
+
 ### Functional Requirements
 
 **Custom and bought parts (US1)**
@@ -229,7 +231,7 @@ A drawing's revision table, bill of materials and hole tables live on each sheet
 - **FR-037**: Candidates MUST be grouped by drawing file; one question and one read MUST cover every document a file sits beside, and the host's merge MUST remove every candidate row of the path it read.
 - **FR-038**: A custom document with no same-name drawing and none attached MUST be unresolved drawing coverage naming the missing file, not a finding.
 - **FR-039**: `request_evidence` for the drawing checklist item MUST be answered by code with each named document's drawing state when any of them has no attached drawing, recording nothing; when no attached drawing shows any custom document, the drawing check MUST close the item by code (unresolved with a candidate or absent document, skipped when every subject is bought), and `mark_coverage` on it MUST answer "closed by code" in that state.
-- **FR-040**: The outcome of every code-run drawing read, refusals included, MUST reach the model: in the resumed turn's message and in the drawing brief.
+- **FR-040**: The outcome of every code-run drawing read, refusals included, MUST reach the model: in the Send opening when read while waiting (feature 015 T086, 2026-10-13), in the resumed turn's message when the review was already sent, and in the drawing brief. A waiting outcome MUST NOT be added again to a later answer or follow-up; see [015 review flow](../015-review-send-gate/contracts/review-flow.md) section 5.
 
 **Sources (US5)**
 

@@ -181,7 +181,7 @@ public sealed class ReviewPageContractTests
             .Split('\n')
             .Single(line => line.StartsWith("| `review.start` |", StringComparison.Ordinal));
 
-        Assert.Contains("review.started {chat_id, run_dir, not_examined, document}", row, StringComparison.Ordinal);
+        Assert.Contains("review.started {chat_id, run_dir, not_examined, document, send_when_checked}", row, StringComparison.Ordinal);
         Assert.Contains("`document` is `{path, configuration}`", row, StringComparison.Ordinal);
     }
 

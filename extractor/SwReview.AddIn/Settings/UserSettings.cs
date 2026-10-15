@@ -175,6 +175,24 @@ public sealed class UserSettings
     [JsonPropertyName("standards_profile_path")]
     public string StandardsProfilePath { get; set; } = DefaultStandardsProfilePath();
 
+    /// <summary>The raw review-flow token; absent in files written before feature 015.</summary>
+    [JsonPropertyName("send_when_checked")]
+    public JsonElement? SendWhenCheckedValue { get; set; }
+
+    /// <summary>Whether Review sends after the checks; only a held false unticks the box.</summary>
+    [JsonIgnore]
+    public bool SendsWhenChecked
+    {
+        get => SendWhenCheckedValue?.ValueKind != JsonValueKind.False;
+        set
+        {
+            using (JsonDocument token = JsonDocument.Parse(value ? "true" : "false"))
+            {
+                SendWhenCheckedValue = token.RootElement.Clone();
+            }
+        }
+    }
+
     /// <summary>%APPDATA%\SwReview\settings.json.</summary>
     public static string DefaultPath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SwReview", "settings.json");
@@ -399,6 +417,17 @@ public sealed class UserSettings
     /// </summary>
     private void Normalize(BuildMode mode, ICollection<string> problems)
     {
+        if (SendWhenCheckedValue.HasValue
+            && SendWhenCheckedValue.Value.ValueKind != JsonValueKind.True
+            && SendWhenCheckedValue.Value.ValueKind != JsonValueKind.False)
+        {
+            if (SendWhenCheckedValue.Value.ValueKind != JsonValueKind.Null)
+            {
+                problems.Add($"send_when_checked '{SendWhenCheckedValue.Value.GetRawText()}' is not true or false; ticked is in use.");
+            }
+            SendWhenCheckedValue = null;
+        }
+
         if (!Providers.Contains(Provider))
         {
             problems.Add(

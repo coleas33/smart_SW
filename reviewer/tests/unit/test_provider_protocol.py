@@ -123,6 +123,13 @@ def valid_bodies() -> dict[str, dict[str, Any]]:
                 "provider_value": "high",
             },
         },
+        "session.sent": {
+            "provider": "fake", "model": "fake-1",
+            "effort_mapping": {
+                "requested": "high", "provider_param": "scripted", "provider_value": "high"
+            },
+            "estimate": {"input_tokens": 123, "encoding": "o200k_base", "approximate": False},
+        },
         "text.delta": {"text": "Checking the fastener joints"},
         "text.done": {"text": "Checking the fastener joints. Two findings."},
         "tool.started": {

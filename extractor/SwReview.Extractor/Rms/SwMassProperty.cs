@@ -11,7 +11,7 @@ namespace SwReview.Extractor.Rms;
 /// copy's geometry reading (<see cref="RemodelGeometry.Read"/>, through
 /// <see cref="IGeometrySource.CreateMassProperty"/>) and PROBE-8 measure with this one mapping.
 /// Since U27 (2026-09-28) the copy's reading uses only its whole-part members - no selection and
-/// no accuracy of its own - while PROBE-8 still sets both on its throwaway part.
+/// no accuracy of its own; T187 makes PROBE-8 use that same path.
 ///
 /// <b>Ungated on purpose.</b> Every caller gates it from outside: <see cref="RemodelGeometry.Read"/>
 /// gates each member under its bare read key, and the probe host wraps it in
@@ -26,6 +26,12 @@ public sealed class SwMassProperty : IMassPropertyReading
     {
         _massProperty = massProperty ?? throw new ArgumentNullException(nameof(massProperty));
     }
+
+    /// <inheritdoc />
+    public IMassPropertyOverrideReading? GetOverrideOptions() =>
+        _massProperty.GetOverrideOptions() is IMassPropertyOverrideOptions options
+            ? new SwMassPropertyOverrideReading(options)
+            : null;
 
     /// <inheritdoc />
     public void SetAccuracyLevel(int accuracyLevel) => _massProperty.AccuracyLevel = accuracyLevel;
@@ -43,7 +49,7 @@ public sealed class SwMassProperty : IMassPropertyReading
         // setter's parameter is a VARIANT, and a plain object[] of COM objects marshals as a
         // SAFEARRAY of VARIANT where the SOLIDWORKS programming guide ("IDispatch Object Arrays
         // as Input in .NET") requires a SAFEARRAY of IDispatch for an input array of its objects.
-        // PROBE-8 is the one caller: the copy's reading measures the whole part and selects none.
+        // Retained adapter mapping only: both production readings measure the whole part and select none.
         var wrapped = new DispatchWrapper[bodies.Count];
         for (int i = 0; i < wrapped.Length; i++)
         {
@@ -156,4 +162,17 @@ public sealed class SwMassProperty : IMassPropertyReading
                 return false;
         }
     }
+}
+
+/// <summary>Read-only typed mapping of the override flags; the caller gates each member.</summary>
+public sealed class SwMassPropertyOverrideReading : IMassPropertyOverrideReading
+{
+    private readonly IMassPropertyOverrideOptions _options;
+
+    public SwMassPropertyOverrideReading(IMassPropertyOverrideOptions options) =>
+        _options = options ?? throw new ArgumentNullException(nameof(options));
+
+    public bool GetOverrideMass() => _options.OverrideMass;
+    public bool GetOverrideCenterOfMass() => _options.OverrideCenterOfMass;
+    public bool GetOverrideMomentsOfInertia() => _options.OverrideMomentsOfInertia;
 }

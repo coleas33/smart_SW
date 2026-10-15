@@ -1,0 +1,517 @@
+# Contract: The Review Flow with a Send Gate
+
+Normative for the backend half of the box: starting a checks-only review, the `awaiting_send` state,
+Send, the engineer's work while a review waits, the opening the model reads at Send, a failed first
+request, the provider a waiting review holds, and the two event changes (FR-003, FR-006 to FR-011,
+FR-014 to FR-020, FR-023 to FR-025, FR-035). Amends 002 `chat-api.md`, `data-model.md` section 3 and
+`chat-events.schema.json`; 008 `checks-first.md` sections 1 and 4 and `answer-batch.md` section 1;
+009 FR-015; 011 `confirmed-open.md` section 1; 013 `part-roles.md` section 9 and
+`drawing-capability.md` section 6. Amended on 2026-10-09 by the owner's plan review (research R7):
+sections 1 to 6, 8 and 10 (decisions 68A, 69A, 70A, 71A, 72A, 74A, 75A, 76A and 79A).
+
+## 1. `POST /sessions`
+
+Two optional body fields; everything else is 002 `chat-api.md`'s row, unchanged.
+
+| Field | Type | Absent means | Rule |
+|---|---|---|---|
+| `send_when_checked` | boolean | `true` | anything but a boolean is `400 InvalidRequest` naming the field |
+| `recheck` | boolean | `false` | `true` re-runs the checks of the folder's waiting review (`recheck.md`); `true` with `send_when_checked: true` is `400 InvalidRequest` ("a re-run always waits for Send") |
+
+**`send_when_checked: true`** (the default, and every host before this feature): today's path, byte
+for byte - the adapter is built first (no key: `502` before any check), the checks run, the chat
+moves to `running`, `run.start` is submitted, `201`.
+
+**`send_when_checked: false`**, in order:
+
+1. the run folder is claimed and resolved as today;
+2. `_start_review` builds a `DeferredProvider` from the request's settings (section 8) - no key is
+   read and no SDK client is built - and calls `start_review(..., send_when_checked=False)`;
+   the pre-run, the part-roles question and the drawing questions run exactly as they do today
+   before a first request (008 `checks-first.md` sections 1 and 2);
+3. `start_review` emits `session.started` with `send_when_checked: false` (section 7), records
+   `model_status {state: "not_sent", document, checked_at: local_now(), profile}` (`profile` the
+   identity of the Standards profile it graded with, omitted when there is none) and, when the pre-run
+   ran, `live_detection`
+   (`records.md` section 1), and the run keeps its `PrerunResult` and standards gap (section 5);
+4. `ChatServer._open_waiting(chat, run)` (owner decision 71A; the one tail the unticked start and a
+   re-run share, `recheck.md` section 2), on the thread pool, all **before** the chat is attached
+   and registered: `run.close_waiting()` - the run builds its Send cache (`build_send_cache()`,
+   section 5: the opening and its estimate) and is then finalized (no turn, so no `turn.ended`;
+   `session.ended` is written; `model_status.checked_at` is the finalization's end, stamped by
+   `local_now`); the report and the attention record are rendered by
+   `ChatServer._render_run(run, chat.report_path, chat.run_dir)` - today's `_render_report` body,
+   extracted, which `_render_report(chat)` now calls too, because `_render_report` returns at once
+   while `chat.run` is `None`; and `run.release_bridge()` closes the run's SOLIDWORKS pipe, which the
+   pre-run's live detection opened, keeping its client (owner decision 79A, section 8). A cache build
+   or finalization that raises closes the run (`run.close()`, today's `ReviewRun.close`,
+   `runner.py:1386-1390`, which closes its bridge, as `start_review`'s setup closes it when setup
+   raises, `runner.py:1747-1750`), so the unregistered run leaves no pipe open (79A); moves the
+   unregistered chat `extracting -> failed`; and answers the error body any unexpected failure of
+   `POST /sessions` answers today: no chat holds the folder, and no shutdown can finalize the run
+   while this call does. The render, as `_play`'s, logs a
+   failure and never raises, so `report.md` is on disk with the not-sent header when the 201
+   arrives unless its write failed;
+5. `_open_waiting` attaches and registers the chat and moves it `extracting -> awaiting_send`;
+6. `201 {chat_id, review_session_id, not_examined}`, as today.
+
+**The host's timeout.** The cache build, the finalization and the render make this call longer than
+a ticked start's by their own time, so the host makes it with the timeout `BackendClient.TimeoutFor`
+gives its mode, `ChecksOnlyTimeout`, which is set from a measurement - or with the one 30 s rule,
+when the measured re-run fits inside 30 s (owner decision 70A; `recheck.md` section 1; research
+R2.17, RK-10); a ticked start keeps 30 s (FR-035). **If the host
+gives up anyway**,
+the backend still finishes and registers the waiting chat, which holds its folder: the host reports
+today's failure (the error card and Retry, which extracts into a new folder) and keeps no record of
+the review. The orphan sends nothing on its own; its record says not sent. When the host holds no
+review of that document and the orphan's folder is its newest, the found-review search offers it
+(`recheck.md` section 9), and its Send's re-run claim (`review.recheck`) adopts the live orphan
+(`recheck.md` section 2); otherwise - a Retry made a newer folder - it is never offered, and it is released at the
+next backend restart.
+
+*Landed as* (T041, T095-T098, T104 and owner decision 87A; T115, 2026-10-15):
+- **The tail's signature.** It is `_open_waiting(chat, run, earlier=None)`. For a re-run, its
+  thread function calls `run.carry_from(earlier)` first, then `close_waiting()`, the render and
+  `release_bridge()`. A carry that raises takes the same failure path as a finalization that
+  raises (`recheck.md` section 4's *Landed as*).
+- **The held folder.** From the claim to the 201, every start holds its folder in
+  `ChatServer._pending_run_dirs` (`recheck.md` section 2's *Landed as*).
+- **The timeout.** There is no `TimeoutFor` or `ChecksOnlyTimeout`. T098's larger measured
+  re-run, 8.8 s, fits inside 30 s, so every call keeps the client's 30 s `CallTimeout`, an
+  unticked start's included (research R2.17).
+
+No provider request of any kind is made, and none will be until Send (FR-006, FR-007, SC-001). The
+explanation pass is not attempted: it follows only a turn that ended `end` (`runner.py:1333`, `1449`).
+
+## 2. The chat state
+
+002 `data-model.md` section 3, amended:
+
+| From | To | When |
+|---|---|---|
+| `extracting` | `awaiting_send` | the checks of an unticked review (or a re-run) are done and saved |
+| `awaiting_send` | `running` | Send (section 3), or an answer route on a waiting run |
+| `running` | `awaiting_send` | the applied answers are saved; a Send failed before any request, its adapter's build included, or its first request failed before a model round completed (section 6) |
+| `awaiting_send` | `failed` | an unrecoverable error |
+
+`POST /messages` is refused in `awaiting_send` (`409 NotSent`, section 4); `POST /evidence`, the
+single answer route, `POST /disposition` and `POST /timing` are accepted there, the last two
+running their write on the chat's one worker and leaving the chat `awaiting_send` (section 4,
+owner decision 69A). `_play` settles `awaiting_send` when `run.awaiting_send` is true after the
+action, and then calls `run.release_bridge()` (owner decision 79A), else `waiting_engineer` or
+`ended` as today. A Settings save is accepted while a chat is `awaiting_send` and refused, as today, while one
+is `running` - which covers answers being applied and a Send in flight (FR-027). An apply that fails
+moves the chat `running -> failed` (section 4), a move that exists today. `_play` also releases
+the pipe when a still-not-sent run settles `failed`, before rendering and publishing that state.
+A failure of this release is logged without replacing the apply's error or preventing the
+record from being rendered and the failed chat from releasing its folder. The ordinary
+sent-review release behavior is unchanged.
+
+## 3. `POST /sessions/{chat_id}/send`
+
+| Method | Path | Body | Answer |
+|---|---|---|---|
+| POST | `/sessions/{chat_id}/send` | `{}` (any keys ignored) | `202` with the chat's public view; the adapter's build and the model's first request follow on the chat's worker |
+
+Checked in this order; a refusal changes nothing and the review keeps waiting:
+
+| Order | Check | Refusal |
+|---|---|---|
+| 1 | the chat exists | `404 UnknownChat` |
+| 2 | not failed | `409 SessionFailed` |
+| 3 | no turn running (answers being applied, or a Send already in flight) | `409 TurnRunning` |
+| 4 | the run waits for Send | `409 NotWaiting` |
+| 5 | the settings in effect hold a usable credential: `ProviderSettings.has_credential` - a key from the settings or the environment, or the scripted provider, or Gemini with an enterprise project | `409 NoCredential` |
+
+Checks 1 to 5, the move `awaiting_send -> running`, setting the run's `_send_in_flight` and
+`_submit(chat, partial(run.send, build_adapter))` run on the event loop with no `await` between them,
+and the route answers `202` (owner decision 69A). `build_adapter` is
+`partial(self.provider_factory, settings)`: the factory runs on the chat's worker, inside `send`'s
+guarded prepare half (section 6), never on the event loop. A factory that raises is therefore one of
+the ways a Send fails before any request - one `error`, the `send.not_started` line, the review back
+to waiting - and never a refusal of its own, which is what the spec's edge case "Send failing before
+its first request" says. A second Send, an answer or a Settings save that arrives once the route has
+moved the chat meets `running` and is refused (`409 TurnRunning`). A decision or a timing write
+accepted before the move was queued on the same worker (section 4) and runs before the Send.
+
+The settings are `ChatServer._settings({provider, model, effort})` of the chat - the one resolver,
+with the backend's environment. They are the settings in effect: changing the provider, model,
+effort or key is a Settings save, and a save restarts the backend (the review is then restored and
+re-run first, `recheck.md`).
+
+## 4. While a review waits
+
+| Action | Route | What happens |
+|---|---|---|
+| Answer one or several questions | `POST /sessions/{id}/evidence` and `/evidence/{request_id}` | validated exactly as 008 `answer-batch.md` section 2; the chat moves to `running`; `answer_evidence_batch` sees `awaiting_send` and applies the answers with **no turn** (below); the chat settles `awaiting_send` |
+| Accept, Reject, Defer | `POST /sessions/{id}/findings/{fid}/disposition` | saved at once on the live session; kept at Send and treated from then on as a decision made between turns (FR-024). On a waiting chat the route runs `record_disposition` on the chat's one worker thread and awaits it (`ChatServer._on_worker(chat, call)`), leaving the chat `awaiting_send`: a Send or an answer accepted while the write runs is queued behind it on the same worker, so no two threads write the session (owner decision 69A; research R2.12). A Settings save is not refused during that write, as it is not during a decision on an ended review today; the save's `write_atomic` keeps the file whole. Any other chat: today's path |
+| Timing | `POST /sessions/{id}/timing` | as the decision route: `record_timing_live` on the chat's worker on a waiting chat; today's path otherwise |
+| Follow-up | `POST /sessions/{id}/messages` | `409 NotSent` while `run.awaiting_send` (a follow-up would reach the model with no opening; FR-019) |
+| Stop | `POST /sessions/{id}/stop` | unchanged code: the session has an `ended_at`, so nothing is written, no event, no model call (FR-025); during a decision or timing write the chat reads `awaiting_send`, so the same holds; during an apply, and while Send's adapter is built, the chat reads `running`, so the flag is set - see "The stop flag" below |
+| Shutdown | lifespan | unchanged code: a finalized session is skipped; nothing is written (FR-010) |
+
+**The stop flag** (owner decision 69A, replacing the tasks review's hand-cleared flag). The stop route
+sets `chat.stop_requested` whenever the chat reads `running` (`chat/server.py:1497-1498`). The flag
+is read by `StoppableTools` (`:2145`) and `check_presentation_cancelled` (`:2147-2149`), and `_play`'s
+`finally` (`:2201`) stays the only place that clears it. Nothing in this feature moves a chat to
+`running` outside `_play`'s reach: a decision or timing write leaves the chat `awaiting_send`, and
+Send's adapter is built inside `send`, inside `_play`. So a stop sent during an apply, or during a
+Send whose build then fails, is cleared by that `_play`'s `finally` before the chat is waiting again:
+the next Send's first turn is never stopped by it. A stop sent while Send's adapter is built and the
+build succeeds is kept: the Send is in flight, and Stop is today's, so the first turn ends `stopped`
+at its first tool boundary (default, research R2.12).
+
+**Applying answers with no turn** (amends 008 `answer-batch.md` section 1 step 3, 009 FR-015, 011
+`confirmed-open.md` section 1, 013 `part-roles.md` section 9). `ReviewRun._apply_answers(answers)`
+holds steps 1, 2 and 2a of the batch, shared by both paths: validate, mark each answer with its
+`evidence.answered` event, `read_confirmed_candidates`, the part-roles regrade, one `_restate`, the
+bought-parts rows and the unmatched-piece rows.
+
+The implementation shares `_answer_requests(answers)` (validation only) and
+`_apply_answer_requests(answers, requests, *, read_drawings=True)` (the answer events,
+confirmed read and regrade). `_apply_answers(answers, *, read_drawings=True)` composes them
+for the ordinary answer and carry callers. The waiting branch validates once, outside its
+failure guard, then guards the same apply body, `_settle_waiting` and `close_waiting`.
+An invalid batch therefore changes no record and writes no error event; an exception after
+validation, including a `ValueError` from the read or regrade, follows the recovery below.
+Then:
+
+- **a run that was sent** (today): the resumed message as today, `_ask`, the reconcile, finalize;
+- **a waiting run**: `_settle_waiting(applied)` - each `ConfirmedRead` is appended to
+  `session.drawing_outcomes` as `{file, outcome}`; the restated tools' calls replace theirs in the
+  run's `PrerunResult` (`prerun.restated`, section 5); `_opening_changed` is set - then
+  `close_waiting()`: the Send cache is rebuilt (`build_send_cache()`, section 5) and the run is
+  finalized. Both helpers are shared with the re-run's carry (`recheck.md` section 4; owner decision
+  71A). No `_ask`, no `REGRADED_LINE`, no turn event. When `_play` settles `awaiting_send` it releases
+  the pipe a confirmed read opened (section 2, 79A).
+
+A crash or a shutdown during the apply loses only the apply: `session.json` holds the record as it
+was before, the questions show open again, and no turn event is written - unless the crash came
+after the finalization wrote `session.json`, when the record is the applied one.
+
+**An apply that fails.** Validation still refuses before anything changes, as today (`400`). Anything
+the waiting branch raises after it - `read_confirmed_candidates`, the part-roles regrade, `_restate`,
+the Send cache's build, or the finalization's writes - is caught there, and the branch:
+
+1. puts the record on disk back into the run: `context.session = load_session(session_path)` (when
+   the failure came after the finalization's write, that record is the applied one; either way it is
+   a whole record), so the `report.md` and `attention.json` `_play` renders next are that record's;
+2. emits one `error` event (`error_body`, the class and the redacted message, `retryable: true`) and
+   no `turn.ended` or `session.ended` (FR-010);
+3. re-raises.
+
+`_play` moves the chat `running -> failed`, and `_close_out` writes nothing because the record's
+`ended_at` is set (`_already_ended`). Its `finally` releases the pipe a confirmed read may have
+opened, including when a later cache build or save failed, then renders the restored record
+and publishes `failed`; a secondary release failure is logged and does not interrupt these
+steps. The failed chat no longer holds the folder; the page restores
+the review read-only with Send offered, and its Send re-runs it from the folder (`recheck.md`;
+owner decision 68A). The page's side is
+`pane.md` section 5. Which record the folder holds depends on where the failure came - the
+finalization writes `session.json`, then `attention.json`, then the `session.ended` event
+(`runner.py:1367-1383`):
+
+| The failure came | `session.json` holds | The restored review shows |
+|---|---|---|
+| before the finalization's `save_session` (the read, the regrade, `_restate`, the cache, the save itself) | the record before the apply | the answers being applied open again |
+| after it (`write_attention_record`, the `session.ended` event) | the applied record | the answers answered; the re-run carries them (`recheck.md` section 4) |
+
+**Minimal US3 restoration prerequisite (2026-10-13).** For the pane's failed-apply restore,
+`GET /reviews/{run_id}` forwards `SendInput {state: "restored", input_tokens: null,
+provider: the recorded provider_info.provider (empty when unrecorded), send_error: null}`
+for a persisted `not_sent` or
+`send_failed` model status. Existing summary code supplies the restored words and the
+persisted failed-Send history; no live cache or request count is read or built. The route
+writes nothing and retains today's read-only reason. Legacy and sent records keep their
+existing snapshots. This prerequisite does not implement a re-run, carry, or the composed
+dated reason: T099/T100 and the remainder of US4 stay pending.
+
+*Landed as* (T100, T108, T115, 2026-10-15): the prerequisite above is superseded.
+- `GET /reviews` answers `report/snapshot.restored_snapshot`. A waiting record's
+  `read_only_reason` is the composed dated line (`recheck.md` section 8).
+- The page's restore of a failed apply offers Send, which re-runs the review (`pane.md` section
+  5's *Landed as*).
+
+**A drawing merged before the failure.** A confirmed read merges its drawing into the folder's
+`package.json` before the regrade; its outcome line reaches `session.json` only with the
+finalization. A failure (or a crash) between the two leaves the drawing in the package and the
+record without its answer or its outcome line. The re-run checks that drawing in its place and does
+not ask its question again, so the outcome line FR-021 sends to the model is lost; the re-run names
+the loss in its `coverage.recheck` row (`recheck.md` section 5), a recorded limitation of FR-021
+(research R2.13).
+
+## 5. The opening at Send, and the Send cache
+
+What Send would send is built once, on a worker, and kept: `ReviewRun.build_send_cache()` sets
+`_send_cache = SendCache(opening=opening_at_send(), estimate=first_request_estimate(),
+named_ids=...)` in one assignment (`estimate.md` section 2). Its only caller is `close_waiting()`
+(owner decision 71A), which every path that leaves a run waiting ends with, each inside a path whose
+failure is already defined: the unticked start and a re-run (through `_open_waiting`, after
+`start_review`, and the carry, and before the finalization: a failure is the start's error body,
+section 1); and the waiting apply (after the regrade and `_settle_waiting`, before its
+finalization: a failure is an apply failure, section 4). Nothing the opening reads moves in a finalization (research R2.8), and a
+test pins that the cache's opening equals the opening built again after it. The attention and
+snapshot routes, which compute on the event loop and never write, and `send` only read the cache;
+no route builds an opening or counts a token.
+
+`ReviewRun.opening_at_send()`, called only by `build_send_cache()`:
+
+- **nothing applied while waiting** (`_opening_changed` false): `self.opening_message`, the opening
+  frozen at setup, byte for byte (SC-004; for a re-run, SC-008);
+- **answers applied**: `_opening_message(self._prerun, session, package, standards_gap=...,
+  roles=review_roles(context))` - the one builder `start_review` uses - followed by the wait's lines
+  inserted between the digest and `OPENING_MESSAGE`:
+
+```
+<package brief, with the part roles as they stand>
+
+<the pre-run digest, rebuilt>
+
+Drawing FICT-1001-drw.SLDDRW: opened read-only, read and closed (2 sheets)
+ER-001 (Which of these parts are bought?) was answered before this review was sent: All bought. The checks above were graded again by code with this answer.
+
+Review the evidence package described in the system prompt. ...
+```
+
+First one `DRAWING_OUTCOME_LINE` per `session.drawing_outcomes` entry, in order (013's words, refusals
+included); then one `WAIT_ANSWER_LINE` per answered code question, in the order the answers were
+given (`answered_at`, then id). Neither block has a header; a block with no line is absent, and
+with no line at all the separator is absent too. No line names a withdrawn finding, and no line asks
+the model to re-run, replace or continue (FR-023). None of these lines is sent again after Send.
+
+**The rebuilt digest** (`prerun.restated(prerun, context, calls, standards)`, new): the pre-run
+result with (a) each restated tool's calls replaced, in place, by its restated `PrerunCall`, whose
+`findings` are the session's standing findings that cite that call's step (a finding `_restate`
+folded keeps its id), plus still-standing ids the restated call returned (a de-duplicating drawing
+check can return an existing id without changing its earlier step; T086 correction, 2026-10-13),
+and (b) `not_evaluated` recomputed by `not_evaluated_families` with the current
+roles and the run's live outcome and withheld tools. `withheld`, `live` and `families` are kept. With
+nothing restated, `restated` returns its input, so the builder reproduces the frozen opening byte for
+byte (pinned by a test). Every finding the digest names stands; every standing pre-run finding is
+named under the digest's own caps (`DIGEST_ID_CAP`; a folded family is counts only).
+
+`PrerunResult.named_finding_ids()` (new) returns the ids the digest lines name, in order, from the
+same loop `_finding_lines` renders: the cache's `named_ids`, recorded as the Send's
+`opening_finding_ids` (SC-010).
+
+## 6. Send, and a failed first request
+
+`ReviewRun.send(build_adapter)`, on the chat's worker, in two halves and a guard (research R2.10;
+the order of the commit half is owner decision 72A, the build in the prepare half 69A):
+
+**Prepare** - nothing written, nothing emitted, nothing in the session changed:
+
+Before entering the guarded steps, keep `before = session.model_status.model_copy(deep=True)`
+and clear `_send_error`. The rollback snapshot must exist before the factory can raise; clearing
+the prior in-memory error changes no session field and writes nothing (2026-10-12 re-check).
+
+1. `adapter = build_adapter()`: the route's `provider_factory` call, which constructs the SDK client
+   (its first import can be cold), on this worker and never on the event loop (69A);
+2. `attach_provider(adapter)`: `configure_provider(adapter, session)`, then
+   `adapter.start_steps_at(len(session.steps))` when the session has steps. The adapter is not yet
+   the run's provider;
+3. `opening`, `estimate` and `named_ids` read from `_send_cache` (section 5);
+4. the `session.sent` body built: `{provider: adapter.name, model, effort_mapping:
+   adapter.effort_mapping(effort), estimate}`.
+
+**Commit**:
+
+5. `session.sent {provider, model, effort_mapping, estimate}` is emitted - first, so the guard never
+   has a write to undo (72A). Its Transcript line reads "Sending to {provider} {model} ...": it can
+   come before a save that fails, so it never says the review was sent (`pane.md` section 10);
+6. the pre-write: the model status gets `failures += [{at: local_now(), error_class:
+   "Interrupted", reason: "the backend stopped before the model answered"}]` and `state:
+   "send_failed"`, and the session is saved as it stands - still the finalized record of the
+   checks, so a crash from here on leaves a whole record that says a request was made and no round
+   completed. The save is `write_atomic`'s, so a save that fails leaves the file it replaced whole
+   (`records.md` section 8);
+7. `withdraw_finalization(session, self._finalized)` - the one body `finalize_session` runs at its
+   start (`runner.py:619-627`), extracted (72A) - removes, by identity, every row of the previous
+   finalization (the close-out row, one unresolved row per open question, one per open checklist
+   item: the "not reviewed, because the review was not sent to the model" rows) and `_finalized` is
+   cleared, so the model's first turn reads the coverage a ticked review's first turn reads: no item
+   placed by a close-out, `open_items` and `get_review_checklist` as a review sent at once sees them
+   (US2, FR-015; research R2.27), on every Send: the first, one after a failed Send, one after
+   answers applied while waiting, and one after a re-run. Rows anything else wrote stay. An
+   otherwise-open model-owned item has no standing finding matching its check prefix and no
+   surviving coverage row that places its checklist id; failed, nonmatching and per-rule rows
+   do not close it (T085 clarification, 2026-10-13). Then
+   `self.provider = adapter`, `awaiting_send = False`, `sent_at = local_now()` (held, not yet
+   recorded). The withdrawal filters lists already in memory and the rest are assignments: nothing
+   here can raise;
+8. `_say(opening)`.
+
+**The guard** over steps 1 to 7. Anything they raise - the factory, `configure_provider`, the effort
+mapping, the `session.sent` emit or the pre-write's save, the five points a Send can fail before any
+request:
+
+- puts the model status back from `before`, in memory only. It never writes: when the pre-write's
+  save is what failed, `write_atomic` left the file as it was, and when anything earlier failed, the
+  pre-write never ran, so `session.json` says what it said before Send either way (72A);
+- leaves the `DeferredProvider` as the run's provider (step 7 never ran);
+- keeps `awaiting_send = True`, clears `_send_in_flight`, and sets `_send_error = {at: local_now(),
+  error_class, reason: redacted message}` - in memory only, shown as the Send block's failure line
+  (`words.md` `send.not_started`) until the next Send, and never written to `model_status`, because
+  no request was made;
+- emits one `error` (`error_body`, `retryable: true`) and no `turn.ended` or `session.ended`. When that
+  emit itself raises - an unwritable `events.jsonl` fails the guard's emit for the reason it failed
+  the step - the failure is logged and not raised (72A);
+- returns normally, so `_play` settles `awaiting_send`, re-renders the unchanged session and releases
+  the pipe (79A).
+
+The run's state and its failure are set **before** the `error` is emitted, so a page that re-reads
+the summary on that event reads the Send block with its failure line (`pane.md` section 3). A
+crash between step 5 and step 6 leaves the record as it was before Send and a stream whose last
+line is `session.sent`, which the Transcript reads as "Sending to ...", never as sent. A crash
+between step 6 and the request leaves `send_failed` although no request left the machine: the record
+errs on the side of the model having been asked (research R2.10, RK-7).
+
+**The first completed round.** In `_emit_turn_event`, the first `usage` event while
+`_send_in_flight` sets `model_status {state: "sent", sent_at, estimate, opening_finding_ids}`, drops
+the `Interrupted` entry, clears `_send_in_flight` and saves the session as it stands: the checks'
+finalization rows were withdrawn at step 7 and `_run_turn` cleared `ended_at`, so the file is a sent
+review whose turn has not ended, never a finalized checks-only record whose state says `sent`
+(research R2.11). A crash after it leaves that record, which `GET /reviews` reads read-only as a sent
+review. From then on the review is a review sent at once in every respect but its record (FR-015):
+turns, Stop, the model's questions, answers that resume it, the explanation pass after a turn that
+ends `end`, follow-ups and the ranking.
+
+**A failure before any round.** `_run_turn`'s `except` branch reads, **before** `emit_turn_failed`,
+whether a Send is in flight with `usage_ledger.current_round_count == 0`. When it is: the
+`Interrupted` entry is replaced by `{at, error_class: type(exc).__name__, reason: redacted message}`,
+`self.messages = []`, `awaiting_send = True`, `_send_in_flight = False` (both before the `error` is
+emitted), and the run's provider goes back to a `DeferredProvider` of the same settings, so nothing can reach the model until the
+next Send attaches an adapter again; then `emit_turn_failed` and `finalize` run as today (the
+`error` and `turn.ended {error}` events are the failed attempt's record; streamed text stays in the
+stream), and the exception travels to `send`, which catches it and returns, so `_play` settles
+`awaiting_send`. The finalization appends a new set of finalization rows, which the next Send's
+step 7 withdraws. A second Send sends the opening once (FR-017). **A failure after a round** is
+today's: the review ends, `failed`, with the error card.
+
+## 7. Events
+
+002 `chat-events.schema.json`, amended (additive). The `session.started` branch's `body` already
+has `"additionalProperties": false` and a fixed property list, and a sibling `allOf` entry cannot widen
+it, so the new key goes **inside that branch's `body.properties`**, beside `effort_mapping`, and not
+in `required`:
+
+```json
+"send_when_checked": { "const": false, "description": "Feature 015: present only for a review started with the box unticked, whose checks run and which then waits for Send. Absent means sent when the checks finish, as every review before the feature." }
+```
+
+`test_events_schema.py` gains the rows: an unticked `session.started` with `send_when_checked: false`
+validates; one with `send_when_checked: true` is refused (`const`); a ticked one without the key
+validates as today; any other new key on `session.started` is still refused. `session.sent` is a new
+branch of its own:
+
+```json
+{ "if": { "properties": { "type": { "const": "session.sent" } } },
+  "then": { "properties": { "body": { "type": "object", "additionalProperties": false,
+    "required": ["provider", "model", "effort_mapping"],
+    "properties": {
+      "provider": { "enum": ["openai", "gemini", "fake"] },
+      "model": { "type": "string" },
+      "effort_mapping": { "type": "object", "additionalProperties": false, "required": ["requested", "provider_param", "provider_value"], "properties": { "requested": { "type": "string" }, "provider_param": { "type": "string" }, "provider_value": { "type": ["string", "integer"] } } },
+      "estimate": { "$ref": "https://smart-sw.local/contracts/review-session.schema.json#/$defs/SendEstimate" } } } } } }
+```
+
+and `"session.sent"` joins the `type` enum and `EventType`. The page handles it live and in a
+transcript replay (`pane.md` section 10); `PageRuleScanTests` reads the enum.
+
+## 8. The provider a waiting review holds
+
+A run holds a `DeferredProvider` whenever it waits: from its setup, after a Send that failed before
+any request (the guard never replaced it), and after a first request that failed before any round
+(the failure branch puts one back) - section 6. `agent/providers/deferred.py`:
+
+```python
+class ProviderNotSent(RuntimeError):
+    """A waiting review asked its provider for a turn: nothing may reach a model before Send."""
+
+class DeferredProvider:
+    name: ProviderName
+    model: str
+    def __init__(self, name: ProviderName, model: str) -> None: ...
+    @classmethod
+    def for_settings(cls, settings: ProviderSettings) -> DeferredProvider: ...
+    def effort_mapping(self, effort: EffortLevel) -> EffortMapping:   # the adapter's own rule
+    def start_steps_at(self, index: int) -> None:                      # kept, read by nothing
+    def run(self, **_: Any) -> TurnResult:                             # raises ProviderNotSent
+    def for_presentation(self, max_output_tokens: int) -> AgentProvider:  # raises ProviderNotSent
+```
+
+`effort_mapping` calls the module function each adapter's method now calls:
+`openai_provider.effort_mapping_for(model, effort)`, `gemini_provider.effort_mapping_for(model,
+effort)`, `fake.effort_mapping_for(model, effort)` (the methods become one-line delegations; no
+behaviour change). An effort the model refuses raises the adapter's own error at setup, as today.
+
+**What an unticked start loads** (owner decision 74A). `DeferredProvider` reads no key and constructs
+no SDK client. It does import the provider's adapter module, and with it the SDK that module imports
+at its top (`openai_provider.py:50-52`, `gemini_provider.py:50`): `start_review` calls
+`effort_mapping` at setup (`runner.py:1581`), and the rule lives in that module. The promise this
+contract makes is "no client and no key until Send" (FR-007), and its test asserts exactly that; it
+makes no promise about the module imports.
+
+**The SOLIDWORKS pipe of a waiting run** (owner decision 79A). `ReviewRun.release_bridge()` closes the
+context's bridge transport and keeps the client: `BridgeClient.close()` closes only the transport
+(`bridge/client.py:569-571`), and the named-pipe transport opens again on its next request, so the
+circuit breaker and the cached drawing-read answer survive. It is called by `_open_waiting` before
+the chat is registered (section 1) and by `_play` whenever it settles `awaiting_send` (section 2),
+so a waiting review holds no pipe, whatever opened one (the pre-run's live detection, a confirmed
+drawing read); the next live call opens it again. When `_open_waiting`'s cache build or
+finalization raises, the run it drops is closed instead (`run.close()`, section 1), so a failed
+unticked start or re-run leaves no pipe open either. A ticked review's pipe is today's. The older
+ceiling on reviews that were sent (`docs/review-backlog.md:336-337`, `:436-437`) is out of scope for
+this feature and left to a separate change.
+
+`configure_provider(provider, session)` (`agent/runner.py`, new) holds `start_review`'s three
+opt-in hooks, unchanged and in their order: `use_model_view(session.model_view)` when
+`ModelViewAware`; `use_prompt_cache(str(session.session_id))` when lever 3 is on and
+`PromptCacheAware`; `drop_prior_reasoning()` when lever 14 is on and `PriorReasoningAware`.
+`start_review` calls it where the three hooks are today; `attach_provider` calls it at Send.
+
+## 9. Error classes
+
+New `ChatError` subclasses; each has a sentence in the words file's `labels.errors`
+(`words.md` section 2), which the existing every-class-has-a-label test enforces.
+
+| Class | Status | Raised by |
+|---|---|---|
+| `NotWaiting` | 409 | Send on a review that does not wait; a re-run of a folder whose record is not a waiting review's |
+| `NotSent` | 409 | a follow-up on a review that waits |
+| `NoCredential` | 409 | Send with no usable credential |
+
+## 10. Tests
+
+Research R4.1: `test_send_gate_server.py`, `test_runner_send.py`, `test_deferred_provider.py`,
+`test_waiting_answers.py`; the moved `test_chat_sessions.py`, `test_chat_server.py` `ROUTES` and
+`test_events_schema.py`, with the two tests that read the event-type enum,
+`test_gate_same_session.py`'s count and `test_provider_protocol.py`'s `valid_bodies()` (research
+R4.3); and, first of all, the characterization of a ticked review on the pre-feature code
+(`test_ticked_review_golden.py`, research R2.28), five scenarios each with its own golden - a review
+that succeeds, posted with no new key and with the host's `{send_when_checked: true, recheck: false}`;
+a ticked start whose factory raises; a first request that raises before any round; a failure after
+one completed round; and Stop at the first tool boundary (owner decision 75A) - which section 1's
+ticked path must keep byte for byte, its failures included. Every test that drives an unticked review
+asserts the provider factory was never called (`ProviderControl.built == []`) up to the Send under
+test. Section 6's guard is pinned at its five failure points (the factory, `configure_provider`, the
+effort mapping, the `session.sent` emit and the pre-write's save): no provider request, the chat
+waiting again, one `error`, and a record that does not say a request was made; and once more with the
+guard's own `error` emit raising too, the chat still settling `awaiting_send`. Section 4's queue is
+pinned by a decision held on the chat's worker while a `POST /send` and a `POST /evidence` are
+accepted and run after it, in order: the write itself never moves the chat, which reads
+`awaiting_send` during the write until a `POST` is accepted and `running` after (section 2), and the
+queued action runs only once the write returns. Section
+4's stop flag is pinned by a stop sent during a held decision write (nothing set, nothing written)
+and during a held adapter build that fails: each answers `202` and writes nothing, and the next
+Send's first turn, which makes a tool call, runs to `end` with no `stopped` turn. The crash cases use
+`tests/support/restart.py` (owner decision 76A): `disk_at` copies the run folder at the point a crash
+would cut, with nothing raised, and `restarted_app` reads the copy with a backend started afresh.
+Section 8's pipe is pinned with a transport that counts what it opens: five unticked assembly reviews
+waiting in one backend hold no pipe, an unticked start whose finalization raises leaves none open,
+and Send's first live tool opens one again (79A). Section 5's last sentence is pinned by an answer and a follow-up after Send
+whose messages carry none of the wait's lines. Section 6's
+withdrawal (step 7) is pinned by comparing **every** request of a scripted first turn that
+calls `mark_coverage`, `request_evidence` and `get_review_checklist` - tool results included -
+between a ticked review and an unticked review sent, on the same package, and again after a failed
+Send and after a re-run.

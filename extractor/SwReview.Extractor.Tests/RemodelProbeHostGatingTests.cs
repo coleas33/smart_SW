@@ -300,7 +300,9 @@ public class RemodelProbeHostGatingTests
 
     /// <summary>
     /// The split's point: the probe host gates none of the two interfaces' members itself, so each
-    /// interop mapping is written once, in the shared class, and each key is gated in one place.
+    /// interop measurement mapping is written once, in the shared class, and each key is gated
+    /// in one place. T187's separate fixture setup needs writable override options and gates that
+    /// setup itself; it does not measure through that handle.
     /// </summary>
     [Fact]
     public void TheProbeHostGatesNoEquationOrMassPropertyMemberItself()
@@ -748,6 +750,7 @@ internal static class ProbeWrapperCases
     /// <summary>In interface order.</summary>
     public static readonly IReadOnlyList<(string Member, string Key)> MassProperty = new[]
     {
+        (nameof(IMassPropertyReading.GetOverrideOptions), "GetOverrideOptions"),
         (nameof(IMassPropertyReading.SetAccuracyLevel), "set_AccuracyLevel"),
         (nameof(IMassPropertyReading.SetSelectedItems), "set_SelectedItems"),
         (nameof(IMassPropertyReading.SetUseSystemUnits), "set_UseSystemUnits"),
@@ -822,6 +825,8 @@ internal static class ProbeWrapperCases
     {
         switch (member)
         {
+            case nameof(IMassPropertyReading.GetOverrideOptions):
+                return target.GetOverrideOptions();
             case nameof(IMassPropertyReading.SetAccuracyLevel):
                 target.SetAccuracyLevel(RemodelGeometry.HigherAccuracy);
                 return null;
@@ -865,6 +870,7 @@ internal static class ProbeWrapperCases
                 return new object?[] { Bodies };
             case nameof(IMassPropertyReading.SetUseSystemUnits):
                 return new object?[] { true };
+            case nameof(IMassPropertyReading.GetOverrideOptions):
             case nameof(IMassPropertyReading.Recalculate):
             case nameof(IMassPropertyReading.GetVolume):
             case nameof(IMassPropertyReading.GetSurfaceArea):

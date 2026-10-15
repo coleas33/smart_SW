@@ -143,8 +143,8 @@ now tells the page as soon as it sees the plan lost, before the engineer presses
 - **What is told.** `remodel.plan_lost {run_dir, message}`, unsolicited (the table below).
   `run_dir` is the plan's folder as `remodel.planned` named it. `message` is
   `RemodelHost.PlanLostMessage`, in the plain words `SessionLostMessage` keeps - no command, no
-  path, none of the build's plumbing - saying that nothing was changed, in the one sentence the
-  two share, and naming the button the page offers, Plan again, by its label. The page prints it
+  path, none of the build's plumbing - saying that the engineer's original part was not changed,
+  and naming the button the page offers, Plan again, by its label. The page prints it
   verbatim: the Remodel page reads no words file, so the host is its words source.
 - **Which plan.** The plan on screen: the host's latest run - the one `init.latest_run` and the
   last `remodel.planned` named - while it is planned and waiting for Start: not started, not
@@ -153,11 +153,15 @@ now tells the page as soon as it sees the plan lost, before the engineer presses
   one listening now - another one, or none while a restart is in flight. The attachment decides,
   never the document: a re-attach back to the same document is lost, because the attachment
   identity changed; a configuration switch and the same document spelt differently re-attach
-  nothing and tell nothing.
+  nothing and tell nothing. *Amended 2026-10-13 (T180):* an ending reported for the exact known
+  run and copy also loses that held session on the same attachment. A plan closed at Plan while
+  Start is switched off remains the deliberate T176 exception.
 - **When the host asks.** On every tool-service attach and detach. The add-in's gate calls
-  `RemodelHost.RefreshAvailability` each time it withdraws a service (before the old one is
-  closed) and each time a new one listens, so a re-attach is seen at the withdrawal, while the
-  page is still showing the seat-checking wait. And once more when a plan releases the host,
+  `RemodelHost.RefreshAvailability` each time it withdraws a service and each time a new one
+  listens. *Amended 2026-10-13 (T180):* withdrawal still precedes disposal and refreshes the
+  capability banner immediately, but the plan-loss notice waits until after the disposal
+  attempt. A timeout may leave application-thread cleanup pending, so the notice promises only
+  that the engineer's original part was not changed; late cleanup facts are reported separately. And once more when a plan releases the host,
   because nothing is told while a plan or a run holds it: a re-attach that lands during a plan
   (22A's race) is told when the plan ends - about the plan just recorded, lost on arrival, or, if
   that plan was refused, about the plan still on screen. A run holds the tool service
@@ -193,15 +197,36 @@ now tells the page as soon as it sees the plan lost, before the engineer presses
   page treats it as the notice for that folder: the same line verbatim, Start disabled and not
   sent, Plan again offered. `init` changes nothing either.
 
+### Held-copy activation and finished-run closure (T180)
+
+*Recorded 2026-10-13 before Start enablement.* With a validated Start seam, a waiting plan
+preserves its original tool-service attachment only for the exact copy recorded by that
+host's latest planned run, on that run's original pipe, while its session is still held.
+Case and canonical path spelling do not change identity. An arbitrary path under `copy/`,
+a different run or attachment, a discarded or ended copy, and a finished run do not qualify.
+The scheduled follow checks the current active document, so a later document change cannot
+make an older copy-activation event preserve the wrong attachment. An ordinary document
+switch retains the existing teardown/re-attach behavior; this exception does not make the
+waiting host busy.
+
+After the executor finishes, the host closes the held session through the existing pipeline
+close with `discard_copy: false`, before it releases its busy guard. It preserves the saved
+copy and every report/artifact. An answered close marks that exact run ended so a later
+Discard cannot close a newer waiting plan on the same pipe. An unanswered close reports
+that cleanup is unconfirmed and may leave the copy open. The next plan can open normally
+after an acknowledged ending. The shipping Start switch remains off until the separate
+workstation gates authorize enablement.
+
 ### When a re-attach or an unload ends the session (T167)
 
 *Added 2026-09-26 (default taken 2026-09-26, the owner may revise; 004 T167, not yet built).* A
 tool-service re-attach or an add-in unload now ends the plan's session on the application thread
 before the old pipe closes (`bridge-remodel.md`, "Ending a session"): the copy is closed unsaved
 and stays in `copy/`, and the four settings `remodel.open` changed are restored. **The page is
-told nothing when that succeeds**: the plan is lost exactly as decision 24A says, and the "Nothing
-was changed" of `SessionLostMessage` and `PlanLostMessage` is now true of the seat as well as of
-the part and the copy. When the teardown reports a failure, the host posts **one** `status`
+told no cleanup error when that succeeds**: the plan is lost exactly as decision 24A says.
+*Amended 2026-10-13 (T180):* `SessionLostMessage`, `PlanLostMessage` and `PlanClosedMessage`
+reassure only that the original part was not changed, including a disposal timeout, failure
+or an answered close that left settings or the copy open. When the teardown reports a failure, the host posts **one** `status`
 `{stage: "error", message}` to the Remodel page, in plain words: what was left - each setting not
 restored, by its Tools > Options label, and whether the copy is still open - and how to put it
 right, with no path and no command. The host hears the outcome through

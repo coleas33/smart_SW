@@ -81,6 +81,28 @@
     chatId: null,
     runDir: null,
     turnRunning: false,
+    awaitingSend: false,
+    sending: false,
+    sendAwaitingStart: false,
+    sendPending: false,
+    applySummaryPending: false,
+    sendError: null,
+    // A restored waiting review's Send is re-running its checks (`review.recheck`, feature 015
+    // contracts/pane.md section 7): every other action waits for it.
+    rechecking: false,
+    sentSeen: Object.create(null),
+    // What the stream on screen has said so far (feature 015, owner decision 98A item 5): its
+    // `session.started` was unticked, and a `session.sent` came after it. The Transcript's
+    // "Nothing was sent" line is decided from these, live and in a replay alike, and never from
+    // what the page shows now. A restore seeds them for a stream it joins part-way.
+    streamChecksOnly: false,
+    streamSent: false,
+    // Send had keyboard focus when its block was last rebuilt (`renderSend`).
+    sendFocus: false,
+    failedApplies: Object.create(null),
+    sendWhenCheckedConfirmed: true,
+    sendWhenCheckedChange: 0,
+    sendWhenCheckedPending: 0,
 
     // The document the review on screen is of, as `review.started` named it, and whether the
     // document on screen is some other one (U8). Stale results are hidden, not discarded: the
@@ -241,6 +263,9 @@
         renderDocument();
         renderBinding();
         followActiveDocument();
+        // A review the host finds for this document only now (feature 015, FR-030): ask again,
+        // and follow its answer by the same rule.
+        requestSessions(true);
         return;
       case 'backend.stopped':
         state.backend = null;
@@ -253,7 +278,9 @@
         // One raw SSE frame, read by the host. Frames for a chat this page is no longer
         // showing are dropped: a reconnect or a second review replaces the transcript, and a
         // late frame from the stream before it belongs to a session that is gone.
-        if (payload.chat_id === state.chatId) {
+        if (payload.chat_id === state.chatId && !state.sendPending && !state.failedApplies[payload.chat_id]) {
+          // A pending Send holds the cursor: its acceptance reopens the durable event log
+          // after establishing the sending state, including frames already queued by the host.
           // A frame is the only proof this side of the channel has that the stream really
           // connected: `events.open` is a request, and the host does not answer it. So this is
           // where the backoff resets. Resetting it in `openStream` - which is exactly what the
@@ -269,7 +296,7 @@
         }
         return;
       case 'events.closed':
-        if (payload.chat_id === state.chatId) {
+        if (payload.chat_id === state.chatId && !state.sendPending && !state.failedApplies[payload.chat_id]) {
           scheduleReconnect(payload.reason || 'The event stream closed.');
         }
         return;
@@ -365,7 +392,7 @@
    * the channel.
    */
   function openStream() {
-    if (!state.chatId) {
+    if (!state.chatId || state.sendPending || state.failedApplies[state.chatId]) {
       return;
     }
 
@@ -501,7 +528,14 @@
     var body = event.body || {};
     switch (event.type) {
       case 'session.started':
+        state.streamChecksOnly = body.send_when_checked === false;
+        state.streamSent = false;
         appendCard(render.textBlock('system', describeStart(body)));
+        return;
+      case 'session.sent':
+        state.sendAwaitingStart = false;
+        state.streamSent = true;
+        appendCard(render.textBlock('system', describeSent(body)));
         return;
       case 'text.delta':
         writeDelta(body.text);
@@ -539,16 +573,47 @@
         renderCoverage();
         return;
       case 'usage':
+        if (state.sending) {
+          state.attentionEpoch++;
+          state.sending = false;
+          state.sendAwaitingStart = false;
+          state.awaitingSend = false;
+          state.sentSeen[state.chatId] = true;
+          // This review has reached the model. Its preceding waiting block is now obsolete.
+          if (state.summary) state.summary.send = null;
+          renderSend();
+          renderChips();
+        }
         state.usage.push(body);
         renderUsage();
         return;
       case 'turn.ended':
-        endTurn(body);
+        // A retry's retained cursor can precede the previous failed attempt's closing pair.
+        // Keep that chronology without ending the accepted attempt before its session.sent.
+        if (state.sending && state.sendAwaitingStart) onReplayedEvent(event);
+        else endTurn(body);
         return;
       case 'session.ended':
-        endSession(body);
+        if (state.sending && state.sendAwaitingStart) onReplayedEvent(event);
+        else endSession(body);
         return;
       case 'error':
+        if (state.sending) {
+          state.sending = false;
+          state.sendAwaitingStart = false;
+          state.awaitingSend = true;
+          state.textBlock = null;
+          state.runningTool = '';
+          setTurnRunning(false);
+          renderTranscriptHead();
+          appendCard(errorLine(body));
+          loadAttention();
+          return;
+        }
+        if (state.turnRunning && state.summary && state.summary.send) {
+          restoreFailedApply(body);
+          return;
+        }
         setTurnRunning(false);
         unansweredFollowUp('failed');
         showError(body);
@@ -590,7 +655,7 @@
         return;
       case 'session.ended':
         state.textBlock = null;
-        appendCard(render.textBlock('system', 'The session ended at ' + (body.ended_at || 'now') + '.'));
+        appendCard(render.textBlock('system', describeEnd(body)));
         return;
       case 'error':
         appendCard(errorLine(body));
@@ -631,11 +696,36 @@
         + 'report.md in the run folder is written by the backend and is unaffected.'));
   }
 
+  /**
+   * The Transcript's line for `session.ended`: "Nothing was sent" only for an unticked review's
+   * end that no `session.sent` on its stream came before (contracts/pane.md section 10). A
+   * failed attempt reached the provider, so its end is the session's.
+   */
+  function describeEnd(body) {
+    return state.streamChecksOnly && !state.streamSent
+      ? 'The checks ended at ' + (body.ended_at || 'now') + '. Nothing was sent to the model.'
+      : 'The session ended at ' + (body.ended_at || 'now') + '.';
+  }
+
   function describeStart(body) {
-    var line = 'Review started with ' + (body.provider || '?') + ' ' + (body.model || '?');
-    if (body.effort_mapping) {
-      line += ' (' + body.effort_mapping.requested + ' -> '
-        + body.effort_mapping.provider_param + '=' + body.effort_mapping.provider_value + ')';
+    if (body.send_when_checked === false) {
+      return 'Checked by code only: nothing is sent to the model until Send to model is pressed.';
+    }
+    return 'Review started with ' + (body.provider || '?') + ' ' + (body.model || '?')
+      + describeEffort(body);
+  }
+
+  function describeEffort(body) {
+    var mapping = body.effort_mapping;
+    return mapping ? ' (' + mapping.requested + ' -> '
+      + mapping.provider_param + '=' + mapping.provider_value + ')' : '';
+  }
+
+  function describeSent(body) {
+    var line = 'Sending to ' + (body.provider || '?') + ' ' + (body.model || '?')
+      + describeEffort(body);
+    if (body.estimate && typeof body.estimate.input_tokens === 'number') {
+      line += ' - first request ' + body.estimate.input_tokens.toLocaleString('en-US') + ' input tokens';
     }
     return line;
   }
@@ -1034,8 +1124,12 @@
     var sentence = '';
     if (!state.chatId) {
       sentence = '';
+    } else if (state.rechecking) {
+      sentence = 'Checking the saved evidence again.';
     } else if (state.reconnectTimer !== null) {
       sentence = 'Reconnecting to the review.';
+    } else if (waitingForSend() && !state.sending) {
+      sentence = 'Checked by code. Not sent to the model.';
     } else if (state.turnRunning) {
       sentence = 'The review is running.';
     } else if (questions && questions.count > 0) {
@@ -1059,15 +1153,27 @@
   }
 
   function endSession(body) {
+    var applying = state.turnRunning && !state.sending && !!(state.summary && state.summary.send);
+    // The backend has settled, but its previous Send size stays unusable until the final
+    // attention arrives. Reads from earlier withdrawals cannot replace that final summary.
+    if (applying) {
+      state.applySummaryPending = true;
+      state.attentionEpoch++;
+    }
+    state.sending = false;
+    state.sendAwaitingStart = false;
     setTurnRunning(false);
     state.textBlock = null;
     state.runningTool = '';
     renderTranscriptHead();
-    appendCard(render.textBlock('system', 'The session ended at ' + (body.ended_at || 'now') + '.'));
+    appendCard(render.textBlock('system', describeEnd(body)));
     // Nothing further will be streamed; a follow-up reopens the stream from the same seq.
     closeStream();
     showStreamState('The session ended.');
-    loadAttention();
+    loadAttention(applying ? function () {
+      state.applySummaryPending = false;
+      renderSend();
+    } : null);
   }
 
   /**
@@ -1093,7 +1199,7 @@
    * `then` rather than a `catch` after it, so it answers the fetch and only the fetch: a throw
    * inside the render is a defect and is not swallowed here.
    */
-  function loadAttention() {
+  function loadAttention(onAccepted) {
     var chatId = state.chatId;
     var epoch = state.attentionEpoch;
     if (!chatId) {
@@ -1102,10 +1208,12 @@
 
     call(sessionPath('/attention'), 'GET').then(
       function (ranking) {
-        if (!ranking || state.chatId !== chatId || state.attentionEpoch !== epoch) {
+        if (!ranking || state.chatId !== chatId || state.attentionEpoch !== epoch
+            || state.failedApplies[chatId]) {
           return;
         }
         applyRanking(ranking);
+        if (typeof onAccepted === 'function') onAccepted();
       },
       function () {
         // Nothing new: Results stay as they are - for a review that has just ended, its cards
@@ -1121,6 +1229,7 @@
    */
   function applyRanking(ranking) {
     state.summary = ranking.summary || null;
+    state.awaitingSend = !!(state.summary && state.summary.send);
     renderSummary();
     renderQuestions();
     renderGroups(ranking.groups || null);
@@ -1142,6 +1251,159 @@
       ui.summary.appendChild(render.summaryBlock(state.summary));
     }
     ui.summary.hidden = !state.summary;
+    renderSend();
+  }
+
+  function waitingForSend() {
+    return state.sending || state.awaitingSend || !!(state.summary && state.summary.send)
+      || !!state.failedApplies[state.chatId];
+  }
+
+  /**
+   * A waiting review restored read-only from its run folder (feature 015, owner decision 68A):
+   * its Send block is the backend's `restored` one, and Send is the one control it offers.
+   */
+  function restoredSend() {
+    return state.readOnly !== null && !!(state.summary && state.summary.send
+      && state.summary.send.state === 'restored');
+  }
+
+  /** The single enabling rule used by both Send's renderer and its press. */
+  function canSendToModel() {
+    return !!state.chatId && !!(state.summary && state.summary.send) && !state.resultsStale
+      && !isDrawing(state.documentInfo) && !state.startPending && !state.turnRunning
+      && !state.sending && !state.sendPending && !state.applySummaryPending && !state.rechecking
+      && (state.readOnly === null || restoredSend());
+  }
+
+  function sendToModel() {
+    if (!canSendToModel()) {
+      return;
+    }
+    if (restoredSend()) {
+      recheckThenSend();
+      return;
+    }
+    var chatId = state.chatId;
+    var resumeStream = !!state.stream || state.reconnectTimer !== null;
+    state.sendPending = true;
+    // Pause an old attempt's stream without consuming its cursor. Accepted Send events and
+    // a refused retry's prior finalization are both replayed from that cursor after the reply.
+    closeStream();
+    state.sendError = null;
+    renderSend();
+    call(sessionPath('/send'), 'POST').then(function () {
+      if (state.chatId !== chatId) return;
+      state.sendPending = false;
+      state.sending = true;
+      state.sendAwaitingStart = true;
+      setTurnRunning(true);
+      renderSend();
+      openStream();
+    }, function (error) {
+      if (state.chatId !== chatId) return;
+      state.sendPending = false;
+      state.sendError = errorBody(error);
+      renderSend();
+      if (resumeStream) openStream();
+    });
+  }
+
+  function renderSend() {
+    // The block is rebuilt, so keyboard focus on Send is carried to the new button (98A). It
+    // stays owed while the button cannot take it - disabled from the press to the reply - and
+    // nothing else has focus.
+    var active = document.activeElement;
+    var onSend = !!active && ui.send.contains(active) && active.getAttribute('data-action') === 'send';
+    state.sendFocus = onSend || (state.sendFocus && (!active || active === document.body));
+    render.clear(ui.send);
+    var block = state.summary && state.summary.send;
+    ui.send.hidden = !block || state.sending;
+    if (block) {
+      ui.send.appendChild(render.sendBlock(block, {
+        disabled: !canSendToModel(),
+        error: state.sendError, labels: state.labels,
+        // A re-run that failed prints the backend's own sentence for it, its class in the fold.
+        errorText: state.sendError && state.sendError.rerun ? block.rerun_failed_text : null
+      }));
+      var button = ui.send.querySelector('[data-action="send"]');
+      if (state.sendFocus && button && !button.disabled && !ui.send.hidden) button.focus();
+    }
+    // Only while the review waits: from Send's press to its first usage a save is refused
+    // (FR-027), so the line would promise what the host will not do (98A).
+    var waitingNote = waitingForSend() && !state.sending && !state.sendPending;
+    ui.waitingSettingsNote.textContent = state.rechecking
+      ? 'Checking the saved evidence again; save when it is done.'
+      : waitingNote
+        ? 'Saving restarts the backend. The waiting review stays, and its Send checks its saved evidence again first.' : '';
+    ui.waitingSettingsNote.hidden = !state.rechecking && !waitingNote;
+    ui.save.disabled = state.rechecking;
+    renderStartReview();
+  }
+
+  /**
+   * A restored waiting review's Send (feature 015, contracts/pane.md section 7): the host re-runs
+   * its checks from its own folder (`review.recheck`), then the re-run's chat is shown from its
+   * snapshot - a live waiting review - and sent as any waiting review is. Nothing is re-keyed: a
+   * read-only review holds no draft and no pending action; its pins follow it. While the re-run
+   * runs, Save, Review, the chips and Send are refused and there is no Stop. A re-run that fails
+   * leaves the review read-only with Send offered and its line beside Send, with no Retry; a folder
+   * that is gone is feature 009's "can no longer be restored".
+   */
+  function recheckThenSend() {
+    var previous = state.chatId;
+    state.rechecking = true;
+    state.sendError = null;
+    renderRechecking();
+    send('review.recheck', { chat_id: previous }).then(function (payload) {
+      state.rechecking = false;
+      var chatId = String(payload.chat_id || '');
+      if (state.pinned[previous]) {
+        state.pinned[chatId] = state.pinned[previous];
+        delete state.pinned[previous];
+      }
+      delete state.failedApplies[previous];
+      showRechecked(chatId, payload);
+    }, function (error) {
+      state.rechecking = false;
+      if (error.errorClass === 'UnknownReview') {
+        cannotRestore(previous);
+      } else {
+        state.sendError = { error_class: error.errorClass, message: error.message, rerun: true };
+      }
+      renderRechecking();
+    });
+  }
+
+  /** Everything the re-run state changes: the status line, the Settings line, the controls, the chips. */
+  function renderRechecking() {
+    renderSend();
+    renderResultsState();
+    renderChips();
+  }
+
+  /** The re-run's chat on screen, from its own snapshot, then sent. */
+  function showRechecked(chatId, payload) {
+    closeStream();
+    resetTranscript();
+    state.chatId = chatId;
+    state.runDir = payload.run_dir || state.runDir;
+    state.reviewed = payload.document || state.reviewed;
+    state.lastSeq = 0;
+    state.transcriptLoaded = false;
+    var epoch = state.restoreEpoch;
+    renderSession();
+    renderBinding();
+    renderAnswers();
+    // The host replaced the re-run review's record: its chip now names this chat.
+    requestSessions(false);
+    call(sessionPath('/snapshot'), 'GET').then(function (snapshot) {
+      if (epoch !== state.restoreEpoch || state.chatId !== chatId) return;
+      restore(snapshot, false);
+      sendToModel();
+    }, function (error) {
+      if (epoch === state.restoreEpoch && state.chatId === chatId) showError(errorBody(error));
+    });
   }
 
   /**
@@ -1246,7 +1508,7 @@
    * review. A host that does not know the row answers an error, and the page simply has no chips.
    */
   function requestSessions(thenFollow) {
-    send('sessions.list', {}).then(function (payload) {
+    return send('sessions.list', {}).then(function (payload) {
       applySessions(payload);
       if (thenFollow) {
         followActiveDocument();
@@ -1258,6 +1520,15 @@
 
   function applySessions(payload) {
     state.reviews = (payload && payload.items) || [];
+    var seen = state.sentSeen;
+    state.sentSeen = Object.create(null);
+    for (var index = 0; index < state.reviews.length; index++) {
+      var item = state.reviews[index] || {};
+      var chatId = String(item.chat_id || '');
+      // A list requested before first usage can arrive afterwards. Keep the live fact until
+      // the host agrees that this review was sent; it alone supplies marks after a reload.
+      if (item.model_status && seen[chatId]) state.sentSeen[chatId] = true;
+    }
     renderChips();
   }
 
@@ -1279,13 +1550,25 @@
       ui.chips.appendChild(render.reviewChips(chips));
     }
     ui.chips.hidden = !chips.length;
+    var buttons = ui.chips.querySelectorAll('[data-action="review-chip"]');
+    for (var chip = 0; chip < buttons.length; chip++) {
+      buttons[chip].disabled = state.rechecking;
+    }
   }
 
-  /** "bracket.sldasm [Default] 10:15": the file and configuration, then the page's own clock. */
+  /**
+   * "bracket.sldasm [Default] 10:15": the file and configuration, then the page's own clock. A
+   * waiting review's chip (one whose item carries `model_status`, feature 015) prints its stored
+   * wall clock as stored, never converted, and its date first when that is not today on this
+   * machine - which only a review found after SOLIDWORKS reopens can be (contracts/pane.md
+   * section 8).
+   */
   function chipLabel(item) {
     var label = docs.label(reviewDocument(item)) || String(item.run_id || '');
-    var clock = clockOf(item.started_at);
-    return clock ? label + ' ' + clock : label;
+    var clock = item.model_status ? storedClockOf(item.started_at) : clockOf(item.started_at);
+    label = clock ? label + ' ' + clock : label;
+    return item.model_status && !state.sentSeen[String(item.chat_id || '')]
+      ? label + ' · not sent' : label;
   }
 
   function clockOf(startedAt) {
@@ -1294,6 +1577,18 @@
       return '';
     }
     return twoDigits(when.getHours()) + ':' + twoDigits(when.getMinutes());
+  }
+
+  /** "HH:MM", or "YYYY-MM-DD HH:MM" when not today: the time's own digits, its offset ignored. */
+  function storedClockOf(startedAt) {
+    var stored = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})/.exec(String(startedAt || ''));
+    if (!stored) {
+      return clockOf(startedAt);
+    }
+    var now = new Date();
+    var today = now.getFullYear() + '-' + twoDigits(now.getMonth() + 1) + '-' + twoDigits(now.getDate());
+    var time = stored[2] + ':' + stored[3];
+    return stored[1] === today ? time : stored[1] + ' ' + time;
   }
 
   function twoDigits(value) {
@@ -1323,7 +1618,7 @@
    * a sort.
    */
   function followActiveDocument() {
-    if (state.turnRunning || state.startPending) {
+    if (state.turnRunning || state.startPending || state.sendPending || state.rechecking) {
       return;
     }
     if (state.chatId && docs.same(state.reviewed, state.documentInfo)) {
@@ -1352,7 +1647,7 @@
    * shows no review.
    */
   function showReview(chatId) {
-    if (state.turnRunning || state.startPending) {
+    if (state.turnRunning || state.startPending || state.sendPending || state.rechecking) {
       return;
     }
     var item = keptReview(chatId);
@@ -1375,8 +1670,21 @@
     renderAnswers();
     renderChips();
 
+    if (state.failedApplies[chatId]) {
+      restoreFromFolder(item, epoch);
+      return;
+    }
     call(sessionPath('/snapshot'), 'GET').then(function (snapshot) {
       if (epoch === state.restoreEpoch) {
+        // A fresh page can arrive after the apply's sole error, with no local memory of it.
+        // The failed waiting cache is still unusable; the saved record is authoritative.
+        var summary = snapshot && snapshot.ranking && snapshot.ranking.summary;
+        if (snapshot && snapshot.chat_state === 'failed' && summary && summary.send
+            && snapshot.send_in_flight !== true) {
+          state.failedApplies[chatId] = { error: null };
+          restoreFromFolder(item, epoch);
+          return;
+        }
         restore(snapshot, false);
       }
     }, function (error) {
@@ -1387,20 +1695,58 @@
         showError(errorBody(error));
         return;
       }
-      call('/reviews/' + encodeURIComponent(String(item.run_id || '')), 'GET').then(function (snapshot) {
-        if (epoch === state.restoreEpoch) {
-          restore(snapshot, true);
-        }
-      }, function (failure) {
-        if (epoch !== state.restoreEpoch) {
-          return;
-        }
-        if (failure.errorClass === 'UnknownReview') {
-          cannotRestore(chatId);
-          return;
-        }
-        showError(errorBody(failure));
-      });
+      restoreFromFolder(item, epoch);
+    });
+  }
+
+  /** The shared disk fallback, also used when a waiting apply leaves a failed live cache. */
+  function restoreFromFolder(item, epoch) {
+    var chatId = String(item.chat_id || '');
+    // A newly observed failed snapshot has no summary while its saved record is read.
+    // Keep the waiting guard rendered as well as enforced by the follow-up handler.
+    if (state.failedApplies[chatId]) {
+      renderStartReview();
+      renderResultsState();
+    }
+    call('/reviews/' + encodeURIComponent(String(item.run_id || '')), 'GET').then(function (snapshot) {
+      if (epoch === state.restoreEpoch) {
+        var failed = state.failedApplies[chatId];
+        state.sendError = failed ? failed.error : null;
+        restore(snapshot, true);
+      }
+    }, function (failure) {
+      if (epoch !== state.restoreEpoch) {
+        return;
+      }
+      if (failure.errorClass === 'UnknownReview') {
+        cannotRestore(chatId);
+        return;
+      }
+      showError(errorBody(failure));
+    });
+  }
+
+  /** An apply has no terminal events on failure. Forget its live view and read the whole saved record. */
+  function restoreFailedApply(error) {
+    var chatId = state.chatId;
+    state.failedApplies[chatId] = { error: error };
+    state.attentionEpoch++;
+    closeStream();
+    setTurnRunning(false);
+    resetTranscript();
+    delete state.drafts[chatId];
+    var epoch = state.restoreEpoch;
+    var item = keptReview(chatId);
+    if (item) {
+      restoreFromFolder(item, epoch);
+      return;
+    }
+    // The host may still be answering the list requested when this review started.
+    requestSessions(false).then(function () {
+      if (epoch !== state.restoreEpoch) return;
+      var kept = keptReview(chatId);
+      if (kept) restoreFromFolder(kept, epoch);
+      else cannotRestore(chatId);
     });
   }
 
@@ -1412,6 +1758,16 @@
   function restore(snapshot, fromFolder) {
     var body = snapshot || {};
     state.restoredFromFolder = fromFolder;
+    state.applySummaryPending = false;
+    state.awaitingSend = body.chat_state === 'awaiting_send';
+    state.sending = body.send_in_flight === true;
+    state.sendAwaitingStart = false;
+    // A stream joined part-way: it waits for Send unless a Send is in flight (98A item 5). A
+    // Transcript replay reads from the start and its `session.started` sets these again.
+    var waits = state.awaitingSend
+      || !!(body.ranking && body.ranking.summary && body.ranking.summary.send);
+    state.streamChecksOnly = waits || state.sending;
+    state.streamSent = state.sending;
     state.readOnly = body.read_only ? String(body.read_only_reason || '') : null;
     state.snapshotLastSeq = typeof body.last_seq === 'number' ? body.last_seq : 0;
 
@@ -1501,6 +1857,7 @@
   function forgetReview(chatId) {
     send('session.forget', { chat_id: chatId }).then(function (payload) {
       delete state.unrestorable[chatId];
+      delete state.failedApplies[chatId];
       applySessions(payload);
     }).catch(function (error) {
       showBanner(error.message);
@@ -1596,7 +1953,7 @@
       startReview(retryOf);
       return;
     }
-    if (state.startPending || state.turnRunning) {
+    if (state.startPending || state.turnRunning || state.sendPending || state.rechecking) {
       return;
     }
     clearPreparation();
@@ -1641,10 +1998,16 @@
   }
 
   function startReview(retryOf, preparationId) {
-    if (state.startPending || state.turnRunning || isDrawing(state.documentInfo)) {
+    if (state.startPending || state.turnRunning || state.sendPending || state.rechecking
+        || isDrawing(state.documentInfo)) {
       return;
     }
 
+    // A refused new extraction has no Send block. The waiting review remains in the host's
+    // chips and can be restored, but its active presentation belongs to the earlier attempt.
+    if (waitingForSend()) {
+      clearReview();
+    }
     clearPreparation();
 
     closeStream();
@@ -1665,6 +2028,7 @@
     send('review.start', request).then(function (payload) {
       resetTranscript();
       state.chatId = payload.chat_id;
+      state.awaitingSend = payload.send_when_checked === false;
       state.runDir = payload.run_dir;
       state.reviewed = payload.document || null;
       state.notExamined = payload.not_examined || null;
@@ -1672,7 +2036,7 @@
       renderSession();
       renderBinding();
       renderAnswers();
-      setTurnRunning(true);
+      setTurnRunning(!state.awaitingSend);
       openStream();
       // The host has just kept this review: ask for the list again, so its chip appears.
       requestSessions(false);
@@ -1693,12 +2057,18 @@
    * pressable again (FR-030).
    */
   function renderStartReview() {
-    ui.startReview.disabled = state.startPending || state.turnRunning || !state.documentInfo
-      || isDrawing(state.documentInfo);
-    var followupDisabled = state.startPending || state.turnRunning || !!state.preparation
-      || !state.chatId || state.resultsStale || state.readOnly !== null;
+    ui.startReview.disabled = state.startPending || state.turnRunning || state.sendPending || state.rechecking
+      || !state.documentInfo || isDrawing(state.documentInfo);
+    var followupDisabled = state.startPending || state.turnRunning || state.sendPending || !!state.preparation
+      || !state.chatId || state.resultsStale || state.readOnly !== null || waitingForSend();
     ui.followupText.disabled = followupDisabled;
+    ui.followupText.placeholder = waitingForSend()
+      ? 'Not sent to the model yet: press Send to model first' : 'Ask a follow-up about any finding';
     ui.followupSend.disabled = followupDisabled;
+    var sendButton = ui.send.querySelector('[data-action="send"]');
+    if (sendButton) {
+      sendButton.disabled = !canSendToModel();
+    }
     ui.clearReview.disabled = !canClearReview();
     syncQuestionControls();
   }
@@ -1709,7 +2079,8 @@
    * pointing at nothing - while the backend goes on spending tokens on it.
    */
   function canClearReview() {
-    return !!state.chatId && !state.turnRunning && !state.startPending;
+    return !!state.chatId && !state.turnRunning && !state.startPending && !state.sendPending
+      && !state.rechecking;
   }
 
   /**
@@ -1759,6 +2130,7 @@
     ui.staleReview.hidden = !line;
 
     renderSession();
+    renderSend();
     renderStartReview();
     renderResultsState();
   }
@@ -1825,6 +2197,12 @@
     render.clear(ui.coverage);
     ui.coverage.hidden = true;
     state.summary = null;
+    state.awaitingSend = false;
+    state.sending = false;
+    state.sendAwaitingStart = false;
+    state.sendPending = false;
+    state.applySummaryPending = false;
+    state.sendError = null;
     state.questionIndex = 0;
     state.questionNote = null;
     state.readOnly = null;
@@ -1867,7 +2245,7 @@
     }
     state.turnRunning = running;
     renderStartReview();
-    ui.stop.disabled = !running || !state.chatId;
+    ui.stop.disabled = !running || !state.chatId || (waitingForSend() && !state.sending);
     renderResultsState();
   }
 
@@ -1880,7 +2258,7 @@
   function sendFollowUp() {
     var text = ui.followupText.value.trim();
     if (!text || !state.chatId || state.turnRunning || state.startPending || state.preparation
-        || state.resultsStale || state.readOnly !== null) {
+        || state.resultsStale || state.readOnly !== null || waitingForSend()) {
       return;
     }
 
@@ -1945,6 +2323,9 @@
 
     var card = target.closest('.card');
     switch (action) {
+      case 'send':
+        sendToModel();
+        return;
       case 'show':
         showInSolidWorks(card);
         return;
@@ -2126,7 +2507,8 @@
       questions,
       draftOf(state.chatId),
       state.questionIndex,
-      { resumeText: state.summary.resume_text, note: state.questionNote, labels: state.labels }));
+      { resumeText: state.summary.resume_text, applyAnswers: !!state.summary.send,
+        note: state.questionNote, labels: state.labels }));
     ui.questions.hidden = false;
     syncQuestionControls();
   }
@@ -2165,9 +2547,10 @@
     return answers;
   }
 
-  /** The panel is locked while a turn runs or a start is in flight, and for a hidden or read-only review. */
+  /** The panel is locked while a turn runs, a start or Send is in flight, or a review is hidden or read-only. */
   function questionsLocked() {
-    return state.turnRunning || state.startPending || state.resultsStale || !state.chatId
+    return state.turnRunning || state.startPending || state.sendPending || state.applySummaryPending
+      || state.resultsStale || !state.chatId
       || state.readOnly !== null;
   }
 
@@ -2293,8 +2676,9 @@
     }
 
     var chatId = state.chatId;
+    var epoch = state.restoreEpoch;
     var items = currentQuestions();
-    state.questionNote = { text: 'Sending your answers...', bad: false };
+    state.questionNote = { text: state.summary && state.summary.send ? 'Applying your answers...' : 'Sending your answers...', bad: false };
     transcriptFromHere();
     setTurnRunning(true);
     renderQuestions();
@@ -2304,7 +2688,7 @@
       for (var index = 0; index < answers.length; index++) {
         delete draft.answers[answers[index].request_id];
       }
-      if (state.chatId !== chatId) {
+      if (state.chatId !== chatId || state.restoreEpoch !== epoch) {
         return;
       }
       state.questionNote = null;
@@ -2313,10 +2697,11 @@
         openStream();
       }
     }).catch(function (error) {
-      setTurnRunning(false);
-      if (state.chatId !== chatId) {
+      if (state.chatId !== chatId || state.restoreEpoch !== epoch) {
         return;
       }
+      state.applySummaryPending = false;
+      setTurnRunning(false);
       var answered = questionNumbered(items, error.requestId);
       if (answered) {
         delete draftOf(chatId).answers[error.requestId];
@@ -2470,6 +2855,10 @@
       return;
     }
 
+    state.sendWhenCheckedConfirmed = state.settings.send_when_checked !== false;
+    if (!state.sendWhenCheckedPending) {
+      ui.sendWhenChecked.checked = state.sendWhenCheckedConfirmed;
+    }
     renderProviders();
     ui.effort.value = state.settings.effort;
     ui.baseUrl.value = state.settings.base_url || '';
@@ -2488,7 +2877,7 @@
     if (source === 'env') {
       return 'No stored key; the key in this workstation environment will be used.';
     }
-    return 'No key is stored. Reviews will fail until one is entered.';
+    return 'No key is stored. With the box ticked a review fails until one is entered; with it unticked the code checks run and Send waits for a key.';
   }
 
   // A key is a credential for one vendor, and there is one key slot: saving a different
@@ -2526,7 +2915,30 @@
     });
   }
 
+  function saveSendWhenChecked() {
+    var change = ++state.sendWhenCheckedChange;
+    var chosen = ui.sendWhenChecked.checked;
+    state.sendWhenCheckedPending++;
+    render.clear(ui.sendWhenCheckedNote);
+    ui.sendWhenCheckedNote.hidden = true;
+    send('send_when_checked.save', { send_when_checked: chosen }).then(function (reply) {
+      state.sendWhenCheckedConfirmed = reply.send_when_checked;
+      if (state.settings) state.settings.send_when_checked = reply.send_when_checked;
+      if (change === state.sendWhenCheckedChange) ui.sendWhenChecked.checked = reply.send_when_checked;
+    }).catch(function (error) {
+      if (change !== state.sendWhenCheckedChange) return;
+      ui.sendWhenChecked.checked = state.sendWhenCheckedConfirmed;
+      errorInto(ui.sendWhenCheckedNote, error, error.message);
+      ui.sendWhenCheckedNote.hidden = false;
+    }).then(function () {
+      state.sendWhenCheckedPending--;
+    });
+  }
+
   function saveSettings() {
+    if (state.rechecking) {
+      return;
+    }
     var payload = {
       provider: currentProvider(),
       model: ui.model.value,
@@ -2589,7 +3001,14 @@
     }
 
     state.initPending = true;
+    var heldToken = state.token;
     send('ready', {}).then(function (payload) {
+      // Another token is another backend (a Settings save, or a restart after it stopped): no
+      // chat of the old one survives. A live waiting review on screen is restored from its folder
+      // at once, read-only with Send offered (feature 015 FR-042, contracts/pane.md section 7).
+      var restarted = !!heldToken && !!payload.token && payload.token !== heldToken;
+      var waiting = restarted && !!state.chatId && state.readOnly === null && waitingForSend()
+        && !state.sending && !state.sendPending;
       state.providers = payload.providers || state.providers;
       state.backend = payload.backend || null;
       state.token = payload.token || null;
@@ -2605,6 +3024,11 @@
       }
       if (state.backend) {
         loadLabels();
+      }
+      if (waiting) {
+        var shown = state.chatId;
+        state.chatId = null;
+        showReview(shown);
       }
       // The reviews the host kept for this SOLIDWORKS session, and - a page reloaded with one of
       // them open - that review shown again (contracts/sessions.md sections 5 and 6).
@@ -2639,6 +3063,9 @@
     ui.location = document.getElementById('gcp-location');
     ui.save = document.getElementById('save-settings');
     ui.saveState = document.getElementById('save-state');
+    ui.waitingSettingsNote = document.getElementById('waiting-settings-note');
+    ui.sendWhenChecked = document.getElementById('send-when-checked');
+    ui.sendWhenCheckedNote = document.getElementById('send-when-checked-note');
 
     ui.startReview = document.getElementById('start-review');
     ui.stop = document.getElementById('stop-turn');
@@ -2652,6 +3079,7 @@
     ui.usage = document.getElementById('usage-line');
     ui.groups = document.getElementById('findings-by-type');
     ui.summary = document.getElementById('summary');
+    ui.send = document.getElementById('send');
     ui.questions = document.getElementById('questions');
     ui.contacts = document.getElementById('contacts');
     ui.notExamined = document.getElementById('not-examined');
@@ -2675,6 +3103,8 @@
     ui.followup = document.getElementById('followup');
     ui.followupText = document.getElementById('followup-text');
     ui.followupSend = document.getElementById('followup-send');
+
+    ui.sendWhenChecked.addEventListener('change', saveSendWhenChecked);
 
     ui.toggleSettings.addEventListener('click', function () {
       ui.settings.hidden = !ui.settings.hidden;

@@ -1,5 +1,7 @@
 # Contract: The Replay
 
+*Feature 015 amendment notice, 2026-10-08:* Planned amendments for the replay refusals are specified in [015 records.md](../../015-review-send-gate/contracts/records.md).
+
 *Amended 2026-09-29 by feature 014 (`specs/014-design-review-eval/`), in scoring.md sections 5 and 10, provenance.md section 6; the amendment text lands with the 014 task that changes the code, 19A's and the origin marks' landed 2026-10-07 (014 T028, T031; section 8, last paragraph):* the replay fixtures regenerate for 19A's check, the origin marks and D12.
 
 *Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`), landed for User Stories 1 to 6 (013 T042, T058, T069, T095, T115, T124; section 9's rows "Feature 013 US1" to "Feature 013 US2") the follow-ups (013 T158, the row "Feature 013 follow-ups") and User Story 7 (013 T134, the row "Feature 013 US7"; its question T134-Q1 answered by a default taken 2026-09-27, section 5's tree-reading clause, built by 013 T145-T146; its question T134-Q2, the Standards sketch check's findings, answered by a default taken 2026-09-27, section 5's clause read for every check that reads the tree):* every change of feature 013 that moves what the model reads passes the replay gate and records a re-measured section 9 row; see 013 `contracts/tokens.md` section 5.
@@ -48,8 +50,15 @@ SOLIDWORKS (FR-002): both passes run `start_review` with `FakeProvider` in a
 
 ## 2. Reading a recording
 
+Amended by feature 015 T079 (FR-040): after finding `session.json`, read its
+`model_status` before checking or reading `events.jsonl`. Reviews started waiting for Send
+are refused by their stored state; a review sent when its checks finished has no
+`model_status` and follows the existing reader path.
+
 | Folder | Answer |
 |---|---|
+| session with `model_status.state` of `not_sent` or `send_failed` | "`<RUN_DIR>` was never sent to the model, so it has no model turn to replay" |
+| session with `model_status.state` of `sent` | "`<RUN_DIR>` was sent to the model after waiting for Send; the replay reads only reviews sent when their checks finished" |
 | no `session.json` | `run_folder_session`'s own sentence (and its benchmark-root sentence when a `<package_id>/session.json` sits below) |
 | no `events.jsonl` | "`<RUN_DIR>` holds no events.jsonl: it is a check folder or was written before the event log, and a check has no provider rounds to replay" |
 | an event log with no `usage` event | "`<RUN_DIR>/events.jsonl` records no usage event: no provider round was recorded, so there is nothing to price" |
@@ -566,6 +575,15 @@ and summary match (`same_summary`) and its size sits within the framing noise of
 growth; the generator's own leak check polices every replaced token of three characters or more
 with a letter, and every replaced number of five digits or more.
 
+*Amended 2026-10-12 by feature 015 T052–T053:* the same string checks also read
+`review-waiting.json` and `review-waiting-big-assembly.json`, generated from fresh unticked
+reviews. `scramble.REVIEWER_OWN_TEXT` also removes the exact public drawing-candidate reason
+(`drawing_context.CANDIDATES_WHY`), the no-interface fit reason in `prerun.not_evaluated_families`,
+and the fixed joint-member clause in `checks.joints._free_faces`. These are the reviewer's
+own words. Tests use the actual snapshot reasons and keep changed clauses and unrelated
+words subject to the unchanged denylist. No individual word or path is exempted, and the
+snapshots are stored without text replacement.
+
 The committed hygiene test checks every fixture file: document and vault paths under the
 fictional root; no drive path outside it, no email, no http(s) URL, no copyright sign; and, when
 the denylist file exists, none of its lines (the test says why it skipped that part when the file
@@ -622,6 +640,38 @@ uv run python tests/fixtures/replay/generate_fixtures.py --recorded <the small a
 fixture that reads `big-assembly` (feature 009, `tests/fixtures/pane/generate_pane_fixture.py
 --write`). A fixture is never edited by hand; SC-001's 1% bar is kept against what the generator
 writes, and every figure of section 9 that moves is re-measured and says why in its test.
+
+**Verification of an unchanged fixture (feature 015, 2026-10-12).** The direct generator
+commands above remain the commands for an intentional fixture change. Their fresh UUIDs,
+wall clocks and measured step durations otherwise change bytes even on accepted code. To
+verify unchanged output, run from `reviewer/` on the machine holding the owner's mapping:
+
+```
+uv run python tests/fixtures/replay/verify_regeneration.py
+```
+
+Then, from the repository root, require the literal raw-file gate:
+
+```
+git diff --exit-code -- reviewer/tests/fixtures/replay
+```
+
+The verifier calls the same unchanged generator and self-checks with the three mapped
+`--recorded` folders, the same names and `--groups 113` for `big-assembly`. Before each
+fixture is replaced, `tests/support/replay_inputs.py` reads only its committed session UUID,
+start time, event times, finalization times and measured step durations. Its context manager
+seeds those producer inputs, resetting for the learning and writing passes: exactly one
+UUID/start clock, two performance clock reads per recorded step, every recorded finalization,
+and every writing-pass event. The first pass has no main-round usage events; its event count
+subtracts `sum(len(plan.rounds) + 1)` and its scratch clock uses the recorded start. Overflow,
+underconsumption and a missing, extra or reordered pass refuse verification. A caught overflow
+still refuses. No generated bytes are normalized, postprocessed or rewritten, and changed
+stable content remains visible in the raw diff. The verifier's exit zero means its generators
+and input checks completed (or an explicitly reported absent-mapping skip), **not** that bytes
+are equal; the literal diff and an unchanged fixture-byte comparison supply that evidence.
+Generator diagnostics, including SystemExit text, are retained in the system temporary
+folder and never printed or committed. Absent mapping/recordings skip with a reason; an
+invalid present mapping fails. An unseeded regeneration is never described as byte-clean.
 
 The finding check is contact-aware. A recorded `interference.static` finding that a contact of
 the fixture reclassifies - its group key and configuration, carried into the fixture's names

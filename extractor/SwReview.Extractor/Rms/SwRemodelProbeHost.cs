@@ -559,7 +559,7 @@ public sealed class SwRemodelProbeHost : IRemodelProbeHost, IRemodelToggleHost
     public IMassPropertyReading? MeasureMassProperties(RemodelProbePart part)
     {
         IModelDoc2 document = Document(part);
-        IBody2 body = FirstSolidBody(document, "PROBE-8 needs a solid body to measure");
+        _gate.Call("ClearSelection2", () => document.ClearSelection2(true));
 
         object created = _gate.Call(Member.CreateMassProperty2, () => document.Extension.CreateMassProperty2());
         if (!(created is IMassProperty2 massProperty))
@@ -567,9 +567,38 @@ public sealed class SwRemodelProbeHost : IRemodelProbeHost, IRemodelToggleHost
             return null;
         }
 
-        var reading = new GatedMassPropertyReading(_gate, new SwMassProperty(massProperty));
-        reading.SetSelectedItems(new object[] { body });
-        return reading;
+        return new GatedMassPropertyReading(_gate, new SwMassProperty(massProperty));
+    }
+
+    /// <inheritdoc />
+    public void ApplyMassPropertyOverride(RemodelProbePart part, string kind)
+    {
+        if (kind != "mass" && kind != "center_of_mass" && kind != "moments")
+            throw new ArgumentException("Unknown analytic override experiment.", nameof(kind));
+
+        IModelDoc2 document = Document(part);
+        _gate.Call("ClearSelection2", () => document.ClearSelection2(true));
+        object created = _gate.Call(Member.CreateMassProperty2, () => document.Extension.CreateMassProperty2());
+        if (!(created is IMassProperty2 properties))
+            throw new InvalidOperationException("The analytic override experiment has no mass property.");
+        new GatedMassPropertyReading(_gate, new SwMassProperty(properties)).SetUseSystemUnits(true);
+        object raw = _gate.Call("GetOverrideOptions", properties.GetOverrideOptions);
+        if (!(raw is IMassPropertyOverrideOptions options))
+            throw new InvalidOperationException("The analytic override options are unreadable.");
+
+        // These seven writers are exempted only by the throwaway probe's guard. The review
+        // and stage-1 guards refuse every spelling of them; none enters the stage-1 allowlist.
+        _gate.Call("IMassPropertyOverrideOptions.set_OverrideMass", () => options.OverrideMass = kind == "mass");
+        _gate.Call("IMassPropertyOverrideOptions.set_OverrideCenterOfMass", () => options.OverrideCenterOfMass = kind == "center_of_mass");
+        _gate.Call("IMassPropertyOverrideOptions.set_OverrideMomentsOfInertia", () => options.OverrideMomentsOfInertia = kind == "moments");
+        bool valueSet = kind == "mass"
+            ? _gate.Call("IMassPropertyOverrideOptions.SetOverrideMassValue", () => options.SetOverrideMassValue(RemodelProbeOverrideValues.Mass))
+            : kind == "center_of_mass"
+                ? _gate.Call("IMassPropertyOverrideOptions.SetOverrideCenterOfMassValue", () => options.SetOverrideCenterOfMassValue(RemodelProbeOverrideValues.Center(), string.Empty))
+                : _gate.Call("IMassPropertyOverrideOptions.SetOverridePrincipalMomentsOfInertia", () => options.SetOverridePrincipalMomentsOfInertia(RemodelProbeOverrideValues.Moments()));
+        if (!valueSet || !_gate.Call("IMassProperty2.SetOverrideOptions", () => properties.SetOverrideOptions(
+                options, (int)swInConfigurationOpts_e.swThisConfiguration, null)))
+            throw new InvalidOperationException("The analytic override could not be applied.");
     }
 
     /// <inheritdoc />

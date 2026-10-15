@@ -91,6 +91,40 @@ def test_a_refusal_is_one_stderr_line_and_exit_1(tmp_path: Path) -> None:
     assert len(result.stderr.strip().splitlines()) == 1
 
 
+@pytest.mark.parametrize("state", ["not_sent", "send_failed", "sent"])
+@pytest.mark.parametrize("events_state", ["present", "missing", "broken"])
+@pytest.mark.parametrize("json_output", [False, True])
+def test_a_waiting_review_refusal_is_exactly_one_stderr_line_before_the_event_read(
+    run: Path, state: str, events_state: str, json_output: bool
+) -> None:
+    session_file = run / "session.json"
+    session = json.loads(session_file.read_text(encoding="utf-8"))
+    session["model_status"] = {
+        "state": state,
+        "document": {"path": "FICT-assembly.SLDASM", "configuration": "Default"},
+        "checked_at": session["started_at"],
+    }
+    session_file.write_text(json.dumps(session), encoding="utf-8")
+    events = run / "events.jsonl"
+    if events_state == "missing":
+        events.unlink()
+    elif events_state == "broken":
+        events.write_text("{FICT-not-json\n", encoding="utf-8")
+    if state == "sent":
+        expected = (
+            f"{run} was sent to the model after waiting for Send; "
+            "the replay reads only reviews sent when their checks finished"
+        )
+    else:
+        expected = f"{run} was never sent to the model, so it has no model turn to replay"
+
+    result = invoke("benchmark", "replay", str(run), *(["--json"] if json_output else []))
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert result.stderr.strip().splitlines() == [f"error: RecordingRefused: {expected}"]
+
+
 def test_a_check_folder_is_refused_naming_the_event_log(tmp_path: Path, run: Path) -> None:
     (run / "events.jsonl").unlink()
 

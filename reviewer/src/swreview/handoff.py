@@ -32,7 +32,7 @@ import zipfile
 from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args
 
 from pydantic import SecretStr
 
@@ -40,6 +40,7 @@ from swreview.agent.settings import MASK, redact
 from swreview.benchmark.runner import PROVENANCE_FILE, SAVED_SET_FILE
 from swreview.ir.loader import reject_answer_key_path
 from swreview.report.attention import EXPLANATION_UNAVAILABLE
+from swreview.report.session import ModelStatus
 from swreview.secrets import KEY_SHAPES
 
 __all__ = [
@@ -413,7 +414,16 @@ def _json_object_bytes(data: bytes | None) -> dict[str, Any] | None:
     return value if isinstance(value, dict) else None
 
 
+# The states a session's model_status may hold, read from the one model that defines them.
+_MODEL_STATES: tuple[str, ...] = get_args(ModelStatus.model_fields["state"].annotation)
+
+
 def _session_summary(session: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    """Carry only a recognized model-status state beside the provider information.
+
+    Missing or null model status adds no key. A non-mapping status or missing, non-string
+    or unknown state adds model_status=None without blocking the export.
+    """
     if session is None:
         return None
     coverage = session.get("coverage")
@@ -450,11 +460,16 @@ def _session_summary(session: Mapping[str, Any] | None) -> dict[str, Any] | None
         for key in ("provider", "model", "effort_mapping", "key_source")
         if isinstance(provider, Mapping) and key in provider
     }
+    model_status = session.get("model_status")
+    model_state = model_status.get("state") if isinstance(model_status, Mapping) else None
+    if not isinstance(model_state, str) or model_state not in _MODEL_STATES:
+        model_state = None
     return {
         key: session.get(key)
         for key in ("session_id", "package_id", "design_id", "started_at", "ended_at", "model")
     } | {
         "provider_info": provider_safe or None,
+        **({"model_status": model_state} if model_status is not None else {}),
         "efficiency": session.get("efficiency"),
         "model_view": session.get("model_view"),
         "explanations": {

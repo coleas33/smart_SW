@@ -1,5 +1,7 @@
 # Contract: Checks First
 
+*Feature 015 amendment notice, 2026-10-08:* Planned amendments for the waiting review and opening, the carried pre-run are specified in [015 review-flow.md](../../015-review-send-gate/contracts/review-flow.md), [015 recheck.md](../../015-review-send-gate/contracts/recheck.md).
+
 *Amended 2026-09-29 by feature 014 (`specs/014-design-review-eval/`), in scoring.md section 5, landed 2026-10-07 (014 T030):* the pre-run's step carries an origin mark (section 1, last paragraph).
 
 *Amended 2026-09-26 by feature 013 (`specs/013-engineer-first-review/`):* landed with 013 T030 - `not_evaluated_families(..., roles=)` ends with `part_role_families(package, roles)`, read from the roles attached to the review: `coverage.prerun.bought_parts` (skipped; the documents not graded because bought in `scope.document_ids`, or in the no-profile state "Bought parts were not told apart: {why}"), `coverage.prerun.maybe_bought` (unresolved; the unclear documents while the part-roles question is open) and the zero-match guard's `coverage.prerun.part_roles` (unresolved), each row and its digest line one sentence, none mapped to a goal; `NotEvaluated` gains `document_ids`, empty for every other family, so their items are unchanged. Pending: the roles attached before the pre-run by `start_review` (013 T022), provenance closed by code at setup (013 T060), and the `check_drawings` digest counting candidate files (013 T085); see 013 `contracts/part-roles.md` section 7, `contracts/re-ask-guard.md` section 2 and `contracts/drawing-capability.md` section 7.
@@ -18,6 +20,15 @@ review runs checks first; `start_review`, `swreview review` and `benchmark run` 
 `coverage_stop`). The pre-run runs inside `start_review`, before the first provider request and
 before `POST /sessions` returns 201, through the same `ToolDispatch` the model uses: every call is
 a real `InvestigationStep` with `tool.started`/`tool.finished`, its findings and its coverage.
+
+*Amended by feature 015 (T035; 015 `contracts/review-flow.md` section 1).* With
+`send_when_checked: false`, the pane runs this same pre-run using a `DeferredProvider`: no key is
+read, no SDK client is built and no provider is set up. No first provider request follows the
+pre-run. The run records `model_status.state: "not_sent"`, the reviewed root document and the
+profile identity when configured, keeps the pre-run and its live-detection outcome, and waits
+for Send. Its first finalization stamps `checked_at` at the end of the checks; later waiting
+finalizations keep that time, so time spent waiting is excluded from unattended runtime. The
+command-line defaults remain `send_when_checked=True` and `earlier=None`.
 
 *Amended by feature 013 (T060, T022, T032).* Before the pre-run, and whether or not checks first is
 on, `start_review` (a) closes provenance by code right after `record_partial_evidence`
@@ -40,7 +51,7 @@ marks.
 
 | # | Call | When |
 |---|---|---|
-| 1 | `bridge_interference(component_ids=[], configuration=<active>, settings=PRERUN_INTERFERENCE_SETTINGS)` | `context.bridge` is set, the root is an assembly and the package has at least two components |
+| 1 | `bridge_interference(component_ids=[], configuration=<active>, settings=PRERUN_INTERFERENCE_SETTINGS)` | `context.bridge` is set, the root is an assembly and the package has at least two components; *amended by feature 015 (T093, 2026-10-14)*: a re-run of a waiting review's checks carries the first run's outcome as this step instead, with no bridge call, and records none where the first run made none (section 3) |
 | 2 | `check_rms_part()`, `check_rms_equations()`, `check_rms_assembly()` | always, unless withheld (lever 4) |
 | 3 | `check_interference_group(group_key=K)`, once per distinct group key | for every group `groups_of` enumerates, the live rows included |
 | 3b | `check_drawings()` (feature 011, *amended 2026-09-23*), after every `CODE_FIRST_CHECKS` name | when the package carries drawing evidence - a drawing record or a drawing candidate (`tools/drawings.drawing_evidence`, the condition `ToolRegistry._offered` offers it on; 011 `contracts/questions.md` section 2) |
@@ -94,6 +105,20 @@ lever 5.
 
 A hang is not detectable: the pipe transport has no read timeout (research R2.23).
 
+*Amended by feature 015 (T093, 2026-10-14).* A re-run of a waiting review's checks after a
+restart (`prerun_checks(..., carried_live=LiveOutcome.from_record(earlier.live_detection))`)
+makes no live call. Where the first run recorded its call it records one carried step through
+`registry.record_call`, at the first run's `step_index`, with the first run's arguments, the
+pre-run's events and origin mark, and the payload `{"status": "carried", "note":
+CARRIED_LIVE_NOTE, "outcome": <the record>}` (plus the first run's `error` for a failed call,
+which records the same `failed` row). Every outcome above is then the first run's line and
+coverage. Rows the first run could not write are not in the folder's package, so the re-run
+removes the reviewed configuration's rows in memory as step 1 does, judges none of the dump's
+stale rows, and its `coverage.prerun.interference_rows` line is `INTERFERENCE_ROWS_NOT_CARRIED`
+in place of the not-written line. The context also carries the first run's `drawing_read`, so
+the host is not pinged. See [015 recheck.md](../../015-review-send-gate/contracts/recheck.md)
+section 3.
+
 *Landed as (T042).* The sentences count in English: "the 1 group the package already holds was
 judged", "1 detected row was dropped because ..." / "<n> detected rows were dropped because
 ...", "the root is a part with 4 components". The live line counts the rows the call **added**
@@ -123,6 +148,18 @@ package equals the written one and a Retry grows neither.
 
 No payload key (`subjects`, `inputs`, `drawing_locations`) ever appears in the opening message.
 The opening message is never pruned (`model-view.md` section 7).
+
+*Amended by feature 015 (T086, 2026-10-13).* When code applies answers while a review waits
+for Send, `prerun.restated` replaces each restated tool's calls in place and re-reads their
+findings from standing session findings citing the new call's step, plus still-standing ids
+the restated call returned. A de-duplicating drawing check keeps its existing finding's earlier
+step, so the returned id also belongs in the rebuilt digest. It recomputes the not-evaluated families with the current roles, keeping the live outcome, folded families and
+withheld tools. With no restatement it returns its input, preserving the frozen opening bytes.
+The same opening builder renders the rebuilt digest; after it and before the opening
+instruction, it adds ordered drawing outcomes, then code questions answered while waiting.
+Those lines occur only in the opening already held by later requests, never as additions to a
+later answer or follow-up. See [015 review flow](../../015-review-send-gate/contracts/review-flow.md)
+section 5.
 
 ## 5. The re-call guard
 
@@ -203,6 +240,11 @@ and `PrerunResult.withheld` holds them. A call *completed* when `PrerunCall.erro
 | `bridge_interference`, `get_finding` and every other tool | never |
 
 A tool that is not in the dispatch's offered tools (withheld by tier) is never listed.
+
+*Amended by feature 015 (T093, 2026-10-14).* A re-run's carried live step (section 3) is a
+`PrerunCall` like the first run's - the same tool, arguments, step and error - so the guard's
+ledger and this table read it as they read the first run's call, and a re-run withholds the
+tools the first run withheld.
 
 **Mechanism.** `PrerunGuard.__iter__` and `__len__` leave out `prerun.withheld`; `call` is
 unchanged, so a withheld tool called anyway reaches the guard's ledger and is answered

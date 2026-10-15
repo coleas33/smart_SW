@@ -666,13 +666,16 @@ public interface IRemodelProbeHost : IRemodelToggleHost
 
     /// <summary>
     /// <c>IModelDocExtension.CreateMassProperty2()</c> (VERIFIED) over <paramref name="part"/>'s
-    /// one solid body, with <c>SelectedItems</c> already set. Null is a failed create. The
-    /// caller still sets <c>AccuracyLevel</c>, sets <c>UseSystemUnits</c> and calls
+    /// whole part with its selection cleared and no accuracy setter. Null is a failed create. The
+    /// caller checks override flags, sets <c>UseSystemUnits</c> and calls
     /// <c>Recalculate()</c> itself, exactly as <see cref="RemodelGeometry.Read"/> does with the
     /// same typed interface - PROBE-8 measures with the identical sequence the stage-1 gate
     /// will use, not a probe-only shortcut.
     /// </summary>
     IMassPropertyReading? MeasureMassProperties(RemodelProbePart part);
+
+    /// <summary>Set exactly one known override on PROBE-8's throwaway analytic part; never save it.</summary>
+    void ApplyMassPropertyOverride(RemodelProbePart part, string kind);
 }
 
 /// <summary>

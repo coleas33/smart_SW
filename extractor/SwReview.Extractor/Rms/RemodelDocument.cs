@@ -252,8 +252,45 @@ public sealed class RemodelSession
 
     public SourceAttestation Attestation { get; }
 
-    /// <summary>Restored in the <c>finally</c> that wraps the run, and at <c>remodel.close</c>.</summary>
-    public RemodelSystemToggles Toggles { get; }
+    /// <summary>The latest command's captured settings; only unfinished restores remain held.</summary>
+    public RemodelSystemToggles Toggles { get; private set; }
+
+    /// <summary>
+    /// T180: idle settings belong to the engineer. Capture them for this command alone,
+    /// verifying the held copy first, and retain any unfinished restore for session cleanup.
+    /// A previous failed restore must finish before a new command can replace its originals.
+    /// </summary>
+    public T WithSettings<T>(IRemodelToggleHost host, Func<T> command)
+    {
+        if (command == null) throw new ArgumentNullException(nameof(command));
+        Toggles.Restore();
+        Scope.VerifyTarget();
+        Exception? primary = null;
+        try
+        {
+            RemodelSystemToggles.Apply(host, Gate, captured => Toggles = captured);
+            return command();
+        }
+        catch (Exception failure)
+        {
+            primary = failure;
+            throw;
+        }
+        finally
+        {
+            try
+            {
+                Toggles.Restore();
+            }
+            catch (Exception restoration)
+            {
+                if (primary == null) throw;
+                throw new AggregateException(
+                    "the copy operation failed and its application settings could not all be restored",
+                    primary, restoration);
+            }
+        }
+    }
 
     /// <summary>The copy's signals, measured at <c>remodel.open</c> step 12.</summary>
     public ScopeSignals? Signals { get; set; }

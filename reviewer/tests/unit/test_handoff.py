@@ -613,3 +613,149 @@ def test_each_artifact_record_names_the_folder_it_was_read_from(
     records = manifest_of(entries)["artifacts"]
     assert PROVENANCE_FILE in {record["path"] for record in records}
     assert {record["source"] for record in records} == {"run_dir"}
+
+
+# --- the model-status summary (feature 015 T111) -----------------------------------
+
+
+@pytest.fixture
+def model_status_run(tmp_path: Path) -> tuple[Path, dict[str, Any]]:
+    run_dir = tmp_path / "FICT-run"
+    write_run(run_dir)
+    (run_dir / "package.json").write_text(
+        json.dumps({
+            "design_id": "FICT-model-status",
+            "source": r"C:\Fictional\FICT-assembly.SLDASM",
+        }),
+        encoding="utf-8",
+    )
+    session = json.loads((run_dir / "session.json").read_text(encoding="utf-8"))
+    session["design_id"] = "FICT-model-status"
+    session["provider_info"]["effort_mapping"] = {
+        "requested": "low", "provider_param": "FICT-effort", "provider_value": "FICT-low",
+    }
+    return run_dir, session
+
+
+def ticked_session_summary() -> dict[str, Any]:
+    """Today's complete summary, including its construction order, for the fictional run."""
+    return {
+        "session_id": "00000000-0000-0000-0000-000000000001",
+        "package_id": "00000000-0000-0000-0000-000000000002",
+        "design_id": "FICT-model-status",
+        "started_at": "2026-09-20T14:00:00Z",
+        "ended_at": "2026-09-20T14:01:00Z",
+        "model": SECRET,
+        "provider_info": {
+            "provider": "fake",
+            "model": "fake-scripted",
+            "effort_mapping": {
+                "requested": "low", "provider_param": "FICT-effort", "provider_value": "FICT-low",
+            },
+            "key_source": "none",
+        },
+        "efficiency": {"prompt_cache_key": False, "coverage_stop": True},
+        "model_view": None,
+        "explanations": {"enabled": True, "fingerprint": "a" * 64, "count": 1},
+        "coverage_counts": {
+            "checked": 1, "skipped": 0, "unresolved": 0, "failed": 0, "out_of_scope": 0,
+        },
+        "coverage_status": "valid",
+        "evidence_request_counts": {"open": 1, "answered": 0},
+        "evidence_request_status": "valid",
+        "usage": {"rounds": 2, "turns": 1},
+    }
+
+
+@pytest.mark.parametrize("state", ["not_sent", "send_failed", "sent"])
+def test_the_session_summary_carries_only_the_model_status_state_beside_provider_info(
+    tmp_path: Path, model_status_run: tuple[Path, dict[str, Any]], state: str,
+) -> None:
+    """015 records section 7: the summary gains only the state; provider information stays."""
+    run_dir, session = model_status_run
+    session["model_status"] = {
+        "state": state,
+        "document": {
+            "path": r"C:\Fictional\FICT-assembly.SLDASM", "configuration": "FICT-default",
+        },
+        "checked_at": "2026-09-20T14:00:30Z",
+        "profile": {"path": r"C:\Fictional\FICT-profile.yaml", "sha256": "b" * 64},
+        "rechecked_from": "00000000-0000-0000-0000-000000000003",
+        "failures": [{
+            "at": "2026-09-20T14:00:40Z",
+            "error_class": "RuntimeError",
+            "reason": "FICT-send-failure",
+        }],
+        "sent_at": "2026-09-20T14:00:45Z",
+        "estimate": {"input_tokens": 123, "encoding": "o200k_base", "approximate": False},
+        "opening_finding_ids": ["F-001"],
+    }
+    (run_dir / "session.json").write_text(json.dumps(session), encoding="utf-8")
+
+    entries = read_zip(export_handoff(run_dir, tmp_path / "FICT-handoff.zip", exported_at=STAMP))
+    summary = manifest_of(entries)["session_summary"]
+
+    assert summary["model_status"] == state
+    expected = ticked_session_summary()
+    assert summary == expected | {"model_status": state}
+    assert summary["provider_info"] == session["provider_info"]
+    # Manifest JSON sorts keys; pin the summary's insertion order before serialization.
+    expected_keys = list(expected)
+    expected_keys.insert(expected_keys.index("provider_info") + 1, "model_status")
+    constructed = handoff._session_summary(session)
+    assert constructed is not None
+    assert list(constructed) == expected_keys
+
+
+@pytest.mark.parametrize("status_present", [False, True], ids=["missing", "null"])
+def test_the_ticked_session_summary_is_unchanged_without_model_status(
+    tmp_path: Path, model_status_run: tuple[Path, dict[str, Any]], status_present: bool,
+) -> None:
+    """Missing and null model status leave the whole sent-at-once summary unchanged."""
+    run_dir, session = model_status_run
+    if status_present:
+        session["model_status"] = None
+    (run_dir / "session.json").write_text(json.dumps(session), encoding="utf-8")
+
+    entries = read_zip(export_handoff(run_dir, tmp_path / "FICT-handoff.zip", exported_at=STAMP))
+
+    expected = ticked_session_summary()
+    assert manifest_of(entries)["session_summary"] == expected
+    constructed = handoff._session_summary(session)
+    assert constructed is not None
+    assert constructed == expected
+    assert list(constructed) == list(expected)
+
+
+@pytest.mark.parametrize("model_status", [
+    pytest.param("sent", id="non_mapping_string"),
+    pytest.param([], id="non_mapping_list"),
+    pytest.param(False, id="non_mapping_false"),
+    pytest.param({}, id="missing_state"),
+    pytest.param({"state": None}, id="null_state"),
+    pytest.param({"state": 7}, id="numeric_state"),
+    pytest.param({"state": ["sent"]}, id="list_state"),
+    pytest.param({"state": {"value": "sent"}}, id="mapping_state"),
+    pytest.param({"state": "FICT-unknown"}, id="unknown_state"),
+])
+def test_a_malformed_model_status_is_null_in_the_summary_and_does_not_block_export(
+    tmp_path: Path, model_status_run: tuple[Path, dict[str, Any]], model_status: Any,
+) -> None:
+    """A non-mapping status or missing, non-string or unknown state exports as null,
+    mirroring provider_info's unreadable value; its presence does not fail the export."""
+    run_dir, session = model_status_run
+    session["model_status"] = model_status
+    (run_dir / "session.json").write_text(json.dumps(session), encoding="utf-8")
+
+    entries = read_zip(export_handoff(run_dir, tmp_path / "FICT-handoff.zip", exported_at=STAMP))
+    summary = manifest_of(entries)["session_summary"]
+
+    assert summary["model_status"] is None
+    expected = ticked_session_summary()
+    assert summary == expected | {"model_status": None}
+    assert summary["provider_info"] == session["provider_info"]
+    expected_keys = list(expected)
+    expected_keys.insert(expected_keys.index("provider_info") + 1, "model_status")
+    constructed = handoff._session_summary(session)
+    assert constructed is not None
+    assert list(constructed) == expected_keys

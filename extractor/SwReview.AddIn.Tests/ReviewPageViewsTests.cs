@@ -105,7 +105,7 @@ public sealed class ReviewPageViewsTests
 
     /// <summary>The status line reads each of the page's four sentences in its state, and nothing without a chat.</summary>
     [Fact]
-    public void TheStatusLineReadsEachOfItsFourSentencesInItsState()
+    public void TheStatusLineReadsEachOfItsSentencesInItsState()
     {
         Run run = Scripted.Value;
 
@@ -115,6 +115,23 @@ public sealed class ReviewPageViewsTests
         Assert.Equal(1, run.ReconnectsHeld);
         Assert.Equal("Waiting for your answers.", run.Waiting.GetProperty("state").GetString());
         Assert.Equal("The review has finished.", run.Finished.GetProperty("state").GetString());
+        WaitingReviewFixture waiting = WaitingReviewFixture.Read();
+        ReviewPageDriver.Run(waiting.Configure, async driver =>
+        {
+            await waiting.Start(driver);
+            Assert.Equal("Checked by code. Not sent to the model.", (await driver.Read(ReadState)).GetProperty("state").GetString());
+        });
+        // 015 T107, moved: a restored review's Send re-running its checks.
+        RestoredReviewFixture restored = RestoredReviewFixture.Read();
+        ReviewPageDriver.Run(driver =>
+        {
+            restored.Configure(driver);
+            driver.HoldReviewRecheck = true;
+        }, async driver =>
+        {
+            await ReviewPageRecheckTests.PressSend(driver);
+            Assert.Equal("Checking the saved evidence again.", (await driver.Read(ReadState)).GetProperty("state").GetString());
+        });
     }
 
     [Fact]

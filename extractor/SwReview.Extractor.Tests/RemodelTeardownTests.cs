@@ -21,8 +21,8 @@ namespace SwReview.Extractor.Tests;
 /// In order: <c>VerifyTarget</c>; when it passes, the tag off and the copy closed
 /// <b>unsaved</b>, each write judged by the guard and recorded but not counted against the
 /// circuit breaker; in a <c>finally</c>, every setting still holding the run's value put back -
-/// the three dialog toggles, since <c>remodel.open</c> puts <c>CommandInProgress</c> back as its
-/// own last step (U27, default taken 2026-09-28, the owner may revise); in an outer
+/// none after a successful idle open/command (T180), or the originals retained by a failed
+/// command restoration; in an outer
 /// <c>finally</c>, the session and the run root cleared. It never saves and never deletes, and it
 /// tells the host every ending of a session that existed.
 ///
@@ -34,12 +34,14 @@ public sealed class RemodelTeardownTests : IDisposable
     private const string Reason = RemodelSessionEnd.ReasonToolServiceStopped;
 
     /// <summary>
-    /// What a whole restore at the end of a session writes, in order: the three toggles'
-    /// originals. <c>CommandInProgress</c> is not among them: the open already put it back (U27).
+    /// A clean idle session has already restored all four originals (T180), so teardown
+    /// performs no redundant application settings write. Failed-command cases explicitly
+    /// create an unfinished restore before asserting its recovery.
     /// </summary>
     private static readonly string[] WholeRestore =
     {
-        "10=True", "77=True", "329=True",
+        // Idle Plan has already restored all four settings (T180).
+
     };
 
     private readonly RemodelHarness _harness;
@@ -318,6 +320,7 @@ public sealed class RemodelTeardownTests : IDisposable
     {
         _harness.Open();
         _harness.Seat.FailingWrites.Add("77=True");
+        LeavePendingSettings();
         _harness.Seat.ToggleWrites.Clear();
 
         RemodelSessionEnd outcome = _harness.Dispatcher.EndRemodelSession(Reason);
@@ -327,8 +330,8 @@ public sealed class RemodelTeardownTests : IDisposable
         Assert.Equal(3, outcome.SettingsRestored);
         Assert.Equal(new[] { "swShowErrorsEveryRebuild" }, outcome.SettingsOutstanding);
 
-        // Every one was attempted, and the session is over anyway.
-        Assert.Equal(WholeRestore, _harness.Seat.ToggleWrites);
+        // Only this command's unfinished restore remains; all other originals are already back.
+        Assert.Equal(new[] { "77=True" }, _harness.Seat.ToggleWrites);
         Assert.False(_harness.Seat.CommandInProgress);
         Assert.Null(_harness.Dispatcher.RemodelTargetPath);
         OpenAgain();
@@ -362,6 +365,7 @@ public sealed class RemodelTeardownTests : IDisposable
         _harness.Copy.UntagFailure = new COMException("untag");
         _harness.Seat.CloseFailure = new COMException("close");
         _harness.Seat.FailingWrites.Add("10=True");
+        LeavePendingSettings();
         _harness.Seat.FailingWrites.Add("CommandInProgress=False");
 
         RemodelSessionEnd outcome = _harness.Dispatcher.EndRemodelSession(Reason);
@@ -400,6 +404,9 @@ public sealed class RemodelTeardownTests : IDisposable
     public void TheCleanUpsWritesAreJudgedAndRecordedAndNoneIsRefused()
     {
         _harness.Open();
+        _harness.Seat.FailingWrites.Add("77=True");
+        LeavePendingSettings();
+        _harness.Seat.FailingWrites.Clear();
         var observer = new SwReview.Extractor.Sw.RecordingGateObserver();
         _harness.Gate.Observer = observer;
 
@@ -623,6 +630,7 @@ public sealed class RemodelTeardownTests : IDisposable
     {
         _harness.Open();
         _harness.Seat.FailingWrites.Add("329=True");
+        LeavePendingSettings();
         Break(RemodelTargetCheck.SessionTag);
 
         RemodelSessionEnd outcome = _harness.Dispatcher.EndRemodelSession(Reason);
@@ -695,6 +703,14 @@ public sealed class RemodelTeardownTests : IDisposable
         _harness.Seat.FailingWrites.Clear();
         _harness.Open();
         Assert.Equal(_harness.CopyPath, _harness.Dispatcher.RemodelTargetPath);
+    }
+
+    /// <summary>A real command whose restore is refused leaves its pending originals for teardown.</summary>
+    private void LeavePendingSettings()
+    {
+        Assert.Equal(BridgeStatus.Error, _harness.Dispatch(
+            RemodelCommands.Rename,
+            "{\"persist_ref\":\"ref:fillet\",\"new_name\":\"Fillet-Edge1\"}").Status);
     }
 
     private static void Trip(CircuitBreaker breaker)

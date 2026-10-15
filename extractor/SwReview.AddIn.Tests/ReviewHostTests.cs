@@ -346,6 +346,7 @@ public sealed class ReviewHostTests
 
             NewSessionRequest posted = Assert.Single(world.Backend.Created);
             Assert.Equal(expected, posted.RunDirectory);
+            Assert.Equal(ReviewMode.Send, posted.Mode);
             Assert.Equal("openai", posted.Provider);
             Assert.Equal("gpt-5.1", posted.Model);
             Assert.Equal("high", posted.Effort);
@@ -367,6 +368,707 @@ public sealed class ReviewHostTests
             // The bridge secret authorizes the in-process tool service (T047). It travels to
             // the backend and nowhere else; the page must never see it.
             world.AssertNothingPostedContains("bridge-secret-value");
+        }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ReviewStartUsesTheStoredModeAndMarksOnlyAnUntickedReview(bool send)
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Document = new PageDocument(@"C:\Fictional\FICT-assembly.SLDASM", "Default");
+            world.Settings.SendsWhenChecked = send;
+            world.Open();
+            world.Receive("review.start", "start", new { });
+            Assert.Equal(send ? ReviewMode.Send : ReviewMode.Wait, Assert.Single(world.Backend.Created).Mode);
+            Assert.Equal(send, world.Reply("review.started", "start").GetProperty("send_when_checked").GetBoolean());
+            Assert.Equal(send ? null : "not_sent", Assert.Single(world.Host.Sessions).ModelStatus);
+            world.Receive("sessions.list", "list", new { });
+            JsonElement item = Assert.Single(world.Reply("sessions", "list").GetProperty("items").EnumerateArray());
+            if (send) Assert.False(item.TryGetProperty("model_status", out _));
+            else
+            {
+                Assert.Equal("not_sent", item.GetProperty("model_status").GetString());
+                Assert.Equal("Checked 12 components by code; nothing was sent to the model.", world.LastPosted("status").GetProperty("message").GetString());
+            }
+        }
+    }
+
+    [Theory]
+    [InlineData("missing", "InvalidRequest")]
+    [InlineData("blank", "InvalidRequest")]
+    [InlineData("unknown", "UnknownChat")]
+    [InlineData("check", "UnknownChat")]
+    [InlineData("drawing", "DrawingActive")]
+    [InlineData("drawing-stopped", "DrawingActive")]
+    [InlineData("other-path", "ReviewNotActive")]
+    [InlineData("other-configuration", "ReviewNotActive")]
+    [InlineData("no-document", "ReviewNotActive")]
+    [InlineData("other-stopped", "ReviewNotActive")]
+    [InlineData("own-stopped", "BackendUnavailable")]
+    public void ReviewRecheckRefusesInOrderWithoutChangingAnything(string scenario, string errorClass)
+    {
+        using (var world = new ReviewWorld())
+        {
+            var reviewed = new PageDocument(@"C:\Fictional\FICT-assembly.SLDASM", "Default");
+            world.Document = reviewed;
+            world.Open();
+            string run = world.TrackedRun("FICT-earlier");
+            world.Host.TrackSession("FICT-earlier", run, reviewed, new DateTimeOffset(Stamp), "send_failed");
+            SessionRecord original = Assert.Single(world.Host.Sessions);
+            string[] folders = world.RunFolders();
+            object payload = new { chat_id = "FICT-earlier" };
+            switch (scenario)
+            {
+                case "missing":
+                    payload = new { };
+                    world.Document = new PageDocument(@"C:\Fictional\FICT-other.SLDDRW", "Default");
+                    world.Backend.Endpoint = null;
+                    break;
+                case "blank":
+                    payload = new { chat_id = "  " };
+                    break;
+                case "unknown":
+                    payload = new { chat_id = "FICT-unknown" };
+                    world.Document = new PageDocument(@"C:\Fictional\FICT-other.SLDDRW", "Default");
+                    world.Backend.Endpoint = null;
+                    break;
+                case "check":
+                    world.Host.TrackCheck(run);
+                    payload = new { chat_id = Path.GetFileName(run) };
+                    break;
+                case "drawing":
+                case "drawing-stopped":
+                    world.Document = new PageDocument(@"C:\Fictional\FICT-other.SLDDRW", "Default");
+                    break;
+                case "other-path":
+                case "other-stopped":
+                    world.Document = new PageDocument(@"C:\Fictional\FICT-other.SLDASM", "Default");
+                    break;
+                case "other-configuration":
+                    world.Document = new PageDocument(reviewed.Path, "default");
+                    break;
+                case "no-document":
+                    world.Document = null;
+                    break;
+            }
+            if (scenario.EndsWith("-stopped", StringComparison.Ordinal)) world.Backend.Endpoint = null;
+            SessionRecord[] before = world.Host.Sessions.ToArray();
+            SessionRecord? latest = world.Host.LatestSession;
+
+            world.Receive("review.recheck", "recheck", payload);
+
+            Assert.Equal(errorClass, world.Reply("error", "recheck").GetProperty("error_class").GetString());
+            Assert.Equal(before, world.Host.Sessions);
+            Assert.Same(latest, world.Host.LatestSession);
+            Assert.Same(original, world.Host.FindSession("FICT-earlier"));
+            Assert.Equal("send_failed", original.ModelStatus);
+            Assert.Equal(folders, world.RunFolders());
+            Assert.Equal(0, world.Dump.Runs);
+            Assert.Empty(world.Backend.Created);
+            Assert.Empty(world.AllPosted("status"));
+            Assert.Empty(world.AllPosted("review.rechecked"));
+        }
+    }
+
+    [Theory]
+    [InlineData("not_sent")]
+    [InlineData("send_failed")]
+    [InlineData(null)]
+    public void ReviewRecheckUsesSavedEvidenceAndReplacesOnlyItsRecord(string? modelStatus)
+    {
+        using (var world = new ReviewWorld())
+        {
+            var reviewed = new PageDocument(@"C:\Fictional\FICT-assembly.SLDASM", "Default");
+            world.Document = new PageDocument(reviewed.Path.ToLowerInvariant(), "Default");
+            world.Settings.Provider = "openai";
+            world.Settings.Model = "FICT-current-model";
+            world.Settings.Effort = "high";
+            world.Settings.StandardsProfilePath = @"C:\Fictional\FICT-current-profile.yaml";
+            world.Settings.SendsWhenChecked = true;
+            world.Bridge = new BridgeConfig("FICT-bridge", "FICT-bridge-secret");
+            world.Now = Stamp.AddHours(1);
+            world.Backend.NextChatId = "FICT-rechecked";
+            world.Backend.NotExamined = JsonDocument.Parse(NotExaminedSample.Json()).RootElement.Clone();
+            world.Open();
+            string run = world.TrackedRun("FICT-earlier");
+            world.Host.TrackSession("FICT-earlier", run, reviewed, new DateTimeOffset(Stamp), modelStatus);
+            SessionRecord original = Assert.Single(world.Host.Sessions);
+            world.Host.TrackSession("FICT-other", world.TrackedRun("FICT-other"));
+            SessionRecord other = world.Host.FindSession("FICT-other")!;
+            SessionRecord check = world.Host.TrackCheck(world.TrackedRun("FICT-check"));
+            string[] folders = world.RunFolders();
+            world.Backend.OnCreate = _ =>
+            {
+                JsonElement status = Assert.Single(world.AllPosted("status"));
+                Assert.Equal("checking", status.GetProperty("stage").GetString());
+                Assert.Equal("Checking the saved evidence again...", status.GetProperty("message").GetString());
+                Assert.Same(original, world.Host.FindSession("FICT-earlier"));
+                Assert.Empty(world.AllPosted("review.rechecked"));
+            };
+
+            world.Receive("review.recheck", "recheck", new
+            {
+                chat_id = "FICT-earlier", run_dir = @"C:\Fictional\FICT-untrusted", send_when_checked = true,
+            });
+
+            NewSessionRequest request = Assert.Single(world.Backend.Created);
+            Assert.Equal(run, request.RunDirectory);
+            Assert.Equal(ReviewMode.Recheck, request.Mode);
+            Assert.Equal("openai", request.Provider);
+            Assert.Equal("FICT-current-model", request.Model);
+            Assert.Equal("high", request.Effort);
+            Assert.Equal(world.Engineer, request.Engineer);
+            Assert.Equal(@"C:\Fictional\FICT-current-profile.yaml", request.StandardsProfilePath);
+            Assert.Same(world.Bridge, request.Bridge);
+            Assert.Null(request.RetryOf);
+            Assert.Equal(0, world.Dump.Runs);
+            Assert.Equal(folders, world.RunFolders());
+            SessionRecord replacement = world.Host.FindSession("FICT-rechecked")!;
+            Assert.NotNull(replacement);
+            Assert.NotSame(original, replacement);
+            Assert.Null(world.Host.FindSession("FICT-earlier"));
+            Assert.Equal(new[] { replacement, other, check }, world.Host.Sessions);
+            Assert.Same(replacement, world.Host.LatestSession);
+            Assert.Same(reviewed, replacement.Document);
+            Assert.Equal(run, replacement.RunDirectory);
+            Assert.Equal(new DateTimeOffset(world.Now), replacement.StartedAt);
+            Assert.Equal(modelStatus, replacement.ModelStatus);
+            JsonElement[] statuses = world.AllPosted("status");
+            Assert.Equal(new[] { "checking", "ready" }, statuses.Select(status => status.GetProperty("stage").GetString()));
+            Assert.Equal("Checking the saved evidence again...", statuses[0].GetProperty("message").GetString());
+            Assert.Equal("Checked the saved evidence again; nothing was sent to the model.", statuses[1].GetProperty("message").GetString());
+            JsonElement reply = world.Reply("review.rechecked", "recheck");
+            Assert.Equal("FICT-rechecked", reply.GetProperty("chat_id").GetString());
+            Assert.Equal("FICT-earlier", reply.GetProperty("previous_chat_id").GetString());
+            Assert.Equal(run, reply.GetProperty("run_dir").GetString());
+            Assert.Equal(NotExaminedSample.Sentence, reply.GetProperty("not_examined").GetProperty("sentence").GetString());
+            Assert.Equal(reviewed.Path, reply.GetProperty("document").GetProperty("path").GetString());
+            Assert.Equal(reviewed.Configuration, reply.GetProperty("document").GetProperty("configuration").GetString());
+            Assert.Empty(world.AllPosted("review.started"));
+            world.AssertNothingPostedContains("FICT-bridge-secret");
+        }
+    }
+
+    [Theory]
+    [InlineData("not_sent")]
+    [InlineData("send_failed")]
+    public void ARecordForgottenDuringItsRecheckIsTrackedAgainWithItsOwnModelStatus(string modelStatus)
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Document = new PageDocument(@"C:\Fictional\FICT-assembly.SLDASM", "Default");
+            world.Backend.NextChatId = "FICT-rechecked";
+            world.Open();
+            string run = world.TrackedRun("FICT-earlier");
+            world.Host.TrackSession("FICT-earlier", run, world.Document, new DateTimeOffset(Stamp), modelStatus);
+            world.Host.TrackSession("FICT-other", world.TrackedRun("FICT-other"));
+            SessionRecord other = world.Host.FindSession("FICT-other")!;
+            world.Backend.OnCreate = _ => Assert.True(world.Host.ForgetSession("FICT-earlier"));
+
+            world.Receive("review.recheck", "recheck", new { chat_id = "FICT-earlier" });
+
+            SessionRecord replacement = world.Host.FindSession("FICT-rechecked")!;
+            Assert.NotNull(replacement);
+            Assert.Equal(modelStatus, replacement.ModelStatus);
+            Assert.Equal(new[] { other, replacement }, world.Host.Sessions);
+            Assert.Same(replacement, world.Host.LatestSession);
+            Assert.Equal("FICT-earlier",
+                world.Reply("review.rechecked", "recheck").GetProperty("previous_chat_id").GetString());
+        }
+    }
+
+    [Fact]
+    public void ReviewRecheckKeepsItsRecordAndReportsTheBackendsOwnRefusal()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Document = new PageDocument(@"C:\Fictional\FICT-assembly.SLDASM", "Default");
+            world.Open();
+            string run = world.TrackedRun("FICT-earlier");
+            world.Host.TrackSession("FICT-earlier", run, world.Document, new DateTimeOffset(Stamp), "not_sent");
+            SessionRecord original = Assert.Single(world.Host.Sessions);
+            world.Backend.CreateFailure = new BackendRequestException("NotWaiting", "FICT-review was already sent.", false);
+
+            world.Receive("review.recheck", "recheck", new { chat_id = "FICT-earlier" });
+
+            JsonElement error = world.Reply("error", "recheck");
+            Assert.Equal("NotWaiting", error.GetProperty("error_class").GetString());
+            Assert.Equal("FICT-review was already sent.", error.GetProperty("message").GetString());
+            Assert.False(error.GetProperty("retryable").GetBoolean());
+            Assert.Same(original, Assert.Single(world.Host.Sessions));
+            Assert.Same(original, world.Host.LatestSession);
+            Assert.Equal("not_sent", original.ModelStatus);
+            Assert.Equal(new[] { run }, world.RunFolders());
+            Assert.Equal(0, world.Dump.Runs);
+            Assert.Empty(world.AllPosted("review.rechecked"));
+            JsonElement[] statuses = world.AllPosted("status");
+            Assert.Equal(new[] { "checking", "error" }, statuses.Select(status => status.GetProperty("stage").GetString()));
+            Assert.Equal("Checking the saved evidence again...", statuses[0].GetProperty("message").GetString());
+            Assert.Equal("FICT-review was already sent.", statuses[1].GetProperty("message").GetString());
+        }
+    }
+
+    [Theory]
+    [InlineData("SLDPRT", "not_sent")]
+    [InlineData("SLDPRT", "send_failed")]
+    [InlineData("SLDASM", "not_sent")]
+    [InlineData("SLDASM", "send_failed")]
+    public void SessionsListFindsAndKeepsOneSavedReviewOfTheActiveDocument(string extension, string state)
+    {
+        using (var world = new ReviewWorld())
+        {
+            var reviewed = new PageDocument(@"C:\Fictional\FICT-reopened." + extension, "Default");
+            world.Document = new PageDocument(reviewed.Path.ToLowerInvariant(), "Default");
+            const string checkedAt = "2026-10-12T23:41:26+09:30";
+            string run = world.SavedReview(reviewed, "FICT-saved-session", state, checkedAt);
+            world.Now = Stamp.AddDays(20);
+            world.Open();
+            Assert.Empty(world.Host.Sessions);
+
+            world.Receive("sessions.list", "first-found", new { });
+
+            JsonElement first = Assert.Single(world.Reply("sessions", "first-found").GetProperty("items").EnumerateArray());
+            Assert.Equal("FICT-saved-session", first.GetProperty("chat_id").GetString());
+            Assert.Equal(run, first.GetProperty("run_dir").GetString());
+            Assert.Equal(Path.GetFileName(run), first.GetProperty("run_id").GetString());
+            Assert.Equal(reviewed.Path, first.GetProperty("path").GetString());
+            Assert.Equal("Default", first.GetProperty("configuration").GetString());
+            Assert.Equal(checkedAt, first.GetProperty("started_at").GetString());
+            Assert.Equal(state, first.GetProperty("model_status").GetString());
+            SessionRecord found = Assert.Single(world.Host.Reviews());
+            Assert.Same(found, world.Host.FindSession("FICT-saved-session"));
+            Assert.Equal(run, found.RunDirectory);
+            Assert.Equal(reviewed.Path, found.Document!.Path);
+            Assert.Equal("Default", found.Document.Configuration);
+            Assert.Equal(TimeSpan.FromMinutes(570), found.StartedAt!.Value.Offset);
+            Assert.Equal(state, found.ModelStatus);
+
+            world.Receive("sessions.list", "second-found", new { });
+
+            JsonElement second = Assert.Single(world.Reply("sessions", "second-found").GetProperty("items").EnumerateArray());
+            Assert.Equal("FICT-saved-session", second.GetProperty("chat_id").GetString());
+            Assert.Equal(state, second.GetProperty("model_status").GetString());
+            Assert.Same(found, Assert.Single(world.Host.Reviews()));
+            Assert.Equal(0, world.Dump.Runs);
+            Assert.Empty(world.Backend.Created);
+        }
+    }
+
+    /// <summary>
+    /// T116 (owner decision 98A item 3): a review the search finds is listed and tracked, but it
+    /// is not the pane's latest run, so the check tabs' Show and the Ask tab's folder stay where
+    /// the engineer's own last run put them.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AReviewFoundBySessionsListIsTrackedWithoutBecomingTheLatestRun(bool afterACheck)
+    {
+        using (var world = new ReviewWorld())
+        {
+            var reviewed = new PageDocument(@"C:\Fictional\FICT-reopened.SLDASM", "Default");
+            world.Document = reviewed;
+            world.SavedReview(reviewed, "FICT-saved-session", "not_sent", "2026-10-12T23:41:26+09:30");
+            world.Open();
+            SessionRecord? check = afterACheck ? world.Host.TrackCheck(world.TrackedRun("model-check")) : null;
+
+            world.Receive("sessions.list", "found", new { });
+
+            JsonElement item = Assert.Single(world.Reply("sessions", "found").GetProperty("items").EnumerateArray());
+            Assert.Equal("FICT-saved-session", item.GetProperty("chat_id").GetString());
+            Assert.NotNull(world.Host.FindSession("FICT-saved-session"));
+            Assert.Same(check, world.Host.LatestSession);
+        }
+    }
+
+    /// <summary>
+    /// T116 (owner decision 98A item 4): the chip's Remove of a found review lasts for the
+    /// SOLIDWORKS session. The folder is remembered ignoring case and a trailing separator, and
+    /// the search offers nothing while its newest candidate is that folder - never an older one.
+    /// </summary>
+    [Theory]
+    [InlineData("found")]
+    [InlineData("tracked-spelt-otherwise")]
+    public void ARemovedReviewIsNotFoundAgainAndNoOlderFolderTakesItsPlace(string how)
+    {
+        using (var world = new ReviewWorld())
+        {
+            var reviewed = new PageDocument(@"C:\Fictional\FICT-reopened.SLDASM", "Default");
+            world.Document = reviewed;
+            world.SavedReview(reviewed, "FICT-older-session", "not_sent", "2026-10-11T23:41:26+09:30",
+                Stamp.AddDays(-1));
+            string newest = world.SavedReview(reviewed, "FICT-saved-session", "send_failed",
+                "2026-10-12T23:41:26+09:30");
+            world.Open();
+            if (how == "found")
+            {
+                world.Receive("sessions.list", "found", new { });
+                Assert.Equal("FICT-saved-session", Assert.Single(
+                    world.Reply("sessions", "found").GetProperty("items").EnumerateArray()).GetProperty("chat_id").GetString());
+            }
+            else
+            {
+                world.Host.TrackSession("FICT-saved-session", newest.ToUpperInvariant() + "\\", reviewed, null, "send_failed");
+            }
+
+            world.Receive("session.forget", "removed", new { chat_id = "FICT-saved-session" });
+            Assert.Empty(world.Reply("sessions", "removed").GetProperty("items").EnumerateArray());
+
+            world.Receive("sessions.list", "again", new { });
+
+            Assert.Empty(world.Reply("sessions", "again").GetProperty("items").EnumerateArray());
+            Assert.Empty(world.Host.Reviews());
+            Assert.Null(world.Host.FindSession("FICT-saved-session"));
+            Assert.Null(world.Host.FindSession("FICT-older-session"));
+        }
+    }
+
+    [Fact]
+    public void AReviewFoundBySessionsListCanRecheckItsSavedFolderWithoutADump()
+    {
+        using (var world = new ReviewWorld())
+        {
+            var reviewed = new PageDocument(@"C:\Fictional\FICT-reopened.SLDASM", "Default");
+            world.Document = reviewed;
+            string run = world.SavedReview(reviewed, "FICT-saved-session", "send_failed",
+                "2026-10-12T23:41:26+09:30");
+            world.Settings.SendsWhenChecked = true;
+            world.Backend.NextChatId = "FICT-rechecked-session";
+            world.Open();
+            world.Receive("sessions.list", "found", new { });
+            Assert.Equal("FICT-saved-session", Assert.Single(
+                world.Reply("sessions", "found").GetProperty("items").EnumerateArray()).GetProperty("chat_id").GetString());
+            string[] folders = world.RunFolders();
+            world.Backend.OnCreate = request =>
+            {
+                Assert.Equal(run, request.RunDirectory);
+                Assert.Equal(ReviewMode.Recheck, request.Mode);
+                JsonElement status = Assert.Single(world.AllPosted("status"));
+                Assert.Equal("checking", status.GetProperty("stage").GetString());
+                Assert.Equal("Checking the saved evidence again...", status.GetProperty("message").GetString());
+                Assert.Equal(0, world.Dump.Runs);
+            };
+
+            world.Receive("review.recheck", "recheck-found", new { chat_id = "FICT-saved-session" });
+
+            NewSessionRequest request = Assert.Single(world.Backend.Created);
+            Assert.Equal(run, request.RunDirectory);
+            // Recheck is the wire pair recheck:true, send_when_checked:false, even while
+            // the stored setting asks fresh reviews to send when checked.
+            Assert.Equal(ReviewMode.Recheck, request.Mode);
+            Assert.Null(request.RetryOf);
+            Assert.Equal(0, world.Dump.Runs);
+            Assert.Equal(folders, world.RunFolders());
+            Assert.Empty(world.AllPosted("error"));
+            JsonElement reply = world.Reply("review.rechecked", "recheck-found");
+            Assert.Equal("FICT-rechecked-session", reply.GetProperty("chat_id").GetString());
+            Assert.Equal("FICT-saved-session", reply.GetProperty("previous_chat_id").GetString());
+            Assert.Equal(run, reply.GetProperty("run_dir").GetString());
+            Assert.Equal(new[] { "checking", "ready" }, world.AllPosted("status")
+                .Select(status => status.GetProperty("stage").GetString()));
+            Assert.Null(world.Host.FindSession("FICT-saved-session"));
+            Assert.Equal("send_failed", Assert.Single(world.Host.Reviews()).ModelStatus);
+            // Send on the found review is the engineer's own action: its re-run is the latest run.
+            Assert.Same(world.Host.FindSession("FICT-rechecked-session"), world.Host.LatestSession);
+
+            world.Receive("sessions.list", "rechecked-list", new { });
+
+            JsonElement item = Assert.Single(world.Reply("sessions", "rechecked-list").GetProperty("items").EnumerateArray());
+            Assert.Equal("FICT-rechecked-session", item.GetProperty("chat_id").GetString());
+            Assert.Single(world.Host.Reviews());
+        }
+    }
+
+    [Theory]
+    [InlineData("same", false)]
+    [InlineData("path-case", false)]
+    [InlineData("configuration-case", true)]
+    [InlineData("other-path", true)]
+    public void SessionsListSearchesOnlyWhenThisDocumentHasNoTrackedReview(string binding, bool findsSaved)
+    {
+        using (var world = new ReviewWorld())
+        {
+            var reviewed = new PageDocument(@"C:\Fictional\FICT-reopened.SLDASM", "Default");
+            world.Document = reviewed;
+            string run = world.SavedReview(reviewed, "FICT-saved-session", "not_sent",
+                "2026-10-12T23:41:26+09:30");
+            int opens = 0;
+            world.OpenSessionHead = path => { opens++; return File.OpenRead(path); };
+            world.Open();
+            var tracked = new PageDocument(
+                binding == "path-case" ? reviewed.Path.ToLowerInvariant()
+                    : binding == "other-path" ? @"C:\Fictional\other\FICT-reopened.SLDASM" : reviewed.Path,
+                binding == "configuration-case" ? "default" : "Default");
+            world.Host.TrackSession("FICT-tracked-session", world.TrackedRun("FICT-tracked"), tracked, null);
+
+            world.Receive("sessions.list", "tracked-list", new { });
+
+            JsonElement[] items = world.Reply("sessions", "tracked-list").GetProperty("items").EnumerateArray().ToArray();
+            Assert.Equal(findsSaved ? 2 : 1, items.Length);
+            Assert.Equal("FICT-tracked-session", items[0].GetProperty("chat_id").GetString());
+            if (findsSaved)
+            {
+                Assert.Equal("FICT-saved-session", items[1].GetProperty("chat_id").GetString());
+                Assert.Equal(run, items[1].GetProperty("run_dir").GetString());
+                Assert.True(opens > 0);
+            }
+            else Assert.Equal(0, opens);
+            Assert.Equal(0, world.Dump.Runs);
+            Assert.Empty(world.Backend.Created);
+        }
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("SLDDRW")]
+    [InlineData("STEP")]
+    public void SessionsListDoesNotSearchWithoutAnActivePartOrAssembly(string? extension)
+    {
+        using (var world = new ReviewWorld())
+        {
+            var reviewed = new PageDocument(@"C:\Fictional\FICT-reopened.SLDASM", "Default");
+            world.SavedReview(reviewed, "FICT-saved-session", "not_sent", "2026-10-12T23:41:26+09:30");
+            world.Document = extension == null ? null
+                : new PageDocument(@"C:\Fictional\FICT-reopened." + extension, "Default");
+            int opens = 0;
+            world.OpenSessionHead = path => { opens++; return File.OpenRead(path); };
+            world.Open();
+
+            world.Receive("sessions.list", "no-model-list", new { });
+
+            Assert.Empty(world.Reply("sessions", "no-model-list").GetProperty("items").EnumerateArray());
+            Assert.Empty(world.Host.Sessions);
+            Assert.Equal(0, opens);
+        }
+    }
+
+    [Fact]
+    public void SessionsRefreshesEachMarkedRecordOnceAndNeverReadsATickedRecord()
+    {
+        using (var world = new ReviewWorld())
+        {
+            var opened = new List<string>();
+            world.OpenSessionHead = path =>
+            {
+                opened.Add(path);
+                string state = path.Contains("waiting") ? "sent" : "send_failed";
+                return new MemoryStream(System.Text.Encoding.UTF8.GetBytes("{\"model_status\":{\"state\":\"" + state + "\"}}"));
+            };
+            world.Open();
+            string waiting = world.TrackedRun("waiting");
+            string failed = world.TrackedRun("failed");
+            string ticked = world.TrackedRun("ticked");
+            world.Host.TrackSession("waiting", waiting, null, null, "not_sent");
+            world.Host.TrackSession("failed", failed, null, null, "send_failed");
+            world.Host.TrackSession("ticked", ticked);
+            world.Host.TrackCheck(world.TrackedRun("check"));
+            world.Receive("sessions.list", "first-marks", new { });
+            Assert.Equal(new[] { Path.Combine(waiting, "session.json"), Path.Combine(failed, "session.json") }, opened);
+            JsonElement[] items = world.Reply("sessions", "first-marks").GetProperty("items").EnumerateArray().ToArray();
+            Assert.Equal(3, items.Length);
+            Assert.False(items.Single(item => item.GetProperty("chat_id").GetString() == "waiting").TryGetProperty("model_status", out _));
+            Assert.Equal("send_failed", items.Single(item => item.GetProperty("chat_id").GetString() == "failed").GetProperty("model_status").GetString());
+            Assert.False(items.Single(item => item.GetProperty("chat_id").GetString() == "ticked").TryGetProperty("model_status", out _));
+            opened.Clear();
+            world.Receive("sessions.list", "second-marks", new { });
+            Assert.Equal(new[] { Path.Combine(failed, "session.json") }, opened);
+        }
+    }
+
+    [Theory]
+    [InlineData("missing")]
+    [InlineData("unreadable")]
+    [InlineData("past-cap")]
+    [InlineData("unknown-state")]
+    public void AnUnconfirmedHeadKeepsTheWaitingMarkAcrossASecondReady(string head)
+    {
+        using (var world = new ReviewWorld())
+        {
+            var opened = new List<string>();
+            world.OpenSessionHead = path =>
+            {
+                opened.Add(path);
+                if (head == "missing") throw new FileNotFoundException("FICT absent", path);
+                if (head == "unreadable") throw new IOException("FICT cannot read");
+                string json = head == "past-cap"
+                    ? "{\"padding\":\"" + new string('x', 65536) + "\",\"model_status\":{\"state\":\"sent\"}}"
+                    : "{\"model_status\":{\"state\":\"FICT-future-state\"}}";
+                return new MemoryStream(System.Text.Encoding.UTF8.GetBytes(json));
+            };
+            world.Open();
+            string run = world.TrackedRun("waiting");
+            world.Host.TrackSession("waiting", run, null, null, "not_sent");
+            world.Receive("ready", "first-ready", new { });
+            world.Receive("sessions.list", "first-list", new { });
+            world.Receive("ready", "second-ready", new { });
+            world.Receive("sessions.list", "second-list", new { });
+            Assert.Equal(2, opened.Count);
+            Assert.All(opened, path => Assert.Equal(Path.Combine(run, "session.json"), path));
+            foreach (string id in new[] { "first-list", "second-list" })
+            {
+                JsonElement item = Assert.Single(world.Reply("sessions", id).GetProperty("items").EnumerateArray());
+                Assert.Equal("not_sent", item.GetProperty("model_status").GetString());
+            }
+            Assert.Equal("not_sent", world.Host.FindSession("waiting")!.ModelStatus);
+        }
+    }
+
+    [Fact]
+    public void AWaitingReviewKeepsItsMarkWhenACheckBecomesLatestBeforeItsStatusAndListReply()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Open();
+            string reviewRun = world.TrackedRun("waiting-review");
+            world.Host.TrackSession("waiting-review", reviewRun,
+                new PageDocument(@"C:\Fictional\FICT-assembly.SLDASM", "Default"),
+                new DateTimeOffset(world.Now), "not_sent");
+            SessionRecord review = Assert.Single(world.Host.Reviews());
+            // The review is already visible to list readers before its ready/reply tail runs.
+            Assert.Equal("not_sent", review.ModelStatus);
+            SessionRecord check = world.Host.TrackCheck(world.TrackedRun("model-check"));
+            Assert.Same(check, world.Host.LatestSession);
+            world.Host.PostStatus("ready", "Checked 12 components by code; nothing was sent to the model.");
+            world.Receive("sessions.list", "after-check", new { });
+            JsonElement item = Assert.Single(world.Reply("sessions", "after-check").GetProperty("items").EnumerateArray());
+            Assert.Equal("waiting-review", item.GetProperty("chat_id").GetString());
+            Assert.Equal("not_sent", item.GetProperty("model_status").GetString());
+            Assert.Null(check.ModelStatus);
+            Assert.Same(check, world.Host.LatestSession);
+        }
+    }
+
+    /// <summary>The independent check pump can publish a new latest run while a review
+    /// starts. A waiting mark belongs to the review before any reader can see its record.</summary>
+    [Fact]
+    public void AWaitingReviewIsPublishedCompleteWhileTheCheckPumpTracksOtherRuns()
+    {
+        using (var world = new ReviewWorld())
+        using (var pumping = new ManualResetEventSlim())
+        using (var stop = new ManualResetEventSlim())
+        {
+            world.Document = new PageDocument(@"C:\Fictional\FICT-assembly.SLDASM", "Default");
+            world.Settings.SendsWhenChecked = false;
+            world.Open();
+            string run = world.TrackedRun("waiting-review");
+            string checkRun = world.TrackedRun("independent-check");
+            var checks = new List<SessionRecord>();
+            Exception? pumpFailure = null;
+            bool sawIncompleteReview = false;
+            var pump = new Thread(() =>
+            {
+                try
+                {
+                    pumping.Set();
+                    while (!stop.IsSet)
+                    {
+                        checks.Add(world.Host.TrackCheck(checkRun));
+                        SessionRecord? review = world.Host.FindSession("chat-1");
+                        if (review != null && review.ModelStatus != "not_sent") sawIncompleteReview = true;
+                    }
+                }
+                catch (Exception failure) { pumpFailure = failure; }
+            }) { IsBackground = true };
+            var create = typeof(ReviewHost).GetMethod("CreateReviewSession",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+            pump.Start();
+            try
+            {
+                Assert.True(pumping.Wait(TimeSpan.FromSeconds(5)), "the check pump did not start");
+                for (int i = 0; i < 2000; i++)
+                {
+                    create.Invoke(world.Host, new object?[] { world.Document, run, null, ReviewMode.Wait,
+                        "race-" + i, new DumpSummary(Path.Combine(run, "package.json"), 12, 0, null),
+                        null /* replacing: none for a fresh start */ });
+                }
+            }
+            finally
+            {
+                stop.Set();
+                Assert.True(pump.Join(TimeSpan.FromSeconds(5)), "the check pump did not stop");
+            }
+            Assert.Null(pumpFailure);
+            Assert.NotEmpty(checks);
+            Assert.False(sawIncompleteReview, "a waiting review was published before its not_sent mark");
+            Assert.All(checks, check => Assert.Null(check.ModelStatus));
+            Assert.Equal("not_sent", Assert.Single(world.Host.Reviews()).ModelStatus);
+        }
+    }
+
+    [Fact]
+    public void LosingTheBackendDuringAHeldExtractionEndsTheStatusInErrorAndKeepsNoReview()
+    {
+        using (var world = new ReviewWorld())
+        using (var extracting = new ManualResetEventSlim())
+        using (var release = new ManualResetEventSlim())
+        {
+            world.Document = new PageDocument(@"C:\Fictional\FICT-assembly.SLDASM", "Default");
+            world.Settings.SendsWhenChecked = false;
+            world.Dump.OnRun = () => { extracting.Set(); Assert.True(release.Wait(TimeSpan.FromSeconds(5))); };
+            world.Open();
+            Exception? startFailure = null;
+            var start = new Thread(() =>
+            {
+                try { world.Receive("review.start", "lost-backend", new { }); }
+                catch (Exception failure) { startFailure = failure; }
+            }) { IsBackground = true };
+            start.Start();
+            try
+            {
+                Assert.True(extracting.Wait(TimeSpan.FromSeconds(5)), "the extraction did not start");
+                world.Backend.Endpoint = null;
+                world.Backend.CreateFailure = new BackendRequestException("BackendUnavailable", "FICT-backend stopped", true);
+            }
+            finally
+            {
+                release.Set();
+                Assert.True(start.Join(TimeSpan.FromSeconds(5)), "the review start did not finish");
+            }
+            Assert.Null(startFailure);
+            Assert.Equal(1, world.Dump.Runs);
+            JsonElement error = world.Reply("error", "lost-backend");
+            Assert.Equal("BackendUnavailable", error.GetProperty("error_class").GetString());
+            Assert.True(error.GetProperty("retryable").GetBoolean());
+            Assert.Equal("FICT-backend stopped", error.GetProperty("message").GetString());
+            Assert.Equal("error", world.LastPosted("status").GetProperty("stage").GetString());
+            Assert.Empty(world.Host.Sessions);
+            Assert.Empty(world.AllPosted("review.started"));
+        }
+    }
+
+    [Fact]
+    public void AQueuedBoxChangeAffectsTheRetryAndKeepsTheEarlierStartMode()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Document = new PageDocument(@"C:\Fictional\FICT-assembly.SLDASM", "Default");
+            world.Open();
+            world.Receive("review.start", "first", new { });
+            world.Receive("send_when_checked.save", "box", new { send_when_checked = false });
+            world.Reply("send_when_checked.saved", "box");
+            world.Now = world.Now.AddSeconds(1);
+            world.Backend.NextChatId = "chat-2";
+            world.Receive("review.start", "retry", new { retry_of = "chat-1" });
+            Assert.Equal(new[] { ReviewMode.Send, ReviewMode.Wait }, world.Backend.Created.Select(request => request.Mode));
+            Assert.Equal("chat-1", world.Backend.Created[1].RetryOf);
+        }
+    }
+
+    [Fact]
+    public void AnUntickedStartThatTimesOutKeepsNoRecord()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Document = new PageDocument(@"C:\Fictional\FICT-assembly.SLDASM", "Default");
+            world.Settings.SendsWhenChecked = false;
+            world.Backend.CreateFailure = new BackendRequestException("BackendUnavailable", "request timed out", true);
+            world.Open();
+            world.Receive("review.start", "timeout", new { });
+            Assert.Equal("BackendUnavailable", world.Reply("error", "timeout").GetProperty("error_class").GetString());
+            Assert.Empty(world.Host.Sessions);
         }
     }
 
@@ -1826,6 +2528,8 @@ public sealed class ReviewHostTests
 
         public BridgeConfig? Bridge { get; set; }
 
+        public Func<string, Stream>? OpenSessionHead { get; set; }
+
         public string Engineer { get; } = "test-engineer";
 
         public bool UseResolver { get; set; } = true;
@@ -1849,6 +2553,7 @@ public sealed class ReviewHostTests
                 BuildMode = BuildMode.Development,
                 LogFolder = LogFolder,
                 CurrentDocument = () => Document,
+                OpenSessionHead = OpenSessionHead,
                 PrepareReview = Prepare,
                 DrawingModels = DrawingModels,
                 Environment = _ => null,
@@ -1867,6 +2572,25 @@ public sealed class ReviewHostTests
         {
             string directory = Path.Combine(Settings.RunRoot, "20260913-142530-" + chatId);
             Directory.CreateDirectory(directory);
+            return directory;
+        }
+
+        /// <summary>A fictional saved review left by an earlier host, before this one opens.</summary>
+        public string SavedReview(
+            PageDocument document, string sessionId, string state, string checkedAt, DateTime? stamp = null)
+        {
+            string directory = SwReview.AddIn.Review.RunFolders.CreateForDocument(
+                Settings.RunRoot, document.Path, stamp ?? Stamp);
+            File.WriteAllText(Path.Combine(directory, "session.json"), JsonSerializer.Serialize(new
+            {
+                session_id = sessionId,
+                model_status = new
+                {
+                    state,
+                    document = new { path = document.Path, configuration = document.Configuration },
+                    checked_at = checkedAt,
+                },
+            }));
             return directory;
         }
 
@@ -2088,6 +2812,8 @@ public sealed class ReviewHostTests
 
         public BackendRequestException? CreateFailure { get; set; }
 
+        public Action<NewSessionRequest>? OnCreate { get; set; }
+
         /// <summary>Every chat id the host asked about, so a skipped record can be proven skipped.</summary>
         public List<string> TurnQuestions { get; } = new List<string>();
 
@@ -2122,6 +2848,7 @@ public sealed class ReviewHostTests
 
         public ChatSessionHandle CreateSession(NewSessionRequest request)
         {
+            OnCreate?.Invoke(request);
             if (CreateFailure != null)
             {
                 throw CreateFailure;

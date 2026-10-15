@@ -116,6 +116,11 @@ public static partial class ReadOnlyGuard
         // Mass-override writes, beside the mass-override read.
         "set_OverrideMass",
         "SetOverrideMassValue",
+        "SetOverrideOptions",
+        "set_OverrideCenterOfMass",
+        "set_OverrideMomentsOfInertia",
+        "SetOverrideCenterOfMassValue",
+        "SetOverridePrincipalMomentsOfInertia",
 
         // Dimension, display-dimension and note writes, beside the GetOverride,
         // GetOverrideValue, GetSystemValue3 and GetText reads. SetSystemValue3 is already
