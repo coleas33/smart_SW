@@ -56,12 +56,13 @@ from swreview.agent.events import (
     replay_events,
 )
 from swreview.agent.providers import AgentEvent
-from swreview.benchmark import recording, report_page
+from swreview.benchmark import recording, report_page, runner
 from swreview.benchmark.scorecard import score_run
 from swreview.benchmark.sets import BenchmarkSet
 from swreview.chat import sessions
 from swreview.report.session import SessionUsage
 from tests.support.studies import PackageSpec, RunSpec, write_run
+from tests.unit.test_benchmark_attempts import write_attempt
 from tests.unit.test_benchmark_report_page import recorded_run
 from tests.unit.test_scorecard_usage import make_usage
 from tests.unit.test_scorecard_usage import write_package as write_scored_package
@@ -529,6 +530,41 @@ def test_read_recording_replays_the_folder_s_event_log_exactly_once(
     recording.read_recording(run)
 
     assert calls == [(run / EVENTS_FILE_NAME, True)]
+
+
+# --- 4: attempt_facts reads each attempt once, found through event_stream (T187) ------------
+
+
+def test_attempt_facts_replays_each_attempt_s_stream_once_found_through_event_stream(
+    tmp_path: Path, tmp_package_dir: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from swreview.agent.providers.fake import ScriptedTurn
+
+    attempts = [
+        write_attempt(tmp_package_dir, tmp_path / name, (ScriptedTurn(text="Done."),))[0]
+        for name in ("attempt-one", "attempt-two")
+    ]
+    folders: list[Path] = []
+    replayed: list[Path] = []
+    real_stream, real_replay = events.event_stream, events.replay_events
+
+    def stream_spy(folder: Path | str) -> Path:
+        folders.append(Path(folder))
+        return real_stream(folder)
+
+    def replay_spy(path: Path | str, after: int = 0, **hooks: Any) -> Iterator[AgentEvent]:
+        replayed.append(Path(path))
+        return real_replay(path, after, **hooks)
+
+    monkeypatch.setattr(events, "event_stream", stream_spy)
+    monkeypatch.setattr(events, "replay_events", replay_spy)
+
+    for attempt in attempts:
+        runner.attempt_facts(attempt.out_dir)
+    runner.attempt_facts(tmp_path / "missing")
+
+    assert folders == [*(attempt.out_dir for attempt in attempts), tmp_path / "missing"]
+    assert replayed == [folder / EVENTS_FILE_NAME for folder in folders]
 
 
 # --- 4: the structural half, no other reader of a stream under benchmark/ (T159, 81A, 85A) --

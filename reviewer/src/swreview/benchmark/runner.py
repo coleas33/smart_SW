@@ -53,8 +53,9 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal
 from pydantic import Field
 
 from swreview import atomic
+from swreview.agent import events
 from swreview.agent.settings import MODEL_VIEW_OFF, EfficiencySettings, ModelViewSettings
-from swreview.benchmark import answers
+from swreview.benchmark import answers, prices
 from swreview.benchmark.case_file import CaseFile
 from swreview.benchmark.digest import sha256_of as sha256_of
 from swreview.benchmark.sets import (
@@ -175,6 +176,57 @@ class RunProvenance(ReviewModel):
     """How many answer turns each review could take after its opening turn
     (`contracts/scripted-answers.md` 4); `None`, "not recorded", in a record older than the
     field, never the default 3."""
+
+
+@dataclass(frozen=True)
+class AttemptFacts:
+    """What one attempt's stream recorded, including usage before a failure."""
+
+    rounds: tuple[prices.RoundFacts, ...]
+    served_models: list[str]
+    retries: int
+    stop_reasons: list[str]
+    paid: bool
+
+
+def attempt_facts(folder: Path) -> AttemptFacts:
+    """Replay an attempt once, keeping the facts before any unreadable tail."""
+    ledger = events.UsageLedger()
+    usage_bodies: list[Mapping[str, Any]] = []
+    served_models: list[str] = []
+    retries = 0
+    stop_reasons: list[str] = []
+    for event in events.replay_events(events.event_stream(folder)):
+        ledger(event)
+        body = event.body
+        if event.type == "usage":
+            usage_bodies.append(body)
+            served_model = body.get("served_model")
+            if served_model is not None and served_model not in served_models:
+                served_models.append(served_model)
+        if event.type in ("usage", "error"):
+            reported_retries = body.get("retries")
+            if reported_retries is not None:
+                retries += reported_retries
+        if event.type == "error":
+            stop_reason = body.get("stop_reason")
+            if stop_reason is not None:
+                stop_reasons.append(stop_reason)
+
+    rounds = tuple(
+        prices.RoundFacts(
+            usage=usage,
+            provider=body["provider"],
+            model=body["model"],
+            served_model=body.get("served_model"),
+            retries=body.get("retries"),
+        )
+        for usage, body in zip(ledger.rounds(), usage_bodies, strict=True)
+    )
+    return AttemptFacts(
+        rounds=rounds, served_models=served_models, retries=retries,
+        stop_reasons=stop_reasons, paid=bool(rounds),
+    )
 
 
 def _git_process(cwd: Path | str, *args: str) -> subprocess.CompletedProcess[str] | None:

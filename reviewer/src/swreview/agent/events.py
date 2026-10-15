@@ -297,6 +297,10 @@ class UsageLedger:
             return None
         return SessionUsage.summed(self._rounds, self._turn_boundaries)
 
+    def rounds(self) -> tuple[TokenUsage, ...]:
+        """A snapshot of each reported round's usage, in stream order."""
+        return tuple(self._rounds)
+
     def last_conversation_input(self) -> int | None:
         """The input tokens of the last round before the most recent `text.done`.
 
