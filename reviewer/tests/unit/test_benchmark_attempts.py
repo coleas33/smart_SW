@@ -1807,7 +1807,8 @@ def test_run_prints_one_line_per_package_and_json_carries_each_outcome(
     )
     assert result.exit_code == (1 if fails else 0), result.stdout + result.stderr
     assert result.stderr.splitlines() == (
-        ["error: infrastructure failures: fict-c"] if fails else []
+        [f"error: infrastructure failures: fict-c; run swreview benchmark resume {out}"]
+        if fails else []
     )
     if json_output:
         payload = json.loads(result.stdout)
@@ -1832,6 +1833,111 @@ def test_run_prints_one_line_per_package_and_json_carries_each_outcome(
             if fails
             else "fict-c: completed",
         ]
+
+
+def test_a_failed_promotion_rename_leaves_the_attempt_for_resume(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float]
+) -> None:
+    """RF-22: a paid kept attempt survives a Windows rename refusal and is never replayed."""
+    from swreview import cli
+    from tests.unit.test_benchmark_resume import resume_command, snapshot, start_run
+
+    out = tmp_path / "run"
+    rename = Path.rename
+
+    def locked(path: Path, target: Any) -> Path:
+        if path == out / "attempts/fict-a/1":
+            raise PermissionError("fict folder locked")
+        return rename(path, target)
+
+    monkeypatch.setattr(Path, "rename", locked)
+    _, first = start_run(
+        tmp_path, monkeypatch,
+        [[ScriptedTurn(text="Reviewed first.")], [ScriptedTurn(text="Reviewed next.")]],
+        ("fict-a", "fict-b"),
+    )
+    assert first.exit_code == 1, first.stdout + first.stderr
+    assert f"swreview benchmark resume {out}" in first.stderr
+    status = driver_status(out)
+    assert status["packages"]["fict-a"]["kept_attempt"] == 1
+    assert driver_row(out)["folder"] == "attempts/fict-a/1"
+    kept_bytes = snapshot(out / "attempts/fict-a/1")
+    next_bytes = snapshot(out / "fict-b")
+
+    monkeypatch.setattr(Path, "rename", rename)
+    install_driver_providers(monkeypatch, [[]])  # Provider preflight sends no request.
+
+    def never_review(*args: Any, **options: Any) -> None:
+        pytest.fail("promotion must reuse the kept attempt")
+
+    monkeypatch.setattr(cli, "_review_fn", never_review)
+    resumed = resume_command(out)
+    assert resumed.exit_code == 0, resumed.stdout + resumed.stderr
+    assert snapshot(out / "fict-a") == kept_bytes
+    assert snapshot(out / "fict-b") == next_bytes
+    assert len(driver_status(out)["packages"]["fict-a"]["attempts"]) == 1
+    assert driver_row(out)["folder"] == "fict-a"
+    assert first.stdout.splitlines() == ["fict-b: completed"]
+    assert "fict-a: promotion failed: fict folder locked" in first.stderr
+
+
+def test_status_is_recorded_before_promotion(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float]
+) -> None:
+    """A crash after recording the destination is recoverable from the physical source."""
+    from tests.unit.test_benchmark_resume import resume_command, snapshot, start_run
+
+    out = tmp_path / "run"
+    rename = Path.rename
+    observed: list[dict[str, Any]] = []
+
+    def crash(path: Path, target: Any) -> Path:
+        if path == out / "attempts/fict-a/1":
+            observed.append(driver_status(out)["packages"]["fict-a"])
+            raise RuntimeError("fict crash between status and promotion")
+        return rename(path, target)
+
+    monkeypatch.setattr(Path, "rename", crash)
+    _, first = start_run(tmp_path, monkeypatch, [[ScriptedTurn(text="Reviewed.")]], ("fict-a",))
+    assert first.exit_code == 1
+    assert observed[0]["kept_attempt"] == 1
+    assert observed[0]["attempts"][0]["kind"] == "completed"
+    assert observed[0]["attempts"][0]["folder"] == "fict-a"
+    kept_bytes = snapshot(out / "attempts/fict-a/1")
+    monkeypatch.setattr(Path, "rename", rename)
+    install_driver_providers(monkeypatch, [[]])
+    result = resume_command(out)
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert snapshot(out / "fict-a") == kept_bytes
+    assert driver_status(out)["packages"]["fict-a"] == observed[0]
+
+
+def test_unattended_runtime_is_the_kept_attempts_span(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float]
+) -> None:
+    from swreview import cli
+    from swreview.report.session import load_session
+    from tests.unit.test_benchmark_resume import start_run
+
+    out, first = start_run(
+        tmp_path, monkeypatch,
+        [[ScriptedTurn(text="", fails=TransientError("fict exhausted request"))]],
+        ("fict-a",),
+    )
+    assert first.exit_code == 1
+    before = driver_status(out)["packages"]["fict-a"]["attempts"][0]
+    install_driver_providers(monkeypatch, [[ScriptedTurn(text="Reviewed on resume.")]])
+    clock_value = [9000.0]
+
+    def review(package_dir: Path, folder: Path, **options: Any) -> Any:
+        result = cli._review_fn(package_dir, folder, **options)
+        clock_value[0] += 60.0
+        return result
+
+    runner.resume_benchmark(out, review_fn=review, clock=lambda: clock_value[0])
+    session = load_session(out / "fict-a/session.json")
+    assert session.timing.unattended_runtime_minutes == 1.0
+    assert driver_status(out)["packages"]["fict-a"]["attempts"][0] == before
 
 
 def test_no_home_folder_still_scrubs_the_run_path(

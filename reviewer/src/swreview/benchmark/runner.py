@@ -46,8 +46,9 @@ import subprocess
 import threading
 import time
 from collections.abc import Callable, Mapping
+from contextlib import ExitStack
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Protocol
@@ -55,8 +56,9 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal, Protocol
 from pydantic import ConfigDict, Field
 
 from swreview import atomic
+from swreview.agent import checklist as agent_checklist
 from swreview.agent import events
-from swreview.agent.providers.retry import RetryPolicy
+from swreview.agent.providers.retry import BENCHMARK_RETRY, RetryPolicy
 from swreview.agent.settings import MODEL_VIEW_OFF, EfficiencySettings, ModelViewSettings
 from swreview.benchmark import answers, prices, scrub
 from swreview.benchmark import attempt as attempt_driver
@@ -68,16 +70,18 @@ from swreview.benchmark.sets import (
     BenchmarkSet,
     SetError,
     checkout_relative,
+    load_saved_set,
     load_set,
     path_form,
 )
-from swreview.checks.standards.profile import display_digest
+from swreview.checks.standards.profile import display_digest, load_profile
 from swreview.findings import ReviewModel
 from swreview.ir.loader import PACKAGE_FILE_NAME, load_package, reject_answer_key_path
 from swreview.report.session import load_session, save_session
 
 if TYPE_CHECKING:
     from swreview.agent.checklist import Checklist
+    from swreview.agent.providers import AgentProvider
     from swreview.checks.standards.profile import StandardsProfile
 
 ReviewFn = Callable[..., Any]
@@ -397,6 +401,9 @@ class AttemptRequest:
     listener: AttemptListener
     run_dir: Path
     root: Path = REPO_ROOT
+    retry_policy: RetryPolicy = BENCHMARK_RETRY
+    max_steps: int | None = None
+    adapter: AgentProvider | None = None
 
 
 RUN_STATUS_FILE = "run-status.json"
@@ -465,7 +472,7 @@ ATTEMPTS_FOLDER = "attempts"
 
 
 def preflight_set(
-    set_path: Path | str,
+    set_path: Path | str | BenchmarkSet,
     profile: StandardsProfile | None,
     checklist: Checklist,
     *,
@@ -484,11 +491,14 @@ def preflight_set(
     `answers.load_case_file` against the package, `checklist` and `profile`, the profile the
     reviews will grade against or `None`, which the command line has loaded, or refused, first.
     """
-    benchmark_set = load_set(set_path, root=root)
+    benchmark_set = (
+        set_path if isinstance(set_path, BenchmarkSet) else load_set(set_path, root=root)
+    )
+    set_name = SAVED_SET_FILE if isinstance(set_path, BenchmarkSet) else Path(set_path).name
     for ref in benchmark_set.packages:
         if ref.package_id.casefold() == ATTEMPTS_FOLDER:
             raise SetError(
-                f"benchmark set {Path(set_path).name}: package id {ref.package_id} would share "
+                f"benchmark set {set_name}: package id {ref.package_id} would share "
                 f"the run folder's {ATTEMPTS_FOLDER}/ folder, where every attempt runs; ids are "
                 "compared ignoring case, as Windows and macOS compare folder names: choose "
                 "another id"
@@ -651,8 +661,48 @@ def run_benchmark(
             "run_benchmark reviews the PreflightedSet that preflight_set returns, not a "
             f"{type(preflighted).__name__}: a set's refusals come before any review"
         )
+    return _run_packages(
+        preflighted, Path(out_dir), provider, model, effort, review_fn, efficiency,
+        explain_findings, model_view=model_view, standards_profile=standards_profile,
+        max_answer_turns=max_answer_turns, package_time_limit_s=package_time_limit_s,
+        stream_activity_window_s=stream_activity_window_s, stop_grace_s=stop_grace_s,
+        redact=redact, on_package_done=on_package_done, clock=clock, status=RunStatus(),
+    )
+
+
+def _utc_now() -> datetime:
+    return datetime.now(UTC)
+
+
+def _run_packages(
+    preflighted: PreflightedSet,
+    out_dir: Path,
+    provider: str,
+    model: str,
+    effort: str,
+    review_fn: ReviewFn | None,
+    efficiency: EfficiencySettings | None,
+    explain_findings: bool,
+    *,
+    model_view: ModelViewSettings,
+    standards_profile: Path | None,
+    max_answer_turns: int,
+    package_time_limit_s: float,
+    stream_activity_window_s: float,
+    stop_grace_s: float,
+    redact: Callable[[str], str],
+    on_package_done: PackageDoneCallback | None,
+    clock: Callable[[], float],
+    status: RunStatus,
+    resumed: bool = False,
+    run_served_models: tuple[str, ...] = (),
+    now: Callable[[], datetime] = _utc_now,
+    retry_policy: RetryPolicy = BENCHMARK_RETRY,
+    max_steps: int | None = None,
+    initial_adapter: AgentProvider | None = None,
+) -> list[Path]:
+    """The same sequential attempt driver for a new run and a resumed run."""
     active_review_fn = review_fn if review_fn is not None else _default_review_fn
-    out_dir = Path(out_dir)
 
     def sanitize_message(text: str) -> str:
         return scrub.one_line(scrub.without_local_paths(
@@ -665,9 +715,30 @@ def run_benchmark(
     )
     if standards_profile is not None and profile_digest is None:
         profile_digest = sha256_of(standards_profile)
-    status = RunStatus()
     package_dirs: list[Path] = []
     for ref in preflighted.benchmark_set.packages:
+        package_status = status.packages.get(ref.package_id)
+        if package_status is not None and package_status.kept_attempt is not None:
+            kept = next(
+                row for row in package_status.attempts
+                if row.attempt == package_status.kept_attempt
+            )
+            folder = _kept_folder(out_dir, ref.package_id, kept)
+            if folder == out_dir / ref.package_id:
+                package_dirs.append(folder)
+                continue
+            promoted, promotion_error = _promote_attempt(
+                out_dir, ref.package_id, folder, kept, status, sanitize_message,
+            )
+            if promoted is not None:
+                package_dirs.append(promoted)
+            elif on_package_done is not None:
+                on_package_done(
+                    package_id=ref.package_id, kind=kept.kind, class_=kept.class_,
+                    stop_reason=kept.stop_reason, error_class=kept.error_class,
+                    retries=attempt_facts(folder).retries, promotion_error=promotion_error,
+                )
+            continue
         if standards_profile is not None:
             current_digest = sha256_of(standards_profile)
             if current_digest != profile_digest:
@@ -676,12 +747,25 @@ def run_benchmark(
                     f"{display_digest(profile_digest)}, current {display_digest(current_digest)}"
                 )
         _reject_answer_key_path(ref.path)
-        package_out_dir = out_dir / ATTEMPTS_FOLDER / ref.package_id / "1"
+        if package_status is None:
+            package_status = PackageStatus()
+            status.packages[ref.package_id] = package_status
+        for prior in package_status.attempts:
+            if prior.kind is None:
+                prior.kind = "infrastructure"
+                prior.class_ = "interrupted"
+                prior.ended_at = now()
+                _write_run_status(out_dir, status)
+        number = max((row.attempt for row in package_status.attempts), default=0) + 1
+        package_out_dir = out_dir / ATTEMPTS_FOLDER / ref.package_id / str(number)
         _reject_answer_key_path(package_out_dir)
         package_out_dir.mkdir(parents=True, exist_ok=True)
 
         stop = threading.Event()
-        listener = AttemptListener(stop, provider=provider, requested_model=model, clock=clock)
+        listener = AttemptListener(
+            stop, provider=provider, requested_model=model, clock=clock,
+            run_served_models=run_served_models,
+        )
         request = AttemptRequest(
             model_view=model_view,
             standards_profile=standards_profile,
@@ -691,13 +775,16 @@ def run_benchmark(
             listener=listener,
             run_dir=out_dir,
             root=preflighted.root,
+            retry_policy=retry_policy,
+            max_steps=max_steps,
+            adapter=initial_adapter,
         )
+        initial_adapter = None
         row = AttemptStatus(
-            attempt=1, started_at=datetime.now(UTC),
+            attempt=number, started_at=now(), resumed=resumed,
             folder=package_out_dir.relative_to(out_dir).as_posix(),
         )
-        package_status = PackageStatus(attempts=[row])
-        status.packages[ref.package_id] = package_status
+        package_status.attempts.append(row)
         _write_run_status(out_dir, status)
 
         def body(
@@ -724,11 +811,11 @@ def run_benchmark(
             stop.set()
             row.kind = "infrastructure"
             row.class_ = "interrupted"
-            row.ended_at = datetime.now(UTC)
+            row.ended_at = now()
             _write_run_status(out_dir, status)
             raise
 
-        row.ended_at = datetime.now(UTC)
+        row.ended_at = now()
         row.kind = outcome.kind
         row.class_ = outcome.class_
         row.stop_reason = outcome.stop_reason
@@ -740,20 +827,10 @@ def run_benchmark(
         if outcome.kind in ("completed", "behavioural"):
             _record_unattended_runtime(package_out_dir, (clock() - started) / 60.0)
             package_status.kept_attempt = row.attempt
-            row.folder = ref.package_id
-            _write_run_status(out_dir, status)
-            promoted = out_dir / ref.package_id
-            try:
-                package_out_dir.rename(promoted)
-            except OSError as error:
-                row.folder = package_out_dir.relative_to(out_dir).as_posix()
-                promotion_error = sanitize_message(str(error))
-                row.message = "; ".join(
-                    message for message in (row.message, f"promotion failed: {promotion_error}")
-                    if message is not None
-                )
-                _write_run_status(out_dir, status)
-            else:
+            promoted, promotion_error = _promote_attempt(
+                out_dir, ref.package_id, package_out_dir, row, status, sanitize_message,
+            )
+            if promoted is not None:
                 facts_folder = promoted
                 package_dirs.append(promoted)
         else:
@@ -765,5 +842,217 @@ def run_benchmark(
                 retries=attempt_facts(facts_folder).retries,
                 promotion_error=promotion_error,
             )
+        if row.class_ == "served_model_changed":
+            break
 
     return package_dirs
+
+
+def _kept_folder(run_dir: Path, package_id: str, row: AttemptStatus) -> Path:
+    """Find either side of the rename, including a crash after recording its destination."""
+    promoted = run_dir / package_id
+    return (
+        promoted if promoted.is_dir()
+        else run_dir / ATTEMPTS_FOLDER / package_id / str(row.attempt)
+    )
+
+
+def _promote_attempt(
+    run_dir: Path, package_id: str, folder: Path, row: AttemptStatus, status: RunStatus,
+    sanitize: Callable[[str], str],
+) -> tuple[Path | None, str | None]:
+    """Record the kept destination before the one rename; leave any refusal recoverable."""
+    row.folder = package_id
+    _write_run_status(run_dir, status)
+    promoted = run_dir / package_id
+    try:
+        folder.rename(promoted)
+    except OSError as error:
+        row.folder = folder.relative_to(run_dir).as_posix()
+        promotion_error = sanitize(str(error))
+        row.message = "; ".join(
+            message for message in (row.message, f"promotion failed: {promotion_error}")
+            if message is not None
+        )
+        _write_run_status(run_dir, status)
+        return None, promotion_error
+    return promoted, None
+
+
+def _digest_or_none(path: Path) -> str | None:
+    try:
+        return sha256_of(path)
+    except OSError:
+        return None
+
+
+def _resume_inputs(
+    run_dir: Path, *, root: Path, standards_profile: Path | None,
+    now: Callable[[], datetime],
+) -> tuple[RunProvenance, PreflightedSet, RunStatus]:
+    """Section 11's refusals, in order, without changing a byte of the recorded run."""
+    provenance = load_provenance(run_dir)
+    if provenance is None or provenance.provenance_schema < PROVENANCE_SCHEMA:
+        raise ValueError("made before runs recorded their status; start a new run")
+    status = load_run_status(run_dir)
+    if status is None and any(run_dir.rglob("session.json")):
+        raise ValueError("made before runs recorded their status; start a new run")
+    if status is None:
+        status = RunStatus()
+    limit = provenance.package_time_limit_s
+    grace = provenance.stop_grace_s
+    safe_after_s = (3600 if limit is None else limit) + (
+        attempt_driver.STOP_GRACE_S if grace is None else grace
+    )
+    current_time = now()
+    for package_id, package in status.packages.items():
+        for row in package.attempts:
+            wait_until = row.started_at + timedelta(seconds=safe_after_s)
+            if row.kind is None and current_time < wait_until:
+                raise ValueError(
+                    f"attempt {row.attempt} of {package_id} may still be running; "
+                    f"wait until {wait_until.isoformat()}"
+                )
+
+    commit = current_commit(root)
+    if provenance.commit is None or commit is None or provenance.commit != commit:
+        raise ValueError(
+            f"commit differs: recorded {provenance.commit or 'unknown'}, "
+            f"current {commit or 'unknown'}"
+        )
+    for field, path in (
+        ("checklist_digest", agent_checklist.CHECKLIST_FILE),
+        ("prompt_digest", agent_checklist.SYSTEM_PROMPT_FILE),
+    ):
+        recorded, current = getattr(provenance, field), _digest_or_none(path)
+        if recorded != current:
+            raise ValueError(f"{field} differs: recorded {recorded}, current {current}")
+
+    saved_set = run_dir / SAVED_SET_FILE
+    set_digest = _digest_or_none(saved_set)
+    if provenance.set_digest != set_digest:
+        raise ValueError(
+            f"{SAVED_SET_FILE} set_digest differs: recorded {provenance.set_digest}, "
+            f"current {set_digest}"
+        )
+    benchmark_set = load_saved_set(saved_set, root=root)
+    for ref in benchmark_set.packages:
+        if ref.case_file is not None:
+            current = _digest_or_none(ref.case_file)
+            if ref.case_file_sha256 != current or current is None:
+                raise ValueError(
+                    f"case file {path_form(ref.case_file, root)} sha256 differs: "
+                    f"recorded {ref.case_file_sha256}, current {current}"
+                )
+
+    recorded_profile = provenance.profile_digest
+    if recorded_profile is None and standards_profile is not None:
+        raise ValueError("standards profile differs: none recorded, but one was named")
+    if recorded_profile is not None:
+        shown = display_digest(recorded_profile)
+        if standards_profile is None:
+            raise ValueError(f"standards profile {shown} was recorded, but none was named")
+        current_profile = _digest_or_none(standards_profile)
+        if current_profile != recorded_profile:
+            current_shown = (
+                display_digest(current_profile) if current_profile is not None else "unknown"
+            )
+            raise ValueError(
+                f"standards profile differs: recorded {shown}, current {current_shown}"
+            )
+    profile = load_profile(standards_profile) if standards_profile is not None else None
+    preflighted = preflight_set(
+        benchmark_set, profile, agent_checklist.load_checklist(), root=root,
+    )
+
+    # Reuse the parity slice's rules, including its exact clean-tree and CR sentences.
+    from swreview.cli import _refuse_a_pane_study_breaking_its_file_rules
+
+    _refuse_a_pane_study_breaking_its_file_rules(
+        provenance.lever, standards_profile=standards_profile,
+        is_example=profile_is_example(standards_profile, root=root),
+        benchmark_set=benchmark_set, commit=commit, dirty=tree_dirty(root=root),
+        digested=(
+            agent_checklist.SYSTEM_PROMPT_FILE, agent_checklist.CHECKLIST_FILE,
+            standards_profile, saved_set, *(ref.case_file for ref in benchmark_set.packages),
+        ),
+        root=root,
+    )
+    return provenance, preflighted, status
+
+
+def resume_benchmark(
+    run_dir: Path | str,
+    *,
+    review_fn: ReviewFn | None = None,
+    root: Path = REPO_ROOT,
+    standards_profile: Path | None = None,
+    now: Callable[[], datetime] = _utc_now,
+    clock: Callable[[], float] = time.monotonic,
+    redact: Callable[[str], str] = events.no_redaction,
+    on_package_done: PackageDoneCallback | None = None,
+    on_preflight: Callable[[RunProvenance], None] | None = None,
+) -> list[Path]:
+    """Continue only missing/infrastructure attempts, from the run's recorded settings.
+
+    `on_preflight` resolves the CLI's provider after every other refusal, before any
+    attempt folder or status is written. Its adapter belongs to the first new attempt.
+    Kept attempts are immutable, apart from completing an interrupted promotion.
+    """
+    run_dir = Path(run_dir)
+    provenance, preflighted, status = _resume_inputs(
+        run_dir, root=root, standards_profile=standards_profile, now=now,
+    )
+    run_served_models: list[str] = []
+    for package_id, package in status.packages.items():
+        if package.kept_attempt is None:
+            continue
+        kept = next(row for row in package.attempts if row.attempt == package.kept_attempt)
+        for served in attempt_facts(_kept_folder(run_dir, package_id, kept)).served_models:
+            if served not in run_served_models:
+                run_served_models.append(served)
+    with ExitStack() as stack:
+        initial_adapter = None
+        if on_preflight is not None:
+            on_preflight(provenance)
+        else:
+            # Library callers get the same provider refusal and first-attempt adapter.
+            from swreview import cli
+
+            settings = cli.ProviderSettings.from_env(
+                provider=provenance.provider, model=provenance.model, effort=provenance.effort,
+            )
+            key_redactor = stack.enter_context(cli._redacting(settings))
+            initial_adapter = cli.provider_factory(settings, provenance.efficiency)
+            initial_adapter.effort_mapping(settings.effort)
+            caller_redactor = redact
+
+            def redact(text: str) -> str:
+                return caller_redactor(key_redactor(text))
+        return _run_packages(
+            preflighted, run_dir, provenance.provider, provenance.model, provenance.effort,
+            review_fn, provenance.efficiency, provenance.explanations_enabled,
+            model_view=provenance.model_view or MODEL_VIEW_OFF,
+            standards_profile=standards_profile,
+            max_answer_turns=(
+                answers.DEFAULT_MAX_ANSWER_TURNS if provenance.max_answer_turns is None
+                else provenance.max_answer_turns
+            ),
+            package_time_limit_s=(
+                3600 if provenance.package_time_limit_s is None else provenance.package_time_limit_s
+            ),
+            stream_activity_window_s=(
+                attempt_driver.STREAM_ACTIVITY_WINDOW_S
+                if provenance.stream_activity_window_s is None
+                else provenance.stream_activity_window_s
+            ),
+            stop_grace_s=(
+                attempt_driver.STOP_GRACE_S if provenance.stop_grace_s is None
+                else provenance.stop_grace_s
+            ),
+            retry_policy=provenance.retry_policy or BENCHMARK_RETRY,
+            max_steps=provenance.max_steps,
+            redact=redact, on_package_done=on_package_done, clock=clock, status=status,
+            resumed=True, run_served_models=tuple(run_served_models), now=now,
+            initial_adapter=initial_adapter,
+        )

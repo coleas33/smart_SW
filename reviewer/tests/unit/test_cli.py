@@ -32,7 +32,7 @@ import pytest
 from typer.testing import CliRunner
 
 from swreview import cli
-from swreview.agent.providers import ProviderName
+from swreview.agent.providers import ProviderError, ProviderName, retry
 from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
 from swreview.agent.runner import ReviewRun, start_review
 from swreview.agent.settings import (
@@ -2508,8 +2508,8 @@ def test_the_run_start_adapter_is_the_first_attempts(
 ) -> None:
     """Feature 014 RF-60 (`benchmark-run.md` 3 row 3): the adapter `benchmark run` builds to
     check the provider and the effort, before any folder is written, is the first package's,
-    and every later package builds its own - one adapter per attempt, as before. Its resume
-    half is lane B6's (T203). Moved by T101 (RF-49): the spy sits on `swreview.cli.start_review`,
+    and every later package builds its own - one adapter per attempt, for run and resume.
+    Moved by T101 (RF-49): the spy sits on `swreview.cli.start_review`,
     which `_review_fn` calls in place of `run_review`."""
     built = fake_provider()
     scripted = cli.provider_factory
@@ -2557,6 +2557,47 @@ def test_the_run_start_adapter_is_the_first_attempts(
     assert folder_written_at_build == [False, True]
     assert len(served) == 2
     assert all(used is made for used, made in zip(served, built, strict=True))
+
+    # Write two failed attempts through the same provider fixture, then resume both. A
+    # nonretryable error needs no backoff; even an accidental retry cannot sleep for real.
+    monkeypatch.setattr(retry, "sleep", lambda delay: pytest.fail("unexpected retry sleep"))
+    out = tmp_path / "runs" / "resume-adapters"
+    fake_provider([ScriptedTurn(text="", fails=ProviderError("fict request failed"))])
+    failed = invoke(
+        "benchmark", "run", "--set", str(set_path), "--out", str(out), "--provider", "fake"
+    )
+    assert failed.exit_code == 1, failed.stdout + failed.stderr
+    for package_id in ("cover", "cover-copy"):
+        assert (out / "attempts" / package_id / "1" / "session.json").is_file()
+        assert not (out / package_id).exists()
+
+    resumed_built = fake_provider()
+    resume_scripted = cli.provider_factory
+    resumed_output_at_build: list[bool] = []
+    served.clear()
+
+    def watched_resume_factory(
+        settings: ProviderSettings, efficiency: EfficiencySettings | None = None
+    ) -> RecordingProvider:
+        # Earlier failed /1 folders already exist. Observe only the new attempt folders
+        # and their destinations, since the first /2 is promoted before the next starts.
+        resumed_output_at_build.append(
+            any(
+                path.exists()
+                for package_id in ("cover", "cover-copy")
+                for path in (out / "attempts" / package_id / "2", out / package_id)
+            )
+        )
+        return resume_scripted(settings, efficiency)
+
+    monkeypatch.setattr(cli, "provider_factory", watched_resume_factory)
+    resumed = invoke("benchmark", "resume", str(out))
+
+    assert resumed.exit_code == 0, resumed.stdout + resumed.stderr
+    assert len(resumed_built) == 2
+    assert resumed_output_at_build == [False, True]
+    assert len(served) == 2
+    assert all(used is made for used, made in zip(served, resumed_built, strict=True))
 
 
 def test_benchmark_run_on_a_missing_set_exits_1(tmp_path: Path) -> None:
