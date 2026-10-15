@@ -577,3 +577,12 @@ def test_provider_errors_keep_runtime_error_construction_and_defaults() -> None:
     assert FictProviderError("another failure").error_class == "FictProviderError"
     assert error.retryable is False
     assert error.stop_reason is None
+
+
+def test_provider_error_declares_retry_defaults_without_changing_its_constructor() -> None:
+    error_type = providers.ProviderError
+    assert "__init__" not in error_type.__dict__
+    for name in ("retries", "retry_after_s"):
+        assert name in error_type.__annotations__
+        assert error_type.__dict__[name] is None
+        assert getattr(error_type("fict failure"), name) is None

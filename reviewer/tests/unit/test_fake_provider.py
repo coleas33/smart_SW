@@ -9,8 +9,10 @@ runs of one script produce byte-identical event streams.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from threading import Event, Thread
 from typing import Any
 
 import pytest
@@ -23,7 +25,13 @@ from swreview.agent.providers import (
     ProviderName,
     ToolCallResult,
 )
-from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
+from swreview.agent.providers.fake import (
+    SYNTHETIC_USAGE,
+    FakeProvider,
+    ScriptedRound,
+    ScriptedToolCall,
+    ScriptedTurn,
+)
 from tests.support.contracts import contract_validator
 from tests.support.toolsets import toolset
 
@@ -510,3 +518,300 @@ def test_fake_presentation_keeps_the_retry_policy_and_stop_callback(
     assert sleeps == []
     assert sink.bodies("error")[0]["retries"] == 0
     assert primary._turn_index == 0
+
+
+@pytest.mark.parametrize("with_rounds", [False, True])
+def test_scripted_failure_plays_completed_rounds_then_raises_the_instance(
+    with_rounds: bool,
+) -> None:
+    failure = providers.ProviderError("fict closing request failed")
+    failure.error_class = "FictRequestError"
+    failure.stop_reason = "fict_stop"
+    # An error reused after a policy must not report retries on a request without one.
+    failure.retries = 7
+    rounds = (
+        ScriptedRound((ScriptedToolCall("list_components", {"n": 1}),), SYNTHETIC_USAGE),
+        ScriptedRound((ScriptedToolCall("list_components", {"n": 2}),), SYNTHETIC_USAGE),
+    ) if with_rounds else ()
+    fake = provider(
+        ScriptedTurn(text="unreached closing text", rounds=rounds, fails=failure),
+        ScriptedTurn(text="next turn"),
+    )
+    tool = FakeTool(name="list_components")
+    sink = Sink()
+
+    with pytest.raises(providers.ProviderError) as raised:
+        run(fake, [tool], sink=sink)
+
+    assert raised.value is failure
+    assert sink.types == ["usage", "tool.started", "tool.finished"] * len(rounds) + ["error"]
+    assert [body["round_index"] for body in sink.bodies("usage")] == list(range(len(rounds)))
+    assert fake.round_usage == [SYNTHETIC_USAGE] * len(rounds)
+    assert [arguments for arguments, _ in tool.calls] == [{"n": i + 1} for i in range(len(rounds))]
+    assert sink.bodies("error") == [{
+        "error_class": "FictRequestError",
+        "message": "fict closing request failed",
+        "retryable": False,
+        "stop_reason": "fict_stop",
+    }]
+    assert run(fake, [tool])[0].text == "next turn"
+
+
+def test_scripted_hang_waits_before_any_round_or_tool_emits() -> None:
+    waiting = Event()
+
+    class ObservedEvent(Event):
+        def wait(self, timeout: float | None = None) -> bool:
+            waiting.set()
+            if not super().wait(timeout=5.0):
+                raise TimeoutError("test did not release the scripted hang")
+            return True
+
+    release = ObservedEvent()
+    fake = provider(ScriptedTurn(
+        text="released",
+        rounds=(ScriptedRound((ScriptedToolCall("list_components"),), SYNTHETIC_USAGE),),
+        hang=release,
+    ))
+    tool = FakeTool(name="list_components")
+    sink = Sink()
+    results: list[Any] = []
+    errors: list[BaseException] = []
+
+    def worker() -> None:
+        try:
+            results.append(run(fake, [tool], sink=sink)[0])
+        except BaseException as error:
+            errors.append(error)
+
+    thread = Thread(target=worker, daemon=True)
+    thread.start()
+    try:
+        assert waiting.wait(timeout=2.0)
+        assert thread.is_alive()
+        assert sink.events == []
+        assert tool.calls == []
+    finally:
+        release.set()
+        thread.join(timeout=5.0)
+    assert not thread.is_alive()
+    assert errors == []
+    assert results[0].text == "released"
+    assert sink.types == [
+        "usage", "tool.started", "tool.finished", "usage", "text.delta", "text.done",
+    ]
+
+
+@pytest.mark.parametrize("end_reason", ["end", "truncated", "stopped", "max_steps"])
+def test_scripted_stop_reason_requires_an_error_end(end_reason: Any) -> None:
+    with pytest.raises(ValueError, match="stop_reason.*end_reason"):
+        ScriptedTurn(text="", stop_reason="", end_reason=end_reason)
+
+
+@pytest.mark.parametrize("stop_reason", ["SAFETY", ""])
+@pytest.mark.parametrize("with_policy", [False, True])
+def test_scripted_stop_emits_an_error_and_returns_the_error_turn(
+    stop_reason: str, with_policy: bool,
+) -> None:
+    from swreview.agent.providers import retry
+
+    fake = provider(ScriptedTurn(text="blocked", end_reason="error", stop_reason=stop_reason))
+    if with_policy:
+        fake.use_retry(retry.BENCHMARK_RETRY, stop_requested=lambda: False)
+
+    result, sink = run(fake, [])
+
+    assert result.reason == "error"
+    assert result.text == "blocked"
+    assert sink.bodies("text.done") == [{"text": "blocked"}]
+    assert len(sink.bodies("usage")) == 1
+    assert len(sink.bodies("error")) == 1
+    error = sink.bodies("error")[0]
+    assert error["stop_reason"] == stop_reason
+    assert error["retryable"] is False
+    if with_policy:
+        assert error["retries"] == 0
+    else:
+        assert "retries" not in error
+    validator = contract_validator("chat-events.schema.json")
+    for event in sink.serialized():
+        validator.validate(event)
+
+
+@pytest.mark.parametrize("served_model", [None, "", "fict-model-a-2026-10-01"])
+@pytest.mark.parametrize("with_rounds", [False, True])
+def test_scripted_served_model_is_carried_by_every_usage(
+    served_model: str | None, with_rounds: bool,
+) -> None:
+    rounds = (
+        ScriptedRound((ScriptedToolCall("list_components"),), SYNTHETIC_USAGE),
+        ScriptedRound((ScriptedToolCall("list_components"),), None),
+        ScriptedRound((ScriptedToolCall("list_components"),), SYNTHETIC_USAGE),
+    ) if with_rounds else ()
+    fake = provider(ScriptedTurn(text="done", rounds=rounds, served_model=served_model))
+
+    _, sink = run(fake, [FakeTool(name="list_components")])
+
+    usage = sink.bodies("usage")
+    assert [body["round_index"] for body in usage] == ([0, 2, 3] if with_rounds else [0])
+    for body in usage:
+        assert body["model"] == "fake-scripted"
+        assert "retries" not in body
+        if served_model is None:
+            assert "served_model" not in body
+        else:
+            assert body["served_model"] == served_model
+
+
+@pytest.mark.parametrize(
+    "text,interval,expected",
+    [("", 0.25, []), ("Only", 0.25, ["text.delta", "text.done"]),
+     ("One two three", 0.25,
+      ["text.delta", 0.25, "text.delta", 0.25, "text.delta", "text.done"]),
+     ("One two", 0.0, ["text.delta", "text.delta", "text.done"])],
+)
+def test_scripted_delta_interval_sleeps_only_between_deltas(
+    text: str, interval: float, expected: list[Any],
+) -> None:
+    timeline: list[Any] = []
+    fake = FakeProvider(
+        script=(ScriptedTurn(text=text, delta_interval_s=interval, usage=None),),
+        model="fict-model-a-2026-10-01", clock=frozen_clock, sleep=timeline.append,
+    )
+
+    result = fake.run(
+        system="review", messages=[], tools=toolset([]), effort="high", max_steps=0,
+        on_event=lambda kind, body: timeline.append(kind),
+    )
+
+    assert timeline == expected
+    assert result.text == text
+
+
+@pytest.mark.parametrize("with_rounds", [False, True])
+@pytest.mark.parametrize("stop_reason", [None, "content_filter", ""])
+def test_scripted_failure_uses_the_shared_retry_loop_for_only_its_request(
+    monkeypatch: pytest.MonkeyPatch, with_rounds: bool, stop_reason: str | None,
+) -> None:
+    from swreview.agent.providers import retry
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(retry, "sleep", sleeps.append)
+    monkeypatch.setattr(retry, "uniform", lambda low, high: high)
+    failure = _TransientFakeResponseError("fict request remains busy")
+    failure.stop_reason = stop_reason
+    rounds = (
+        ScriptedRound((ScriptedToolCall("list_components"),), SYNTHETIC_USAGE),
+    ) if with_rounds else ()
+    turn = ScriptedTurn(
+        text="unreached", rounds=rounds, fails=failure, served_model="fict-served-2026-10-01",
+    )
+    fake = _RetryingFakeProvider(script=(turn,), failures={})
+    assert isinstance(fake, providers.RetryAware)
+    fake.use_retry(
+        retry.RetryPolicy(retries=2, initial_delay_s=0.5, max_delay_s=2.0),
+        stop_requested=lambda: False,
+    )
+    tool = FakeTool(name="list_components")
+    sink = Sink()
+
+    with pytest.raises(_TransientFakeResponseError) as raised:
+        run(fake, [tool], sink=sink)
+
+    expected_retries = 2 if stop_reason is None else 0
+    assert raised.value is failure
+    assert fake.responses == [*rounds, *([turn] * (expected_retries + 1))]
+    assert len(tool.calls) == len(rounds)
+    assert sink.bodies("text.delta") == []
+    assert len(sink.bodies("usage")) == len(rounds)
+    for body in sink.bodies("usage"):
+        assert body["retries"] == 0
+        assert body["served_model"] == "fict-served-2026-10-01"
+    assert sleeps == ([0.5, 1.0] if expected_retries else [])
+    assert len(sink.bodies("error")) == 1
+    assert sink.bodies("error")[0] == providers.error_body(
+        error_class="_TransientFakeResponseError", message=str(failure), retryable=True,
+        stop_reason=stop_reason, retries=expected_retries,
+    )
+
+
+def test_scripted_presentation_keeps_sleep_policy_and_stop_callback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from swreview.agent.providers import retry
+
+    text_sleeps: list[float] = []
+    retry_sleeps: list[float] = []
+    monkeypatch.setattr(retry, "sleep", retry_sleeps.append)
+    failure = _TransientFakeResponseError("fict presentation busy")
+    stopped = False
+    primary = FakeProvider(
+        script=(ScriptedTurn(text="review"),),
+        explanation_script=(
+            ScriptedTurn(text="explain now", delta_interval_s=0.25),
+            ScriptedTurn(text="unreached", fails=failure),
+        ),
+        model="fict-model-a-2026-10-01", clock=frozen_clock, sleep=text_sleeps.append,
+    )
+    primary.use_retry(retry.BENCHMARK_RETRY, stop_requested=lambda: stopped)
+    presentation = primary.for_presentation(2048)
+
+    _, sink = run(presentation, [], max_steps=0)
+    assert text_sleeps == [0.25]
+    assert sink.bodies("usage")[0]["retries"] == 0
+    stopped = True
+    failed_sink = Sink()
+    with pytest.raises(_TransientFakeResponseError) as raised:
+        run(presentation, [], sink=failed_sink, max_steps=0)
+    assert raised.value is failure
+    assert failed_sink.bodies("error")[0]["retries"] == 0
+    assert retry_sleeps == []
+    assert primary._turn_index == 0
+
+
+@pytest.mark.parametrize("with_rounds", [False, True])
+def test_scripted_reported_stop_counts_its_retries_once(
+    monkeypatch: pytest.MonkeyPatch, with_rounds: bool,
+) -> None:
+    from swreview.agent.providers import retry
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(retry, "sleep", sleeps.append)
+    monkeypatch.setattr(retry, "uniform", lambda low, high: high)
+    rounds = (
+        ScriptedRound((ScriptedToolCall("list_components"),), SYNTHETIC_USAGE),
+    ) if with_rounds else ()
+    turn = ScriptedTurn(text="blocked", rounds=rounds, end_reason="error", stop_reason="SAFETY")
+    fake = _RetryingFakeProvider(
+        script=(turn,), failures={len(rounds) + 1: _TransientFakeResponseError("fict busy")},
+    )
+    fake.use_retry(
+        retry.RetryPolicy(retries=2, initial_delay_s=0.5, max_delay_s=2.0),
+        stop_requested=lambda: False,
+    )
+
+    result, sink = run(fake, [FakeTool(name="list_components")])
+
+    assert result.reason == "error"
+    assert fake.responses == [*rounds, turn, turn]
+    assert sleeps == [0.5]
+    assert [body["retries"] for body in sink.bodies("usage")] == [0] * (len(rounds) + 1)
+    assert len(sink.bodies("error")) == 1
+    assert sink.bodies("error")[0]["retries"] == 1
+    assert sink.bodies("error")[0]["stop_reason"] == "SAFETY"
+
+
+def test_scripted_defaults_preserve_the_parent_event_bytes() -> None:
+    fake = provider(ScriptedTurn(text="Done now"), model="fict-model-a-2026-10-01")
+
+    _, sink = run(fake, [])
+
+    actual = json.dumps([[event.type, event.body] for event in sink.events], separators=(",", ":"))
+    assert actual == (
+        '[["usage",{"round_index":0,"provider":"fake","model":"fict-model-a-2026-10-01",'
+        '"input_tokens":1337,"cached_input_tokens":419,"cache_write_tokens":null,'
+        '"output_tokens":211,"reasoning_tokens":67,"tool_result_input_tokens":null,'
+        '"total_tokens":1548,"latency_s":0.37,"cache_diagnostic":null}],'
+        '["text.delta",{"text":"Done "}],["text.delta",{"text":"now"}],'
+        '["text.done",{"text":"Done now"}]]'
+    )
