@@ -2394,3 +2394,211 @@ def test_96a_off_windows_a_read_only_entry_s_error_stands(monkeypatch: pytest.Mo
         with pytest.raises(PermissionError, match="fictional denial"):
             report_page._writable(retried.append, "entry", form)
     assert retried == []
+
+
+# --- owner decision 97A: staging names are refused, never deleted -----------------------------
+
+STAGING_NAMES = ("transcripts.new", "transcripts.old", "index.html.new")
+
+
+def _plant(folder: Path, name: str) -> Path:
+    """The user's own file or folder under `name` in `folder`."""
+    planted = folder / name
+    if name.startswith("transcripts"):
+        planted.mkdir()
+        (planted / "notes.txt").write_text("the engineer's notes", encoding="utf-8")
+    else:
+        planted.write_text("the engineer's notes", encoding="utf-8")
+    return planted
+
+
+def _staging_refusal(path: Path) -> str:
+    return (
+        f"{path} is a name this command stages an in-place copy under, so it may be what an "
+        "interrupted build left, or yours; this command never deletes it: delete it, or move it "
+        "elsewhere, and build again"
+    )
+
+
+@pytest.mark.parametrize("path", ["move", "in-place"])
+@pytest.mark.parametrize("name", STAGING_NAMES)
+def test_97a_an_out_holding_a_staging_name_is_refused_and_it_survives(
+    report_runs: Runs, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, name: str, path: str
+) -> None:
+    out = tmp_path / "report"
+    build_report([report_runs.off], out)
+    planted = _plant(out, name)
+    before = snapshot(out)
+    given = out
+    if path == "in-place":
+        monkeypatch.chdir(out)
+        given = Path(".")
+
+    with pytest.raises(report_page.ReportError) as refused:
+        build_report([report_runs.on], given)
+
+    assert str(refused.value) == _staging_refusal(given / name)
+    assert snapshot(out) == before
+    assert os.path.lexists(planted)
+    assert _siblings(out) == []
+
+
+def test_97a_a_staging_name_appearing_before_an_in_place_copy_is_refused_not_deleted(
+    report_runs: Runs, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Planted after the folder was checked and before the copy: still never deleted."""
+    out = tmp_path / "report"
+    build_report([report_runs.off], out)
+    monkeypatch.chdir(out)
+    real = report_page._copy_in_place
+
+    def plant_then_copy(built: Path, target: Path) -> Path | None:
+        _plant(target, "transcripts.new")
+        return real(built, target)
+
+    monkeypatch.setattr(report_page, "_copy_in_place", plant_then_copy)
+
+    with pytest.raises(report_page.ReportError) as refused:
+        build_report([report_runs.on], Path("."))
+
+    assert str(refused.value) == _staging_refusal(out.resolve() / "transcripts.new")
+    assert (out / "transcripts.new" / "notes.txt").is_file()
+
+
+def test_97a_an_out_holding_the_marker_is_refused_with_what_to_do(
+    report_runs: Runs, tmp_path: Path
+) -> None:
+    """A previous report a build could not move back, moved back by hand with its marker: the
+    marker's name is refused, never allowed, so the user deletes it, as it says (97A)."""
+    out = tmp_path / "report"
+    build_report([report_runs.off], out)
+    (out / report_page.STRANDED_FILE).write_text("the marker", encoding="utf-8")
+
+    with pytest.raises(report_page.ReportError) as refused:
+        build_report([report_runs.on], out)
+
+    assert str(refused.value) == (
+        f"{out / report_page.STRANDED_FILE} marks a previous report a build could not move back; "
+        "if you have moved it back by hand, delete this file and build again"
+    )
+
+
+def test_97a_a_sweep_candidate_holding_a_staging_name_is_kept_and_named(
+    report_runs: Runs, tmp_path: Path
+) -> None:
+    out = tmp_path / "report"
+    build_report([report_runs.off], out)
+    previous = _report_like(tmp_path / ".report.0123456789abcdef.previous")
+    planted = _plant(previous, "transcripts.old")
+    _age(previous)
+
+    built = build_report([report_runs.on], out)
+
+    assert (planted / "notes.txt").is_file()
+    assert built.warnings == (
+        f"kept {previous}: it holds {planted.name}, a name an in-place copy stages under; "
+        "delete it by hand if an interrupted build left it",
+    )
+
+
+def test_97a_a_sibling_that_cannot_be_read_is_kept_and_named(
+    report_runs: Runs, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    out = tmp_path / "report"
+    build_report([report_runs.off], out)
+    unreadable = _report_like(tmp_path / ".report.0123456789abcdef.building")
+
+    def denied(folder: Path) -> float:
+        raise PermissionError(13, "Access is denied", str(folder))
+
+    monkeypatch.setattr(report_page, "_youngest", denied)
+
+    built = build_report([report_runs.on], out)
+
+    assert unreadable.is_dir()
+    denial = PermissionError(13, "Access is denied", str(unreadable))
+    assert built.warnings == (f"kept {unreadable}: could not read it ({denial})",)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="a junction is a Windows folder link")
+def test_97a_a_sibling_s_age_is_read_without_following_a_junction_inside_it(
+    report_runs: Runs, tmp_path: Path
+) -> None:
+    """A fresh folder reached only through a junction inside an old sibling does not make the
+    sibling young; the sibling is removed, the junction's target untouched."""
+    out = tmp_path / "report"
+    build_report([report_runs.off], out)
+    sibling = _report_like(tmp_path / ".report.0123456789abcdef.building")
+    fresh = tmp_path / "fresh"
+    (fresh / "notes.txt").parent.mkdir()
+    (fresh / "notes.txt").write_text("the engineer's notes", encoding="utf-8")
+    _junction(sibling / "transcripts" / "off" / "linked", fresh)
+    then = time.time() - 3600
+    for entry in (
+        sibling / "index.html",
+        sibling / "transcripts" / "off",
+        sibling / "transcripts",
+        sibling,
+    ):
+        os.utime(entry, (then, then))
+
+    built = build_report([report_runs.on], out)
+
+    assert built.removed == (sibling,)
+    assert (fresh / "notes.txt").read_text(encoding="utf-8") == "the engineer's notes"
+
+
+def test_97a_a_marker_that_cannot_be_written_is_named_on_the_refusal(
+    report_runs: Runs, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    out = tmp_path / "report"
+    build_report([report_runs.off], out)
+    moves = _renames(
+        monkeypatch,
+        lambda source, to: (
+            PermissionError("in use") if to.name == out.name and source.name != out.name else None
+        ),
+    )
+    real = Path.write_bytes
+
+    def write_bytes(self: Path, data: bytes) -> int:
+        if self.name == report_page.STRANDED_FILE:
+            raise OSError("a fictional full disk")
+        return real(self, data)
+
+    monkeypatch.setattr(Path, "write_bytes", write_bytes)
+
+    with pytest.raises(report_page.ReportError) as refused:
+        build_report([report_runs.on], out)
+
+    [aside] = [to for source, to in moves if source == out.name]
+    previous = tmp_path / aside
+    assert str(refused.value) == (
+        f"the previous report was moved aside to {previous} and could not be moved back to "
+        f"{out.resolve()}; move it back by hand; it could not be marked against removal "
+        "(a fictional full disk), so move it back before building again"
+    )
+
+
+def test_97a_the_marker_says_to_delete_itself_once_the_report_is_moved_back(
+    report_runs: Runs, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    out = tmp_path / "report"
+    build_report([report_runs.off], out)
+    moves = _renames(
+        monkeypatch,
+        lambda source, to: (
+            PermissionError("in use") if to.name == out.name and source.name != out.name else None
+        ),
+    )
+
+    with pytest.raises(report_page.ReportError):
+        build_report([report_runs.on], out)
+
+    [aside] = [to for source, to in moves if source == out.name]
+    marker = (tmp_path / aside / report_page.STRANDED_FILE).read_text(encoding="utf-8")
+    assert marker == (
+        "swreview benchmark report moved the previous report in this folder aside from "
+        f"{out.resolve()} and could not move it back. Move it back by hand, then delete this "
+        "file; no build removes this folder while it holds this file.\n"
+    )
