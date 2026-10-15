@@ -187,8 +187,9 @@ BUILDING = ".building"
 """The suffix of the sibling folder a build is written into before it is put in place (83A)."""
 
 STAGED = (f"{TRANSCRIPTS_DIR}.new", f"{TRANSCRIPTS_DIR}.old", f"{INDEX_FILE}.new")
-"""The names an in-place copy stages beside a report before renaming them into place; a copy that
-was killed may leave them, and a report may hold them (owner decision 96A)."""
+"""The names an in-place copy stages beside a report before renaming them into place (owner
+decision 96A). A copy that was killed may leave them, and so may a user: a folder holding one is
+refused, never cleared, and this command never deletes one it did not just make (97A)."""
 
 STRANDED_FILE = "STRANDED-by-swreview-benchmark-report.txt"
 """Written into a previous report a build moved aside and could not move back, so that no later
@@ -342,7 +343,7 @@ def build_report(
                 page = _transcript_page(run, score, _legend_of(run, score, legends))
                 _write_page(building / Path(*run.transcript(score.package_id).split("/")), page)
                 written += 1
-        leftover = _place(building, target, in_place=in_place)
+        leftovers = _place(building, target, in_place=in_place)
     except BaseException:
         _remove(building)
         raise
@@ -350,7 +351,7 @@ def build_report(
         index=target / INDEX_FILE,
         transcripts=written,
         removed=removed,
-        warnings=stuck + (() if leftover is None else (_leftover_warning(leftover),)),
+        warnings=stuck + tuple(_leftover_warning(leftover) for leftover in leftovers),
     )
 
 
@@ -383,8 +384,8 @@ def _in_place(out: Path, target: Path) -> bool:
     return target.exists() and Path.cwd().resolve().is_relative_to(target)
 
 
-def _place(built: Path, target: Path, *, in_place: bool) -> Path | None:
-    """Put the finished build at `target`; the folder this left and could not remove, if any.
+def _place(built: Path, target: Path, *, in_place: bool) -> tuple[Path, ...]:
+    """Put the finished build at `target`; the folders this left and could not remove.
 
     Moved when it can be: a previous report, or an empty folder, aside, the build in, the
     previous one removed. Copied in place when `in_place`, or when the previous report cannot be
@@ -393,63 +394,72 @@ def _place(built: Path, target: Path, *, in_place: bool) -> Path | None:
     the copy and anything else is raised (owner decision 96A).
     """
     if in_place:
-        _copy_in_place(built, target)
-        return _remove(built)
+        return _left(_copy_in_place(built, target), _remove(built))
     if not target.exists():
         built.rename(target)
-        return None
+        return ()
     previous = _sibling(target, PREVIOUS)
     try:
         target.rename(previous)
     except OSError:
-        _copy_in_place(built, target)
-        return _remove(built)
+        return _left(_copy_in_place(built, target), _remove(built))
     try:
         built.rename(target)
     except BaseException as failure:
         _move_back(previous, target, failure)
         if not isinstance(failure, OSError):
             raise
-        _copy_in_place(built, target)
-        return _remove(built)
-    return _remove(previous)
+        return _left(_copy_in_place(built, target), _remove(built))
+    return _left(_remove(previous))
+
+
+def _left(*folders: Path | None) -> tuple[Path, ...]:
+    return tuple(folder for folder in folders if folder is not None)
 
 
 def _move_back(previous: Path, target: Path, failure: BaseException) -> None:
     """Put the previous report back at `target`. When that fails too, mark it so that no later
-    build's sweep removes it, and refuse, naming where it is (owner decision 96A)."""
+    build's sweep removes it, and refuse, naming where it is; a mark that cannot be written is
+    named on the refusal too, never dropped (owner decisions 96A, 97A)."""
     try:
         previous.rename(target)
     except OSError:
-        with contextlib.suppress(OSError):
+        message = (
+            f"the previous report was moved aside to {previous} and could not be moved back to "
+            f"{target}; move it back by hand"
+        )
+        try:
             (previous / STRANDED_FILE).write_bytes(
                 (
                     f"swreview benchmark report moved the previous report in this folder aside "
-                    f"from {target} and could not move it back. Move it back by hand; no build "
-                    "removes this folder.\n"
+                    f"from {target} and could not move it back. Move it back by hand, then "
+                    "delete this file; no build removes this folder while it holds this file.\n"
                 ).encode()
             )
-        raise ReportError(
-            f"the previous report was moved aside to {previous} and could not be moved back to "
-            f"{target}; move it back by hand"
-        ) from failure
+        except OSError as unmarked:
+            message += (
+                f"; it could not be marked against removal ({unmarked}), so move it back before "
+                "building again"
+            )
+        raise ReportError(message) from failure
 
 
-def _copy_in_place(built: Path, target: Path) -> None:
-    """Replace `target`'s report with the build's, keeping the folder itself (owner decision 96A).
+def _copy_in_place(built: Path, target: Path) -> Path | None:
+    """Replace `target`'s report with the build's, keeping the folder itself (owner decision 96A);
+    the old transcripts' folder, when it could not be removed afterwards.
 
     The build is copied beside the report first, as `transcripts.new` and `index.html.new`, so a
     copy that fails leaves the previous report whole and readable; then the old `transcripts/` is
     renamed aside to `transcripts.old`, `transcripts.new` into its place (renamed back on a
     failure), `index.html.new` over `index.html`, and `transcripts.old` removed, best effort. The
     renames are separate steps, not one: a failure between them can leave one build's index
-    beside the other's transcripts, which the next build replaces.
+    beside the other's transcripts. A staging name already there is refused, never cleared
+    (97A): one an interrupted copy left is deleted by hand, as the refusal says.
     """
+    staged = _staging_held(target)
+    if staged:
+        raise ReportError(_staging_refusal(target / staged[0]))
     staged_transcripts, old_transcripts, staged_index = (target / name for name in STAGED)
-    for stale in (staged_transcripts, old_transcripts):
-        if os.path.lexists(stale):
-            _rmtree(stale)
-    staged_index.unlink(missing_ok=True)
     try:
         if (built / TRANSCRIPTS_DIR).is_dir():
             shutil.copytree(built / TRANSCRIPTS_DIR, staged_transcripts)
@@ -470,7 +480,7 @@ def _copy_in_place(built: Path, target: Path) -> None:
             old_transcripts.rename(transcripts)
         raise
     os.replace(staged_index, target / INDEX_FILE)
-    _remove(old_transcripts)
+    return _remove(old_transcripts)
 
 
 def _is_junction(path: Path) -> bool:
@@ -543,7 +553,10 @@ def _remove_orphans(target: Path) -> tuple[tuple[Path, ...], tuple[str, ...]]:
             continue
         if child.is_symlink() or _is_junction(child) or not child.is_dir():
             continue
-        reason = _why_kept(child, target)
+        try:
+            reason = _why_kept(child, target)
+        except OSError as unread:
+            reason = f"could not read it ({unread})"
         if reason is not None:
             warnings.append(f"kept {child}: {reason}")
         elif _remove(child) is None:
@@ -565,6 +578,12 @@ def _why_kept(sibling: Path, target: Path) -> str | None:
             "a build moved this previous report aside and could not move it back; move it back "
             "by hand"
         )
+    staged = _staging_held(sibling)
+    if staged:
+        return (
+            f"it holds {staged[0]}, a name an in-place copy stages under; delete it by hand if an "
+            "interrupted build left it"
+        )
     if not _holds_a_report(sibling, index_required=False):
         return "it holds files this command did not write"
     if time.time() - _youngest(sibling) < ORPHAN_MIN_AGE_S:
@@ -580,16 +599,29 @@ def _why_kept(sibling: Path, target: Path) -> str | None:
 
 
 def _youngest(folder: Path) -> float:
-    """The latest modification time of `folder` and of everything beneath it, links unfollowed."""
+    """The latest modification time of `folder` and of everything beneath it, links unfollowed
+    and junctions skipped, their own times too (owner decision 97A)."""
     youngest = os.lstat(folder).st_mtime
-    for parent, folders, files in os.walk(folder):
-        for name in (*folders, *files):
-            youngest = max(youngest, os.lstat(os.path.join(parent, name)).st_mtime)
+    pending = [folder]
+    while pending:
+        with os.scandir(pending.pop()) as entries:
+            for entry in entries:
+                if _is_junction(Path(entry.path)):
+                    continue
+                youngest = max(youngest, entry.stat(follow_symlinks=False).st_mtime)
+                if entry.is_dir(follow_symlinks=False):
+                    pending.append(Path(entry.path))
     return youngest
 
 
 def _leftover_warning(leftover: Path) -> str:
-    what = "the previous report" if leftover.name.endswith(PREVIOUS) else "this build's copy"
+    """The one line naming a folder this build could not remove, its report being in place."""
+    if leftover.name.endswith(PREVIOUS):
+        what = "the previous report"
+    elif leftover.name == STAGED[1]:
+        what = "the previous report's transcripts; the next build refuses until it is gone"
+    else:
+        what = "this build's copy"
     return f"could not remove {leftover}, {what}; the new report is in place, so remove it by hand"
 
 
@@ -644,7 +676,8 @@ def _refuse_an_out_in_a_run_folder(out: Path, runs: Sequence[Path]) -> None:
 
 def _refuse_a_foreign_out(out: Path) -> None:
     """`--out` is absent, empty, or a previous report (`_holds_a_report`, its `index.html`
-    required); a `transcripts/` that is a link is refused on its own line (`report.md` 6, 7)."""
+    required). Refused on their own line: a `transcripts/` that is a link (96A), and a staging
+    name or the marker of a report a build could not move back, each with what to do (97A)."""
     if not out.exists():
         return
     if out.is_dir():
@@ -654,17 +687,38 @@ def _refuse_a_foreign_out(out: Path) -> None:
                 f"{transcripts} is a link; the report replaces that folder and will not write "
                 "through a link: remove the link, or choose another folder"
             )
+        staged = _staging_held(out)
+        if staged:
+            raise ReportError(_staging_refusal(out / staged[0]))
+        if (out / STRANDED_FILE).exists():
+            raise ReportError(
+                f"{out / STRANDED_FILE} marks a previous report a build could not move back; if "
+                "you have moved it back by hand, delete this file and build again"
+            )
         if not any(out.iterdir()) or _holds_a_report(out, index_required=True):
             return
     raise ReportError(f"{out} holds files this command did not write; choose an empty folder")
 
 
+def _staging_held(folder: Path) -> list[str]:
+    """The staging names `folder` holds, file, folder or link (owner decision 97A)."""
+    return [name for name in STAGED if os.path.lexists(folder / name)]
+
+
+def _staging_refusal(path: Path) -> str:
+    return (
+        f"{path} is a name this command stages an in-place copy under, so it may be what an "
+        "interrupted build left, or yours; this command never deletes it: delete it, or move it "
+        "elsewhere, and build again"
+    )
+
+
 def _holds_a_report(folder: Path, *, index_required: bool) -> bool:
-    """Whether `folder` holds only what this command writes: an `index.html` carrying the
-    generator tag (needed only when `index_required`), a `transcripts/` that is a folder and no
-    link, and an in-place copy's staged names (owner decision 96A)."""
+    """Whether `folder` holds only what this command leaves: an `index.html` carrying the
+    generator tag (needed only when `index_required`) and a `transcripts/` that is a folder and
+    no link (owner decisions 96A, 97A: a staging name is no part of a report)."""
     held = {child.name for child in folder.iterdir()}
-    if not held <= {INDEX_FILE, TRANSCRIPTS_DIR, *STAGED}:
+    if not held <= {INDEX_FILE, TRANSCRIPTS_DIR}:
         return False
     index = folder / INDEX_FILE
     if INDEX_FILE in held:
@@ -672,11 +726,10 @@ def _holds_a_report(folder: Path, *, index_required: bool) -> bool:
             return False
     elif index_required:
         return False
-    for name in (TRANSCRIPTS_DIR, *STAGED[:2]):
-        path = folder / name
-        if name in held and (path.is_symlink() or _is_junction(path) or not path.is_dir()):
-            return False
-    return True
+    transcripts = folder / TRANSCRIPTS_DIR
+    return TRANSCRIPTS_DIR not in held or (
+        transcripts.is_dir() and not transcripts.is_symlink() and not _is_junction(transcripts)
+    )
 
 
 def _relative_names(paths: Sequence[Path]) -> list[str]:
