@@ -148,6 +148,7 @@ re-run first, `recheck.md`).
 | Timing | `POST /sessions/{id}/timing` | as the decision route: `record_timing_live` on the chat's worker on a waiting chat; today's path otherwise |
 | Follow-up | `POST /sessions/{id}/messages` | `409 NotSent` while `run.awaiting_send` (a follow-up would reach the model with no opening; FR-019) |
 | Stop | `POST /sessions/{id}/stop` | unchanged code: the session has an `ended_at`, so nothing is written, no event, no model call (FR-025); during a decision or timing write the chat reads `awaiting_send`, so the same holds; during an apply, and while Send's adapter is built, the chat reads `running`, so the flag is set - see "The stop flag" below |
+| Edit saved engineering context | `POST /engineering-context/{run_id}/...` | *Amended 2026-10-15 (feature 016, owner decision 99A):* `409 EngineeringContextConflict` ("in use by a running review") while a chat on that run folder is `awaiting_send`, as while one is set up (the folder in `_pending_run_dirs`), extracting, running or waiting for the engineer: Send plays the context snapshot taken at the start, so it cannot change under a waiting review |
 | Shutdown | lifespan | unchanged code: a finalized session is skipped; nothing is written (FR-010) |
 
 **The stop flag** (owner decision 69A, replacing the tasks review's hand-cleared flag). The stop route

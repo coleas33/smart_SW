@@ -11,6 +11,8 @@ saved context cannot change while a review that carries it is set up or waits (s
 from __future__ import annotations
 
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -46,6 +48,7 @@ ENGINEERING_LEAD = "Engineer-supplied inputs for the saved evidence snapshot fol
 """The first sentence of the opening's engineering block (`runner._opening_message`)."""
 SUMMARY_FILE = "engineering-context-summary.json"
 SESSION_SCHEMA = "https://smart-sw.local/contracts/review-session.schema.json"
+IN_USE = "Engineering context is in use by a running review."
 
 
 def attachment_of(client: TestClient, folder: Path, entity_id: str = "cmp:0001") -> dict[str, Any]:
@@ -352,3 +355,100 @@ def test_a_re_run_stopped_at_its_record_replace_keeps_the_summary_and_record(
         assert recheck_cases.recheck(fresh, folder).status_code == 500
     assert (folder / "session.json").read_bytes() == record
     assert (folder / SUMMARY_FILE).read_bytes() == summary
+
+
+# --- should-fix D: no edit while a review that carries the context is set up or waits --------
+
+
+def test_an_edit_while_the_review_waits_for_send_is_refused(
+    client: TestClient, run_dir: Path
+) -> None:
+    attachment = attachment_of(client, run_dir)
+    started = chat.start_session(
+        client, run_dir, send_when_checked=False, engineering_context=attachment
+    )
+    assert chat.state_of(client, started["chat_id"]) == "awaiting_send"
+
+    refused = client.post(
+        ctx.endpoint(run_dir, "/requirement"),
+        json=ctx.requirement(attachment, text="FICT revised load."),
+    )
+
+    assert refused.status_code == 409, refused.text
+    assert refused.json()["message"] == IN_USE
+    assert client.get(ctx.endpoint(run_dir)).json()["head_digest"] == attachment["head_digest"]
+
+
+def held_step(
+    owner: Any, monkeypatch: pytest.MonkeyPatch, step: str
+) -> tuple[threading.Event, threading.Event]:
+    """Hold the server's setup `step`, which runs on the thread pool, until released."""
+    entered, release = threading.Event(), threading.Event()
+    original = getattr(owner, step)
+
+    def held(*args: Any, **kwargs: Any) -> Any:
+        entered.set()
+        assert release.wait(chat.TIMEOUT_S)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(owner, step, held)
+    return entered, release
+
+
+def edit_refused_while_held(
+    client: TestClient,
+    folder: Path,
+    body: dict[str, Any],
+    attachment: dict[str, Any],
+    entered: threading.Event,
+    release: threading.Event,
+) -> None:
+    """Post `body` to `POST /sessions`; while its held step waits, an edit is refused as busy."""
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        response = pool.submit(client.post, "/sessions", json=body)
+        try:
+            assert entered.wait(chat.TIMEOUT_S)
+            refused = client.post(
+                ctx.endpoint(folder, "/requirement"),
+                json=ctx.requirement(attachment, text="FICT revised load."),
+            )
+            assert refused.status_code == 409, refused.text
+            assert refused.json()["message"] == IN_USE
+        finally:
+            release.set()
+        assert response.result().status_code == 201, response.result().text
+    assert client.get(ctx.endpoint(folder)).json()["head_digest"] == attachment["head_digest"]
+
+
+def test_an_edit_while_an_unticked_start_is_set_up_is_refused(
+    app: Any, client: TestClient, run_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    attachment = attachment_of(client, run_dir)
+    entered, release = held_step(app.state.server, monkeypatch, "_start_review")
+    body = chat.session_body(run_dir, send_when_checked=False, engineering_context=attachment)
+
+    edit_refused_while_held(client, run_dir, body, attachment, entered, release)
+
+
+@pytest.mark.parametrize("step", ["_waiting_record", "_start_review"])
+def test_an_edit_while_a_re_run_is_set_up_is_refused(
+    client: TestClient,
+    run_dir: Path,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+    monkeypatch: pytest.MonkeyPatch,
+    step: str,
+) -> None:
+    """From the claim on: `_waiting_record` runs before the attachment is read again, and an
+    edit there would otherwise change the head under the re-run."""
+    attachment = attachment_of(client, run_dir)
+    chat.start_session(client, run_dir, send_when_checked=False, engineering_context=attachment)
+    settings = recheck_cases.server_settings(
+        provider_control, models, recheck_cases.silent_seat()
+    )
+    with restarted_app(run_root, settings) as fresh:
+        entered, release = held_step(fresh.app.state.server, monkeypatch, step)
+        body = recheck_cases.recheck_body(run_dir, standards_profile=None, bridge=None)
+
+        edit_refused_while_held(fresh, run_dir, body, attachment, entered, release)

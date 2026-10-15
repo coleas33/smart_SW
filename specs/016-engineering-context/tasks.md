@@ -29,3 +29,7 @@
 - [x] T019 The waiting record names its attachment, and a restored review's re-run reloads
       and validates it, never unlinking the summary before its commit point (99A; T116
       integration review, "a restored waiting review's re-run drops its engineering context").
+- [x] T020 No context edit while a review of the folder is set up or waits for Send: one
+      "folder being set up" registry (015's `_pending_run_dirs`) for every start mode, and
+      `awaiting_send` counted as busy (99A; T116 integration review, "saved context can be
+      edited while a review that carries it waits for Send").

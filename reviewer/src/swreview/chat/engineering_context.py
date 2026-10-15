@@ -312,7 +312,6 @@ class EngineeringContextServer:
     def __init__(self, server: Any):
         self.server = server
         self._lock = threading.RLock()
-        self._preparing: set[Path] = set()
 
     def _run_dir(self, run_id: Any) -> Path:
         if (
@@ -353,9 +352,22 @@ class EngineeringContextServer:
         return self.server.run_root / ".engineering-context" / directory.name
 
     def _busy(self, directory: Path) -> None:
-        busy_states = {ChatState.EXTRACTING, ChatState.RUNNING, ChatState.WAITING_ENGINEER}
-        if directory.resolve() in self._preparing or any(
-            chat.run_dir.resolve() == directory.resolve() and chat.state in busy_states
+        """Refuse an edit while a review of this folder is set up, runs or waits.
+
+        Owner decision 99A: one "folder being set up" registry, the chat server's
+        `_pending_run_dirs`, which every `POST /sessions` mode holds from its claim until the
+        chat is registered or the start fails; a registered chat then holds the folder by its
+        state, waiting for Send included, because Send plays the snapshot taken at the start.
+        """
+        resolved = directory.resolve()
+        busy_states = {
+            ChatState.EXTRACTING,
+            ChatState.RUNNING,
+            ChatState.WAITING_ENGINEER,
+            ChatState.AWAITING_SEND,
+        }
+        if resolved in self.server._pending_run_dirs or any(
+            chat.run_dir.resolve() == resolved and chat.state in busy_states
             for chat in tuple(self.server.chats.values())
         ):
             raise ContextEntryConflict("Engineering context is in use by a running review.")
@@ -491,30 +503,32 @@ class EngineeringContextServer:
             raise ContextEntryRefused("Saved context attachment is unavailable.") from None
         return artifact
 
-    def begin_review(self, directory: Path, raw: Any, *, requested: bool) -> ContextArtifact | None:
-        """Reserve entry before provider setup, validating an explicit exact attachment."""
-        with self._lock:
-            self._busy(directory)
-            artifact = None
-            if requested:
-                artifact = self._attached(
-                    directory,
-                    _typed(ContextAttachment, raw),
-                    same_package=True,
-                    conflict="Context attachment changed; inspect it again.",
-                )
-            self._preparing.add(directory.resolve())
-            return artifact
+    def review_attachment(
+        self, directory: Path, raw: Any, *, requested: bool
+    ) -> ContextArtifact | None:
+        """Validate an explicit exact attachment before provider setup; None when not requested.
 
-    def begin_recheck(self, directory: Path, recorded: Mapping[str, Any]) -> ContextArtifact:
-        """Reserve entry for a waiting review's re-run and reload the context its record names.
+        The caller holds the folder in the chat server's `_pending_run_dirs` from its claim, so
+        no edit lands between this check and the review's registration (owner decision 99A).
+        """
+        if not requested:
+            return None
+        with self._lock:
+            return self._attached(
+                directory,
+                _typed(ContextAttachment, raw),
+                same_package=True,
+                conflict="Context attachment changed; inspect it again.",
+            )
+
+    def recheck_attachment(self, directory: Path, recorded: Mapping[str, Any]) -> ContextArtifact:
+        """Reload and validate the context a waiting review's record names, for its re-run.
 
         Owner decision 99A: the re-run carries the attachment its waiting record names. A head
         changed since then refuses the re-run before anything in the folder moves.
         """
         with self._lock:
-            self._busy(directory)
-            artifact = self._attached(
+            return self._attached(
                 directory,
                 _typed(ContextAttachment, dict(recorded)),
                 same_package=False,
@@ -523,12 +537,6 @@ class EngineeringContextServer:
                     "start a new review with the saved context."
                 ),
             )
-            self._preparing.add(directory.resolve())
-            return artifact
-
-    def end_review_preparation(self, directory: Path) -> None:
-        with self._lock:
-            self._preparing.discard(directory.resolve())
 
     def validate_prepared_review(
         self, directory: Path, artifact: ContextArtifact, *, same_package: bool = True

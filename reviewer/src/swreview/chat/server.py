@@ -1324,16 +1324,7 @@ class ChatServer:
                 created_at=datetime.now(UTC),
             )
             chat.to(ChatState.EXTRACTING)
-            recorded = earlier.model_status.engineering_context if earlier is not None else None
-            artifact = (
-                self.engineering_context.begin_recheck(run_dir, recorded)
-                if recorded is not None
-                else self.engineering_context.begin_review(
-                    run_dir,
-                    body.get("engineering_context"),
-                    requested="engineering_context" in body,
-                )
-            )
+            artifact = await run_in_threadpool(self._attachment_of, run_dir, body, earlier)
             try:
                 if send_when_checked:
                     run = await run_in_threadpool(
@@ -1366,8 +1357,6 @@ class ChatServer:
                 if chat.state is ChatState.EXTRACTING:
                     chat.to(ChatState.FAILED)
                 raise
-            finally:
-                self.engineering_context.end_review_preparation(run_dir)
         finally:
             self._pending_run_dirs.discard(run_dir)
         return self._created(chat, run)
@@ -2228,6 +2217,26 @@ class ChatServer:
                 f"review into a new run folder"
             )
         return None
+
+    def _attachment_of(
+        self, run_dir: Path, body: Mapping[str, Any], earlier: ReviewSession | None
+    ) -> ContextArtifact | None:
+        """Feature 016's saved context for this start, validated; None for a review without.
+
+        A blocking read under the context lock, so the route runs it on the thread pool. A
+        re-run carries what its waiting record names (owner decision 99A); any other start
+        carries what its body names, exactly.
+        """
+        recorded = (
+            earlier.model_status.engineering_context
+            if earlier is not None and earlier.model_status is not None
+            else None
+        )
+        if recorded is not None:
+            return self.engineering_context.recheck_attachment(run_dir, recorded)
+        return self.engineering_context.review_attachment(
+            run_dir, body.get("engineering_context"), requested="engineering_context" in body
+        )
 
     @staticmethod
     def _waiting_record(run_dir: Path) -> ReviewSession:
