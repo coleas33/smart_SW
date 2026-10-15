@@ -31,7 +31,10 @@ their recorded states; they do not become confirmed forces.
 Live checks can append evidence when the review starts. If that changes the exact
 saved baseline, the model's opening summary retains the historical inputs and marks
 their applicability as needing review. Confirmation is never carried to changed
-evidence automatically.
+evidence automatically. *Amended 2026-10-15 (owner decision 107A):* the review's own live
+interference check rewrites the package, replacing the active configuration's interference
+rows and adding its gaps; that rewrite alone keeps saved inputs matched. Any other change,
+including a re-spelling of the file, is still a mismatch.
 
 Pane stores live under `run_root/.engineering-context/<run_id>`, beside the extracted
 run folders. The API displays engineering values while omitting private source paths,

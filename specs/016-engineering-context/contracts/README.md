@@ -18,6 +18,12 @@ Context digests include the full artifact and audit metadata; predecessor digest
 the immutable revision chain inspectable. They provide integrity checks within a trusted
 local store, not signatures or proof of actor identity.
 
+*Amended 2026-10-15 (owner decision 107A):* `EvidenceBaseline` gains the optional
+`without_live_interference_sha256` (see the [pane contract](pane-context.md)), omitted when
+absent so earlier contexts keep their bytes and digests; the schema is regenerated with it.
+Binding reports `matched_snapshot` for the exact saved package, or for that package as the
+review's live interference check rewrote it and nothing else.
+
 State dimensions stay separate: the latest matching input receipt determines
 `draft`, `confirmed`, `rejected` or `needs_review`; saved evidence binding determines
 `matched_snapshot`, `not_verified`, `unresolved` or `mismatch`. No offline result is

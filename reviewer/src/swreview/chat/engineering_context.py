@@ -27,6 +27,7 @@ from swreview.engineering_context.binding import (
     anchor_from_package,
     assess_binding,
     baseline_from_package,
+    same_saved_package,
 )
 from swreview.engineering_context.brief import _NATIVE_REF, _PATH, _QUOTED_PATH
 from swreview.engineering_context.models import (
@@ -428,7 +429,7 @@ class EngineeringContextServer:
                             "Initialize engineering context before entering inputs."
                         )
                     if (
-                        current.baseline != baseline
+                        not same_saved_package(current.baseline, baseline)
                         or context_digest(current) != body.expected_head
                     ):
                         raise ContextEntryConflict(
@@ -496,7 +497,10 @@ class EngineeringContextServer:
                 or artifact.context_id != attachment.context_id
                 or context_digest(artifact) != attachment.head_digest
                 or artifact.baseline.package_sha256 != attachment.package_sha256
-                or (same_package and baseline_from_package(loaded) != artifact.baseline)
+                or (
+                    same_package
+                    and not same_saved_package(artifact.baseline, baseline_from_package(loaded))
+                )
             ):
                 raise ContextEntryConflict(conflict)
         except CONTEXT_READ_ERRORS:

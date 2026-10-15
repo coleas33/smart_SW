@@ -12,6 +12,7 @@ import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from pydantic import ValidationError
 
@@ -95,6 +96,15 @@ def save_package(package: EvidencePackage, directory: Path | str) -> Path:
     return package_file
 
 
+def merged_package_text(data: Any) -> str:
+    """The text `append_interference_run` writes for a merged package's raw JSON `data`.
+
+    One spelling, so feature 016's binding (owner decision 107A) can tell a package the live
+    interference check rewrote from one edited any other way.
+    """
+    return json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+
+
 def append_interference_run(
     source_dir: Path | str,
     target_dir: Path | str,
@@ -152,7 +162,7 @@ def append_interference_run(
             new_gaps.append(gap)
     data["interferences"] = [*kept, *(row.model_dump(mode="json") for row in rows)]
     data["gaps"] = [*data.get("gaps", []), *(gap.model_dump(mode="json") for gap in new_gaps)]
-    merged_text = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+    merged_text = merged_package_text(data)
 
     expected = before.model_copy(
         update={

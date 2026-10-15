@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import math
 from pathlib import Path
 from uuid import uuid4
@@ -24,12 +25,29 @@ from swreview.engineering_context.binding import (
 )
 from swreview.engineering_context.models import (
     AppliedForceRecord,
+    EvidenceBaseline,
     ForceQuantity,
     Provenance,
 )
-from swreview.ir.loader import AnswerKeyAccessError, LoadedPackage, load_package, save_package
-from swreview.ir.models import BBox3D, EvidencePackage, FaceGeometry, PlaneFace, Vec3
+from swreview.ir.loader import (
+    AnswerKeyAccessError,
+    LoadedPackage,
+    append_interference_run,
+    load_package,
+    merged_package_text,
+    save_package,
+)
+from swreview.ir.models import (
+    BBox3D,
+    EvidencePackage,
+    FaceGeometry,
+    Gap,
+    Interference,
+    PlaneFace,
+    Vec3,
+)
 from tests.support.packages import build_package, persist_ref
+from tests.support.review_bridge import interference_row
 
 IDENTITY = [
     [1.0, 0.0, 0.0, 0.0],
@@ -460,3 +478,108 @@ def test_unknown_ancestor_document_or_configuration_prevents_child_binding(
     assert expected in result.reasons
     with pytest.raises(ValueError, match="ancestor"):
         frame_from_package(loaded, "frame:child", child.id)
+
+
+# --- owner decision 107A: the live interference check's rewrite keeps inputs matched -----------
+
+LIVE_GAP = Gap(
+    kind="unsupported",
+    entity_kind="interference_volume_unit",
+    entity_id=None,
+    reason="IInterference.Volume unit assumed m3; verify on workstation",
+    error=None,
+)
+
+
+def _live_checked(path: Path, *, rows: int = 1) -> LoadedPackage:
+    """What the pre-run's live interference check leaves: `package.json` rewritten with the
+    active configuration's rows replaced and its gaps appended (`append_interference_run`)."""
+    detected = [
+        Interference.model_validate(
+            interference_row(
+                f"int:{index:04d}", ("cmp:0001", "cmp:0002"), f"cmp:0001|cmp:0002|{index}", 12.0
+            )
+        )
+        for index in range(1, rows + 1)
+    ]
+    append_interference_run(path, path, "Default", detected, [LIVE_GAP])
+    return load_package(path)
+
+
+@pytest.mark.parametrize("rows", [0, 2])
+def test_a_live_interference_rewrite_keeps_saved_inputs_matched(tmp_path: Path, rows: int) -> None:
+    loaded = _loaded(tmp_path)
+    anchor = anchor_from_package(loaded, "anchor:1", "component", "cmp:0001")
+    baseline = baseline_from_package(loaded)
+    before = (tmp_path / "package.json").read_bytes()
+
+    checked = _live_checked(tmp_path, rows=rows)
+
+    assert (tmp_path / "package.json").read_bytes() != before
+    assert baseline_from_package(checked).package_sha256 != baseline.package_sha256
+    result = assess_binding(anchor, baseline, checked)
+    assert result.status == "matched_snapshot"
+    assert result.needs_review is False
+
+
+def _written_as_the_live_check_writes(path: Path, package: EvidencePackage) -> LoadedPackage:
+    """`package` written in the spelling `append_interference_run` uses, so only its content
+    differs from what the live check would leave."""
+    text = merged_package_text(json.loads(package.model_dump_json()))
+    (path / "package.json").write_bytes(text.encode("utf-8"))
+    return load_package(path)
+
+
+@pytest.mark.parametrize(
+    "changed",
+    ["none", "geometry", "document", "other_gap", "other_configuration_row", "respelled"],
+)
+def test_any_other_change_beside_the_live_rows_is_still_a_mismatch(
+    tmp_path: Path, changed: str
+) -> None:
+    loaded = _loaded(tmp_path)
+    anchor = anchor_from_package(loaded, "anchor:1", "component", "cmp:0001")
+    baseline = baseline_from_package(loaded)
+    checked = _live_checked(tmp_path).package.model_copy(deep=True)
+    if changed == "geometry":
+        checked.components[1].transform[0][3] = 0.5
+    elif changed == "document":
+        checked.documents[0].material = "FICT-alloy-B"
+    elif changed == "other_gap":
+        checked.gaps.append(
+            Gap(kind="tool_error", entity_kind="mate", entity_id=None, reason="FICT", error=None)
+        )
+    elif changed == "other_configuration_row":
+        row = interference_row(
+            "int:0099", ("cmp:0001", "cmp:0002"), "cmp:0001|cmp:0002|other", 1.0,
+            configuration="Alternate",
+        )
+        checked.interferences.append(Interference.model_validate(row))
+    current = _written_as_the_live_check_writes(tmp_path, checked)
+    if changed == "respelled":
+        (tmp_path / "package.json").write_bytes((tmp_path / "package.json").read_bytes() + b" ")
+        current = load_package(tmp_path)
+
+    result = assess_binding(anchor, baseline, current)
+
+    if changed == "none":
+        assert result.status == "matched_snapshot"
+    else:
+        assert result.status == "mismatch"
+        assert result.reasons == ("package_digest_changed",)
+
+
+def test_a_baseline_saved_before_107a_still_compares_exact_bytes(tmp_path: Path) -> None:
+    loaded = _loaded(tmp_path)
+    anchor = anchor_from_package(loaded, "anchor:1", "component", "cmp:0001")
+    legacy = EvidenceBaseline.model_validate_json(
+        baseline_from_package(loaded).model_dump_json(
+            exclude={"without_live_interference_sha256"}
+        )
+    )
+    assert "without_live_interference_sha256" not in legacy.model_dump(mode="json")
+    assert assess_binding(anchor, legacy, loaded).status == "matched_snapshot"
+
+    checked = _live_checked(tmp_path)
+
+    assert assess_binding(anchor, legacy, checked).status == "mismatch"
