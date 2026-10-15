@@ -2201,3 +2201,88 @@ each is noted on the task lines it touches, no task box is ticked for it, and
   `read_attention_record` flags it by its session id. The next re-run's rotation copies a canonical
   file to an index only when it is the record's own, and its finalization writes `attention.json`
   again.
+
+### 98A. Every confirmed T116 finding in 015's own code and tests is fixed now, test-first (2026-10-15)
+
+- **Question** (the T116 review's 16A): the adversarial review of the branch at `3da2b98` (T116)
+  confirmed seven should-fix findings in 015's own code and tests, and five notes. Fix them now,
+  each test-first, or record some for T118.
+- **Chosen**: fix all of them, test-first:
+  1. **FR-032, the report at Send's mid-turn saves.** The first `usage` save wrote `session.json`
+     only, so `report.md` said "not sent to the model" through the whole first turn, and for good
+     after a kill or a SOLIDWORKS close mid-turn (`ChatServer.shutdown` finalized the sent record
+     and rendered nothing). The first-usage save, Send's pre-write and `_finalize_on_exit` now
+     render `report.md` and `attention.json` too, best-effort: a render failure is logged and
+     never raised. One `ReviewRun.write_views(save=, best_effort=)` holds the sequence "save,
+     rank, render the report, write the record", and `record_disposition`, `record_timing_live`,
+     Send's two saves, a shutdown and `ChatServer._render_run` all call it (DRY: three copies
+     became one). Tested where the report is rendered: a `disk_at` kill after Send's pre-write and
+     after the first usage, and a shutdown during the first turn, each with a report equal to a
+     render of the `session.json` beside it.
+  2. **A re-run that raises past its commit point (93A).** `_open_waiting`'s failure branch now
+     renders both views, before `run.close()`, when the canonical `session.json` holds the re-run's
+     session id, so Open report and a handoff read the committed record. The raise cases of
+     `assert_committed_and_restorable` check `report.md`. A kill in that window still leaves the
+     earlier session's `report.md`, as the review log's "Left as is" says; a kill cannot render.
+  3. **A found review is not the latest run.** A review found by `sessions.list` is tracked
+     without becoming `LatestSession`, so the check tabs' Show and the Ask tab's folder do not
+     move to another document. `review.start` and `review.recheck` still make their record the
+     latest.
+  4. **Removing a found review lasts for the SOLIDWORKS session.** `ForgetSession` remembers the
+     record's run folder (compared ignoring case, after `SameFolder`'s trimming), and the search
+     offers nothing when its newest candidate is one of them, with no fall-back to an older folder.
+  5. **The Transcript's "Nothing was sent to the model" comes from the stream.** A per-stream
+     flag: `session.started` clears it, `session.sent` sets it (a replayed one too), and a restore
+     sets it from `send_in_flight` or `model_status`. The line is printed only when no
+     `session.sent` came before that `session.ended`.
+  6. **Two tests that could not fail.** A re-run carrying only drawing outcome lines (FR-021 after
+     a restart): the lines appear exactly once in Send's first message. The runtime after a
+     waited-then-sent review: the clock moves inside the scripted provider, and the runtime is
+     2 + 7 minutes with the wait left out.
+
+  The cheap notes are fixed where small: `FindNotSentReview` uses `PageDocument.IsAttachable`;
+  Send keeps keyboard focus and its failure line is announced; the Settings line no longer says
+  the waiting review stays while a Send is in flight; the raw-token scan reads the Send block's
+  failure states; a `send_failed` re-run stamps `checked_at` at its finalization, as data-model
+  section 3 says; and tests for the copy of an earlier record whose stream is gone and for the
+  `400` on `recheck` with `retry_of`. Any that is not fixed is recorded for T118 with its reason
+  in `review-2026-10-12.md`.
+
+### 99A. 015 merges to `main` first, after 014 slice 5; 016 adapts on top of `main` (2026-10-15)
+
+- **Question** (the T116 review's 17A): the integration reviewer merged 015 with 016
+  (`016-engineering-context`) in a scratch tree and found three blockers for whichever lands
+  second. (a) 016's context panel starts a review through its own `NewSessionRequest`, so after a
+  merge it takes 015's default `ReviewMode.Send` and ignores an unticked box (SC-001, FR-019); the
+  page's context `busy` predicate also leaves out `sendPending`, `rechecking` and `awaitingSend`.
+  (b) The engineering-context summary is a local of 016's `start_review`, so 015's
+  `opening_at_send` rebuild after a waiting answer drops the "Engineer-supplied inputs" block from
+  Send's first request, silently. (c) Saved context can be edited while a review that carries it
+  waits, and Send then sends the snapshot taken at the start (016's `_busy` has no
+  `AWAITING_SEND`).
+- **Chosen**: documentation only on this branch, and nothing of 016 is edited here. The order is
+  014 slice 5 to `main`, then 015 (T117), then 016, which adapts on top of `main`:
+  - its context start goes through 015's one `ReviewHost.CreateReviewSession`, with Send or Wait
+    taken from the box, and the attachment threaded into `NewSessionRequest` as a named argument;
+  - the context summary lives on `ReviewRun`, so `start_review` and `opening_at_send` call
+    `_opening_message` with the same inputs (one builder input), recomputed over the package when
+    a waiting answer changed it;
+  - context cannot be edited while a review waits (`AWAITING_SEND` counts as busy, on the page
+    and in the backend);
+  - one combined test: an unticked review with context sends nothing, and Send's first request
+    carries the context.
+  `review-2026-10-12.md` records this as the integration plan, with the reviewer's conflict list.
+
+### 100A. The 014 slice-5 merge regenerates nothing, and one test stops reading a private helper (2026-10-15)
+
+- **Question** (the T116 review's 18A): `test_replay_recording` patched the private
+  `recording._events`, which 014 slice 5 removes, so the 015 x slice-5 merge is textually clean
+  and red (nine failures). T117's checklist was also stale: three items were already met on 015's
+  base, it asked to regenerate goldens that the merged code passes unchanged, and it missed the
+  `main` catch-up and the pane-fixture regeneration, which 016 drives, not 014.
+- **Chosen**: the test patches the event read through a sentinel `events.jsonl` that refuses to be
+  opened, so it passes before and after slice 5. T117's checklist is rewritten: no golden or
+  fixture regeneration for the slice-5 merge, and the merged code must pass the committed goldens
+  unchanged; the `handoff.py` catch-up with `main`; the pane-fixture regeneration
+  (`review-big-assembly.json`) done by whichever of 015 and 016 lands second, its snapshot part
+  byte-equal and its labels the union; and the conflicts the integration reviewer listed.

@@ -855,6 +855,82 @@ def test_send_preparation_changes_nothing_and_commit_withdraws_only_its_own_rows
         run.close()
 
 
+def _views_agree_with_the_record(folder: Path, ir: Any) -> str:
+    """The report a folder holds, checked against a render of the `session.json` beside it,
+    and its `attention.json` against that record's id: the two views say what the record says."""
+    from swreview.report.attention import rank
+    from swreview.report.attention_record import read_attention_record
+    from swreview.report.markdown import render_report
+
+    record = load_session(folder / "session.json")
+    report = (folder / "report.md").read_text(encoding="utf-8")
+    assert report == render_report(record, ir, ranking=rank(record))
+    assert read_attention_record(folder).session_id == record.session_id
+    return report
+
+
+def test_a_kill_after_sends_pre_write_or_first_usage_leaves_a_report_that_agrees(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FR-032 (owner decision 98A item 1): the report says what the record says at both of
+    Send's mid-turn saves, so a kill at either one leaves no report that contradicts it."""
+    from swreview.report.attention import rank
+    from swreview.report.markdown import render_report
+    from tests.support.restart import disk_at
+
+    clock = [CHECKED]
+    monkeypatch.setattr(events, "local_now", lambda: clock[0])
+    run = checks_only_run(tmp_path / "FICT-send-report")
+    try:
+        run.started = CHECKED - timedelta(minutes=2)
+        run.session.started_at = run.started
+        run.close_waiting()
+        # What `_open_waiting` leaves beside the waiting record.
+        (run.out_dir / "report.md").write_text(
+            render_report(run.session, run.context.ir, ranking=rank(run.session)),
+            encoding="utf-8",
+        )
+        assert "- Model: not sent to the model (checked by code only)" in (
+            run.out_dir / "report.md"
+        ).read_text(encoding="utf-8")
+        provider = send_recorder()
+        withdraw = runner.withdraw_finalization
+        emit_turn_event = ReviewRun._emit_turn_event
+        with (
+            disk_at(run.out_dir, "after-pre-write") as after_pre_write,
+            disk_at(run.out_dir, "after-first-usage") as after_usage,
+        ):
+
+            def withdrawn(session: Any, written: Any) -> None:
+                if session.model_status.state == "send_failed":
+                    after_pre_write()
+                withdraw(session, written)
+
+            def handled(self: ReviewRun, event_type: Any, body: Any) -> None:
+                emit_turn_event(self, event_type, body)
+                if event_type == "usage":
+                    after_usage()
+
+            monkeypatch.setattr(runner, "withdraw_finalization", withdrawn)
+            monkeypatch.setattr(ReviewRun, "_emit_turn_event", handled)
+            clock[0] += timedelta(hours=1)
+            run.send(lambda: provider)
+            monkeypatch.undo()
+
+            interrupted = _views_agree_with_the_record(after_pre_write.folder, run.context.ir)
+            assert (
+                "- Model: not sent to the model; the last attempt failed at "
+                f"{(CHECKED + timedelta(hours=1)).isoformat()}: {runner.INTERRUPTED_SEND}"
+            ) in interrupted
+            sent = _views_agree_with_the_record(after_usage.folder, run.context.ir)
+            assert f"- Model: {run.session.model}" in sent
+            assert f"- Sent to the model: {(CHECKED + timedelta(hours=1)).isoformat()}" in sent
+            assert "not sent to the model" not in sent
+    finally:
+        run.close()
+
+
 def test_withdraw_finalization_is_shared_by_finalize_and_send() -> None:
     assert "withdraw_finalization(" in inspect.getsource(runner.finalize_session)
     assert "withdraw_finalization(" in inspect.getsource(ReviewRun.send)

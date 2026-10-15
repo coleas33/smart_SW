@@ -22,6 +22,7 @@ from swreview.bridge.client import BridgeError
 from swreview.chat import server
 from swreview.checks.drawing_context import CANDIDATE_CONFIRM
 from swreview.report.attention import family_counts, family_of
+from swreview.report.markdown import render_report
 from swreview.report.session import load_session, save_session
 from swreview.report.snapshot import review_snapshot
 from swreview.report.summary import load_words
@@ -875,9 +876,16 @@ def test_a_failed_waiting_apply_restores_the_whole_saved_record_and_releases_its
 
         monkeypatch.setattr(atomic.os, "replace", refused_replace)
     elif point == "attention":
+        write_attention = runner.write_attention_record
+        refusals = [refused]
+
         def refused_attention(*args: Any, **kwargs: Any) -> Any:
-            order.append("attention")
-            refused()
+            # The finalization's write is refused; the render after the failure (`_play`'s,
+            # through `write_views`) is the one that writes the record again.
+            if refusals:
+                order.append("attention")
+                refusals.pop()()
+            return write_attention(*args, **kwargs)
 
         monkeypatch.setattr(runner, "write_attention_record", refused_attention)
     else:
@@ -919,7 +927,7 @@ def test_a_failed_waiting_apply_restores_the_whole_saved_record_and_releases_its
         assert saved_record != before
         assert order == (["save", "attention"] if point == "attention" else ["save", "ended-event"])
         ranking = server.rank(saved_record)
-        assert (run.out_dir / "report.md").read_text(encoding="utf-8") == server.render_report(
+        assert (run.out_dir / "report.md").read_text(encoding="utf-8") == render_report(
             saved_record, run.context.ir, ranking=ranking,
         )
         attention = json.loads((run.out_dir / "attention.json").read_bytes())

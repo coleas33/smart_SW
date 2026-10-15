@@ -138,9 +138,8 @@ from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore, ReviewExce
 from swreview.ir.loader import load_package
 from swreview.ir.models import EvidencePackage, UnsupportedSchemaVersionError
 from swreview.report.attention import rank
-from swreview.report.attention_record import ATTENTION_FILE_NAME, write_attention_record
+from swreview.report.attention_record import ATTENTION_FILE_NAME
 from swreview.report.dispositions import DECISIONS, REPORT_FILE_NAME, find_finding
-from swreview.report.markdown import render_report
 from swreview.report.names import component_names
 from swreview.report.session import ReviewSession, load_session
 from swreview.report.snapshot import WAITING_STATES, restored_snapshot, review_snapshot
@@ -2388,9 +2387,13 @@ class ChatServer:
                 if earlier is not None:
                     run.carry_from(earlier)
                 run.close_waiting()
-                self._render_run(run, chat.report_path, chat.run_dir)
+                self._render_run(run)
                 run.release_bridge()
             except Exception:
+                # Past the commit point (93A) the record on disk is this run's, so its report
+                # is rendered from it before the failure is raised (owner decision 98A item 2).
+                if _record_id(run.session_path) == str(run.session.session_id):
+                    self._render_run(run)
                 with contextlib.suppress(Exception):
                     run.close()
                 raise
@@ -2543,20 +2546,15 @@ class ChatServer:
         run = chat.run
         if run is None:
             return
-        self._render_run(run, chat.report_path, chat.run_dir)
+        self._render_run(run)
 
-    def _render_run(self, run: ReviewRun, report_path: Path, run_dir: Path) -> None:
-        """Write both review views from one ranking, logging secondary failures."""
-        try:
-            ranking = rank(run.session)
-            report_path.write_text(
-                render_report(run.session, run.context.ir, ranking=ranking), encoding="utf-8"
-            )
-            write_attention_record(run_dir, ranking, run.session.session_id)
-        except Exception as exc:  # noqa: BLE001 - see below
-            # A report that would not render is not a reason to lose the session: the
-            # session file is already written and `report` answers 404 until it is there.
-            logger.warning("rendering %s failed: %s", report_path, self.redact(str(exc)))
+    def _render_run(self, run: ReviewRun) -> None:
+        """Write both review views from one ranking, logging secondary failures.
+
+        A report that would not render is not a reason to lose the session: the session file
+        is already written and `report` answers 404 until it is there (`write_views`).
+        """
+        run.write_views(save=False, best_effort=True)
 
     def _end_stopped(self, chat: ChatSession, *, settle: bool = True) -> None:
         """How a stopped chat closes, wherever the stop was noticed.
@@ -2608,6 +2606,9 @@ class ChatServer:
         if chat.state is ChatState.RUNNING:
             chat.emit("turn.ended", {"reason": "error"})
         self._finalize_run(chat)
+        # `_play`'s render may never run once the workers are let go, so the closing record's
+        # report is rendered here (FR-032; owner decision 98A item 1).
+        self._render_report(chat)
         self._settle(chat, ChatState.ENDED)
         chat.run.close()
 

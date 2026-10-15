@@ -53,7 +53,9 @@ from swreview.prerun import (
     LIVE_INTERFERENCE_TOOL,
     PRERUN_INTERFERENCE_SETTINGS,
 )
+from swreview.report.attention import rank
 from swreview.report.attention_record import StaleAttentionRecord, read_attention_record
+from swreview.report.markdown import render_report
 from swreview.report.names import plural
 from swreview.report.session import (
     DrawingOutcome,
@@ -1059,14 +1061,26 @@ def assert_committed_and_restorable(
     settings: dict[str, Any],
     provider_control: chat.ProviderControl,
     point: str,
+    *,
+    raised: bool,
 ) -> None:
     """The folder's canonical record is the re-run's; a fresh app restores it with Send, from
-    `session.json` alone, and its Send's re-run succeeds and pairs every index correctly."""
+    `session.json` alone, and its Send's re-run succeeds and pairs every index correctly.
+
+    A re-run that `raised` past its commit point has also rendered `report.md` from the record
+    it committed (owner decision 98A item 2), so Open report and a handoff read that record.
+    A kill there cannot render, which research R8 records as the remaining window.
+    """
     record = load_session(folder / "session.json")
     assert record.session_id != earlier.record.session_id, "past the commit point"
     assert record.model_status is not None and record.model_status.state == "not_sent"
     assert record.model_status.rechecked_from == earlier.record.session_id
     assert (folder / "session.1.json").read_bytes() == earlier.files["session.json"]
+    if raised:
+        package = load_package(folder).package
+        assert (folder / "report.md").read_text(encoding="utf-8") == render_report(
+            record, package, ranking=rank(record)
+        ), "the report names the committed record, not the earlier session"
     if point == "attention":
         with pytest.raises(StaleAttentionRecord):
             read_attention_record(folder)
@@ -1120,7 +1134,7 @@ def test_a_re_run_that_fails_after_its_commit_point_is_complete_and_restorable(
     monkeypatch.undo()
 
     assert_committed_and_restorable(
-        run_root, earlier.folder, earlier, settings, provider_control, point
+        run_root, earlier.folder, earlier, settings, provider_control, point, raised=True
     )
 
 
@@ -1146,7 +1160,8 @@ def test_a_re_run_cut_off_after_its_commit_point_is_complete_and_restorable(
         assert captured.folder.is_dir()
 
         assert_committed_and_restorable(
-            captured.root, captured.folder, earlier, settings, provider_control, point
+            captured.root, captured.folder, earlier, settings, provider_control, point,
+            raised=False,
         )
 
 

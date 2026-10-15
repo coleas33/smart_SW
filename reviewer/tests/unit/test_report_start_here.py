@@ -36,7 +36,7 @@ written down.
 
 Section 8 is the enumeration (007 T031, FR-019). A section that one render site writes and the
 next erases is worse than none, so the production render sites are counted rather than trusted:
-the source tree is parsed and every call of *this* renderer has to be one of the seven named
+the source tree is parsed and every call of *this* renderer has to be one of the five named
 below and has to pass a ranking.
 """
 
@@ -461,9 +461,7 @@ would count its calls and demand a ranking the re-modeller has no session to com
 
 RENDER_SITES: frozenset[str] = frozenset(
     {
-        "chat/server.py::_render_run",
-        "chat/sessions.py::record_disposition",
-        "chat/sessions.py::record_timing_live",
+        "agent/runner.py::write_views",
         "checks/rules/run.py::write_report",
         "checks/standards/run.py::_write_report",
         "cli.py::review",
@@ -472,13 +470,15 @@ RENDER_SITES: frozenset[str] = frozenset(
 )
 """Every production call of `swreview.report.markdown.render_report`, by path and function.
 
-The eight places a `report.md` an engineer opens is written from (research R3) reach the
-renderer through these seven calls: the review command line, the pane after every turn and
-after a stop, a disposition recorded on a live review, minutes recorded on a live review, the
-Model check, the standards check, and `render_folder_report`, which both `swreview report` and
-the one offline folder re-render call (`FOLDER_RENDER_SITES`; since 2026-09-23, when `swreview
-report` stopped rendering from the session alone). Each must pass `ranking=`; an eighth call
-fails the first test below and a call that renders without a ranking fails the second.
+The places a `report.md` an engineer opens is written from (research R3) reach the renderer
+through these five calls: the review command line; a live review's `ReviewRun.write_views`,
+which the pane after every turn and after a stop, a disposition and minutes recorded on a live
+review, Send's two mid-turn saves and a shutdown all call (since 015's owner decision 98A,
+which folded three copies into it); the Model check; the standards check; and
+`render_folder_report`, which both `swreview report` and the one offline folder re-render call
+(`FOLDER_RENDER_SITES`; since 2026-09-23, when `swreview report` stopped rendering from the
+session alone). Each must pass `ranking=`; a sixth call fails the first test below and a call
+that renders without a ranking fails the second.
 """
 
 FOLDER_RENDER_SITES: frozenset[str] = frozenset({"cli.py::report"})
@@ -486,7 +486,7 @@ FOLDER_RENDER_SITES: frozenset[str] = frozenset({"cli.py::report"})
 folder's verdict header: `swreview report`, which writes no record. The re-render, which
 writes one, is its other caller and sits in the module that defines it, which the scan does not
 read (it matches imports); that it renders the same text is `test_rerender.py`'s. A writer that
-went back to rendering from the session alone would become an eighth entry in `RENDER_SITES`
+went back to rendering from the session alone would become a sixth entry in `RENDER_SITES`
 and fail there; one that stopped rendering through the folder fails here.
 """
 
@@ -499,10 +499,10 @@ RERENDER_SITES: frozenset[str] = frozenset(
 )
 """The offline writers that render through `rerender_run_folder` rather than themselves.
 
-They are pinned for the same reason the seven are: each of them *used* to call the
+They are pinned for the same reason the five are: each of them *used* to call the
 renderer directly with nothing but the session, which is how a run folder lost its package
 and a standards folder lost its verdict header (research R2.7). A function that went back
-to rendering its own report would become an eighth entry in `RENDER_SITES` and fail there;
+to rendering its own report would become a sixth entry in `RENDER_SITES` and fail there;
 one that stopped re-rendering at all fails here.
 """
 
@@ -559,8 +559,8 @@ def _calls_of(module: str, name: str) -> dict[str, list[ast.Call]]:
     return calls
 
 
-def test_the_production_render_sites_are_exactly_the_seven_named_here() -> None:
-    """FR-019: a new render site cannot land unwired, because an eighth fails here.
+def test_the_production_render_sites_are_exactly_the_five_named_here() -> None:
+    """FR-019: a new render site cannot land unwired, because a sixth fails here.
 
     Add the site to `RENDER_SITES` *and* make it pass a ranking; a site that renders a
     report an engineer opens without the section is the drift this test exists to stop.
@@ -575,7 +575,7 @@ def test_the_production_render_sites_are_exactly_the_seven_named_here() -> None:
 
 
 def test_every_production_render_passes_a_ranking() -> None:
-    """Each of the seven hands the renderer a `ranking=`; none renders the default shape."""
+    """Each of the five hands the renderer a `ranking=`; none renders the default shape."""
     unranked = [
         site
         for site, calls in sorted(_calls_of(RENDERER_MODULE, "render_report").items())
