@@ -214,6 +214,9 @@ string is escaped; a finding text holding markup renders as text.
 | A run folder or package path lies under a key path | the key guard's own message (`ir/loader.py:46-62`) |
 | `--out` holds files this command did not write | the folder, and to choose an empty one |
 | A package or attempt folder holds both `events.jsonl` and `events.jsonl.gz`, a pack that did not finish | `event_stream`'s message: the folder, and to run `swreview benchmark pack` on its run again (`provenance.md` 6.7) |
+| A run folder lies in the home folder and the run folders' common parent is the home folder or above it, so their names would carry the home folder's own folders (owner decision 84A) | the run folder, the common parent, and to copy the run folders under one study folder |
+| `--out` is a run folder or lies in one (84A) | the folder, the run folder, and to choose a folder outside it |
+| A scored package's id cannot name a file: empty, a path separator, `.` or `..`, a character or a device name Windows refuses, a trailing dot or space; or two ids are one file name when case-folded (84A) | the run folder, the id or ids, and why |
 
 Not refused, each shown as section 4 or 5 says: a folder written before `prompts.json`, missing
 usage, a failed repetition, a missing package, an unreadable tail of the event log (a truncated or

@@ -160,6 +160,21 @@ UNSTORED: dict[UnstoredReason, str] = {
 }
 """Each `Unstored` reason as the transcript names it (`report.md` 5), never guessed."""
 
+NOT_IN_A_FILE_NAME = frozenset('<>:"|?*')
+"""The printable characters Windows refuses in a file name; control characters too."""
+
+WINDOWS_RESERVED = frozenset(
+    {
+        "CON",
+        "PRN",
+        "AUX",
+        "NUL",
+        *(f"COM{n}" for n in range(1, 10)),
+        *(f"LPT{n}" for n in range(1, 10)),
+    }
+)
+"""The device names Windows reserves, with or without an extension."""
+
 BUILDING = ".building"
 """The suffix of the sibling folder a build is written into before it is swapped in (83A)."""
 
@@ -238,11 +253,14 @@ def build_report(
     """Build `<out>/index.html` and one transcript page per scored package of each run folder.
 
     Refuses, before writing anything (`report.md` 7): a folder named twice; a run folder under a
-    key path; one with no `scorecard.json`; a scorecard `read_scorecard` refuses; an `out` holding
-    anything but a previous report. A saved set or package under a key path is refused with the
-    key guard's message, and a package folder holding both stream forms with `event_stream`'s,
-    before anything is written too. Every number is the scorecard's; nothing is written into a run
-    folder; no build time is written, so two builds are byte-identical.
+    key path; one with no `scorecard.json`; a scorecard `read_scorecard` refuses; a scored package
+    id that cannot name a file, or two that are one file name case-folded; an `out` at or under a
+    run folder, or holding anything but a previous report; run folders on two drives, or in the
+    home folder with a common parent at or above it (owner decision 84A). A saved set or package
+    under a key path is refused with the key guard's message, and a package folder holding both
+    stream forms with `event_stream`'s, before anything is written too. Every number is the
+    scorecard's; nothing is written into a run folder; no build time is written, so two builds
+    are byte-identical.
 
     The pages are written into a new sibling folder of `out` and swapped in once all are written,
     so a build that fails part-way, on an `OSError` such as a path too long included, leaves a
@@ -258,6 +276,9 @@ def build_report(
                 f"{path}: no {SCORECARD_FILE}; run `swreview benchmark score` on it first"
             )
     scorecards = [read_scorecard(path) for path in paths]
+    for path, scorecard in zip(paths, scorecards, strict=True):
+        _refuse_package_ids_that_name_no_file(path, scorecard)
+    _refuse_an_out_in_a_run_folder(out, paths)
     _refuse_a_foreign_out(out)
 
     names = _relative_names(paths)
@@ -319,6 +340,55 @@ def _swap_in(built: Path, out: Path) -> None:
     shutil.rmtree(previous)
 
 
+def _refuse_package_ids_that_name_no_file(run: Path, scorecard: Scorecard) -> None:
+    """Each scored package id names a folder and a transcript file: refuse one that cannot, and
+    two that are one file name where case is not told apart (owner decision 84A)."""
+    seen: dict[str, str] = {}
+    for score in scorecard.per_package:
+        package_id = score.package_id
+        reason = _why_no_file_name(package_id)
+        if reason is not None:
+            raise ReportError(
+                f"{run}: package id {package_id!r} cannot name a transcript file: {reason}"
+            )
+        earlier = seen.setdefault(package_id.casefold(), package_id)
+        if earlier != package_id:
+            raise ReportError(
+                f"{run}: package ids {earlier!r} and {package_id!r} are one file name where "
+                "case is not told apart"
+            )
+
+
+def _why_no_file_name(name: str) -> str | None:
+    """Why `name` cannot be a file name on every platform the reviewer runs on, or `None`."""
+    if not name:
+        return "it is empty"
+    if "/" in name or "\\" in name:
+        return "it holds a path separator"
+    if name == ".":
+        return "it is '.'"
+    if ".." in name:
+        return "it holds '..'"
+    if any(character in NOT_IN_A_FILE_NAME or ord(character) < 32 for character in name):
+        return "it holds a character Windows does not allow in a file name"
+    if name.endswith((".", " ")):
+        return "it ends in a dot or a space"
+    if name.split(".", 1)[0].upper() in WINDOWS_RESERVED:
+        return "it is a name Windows reserves"
+    return None
+
+
+def _refuse_an_out_in_a_run_folder(out: Path, runs: Sequence[Path]) -> None:
+    """The report writes nothing into a run folder, so `--out` lies outside every one (84A)."""
+    target = out.resolve()
+    for run in runs:
+        if target.is_relative_to(run.resolve()):
+            raise ReportError(
+                f"{out} lies in the run folder {run}; the report writes nothing into a run "
+                "folder: choose a folder outside it"
+            )
+
+
 def _refuse_a_foreign_out(out: Path) -> None:
     """`--out` is absent, empty, or a previous report: only an `index.html` carrying the
     generator tag and, optionally, `transcripts/` (`report.md` 6)."""
@@ -342,7 +412,12 @@ def _refuse_a_foreign_out(out: Path) -> None:
 
 
 def _relative_names(paths: Sequence[Path]) -> list[str]:
-    """Each run folder relative to the common parent of the folders' parents."""
+    """Each run folder relative to the common parent of the folders' parents.
+
+    Refused when there is none (two drives), and when a run folder lies in the home folder while
+    the common parent is the home folder or above it: the names would then carry the home
+    folder's own folders, `Users/<name>/AppData/...` (owner decision 84A).
+    """
     resolved = [path.resolve() for path in paths]
     try:
         common = Path(os.path.commonpath([str(path.parent) for path in resolved]))
@@ -351,6 +426,15 @@ def _relative_names(paths: Sequence[Path]) -> list[str]:
             "the run folders have no common parent (they lie on different drives); "
             "copy them under one folder first"
         ) from None
+    home = Path.home().resolve()
+    if home.is_relative_to(common):
+        for path, full in zip(paths, resolved, strict=True):
+            if full.is_relative_to(home):
+                raise ReportError(
+                    f"{path} lies in the home folder and the run folders' common parent {common} "
+                    "is at or above it, so the report would name the home folder's folders; copy "
+                    "the run folders under one study folder first"
+                )
     return [path.relative_to(common).as_posix() for path in resolved]
 
 
