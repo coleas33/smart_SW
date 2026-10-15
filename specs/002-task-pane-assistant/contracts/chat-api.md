@@ -111,7 +111,11 @@ context edits and clears on setup failure.
 context. A review started unticked with it records it in `model_status.engineering_context`, and its
 `recheck: true` re-run reloads and validates that attachment (a changed head is `409
 EngineeringContextConflict`, nothing moved); `recheck: true` with an `engineering_context` member is
-`400 InvalidRequest`. The [pane context contract](../../016-engineering-context/contracts/pane-context.md)
+`400 InvalidRequest`. The startup reservation is the one "folder being set up" registry
+above, `_pending_run_dirs`, held from the claim in every mode (ticked, unticked and re-run, the
+record read included); the attachment is read again on the thread pool, and saved context cannot
+be edited while a chat on the folder is set up, extracting, running, waiting for the engineer or
+`awaiting_send`. The [pane context contract](../../016-engineering-context/contracts/pane-context.md)
 defines the entry bodies, projections, privacy limits and saved-snapshot scope.
 
 ## Path rule for `run_dir`

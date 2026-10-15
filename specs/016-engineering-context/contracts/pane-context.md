@@ -129,3 +129,11 @@ needing review. A head changed since then refuses the re-run with `EngineeringCo
 and leaves the earlier record and summary in place. A re-run never unlinks the retained
 summary, and the host never sends an attachment with a re-run.
 
+**No edit under a review that carries it.** Context entry answers 409 while a review of the
+folder is being set up, extracts, runs, waits for the engineer or waits for Send, because
+Send plays the snapshot taken at the start. "Being set up" is the chat server's one registry
+of folders (`_pending_run_dirs`), held from the claim of every `POST /sessions` mode - ticked,
+unticked and a re-run, its record read included - until the chat is registered or the start
+fails; 016's separate `_preparing` set is gone. The attachment is validated on the thread
+pool under the context lock, never on the event loop.
+
