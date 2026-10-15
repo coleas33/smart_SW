@@ -164,11 +164,17 @@ def host_gaps(package: EvidencePackage, stale_gap: StaleGap) -> list[Gap]:
 
 
 def merged(
-    folder: Path, document_id: str, *, stale_gap: StaleGap = "reworded"
+    folder: Path,
+    document_id: str,
+    *,
+    stale_gap: StaleGap = "reworded",
+    drafting_standard: str | None = None,
 ) -> Callable[[], dict[str, Any]]:
     """What the host does on a read: append the drawing, drop every candidate row of the path it
     read (013 T083: a part and an assembly of one stem share it) and treat the standing drawing
-    gap as `stale_gap` says (the host as built rewords it), then say so."""
+    gap as `stale_gap` says (the host as built rewords it), then say so. `drafting_standard`,
+    when given, is the read drawing's own in place of the builder's default (feature 015's
+    re-run reads one the profile does not accept, so its finding moves the numbers)."""
 
     def read() -> dict[str, Any]:
         package = load_package(folder).package
@@ -177,7 +183,11 @@ def merged(
                          document_id)
         stem = candidate.path.rsplit("\\", 1)[-1].rsplit(".", 1)[0]
         drawing = builder.drawing_document(stem)
-        record = builder.drawing(drawing)
+        record = (
+            builder.drawing(drawing)
+            if drafting_standard is None
+            else builder.drawing(drawing, drafting_standard_name=drafting_standard)
+        )
         builder.view(builder.sheet(record, "Sheet1"), "Drawing View1", references=document_id)
         after = builder.build()
         after = after.model_copy(

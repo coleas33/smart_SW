@@ -58,7 +58,7 @@ from swreview.report.session import (
 )
 from tests.support.prerun import LIVE_ROWS, live_prerun_package, prerun_package
 from tests.support.questions_package import build_questions_package
-from tests.support.recording_provider import RecordingProvider
+from tests.support.recording_provider import RecordedRequest, RecordingProvider
 from tests.support.restart import BEFORE_REPLACE, disk_at, restarted_app
 from tests.support.review_bridge import VOLUME_UNIT_GAP, ScriptedReviewBridge
 from tests.support.roles_review import PLATE_ID
@@ -912,10 +912,21 @@ def test_nothing_is_written_to_the_record_before_the_finalization(
 # --- the carry (T096; `contracts/recheck.md` sections 4 and 5) -------------------------------
 
 
+DRIFTED_STANDARD = "FICT-DRIFTED-STANDARD"
+"""The merged drawing's drafting standard, which the fixture's profile does not accept. The
+first run raises its conformance finding after every other check's, when the read reloads the
+package; the re-run raises it in the drawing check's own place, so every finding after it moves
+up one number (the spec's edge case "Numbers that move across a re-run")."""
+
+REJECTED_CHECK = "standards.document.data_card_complete"
+"""The check of the finding the worked review Rejects: one the conformance finding overtakes, so
+the re-run gives its earlier number to another finding (owner decision 87A)."""
+
+
 def merging_seat(bridge: Any, folder: Path) -> None:
     """Make the fixture's seat merge the plate's drawing on its confirmed read, as the host
     does (`test_confirmed_drawing_read.merged`), so the read moves what the package holds."""
-    read = confirmed.merged(folder, PLATE_ID)
+    read = confirmed.merged(folder, PLATE_ID, drafting_standard=DRIFTED_STANDARD)
     bridge._results["drawing_read"] = deque([lambda arguments: read()])
 
 
@@ -923,7 +934,8 @@ def worked_review(
     app: Any, client: TestClient, folder: Path, *, reject: bool = True
 ) -> waiting_answers.Waiting:
     """The US4 independent test's earlier record: a part-roles answer, a drawing answer whose
-    read merged its drawing, and a Reject, all made while the review waited."""
+    read merged its drawing and moved the finding numbers, and a Reject of a finding whose
+    number moves, all made while the review waited."""
     fixture = build_questions_package(folder)
     merging_seat(fixture.bridge, folder)
     app.state.server.bridge_factory = lambda pipe, secret: fixture.bridge
@@ -948,7 +960,7 @@ def worked_review(
     assert chat.settle(client, chat_id) == "awaiting_send"
     assert waiting.run.session.drawing_outcomes
     if reject:
-        finding = waiting.run.session.findings[-1]
+        finding = next(f for f in waiting.run.session.findings if f.check == REJECTED_CHECK)
         decided = client.post(
             f"/sessions/{chat_id}/findings/{finding.id}/disposition",
             json={"decision": "rejected", "note": "FICT engineer decision"},
@@ -1017,6 +1029,26 @@ def test_the_independent_test_carries_every_answer_decision_and_outcome_by_ident
     assert set(carried_answers.items()) <= set(earlier_answers.items())
     assert not [q for q in session.evidence_requests if CANDIDATE_CONFIRM in q.options]
     assert decided(session) == decided(earlier) != {}
+    # The numbers moved (owner decision 87A): the drawing's conformance finding took the
+    # rejected finding's earlier number, so a carry by number would Reject the wrong finding.
+    numbers_before = {finding_subject_key(f): f.id for f in earlier.findings}
+    numbers_after = {finding_subject_key(f): f.id for f in session.findings}
+    assert numbers_before.keys() == numbers_after.keys()
+    assert [key for key in numbers_before if numbers_before[key] != numbers_after[key]]
+    (rejected_before,) = [f for f in earlier.findings if f.disposition is not None]
+    (rejected_after,) = [f for f in session.findings if f.disposition is not None]
+    assert rejected_before.check == rejected_after.check == REJECTED_CHECK
+    assert rejected_after.id != rejected_before.id
+    assert rejected_after.disposition == rejected_before.disposition
+    (holder,) = [f for f in session.findings if f.id == rejected_before.id]
+    assert holder.check == "drawing_profile.conformance"
+    assert holder.disposition is None
+    role = next(q for q in earlier.evidence_requests if q.answer == "All bought")
+    (carried_role,) = [
+        q for q in session.evidence_requests
+        if (q.question, q.entity_ids) == (role.question, role.entity_ids)
+    ]
+    assert (carried_role.status, carried_role.answer) == ("answered", "All bought")
     assert session.drawing_outcomes == earlier.drawing_outcomes
     assert recheck_row(session) == []
     assert session.model_status is not None
@@ -1162,6 +1194,29 @@ def _request(request_id: str, question: str, *, answer: str | None = None) -> Ev
         answer=answer,
         answered_at=FIRST_DECIDED if answer is not None else None,
     )
+
+
+def test_an_answer_is_carried_onto_the_question_that_asks_the_same_under_a_new_number(
+    bare: Any,
+) -> None:
+    """Owner decision 87A: the earlier ER-005 is the re-run's ER-001, and the earlier ER-001 asks
+    something else, so a carry by number would answer the wrong question."""
+    run, earlier, _ = bare
+    run.session.evidence_requests[:] = [
+        _request("ER-001", "FICT asked first now?"), _request("ER-002", "FICT asked first then?"),
+    ]
+    earlier.evidence_requests[:] = [
+        _request("ER-001", "FICT asked first then?"),
+        _request("ER-005", "FICT asked first now?", answer="FICT no"),
+    ]
+
+    run.carry_from(earlier)
+
+    moved, other = run.session.evidence_requests
+    assert (moved.id, moved.status, moved.answer) == ("ER-001", "answered", "FICT no")
+    assert moved.answered_at == FIRST_DECIDED
+    assert (other.id, other.status, other.answer) == ("ER-002", "open", None)
+    assert recheck_row(run.session) == []
 
 
 def test_each_unmatched_or_ambiguous_item_is_named_once_in_one_row(bare: Any) -> None:
@@ -1351,19 +1406,64 @@ def test_an_open_drawing_question_an_unfinished_read_merged_is_named_once(
 # --- SC-008 and the size sent ----------------------------------------------------------------
 
 
+def sent_live_and_after_a_re_run(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    saved: Path,
+    waiting: waiting_answers.Waiting,
+    settings: dict[str, Any],
+) -> tuple[list[RecordedRequest], list[RecordedRequest], runner.ReviewRun]:
+    """Press Send on the live waiting review; put its folder back as it was before that Send;
+    re-run it from a restarted app and press Send again. Returns each Send's provider log -
+    every request of its first turn, the explanation pass's included - and the re-run.
+
+    The same provider, model and folder both times, so SC-008 compares what was sent, not a
+    cache built for it (owner decision 87A).
+    """
+    folder = waiting.fixture.folder
+    shutil.copytree(folder, saved)
+    live = RecordingProvider([chat.turn("FICT sent")])
+    app.state.server.provider_factory = lambda chosen: live
+    assert client.post(f"/sessions/{waiting.chat_id}/send", json={}).status_code == 202
+    chat.settle(client, waiting.chat_id)
+    shutil.rmtree(folder)
+    shutil.copytree(saved, folder)
+    after = RecordingProvider([chat.turn("FICT sent")])
+    with restarted_app(run_root, settings) as fresh:
+        rerun = rerun_of(fresh, folder)
+        fresh.app.state.server.provider_factory = lambda chosen: after
+        chat_id = str(next(iter(fresh.app.state.server.chats)))
+        assert fresh.post(f"/sessions/{chat_id}/send", json={}).status_code == 202
+        chat.settle(fresh, chat_id)
+    return live.log, after.log, rerun
+
+
+def assert_sent_alike(live: list[RecordedRequest], after: list[RecordedRequest]) -> None:
+    """Entry by entry: the system prompt, the encoded tools and history, the raw tool specs
+    and first message, and whether it was the explanation pass."""
+    assert live and len(after) == len(live)
+    for index, (expected, actual) in enumerate(zip(live, after, strict=True)):
+        assert actual == expected, f"request {index} of Send's first turn differs"
+
+
 @pytest.mark.usefixtures("vocabulary")
 def test_with_nothing_answered_the_first_request_is_the_live_waiting_reviews(
     app: Any,
     client: TestClient,
     run_root: Path,
+    tmp_path: Path,
     provider_control: chat.ProviderControl,
     models: chat.Models,
     silent: ScriptedReviewBridge,
 ) -> None:
     waiting = waiting_answers.waiting_review(app, client, run_root / "FICT-recheck-sc008")
     live = waiting.run
-    with restarted_app(run_root, server_settings(provider_control, models, silent)) as fresh:
-        rerun = rerun_of(fresh, waiting.fixture.folder)
+    settings = server_settings(provider_control, models, silent)
+
+    sent, resent, rerun = sent_live_and_after_a_re_run(
+        app, client, run_root, tmp_path / "saved", waiting, settings
+    )
 
     assert silent.calls == []
     assert rerun.system == live.system
@@ -1372,6 +1472,42 @@ def test_with_nothing_answered_the_first_request_is_the_live_waiting_reviews(
         request_prefix(live.system, live.tools, live._send_cache.opening)
     )
     assert rerun._send_cache.estimate == live._send_cache.estimate
+    assert_sent_alike(sent, resent)
+
+
+@pytest.mark.usefixtures("vocabulary")
+def test_a_carried_reject_alone_leaves_the_first_request_the_live_waiting_reviews(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    tmp_path: Path,
+    provider_control: chat.ProviderControl,
+    models: chat.Models,
+    silent: ScriptedReviewBridge,
+) -> None:
+    """Owner decision 88A: a carry of decisions alone does not settle the waiting opening, as a
+    decision made while a live review waits does not, so with the gate on and only a Reject
+    carried, Send's requests are the live waiting review's."""
+    waiting = waiting_answers.waiting_review(app, client, run_root / "FICT-recheck-reject")
+    finding = next(f for f in waiting.run.session.findings if f.check == REJECTED_CHECK)
+    decided_now = client.post(
+        f"/sessions/{waiting.chat_id}/findings/{finding.id}/disposition",
+        json={"decision": "rejected", "note": "FICT engineer decision"},
+    )
+    assert decided_now.status_code == 200, decided_now.text
+    settings = server_settings(provider_control, models, silent)
+
+    sent, resent, rerun = sent_live_and_after_a_re_run(
+        app, client, run_root, tmp_path / "saved", waiting, settings
+    )
+
+    (carried,) = [f for f in rerun.session.findings if f.disposition is not None]
+    assert carried.check == REJECTED_CHECK
+    assert carried.disposition is not None and carried.disposition.decision == "rejected"
+    assert not [q for q in rerun.session.evidence_requests if q.status == "answered"]
+    assert rerun.session.drawing_outcomes == []
+    assert recheck_row(rerun.session) == []
+    assert_sent_alike(sent, resent)
 
 
 @pytest.mark.usefixtures("vocabulary")
