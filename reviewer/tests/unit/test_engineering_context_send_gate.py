@@ -17,8 +17,11 @@ from typing import Any
 import pytest
 from starlette.testclient import TestClient
 
+from swreview import tokens
 from swreview.agent import runner
-from swreview.engineering_context.brief import compact_json
+from swreview.agent.runner import request_prefix
+from swreview.engineering_context.brief import build_summary, compact_json
+from swreview.ir.loader import load_package
 from tests.support.recording_provider import RecordingProvider
 from tests.unit import test_chat_engineering_context as ctx
 from tests.unit import test_chat_server as chat
@@ -121,3 +124,68 @@ def test_a_stale_attachment_on_an_unticked_start_is_refused_before_any_setup(
     assert provider_control.built == []
     assert not (run_dir / "session.json").exists()
     assert not (run_dir / "events.jsonl").exists()
+
+
+# --- blocker B: the opening rebuilt at Send keeps the context ----------------------------------
+
+
+@pytest.mark.usefixtures("vocabulary")
+def test_a_waiting_answer_rebuilds_the_opening_with_the_engineering_block_once(
+    app: Any,
+    client: TestClient,
+    run_root: Path,
+    provider_control: chat.ProviderControl,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    folder = run_root / "FICT-context-answered"
+    waiting = waiting_with_context(app, client, folder)
+    role = waiting_cases.question(waiting)
+    assert waiting_cases.apply(client, waiting, (role.id, "All bought")).status_code == 202
+    assert chat.settle(client, waiting.chat_id) == "awaiting_send"
+    run = waiting.run
+    cache = run._send_cache
+    assert cache is not None
+
+    opening = cache.opening
+    assert opening != run.opening_message
+    assert_block_once(opening, folder)
+    answer = waiting_cases.wait_line(role)
+    assert opening.index(block_of(folder)) < opening.index(answer)
+    assert opening.index(answer) < opening.rindex(runner.OPENING_MESSAGE)
+    assert opening.endswith(runner.OPENING_MESSAGE)
+    assert cache.estimate.input_tokens == tokens.count_tokens(
+        request_prefix(run.system, run.tools, opening)
+    )
+
+    sent = sent_opening(app, client, waiting.chat_id, monkeypatch)
+
+    assert sent == opening
+    assert provider_control.built == []
+
+
+def test_a_reloaded_package_rebuilds_the_summary_the_opening_and_its_file_carry(
+    app: Any, client: TestClient, run_root: Path
+) -> None:
+    """A confirmed drawing read reloads the package (feature 011): the opening Send rebuilds
+    carries the summary over that package, and the retained file says the same."""
+    folder = run_root / "FICT-context-reloaded"
+    waiting = waiting_with_context(app, client, folder)
+    run = waiting.run
+    before = block_of(folder)
+    reloaded = load_package(folder)
+    reloaded.package.components = [
+        item for item in reloaded.package.components if item.id != "cmp:0001"
+    ]
+    run.context.reload_package(reloaded)
+    run._settle_waiting(runner.AppliedAnswers(read=(), withdrawn_by_answer=()))
+
+    opening = run.opening_at_send()
+
+    current = build_summary(run.context.engineering_context, run.context.package)
+    assert compact_json(current) != before
+    assert compact_json(current) in opening
+    assert before not in opening
+    assert opening.count(ENGINEERING_LEAD) == 1
+    assert json.loads((folder / SUMMARY_FILE).read_text(encoding="utf-8")) == current
+    assert run.opening_at_send() == opening
+

@@ -177,6 +177,8 @@ from swreview.tools.registry import (
 from swreview.tools.session import record_question
 
 SESSION_FILE_NAME = "session.json"
+ENGINEERING_SUMMARY_FILE_NAME = "engineering-context-summary.json"
+"""Feature 016: the sanitized engineering-context summary a review with saved context retains."""
 
 EVIDENCE_CHECK = "coverage.evidence_request"
 PROFILE_CHECK = "coverage.extractor_profile"
@@ -1158,6 +1160,7 @@ class ReviewRun:
         awaiting_send: bool = False,
         prerun: PrerunResult | None = None,
         standards_gap: Any | None = None,
+        engineering_summary: dict[str, Any] | None = None,
     ) -> None:
         self.context = context
         self.provider = provider
@@ -1221,6 +1224,10 @@ class ReviewRun:
         self.awaiting_send = awaiting_send
         self._prerun = prerun
         self._standards_gap = standards_gap
+        self._engineering_summary = engineering_summary
+        self._engineering_summary_over = context.package
+        """Feature 016's summary and the package it assessed: the opening's engineering block
+        (owner decision 99A). Built again only when a confirmed read reloads the package."""
         self._explanation_allowed = False
         self._pending_turn_end: str | None = None
         self.check_presentation_cancelled: Callable[[], None] = lambda: None
@@ -1764,9 +1771,9 @@ class ReviewRun:
         """The frozen opening, or the same builder over the applied code evidence."""
         if not self._opening_changed:
             return self.opening_message
-        opening = _opening_message(
-            self._prerun, self.session, self.context.ir,
-            standards_gap=self._standards_gap, roles=review_roles(self.context),
+        opening = _review_opening(
+            self._prerun, self.context, standards_gap=self._standards_gap,
+            engineering_summary=self._engineering_summary_now(),
         )
         lines = [
             DRAWING_OUTCOME_LINE.format(file=item.file, outcome=item.outcome)
@@ -1792,6 +1799,25 @@ class ReviewRun:
             return opening
         prefix = opening.removesuffix(OPENING_MESSAGE)
         return prefix + "\n".join(lines) + "\n\n" + OPENING_MESSAGE
+
+    def _engineering_summary_now(self) -> dict[str, Any] | None:
+        """Feature 016's summary over the package this run reads now (owner decision 99A).
+
+        `start_review` builds it over the package the pre-run left. A confirmed drawing read
+        while the review waits reloads the package (feature 011), and the opening Send rebuilds
+        must assess the snapshot the context tools read, so the summary is built again over the
+        reloaded package, and its retained file written again, only then.
+        """
+        artifact = self.context.engineering_context
+        if artifact is None:
+            return None
+        reloaded = self.context.package is not self._engineering_summary_over
+        if self._engineering_summary is None or reloaded:
+            self._engineering_summary = write_engineering_summary(
+                self.out_dir, artifact, self.context.package
+            )
+            self._engineering_summary_over = self.context.package
+        return self._engineering_summary
 
     def first_request_estimate(self) -> int | None:
         """Count the first request locally, with the tools offered to the adapter."""
@@ -2394,10 +2420,8 @@ def start_review(
         if context.engineering_context is not None:
             # Live pre-run reads can append evidence to package.json. The opening
             # prompt must assess the same resulting snapshot as later context reads.
-            engineering_summary = build_summary(context.engineering_context, context.package)
-            write_atomic(
-                out / "engineering-context-summary.json",
-                compact_json(engineering_summary).encode("utf-8"),
+            engineering_summary = write_engineering_summary(
+                out, context.engineering_context, context.package
             )
     except Exception:
         if bridge_client is not None:
@@ -2420,13 +2444,11 @@ def start_review(
         effort=effort,
         max_steps=max_steps,
         efficiency=session.efficiency,
-        opening_message=_opening_message(
+        opening_message=_review_opening(
             prerun,
-            session,
-            loaded.package,
+            context,
             standards_gap=standards_gap if standards_profile is not None else None,
-            roles=review_roles(context),
-            engineering_context_summary=engineering_summary,
+            engineering_summary=engineering_summary,
         ),
         bridge=bridge_client,
         redact=redact,
@@ -2437,6 +2459,40 @@ def start_review(
         awaiting_send=not send_when_checked,
         prerun=prerun,
         standards_gap=standards_gap if standards_profile is not None else None,
+        engineering_summary=engineering_summary,
+    )
+
+
+def write_engineering_summary(
+    out: Path, artifact: ContextArtifact, loaded: LoadedPackage
+) -> dict[str, Any]:
+    """Feature 016: summarize `artifact` over `loaded` and retain it, sanitized, in `out`."""
+    summary = build_summary(artifact, loaded)
+    write_atomic(out / ENGINEERING_SUMMARY_FILE_NAME, compact_json(summary).encode("utf-8"))
+    return summary
+
+
+def _review_opening(
+    prerun: PrerunResult | None,
+    context: ToolContext,
+    *,
+    standards_gap: Any | None,
+    engineering_summary: dict[str, Any] | None,
+) -> str:
+    """The one call of `_opening_message` a review makes, at setup and again at Send.
+
+    Owner decision 99A: `start_review` and `ReviewRun.opening_at_send` build the opening from
+    the same inputs - the context's package, session and roles, the standards gap and feature
+    016's engineering summary - so an opening rebuilt after a waiting answer keeps every block
+    the frozen one had.
+    """
+    return _opening_message(
+        prerun,
+        context.require_session(),
+        context.ir,
+        standards_gap=standards_gap,
+        roles=review_roles(context),
+        engineering_context_summary=engineering_summary,
     )
 
 

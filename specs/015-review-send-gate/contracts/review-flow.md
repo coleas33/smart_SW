@@ -256,6 +256,14 @@ no route builds an opening or counts a token.
 
 `ReviewRun.opening_at_send()`, called only by `build_send_cache()`:
 
+*Amended 2026-10-15 (feature 016 lands on this feature, owner decision 99A):* `start_review` and
+`opening_at_send` both call `_opening_message` through `runner._review_opening(prerun, context,
+standards_gap=..., engineering_summary=...)`, so the rebuilt opening has every input the frozen one
+had. Feature 016's engineering summary is held by `ReviewRun`; a review with saved context keeps
+its "Engineer-supplied inputs" block, once, before the wait's lines, and the summary is built again
+over the package only when a confirmed read reloaded it. Without saved context the builder's
+output is unchanged, byte for byte (T007 and T008 stay green, unedited).
+
 - **nothing applied while waiting** (`_opening_changed` false): `self.opening_message`, the opening
   frozen at setup, byte for byte (SC-004; for a re-run, SC-008);
 - **answers applied**: `_opening_message(self._prerun, session, package, standards_gap=...,
