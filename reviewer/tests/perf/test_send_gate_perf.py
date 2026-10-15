@@ -150,3 +150,6 @@ def test_the_checks_only_start_and_the_re_run_fit_their_measured_bound(
     assert rerun.model_status is not None
     assert str(rerun.model_status.rechecked_from) == str(session.session_id)
     assert added < ADDED_WORK_SHARE * unticked_prerun
+    # T104 drops `TimeoutFor` and `ChecksOnlyTimeout` because the re-run fits the one rule
+    # (owner decision 70A); this pins that measurement (owner decision 87A).
+    assert rerun_s < ONE_RULE_S

@@ -99,7 +99,7 @@ from swreview.checks.drawing_context import CANDIDATE_CONFIRM
 from swreview.checks.provenance import PROVENANCE_CHECK, close_provenance
 from swreview.checks.questions import asks_same
 from swreview.checks.rms.registry import RMS_FAMILY
-from swreview.drawings.evidence import DrawingIndex
+from swreview.drawings.evidence import DrawingIndex, file_key
 from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore
 from swreview.findings import Finding, finding_subject_key
 from swreview.ir.loader import LoadedPackage, load_package
@@ -142,6 +142,7 @@ from swreview.report.session import (
     KeySource,
     ModelStatus,
     ProviderInfo,
+    RecordedProfileIdentity,
     ReviewSession,
     SendEstimate,
     SendFailure,
@@ -1015,6 +1016,10 @@ NOT_CARRIED = "Not carried from the earlier check run: {items}."
 NOT_CARRIED_ANSWER_GONE = "the answer to {id} (its question is no longer asked)"
 NOT_CARRIED_ANSWER_MANY = "the answer to {id} (it matches more than one question)"
 NOT_CARRIED_ANSWER_SHARED = "the answer to {id} (another answer matches the same question)"
+NOT_CARRIED_ANSWER_PARTIAL = (
+    "the answer to {id} (part of its drawing read was refused or failed, so its question is "
+    "asked again)"
+)
 NOT_CARRIED_DECISION_GONE = "the {decision} of {id} (its finding is no longer raised)"
 NOT_CARRIED_DECISION_MANY = "the {decision} of {id} (it matches more than one finding)"
 NOT_CARRIED_DECISION_SHARED = "the {decision} of {id} (another decision matches the same finding)"
@@ -1030,6 +1035,20 @@ an earlier id, never a path, and the items are joined with "; " in the carry's o
 
 DECISION_NOUNS = {"accepted": "Accept", "rejected": "Reject", "deferred": "Defer"}
 """How a decision is named in a `coverage.recheck` item: "the Reject of F-007"."""
+
+
+def _same_profile(
+    now: RecordedProfileIdentity | None, before: RecordedProfileIdentity | None
+) -> bool:
+    """One Standards profile at both runs: the same file however its Windows path is spelled
+    (`file_key`, case and separator ignored; owner decision 90A) with the same digest, or none
+    at either."""
+    if now is None or before is None:
+        return now is None and before is None
+    return (
+        file_key(now["path"]) == file_key(before["path"])
+        and now["sha256"] == before["sha256"]
+    )
 
 
 def drawing_outcome_lines(read: Sequence[ConfirmedRead]) -> list[str]:
@@ -1386,7 +1405,8 @@ class ReviewRun:
         """
         session = self.session
         named: list[str] = []
-        answers, answered_at = self._carried_answers(earlier, named)
+        index = DrawingIndex.for_package(self.context.ir)
+        answers, answered_at = self._carried_answers(earlier, named, index)
         applied = (
             self._apply_answers(answers, read_drawings=False)
             if answers else AppliedAnswers(read=(), withdrawn_by_answer=())
@@ -1396,7 +1416,7 @@ class ReviewRun:
                 request.answered_at = answered_at[request.id]
         self._carry_decisions(earlier, named)
         session.drawing_outcomes = [outcome.model_copy() for outcome in earlier.drawing_outcomes]
-        named.extend(self._lost_drawing_outcomes(earlier))
+        named.extend(self._lost_drawing_outcomes(earlier, index))
         session.timing = session.timing.replace(
             baseline_minutes=earlier.timing.baseline_minutes,
             assisted_supervision_minutes=earlier.timing.assisted_supervision_minutes,
@@ -1405,7 +1425,7 @@ class ReviewRun:
         )
         status, before = session.model_status, earlier.model_status
         if status is not None and before is not None:
-            if status.profile != before.profile:
+            if not _same_profile(status.profile, before.profile):
                 named.append(NOT_CARRIED_PROFILE)
             session.model_status = status.model_copy(
                 update={
@@ -1429,12 +1449,15 @@ class ReviewRun:
             self._settle_waiting(applied)
 
     def _carried_answers(
-        self, earlier: ReviewSession, named: list[str]
+        self, earlier: ReviewSession, named: list[str], index: DrawingIndex
     ) -> tuple[list[tuple[str, str]], dict[str, datetime | None]]:
         """Each earlier answer's one matching open question here, in answer order.
 
         A drawing candidate question whose drawing the earlier read merged is not asked again;
-        its answer is not named, because its outcome line is what carries. Two earlier answers
+        its answer is not named, because its outcome line is what carries. One whose read merged
+        some of its documents' drawings and was refused or failed for the rest is asked again
+        over the rest, a narrower question no earlier answer asks the same as, so its answer is
+        named as such (FR-029; owner decision 90A). Two earlier answers
         that match one question carry neither, and each is named (owner decision 89A, 72A's rule
         for decisions).
         """
@@ -1464,8 +1487,12 @@ class ReviewRun:
             elif matches:
                 answers.append((matches[0].id, str(request.answer)))
                 answered_at[matches[0].id] = request.answered_at
-            elif not self._drawing_merged(request):
-                named.append(NOT_CARRIED_ANSWER_GONE.format(id=request.id))
+            else:
+                merged, documents = self._merged_documents(request, index)
+                if merged == 0:
+                    named.append(NOT_CARRIED_ANSWER_GONE.format(id=request.id))
+                elif merged < documents:
+                    named.append(NOT_CARRIED_ANSWER_PARTIAL.format(id=request.id))
         return answers, answered_at
 
     def _carry_decisions(self, earlier: ReviewSession, named: list[str]) -> None:
@@ -1499,20 +1526,22 @@ class ReviewRun:
                 )
                 self.announce_disposition(carried)
 
-    def _drawing_merged(self, request: EvidenceRequest) -> bool:
-        """An earlier drawing candidate question whose every document now has a drawing."""
+    @staticmethod
+    def _merged_documents(request: EvidenceRequest, index: DrawingIndex) -> tuple[int, int]:
+        """`(documents that now have a drawing, documents)` of an earlier drawing candidate
+        question; `(0, 0)` for any other question."""
         if CANDIDATE_CONFIRM not in request.options or not request.entity_ids:
-            return False
-        index = DrawingIndex.for_package(self.context.ir)
-        return all(index.drawings_of(document_id) for document_id in request.entity_ids)
+            return 0, 0
+        merged = sum(1 for document_id in request.entity_ids if index.drawings_of(document_id))
+        return merged, len(request.entity_ids)
 
-    def _lost_drawing_outcomes(self, earlier: ReviewSession) -> list[str]:
-        """Earlier open drawing questions whose drawing an unfinished read merged (R2.13)."""
-        index = DrawingIndex.for_package(self.context.ir)
+    def _lost_drawing_outcomes(self, earlier: ReviewSession, index: DrawingIndex) -> list[str]:
+        """Earlier open drawing questions whose drawings an unfinished read merged, all of them
+        or some (R2.13; owner decision 90A), with no outcome line for any merged file."""
         named_files = {outcome.file for outcome in earlier.drawing_outcomes}
         lost: list[str] = []
         for request in earlier.evidence_requests:
-            if request.status != "open" or not self._drawing_merged(request):
+            if request.status != "open" or self._merged_documents(request, index)[0] == 0:
                 continue
             files = {
                 index.file_name_of(drawing)
