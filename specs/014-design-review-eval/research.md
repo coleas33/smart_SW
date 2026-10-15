@@ -458,6 +458,14 @@ From T186, issue 21, answered 21A. Amends RF-8.
 - **Options**: A: enter the short-context prices with the threshold, and read a round above it as cost unknown. B: keep RF-8, no entry. C: add a tiers block with both prices.
 - **Chosen**: A. An entry may carry `short_context_max_input_tokens` (an int of at least 1; 272000 for the three variants, reading K as 1,000). A round whose input exceeds it is cost unknown, named "`<model>`: long-context tier, not priced", never priced at the short rate. The table still refuses a `tiers` block and a fourth price. Tests `test_a_round_above_the_short_context_threshold_is_cost_unknown_naming_the_tier` and `test_an_entry_without_a_threshold_prices_every_round`; `benchmark-run.md` 13 and data-model section 7.
 
+### 104A. The scanner admits the scrub's placeholders (2026-10-15)
+
+From T182 and T183, issue 25, answered 25A.
+
+- **Question** (tasks.md T182, T183; `provenance.md` 6.6; RF-41): the scrub's specified replacements read `<run>/attempts/...`, `<repo>/...`, `<tmp>/...` and `<home>/...`, and the committed scanner flagged them: a `/` after `>` read as a rooted path, and a doubled backslash after one as a UNC path. A faithful T182 could never go green.
+- **Options**: A: the scanner admits a separator directly after exactly one of the four placeholders. B: the scrub writes another form, changing the contract's placeholders.
+- **Chosen**: A. `tests/support/local_paths.py` skips a rooted or UNC anchor whose text just before it ends in `<run>`, `<repo>`, `<tmp>` or `<home>`, and nothing else. `test_committable_paths.py` pins the four placeholders in `/`, `\` and doubled spellings passing, and `>/srv/x`, `<other>/x`, drive, POSIX-home and UNC paths, and a real path after a placeholder, still flagged. Known limit for T198 and T199, the scrub's first callers: `without_local_paths` calls `Path.home()`, which can raise `RuntimeError` on an account with no home folder, as 92A guards in the report.
+
 ---
 
 ## §2 The 2026-09-28 audit

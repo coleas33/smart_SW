@@ -264,6 +264,102 @@ def test_the_scanner_ignores_and_or_fractions_urls_and_relative_paths(tmp_path: 
     assert reasons(written(tmp_path / "message.json", json.dumps({"message": text}))) == []
 
 
+def test_the_scanner_admits_only_the_four_local_path_placeholders(tmp_path: Path) -> None:
+    """104A: separators after these four exact placeholders start no rooted or UNC path."""
+    for placeholder in ("<run>", "<repo>", "<tmp>", "<home>"):
+        for separator in ("/", "\\", "\\\\"):
+            text = f"{placeholder}{separator}x"
+            assert reasons(written(tmp_path / "placeholder.md", text)) == [], text
+
+    flagged = {
+        ">/srv/x": local_paths.ROOTED_PATH,
+        "<other>/x": local_paths.ROOTED_PATH,
+        "C:\\Users\\FICT\\x": local_paths.DRIVE_PATH,
+        "/home/fict/x": local_paths.ROOTED_PATH,
+        "\\\\FICT\\share\\x": local_paths.UNC_PATH,
+        "<run>C:\\Users\\FICT\\x": local_paths.DRIVE_PATH,
+        "<run>/x/C:\\Users\\FICT\\x": local_paths.DRIVE_PATH,
+    }
+    for text, reason in flagged.items():
+        assert reasons(written(tmp_path / "flagged.md", text)) == [reason], text
+
+
+def test_the_scanner_finds_nothing_in_a_message_scrubbed_of_local_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """T182: every spelling is detected before scrubbing; the longest local folder wins."""
+    monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))
+    run = tmp_path / "Run-FICT"
+    assert run.is_relative_to(Path(tempfile.gettempdir()))
+    spellings = (forward, backward, lambda text: backward(text).replace("\\", "\\\\"))
+    messages: list[str] = []
+    expected: list[str] = []
+    for folder, placeholder, tail in (
+        (run, "<run>", "attempts/pkg/events.jsonl"),
+        (REPO_ROOT, "<repo>", "benchmarks/x"),
+        (Path(tempfile.gettempdir()), "<tmp>", "scratch/x"),
+        (Path.home(), "<home>", ".cache/x"),
+    ):
+        for prefix in (str(folder), str(folder).swapcase()):
+            for spelling in spellings:
+                messages.append(spelling(f"cannot read {prefix}/{tail}"))
+                expected.append(spelling(f"cannot read {placeholder}/{tail}"))
+    text = "\n".join(messages)
+    assert len(local_paths.scan_file(written(tmp_path / "before.md", text))) == len(messages)
+
+    from swreview.benchmark.scrub import without_local_paths
+
+    scrubbed = without_local_paths(text, run_dir=run, root=REPO_ROOT)
+    assert scrubbed == "\n".join(expected)
+    assert "<run>/attempts/pkg/events.jsonl" in scrubbed
+    assert reasons(written(tmp_path / "after.md", scrubbed)) == []
+    unchanged = "cannot read attempts/pkg/events.jsonl"
+    assert without_local_paths(unchanged, run_dir=run, root=REPO_ROOT) == unchanged
+
+
+def test_the_scrub_preserves_longer_and_hyphenated_folder_names(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from swreview.benchmark.scrub import without_local_paths
+
+    run, root, temporary, home = (tmp_path / name for name in ("run", "repo", "tmp", "home"))
+    monkeypatch.setattr(tempfile, "gettempdir", lambda: str(temporary))
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+    for folder in (run, root, temporary, home):
+        for suffix in ("2", "-other", "_copy"):
+            text = f"cannot read {folder}{suffix}/x"
+            assert without_local_paths(text, run_dir=run, root=root) == text
+
+
+def test_the_scrub_covers_each_spelled_and_resolved_folder(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from swreview.benchmark.scrub import without_local_paths
+
+    folders = tuple(tmp_path / "alias" / ".." / name for name in ("run", "repo", "tmp", "home"))
+    run, root, temporary, home = folders
+    monkeypatch.setattr(tempfile, "gettempdir", lambda: str(temporary))
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+    for folder, placeholder in zip(folders, ("<run>", "<repo>", "<tmp>", "<home>"), strict=True):
+        for form in (folder, folder.resolve()):
+            text = f"cannot read {form}/x"
+            assert without_local_paths(text, run_dir=str(run), root=str(root)) == (
+                f"cannot read {placeholder}/x"
+            )
+
+
+def test_the_scrub_skips_a_bare_drive_or_root_anchor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from swreview.benchmark.scrub import without_local_paths
+
+    anchor = Path(tmp_path.anchor)
+    monkeypatch.setattr(tempfile, "gettempdir", lambda: str(anchor))
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: anchor))
+    text = f"root {anchor}; see {(anchor / '.cache' / 'FICT' / 'x').as_posix()}"
+    assert without_local_paths(text, run_dir=anchor, root=anchor) == text
+
+
 def test_an_html_end_tag_or_a_self_closing_tag_starts_no_path(tmp_path: Path) -> None:
     """The report slice's pages may be committed (`report.md` 4): an end tag's `/` (`</td>`,
     `</table>`, any case, a space before its `>`) and a self-closing tag's `/>` start no rooted
