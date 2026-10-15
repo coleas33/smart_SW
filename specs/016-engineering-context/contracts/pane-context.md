@@ -123,11 +123,23 @@ the opening and later context reads assess the same snapshot.
 context records the attachment (context id, head digest, saved package digest) in its
 waiting record's `model_status.engineering_context`. After SOLIDWORKS or the backend
 restarts, its Send re-runs the checks (015 `recheck.md`), and the re-run reloads that
-context from the fixed private store and requires the same head; the folder's
+context from the fixed private store and requires the same head (owner decision 105A: and
+the saved baseline's package id, root document and configuration); the folder's
 package may differ from the saved baseline by the first run's live evidence or a confirmed
 drawing read, which the summary assesses as any review's does. A head changed since then refuses the re-run with `EngineeringContextConflict`
 and leaves the earlier record and summary in place. A re-run never unlinks the retained
 summary, and the host never sends an attachment with a re-run.
+
+**Retry carries the context** (owner decision 108A). Retry on a failed context review sends
+`review.start {retry_of}` as any Retry does; the host recognises a chat it started with saved
+context and, instead of extracting again, posts `POST /sessions` with that chat's own run
+folder, `retry_of`, the same attachment and the box's Send or Wait, through the one
+`CreateReviewSession`. The backend validates the head as a re-run does; a context changed
+since is `409 EngineeringContextConflict` with a line that points to the Engineering context
+panel, and nothing in the folder moves. Another document active is `ReviewNotActive`.
+
+**The lock is strict** (owner decision 106A): the panel is disabled while any review is shown
+waiting, and the backend refuses context edits per folder.
 
 **The live check keeps inputs matched** (owner decision 107A). Every saved input of an
 assembly review used to read `mismatch: package_digest_changed`, because the review's live

@@ -86,6 +86,74 @@ public sealed class EngineeringContextHostTests
         Assert.Equal(1, world.Dump.Runs);
     }
 
+    /// <summary>
+    /// Owner decision 108A: Retry on a failed context review re-attaches the same saved context
+    /// in the same run folder, with no new extraction, through the one gated session path.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RetryOfAContextReviewReattachesItsSavedContextInItsFolder(bool sendWhenChecked)
+    {
+        using var world = new World(sendWhenChecked);
+        (string contextId, string head, string sha) = world.StartContextReview();
+
+        world.Host.Receive(Message("review.start", new { retry_of = "chat-context" }));
+
+        Assert.Equal(1, world.Dump.Runs);
+        Assert.Equal(2, world.Backend.Created.Count);
+        NewSessionRequest retry = world.Backend.Created[1];
+        Assert.Equal(world.Dump.Directory, retry.RunDirectory);
+        Assert.Equal("chat-context", retry.RetryOf);
+        Assert.Equal(sendWhenChecked ? ReviewMode.Send : ReviewMode.Wait, retry.Mode);
+        Assert.Equal(contextId, retry.EngineeringContext!.ContextId);
+        Assert.Equal(head, retry.EngineeringContext.HeadDigest);
+        Assert.Equal(sha, retry.EngineeringContext.PackageSha256);
+        Assert.Equal(sendWhenChecked, world.Reply("review.started").GetProperty("send_when_checked").GetBoolean());
+    }
+
+    [Fact]
+    public void ARetryOfAContextReviewWhoseContextChangedIsRefusedWithTheBackendsConflict()
+    {
+        using var world = new World(sendWhenChecked: false);
+        world.StartContextReview();
+        world.Backend.NextError = new BackendRequestException(
+            "EngineeringContextConflict", "FICT the saved context changed; use the Engineering context panel.", false);
+
+        world.Host.Receive(Message("review.start", new { retry_of = "chat-context" }));
+
+        Assert.Equal(1, world.Dump.Runs);
+        JsonElement error = world.Reply("error");
+        Assert.Equal("EngineeringContextConflict", error.GetProperty("error_class").GetString());
+        Assert.Contains("Engineering context panel", error.GetProperty("message").GetString());
+    }
+
+    [Fact]
+    public void ARetryOfAContextReviewOfAnotherDocumentIsRefusedAndNothingStarts()
+    {
+        using var world = new World();
+        world.StartContextReview();
+        world.Document = new PageDocument(@"C:\Fictional\other.SLDASM", "Default");
+
+        world.Host.Receive(Message("review.start", new { retry_of = "chat-context" }));
+
+        Assert.Single(world.Backend.Created);
+        Assert.Equal(1, world.Dump.Runs);
+        Assert.Equal("ReviewNotActive", world.Reply("error").GetProperty("error_class").GetString());
+    }
+
+    [Fact]
+    public void AnOrdinaryRetryStillExtractsAgainWithNoContext()
+    {
+        using var world = new World();
+        world.Host.Receive(Message("review.start", new { }));
+        world.Host.Receive(Message("review.start", new { retry_of = "chat-context" }));
+
+        Assert.Equal(2, world.Dump.Runs);
+        Assert.Null(world.Backend.Created[1].EngineeringContext);
+        Assert.Equal("chat-context", world.Backend.Created[1].RetryOf);
+    }
+
     [Theory]
     [InlineData("document")]
     [InlineData("configuration")]
@@ -250,6 +318,23 @@ public sealed class EngineeringContextHostTests
             throw new Xunit.Sdk.XunitException("Missing " + type + " reply: " + string.Join(" | ", Messages));
         }
 
+        /// <summary>Prepare saved evidence and start a review with an exact attachment.</summary>
+        public (string ContextId, string Head, string Sha) StartContextReview()
+        {
+            Host.Receive(Message("context.prepare", new { }));
+            JsonElement prepared = Reply("context.prepared");
+            string contextId = Guid.NewGuid().ToString();
+            string head = new string('a', 64);
+            string sha = prepared.GetProperty("package_sha256").GetString()!;
+            Host.Receive(Message("context.review", new
+            {
+                run_id = prepared.GetProperty("run_id").GetString(), context_id = contextId,
+                head_digest = head, package_sha256 = sha,
+            }));
+            Assert.Single(Backend.Created);
+            return (contextId, head, sha);
+        }
+
         /// <summary>The text of the last `status` message posted with `state`.</summary>
         public string Status(string state)
         {
@@ -312,8 +397,12 @@ public sealed class EngineeringContextHostTests
         public IReadOnlyList<ModelChoice> ListModels(string provider) => new ModelChoice[0];
         public bool IsTurnRunning(string chatId) => Running;
         public void Restart(UserSettings settings, ResolvedApiKey key) { }
+        public BackendRequestException? NextError;
         public ChatSessionHandle CreateSession(NewSessionRequest request)
         {
+            BackendRequestException? error = NextError;
+            NextError = null;
+            if (error != null) throw error;
             Created.Add(request);
             return new ChatSessionHandle("chat-context", "review-context");
         }

@@ -352,6 +352,74 @@ public sealed class EngineeringContextPaneTests
         });
     }
 
+    /// <summary>
+    /// Owner decision 108A: Retry on a failed context review asks the host to retry that chat,
+    /// which re-attaches its saved context (the host's part); the box at Retry decides Send or
+    /// Wait. The page sends no second context.review and no new preparation.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void RetryOnAFailedContextReviewRetriesThatChat(bool sendWhenChecked)
+    {
+        ReviewPageDriver.Run(driver => Configure(driver, Snapshot(Requirement())), async driver =>
+        {
+            await FailedContextReview(driver);
+            driver.SendWhenChecked = sendWhenChecked;
+
+            await driver.Read("document.querySelector('#errors [data-action=retry]').click();return JSON.stringify({ok:true});");
+            await driver.Settle();
+
+            JsonElement retry = Assert.Single(driver.Posted("review.start"));
+            Assert.Equal("chat-1", retry.GetProperty("retry_of").GetString());
+            Assert.Single(driver.Posted("context.review"));
+            Assert.Single(driver.Posted("context.prepare"));
+            string status = (await driver.Read("return JSON.stringify({ok:true,text:document.getElementById('results-state').textContent});")).GetProperty("text").GetString()!;
+            Assert.Equal(!sendWhenChecked, status == "Checked by code. Not sent to the model.");
+        });
+    }
+
+    [Fact]
+    public void ARefusedContextRetryPointsToTheContextPanel()
+    {
+        WaitingReviewFixture words = WaitingReviewFixture.Read();
+        string label = words.Root.GetProperty("labels").GetProperty("errors").GetProperty("EngineeringContextConflict").GetString()!;
+        ReviewPageDriver.Run(driver =>
+        {
+            Configure(driver, Snapshot(Requirement()));
+            driver.InitialRoutes.Add(("GET", "/labels", 200, words.Root.GetProperty("labels").GetRawText()));
+        }, async driver =>
+        {
+            await FailedContextReview(driver);
+            driver.ReviewStartError = new
+            {
+                error_class = "EngineeringContextConflict", retryable = false,
+                message = "The saved engineering context changed after this review started.",
+            };
+
+            await driver.Read("document.querySelector('#errors [data-action=retry]').click();return JSON.stringify({ok:true});");
+            await driver.Settle();
+
+            string errors = (await driver.Read("return JSON.stringify({ok:true,text:document.getElementById('errors').textContent});")).GetProperty("text").GetString()!;
+            Assert.Contains("Engineering context panel", label);
+            Assert.Contains(label, errors);
+        });
+    }
+
+    /// <summary>A review started from the context panel whose first request failed.</summary>
+    private static async Task FailedContextReview(ReviewPageDriver driver)
+    {
+        await Prepare(driver);
+        await driver.Page.ExecuteScriptAsync("document.getElementById('context-review').click();0");
+        await OffscreenReviewPage.Settled(driver.Page);
+        Assert.Single(driver.Posted("context.review"));
+        await driver.Push("chat-1", 1, "error", "{\"error_class\":\"FICTTickedError\",\"message\":\"FICT-first request failed\",\"retryable\":true}");
+        await driver.Push("chat-1", 2, "turn.ended", "{\"reason\":\"error\"}");
+        await driver.Push("chat-1", 3, "session.ended", "{\"ended_at\":\"2026-10-15T12:00:00+00:00\"}");
+        await driver.Settle();
+        Assert.True(JsonDocument.Parse(await driver.Page.ExecuteScriptAsync("!!document.querySelector('#errors [data-action=retry]')")).RootElement.GetBoolean());
+    }
+
     /// <summary>Every context control that edits, prepares or reviews is off.</summary>
     private const string ContextOff = "['context-prepare','context-selection','context-save','context-new','context-review']"
         + ".every(function(id){return document.getElementById(id).disabled;})";

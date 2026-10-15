@@ -171,7 +171,11 @@ after the record read, the backend reloads the context that field names from the
 private store and requires the store's head to be that exact context id and head digest with that
 saved package digest. It does not require the folder's package
 to be the saved baseline, since the first run's live checks may have appended evidence to it,
-which the summary marks as needing review. A head changed since then is `409
+which the summary marks as needing review. *Amended 2026-10-15 (owner decisions 105A and 107A):*
+it does require the baseline's package id, root document and configuration, and the live check's
+own rewrite now keeps inputs matched (016 `pane-context.md`). The refusal's message names the one
+action left, new context evidence from the Engineering context panel, and the page's label for
+`EngineeringContextConflict` points there too. A head changed since then is `409
 EngineeringContextConflict` before the rotation, so nothing in the folder moves and the earlier
 record stays canonical and restorable. `POST /sessions` with `recheck: true` and an
 `engineering_context` member is `400 InvalidRequest`. A re-run never unlinks the retained

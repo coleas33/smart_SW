@@ -148,6 +148,15 @@ public sealed class SessionRecord
     public string? ModelStatus { get; set; }
 
     /// <summary>
+    /// Feature 016's saved context this review was started with, or null for an ordinary review:
+    /// what a Retry of it re-attaches in its own folder (owner decision 108A).
+    /// </summary>
+    public EngineeringContextAttachment? EngineeringContext { get; set; }
+
+    /// <summary>The extraction a context review was started on, for a Retry's ready status.</summary>
+    public DumpSummary? ContextExtraction { get; set; }
+
+    /// <summary>
     /// Whether this run is a Model check.
     ///
     /// Stated rather than inferred from a null chat id, because what the any-turn-running scan
@@ -1575,6 +1584,14 @@ public sealed class ReviewHost : IDisposable
             }
         }
 
+        string? retryOf = Blank(Text(payload, "retry_of"));
+        SessionRecord? retried = retryOf == null ? null : FindSession(retryOf);
+        if (retried?.EngineeringContext != null)
+        {
+            RetryContextReview(id, document, retried);
+            return;
+        }
+
         if (_options.Dump == null)
         {
             SendError(
@@ -1627,6 +1644,31 @@ public sealed class ReviewHost : IDisposable
 
         CreateReviewSession(document, runDirectory, Blank(Text(payload, "retry_of")),
             _settings.SendsWhenChecked ? ReviewMode.Send : ReviewMode.Wait, id, summary);
+    }
+
+    /// <summary>
+    /// Owner decision 108A: Retry on a failed context review. Its saved context lives in the
+    /// review's own run folder, so nothing is extracted again: the same attachment (context id,
+    /// head and saved package digest) is posted with that folder and the failed chat as
+    /// `retry_of`, through the one gated session path, Send or Wait from the box. The backend
+    /// validates the head again and refuses a changed context with its conflict.
+    /// </summary>
+    private void RetryContextReview(string? id, PageDocument document, SessionRecord retried)
+    {
+        if (!document.IsSameDocument(retried.Document))
+        {
+            SendError(id, "ReviewNotActive", "Open or switch to the reviewed document and configuration before retrying its review with saved context.", retryable: true);
+            return;
+        }
+        if (!BackendReady(id))
+        {
+            return;
+        }
+
+        CreateReviewSession(retried.Document, retried.RunDirectory, retried.ChatId,
+            _settings.SendsWhenChecked ? ReviewMode.Send : ReviewMode.Wait, id,
+            retried.ContextExtraction ?? new DumpSummary(retried.RunDirectory, 0, 0),
+            attachment: retried.EngineeringContext);
     }
 
     private bool CanReviewDocument(PageDocument document, string? id)
@@ -1731,6 +1773,8 @@ public sealed class ReviewHost : IDisposable
         Publish(new SessionRecord(handle.ChatId, runDirectory, document, new DateTimeOffset(_options.Now()))
         {
             ModelStatus = modelStatus,
+            EngineeringContext = attachment ?? replacing?.EngineeringContext,
+            ContextExtraction = attachment != null ? summary : replacing?.ContextExtraction,
         }, makeLatest: true, replacing);
         PostStatus("ready", mode == ReviewMode.Recheck
             ? "Checked the saved evidence again; nothing was sent to the model."
