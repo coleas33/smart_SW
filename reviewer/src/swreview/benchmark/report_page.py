@@ -34,6 +34,7 @@ import re
 import secrets
 import shutil
 import stat
+import sys
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -361,7 +362,7 @@ def _sibling(target: Path, suffix: str) -> Path:
 def _in_place(out: Path, target: Path) -> bool:
     """Whether the build is copied into `out` rather than moved: `out` is a link, whose target
     the copy updates, or is or holds the working folder, which cannot be moved (91A)."""
-    if out.is_symlink() or out.is_junction():
+    if out.is_symlink() or _is_junction(out):
         return True
     return target.exists() and Path.cwd().resolve().is_relative_to(target)
 
@@ -399,14 +400,42 @@ def _copy_in_place(built: Path, target: Path) -> None:
     """Replace `target`'s report with the build's, keeping the folder itself; not atomic."""
     transcripts = target / TRANSCRIPTS_DIR
     if transcripts.is_dir():
-        shutil.rmtree(transcripts, onexc=_writable)
+        _rmtree(transcripts)
     if (built / TRANSCRIPTS_DIR).is_dir():
         shutil.copytree(built / TRANSCRIPTS_DIR, transcripts)
     shutil.copyfile(built / INDEX_FILE, target / INDEX_FILE)
 
 
-def _writable(function: Any, name: str, error: BaseException) -> None:
-    """`shutil.rmtree`'s retry for a read-only file or folder: clear the flag, try once more."""
+def _is_junction(path: Path) -> bool:
+    """Whether `path` is a Windows junction: `Path.is_junction` where it exists (Python 3.12), the
+    mount-point reparse tag of `os.lstat` on Windows otherwise, never elsewhere (owner decision
+    95A: the reviewer supports Python 3.11)."""
+    method = getattr(Path, "is_junction", None)
+    if method is not None:
+        return bool(method(path))
+    if os.name != "nt":
+        return False
+    try:
+        return os.lstat(path).st_reparse_tag == stat.IO_REPARSE_TAG_MOUNT_POINT
+    except OSError:
+        return False
+
+
+def _rmtree(folder: Path) -> None:
+    """`shutil.rmtree`, retrying a read-only entry with `_writable`: through `onexc` on Python
+    3.12, through `onerror`, which hands over `exc_info` instead, on 3.11 (95A)."""
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(folder, onexc=_writable)
+    else:
+        shutil.rmtree(folder, onerror=_writable)
+
+
+def _writable(function: Any, name: str, error: Any) -> None:
+    """`shutil.rmtree`'s retry for a read-only entry: on Windows, clear the flag and try once
+    more; elsewhere a file's own mode never stops its removal, so the error stands. `error` is the
+    exception (`onexc`) or its `exc_info` (`onerror`)."""
+    if os.name != "nt":
+        raise error if isinstance(error, BaseException) else error[1]
     os.chmod(name, stat.S_IWRITE)
     function(name)
 
@@ -415,7 +444,7 @@ def _remove(folder: Path) -> Path | None:
     """Remove a folder this command wrote, read-only flags cleared; best effort: the folder
     when it could not be removed, else `None`."""
     try:
-        shutil.rmtree(folder, onexc=_writable)
+        _rmtree(folder)
     except OSError:
         return folder
     return None

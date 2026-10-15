@@ -402,6 +402,14 @@ From the second verification of slice 5, issue 8, answered 8A.
 - **Chosen**: A. `cli._one_line` appends an exception's notes after its message is cut to length, so a note is never lost. `report_page._relative_names` refuses only two or more run folders, one in the home folder, whose common parent is the home folder or above it, and `_home` reads a `RuntimeError` from `Path.home()` as no home folder to guard (`report.md` 7's row says both). `test_event_lines.py`'s alias walk binds through `AnnAssign`, tuple, list and starred targets, and `NamedExpr`. Tests `test_92a_*` in `test_benchmark_report_page.py`, `test_prompts_record.py` and `test_event_lines.py`; tasks.md T159, T162 and T169.
 - **Known limits**, recorded and not closed: (1) the structural rule catches `gzip`'s readers by any imported name, but not a gzip stream read through `zlib.decompress(data, wbits=31)` (or `zlib.decompressobj`); (2) it folds constants and constant-only f-strings, but a stream name spelled by a constant inside an f-string's braces (`f"{'events'}.jsonl"`) is not folded; (3) `recording._EventReader` reads a call's step with `int(...)`, so a recorded `"3"` is step 3 to the replay, while the report's walk reads any step that is not an integer as a damaged body (83A, 91A); the two readers disagree on that one malformed shape.
 
+### 95A. A Python 3.11 shim (2026-10-14)
+
+From the final pre-merge check of slice 5 (`9d1d065..8bc13e8`), issue 13, answered 13A; it held the merge to `main`.
+
+- **Question** (blocker; tasks.md T169, T170): `report_page.py` called `Path.is_junction()` and `shutil.rmtree(onexc=...)`, both new in Python 3.12, while `reviewer/pyproject.toml` says `requires-python >=3.11` and CI runs 3.11 on Ubuntu and Windows; on a 3.11.16 interpreter the report's tests failed with `AttributeError` on `is_junction`. Slice 5's gate ran only 3.12.
+- **Options**: A: shim both and add a 3.11 run of the report, event-line and prompts-record tests to the slice's gate; and look for any other 3.12-only API slice 5 added. B: raise `requires-python` to 3.12.
+- **Chosen**: A. `report_page._is_junction` uses `Path.is_junction` where it exists, else on Windows the mount-point reparse tag of `os.lstat`, else `False`; `report_page._rmtree` passes `_writable` as `onexc` on 3.12 and `onerror` on 3.11, `_writable` reading either form. A search of every source line slice 5 added found no other 3.12-only call, and every changed module parses under 3.11's grammar (`ast.parse(..., feature_version=(3, 11))`). Tests `test_95a_*` (a junction known with `Path.is_junction` deleted, and a read-only file in the previous report removed). T170 runs the three test files under `uv run --python 3.11 --isolated` (a scratch environment outside the repository, bytecode writing off), and records it.
+
 ---
 
 ## §2 The 2026-09-28 audit
