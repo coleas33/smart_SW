@@ -6,7 +6,7 @@ import dataclasses
 import gzip
 import json
 import threading
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -52,7 +52,7 @@ def write_attempt(
     with_policy: bool = False,
 ) -> tuple[ReviewRun, list[AgentEvent]]:
     """Write real runner events, including its generic error after an adapter raises."""
-    provider = FakeProvider(script=script, model=MODEL)
+    provider = FakeProvider(script=script, model=MODEL, clock=lambda: 0.0)
     if with_policy:
         provider.use_retry(
             retry.RetryPolicy(retries=2, initial_delay_s=0.5, max_delay_s=2.0),
@@ -299,7 +299,9 @@ def test_infrastructure_wins_over_a_later_behavioural_stop() -> None:
             served_model=wrong,
         ),
     )
-    outcome = attempt.run_attempt(lambda: None, stop=stop, listener=listener, limit_s=10)
+    outcome = attempt.run_attempt(
+        lambda: None, stop=stop, listener=listener, limit_s=10, clock=listener.clock,
+    )
     assert (outcome.kind, outcome.class_) == ("infrastructure", "wrong_model")
     assert MODEL in outcome.message and wrong in outcome.message
     assert stop.is_set()
@@ -311,7 +313,9 @@ def test_infrastructure_wins_over_a_later_behavioural_stop() -> None:
     def failed_body() -> None:
         raise failure
 
-    outcome = attempt.run_attempt(failed_body, stop=stop, listener=listener, limit_s=10)
+    outcome = attempt.run_attempt(
+        failed_body, stop=stop, listener=listener, limit_s=10, clock=listener.clock,
+    )
     assert (outcome.kind, outcome.class_) == ("infrastructure", "provider_error")
     assert outcome.error_class == "ProviderError"
     assert outcome.message == str(failure)
@@ -322,15 +326,27 @@ def test_the_first_behavioural_stop_wins() -> None:
 
     stop, listener, sink = _attempt_listener_control()
     sink.emit("turn.ended", {"reason": "max_steps"})
-    outcome = attempt.run_attempt(
-        lambda: stop.wait(1),
-        stop=stop,
-        listener=listener,
-        limit_s=0,
-        grace_s=1,
-        clock=lambda: 0.0,
-    )
-    assert stop.is_set()
+    workers: list[threading.Thread] = []
+
+    def body() -> None:
+        workers.append(threading.current_thread())
+        assert stop.wait(30)
+
+    try:
+        outcome = attempt.run_attempt(
+            body,
+            stop=stop,
+            listener=listener,
+            limit_s=0,
+            grace_s=1,
+            clock=lambda: 0.0,
+        )
+        assert stop.is_set()
+    finally:
+        stop.set()
+        for worker in workers:
+            worker.join(30)
+            assert not worker.is_alive()
     assert (outcome.kind, outcome.class_) == ("behavioural", "max_steps")
     assert outcome.stream_active_at_limit is True
 
@@ -367,7 +383,9 @@ def test_the_inferred_overflow_is_recognised_by_type() -> None:
         def failed_body(failure: ProviderError = failure) -> None:
             raise failure
 
-        outcome = attempt.run_attempt(failed_body, stop=stop, listener=listener, limit_s=10)
+        outcome = attempt.run_attempt(
+            failed_body, stop=stop, listener=listener, limit_s=10, clock=listener.clock,
+        )
         assert (outcome.kind, outcome.class_, outcome.stop_reason) == (kind, class_, reason)
         assert outcome.message == message
 
@@ -390,11 +408,11 @@ def test_the_driver_waits_in_short_slices_so_an_interrupt_is_seen(
 
     def body() -> None:
         entered.set()
-        release.wait(1)
+        assert release.wait(30)
         returned.set()
 
     def wait(_queue: Any, block: bool = True, timeout: float | None = None) -> Any:
-        assert entered.wait(1)
+        assert entered.wait(30)
         assert timeout is not None
         timeouts.append(timeout)
         now[0] += timeout
@@ -415,7 +433,7 @@ def test_the_driver_waits_in_short_slices_so_an_interrupt_is_seen(
     finally:
         release.set()
 
-    assert returned.wait(1)
+    assert returned.wait(30)
     assert timeouts == [attempt.WAIT_SLICE_S] * 3
     assert all(timeout <= attempt.WAIT_SLICE_S for timeout in timeouts)
     assert stop.is_set()
@@ -427,7 +445,9 @@ def test_a_malformed_usage_body_records_an_internal_error_without_escaping_the_l
     stop, listener, sink = _attempt_listener_control()
     sink.emit("usage", {})
     assert stop.is_set()
-    outcome = attempt.run_attempt(lambda: None, stop=stop, listener=listener, limit_s=10)
+    outcome = attempt.run_attempt(
+        lambda: None, stop=stop, listener=listener, limit_s=10, clock=listener.clock,
+    )
     assert (outcome.kind, outcome.class_) == ("infrastructure", "internal_error")
     assert outcome.error_class == "KeyError"
     assert "KeyError" in outcome.message and "input_tokens" in outcome.message
@@ -464,7 +484,7 @@ def test_a_returned_worker_is_collected_before_a_late_deadline_check(
         clock_calls += 1
         if clock_calls == 1:
             return 0.0
-        assert queued.wait(1)
+        assert queued.wait(30)
         return 2.0
 
     monkeypatch.setattr(attempt.queue.Queue, "put", put)
@@ -498,19 +518,20 @@ def test_a_worker_finished_before_the_limit_is_completed_when_its_result_is_not_
         clock_calls += 1
         if clock_calls == 1:
             return 0.0
-        assert ready_to_queue.wait(1)
+        assert ready_to_queue.wait(30)
         return 1.0
 
     def put(self: Any, item: Any, *args: Any, **kwargs: Any) -> None:
         ready_to_queue.set()
-        assert release_queue.wait(1)
+        assert release_queue.wait(30)
         real_put(self, item, *args, **kwargs)
 
     def get(self: Any, block: bool = True, timeout: float | None = None) -> Any:
         observed_conditions.extend(listener.conditions)
         assert stop.is_set()
         release_queue.set()
-        return real_get(self, block=block, timeout=timeout)
+        # The queue release, rather than a short real deadline, orders this race.
+        return real_get(self, block=block, timeout=30 if block else None)
 
     monkeypatch.setattr(attempt.queue.Queue, "put", put)
     monkeypatch.setattr(attempt.queue.Queue, "get", get)
@@ -552,12 +573,12 @@ def test_a_blocking_wait_returning_after_the_deadline_observes_the_limit(
             return real_get(self, block=False)
         now[0] = 2.0
         release.set()
-        return real_get(self, timeout=1)
+        return real_get(self, timeout=30)
 
     monkeypatch.setattr(attempt.queue.Queue, "get", get)
     try:
         outcome = attempt.run_attempt(
-            lambda: release.wait(1), stop=stop, listener=listener, limit_s=1,
+            lambda: release.wait(30), stop=stop, listener=listener, limit_s=1,
             activity_window_s=5, grace_s=grace_s, clock=lambda: now[0],
         )
     finally:
@@ -600,6 +621,8 @@ def install_driver_providers(
     from swreview import cli
 
     built: list[FakeProvider] = []
+    provider_options.setdefault("clock", lambda: 0.0)
+    provider_options.setdefault("sleep", lambda delay: None)
 
     def factory(settings: Any, efficiency: Any = None) -> FakeProvider:
         adapter = kind(script=scripts[len(built)], model=settings.model, **provider_options)
@@ -620,6 +643,9 @@ def driver_run(
 ) -> list[Path]:
     from swreview import cli
 
+    # Other test modules import this helper to exercise explicit real deadlines.
+    if "package_time_limit_s" not in options:
+        options.setdefault("clock", lambda: 0.0)
     return runner.run_benchmark(
         preflighted,
         out,
@@ -653,9 +679,18 @@ def provider_stop(reason: str) -> ProviderError:
 
 @pytest.fixture
 def driver_sleeps(monkeypatch: pytest.MonkeyPatch) -> list[float]:
+    from swreview import cli
+
     sleeps: list[float] = []
     monkeypatch.setattr(retry, "sleep", sleeps.append)
     monkeypatch.setattr(retry, "uniform", lambda low, high: high / 2)
+    real_run = cli.run_benchmark
+
+    def run(*args: Any, **options: Any) -> Any:
+        options.setdefault("clock", lambda: 0.0)
+        return real_run(*args, **options)
+
+    monkeypatch.setattr(cli, "run_benchmark", run)
     return sleeps
 
 
@@ -1032,22 +1067,26 @@ def test_ctrl_c_records_the_attempt_interrupted(
     from swreview.benchmark import attempt
 
     preflighted = prepare_driver_set(tmp_path)
-    release = threading.Event()
+    release = [threading.Event(), threading.Event()]
     observed: list[runner.AttemptRequest] = []
-    entered = threading.Event()
+    entered = [threading.Event(), threading.Event()]
+    workers: list[threading.Thread] = []
+    attempt_index = 0
     real_body = cli._review_fn
 
     def body(*args: Any, **kwargs: Any) -> Any:
+        index = len(observed)
         observed.append(kwargs["attempt"])
-        entered.set()
+        workers.append(threading.current_thread())
+        entered[index].set()
         return real_body(*args, **kwargs)
 
     def interrupted(self: Any, block: bool = True, timeout: float | None = None) -> Any:
-        assert entered.wait(1)
+        assert entered[attempt_index].wait(30)
         raise KeyboardInterrupt
 
     monkeypatch.setattr(cli, "_review_fn", body)
-    install_driver_providers(monkeypatch, [[ScriptedTurn(text="", hang=release)]])
+    install_driver_providers(monkeypatch, [[ScriptedTurn(text="", hang=release[0])]])
     monkeypatch.setattr(attempt.queue.Queue, "get", interrupted)
     out = tmp_path / "run"
     try:
@@ -1057,7 +1096,11 @@ def test_ctrl_c_records_the_attempt_interrupted(
         assert (row["kind"], row["class"]) == ("infrastructure", "interrupted")
         assert row["ended_at"].endswith("Z")
         assert observed[0].stop.is_set()
-        install_driver_providers(monkeypatch, [[ScriptedTurn(text="", hang=release)]])
+        release[0].set()
+        workers[0].join(30)
+        assert not workers[0].is_alive()
+        attempt_index = 1
+        install_driver_providers(monkeypatch, [[ScriptedTurn(text="", hang=release[1])]])
         result = CliRunner().invoke(
             cli.app,
             [
@@ -1073,11 +1116,16 @@ def test_ctrl_c_records_the_attempt_interrupted(
         )
         assert result.exit_code == 1
         assert driver_row(tmp_path / "cli-run")["class"] == "interrupted"
+        assert observed[1].stop.is_set()
     finally:
-        release.set()
+        for event in release:
+            event.set()
+        for worker in workers:
+            worker.join(30)
+            assert not worker.is_alive()
 
 
-# --- T195: served ids and real, short wall clocks --------------------------------------
+# --- T195: served ids and virtual wall clocks -----------------------------------------
 
 
 @pytest.mark.parametrize("provider_name", ["openai", "fake"])
@@ -1152,38 +1200,130 @@ class ToolAfterTextProvider(FakeProvider):
         return result
 
 
-def short_clock(**overrides: float) -> dict[str, float]:
-    return {
-        "package_time_limit_s": 0.25,
-        "stream_activity_window_s": 0.03,
-        "stop_grace_s": 0.8,
-        **overrides,
-    }
+@dataclasses.dataclass
+class ScheduledWorker:
+    wake_at: float | None = None
+    finished: bool = False
+    released: bool = False
+
+
+class DriverClock:
+    """Advance only between worker checkpoints, never with the OS scheduler.
+
+    Each provider sleep parks its worker. A driver wait moves to the earlier of
+    the next wake or wait slice, then lets the driver check its deadline *before*
+    resuming the worker. Real waits below are only deadlock guards.
+    """
+
+    def __init__(self) -> None:
+        self.now = 0.0
+        self.condition = threading.Condition()
+        self.local = threading.local()
+        self.workers: list[ScheduledWorker] = []
+
+    def __call__(self) -> float:
+        with self.condition:
+            return self.now
+
+    def sleep(self, delay: float) -> None:
+        worker = self.local.worker
+        with self.condition:
+            if worker.released:
+                return
+            worker.wake_at = self.now + delay
+            self.condition.notify_all()
+            assert self.condition.wait_for(
+                lambda: worker.wake_at is None or worker.released, timeout=30,
+            ), "driver did not resume the scripted worker"
+
+    def wait(self, worker: ScheduledWorker, results: Any, timeout: float) -> Any:
+        from swreview.benchmark import attempt
+
+        with self.condition:
+            assert self.condition.wait_for(
+                lambda: worker.wake_at is not None or worker.finished, timeout=30,
+            ), "worker did not reach a checkpoint"
+            if worker.wake_at is not None and worker.wake_at <= self.now:
+                worker.wake_at = None
+                self.condition.notify_all()
+                assert self.condition.wait_for(
+                    lambda: worker.wake_at is not None or worker.finished, timeout=30,
+                ), "worker did not reach its next checkpoint"
+            if not worker.finished:
+                assert worker.wake_at is not None
+                self.now = min(self.now + timeout, worker.wake_at)
+                raise attempt.queue.Empty
+        return results.get(timeout=30)
+
+    def run(self, real_run: Callable[..., Any], body: Callable[[], Any], **options: Any) -> Any:
+        worker = ScheduledWorker()
+        self.workers.append(worker)
+
+        def work() -> Any:
+            self.local.worker = worker
+            try:
+                return body()
+            finally:
+                with self.condition:
+                    worker.finished = True
+                    self.condition.notify_all()
+
+        return real_run(
+            work, **options, wait_slice_s=1,
+            wait_for_result=lambda results, timeout: self.wait(worker, results, timeout),
+        )
+
+    def options(self, **overrides: float) -> dict[str, Any]:
+        return {
+            "clock": self,
+            "package_time_limit_s": 10,
+            "stream_activity_window_s": 2,
+            "stop_grace_s": 40,
+            **overrides,
+        }
+
+    def close(self) -> None:
+        with self.condition:
+            for worker in self.workers:
+                worker.released = True
+            self.condition.notify_all()
+            assert self.condition.wait_for(
+                lambda: all(worker.finished for worker in self.workers), timeout=30,
+            ), "abandoned worker did not finish during cleanup"
+
+
+@pytest.fixture
+def driver_clock(monkeypatch: pytest.MonkeyPatch) -> Iterator[DriverClock]:
+    from swreview.benchmark import attempt
+
+    clock = DriverClock()
+    real_run = attempt.run_attempt
+    monkeypatch.setattr(attempt, "run_attempt", lambda body, **kw: clock.run(real_run, body, **kw))
+    try:
+        yield clock
+    finally:
+        clock.close()
 
 
 def test_a_silent_stream_at_the_wall_clock_is_an_infrastructure_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float],
+    driver_clock: DriverClock,
 ) -> None:
     preflighted = prepare_driver_set(tmp_path)
-    release = threading.Event()
 
     class TimedSilentProvider(FakeProvider):
         def run(self, **options: Any) -> Any:
-            timer = threading.Timer(0.45, release.set)
-            timer.daemon = True
-            timer.start()
+            driver_clock.sleep(12)
             return super().run(**options)
 
     install_driver_providers(
         monkeypatch,
-        [[ScriptedTurn(text="", hang=release, tool_calls=(ScriptedToolCall("list_components"),))]],
+        [[ScriptedTurn(text="", tool_calls=(ScriptedToolCall("list_components"),))]],
         kind=TimedSilentProvider,
+        clock=driver_clock, sleep=driver_clock.sleep,
     )
     out = tmp_path / "run"
-    try:
-        assert driver_run(preflighted, out, **short_clock()) == []
-    finally:
-        release.set()
+    assert driver_run(preflighted, out, **driver_clock.options()) == []
     row = driver_row(out)
     assert (row["kind"], row["class"], row["stream_active_at_limit"]) == (
         "infrastructure",
@@ -1194,15 +1334,17 @@ def test_a_silent_stream_at_the_wall_clock_is_an_infrastructure_failure(
 
 
 def test_an_active_stream_at_the_wall_clock_is_a_behavioural_stop_not_re_run(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float],
+    driver_clock: DriverClock,
 ) -> None:
     from swreview.report.session import load_session
 
     preflighted = prepare_driver_set(tmp_path)
     install_driver_providers(
         monkeypatch,
-        [[ScriptedTurn(text=" ".join(["fict"] * 30), delta_interval_s=0.015)]],
+        [[ScriptedTurn(text=" ".join(["fict"] * 30), delta_interval_s=1)]],
         kind=ToolAfterTextProvider,
+        clock=driver_clock, sleep=driver_clock.sleep,
     )
     ended: list[ReviewRun] = []
     real_end = ReviewRun.end_stopped
@@ -1213,7 +1355,7 @@ def test_an_active_stream_at_the_wall_clock_is_a_behavioural_stop_not_re_run(
 
     monkeypatch.setattr(ReviewRun, "end_stopped", end)
     out = tmp_path / "run"
-    assert driver_run(preflighted, out, **short_clock(stream_activity_window_s=0.1)) == [
+    assert driver_run(preflighted, out, **driver_clock.options()) == [
         out / "fict-a"
     ]
     row = driver_row(out)
@@ -1228,14 +1370,13 @@ def test_an_active_stream_at_the_wall_clock_is_a_behavioural_stop_not_re_run(
 
 
 def test_a_tool_in_progress_at_the_wall_clock_counts_as_activity(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float],
+    driver_clock: DriverClock,
 ) -> None:
     from swreview import cli
 
     preflighted = prepare_driver_set(tmp_path)
-    release = threading.Event()
     real_start = cli.start_review
-    timers: list[threading.Timer] = []
 
     def start(*args: Any, **options: Any) -> ReviewRun:
         run = real_start(*args, **options)
@@ -1249,11 +1390,7 @@ def test_a_tool_in_progress_at_the_wall_clock_counts_as_activity(
                 return len(tools)
 
             def call(self, name: str, arguments: Any, call_id: str = "") -> Any:
-                timer = threading.Timer(0.45, release.set)
-                timer.daemon = True
-                timers.append(timer)
-                timer.start()
-                release.wait()
+                driver_clock.sleep(12)
                 return tools.call(name, arguments, call_id)
 
         run.tools = SlowTool()
@@ -1263,14 +1400,10 @@ def test_a_tool_in_progress_at_the_wall_clock_counts_as_activity(
     install_driver_providers(
         monkeypatch,
         [[ScriptedTurn(text="", tool_calls=(ScriptedToolCall("list_components"),))]],
+        clock=driver_clock, sleep=driver_clock.sleep,
     )
     out = tmp_path / "run"
-    try:
-        assert driver_run(preflighted, out, **short_clock()) == [out / "fict-a"]
-    finally:
-        release.set()
-        for timer in timers:
-            timer.cancel()
+    assert driver_run(preflighted, out, **driver_clock.options()) == [out / "fict-a"]
     row = driver_row(out)
     assert (row["kind"], row["class"], row["stream_active_at_limit"]) == (
         "behavioural",
@@ -1280,30 +1413,27 @@ def test_a_tool_in_progress_at_the_wall_clock_counts_as_activity(
 
 
 def test_a_worker_that_does_not_return_within_the_grace_is_abandoned_and_never_promoted(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float],
+    driver_clock: DriverClock,
 ) -> None:
     preflighted = prepare_driver_set(tmp_path, ("fict-a", "fict-b"))
-    release = threading.Event()
     built = install_driver_providers(
         monkeypatch,
         [
-            [ScriptedTurn(text=" ".join(["fict"] * 100), delta_interval_s=0.02)],
+            [ScriptedTurn(text=" ".join(["fict"] * 100), delta_interval_s=1)],
             [ScriptedTurn(text="Reviewed next.")],
         ],
         kind=ToolAfterTextProvider,
-        sleep=lambda delay: release.wait(delay),
+        clock=driver_clock, sleep=driver_clock.sleep,
     )
     out = tmp_path / "run"
-    try:
-        assert driver_run(preflighted, out, **short_clock(stop_grace_s=0.04)) == [out / "fict-b"]
-        row = driver_row(out)
-        assert (row["kind"], row["class"]) == ("infrastructure", "abandoned")
-        assert row["folder"] == "attempts/fict-a/1"
-        assert (out / row["folder"]).is_dir() and not (out / "fict-a").exists()
-        assert driver_row(out, "fict-b")["kind"] == "completed"
-        assert len(built) == 2
-    finally:
-        release.set()
+    assert driver_run(preflighted, out, **driver_clock.options(stop_grace_s=2)) == [out / "fict-b"]
+    row = driver_row(out)
+    assert (row["kind"], row["class"]) == ("infrastructure", "abandoned")
+    assert row["folder"] == "attempts/fict-a/1"
+    assert (out / row["folder"]).is_dir() and not (out / "fict-a").exists()
+    assert driver_row(out, "fict-b")["kind"] == "completed"
+    assert len(built) == 2
 
 
 def test_a_hung_attempt_is_abandoned_and_the_process_still_exits(tmp_path: Path) -> None:
@@ -1311,7 +1441,6 @@ def test_a_hung_attempt_is_abandoned_and_the_process_still_exits(tmp_path: Path)
     import subprocess
     import sys
     import textwrap
-    import time
 
     script = textwrap.dedent("""
         import sys
@@ -1319,30 +1448,53 @@ def test_a_hung_attempt_is_abandoned_and_the_process_still_exits(tmp_path: Path)
         from pathlib import Path
         from swreview import cli
         from swreview.agent.providers.fake import FakeProvider, ScriptedTurn
+        from swreview.benchmark import attempt
         from tests.unit.test_benchmark_attempts import prepare_driver_set, driver_run
+
+        now = [0.0]
+        entered = threading.Event()
+        never = threading.Event()
+
+        class HungProvider(FakeProvider):
+            def run(self, **options):
+                assert threading.current_thread().daemon
+                entered.set()
+                never.wait()
+
+        real_get = attempt.queue.Queue.get
+
+        def wait(self, block=True, timeout=None):
+            if not block:
+                return real_get(self, block=False)
+            assert entered.wait(30)
+            now[0] = 3.0
+            raise attempt.queue.Empty
+
+        attempt.queue.Queue.get = wait
         folder = Path(sys.argv[1])
-        cli.provider_factory = lambda settings, efficiency=None: FakeProvider(
-            script=[ScriptedTurn(text="", hang=threading.Event())], model=settings.model
+        cli.provider_factory = lambda settings, efficiency=None: HungProvider(
+            script=[ScriptedTurn(text="")], model=settings.model, clock=lambda: now[0]
         )
         driver_run(prepare_driver_set(folder), folder / "run",
-                   package_time_limit_s=.15, stream_activity_window_s=.02, stop_grace_s=.05)
+                   package_time_limit_s=1, stream_activity_window_s=1, stop_grace_s=1,
+                   clock=lambda: now[0])
+        assert entered.is_set()
     """)
-    started = time.monotonic()
     result = subprocess.run(
         [sys.executable, "-c", script, str(tmp_path)],
         capture_output=True,
         text=True,
-        timeout=8,
+        timeout=60,
         check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    assert time.monotonic() - started < 8
     assert driver_row(tmp_path / "run")["class"] == "abandoned"
     assert not (tmp_path / "run/fict-a").exists()
 
 
 def test_the_wall_clock_stops_answer_turns(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float],
+    driver_clock: DriverClock,
 ) -> None:
     from swreview.agent.checklist import load_checklist
     from swreview.benchmark.answers import read_answer_log
@@ -1356,11 +1508,12 @@ def test_the_wall_clock_stops_answer_turns(
     )
     package_id = preflighted.benchmark_set.packages[0].package_id
     built = install_driver_providers(
-        monkeypatch, [[ScriptedTurn(text=" ".join(["fict"] * 30), delta_interval_s=0.015)]]
+        monkeypatch, [[ScriptedTurn(text=" ".join(["fict"] * 30), delta_interval_s=1)]],
+        clock=driver_clock, sleep=driver_clock.sleep,
     )
     out = tmp_path / "run"
     assert driver_run(
-        preflighted, out, standards_profile=profile, **short_clock(stream_activity_window_s=0.1)
+        preflighted, out, standards_profile=profile, **driver_clock.options()
     ) == [out / package_id]
     assert driver_row(out, package_id)["class"] == "wall_clock"
     assert read_answer_log(out / package_id).ended == "stopped"

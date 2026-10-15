@@ -23,6 +23,7 @@ AttemptClass = Literal[
     "abandoned", "internal_error", "interrupted", "max_steps", "truncated",
     "provider_stop", "wall_clock",
 ]
+_WorkerResult = tuple[object, BaseException | None, float]
 
 
 @dataclass(frozen=True)
@@ -183,11 +184,16 @@ def run_attempt(
     grace_s: float = STOP_GRACE_S,
     clock: Callable[[], float] = time.monotonic,
     wait_slice_s: float = WAIT_SLICE_S,
+    wait_for_result: Callable[[queue.Queue[_WorkerResult], float], _WorkerResult] | None = None,
 ) -> AttemptOutcome:
-    """Wait in short slices; a worker surviving its stop grace is left as a daemon."""
+    """Wait in short slices; a worker surviving its stop grace is left as a daemon.
+
+    `wait_for_result` defaults to the queue's timed get; tests can drive that wait
+    with the same clock as the worker and listener.
+    """
     if wait_slice_s <= 0:
         raise ValueError("wait_slice_s must be above zero")
-    results: queue.Queue[tuple[object, BaseException | None, float]] = queue.Queue()
+    results: queue.Queue[_WorkerResult] = queue.Queue()
 
     def work() -> None:
         value: object = None
@@ -252,7 +258,11 @@ def run_attempt(
             if grace_deadline is not None and remaining <= 0:
                 return abandoned()
             try:
-                _value, error, completed_at = results.get(timeout=min(wait_slice_s, remaining))
+                timeout = min(wait_slice_s, remaining)
+                _value, error, completed_at = (
+                    results.get(timeout=timeout) if wait_for_result is None
+                    else wait_for_result(results, timeout)
+                )
             except queue.Empty:
                 continue
             return finish(error, completed_at)
