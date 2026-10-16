@@ -26,7 +26,7 @@ Three things this module is, in order of weight:
    put there survives the next regeneration instead of being reset to `no`.
 
 **`compare` never contacts a provider, never starts a run and reads no answer key.** It
-reads the provenance record, `session.json`, `events.jsonl` and `scorecard.json`, so
+reads the provenance record, `session.json`, the saved set and `scorecard.json`, so
 Principle VI and FR-025 are untouched.
 
 What is refused, and what is merely null:
@@ -38,7 +38,8 @@ What is refused, and what is merely null:
   and cannot be attributed to an arm.
 - The two records disagreeing, on the settings, the provider, the model, the effort, the
   model view, a standards finding's profile stamp, the saved set copy, or the arm against
-  its settings: **refused**, naming it. A saved set whose `held_out` flag disagrees with a
+  its settings: **refused**, naming it. A scorecard's served model outside the requested
+  model's aliases is refused too. A saved set whose `held_out` flag disagrees with a
   package's scored items, or that does not hold a scored package: **refused**, naming the
   package (feature 014 `contracts/provenance.md` 2).
 - Two runs of one study differing in any field of the record but the named exemptions
@@ -81,7 +82,7 @@ from swreview.agent.settings import (
     PRIVATE_PANE_STUDY,
     ModelViewSettings,
 )
-from swreview.benchmark import sets
+from swreview.benchmark import served, sets
 from swreview.benchmark.adoption import (
     BASELINE,
     METRICS,
@@ -477,6 +478,7 @@ def _load_run(run_dir: Path, *, root: Path) -> _LoadedRun:
     scorecard = read_scorecard(run_dir)
     provenance = load_provenance(run_dir)
     _check_record(run_dir, provenance)
+    _check_served_models(run_dir, scorecard, provenance)
 
     sessions: dict[str, ReviewSession] = {}
     for score in scorecard.per_package:
@@ -547,6 +549,21 @@ def _check_record(run_dir: Path, provenance: RunProvenance | None) -> None:
             f"{run_dir}: a {PANE_STUDY} run grades against the checkout's example profile, and "
             f"this one recorded profile_is_example {provenance.profile_is_example!r}"
         )
+
+
+def _check_served_models(
+    run_dir: Path, scorecard: Scorecard, provenance: RunProvenance | None
+) -> None:
+    """RF-16's second check: the kept attempts' served ids, read from the scorecard only."""
+    if provenance is None:
+        return
+    for score in scorecard.per_package:
+        for model in score.served_models:
+            if not served.aliases(provenance.provider, provenance.model, model):
+                raise CompareError(
+                    f"{run_dir} / {score.package_id}: scorecard.json names served model {model!r} "
+                    f"outside the aliases of requested model {provenance.model!r}"
+                )
 
 
 def _check_session(
