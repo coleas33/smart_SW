@@ -17,7 +17,7 @@ import pytest
 import swreview.handoff as handoff
 from swreview.agent.providers import ProviderName
 from swreview.agent.settings import pane_defaults
-from swreview.benchmark.runner import PROVENANCE_FILE, RunProvenance
+from swreview.benchmark.runner import PROVENANCE_FILE, RUN_STATUS_FILE, RunProvenance
 from swreview.checks.standards.profile import load_profile
 from swreview.handoff import HandoffExportError, export_handoff
 from swreview.report.attention import rank
@@ -547,10 +547,9 @@ def test_the_run_root_s_file_names_come_from_the_runner_not_the_ledger() -> None
 def test_a_package_export_reads_only_the_run_roots_provenance_and_status(
     tmp_path: Path, tmp_package_dir: Path
 ) -> None:
-    """The parity half (the robustness slice adds `run-status.json`): from the run root only
-    `run-provenance.json` is read, and from no parent that is not a run root; nothing else of the
-    run root or of another package reaches the archive, which lies outside the run root as well
-    as outside the package folder."""
+    """Only provenance and status are read from the run root, and from no other parent;
+    nothing else of the run root or of another package reaches the archive, which lies outside
+    the run root as well as outside the package folder (T218; RF-42)."""
     run_root, _ = pane_defaults_run(tmp_path, two_package_set(tmp_path, tmp_package_dir))
     package, other = run_root / "cover", run_root / "cover-copy"
     root_marker, other_marker = "only-in-the-run-root", "only-in-another-package"
@@ -564,8 +563,11 @@ def test_a_package_export_reads_only_the_run_roots_provenance_and_status(
 
     entries = read_zip(export_handoff(package, tmp_path / "handoff.zip", exported_at=STAMP))
 
-    assert set(entries) == package_files | {PROVENANCE_FILE, "handoff-manifest.json"}
-    assert entries[PROVENANCE_FILE] == (run_root / PROVENANCE_FILE).read_bytes()
+    assert set(entries) == package_files | {
+        PROVENANCE_FILE, RUN_STATUS_FILE, "handoff-manifest.json",
+    }
+    for name in (PROVENANCE_FILE, RUN_STATUS_FILE):
+        assert entries[name] == (run_root / name).read_bytes()
     assert all(entries[name] == (package / name).read_bytes() for name in package_files)
     joined = b"".join(entries.values())
     assert root_marker.encode() not in joined
@@ -577,6 +579,7 @@ def test_a_package_export_reads_only_the_run_roots_provenance_and_status(
         parent = tmp_path / f"parent-holding-{kept}-alone"
         shutil.copytree(package, parent / "cover")
         shutil.copyfile(run_root / kept, parent / kept)
+        shutil.copyfile(run_root / RUN_STATUS_FILE, parent / RUN_STATUS_FILE)
         (parent / "check.log").write_text(root_marker, encoding="utf-8")
 
         alone = read_zip(
@@ -591,6 +594,51 @@ def test_a_package_export_reads_only_the_run_roots_provenance_and_status(
         with pytest.raises(HandoffExportError, match="outside"):
             export_handoff(package, inside, exported_at=STAMP)
         assert not inside.exists()
+
+
+@pytest.mark.parametrize("present", [True, False], ids=["present", "absent"])
+def test_run_status_prompts_and_answer_log_are_exported_when_present(
+    tmp_path: Path, tmp_package_dir: Path, present: bool,
+) -> None:
+    """A scripted benchmark's supplementary records travel with the selected package;
+    their absence leaves the older export shape and missing list (T218; RF-42)."""
+    run_root, _ = pane_defaults_run(tmp_path, one_package_set(tmp_path, tmp_package_dir))
+    package = run_root / "cover"
+    paths = {
+        RUN_STATUS_FILE: run_root / RUN_STATUS_FILE,
+        "prompts.json": package / "prompts.json",
+        "answer-log.json": package / "answer-log.json",
+    }
+    originals = {name: path.read_bytes() for name, path in paths.items()}
+    if not present:
+        for path in paths.values():
+            path.unlink()
+
+    entries = read_zip(export_handoff(package, tmp_path / "handoff.zip", exported_at=STAMP))
+
+    manifest = manifest_of(entries)
+    if present:
+        assert set(originals) <= set(entries)
+        records = {record["path"]: record for record in manifest["artifacts"]}
+        for name, data in originals.items():
+            assert entries[name] == data
+            assert records[name]["source"] == (
+                "run_root" if name == RUN_STATUS_FILE else "run_dir"
+            )
+            assert records[name]["size_bytes"] == len(data)
+            assert records[name]["sha256"] == hashlib.sha256(data).hexdigest()
+    else:
+        assert set(originals).isdisjoint(entries)
+        package_files = {
+            name
+            for name in (*handoff.REQUIRED_ARTIFACTS, *handoff.OPTIONAL_ARTIFACTS)
+            if (package / name).is_file()
+        }
+        assert set(entries) == package_files | {PROVENANCE_FILE, "handoff-manifest.json"}
+    assert manifest["missing_artifacts"] == sorted(
+        name for name in handoff.REQUIRED_ARTIFACTS if not (package / name).is_file()
+    )
+    assert manifest["excluded_artifacts"] == []
 
 
 def test_each_artifact_record_names_the_folder_it_was_read_from(
@@ -609,6 +657,7 @@ def test_each_artifact_record_names_the_folder_it_was_read_from(
     sources = {record["path"]: record["source"] for record in manifest_of(entries)["artifacts"]}
     assert set(sources) == set(entries) - {"handoff-manifest.json"}
     assert sources.pop(PROVENANCE_FILE) == "run_root"
+    assert sources.pop(RUN_STATUS_FILE) == "run_root"
     assert sources and set(sources.values()) == {"run_dir"}
 
     review = tmp_path / "review"
