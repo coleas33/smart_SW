@@ -585,9 +585,9 @@ STREAM_STRINGS = frozenset({EVENTS_FILE_NAME, PACKED_EVENTS_FILE_NAME})
 READERS = frozenset({"replay_events", "event_stream"})
 GZIP_READS = frozenset({"open", "decompress", "GzipFile"})
 
-EXEMPT_MODULES: frozenset[str] = frozenset()
-"""Modules exempt from both rules: none in this slice. The robustness slice adds `streams.py`,
-whose packing copies a stream's bytes and parses no event (T214, T215; RF-83)."""
+EXEMPT_MODULES: frozenset[str] = frozenset({"streams.py"})
+"""Packing is the one exception: it copies a stream's bytes and parses no event
+(T214, T215; RF-83)."""
 
 NAMED_SENTENCES: frozenset[tuple[str, str]] = frozenset({("scorecard.py", "NO_EVENT_STREAM")})
 """Owner decision 81A: the module-level sentences that may name the stream files, by module and

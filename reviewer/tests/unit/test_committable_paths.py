@@ -728,3 +728,109 @@ def test_packed_streams_are_committable_only_in_the_study_and_pilot_trees() -> N
     assert {path: (found[path]["binary"], found[path]["text"]) for path in packed} == {
         path: ("set", "unset") for path in packed
     }
+
+
+# --- the committed packed streams and their digests (T214, for T215; RF-84) -------------
+
+
+def test_committed_run_folders_hold_packed_streams_matching_their_digests() -> None:
+    """Every tracked study and pilot run has its tracked packed streams and digest rows;
+    an unavailable git skips this assertion rather than silently passing it."""
+    if shutil.which("git") is None:
+        pytest.skip("git is not on the path")
+    assert [str(offence) for offence in local_paths.check_committed_streams()] == []
+
+
+@pytest.fixture(params=("studies", "pilots"))
+def committed_packed_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
+) -> tuple[Path, Path]:
+    """Commit a fictional run that the real run and pack commands wrote."""
+    from swreview.agent.providers.fake import ScriptedTurn
+    from tests.unit.test_benchmark_resume import start_run
+
+    if shutil.which("git") is None:
+        pytest.skip("git is not on the path")
+    root = tmp_path / "checkout"
+    set_file = checkout(root)
+    point_at(root, monkeypatch)
+    run, result = start_run(
+        root,
+        monkeypatch,
+        [[ScriptedTurn(text="Fictional review completed.")]],
+        ids=("pkg-1",),
+        set_file=set_file,
+        out=root / "benchmarks" / request.param / "fictional" / "run-1",
+    )
+    assert result.exit_code == 0, result.stdout + result.stderr
+    packed = invoke("benchmark", "pack", str(run))
+    assert packed.exit_code == 0, packed.stdout + packed.stderr
+    git(root, "add", "-A")
+    git(
+        root,
+        "-c", "user.name=Fictional Tester",
+        "-c", "user.email=tester@example.invalid",
+        "-c", "commit.gpgsign=false",
+        "commit", "-q", "-m", "a fictional packed run",
+    )
+    return root, run
+
+
+@pytest.mark.parametrize(
+    "damage",
+    ("missing-stream", "missing-row", "edited-stream", "orphan-row", "untracked-record"),
+)
+def test_the_committed_stream_check_rejects_a_broken_packed_run(
+    committed_packed_run: tuple[Path, Path], damage: str
+) -> None:
+    """Pin the checkout assertion in both trees with a real packed and committed run:
+    losing a tracked stream, a row, its bytes or its target must name the affected file."""
+    root, run = committed_packed_run
+    assert local_paths.check_committed_streams(root) == []
+    stream = run / "pkg-1" / "events.jsonl.gz"
+    relative = stream.relative_to(run).as_posix()
+    record = run / "event-streams.json"
+    payload = json.loads(record.read_bytes())
+    expected = stream
+    if damage == "missing-stream":
+        git(root, "rm", stream.relative_to(root).as_posix())
+    elif damage == "missing-row":
+        del payload["streams"][relative]
+    elif damage == "edited-stream":
+        edited = gzip.decompress(stream.read_bytes()) + b"\n"
+        stream.write_bytes(gzip.compress(edited, compresslevel=9, mtime=0))
+    elif damage == "orphan-row":
+        orphan = "orphan/events.jsonl.gz"
+        payload["streams"][orphan] = "0" * 64
+        expected = run / orphan
+    else:
+        git(root, "rm", "--cached", record.relative_to(root).as_posix())
+        expected = record
+    if damage in {"missing-row", "orphan-row"}:
+        record.write_bytes((json.dumps(payload, sort_keys=True, indent=2) + "\n").encode())
+
+    found = local_paths.check_committed_streams(root)
+    assert found, damage
+    assert expected in {offence.file for offence in found}, [str(offence) for offence in found]
+
+
+def test_the_committed_stream_check_leaves_an_untracked_run_alone(tmp_path: Path) -> None:
+    """A still-running, untracked study or pilot need not already have packed streams."""
+    if shutil.which("git") is None:
+        pytest.skip("git is not on the path")
+    root = tmp_path / "checkout"
+    checkout(root)
+    for tree in local_paths.STUDY_TREES:
+        run = root / tree / "fictional" / "running"
+        written(run / "run-provenance.json", "{}\n")
+        written(run / "pkg-1" / "session.json", "{}\n")
+
+    assert local_paths.check_committed_streams(root) == []
+
+
+def test_the_committed_stream_check_cannot_pass_where_git_cannot_answer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(local_paths, "_git", lambda *_args: None)
+    with pytest.raises(RuntimeError, match="git"):
+        local_paths.check_committed_streams(tmp_path)
