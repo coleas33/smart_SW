@@ -25,7 +25,7 @@ record, or of an `unknown` false alarm, is compare's (`verdict.md` 7, refusal 3)
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from swreview import prerun
 from swreview.checks.standards import registry as standards_registry
@@ -33,11 +33,15 @@ from swreview.findings import Finding
 from swreview.report.session import ReviewSession
 from swreview.tools import drawings
 
+if TYPE_CHECKING:
+    from swreview.benchmark.scorecard import PackageScore
+
 __all__ = [
     "CODE_ONLY_TOOLS",
     "MODEL_ORIGINS",
     "SETUP_CHECK_PREFIXES",
     "Origin",
+    "deciding_false_alarm_ids",
     "finding_origin",
 ]
 
@@ -76,6 +80,16 @@ CODE_ONLY_TOOLS: frozenset[str] = frozenset(
 standards check (`scoring.md` 5.4), built from the constants that already name them, so a
 pre-run change moves it with no second edit (RF-6). Every other check tool is a configured
 check by rule 4's "otherwise"; no second set names them (RF-68)."""
+
+
+def deciding_false_alarm_ids(score: PackageScore) -> list[str]:
+    """The false alarms the verdict counts (17A, D15): model origin, and not tuned-on."""
+    tuned_on = set(score.tuned_on_false_alarm_finding_ids)
+    return [
+        finding_id
+        for finding_id in score.false_alarm_finding_ids
+        if score.finding_origins.get(finding_id) in MODEL_ORIGINS and finding_id not in tuned_on
+    ]
 
 
 def finding_origin(finding: Finding, session: ReviewSession) -> Origin:

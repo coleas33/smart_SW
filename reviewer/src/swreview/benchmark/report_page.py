@@ -52,7 +52,7 @@ from swreview.agent.runner import SESSION_FILE_NAME
 from swreview.benchmark import runner
 from swreview.benchmark.answers import AnswerLog, AnswerPoint, read_answer_log
 from swreview.benchmark.compare import distinct_run_dirs, format_count
-from swreview.benchmark.origins import MODEL_ORIGINS
+from swreview.benchmark.origins import deciding_false_alarm_ids
 from swreview.benchmark.prices import Cost
 from swreview.benchmark.recording import bracketing_step, round_kind
 from swreview.benchmark.runner import SAVED_SET_FILE, RunProvenance, load_provenance
@@ -289,16 +289,6 @@ class _Run:
         """A separate page for each failed row; recorded ids and folders are never filenames."""
         ordinal = self.scorecard.failed_attempts.index(attempt) + 1
         return f"{TRANSCRIPTS_DIR}/{self.name}/failed-attempts/{ordinal}.html"
-
-
-def deciding_false_alarm_ids(score: PackageScore) -> list[str]:
-    """The false alarms the verdict counts (17A, D15): model origin, and not tuned-on."""
-    tuned_on = set(score.tuned_on_false_alarm_finding_ids)
-    return [
-        finding_id
-        for finding_id in score.false_alarm_finding_ids
-        if score.finding_origins.get(finding_id) in MODEL_ORIGINS and finding_id not in tuned_on
-    ]
 
 
 def build_report(
