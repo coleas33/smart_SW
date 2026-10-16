@@ -476,6 +476,12 @@ def _load_run(run_dir: Path, *, root: Path) -> _LoadedRun:
     # Before any session or parity check (feature 014 `scoring.md` 8): a folder scored under
     # other rules meets the re-score line, never a refusal its old fields happen to trigger.
     scorecard = read_scorecard(run_dir)
+    if scorecard.unscored_packages:
+        packages = ", ".join(package.package_id for package in scorecard.unscored_packages)
+        raise CompareError(
+            f"{run_dir}: unscored packages: {packages}; run "
+            f"`swreview benchmark resume {run_dir}` before comparing this run"
+        )
     provenance = load_provenance(run_dir)
     _check_record(run_dir, provenance)
     _check_served_models(run_dir, scorecard, provenance)

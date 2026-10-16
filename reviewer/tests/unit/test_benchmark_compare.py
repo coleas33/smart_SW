@@ -108,6 +108,33 @@ CHEAPER = {"packages": (PackageSpec(total_tokens=209_000, wall_clock_s=250.0),)}
 """An on arm that halved the bill and lost nothing: the only shape that may `adopt`."""
 
 
+def test_compare_refuses_unscored_packages_before_counting_missing_work_as_savings(
+    tmp_path: Path,
+) -> None:
+    packages = (PackageSpec(package_id="fict-a"), PackageSpec(package_id="fict-b"))
+    runs = write_study(tmp_path, study_specs(off={"packages": packages}, on={"packages": packages}))
+    for run in runs:
+        if not run.name.startswith("on-"):
+            continue
+        path = run / SCORECARD_FILE
+        record = json.loads(path.read_bytes())
+        record["per_package"] = [
+            row for row in record["per_package"] if row["package_id"] != "fict-b"
+        ]
+        record["unscored_packages"] = [{
+            "package_id": "fict-b", "kind": "infrastructure", "class": "provider_error",
+            "error_class": "FictConnectionError", "attempts": 1, "folder": "attempts/fict-b/1",
+        }]
+        path.write_text(json.dumps(record), encoding="utf-8")
+
+    with pytest.raises(CompareError) as refused:
+        compare_runs(runs)
+
+    assert "on-1" in str(refused.value)
+    assert "fict-b" in str(refused.value)
+    assert "swreview benchmark resume" in str(refused.value)
+
+
 def cells_of(rendered: str, run: str) -> dict[str, str]:
     """One raw row of the rendered table, keyed by its column heading.
 

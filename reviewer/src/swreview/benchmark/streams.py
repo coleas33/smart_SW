@@ -20,7 +20,13 @@ from pydantic import Field, StringConstraints, field_validator
 from swreview.agent.events import EVENTS_FILE_NAME, PACKED_EVENTS_FILE_NAME
 from swreview.atomic import write_atomic
 from swreview.benchmark.digest import sha256_of_bytes
-from swreview.benchmark.runner import PROVENANCE_FILE, load_run_status, package_outcome
+from swreview.benchmark.runner import (
+    PROVENANCE_FILE,
+    load_run_status,
+    package_outcome,
+    resolve_attempt_folder,
+    validate_attempt_folder,
+)
 from swreview.findings import ReviewModel
 
 EVENT_STREAMS_FILE = "event-streams.json"
@@ -37,18 +43,13 @@ class EventStreams(ReviewModel):
     @classmethod
     def _relative_stream_paths(cls, streams: dict[str, str]) -> dict[str, str]:
         for path in streams:
-            parts = path.split("/")
-            kept = len(parts) == 2
-            attempt = (
-                len(parts) == 4 and parts[0] == "attempts"
-                and parts[2].isascii() and parts[2].isdecimal()
-                and not parts[2].startswith("0")
-            )
-            if (
-                not (kept or attempt) or parts[-1] != PACKED_EVENTS_FILE_NAME
-                or any(part in {"", ".", ".."} or "\\" in part or ":" in part for part in parts)
-            ):
-                raise ValueError(f"{path!r} is not a run-relative packed stream path")
+            folder, separator, filename = path.rpartition("/")
+            try:
+                validate_attempt_folder(folder)
+                if not separator or filename != PACKED_EVENTS_FILE_NAME:
+                    raise ValueError("not a packed stream")
+            except ValueError:
+                raise ValueError(f"{path!r} is not a run-relative packed stream path") from None
         return streams
 
 
@@ -98,14 +99,21 @@ def _prepare_pack(run_dir: Path) -> _Pack:
     rows = dict(previous.streams)
     folders: set[Path] = set()
     for package_id in status.packages:
-        folders.add(run_dir / package_id)
-        attempts = run_dir / "attempts" / package_id
+        folders.add(resolve_attempt_folder(run_dir, package_id))
+        # Validate the parent before enumerating it, including a link whose
+        # numbered children would otherwise lead the pack outside this run.
+        attempts = resolve_attempt_folder(run_dir, f"attempts/{package_id}/1").parent
         if attempts.is_dir():
-            folders.update(
-                folder for folder in attempts.iterdir()
-                if folder.is_dir() and folder.name.isascii() and folder.name.isdecimal()
-                and not folder.name.startswith("0")
-            )
+            for folder in attempts.iterdir():
+                if (
+                    folder.name.isascii() and folder.name.isdecimal()
+                    and not folder.name.startswith("0")
+                ):
+                    checked = resolve_attempt_folder(
+                        run_dir, folder.relative_to(run_dir).as_posix(),
+                    )
+                    if checked.is_dir():
+                        folders.add(checked)
 
     streams: list[_Stream] = []
     for folder in sorted(folders):

@@ -91,7 +91,11 @@ from swreview.agent.settings import (
 from swreview.agent.settings import pane_defaults as pane_defaults_for
 from swreview.benchmark import answers, prices, report_page, scrub, set_summary, sets, streams
 from swreview.benchmark.answers import DEFAULT_MAX_ANSWER_TURNS
-from swreview.benchmark.attempt import STOP_GRACE_S, STREAM_ACTIVITY_WINDOW_S
+from swreview.benchmark.attempt import (
+    PACKAGE_TIME_LIMIT_S,
+    STOP_GRACE_S,
+    STREAM_ACTIVITY_WINDOW_S,
+)
 from swreview.benchmark.compare import (
     carry_sign_offs,
     committed_sign_off_sources,
@@ -2406,7 +2410,7 @@ def _review_fn(
                     stop_requested=attempt.stop.is_set,
                 )
             except TurnStopped:
-                run.end_stopped()
+                pass  # drive_review closed the stopped turn before writing its answer log.
         except BaseException as failure:
             _rewrite_prompts_and_close(run, session_out_dir, failure)
             raise
@@ -2756,7 +2760,7 @@ def benchmark_run(
             "--package-time-limit", min=1, metavar="MINUTES",
             help="Wall-clock limit per package, in minutes.",
         ),
-    ] = 60,
+    ] = PACKAGE_TIME_LIMIT_S // 60,
     jobs: Annotated[
         int, typer.Option("--jobs", min=1, help="How many packages to review at once."),
     ] = 1,
@@ -2885,7 +2889,7 @@ def benchmark_run(
             )
             run_benchmark(
                 preflighted,
-                out,
+                run_dir,
                 provider=settings.provider.value,
                 model=settings.model,
                 effort=settings.effort,
@@ -3035,7 +3039,9 @@ def benchmark_score(
         scorecard = score_run(run_dir, answer_keys, benchmark_set)
         scorecard_json = Path(run_dir).resolve() / "scorecard.json"
         scorecard_md = Path(run_dir).resolve() / "scorecard.md"
-        scorecard_json.write_text(scorecard.model_dump_json(indent=2) + "\n", encoding="utf-8")
+        scorecard_json.write_text(
+            scorecard.model_dump_json(indent=2, by_alias=True) + "\n", encoding="utf-8",
+        )
         scorecard_md.write_text(render_scorecard_md(scorecard), encoding="utf-8")
 
     aggregate = scorecard.aggregate

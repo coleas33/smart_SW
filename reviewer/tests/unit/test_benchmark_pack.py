@@ -172,6 +172,33 @@ def test_pack_replaces_every_stream_with_its_packed_form_and_records_its_digest(
     assert not unrelated.with_suffix(".jsonl.gz").exists()
 
 
+@pytest.mark.parametrize("redirected_folder", ["attempts/fict-b/1", "attempts/fict-b"])
+def test_pack_refuses_an_earlier_attempt_or_its_parent_resolving_outside_the_run(
+    packable_run: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, redirected_folder: str,
+) -> None:
+    streams = packing_module()
+    redirected = packable_run / redirected_folder
+    outside = tmp_path / "fict-outside"
+    outside.mkdir()
+    (outside / events.EVENTS_FILE_NAME).write_bytes(b"Fict outside stream.\n")
+    before = snapshot(packable_run)
+    outside_before = snapshot(outside)
+    real_resolve = Path.resolve
+
+    def resolve(path: Path, *args: Any, **kwargs: Any) -> Path:
+        if path == redirected or redirected in path.parents:
+            return outside / path.relative_to(redirected)
+        return real_resolve(path, *args, **kwargs)
+
+    # The same resolved paths as a directory symlink, without requiring
+    # Windows elevation to create that link in the sandbox.
+    monkeypatch.setattr(Path, "resolve", resolve)
+    with pytest.raises(ValueError, match="outside the run"):
+        streams.pack_run(packable_run)
+    assert snapshot(packable_run) == before
+    assert snapshot(outside) == outside_before
+
+
 def test_packing_is_reproducible(packable_run: Path, tmp_path: Path) -> None:
     first = packable_run
     second = tmp_path / "same-streams"

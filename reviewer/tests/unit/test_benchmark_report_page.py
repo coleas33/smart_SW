@@ -1132,25 +1132,13 @@ def test_r8_the_report_opens_no_key_and_no_case_file(
 
 
 def test_r9_the_output_holds_no_local_path_and_every_link_is_relative(off_report: Path) -> None:
-    """FR-051's test, over every file the build wrote. The scanner reads one thing that is no
-    path as a rooted one: the closing tag of R-13's planted markup, escaped (`&lt;/script&gt;`).
-    Exactly as many of those as the pages hold are let through, each in `fict-a`'s transcript,
-    and nothing else (owner decision 85A)."""
+    """FR-051 scans every output, including escaped markup, without an exemption (110A)."""
     planted = sum(
         page.read_text(encoding="utf-8").count("&lt;/script&gt;")
         for page in off_report.rglob("*.html")
     )
-    offences = local_paths.scan_folder(off_report)
-    markup = [
-        offence
-        for offence in offences
-        if offence.reason == local_paths.ROOTED_PATH
-        and offence.text.startswith("/script&gt")
-        and offence.file.name == f"{CASE_A}.html"
-    ]
     assert planted > 0
-    assert len(markup) == planted
-    assert [offence for offence in offences if offence not in markup] == []
+    assert local_paths.scan_folder(off_report) == []
     for page_path in off_report.rglob("*.html"):
         for href in Page(page_path).hrefs:
             assert not href.startswith("/") and ":" not in href, (page_path, href)
@@ -2904,7 +2892,8 @@ def test_r3_statuses_failed_rows_and_recorded_billed_totals(
             assert "no events were recorded" in notes(attempt_page)
             assert "no session was recorded" in notes(attempt_page)
             assert "unknown" in row["tokens"]
-            assert "unknown (no usage)" in row["cost"]
+            expected = "synthetic, not priced" if provider == "fake" else "unknown (no usage)"
+            assert expected in row["cost"]
     totals = named_row(page, "Totals")
     assert totals["completed"] == "1" and totals["bound-reached"] == "0"
     assert totals["stopped by class"] == "provider_stop: 1"
@@ -2912,7 +2901,7 @@ def test_r3_statuses_failed_rows_and_recorded_billed_totals(
         "infrastructure, internal_error: 1; infrastructure, provider_error: 1"
     )
     billed = (
-        "unknown (2 of 2 costs unknown; no usage)" if provider == "fake" else
+        "synthetic, not priced" if provider == "fake" else
         "unknown (1 of 2 costs unknown; no usage); "
         "cached input priced as uncached: containment unverified (probe L1)"
     )
@@ -2924,9 +2913,7 @@ def test_r3_statuses_failed_rows_and_recorded_billed_totals(
     else:
         assert "cache-write 73" in named_row(page, "fict-a")["tokens"]
         assert "cache-write tokens counted, not priced" in named_row(page, "fict-a")["cost"]
-        assert compare.format_count(card.per_package[0].cost.amount) in (
-            named_row(page, "fict-a")["cost"]
-        )
+        assert named_row(page, "fict-a")["cost"].startswith("USD 0.009568;")
         assert "unknown" in totals["cost"] and "1 of 2 costs unknown" in totals["cost"]
         sources = page.table("Price table").rows
         assert len(sources) == 4
@@ -3255,6 +3242,138 @@ def test_r1_contract_column_order_and_one_totals_block(
     start = page.index_of("h2", "Totals")
     end = page.index_of("h2", PACKAGES[0], start)
     assert [text for tag, text in page.blocks[start:end] if tag == "p"] == [
-        f"{name}: billed by failed attempts, in no score: unknown (no costs recorded)"
+        f"{name}: billed by failed attempts, in no score: none: no attempt failed"
         for name in ("on", "off")
     ]
+
+
+@pytest.mark.usefixtures("report_attempt_seams")
+@pytest.mark.parametrize("amount, rendered", [(0.000228, "0.000228"), (0.0, "0"),
+                                              (1e-12, "1e-12")])
+def test_report_money_preserves_nonzero_subcent_and_exact_zero_costs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, amount: float, rendered: str,
+) -> None:
+    run = status_cost_run(tmp_path, monkeypatch, "fake")
+    card = json.loads((run / "scorecard.json").read_bytes())
+    cost = {"amount": amount, "missing": [], "basis": [], "synthetic": False}
+    card["per_package"][0]["cost"] = cost
+    card["failed_attempts"][0]["cost"] = cost
+    card["aggregate"]["failed_attempts_cost"] = cost
+    (run / "scorecard.json").write_text(json.dumps(card), encoding="utf-8")
+
+    out = tmp_path / "report"
+    build_report([run], out)
+
+    page = Page(out / "index.html")
+    assert named_row(page, "fict-a")["cost"] == f"USD {rendered}"
+    assert page.table("Failed attempts").rows[1][-2] == f"USD {rendered}"
+    assert f"run: billed by failed attempts, in no score: USD {rendered}" in page.texts("p")
+
+
+@pytest.mark.usefixtures("report_attempt_seams")
+def test_all_failed_report_totals_say_no_package_scored(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from swreview.benchmark import runner
+    from tests.unit.test_benchmark_attempts import TransientError
+    from tests.unit.test_scorecard import run_field_fixture
+
+    run, keys, benchmark_set = run_field_fixture(tmp_path, monkeypatch, [
+        [ScriptedTurn(text="", fails=TransientError("fict failure"))],
+    ])
+    card = scorecard.score_run(run, keys, benchmark_set)
+    (run / "scorecard.json").write_text(card.model_dump_json(by_alias=True), encoding="utf-8")
+    assert runner.load_run_status(run) is not None
+    out = tmp_path / "report"
+
+    build_report([run], out)
+
+    totals = named_row(Page(out / "index.html"), "Totals")
+    assert totals["total tokens"] == "no package scored"
+    assert totals["wall clock s"] == "no package scored"
+
+
+@pytest.mark.usefixtures("report_attempt_seams")
+def test_failed_attempt_billing_uses_facts_beyond_an_unreadable_transcript_body(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from swreview.benchmark import runner
+    from swreview.report.session import SessionUsage
+
+    run = status_cost_run(tmp_path, monkeypatch, "openai")
+    failed = read_scorecard(run).failed_attempts[0]
+    folder = run / failed.folder
+    logged = list(events.replay_events(events.event_stream(folder)))
+    usage = next(event for event in logged if event.type == "usage")
+    end = logged[-1]
+    malformed = end.model_copy(update={"seq": end.seq + 1, "type": "tool.started",
+                                      "body": {"step_index": "fict-unreadable"}})
+    later = usage.model_copy(update={"seq": end.seq + 2,
+                                    "body": {**usage.body, "served_model": "gpt-5.6-luna"}})
+    with (folder / EVENTS_FILE_NAME).open("a", encoding="utf-8") as stream:
+        stream.write(malformed.model_dump_json() + "\n" + later.model_dump_json() + "\n")
+    result = CliRunner().invoke(cli.app, ["benchmark", "score", str(run), "--answer-keys",
+                                        str(tmp_path / "answer_keys")])
+    assert result.exit_code == 0, result.stdout + result.stderr
+    facts = runner.attempt_facts(folder)
+    expected = SessionUsage.summed([round_.usage for round_ in facts.rounds], []).totals
+    out = tmp_path / "report"
+
+    build_report([run], out)
+
+    page = Page(out / "index.html")
+    table = page.table("Failed attempts")
+    row = dict(zip(table.rows[0], table.rows[1], strict=True))
+    assert f"input {compare.format_count(expected.input_tokens)};" in row["billed usage"]
+    [href] = table.links[1]
+    transcript = Page(out / href)
+    header = dict(transcript.tables[0].rows)
+    assert header["usage"] == row["billed usage"]
+    assert header["responding model"] == ", ".join(facts.served_models)
+    assert any("unreadable" in note for note in notes(transcript))
+
+
+@pytest.mark.usefixtures("report_attempt_seams")
+def test_score_command_serializes_class_alias_without_pydantic_211_configuration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """False simulates pydantic 2.7 ignoring the later serialize_by_alias setting."""
+    models = [scorecard.PackageRunStatus, scorecard.UnscoredPackage, scorecard.FailedAttempt]
+    original = {model: dict(model.model_config) for model in models}
+    try:
+        for model in models:
+            model.model_config = {**model.model_config, "serialize_by_alias": False}
+            model.model_rebuild(force=True)
+        scorecard.PackageScore.model_rebuild(force=True)
+        scorecard.Scorecard.model_rebuild(force=True)
+
+        run = status_cost_run(tmp_path, monkeypatch, "fake")
+        card = json.loads((run / "scorecard.json").read_bytes())
+        rows = [*(row["run_status"] for row in card["per_package"]),
+                *card["unscored_packages"], *card["failed_attempts"]]
+        assert rows
+        assert all("class" in row and "class_" not in row for row in rows)
+    finally:
+        for model, config in original.items():
+            model.model_config = config
+            model.model_rebuild(force=True)
+        scorecard.PackageScore.model_rebuild(force=True)
+        scorecard.Scorecard.model_rebuild(force=True)
+
+
+@pytest.mark.usefixtures("report_attempt_seams")
+@pytest.mark.parametrize("folder", ["../fict-outside", "C:/fict-outside", "/fict-outside"])
+@pytest.mark.parametrize("collection", ["failed_attempts", "unscored_packages"])
+def test_report_refuses_scorecard_folders_outside_the_run_before_opening_them(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, folder: str, collection: str,
+) -> None:
+    run = status_cost_run(tmp_path, monkeypatch, "fake")
+    card = json.loads((run / "scorecard.json").read_bytes())
+    card[collection][0]["folder"] = folder
+    (run / "scorecard.json").write_text(json.dumps(card), encoding="utf-8")
+    out = tmp_path / "report"
+
+    with pytest.raises(ValueError, match="run-relative"):
+        build_report([run], out)
+
+    assert not out.exists()

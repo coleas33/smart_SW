@@ -50,6 +50,7 @@ from math import isfinite
 from time import perf_counter
 from typing import Any
 
+import httpx
 import openai
 from openai import OpenAI
 from openai.types.responses import Response
@@ -79,6 +80,14 @@ from swreview.agent.providers.pruning import prune_history
 from swreview.agent.providers.retry import RetryPolicy, run_request
 from swreview.agent.providers.schema import strictify
 from swreview.agent.settings import ModelViewSettings, output_ceiling, redact
+
+try:
+    import httpx2
+except ImportError:
+    # Earlier supported SDKs use httpx; newer SDKs also accept that injected client.
+    _TRANSPORT_ERRORS = (httpx.TransportError,)
+else:
+    _TRANSPORT_ERRORS = (httpx.TransportError, httpx2.TransportError)
 
 __all__ = [
     "EFFORT_BY_MODEL",
@@ -648,16 +657,24 @@ class OpenAIProvider:
     def _stream(self, request: Mapping[str, Any], on_event: EventCallback) -> Response | None:
         """Send `request` and stream it: text deltas go out as they arrive; the `Response` the
         stream finished on, or `None` when it ended without one. An `openai` error is the
-        caller's to map; a `response.failed` event is raised here, named."""
+        caller's to map; a `response.failed` event is raised here, named. The SDK can let
+        transport errors escape mid-read: under a policy, map them into its retry loop."""
         final: Response | None = None
-        with self._client.responses.create(**request) as stream:
-            for event in stream:
-                if event.type == "response.output_text.delta":
-                    on_event("text.delta", {"text": event.delta})
-                elif event.type in ("response.completed", "response.incomplete"):
-                    final = event.response
-                elif event.type == "response.failed":
-                    raise self._failed(event.response, on_event)
+        try:
+            with self._client.responses.create(**request) as stream:
+                for event in stream:
+                    if event.type == "response.output_text.delta":
+                        on_event("text.delta", {"text": event.delta})
+                    elif event.type in ("response.completed", "response.incomplete"):
+                        final = event.response
+                    elif event.type == "response.failed":
+                        raise self._failed(event.response, on_event)
+        except _TRANSPORT_ERRORS as exc:
+            if self._retry_policy is None:
+                raise
+            raise self._raise_error(
+                str(exc), error_class=type(exc).__name__, retryable=True, on_event=on_event,
+            ) from exc
         return final
 
     def _with_reasoning_kept(

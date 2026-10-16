@@ -252,6 +252,109 @@ def test_an_attempt_with_no_stream_has_empty_unpaid_facts(tmp_path: Path) -> Non
     assert facts.paid is False
 
 
+def test_a_worker_returned_after_the_limit_before_any_stop_is_not_abandoned() -> None:
+    from swreview.benchmark import attempt
+
+    current = [0.0]
+    stop = threading.Event()
+    listener = attempt.AttemptListener(stop, provider="fake", requested_model="fict-model")
+
+    def body() -> None:
+        current[0] = 20.0
+
+    running = attempt.start_attempt(
+        body, stop=stop, listener=listener, limit_s=10, grace_s=5,
+        clock=lambda: current[0],
+    )
+    running.worker.join(timeout=30)  # Deadlock guard; elapsed time is entirely virtual.
+    assert not running.worker.is_alive()
+    assert not stop.is_set()
+    outcome = running.poll(20.0)
+    assert outcome is not None
+    assert (outcome.kind, outcome.class_) == ("infrastructure", "wall_clock_silent")
+    assert running.completed_at == 20.0
+
+
+def test_a_late_first_poll_starts_a_full_stop_grace() -> None:
+    from swreview.benchmark import attempt
+
+    release = threading.Event()
+    stop = threading.Event()
+    listener = attempt.AttemptListener(stop, provider="fake", requested_model="fict-model")
+    running = attempt.start_attempt(
+        lambda: release.wait(timeout=30), stop=stop, listener=listener,
+        limit_s=10, grace_s=5, clock=lambda: 0.0,
+    )
+    try:
+        assert running.poll(30.0) is None
+        assert stop.is_set()
+        assert running.poll(34.99) is None
+        outcome = running.poll(35.0)
+        assert outcome is not None and outcome.class_ == "abandoned"
+        assert running.completed_at == 35.0
+    finally:
+        release.set()
+        running.worker.join(timeout=30)
+        assert not running.worker.is_alive()
+
+
+def test_a_slow_package_callback_does_not_abandon_an_attempt_that_returned_without_a_stop(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from swreview.benchmark import attempt
+
+    preflighted = prepare_driver_set(tmp_path, ("fict-a", "fict-b"))
+    current = [0.0]
+    release = threading.Event()
+    running: list[Any] = []
+    polled: list[int] = []
+    finished: dict[str, Any] = {}
+    real_start = attempt.start_attempt
+
+    def start(body: Callable[[], Any], **kwargs: Any) -> Any:
+        worker = real_start(body, **kwargs)
+        index = len(running)
+        running.append(worker)
+        real_poll = worker.poll
+
+        def poll(now: float) -> Any:
+            polled.append(index)
+            return real_poll(now)
+
+        worker.poll = poll
+        if index == 0:
+            worker.worker.join(timeout=30)
+            assert not worker.worker.is_alive()
+        return worker
+
+    def review(package: Path, folder: Path, **kwargs: Any) -> None:
+        if package.name == "fict-b":
+            assert release.wait(timeout=30)
+
+    def done(**row: Any) -> None:
+        finished[row["package_id"]] = row
+        if row["package_id"] == "fict-a":
+            assert polled == [0, 1]  # All workers must be polled before output can block.
+            current[0] = 20.0
+            assert not running[1].stop.is_set()
+            release.set()
+            running[1].worker.join(timeout=30)
+            assert not running[1].worker.is_alive()
+
+    monkeypatch.setattr(attempt, "start_attempt", start)
+    try:
+        runner.run_benchmark(
+            preflighted, tmp_path / "run", provider="fake", model="fict-model-a", effort="low",
+            review_fn=review, clock=lambda: current[0], jobs=2,
+            package_time_limit_s=10, stop_grace_s=5, on_package_done=done,
+        )
+    finally:
+        release.set()
+        for worker in running:
+            worker.worker.join(timeout=30)
+    assert finished["fict-b"]["class_"] == "wall_clock_silent"
+
+
 def test_the_stop_wrapper_forwards_tools_withdrawn() -> None:
     """RF-18: wrapping a set preserves its withdrawal, including its absence."""
 
@@ -553,7 +656,7 @@ def test_a_worker_finished_before_the_limit_is_completed_when_its_result_is_not_
     [
         (False, 5.0, "infrastructure", "wall_clock_silent"),
         (True, 5.0, "behavioural", "wall_clock"),
-        (True, 0.5, "infrastructure", "abandoned"),
+        (True, 0.5, "behavioural", "wall_clock"),
     ],
 )
 def test_a_blocking_wait_returning_after_the_deadline_observes_the_limit(
@@ -585,7 +688,7 @@ def test_a_blocking_wait_returning_after_the_deadline_observes_the_limit(
         release.set()
     assert (outcome.kind, outcome.class_) == (kind, class_)
     assert outcome.stream_active_at_limit is active
-    assert stop.is_set()
+    assert not stop.is_set()
 
 
 # --- T194: classification through the real benchmark body -----------------------------
@@ -1480,7 +1583,7 @@ def test_a_hung_attempt_is_abandoned_and_the_process_still_exits(tmp_path: Path)
             if not block:
                 return real_get(self, block=False)
             assert entered.wait(30)
-            now[0] = 3.0
+            now[0] += timeout
             raise attempt.queue.Empty
 
         attempt.queue.Queue.get = wait

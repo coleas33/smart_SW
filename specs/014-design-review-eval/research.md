@@ -466,6 +466,15 @@ From T182 and T183, issue 25, answered 25A.
 - **Options**: A: the scanner admits a separator directly after exactly one of the four placeholders. B: the scrub writes another form, changing the contract's placeholders.
 - **Chosen**: A. `tests/support/local_paths.py` skips a rooted or UNC anchor whose text just before it ends in `<run>`, `<repo>`, `<tmp>` or `<home>`, and nothing else. `test_committable_paths.py` pins the four placeholders in `/`, `\` and doubled spellings passing, and `>/srv/x`, `<other>/x`, drive, POSIX-home and UNC paths, and a real path after a placeholder, still flagged. Known limit for T198 and T199, the scrub's first callers: `without_local_paths` calls `Path.home()`, which can raise `RuntimeError` on an account with no home folder, as 92A guards in the report.
 
+### 110A. The whole-slice review's fixes, without a version bump (2026-10-16)
+
+From the adversarial review of all of slice 6 before its merge (issue 34, answered 34A): 12 confirmed findings and 5 notes, none a blocker, each fixed test-first and re-checked (every new test fails on its revert).
+
+- **Chosen**: fix everything; a failed attempt's billed usage and served models come to the report from `runner.attempt_facts`, the one reader, so no scoring-rules bump and no golden regeneration; no failed attempt reads "none: no attempt failed", never "unknown"; a cost is synthetic when the run's provider is the scripted one; compare refuses a run with unscored packages, pointing to resume; money has its own formatter, so a non-zero amount never prints as zero; the scanner reads `.html` unescaped; the scorecard's `class` key avoids the pydantic-2.11-only feature, so the floor stays `pydantic>=2.7`. Also: resume promotes every kept attempt before scheduling, so a halt never strands one; grace runs from when the stop is set; a transport error mid-stream is retried while no text has been sent; `benchmark run` passes the resolved run folder and the scrub replaces absolute spellings only; the answer log's last turn end matches the stream on a stop; run-relative folders outside the run are refused; library `run_benchmark` redacts the key. A re-check found the relative-folder fix's leading boundary let a path after a `repr`'d `
+`, `	` or `` through; drive and UNC spellings now match anywhere, POSIX ones after a word boundary or an escaped `
+`, `	` or ``, and the scanner gained the same boundary (stricter, never looser).
+- **Deferred by the owner (33C)**: whether `gpt-5.6`'s served `-sol`, `-terra` or `-luna` count as its aliases, until before T244, the first paid run; until then such a run fails as `wrong_model`.
+
 ---
 
 ## §2 The 2026-09-28 audit

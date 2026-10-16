@@ -30,7 +30,7 @@ import json
 import shutil
 import subprocess
 import tempfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 import pytest
@@ -358,6 +358,204 @@ def test_the_scrub_skips_a_bare_drive_or_root_anchor(
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: anchor))
     text = f"root {anchor}; see {(anchor / '.cache' / 'FICT' / 'x').as_posix()}"
     assert without_local_paths(text, run_dir=anchor, root=anchor) == text
+
+
+def test_a_relative_run_folder_does_not_scrub_parts_of_ordinary_words(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from swreview.benchmark.scrub import without_local_paths
+
+    monkeypatch.chdir(tmp_path)
+    text = (
+        "Request timed out; read timeout about the output; cannot read "
+        f"{(tmp_path / 'out/x').as_posix()}"
+    )
+    assert without_local_paths(text, run_dir=Path("out")) == (
+        "Request timed out; read timeout about the output; cannot read <run>/x"
+    )
+
+
+def test_the_scrub_requires_a_leading_path_boundary(tmp_path: Path) -> None:
+    """Only POSIX spellings need a word boundary; absolute drive/UNC paths are unambiguous.
+
+    A dot is a boundary too, and escaped newline/tab/carriage-return boundaries are covered
+    below. Relative single-name output folders still must not rewrite ordinary words (C10).
+    """
+    from swreview.benchmark.scrub import without_local_paths
+
+    run = tmp_path / "run"
+    text = f"fict{run}/x .{run}/y; cannot read {run}/z"
+    first = "<run>" if run.drive else str(run)
+    assert without_local_paths(text, run_dir=run) == f"fict{first}/x .<run>/y; cannot read <run>/z"
+
+
+@pytest.mark.parametrize(("folder", "path"), [
+    (r"C:\Users\fict\run", r"C:\Users\fict\run\private.txt"),
+    (r"C:\Users\fict\run", "C:/Users/fict/run/private.txt"),
+    (r"C:\Users\fict\run", r"C:\\Users\\fict\\run\\private.txt"),
+    (r"\\fict-host\share\run", r"\\fict-host\share\run\private.txt"),
+    (r"\\fict-host\share\run", "//fict-host/share/run/private.txt"),
+    (r"\\fict-host\share\run", r"\\\\fict-host\\share\\run\\private.txt"),
+    ("/home/fict/run", "/home/fict/run/private.txt"),
+], ids=["drive", "forward-drive", "repr-drive", "unc", "forward-unc", "repr-unc", "posix"])
+@pytest.mark.parametrize("escaped", [r"\n", r"\t", r"\r"], ids=["newline", "tab", "return"])
+def test_the_scrub_accepts_escaped_control_boundaries_on_either_platform(
+    monkeypatch: pytest.MonkeyPatch, folder: str, path: str, escaped: str,
+) -> None:
+    """Exercise foreign absolute paths on either host without resolving them into local paths."""
+    from swreview.benchmark import scrub
+
+    flavour = PurePosixPath if folder.startswith("/") else PureWindowsPath
+    monkeypatch.setattr(flavour, "resolve", lambda path: path, raising=False)
+    monkeypatch.setattr(flavour, "home", classmethod(lambda cls: cls(folder)), raising=False)
+    monkeypatch.setattr(scrub, "Path", flavour)
+    monkeypatch.setattr(tempfile, "gettempdir", lambda: folder)
+    tail = path[path.index("run") + len("run"):]
+    assert scrub.without_local_paths(
+        f"line one{escaped}{path}", run_dir=folder, root=folder,
+    ) == f"line one{escaped}<run>{tail}"
+
+
+@pytest.mark.parametrize(("path", "reason"), [
+    (r"E:\Users\fict\private.txt", local_paths.DRIVE_PATH),
+    ("E:/Users/fict/private.txt", local_paths.DRIVE_PATH),
+    (r"\\fict-host\share\private.txt", local_paths.UNC_PATH),
+    ("/home/fict/private.txt", local_paths.ROOTED_PATH),
+], ids=["drive", "forward-drive", "unc", "posix"])
+@pytest.mark.parametrize("escaped", [r"\n", r"\t", r"\r"], ids=["newline", "tab", "return"])
+def test_the_scanner_flags_paths_after_escaped_control_boundaries(
+    tmp_path: Path, path: str, reason: str, escaped: str,
+) -> None:
+    text = f"line one{escaped}{path}"
+    assert offences(written(tmp_path / "before.md", text)) == [(reason, path)]
+    assert offences(written(tmp_path / "before.json", json.dumps({"message": text}))) == [
+        (reason, path)
+    ]
+
+
+@pytest.mark.parametrize("separator", ["/", "\\"], ids=["forward", "native"])
+@pytest.mark.parametrize("control", ["\n", "\t", "\r"], ids=["newline", "tab", "return"])
+def test_run_benchmark_scrubs_repr_paths_after_control_characters(
+    tmp_path: Path, separator: str, control: str,
+) -> None:
+    """A real fake-provider run records no private path from an internal two-line repr error."""
+    from tests.unit.test_benchmark_attempts import driver_row, prepare_driver_set
+
+    preflighted = prepare_driver_set(tmp_path)
+    out = tmp_path / "run"
+    path = f"{out.as_posix()}/attempts/fict-a/1/private.txt".replace("/", separator)
+
+    def review(*args: Any, **kwargs: Any) -> None:
+        raise PermissionError(f"cannot read {('line one' + control + path)!r}")
+
+    assert runner.run_benchmark(
+        preflighted, out, provider="fake", model="fict-model", effort="low",
+        review_fn=review, clock=lambda: 0.0,
+    ) == []
+    row = driver_row(out)
+    assert row["class"] == "internal_error"
+    expected = f"<run>{separator}attempts{separator}fict-a{separator}1{separator}private.txt"
+    assert row["message"] == f"cannot read {('line one' + control + expected)!r}"
+    assert local_paths.scan_file(out / runner.RUN_STATUS_FILE) == []
+    assert local_paths.scan_folder(out) == []
+
+
+@pytest.mark.parametrize("separator", ["/", "\\\\"])
+def test_html_escaped_scrub_placeholders_and_markup_scan_clean(
+    tmp_path: Path, separator: str,
+) -> None:
+    import html
+
+    text = " ".join(f"{placeholder}{separator}attempts/fict-a/1/private.txt" for placeholder in (
+        "<run>", "<repo>", "<tmp>", "<home>",
+    ))
+    page = f"<p>{html.escape(text)} &lt;/script&gt;</p>"
+    assert local_paths.scan_file(written(tmp_path / "failed.html", page)) == []
+
+
+@pytest.mark.parametrize("path", ["/srv/fict-vault/private.txt", "C:/FictPrivate/x.txt"])
+def test_html_unescaping_still_flags_real_escaped_paths(tmp_path: Path, path: str) -> None:
+    encoded = "".join(f"&#{ord(char)};" for char in path)
+    found = local_paths.scan_file(written(tmp_path / "escaped.html", f"<p>{encoded}</p>"))
+    assert [offence.text for offence in found] == [path]
+
+
+def test_relative_cli_out_passes_the_resolved_run_folder_and_preserves_failure_words(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from typer.testing import CliRunner
+
+    from swreview import cli
+    from swreview.agent.providers.fake import FakeProvider, ScriptedTurn
+    from tests.unit.test_benchmark_attempts import (
+        driver_row,
+        install_driver_providers,
+        prepare_driver_set,
+    )
+
+    prepare_driver_set(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    out = tmp_path / "out"
+    message = f"Request timed out; read timeout about the output; cannot read {out.as_posix()}/x"
+
+    class BrokenProvider(FakeProvider):
+        def run(self, **options: Any) -> Any:
+            raise PermissionError(message)
+
+    install_driver_providers(monkeypatch, [[ScriptedTurn(text="")]], kind=BrokenProvider)
+    real_run = cli.run_benchmark
+    folders: list[Path] = []
+
+    def run(preflighted: Any, folder: Path, **options: Any) -> Any:
+        folders.append(folder)
+        return real_run(preflighted, folder, **options, clock=lambda: 0.0)
+
+    monkeypatch.setattr(cli, "run_benchmark", run)
+    result = CliRunner().invoke(cli.app, [
+        "benchmark", "run", "--set", str(tmp_path / "set.json"), "--out", "out",
+        "--provider", "fake",
+    ])
+    assert result.exit_code == 1, result.stdout + result.stderr
+    assert folders == [out.resolve()]
+    assert driver_row(out)["message"] == (
+        "Request timed out; read timeout about the output; cannot read <run>/x"
+    )
+
+
+@pytest.mark.parametrize("separator", ["/", "\\\\"])
+def test_failed_attempt_report_with_scrubbed_paths_scans_clean(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, separator: str,
+) -> None:
+    from swreview.agent.providers.fake import FakeProvider, ScriptedTurn
+    from swreview.benchmark.report_page import build_report
+    from swreview.benchmark.scorecard import SCORECARD_FILE, score_run
+    from tests.unit.test_benchmark_attempts import (
+        driver_run,
+        install_driver_providers,
+        prepare_driver_set,
+    )
+
+    preflighted = prepare_driver_set(tmp_path)
+    out = tmp_path / "run"
+    path = f"{out.as_posix()}/attempts/fict-a/1/private.txt".replace("/", separator)
+
+    class BrokenProvider(FakeProvider):
+        def run(self, **options: Any) -> Any:
+            raise PermissionError(f"cannot read '{path}'")
+
+    install_driver_providers(monkeypatch, [[ScriptedTurn(text="")]], kind=BrokenProvider)
+    assert driver_run(preflighted, out) == []
+    assert local_paths.scan_folder(out) == []
+    keys = tmp_path / "answer_keys"
+    write_key(keys, "fict-a", known_defects=[])
+    (out / SCORECARD_FILE).write_text(
+        score_run(out, keys, preflighted.benchmark_set).model_dump_json(by_alias=True),
+        encoding="utf-8",
+    )
+    report = tmp_path / "report"
+    build_report([out], report)
+
+    assert local_paths.scan_folder(report) == []
 
 
 def test_an_html_end_tag_or_a_self_closing_tag_starts_no_path(tmp_path: Path) -> None:

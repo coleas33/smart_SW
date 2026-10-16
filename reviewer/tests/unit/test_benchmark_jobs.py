@@ -753,7 +753,8 @@ def test_a_silent_package_holds_only_its_own_slot(
     def wait(running: Sequence[Any], timeout: float) -> None:
         if "fict-a" not in reviews.completed:
             assert reviews.started == ["fict-a", "fict-b"]
-            reviews.time = 8.0  # a reached W+G; b has not reached its own W.
+            # Visit a's W before its stop grace; b keeps its later deadline.
+            reviews.time = min(8.0, reviews.time + timeout)
             return
         reviews.wait(running, timeout)
 

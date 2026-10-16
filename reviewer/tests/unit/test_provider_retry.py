@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 import random
+import threading
 from datetime import UTC, datetime, timedelta
 from email.utils import format_datetime
+from importlib import import_module
 from typing import Any
 
 import httpx
@@ -231,6 +233,90 @@ def test_a_request_is_retried_only_before_its_first_delta(
     assert len(_bodies(events, "error")) == 1
     assert _bodies(events, "error")[0]["retries"] == 0
     assert caught.value.retries == 0
+
+
+@pytest.mark.parametrize("transport_name", ["httpx2", "httpx"])
+@pytest.mark.parametrize("error_class", ["RemoteProtocolError", "ReadError", "ReadTimeout"])
+@pytest.mark.parametrize("result", ["retried", "exhausted", "after_delta", "no_policy"])
+def test_a_transport_error_mid_stream_uses_the_request_retry_policy(
+    monkeypatch: pytest.MonkeyPatch, transport_name: str, error_class: str, result: str,
+) -> None:
+    """Both the SDK's production transport and an injected legacy client drop mid-read."""
+    transport = import_module(transport_name)
+    calls = 0
+    events: list[tuple[str, dict[str, Any]]] = []
+
+    def encoded(event: dict[str, Any]) -> bytes:
+        return ("event: " + event["type"] + "\ndata: " + json.dumps(event) + "\n\n").encode()
+
+    class DroppedStream(transport.SyncByteStream):
+        def __iter__(self) -> Any:
+            yield encoded({
+                "type": "response.created", "sequence_number": 0, "response": _response(),
+            })
+            if result == "after_delta":
+                yield encoded({
+                    "type": "response.output_text.delta", "delta": "fict partial text",
+                    "item_id": "msg_fict", "output_index": 0, "content_index": 0,
+                    "logprobs": [], "sequence_number": 1,
+                })
+            raise getattr(transport, error_class)("fict transport broke while reading")
+
+    def respond(request: Any) -> Any:
+        nonlocal calls
+        calls += 1
+        if calls == 1 or result == "exhausted":
+            stream = DroppedStream()
+            return transport.Response(200, headers={"content-type": "text/event-stream"},
+                                      stream=stream)
+        return transport.Response(
+            200, headers={"content-type": "text/event-stream"},
+            content=encoded({
+                "type": "response.completed", "sequence_number": 9, "response": _response(),
+            }),
+        )
+
+    client = transport.Client(transport=transport.MockTransport(respond))
+    with OpenAI(api_key="fict-key", http_client=client, max_retries=0) as sdk:
+        provider = OpenAIProvider(model=MODEL, max_output_tokens=1200, client=sdk)
+        if result == "no_policy":
+            with pytest.raises(getattr(transport, error_class)):
+                _run(provider, events)
+            assert calls == 1
+            assert _bodies(events, "error") == []
+            assert _bodies(events, "usage") == []
+        elif result == "retried":
+            sleeps = _enable(provider, monkeypatch, retries=1)
+            _run(provider, events)
+            assert calls == 2
+            assert sleeps == [1.0]
+            assert _bodies(events, "error") == []
+            assert _bodies(events, "usage")[0]["retries"] == 1
+        else:
+            from swreview.benchmark.attempt import AttemptListener, run_attempt
+
+            sleeps = _enable(provider, monkeypatch, retries=1)
+            stop = threading.Event()
+            listener = AttemptListener(stop, provider="openai", requested_model=MODEL,
+                                       clock=lambda: 0.0)
+            outcome = run_attempt(
+                lambda: _run(provider, events), stop=stop, listener=listener,
+                limit_s=10, clock=lambda: 0.0,
+            )
+            assert (outcome.kind, outcome.class_) == ("infrastructure", "provider_error")
+            assert outcome.error_class == error_class
+            retries = int(result == "exhausted")
+            assert calls == retries + 1
+            assert sleeps == ([1.0] if retries else [])
+            assert _bodies(events, "usage") == []
+            errors = _bodies(events, "error")
+            assert len(errors) == 1
+            assert errors[0]["error_class"] == error_class
+            assert errors[0]["retries"] == retries
+            assert errors[0]["retryable"] is True
+        assert _bodies(events, "text.delta") == (
+            [{"text": "fict partial text"}] if result == "after_delta" else []
+        )
 
 
 @pytest.mark.parametrize("code", ["server_error", "rate_limit_exceeded", None])
