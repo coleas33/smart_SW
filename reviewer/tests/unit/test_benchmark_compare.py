@@ -33,6 +33,7 @@ from dataclasses import replace
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 from typer.testing import CliRunner
@@ -1061,6 +1062,76 @@ def refusal_of(run_dirs: Sequence[Path]) -> str:
 
 STANDARDS_FINDING = "F-001 (standards.document.data_card_complete)"
 """The first standards finding `RunSpec.standards_stamps` writes, as a refusal names it."""
+
+
+@pytest.fixture
+def no_attempt_event_reads() -> Iterator[None]:
+    """RF-16: compare validates the scorecard without reading any attempt's events."""
+    with (
+        patch("swreview.benchmark.runner.attempt_facts") as facts,
+        patch("swreview.agent.events.replay_events") as replay,
+    ):
+        yield
+        facts.assert_not_called()
+        replay.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("provider", "model"), [("openai", "gpt-5.6-sol"), ("fake", "scripted-model")]
+)
+@pytest.mark.parametrize("package_index", [0, 1], ids=["first-package", "second-package"])
+def test_compare_refuses_a_kept_attempt_served_outside_the_aliases(
+    tmp_path: Path, no_attempt_event_reads: None, provider: str, model: str, package_index: int
+) -> None:
+    """FR-039: check every package and every id; OpenAI and scripted only (94A)."""
+    foreign = "foreign-model"
+    spec = RunSpec(
+        run="off-1",
+        provider=provider,
+        model=model,
+        served_models=(model, foreign),
+        packages=(PackageSpec(), PackageSpec(package_id="fict-part")),
+    )
+    run_dir = write_run(tmp_path, spec)
+    # Only one package disagrees, and its first served id is valid.
+    path = run_dir / SCORECARD_FILE
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["per_package"][1 - package_index]["served_models"] = [model]
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+    message = refusal_of([run_dir])
+
+    assert str(run_dir) in message
+    assert spec.packages[package_index].package_id in message
+    assert foreign in message
+    assert model in message
+
+
+@pytest.mark.parametrize(
+    ("provider", "model", "served_models"),
+    [
+        ("openai", "gpt-5.6-sol", ("gpt-5.6-sol",)),
+        ("openai", "gpt-5.6-sol", ("gpt-5.6-sol-2026-10-15",)),
+        ("openai", "gpt-5.6-sol", ()),
+        ("fake", "scripted-model", ("scripted-model",)),
+        ("fake", "scripted-model", ()),
+    ],
+    ids=["openai-exact", "openai-snapshot", "openai-empty", "scripted-exact", "scripted-empty"],
+)
+def test_compare_accepts_served_aliases_and_an_empty_served_model_list(
+    tmp_path: Path,
+    no_attempt_event_reads: None,
+    provider: str,
+    model: str,
+    served_models: tuple[str, ...],
+) -> None:
+    """RF-16 accepts aliases and no recorded ids; no Gemini case under 94A."""
+    spec = RunSpec(run="off-1", provider=provider, model=model, served_models=served_models)
+    run_dir = write_run(tmp_path, spec)
+
+    row = one_row(compare_runs([run_dir]), spec.run)
+
+    assert row.package_id == spec.packages[0].package_id
 
 
 @pytest.mark.parametrize(
