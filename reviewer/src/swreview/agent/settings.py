@@ -56,6 +56,7 @@ from swreview.agent.providers import EffortLevel, ProviderName
 
 __all__ = [
     "ARMS",
+    "BETWEEN_TURN_SETTINGS",
     "DEFAULT_EFFORT",
     "DEFAULT_MODELS",
     "DEFAULT_PROVIDER",
@@ -532,6 +533,11 @@ def pane_efficiency(provider: ProviderName) -> EfficiencySettings:
         parallel_tool_calls=provider is ProviderName.OPENAI,
         drop_prior_reasoning=True,
     )
+
+
+BETWEEN_TURN_SETTINGS: tuple[str, ...] = ("drop_prior_reasoning",)
+"""Settings that act only at a turn boundary; without held-out answer turns the verdict
+names them as untested (feature 014 RF-14)."""
 
 
 INERT_SETTINGS: Mapping[ProviderName, tuple[str, ...]] = {
