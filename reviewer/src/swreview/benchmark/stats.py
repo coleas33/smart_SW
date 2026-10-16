@@ -82,6 +82,12 @@ def t_quantile(df: int, p: float) -> float:
     p = _finite(p, "p")
     if not 0 < p < 1:
         raise ValueError("p must be inside (0, 1)")
+    return _t_quantile(df, p)
+
+
+@cache
+def _t_quantile(df: int, p: float) -> float:
+    """Cache only validated arguments: bools must never hit an integer cache key."""
     if p == 0.5:
         return 0.0
 
@@ -111,6 +117,174 @@ class Interval:
     df: int
     packages: int
     computable: bool
+
+
+@dataclass(frozen=True)
+class PackageMoments:
+    """Alpha-independent interval inputs, with packages on the reduced axis."""
+
+    estimate: NDArray[np.float64]
+    se: NDArray[np.float64]
+    df: NDArray[np.int64]
+    packages: NDArray[np.int64]
+    computable: NDArray[np.bool_]
+
+
+@dataclass(frozen=True)
+class BatchInterval:
+    """Package intervals over arbitrary leading axes; absent values are NaN."""
+
+    estimate: NDArray[np.float64]
+    lower: NDArray[np.float64]
+    upper: NDArray[np.float64]
+    df: NDArray[np.int64]
+    packages: NDArray[np.int64]
+    computable: NDArray[np.bool_]
+
+
+@np.errstate(over="ignore", invalid="ignore")
+def _fsum_last(values: NDArray[np.float64]) -> NDArray[np.float64]:
+    """Apply math.fsum's expansion arithmetic to every row together.
+
+    NumPy's reduction may round away small residuals and alter a strict verdict
+    boundary. The loops traverse packages and the short float expansion, never
+    studies. The final half-even correction matches math.fsum on IEEE doubles.
+    """
+    shape = values.shape[:-1]
+    columns = values.shape[-1]
+    rows = math.prod(shape)
+    inputs = values.reshape(rows, columns)
+    partials = np.zeros((columns, rows), dtype=float)
+    count = np.zeros(rows, dtype=np.int64)
+    inf_sum = np.zeros(rows, dtype=float)
+    special_sum = np.zeros(rows, dtype=float)
+    row = np.arange(rows)
+    for column in range(columns):
+        x = inputs[:, column].copy()
+        special = ~np.isfinite(x)
+        if np.any(special):
+            infinite = np.isinf(x)
+            inf_sum[infinite] += x[infinite]
+            special_sum[special] += x[special]
+            count[special] = 0
+            x[special] = 0
+        if not np.any(x):
+            continue
+        stored = np.zeros(rows, dtype=np.int64)
+        for index in range(int(np.max(count, initial=0))):
+            active = index < count
+            y = np.where(active, partials[index], 0)
+            swap = np.abs(x) < np.abs(y)
+            larger, smaller = np.where(swap, y, x), np.where(swap, x, y)
+            hi = larger + smaller
+            if np.any(~np.isfinite(hi)):
+                raise OverflowError("intermediate overflow in fsum")
+            lo = smaller - (hi - larger)
+            keep = active & (lo != 0)
+            partials[stored[keep], row[keep]] = lo[keep]
+            stored += keep
+            x = np.where(active, hi, x)
+        keep = x != 0
+        partials[stored[keep], row[keep]] = x[keep]
+        count = stored + keep
+    remaining = np.maximum(count - 1, 0)
+    hi = np.zeros(rows, dtype=float)
+    present = count > 0
+    hi[present] = partials[remaining[present], row[present]]
+    lo = np.zeros(rows, dtype=float)
+    active = remaining > 0
+    while np.any(active):
+        remaining[active] -= 1
+        y = partials[remaining, row]
+        next_hi = hi + y
+        next_lo = y - (next_hi - hi)
+        hi = np.where(active, next_hi, hi)
+        lo = np.where(active, next_lo, lo)
+        active &= lo == 0
+        active &= remaining > 0
+    previous = partials[np.maximum(remaining - 1, 0), row] if columns else hi
+    correct = (remaining > 0) & (((lo < 0) & (previous < 0)) | ((lo > 0) & (previous > 0)))
+    doubled = lo * 2
+    rounded = hi + doubled
+    hi = np.where(correct & (rounded - hi == doubled), rounded, hi)
+    if np.any(np.isnan(inf_sum)):
+        raise ValueError("-inf + inf in fsum")
+    hi = np.where(special_sum != 0, special_sum, hi)
+    return hi.reshape(shape)
+
+
+def prepare_package_intervals(sums: ArrayLike, weights: ArrayLike) -> PackageMoments:
+    """Compute ratio-linearised moments for all studies without row iteration."""
+    arrays = []
+    for values, name in ((sums, "sums"), (weights, "weights")):
+        try:
+            array = np.asarray(values, dtype=float)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError(f"{name} must be finite arrays with a final package axis") from exc
+        if array.ndim < 1 or not np.all(np.isfinite(array)):
+            raise ValueError(f"{name} must be finite arrays with a final package axis")
+        arrays.append(array)
+    sums_array, weights_array = arrays
+    if sums_array.shape != weights_array.shape:
+        raise ValueError("weights must have the same shape as sums")
+    if np.any(weights_array < 0):
+        raise ValueError("weights must be nonnegative")
+    if np.any((weights_array == 0) & (sums_array != 0)):
+        raise ValueError("sums must be zero for packages with zero weights")
+    retained = weights_array > 0
+    packages = np.sum(retained, axis=-1, dtype=np.int64)
+    df = packages - 1
+    total_weight = _fsum_last(weights_array)
+    estimate = np.divide(
+        _fsum_last(sums_array), total_weight,
+        out=np.full(packages.shape, np.nan), where=packages > 0,
+    )
+    means = np.divide(
+        sums_array, weights_array, out=np.zeros_like(sums_array), where=retained,
+    )
+    if sums_array.shape[-1]:
+        first = np.take_along_axis(means, np.argmax(retained, axis=-1)[..., None], axis=-1)
+        equal = np.all(~retained | (means == first), axis=-1)
+    else:
+        equal = np.ones(packages.shape, dtype=bool)
+    residuals = np.where(retained, sums_array - estimate[..., None] * weights_array, 0)
+    variance = np.divide(
+        packages, df, out=np.zeros(packages.shape, dtype=float), where=packages > 1,
+    ) * _fsum_last(residuals * residuals)
+    se = np.divide(
+        np.sqrt(variance), total_weight,
+        out=np.zeros(packages.shape, dtype=float), where=packages > 0,
+    )
+    computable = (packages > 1) & ~equal & (se != 0)
+    return PackageMoments(estimate, se, df, packages, computable)
+
+
+def package_intervals_from_moments(
+    moments: PackageMoments, alpha: float, sides: int = 1,
+) -> BatchInterval:
+    """Apply one tail level to prepared moments; invert t only once per df."""
+    alpha = _finite(alpha, "alpha")
+    if not 0 < alpha <= 0.5:
+        raise ValueError("alpha must be inside (0, 0.5]")
+    sides = _integer(sides, "sides")
+    if sides not in (1, 2):
+        raise ValueError("sides must be 1 or 2")
+    quantiles = np.zeros(moments.df.shape, dtype=float)
+    for df in np.unique(moments.df[moments.computable]):
+        quantiles[moments.df == df] = t_quantile(int(df), 1 - alpha / sides)
+    margin = quantiles * moments.se
+    lower = np.where(moments.computable, moments.estimate - margin, np.nan)
+    upper = np.where(moments.computable, moments.estimate + margin, np.nan)
+    return BatchInterval(
+        moments.estimate, lower, upper, moments.df, moments.packages, moments.computable,
+    )
+
+
+def package_intervals(
+    sums: ArrayLike, weights: ArrayLike, alpha: float, sides: int = 1,
+) -> BatchInterval:
+    """Ratio-linearised intervals across the final package axis of an array."""
+    return package_intervals_from_moments(prepare_package_intervals(sums, weights), alpha, sides)
 
 
 def _vector(values: ArrayLike, name: str) -> NDArray[np.float64]:

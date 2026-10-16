@@ -3223,6 +3223,39 @@ def benchmark_replay(
         raise typer.Exit(1)
 
 
+@benchmark_app.command("simulate")
+def benchmark_simulate(
+    scenario: Annotated[
+        list[str] | None,
+        typer.Option("--scenario", help="Reference scenario name; repeatable, all 39 by default."),
+    ] = None,
+    seed: Annotated[int, typer.Option("--seed", min=0)] = 20261016,
+    cap: Annotated[int, typer.Option("--cap", min=3)] = 10,
+    sims: Annotated[int, typer.Option("--sims", min=1)] = 4000,
+    json_output: JsonFlag = False,
+) -> None:
+    """Size seeded fictional studies using the pane verdict; contacts no provider."""
+    from swreview.benchmark import simulate
+
+    names = list(simulate.SCENARIOS) if scenario is None else scenario
+    for name in names:
+        if name not in simulate.SCENARIOS:
+            raise typer.BadParameter(f"unknown scenario {name!r}", param_hint="--scenario")
+    rows = []
+    lines = []
+    with _errors_as_exit_1():
+        for name in names:
+            case = simulate.SCENARIOS[name]
+            result = simulate.search(case, seed=seed, sims=sims, cap=cap)
+            rows.append({
+                "name": name,
+                "inputs": simulate.scenario_inputs(case, seed=seed, sims=sims, cap=cap),
+                "result": result.as_dict(),
+            })
+            lines.append(simulate.render_result(case, result, seed=seed, sims=sims, cap=cap))
+    _emit({"scenarios": rows}, lines, json_output)
+
+
 @benchmark_app.command("compare")
 def benchmark_compare(
     run_dirs: Annotated[

@@ -309,28 +309,80 @@ def study_stats(runs: Sequence[StudyRun]) -> StudyStats:
     )
 
 
-def _paired(sums: NDArray, weights: NDArray, alpha: float, *, recall: bool) -> PairedInterval:
-    interval = statistics.package_interval(sums, weights, alpha, sides=1)
-    bound = interval.upper if recall else interval.lower
-    loss = interval.computable and bound is not None and (bound < 0 if recall else bound > 0)
-    return PairedInterval(**vars(interval), alpha=alpha, loss=bool(loss))
+def _paired(
+    intervals: statistics.BatchInterval,
+    loss: NDArray[np.bool_],
+    study: int,
+    figure: int,
+    alpha: float,
+) -> PairedInterval:
+    def optional(values):
+        value = float(values[study, figure])
+        return None if math.isnan(value) else value
+
+    return PairedInterval(
+        estimate=optional(intervals.estimate),
+        lower=optional(intervals.lower),
+        upper=optional(intervals.upper),
+        df=int(intervals.df[study, figure]),
+        packages=int(intervals.packages[study, figure]),
+        computable=bool(intervals.computable[study, figure]),
+        alpha=alpha,
+        loss=bool(loss[study, figure]),
+    )
 
 
-def _reference(ids: tuple[DefectRef, ...], index: int) -> DefectRef:
-    # Simulated studies need no report names. Their labels never enter a ledger.
-    return ids[index] if ids else DefectRef(package_id="simulated", defect_id=str(index))
+@dataclass(frozen=True)
+class PreparedJudge:
+    """Package moments and guards shared across every tested alpha level."""
+
+    stats: StudyStats
+    retained: NDArray[np.bool_]
+    retained_packages: NDArray[np.bool_]
+    retained_defects: NDArray[np.int64]
+    recall: statistics.PackageMoments
+    false_alarms: statistics.PackageMoments
+    code_retained: NDArray[np.bool_]
+    code_lost: NDArray[np.bool_]
+    sometimes: NDArray[np.bool_]
+    cleared: NDArray[np.bool_]
 
 
-def _label(reference: DefectRef) -> str:
-    return f"{reference.package_id}/{reference.defect_id}"
+@dataclass(frozen=True)
+class JudgeCounts:
+    """The same rule's numerical outcomes without allocating named reports."""
+
+    quality_loss: NDArray[np.bool_]
+    no_loss: NDArray[np.bool_]
+    below_floor: NDArray[np.bool_]
+    recall_computable: NDArray[np.bool_]
+    recall_loss: NDArray[np.bool_]
+    false_alarm_loss: NDArray[np.bool_]
+    recall: statistics.BatchInterval
+    false_alarms: statistics.BatchInterval
+
+    @property
+    def main_recall_loss(self) -> NDArray[np.bool_]:
+        return self.recall_loss[:, 0]
 
 
-def judge(stats: StudyStats, rules: VerdictRules) -> list[StudyVerdict]:
-    """Apply every loss before floor, computability and the strict -10-point bound.
+def _group_packages(values: NDArray, packages: NDArray, count: int) -> NDArray[np.float64]:
+    """Sum each package's defects without constructing a dense one-hot matrix."""
+    # Existing reports may contain more than the simulator's two defects per
+    # package. Retain their historical addition order in cancellation cases.
+    if packages.size and np.max(np.bincount(packages, minlength=count)) > 2:
+        grouping = (packages[:, None] == np.arange(count)).astype(float)
+        return np.einsum("sfd,dk->sfk", values, grouping)
+    grouped = np.zeros((*values.shape[:-1], count), dtype=float)
+    if packages.size:
+        order = np.argsort(packages, kind="stable")
+        unique, starts = np.unique(packages[order], return_index=True)
+        grouped[..., unique] = np.add.reduceat(values[..., order], starts, axis=-1)
+    return grouped
 
-    All studies use the same array path and package interval; there is no separate
-    simulation rule. Only interval calls and named output construction iterate rows.
-    """
+
+def prepare_judge(stats: StudyStats) -> PreparedJudge:
+    """Compute alpha-independent package moments and guard masks together."""
     retained = np.all(stats.counted_runs > 0, axis=1)
     retained_packages = np.all(stats.package_runs > 0, axis=1)
     rates = np.divide(
@@ -346,33 +398,95 @@ def judge(stats: StudyStats, rules: VerdictRules) -> list[StudyVerdict]:
         where=stats.package_runs > 0,
     )
     package_count = stats.package_runs.shape[-1]
-    grouping = (stats.defect_packages[:, None] == np.arange(package_count)).astype(float)
-    recall_sums = np.einsum("sfd,dk->sfk", (rates[:, 1] - rates[:, 0]) * retained, grouping)
-    recall_weights = np.einsum("sfd,dk->sfk", retained.astype(float), grouping)
+    recall_sums = _group_packages(
+        (rates[:, 1] - rates[:, 0]) * retained, stats.defect_packages, package_count,
+    )
+    recall_weights = _group_packages(retained.astype(float), stats.defect_packages, package_count)
     alarm_sums = (alarm_rates[:, 1] - alarm_rates[:, 0]) * retained_packages
     code_retained = np.all(stats.code_runs > 0, axis=1)
     off_complete = stats.code_detections[:, 0] == stats.code_runs[:, 0]
     code_lost = code_retained & off_complete & (stats.code_detections[:, 1] < stats.code_runs[:, 1])
     sometimes = code_retained & (stats.code_detections[:, 0] > 0) & ~off_complete
     cleared = (stats.clears[:, 1] > 0) & (stats.clears[:, 0] == 0)
+    return PreparedJudge(
+        stats=stats,
+        retained=retained,
+        retained_packages=retained_packages,
+        retained_defects=np.count_nonzero(retained, axis=-1),
+        recall=statistics.prepare_package_intervals(recall_sums, recall_weights),
+        false_alarms=statistics.prepare_package_intervals(
+            alarm_sums, retained_packages.astype(float),
+        ),
+        code_retained=code_retained,
+        code_lost=code_lost,
+        sometimes=sometimes,
+        cleared=cleared,
+    )
+
+
+def _judge_counts(prepared: PreparedJudge, rules: VerdictRules) -> JudgeCounts:
+    recall = statistics.package_intervals_from_moments(prepared.recall, rules.alpha)
+    alarms = statistics.package_intervals_from_moments(prepared.false_alarms, rules.alpha)
+    recall_loss = recall.computable & (recall.upper < 0)
+    alarm_loss = alarms.computable & (alarms.lower > 0)
+    quality_loss = np.any(recall_loss | alarm_loss, axis=1) | np.any(prepared.code_lost, axis=1)
+    if rules.cleared_guard_decides:
+        quality_loss |= np.any(prepared.cleared & prepared.stats.clear_held_out, axis=1)
+    below_floor = np.any(prepared.retained_defects < rules.floor, axis=1)
+    recall_computable = np.all(recall.computable, axis=1)
+    no_loss = (
+        ~quality_loss & ~below_floor & recall_computable & np.all(recall.lower > -0.10, axis=1)
+    )
+    return JudgeCounts(
+        quality_loss=quality_loss,
+        no_loss=no_loss,
+        below_floor=below_floor,
+        recall_computable=recall_computable,
+        recall_loss=recall_loss,
+        false_alarm_loss=alarm_loss,
+        recall=recall,
+        false_alarms=alarms,
+    )
+
+def _reference(ids: tuple[DefectRef, ...], index: int) -> DefectRef:
+    # Simulated studies need no report names. Their labels never enter a ledger.
+    return ids[index] if ids else DefectRef(package_id="simulated", defect_id=str(index))
+
+
+def _label(reference: DefectRef) -> str:
+    return f"{reference.package_id}/{reference.defect_id}"
+
+
+def judge(
+    stats: StudyStats | PreparedJudge, rules: VerdictRules, *, named: bool = True,
+) -> list[StudyVerdict] | JudgeCounts:
+    """Apply every loss before floor, computability and the strict -10-point bound.
+
+    Both modes use the same batched intervals and decision masks. Named reports
+    allocate per-study models only when requested; a prepared study can be reused
+    at another alpha without recomputing package moments or guards.
+    """
+    prepared = stats if isinstance(stats, PreparedJudge) else prepare_judge(stats)
+    judged = _judge_counts(prepared, rules)
+    if not named:
+        return judged
+    stats = prepared.stats
+    retained, retained_packages = prepared.retained, prepared.retained_packages
+    code_retained, code_lost = prepared.code_retained, prepared.code_lost
+    sometimes, cleared = prepared.sometimes, prepared.cleared
     results: list[StudyVerdict] = []
 
     for study in range(stats.detections.shape[0]):
         reasons: list[str] = []
         figures: list[FigureStats] = []
         for figure, name in enumerate(FIGURES):
-            recall = _paired(
-                recall_sums[study, figure], recall_weights[study, figure], rules.alpha, recall=True
-            )
+            recall = _paired(judged.recall, judged.recall_loss, study, figure, rules.alpha)
             alarms = _paired(
-                alarm_sums[study, figure],
-                retained_packages[study, figure].astype(float),
-                rules.alpha,
-                recall=False,
+                judged.false_alarms, judged.false_alarm_loss, study, figure, rules.alpha,
             )
             figures.append(
                 FigureStats(
-                    retained_defects=int(np.count_nonzero(retained[study, figure])),
+                    retained_defects=int(prepared.retained_defects[study, figure]),
                     retained_packages=int(np.count_nonzero(retained_packages[study, figure])),
                     dropped_defects=[
                         _reference(stats.defect_ids, int(i))
@@ -418,7 +532,7 @@ def judge(stats: StudyStats, rules: VerdictRules) -> list[StudyVerdict]:
                 for i in np.flatnonzero(~code_retained[study])
             ],
         )
-        named = [
+        named_clears = [
             DefectRuns(
                 **_reference(stats.clear_ids, int(i)).model_dump(),
                 runs=list(stats.clear_runs.get((study, int(i)), ())),
@@ -431,9 +545,9 @@ def judge(stats: StudyStats, rules: VerdictRules) -> list[StudyVerdict]:
                 runs = stats.clear_runs.get((study, int(i)), ())
                 reasons.append(f"{CLEARED}: {_label(reference)}; runs {', '.join(runs)}")
 
-        if reasons:
+        if judged.quality_loss[study]:
             outcome: Verdict = "quality loss"
-        elif any(figure.retained_defects < rules.floor for figure in figures):
+        elif judged.below_floor[study]:
             outcome = "inconclusive"
             counts = []
             for name, figure in zip(FIGURES, figures, strict=True):
@@ -444,7 +558,7 @@ def judge(stats: StudyStats, rules: VerdictRules) -> list[StudyVerdict]:
                     f"dropped packages {packages}"
                 )
             reasons.append(f"{BELOW_FLOOR}: floor {rules.floor}; " + "; ".join(counts))
-        elif any(not figure.recall.computable for figure in figures):
+        elif not judged.recall_computable[study]:
             outcome = "inconclusive"
             for name, figure in zip(FIGURES, figures, strict=True):
                 if not figure.recall.computable:
@@ -461,14 +575,14 @@ def judge(stats: StudyStats, rules: VerdictRules) -> list[StudyVerdict]:
                     reasons.append(
                         f"{LOWER_END_AT_OR_BELOW_MINUS_TEN_POINTS}: {name} {lower * 100:.1f}"
                     )
-            outcome = "inconclusive" if reasons else "no 10-point loss"
+            outcome = "no 10-point loss" if judged.no_loss[study] else "inconclusive"
         results.append(
             StudyVerdict(
                 verdict=outcome,
                 reasons=reasons,
                 figures=Figures(main=figures[0], sensitivity=figures[1]),
                 code_guard=code_guard,
-                cleared_guard=ClearedGuard(decides=rules.cleared_guard_decides, named=named),
+                cleared_guard=ClearedGuard(decides=rules.cleared_guard_decides, named=named_clears),
             )
         )
     return results

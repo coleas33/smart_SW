@@ -250,3 +250,130 @@ def test_v26_invalid_simulation_count_names_n(n: float) -> None:
 def test_v26_invalid_hits_name_hits(hits: float) -> None:
     with pytest.raises(ValueError, match=r"\bhits\b"):
         stats.mc_upper_bound(hits, 4000)
+
+
+def test_batch_sum_matches_fsum_including_cancellation_and_half_even() -> None:
+    rng = np.random.default_rng(13)
+    values = rng.normal(size=(200, 81)) * np.exp2(rng.integers(-100, 100, size=(200, 81)))
+    values[:4] = 0
+    values[0, :3] = [1e16, 1, -1e16]
+    values[1, :3] = [1, 2**-53, 2**-100]
+    values[2, :3] = [1, 2**-53, -2**-100]
+    values[3, :4] = [1, 2**-52, 2**-53, 2**-100]
+    expected = np.array([math.fsum(row) for row in values])
+    np.testing.assert_array_equal(stats._fsum_last(values), expected)
+
+
+def test_batch_sum_matches_fsum_across_normal_and_subnormal_exponents() -> None:
+    rng = np.random.default_rng(20261016)
+    values = np.ldexp(rng.uniform(-1, 1, (200, 40)), rng.integers(-1074, 1023, (200, 40)))
+    expected = np.array([math.fsum(row) for row in values])
+    np.testing.assert_array_equal(stats._fsum_last(values), expected)
+
+
+@pytest.mark.parametrize("values", [[1e308, 1e308], [-1e308, -1e308]])
+def test_batch_sum_preserves_fsum_overflow(values: list[float]) -> None:
+    with pytest.raises(OverflowError, match="overflow"):
+        math.fsum(values)
+    with pytest.raises(OverflowError, match="overflow"):
+        stats._fsum_last(np.asarray([values]))
+
+
+def test_batch_sum_preserves_nonfinite_fsum_results() -> None:
+    values = np.array([[math.inf, 1], [-math.inf, 1], [math.nan, 1]])
+    expected = np.array([math.fsum(row) for row in values])
+    np.testing.assert_array_equal(stats._fsum_last(values), expected)
+    with pytest.raises(ValueError, match="-inf"):
+        stats._fsum_last(np.array([[math.inf, -math.inf]]))
+
+
+def test_batch_interval_preserves_infinite_variance_scalar_bounds() -> None:
+    with np.errstate(over="ignore"):
+        expected = stats.package_interval([1e308, -1e308], [1, 1], 0.025)
+        actual = stats.package_intervals([[1e308, -1e308]], [[1, 1]], 0.025)
+    assert expected.computable and actual.computable[0]
+    assert expected.estimate == actual.estimate[0] == 0
+    assert expected.lower == actual.lower[0] == -math.inf
+    assert expected.upper == actual.upper[0] == math.inf
+
+
+@pytest.mark.parametrize("sides", [1, 2])
+@pytest.mark.parametrize("alpha", [0.5, 0.025, 0.0025])
+def test_batch_intervals_match_every_scalar_field_exactly(alpha: float, sides: int) -> None:
+    rng = np.random.default_rng(981)
+    weights = rng.integers(0, 3, size=(40, 2, 17)).astype(float)
+    sums = rng.normal(size=weights.shape) * weights
+    weights[0] = 0
+    weights[1, :, 1:] = 0
+    sums = np.where(weights > 0, sums, 0)
+    sums[2] = 0.1 * weights[2]
+    weights[3] = 1
+    sums[3] = np.tile([0.1, 0.1 + 1e-14, 0.1 + 2e-14] * 6, (2, 1))[:, :17]
+    moments = stats.prepare_package_intervals(sums, weights)
+    actual = stats.package_intervals_from_moments(moments, alpha, sides)
+    for index in np.ndindex(sums.shape[:-1]):
+        expected = stats.package_interval(sums[index], weights[index], alpha, sides)
+        for name in ("estimate", "lower", "upper"):
+            field = getattr(expected, name)
+            value = getattr(actual, name)[index]
+            assert math.isnan(value) if field is None else value == field
+        for name in ("df", "packages", "computable"):
+            assert getattr(actual, name)[index] == getattr(expected, name)
+
+
+def test_empty_package_axis_and_empty_study_axis() -> None:
+    empty_packages = stats.package_intervals(np.empty((3, 0)), np.empty((3, 0)), 0.025)
+    assert np.all(empty_packages.packages == 0)
+    assert np.all(np.isnan(empty_packages.estimate))
+    assert not np.any(empty_packages.computable)
+    empty_studies = stats.package_intervals(np.empty((0, 2, 17)), np.empty((0, 2, 17)), 0.025)
+    assert empty_studies.estimate.shape == (0, 2)
+
+
+def test_cached_quantile_revalidates_boolean_df() -> None:
+    stats.t_quantile(1, 0.975)
+    with pytest.raises(ValueError, match="df"):
+        stats.t_quantile(True, 0.975)
+    with pytest.raises(ValueError, match="df"):
+        stats.t_quantile(np.bool_(True), 0.975)
+
+
+def test_repeated_quantile_does_not_repeat_cdf_inversion(monkeypatch: pytest.MonkeyPatch) -> None:
+    stats._t_quantile.cache_clear()
+    original = stats.t_cdf
+    calls = 0
+
+    def counted(t: float, df: int) -> float:
+        nonlocal calls
+        calls += 1
+        return original(t, df)
+
+    monkeypatch.setattr(stats, "t_cdf", counted)
+    first = stats.t_quantile(16, 0.975)
+    first_calls = calls
+    assert first_calls > 0
+    assert stats.t_quantile(np.int64(16), 0.975) == first
+    assert calls == first_calls
+
+
+def test_intercept_table_solves_once_per_sigma_and_is_read_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stats.intercept_table.cache_clear()
+    original = np.logaddexp
+    calls = 0
+
+    def counted(*args: object, **kwargs: object) -> object:
+        nonlocal calls
+        calls += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(np, "logaddexp", counted)
+    first = stats.intercept_table(0.812345)
+    first_calls = calls
+    assert first_calls > 0
+    second = stats.intercept_table(0.812345)
+    assert first is second
+    assert calls == first_calls
+    assert not first[0].flags.writeable
+    assert not first[1].flags.writeable
