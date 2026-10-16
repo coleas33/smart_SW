@@ -1684,6 +1684,8 @@ def test_the_private_pane_study_is_its_own_key_and_renders_as_raw_rows(tmp_path:
         PRIVATE_PANE_STUDY,
     ]
     assert ledger.levers == []
+    # T234 routes each pane key to its own verdict block and keeps every raw row.
+    assert {row.study for row in ledger.pane_studies} == {PANE_STUDY, PRIVATE_PANE_STUDY}
 
 
 @pytest.mark.parametrize(
@@ -1928,10 +1930,9 @@ def test_the_ledger_record_is_schema_1_1_and_names_no_pane_study_when_none_was_c
 ) -> None:
     """One bump (INT-10). The 1.1 record names `pane_studies`, a key omitted when no pane study
     was compared and filled from the verdict slice, which moves neither the version nor the
-    header; until then a pane study renders raw rows only."""
-    dirs = write_study(tmp_path, pane_study_specs(reps=1))
+    header. T234 fills the pane block while an empty ledger still omits it."""
 
-    json_path, _ = write_ledger(compare_runs(dirs), tmp_path / "ledger")
+    json_path, _ = write_ledger(compare_runs([]), tmp_path / "ledger")
 
     payload = json.loads(json_path.read_text(encoding="utf-8"))
     assert payload["ledger_schema"] == "1.1"
@@ -2393,9 +2394,13 @@ def test_the_committed_results_table_regenerates_byte_identically() -> None:
     study lands under `benchmarks/studies/`, this test goes red until the table is
     regenerated, which is the whole point of it.
     """
+    from swreview.benchmark.compare import recorded_noise_floors, recorded_pilots
+
     document = OPTIONS_DOC.read_text(encoding="utf-8")
 
-    regenerated = splice_ledger(document, render_ledger_md(compare_runs(recorded_runs())))
+    regenerated = splice_ledger(document, render_ledger_md(compare_runs(
+        recorded_runs(), pilots=recorded_pilots(), noise_floors=recorded_noise_floors(),
+    )))
 
     assert regenerated == document
 

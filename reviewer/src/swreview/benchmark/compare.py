@@ -65,16 +65,17 @@ What is refused, and what is merely null:
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path, PureWindowsPath
 
-from pydantic import Field
+from pydantic import Field, model_serializer
 
 from swreview.agent.providers import CACHED_SHARE_PUBLISHABLE
 from swreview.agent.runner import SESSION_FILE_NAME
 from swreview.agent.settings import (
+    BETWEEN_TURN_SETTINGS,
     LEVER_NAMES,
     MODEL_VIEW_OFF,
     MODEL_VIEW_PANE,
@@ -82,7 +83,9 @@ from swreview.agent.settings import (
     PRIVATE_PANE_STUDY,
     ModelViewSettings,
 )
-from swreview.benchmark import served, sets
+from swreview.benchmark import digest as benchmark_digest
+from swreview.benchmark import pilot, served, sets, simulate, verdict
+from swreview.benchmark import stats as pane_stats
 from swreview.benchmark.adoption import (
     BASELINE,
     METRICS,
@@ -149,8 +152,8 @@ BASELINE_LABELS: tuple[str, ...] = (NO_LEVER, PANE_BASELINE_LABEL)
 PANE_STUDIES: tuple[str, ...] = (PANE_STUDY, PRIVATE_PANE_STUDY)
 """The two pane studies (feature 014 `contracts/provenance.md` 3.1), each its own study key.
 
-Until the verdict slice routes them to `verdict`, compare checks them and renders their raw rows,
-and never hands them to `_decision_row`: `decide` never applies to a pane study (FR-045)."""
+Compare routes them to `verdict` and never hands them to `_decision_row`: `decide` never applies
+to a pane study (FR-045)."""
 
 RUN_START_SCHEMA = 2
 """The first provenance schema to record the model view and the profile's digest (feature 014
@@ -164,6 +167,8 @@ The `## Results` table in `docs/llm-efficiency-options.md` is a rendering of exa
 folders, and `--check` is what stops the document drifting from them (T045). The directory
 does not exist until the first study is run, and an empty ledger is the honest rendering of
 a feature that has measured nothing yet."""
+
+PILOTS_DIR = REPO_ROOT / "benchmarks" / "pilots"
 
 TRIM_LEVER = "trim_tool_descriptions"
 """Lever 2, whose counter is the tool-name histogram rather than one of `adoption.METRICS`."""
@@ -441,6 +446,14 @@ class Ledger(ReviewModel):
     ledger_schema: str = LEDGER_SCHEMA
     runs: list[RunRow]
     levers: list[LeverDecision]
+    pane_studies: list[verdict.PaneStudy] = Field(default_factory=list)
+
+    @model_serializer(mode="wrap")
+    def _omit_empty_pane_studies(self, handler):
+        payload = handler(self)
+        if not self.pane_studies:
+            payload.pop("pane_studies", None)
+        return payload
 
 
 @dataclass(frozen=True)
@@ -1270,11 +1283,192 @@ def _settings_of(record: RunProvenance) -> dict[str, object]:
 # --- the ledger --------------------------------------------------------------------
 
 
+def _study_run(loaded: _LoadedRun) -> verdict.StudyRun:
+    """The single conversion from compare's validated run to the shared verdict input."""
+    assert loaded.provenance is not None
+    return verdict.StudyRun(
+        run=loaded.run, arm=loaded.provenance.arm, scorecard=loaded.scorecard,
+    )
+
+
+def _pane_refusal(
+    key: tuple[str, str | None, str | None],
+    runs: Sequence[_LoadedRun],
+    saved_sets: Sequence[tuple[sets.BenchmarkSet, Path]],
+    measurements: Sequence[tuple[Path, pilot.PilotMeasurement]],
+) -> str | None:
+    """Read verdict.md section 7 in order, after all run-level checks have passed."""
+    arms = {run.provenance.arm for run in runs if run.provenance is not None}
+    missing = set(verdict.ARMS) - arms
+    if missing:
+        return f"arm {', '.join(sorted(arms))} present; arm {', '.join(sorted(missing))} has no run"
+    if key[0] == PANE_STUDY:
+        private = sorted({
+            f"{ref.package_id} ({sets.path_form(ref.path, root=checkout)})"
+            for saved, checkout in saved_sets for ref in saved.packages
+            if sets.checkout_relative(ref.path, root=checkout) is None
+        })
+        if private:
+            return (
+                f"private entries: {', '.join(private)}; a pane study's set holds committed "
+                "cases only; the private slice is its own study, `pane_defaults_private`"
+            )
+    for run in runs:
+        rerun = f"re-run `swreview benchmark run` for {run.run_dir}"
+        for score in run.scorecard.per_package:
+            where = f"{run.run_dir} / {score.package_id}"
+            if run.sessions[score.package_id].origin_marks is None:
+                return f"{where}: session has no origin-marks record; {rerun}"
+            for finding in score.false_alarm_finding_ids:
+                if score.finding_origins.get(finding, "unknown") == "unknown":
+                    return f"{where}: false alarm {finding} has origin unknown; {rerun}"
+            if score.run_status.kind == "not_recorded":
+                return f"{where}: run_status is not_recorded; {rerun}"
+    if key[0] == PRIVATE_PANE_STUDY:
+        return None
+    count = min(run.scorecard.aggregate.held_out_model_defects for run in runs)
+    if count < 34:
+        return f"keys name {count} held-out model-produced defects; the floor is 34"
+    if len(measurements) != 1:
+        files = ", ".join(str(path) for path, _ in measurements) or "none"
+        return (
+            f"study {key}: expected one matching measurement with --pilot; "
+            f"found {len(measurements)} ({files})"
+        )
+    path, measurement = measurements[0]
+    if pilot.sizing_digest(measurement) != measurement.sizing_digest:
+        return f"{path}: the sizing was edited by hand; re-run `swreview benchmark pilot`"
+    if measurement.approval.approved is not True:
+        return f"{path}: approval.approved is not true"
+    approved_at = measurement.approval.approved_at
+    if not approved_at or not approved_at.strip():
+        return f"{path}: approval.approved_at is empty"
+    earliest = min(run.provenance.started_at.date() for run in runs)
+    if date.fromisoformat(approved_at) > earliest:
+        return (
+            f"{path}: approval.approved_at {approved_at} is later than earliest study run "
+            f"{earliest.isoformat()}; levels chosen after the paid runs void the 5% bounds"
+        )
+    sizing = measurement.sizing
+    if count < sizing.result.held_out_model_defects:
+        return (
+            f"keys name {count} held-out model-produced defects; approval requires "
+            f"{sizing.result.held_out_model_defects}"
+        )
+    for arm in verdict.ARMS:
+        reps = {run.provenance.rep for run in runs if run.provenance.arm == arm}
+        if len(reps) < sizing.result.reps:
+            return (f"arm {arm} has {len(reps)} distinct repetitions; approval requires "
+                    f"{sizing.result.reps}")
+    pilot_packages = set(sizing.pilot_packages)
+    if (pilot_packages or sizing.growth_units) and len(saved_sets) < len(runs):
+        missing_sets = ", ".join(run.run for run in runs
+                                 if not (run.run_dir / SAVED_SET_FILE).is_file())
+        return (f"{missing_sets}: missing saved set; approval requires every pilot package "
+                f"and {sizing.growth_units} growth units")
+    core = {
+        score.package_id for run in runs for score in run.scorecard.per_package
+        if any(item.kind == "known_defect" and item.tag == "held_out"
+               for item in score.graded_items)
+    }
+    for saved, _ in saved_sets:
+        ids = {ref.package_id for ref in saved.packages}
+        missing_packages = sorted(pilot_packages - ids)
+        growth = len((ids & core) - pilot_packages)
+        if missing_packages or growth < sizing.growth_units:
+            return (
+                f"saved set missing pilot packages: {', '.join(missing_packages) or 'none'}; "
+                f"found {growth} growth units; approval requires {sizing.growth_units}"
+            )
+    return None
+
+
+def _pane_noise_floor(key, runs, records, notes) -> verdict.NoiseFloor:
+    matching = [(path, record) for path, record in records
+                if (record.study, record.provider, record.model) == key]
+    if len(matching) != 1:
+        if matching:
+            notes.append(f"study {key}: multiple noise-floor records: "
+                         + ", ".join(str(path) for path, _ in matching))
+        return verdict.NoiseFloor(state="not_computed", points=None, seed=None, numpy=None)
+    path, record = matching[0]
+    current = simulate.runs_digest([run.run_dir for run in runs], relative_to=path.parent)
+    return verdict.NoiseFloor(
+        state="computed" if current == record.runs_digest else "stale",
+        points=record.result, seed=record.seed, numpy=record.numpy_version,
+    )
+
+
+def _pane_study(key, runs, measurements, noise_floors, *, root, notes) -> verdict.PaneStudy:
+    matching = [(path, item) for path, item in measurements
+                if (item.identity.study, item.identity.provider, item.identity.model) == key]
+    saved_sets = [
+        (sets.load_saved_set(run.run_dir / SAVED_SET_FILE, root=root), root)
+        for run in runs if (run.run_dir / SAVED_SET_FILE).is_file()
+    ]
+    refusal = _pane_refusal(key, runs, saved_sets, matching)
+    record = runs[0].provenance
+    private = key[0] == PRIVATE_PANE_STUDY
+    block = verdict.PaneStudy(
+        study=key[0], provider=key[1], model=key[2], commit=record.commit or UNKNOWN,
+        slice="private" if private else "committed", run_dirs=[run.ledger_dir for run in runs],
+        reps=verdict.Repetitions(**{
+            arm: len({run.provenance.rep for run in runs if run.provenance.arm == arm})
+            for arm in verdict.ARMS
+        }),
+        verdict=None, reasons=[], refusal=refusal, approval=None, figures=None,
+        code_guard=None, cleared_guard=None,
+        noise_floor=verdict.NoiseFloor(state="not_computed", points=None, seed=None, numpy=None),
+        arms_differed_in=[], inert=[], untested_between_turns=[], shown=[],
+    )
+    if refusal:
+        return block
+    rules = verdict.VerdictRules(alpha=0.025, cleared_guard_decides=False)
+    if not private:
+        path, measurement = matching[0]
+        result = measurement.sizing.result
+        rules = verdict.VerdictRules(result.alpha, result.cleared_guard_decides)
+        block.approval = verdict.StudyApproval(
+            file_sha256=benchmark_digest.sha256_of(path),
+            approved_at=measurement.approval.approved_at,
+            alpha=result.alpha, held_out_model_defects=result.held_out_model_defects,
+            reps=result.reps, cleared_guard_decides=result.cleared_guard_decides,
+            seed=measurement.sizing.seed, simulated=result.simulated.model_dump(),
+        )
+    judged = verdict.judge(verdict.study_stats([_study_run(run) for run in runs]), rules)[0]
+    block.figures = judged.figures
+    block.code_guard = judged.code_guard
+    block.cleared_guard = judged.cleared_guard
+    block.verdict = None if private else judged.verdict
+    block.reasons = ([
+        "private slice (23A): shown beside the pane study's verdict, never deciding"
+    ] if private else judged.reasons)
+    block.shown = _pane_shown(runs, judged)
+    block.noise_floor = _pane_noise_floor(key, runs, noise_floors, notes)
+    off, on = (next(run.provenance for run in runs if run.provenance.arm == arm)
+               for arm in verdict.ARMS)
+    settings = settings_differed(off, on)
+    block.arms_differed_in = list(settings.arms_differed_in)
+    block.inert = list(settings.inert)
+    answer_turns = any(ref.held_out and ref.case_file is not None
+                       for saved, _ in saved_sets for ref in saved.packages)
+    if not answer_turns:
+        block.untested_between_turns = [verdict.UntestedSetting(
+            setting=name, reason="acts only between turns; no held-out case takes an answer "
+            "turn, so the verdict does not test it; the anchors show it",
+        ) for name in settings.arms_differed_in
+            if name in BETWEEN_TURN_SETTINGS and name not in settings.inert]
+    return block
+
+
 def compare_runs(
     run_dirs: Sequence[Path | str],
     *,
     root: Path | None = None,
     committed_ledger: bool = False,
+    pilots: Sequence[Path | str] = (),
+    noise_floors: Sequence[Path | str] = (),
+    notes: list[str] | None = None,
 ) -> Ledger:
     """Read N run directories and build the ledger. Contacts nothing and starts nothing.
 
@@ -1283,7 +1477,7 @@ def compare_runs(
     another (feature 014 `contracts/provenance.md` 6.1, 6.3). `committed_ledger` says the ledger
     is written where the repository may commit it, which refuses every run
     `_refuse_for_the_committed_ledger` names (6.4). Every study is checked; a pane study renders
-    its raw rows and no decision row.
+    its raw rows and the shared judge's block, with no lever decision row.
     """
     checkout = sets.REPO_ROOT if root is None else root
     loaded = [_load_run(path, root=checkout) for path in distinct_run_dirs(run_dirs)]
@@ -1300,8 +1494,39 @@ def compare_runs(
     for key, runs in studies.items():
         _check_one_study(key, runs)
 
+    messages = [] if notes is None else notes
+    measurements = [(Path(path), pilot.read_measurement(path)) for path in pilots]
+    floors = [(Path(path), simulate.read_noise_floor(path)) for path in noise_floors]
+    for path, measurement in measurements:
+        identity = measurement.identity
+        key = (identity.study, identity.provider, identity.model)
+        if key not in studies or key[0] not in PANE_STUDIES:
+            messages.append(f"{path}: pilot measurement matches no compared study {key}")
+    pane_studies = [
+        _pane_study(key, runs, measurements, floors, root=checkout, notes=messages)
+        for key, runs in studies.items() if key[0] in PANE_STUDIES
+    ]
+    for key in studies:
+        matching = [(path, item) for path, item in measurements
+                    if (item.identity.study, item.identity.provider, item.identity.model) == key]
+        if key[0] not in PANE_STUDIES or len(matching) != 1:
+            continue
+        path, measurement = matching[0]
+        for listed in measurement.pilot_runs:
+            folder = (path.parent / listed.folder).resolve()
+            try:
+                loaded_pilot = _load_run(folder, root=checkout)
+            except CompareError as exc:
+                messages.append(f"pilot {folder}: {' '.join(str(exc).splitlines())}")
+                continue
+            if committed_ledger:
+                _refuse_for_the_committed_ledger(loaded_pilot, root=checkout)
+            rows.extend(_row(loaded_pilot, score).model_copy(update={"arm": "off (pilot)"})
+                        for score in loaded_pilot.scorecard.per_package)
+
     return Ledger(
         runs=rows,
+        pane_studies=pane_studies,
         levers=[
             _decision_row(key, runs)
             for key, runs in studies.items()
@@ -1341,6 +1566,20 @@ def recorded_runs(studies_dir: Path | str = STUDIES_DIR) -> list[Path]:
     if not root.is_dir():
         return []
     return sorted({path.parent for path in root.rglob(SCORECARD_FILE)})
+
+
+def recorded_pilots(pilots_dir: Path | str = PILOTS_DIR) -> list[Path]:
+    """Every stored pilot measurement, apart from the study run tree."""
+    return sorted(Path(pilots_dir).rglob("pilot-measurement.json"))
+
+
+def recorded_noise_floors(studies_dir: Path | str = STUDIES_DIR) -> list[Path]:
+    """Every stored noise-floor record, without running a simulation."""
+    return sorted(Path(studies_dir).rglob("noise-floor.json"))
+
+
+def refused_pane_studies(ledger: Ledger) -> list[verdict.PaneStudy]:
+    return [study for study in ledger.pane_studies if study.refusal is not None]
 
 
 def refused_decisions(ledger: Ledger) -> list[LeverDecision]:
@@ -1649,6 +1888,8 @@ def render_ledger_md(ledger: Ledger) -> str:
         "`tool calls` is `len(session.steps)`, every step of the review: the pre-run's and the "
         "regrade's steps are counted with the model's, not split by the step mark.",
     ]
+    if ledger.pane_studies:
+        lines += _render_pane_studies(ledger)
     return "\n".join(lines) + "\n"
 
 
@@ -1787,3 +2028,429 @@ def committed_sign_off_sources(out: Path | None, into: Path | None) -> list[str]
     if into is not None:
         sources.append(Path(into))
     return [path.read_text(encoding="utf-8") for path in sources if path.is_file()]
+
+
+def _pane_measure(
+    runs: Sequence[_LoadedRun],
+    name: str,
+    reading: Callable[[PackageScore, _LoadedRun], float | None],
+    *,
+    units: Callable[[PackageScore], int] | None = None,
+    completed: bool = False,
+) -> verdict.ShownMeasure:
+    """Average repetitions within packages before making the shown paired interval.
+
+    Defect rates carry the package's number of graded defects as their weight;
+    counts carry one package. An unassessed value supplies neither a zero nor a
+    package to the interval.
+    """
+    samples: dict[str, dict[str, list[tuple[float, float]]]] = {"off": {}, "on": {}}
+    for run in runs:
+        assert run.provenance is not None
+        arm = run.provenance.arm
+        assert arm in samples
+        unscored = {row.package_id for row in run.scorecard.unscored_packages}
+        for score in run.scorecard.per_package:
+            if score.package_id in unscored:
+                continue
+            if completed and score.run_status.kind != "completed":
+                continue
+            value = reading(score, run)
+            weight = units(score) if units is not None else 1
+            if value is None or weight == 0:
+                continue
+            samples[arm].setdefault(score.package_id, []).append((float(value), float(weight)))
+    means = {
+        arm: {
+            package: (
+                sum(value for value, _ in values) / len(values),
+                sum(weight for _, weight in values) / len(values),
+            )
+            for package, values in packages.items()
+        }
+        for arm, packages in samples.items()
+    }
+
+    def arm_value(arm: str) -> float | None:
+        total = sum(weight for _, weight in means[arm].values())
+        return sum(value for value, _ in means[arm].values()) / total if total else None
+
+    differences, weights = [], []
+    for package in sorted(means["off"].keys() & means["on"].keys()):
+        off, off_units = means["off"][package]
+        on, on_units = means["on"][package]
+        weight = min(off_units, on_units)
+        differences.append((on / on_units - off / off_units) * weight)
+        weights.append(weight)
+    interval = pane_stats.package_interval(differences, weights, alpha=0.05, sides=2)
+    return verdict.ShownMeasure(
+        name=name,
+        off=arm_value("off"),
+        on=arm_value("on"),
+        estimate=interval.estimate,
+        lower=interval.lower,
+        upper=interval.upper,
+        excludes_zero=(
+            interval.lower is not None and interval.upper is not None
+            and (interval.lower > 0 or interval.upper < 0)
+        ),
+    )
+
+
+def _pane_defect_ids(score: PackageScore, producer: str, tag: str | None = None) -> set[str]:
+    return {
+        item.id for item in score.graded_items
+        if item.kind == "known_defect" and item.producer == producer
+        and (tag is None or item.tag == tag)
+    }
+
+
+def _pane_detection_history(
+    runs: Sequence[_LoadedRun], producer: str, tag: str | None = None,
+) -> dict[tuple[str, str], dict[str, list[bool]]]:
+    """The completed-run observations needed to name descriptive defect groups."""
+    history: dict[tuple[str, str], dict[str, list[bool]]] = {}
+    for run in runs:
+        assert run.provenance is not None
+        arm = run.provenance.arm
+        assert arm in ("off", "on")
+        for score in run.scorecard.per_package:
+            if score.run_status.kind != "completed":
+                continue
+            detected = set(score.matched_defect_ids) | set(score.flagged_defect_ids)
+            for defect in _pane_defect_ids(score, producer, tag):
+                history.setdefault((score.package_id, defect), {"off": [], "on": []})[
+                    arm
+                ].append(defect in detected)
+    return history
+
+
+def _pane_shown(
+    runs: Sequence[_LoadedRun], result: verdict.StudyVerdict,
+) -> list[verdict.ShownMeasure]:
+    """Section 6's descriptive columns, kept separate from the shared judge."""
+    shown: list[verdict.ShownMeasure] = []
+
+    def add(name, reading, **kwargs):
+        shown.append(_pane_measure(runs, name, reading, **kwargs))
+
+    for name, producer, tag in (
+        ("recall on tuned-on model-produced defects", "model", "tuned_on"),
+        ("detection of code-produced defects", "code", None),
+    ):
+        add(
+            name,
+            lambda score, run, producer=producer, tag=tag: len(
+                _pane_defect_ids(score, producer, tag)
+                & (set(score.matched_defect_ids) | set(score.flagged_defect_ids))
+            ),
+            units=lambda score, producer=producer, tag=tag: len(
+                _pane_defect_ids(score, producer, tag)
+            ),
+            completed=True,
+        )
+    add(
+        "hits on tuned-on forbidden entries",
+        lambda score, run: (
+            len(set(score.forbidden_hit_finding_ids) & set(score.tuned_on_false_alarm_finding_ids))
+            if score.forbidden_hit_finding_ids is not None and any(
+                item.kind == "forbidden_entry" and item.tag == "tuned_on"
+                for item in score.graded_items
+            ) else None
+        ),
+    )
+    for name, column in (
+        ("contradicted correct conditions", "contradicted_condition_ids"),
+        ("confirmed correct conditions", "confirmed_condition_ids"),
+    ):
+        add(name, lambda score, run, column=column: length_or_none(getattr(score, column)))
+    for origin in by_origin(()):
+        add(
+            f"false alarms: {origin}",
+            lambda score, run, origin=origin: by_origin(false_alarm_origins(score))[origin],
+        )
+    add("false alarms", lambda score, run: score.false_alarms)
+    for origin in by_origin(()):
+        add(
+            f"findings: {origin}",
+            lambda score, run, origin=origin: by_origin(final_state_origins(score))[origin],
+        )
+    add("valid findings", lambda score, run: score.valid_findings)
+    add("detected defects", lambda score, run: len(
+        set(score.matched_defect_ids) | set(score.flagged_defect_ids)
+    ))
+    for name, column in (
+        ("flagged defects", "flagged_defect_ids"),
+        ("missed known defects", "missed_defect_ids"),
+    ):
+        add(name, lambda score, run, column=column: len(getattr(score, column)))
+    add("carried findings", lambda score, run: score.carried_findings)
+    for name, column in (
+        ("flagged below expected", "flagged_below_expected_defect_ids"),
+        ("status mismatches", "status_mismatch_defect_ids"),
+        ("forbidden hits", "forbidden_hit_finding_ids"),
+        ("withdrawn forbidden hits", "withdrawn_forbidden_hit_finding_ids"),
+        ("coverage mismatches", "coverage_mismatches"),
+    ):
+        add(name, lambda score, run, column=column: length_or_none(getattr(score, column)))
+    add("unresolved findings", lambda score, run: score.unresolved_count)
+    add("unresolved coverage", lambda score, run: score.coverage_bucket_mix.get(
+        "unresolved", score.unresolved_because_withheld + score.unresolved_other,
+    ))
+    add("unresolved because withheld", lambda score, run: score.unresolved_because_withheld)
+    add("unresolved other", lambda score, run: score.unresolved_other)
+    buckets = sorted({
+        bucket for run in runs for score in run.scorecard.per_package
+        for bucket in score.coverage_bucket_mix
+    })
+    for bucket in buckets:
+        add(
+            f"coverage: {bucket}",
+            lambda score, run, bucket=bucket: score.coverage_bucket_mix.get(bucket, 0),
+        )
+    add("unanswerable requests", lambda score, run: length_or_none(score.unanswerable_requests))
+    for name, seen in (("re-asks seen", True), ("re-asks refused", False)):
+        add(name, lambda score, run, seen=seen: (
+            sum((row.outcome == "recorded") == seen for row in score.re_asks)
+            if score.re_asks is not None else None
+        ))
+    add("repeats of open questions", lambda score, run: length_or_none(score.open_repeats))
+    add("unmatched requests", lambda score, run: length_or_none(score.unmatched_requests))
+    add("question-count misses", lambda score, run: (
+        sum(row.missed for row in score.question_counts)
+        if score.question_counts is not None else None
+    ))
+    add("unscripted questions", lambda score, run: length_or_none(score.unscripted_questions))
+    add("bound-reached reviews", lambda score, run: (
+        int(score.bound_reached) if score.bound_reached is not None else None
+    ))
+    add("fit and axial-stack calls per run", lambda score, run: sum(
+        count for tool, count in score.tool_calls_by_name.items() if tool in GATE_TOOLS
+    ))
+    failure_classes = sorted({
+        attempt.class_ or UNKNOWN for run in runs for attempt in run.scorecard.failed_attempts
+    } | {
+        package.class_ or UNKNOWN for run in runs for package in run.scorecard.unscored_packages
+    })
+    for failure_class in failure_classes:
+        add(
+            f"failures: infrastructure/{failure_class}",
+            lambda score, run, failure_class=failure_class: sum(
+                attempt.package_id == score.package_id
+                and (attempt.class_ or UNKNOWN) == failure_class
+                for attempt in run.scorecard.failed_attempts
+            ),
+        )
+    stop_classes = sorted({
+        score.run_status.class_ or UNKNOWN for run in runs for score in run.scorecard.per_package
+        if score.run_status.kind == "behavioural"
+    })
+    for stop_class in stop_classes:
+        add(
+            f"behavioural stops: {stop_class}",
+            lambda score, run, stop_class=stop_class: int(
+                score.run_status.kind == "behavioural"
+                and (score.run_status.class_ or UNKNOWN) == stop_class
+            ),
+        )
+
+    code_history = _pane_detection_history(runs, "code")
+    sometimes = {
+        (ref.package_id, ref.defect_id) for ref in result.code_guard.off_only_sometimes
+    } | {
+        key for key, arms in code_history.items()
+        if arms["off"] and any(arms["off"]) and not all(arms["off"])
+    }
+    sometimes_name = "code-produced defects detected only sometimes by off arm"
+    add(sometimes_name, lambda score, run: (
+        sum((score.package_id, defect) in sometimes for defect in
+            set(score.matched_defect_ids) | set(score.flagged_defect_ids))
+        if score.run_status.kind == "completed" else 0
+    ))
+    add("cleared defects", lambda score, run: len(score.cleared_defect_ids))
+    held_history = _pane_detection_history(runs, "model", "held_out")
+    every = {
+        key for key, arms in held_history.items()
+        if arms["off"] and arms["on"] and all(arms["off"]) and all(arms["on"])
+    }
+    never = {
+        key for key, arms in held_history.items()
+        if arms["off"] and arms["on"] and not any(arms["off"]) and not any(arms["on"])
+    }
+    every_name = "held-out model-produced defects detected on every counted run of both arms"
+    never_name = "held-out model-produced defects detected on no counted run"
+    for name, selected in ((every_name, every), (never_name, never)):
+        add(name, lambda score, run, selected=selected: sum(
+            package == score.package_id for package, _ in selected
+        ))
+
+    # Names carry the descriptive identities: ShownMeasure deliberately has only
+    # numeric cells, while the judge's separate guards retain their strict models.
+    for package, defect in sorted(sometimes):
+        add(
+            f"{sometimes_name}: {package}/{defect}; the off arm detected it only sometimes",
+            lambda score, run, package=package, defect=defect: (
+                int(defect in set(score.matched_defect_ids) | set(score.flagged_defect_ids))
+                if score.package_id == package and score.run_status.kind == "completed"
+                else (0 if score.package_id == package else None)
+            ),
+        )
+    cleared = sorted({
+        (score.package_id, defect) for run in runs for score in run.scorecard.per_package
+        for defect in score.cleared_defect_ids
+    })
+    for package, defect in cleared:
+        arm_runs = {
+            arm: sorted({
+                run.run for run in runs if run.provenance is not None
+                and run.provenance.arm == arm for score in run.scorecard.per_package
+                if score.package_id == package and defect in score.cleared_defect_ids
+            }) for arm in ("off", "on")
+        }
+        add(
+            f"cleared defects: {package}/{defect}; runs off: "
+            f"{', '.join(arm_runs['off']) or 'none'}; on: {', '.join(arm_runs['on']) or 'none'}",
+            lambda score, run, package=package, defect=defect: (
+                int(defect in score.cleared_defect_ids) if score.package_id == package else None
+            ),
+        )
+    for name, selected in ((every_name, every), (never_name, never)):
+        for package, defect in sorted(selected):
+            add(
+                f"{name}: {package}/{defect}",
+                lambda score, run, package=package: 1 if score.package_id == package else None,
+            )
+    return shown
+
+
+def _pane_points(value: float | None) -> str:
+    return UNKNOWN if value is None else f"{value * 100:.1f} points"
+
+
+def _pane_reference(reference: verdict.DefectRef) -> str:
+    return f"{reference.package_id}/{reference.defect_id}"
+
+
+def _pane_runs(reference: verdict.DefectRuns) -> str:
+    return f"{_pane_reference(reference)}; runs {', '.join(reference.runs) or 'none'}"
+
+
+def _render_pane_studies(ledger: Ledger) -> list[str]:
+    """Render the data-only pane blocks without evaluating any verdict rule."""
+    if not ledger.pane_studies:
+        return []
+    lines = ["", "### Pane study", ""]
+    for pane in ledger.pane_studies:
+        lines += [
+            f"#### {pane.study}: {pane.provider} {pane.model}", "",
+            f"Verdict: {_text(pane.verdict)}.",
+            "Reasons: " + ("; ".join(pane.reasons) or "none") + ".",
+        ]
+        if pane.refusal is not None:
+            lines.append(f"Refusal: {pane.refusal}")
+        lines += ["", *_header((
+            "Paired rule", "Estimate (points)", "Interval (points)", "Level",
+            "Packages", "Retained defects", "Result",
+        ))]
+        if pane.figures is not None:
+            for figure_name in verdict.FIGURES:
+                figure = getattr(pane.figures, figure_name)
+                for rule_name, rule in (
+                    ("recall", figure.recall), ("false alarms", figure.false_alarms),
+                ):
+                    level = 0.95 if pane.slice == "private" else 1 - rule.alpha
+                    state = "loss" if rule.loss else (
+                        "no loss" if rule.computable else "not computable"
+                    )
+                    cells = (
+                        f"{figure_name} {rule_name}", _pane_points(rule.estimate),
+                        f"{_pane_points(rule.lower)} to {_pane_points(rule.upper)}", f"{level:.1%}",
+                        str(rule.packages), str(figure.retained_defects), state,
+                    )
+                    lines.append("| " + " | ".join(cells) + " |")
+        else:
+            lines.append(f"| {UNKNOWN} | {UNKNOWN} | {UNKNOWN} | {UNKNOWN} | "
+                         f"{UNKNOWN} | {UNKNOWN} | {UNKNOWN} |")
+        code = pane.code_guard
+        cleared = pane.cleared_guard
+        lines += [
+            "", "Code guard: " + (
+                "lost: " + ("; ".join(_pane_runs(ref) for ref in code.lost) or "none")
+                + "; off only sometimes: "
+                + ("; ".join(f"{_pane_reference(ref)}: {ref.reason}"
+                             for ref in code.off_only_sometimes) or "none")
+                + "; skipped: "
+                + ("; ".join(f"{_pane_reference(ref)}: {ref.reason}"
+                             for ref in code.skipped) or "none")
+                if code is not None else UNKNOWN
+            ),
+            "Cleared guard: " + (
+                f"decides {_yes_no(cleared.decides)}; "
+                + ("; ".join(_pane_runs(ref) for ref in cleared.named) or "none")
+                if cleared is not None else UNKNOWN
+            ),
+            "", "Dropped:",
+        ]
+        if pane.figures is not None:
+            for name in verdict.FIGURES:
+                figure = getattr(pane.figures, name)
+                defects = ", ".join(
+                    _pane_reference(ref) for ref in figure.dropped_defects
+                ) or "none"
+                packages = ", ".join(figure.dropped_packages) or "none"
+                lines.append(f"- {name}: defects {defects}; packages {packages}.")
+        else:
+            lines.append(UNKNOWN)
+        approval = pane.approval
+        lines += ["", "Approval: " + (
+            f"{approval.approved_at}; size {approval.held_out_model_defects}; "
+            f"repetitions {approval.reps}; alpha {approval.alpha:g}; "
+            f"cleared guard {_yes_no(approval.cleared_guard_decides)}; seed {approval.seed}; "
+            "simulated " + ", ".join(
+                f"{name}={value:g}" for name, value in approval.simulated.model_dump().items()
+            ) if approval is not None else UNKNOWN
+        )]
+        noise = pane.noise_floor
+        if noise.state == "stale":
+            noise_text = "stale: computed over other runs"
+        elif noise.state == "not_computed":
+            noise_text = "not computed: run swreview benchmark noise-floor"
+        else:
+            points = noise.points if isinstance(noise.points, str) else (
+                UNKNOWN if noise.points is None else f"{format_count(noise.points)} points"
+            )
+            noise_text = f"{points}; seed {_text(noise.seed)}; numpy {_text(noise.numpy)}"
+        lines += [
+            "", f"Noise floor: {noise_text}.",
+            "", "Settings the arms differed in: "
+            + (", ".join(pane.arms_differed_in) or "none") + ".",
+            "Recorded inert: " + (", ".join(pane.inert) or "none") + ".",
+            "Settings the verdict does not test: " + (
+                "; ".join(f"{item.setting}: {item.reason}" for item in pane.untested_between_turns)
+                or "none"
+            ) + ".",
+            "", "Shown (per package, or defect rate where named; two-sided 95% intervals):", "",
+            *_header(("Measure", "Off", "On", "Difference", "95% interval", "Excludes zero")),
+        ]
+        rate_names = {
+            "recall on tuned-on model-produced defects", "detection of code-produced defects",
+        }
+        for measure in pane.shown:
+            number = _pane_points if measure.name in rate_names else format_count
+            absent = measure.off is None and measure.on is None
+            cells = (
+                measure.name,
+                "not assessed" if absent else number(measure.off),
+                "not assessed" if absent else number(measure.on),
+                number(measure.estimate), f"{number(measure.lower)} to {number(measure.upper)}",
+                _yes_no(measure.excludes_zero),
+            )
+            lines.append("| " + " | ".join(cells) + " |")
+        changes = [
+            f"{measure.name} {'fell' if measure.estimate < 0 else 'rose'}"
+            for measure in pane.shown if measure.excludes_zero and measure.estimate is not None
+        ]
+        if changes:
+            lines += ["", "Shown changes whose interval excludes zero: " + "; ".join(changes) + "."]
+        lines.append("")
+    return lines

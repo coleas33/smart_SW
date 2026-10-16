@@ -1,8 +1,9 @@
-"""T226: the pane rule over fictional, hand-built scorecards; no run folders."""
+"""T226's pane rule and T232's pane block over fictional, hand-built scorecards."""
 
 from __future__ import annotations
 
 import ast
+import json
 from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import fields, replace
@@ -14,8 +15,9 @@ import numpy as np
 import pytest
 from pydantic import ValidationError
 
-from swreview.benchmark import origins, stats, verdict
-from swreview.benchmark.scorecard import Scorecard, UnscoredPackage
+from swreview.agent import settings
+from swreview.benchmark import compare, origins, stats, verdict
+from swreview.benchmark.scorecard import GradedItem, Scorecard, UnscoredPackage
 from tests.support.studies import PanePackage, pane_run
 
 Edit = Callable[[str, int, int, PanePackage], PanePackage]
@@ -790,3 +792,267 @@ def test_package_grouping_preserves_existing_order_for_more_than_two_defects():
         "sfd,dk->sfk", values, (packages[:, None] == np.arange(3)).astype(float),
     )
     np.testing.assert_array_equal(verdict._group_packages(values, packages, 3), expected)
+
+
+def pane_block(tmp_path, runs=None, *, provider="openai", case_file=False):
+    """T232 exercises the public compare path, including the approved sizing input."""
+    from tests.support.studies import (
+        write_measurement,
+        write_noise_floor,
+        write_pane_study,
+    )
+
+    runs = study() if runs is None else runs
+    folders = write_pane_study(
+        tmp_path / "runs", runs, provider=provider, case_file=case_file,
+    )
+    measurement = write_measurement(tmp_path / "pilot", provider=provider)
+    noise_floor = write_noise_floor(tmp_path / "runs", folders, provider=provider)
+    ledger = compare.compare_runs(
+        folders, root=tmp_path, pilots=[measurement], noise_floors=[noise_floor],
+    )
+    assert len(ledger.pane_studies) == 1
+    block = ledger.pane_studies[0]
+    assert block.refusal is None
+    return ledger, block
+
+
+def shown(block, name):
+    measures = [measure for measure in block.shown if measure.name == name]
+    assert len(measures) == 1, (name, [measure.name for measure in block.shown])
+    return measures[0]
+
+
+def assert_two_sided_half_split(measure, *, off, on):
+    """18 package differences split evenly one unit apart: SE = sqrt(.25 / 17)."""
+    margin = 2.109815578 * (0.25 / 17) ** 0.5  # t(17, .975), tabulated independently.
+    assert measure.off == pytest.approx(off)
+    assert measure.on == pytest.approx(on)
+    assert measure.estimate == pytest.approx(on - off)
+    assert measure.lower == pytest.approx(on - off - margin, abs=1e-8)
+    assert measure.upper == pytest.approx(on - off + margin, abs=1e-8)
+    assert measure.level == 0.95
+    assert measure.excludes_zero is True
+
+
+def grade_forbidden_entries(runs, tag):
+    for run in runs:
+        for package in run.scorecard.per_package:
+            package.graded_items.extend(
+                GradedItem(id=f"forbidden-{n}", kind="forbidden_entry", tag=tag,
+                           producer=None, expected_status=None)
+                for n in range(2)
+            )
+            package.not_assessed.pop("forbidden_hit_finding_ids", None)
+
+
+def test_v9_prerun_false_alarm_rise_is_named_and_shown_without_changing_the_verdict(tmp_path):
+    def edit(arm, rep, index, package):
+        prerun = 1 + index % 2 if arm == "on" else 0
+        return replace(package, false_alarms=(
+            ("F-model", "model"),
+            *((f"F-prerun-{n}", "prerun") for n in range(prerun)),
+        ))
+
+    runs = study(edit)
+    ledger, block = pane_block(tmp_path, runs)
+    expected = judge(runs)
+    assert block.verdict == expected.verdict == "no 10-point loss"
+    assert block.figures == expected.figures
+    assert_two_sided_half_split(shown(block, "false alarms: prerun"), off=0, on=1.5)
+    model = shown(block, "false alarms: model")
+    assert model.off == model.on == 1
+    assert model.estimate == 0
+    markdown = compare.render_ledger_md(ledger)
+    assert "false alarms: prerun" in markdown
+    assert "excludes zero" in markdown.lower()
+
+
+def test_v10_tuned_on_forbidden_hits_are_regression_guards_outside_deciding_alarms(tmp_path):
+    def edit(arm, rep, index, package):
+        hits = 1 + index % 2 if arm == "on" else 0
+        findings = tuple(f"F-tuned-{n}" for n in range(hits))
+        return replace(
+            package,
+            false_alarms=tuple((finding, "model") for finding in findings),
+            tuned_on_false_alarms=findings,
+            score_overrides={"forbidden_hit_finding_ids": list(findings)},
+        )
+
+    runs = study(edit)
+    grade_forbidden_entries(runs, "tuned_on")
+    _, block = pane_block(tmp_path, runs)
+    assert block.verdict == "no 10-point loss"
+    for figure in (block.figures.main, block.figures.sensitivity):
+        assert figure.false_alarms.estimate == 0
+        assert figure.false_alarms.loss is False
+    assert_two_sided_half_split(
+        shown(block, "hits on tuned-on forbidden entries"), off=0, on=1.5,
+    )
+
+
+def test_v10_tuned_on_model_detection_is_a_shown_guard_outside_both_recall_figures(tmp_path):
+    def edit(arm, rep, index, package):
+        detected = ("T-1",) if arm == "on" and index % 2 else ()
+        return replace(package, model_tuned_on=("T-1",), matched=package.matched + detected)
+
+    runs = study(edit)
+    _, block = pane_block(tmp_path, runs)
+    expected = judge(study())
+    assert block.verdict == expected.verdict == "no 10-point loss"
+    assert block.figures == expected.figures
+    guard = shown(block, "recall on tuned-on model-produced defects")
+    assert guard.off == 0
+    assert guard.on == guard.estimate == 0.5
+    assert guard.lower > 0
+    assert guard.excludes_zero is True
+    assert guard.level == 0.95
+
+
+def test_v11_fit_and_axial_stack_call_fall_has_a_paired_interval_and_does_not_decide(tmp_path):
+    def edit(arm, rep, index, package):
+        fit, axial = (2, 2) if arm == "off" else (1, 1 + index % 2)
+        return replace(package, tool_calls_by_name=(
+            ("check_fit", fit), ("check_axial_stack", axial), ("list_holes", 900),
+        ))
+
+    runs = study(edit)
+    ledger, block = pane_block(tmp_path, runs)
+    assert block.verdict == "no 10-point loss"
+    assert block.figures == judge(study()).figures
+    assert_two_sided_half_split(
+        shown(block, "fit and axial-stack calls per run"), off=4, on=2.5,
+    )
+    markdown = compare.render_ledger_md(ledger)
+    assert "fit and axial-stack calls per run" in markdown
+    assert "excludes zero" in markdown.lower()
+
+
+def test_v18_model_code_only_false_alarms_are_shown_beside_prerun_and_never_decide(tmp_path):
+    def edit(arm, rep, index, package):
+        count = 1 + index % 2 if arm == "off" else 0
+        return replace(package, false_alarms=tuple(
+            (f"F-forbidden-code-{n}", "code_only_call") for n in range(count)
+        ), score_overrides={
+            "forbidden_hit_finding_ids": [f"F-forbidden-code-{n}" for n in range(count)],
+        })
+
+    runs = study(edit)
+    grade_forbidden_entries(runs, "held_out")
+    _, block = pane_block(tmp_path, runs)
+    assert block.verdict == "no 10-point loss"
+    assert block.figures == judge(runs).figures
+    assert_two_sided_half_split(shown(block, "false alarms: code_only_call"), off=1.5, on=0)
+    assert shown(block, "false alarms: prerun").off == 0
+    names = [measure.name for measure in block.shown]
+    assert names.index("false alarms: code_only_call") == names.index("false alarms: regrade") + 1
+
+
+def test_v20_compare_routes_the_pane_study_to_no_lever_decision(tmp_path, monkeypatch):
+    def forbidden(*args, **kwargs):
+        pytest.fail("a pane study reached feature 005's adoption rule")
+
+    monkeypatch.setattr(compare, "_decision_row", forbidden)
+    ledger, block = pane_block(tmp_path)
+    assert ledger.levers == []
+    assert block.study == settings.PANE_STUDY
+    assert block.verdict == "no 10-point loss"
+    assert block.reps.model_dump() == {"off": 3, "on": 3}
+    assert len(block.run_dirs) == 6
+
+
+def test_v21_gemini_names_the_differing_and_recorded_inert_settings(tmp_path):
+    from tests.support.studies import pane_study_specs
+
+    # Gemini is explicit in V-21, rather than an either-provider adapter test (94A).
+    ledger, block = pane_block(tmp_path, provider="gemini")
+    off, on = pane_study_specs(provider="gemini", reps=1)
+    expected = compare.settings_differed(off.provenance(), on.provenance())
+    assert block.arms_differed_in == list(expected.arms_differed_in)
+    assert block.inert == list(expected.inert)
+    assert {"parallel_tool_calls", "drop_prior_reasoning"} <= set(block.inert)
+    markdown = compare.render_ledger_md(ledger)
+    assert "parallel_tool_calls" in markdown
+    assert "drop_prior_reasoning" in markdown
+
+
+def test_v22_pane_block_uses_shared_judge_and_exposes_rules_approval_and_noise(
+    tmp_path, monkeypatch,
+):
+    runs = study()
+    expected = judge(runs)
+    stats_calls, judge_calls = [], []
+    original_stats, original_judge = verdict.study_stats, verdict.judge
+
+    def observe_stats(loaded):
+        stats_calls.append(loaded)
+        return original_stats(loaded)
+
+    def observe_judge(data, rules, **kwargs):
+        judge_calls.append(rules)
+        return original_judge(data, rules, **kwargs)
+
+    monkeypatch.setattr(verdict, "study_stats", observe_stats)
+    monkeypatch.setattr(verdict, "judge", observe_judge)
+    ledger, block = pane_block(tmp_path, runs)
+    assert len(stats_calls) == len(judge_calls) == 1
+    assert len(stats_calls[0]) == 6
+    assert all(isinstance(run, verdict.StudyRun) for run in stats_calls[0])
+    assert judge_calls == [RULES]
+    assert block.verdict == expected.verdict
+    assert block.figures == expected.figures
+    assert block.code_guard == expected.code_guard
+    assert block.cleared_guard == expected.cleared_guard
+    assert block.approval.alpha == 0.025
+    assert block.approval.held_out_model_defects == 36
+    assert block.approval.reps == 3
+    assert block.approval.cleared_guard_decides is False
+    assert block.approval.seed == 140514
+    measurement = json.loads((tmp_path / "pilot" / "pilot-measurement.json").read_text())
+    assert block.approval.simulated.model_dump() == measurement["sizing"]["result"]["simulated"]
+    assert block.noise_floor.state == "computed"
+    assert block.noise_floor.points == 8.5
+    assert block.noise_floor.seed == 140514
+    for figure in (block.figures.main, block.figures.sensitivity):
+        assert figure.recall.alpha == figure.false_alarms.alpha == 0.025
+    assert block.shown
+    markdown = compare.render_ledger_md(ledger)
+    for text in ("### Pane study", "no 10-point loss", "main", "sensitivity", "recall",
+                 "false", "guard", "approval", "alpha", "140514", "8.5", "shown"):
+        assert text.lower() in markdown.lower()
+
+
+def test_v24_a_shown_column_the_keys_do_not_grade_has_no_interval(tmp_path):
+    ledger, block = pane_block(tmp_path)
+    measure = shown(block, "forbidden hits")
+    assert measure.off is measure.on is measure.estimate is measure.lower is measure.upper is None
+    assert measure.excludes_zero is False
+    assert "not assessed" in compare.render_ledger_md(ledger)
+
+
+def test_v27_between_turn_settings_name_efficiency_fields():
+    assert settings.BETWEEN_TURN_SETTINGS == ("drop_prior_reasoning",)
+    assert all(name in settings.EfficiencySettings.model_fields
+               for name in settings.BETWEEN_TURN_SETTINGS)
+
+
+@pytest.mark.parametrize("case_file", [False, True])
+def test_v27_openai_names_dropped_reasoning_untested_only_without_a_held_out_answer_case(
+    tmp_path, case_file,
+):
+    ledger, block = pane_block(tmp_path, case_file=case_file)
+    expected = [] if case_file else [{
+        "setting": "drop_prior_reasoning",
+        "reason": "acts only between turns; no held-out case takes an answer turn, "
+                  "so the verdict does not test it; the anchors show it",
+    }]
+    assert [setting.model_dump() for setting in block.untested_between_turns] == expected
+    assert "drop_prior_reasoning" not in block.inert
+    if not case_file:
+        assert expected[0]["reason"] in compare.render_ledger_md(ledger)
+
+
+def test_v27_gemini_names_dropped_reasoning_only_as_inert(tmp_path):
+    _, block = pane_block(tmp_path, provider="gemini")
+    assert "drop_prior_reasoning" in block.inert
+    assert block.untested_between_turns == []

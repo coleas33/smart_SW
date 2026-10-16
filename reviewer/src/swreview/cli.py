@@ -101,6 +101,7 @@ from swreview.benchmark.compare import (
     committed_sign_off_sources,
     compare_runs,
     refused_decisions,
+    refused_pane_studies,
     render_ledger_md,
     splice_ledger,
     write_ledger,
@@ -3276,6 +3277,14 @@ def benchmark_compare(
         bool,
         typer.Option("--check", help="With --into: verify it is current, write nothing."),
     ] = False,
+    pilot: Annotated[
+        list[Path] | None,
+        typer.Option("--pilot", help="Pilot measurement for a pane study; repeatable."),
+    ] = None,
+    noise_floor: Annotated[
+        list[Path] | None,
+        typer.Option("--noise-floor", help="Saved noise-floor record; repeatable."),
+    ] = None,
     json_output: JsonFlag = False,
 ) -> None:
     """Render the results ledger from scored run directories; contacts no provider.
@@ -3300,8 +3309,10 @@ def benchmark_compare(
         committed = any(
             committable(path, root=root) for path in (out, into) if path is not None
         )
+        notes: list[str] = []
         ledger = carry_sign_offs(
-            compare_runs(run_dirs or [], root=root, committed_ledger=committed),
+            compare_runs(run_dirs or [], root=root, committed_ledger=committed,
+                         pilots=pilot or (), noise_floors=noise_floor or (), notes=notes),
             *committed_sign_off_sources(out, into),
         )
         rendered = render_ledger_md(ledger)
@@ -3319,6 +3330,7 @@ def benchmark_compare(
                 written.append(str(Path(into).resolve()))
 
     refused = refused_decisions(ledger)
+    refused_panes = refused_pane_studies(ledger)
     payload = {
         "runs": len(ledger.runs),
         "levers": len(ledger.levers),
@@ -3327,14 +3339,20 @@ def benchmark_compare(
             {"lever": row.lever, "reason": row.decision_reason} for row in refused
         ],
         "drifted": drifted,
+        "refused_pane_studies": [
+            {"study": row.study, "reason": row.refusal} for row in refused_panes
+        ],
+        "notes": notes,
     }
     lines = [f"compared {len(ledger.runs)} run rows over {len(ledger.levers)} studies"]
     lines += [f"wrote {path}" for path in written]
     lines += [f"no decision for {row.lever}: {row.decision_reason}" for row in refused]
+    lines += notes
+    lines += [f"no verdict for {row.study}: {row.refusal}" for row in refused_panes]
     if drifted:
         lines.append(f"{into} is out of date: re-run without --check to regenerate it")
     _emit(payload, lines, json_output)
-    if refused or drifted:
+    if refused or refused_panes or drifted:
         raise typer.Exit(1)
 
 

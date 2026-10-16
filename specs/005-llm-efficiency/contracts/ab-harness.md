@@ -332,6 +332,8 @@ compared may not report that nothing was lost.
 
 ## 5. The decision rows, and who owns the Decision
 
+The pane study is decided by [014's verdict contract](../../014-design-review-eval/contracts/verdict.md), not `adoption.decide`; none of its four rules applies to it (FR-045).
+
 `compare` renders **one decision row per lever per provider and model** into `ledger.md`, applying
 the four rules of levers.md section 7.
 
@@ -435,6 +437,8 @@ One column carrying the number that lever's own gate needs and no other's.
 | 11a `carry_over_rms` | carried versus re-run counts | A lever that "improves" recall by remembering is not an improvement |
 
 ## 7. Preconditions for the whole harness, in order
+
+The pane study is decided by [014's verdict contract](../../014-design-review-eval/contracts/verdict.md), not `adoption.decide`; none of its four rules applies to it (FR-045).
 
 1. **The instrumentation has landed**: per-round usage from both adapters, summed onto
    `session.json`, surfaced in `PackageScore` and `render_scorecard_md`.

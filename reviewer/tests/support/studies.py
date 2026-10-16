@@ -907,3 +907,147 @@ def pane_run(
     payload.update(per_package=scored, unscored_packages=unscored,
                    aggregate=Aggregate.model_validate(aggregate))
     return verdict.StudyRun(run=run, arm=arm, scorecard=Scorecard.model_validate(payload))
+
+
+def write_pane_study(
+    root: Path,
+    runs: Sequence[verdict.StudyRun],
+    *,
+    provider: str = "openai",
+    model: str | None = None,
+    study: str = PANE_STUDY,
+    case_file: bool = False,
+) -> list[Path]:
+    """Save pane scorecards beside matching provenance, saved sets and marked sessions."""
+    folders = []
+    for run in runs:
+        packages = tuple(
+            PackageSpec(
+                package_id=score.package_id, held_out=score.held_out,
+                matched=tuple(score.matched_defect_ids), missed=tuple(score.missed_defect_ids),
+                false_alarms=0,
+            )
+            for score in run.scorecard.per_package
+        )
+        spec = pane_run_spec(
+            run.run, run.arm, int(run.run.rsplit("-", 1)[-1]),
+            study=study, provider=provider, packages=packages,
+            **({"model": model} if model else {}),
+        )
+        entries = saved_set_entries(spec)
+        for entry, score in zip(entries, run.scorecard.per_package, strict=True):
+            entry["held_out"] = any(item.tag == "held_out" for item in score.graded_items)
+        if case_file:
+            for entry in entries:
+                if entry["held_out"]:
+                    entry["case_file"] = f"benchmarks/cases/{entry['package_id']}.json"
+        folder = write_run(root, spec, session_edit={"origin_marks": 1}, saved_packages=entries)
+        (folder / "scorecard.json").write_text(
+            run.scorecard.model_dump_json(indent=2) + "\n", encoding="utf-8",
+        )
+        folders.append(folder)
+    return folders
+
+
+def write_measurement(
+    folder: Path,
+    *,
+    study: str = PANE_STUDY,
+    provider: str = "openai",
+    model: str | None = None,
+    reps: int = 3,
+    held_out_model_defects: int = 36,
+    packages: int = 18,
+    pilot_packages: Sequence[str] | None = None,
+    growth_units: int = 0,
+    approved: bool = True,
+    approved_at: str | None = "2026-09-14",
+    alpha: float = 0.025,
+    cleared_guard_decides: bool = False,
+    seed: int = 140514,
+    pilot_runs: Sequence[dict[str, Any]] = (),
+) -> Path:
+    """Hand-written measurement through its strict model; no fitting or simulation."""
+    from swreview.benchmark import pilot
+
+    simulated = {
+        "power_proportional": 0.83, "power_room": 0.87,
+        "identical_loss": 0.036, "identical_loss_upper": 0.041,
+        "no_loss_at_drop": 0.021, "no_loss_at_drop_upper": 0.025,
+    }
+    result = {
+        "reps": reps, "packages": packages, "held_out_model_defects": held_out_model_defects,
+        "alpha": alpha, "deciding_rules": ["recall", "false_alarms", "code_guard"],
+        "cleared_guard_decides": cleared_guard_decides, "simulated": simulated,
+        "stress_case": 0.729, "estimated_study_cost": None,
+    }
+    measurement = pilot.PilotMeasurement.model_validate({
+        "identity": {
+            "pilot_schema": pilot.PILOT_SCHEMA, "study": study, "provider": provider,
+            "model": model or DEFAULT_MODELS[ProviderName(provider)], "commit": COMMIT,
+            "set_digest": SET_DIGEST, "scoring_rules_version": SCORING_RULES_VERSION,
+        },
+        "pilot_runs": list(pilot_runs), "smoke_runs": [],
+        "measured": {
+            "defect_counts": [], "dropped_defects": [], "dropped_defect_count": 0,
+            "variance_excluded_defects": [], "variance_excluded_count": 0,
+            "beta_fit": {
+                "mu": 0.5, "variance": None, "variance_computable": False,
+                "distribution": "constant", "a": None, "b": None, "reason": "fictional",
+            },
+            "comovement": {"grid": [], "estimate": 0.0, "used": 0.0},
+            "code_defects": [], "stops": {"x": 0, "n": 0}, "clearances": [],
+            "false_alarm_fit": {
+                "mean": 0.0, "variance": 0.0, "distribution": "poisson", "k": None,
+            },
+            "cost_time": {
+                "mean_cost": None, "mean_wall_clock_s": None,
+                "unknown_cost_runs": [], "unknown_cost_count": 0,
+            },
+            "never_detected": [],
+        },
+        "sizing": {
+            "cap": 10, "floor": 34, "seed": seed, "sims": 4000,
+            "ladder": [0.025, 0.02], "tried": [],
+            "pilot_packages": list(pilot_packages or ()), "growth_units": growth_units,
+            "jobs": 1,
+            "projected_wall_clock": {
+                "off_run_s": None, "on_run_s": None, "study_s": None, "smoke_ratio": None,
+                "smoke_off_s": None, "smoke_on_s": None, "mean_tokens_per_minute": None,
+                "unknown_packages": [],
+            },
+            "result": result,
+        },
+        "sizing_digest": "pending", "approval": {"approved": approved, "approved_at": approved_at},
+    })
+    measurement.sizing_digest = pilot.sizing_digest(measurement)
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / "pilot-measurement.json"
+    path.write_text(measurement.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+def write_noise_floor(
+    folder: Path,
+    runs: Sequence[Path],
+    *,
+    study: str = PANE_STUDY,
+    provider: str = "openai",
+    model: str | None = None,
+    points: float = 8.5,
+    seed: int = 140514,
+    runs_digest: str | None = None,
+) -> Path:
+    """A stored noise-floor result, constructed without drawing a random number."""
+    from swreview.benchmark import simulate
+
+    record = simulate.NoiseFloorRecord(
+        noise_floor_schema=1, study=study, provider=provider,
+        model=model or DEFAULT_MODELS[ProviderName(provider)],
+        runs_digest=runs_digest or simulate.runs_digest(runs, relative_to=folder),
+        seed=seed, sims=4000, numpy_version="2.4.6", grid=[0.5, 1.0, 8.5], result=points,
+    )
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / "noise-floor.json"
+    path.write_text(record.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    return path
