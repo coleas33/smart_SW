@@ -7,8 +7,8 @@ workstation. They are skipped, not failed, when it is absent (plan.md, Testing).
 key is absent from the environment - the same convention, so a checkout with neither a
 native package nor a key runs the whole suite green.
 
-`perf` tests are the exception to that convention: they are not collected at all unless
-the run asks for them by marker. See `pytest_ignore_collect` below.
+`perf` and `simulation` tests are the exception to that convention: they are not collected
+at all unless the run asks for them by marker. See `pytest_ignore_collect` below.
 """
 
 from __future__ import annotations
@@ -45,13 +45,17 @@ that names this directory without being `==` to it, and the budgets would quietl
 the default run. `tests/unit/test_perf_collection_gate.py` pins that case.
 """
 
+SIMULATION_DIR = (Path(__file__).parent / "simulation").resolve()
+"""The reference sweep, collected only on request with the same resolved-path rule."""
+
 
 def pytest_ignore_collect(collection_path: Path, config: pytest.Config) -> bool | None:
-    """Keep `tests/perf/` out of every run whose `-m` expression does not name `perf`.
+    """Keep perf and simulation folders out unless `-m` names their respective marker.
 
     A perf test asserts a wall-clock budget, so it measures the machine as much as the
     code: on a loaded laptop or a shared runner it goes red with no commit at fault. It
     is therefore out of the default run (`uv run pytest -m "not live"`) and out of CI.
+    The simulation reference sweep takes several minutes and is also run deliberately.
 
     Not *collected*, rather than skipped the way `integration` and `live` are: those two
     skip because this checkout is missing an input, and the skip line is the useful
@@ -59,9 +63,12 @@ def pytest_ignore_collect(collection_path: Path, config: pytest.Config) -> bool 
     a measurement that was considered, which it was not. Run them deliberately:
 
         uv run pytest -m perf -s
+        uv run pytest -m simulation -s
     """
-    if collection_path.resolve() == PERF_DIR and "perf" not in config.getoption("markexpr"):
-        return True
+    resolved = collection_path.resolve()
+    for directory, marker in ((PERF_DIR, "perf"), (SIMULATION_DIR, "simulation")):
+        if resolved == directory and marker not in config.getoption("markexpr"):
+            return True
     return None
 
 
