@@ -10,10 +10,10 @@ A Remodel run folder is judged by a Remodel run's records (``REMODEL_REQUIRED_AR
 so its missing list says what the run did not reach rather than naming review files it
 never writes; the manifest's ``run_kind`` says which list applied.
 
-A benchmark run's package folder is exported with its run's record: ``benchmark run`` keeps
-``run-provenance.json`` at the run root, beside ``benchmark-set.json``, and each package's
-session and events in ``<run>/<package>/``, so that one name is read from the parent and
-nothing else of the run root or of another package.
+A benchmark run's package folder is exported with its run's records: ``benchmark run`` keeps
+``run-provenance.json`` and ``run-status.json`` at the run root, beside ``benchmark-set.json``,
+and each package's session, events, prompts and answer log in ``<run>/<package>/``, so those
+two names are read from the parent and nothing else of the run root or of another package.
 
 The secret scan is a safety net, not a proof that a bundle is secret-free.  Configured
 secret values are redacted with the product redactor and the provider-key shapes used by
@@ -38,7 +38,7 @@ from uuid import UUID
 from pydantic import SecretStr
 
 from swreview.agent.settings import MASK, redact
-from swreview.benchmark.runner import PROVENANCE_FILE, SAVED_SET_FILE
+from swreview.benchmark.runner import PROVENANCE_FILE, RUN_STATUS_FILE, SAVED_SET_FILE
 from swreview.ir.loader import reject_answer_key_path
 from swreview.report.attention import EXPLANATION_UNAVAILABLE
 from swreview.report.attention_record import StaleAttentionRecord, read_attention_record
@@ -69,6 +69,8 @@ REQUIRED_ARTIFACTS: tuple[str, ...] = (
 
 OPTIONAL_ARTIFACTS: tuple[str, ...] = (
     PROVENANCE_FILE,
+    "prompts.json",
+    "answer-log.json",
     "extraction-progress.jsonl",
     "check.json",
     "chat-log.jsonl",
@@ -124,10 +126,10 @@ _RUN_ROOT_MARKERS: tuple[str, ...] = (PROVENANCE_FILE, SAVED_SET_FILE)
 """What a benchmark run's root holds beside its package folders: the run's record and its saved
 set. A folder whose parent holds both is one of a benchmark run's package folders."""
 
-_RUN_ROOT_ARTIFACTS: tuple[str, ...] = (PROVENANCE_FILE,)
+_RUN_ROOT_ARTIFACTS: tuple[str, ...] = (PROVENANCE_FILE, RUN_STATUS_FILE)
 """What a benchmark package export reads from its run root, and nothing else of it: the run keeps
-its record at the root, which holds no session, and each package's session and events in
-``<run>/<package>/``, which holds no record (014 `contracts/provenance.md` section 7)."""
+its provenance and status at the root, which holds no session, and each package's session and
+events in ``<run>/<package>/`` (014 `contracts/provenance.md` section 7)."""
 
 _FROM_RUN_DIR = "run_dir"
 """An artifact record's ``source`` for a name read from the input tree."""
