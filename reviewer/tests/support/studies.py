@@ -21,7 +21,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from statistics import median
-from typing import Any, get_args
+from typing import TYPE_CHECKING, Any, Literal, get_args
 from uuid import NAMESPACE_URL, uuid5
 
 from swreview.agent.providers import EffortMapping, ProviderName, TokenUsage
@@ -81,6 +81,9 @@ from swreview.report.session import (
 )
 from tests.support.findings import make_finding
 from tests.support.packages import build_package
+
+if TYPE_CHECKING:
+    from swreview.benchmark import verdict
 
 PACKAGE = build_package()
 
@@ -755,3 +758,152 @@ def study_specs(
         )
         specs.append(RunSpec(run=f"on-{rep}", arm="on", rep=rep, lever=lever, **(on or {})))
     return specs
+
+
+@dataclass(frozen=True)
+class PanePackage:
+    """One pane-study package run, with its fictional key's tags and scored outcomes.
+
+    Infrastructure outcomes become `unscored_packages`; every other outcome is built
+    through `PackageScore`. This builder neither reads a key nor writes a run folder.
+    """
+
+    package_id: str
+    model_held_out: tuple[str, ...] = ("D-1", "D-2")
+    model_tuned_on: tuple[str, ...] = ()
+    code_held_out: tuple[str, ...] = ()
+    code_tuned_on: tuple[str, ...] = ()
+    matched: tuple[str, ...] = ("D-1",)
+    flagged: tuple[str, ...] = ()
+    cleared: tuple[str, ...] = ()
+    false_alarms: tuple[tuple[str, Origin], ...] = ()
+    tuned_on_false_alarms: tuple[str, ...] = ()
+    status: Literal["completed", "behavioural", "infrastructure"] = "completed"
+    bound_reached: bool = False
+    tool_calls_by_name: tuple[tuple[str, int], ...] = (("check_fit", 1),)
+    score_overrides: dict[str, Any] | None = None
+
+
+def pane_run(
+    run: str, arm: Literal["off", "on"], packages: Sequence[PanePackage]
+) -> verdict.StudyRun:
+    """A `StudyRun` over hand-built pane scorecards, with no filesystem or provider."""
+    from swreview.benchmark import verdict
+    from swreview.benchmark.scorecard import UnscoredPackage
+
+    specs = tuple(
+        PackageSpec(
+            package_id=package.package_id,
+            matched=package.matched,
+            missed=tuple(
+                defect for defect in package.model_held_out if defect not in package.matched
+            ),
+            false_alarms=len(package.false_alarms),
+        )
+        for package in packages
+    )
+    base = scorecard(RunSpec(run=run, arm=arm, lever=PANE_STUDY, packages=specs))
+    scored: list[PackageScore] = []
+    unscored: list[UnscoredPackage] = []
+    for package, spec in zip(packages, specs, strict=True):
+        if package.status == "infrastructure":
+            unscored.append(
+                UnscoredPackage(
+                    package_id=package.package_id,
+                    kind="infrastructure",
+                    class_="provider_error",
+                    error_class="FictionalProviderError",
+                    attempts=1,
+                    folder=f"attempts/{package.package_id}/1",
+                )
+            )
+            continue
+        items = [
+            GradedItem(
+                id=defect,
+                kind="known_defect",
+                tag=tag,
+                producer=producer,
+                expected_status="suspected",
+            )
+            for producer, tag, ids in (
+                ("model", "held_out", package.model_held_out),
+                ("model", "tuned_on", package.model_tuned_on),
+                ("code", "held_out", package.code_held_out),
+                ("code", "tuned_on", package.code_tuned_on),
+            )
+            for defect in ids
+        ]
+        detected = set(package.matched) | set(package.flagged)
+        missed = [item.id for item in items if item.id not in detected | set(package.cleared)]
+        payload = package_score(spec).model_dump()
+        payload.update(
+            held_out=any(item.tag == "held_out" for item in items),
+            run_status={
+                "kind": package.status,
+                "class": "max_steps" if package.status == "behavioural" else None,
+                "stop_reason": "max_steps" if package.status == "behavioural" else None,
+            },
+            valid_findings=len(detected),
+            missed_known_defects=len(missed),
+            matched_defect_ids=list(package.matched),
+            flagged_defect_ids=list(package.flagged),
+            cleared_defect_ids=list(package.cleared),
+            missed_defect_ids=missed,
+            false_alarm_finding_ids=[finding for finding, _ in package.false_alarms],
+            finding_origins=dict(package.false_alarms),
+            tuned_on_false_alarm_finding_ids=list(package.tuned_on_false_alarms),
+            graded_items=items,
+            tool_calls_by_name=dict(package.tool_calls_by_name),
+            bound_reached=package.bound_reached,
+        )
+        payload["not_assessed"].pop("bound_reached", None)
+        payload.update(package.score_overrides or {})
+        scored.append(PackageScore.model_validate(payload))
+
+    def recall(producer: str, tag: str) -> float | None:
+        known = [
+            (score, item)
+            for score in scored
+            for item in score.graded_items
+            if item.producer == producer and item.tag == tag
+        ]
+        return (
+            sum(
+                item.id in set(score.matched_defect_ids) | set(score.flagged_defect_ids)
+                for score, item in known
+            ) / len(known)
+            if known else None
+        )
+
+    by_origin = dict.fromkeys(get_args(Origin), 0)
+    for score in scored:
+        for finding in score.false_alarm_finding_ids:
+            by_origin[score.finding_origins[finding]] += 1
+    aggregate = base.aggregate.model_dump()
+    aggregate.update(
+        packages=len(scored),
+        held_out_packages=sum(score.held_out for score in scored),
+        valid_findings=sum(score.valid_findings for score in scored),
+        missed_known_defects=sum(score.missed_known_defects for score in scored),
+        false_alarms=sum(score.false_alarms for score in scored),
+        detected=sum(len(set(score.matched_defect_ids) | set(score.flagged_defect_ids))
+                     for score in scored),
+        flagged=sum(len(score.flagged_defect_ids) for score in scored),
+        cleared=sum(len(score.cleared_defect_ids) for score in scored),
+        tuned_on_false_alarms=sum(len(score.tuned_on_false_alarm_finding_ids) for score in scored),
+        bound_reached=sum(bool(score.bound_reached) for score in scored),
+        findings_by_origin=by_origin,
+        false_alarms_by_origin=by_origin,
+        recall_by_producer=RecallByProducer(
+            model=RecallByTag(held_out=recall("model", "held_out"),
+                              tuned_on=recall("model", "tuned_on")),
+            code=RecallByTag(held_out=recall("code", "held_out"),
+                             tuned_on=recall("code", "tuned_on")),
+        ),
+        held_out_model_defects=sum(len(package.model_held_out) for package in packages),
+    )
+    payload = base.model_dump()
+    payload.update(per_package=scored, unscored_packages=unscored,
+                   aggregate=Aggregate.model_validate(aggregate))
+    return verdict.StudyRun(run=run, arm=arm, scorecard=Scorecard.model_validate(payload))
