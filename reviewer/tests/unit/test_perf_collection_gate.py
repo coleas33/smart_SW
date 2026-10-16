@@ -16,12 +16,13 @@ being `==` to it.
 
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from tests.conftest import PERF_DIR, pytest_ignore_collect
+from tests.conftest import PERF_DIR, SIMULATION_DIR, pytest_ignore_collect
 
 
 class _Config:
@@ -80,3 +81,46 @@ def test_other_paths_are_left_alone(relative: str) -> None:
     """
     path = Path(PERF_DIR.parent / relative)
     assert pytest_ignore_collect(path, _Config("not live")) is None
+
+
+def test_simulation_directory_is_resolved() -> None:
+    assert SIMULATION_DIR == Path(__file__).resolve().parents[1] / "simulation"
+    assert SIMULATION_DIR == SIMULATION_DIR.resolve()
+
+
+@pytest.mark.parametrize(
+    "markexpr",
+    [
+        pytest.param("", id="bare-run"),
+        pytest.param("not live", id="default-run"),
+        pytest.param("not live and not raycast", id="ci-run"),
+        pytest.param("perf", id="perf-run"),
+    ],
+)
+def test_simulation_directory_is_ignored_when_the_marker_expression_does_not_name_simulation(
+    markexpr: str,
+) -> None:
+    assert pytest_ignore_collect(SIMULATION_DIR, _Config(markexpr)) is True
+
+
+def test_simulation_directory_is_collected_when_the_run_asks_for_the_marker() -> None:
+    assert pytest_ignore_collect(SIMULATION_DIR, _Config("simulation")) is None
+
+
+def test_an_unresolved_path_to_the_simulation_directory_is_still_ignored() -> None:
+    unresolved = SIMULATION_DIR.parent / "support" / ".." / "simulation"
+    assert unresolved != SIMULATION_DIR, "the case under test needs a path that is not `==`"
+    assert unresolved.resolve() == SIMULATION_DIR
+
+    assert pytest_ignore_collect(unresolved, _Config("not live")) is True
+
+
+def test_perf_directory_is_still_ignored_when_the_run_asks_for_simulation() -> None:
+    assert pytest_ignore_collect(PERF_DIR, _Config("simulation")) is True
+
+
+def test_simulation_marker_is_registered_once() -> None:
+    pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
+    with pyproject.open("rb") as stream:
+        markers = tomllib.load(stream)["tool"]["pytest"]["ini_options"]["markers"]
+    assert len([marker for marker in markers if marker.startswith("simulation:")]) == 1

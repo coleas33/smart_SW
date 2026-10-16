@@ -61,5 +61,6 @@ markers = [
     "live: calls a real provider API; skipped without the provider's key in the environment",
     "raycast: needs the optional embreex wheel",
     "perf: asserts a wall-clock budget; collected only when `-m` names it (tests/conftest.py)",
+    "simulation: the 39-scenario reference sweep (verdict.md S-10); collected only when -m names it (tests/conftest.py)",
 ]
 addopts = "-q"
