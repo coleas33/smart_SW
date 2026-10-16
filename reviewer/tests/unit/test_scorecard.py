@@ -75,6 +75,7 @@ from tests.support.packages import build_package, persist_ref
 from tests.support.roles_review import PIN_ID, roles_review, write_profile
 from tests.support.roles_review import write_package as write_roles_package
 from tests.support.scoring_probes import NOT_ASSESSED_WITHOUT_EXTENSIONS, assert_oracle_and_null
+from tests.unit.test_benchmark_attempts import driver_sleeps as driver_sleeps
 from tests.unit.test_checks_fastener import layer, mm, screw, tapped_hole
 from tests.unit.test_drawing_finding_number_guard import (
     FIRST,
@@ -985,7 +986,16 @@ def test_both_stream_columns_come_from_one_pass_through_replay_events(
         calls.append(Path(path))
         return real(path, after, **hooks)
 
-    monkeypatch.setattr(agent_events, "replay_events", spy)
+    read_stream = scorecard_module.read_stream
+
+    def read_with_spy(path: Path) -> Any:
+        # T209 separately replays attempt facts for cost and served models. The
+        # timing and withdrawal columns must still share their one scoring pass.
+        with monkeypatch.context() as patch:
+            patch.setattr(agent_events, "replay_events", spy)
+            return read_stream(path)
+
+    monkeypatch.setattr(scorecard_module, "read_stream", read_with_spy)
 
     score = score_all_bought(tmp_path)
 
@@ -1745,7 +1755,10 @@ def test_the_scoring_rules_version_is_written_on_the_scorecard(tmp_path: Path) -
     scorecard = scored(*build_scoring_fixture(tmp_path))
 
     assert scorecard.scoring_rules_version == scorecard_module.SCORING_RULES_VERSION
-    assert json.loads(scorecard.model_dump_json())["scoring_rules_version"] == 3
+    assert (
+        json.loads(scorecard.model_dump_json())["scoring_rules_version"]
+        == scorecard_module.SCORING_RULES_VERSION
+    )
 
 
 # --- the oracle of every list (SC-001's reach over the new columns; scoring.md 9.2) ----------
@@ -1801,5 +1814,259 @@ def test_the_oracle_of_a_key_holding_every_list_scores_zero_on_every_column_it_g
             aggregate=scorecard_module._aggregate([score], [key]),
             distribution=[score.net_saved_minutes],
             key_sha256={key.package_id: "e" * 64},
+            unscored_packages=[],
+            failed_attempts=[],
+            price_table=None,
         )
         assert contract_errors(card) == []
+
+
+# --- 16. the run's outcomes, priced attempts and served ids (T207) -------------------------
+
+
+def run_field_fixture(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    scripts: Sequence[Sequence[ScriptedTurn]],
+    *,
+    held_out: bool = False,
+) -> tuple[Path, Path, BenchmarkSet]:
+    """Real benchmark attempts over fictional packages, with keys withheld until scoring."""
+    from tests.unit.test_benchmark_attempts import (
+        driver_run,
+        install_driver_providers,
+        prepare_driver_set,
+    )
+
+    ids = [f"fict-{index}" for index in range(len(scripts))]
+    prepared = prepare_driver_set(tmp_path, ids, held_out=held_out)
+    install_driver_providers(monkeypatch, scripts)
+    out = tmp_path / "run"
+    driver_run(prepared, out)
+    keys = tmp_path / "answer_keys"
+    for package_id in ids:
+        write_key(
+            keys,
+            package_id,
+            known_defects=[{
+                "check": "hygiene.revision_present",
+                "component_ids": ["cmp:0001"],
+                "tag": "held_out" if held_out else "tuned_on",
+            }],
+        )
+    return out, keys, prepared.benchmark_set
+
+
+def test_infrastructure_failure_is_unscored_but_its_held_out_key_still_counts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float],
+) -> None:
+    from swreview.agent.providers import retry
+    from tests.unit.test_benchmark_attempts import TransientError
+
+    out, keys, benchmark_set = run_field_fixture(
+        tmp_path, monkeypatch,
+        [
+            [ScriptedTurn(text="", fails=TransientError("fict exhausted request"))],
+            [ScriptedTurn(text="Reviewed the second package.")],
+        ],
+        held_out=True,
+    )
+    card = score_run(out, keys, benchmark_set)
+    payload = card.model_dump(mode="json", by_alias=True)
+
+    assert [score.package_id for score in card.per_package] == ["fict-1"]
+    assert card.aggregate.packages == 1
+    assert card.aggregate.held_out_model_defects == 2
+    assert set(card.key_sha256) == {"fict-0", "fict-1"}
+    assert payload["unscored_packages"] == [{
+        "package_id": "fict-0", "kind": "infrastructure", "class": "provider_error",
+        "error_class": "TransientError", "attempts": 1, "folder": "attempts/fict-0/1",
+    }]
+    failed, = payload["failed_attempts"]
+    assert {name: failed[name] for name in (
+        "package_id", "attempt", "class", "retries", "folder",
+    )} == {
+        "package_id": "fict-0", "attempt": 1, "class": "provider_error",
+        "retries": retry.BENCHMARK_RETRY.retries, "folder": "attempts/fict-0/1",
+    }
+    assert failed["cost"]["amount"] is None
+    for row in [*payload["unscored_packages"], *payload["failed_attempts"]]:
+        assert not Path(row["folder"]).is_absolute()
+        assert "\\" not in row["folder"]
+        assert (out / row["folder"]).is_dir()
+    validator = Draft202012Validator(
+        load_contract("scorecard.schema.json"), format_checker=Draft202012Validator.FORMAT_CHECKER,
+    )
+    assert list(validator.iter_errors(payload)) == []
+
+
+@pytest.mark.parametrize("stop_class", ["provider_stop", "max_steps"])
+def test_a_behavioural_stop_scores_its_finalized_session_and_class(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float],
+    stop_class: str,
+) -> None:
+    from swreview.agent.runner import DEFAULT_MAX_STEPS
+    from swreview.report.session import load_session
+
+    stopped = (
+        ScriptedTurn(text="", stop_reason="SAFETY", end_reason="error")
+        if stop_class == "provider_stop"
+        else ScriptedTurn(
+            text="", tool_calls=(ScriptedToolCall("list_components"),) * (DEFAULT_MAX_STEPS + 1),
+        )
+    )
+    out, keys, benchmark_set = run_field_fixture(tmp_path, monkeypatch, [[stopped]])
+    card = score_run(out, keys, benchmark_set)
+    score, = card.per_package
+
+    assert load_session(out / "fict-0/session.json").ended_at is not None
+    assert score.model_dump(mode="json", by_alias=True)["run_status"] == {
+        "kind": "behavioural", "class": stop_class,
+        "stop_reason": "SAFETY" if stop_class == "provider_stop" else None,
+    }
+    assert score.served_models == []
+    assert score.cost.synthetic
+    assert card.model_dump(mode="json", by_alias=True)["unscored_packages"] == []
+    assert card.model_dump(mode="json", by_alias=True)["failed_attempts"] == []
+
+
+def test_a_run_without_a_status_record_reads_not_recorded_never_completed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float],
+) -> None:
+    out, keys, benchmark_set = run_field_fixture(
+        tmp_path, monkeypatch, [[ScriptedTurn(text="Reviewed.")]],
+    )
+    (out / "run-status.json").unlink()
+
+    card = score_run(out, keys, benchmark_set)
+
+    score, = card.per_package
+    assert score.model_dump(mode="json", by_alias=True)["run_status"] == {
+        "kind": "not_recorded", "class": None, "stop_reason": None,
+    }
+    assert score.served_models == []
+
+
+def test_an_all_failed_run_renders_with_no_scored_packages_or_zero_clock_or_spend(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float],
+) -> None:
+    """86A: an empty sum is unknown; zero would claim a clock or bill was measured."""
+    from tests.unit.test_benchmark_attempts import TransientError
+
+    out, keys, benchmark_set = run_field_fixture(
+        tmp_path, monkeypatch,
+        [
+            [ScriptedTurn(text="", fails=TransientError(f"fict failure {index}"))]
+            for index in (1, 2)
+        ],
+        held_out=True,
+    )
+    card = score_run(out, keys, benchmark_set)
+
+    assert card.per_package == []
+    assert card.distribution == []
+    assert card.aggregate.packages == 0
+    assert card.aggregate.held_out_model_defects == 2
+    assert card.aggregate.cost.amount is None
+    assert card.aggregate.failed_attempts_cost.amount is None
+    assert card.aggregate.input_tokens is None
+    assert card.aggregate.round_trips is None
+    assert scorecard_module.sum_or_none([]) is None
+    assert scorecard_module.sum_or_none(score.wall_clock_s for score in card.per_package) is None
+    assert len(card.model_dump(by_alias=True)["unscored_packages"]) == 2
+    assert len(card.model_dump(by_alias=True)["failed_attempts"]) == 2
+    rendered = render_scorecard_md(card)
+    assert "## Aggregate" in rendered and "- packages: 0" in rendered
+    assert contract_errors(card) == []
+
+
+@pytest.mark.parametrize("unfinished", ["missing_entry", "missing_outcome"])
+def test_an_unfinished_package_status_refuses_scoring_naming_resume(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float],
+    unfinished: str,
+) -> None:
+    out, keys, benchmark_set = run_field_fixture(
+        tmp_path, monkeypatch, [[ScriptedTurn(text="Reviewed.")]],
+    )
+    status_path = out / "run-status.json"
+    status = json.loads(status_path.read_bytes())
+    if unfinished == "missing_entry":
+        status["packages"].clear()
+    else:
+        package_status = status["packages"]["fict-0"]
+        package_status["kept_attempt"] = None
+        package_status["attempts"][-1]["kind"] = None
+        package_status["attempts"][-1]["ended_at"] = None
+    status_path.write_bytes((json.dumps(status) + "\n").encode())
+
+    with pytest.raises(ValueError) as caught:
+        score_run(out, keys, benchmark_set)
+
+    assert "fict-0" in str(caught.value)
+    assert f"swreview benchmark resume {out}" in str(caught.value)
+
+
+def test_the_kept_attempt_records_distinct_served_ids_in_first_seen_order(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float],
+) -> None:
+    """94A: OpenAI settings and the scripted provider cover the served-model case."""
+    from swreview.benchmark import runner
+    from tests.support.scripted_answers import ask, turn
+    from tests.unit.test_benchmark_attempts import driver_run, install_driver_providers
+    from tests.unit.test_benchmark_case_file import case, case_file_set, item_answer
+    from tests.unit.test_benchmark_questions import FIT, PIN_1, PLATE_1
+
+    monkeypatch.setenv("OPENAI_API_KEY", "fict-offline-key")
+    prepared = runner.preflight_set(
+        case_file_set(tmp_path, case(item_answer())), None, load_checklist(),
+    )
+    package_id = prepared.benchmark_set.packages[0].package_id
+    served = ["fict-base-2026-10-01", "fict-base-2026-10-02"]
+    install_driver_providers(monkeypatch, [[
+        turn(ask(PLATE_1, PIN_1, item=FIT), served_model=served[0]),
+        ScriptedTurn(text="Reviewed with the saved answer.", served_model=served[1]),
+    ]])
+    out = tmp_path / "run"
+    driver_run(prepared, out, provider="openai", model="fict-base")
+    keys = tmp_path / "answer_keys"
+    write_key(keys, package_id, known_defects=[{
+        "check": "hygiene.revision_present", "component_ids": [PLATE_1], "tag": "held_out",
+    }])
+
+    card = score_run(out, keys, prepared.benchmark_set)
+
+    score, = card.per_package
+    assert score.served_models == served
+    assert score.model_dump(mode="json", by_alias=True)["run_status"] == {
+        "kind": "completed", "class": None, "stop_reason": None,
+    }
+
+
+def test_a_completed_run_preserves_the_answer_turn_bound(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float],
+) -> None:
+    from swreview.benchmark import runner
+    from tests.support.scripted_answers import ask, turn
+    from tests.unit.test_benchmark_attempts import driver_run, install_driver_providers
+    from tests.unit.test_benchmark_case_file import case, case_file_set, item_answer
+    from tests.unit.test_benchmark_questions import FIT, PIN_1, PLATE_1
+
+    prepared = runner.preflight_set(
+        case_file_set(tmp_path, case(item_answer())), None, load_checklist(),
+    )
+    package_id = prepared.benchmark_set.packages[0].package_id
+    install_driver_providers(monkeypatch, [[turn(ask(PLATE_1, PIN_1, item=FIT))]])
+    out = tmp_path / "run"
+    driver_run(prepared, out, max_answer_turns=0)
+    keys = tmp_path / "answer_keys"
+    write_key(keys, package_id, known_defects=[{
+        "check": "hygiene.revision_present", "component_ids": [PLATE_1], "tag": "held_out",
+    }])
+
+    card = score_run(out, keys, prepared.benchmark_set)
+
+    score, = card.per_package
+    assert score.bound_reached is True
+    assert score.model_dump(mode="json", by_alias=True)["run_status"] == {
+        "kind": "completed", "class": None, "stop_reason": None,
+    }

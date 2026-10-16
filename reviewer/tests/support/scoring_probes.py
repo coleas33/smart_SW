@@ -41,7 +41,7 @@ from uuid import NAMESPACE_URL, uuid5
 from swreview.agent.checklist import load_checklist
 from swreview.agent.events import EVENTS_FILE_NAME, EventSink
 from swreview.agent.runner import SESSION_FILE_NAME, ask_part_roles, classify_part_roles
-from swreview.benchmark import answers, matching, questions, scorecard
+from swreview.benchmark import answers, matching, prices, questions, scorecard
 from swreview.benchmark.answer_key import _dimensions_named, _entities_named, load_answer_key
 from swreview.benchmark.answer_key_model import (
     AnswerKey,
@@ -501,7 +501,10 @@ def assert_oracle_and_null(
     return oracle, null
 
 
-def _score(key: AnswerKey, package_dir: Path, package: EvidencePackage) -> PackageScore:
+def _score(
+    key: AnswerKey, package_dir: Path, package: EvidencePackage,
+    *, run_status: dict[str, str | None] | None = None,
+) -> PackageScore:
     """One review folder's score, as `score_run` scores each package of a run."""
     return scorecard._score_package(
         package_dir,
@@ -510,6 +513,12 @@ def _score(key: AnswerKey, package_dir: Path, package: EvidencePackage) -> Packa
         answer_key=key,
         package=package,
         words=load_words(),
+        run_status=(
+            {"kind": "completed", "class": None, "stop_reason": None}
+            if run_status is None else run_status
+        ),
+        cost=prices.SYNTHETIC_COST,
+        served_models=[],
     )
 
 
@@ -575,6 +584,8 @@ GOLDEN_EXCLUDED = (
     "wall_clock_s",
     "seconds_to_first_finding",
     "tool_calls_by_name",
+    "cost",
+    "served_models",
 )
 GOLDEN_IDENTITY = ("package_id", "held_out", "graded_items")
 
@@ -758,6 +769,9 @@ class ProbeReview:
     session: ReviewSession
 
     def __post_init__(self) -> None:
+        self.run_status: dict[str, str | None] = {
+            "kind": "completed", "class": None, "stop_reason": None,
+        }
         self.context = context_for(self.package)
         self.context.session = self.session
         self.context.evidence_request_ids = EvidenceRequestIdAllocator(
@@ -893,7 +907,9 @@ def probe_scores(
             review = ProbeReview(key, package, target, session)
             probe.behaviour(review)
             review.save()
-        views.append(golden_view(_score(key, target, package)))
+        views.append(golden_view(_score(
+            key, target, package, run_status=review.run_status if label == "probe" else None,
+        )))
     return views[0], views[1]
 
 
@@ -1073,6 +1089,14 @@ _LOST_TO_ALARM = {
 
 def _scoring_probes() -> list[Probe]:
     probes = [
+        Probe(
+            "behavioural-stop", "kalo-1", "oracle",
+            lambda r: r.run_status.update(kind="behavioural", **{"class": "max_steps"}),
+            {"run_status": Change(
+                {"kind": "completed", "class": None, "stop_reason": None},
+                {"kind": "behavioural", "class": "max_steps", "stop_reason": None},
+            )},
+        ),
         Probe("credited", "kalo-1", "null", lambda r: r.add("D-1"), _DETECT, "D-1", "exact-check"),
         Probe(
             "flagged",

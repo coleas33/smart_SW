@@ -41,6 +41,7 @@ from swreview.agent.settings import (
 )
 from swreview.benchmark.adoption import ArmRun
 from swreview.benchmark.origins import Origin
+from swreview.benchmark.prices import SYNTHETIC_COST
 from swreview.benchmark.questions import (
     NO_ANSWER_LOG,
     NO_QUESTION_COUNT_RULE,
@@ -199,6 +200,7 @@ class RunSpec:
     commit: str | None = COMMIT
     provider: str = "openai"
     model: str = "gpt-5.6"
+    served_models: tuple[str, ...] = ()
     effort: str = "high"
     checklist_digest: str = CHECKLIST_DIGEST
     set_digest: str | None = None
@@ -382,7 +384,7 @@ def step_tools(spec: PackageSpec) -> list[str]:
     return [spec.tool_names[index % len(spec.tool_names)] for index in range(spec.tool_calls)]
 
 
-def package_score(spec: PackageSpec) -> PackageScore:
+def package_score(spec: PackageSpec, *, served_models: Sequence[str] = ()) -> PackageScore:
     usage = spec.usage()
     timing = spec.timing()
     tag = "held_out" if spec.held_out else "tuned_on"
@@ -391,6 +393,9 @@ def package_score(spec: PackageSpec) -> PackageScore:
         package_id=spec.package_id,
         held_out=spec.held_out,
         session_id=str(uuid5(NAMESPACE_URL, spec.package_id)),
+        run_status={"kind": "completed", "class": None, "stop_reason": None},
+        cost=SYNTHETIC_COST,
+        served_models=list(served_models),
         valid_findings=spec.valid_findings,
         missed_known_defects=len(spec.missed),
         false_alarms=spec.false_alarms,
@@ -463,7 +468,9 @@ def _recall(scores: Sequence[PackageScore]) -> float | None:
 
 def scorecard(spec: RunSpec) -> Scorecard:
     """The `scorecard.json` `benchmark score` would have written for this run."""
-    per_package = [package_score(package) for package in spec.packages]
+    per_package = [
+        package_score(package, served_models=spec.served_models) for package in spec.packages
+    ]
     held_out = [score for score in per_package if score.held_out]
     tuned_on = [score for score in per_package if not score.held_out]
     valid = sum(score.valid_findings for score in per_package)
@@ -480,8 +487,13 @@ def scorecard(spec: RunSpec) -> Scorecard:
         benchmark_set=SET_NAME,
         scored_at=SCORED_AT,
         per_package=per_package,
+        unscored_packages=[],
+        failed_attempts=[],
+        price_table=None,
         aggregate=Aggregate(
             packages=len(per_package),
+            cost=SYNTHETIC_COST,
+            failed_attempts_cost=SYNTHETIC_COST,
             held_out_packages=len(held_out),
             valid_findings=valid,
             missed_known_defects=sum(score.missed_known_defects for score in per_package),

@@ -49,6 +49,10 @@ open_repeats: []
 package_id: okta-2
 question_counts: null
 re_asks: []
+run_status:
+  class: null
+  kind: completed
+  stop_reason: null
 status_mismatch_defect_ids: []
 tuned_on_false_alarm_finding_ids: []
 unanswerable_requests: null

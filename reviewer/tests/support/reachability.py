@@ -76,7 +76,7 @@ from swreview.agent.providers import (
 from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
 from swreview.agent.runner import StoppableTools
 from swreview.agent.settings import DEFAULT_EFFORT, DEFAULT_MODELS
-from swreview.benchmark import matching, scorecard
+from swreview.benchmark import matching, prices, scorecard
 from swreview.benchmark.answer_key import load_answer_key
 from swreview.benchmark.answer_key_model import REFERENCE_KEYED_CHECKS, AnswerKey, ReferenceKind
 from swreview.benchmark.attempt import AttemptListener
@@ -265,6 +265,9 @@ def _review(
         answer_key=key,
         package=package,
         words=words,
+        run_status={"kind": "completed", "class": None, "stop_reason": None},
+        cost=prices.SYNTHETIC_COST,
+        served_models=[],
     )
     return _Review(folder=folder, session=session, score=score)
 

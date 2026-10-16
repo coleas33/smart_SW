@@ -26,6 +26,7 @@ from tests.support.usage import (
     OPENAI_OUTPUT_TOKENS,
     openai_usage,
 )
+from tests.unit.test_benchmark_attempts import driver_sleeps as driver_sleeps
 from tests.unit.test_gemini_provider import FakeTool
 from tests.unit.test_openai_provider import (
     RESPONSES_URL,
@@ -533,3 +534,228 @@ def test_recorded_responses_price_every_round(
     assert cost.amount == pytest.approx(expected)
     assert cost.missing == []
     assert not cost.synthetic
+
+
+# --- T207: saved run spend, its price sources and synthetic direct reviews -----------------
+
+
+@pytest.mark.parametrize("unknown", [None, "failed", "kept"])
+def test_run_spend_includes_failed_attempts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float],
+    unknown: str | None,
+) -> None:
+    """D2 and 94A: an offline OpenAI adapter prices every failure and only the kept review."""
+    from typer.testing import CliRunner
+
+    from swreview import cli
+    from swreview.agent import events
+    from swreview.agent.providers.fake import (
+        FakeProvider,
+        ScriptedRound,
+        ScriptedToolCall,
+        ScriptedTurn,
+    )
+    from swreview.benchmark import prices, scorecard, sets
+    from tests.support.answer_keys import write_key
+    from tests.unit.test_benchmark_attempts import (
+        TransientError,
+        install_driver_providers,
+        prepare_driver_set,
+    )
+    from tests.unit.test_benchmark_resume import resume_command
+
+    class OfflineOpenAI(FakeProvider):
+        name = ProviderName.OPENAI
+
+    monkeypatch.setenv("OPENAI_API_KEY", "fict-offline-key")
+    monkeypatch.setattr(providers, "CACHED_SHARE_PUBLISHABLE", False)
+    prepare_driver_set(tmp_path, ("fict-a", "fict-b"))
+    first, second, kept, last = [
+        _round(
+            input_tokens=count, output_tokens=count // 7, total_tokens=count + count // 7,
+        ).usage
+        for count in (2_003, 3_011, 5_009, 7_001)
+    ]
+    call = ScriptedToolCall("list_components")
+
+    def failed(usage: TokenUsage | None) -> ScriptedTurn:
+        return ScriptedTurn(
+            text="", rounds=(ScriptedRound((call,), usage),),
+            served_model=OPENAI_MODEL + "-2026-10-01",
+            fails=TransientError("fict exhausted request"),
+        )
+
+    install_driver_providers(monkeypatch, [[failed(first)], [failed(second)]], kind=OfflineOpenAI)
+    out = tmp_path / "run"
+    result = CliRunner().invoke(cli.app, [
+        "benchmark", "run", "--set", str(tmp_path / "set.json"), "--out", str(out),
+        "--provider", "openai", "--model", OPENAI_MODEL,
+    ])
+    assert result.exit_code == 1, result.stdout + result.stderr
+    install_driver_providers(monkeypatch, [
+        [ScriptedTurn(
+            text="A fresh successful review.", usage=None if unknown == "kept" else kept,
+            served_model=OPENAI_MODEL + "-2026-10-02",
+        )],
+        [failed(None if unknown == "failed" else last)],
+    ], kind=OfflineOpenAI)
+    resumed = resume_command(out)
+    assert resumed.exit_code == 1, resumed.stdout + resumed.stderr
+    keys = tmp_path / "answer_keys"
+    for package_id in ("fict-a", "fict-b"):
+        write_key(keys, package_id)
+    benchmark_set = sets.load_saved_set(out / "benchmark-set.json")
+    table = _table(tmp_path)
+
+    def amount(usage: TokenUsage) -> float:
+        return (usage.input_tokens * INPUT_RATE + usage.output_tokens * OUTPUT_RATE) / PER_TOKENS
+
+    snapshots: list[tuple[TokenUsage, ...]] = []
+
+    class SpyLedger(events.UsageLedger):
+        def rounds(self) -> tuple[TokenUsage, ...]:
+            snapshot = super().rounds()
+            snapshots.append(snapshot)
+            return snapshot
+
+    received: list[TokenUsage] = []
+    real_price_rounds = prices.price_rounds
+
+    def price_spy(rounds: Any, *, table: PriceTable) -> Any:
+        received.extend(round_.usage for round_ in rounds)
+        return real_price_rounds(rounds, table=table)
+
+    monkeypatch.setattr(events, "UsageLedger", SpyLedger)
+    monkeypatch.setattr(prices, "price_rounds", price_spy)
+    card = scorecard.score_run(out, keys, benchmark_set, prices=table)
+    payload = card.model_dump(mode="json", by_alias=True)
+
+    assert [score.package_id for score in card.per_package] == ["fict-a"]
+    assert len(snapshots) == 4, "each kept or infrastructure attempt is replayed once"
+    ledger_usages = [usage for snapshot in snapshots for usage in snapshot]
+    assert received
+    assert {id(usage) for usage in received} == {id(usage) for usage in ledger_usages}
+    assert all(any(usage is from_ledger for from_ledger in ledger_usages) for usage in received)
+    assert sorted(usage.input_tokens for usage in ledger_usages) == sorted([
+        first.input_tokens, second.input_tokens,
+        *([] if unknown == "kept" else [kept.input_tokens]),
+        *([] if unknown == "failed" else [last.input_tokens]),
+    ])
+    rows = payload["failed_attempts"]
+    assert [(row["package_id"], row["attempt"], row["folder"]) for row in rows] == [
+        ("fict-a", 1, "attempts/fict-a/1"),
+        ("fict-b", 1, "attempts/fict-b/1"),
+        ("fict-b", 2, "attempts/fict-b/2"),
+    ]
+    assert all((out / row["folder"]).is_dir() for row in rows)
+    assert all(row["retries"] == 5 for row in rows)
+    assert [row["cost"]["amount"] for row in rows[:2]] == pytest.approx([
+        amount(first), amount(second),
+    ])
+    if unknown == "failed":
+        assert rows[2]["cost"]["amount"] is None
+        assert card.aggregate.failed_attempts_cost.amount is None
+        assert any("1 of 3" in reason for reason in card.aggregate.failed_attempts_cost.missing)
+    else:
+        assert rows[2]["cost"]["amount"] == pytest.approx(amount(last))
+        assert card.aggregate.failed_attempts_cost.amount == pytest.approx(
+            amount(first) + amount(second) + amount(last),
+        )
+    if unknown == "kept":
+        assert card.per_package[0].cost.amount is None
+        assert card.aggregate.cost.amount is None
+        assert any("1 of 1" in reason for reason in card.aggregate.cost.missing)
+    else:
+        assert card.per_package[0].cost.amount == pytest.approx(amount(kept))
+        assert card.aggregate.cost.amount == pytest.approx(amount(kept))
+    assert payload["unscored_packages"] == [{
+        "package_id": "fict-b", "kind": "infrastructure", "class": "provider_error",
+        "error_class": "TransientError", "attempts": 2, "folder": "attempts/fict-b/2",
+    }]
+
+
+@pytest.mark.parametrize("priced", [True, False])
+def test_the_scorecard_records_the_price_tables_sources_and_dates(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float], priced: bool,
+) -> None:
+    """RF-45 and 94A: only the used offline OpenAI entry is copied; scripted is unpriced."""
+    from swreview.agent.providers.fake import FakeProvider, ScriptedTurn
+    from swreview.benchmark import scorecard
+    from tests.support.answer_keys import write_key
+    from tests.unit.test_benchmark_attempts import (
+        driver_run,
+        install_driver_providers,
+        prepare_driver_set,
+    )
+
+    class OfflineOpenAI(FakeProvider):
+        name = ProviderName.OPENAI
+
+    monkeypatch.setattr(providers, "CACHED_SHARE_PUBLISHABLE", False)
+    prepared = prepare_driver_set(tmp_path)
+    install_driver_providers(monkeypatch, [[ScriptedTurn(
+        text="Reviewed.", usage=_round().usage, served_model=OPENAI_MODEL,
+    )]], kind=OfflineOpenAI if priced else FakeProvider)
+    out = tmp_path / "run"
+    driver_run(prepared, out, model=OPENAI_MODEL)
+    keys = tmp_path / "answer_keys"
+    write_key(keys, "fict-a")
+    table = _table(tmp_path)
+    card = scorecard.score_run(out, keys, prepared.benchmark_set, prices=table)
+    recorded = card.model_dump(mode="json", by_alias=True)["price_table"]
+
+    if priced:
+        assert recorded == {
+            "prices_version": table.prices_version,
+            "models": [{
+                "provider": "openai", "model": OPENAI_MODEL,
+                **{
+                    field: {"source": "https://example.test/openai/pricing", "date": "2026-10-01"}
+                    for field in ("input", "cached_input", "output")
+                },
+            }],
+        }
+    else:
+        assert recorded is None
+        assert card.per_package[0].cost.synthetic
+
+
+@pytest.mark.parametrize("review", ["oracle", "null"])
+def test_the_oracle_and_null_reviews_are_synthetic_and_unpriced(
+    tmp_path: Path, review: str,
+) -> None:
+    from swreview.agent import events
+    from swreview.agent.checklist import load_checklist
+    from swreview.benchmark import prices, scorecard
+    from swreview.benchmark.answer_key import load_answer_key
+    from swreview.report.summary import load_words
+    from tests.support.answer_keys import write_key
+    from tests.support.packages import build_package
+    from tests.support.scoring_probes import null_review, oracle_review
+
+    package = build_package()
+    key = load_answer_key(
+        write_key(tmp_path / "answer_keys", "fict-synthetic", known_defects=[{
+            "check": "hygiene.revision_present", "component_ids": ["cmp:0001"],
+        }]),
+        package=package, checklist=load_checklist(), words=load_words(),
+    )
+    folder = tmp_path / review
+    if review == "oracle":
+        oracle_review(key, package, folder)
+    else:
+        null_review(package, folder)
+    assert [event.type for event in events.replay_events(events.event_stream(folder))] == [
+        "session.started",
+    ]
+
+    score = scorecard._score_package(
+        folder, package_id=key.package_id, held_out=False, answer_key=key, package=package,
+        words=load_words(), run_status={"kind": "completed", "class": None, "stop_reason": None},
+        cost=prices.SYNTHETIC_COST, served_models=[],
+    )
+
+    assert score.cost.synthetic
+    assert score.cost.amount is None
+    assert score.cost.missing == []
+    assert score.cost == prices.SYNTHETIC_COST

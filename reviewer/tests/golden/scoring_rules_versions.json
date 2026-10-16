@@ -3,5 +3,10 @@
     "version": 3,
     "goldens_sha256": "4bdadd553790d5aed67e4ef8cb9e29cd3542ad44c8634d96eae53d2a606520d4",
     "reason": "feature 014: exact and family matching, references, 13A statuses, origins, forbidden entries, coverage, questions"
+  },
+  {
+    "version": 4,
+    "goldens_sha256": "a62fdca0d07f953eea30f8ed95365568c66222ff9dfc785b581b3b9845fbbc8d",
+    "reason": "feature 014 robustness: run_status in the golden view; cost, served models, unscored packages, failed attempts and the price table outside it"
   }
 ]

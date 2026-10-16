@@ -74,16 +74,18 @@ from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from datetime import date as Date
 from pathlib import Path
 from typing import Annotated, Any, Literal, TypeVar, get_args
 
-from pydantic import Field, ValidationError
+from pydantic import ConfigDict, Field, ValidationError
 
 from swreview.agent import events
 from swreview.agent.checklist import load_checklist
 from swreview.agent.providers import CACHED_SHARE_PUBLISHABLE, TokenUsage
 from swreview.agent.runner import SESSION_FILE_NAME
-from swreview.benchmark import answers, matching, questions, sets
+from swreview.benchmark import answers, matching, questions, runner, sets
+from swreview.benchmark import prices as pricing
 from swreview.benchmark.answer_key import load_answer_key
 from swreview.benchmark.answer_key_model import (
     AnswerKey,
@@ -94,6 +96,7 @@ from swreview.benchmark.answer_key_model import (
     Tag,
 )
 from swreview.benchmark.answers import UnscriptedRequest
+from swreview.benchmark.attempt import AttemptClass
 from swreview.benchmark.digest import sha256_of
 from swreview.benchmark.origins import MODEL_ORIGINS, Origin, finding_origin
 from swreview.benchmark.questions import CallRow, CountRow, QuestionIds, RepeatRow, UnanswerableRow
@@ -111,13 +114,13 @@ from swreview.report.finding_groups import (
 from swreview.report.session import Coverage, ReviewSession, load_session
 from swreview.report.summary import Words, load_words
 
-SCORING_RULES_VERSION = 3
+SCORING_RULES_VERSION = 4
 """The rules this build scores by (`scoring.md` 8): 2 was feature 014's scorer slice, exact and
 family matching, references, 13A's statuses, conditions, origins and recall by tag; 3 is its
 key-extensions slice, adding forbidden, withdrawn and tuned-on hits, expected coverage and the
-question columns. A scorecard without the field was scored under version 1. Pinned by value in
-`tests/unit/test_scoring_rules_version.py` until the validation slice's version record exists
-(plan decision INT-11)."""
+question columns; 4 adds the run outcomes, attempt costs, served models and price sources.
+A scorecard without the field was scored under version 1. The golden version record pins the
+current version and its scoring view (INT-11, SC-013)."""
 
 SCORECARD_FILE = "scorecard.json"
 """What `benchmark score` writes into a run folder, and `read_scorecard` reads."""
@@ -266,10 +269,60 @@ class RecallByProducer(ReviewModel):
     code: RecallByTag
 
 
+class _ClassRecord(ReviewModel):
+    """Records keep the contract's `class` key in every serialized form."""
+
+    model_config = ConfigDict(populate_by_name=True, serialize_by_alias=True)
+
+    class_: AttemptClass | None = Field(alias="class")
+
+
+class PackageRunStatus(_ClassRecord):
+    kind: Literal["completed", "behavioural", "not_recorded"]
+    stop_reason: str | None
+
+
+class UnscoredPackage(_ClassRecord):
+    package_id: str
+    kind: Literal["infrastructure"]
+    error_class: str | None
+    attempts: int = Field(ge=1)
+    folder: str
+
+
+class FailedAttempt(_ClassRecord):
+    package_id: str
+    attempt: int = Field(ge=1)
+    retries: int = Field(ge=0)
+    cost: pricing.Cost
+    folder: str
+
+
+class PriceSource(ReviewModel):
+    source: str
+    date: Date
+
+
+class PricedModel(ReviewModel):
+    provider: str
+    model: str
+    input: PriceSource
+    cached_input: PriceSource
+    output: PriceSource
+
+
+class PriceTableRecord(ReviewModel):
+    prices_version: int
+    models: list[PricedModel]
+
+
 class PackageScore(ReviewModel):
     package_id: str
     held_out: bool
     session_id: str
+    run_status: PackageRunStatus
+    cost: pricing.Cost
+    served_models: list[str]
     valid_findings: int = Field(ge=0)
     missed_known_defects: int = Field(ge=0)
     false_alarms: int = Field(ge=0)
@@ -401,7 +454,9 @@ class PackageScore(ReviewModel):
 
 
 class Aggregate(ReviewModel):
-    packages: int = Field(ge=1)
+    packages: int = Field(ge=0)
+    cost: pricing.Cost
+    failed_attempts_cost: pricing.Cost
     held_out_packages: int = Field(ge=0)
     valid_findings: int = Field(ge=0)
     missed_known_defects: int = Field(ge=0)
@@ -477,7 +532,10 @@ class Scorecard(ReviewModel):
     run_id: str
     benchmark_set: str
     scored_at: datetime = Field(strict=False)
-    per_package: Annotated[list[PackageScore], Field(min_length=1)]
+    per_package: list[PackageScore]
+    unscored_packages: list[UnscoredPackage]
+    failed_attempts: list[FailedAttempt]
+    price_table: PriceTableRecord | None
     aggregate: Aggregate
     distribution: list[float | None]
     key_sha256: dict[str, str]
@@ -752,6 +810,9 @@ def _score_package(
     answer_key: AnswerKey,
     package: EvidencePackage,
     words: Words,
+    run_status: PackageRunStatus | Mapping[str, str | None],
+    cost: pricing.Cost,
+    served_models: list[str],
 ) -> PackageScore:
     """Score one package folder as a run leaves it, `session.json`, its event stream, its stored
     request results and its answer log, against its loaded key and its package: what `score_run`
@@ -810,6 +871,9 @@ def _score_package(
         package_id=package_id,
         held_out=held_out,
         session_id=str(session.session_id),
+        run_status=run_status,
+        cost=cost,
+        served_models=served_models,
         valid_findings=len(crediting),
         missed_known_defects=len(defects["missed"]),
         false_alarms=len(false_alarm_ids),
@@ -878,7 +942,7 @@ def sum_or_none(values: Iterable[Number | None]) -> Number | None:
     and no reader of the number can tell that it happened.
     """
     collected = list(values)
-    if any(value is None for value in collected):
+    if not collected or any(value is None for value in collected):
         return None
     return sum(value for value in collected if value is not None)
 
@@ -980,7 +1044,28 @@ def known_defect_count(scorecard: Scorecard) -> int:
     return len(_graded_defects(scorecard.per_package))
 
 
-def _aggregate(per_package: Sequence[PackageScore], answer_keys: Sequence[AnswerKey]) -> Aggregate:
+def _sum_costs(costs: Sequence[pricing.Cost]) -> pricing.Cost:
+    """An empty or partly unpriced group cannot claim a measured zero spend (86A)."""
+    if not costs:
+        return pricing.Cost(amount=None, missing=["no costs recorded"], basis=[], synthetic=False)
+    if all(cost.synthetic for cost in costs):
+        return pricing.SYNTHETIC_COST
+    unknown = sum(cost.amount is None for cost in costs)
+    return pricing.Cost(
+        amount=sum_or_none(cost.amount for cost in costs),
+        missing=list(dict.fromkeys([
+            *([f"{unknown} of {len(costs)} costs unknown"] if unknown else []),
+            *(reason for cost in costs for reason in cost.missing),
+        ])),
+        basis=list(dict.fromkeys(note for cost in costs for note in cost.basis)),
+        synthetic=False,
+    )
+
+
+def _aggregate(
+    per_package: Sequence[PackageScore], answer_keys: Sequence[AnswerKey],
+    *, failed_attempts: Sequence[FailedAttempt] = (),
+) -> Aggregate:
     """The run's totals. Recall is held-out items of both producers, read from the tags: the
     set's package flag, checked against its key in `score_run`, filters nothing (`scoring.md`
     6)."""
@@ -1005,6 +1090,8 @@ def _aggregate(per_package: Sequence[PackageScore], answer_keys: Sequence[Answer
 
     return Aggregate(
         packages=len(per_package),
+        cost=_sum_costs([score.cost for score in per_package]),
+        failed_attempts_cost=_sum_costs([attempt.cost for attempt in failed_attempts]),
         held_out_packages=len(held_out_scores),
         valid_findings=total_valid,
         missed_known_defects=sum(score.missed_known_defects for score in per_package),
@@ -1118,7 +1205,8 @@ def key_package_error(entry: BenchmarkPackageRef, answer_key: AnswerKey) -> str 
 
 
 def score_run(
-    run_dir: Path | str, answer_keys_dir: Path | None, benchmark_set: BenchmarkSet
+    run_dir: Path | str, answer_keys_dir: Path | None, benchmark_set: BenchmarkSet,
+    *, prices: pricing.PriceTable | None = None,
 ) -> Scorecard:
     """Score every package in `benchmark_set` from `<run_dir>/<package_id>/session.json`
     against its answer key, found by `sets.key_path`: the entry's own `key` in a keyed set,
@@ -1136,6 +1224,28 @@ def score_run(
     per_package: list[PackageScore] = []
     answer_keys: list[AnswerKey] = []
     key_sha256: dict[str, str] = {}
+    table = pricing.load_prices() if prices is None else prices
+    unscored_packages: list[UnscoredPackage] = []
+    failed_attempts: list[FailedAttempt] = []
+    used_models: dict[tuple[str, str], PricedModel] = {}
+
+    def attempt_cost(facts: runner.AttemptFacts) -> pricing.Cost:
+        cost = pricing.price_rounds(facts.rounds, table=table)
+        for round_ in facts.rounds:
+            if pricing.price_rounds([round_], table=table).amount is None:
+                continue
+            entry = pricing.price_entry(table, round_.provider, round_.served_model)
+            assert entry is not None  # a priced round necessarily resolved an entry
+            used_models.setdefault((entry.provider, entry.model), PricedModel(
+                provider=entry.provider,
+                model=entry.model,
+                **{
+                    name: PriceSource(source=price.source, date=price.date)
+                    for name in ("input", "cached_input", "output")
+                    for price in [getattr(entry, name)]
+                },
+            ))
+        return cost
     for ref in benchmark_set.packages:
         key_path = sets.key_path(ref, answer_keys_dir)
         package = _package_on_disk(ref.path)
@@ -1155,6 +1265,29 @@ def score_run(
             raise ValueError(flag_error)
         key_sha256[ref.package_id] = sha256_of(key_path)
         answer_keys.append(answer_key)
+        outcome = runner.package_outcome(run_dir, ref.package_id)
+        for attempt in outcome.attempts:
+            if attempt.kind == "infrastructure":
+                facts = runner.attempt_facts(run_dir / attempt.folder)
+                failed_attempts.append(FailedAttempt(
+                    package_id=ref.package_id,
+                    attempt=attempt.attempt,
+                    class_=attempt.class_,
+                    retries=facts.retries,
+                    cost=attempt_cost(facts),
+                    folder=attempt.folder,
+                ))
+        if outcome.kind == "infrastructure":
+            unscored_packages.append(UnscoredPackage(
+                package_id=ref.package_id,
+                kind=outcome.kind,
+                class_=outcome.class_,
+                error_class=outcome.error_class,
+                attempts=len(outcome.attempts),
+                folder=outcome.folder,
+            ))
+            continue
+        facts = runner.attempt_facts(run_dir / ref.package_id)
         per_package.append(
             _score_package(
                 run_dir / ref.package_id,
@@ -1163,6 +1296,11 @@ def score_run(
                 answer_key=answer_key,
                 package=package,
                 words=words,
+                run_status=PackageRunStatus(
+                    kind=outcome.kind, class_=outcome.class_, stop_reason=outcome.stop_reason,
+                ),
+                cost=attempt_cost(facts),
+                served_models=facts.served_models,
             )
         )
 
@@ -1172,9 +1310,15 @@ def score_run(
         benchmark_set=benchmark_set.name,
         scored_at=datetime.now(UTC),
         per_package=per_package,
-        aggregate=_aggregate(per_package, answer_keys),
+        aggregate=_aggregate(per_package, answer_keys, failed_attempts=failed_attempts),
         distribution=[score.net_saved_minutes for score in per_package],
         key_sha256=key_sha256,
+        unscored_packages=unscored_packages,
+        failed_attempts=failed_attempts,
+        price_table=(
+            PriceTableRecord(prices_version=table.prices_version, models=list(used_models.values()))
+            if used_models else None
+        ),
     )
 
 

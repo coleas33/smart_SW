@@ -448,6 +448,69 @@ def load_run_status(run_dir: Path | str) -> RunStatus | None:
     return RunStatus.model_validate_json(path.read_bytes()) if path.is_file() else None
 
 
+@dataclass(frozen=True)
+class PackageOutcome:
+    """The kept attempt's outcome, or the last failure when no attempt was kept."""
+
+    kind: AttemptKind | Literal["not_recorded"]
+    class_: AttemptClass | None
+    stop_reason: str | None
+    error_class: str | None
+    attempts: tuple[AttemptStatus, ...]
+    folder: str
+    bound_reached: bool | None
+
+
+def package_outcome(run_dir: Path | str, package_id: str) -> PackageOutcome:
+    """Read a package's status once, refusing unfinished attempts and promotions.
+
+    Readers keep using the promoted package folder. Only resume may finish a kept
+    attempt's rename, or replace an attempt whose outcome was never recorded.
+    """
+    run_dir = Path(run_dir)
+    status = load_run_status(run_dir)
+    if status is None:
+        return PackageOutcome(
+            kind="not_recorded", class_=None, stop_reason=None, error_class=None,
+            attempts=(), folder=package_id, bound_reached=None,
+        )
+
+    resume = f"run `swreview benchmark resume {run_dir}`"
+    package = status.packages.get(package_id)
+    if package is None or not package.attempts:
+        raise ValueError(f"{package_id}: no attempt outcome recorded: {resume}")
+    last = package.attempts[-1]
+    if last.kind is None:
+        raise ValueError(f"{package_id}: attempt {last.attempt} has no outcome: {resume}")
+    attempts = tuple(package.attempts)
+    if package.kept_attempt is None:
+        if last.kind != "infrastructure":
+            raise ValueError(f"{package_id}: no kept attempt recorded: {resume}")
+        return PackageOutcome(
+            kind=last.kind, class_=last.class_, stop_reason=last.stop_reason,
+            error_class=last.error_class, attempts=attempts, folder=last.folder,
+            bound_reached=None,
+        )
+
+    kept = next(
+        (row for row in attempts if row.attempt == package.kept_attempt), None
+    )
+    if kept is None or kept.kind not in ("completed", "behavioural"):
+        raise ValueError(
+            f"{package_id}: kept attempt {package.kept_attempt} has no kept outcome: {resume}"
+        )
+    folder = _kept_folder(run_dir, package_id, kept)
+    if folder != run_dir / package_id:
+        raise ValueError(f"promotion incomplete: {resume}")
+    answer_log = answers.read_answer_log(folder)
+    return PackageOutcome(
+        kind=kept.kind, class_=kept.class_, stop_reason=kept.stop_reason,
+        error_class=kept.error_class, attempts=attempts,
+        folder=folder.relative_to(run_dir).as_posix(),
+        bound_reached=None if answer_log is None else answer_log.ended == "bound_reached",
+    )
+
+
 def _write_run_status(run_dir: Path, status: RunStatus) -> None:
     atomic.write_atomic(
         run_dir / RUN_STATUS_FILE,

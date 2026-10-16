@@ -451,7 +451,7 @@ def test_event_stream_refuses_a_folder_holding_both_as_an_unfinished_pack(
         event_stream(tmp_path)
 
 
-# --- 4 and 6: score_run reads each package's stream once, found through event_stream (T086) ---
+# --- 4 and 6: scoring and attempt facts each read through event_stream (T086, T209) ---
 
 
 def two_scored_packages(tmp_path: Path) -> tuple[Path, Path, BenchmarkSet]:
@@ -466,7 +466,7 @@ def two_scored_packages(tmp_path: Path) -> tuple[Path, Path, BenchmarkSet]:
     return run_dir, keys, BenchmarkSet(name="pilot", packages=refs)
 
 
-def test_score_run_replays_each_package_s_stream_exactly_once(
+def test_score_run_replays_each_package_s_stream_once_per_reading(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     run_dir, keys, benchmark_set = two_scored_packages(tmp_path)
@@ -481,7 +481,12 @@ def test_score_run_replays_each_package_s_stream_exactly_once(
 
     score_run(run_dir, keys, benchmark_set)
 
-    assert calls == [run_dir / package / EVENTS_FILE_NAME for package in ("pkg-a", "pkg-b")]
+    # One pass for attempt facts (cost and served ids), one for timing and withdrawals.
+    assert calls == [
+        run_dir / package / EVENTS_FILE_NAME
+        for package in ("pkg-a", "pkg-b")
+        for _ in ("attempt facts", "scoring")
+    ]
 
 
 def test_score_run_finds_each_package_s_stream_through_event_stream(
@@ -499,7 +504,11 @@ def test_score_run_finds_each_package_s_stream_through_event_stream(
 
     score_run(run_dir, keys, benchmark_set)
 
-    assert folders == [run_dir / "pkg-a", run_dir / "pkg-b"]
+    assert folders == [
+        run_dir / package
+        for package in ("pkg-a", "pkg-b")
+        for _ in ("attempt facts", "scoring")
+    ]
 
 
 # --- 4: read_recording reads its log once, through replay_events (T159) --------------------
