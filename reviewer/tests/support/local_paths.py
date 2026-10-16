@@ -70,6 +70,7 @@ __all__ = [
     "UNC_PATH",
     "UNREADABLE",
     "Offence",
+    "check_committed_streams",
     "scan_committable",
     "scan_file",
     "scan_folder",
@@ -215,6 +216,69 @@ def scan_committable(root: Path = REPO_ROOT) -> list[Offence]:
     if document.is_file():
         offences += _text_offences(document, _ledger_block(document.read_text(encoding="utf-8")))
     return offences
+
+
+def check_committed_streams(root: Path = REPO_ROOT) -> list[Offence]:
+    """Check tracked study and pilot runs' packed streams against their tracked digest rows.
+
+    Only a tracked provenance record selects a run: a still-running, untracked folder is
+    outside this check. Git that cannot answer raises rather than returning a passing list;
+    the checkout test explicitly skips where the git executable is absent (T214; RF-84).
+    """
+    from swreview.benchmark.digest import sha256_of_bytes
+    from swreview.benchmark.runner import PROVENANCE_FILE
+    from swreview.benchmark.streams import EVENT_STREAMS_FILE, EventStreams
+
+    root = Path(root)
+    listed = _git(root, "ls-files", "-z", "--cached", "--", *(p.as_posix() for p in STUDY_TREES))
+    if listed is None:
+        raise RuntimeError(f"git cannot list tracked study and pilot files in {root}")
+    tracked = {root / name for name in listed.split("\0") if name}
+    runs = sorted(path.parent for path in tracked if path.name == PROVENANCE_FILE)
+    offences: list[Offence] = []
+    for run in runs:
+        files = {path for path in tracked if path.is_relative_to(run)}
+        record = run / EVENT_STREAMS_FILE
+        rows: dict[str, str] = {}
+        if record not in files:
+            offences.append(
+                Offence(record, "the packed-stream digest record is not tracked", record.name)
+            )
+        else:
+            try:
+                rows = EventStreams.model_validate_json(record.read_bytes()).streams
+            except (OSError, ValueError) as exc:
+                offences.append(
+                    Offence(record, "cannot read the packed-stream digest record", str(exc))
+                )
+        packed = {
+            path.relative_to(run).as_posix(): path
+            for path in files if path.name == "events.jsonl.gz"
+        }
+        for session in sorted(path for path in files if path.name == "session.json"):
+            stream = session.with_name("events.jsonl.gz")
+            if stream not in files:
+                offences.append(
+                    Offence(stream, "the session's packed stream is not tracked", session.name)
+                )
+        for name, stream in sorted(packed.items()):
+            if name not in rows:
+                offences.append(Offence(stream, "the packed stream has no digest row", name))
+            try:
+                actual = sha256_of_bytes(gzip.decompress(stream.read_bytes()))
+            except (OSError, EOFError, zlib.error) as exc:
+                offences.append(Offence(stream, "cannot read the packed stream", str(exc)))
+                continue
+            if name in rows and actual != rows[name]:
+                offences.append(
+                    Offence(stream, "the packed stream differs from its recorded digest", name)
+                )
+        for name in sorted(rows):
+            if name not in packed:
+                offences.append(
+                    Offence(run / name, "the digest row names no tracked packed stream", name)
+                )
+    return sorted(offences, key=lambda offence: (str(offence.file), offence.reason))
 
 
 def _committable_files(root: Path) -> list[Path]:

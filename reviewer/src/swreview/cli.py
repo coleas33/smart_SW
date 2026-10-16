@@ -89,7 +89,7 @@ from swreview.agent.settings import (
     redact,
 )
 from swreview.agent.settings import pane_defaults as pane_defaults_for
-from swreview.benchmark import answers, prices, report_page, scrub, set_summary, sets
+from swreview.benchmark import answers, prices, report_page, scrub, set_summary, sets, streams
 from swreview.benchmark.answers import DEFAULT_MAX_ANSWER_TURNS
 from swreview.benchmark.attempt import STOP_GRACE_S, STREAM_ACTIVITY_WINDOW_S
 from swreview.benchmark.compare import (
@@ -3297,6 +3297,19 @@ def benchmark_compare(
     _emit(payload, lines, json_output)
     if refused or drifted:
         raise typer.Exit(1)
+
+
+@benchmark_app.command("pack")
+def benchmark_pack(
+    run_dirs: Annotated[
+        list[Path], typer.Argument(help="Finished run directories whose event streams to pack.")
+    ],
+) -> None:
+    """Pack a finished run's streams in place; contacts no provider and reads no key."""
+    with _errors_as_exit_1():
+        packed = streams.pack_runs(run_dirs)
+    for run_dir, changed in packed:
+        typer.echo(f"{run_dir}: {'packed' if changed else 'already packed'}")
 
 
 @benchmark_app.command("report")
