@@ -434,13 +434,15 @@ def slice_3_runs(tmp_path: Path) -> list[SliceRun]:
 
 
 def slice_6_runs(tmp_path: Path) -> list[SliceRun]:
-    """T201: the default wall clock, activity window, stop grace and request retry policy."""
-    return [([], {
+    """T201/T205: the clocks, retry policy and record-only package concurrency (36A)."""
+    defaults = {
         "package_time_limit_s": 3600,
         "stream_activity_window_s": 600,
         "stop_grace_s": 900,
         "retry_policy": {"retries": 5, "initial_delay_s": 2.0, "max_delay_s": 60.0},
-    })]
+        "jobs": 1,
+    }
+    return [([], defaults), (["--jobs", "3"], {**defaults, "jobs": 3})]
 
 
 SLICE_RUNS = {2: slice_2_runs, 3: slice_3_runs, 6: slice_6_runs}
@@ -512,6 +514,7 @@ NOT_RECORDED: tuple[str, ...] = (
     "stream_activity_window_s",
     "stop_grace_s",
     "retry_policy",
+    "jobs",
 )
 """The new fields a record older than feature 014 reads as `None`, "not recorded"."""
 

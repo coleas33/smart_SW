@@ -228,6 +228,7 @@ class RunSpec:
     stream_activity_window_s: int | None = 600
     stop_grace_s: int | None = 900
     retry_policy: RetryPolicy | None = BENCHMARK_RETRY
+    jobs: int | None = 1
     standards_stamps: tuple[str, ...] = ()
     """The profile stamps this run's standards findings carry (`profile_stamp`): one
     `standards.*` finding per stamp in every package's session."""
@@ -271,6 +272,7 @@ class RunSpec:
             stream_activity_window_s=self.stream_activity_window_s,
             stop_grace_s=self.stop_grace_s,
             retry_policy=self.retry_policy,
+            jobs=self.jobs,
         )
 
 

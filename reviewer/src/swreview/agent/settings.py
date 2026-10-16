@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, Self, get_args
@@ -1023,6 +1024,9 @@ class RedactingFilter(logging.Filter):
         return True
 
 
+_LOG_REDACTOR_LOCK = threading.Lock()
+
+
 class LogRecordRedactor:
     """Process-wide log redaction, installed as the `logging` record factory.
 
@@ -1044,23 +1048,31 @@ class LogRecordRedactor:
 
     def install(self) -> None:
         """Take over the record factory, keeping the one replaced so it still runs."""
-        self._previous = logging.getLogRecordFactory()
-        logging.setLogRecordFactory(self)
+        with _LOG_REDACTOR_LOCK:
+            self._previous = logging.getLogRecordFactory()
+            logging.setLogRecordFactory(self)
 
     def remove(self) -> None:
-        """Put the previous factory back, if this one is still the installed factory.
+        """Unlink this install, preserving every other live redactor and the base factory.
 
-        Removal is expected to be last-in-first-out (the backend installs one redactor per
-        launch). When it is not - another redactor was installed on top of this one -
-        restoring would tear that later one off the chain, so this one stays where it is
-        and simply stops masking instead.
+        Parallel attempts may finish in any order. Leaving a removed redactor linked
+        below a newer one would retain a growing chain of inactive factory calls.
         """
-        if self._previous is None:
-            return
-        if logging.getLogRecordFactory() is self:
-            logging.setLogRecordFactory(self._previous)
-            self._previous = None
-        self.secrets = ()
+        with _LOG_REDACTOR_LOCK:
+            if self._previous is None:
+                return
+            current = logging.getLogRecordFactory()
+            if current is self:
+                logging.setLogRecordFactory(self._previous)
+            else:
+                while isinstance(current, LogRecordRedactor):
+                    if current._previous is self:
+                        current._previous = self._previous
+                        break
+                    current = current._previous
+            self.secrets = ()
+            # A log call may already have captured this factory before it was removed.
+            # Keep its predecessor so that call still reaches the original factory.
 
     def __call__(self, *args: Any, **kwargs: Any) -> logging.LogRecord:
         previous = self._previous if self._previous is not None else logging.LogRecord

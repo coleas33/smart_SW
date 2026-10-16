@@ -31,6 +31,7 @@ import hashlib
 import os
 import sys
 import tempfile
+import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -70,6 +71,7 @@ FETCH_COMMAND = "swreview tokenizer fetch"
 """What every refusal tells the operator to run."""
 
 _TIKTOKEN_CACHE_ENV = "TIKTOKEN_CACHE_DIR"
+_TIKTOKEN_CACHE_LOCK = threading.RLock()
 
 
 class TokenizerUnavailable(RuntimeError):
@@ -126,15 +128,17 @@ def _checked_vocabulary(folder: Path) -> None:
 @contextmanager
 def _tiktoken_cache(folder: Path | str) -> Iterator[None]:
     """Point tiktoken's cache at `folder` for the duration, then restore the variable exactly."""
-    before = os.environ.get(_TIKTOKEN_CACHE_ENV)
-    os.environ[_TIKTOKEN_CACHE_ENV] = str(folder)
-    try:
-        yield
-    finally:
-        if before is None:
-            os.environ.pop(_TIKTOKEN_CACHE_ENV, None)
-        else:
-            os.environ[_TIKTOKEN_CACHE_ENV] = before
+    # Loading and fetching both borrow this process-wide variable; hold it for the call.
+    with _TIKTOKEN_CACHE_LOCK:
+        before = os.environ.get(_TIKTOKEN_CACHE_ENV)
+        os.environ[_TIKTOKEN_CACHE_ENV] = str(folder)
+        try:
+            yield
+        finally:
+            if before is None:
+                os.environ.pop(_TIKTOKEN_CACHE_ENV, None)
+            else:
+                os.environ[_TIKTOKEN_CACHE_ENV] = before
 
 
 def load_encoding() -> tiktoken.Encoding:

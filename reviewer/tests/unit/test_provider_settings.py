@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 from typing import Any, get_args
 
 import pytest
@@ -40,6 +41,7 @@ from swreview.agent.settings import (
     MASK,
     OUTPUT_CEILINGS,
     GeminiEnterprise,
+    LogRecordRedactor,
     ProviderSettings,
     RedactingFilter,
     configure_logging_redaction,
@@ -741,6 +743,79 @@ def test_removing_an_install_that_is_no_longer_the_factory_masks_nothing_further
     logging.getLogger("openai").info("%s and %s", KEY, ENV_KEY)
     assert logging.getLogRecordFactory() is inner
     assert root_capture.lines == [f"{KEY} and {MASK}"]
+
+
+def test_many_overlapping_redactors_unlink_removed_attempts_and_restore_the_factory(
+    root_capture: Capture,
+) -> None:
+    """Four concurrent attempts repeatedly finish in installation order, not stack order.
+
+    Events make the overlapping lifetimes and out-of-order removals deterministic. A
+    run-level redactor stays live throughout, just as it does for a parallel benchmark.
+    """
+    original = logging.getLogRecordFactory()
+    run_level = configure_logging_redaction([KEY])
+    attempt_keys = [f"fict-worker-{index}-secret" for index in range(4)]
+    depths: list[int] = []
+    failures: list[BaseException] = []
+    threads: list[threading.Thread] = []
+    releases: list[threading.Event] = []
+
+    def depth() -> int:
+        factory = logging.getLogRecordFactory()
+        count = 0
+        while isinstance(factory, LogRecordRedactor):
+            count += 1
+            factory = factory._previous
+        assert factory is original, "the original record factory must remain reachable"
+        return count
+
+    def attempt(key: str, installed: threading.Event, release: threading.Event) -> None:
+        install = configure_logging_redaction([key])
+        try:
+            installed.set()
+            assert release.wait(timeout=10), "attempt was never released"
+        except BaseException as error:
+            failures.append(error)
+        finally:
+            install.remove()
+
+    try:
+        for _ in range(100):
+            threads, releases = [], []
+            for key in attempt_keys:
+                installed, release = threading.Event(), threading.Event()
+                thread = threading.Thread(target=attempt, args=(key, installed, release))
+                threads.append(thread)
+                releases.append(release)
+                thread.start()
+                assert installed.wait(timeout=10), "attempt never installed its redactor"
+
+            depths.append(depth())
+            logging.getLogger("openai").warning("%s", " ".join([KEY, *attempt_keys]))
+            assert root_capture.lines[-1] == " ".join([MASK] * 5)
+
+            # The oldest attempt finishes first while newer attempts still run.
+            for release, thread in zip(releases, threads, strict=True):
+                release.set()
+                thread.join(timeout=10)
+                assert not thread.is_alive(), "attempt did not finish"
+
+            depths.append(depth())
+            logging.getLogger("openai").warning("%s", " ".join([KEY, *attempt_keys]))
+            assert root_capture.lines[-1] == " ".join([MASK, *attempt_keys])
+
+        assert failures == []
+        assert max(depths) == 5, "only the run and four live attempts may remain linked"
+        assert depths[1::2] == [1] * 100, "finished attempts must leave no dead links"
+        run_level.remove()
+        assert logging.getLogRecordFactory() is original
+    finally:
+        for release in releases:
+            release.set()
+        for thread in threads:
+            thread.join(timeout=10)
+        run_level.remove()
 
 
 def test_configure_logging_redaction_accepts_settings_secrets(

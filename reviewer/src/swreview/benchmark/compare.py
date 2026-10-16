@@ -228,8 +228,8 @@ until their lever lands."""
 RUN_IDENTITY: tuple[str, ...] = ("rep", "started_at")
 """Which run this is: never compared."""
 
-RECORD_ONLY: tuple[str, ...] = ("live_tools",)
-"""Recorded and shown, never must-match (PP-9)."""
+RECORD_ONLY: tuple[str, ...] = ("live_tools", "jobs")
+"""Recorded and shown, never must-match (PP-9, owner decision 36A)."""
 
 STUDY_KEY_FIELDS: tuple[str, ...] = ("lever", "provider", "model")
 """The study's key (`_study_key`): two runs differing in one are two studies, not a refusal."""
