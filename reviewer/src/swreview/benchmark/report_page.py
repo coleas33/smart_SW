@@ -14,15 +14,15 @@ the record's one format, one writer and one reader.
 
 ## The report (FR-034, FR-021, FR-051; RP-1 to RP-7)
 
-`build_report` writes one static page, `index.html`, and one transcript page per scored package
-of each run folder, from run folders alone: every number is the scorecard's (`read_scorecard`,
-the one reader), counted from its id lists where it is rendered and formatted by the ledger's
+`build_report` writes one static page, `index.html`, and transcript pages for kept and failed
+attempts of each run folder, from run folders alone: every number is the scorecard's
+(`read_scorecard`, the one reader), counted from its id lists where it is rendered by the ledger's
 rule (`compare.format_count`); the matcher is never run and no key is read. Each stream is found
 through `event_stream`, plain or packed, and read in one pass through `replay_events` (plan
 decisions RF-29, RF-83); each call's full result through `read_stored_result`, embedded escaped
 (RF-30). Every recorded string is escaped; the pages hold one inline style block, no script, no
-external resource and no build time. The status and cost columns and the failed attempts' pages
-are the robustness slice's (T216, T217).
+external resource and no build time. Statuses, costs and price sources are rendered from the
+scorecard, with failed attempts' billed usage and cost kept separate from every score (T216, T217).
 """
 
 from __future__ import annotations
@@ -37,6 +37,7 @@ import shutil
 import stat
 import sys
 import time
+from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -44,20 +45,23 @@ from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import quote
 
 from swreview import atomic
-from swreview.agent.events import event_stream, replay_events
+from swreview.agent.events import UsageLedger, event_stream, replay_events
 from swreview.agent.providers import AgentEvent, ProviderName, TokenUsage, usage_from_body
 from swreview.agent.runner import SESSION_FILE_NAME
 from swreview.benchmark.answers import AnswerLog, AnswerPoint, read_answer_log
 from swreview.benchmark.compare import distinct_run_dirs, format_count
 from swreview.benchmark.origins import MODEL_ORIGINS
+from swreview.benchmark.prices import Cost
 from swreview.benchmark.recording import bracketing_step, round_kind
 from swreview.benchmark.runner import SAVED_SET_FILE, RunProvenance, load_provenance
 from swreview.benchmark.scorecard import (
     NOT_ASSESSED,
     SCORECARD_FILE,
     UNKNOWN,
+    FailedAttempt,
     PackageScore,
     Scorecard,
+    UnscoredPackage,
     read_scorecard,
     sum_or_none,
 )
@@ -241,6 +245,17 @@ class _Legend:
 
 
 @dataclass(frozen=True)
+class _FailedLog:
+    """One failed attempt's stream, read once for its billed usage and its transcript."""
+
+    events: list[AgentEvent]
+    malformed: int | None
+    unreadable: tuple[int, ...]
+    usage: TokenUsage | None
+    served_models: list[str]
+
+
+@dataclass(frozen=True)
 class _Run:
     """One run folder as the report reads it, before any transcript is written."""
 
@@ -255,6 +270,8 @@ class _Run:
     """Why no package of this run has a legend, when the saved set is absent or fails."""
     streams: dict[str, Path]
     """Each scored package's stream, as `event_stream` found it."""
+    failed_logs: dict[str, _FailedLog]
+    """Failed attempts keyed by their scorecard rows' exact run-relative folders."""
 
     @property
     def reasoning_label(self) -> str:
@@ -265,6 +282,11 @@ class _Run:
     def transcript(self, package_id: str) -> str:
         """The package's transcript page, relative to the output folder, `/`-separated."""
         return f"{TRANSCRIPTS_DIR}/{self.name}/{package_id}.html"
+
+    def failed_transcript(self, attempt: FailedAttempt) -> str:
+        """A separate page for each failed row; recorded ids and folders are never filenames."""
+        ordinal = self.scorecard.failed_attempts.index(attempt) + 1
+        return f"{TRANSCRIPTS_DIR}/{self.name}/failed-attempts/{ordinal}.html"
 
 
 def deciding_false_alarm_ids(score: PackageScore) -> list[str]:
@@ -325,7 +347,7 @@ def build_report(
     ]
     legends: dict[Path, _Legend] = {}
     for run in runs:
-        for score in run.scorecard.per_package:
+        for score in [*run.scorecard.per_package, *run.scorecard.failed_attempts]:
             entry = run.entries.get(score.package_id)
             if entry is not None and entry.path not in legends:
                 legends[entry.path] = _legend(entry, root=root)
@@ -344,6 +366,10 @@ def build_report(
                 page = _transcript_page(run, score, _legend_of(run, score, legends))
                 _write_page(building / Path(*run.transcript(score.package_id).split("/")), page)
                 written += 1
+            for attempt in run.scorecard.failed_attempts:
+                page = _transcript_page(run, attempt, _legend_of(run, attempt, legends))
+                _write_page(building / Path(*run.failed_transcript(attempt).split("/")), page)
+                written += 1
         leftovers = _place(building, target, in_place=in_place)
     except BaseException:
         _remove(building)
@@ -356,7 +382,9 @@ def build_report(
     )
 
 
-def _legend_of(run: _Run, score: PackageScore, legends: dict[Path, _Legend]) -> _Legend:
+def _legend_of(
+    run: _Run, score: PackageScore | FailedAttempt, legends: dict[Path, _Legend]
+) -> _Legend:
     """The package's legend, or why the run shows none."""
     if run.no_legend is not None:
         return _Legend(names=None, note=run.no_legend)
@@ -860,6 +888,32 @@ def _read_run(path: Path, name: str, scorecard: Scorecard, *, root: Path) -> _Ru
             score.package_id: event_stream(path / score.package_id)
             for score in scorecard.per_package
         },
+        failed_logs={
+            attempt.folder: _read_failed_log(event_stream(path / attempt.folder))
+            for attempt in scorecard.failed_attempts
+        },
+    )
+
+
+def _read_failed_log(stream: Path) -> _FailedLog:
+    unreadable: list[int] = []
+    logged, malformed = _readable_prefix(
+        list(replay_events(stream, on_unreadable=unreadable.append))
+    )
+    ledger = UsageLedger()
+    served: dict[str, None] = {}
+    for event in logged:
+        ledger(event)
+        model = event.body.get("served_model")
+        if event.type == "usage" and isinstance(model, str) and model:
+            served.setdefault(model, None)
+    usage = ledger.usage()
+    return _FailedLog(
+        events=logged,
+        malformed=malformed,
+        unreadable=tuple(unreadable),
+        usage=usage.totals if usage is not None else None,
+        served_models=list(served),
     )
 
 
@@ -946,8 +1000,57 @@ def _index_page(runs: Sequence[_Run]) -> list[str]:
                 ]
             )
         )
-    lines += ["</table>", "<h2>Totals</h2>", "<table>"]
-    lines.append(_row(["run", "packages scored", "total tokens", "wall clock s"], header=True))
+    lines.append("</table>")
+    priced = [
+        (run, model)
+        for run in runs
+        if run.scorecard.price_table is not None
+        for model in run.scorecard.price_table.models
+    ]
+    if priced:
+        lines += [
+            "<h2>Price table</h2>",
+            "<table>",
+            _row(
+                ["run", "provider", "model", "price", "source", "date"],
+                header=True,
+            ),
+        ]
+        for run, model in priced:
+            for name in ("input", "cached_input", "output"):
+                price = getattr(model, name)
+                lines.append(
+                    _row(
+                        [
+                            run.name,
+                            model.provider,
+                            model.model,
+                            name,
+                            price.source,
+                            price.date.isoformat(),
+                        ]
+                    )
+                )
+        lines.append("</table>")
+    lines += [
+        "<h2>Totals</h2>",
+        "<table>",
+        _row(
+            [
+                "run",
+                "packages scored",
+                "completed",
+                "bound-reached",
+                "stopped by class",
+                "failed by kind and class",
+                "status unknown",
+                "total tokens",
+                "cost",
+                "wall clock s",
+            ],
+            header=True,
+        ),
+    ]
     for run in runs:
         aggregate = run.scorecard.aggregate
         per_package = run.scorecard.per_package
@@ -965,10 +1068,44 @@ def _index_page(runs: Sequence[_Run]) -> list[str]:
                 f" ({format_count(missing)} of {format_count(len(per_package))} packages "
                 "report no wall clock)"
             )
-        lines.append(_row([run.name, format_count(len(per_package)), tokens, wall]))
+        statuses = Counter(_status(score) for score in per_package)
+        stopped = Counter(
+            {
+                name.removeprefix("stopped: "): count
+                for name, count in statuses.items()
+                if name.startswith("stopped: ")
+            }
+        )
+        failed = Counter(
+            f"{row.kind}, {_cell(row.class_)}" for row in run.scorecard.unscored_packages
+        )
+        lines.append(
+            _row(
+                [
+                    run.name,
+                    format_count(len(per_package)),
+                    format_count(statuses["completed"]),
+                    format_count(statuses["bound-reached"]),
+                    _counts(stopped),
+                    _counts(failed),
+                    format_count(statuses[UNKNOWN]),
+                    tokens,
+                    _cost(aggregate.cost),
+                    wall,
+                ]
+            )
+        )
     lines.append("</table>")
+    for run in runs:
+        lines.append(
+            "<p>" + _e(
+                f"{run.name}: billed by failed attempts, in no score: "
+                f"{_cost(run.scorecard.aggregate.failed_attempts_cost)}"
+            ) + "</p>"
+        )
     for package_id in _case_order(runs):
         lines += _case_section(package_id, runs)
+    lines += _failed_attempts(runs)
     lines += ["</body>", "</html>"]
     return lines
 
@@ -982,15 +1119,27 @@ def _row(cells: Sequence[str], *, header: bool = False, raw: bool = False) -> st
 
 def _case_order(runs: Sequence[_Run]) -> list[str]:
     """The first run folder's saved-set order, then any package only a later one holds, then any
-    scored package no saved set names, in scorecard order; scored packages only."""
-    scored = {score.package_id for run in runs for score in run.scorecard.per_package}
+    kept or failed package no saved set names, in scorecard order."""
+    scored = {
+        score.package_id
+        for run in runs
+        for score in (
+            *run.scorecard.per_package,
+            *run.scorecard.unscored_packages,
+            *run.scorecard.failed_attempts,
+        )
+    }
     ordered: dict[str, None] = {}
     for run in runs:
         for package_id in run.entries:
             if package_id in scored:
                 ordered.setdefault(package_id)
     for run in runs:
-        for score in run.scorecard.per_package:
+        for score in (
+            *run.scorecard.per_package,
+            *run.scorecard.unscored_packages,
+            *run.scorecard.failed_attempts,
+        ):
             ordered.setdefault(score.package_id)
     return list(ordered)
 
@@ -1009,23 +1158,26 @@ def _case_section(package_id: str, runs: Sequence[_Run]) -> list[str]:
         (
             (run, score)
             for run in runs
-            for score in run.scorecard.per_package
-            if score.package_id == package_id
+            for score in [_case_score(run, package_id)]
+            if score is not None
         ),
         key=lambda pair: _study_order(pair[0]),
     )
-    first = rows[0][1]
-    lines = [f"<section><h2>{_e(package_id)}</h2>", f"<p>{_e(_tags(package_id, first, runs))}</p>"]
+    scored = next((score for _, score in rows if isinstance(score, PackageScore)), None)
+    tags = _tags(package_id, scored, runs) if scored is not None else "not scored: failed"
+    lines = [f"<section><h2>{_e(package_id)}</h2>", f"<p>{_e(tags)}</p>"]
     lines += ["<table>"]
     lines.append(
         _row(
             [
                 "run",
+                "status",
                 "held-out model-produced",
                 "code-produced",
-                "tuned-on model-produced",
+                "tuned-on",
                 "false alarms",
                 "tokens",
+                "cost",
                 "wall clock s",
                 "transcript",
             ],
@@ -1037,20 +1189,148 @@ def _case_section(package_id: str, runs: Sequence[_Run]) -> list[str]:
         run_cell = (
             f"{run.name}, arm {_recorded(record, 'arm')}, repetition {_recorded(record, 'rep')}"
         )
+        if not isinstance(score, PackageScore):
+            attempts = [
+                row for row in run.scorecard.failed_attempts if row.package_id == package_id
+            ]
+            last = next((row for row in attempts if row.folder == score.folder), None)
+            link = (
+                f'<a href="{_e(_href(run.failed_transcript(last)))}">transcript</a>'
+                if last is not None
+                else UNKNOWN
+            )
+            cells = [
+                _e(run_cell),
+                _e(_failed_status(score)),
+                *[_e("not scored: failed")] * 4,
+                _e(
+                    "failed attempts: "
+                    + "; ".join(
+                        f"attempt {row.attempt}: "
+                        f"{_tokens(run.failed_logs[row.folder].usage, run.reasoning_label)}"
+                        for row in attempts
+                    )
+                ),
+                _e(
+                    "failed attempts: "
+                    + "; ".join(f"attempt {row.attempt}: {_cost(row.cost)}" for row in attempts)
+                ),
+                UNKNOWN,
+                link,
+            ]
+            lines.append(_row(cells, raw=True))
+            continue
         link = f'<a href="{_e(_href(run.transcript(package_id)))}">transcript</a>'
         cells = [
             _e(run_cell),
+            _e(_status(score)),
             _e(_defects(score, tag="held_out", producer="model", headline=True)),
             _e(_defects(score, tag=None, producer="code")),
             _e(_defects(score, tag="tuned_on", producer="model")),
             _e(_false_alarms(score)),
             _e(_tokens(score.usage, run.reasoning_label)),
+            _e(_cost(score.cost)),
             _e(format_count(score.wall_clock_s)),
             link,
         ]
         lines.append(_row(cells, raw=True))
     lines += ["</table>", "</section>"]
     return lines
+
+
+def _case_score(
+    run: _Run, package_id: str
+) -> PackageScore | UnscoredPackage | FailedAttempt | None:
+    return next(
+        (
+            score
+            for score in (
+                *run.scorecard.per_package,
+                *run.scorecard.unscored_packages,
+                *reversed(run.scorecard.failed_attempts),
+            )
+            if score.package_id == package_id
+        ),
+        None,
+    )
+
+
+def _status(score: PackageScore) -> str:
+    if score.run_status.kind == "behavioural":
+        return f"stopped: {_cell(score.run_status.class_)}"
+    if score.bound_reached:
+        return "bound-reached"
+    return "completed" if score.run_status.kind == "completed" else UNKNOWN
+
+
+def _failed_status(score: UnscoredPackage | FailedAttempt) -> str:
+    return f"failed: infrastructure, {_cell(score.class_)}"
+
+
+def _counts(counts: Counter[str]) -> str:
+    return (
+        "; ".join(f"{name}: {format_count(count)}" for name, count in sorted(counts.items()))
+        or "none"
+    )
+
+
+def _cost(cost: Cost) -> str:
+    """Render the recorded amount, reasons and basis; pricing never runs in the report."""
+    if cost.synthetic:
+        return "synthetic, not priced"
+    value = f"USD {format_count(cost.amount)}" if cost.amount is not None else UNKNOWN
+    if cost.amount is None and cost.missing:
+        value += f" ({'; '.join(cost.missing)})"
+    if cost.basis:
+        value += "; " + "; ".join(cost.basis)
+    return value
+
+
+def _failed_attempts(
+    runs: Sequence[_Run], *, package_id: str | None = None, prefix: str = ""
+) -> list[str]:
+    attempts = [
+        (run, attempt)
+        for run in runs
+        for attempt in run.scorecard.failed_attempts
+        if package_id is None or attempt.package_id == package_id
+    ]
+    if not attempts:
+        return []
+    lines = [
+        "<h2>Failed attempts</h2>",
+        "<table>",
+        _row(
+            [
+                "run",
+                "package",
+                "attempt",
+                "kind",
+                "class",
+                "retries",
+                "billed usage",
+                "cost",
+                "transcript",
+            ],
+            header=True,
+        ),
+    ]
+    for run, attempt in attempts:
+        href = prefix + run.failed_transcript(attempt)
+        cells = [
+            run.name,
+            attempt.package_id,
+            format_count(attempt.attempt),
+            "infrastructure",
+            _cell(attempt.class_),
+            format_count(attempt.retries),
+            _tokens(run.failed_logs[attempt.folder].usage, run.reasoning_label),
+            _cost(attempt.cost),
+        ]
+        lines.append(
+            _row([*map(_e, cells), f'<a href="{_e(_href(href))}">transcript</a>'], raw=True)
+        )
+    return [*lines, "</table>"]
 
 
 def _tags(package_id: str, score: PackageScore, runs: Sequence[_Run]) -> str:
@@ -1133,18 +1413,28 @@ def _tokens(usage: TokenUsage | None, reasoning: str) -> str:
 # --- a transcript page (`report.md` 5) -------------------------------------------------------
 
 
-def _transcript_page(run: _Run, score: PackageScore, legend: _Legend) -> list[str]:
+def _transcript_page(run: _Run, score: PackageScore | FailedAttempt, legend: _Legend) -> list[str]:
     """Header, the system prompt as sent and the legend, the log in its own order, then the
     final state; each file of the package folder read once."""
-    folder = run.path / score.package_id
+    failed = isinstance(score, FailedAttempt)
+    folder = run.path / (score.folder if failed else score.package_id)
     record = run.provenance
     session, session_note = _read_session(folder)
     prompts, prompts_note = _read_prompts(folder)
     answer_log, log_note = _read_answer_log(folder)
     unreadable: list[int] = []
-    logged = list(replay_events(run.streams[score.package_id], on_unreadable=unreadable.append))
-    events, malformed = _readable_prefix(logged)
-    back = "../" * (len(run.name.split("/")) + 1) + INDEX_FILE
+    if failed:
+        log = run.failed_logs[score.folder]
+        events, malformed, unreadable = log.events, log.malformed, list(log.unreadable)
+        usage, served = log.usage, log.served_models
+        status, wall = _failed_status(score), UNKNOWN
+    else:
+        logged = list(replay_events(run.streams[score.package_id], on_unreadable=unreadable.append))
+        events, malformed = _readable_prefix(logged)
+        usage, served = score.usage, score.served_models
+        status, wall = _status(score), format_count(score.wall_clock_s)
+    prefix = "../" * (len(run.name.split("/")) + 1 + int(failed))
+    back = prefix + INDEX_FILE
 
     lines = [*_page(f"{score.package_id} in {run.name}"), f"<h1>{_e(score.package_id)}</h1>"]
     lines.append("<table>")
@@ -1153,11 +1443,16 @@ def _transcript_page(run: _Run, score: PackageScore, legend: _Legend) -> list[st
         ("package", score.package_id),
         ("arm", _recorded(record, "arm")),
         ("repetition", _recorded(record, "rep")),
+        ("status", status),
         ("requested model", _recorded(record, "model")),
-        ("usage", _tokens(score.usage, run.reasoning_label)),
-        ("wall clock s", format_count(score.wall_clock_s)),
+        ("responding model", ", ".join(served) or UNKNOWN),
+        ("usage", _tokens(usage, run.reasoning_label)),
+        ("cost", _cost(score.cost)),
+        ("wall clock s", wall),
     ):
         lines.append(_row([label, value]))
+    if failed:
+        lines.append(_row(["retries", format_count(score.retries)]))
     lines += ["</table>", f'<p><a href="{_e(back)}">back to the report</a></p>']
 
     lines.append("<h2>The system prompt as sent</h2>")
@@ -1190,7 +1485,22 @@ def _transcript_page(run: _Run, score: PackageScore, legend: _Legend) -> list[st
     elif not events:
         lines.append(_note(NO_EVENTS))
 
-    lines += _final_state(score, session, session_note, events)
+    if failed:
+        lines += ["<h2>The final state</h2>", _note("not scored: failed")]
+        if session is None:
+            lines.append(_note(session_note))
+        else:
+            lines += [
+                "<h3>Findings</h3>",
+                "<table>",
+                _row(["finding", "check", "status", "title"], header=True),
+            ]
+            for finding in session.findings:
+                lines.append(_row([finding.id, finding.check, finding.status, finding.title]))
+            lines.append("</table>")
+    else:
+        lines += _final_state(score, session, session_note, events)
+        lines += _failed_attempts([run], package_id=score.package_id, prefix=prefix)
     lines += ["</body>", "</html>"]
     return lines
 
