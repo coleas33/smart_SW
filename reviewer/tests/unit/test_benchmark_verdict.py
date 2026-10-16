@@ -15,7 +15,7 @@ import pytest
 from pydantic import ValidationError
 
 from swreview.benchmark import origins, stats, verdict
-from swreview.benchmark.scorecard import UnscoredPackage
+from swreview.benchmark.scorecard import Scorecard, UnscoredPackage
 from tests.support.studies import PanePackage, pane_run
 
 Edit = Callable[[str, int, int, PanePackage], PanePackage]
@@ -194,13 +194,25 @@ def test_recall_with_fewer_than_two_packages_explains_why_not_computable():
     assert any("two" in reason.lower() or "2" in reason for reason in result.reasons)
 
 
-def interval_stub(monkeypatch, lower: float, upper: float):
-    def interval(sums, weights, alpha, sides=1):
-        if np.max(weights) > 1:  # Two retained defects versus one FA unit per package.
-            return stats.Interval((lower + upper) / 2, lower, upper, 17, 18, True)
-        return stats.Interval(0, None, None, 17, 18, False)
+def batch_interval_stub(moments, estimate, lower, upper):
+    shape = moments.estimate.shape
+    return stats.BatchInterval(
+        estimate=np.full(shape, estimate),
+        lower=np.full(shape, np.nan if lower is None else lower),
+        upper=np.full(shape, np.nan if upper is None else upper),
+        df=moments.df,
+        packages=moments.packages,
+        computable=np.full(shape, lower is not None and upper is not None),
+    )
 
-    monkeypatch.setattr(stats, "package_interval", interval)
+
+def interval_stub(monkeypatch, lower: float, upper: float):
+    def interval(moments, alpha, sides=1):
+        if np.any(moments.computable):  # Recall varies; this study's alarms are all zero.
+            return batch_interval_stub(moments, (lower + upper) / 2, lower, upper)
+        return batch_interval_stub(moments, 0, None, None)
+
+    monkeypatch.setattr(stats, "package_intervals_from_moments", interval)
 
 
 def test_v13_lower_minus_eighteen_upper_plus_four_is_inconclusive(monkeypatch):
@@ -369,12 +381,12 @@ def test_v23_recall_comparisons_are_strict(monkeypatch, lower, upper, expected):
 
 
 def test_false_alarm_lower_end_exactly_zero_is_no_loss(monkeypatch):
-    def interval(sums, weights, alpha, sides=1):
-        if np.max(weights) > 1:
-            return stats.Interval(0, -0.05, 0.05, 17, 18, True)
-        return stats.Interval(0.1, 0.0, 0.2, 17, 18, True)
+    def interval(moments, alpha, sides=1):
+        if np.any(moments.computable):
+            return batch_interval_stub(moments, 0, -0.05, 0.05)
+        return batch_interval_stub(moments, 0.1, 0.0, 0.2)
 
-    monkeypatch.setattr(stats, "package_interval", interval)
+    monkeypatch.setattr(stats, "package_intervals_from_moments", interval)
     result = judge(study())
     assert result.verdict == "no 10-point loss"
     assert result.figures.main.false_alarms.loss is False
@@ -506,6 +518,138 @@ def test_leading_axis_of_three_studies_is_judged_like_three_individual_calls():
     assert verdict.judge(batched, RULES) == [verdict.judge(item, RULES)[0] for item in individual]
 
 
+def test_v25_seeded_simulator_draws_match_scorecards_including_stopped_runs(tmp_path):
+    """The same raw draws reach the one rule through both of its callers."""
+    from swreview.benchmark import simulate
+
+    layout = simulate.Layout(packages=(2, 1, 2, 1, 0, 0))
+    scenario = simulate.Scenario(
+        name="v25-mixed", rates="uniform", sd=1.0, fa_mean=1.0, fa_size=0.5,
+        stop_rate=0.2, clearance_count=6, clearance_rate=0.15,
+        code_count=2, code_rate=0.8,
+    )
+    draws = simulate.draw_studies(
+        scenario, seed=230025, sims=200, reps=3, layout=layout, return_draws=True,
+    )
+    package_ids = tuple(f"package-{index:02d}" for index in range(len(layout.packages)))
+    model_refs = tuple(
+        verdict.DefectRef(package_id=package_ids[int(package)], defect_id=f"D-{index:02d}")
+        for index, package in enumerate(draws.defect_packages)
+    )
+    code_refs = tuple(
+        verdict.DefectRef(package_id=package_ids[int(package)], defect_id=f"C-{index:02d}")
+        for index, package in enumerate(draws.code_packages)
+    )
+    known_refs = model_refs + code_refs
+    known_packages = np.concatenate((draws.defect_packages, draws.code_packages))
+
+    def ordered(refs):
+        return sorted(range(len(refs)), key=lambda index: (
+            refs[index].package_id, refs[index].defect_id))
+
+    model_order, code_order, clear_order = map(ordered, (model_refs, code_refs, known_refs))
+    clear_runs = {
+        (study_index, named_index): tuple(
+            f"on-{rep + 1}"
+            for rep in np.flatnonzero(draws.clears[study_index, 1, :, raw_index])
+        )
+        for study_index in range(200)
+        for named_index, raw_index in enumerate(clear_order)
+        if np.any(draws.clears[study_index, 1, :, raw_index])
+    }
+    # Supply report identities and canonical ordering only; counts remain the
+    # simulator's own sufficient statistics, never rebuilt from the scorecards.
+    direct = replace(
+        draws.stats,
+        detections=draws.stats.detections[..., model_order],
+        counted_runs=draws.stats.counted_runs[..., model_order],
+        defect_packages=draws.stats.defect_packages[model_order],
+        code_detections=draws.stats.code_detections[..., code_order],
+        code_runs=draws.stats.code_runs[..., code_order],
+        clears=draws.stats.clears[..., clear_order],
+        clear_held_out=draws.stats.clear_held_out[clear_order],
+        defect_ids=tuple(model_refs[index] for index in model_order),
+        package_ids=package_ids,
+        code_ids=tuple(code_refs[index] for index in code_order),
+        clear_ids=tuple(known_refs[index] for index in clear_order),
+        clear_runs=clear_runs,
+    )
+    rulesets = (
+        verdict.VerdictRules(alpha=0.025, cleared_guard_decides=False, floor=4),
+        verdict.VerdictRules(alpha=0.01, cleared_guard_decides=True, floor=4),
+    )
+    direct_results = [verdict.judge(direct, rules) for rules in rulesets]
+    assert draws.stats.detections.shape[0] == 200
+    assert np.any(draws.false_alarms[draws.stopped] > 0)
+    assert np.any(draws.detections & draws.stopped[..., draws.defect_packages])
+    assert np.any(draws.clears & draws.stopped[..., known_packages])
+    stopped_scorecards = 0
+
+    for study_index in range(200):
+        runs = []
+        for rep in range(3):
+            for arm_index, arm in enumerate(("off", "on")):
+                packages = []
+                for package_index, package_id in enumerate(package_ids):
+                    model_indices = np.flatnonzero(draws.defect_packages == package_index)
+                    code_indices = np.flatnonzero(draws.code_packages == package_index)
+                    detected = tuple(
+                        model_refs[index].defect_id for index in model_indices
+                        if draws.detections[study_index, arm_index, rep, index]
+                    ) + tuple(
+                        code_refs[index].defect_id for index in code_indices
+                        if draws.code_detections[study_index, arm_index, rep, index]
+                    )
+                    cleared = tuple(
+                        known_refs[index].defect_id
+                        for index in np.flatnonzero(known_packages == package_index)
+                        if draws.clears[study_index, arm_index, rep, index]
+                    )
+                    alarm_count = int(draws.false_alarms[
+                        study_index, arm_index, rep, package_index])
+                    stopped = bool(draws.stopped[study_index, arm_index, rep, package_index])
+                    stopped_scorecards += int(stopped)
+                    packages.append(PanePackage(
+                        package_id=package_id,
+                        model_held_out=tuple(model_refs[index].defect_id
+                                             for index in model_indices),
+                        code_held_out=tuple(code_refs[index].defect_id for index in code_indices),
+                        matched=detected, cleared=cleared,
+                        false_alarms=tuple((f"F-{index}", "model")
+                                           for index in range(alarm_count)),
+                        status="behavioural" if stopped else "completed",
+                    ))
+                run = pane_run(f"{arm}-{rep + 1}", arm, packages)
+                scorecard_path = tmp_path / f"study-{study_index:03d}-{arm}-{rep + 1}.json"
+                scorecard_path.write_text(run.scorecard.model_dump_json(), encoding="utf-8")
+                parsed = Scorecard.model_validate_json(scorecard_path.read_bytes())
+                for score, package in zip(parsed.per_package, packages, strict=True):
+                    assert score.run_status.kind == package.status
+                    assert len(score.false_alarm_finding_ids) == len(package.false_alarms)
+                runs.append(replace(run, scorecard=parsed))
+
+        read = verdict.study_stats(runs)
+        for field in fields(read):
+            actual, expected = getattr(read, field.name), getattr(direct, field.name)
+            if isinstance(actual, np.ndarray):
+                if expected.ndim >= 3:
+                    expected = expected[study_index:study_index + 1]
+                np.testing.assert_array_equal(actual, expected, err_msg=field.name)
+        assert read.defect_ids == direct.defect_ids
+        assert read.package_ids == direct.package_ids
+        assert read.code_ids == direct.code_ids
+        assert read.clear_ids == direct.clear_ids
+        assert read.code_missed_runs == {}
+        assert read.clear_runs == {
+            (0, index): names for (study, index), names in clear_runs.items()
+            if study == study_index
+        }
+        for rules_index, rules in enumerate(rulesets):
+            assert verdict.judge(read, rules)[0] == direct_results[rules_index][study_index]
+
+    assert stopped_scorecards == np.count_nonzero(draws.stopped)
+
+
 def test_verdict_imports_no_report_compare_simulator_pilot_or_adoption_rule():
     tree = ast.parse(Path(verdict.__file__).read_text(encoding="utf-8"))
     names = []
@@ -589,3 +733,60 @@ def test_refused_or_private_pane_study_can_carry_no_verdict_approval_or_figures(
     assert parsed.verdict is parsed.approval is parsed.figures is parsed.code_guard is (
         parsed.cleared_guard) is None
     assert parsed.refusal == "the on arm has no run"
+
+
+@pytest.mark.parametrize("decides", [False, True])
+@pytest.mark.parametrize("floor", [1, 34])
+def test_compact_judge_matches_named_reports_on_mixed_stopped_and_guard_studies(decides, floor):
+    from swreview.benchmark import simulate
+
+    scenario = simulate.Scenario(
+        "compact-mixed", "uniform", 1, 1, 0.5, stop_rate=0.2,
+        clearance_count=6, clearance_rate=0.15, code_count=2, code_rate=0.8,
+    )
+    drawn = simulate.draw_studies(
+        scenario, seed=230111, sims=200, reps=3,
+        layout=simulate.Layout((2, 1, 2, 1, 0, 0)),
+    )
+    prepared = verdict.prepare_judge(drawn)
+    for alpha in simulate.ALPHA_LADDER:
+        rules = verdict.VerdictRules(alpha, decides, floor=floor)
+        named = verdict.judge(drawn, rules)
+        compact = verdict.judge(prepared, rules, named=False)
+        np.testing.assert_array_equal(
+            compact.quality_loss, [row.verdict == "quality loss" for row in named],
+        )
+        np.testing.assert_array_equal(
+            compact.no_loss, [row.verdict == "no 10-point loss" for row in named],
+        )
+        np.testing.assert_array_equal(
+            compact.main_recall_loss, [row.figures.main.recall.loss for row in named],
+        )
+
+
+def test_prepared_judge_reuses_package_moments_without_building_named_models(monkeypatch):
+    data = verdict.study_stats(study())
+    expected = verdict.judge(data, RULES)[0]
+    prepared = verdict.prepare_judge(data)
+
+    def unexpected(*args, **kwargs):
+        pytest.fail("prepared numerical judging repeated moment work or allocated report models")
+
+    monkeypatch.setattr(stats, "prepare_package_intervals", unexpected)
+    monkeypatch.setattr(verdict, "StudyVerdict", unexpected)
+    monkeypatch.setattr(verdict, "PairedInterval", unexpected)
+    for alpha in (0.025, 0.01, 0.0025):
+        compact = verdict.judge(prepared, replace(RULES, alpha=alpha), named=False)
+        assert compact.quality_loss.tolist() == [False]
+    compact = verdict.judge(prepared, RULES, named=False)
+    assert compact.no_loss.tolist() == [expected.verdict == "no 10-point loss"]
+
+
+def test_package_grouping_preserves_existing_order_for_more_than_two_defects():
+    # A report can have more defects per package than a reference simulation.
+    values = np.array([[[1e16, 1.0, -1e16, 0.25], [0.0, 0.0, 0.0, 0.5]]])
+    packages = np.array([0, 0, 0, 1])
+    expected = np.einsum(
+        "sfd,dk->sfk", values, (packages[:, None] == np.arange(3)).astype(float),
+    )
+    np.testing.assert_array_equal(verdict._group_packages(values, packages, 3), expected)

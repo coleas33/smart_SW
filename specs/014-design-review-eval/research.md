@@ -471,9 +471,19 @@ From T182 and T183, issue 25, answered 25A.
 From the adversarial review of all of slice 6 before its merge (issue 34, answered 34A): 12 confirmed findings and 5 notes, none a blocker, each fixed test-first and re-checked (every new test fails on its revert).
 
 - **Chosen**: fix everything; a failed attempt's billed usage and served models come to the report from `runner.attempt_facts`, the one reader, so no scoring-rules bump and no golden regeneration; no failed attempt reads "none: no attempt failed", never "unknown"; a cost is synthetic when the run's provider is the scripted one; compare refuses a run with unscored packages, pointing to resume; money has its own formatter, so a non-zero amount never prints as zero; the scanner reads `.html` unescaped; the scorecard's `class` key avoids the pydantic-2.11-only feature, so the floor stays `pydantic>=2.7`. Also: resume promotes every kept attempt before scheduling, so a halt never strands one; grace runs from when the stop is set; a transport error mid-stream is retried while no text has been sent; `benchmark run` passes the resolved run folder and the scrub replaces absolute spellings only; the answer log's last turn end matches the stream on a stop; run-relative folders outside the run are refused; library `run_benchmark` redacts the key. A re-check found the relative-folder fix's leading boundary let a path after a `repr`'d `
-`, `	` or `` through; drive and UNC spellings now match anywhere, POSIX ones after a word boundary or an escaped `
-`, `	` or ``, and the scanner gained the same boundary (stricter, never looser).
+`, `	` or `
+` through; drive and UNC spellings now match anywhere, POSIX ones after a word boundary or an escaped `
+`, `	` or `
+`, and the scanner gained the same boundary (stricter, never looser).
 - **Deferred by the owner (33C)**: whether `gpt-5.6`'s served `-sol`, `-terra` or `-luna` count as its aliases, until before T244, the first paid run; until then such a run fails as `wrong_model`.
+
+### 111A. The simulator made fast before it lands (2026-10-16)
+
+From T230 and T231, issue 35, answered 35A.
+
+- **Question** (tasks.md T231, T235; VD-18): the first simulator was correct, all 39 reference scenarios holding both 5% bounds, but about seven times slower than the plan: the S-10 sweep took 38 minutes on the development machine against T235's 4 to 6, and `test_benchmark_simulate.py` added 309 s to every default run, one fixture 261 s of it.
+- **Options**: A: speed it up before it lands, its outputs pinned. B: move the slow cases under `-m simulation`. C: accept it.
+- **Chosen**: A. Statistics are batched over the studies (`stats.package_intervals_from_moments`, `PackageMoments`, `BatchInterval`), prepared judgements and seeded draws reused, and t-quantiles cached by validated arguments; every one of the 39 scenarios' outputs, and every unit fixture's, is byte-identical to the slow version's under the same seed. Measured on the development machine: the sweep 191 s, the default run's addition 32 s.
 
 ---
 
