@@ -1298,10 +1298,19 @@ def test_the_provenance_fields_are_partitioned_into_must_match_and_named_exempti
         list(RunProvenance.model_fields)
     )
     assert RUN_IDENTITY == ("rep", "started_at")
-    assert RECORD_ONLY == ("live_tools",)
+    assert RECORD_ONLY == ("live_tools", "jobs")
     assert STUDY_KEY_FIELDS == ("lever", "provider", "model")
     assert ACROSS_ARMS == ("arm",)
     assert ACROSS_PANE_ARMS == ("efficiency", "model_view", "pane_defaults")
+
+
+@pytest.mark.parametrize("pair", sorted(PAIRS))
+def test_jobs_never_refuses(tmp_path: Path, pair: str) -> None:
+    """36A: concurrency changes no review input, within an arm or across its arms."""
+    first, second = PAIRS[pair]
+    dirs = write_study(tmp_path, [replace(first, jobs=1), replace(second, jobs=4)])
+
+    assert len(compare_runs(dirs).runs) == 2
 
 
 def test_a_lever_studys_off_and_on_runs_pass_the_must_match_loop(tmp_path: Path) -> None:

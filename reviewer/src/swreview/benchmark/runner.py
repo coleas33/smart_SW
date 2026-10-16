@@ -45,10 +45,11 @@ from __future__ import annotations
 import subprocess
 import threading
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import ExitStack
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from functools import partial
 from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Protocol
@@ -85,6 +86,7 @@ if TYPE_CHECKING:
     from swreview.checks.standards.profile import StandardsProfile
 
 ReviewFn = Callable[..., Any]
+WaitForAttempts = Callable[[Sequence[attempt_driver.RunningAttempt], float], None]
 
 
 class PackageDoneCallback(Protocol):
@@ -209,6 +211,9 @@ class RunProvenance(ReviewModel):
 
     retry_policy: RetryPolicy | None = None
     """The request retry policy applied to every attempt; absent means "not recorded"."""
+
+    jobs: int | None = Field(default=None, ge=1)
+    """Packages reviewed at once (36A); record-only, absent means "not recorded"."""
 
 
 @dataclass(frozen=True)
@@ -628,6 +633,8 @@ def run_benchmark(
     redact: Callable[[str], str] = events.no_redaction,
     on_package_done: PackageDoneCallback | None = None,
     clock: Callable[[], float] = time.monotonic,
+    jobs: int = 1,
+    wait_for_attempts: WaitForAttempts | None = None,
 ) -> list[Path]:
     """Review every package of the preflighted set into `out_dir`.
 
@@ -667,11 +674,28 @@ def run_benchmark(
         max_answer_turns=max_answer_turns, package_time_limit_s=package_time_limit_s,
         stream_activity_window_s=stream_activity_window_s, stop_grace_s=stop_grace_s,
         redact=redact, on_package_done=on_package_done, clock=clock, status=RunStatus(),
+        jobs=jobs, wait_for_attempts=wait_for_attempts,
     )
 
 
 def _utc_now() -> datetime:
     return datetime.now(UTC)
+
+
+@dataclass
+class _RunningPackage:
+    package_id: str
+    folder: Path
+    status: PackageStatus
+    row: AttemptStatus
+    request: AttemptRequest
+    started: float
+    running: attempt_driver.RunningAttempt | None = None
+
+
+def _wait_for_attempts(running: Sequence[attempt_driver.RunningAttempt], timeout: float) -> None:
+    """Wait at most one short slice; every worker is polled again afterwards."""
+    running[0].wait(timeout)
 
 
 def _run_packages(
@@ -700,14 +724,29 @@ def _run_packages(
     retry_policy: RetryPolicy = BENCHMARK_RETRY,
     max_steps: int | None = None,
     initial_adapter: AgentProvider | None = None,
+    jobs: int = 1,
+    wait_for_attempts: WaitForAttempts | None = None,
 ) -> list[Path]:
-    """The same sequential attempt driver for a new run and a resumed run."""
+    """One calling-thread scheduler owns the shared records of new and resumed runs."""
+    if jobs < 1:
+        raise ValueError("jobs must be at least one")
     active_review_fn = review_fn if review_fn is not None else _default_review_fn
+    wait = _wait_for_attempts if wait_for_attempts is None else wait_for_attempts
 
     def sanitize_message(text: str) -> str:
         return scrub.one_line(scrub.without_local_paths(
             redact(text), run_dir=out_dir, root=preflighted.root,
         ))
+
+    def record_outcome(package: _RunningPackage, outcome: attempt_driver.AttemptOutcome) -> None:
+        row = package.row
+        row.ended_at = row.ended_at or now()
+        row.kind = outcome.kind
+        row.class_ = outcome.class_
+        row.stop_reason = outcome.stop_reason
+        row.error_class = outcome.error_class
+        row.stream_active_at_limit = outcome.stream_active_at_limit
+        row.message = sanitize_message(outcome.message) if outcome.message is not None else None
 
     provenance = load_provenance(out_dir)
     profile_digest = (
@@ -715,137 +754,214 @@ def _run_packages(
     )
     if standards_profile is not None and profile_digest is None:
         profile_digest = sha256_of(standards_profile)
-    package_dirs: list[Path] = []
-    for ref in preflighted.benchmark_set.packages:
-        package_status = status.packages.get(ref.package_id)
-        if package_status is not None and package_status.kept_attempt is not None:
-            kept = next(
-                row for row in package_status.attempts
-                if row.attempt == package_status.kept_attempt
-            )
-            folder = _kept_folder(out_dir, ref.package_id, kept)
-            if folder == out_dir / ref.package_id:
-                package_dirs.append(folder)
-                continue
-            promoted, promotion_error = _promote_attempt(
-                out_dir, ref.package_id, folder, kept, status, sanitize_message,
-            )
-            if promoted is not None:
-                package_dirs.append(promoted)
-            elif on_package_done is not None:
-                on_package_done(
-                    package_id=ref.package_id, kind=kept.kind, class_=kept.class_,
-                    stop_reason=kept.stop_reason, error_class=kept.error_class,
-                    retries=attempt_facts(folder).retries, promotion_error=promotion_error,
+    refs = preflighted.benchmark_set.packages
+    order = {ref.package_id: index for index, ref in enumerate(refs)}
+    package_dirs: dict[str, Path] = {}
+    remaining = iter(refs)
+    in_flight: dict[str, _RunningPackage] = {}
+    exhausted = False
+    halted = False
+    profile_error: ValueError | None = None
+    try:
+        while True:
+            while not exhausted and not halted and len(in_flight) < jobs:
+                ref = next(remaining, None)
+                if ref is None:
+                    exhausted = True
+                    break
+                package_status = status.packages.get(ref.package_id)
+                if package_status is not None and package_status.kept_attempt is not None:
+                    kept = next(
+                        row for row in package_status.attempts
+                        if row.attempt == package_status.kept_attempt
+                    )
+                    folder = _kept_folder(out_dir, ref.package_id, kept)
+                    if folder == out_dir / ref.package_id:
+                        package_dirs[ref.package_id] = folder
+                        continue
+                    promoted, promotion_error = _promote_attempt(
+                        out_dir, ref.package_id, folder, kept, status, sanitize_message,
+                    )
+                    if promoted is not None:
+                        package_dirs[ref.package_id] = promoted
+                    elif on_package_done is not None:
+                        on_package_done(
+                            package_id=ref.package_id, kind=kept.kind, class_=kept.class_,
+                            stop_reason=kept.stop_reason, error_class=kept.error_class,
+                            retries=attempt_facts(folder).retries, promotion_error=promotion_error,
+                        )
+                    continue
+                if standards_profile is not None:
+                    current_digest = _digest_or_none(standards_profile)
+                    if current_digest != profile_digest:
+                        current = display_digest(current_digest) if current_digest else "unknown"
+                        profile_error = ValueError(
+                            "standards profile changed: recorded "
+                            f"{display_digest(profile_digest)}, current {current}"
+                        )
+                        halted = True
+                        break
+                _reject_answer_key_path(ref.path)
+                if package_status is None:
+                    package_status = PackageStatus()
+                    status.packages[ref.package_id] = package_status
+                    status.packages = dict(sorted(
+                        status.packages.items(), key=lambda item: order.get(item[0], len(order)),
+                    ))
+                for prior in package_status.attempts:
+                    if prior.kind is None:
+                        prior.kind = "infrastructure"
+                        prior.class_ = "interrupted"
+                        prior.ended_at = now()
+                        _write_run_status(out_dir, status)
+                number = max((row.attempt for row in package_status.attempts), default=0) + 1
+                folder = out_dir / ATTEMPTS_FOLDER / ref.package_id / str(number)
+                _reject_answer_key_path(folder)
+                folder.mkdir(parents=True, exist_ok=True)
+                stop = threading.Event()
+                listener = AttemptListener(
+                    stop, provider=provider, requested_model=model, clock=clock,
+                    run_served_models=run_served_models,
                 )
-            continue
-        if standards_profile is not None:
-            current_digest = sha256_of(standards_profile)
-            if current_digest != profile_digest:
-                raise ValueError(
-                    "standards profile changed: recorded "
-                    f"{display_digest(profile_digest)}, current {display_digest(current_digest)}"
+                request = AttemptRequest(
+                    model_view=model_view, standards_profile=standards_profile,
+                    case_file=preflighted.case_files[ref.package_id],
+                    max_answer_turns=max_answer_turns, stop=stop, listener=listener,
+                    run_dir=out_dir, root=preflighted.root, retry_policy=retry_policy,
+                    max_steps=max_steps, adapter=initial_adapter,
                 )
-        _reject_answer_key_path(ref.path)
-        if package_status is None:
-            package_status = PackageStatus()
-            status.packages[ref.package_id] = package_status
-        for prior in package_status.attempts:
-            if prior.kind is None:
-                prior.kind = "infrastructure"
-                prior.class_ = "interrupted"
-                prior.ended_at = now()
+                initial_adapter = None
+                row = AttemptStatus(
+                    attempt=number, started_at=now(), resumed=resumed,
+                    folder=folder.relative_to(out_dir).as_posix(),
+                )
+                package_status.attempts.append(row)
                 _write_run_status(out_dir, status)
-        number = max((row.attempt for row in package_status.attempts), default=0) + 1
-        package_out_dir = out_dir / ATTEMPTS_FOLDER / ref.package_id / str(number)
-        _reject_answer_key_path(package_out_dir)
-        package_out_dir.mkdir(parents=True, exist_ok=True)
 
-        stop = threading.Event()
-        listener = AttemptListener(
-            stop, provider=provider, requested_model=model, clock=clock,
-            run_served_models=run_served_models,
-        )
-        request = AttemptRequest(
-            model_view=model_view,
-            standards_profile=standards_profile,
-            case_file=preflighted.case_files[ref.package_id],
-            max_answer_turns=max_answer_turns,
-            stop=stop,
-            listener=listener,
-            run_dir=out_dir,
-            root=preflighted.root,
-            retry_policy=retry_policy,
-            max_steps=max_steps,
-            adapter=initial_adapter,
-        )
-        initial_adapter = None
-        row = AttemptStatus(
-            attempt=number, started_at=now(), resumed=resumed,
-            folder=package_out_dir.relative_to(out_dir).as_posix(),
-        )
-        package_status.attempts.append(row)
-        _write_run_status(out_dir, status)
+                def body(
+                    package_dir: Path = ref.path, folder: Path = folder,
+                    request: AttemptRequest = request,
+                ) -> Any:
+                    # An abandoned daemon can outlive this scheduler iteration.
+                    return active_review_fn(
+                        package_dir, folder, provider=provider, model=model, effort=effort,
+                        efficiency=efficiency,
+                        **({"explain_findings": True} if explain_findings else {}),
+                        attempt=request,
+                    )
 
-        def body(
-            package_dir: Path = ref.path,
-            folder: Path = package_out_dir,
-            request: AttemptRequest = request,
-        ) -> Any:
-            # Bind per-attempt inputs: an abandoned daemon may outlive this loop iteration.
-            return active_review_fn(
-                package_dir, folder, provider=provider, model=model, effort=effort,
-                efficiency=efficiency,
-                **({"explain_findings": True} if explain_findings else {}),
-                attempt=request,
-            )
+                package = _RunningPackage(
+                    ref.package_id, folder, package_status, row, request, clock(),
+                )
+                in_flight[ref.package_id] = package
+                package.running = attempt_driver.start_attempt(
+                    body, stop=stop, listener=listener, limit_s=package_time_limit_s,
+                    activity_window_s=stream_activity_window_s, grace_s=stop_grace_s,
+                    clock=clock,
+                )
 
-        started = clock()
-        try:
-            outcome = attempt_driver.run_attempt(
-                body, stop=stop, listener=listener, limit_s=package_time_limit_s,
-                activity_window_s=stream_activity_window_s, grace_s=stop_grace_s,
-                clock=clock,
-            )
-        except KeyboardInterrupt:
-            stop.set()
-            row.kind = "infrastructure"
-            row.class_ = "interrupted"
-            row.ended_at = now()
-            _write_run_status(out_dir, status)
-            raise
-
-        row.ended_at = now()
-        row.kind = outcome.kind
-        row.class_ = outcome.class_
-        row.stop_reason = outcome.stop_reason
-        row.error_class = outcome.error_class
-        row.message = sanitize_message(outcome.message) if outcome.message is not None else None
-        row.stream_active_at_limit = outcome.stream_active_at_limit
-        facts_folder = package_out_dir
-        promotion_error: str | None = None
-        if outcome.kind in ("completed", "behavioural"):
-            _record_unattended_runtime(package_out_dir, (clock() - started) / 60.0)
-            package_status.kept_attempt = row.attempt
-            promoted, promotion_error = _promote_attempt(
-                out_dir, ref.package_id, package_out_dir, row, status, sanitize_message,
-            )
-            if promoted is not None:
-                facts_folder = promoted
-                package_dirs.append(promoted)
-        else:
-            _write_run_status(out_dir, status)
-        if on_package_done is not None:
-            on_package_done(
-                package_id=ref.package_id, kind=row.kind, class_=row.class_,
-                stop_reason=row.stop_reason, error_class=row.error_class,
-                retries=attempt_facts(facts_folder).retries,
-                promotion_error=promotion_error,
-            )
-        if row.class_ == "served_model_changed":
-            break
-
-    return package_dirs
+            completed: list[tuple[_RunningPackage, attempt_driver.AttemptOutcome]] = []
+            for package in in_flight.values():
+                assert package.running is not None
+                outcome = package.running.poll(clock())
+                if outcome is not None:
+                    completed.append((package, outcome))
+            completed.sort(key=lambda item: item[0].running.completed_at)
+            for package, outcome in completed:
+                record_outcome(package, outcome)
+                row = package.row
+                facts_folder = package.folder
+                promotion_error: str | None = None
+                if outcome.kind in ("completed", "behavioural"):
+                    _record_unattended_runtime(
+                        package.folder, (package.running.completed_at - package.started) / 60.0,
+                    )
+                    package.status.kept_attempt = row.attempt
+                    promoted, promotion_error = _promote_attempt(
+                        out_dir, package.package_id, package.folder, row, status, sanitize_message,
+                    )
+                    if promoted is not None:
+                        facts_folder = promoted
+                        package_dirs[package.package_id] = promoted
+                else:
+                    _write_run_status(out_dir, status)
+                if on_package_done is not None:
+                    on_package_done(
+                        package_id=package.package_id, kind=row.kind, class_=row.class_,
+                        stop_reason=row.stop_reason, error_class=row.error_class,
+                        retries=attempt_facts(facts_folder).retries,
+                        promotion_error=promotion_error,
+                    )
+                del in_flight[package.package_id]
+                if row.class_ == "served_model_changed":
+                    halted = True
+            if not in_flight:
+                if exhausted or halted:
+                    break
+                continue
+            if not completed:
+                running = [package.running for package in in_flight.values()]
+                observed_at = clock()
+                timeout = min(worker.wait_timeout(observed_at) for worker in running)
+                wait(running, timeout)
+    except BaseException as failure:
+        ready: dict[str, attempt_driver.AttemptOutcome] = {}
+        for package in in_flight.values():
+            try:
+                # Recover cached and queued results before requesting any stops:
+                # a normal return caused by a stop is not a completed review.
+                outcome = package.running.poll(clock()) if package.running is not None else None
+                if outcome is not None:
+                    ready[package.package_id] = outcome
+            except BaseException as cleanup_error:
+                failure.add_note(
+                    f"attempt poll failed for {package.package_id}: "
+                    f"{type(cleanup_error).__name__}: {cleanup_error}"
+                )
+        for package in in_flight.values():
+            if package.row.kind is None and package.package_id not in ready:
+                # Infrastructure wins classification even if the worker responds to
+                # stop by returning normally and is polled after this handler exits.
+                package.request.listener._record(attempt_driver.AttemptOutcome(
+                    "infrastructure", "interrupted",
+                ))
+                package.row.kind = "infrastructure"
+                package.row.class_ = "interrupted"
+        for package in in_flight.values():
+            package.request.stop.set()
+        for package in in_flight.values():
+            try:
+                package.row.ended_at = package.row.ended_at or now()
+                outcome = ready.get(package.package_id)
+                if outcome is not None:
+                    # A callback can fail after promotion appended its diagnostic.
+                    # An already recorded outcome must retain that message too.
+                    if package.row.kind is None:
+                        record_outcome(package, outcome)
+                    if outcome.kind in ("completed", "behavioural"):
+                        _record_unattended_runtime(
+                            package.folder,
+                            (package.running.completed_at - package.started) / 60.0,
+                        )
+            except BaseException as cleanup_error:
+                failure.add_note(
+                    f"attempt cleanup failed for {package.package_id}: "
+                    f"{type(cleanup_error).__name__}: {cleanup_error}"
+                )
+            # Preserve known outcomes; resume finishes any pending rename.
+            if package.row.kind in ("completed", "behavioural"):
+                package.status.kept_attempt = package.row.attempt
+        if in_flight:
+            try:
+                _write_run_status(out_dir, status)
+            except BaseException as cleanup_error:
+                failure.add_note(
+                    f"run status cleanup failed: {type(cleanup_error).__name__}: {cleanup_error}"
+                )
+        raise
+    if profile_error is not None:
+        raise profile_error
+    return [package_dirs[ref.package_id] for ref in refs if ref.package_id in package_dirs]
 
 
 def _kept_folder(run_dir: Path, package_id: str, row: AttemptStatus) -> Path:
@@ -992,6 +1108,7 @@ def resume_benchmark(
     redact: Callable[[str], str] = events.no_redaction,
     on_package_done: PackageDoneCallback | None = None,
     on_preflight: Callable[[RunProvenance], None] | None = None,
+    wait_for_attempts: WaitForAttempts | None = None,
 ) -> list[Path]:
     """Continue only missing/infrastructure attempts, from the run's recorded settings.
 
@@ -1023,6 +1140,8 @@ def resume_benchmark(
                 provider=provenance.provider, model=provenance.model, effort=provenance.effort,
             )
             key_redactor = stack.enter_context(cli._redacting(settings))
+            if review_fn is None:
+                review_fn = partial(cli._review_fn, run_redactor=key_redactor)
             initial_adapter = cli.provider_factory(settings, provenance.efficiency)
             initial_adapter.effort_mapping(settings.effort)
             caller_redactor = redact
@@ -1055,4 +1174,6 @@ def resume_benchmark(
             redact=redact, on_package_done=on_package_done, clock=clock, status=status,
             resumed=True, run_served_models=tuple(run_served_models), now=now,
             initial_adapter=initial_adapter,
+            jobs=1 if provenance.jobs is None else provenance.jobs,
+            wait_for_attempts=wait_for_attempts,
         )

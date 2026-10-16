@@ -1255,7 +1255,7 @@ class DriverClock:
                 raise attempt.queue.Empty
         return results.get(timeout=30)
 
-    def run(self, real_run: Callable[..., Any], body: Callable[[], Any], **options: Any) -> Any:
+    def start(self, real_start: Callable[..., Any], body: Callable[[], Any], **options: Any) -> Any:
         worker = ScheduledWorker()
         self.workers.append(worker)
 
@@ -1268,10 +1268,7 @@ class DriverClock:
                     worker.finished = True
                     self.condition.notify_all()
 
-        return real_run(
-            work, **options, wait_slice_s=1,
-            wait_for_result=lambda results, timeout: self.wait(worker, results, timeout),
-        )
+        return real_start(work, **options)
 
     def options(self, **overrides: float) -> dict[str, Any]:
         return {
@@ -1297,8 +1294,24 @@ def driver_clock(monkeypatch: pytest.MonkeyPatch) -> Iterator[DriverClock]:
     from swreview.benchmark import attempt
 
     clock = DriverClock()
-    real_run = attempt.run_attempt
-    monkeypatch.setattr(attempt, "run_attempt", lambda body, **kw: clock.run(real_run, body, **kw))
+    # T206 moves the scheduler to start/poll; keep the same virtual worker checkpoints.
+    real_start = attempt.start_attempt
+    workers: dict[Any, ScheduledWorker] = {}
+
+    def start(body: Callable[[], Any], **options: Any) -> Any:
+        running = clock.start(real_start, body, **options)
+        workers[running] = clock.workers[-1]
+        return running
+
+    def wait(running: Sequence[Any], timeout: float) -> None:
+        worker = running[0]
+        worker.wait(
+            timeout,
+            wait_for_result=lambda results, seconds: clock.wait(workers[worker], results, seconds),
+        )
+
+    monkeypatch.setattr(attempt, "start_attempt", start)
+    monkeypatch.setattr(runner, "_wait_for_attempts", wait)
     try:
         yield clock
     finally:

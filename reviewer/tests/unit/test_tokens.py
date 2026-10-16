@@ -22,6 +22,7 @@ import os
 import socket
 import subprocess
 import sys
+import threading
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -273,6 +274,82 @@ def test_tiktoken_cache_dir_is_restored_after_a_refusal(
         tokens.load_encoding()
 
     assert os.environ.get("TIKTOKEN_CACHE_DIR") == str(tmp_path / "theirs")
+
+
+@pytest.mark.parametrize("before", [None, "the-operators-cache"])
+def test_concurrent_first_encoding_loads_restore_the_cache_environment(
+    before: str | None, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A second first-call cache miss must not borrow the first call's environment."""
+    if before is None:
+        monkeypatch.delenv("TIKTOKEN_CACHE_DIR", raising=False)
+    else:
+        monkeypatch.setenv("TIKTOKEN_CACHE_DIR", before)
+    first_inside = threading.Event()
+    second_started = threading.Event()
+    first_finished = threading.Event()
+    outcomes: list[tuple[str, str | None]] = []
+    errors: list[BaseException] = []
+    actual_lock = getattr(tokens, "_TIKTOKEN_CACHE_LOCK", threading.RLock())
+
+    class ObservedLock:
+        def __enter__(self) -> None:
+            # Acknowledge contention before acquiring, so no sleep decides the interleaving.
+            if threading.current_thread().name == "second-tokenizer-load":
+                second_started.set()
+            actual_lock.acquire()
+
+        def __exit__(self, *exc: object) -> None:
+            actual_lock.release()
+
+    monkeypatch.setattr(tokens, "_TIKTOKEN_CACHE_LOCK", ObservedLock(), raising=False)
+    monkeypatch.setattr(tokens, "_checked_vocabulary", lambda folder: None)
+    monkeypatch.setattr(
+        tokens, "tokenizer_dir", lambda: tmp_path / threading.current_thread().name
+    )
+
+    def get_encoding(name: str) -> object:
+        worker = threading.current_thread().name
+        if worker == "first-tokenizer-load":
+            first_inside.set()
+            assert second_started.wait(5), "the second load did not start"
+        else:
+            # Before locking was added, this is where the second load could overwrite
+            # the first's environment. Keep it active while the first restores its value.
+            second_started.set()
+            assert first_finished.wait(5), "the first load did not finish"
+        outcomes.append((worker, os.environ.get("TIKTOKEN_CACHE_DIR")))
+        return object()
+
+    monkeypatch.setattr(tokens.tiktoken, "get_encoding", get_encoding)
+
+    def load() -> None:
+        try:
+            tokens.encoding()
+        except BaseException as exc:
+            errors.append(exc)
+        finally:
+            if threading.current_thread().name == "first-tokenizer-load":
+                first_finished.set()
+
+    first = threading.Thread(target=load, name="first-tokenizer-load", daemon=True)
+    second = threading.Thread(target=load, name="second-tokenizer-load", daemon=True)
+    tokens.encoding.cache_clear()
+    try:
+        first.start()
+        assert first_inside.wait(5), "the first load did not enter tiktoken"
+        second.start()
+        first.join(5)
+        second.join(5)
+        assert not first.is_alive() and not second.is_alive()
+        assert errors == []
+        assert outcomes == [
+            ("first-tokenizer-load", str(tmp_path / "first-tokenizer-load")),
+            ("second-tokenizer-load", str(tmp_path / "second-tokenizer-load")),
+        ]
+        assert os.environ.get("TIKTOKEN_CACHE_DIR") == before
+    finally:
+        tokens.encoding.cache_clear()
 
 
 # --- `swreview tokenizer fetch` ------------------------------------------------------

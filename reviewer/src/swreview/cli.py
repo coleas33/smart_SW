@@ -39,9 +39,10 @@ import json
 import os
 import re
 import sys
+import threading
 import zipfile
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack, contextmanager, nullcontext
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -2317,11 +2318,13 @@ class RunStartAdapter:
 
     def __init__(self, adapter: AgentProvider) -> None:
         self._adapter: AgentProvider | None = adapter
+        self._lock = threading.Lock()
 
     def take(self) -> AgentProvider | None:
         """The adapter, the first time; `None` after, so every later attempt builds its own."""
-        adapter, self._adapter = self._adapter, None
-        return adapter
+        with self._lock:
+            adapter, self._adapter = self._adapter, None
+            return adapter
 
 
 def _review_fn(
@@ -2335,6 +2338,7 @@ def _review_fn(
     efficiency: EfficiencySettings | None = None,
     explain_findings: bool = False,
     run_start: RunStartAdapter | None = None,
+    run_redactor: Callable[[str], str] | None = None,
 ) -> Any:
     """One package of a benchmark set, reviewed through the same hooks as `review`.
 
@@ -2359,13 +2363,14 @@ def _review_fn(
     run is closed whatever the second write does (`_rewrite_prompts_and_close`). Only a benchmark
     attempt writes it (INT-1).
 
-    The redaction is per package too, rather than left to `benchmark_run`: a library
-    caller that reaches this through `benchmark.runner`'s default `review_fn` gets the
-    same guarantee as one that came through the command line (FR-015).
+    Commands lend the run's redactor to every package, so concurrent attempts never
+    replace the process-wide factory. A library caller with no run owner installs its
+    own redactor for the same protection (FR-015).
     """
     settings = ProviderSettings.from_env(provider=provider, model=model, effort=effort)
     adapter = run_start.take() if run_start is not None else attempt.adapter
-    with _redacting(settings) as redactor:
+    redaction = _redacting(settings) if run_redactor is None else nullcontext(run_redactor)
+    with redaction as redactor:
         if adapter is None:
             adapter = provider_factory(settings, efficiency)
         if isinstance(adapter, providers.RetryAware):
@@ -2752,6 +2757,9 @@ def benchmark_run(
             help="Wall-clock limit per package, in minutes.",
         ),
     ] = 60,
+    jobs: Annotated[
+        int, typer.Option("--jobs", min=1, help="How many packages to review at once."),
+    ] = 1,
     json_output: JsonFlag = False,
 ) -> None:
     """Review every package in the set, with answer keys unreadable."""
@@ -2872,6 +2880,7 @@ def benchmark_run(
                     stream_activity_window_s=STREAM_ACTIVITY_WINDOW_S,
                     stop_grace_s=STOP_GRACE_S,
                     retry_policy=BENCHMARK_RETRY,
+                    jobs=jobs,
                 ),
             )
             run_benchmark(
@@ -2880,13 +2889,14 @@ def benchmark_run(
                 provider=settings.provider.value,
                 model=settings.model,
                 effort=settings.effort,
-                review_fn=partial(_review_fn, run_start=run_start),
+                review_fn=partial(_review_fn, run_start=run_start, run_redactor=redactor),
                 efficiency=resolved.efficiency,
                 explain_findings=resolved.explain_findings,
                 model_view=resolved.model_view,
                 standards_profile=standards_profile,
                 max_answer_turns=max_answer_turns,
                 package_time_limit_s=package_time_limit * 60,
+                jobs=jobs,
                 redact=redactor,
                 on_package_done=_benchmark_package_done(json_output),
             )
@@ -2909,9 +2919,15 @@ def benchmark_resume(
             help="The profile used by the recorded run; its digest must match.",
         ),
     ] = None,
+    jobs: Annotated[
+        str | None,
+        typer.Option("--jobs", hidden=True, help="Resume uses its recorded concurrency."),
+    ] = None,
     json_output: JsonFlag = False,
 ) -> None:
     """Continue infrastructure failures and unfinished promotions from a recorded run."""
+    if jobs is not None:
+        raise typer.BadParameter("resume runs at the run's recorded --jobs", param_hint="--jobs")
     run_dir = run_dir.resolve()
     root = sets.REPO_ROOT
     before: dict[str, int] = {}
@@ -2943,7 +2959,10 @@ def benchmark_resume(
                 )
 
         def review(package_dir: Path, session_out_dir: Path, **options: Any) -> Any:
-            return _review_fn(package_dir, session_out_dir, run_start=run_start, **options)
+            return _review_fn(
+                package_dir, session_out_dir, run_start=run_start,
+                run_redactor=redact_run, **options,
+            )
 
         resume_benchmark(
             run_dir, review_fn=review, root=root, standards_profile=standards_profile,
