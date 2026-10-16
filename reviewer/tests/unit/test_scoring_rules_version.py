@@ -96,7 +96,8 @@ def re_score_line(run_dir: Path) -> str:
     """`scoring.md` 8's refusal of a scorecard scored under version 1, as fixed text."""
     return (
         f"{run_dir}: scorecard.json was scored under scoring rules version 1; this build scores "
-        f"under 3. Re-score it: swreview benchmark score {run_dir} (add --answer-keys <dir> when "
+        f"under {scorecard_module.SCORING_RULES_VERSION}. Re-score it: swreview benchmark score "
+        f"{run_dir} (add --answer-keys <dir> when "
         "its set names no keys; it reads the saved session; nothing is re-run)"
     )
 
@@ -197,12 +198,13 @@ def test_a_scorecard_scored_at_the_scorer_slice_meets_the_re_score_line(tmp_path
 
 
 def test_compare_refuses_a_scorecard_of_a_newer_version(tmp_path: Path) -> None:
-    """Moved from version 3 to 4 with the bump (T086): 3 is this build's now."""
+    """A version above this build's is refused before its model is read."""
     run_dir = write_run(tmp_path, RunSpec(run="off-1"))
-    rewrite_scorecard(run_dir, with_fields(scoring_rules_version=4))
+    newer = scorecard_module.SCORING_RULES_VERSION + 1
+    rewrite_scorecard(run_dir, with_fields(scoring_rules_version=newer))
 
     assert str(refusal(run_dir)) == (
-        f"{run_dir}: scorecard.json was scored by a newer build (version 4); compare it with "
+        f"{run_dir}: scorecard.json was scored by a newer build (version {newer}); compare it with "
         "that build, or re-score it with this one"
     )
 
@@ -278,7 +280,7 @@ def test_re_scoring_an_old_folder_writes_the_current_version_and_compare_accepts
 
     assert rescored.exit_code == 0, rescored.stdout + rescored.stderr
     payload = json.loads((run_dir / "scorecard.json").read_text(encoding="utf-8"))
-    assert payload["scoring_rules_version"] == 3
+    assert payload["scoring_rules_version"] == scorecard_module.SCORING_RULES_VERSION
     assert [row.package_id for row in compare_runs([run_dir]).runs] == ["pkg-a"]
     origins = payload["per_package"][0]["finding_origins"]
     assert origins

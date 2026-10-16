@@ -1977,3 +1977,40 @@ def test_no_home_folder_still_scrubs_the_run_path(
     assert row["error_class"] == "PermissionError"
     assert "<run>" in row["message"] and str(out) not in row["message"]
     assert scan_folder(out) == []
+
+
+def test_a_reader_meeting_an_incomplete_promotion_refuses_naming_resume(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float],
+) -> None:
+    from typer.testing import CliRunner
+
+    from swreview import cli
+    from tests.support.answer_keys import write_key
+    from tests.unit.test_benchmark_resume import start_run
+
+    out = tmp_path / "run"
+    rename = Path.rename
+
+    def locked(path: Path, target: Any) -> Path:
+        if path == out / "attempts/fict-a/1":
+            raise PermissionError("fict folder locked")
+        return rename(path, target)
+
+    monkeypatch.setattr(Path, "rename", locked)
+    _, first = start_run(
+        tmp_path, monkeypatch, [[ScriptedTurn(text="Reviewed.")]], ("fict-a",),
+    )
+    assert first.exit_code == 1, first.stdout + first.stderr
+    assert driver_status(out)["packages"]["fict-a"]["kept_attempt"] == 1
+    assert driver_row(out)["folder"] == "attempts/fict-a/1"
+    assert (out / "attempts/fict-a/1/session.json").is_file()
+    keys = tmp_path / "answer_keys"
+    write_key(keys, "fict-a")
+
+    result = CliRunner().invoke(cli.app, [
+        "benchmark", "score", str(out), "--answer-keys", str(keys),
+    ])
+
+    assert result.exit_code == 1, result.stdout + result.stderr
+    assert f"promotion incomplete: run `swreview benchmark resume {out}`" in result.stderr
+    assert not (out / "scorecard.json").exists()

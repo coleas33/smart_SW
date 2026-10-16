@@ -2999,7 +2999,7 @@ def test_benchmark_score_prints_its_three_summary_lines(
     assert result.exit_code == 0, result.stdout + result.stderr
     run_dir = benchmark_run_dir.resolve()
     assert result.stdout.splitlines() == [
-        "scored 1 packages of set pilot (scoring rules version 3)",
+        "scored 1 packages of set pilot (scoring rules version 4)",
         "detected: 0 of 1 (flagged 0; below expected 0), cleared: 0, false alarms: 1 "
         "(1 of model origin), unresolved: 0",
         f"wrote {run_dir / 'scorecard.json'} and {run_dir / 'scorecard.md'}",

@@ -42,6 +42,7 @@ from swreview.ir.models import (
     MateEntity,
     SketchInfo,
 )
+from tests.golden import test_golden_scorecards as scorecard_goldens
 from tests.golden.test_golden import (
     FIXTURES_DIR,
     PRE_1_4_0_FIXTURE_DIRS,
@@ -272,6 +273,32 @@ THREAD_PITCH_NEW_PATHS: frozenset[str] = frozenset(
     + [f"test_golden/{case}.yml" for case in THREAD_PITCH_NEW_CASES]
 )
 
+SCORING_RUN_FIELDS_NEW_PATHS = frozenset({
+    "test_golden_scorecards/kalo-1--behavioural-stop.yml",
+})
+SCORING_RUN_FIELDS_PATHS = frozenset(
+    {"scoring_rules_versions.json"}
+    | {
+        f"test_golden_scorecards/{case}--{review}.yml"
+        for case in scorecard_goldens.ENTRIES
+        for review in ("oracle", "null")
+    }
+    | {
+        f"test_golden_scorecards/{probe.case}--{probe.name}.yml"
+        for probe in scorecard_goldens.scoring_probes.PROBES
+    }
+    | {
+        f"test_golden_scorecards/{probe.case}--{probe.overlay}--{probe.base}.yml"
+        for probe in scorecard_goldens.OVERLAY_BASES
+    }
+)
+"""Feature 014 T211's exact declared scorecards and version record, regenerated together.
+
+The harness's case/probe identities name the files; no directory wildcard permits an
+unrelated golden. The new behavioural probe remains held to `??` until committed.
+"""
+
+
 GOLDEN_HARNESS: frozenset[str] = frozenset({"test_golden.py", "test_standards_goldens.py"})
 """The two modules in that tree that are code rather than artefact, named so that they are
 accounted for rather than dropped by a directory filter.
@@ -464,15 +491,22 @@ def test_the_golden_tree_holds_only_this_feature_s_new_goldens() -> None:
     The gate is absolute over the **whole** of that tree: every line it prints must be a
     golden this feature adds (T053 to T056, T069) and still untracked, one of this
     feature's own goldens that T069a, T070 and T070a rewrite and that
-    `REWRITTEN_BY_THE_DRAWING_CHECKS` names, or one of the two harness modules named above.
+    `REWRITTEN_BY_THE_DRAWING_CHECKS` names, feature 014 T211's declared scorecards and
+    version record, or one of the two harness modules named above.
     A feature 001, 002 or 003 baseline that drifted prints a line that is none of those, and
     so does a `standards-*` baseline of this feature's own that stopped being new and is not
     named - which is SC-004 measured rather than asserted by inspection.
     """
     changed = golden_tree_status()
 
-    new = NEW_GOLDEN_PATHS | DECISION_17A_NEW_PATHS | T161_NEW_PATHS | THREAD_PITCH_NEW_PATHS
-    rewritten = REWRITTEN_BY_THE_DRAWING_CHECKS | REWRITTEN_BY_DECISION_17A | REWRITTEN_BY_T161
+    new = (
+        NEW_GOLDEN_PATHS | DECISION_17A_NEW_PATHS | T161_NEW_PATHS | THREAD_PITCH_NEW_PATHS
+        | SCORING_RUN_FIELDS_NEW_PATHS
+    )
+    rewritten = (
+        REWRITTEN_BY_THE_DRAWING_CHECKS | REWRITTEN_BY_DECISION_17A | REWRITTEN_BY_T161
+        | (SCORING_RUN_FIELDS_PATHS - SCORING_RUN_FIELDS_NEW_PATHS)
+    )
     allowed = new | GOLDEN_HARNESS | rewritten
     stray = [f"{status} {path}" for status, path in changed if path not in allowed]
     drifted = [

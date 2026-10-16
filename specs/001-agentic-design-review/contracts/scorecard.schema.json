@@ -5,13 +5,16 @@
   "description": "Result of running the reviewer over a benchmark set and scoring against withheld answer keys. Field rules: data-model.md section 3.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["scoring_rules_version", "run_id", "benchmark_set", "scored_at", "per_package", "aggregate", "distribution", "key_sha256"],
+  "required": ["scoring_rules_version", "run_id", "benchmark_set", "scored_at", "per_package", "aggregate", "distribution", "key_sha256", "unscored_packages", "failed_attempts", "price_table"],
   "properties": {
     "scoring_rules_version": { "type": "integer", "minimum": 1, "description": "The scoring rules the scorecard was scored under (feature 014 scoring.md 8); read before the rest is validated, and a scorecard of another version is refused with the command that re-scores it. A scorecard without the field was scored under version 1" },
     "run_id": { "type": "string" },
     "benchmark_set": { "type": "string" },
     "scored_at": { "type": "string", "format": "date-time" },
-    "per_package": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/PackageScore" } },
+    "per_package": { "type": "array", "items": { "$ref": "#/$defs/PackageScore" }, "description": "Kept completed or behavioural attempts only; empty when every package failed (feature 014 T209)" },
+    "unscored_packages": { "type": "array", "items": { "$ref": "#/$defs/UnscoredPackage" }, "description": "Infrastructure failures, absent from per_package and every score; their keys still contribute held_out_model_defects" },
+    "failed_attempts": { "type": "array", "items": { "$ref": "#/$defs/FailedAttempt" }, "description": "Every infrastructure attempt, including earlier failures of kept packages; billed cost is outside all scores" },
+    "price_table": { "anyOf": [{ "$ref": "#/$defs/PriceTableRecord" }, { "type": "null" }], "description": "Sources and dates of each entry used to price a round of any attempt; null when no round was priced (feature 014 RF-45)" },
     "aggregate": { "$ref": "#/$defs/Aggregate" },
     "distribution": { "type": "array", "items": { "type": ["number", "null"] }, "description": "net_saved_minutes per package, same order as per_package" },
     "key_sha256": { "type": "object", "additionalProperties": { "type": "string", "pattern": "^[0-9a-f]{64}$" }, "description": "Package id to the sha256 of its answer key file's raw bytes; compare refuses a study whose runs name two digests for one package's key (feature 014 INT-16)" }
@@ -19,9 +22,12 @@
   "$defs": {
     "PackageScore": {
       "type": "object", "additionalProperties": false,
-      "required": ["package_id", "held_out", "session_id", "valid_findings", "missed_known_defects", "false_alarms", "unresolved_count", "baseline_minutes", "assisted_minutes", "unattended_runtime_minutes", "net_saved_minutes", "usage", "round_trips", "cached_input_share", "wall_clock_s", "seconds_to_first_finding", "carried_findings", "unresolved_because_withheld", "unresolved_other", "coverage_bucket_mix", "tool_calls_by_name", "matched_defect_ids", "flagged_defect_ids", "status_mismatch_defect_ids", "flagged_below_expected_defect_ids", "cleared_defect_ids", "missed_defect_ids", "contradicted_condition_ids", "confirmed_condition_ids", "false_alarm_finding_ids", "forbidden_hit_finding_ids", "withdrawn_forbidden_hit_finding_ids", "tuned_on_false_alarm_finding_ids", "coverage_mismatches", "finding_origins", "graded_items", "re_asks", "open_repeats", "unanswerable_requests", "unmatched_requests", "question_counts", "unscripted_questions", "bound_reached", "not_assessed"],
+      "required": ["package_id", "held_out", "session_id", "valid_findings", "missed_known_defects", "false_alarms", "unresolved_count", "baseline_minutes", "assisted_minutes", "unattended_runtime_minutes", "net_saved_minutes", "usage", "round_trips", "cached_input_share", "wall_clock_s", "seconds_to_first_finding", "carried_findings", "unresolved_because_withheld", "unresolved_other", "coverage_bucket_mix", "tool_calls_by_name", "matched_defect_ids", "flagged_defect_ids", "status_mismatch_defect_ids", "flagged_below_expected_defect_ids", "cleared_defect_ids", "missed_defect_ids", "contradicted_condition_ids", "confirmed_condition_ids", "false_alarm_finding_ids", "forbidden_hit_finding_ids", "withdrawn_forbidden_hit_finding_ids", "tuned_on_false_alarm_finding_ids", "coverage_mismatches", "finding_origins", "graded_items", "re_asks", "open_repeats", "unanswerable_requests", "unmatched_requests", "question_counts", "unscripted_questions", "bound_reached", "not_assessed", "run_status", "cost", "served_models"],
       "properties": {
         "package_id": { "type": "string" }, "held_out": { "type": "boolean" }, "session_id": { "type": "string" },
+        "run_status": { "$ref": "#/$defs/PackageRunStatus" },
+        "cost": { "$ref": "#/$defs/Cost", "description": "Only the kept attempt's cost; oracle, null and scripted reviews are synthetic and unpriced" },
+        "served_models": { "type": "array", "items": { "type": "string" }, "description": "Kept attempt's distinct reported served ids, in first-seen order; empty when none was reported (feature 014 RF-16)" },
         "valid_findings": { "type": "integer", "minimum": 0 },
         "missed_known_defects": { "type": "integer", "minimum": 0 },
         "false_alarms": { "type": "integer", "minimum": 0 },
@@ -63,6 +69,77 @@
         "unscripted_questions": { "type": ["array", "null"], "items": { "$ref": "#/$defs/UnscriptedRequest" }, "description": "Each request an answer point gave nothing, once, with its first reason, as the answer log records it; null when the package has no answer log" },
         "bound_reached": { "type": ["boolean", "null"], "description": "Whether the answer log ended because the answer-turn bound was reached; null when the package has no answer log" },
         "not_assessed": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Column name to why it is null, for every null column above and no other; never 0 (FR-021)" }
+      }
+    },
+    "AttemptClass": {
+      "enum": ["provider_error", "wrong_model", "served_model_changed", "wall_clock_silent", "abandoned", "internal_error", "interrupted", "max_steps", "truncated", "provider_stop", "wall_clock", null]
+    },
+    "PackageRunStatus": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "class", "stop_reason"],
+      "properties": {
+        "kind": { "enum": ["completed", "behavioural", "not_recorded"] },
+        "class": { "$ref": "#/$defs/AttemptClass" },
+        "stop_reason": { "type": ["string", "null"] }
+      },
+      "description": "Kept attempt's outcome; not_recorded means no run-status.json, never an inferred completion (feature 014 scoring.md 7)"
+    },
+    "Cost": {
+      "type": "object", "additionalProperties": false,
+      "required": ["amount", "missing", "basis", "synthetic"],
+      "properties": {
+        "amount": { "type": ["number", "null"] },
+        "missing": { "type": "array", "items": { "type": "string" } },
+        "basis": { "type": "array", "items": { "type": "string" } },
+        "synthetic": { "type": "boolean" }
+      },
+      "description": "An unrounded amount or null with distinct missing reasons and basis notes; synthetic reviews have null amount and no missing reasons"
+    },
+    "UnscoredPackage": {
+      "type": "object", "additionalProperties": false,
+      "required": ["package_id", "kind", "class", "error_class", "attempts", "folder"],
+      "properties": {
+        "package_id": { "type": "string" },
+        "kind": { "const": "infrastructure" },
+        "class": { "$ref": "#/$defs/AttemptClass" },
+        "error_class": { "type": ["string", "null"] },
+        "attempts": { "type": "integer", "minimum": 1 },
+        "folder": { "type": "string", "description": "Last attempt's run-relative folder with / separators (feature 014 RF-17)" }
+      }
+    },
+    "FailedAttempt": {
+      "type": "object", "additionalProperties": false,
+      "required": ["package_id", "attempt", "class", "retries", "cost", "folder"],
+      "properties": {
+        "package_id": { "type": "string" },
+        "attempt": { "type": "integer", "minimum": 1 },
+        "class": { "$ref": "#/$defs/AttemptClass" },
+        "retries": { "type": "integer", "minimum": 0 },
+        "cost": { "$ref": "#/$defs/Cost" },
+        "folder": { "type": "string", "description": "This infrastructure attempt's run-relative folder with / separators (feature 014 RF-17)" }
+      }
+    },
+    "PriceSource": {
+      "type": "object", "additionalProperties": false,
+      "required": ["source", "date"],
+      "properties": { "source": { "type": "string" }, "date": { "type": "string", "format": "date" } }
+    },
+    "PricedModel": {
+      "type": "object", "additionalProperties": false,
+      "required": ["provider", "model", "input", "cached_input", "output"],
+      "properties": {
+        "provider": { "type": "string" }, "model": { "type": "string" },
+        "input": { "$ref": "#/$defs/PriceSource" },
+        "cached_input": { "$ref": "#/$defs/PriceSource" },
+        "output": { "$ref": "#/$defs/PriceSource" }
+      }
+    },
+    "PriceTableRecord": {
+      "type": "object", "additionalProperties": false,
+      "required": ["prices_version", "models"],
+      "properties": {
+        "prices_version": { "type": "integer" },
+        "models": { "type": "array", "items": { "$ref": "#/$defs/PricedModel" } }
       }
     },
     "Origin": {
@@ -151,9 +228,11 @@
     },
     "Aggregate": {
       "type": "object", "additionalProperties": false,
-      "required": ["packages", "held_out_packages", "valid_findings", "missed_known_defects", "false_alarms", "unresolved_count", "recall", "false_alarm_rate", "median_net_saved_minutes", "packages_with_timing", "input_tokens", "cached_input_tokens", "output_tokens", "reasoning_tokens", "total_tokens", "round_trips", "median_seconds_to_first_finding", "packages_with_usage", "detected", "flagged", "status_mismatches", "flagged_below_expected", "cleared", "contradictions", "confirmations", "forbidden_hits", "withdrawn_forbidden_hits", "tuned_on_false_alarms", "coverage_mismatches", "findings_by_origin", "false_alarms_by_origin", "recall_by_producer", "held_out_model_defects", "re_asks", "open_repeats", "unanswerable_requests", "unmatched_requests", "unscripted_questions", "question_count_misses", "bound_reached"],
+      "required": ["packages", "held_out_packages", "valid_findings", "missed_known_defects", "false_alarms", "unresolved_count", "recall", "false_alarm_rate", "median_net_saved_minutes", "packages_with_timing", "input_tokens", "cached_input_tokens", "output_tokens", "reasoning_tokens", "total_tokens", "round_trips", "median_seconds_to_first_finding", "packages_with_usage", "detected", "flagged", "status_mismatches", "flagged_below_expected", "cleared", "contradictions", "confirmations", "forbidden_hits", "withdrawn_forbidden_hits", "tuned_on_false_alarms", "coverage_mismatches", "findings_by_origin", "false_alarms_by_origin", "recall_by_producer", "held_out_model_defects", "re_asks", "open_repeats", "unanswerable_requests", "unmatched_requests", "unscripted_questions", "question_count_misses", "bound_reached", "cost", "failed_attempts_cost"],
       "properties": {
-        "packages": { "type": "integer", "minimum": 1 }, "held_out_packages": { "type": "integer", "minimum": 0 },
+        "packages": { "type": "integer", "minimum": 0 }, "held_out_packages": { "type": "integer", "minimum": 0 },
+        "cost": { "$ref": "#/$defs/Cost", "description": "Kept attempts' cost, summed only when every member is known; otherwise null naming how many of how many are unknown" },
+        "failed_attempts_cost": { "$ref": "#/$defs/Cost", "description": "Infrastructure attempts' billed cost, in no score; summed only when every member is known, else null naming how many of how many are unknown" },
         "valid_findings": { "type": "integer", "minimum": 0 }, "missed_known_defects": { "type": "integer", "minimum": 0 },
         "false_alarms": { "type": "integer", "minimum": 0 }, "unresolved_count": { "type": "integer", "minimum": 0 },
         "recall": { "type": ["number", "null"], "minimum": 0, "maximum": 1, "description": "Detected over all held-out known defects of both producers, read from the answer keys' item tags, never from the set's package flag (feature 014 scoring.md 6); null with no held-out known defect" },

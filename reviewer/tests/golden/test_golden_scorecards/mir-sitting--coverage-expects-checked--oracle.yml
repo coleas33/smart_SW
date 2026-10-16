@@ -92,6 +92,10 @@ question_counts:
   max: 1
   min: 1
 re_asks: []
+run_status:
+  class: null
+  kind: completed
+  stop_reason: null
 status_mismatch_defect_ids: []
 tuned_on_false_alarm_finding_ids: []
 unanswerable_requests: []

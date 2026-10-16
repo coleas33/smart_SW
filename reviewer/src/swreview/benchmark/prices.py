@@ -87,6 +87,10 @@ class Cost(_StrictModel):
     synthetic: bool
 
 
+SYNTHETIC_COST = Cost(amount=None, missing=[], basis=[], synthetic=True)
+"""Oracle, null and scripted reviews have no monetary price (FR-042)."""
+
+
 _OPENAI_ADDENDS = ("input_tokens", "output_tokens")
 _GEMINI_ADDENDS = (
     "input_tokens",
@@ -102,6 +106,8 @@ def price_rounds(rounds: Sequence[RoundFacts], *, table: PriceTable) -> Cost:
     basis: list[str] = []
     numerator = 0.0
     synthetic = bool(rounds) and all(round_.provider == ProviderName.FAKE for round_ in rounds)
+    if synthetic:
+        return SYNTHETIC_COST
     if not rounds:
         missing.append("no usage")
 
