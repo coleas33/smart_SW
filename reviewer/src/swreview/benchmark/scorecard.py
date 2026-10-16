@@ -78,11 +78,18 @@ from datetime import date as Date
 from pathlib import Path
 from typing import Annotated, Any, Literal, TypeVar, get_args
 
-from pydantic import ConfigDict, Field, ValidationError
+from pydantic import (
+    AfterValidator,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    ValidationError,
+    model_serializer,
+)
 
 from swreview.agent import events
 from swreview.agent.checklist import load_checklist
-from swreview.agent.providers import CACHED_SHARE_PUBLISHABLE, TokenUsage
+from swreview.agent.providers import CACHED_SHARE_PUBLISHABLE, ProviderName, TokenUsage
 from swreview.agent.runner import SESSION_FILE_NAME
 from swreview.benchmark import answers, matching, questions, runner, sets
 from swreview.benchmark import prices as pricing
@@ -272,9 +279,19 @@ class RecallByProducer(ReviewModel):
 class _ClassRecord(ReviewModel):
     """Records keep the contract's `class` key in every serialized form."""
 
-    model_config = ConfigDict(populate_by_name=True, serialize_by_alias=True)
+    model_config = ConfigDict(populate_by_name=True)
 
     class_: AttemptClass | None = Field(alias="class")
+
+    @model_serializer(mode="wrap")
+    def _contract_keys(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        """Keep nested dumps compatible with pydantic 2.7, before serialize_by_alias existed."""
+        return {
+            "class" if key == "class_" else key: value for key, value in handler(self).items()
+        }
+
+
+AttemptFolder = Annotated[str, AfterValidator(runner.validate_attempt_folder)]
 
 
 class PackageRunStatus(_ClassRecord):
@@ -287,7 +304,7 @@ class UnscoredPackage(_ClassRecord):
     kind: Literal["infrastructure"]
     error_class: str | None
     attempts: int = Field(ge=1)
-    folder: str
+    folder: AttemptFolder
 
 
 class FailedAttempt(_ClassRecord):
@@ -295,7 +312,7 @@ class FailedAttempt(_ClassRecord):
     attempt: int = Field(ge=1)
     retries: int = Field(ge=0)
     cost: pricing.Cost
-    folder: str
+    folder: AttemptFolder
 
 
 class PriceSource(ReviewModel):
@@ -1050,7 +1067,7 @@ def _sum_costs(costs: Sequence[pricing.Cost]) -> pricing.Cost:
         return pricing.Cost(amount=None, missing=["no costs recorded"], basis=[], synthetic=False)
     if all(cost.synthetic for cost in costs):
         return pricing.SYNTHETIC_COST
-    unknown = sum(cost.amount is None for cost in costs)
+    unknown = sum(cost.amount is None and not cost.synthetic for cost in costs)
     return pricing.Cost(
         amount=sum_or_none(cost.amount for cost in costs),
         missing=list(dict.fromkeys([
@@ -1219,6 +1236,7 @@ def score_run(
     `distribution` mirrors `per_package`.
     """
     run_dir = Path(run_dir)
+    provenance = runner.load_provenance(run_dir)
     checklist = load_checklist()
     words = load_words()
     per_package: list[PackageScore] = []
@@ -1230,6 +1248,8 @@ def score_run(
     used_models: dict[tuple[str, str], PricedModel] = {}
 
     def attempt_cost(facts: runner.AttemptFacts) -> pricing.Cost:
+        if provenance is not None and provenance.provider == ProviderName.FAKE:
+            return pricing.SYNTHETIC_COST
         cost = pricing.price_rounds(facts.rounds, table=table)
         for round_ in facts.rounds:
             if pricing.price_rounds([round_], table=table).amount is None:
@@ -1268,7 +1288,7 @@ def score_run(
         outcome = runner.package_outcome(run_dir, ref.package_id)
         for attempt in outcome.attempts:
             if attempt.kind == "infrastructure":
-                facts = runner.attempt_facts(run_dir / attempt.folder)
+                facts = runner.attempt_facts(runner.resolve_attempt_folder(run_dir, attempt.folder))
                 failed_attempts.append(FailedAttempt(
                     package_id=ref.package_id,
                     attempt=attempt.attempt,
@@ -1287,10 +1307,11 @@ def score_run(
                 folder=outcome.folder,
             ))
             continue
-        facts = runner.attempt_facts(run_dir / ref.package_id)
+        folder = runner.resolve_attempt_folder(run_dir, ref.package_id)
+        facts = runner.attempt_facts(folder)
         per_package.append(
             _score_package(
-                run_dir / ref.package_id,
+                folder,
                 package_id=ref.package_id,
                 held_out=ref.held_out,
                 answer_key=answer_key,

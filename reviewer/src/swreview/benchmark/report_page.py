@@ -15,14 +15,15 @@ the record's one format, one writer and one reader.
 ## The report (FR-034, FR-021, FR-051; RP-1 to RP-7)
 
 `build_report` writes one static page, `index.html`, and transcript pages for kept and failed
-attempts of each run folder, from run folders alone: every number is the scorecard's
+attempts of each run folder, from run folders alone: every scored number is the scorecard's
 (`read_scorecard`, the one reader), counted from its id lists where it is rendered by the ledger's
-rule (`compare.format_count`); the matcher is never run and no key is read. Each stream is found
-through `event_stream`, plain or packed, and read in one pass through `replay_events` (plan
-decisions RF-29, RF-83); each call's full result through `read_stored_result`, embedded escaped
-(RF-30). Every recorded string is escaped; the pages hold one inline style block, no script, no
-external resource and no build time. Statuses, costs and price sources are rendered from the
-scorecard, with failed attempts' billed usage and cost kept separate from every score (T216, T217).
+rule (`compare.format_count`); the matcher is never run and no key is read. Streams are found
+through `event_stream`, plain or packed, and read through `replay_events` (RF-29, RF-83).
+Failed attempts' billed usage and served models come from `runner.attempt_facts`, independently
+of where their transcript walk stops; each call's full result through `read_stored_result`,
+embedded escaped (RF-30). Every recorded string is escaped; the pages hold one inline style
+block, no external resource and no build time. Statuses, costs and price sources are rendered from
+the scorecard; failed attempts' billed usage and cost stay separate from every score (T216, T217).
 """
 
 from __future__ import annotations
@@ -45,9 +46,10 @@ from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import quote
 
 from swreview import atomic
-from swreview.agent.events import UsageLedger, event_stream, replay_events
+from swreview.agent.events import event_stream, replay_events
 from swreview.agent.providers import AgentEvent, ProviderName, TokenUsage, usage_from_body
 from swreview.agent.runner import SESSION_FILE_NAME
+from swreview.benchmark import runner
 from swreview.benchmark.answers import AnswerLog, AnswerPoint, read_answer_log
 from swreview.benchmark.compare import distinct_run_dirs, format_count
 from swreview.benchmark.origins import MODEL_ORIGINS
@@ -74,7 +76,7 @@ from swreview.benchmark.sets import (
 from swreview.findings import ReviewModel
 from swreview.ir.loader import AnswerKeyAccessError, load_package, reject_answer_key_path
 from swreview.report.names import component_names
-from swreview.report.session import ReviewSession, load_session
+from swreview.report.session import ReviewSession, SessionUsage, load_session
 from swreview.tools.registry import Unstored, UnstoredReason, read_stored_result
 
 if TYPE_CHECKING:
@@ -246,7 +248,7 @@ class _Legend:
 
 @dataclass(frozen=True)
 class _FailedLog:
-    """One failed attempt's stream, read once for its billed usage and its transcript."""
+    """One failed transcript's events, with its billed facts from the shared attempt reader."""
 
     events: list[AgentEvent]
     malformed: int | None
@@ -885,35 +887,32 @@ def _read_run(path: Path, name: str, scorecard: Scorecard, *, root: Path) -> _Ru
         entries=entries,
         no_legend=no_legend,
         streams={
-            score.package_id: event_stream(path / score.package_id)
+            score.package_id: event_stream(runner.resolve_attempt_folder(path, score.package_id))
             for score in scorecard.per_package
         },
         failed_logs={
-            attempt.folder: _read_failed_log(event_stream(path / attempt.folder))
+            attempt.folder: _read_failed_log(runner.resolve_attempt_folder(path, attempt.folder))
             for attempt in scorecard.failed_attempts
         },
     )
 
 
-def _read_failed_log(stream: Path) -> _FailedLog:
+def _read_failed_log(folder: Path) -> _FailedLog:
+    facts = runner.attempt_facts(folder)
     unreadable: list[int] = []
     logged, malformed = _readable_prefix(
-        list(replay_events(stream, on_unreadable=unreadable.append))
+        list(replay_events(event_stream(folder), on_unreadable=unreadable.append))
     )
-    ledger = UsageLedger()
-    served: dict[str, None] = {}
-    for event in logged:
-        ledger(event)
-        model = event.body.get("served_model")
-        if event.type == "usage" and isinstance(model, str) and model:
-            served.setdefault(model, None)
-    usage = ledger.usage()
+    usage = (
+        SessionUsage.summed([round_.usage for round_ in facts.rounds], []).totals
+        if facts.paid else None
+    )
     return _FailedLog(
         events=logged,
         malformed=malformed,
         unreadable=tuple(unreadable),
-        usage=usage.totals if usage is not None else None,
-        served_models=list(served),
+        usage=usage,
+        served_models=facts.served_models,
     )
 
 
@@ -1055,14 +1054,18 @@ def _index_page(runs: Sequence[_Run]) -> list[str]:
         aggregate = run.scorecard.aggregate
         per_package = run.scorecard.per_package
         tokens = format_count(aggregate.total_tokens)
-        if aggregate.total_tokens is None:
+        if aggregate.packages == 0:
+            tokens = "no package scored"
+        elif aggregate.total_tokens is None:
             tokens += (
                 f" ({format_count(aggregate.packages - aggregate.packages_with_usage)} of "
                 f"{format_count(aggregate.packages)} packages report no usage)"
             )
         seconds = sum_or_none([score.wall_clock_s for score in per_package])
         wall = format_count(seconds)
-        if seconds is None:
+        if not per_package:
+            wall = "no package scored"
+        elif seconds is None:
             missing = sum(1 for score in per_package if score.wall_clock_s is None)
             wall += (
                 f" ({format_count(missing)} of {format_count(len(per_package))} packages "
@@ -1097,10 +1100,14 @@ def _index_page(runs: Sequence[_Run]) -> list[str]:
         )
     lines.append("</table>")
     for run in runs:
+        billed = (
+            _cost(run.scorecard.aggregate.failed_attempts_cost)
+            if run.scorecard.failed_attempts else "none: no attempt failed"
+        )
         lines.append(
             "<p>" + _e(
                 f"{run.name}: billed by failed attempts, in no score: "
-                f"{_cost(run.scorecard.aggregate.failed_attempts_cost)}"
+                f"{billed}"
             ) + "</p>"
         )
     for package_id in _case_order(runs):
@@ -1274,11 +1281,20 @@ def _counts(counts: Counter[str]) -> str:
     )
 
 
+def _money(amount: float) -> str:
+    """Keep sub-cent spend visible, including amounts smaller than any fixed decimal place."""
+    if amount == 0:
+        return "0"
+    if abs(amount) < 0.01:
+        return f"{amount:.6g}"
+    return str(int(amount)) if float(amount).is_integer() else f"{amount:.2f}"
+
+
 def _cost(cost: Cost) -> str:
     """Render the recorded amount, reasons and basis; pricing never runs in the report."""
     if cost.synthetic:
         return "synthetic, not priced"
-    value = f"USD {format_count(cost.amount)}" if cost.amount is not None else UNKNOWN
+    value = f"USD {_money(cost.amount)}" if cost.amount is not None else UNKNOWN
     if cost.amount is None and cost.missing:
         value += f" ({'; '.join(cost.missing)})"
     if cost.basis:
@@ -1417,7 +1433,7 @@ def _transcript_page(run: _Run, score: PackageScore | FailedAttempt, legend: _Le
     """Header, the system prompt as sent and the legend, the log in its own order, then the
     final state; each file of the package folder read once."""
     failed = isinstance(score, FailedAttempt)
-    folder = run.path / (score.folder if failed else score.package_id)
+    folder = runner.resolve_attempt_folder(run.path, score.folder if failed else score.package_id)
     record = run.provenance
     session, session_note = _read_session(folder)
     prompts, prompts_note = _read_prompts(folder)

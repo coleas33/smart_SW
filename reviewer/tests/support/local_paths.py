@@ -22,7 +22,8 @@ streams are committed packed (RF-84). It flags:
   committed. A UNC anchor and a drive letter with `/` start a path only at a token boundary too
   (not after a word character), so a separator doubled inside a path is no UNC path and a URL's
   scheme no drive; a drive letter with its backslash starts one wherever it stands, glued to a
-  word character included (`...\\nE:\\...` in plain text quoting an escaped line). A path runs to
+  word character included (`...\\nE:\\...` in plain text quoting an escaped line). An escaped
+  `\\n`, `\\t` or `\\r` is also a boundary for a UNC, forward-drive or rooted path. A path runs to
   the next space, quote, `<`, `>` or `|`, and lies under a fictional root only once its `..` are
   applied, so one that climbs out of a root is flagged;
 - **a private entry**: a saved set (`benchmark-set.json`) naming a path outside the repository
@@ -39,6 +40,7 @@ empty list meaning nothing was found.
 from __future__ import annotations
 
 import gzip
+import html
 import json
 import posixpath
 import re
@@ -134,12 +136,12 @@ _END_TAG = r"(?<=<)/[A-Za-z][\w-]*\s*>"
 slice's pages may be committed. A `/` after `<` that a path follows (`</srv/x>`) is no end tag."""
 
 _PATH_START = re.compile(
-    rf"(?<!\w)(?P<windows>{WINDOWS_ANCHOR.pattern})"
+    rf"(?:(?<!\w)|(?<=\\[ntr]))(?P<windows>{WINDOWS_ANCHOR.pattern})"
     # The anchor glued to a word character, kept only when it is a drive and its backslash: a
     # UNC anchor's two backslashes there are a separator doubled inside a path.
     rf"|(?P<glued>{WINDOWS_ANCHOR.pattern})(?<=:\\)"
-    r"|(?<!\w)(?P<drive>[A-Za-z]:/)"
-    rf"|(?<![\w:/.])(?!{_END_TAG})(?P<rooted>/)(?=[^\s>])"
+    r"|(?:(?<!\w)|(?<=\\[ntr]))(?P<drive>[A-Za-z]:/)"
+    rf"|(?:(?<![\w:/.])|(?<=\\[ntr]))(?!{_END_TAG})(?P<rooted>/)(?=[^\s>])"
 )
 _PATH_END = re.compile(r"[\s\"'`<>|]")
 _TRAILING = ".,;:!?)]}"
@@ -170,7 +172,9 @@ def _local_folders() -> tuple[tuple[str, re.Pattern[str]], ...]:
                 spelled.setdefault(str(form), reason)
     longest_first = sorted(spelled.items(), key=lambda item: len(item[0]), reverse=True)
     return tuple(
-        (reason, re.compile(r"(?<![\w.])" + _spelling(text) + _AFTER_NAME, re.IGNORECASE))
+        (reason, re.compile(
+            r"(?:(?<![\w.])|(?<=\\[ntr]))" + _spelling(text) + _AFTER_NAME, re.IGNORECASE,
+        ))
         for text, reason in longest_first
     )
 
@@ -313,6 +317,8 @@ def _strings(name: str, text: str) -> Iterator[str]:
     elif name.endswith(".jsonl"):
         for line in text.splitlines():
             yield from _json_texts(line)
+    elif name.endswith(".html"):
+        yield html.unescape(text)
     else:
         yield text
 

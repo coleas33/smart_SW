@@ -51,7 +51,7 @@ from pydantic import (
 
 from swreview import atomic
 from swreview.agent.providers import TurnEndReason
-from swreview.agent.runner import open_evidence_requests
+from swreview.agent.runner import TurnStopped, open_evidence_requests
 from swreview.benchmark import sets
 from swreview.benchmark.case_file import CaseFile, ScriptedAnswer
 from swreview.benchmark.questions import QuestionIds, Unscripted, scripted_answer_for
@@ -447,7 +447,8 @@ def drive_review(
     the session, not the turn's result. The log is written in a `finally`, so a turn that raises
     leaves one reading `turn_did_not_end` before the exception propagates; when no `turn.ended`
     reached the listener at all, `last_turn_end` reads `error`, the turn having failed before it
-    said how it ended. The driver never calls `continue_session` (QA-20), reads no key and
+    said how it ended. A stopped turn is closed before the log is written, so its last reason
+    reads `stopped`. The driver never calls `continue_session` (QA-20), reads no key and
     writes no case-file text, and no product method changes for it: `answer_evidence_batch`'s
     own refusals cannot fire on a batch naming only requests the session holds open.
     """
@@ -467,6 +468,9 @@ def drive_review(
         ended = _answer_points(
             run, case_file, points, turn_ends, max_answer_turns, stop_requested
         )
+    except TurnStopped:
+        run.end_stopped()
+        raise
     finally:
         delivered = {one.entry for point in points for one in point.sent}
         log = AnswerLog(

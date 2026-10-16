@@ -31,13 +31,21 @@ def without_local_paths(
         pass  # an account with no home folder has none to scrub (owner decisions 92A, 104A)
     for folder, replacement in known:
         for form in (folder, folder.resolve()):
-            if form.parent != form:
+            if form.is_absolute() and form.parent != form:
                 folders.setdefault(str(form), replacement)
 
     for folder, replacement in sorted(folders.items(), key=lambda item: len(item[0]), reverse=True):
         forward = folder.replace("\\", "/")
         backward = forward.replace("/", "\\")
         spellings = (forward, backward, backward.replace("\\", "\\\\"))
-        pattern = "(?:" + "|".join(re.escape(spelling) for spelling in spellings) + r")(?![\w-])"
+        # Absolute drive/UNC paths are unambiguous even after a word character. A POSIX
+        # spelling needs a boundary, including repr's escaped newline, tab or carriage return.
+        pattern = (
+            "(?:" + "|".join(
+                (r"(?:(?<!\w)|(?<=\\[ntr]))" if spelling.startswith("/")
+                 and not spelling.startswith("//") else "") + re.escape(spelling)
+                for spelling in spellings
+            ) + r")(?![\w-])"
+        )
         text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
     return text

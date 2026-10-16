@@ -13,6 +13,7 @@ from swreview.agent.providers import AgentEvent, ProviderError, ProviderName, us
 from swreview.benchmark.scrub import one_line
 from swreview.benchmark.served import aliases
 
+PACKAGE_TIME_LIMIT_S = 3600
 STREAM_ACTIVITY_WINDOW_S = 600
 STOP_GRACE_S = 900
 WAIT_SLICE_S = 1.0
@@ -209,6 +210,7 @@ class RunningAttempt:
         self._pending_result: _WorkerResult | None = None
         self._outcome: AttemptOutcome | None = None
         self._deadline = clock() + limit_s
+        self._stop_set_at: float | None = None
         self._grace_deadline: float | None = None
         self._active_at_limit: bool | None = None
         self._limit_condition: AttemptOutcome | None = None
@@ -226,8 +228,8 @@ class RunningAttempt:
         self.worker = threading.Thread(target=work, daemon=True)
         self.worker.start()
 
-    def _reach_limit(self, now: float) -> None:
-        if self._grace_deadline is None and now >= self._deadline:
+    def _reach_limit(self, now: float, *, stop_worker: bool = True) -> None:
+        if self._limit_condition is None and now >= self._deadline:
             self._active_at_limit = self.listener.stream_active(now, self._activity_window_s)
             self._limit_condition = AttemptOutcome(
                 "behavioural" if self._active_at_limit else "infrastructure",
@@ -235,8 +237,10 @@ class RunningAttempt:
                 message="package wall clock limit reached",
             )
             self._limit_condition_index = len(self.listener.conditions)
-            self.stop.set()
-            self._grace_deadline = self._deadline + self._grace_s
+            if stop_worker:
+                self._stop_set_at = now
+                self.stop.set()
+                self._grace_deadline = now + self._grace_s
 
     def _abandoned(self) -> AttemptOutcome:
         self.completed_at = self._grace_deadline
@@ -252,8 +256,10 @@ class RunningAttempt:
         # its result when the driver observes the limit.
         if completed_at < self._deadline:
             return _classify(self.listener, error, None)
-        self._reach_limit(completed_at)
-        if self._grace_deadline is not None and completed_at > self._grace_deadline:
+        # A result already returned needs no new stop. When polling was delayed,
+        # only a stop actually requested earlier can have exhausted its grace.
+        self._reach_limit(completed_at, stop_worker=False)
+        if self._stop_set_at is not None and completed_at > self._stop_set_at + self._grace_s:
             return self._abandoned()
         if self._limit_condition is not None:
             self.listener._record(self._limit_condition, index=self._limit_condition_index)

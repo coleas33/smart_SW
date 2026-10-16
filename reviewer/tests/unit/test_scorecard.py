@@ -1832,6 +1832,8 @@ def run_field_fixture(
     held_out: bool = False,
 ) -> tuple[Path, Path, BenchmarkSet]:
     """Real benchmark attempts over fictional packages, with keys withheld until scoring."""
+    from swreview.benchmark.runner import write_provenance
+    from tests.support.studies import RunSpec
     from tests.unit.test_benchmark_attempts import (
         driver_run,
         install_driver_providers,
@@ -1843,6 +1845,7 @@ def run_field_fixture(
     install_driver_providers(monkeypatch, scripts)
     out = tmp_path / "run"
     driver_run(prepared, out)
+    write_provenance(out, RunSpec("run", provider="fake").provenance())
     keys = tmp_path / "answer_keys"
     for package_id in ids:
         write_key(
@@ -1969,6 +1972,8 @@ def test_an_all_failed_run_renders_with_no_scored_packages_or_zero_clock_or_spen
     assert card.aggregate.held_out_model_defects == 2
     assert card.aggregate.cost.amount is None
     assert card.aggregate.failed_attempts_cost.amount is None
+    assert card.aggregate.failed_attempts_cost.synthetic
+    assert card.aggregate.failed_attempts_cost.missing == []
     assert card.aggregate.input_tokens is None
     assert card.aggregate.round_trips is None
     assert scorecard_module.sum_or_none([]) is None
@@ -1978,6 +1983,66 @@ def test_an_all_failed_run_renders_with_no_scored_packages_or_zero_clock_or_spen
     rendered = render_scorecard_md(card)
     assert "## Aggregate" in rendered and "- packages: 0" in rendered
     assert contract_errors(card) == []
+
+
+@pytest.mark.parametrize("folder", ["../outside", "C:/outside", "/outside", "attempts/fict-0/01",
+                                   "attempts/fict-0/0", "attempts/fict-0/1/extra", "fict\\outside"])
+@pytest.mark.parametrize("record_type", [scorecard_module.UnscoredPackage,
+                                        scorecard_module.FailedAttempt])
+def test_scorecard_attempt_folders_refuse_paths_outside_the_run(
+    folder: str, record_type: type,
+) -> None:
+    from pydantic import ValidationError
+
+    from swreview.benchmark.prices import SYNTHETIC_COST
+
+    fields = {"package_id": "fict-0", "class": "internal_error", "folder": folder}
+    if record_type is scorecard_module.UnscoredPackage:
+        fields.update(kind="infrastructure", error_class="RuntimeError", attempts=1)
+    else:
+        fields.update(attempt=1, retries=0, cost=SYNTHETIC_COST)
+
+    with pytest.raises(ValidationError, match="run-relative"):
+        record_type.model_validate(fields)
+
+
+def test_scripted_run_cost_is_synthetic_without_any_usage_rounds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_sleeps: list[float],
+) -> None:
+    from tests.unit.test_benchmark_attempts import TransientError
+
+    out, keys, benchmark_set = run_field_fixture(tmp_path, monkeypatch, [
+        [ScriptedTurn(text="", fails=TransientError("fict unopened failure"), usage=None)],
+        [ScriptedTurn(text="Fictional completion without usage.", usage=None)],
+    ])
+
+    card = score_run(out, keys, benchmark_set)
+
+    for cost in [card.aggregate.cost, card.aggregate.failed_attempts_cost,
+                 card.per_package[0].cost, card.failed_attempts[0].cost]:
+        assert cost.synthetic
+        assert cost.amount is None and cost.missing == []
+
+
+def test_synthetic_costs_do_not_count_as_unknown_costs() -> None:
+    from swreview.benchmark import prices
+
+    total = scorecard_module._sum_costs([
+        prices.SYNTHETIC_COST,
+        prices.Cost(amount=None, missing=["no usage"], basis=[], synthetic=False),
+    ])
+
+    assert total.missing == ["1 of 2 costs unknown", "no usage"]
+
+
+def test_class_alias_serialization_works_without_pydantic_211_configuration() -> None:
+    class Before211(scorecard_module.PackageRunStatus):
+        model_config = {"serialize_by_alias": False}
+
+    record = Before211(kind="completed", class_=None, stop_reason=None)
+
+    assert record.model_dump() == {"kind": "completed", "class": None, "stop_reason": None}
+    assert json.loads(record.model_dump_json()) == record.model_dump()
 
 
 @pytest.mark.parametrize("unfinished", ["missing_entry", "missing_outcome"])

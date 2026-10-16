@@ -11,15 +11,25 @@ from typer.testing import CliRunner
 
 from swreview import cli
 from swreview.agent.providers import usage_body
-from swreview.agent.providers.fake import SYNTHETIC_USAGE, FakeProvider, ScriptedTurn
+from swreview.agent.providers.fake import (
+    SYNTHETIC_USAGE,
+    FakeProvider,
+    ScriptedToolCall,
+    ScriptedTurn,
+)
 from swreview.agent.runner import ReviewRun
+from swreview.benchmark import runner
 from swreview.benchmark.answers import read_answer_log
 from tests.unit.test_benchmark_attempts import (
+    DriverClock,
     driver_events,
     driver_row,
     driver_run,
     install_driver_providers,
     prepare_driver_set,
+)
+from tests.unit.test_benchmark_attempts import (
+    driver_clock as driver_clock,
 )
 
 
@@ -73,6 +83,66 @@ def test_a_stop_before_the_opening_turn_sends_no_provider_request(
     assert log.ended == "stopped"
     assert log.last_turn_end == "stopped"
     assert log.points == []
+
+
+@pytest.mark.parametrize("answer_turn", [0, 1])
+@pytest.mark.parametrize("condition", ["wrong_model", "wall_clock"])
+def test_a_mid_turn_stop_closes_once_before_writing_the_answer_log(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, driver_clock: DriverClock,
+    condition: str, answer_turn: int,
+) -> None:
+    """A stopped opening or answer turn logs the stop seen on its own event stream."""
+    from swreview.agent.checklist import load_checklist
+    from swreview.checks.standards.profile import load_profile
+    from swreview.report.session import load_session
+    from tests.support import roles_review
+    from tests.unit.test_benchmark_case_file import case, case_file_set, roles_answer
+
+    profile = roles_review.write_profile(tmp_path)
+    preflighted = runner.preflight_set(
+        case_file_set(tmp_path, case(roles_answer())), load_profile(profile), load_checklist(),
+    )
+    package_id = preflighted.benchmark_set.packages[0].package_id
+    ending: list[ReviewRun] = []
+    end_stopped = ReviewRun.end_stopped
+
+    def end(run: ReviewRun) -> Any:
+        ending.append(run)
+        return end_stopped(run)
+
+    class BoundaryProvider(FakeProvider):
+        def run(self, **options: Any) -> Any:
+            result = super().run(**options)
+            options["tools"].call("list_components", {}, call_id="fict-boundary")
+            return result
+
+    stopped_turn = (
+        ScriptedTurn(text="Unreached.", served_model="fict-wrong-model",
+                     tool_calls=(ScriptedToolCall("list_components"),))
+        if condition == "wrong_model"
+        else ScriptedTurn(text=" ".join(["fict"] * 30), delta_interval_s=1)
+    )
+    script = [ScriptedTurn(text="Fict opening.")] * answer_turn + [stopped_turn]
+    built = install_driver_providers(
+        monkeypatch, [script], kind=BoundaryProvider,
+        clock=driver_clock, sleep=driver_clock.sleep,
+    )
+    monkeypatch.setattr(ReviewRun, "end_stopped", end)
+    out = tmp_path / "run"
+    driver_run(preflighted, out, standards_profile=profile, **driver_clock.options())
+
+    row = driver_row(out, package_id)
+    assert row["class"] == condition
+    folder = out / row["folder"]
+    log = read_answer_log(folder)
+    assert log.last_turn_end == "stopped"
+    assert log.ended == "turn_did_not_end"
+    assert len(log.points) == answer_turn
+    assert built[0]._turn_index == answer_turn + 1
+    assert [event.body["reason"] for event in driver_events(folder)
+            if event.type == "turn.ended"] == ["end"] * answer_turn + ["stopped"]
+    assert len(ending) == 1
+    assert load_session(folder / "session.json").ended_at is not None
 
 
 @pytest.mark.parametrize("root_name", ["fict-checkout", "fict  checkout"])

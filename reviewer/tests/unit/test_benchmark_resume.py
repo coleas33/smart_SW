@@ -581,6 +581,119 @@ def test_resume_completes_an_interrupted_promotion(
     assert package["attempts"][0]["folder"] == "fict-a"
 
 
+@pytest.mark.parametrize("halt", ["served-model", "profile"])
+def test_resume_promotes_every_kept_attempt_before_a_halt_or_any_new_attempt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, halt: str,
+) -> None:
+    old, new = "fict-model-a-2026-10-01", "fict-model-a-2026-11-01"
+    monkeypatch.setenv("OPENAI_API_KEY", "fict-offline-key")
+    profile = example_profile_copy(tmp_path / "profiles") if halt == "profile" else None
+    options = () if profile is None else ("--standards-profile", str(profile))
+    out, first = start_run(
+        tmp_path, monkeypatch,
+        [
+            [ScriptedTurn(text="", fails=TransientError("fict unavailable"))],
+            [ScriptedTurn(text="Kept b.", served_model=old)],
+            [ScriptedTurn(text="Kept c.", served_model=old)],
+        ],
+        IDS, *options, provider="openai", model="fict-model-a",
+    )
+    assert first.exit_code == 1, first.stdout + first.stderr
+    status = driver_status(out)
+    for package_id in IDS[1:]:
+        pending = out / "attempts" / package_id / "1"
+        (out / package_id).rename(pending)
+        status["packages"][package_id]["attempts"][0]["folder"] = (
+            pending.relative_to(out).as_posix()
+        )
+    write_status(out, status)
+    install_driver_providers(monkeypatch, [[ScriptedTurn(
+        text="Changed responder.", served_model=new,
+        tool_calls=(ScriptedToolCall("list_components"),),
+    )]])
+    promotion_state_at_review: list[bool] = []
+    real_review = cli._review_fn
+
+    def review(*args: Any, **kwargs: Any) -> Any:
+        promotion_state_at_review.append(all((out / name).is_dir() for name in IDS[1:]))
+        return real_review(*args, **kwargs)
+
+    monkeypatch.setattr(cli, "_review_fn", review)
+    if profile is not None:
+        real_factory = cli.provider_factory
+
+        def factory(*args: Any, **kwargs: Any) -> Any:
+            adapter = real_factory(*args, **kwargs)
+            profile.write_bytes(profile.read_bytes() + b"\n# fict moved after preflight\n")
+            return adapter
+
+        monkeypatch.setattr(cli, "provider_factory", factory)
+
+    result = resume_command(out, *options)
+
+    assert result.exit_code == 1, result.stdout + result.stderr
+    assert all((out / name).is_dir() for name in IDS[1:])
+    assert all(not (out / "attempts" / name / "1").exists() for name in IDS[1:])
+    assert "promotion incomplete" not in result.stderr
+    if halt == "served-model":
+        assert promotion_state_at_review == [True]
+        assert driver_row(out, "fict-a")["class"] == "served_model_changed"
+    else:
+        assert promotion_state_at_review == []
+        assert "standards profile changed" in result.stderr
+
+
+def test_recorded_timing_resolves_one_shared_set_of_legacy_defaults(
+    recorded_run: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from inspect import signature
+
+    from swreview.benchmark import attempt
+
+    assert signature(runner.run_benchmark).parameters["package_time_limit_s"].default == (
+        attempt.PACKAGE_TIME_LIMIT_S
+    )
+    provenance = runner.load_provenance(recorded_run)
+    assert provenance is not None
+    monkeypatch.setattr(attempt, "PACKAGE_TIME_LIMIT_S", 71)
+    monkeypatch.setattr(attempt, "STREAM_ACTIVITY_WINDOW_S", 7)
+    monkeypatch.setattr(attempt, "STOP_GRACE_S", 9)
+    legacy = provenance.model_copy(update={
+        "package_time_limit_s": None, "stream_activity_window_s": None, "stop_grace_s": None,
+    })
+    assert runner._recorded_timing(legacy) == (71, 7, 9)
+    recorded = provenance.model_copy(update={
+        "package_time_limit_s": 81, "stream_activity_window_s": 11, "stop_grace_s": 13,
+    })
+    assert runner._recorded_timing(recorded) == (81, 11, 13)
+
+
+def test_resume_uses_the_same_legacy_timing_for_its_running_guard_and_scheduler(
+    recorded_run: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from swreview.benchmark import attempt
+
+    rewrite_record(
+        recorded_run, package_time_limit_s=None, stream_activity_window_s=None, stop_grace_s=None,
+    )
+    unfinished_attempt(recorded_run, NOW - timedelta(seconds=36))
+    monkeypatch.setattr(attempt, "PACKAGE_TIME_LIMIT_S", 30, raising=False)
+    monkeypatch.setattr(attempt, "STREAM_ACTIVITY_WINDOW_S", 7)
+    monkeypatch.setattr(attempt, "STOP_GRACE_S", 5)
+    observed: list[tuple[float, float, float]] = []
+
+    def schedule(*args: Any, **kwargs: Any) -> list[Path]:
+        observed.append((
+            kwargs["package_time_limit_s"], kwargs["stream_activity_window_s"],
+            kwargs["stop_grace_s"],
+        ))
+        return []
+
+    monkeypatch.setattr(runner, "_run_packages", schedule)
+    runner.resume_benchmark(recorded_run, now=lambda: NOW, on_preflight=lambda provenance: None)
+    assert observed == [(30, 7, 5)]
+
+
 @pytest.mark.parametrize("first_refusal", ["legacy", "commit", "set", "profile"])
 def test_resume_refusals_follow_the_contract_order_without_writing(
     recorded_run: Path, monkeypatch: pytest.MonkeyPatch, first_refusal: str,

@@ -39,6 +39,7 @@ from swreview import cli
 from swreview.agent.checklist import load_checklist
 from swreview.agent.providers import ProviderName
 from swreview.agent.settings import DEFAULT_EFFORT, default_model
+from swreview.benchmark import runner
 from swreview.benchmark.answers import CaseFileError
 from swreview.benchmark.case_file import CaseFile
 from swreview.benchmark.runner import (
@@ -66,6 +67,67 @@ from tests.unit.test_benchmark_case_file import (
 from tests.unit.test_benchmark_run_options import one_line, refusal_line
 
 FAKE_MODEL = default_model(ProviderName.FAKE)
+
+
+@pytest.mark.parametrize("folder", [
+    "../fict-outside", "/fict-outside", "C:/fict-outside", "C:\\fict-outside",
+    "\\\\fict-host\\fict-share", "fict-a/../fict-b", "fict-a/", "./fict-a",
+    "attempts/fict-a/0", "attempts/fict-a/01", "attempts/fict-a/١", "attempts/fict-a/-1",
+])
+def test_attempt_status_refuses_folders_outside_the_recorded_run(folder: str) -> None:
+    from datetime import UTC, datetime
+
+    with pytest.raises(ValueError, match="run-relative attempt folder"):
+        runner.AttemptStatus(
+            attempt=1, started_at=datetime(2026, 10, 15, tzinfo=UTC), folder=folder,
+        )
+
+
+def test_attempt_folder_resolution_refuses_a_symlink_outside_the_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run = tmp_path / "run"
+    outside = tmp_path / "fict-outside"
+    real_resolve = Path.resolve
+
+    def resolve(path: Path, *args: Any, **kwargs: Any) -> Path:
+        if path == run / "fict-a":
+            return outside
+        return real_resolve(path, *args, **kwargs)
+
+    # Emulate the result of resolving a directory symlink on systems where
+    # creating a symlink requires elevated Windows privileges.
+    monkeypatch.setattr(Path, "resolve", resolve)
+    with pytest.raises(ValueError, match="outside the run"):
+        runner.resolve_attempt_folder(run, "fict-a")
+
+
+@pytest.mark.parametrize("custom_redactor", [False, True])
+def test_library_run_benchmark_redacts_the_configured_key_from_status(
+    tmp_path: Path, tmp_package_dir: Path, monkeypatch: pytest.MonkeyPatch, custom_redactor: bool,
+) -> None:
+    from swreview.agent.settings import MASK
+
+    secret = "fict-library-openai-key"
+    monkeypatch.setenv("OPENAI_API_KEY", secret)
+    set_path = write_set(tmp_path / "sets/pilot.json", tmp_package_dir)
+    out = tmp_path / "run"
+
+    def review(*args: Any, **kwargs: Any) -> None:
+        raise RuntimeError(f"fict failure includes {secret}; caller-value")
+
+    options = {"redact": lambda text: text.replace("caller-value", "caller-redacted")} if (
+        custom_redactor
+    ) else {}
+    run_benchmark(
+        preflight_set(set_path, None, load_checklist()), out, provider="openai",
+        model="fict-model-a", effort="low", review_fn=review,
+        clock=lambda: 0.0, **options,
+    )
+    status = (out / runner.RUN_STATUS_FILE).read_text(encoding="utf-8")
+    assert secret not in status
+    assert MASK in status
+    assert ("caller-redacted" if custom_redactor else "caller-value") in status
 
 
 def write_set(path: Path, package_dir: Path) -> Path:
