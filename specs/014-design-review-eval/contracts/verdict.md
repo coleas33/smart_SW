@@ -726,6 +726,13 @@ provider, no SOLIDWORKS.
 - S-9 the uniform co-moving clearance and code-defect scenarios and `half`, SD 1.0, at 4,000
   simulations, hold both bounds at the chosen size and `alpha`.
 
+*Amended 2026-10-16 (owner decision 114A):* S-7's and S-9's full 4,000-simulation searches moved
+to `tests/simulation/test_reference_searches.py`, collected only under `-m simulation` and run
+before any approval beside S-10, their assertions unchanged. `test_benchmark_simulate.py` keeps
+small seeded versions (100 simulations, cap 10) of both: the search's shape, every tried size
+printed, and the independent recompute agreeing exactly; the 5% bounds and 80% power need the full
+4,000 and are claimed only by the moved tests.
+
 `tests/simulation/test_reference_scenarios.py`, collected only when `-m simulation` names it, as
 `tests/perf/` is gated (`reviewer/tests/conftest.py:39-66`):
 - S-10 all 39 scenarios: both 5% bounds held at the chosen size and `alpha`, power of at least 80%

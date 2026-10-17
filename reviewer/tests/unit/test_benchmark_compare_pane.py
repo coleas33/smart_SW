@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import shutil
 from dataclasses import replace
 from pathlib import Path
 from typing import get_args
@@ -48,6 +49,66 @@ def study(*, count=18, reps=3, edit=None):
                 packages.append(edit(arm, rep, index, package) if edit else package)
             runs.append(pane_run(f"{arm}-{rep}", arm, packages))
     return runs
+
+
+def folder_bytes(root):
+    return {
+        path.relative_to(root).as_posix(): path.read_bytes()
+        for path in sorted(root.rglob("*")) if path.is_file()
+    }
+
+
+@pytest.fixture(scope="module")
+def pane_templates(tmp_path_factory):
+    """The default `study()` written once per module and study name (owner decision 114A).
+
+    Writing its 18 run folders took about 1 s a test. The written bytes hold no path of their
+    own and two writes are identical, so the shared folders are the same input a fresh write
+    would be. At the module's end every template must still hold the bytes it was written with:
+    a test that wrote into the shared folders fails here, naming the files it changed.
+    """
+    root = tmp_path_factory.mktemp("pane-templates")
+    written, snapshots = {}, {}
+
+    def template(name):
+        if name not in written:
+            written[name] = write_pane_study(root / name, study(), study=name)
+            snapshots[name] = folder_bytes(root / name)
+        return written[name]
+
+    yield template
+    for name, before in snapshots.items():
+        after = folder_bytes(root / name)
+        changed = sorted(path for path in before.keys() | after.keys()
+                         if before.get(path) != after.get(path))
+        assert not changed, f"a test wrote into the shared {name} runs: {changed}"
+
+
+@pytest.fixture
+def pane_runs(pane_templates):
+    """The shared `write_pane_study(..., study(), study=name)` folders, for tests that only read.
+
+    A test that edits, adds or removes a file in its runs, or needs them at a given place, takes
+    `pane_runs_to_edit` instead.
+    """
+
+    def shared(name=PANE_STUDY):
+        return list(pane_templates(name))
+
+    return shared
+
+
+@pytest.fixture
+def pane_runs_to_edit(tmp_path, pane_templates):
+    """This test's own copy of the shared folders, at `tmp_path / "runs"` or `destination`."""
+
+    def copy(name=PANE_STUDY, *, destination=None):
+        destination = tmp_path / "runs" if destination is None else destination
+        folders = pane_templates(name)
+        shutil.copytree(folders[0].parent, destination)
+        return [destination / folder.name for folder in folders]
+
+    return copy
 
 
 def edit_json(path, edit):
@@ -115,8 +176,8 @@ def test_c1_and_c16_a_missing_arm_refuses_the_verdict_but_keeps_raw_rows(tmp_pat
     assert_refusal(invoke(runs, out), out, runs, arm, "on" if arm == "off" else "off")
 
 
-def test_c2_committed_pane_study_refuses_private_saved_set_entries(tmp_path):
-    runs = write_pane_study(tmp_path / "runs", study())
+def test_c2_committed_pane_study_refuses_private_saved_set_entries(tmp_path, pane_runs_to_edit):
+    runs = pane_runs_to_edit()
     edit_saved_sets(runs, lambda record: record["packages"][0].update(
         path="C:/Fictional/private/case-00",
     ))
@@ -130,10 +191,10 @@ def test_c2_committed_pane_study_refuses_private_saved_set_entries(tmp_path):
 
 @pytest.mark.parametrize("private", [False, True])
 @pytest.mark.parametrize("cause", ["origin_marks", "unknown", "not_recorded"])
-def test_c3_and_c16_unrecorded_origins_or_outcomes_name_the_rerun(tmp_path, private, cause):
-    runs = write_pane_study(
-        tmp_path / "runs", study(), study=PRIVATE_PANE_STUDY if private else PANE_STUDY,
-    )
+def test_c3_and_c16_unrecorded_origins_or_outcomes_name_the_rerun(
+    tmp_path, pane_runs_to_edit, private, cause,
+):
+    runs = pane_runs_to_edit(PRIVATE_PANE_STUDY if private else PANE_STUDY)
     first = runs[0]
     tokens = ["off-1", "case-00", "swreview benchmark run"]
     if cause == "origin_marks":
@@ -189,8 +250,8 @@ def test_c10_private_study_has_all_intervals_and_no_verdict_or_measurement_refus
     assert json.loads((out / "ledger.json").read_bytes())["levers"] == []
 
 
-def test_c12_identical_folders_measurement_and_record_give_identical_bytes(tmp_path):
-    runs = write_pane_study(tmp_path / "runs", study())
+def test_c12_identical_folders_measurement_and_record_give_identical_bytes(tmp_path, pane_runs):
+    runs = pane_runs()
     measurement = write_measurement(tmp_path / "pilot")
     noise = write_noise_floor(tmp_path / "noise", runs)
     for suffix in ("a", "b"):
@@ -199,8 +260,10 @@ def test_c12_identical_folders_measurement_and_record_give_identical_bytes(tmp_p
     assert (tmp_path / "a/ledger.json").read_bytes() == (tmp_path / "b/ledger.json").read_bytes()
 
 
-def test_c13_compare_never_opens_a_key_named_by_a_saved_set(tmp_path, monkeypatch):
-    runs = write_pane_study(tmp_path / "runs", study())
+def test_c13_compare_never_opens_a_key_named_by_a_saved_set(
+    tmp_path, pane_runs_to_edit, monkeypatch,
+):
+    runs = pane_runs_to_edit()
     edit_saved_sets(runs, lambda record: [
         entry.update(key=f"benchmarks/answer_keys/{entry['package_id']}.json")
         for entry in record["packages"]
@@ -323,8 +386,8 @@ def test_the_shown_table_holds_section_6s_measures_in_order(tmp_path):
     assert "case-02" in rendered and "D-2" in rendered and "on-1" in rendered
 
 
-def test_only_the_studys_own_arms_feed_its_verdict(tmp_path, monkeypatch):
-    pane = write_pane_study(tmp_path / "pane", study())
+def test_only_the_studys_own_arms_feed_its_verdict(tmp_path, pane_runs, monkeypatch):
+    pane = pane_runs()
     private = write_pane_study(
         tmp_path / "private", [replace(run, run="private-" + run.run) for run in study(count=2)],
         study=PRIVATE_PANE_STUDY,
@@ -362,8 +425,8 @@ def test_only_the_studys_own_arms_feed_its_verdict(tmp_path, monkeypatch):
     assert {row.run for row in together.runs} >= {"pane-baseline", "plain-baseline"}
 
 
-def test_markdown_pane_section_holds_the_contracts_order_points_and_unknowns(tmp_path):
-    runs = write_pane_study(tmp_path / "runs", study())
+def test_markdown_pane_section_holds_the_contracts_order_points_and_unknowns(tmp_path, pane_runs):
+    runs = pane_runs()
     measurement = write_measurement(tmp_path / "pilot")
     noise = write_noise_floor(tmp_path / "noise", runs)
     ledger = compare.compare_runs(runs, pilots=[measurement], noise_floors=[noise])
@@ -390,8 +453,10 @@ def test_markdown_pane_section_holds_the_contracts_order_points_and_unknowns(tmp
 
 
 @pytest.mark.parametrize("count", [0, 2])
-def test_c5_missing_or_duplicate_measurements_name_the_study_key_and_option(tmp_path, count):
-    runs = write_pane_study(tmp_path / "runs", study())
+def test_c5_missing_or_duplicate_measurements_name_the_study_key_and_option(
+    tmp_path, pane_runs, count,
+):
+    runs = pane_runs()
     measurements = [write_measurement(tmp_path / f"pilot-{index}") for index in range(count)]
     out = tmp_path / "out"
     block = assert_refusal(invoke(runs, out, pilots=measurements), out, runs,
@@ -400,8 +465,8 @@ def test_c5_missing_or_duplicate_measurements_name_the_study_key_and_option(tmp_
 
 
 @pytest.mark.parametrize("edited", ["sizing", "pilot_runs"])
-def test_c6_editing_either_computed_block_refuses_the_sizing_digest(tmp_path, edited):
-    runs = write_pane_study(tmp_path / "runs", study())
+def test_c6_editing_either_computed_block_refuses_the_sizing_digest(tmp_path, pane_runs, edited):
+    runs = pane_runs()
     measurement = write_measurement(tmp_path / "pilot")
     if edited == "sizing":
         edit_json(measurement, lambda record: record["sizing"].update(seed=999))
@@ -416,16 +481,16 @@ def test_c6_editing_either_computed_block_refuses_the_sizing_digest(tmp_path, ed
 
 
 @pytest.mark.parametrize("field,value", [("approved", False), ("approved_at", "")])
-def test_c7_unapproved_measurement_names_the_file_and_field(tmp_path, field, value):
-    runs = write_pane_study(tmp_path / "runs", study())
+def test_c7_unapproved_measurement_names_the_file_and_field(tmp_path, pane_runs, field, value):
+    runs = pane_runs()
     measurement = write_measurement(tmp_path / "pilot")
     edit_json(measurement, lambda record: record["approval"].update({field: value}))
     out = tmp_path / "out"
     assert_refusal(invoke(runs, out, pilots=[measurement]), out, runs, measurement.name, field)
 
 
-def test_c8_levels_chosen_after_first_paid_run_name_both_dates(tmp_path):
-    runs = write_pane_study(tmp_path / "runs", study())
+def test_c8_levels_chosen_after_first_paid_run_name_both_dates(tmp_path, pane_runs):
+    runs = pane_runs()
     measurement = write_measurement(tmp_path / "pilot", approved_at="2026-09-17")
     out = tmp_path / "out"
     assert_refusal(
@@ -437,8 +502,8 @@ def test_c8_levels_chosen_after_first_paid_run_name_both_dates(tmp_path):
 @pytest.mark.parametrize("approved_at", [
     "2026-09-14T10:00", "14/09/2026", "20260914", "2026-02-30",
 ])
-def test_approval_invalid_date_refuses_without_losing_the_ledger(tmp_path, approved_at):
-    runs = write_pane_study(tmp_path / "runs", study())
+def test_approval_invalid_date_refuses_without_losing_the_ledger(tmp_path, pane_runs, approved_at):
+    runs = pane_runs()
     measurement = write_measurement(tmp_path / "pilot", approved_at=approved_at)
     out = tmp_path / "out"
     assert_refusal(invoke(runs, out, pilots=[measurement]), out, runs,
@@ -446,8 +511,8 @@ def test_approval_invalid_date_refuses_without_losing_the_ledger(tmp_path, appro
 
 
 @pytest.mark.parametrize("field", ["alpha", *pilot.SimulatedRates.model_fields])
-def test_approval_unknown_sizing_refuses_without_losing_the_ledger(tmp_path, field):
-    runs = write_pane_study(tmp_path / "runs", study())
+def test_approval_unknown_sizing_refuses_without_losing_the_ledger(tmp_path, pane_runs, field):
+    runs = pane_runs()
     measurement = write_measurement(tmp_path / "pilot")
 
     def clear(record):
@@ -462,8 +527,10 @@ def test_approval_unknown_sizing_refuses_without_losing_the_ledger(tmp_path, fie
 
 
 @pytest.mark.parametrize("value", [-0.1, 1.1, float("nan"), float("inf")])
-def test_approval_invalid_simulated_rate_refuses_without_losing_the_ledger(tmp_path, value):
-    runs = write_pane_study(tmp_path / "runs", study())
+def test_approval_invalid_simulated_rate_refuses_without_losing_the_ledger(
+    tmp_path, pane_runs, value,
+):
+    runs = pane_runs()
     measurement = write_measurement(tmp_path / "pilot")
 
     def invalidate(record):
@@ -482,8 +549,10 @@ def test_approval_invalid_simulated_rate_refuses_without_losing_the_ledger(tmp_p
     ("approval.approved", "unknown"), ("sizing.result.cleared_guard_decides", "unknown"),
     ("sizing.result.simulated.power_room", "unknown"),
 ])
-def test_invalid_approval_field_types_and_ranges_keep_mixed_ledger_rows(tmp_path, field, value):
-    runs = write_pane_study(tmp_path / "runs", study())
+def test_invalid_approval_field_types_and_ranges_keep_mixed_ledger_rows(
+    tmp_path, pane_runs, field, value,
+):
+    runs = pane_runs()
     measurement = write_measurement(tmp_path / "pilot")
     baseline = write_run(tmp_path, RunSpec(run="plain-baseline", lever="none", arm="baseline"))
 
@@ -525,8 +594,8 @@ def test_invalid_approval_model_does_not_bypass_earlier_refusal(tmp_path, earlie
     assert_refusal(invoke(runs, out, pilots=[measurement]), out, runs, expected[earlier])
 
 
-def test_same_day_approval_is_accepted(tmp_path):
-    runs = write_pane_study(tmp_path / "runs", study())
+def test_same_day_approval_is_accepted(tmp_path, pane_runs):
+    runs = pane_runs()
     measurement = write_measurement(tmp_path / "pilot", approved_at="2026-09-16")
     out = tmp_path / "out"
     result = invoke(runs, out, pilots=[measurement])
@@ -554,8 +623,10 @@ def test_first_refusal_wins_when_two_rows_fail(tmp_path, pair):
     (0.02, 2.223845307517, "no 10-point loss"),
     (0.01, 2.566933983, "inconclusive"),
 ])
-def test_approved_level_reaches_judge_and_its_numeric_interval(tmp_path, alpha, t, expected):
-    runs = write_pane_study(tmp_path / "runs", study())
+def test_approved_level_reaches_judge_and_its_numeric_interval(
+    tmp_path, pane_runs, alpha, t, expected,
+):
+    runs = pane_runs()
     measurement = write_measurement(tmp_path / "pilot", alpha=alpha)
     block = compare.compare_runs(runs, pilots=[measurement]).pane_studies[0]
     assert block.verdict == expected
@@ -581,15 +652,15 @@ def test_approved_cleared_guard_setting_reaches_judge(tmp_path, decides):
     assert any(reason.startswith("CLEARED:") for reason in block.reasons) is decides
 
 
-def test_compare_reads_the_shared_floor_constant(tmp_path, monkeypatch):
+def test_compare_reads_the_shared_floor_constant(tmp_path, pane_runs, monkeypatch):
     monkeypatch.setattr(verdict, "FLOOR", 37, raising=False)
-    runs = write_pane_study(tmp_path / "runs", study())
+    runs = pane_runs()
     out = tmp_path / "out"
     assert_refusal(invoke(runs, out), out, runs, "keys name 36", "floor is 37")
 
 
-def test_measurement_identity_is_read_once_per_file(tmp_path, monkeypatch):
-    runs = write_pane_study(tmp_path / "runs", study())
+def test_measurement_identity_is_read_once_per_file(tmp_path, pane_runs, monkeypatch):
+    runs = pane_runs()
     measurement = write_measurement(tmp_path / "pilot")
     calls = []
     original = getattr(compare, "_measurement_key", None)
@@ -619,8 +690,10 @@ def test_shown_detections_share_verdicts_definition(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("shortfall", ["defects", "reps", "pilot_packages", "growth_units"])
-def test_c9_study_must_reach_the_approved_size_repetitions_and_growth(tmp_path, shortfall):
-    runs = write_pane_study(tmp_path / "runs", study())
+def test_c9_study_must_reach_the_approved_size_repetitions_and_growth(
+    tmp_path, pane_runs, shortfall,
+):
+    runs = pane_runs()
     options = {}
     expected = []
     if shortfall == "defects":
@@ -659,8 +732,8 @@ def test_c9_one_core_case_and_its_twin_are_one_growth_unit_not_two(tmp_path):
     assert_refusal(invoke(runs, out, pilots=[measurement]), out, runs, "1", "2")
 
 
-def test_c9_missing_saved_set_cannot_prove_the_approved_pilot_layout(tmp_path):
-    runs = write_pane_study(tmp_path / "runs", study())
+def test_c9_missing_saved_set_cannot_prove_the_approved_pilot_layout(tmp_path, pane_runs_to_edit):
+    runs = pane_runs_to_edit()
     (runs[0] / "benchmark-set.json").unlink()
     measurement = write_measurement(tmp_path / "pilot", pilot_packages=["case-00"])
     out = tmp_path / "out"
@@ -668,11 +741,13 @@ def test_c9_missing_saved_set_cannot_prove_the_approved_pilot_layout(tmp_path):
                    "off-1", "saved set", "approval")
 
 
-def test_c11_pilot_folders_are_raw_rows_without_entering_study_checks_or_counts(tmp_path):
+def test_c11_pilot_folders_are_raw_rows_without_entering_study_checks_or_counts(
+    tmp_path, pane_runs_to_edit,
+):
     checkout = tmp_path / "checkout"
     studies = checkout / "benchmarks/studies"
     pilots = checkout / "benchmarks/pilots/pane"
-    runs = write_pane_study(studies / "pane", study())
+    runs = pane_runs_to_edit(destination=studies / "pane")
     pilot_folders = write_pane_study(pilots, [run for run in study() if run.arm == "off"])
     for folder in pilot_folders:
         edit_json(folder / "run-provenance.json", lambda record: record.update(
@@ -711,8 +786,8 @@ def test_c14_empty_ledger_markdown_remains_the_committed_block():
     assert "pane_studies" not in compare.compare_runs([]).model_dump(mode="json")
 
 
-def test_c15_unmatched_measurement_is_one_note_and_never_a_refusal(tmp_path):
-    runs = write_pane_study(tmp_path / "runs", study())
+def test_c15_unmatched_measurement_is_one_note_and_never_a_refusal(tmp_path, pane_runs):
+    runs = pane_runs()
     matching = write_measurement(tmp_path / "pilot")
     unmatched = write_measurement(tmp_path / "unmatched", model="fictional-unmatched-model")
     out = tmp_path / "out"
@@ -726,9 +801,9 @@ def test_c15_unmatched_measurement_is_one_note_and_never_a_refusal(tmp_path):
 
 @pytest.mark.parametrize("state", ["computed", "missing", "stale", "duplicate"])
 def test_c17_saved_noise_floor_is_read_without_search_and_never_refuses(
-    tmp_path, monkeypatch, state,
+    tmp_path, pane_runs, monkeypatch, state,
 ):
-    runs = write_pane_study(tmp_path / "runs", study())
+    runs = pane_runs()
     measurement = write_measurement(tmp_path / "pilot")
     records = []
     if state != "missing":

@@ -1,4 +1,8 @@
-"""T230: seeded simulator mechanics and the three default reference searches."""
+"""T230: seeded simulator mechanics and small seeded versions of the three reference searches.
+
+The full 4,000-simulation S-7 and S-9 searches run under `-m simulation`, in
+`tests/simulation/test_reference_searches.py` (owner decision 114A).
+"""
 
 from __future__ import annotations
 
@@ -36,11 +40,25 @@ def constant_rate(rate):
     return lambda rng, shape: np.full(shape, rate, dtype=float)
 
 
+SMALL_SIMS = 100
+"""Small, but enough for a 5% Wilson bound to hold with room: below 52 none can, since even 0
+hits of 51 bound above 5%, and at 50 no size up to 200 defects is chosen.
+
+At this seed each of S-9's three searches still reaches the cap of 10 and then grows, as the
+full ones do, in under 2 s; the independent recompute takes about 2 s more.
+"""
+
+
 @pytest.fixture(scope="module")
-def reference_results():
-    """Exactly three 4,000-study searches belong in the default suite (S-9)."""
+def small_results():
+    """S-9's three searches at `SMALL_SIMS`, seeded, at the default cap of 10 (114A).
+
+    The full 4,000-study searches moved to `tests/simulation/test_reference_searches.py`, run
+    under `-m simulation` before any approval; they alone carry the 5% bound and 80% power
+    claims, which need all 4,000 simulations.
+    """
     return {
-        name: simulate.search(simulate.SCENARIOS[name], seed=SEED, sims=4000)
+        name: simulate.search(simulate.SCENARIOS[name], seed=SEED, sims=SMALL_SIMS)
         for name in DEFAULT_SCENARIOS
     }
 
@@ -507,26 +525,41 @@ def test_s7_cap_six_stops_repetitions_and_records_every_growth_unit():
     assert all(row["growth_units"] == (row["defects"] - 34) // 2 for row in tried)
 
 
-def test_s7_half_at_sd_one_reaches_ten_then_grows(reference_results):
-    search = reference_results[DEFAULT_SCENARIOS[0]]
+def test_s7_small_half_at_sd_one_walks_repetitions_to_ten_then_grows(small_results):
+    """The full search's shape at `SMALL_SIMS`; its full twin runs under `-m simulation`.
+
+    Repetitions 3 to 10 at no growth, then one growth unit at a time at 10 repetitions. Whether
+    the full 4,000-study search reaches its size with both 5% bounds and 80% power is
+    `tests/simulation/test_reference_searches.py`'s claim, not this test's.
+    """
+    search = small_results[DEFAULT_SCENARIOS[0]]
     assert search.result is not None
     assert search.result.reps == 10
     assert search.result.growth_units >= 1
     first_growth = next(index for index, row in enumerate(search.tried) if row.growth_units)
     assert [row.reps for row in search.tried[:first_growth]] == list(range(3, 11))
     assert all(row.reps == 10 for row in search.tried[first_growth:])
+    grown = search.tried[first_growth:]
+    assert [row.growth_units for row in grown] == list(range(1, len(grown) + 1))
 
 
 @pytest.mark.parametrize("name", DEFAULT_SCENARIOS)
-def test_s9_three_full_searches_hold_both_bounds_and_both_powers(name, reference_results):
-    search = reference_results[name]
+def test_s9_small_searches_print_every_row_and_match_the_independent_recompute(
+    name, small_results,
+):
+    """S-9's structure at `SMALL_SIMS`; the full 4,000-study searches run under `-m simulation`.
+
+    `assert_search_measurements` redraws every tried size without the search's own streams and
+    must agree with it exactly, here as at 4,000. The 5% bounds and 80% powers it re-derives at
+    this size are only the search's own stopping rule; that the reference scenarios hold them
+    needs the full 4,000 simulations, so that claim lives only in
+    `tests/simulation/test_reference_searches.py`.
+    """
+    scenario = simulate.SCENARIOS[name]
+    search = small_results[name]
     result = search.result
     assert result is not None, name
     assert result.alpha in simulate.ALPHA_LADDER
-    assert result.identical_loss <= result.identical_loss_upper <= .05
-    assert result.no_loss_at_drop <= result.no_loss_at_drop_upper <= .05
-    assert result.power_room >= .8
-    assert result.power_proportional >= .8
     assert all(row.reps >= 3 and row.defects >= 34 for row in search.tried)
     assert result.defects == 34 + 2 * result.growth_units
     assert result.packages == 51 + 3 * result.growth_units
@@ -537,7 +570,13 @@ def test_s9_three_full_searches_hold_both_bounds_and_both_powers(name, reference
         assert search.stress_case == pytest.approx(simulate.stress_case(
             np.full(10, .95), result.reps,
         ))
-    assert_search_measurements(simulate.SCENARIOS[name], search, seed=SEED, sims=4000)
+    printed = simulate.render_result(scenario, search, seed=SEED, sims=SMALL_SIMS).splitlines()
+    # Every size tried is printed once, in the order tried, then the chosen one.
+    assert [line.split(" growth_units=")[0] for line in printed if line.startswith("reps=")] == [
+        f"reps={row.reps} packages={row.packages} defects={row.defects}" for row in search.tried
+    ]
+    assert f"chosen reps={result.reps} packages={result.packages}" in printed[-1]
+    assert_search_measurements(scenario, search, seed=SEED, sims=SMALL_SIMS)
 
 
 def noise_floor_data():
