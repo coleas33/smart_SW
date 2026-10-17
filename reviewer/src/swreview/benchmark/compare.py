@@ -471,6 +471,7 @@ class _LoadedRun:
     provenance: RunProvenance | None
     scorecard: Scorecard
     sessions: dict[str, ReviewSession]
+    saved_set: sets.BenchmarkSet | None
 
     @property
     def tool_calls(self) -> int:
@@ -510,7 +511,7 @@ def _load_run(run_dir: Path, *, root: Path) -> _LoadedRun:
         sessions[score.package_id] = session
 
     _check_saved_set(run_dir, provenance)
-    _check_set_flags(run_dir, scorecard, root=root)
+    saved_set = _check_set_flags(run_dir, scorecard, root=root)
     return _LoadedRun(
         run=run_dir.name,
         run_dir=run_dir,
@@ -518,6 +519,7 @@ def _load_run(run_dir: Path, *, root: Path) -> _LoadedRun:
         provenance=provenance,
         scorecard=scorecard,
         sessions=sessions,
+        saved_set=saved_set,
     )
 
 
@@ -770,7 +772,9 @@ def _check_saved_set(run_dir: Path, provenance: RunProvenance | None) -> None:
         )
 
 
-def _check_set_flags(run_dir: Path, scorecard: Scorecard, *, root: Path) -> None:
+def _check_set_flags(
+    run_dir: Path, scorecard: Scorecard, *, root: Path,
+) -> sets.BenchmarkSet | None:
     """Each scored package's saved-set entry against its scored items (feature 014 FR-032's
     compare half; plan decisions RF-39, RF-62).
 
@@ -783,8 +787,9 @@ def _check_set_flags(run_dir: Path, scorecard: Scorecard, *, root: Path) -> None
     """
     saved = run_dir / SAVED_SET_FILE
     if not saved.is_file():
-        return
-    flags = {ref.package_id: ref.held_out for ref in sets.load_saved_set(saved, root=root).packages}
+        return None
+    saved_set = sets.load_saved_set(saved, root=root)
+    flags = {ref.package_id: ref.held_out for ref in saved_set.packages}
     for score in scorecard.per_package:
         if score.package_id not in flags:
             raise CompareError(
@@ -798,6 +803,8 @@ def _check_set_flags(run_dir: Path, scorecard: Scorecard, *, root: Path) -> None
                 f"but its scored items hold {held} held-out items; the flag is derived from the "
                 "key"
             )
+
+    return saved_set
 
 
 def _refuse_for_the_committed_ledger(run: _LoadedRun, *, root: Path) -> None:
@@ -1286,10 +1293,56 @@ def _settings_of(record: RunProvenance) -> dict[str, object]:
 
 def _study_run(loaded: _LoadedRun) -> verdict.StudyRun:
     """The single conversion from compare's validated run to the shared verdict input."""
-    assert loaded.provenance is not None
+    if loaded.provenance is None:
+        raise CompareError(f"{loaded.run_dir}: no provenance record for a study run")
     return verdict.StudyRun(
         run=loaded.run, arm=loaded.provenance.arm, scorecard=loaded.scorecard,
     )
+
+
+def measurement_refusal(
+    path: Path,
+    measurement: pilot.PilotMeasurement | _RefusedMeasurement,
+    *,
+    earliest: date | None = None,
+) -> str | None:
+    """One approval check for compare and the noise floor, before study-size checks."""
+    digest_matches = (
+        measurement.digest_matches if isinstance(measurement, _RefusedMeasurement)
+        else pilot.sizing_digest(measurement) == measurement.sizing_digest
+    )
+    if not digest_matches:
+        return f"{path}: the sizing was edited by hand; re-run `swreview benchmark pilot`"
+    if isinstance(measurement, _RefusedMeasurement):
+        return measurement.refusal
+    if measurement.approval.approved is not True:
+        return f"{path}: approval.approved is not true"
+    approved_at = measurement.approval.approved_at
+    if not approved_at or not approved_at.strip():
+        return f"{path}: approval.approved_at is empty"
+    try:
+        approved_date = date.fromisoformat(approved_at)
+        if approved_date.isoformat() != approved_at:
+            raise ValueError("expected YYYY-MM-DD")
+    except ValueError:
+        return f"{path}: approval.approved_at {approved_at!r} is not a YYYY-MM-DD date"
+    result = measurement.sizing.result
+    if "state" in result.model_fields_set and result.state != "reached":
+        return (f"{path}: sizing.result.state is {result.state!r}; "
+                "the approved sizing must be 'reached'")
+    if result.alpha is None:
+        return (f"{path}: sizing.result.alpha reached no level; "
+                "the approved sizing cannot set the rule")
+    for field, value in result.simulated.model_dump().items():
+        if value is None or not math.isfinite(value) or not 0 <= value <= 1:
+            return (f"{path}: sizing.result.simulated.{field} is {value!r}; "
+                    "the approved sizing requires a known rate in [0, 1]")
+    if earliest is not None and approved_date > earliest:
+        return (
+            f"{path}: approval.approved_at {approved_at} is later than earliest study run "
+            f"{earliest.isoformat()}; levels chosen after the paid runs void the 5% bounds"
+        )
+    return None
 
 
 def _pane_refusal(
@@ -1337,39 +1390,10 @@ def _pane_refusal(
             f"found {len(measurements)} ({files})"
         )
     path, measurement = measurements[0]
-    digest_matches = (
-        measurement.digest_matches if isinstance(measurement, _RefusedMeasurement)
-        else pilot.sizing_digest(measurement) == measurement.sizing_digest
-    )
-    if not digest_matches:
-        return f"{path}: the sizing was edited by hand; re-run `swreview benchmark pilot`"
-    if isinstance(measurement, _RefusedMeasurement):
-        return measurement.refusal
-    if measurement.approval.approved is not True:
-        return f"{path}: approval.approved is not true"
-    approved_at = measurement.approval.approved_at
-    if not approved_at or not approved_at.strip():
-        return f"{path}: approval.approved_at is empty"
-    try:
-        approved_date = date.fromisoformat(approved_at)
-        if approved_date.isoformat() != approved_at:
-            raise ValueError("expected YYYY-MM-DD")
-    except ValueError:
-        return f"{path}: approval.approved_at {approved_at!r} is not a YYYY-MM-DD date"
-    result = measurement.sizing.result
-    if result.alpha is None:
-        return (f"{path}: sizing.result.alpha reached no level; "
-                "the approved sizing cannot set the rule")
-    for field, value in result.simulated.model_dump().items():
-        if value is None or not math.isfinite(value) or not 0 <= value <= 1:
-            return (f"{path}: sizing.result.simulated.{field} is {value!r}; "
-                    "the approved sizing requires a known rate in [0, 1]")
     earliest = min(run.provenance.started_at.date() for run in runs)
-    if approved_date > earliest:
-        return (
-            f"{path}: approval.approved_at {approved_at} is later than earliest study run "
-            f"{earliest.isoformat()}; levels chosen after the paid runs void the 5% bounds"
-        )
+    refusal = measurement_refusal(path, measurement, earliest=earliest)
+    if refusal is not None:
+        return refusal
     sizing = measurement.sizing
     if count < sizing.result.held_out_model_defects:
         return (
@@ -1384,7 +1408,7 @@ def _pane_refusal(
     pilot_packages = set(sizing.pilot_packages)
     if (pilot_packages or sizing.growth_units) and len(saved_sets) < len(runs):
         missing_sets = ", ".join(run.run for run in runs
-                                 if not (run.run_dir / SAVED_SET_FILE).is_file())
+                                 if run.saved_set is None)
         return (f"{missing_sets}: missing saved set; approval requires every pilot package "
                 f"and {sizing.growth_units} growth units")
     core = {
@@ -1465,8 +1489,7 @@ def _measurement_key(
 
 def _pane_study(key, runs, matching, noise_floors, *, root, notes) -> verdict.PaneStudy:
     saved_sets = [
-        (sets.load_saved_set(run.run_dir / SAVED_SET_FILE, root=root), root)
-        for run in runs if (run.run_dir / SAVED_SET_FILE).is_file()
+        (run.saved_set, root) for run in runs if run.saved_set is not None
     ]
     refusal = _pane_refusal(key, runs, saved_sets, matching)
     record = runs[0].provenance
@@ -1506,7 +1529,8 @@ def _pane_study(key, runs, matching, noise_floors, *, root, notes) -> verdict.Pa
         "private slice (23A): shown beside the pane study's verdict, never deciding"
     ] if private else judged.reasons)
     block.shown = _pane_shown(runs, judged)
-    block.noise_floor = _pane_noise_floor(key, runs, noise_floors, notes)
+    if not private:
+        block.noise_floor = _pane_noise_floor(key, runs, noise_floors, notes)
     off, on = (next(run.provenance for run in runs if run.provenance.arm == arm)
                for arm in verdict.ARMS)
     settings = settings_differed(off, on)
@@ -1523,6 +1547,22 @@ def _pane_study(key, runs, matching, noise_floors, *, root, notes) -> verdict.Pa
     return block
 
 
+def _checkout(root: Path | None) -> Path:
+    return sets.REPO_ROOT if root is None else root
+
+
+def _studies(
+    loaded: Sequence[_LoadedRun],
+) -> dict[tuple[str, str | None, str | None], list[_LoadedRun]]:
+    """The study grouping shared by validation and ledger rendering."""
+    studies: dict[tuple[str, str | None, str | None], list[_LoadedRun]] = {}
+    for run in loaded:
+        key = _study_key(run)
+        if key is not None:
+            studies.setdefault(key, []).append(run)
+    return studies
+
+
 def load_runs(
     run_dirs: Sequence[Path | str], *, root: Path | None = None,
     committed_ledger: bool = False,
@@ -1532,16 +1572,12 @@ def load_runs(
     With ``committed_ledger``, each run is first held to the committed ledger's
     refusal, which comes before any study check (FR-051).
     """
-    checkout = sets.REPO_ROOT if root is None else root
+    checkout = _checkout(root)
     loaded = [_load_run(path, root=checkout) for path in distinct_run_dirs(run_dirs)]
     if committed_ledger:
         for run in loaded:
             _refuse_for_the_committed_ledger(run, root=checkout)
-    studies: dict[tuple[str, str | None, str | None], list[_LoadedRun]] = {}
-    for run in loaded:
-        key = _study_key(run)
-        if key is not None:
-            studies.setdefault(key, []).append(run)
+    studies = _studies(loaded)
     for key, runs in studies.items():
         _check_one_study(key, runs)
     return loaded
@@ -1551,7 +1587,7 @@ def run_records(
     run_dirs: Sequence[Path | str], *, root: Path | None = None,
 ) -> list[pilot.RunRecord]:
     """Expose loaded off/on runs through the shared verdict converter and saved-set reader."""
-    checkout = sets.REPO_ROOT if root is None else root
+    checkout = _checkout(root)
     records: list[pilot.RunRecord] = []
     for run in load_runs(run_dirs, root=checkout):
         if run.provenance is None:
@@ -1559,12 +1595,23 @@ def run_records(
                 f"{run.run_dir}: no provenance record; the pilot and the noise floor "
                 "read benchmark run folders only",
             )
+        if run.provenance.arm not in verdict.ARMS:
+            raise CompareError(
+                f"{run.run_dir}: arm {run.provenance.arm!r}; the pilot and the noise floor "
+                "read off- and on-arm runs only",
+            )
+        if run.saved_set is None:
+            raise CompareError(
+                f"{run.run_dir}: no {SAVED_SET_FILE}; the pilot and the noise floor "
+                "read benchmark run folders only",
+            )
         records.append(pilot.RunRecord(
             study_run=_study_run(run),
             folder=run.run_dir,
             provenance=run.provenance,
             sessions=run.sessions,
-            saved_set=sets.load_saved_set(run.run_dir / SAVED_SET_FILE, root=checkout),
+            saved_set=run.saved_set,
+            study_key=_study_key(run),
         ))
     return records
 
@@ -1587,15 +1634,11 @@ def compare_runs(
     `_refuse_for_the_committed_ledger` names (6.4). Every study is checked; a pane study renders
     its raw rows and the shared judge's block, with no lever decision row.
     """
-    checkout = sets.REPO_ROOT if root is None else root
+    checkout = _checkout(root)
     loaded = load_runs(run_dirs, root=checkout, committed_ledger=committed_ledger)
     rows = [_row(run, score) for run in loaded for score in run.scorecard.per_package]
 
-    studies: dict[tuple[str, str | None, str | None], list[_LoadedRun]] = {}
-    for run in loaded:
-        key = _study_key(run)
-        if key is not None:
-            studies.setdefault(key, []).append(run)
+    studies = _studies(loaded)
     messages = [] if notes is None else notes
     measurements = [(Path(path), _read_measurement_for_compare(Path(path))) for path in pilots]
     floors = [(Path(path), simulate.read_noise_floor(path)) for path in noise_floors]

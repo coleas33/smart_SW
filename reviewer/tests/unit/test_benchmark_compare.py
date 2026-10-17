@@ -48,6 +48,7 @@ from swreview.agent.settings import (
     ModelViewSettings,
 )
 from swreview.benchmark import compare, pilot, sets
+from swreview.benchmark import digest as benchmark_digest
 from swreview.benchmark import scorecard as scorecard_module
 from swreview.benchmark import verdict as pane_verdict
 from swreview.benchmark.adoption import (
@@ -97,13 +98,17 @@ from tests.support.studies import (
     PRIVATE_PROFILE_DIGEST,
     STARTED_AT,
     PackageSpec,
+    PanePackage,
     RunSpec,
     pane_baseline_spec,
+    pane_run,
     pane_run_spec,
     pane_study_specs,
     profile_stamp,
     saved_set_entries,
     study_specs,
+    write_measurement,
+    write_pane_study,
     write_run,
     write_study,
 )
@@ -265,6 +270,76 @@ def test_run_records_refuses_a_run_with_no_provenance_record_naming_its_folder(
     )
 
 
+@pytest.mark.parametrize("arm", ["baseline", None], ids=["pane-baseline", "no-arm"])
+def test_run_records_refuses_other_arms_naming_the_folder_and_arm(tmp_path: Path, arm) -> None:
+    spec = (pane_baseline_spec("pane-baseline", 1) if arm == "baseline"
+            else RunSpec(run="no-arm", arm=None, lever="none"))
+    folder = write_run(tmp_path, spec)
+
+    with pytest.raises(CompareError) as refused:
+        compare.run_records([folder], root=tmp_path)
+
+    assert str(refused.value) == (
+        f"{folder}: arm {arm!r}; the pilot and the noise floor "
+        "read off- and on-arm runs only"
+    )
+
+
+def test_run_records_refuses_a_missing_saved_set_naming_the_folder(tmp_path: Path) -> None:
+    folder = write_run(tmp_path, pane_run_spec("off-1", "off", 1))
+    (folder / SAVED_SET_FILE).unlink()
+
+    with pytest.raises(CompareError) as refused:
+        compare.run_records([folder], root=tmp_path)
+
+    assert str(refused.value) == (
+        f"{folder}: no {SAVED_SET_FILE}; the pilot and the noise floor "
+        "read benchmark run folders only"
+    )
+
+
+def test_load_and_compare_share_one_study_grouping(tmp_path: Path) -> None:
+    folders = write_study(tmp_path, [
+        RunSpec(run="z-off"), RunSpec(run="a-on", arm="on"),
+        pane_baseline_spec("pane-baseline", 1),
+    ])
+
+    with patch.object(compare, "_studies", wraps=compare._studies) as grouping:
+        loaded = compare.load_runs(folders, root=tmp_path)
+        assert grouping.call_count == 1
+        ledger = compare.compare_runs(folders, root=tmp_path)
+        assert grouping.call_count == 3  # loading checks, then ledger rendering
+
+    grouped = compare._studies(loaded)
+    assert [list(group) for group in grouped.values()] == [loaded[:2], loaded[2:]]
+    assert [row.run for row in ledger.runs] == [folder.name for folder in folders]
+    assert list(grouped)[1][0] == compare.PANE_BASELINE_LABEL
+
+
+@pytest.mark.parametrize("reader", [compare.run_records, compare.compare_runs])
+def test_saved_set_is_read_once_per_run_and_shared_by_each_consumer(tmp_path: Path, reader) -> None:
+    folders = write_study(tmp_path, [
+        pane_run_spec("off-1", "off", 1), pane_run_spec("on-1", "on", 1),
+    ])
+
+    with patch.object(sets, "load_saved_set", wraps=sets.load_saved_set) as saved:
+        reader(folders, root=tmp_path)
+
+    assert saved.call_args_list == [
+        call(folder / SAVED_SET_FILE, root=tmp_path) for folder in folders
+    ]
+
+
+def test_run_record_carries_compares_study_key_without_rebuilding_it(tmp_path: Path) -> None:
+    folder = write_run(tmp_path, pane_run_spec("off-1", "off", 1))
+    key = (PANE_STUDY, "fictional-key-provider", "fictional-key-model")
+
+    with patch.object(compare, "_study_key", return_value=key):
+        records = compare.run_records([folder], root=tmp_path)
+
+    assert records[0].study_key == key
+
+
 @pytest.mark.parametrize("root_kind", ["omitted", "none", "explicit"])
 def test_run_records_exposes_loaded_runs_through_the_shared_converter_and_saved_set(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, root_kind: str
@@ -289,9 +364,7 @@ def test_run_records_exposes_loaded_runs_through_the_shared_converter_and_saved_
 
     loading.assert_called_once_with(folders, root=checkout)
     assert convert.call_args_list == [call(run) for run in loaded]
-    assert saved.call_args_list == [
-        call(folder / SAVED_SET_FILE, root=checkout) for folder in folders
-    ]
+    saved.assert_not_called()  # load_runs already holds the checked saved set
     assert len(records) == len(folders)
     for record, run in zip(records, loaded, strict=True):
         assert isinstance(record, pilot.RunRecord)
@@ -302,7 +375,9 @@ def test_run_records_exposes_loaded_runs_through_the_shared_converter_and_saved_
         assert record.folder == run.run_dir
         assert record.provenance is run.provenance
         assert record.sessions is run.sessions
+        assert record.study_key == compare._study_key(run)
         assert set(record.sessions) == {"fict-a", "fict-b"}
+        assert record.saved_set is run.saved_set
         assert record.saved_set == sets.load_saved_set(run.run_dir / SAVED_SET_FILE, root=checkout)
         assert [entry.path for entry in record.saved_set.packages] == [
             checkout / "benchmarks" / "packages" / package.package_id for package in packages
@@ -311,6 +386,95 @@ def test_run_records_exposes_loaded_runs_through_the_shared_converter_and_saved_
     with pytest.raises(FrozenInstanceError):
         records[0].folder = tmp_path / "replacement"
 
+
+@pytest.fixture(scope="module")
+def offline_review_pane_runs(tmp_path_factory):
+    """A shared, read-only fictional study for the approval and smoke ledger rows."""
+    packages = [PanePackage(package_id=f"case-{index:02d}") for index in range(18)]
+    runs = [pane_run(f"{arm}-{rep}", arm, packages)
+            for rep in range(1, 4) for arm in ("off", "on")]
+    return write_pane_study(tmp_path_factory.mktemp("offline-review-pane"), runs)
+
+
+@pytest.mark.parametrize("state", ["reached", "not reached", "not attainable", None])
+def test_compare_refuses_an_approved_unreached_search_state(
+    tmp_path: Path, offline_review_pane_runs, state: str | None,
+) -> None:
+    path = write_measurement(tmp_path / "pilot")
+    record = json.loads(path.read_bytes())
+    record["sizing"]["result"].update(state=state, cleared_guard_reason="fictional guard reason")
+    record["sizing_digest"] = benchmark_digest.canonical_sha256({
+        name: record[name]
+        for name in ("identity", "pilot_runs", "smoke_runs", "measured", "sizing")
+    })
+    path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+
+    block = compare.compare_runs(offline_review_pane_runs, pilots=[path]).pane_studies[0]
+
+    if state == "reached":
+        assert block.refusal is None
+    else:
+        assert block.refusal == (
+            f"{path}: sizing.result.state is {state!r}; the approved sizing must be 'reached'"
+        )
+
+
+def test_compare_accepts_an_older_measurement_without_search_state(
+    tmp_path: Path, offline_review_pane_runs,
+) -> None:
+    path = write_measurement(tmp_path / "pilot")
+    assert "state" not in json.loads(path.read_bytes())["sizing"]["result"]
+    block = compare.compare_runs(offline_review_pane_runs, pilots=[path]).pane_studies[0]
+    assert block.refusal is None
+
+
+def test_measurement_refusal_is_shared_with_compare_and_preserves_date_checks(
+    tmp_path: Path, offline_review_pane_runs,
+) -> None:
+    path = write_measurement(tmp_path / "pilot", approved_at="2026-09-17")
+    measurement = pilot.read_measurement(path)
+    assert compare.measurement_refusal(path, measurement) is None
+    assert compare.measurement_refusal(path, measurement, earliest=date(2026, 9, 16)) == (
+        f"{path}: approval.approved_at 2026-09-17 is later than earliest study run "
+        "2026-09-16; levels chosen after the paid runs void the 5% bounds"
+    )
+    with patch.object(compare, "measurement_refusal", return_value="shared refusal") as checking:
+        block = compare.compare_runs(offline_review_pane_runs, pilots=[path]).pane_studies[0]
+    assert block.refusal == "shared refusal"
+    checking.assert_called_once_with(path, measurement, earliest=date(2026, 9, 16))
+
+
+def test_measurement_smoke_folders_never_render_or_change_pane_figures(
+    tmp_path: Path, offline_review_pane_runs,
+) -> None:
+    packages = [PanePackage(package_id=f"case-{index:02d}") for index in range(18)]
+    pilot_folders = write_pane_study(tmp_path / "pilot", [
+        pane_run(f"pilot-off-{rep}", "off", packages) for rep in range(1, 4)
+    ])
+    smoke_folders = write_pane_study(tmp_path / "smoke", [
+        pane_run("smoke-off-1", "off", packages), pane_run("smoke-on-1", "on", packages),
+    ])
+    pilot_rows = [{"folder": folder.name, "arm": "off", "repetition": rep,
+                   "started_at": "2026-09-10T09:00:00Z", "commit": COMMIT}
+                  for rep, folder in enumerate(pilot_folders, start=1)]
+    path = write_measurement(tmp_path / "pilot", pilot_runs=pilot_rows)
+    before = compare.compare_runs(offline_review_pane_runs, pilots=[path])
+    smoke_rows = [{"folder": f"../smoke/{folder.name}", "arm": arm, "repetition": 1,
+                   "started_at": "2026-09-10T09:00:00Z", "commit": COMMIT}
+                  for folder, arm in zip(smoke_folders, ("off", "on"), strict=True)]
+    path = write_measurement(tmp_path / "pilot", pilot_runs=pilot_rows, smoke_runs=smoke_rows)
+
+    ledger = compare.compare_runs(offline_review_pane_runs, pilots=[path])
+    out = tmp_path / "ledger"
+    compare.write_ledger(ledger, out)
+
+    assert ledger.pane_studies[0].refusal is None
+    assert ledger.pane_studies[0].figures == before.pane_studies[0].figures
+    assert ledger.pane_studies[0].reps == before.pane_studies[0].reps
+    assert len([row for row in ledger.runs if row.arm == "off (pilot)"]) == 54
+    for output in (out / compare.LEDGER_JSON, out / compare.LEDGER_MD):
+        rendered = output.read_text(encoding="utf-8")
+        assert all(folder.name not in rendered for folder in smoke_folders)
 
 def test_run_records_accepts_no_folders() -> None:
     assert compare.run_records([]) == []

@@ -967,6 +967,7 @@ def write_measurement(
     cleared_guard_decides: bool = False,
     seed: int = 140514,
     pilot_runs: Sequence[dict[str, Any]] = (),
+    smoke_runs: Sequence[dict[str, Any]] = (),
 ) -> Path:
     """Hand-written measurement through its strict model; no fitting or simulation."""
     from swreview.benchmark import pilot
@@ -988,7 +989,7 @@ def write_measurement(
             "model": model or DEFAULT_MODELS[ProviderName(provider)], "commit": COMMIT,
             "set_digest": SET_DIGEST, "scoring_rules_version": SCORING_RULES_VERSION,
         },
-        "pilot_runs": list(pilot_runs), "smoke_runs": [],
+        "pilot_runs": list(pilot_runs), "smoke_runs": list(smoke_runs),
         "measured": {
             "defect_counts": [], "dropped_defects": [], "dropped_defect_count": 0,
             "variance_excluded_defects": [], "variance_excluded_count": 0,

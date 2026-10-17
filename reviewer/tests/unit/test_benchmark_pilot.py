@@ -7,16 +7,25 @@ import json
 from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
+from shutil import copytree
 
 import numpy as np
 import pytest
 from pydantic import ValidationError
 
+from swreview.agent.settings import PANE_STUDY, PRIVATE_PANE_STUDY
 from swreview.benchmark import answer_key, compare, digest, matching, pilot, sets, simulate, verdict
 from tests.support import local_paths
 from tests.support.answer_keys import write_key
 from tests.support.findings import make_finding
-from tests.support.studies import PanePackage, pane_run, write_measurement, write_pane_study
+from tests.support.studies import (
+    PanePackage,
+    RunSpec,
+    pane_run,
+    write_measurement,
+    write_pane_study,
+    write_run,
+)
 
 COMPUTED_BLOCKS = ("identity", "pilot_runs", "smoke_runs", "measured", "sizing")
 
@@ -484,9 +493,12 @@ def small_search(monkeypatch, *, growth=0, power=0.82, reached=True):
 
 
 def test_layout_reads_saved_order_and_a_core_with_its_named_twin(tmp_path, monkeypatch):
-    folders, _ = keyed_folders(tmp_path, monkeypatch)
+    folders, _ = keyed_folders(tmp_path, monkeypatch, packages=(
+        PanePackage("core"), PanePackage("twin", model_held_out=(), matched=()),
+        PanePackage("alt"), PanePackage("alt-twin", model_held_out=(), matched=()),
+    ))
     layout = pilot.study_layout(compare.run_records(folders))
-    assert layout.packages == (2, 0)
+    assert layout.packages == (2, 0, 2, 0)
     assert layout.growth_unit == (2, 0)
 
 
@@ -502,10 +514,11 @@ def test_projection_uses_list_scheduling_and_alternates_complete_runs(jobs, seco
 
 
 def test_projection_growth_uses_the_mean_and_missing_times_stay_unknown():
-    grown = pilot.project_wall_clock({"core": 10, "twin": 30}, on_ratio=2,
-                                     jobs=1, repetitions=3, growth=2)
-    assert grown.off_run_s == 80
-    assert grown.on_run_s == 160
+    grown = pilot.project_wall_clock({"core": 10, "twin": 30, "anchor": 1000}, on_ratio=2,
+                                     jobs=1, repetitions=3, growth=2,
+                                     growth_packages=("core", "twin"))
+    assert grown.off_run_s == 1080
+    assert grown.on_run_s == 2160
     missing = pilot.project_wall_clock({"core": None, "twin": 30}, on_ratio=2,
                                       jobs=1, repetitions=3, growth=0)
     assert missing.off_run_s is None
@@ -551,12 +564,18 @@ def test_command_writes_the_cost_gate_and_unapproved_relative_atomic_record(
     assert {run.folder for run in measurement.smoke_runs} == {"../smoke/off-1", "../smoke/on-1"}
     for text in ("repetitions", "alpha", "cleared", "stress", "cost", "wall", "growth", "rules"):
         assert text in result.output.lower()
-    assert "6" in result.output  # six package runs have synthetic/unknown monetary cost
+    assert "cost unknown: 6 package runs left out" in result.output
     assert measurement.measured.cost_time.unknown_cost_count == 6
     assert {row.package_id for row in measurement.measured.cost_time.unknown_cost_runs} == {
         "core", "twin",
     }
-    assert "core" in result.output and "twin" in result.output
+    for row in measurement.measured.cost_time.unknown_cost_runs:
+        assert f"cost unknown: {row.run}, package {row.package_id}" in result.output.splitlines()
+    projection = measurement.sizing.projected_wall_clock
+    assert (f"projected wall clock at --jobs 2: off run {projection.off_run_s} s; "
+            f"on run {projection.on_run_s} s; study {projection.study_s} s") in result.output
+    assert (f"mean tokens per minute of one off-arm review: "
+            f"{projection.mean_tokens_per_minute}") in result.output.splitlines()
 
 
 def test_never_detected_uses_the_key_loader_and_target_overlap_for_any_final_finding(
@@ -663,12 +682,15 @@ def test_other_estimators_share_verdict_counts_and_keep_individual_rates(tmp_pat
     for rep, record in enumerate(records):
         core = replace(packages[0], matched=("D-1", "D-3", "D-4") if rep < 2 else (),
                        cleared=("D-2", "D-4") if rep == 0 else (),
+                       false_alarms=tuple((f"F-{i}", "model") for i in range(4))
+                       if rep == 1 else (),
                        score_overrides={
                            "wall_clock_s": 10 + rep * 10,
                            "cost": {"amount": rep + 1, "missing": [],
                                     "basis": ["fictional price"], "synthetic": False},
                        })
         twin = replace(packages[1], status="behavioural" if rep == 0 else "completed",
+                       false_alarms=(("F-stopped", "model"),) if rep == 0 else (),
                        score_overrides={"wall_clock_s": 40})
         adjusted.append(replace(
             record, study_run=pane_run(record.study_run.run, "off", [core, twin]),
@@ -690,6 +712,28 @@ def test_other_estimators_share_verdict_counts_and_keep_individual_rates(tmp_pat
     assert measurement.sizing.result.estimated_study_cost == 24
     assert calls[0][0].code_rate == (2 / 3, 2 / 3)
     assert calls[0][0].clearance_rate == (0, 1 / 3, 0, 1 / 3)
+    scenario, options = calls[0]
+    # Rates 2/3 and 0 have sample variance 2/9 and correction 1/18.
+    assert measured.beta_fit.mu == 1 / 3
+    assert measured.beta_fit.variance == pytest.approx(1 / 6)
+    assert measured.beta_fit.a == pytest.approx(1 / 9)
+    assert measured.beta_fit.b == pytest.approx(2 / 9)
+    np.testing.assert_allclose(
+        scenario.rates(np.random.default_rng(1), (2, 3)),
+        np.random.default_rng(1).beta(1 / 9, 2 / 9, (2, 3)),
+        rtol=1e-13, atol=0,
+    )
+    assert scenario.sd == measured.comovement.used
+    assert scenario.sd != measured.comovement.estimate
+    # Completed package runs have alarms [0,4,0,0,0]; the stopped alarm is omitted.
+    assert measured.false_alarm_fit.mean == 4 / 5
+    assert measured.false_alarm_fit.variance == pytest.approx(16 / 5)
+    assert measured.false_alarm_fit.k == pytest.approx(4 / 15)
+    assert scenario.fa_mean == 4 / 5
+    assert scenario.fa_size == pytest.approx(4 / 15)
+    assert scenario.stop_rate == 1 / 6
+    assert options["sims"] == simulate.DEFAULT_SIMS == measurement.sizing.sims
+    assert options["cap"] == 3 == measurement.sizing.cap
     # A stopped and an infrastructure package add neither code detections nor counted runs.
     extra = [pane_run("off-4", "off", [replace(packages[0], status="behavioural")]),
              pane_run("off-5", "off", [replace(packages[0], status="infrastructure")])]
@@ -726,7 +770,7 @@ def test_pilot_command_refuses_each_invalid_pilot_input(tmp_path, monkeypatch, c
     folders, smoke = keyed_folders(tmp_path, monkeypatch)
     expected = case
     if case == "on":
-        folders = [smoke[1]]
+        folders = [copytree(smoke[1], tmp_path / "separate-pilot" / smoke[1].name)]
         expected = "off"
     elif case == "other-study":
         for folder in folders:
@@ -752,7 +796,11 @@ def test_pilot_command_refuses_each_invalid_pilot_input(tmp_path, monkeypatch, c
         data = json.loads(path.read_bytes())
         data["commit"] = "different-fictional-commit"
         path.write_text(json.dumps(data), encoding="utf-8")
-        expected = "commit"
+        original_commit = json.loads((folders[0] / "run-provenance.json").read_bytes())["commit"]
+        expected = (
+            f"{folders[0]} and {folders[1]} cannot be placed in one comparison: "
+            f"commit differs ({original_commit!r} against 'different-fictional-commit')"
+        )
     elif case == "keyless":
         for folder in (*folders, *smoke):
             path = folder / "benchmark-set.json"
@@ -788,7 +836,7 @@ def test_jobs_below_one_is_a_usage_error(tmp_path):
 
 
 @pytest.mark.parametrize("field", ["arm", "lever", "provider", "model", "effort", "commit",
-                                   "saved_set", "unscored_packages", "kept"])
+                                   "saved_set", "kept"])
 def test_smoke_refusals_name_the_folder_and_field(tmp_path, monkeypatch, field):
     folders, smoke_folders = keyed_folders(tmp_path, monkeypatch)
     records, smoke = compare.run_records(folders), compare.run_records(smoke_folders)
@@ -797,24 +845,21 @@ def test_smoke_refusals_name_the_folder_and_field(tmp_path, monkeypatch, field):
         bad = replace(bad, provenance=bad.provenance.model_copy(update={"arm": "off"}))
     elif field in {"lever", "provider", "model", "effort", "commit"}:
         bad = replace(bad, provenance=bad.provenance.model_copy(update={field: "fictional-other"}))
+        if field in {"lever", "provider", "model"}:
+            key = list(bad.study_key)
+            key[("lever", "provider", "model").index(field)] = "fictional-other"
+            bad = replace(bad, study_key=tuple(key))
     elif field == "saved_set":
         entry = bad.saved_set.packages[0].model_copy(update={"package_id": "not-in-pilot"})
         bad = replace(bad, saved_set=bad.saved_set.model_copy(update={"packages": [entry]}))
     else:
         card = bad.study_run.scorecard
-        if field == "unscored_packages":
-            unscored = pane_run("on-1", "on", [PanePackage("core", status="infrastructure")])
-            card = card.model_copy(update={
-                "unscored_packages": unscored.scorecard.unscored_packages,
-            })
-        else:
-            card = card.model_copy(update={"per_package": card.per_package[:1]})
+        card = card.model_copy(update={"per_package": card.per_package[:1]})
         bad = replace(bad, study_run=replace(bad.study_run, scorecard=card))
     result = invoke_records(monkeypatch, records, [smoke[0], bad], tmp_path / "measurement.json")
     assert result.exit_code == 1
     assert str(bad.folder) in result.output
-    expected = {"saved_set": "package", "unscored_packages": "unscored",
-                "kept": "kept"}.get(field, field)
+    expected = {"saved_set": "package", "kept": "kept"}.get(field, field)
     assert expected in result.output
 
 
@@ -906,11 +951,14 @@ def test_command_prints_not_reached_when_last_alpha_has_insufficient_power(tmp_p
     assert "not reached" in result.output
 
 
-def test_growth_projection_uses_core_and_twin_mean_without_anchor_times(tmp_path, monkeypatch):
+@pytest.mark.parametrize("anchor_name", ["anchor", "growth-1"])
+def test_growth_projection_uses_core_and_twin_mean_without_anchor_times(
+    tmp_path, monkeypatch, anchor_name,
+):
     packages = (
         PanePackage("core", score_overrides={"wall_clock_s": 10}),
         PanePackage("twin", model_held_out=(), matched=(), score_overrides={"wall_clock_s": 30}),
-        PanePackage("anchor", model_held_out=(), matched=(),
+        PanePackage(anchor_name, model_held_out=(), matched=(),
                     score_overrides={"wall_clock_s": 1000}),
     )
     folders, smoke = keyed_folders(tmp_path, monkeypatch, packages=packages)
@@ -1040,6 +1088,31 @@ def invoke_noise_floor(folders, measurement, out):
     ])
 
 
+@pytest.mark.parametrize("pilot_exists", [False, True])
+def test_noise_floor_refuses_private_study_before_reading_pilot(
+    tmp_path, monkeypatch, pilot_exists,
+):
+    packages = (PanePackage("core-a"), PanePackage("core-b"))
+    folders = write_pane_study(tmp_path / "study", [
+        pane_run(f"{arm}-1", arm, packages) for arm in ("off", "on")
+    ], study=PRIVATE_PANE_STUDY)
+    measurement = (write_measurement(tmp_path / "pilot") if pilot_exists
+                   else tmp_path / "missing-pilot.json")
+    before = {path: path.read_bytes() for path in tmp_path.rglob("*") if path.is_file()}
+
+    def no_pilot(*args, **kwargs):
+        pytest.fail("private study must refuse before reading --pilot")
+
+    monkeypatch.setattr(pilot, "read_measurement", no_pilot)
+    out = tmp_path / "new-folder" / "noise-floor.json"
+    result = invoke_noise_floor(folders, measurement, out)
+    assert result.exit_code == 1, result.output
+    assert (f"{PRIVATE_PANE_STUDY}: the private slice has no approved measurement; "
+            "its noise floor is not computed") in result.output
+    assert not out.parent.exists()
+    assert {path: path.read_bytes() for path in tmp_path.rglob("*") if path.is_file()} == before
+
+
 def test_noise_floor_command_writes_one_reproducible_atomic_record_and_compare_reads_it(
     tmp_path, monkeypatch,
 ):
@@ -1162,7 +1235,7 @@ def test_noise_floor_command_keeps_saved_set_order_and_each_arms_counted_repetit
     assert result.exit_code == 0, result.output
     layout, rates, repetitions = calls[0]
     assert layout.packages == (2, 2, 2)
-    assert rates == [fitted_rates[f"{package.package_id}/{defect}"]
+    assert rates == [fitted_rates[package.package_id, defect]
                      for package in packages for defect in ("D-1", "D-2")]
     assert rates != list(fitted_rates.values())
     assert repetitions == [[3, 3, 3], [2, 3, 3]]
@@ -1199,16 +1272,68 @@ def test_noise_floor_command_uses_the_lower_shape_power_and_first_passing_grid_p
 
 
 @pytest.mark.parametrize("cores, matched, expected", [
-    (1, ("D-1",), "above 50 points"), (2, (), "not attainable"),
+    (3, ("D-1",), "above 50 points"), (2, (), "not attainable"),
 ])
 def test_noise_floor_command_records_unreached_and_unattainable_studies(
     tmp_path, monkeypatch, cores, matched, expected,
 ):
     folders, measurement = noise_floor_study(tmp_path, monkeypatch, cores=cores, matched=matched)
+    # Keep recall computable with multiple retained packages; the stricter
+    # approved level leaves this small study below 80% at every grid drop.
+    edit_measurement(measurement, lambda data: data["sizing"]["result"].update(alpha=.0025))
     out = tmp_path / "noise-floor.json"
     result = invoke_noise_floor(folders, measurement, out)
     assert result.exit_code == 0, result.output
     assert simulate.read_noise_floor(out).result == expected
+
+
+@pytest.mark.parametrize("case, reason", [
+    ("one-package", "fewer than two retained packages"),
+    ("one-retained-package", "fewer than two retained packages"),
+    ("no-defects", "no retained defect"),
+    ("off-uncounted", "no retained defect"),
+    ("on-uncounted", "every on-arm run is uncounted"),
+    ("disjoint-arms", "no retained defect"),
+    ("only-clean-on-counted", "no retained defect"),
+])
+def test_noise_floor_command_refuses_uncomputable_main_recall_without_writing(
+    tmp_path, monkeypatch, case, reason,
+):
+    packages = (PanePackage("core-a"), PanePackage("core-b"))
+    if case == "one-package":
+        packages = packages[:1]
+    elif case in ("one-retained-package", "only-clean-on-counted"):
+        packages = (packages[0], PanePackage("clean", model_held_out=(), matched=()))
+    elif case == "no-defects":
+        packages = tuple(replace(package, model_held_out=(), matched=()) for package in packages)
+    runs = []
+    for arm in ("off", "on"):
+        changed = []
+        for index, package in enumerate(packages):
+            uncounted = (
+                (case == "off-uncounted" and arm == "off")
+                or (case == "on-uncounted" and arm == "on")
+                or (case == "disjoint-arms" and index == (0 if arm == "on" else 1))
+                or (case == "only-clean-on-counted" and arm == "on" and index == 0)
+            )
+            changed.append(replace(package, status="behavioural") if uncounted else package)
+        runs.append(pane_run(f"{arm}-1", arm, changed))
+    folders = write_pane_study(tmp_path / "study", runs)
+    measurement = write_measurement(tmp_path / "pilot")
+    before = {path: path.read_bytes() for path in tmp_path.rglob("*") if path.is_file()}
+
+    def no_fit(*args, **kwargs):
+        pytest.fail("uncomputable recall must refuse before fitting or simulating")
+
+    monkeypatch.setattr(pilot, "beta_fit", no_fit)
+    monkeypatch.setattr(simulate, "noise_floor", no_fit)
+    out = tmp_path / "new-folder" / "noise-floor.json"
+    result = invoke_noise_floor(folders, measurement, out)
+    assert result.exit_code == 1, result.output
+    assert f"{PANE_STUDY}: main recall is not computable:" in result.output
+    assert reason in result.output
+    assert not out.parent.exists()
+    assert {path: path.read_bytes() for path in tmp_path.rglob("*") if path.is_file()} == before
 
 
 def test_noise_floor_command_refuses_an_existing_output_before_loading(tmp_path, monkeypatch):
@@ -1263,3 +1388,460 @@ def test_noise_floor_command_refuses_runs_outside_one_scored_two_arm_pane_study(
     if case == "unscored":
         assert str(folders[0]) in result.output
     assert not out.parent.exists()
+
+
+@pytest.mark.parametrize("counts,mu,variance,a,b", [
+    ({"a": (1, 4), "b": (3, 4)}, 1 / 2, 1 / 16, 3 / 2, 3 / 2),
+    ({"a": (0, 3), "b": (3, 3), "c": (1, 3), "d": (2, 3)},
+     1 / 2, 7 / 54, 13 / 28, 13 / 28),
+    ({"a": (1, 3), "b": (3, 3), "c": (2, 5), "d": (0, 1), "e": (0, 0),
+      "f": (4, 6)}, 5 / 9, 41 / 1080, 3.057813911472447, 2.446251129177958),
+])
+def test_beta_moments_pin_sample_variance_and_unbiased_binomial_correction(
+    counts, mu, variance, a, b,
+):
+    fitted = pilot.beta_fit(counts)
+    assert fitted.mu == mu
+    assert fitted.variance == pytest.approx(variance)
+    assert fitted.a == pytest.approx(a)
+    assert fitted.b == pytest.approx(b)
+
+
+def test_polarised_boundary_and_posterior_limit_are_exact():
+    # Rates 0, 0, 0, 1: sample variance 1/4, correction zero, pooled mu 1/2.
+    boundary = pilot.beta_fit({"a": (0, 2), "b": (0, 2), "c": (0, 2), "d": (6, 6)})
+    assert boundary.mu == 1 / 2
+    assert boundary.variance == boundary.mu * (1 - boundary.mu)
+    assert boundary.distribution == "polarised"
+    polar = pilot.beta_fit({"zero": (0, 3), "one": (3, 3), "missing": (0, 0)})
+    assert pilot.shrunk_rates({"zero": (0, 3), "one": (3, 3), "missing": (0, 0)}, polar) == {
+        "zero": 0, "one": 1, "missing": 0.5,
+    }
+
+
+def vector_stats(detected, counted=None):
+    """Independent sufficient-statistic fixture; adjacent defects share a package."""
+    detected = np.asarray(detected, dtype=bool)
+    runs, defects = detected.shape
+    packages = defects // 2
+    defect_packages = np.repeat(np.arange(packages), 2)
+    counted = np.ones((runs, packages), bool) if counted is None else np.asarray(counted, bool)
+    detected = detected & counted[:, defect_packages]
+    detection_counts = np.zeros((1, 2, 2, defects), dtype=np.int64)
+    detection_counts[0, 0] = detected.sum(axis=0)
+    package_runs = np.zeros((1, 2, 2, packages), dtype=np.int64)
+    package_runs[0, 0] = counted.sum(axis=0)
+    vectors = np.zeros((1, 2, runs, defects), bool)
+    vectors[0, 0] = detected
+    counted_vectors = np.zeros((1, 2, runs, packages), bool)
+    counted_vectors[0, 0] = counted
+    return verdict.StudyStats(
+        detections=detection_counts, counted_runs=package_runs[..., defect_packages],
+        defect_packages=defect_packages, false_alarms=np.zeros_like(package_runs),
+        package_runs=package_runs, code_detections=np.zeros((1, 2, 0), dtype=np.int64),
+        code_runs=np.zeros((1, 2, 0), dtype=np.int64),
+        clears=np.zeros((1, 2, 0), dtype=np.int64), clear_held_out=np.zeros(0, bool),
+        defect_ids=tuple(verdict.DefectRef(package_id=f"core-{i // 2:02d}",
+                                        defect_id=f"D-{i % 2 + 1}") for i in range(defects)),
+        package_ids=tuple(f"core-{i:02d}" for i in range(packages)),
+        package_run_detections=verdict.PackageRunDetections(vectors, counted_vectors),
+    )
+
+
+def test_comovement_pins_distinct_shrunk_rates_and_each_grid_intercept():
+    data = vector_stats([[1, 1, 1, 0], [1, 0, 0, 0], [0, 0, 0, 1]])
+    fit = pilot.BetaFit(mu=0.4, variance=0.04, variance_computable=True,
+                        distribution="beta", a=2, b=3, reason=None)
+    result = pilot.comovement(data, fit)
+    values = {point.sd: point.log_likelihood for point in result.grid}
+    # Posterior rates .5, .375, .375, .375. At SD0 the Bernoulli products
+    # are exact. Nonzero constants come from independent 160-node quadrature,
+    # with each marginal intercept solved by bisection rather than stats.py.
+    assert values[0] == pytest.approx(-7.841951076189429, abs=1e-10)
+    assert values[1] == pytest.approx(-7.932698255108064, abs=1e-5)
+    assert values[2.5] == pytest.approx(-8.530064271116299, abs=1e-4)
+
+
+@pytest.mark.parametrize("sd", [0.0, 1.0])
+def test_comovement_recovery_and_upper_profile_cover_many_independent_seeds(sd):
+    fit = pilot.BetaFit(mu=0.5, variance=0, variance_computable=True,
+                        distribution="constant", a=None, b=None, reason="known marginal")
+    results = []
+    for seed in range(100, 120):
+        rng = np.random.default_rng(seed)
+        shocks = np.repeat(rng.normal(0, sd, (5, 17)), 2, axis=1)
+        detected = rng.random((5, 34)) < 1 / (1 + np.exp(-shocks))
+        results.append(pilot.comovement(vector_stats(detected), fit))
+    # Five repetitions leave a positive boundary bias at true SD0. The seeded
+    # ensemble pins that sampling regime and the profile limit's coverage.
+    assert np.mean([item.estimate for item in results]) == pytest.approx(
+        sd, abs=0.4 if sd == 0 else 0.25,
+    )
+    assert np.median([item.estimate for item in results]) == pytest.approx(sd, abs=0.25)
+    assert sum(item.used >= sd for item in results) >= 16
+
+
+def test_comovement_refuses_limit_rates_that_contradict_observed_vectors():
+    fit = pilot.BetaFit(mu=0, variance=0, variance_computable=True,
+                        distribution="constant", a=None, b=None, reason="off arm never detects")
+    with pytest.raises(ValueError, match="limit rates contradict.*arm 'off'"):
+        pilot.comovement(vector_stats([[1, 0], [0, 0]]), fit)
+
+
+def test_layout_refuses_cores_with_inconsistent_twins(tmp_path, monkeypatch):
+    folders, _ = keyed_folders(tmp_path, monkeypatch, packages=(
+        PanePackage("core"), PanePackage("twin", model_held_out=(), matched=()),
+        PanePackage("alt"),
+    ))
+    with pytest.raises(ValueError, match="one consistent core case and its twins"):
+        pilot.study_layout(compare.run_records(folders))
+
+
+def test_projection_and_saved_package_list_keep_their_required_orders(tmp_path, monkeypatch):
+    names = ("e", "b", "d", "a", "c")
+    times = (10, 30, 20, 40, 10)
+    projection = pilot.project_wall_clock(dict(zip(names, times, strict=True)),
+                                         on_ratio=1, jobs=2, repetitions=3, growth=0)
+    assert projection.off_run_s == 70
+    packages = tuple(PanePackage(name, score_overrides={"wall_clock_s": seconds})
+                     for name, seconds in zip(names, times, strict=True))
+    folders, smoke = keyed_folders(tmp_path, monkeypatch, packages=packages)
+    small_search(monkeypatch)
+    out = tmp_path / "measurement.json"
+    result = invoke_pilot(folders, smoke, out, "--jobs", "2")
+    assert result.exit_code == 0, result.output
+    measured = pilot.read_measurement(out)
+    assert measured.sizing.pilot_packages == sorted(names)
+    assert measured.sizing.projected_wall_clock.off_run_s == 70
+
+
+@pytest.mark.parametrize("distribution", ["constant", "polarised"])
+def test_measure_passes_the_limit_rate_draw_to_search(tmp_path, monkeypatch, distribution):
+    folders, smoke = keyed_folders(tmp_path, monkeypatch)
+    fit = pilot.BetaFit(mu=0.3, variance=0 if distribution == "constant" else 0.3,
+                        variance_computable=True, distribution=distribution,
+                        a=None, b=None, reason="known moment limit")
+    monkeypatch.setattr(pilot, "beta_fit", lambda counts: fit)
+    calls = small_search(monkeypatch)
+    result = invoke_pilot(folders, smoke, tmp_path / "measurement.json")
+    assert result.exit_code == 0, result.output
+    actual = calls[0][0].rates(np.random.default_rng(1), (20, 30))
+    expected = (np.full((20, 30), 0.3) if distribution == "constant"
+                else np.random.default_rng(1).binomial(1, 0.3, (20, 30)))
+    np.testing.assert_array_equal(actual, expected)
+    if distribution == "polarised":
+        assert set(actual.flat) == {0, 1}
+        assert actual.mean() == pytest.approx(0.3, abs=0.05)
+
+
+def test_measure_draws_the_seed_once_and_records_search_options(tmp_path, monkeypatch):
+    folders, smoke = keyed_folders(tmp_path, monkeypatch)
+    records, smoke_records = compare.run_records(folders), compare.run_records(smoke)
+    drawn = []
+
+    def randbits(bits):
+        drawn.append(bits)
+        return 731239
+
+    monkeypatch.setattr(pilot.secrets, "randbits", randbits)
+    calls = small_search(monkeypatch)
+    measurement = pilot.measure(records, smoke_records, relative_to=tmp_path, cap=3)
+    assert drawn == [63]
+    assert calls[0][1]["seed"] == measurement.sizing.seed == 731239
+    assert calls[0][1]["sims"] == measurement.sizing.sims == simulate.DEFAULT_SIMS
+    assert calls[0][1]["cap"] == measurement.sizing.cap == 3
+
+
+def test_pilot_and_smoke_cannot_name_the_same_folder(tmp_path, monkeypatch):
+    folders, smoke = keyed_folders(tmp_path, monkeypatch)
+    small_search(monkeypatch)
+    result = invoke_pilot(folders, [folders[0], smoke[1]], tmp_path / "measurement.json")
+    assert result.exit_code == 1
+    assert str(folders[0]) in result.output and "once" in result.output
+    assert not (tmp_path / "measurement.json").exists()
+
+
+def test_baseline_smoke_is_refused_through_the_real_loader_naming_its_arm(tmp_path, monkeypatch):
+    folders, smoke = keyed_folders(tmp_path, monkeypatch)
+    baseline = write_run(tmp_path / "smoke", RunSpec(run="baseline", arm="baseline", lever="none"))
+    result = invoke_pilot(folders, [smoke[0], baseline], tmp_path / "measurement.json")
+    assert result.exit_code == 1
+    assert f"{baseline}: arm 'baseline'" in result.output
+
+
+@pytest.mark.parametrize("cap", [1, 2])
+def test_cap_below_three_is_a_usage_error_before_loading(tmp_path, monkeypatch, cap):
+    def forbidden(*args, **kwargs):
+        pytest.fail("an invalid --cap must refuse before loading")
+
+    monkeypatch.setattr(compare, "run_records", forbidden)
+    out = tmp_path / "measurement.json"
+    result = invoke_pilot([tmp_path / "missing"], [], out, "--cap", str(cap))
+    assert result.exit_code == 2
+    assert "--cap" in result.output
+    assert not out.exists()
+    data = measurement_data()
+    data["sizing"]["cap"] = cap
+    with pytest.raises(ValidationError, match="cap"):
+        pilot.PilotMeasurement.model_validate(data)
+
+
+@pytest.mark.parametrize("state", ["reached", "not reached", "not attainable"])
+def test_measure_records_and_prints_the_search_state_and_guard_reason(tmp_path, monkeypatch, state):
+    folders, smoke = keyed_folders(tmp_path, monkeypatch)
+    small_search(monkeypatch)
+    original = simulate.search
+
+    def search(scenario, **kwargs):
+        value = original(scenario, **kwargs)
+        return replace(value, state=state, cleared_guard_reason="independent guard explanation")
+
+    monkeypatch.setattr(simulate, "search", search)
+    out = tmp_path / "measurement.json"
+    result = invoke_pilot(folders, smoke, out)
+    assert result.exit_code == 0, result.output
+    measurement = pilot.read_measurement(out)
+    assert measurement.sizing.result.state == state
+    assert measurement.sizing.result.cleared_guard_reason == "independent guard explanation"
+    assert f"result: {state}" in result.output.splitlines()
+    assert "cleared guard: named only; independent guard explanation" in result.output.splitlines()
+    assert measurement.sizing_digest == pilot.sizing_digest(measurement)
+
+
+def test_optional_search_state_preserves_old_record_and_enters_new_digest(tmp_path):
+    data = measurement_data()
+    legacy = pilot.PilotMeasurement.model_validate(data)
+    assert legacy.model_dump(mode="json") == data
+    old_digest = pilot.sizing_digest(legacy)
+    data["sizing"]["result"].update(state="reached", cleared_guard_reason="held at named only")
+    measured = pilot.read_measurement(write_record(tmp_path, data))
+    assert measured.model_dump(mode="json") == data
+    assert pilot.sizing_digest(measured) != old_digest
+    changed = measured.model_copy(deep=True)
+    changed.sizing.result.state = "not reached"
+    assert pilot.sizing_digest(changed) != pilot.sizing_digest(measured)
+
+
+def test_layout_inputs_uses_saved_order_and_names_a_missing_scored_package(tmp_path, monkeypatch):
+    packages = (PanePackage("z"), PanePackage("a", matched=()))
+    folders, _ = keyed_folders(tmp_path, monkeypatch, packages=packages)
+    records = compare.run_records(folders)
+    data = verdict.study_stats([record.study_run for record in records])
+    rates = {("a", "D-1"): 0.1, ("a", "D-2"): 0.2,
+             ("z", "D-1"): 0.8, ("z", "D-2"): 0.9}
+    layout, ordered, repetitions = pilot.layout_inputs(records, data, rates)
+    assert layout.packages == (2, 2)
+    assert ordered == [0.8, 0.9, 0.1, 0.2]
+    assert repetitions == [[3, 3], [0, 0]]
+    with pytest.raises(ValueError, match="saved set package 'z'.*scorecards"):
+        pilot.layout_inputs(records, replace(data, package_ids=("a", "missing")), rates)
+
+
+def test_defect_identity_does_not_merge_package_and_defect_slashes():
+    data = verdict.study_stats([pane_run("off-1", "off", [
+        PanePackage("a", model_held_out=("b/c",), matched=("b/c",)),
+        PanePackage("a/b", model_held_out=("c",), matched=()),
+    ])])
+    assert pilot.defect_counts(data, "off") == {("a", "b/c"): (1, 1), ("a/b", "c"): (0, 1)}
+
+
+def test_fit_and_measure_share_the_count_partition_rule(monkeypatch, tmp_path):
+    observed = []
+    partition = pilot._count_groups
+
+    def count_groups(counts):
+        observed.append(counts)
+        return partition(counts)
+
+    monkeypatch.setattr(pilot, "_count_groups", count_groups)
+    pilot.beta_fit({"zero": (0, 0), "once": (1, 1), "twice": (1, 2)})
+    assert observed == [{"zero": (0, 0), "once": (1, 1), "twice": (1, 2)}]
+    test_measure_names_zero_and_one_count_defects_without_dividing_by_zero(tmp_path, monkeypatch)
+    assert len(observed) >= 3  # the fit and measured name lists both use this rule
+
+
+def test_comovement_does_not_silently_drop_a_missing_rate(monkeypatch):
+    data = vector_stats([[1, 0], [0, 1]])
+    fit = pilot.beta_fit(pilot.defect_counts(data, "off"))
+    monkeypatch.setattr(pilot, "shrunk_rates", lambda counts, fit: {next(iter(counts)): 0.5})
+    with pytest.raises(KeyError):
+        pilot.comovement(data, fit)
+
+
+def test_existing_output_refusal_is_shared_by_command_and_writer(tmp_path, monkeypatch):
+    calls = []
+
+    def refuse_existing(path):
+        calls.append(path)
+        raise ValueError("one shared existing-output refusal")
+
+    monkeypatch.setattr(pilot, "refuse_existing", refuse_existing)
+    out = tmp_path / "exists.json"
+    result = invoke_pilot([tmp_path / "missing"], [], out)
+    assert result.exit_code == 1 and "one shared existing-output refusal" in result.output
+    with pytest.raises(ValueError, match="one shared existing-output refusal"):
+        pilot.write_measurement(out, pilot.PilotMeasurement.model_validate(measurement_data()))
+    assert calls == [out, out]
+
+
+def test_growth_defect_clearances_use_the_pooled_held_out_observation_rate(tmp_path, monkeypatch):
+    packages = (PanePackage("core", code_held_out=("D-3",)), PanePackage("alt"))
+    folders, smoke = keyed_folders(tmp_path, monkeypatch, packages=packages)
+    records = compare.run_records(folders)
+    changed = []
+    for rep, record in enumerate(records):
+        core = replace(packages[0], cleared=("D-1", "D-3") if rep == 0 else ())
+        alt = replace(packages[1], cleared=("D-1",) if rep == 0 else (),
+                      status="infrastructure" if rep == 2 else "completed")
+        changed.append(replace(
+            record, study_run=pane_run(record.study_run.run, "off", [core, alt]),
+        ))
+    calls = small_search(monkeypatch, growth=1)
+    measured = pilot.measure(changed, compare.run_records(smoke), relative_to=tmp_path, cap=3)
+    # core's two model targets plus its code target have n=3 each; alt's two
+    # model targets have n=2 each. Three clearances / thirteen opportunities.
+    assert sum(row.x for row in measured.measured.clearances) == 3
+    assert sum(row.n for row in measured.measured.clearances) == 13
+    assert calls[0][0].growth_clearance_rate == 3 / 13
+    individual_mean = np.mean([row.x / row.n for row in measured.measured.clearances])
+    assert individual_mean != calls[0][0].growth_clearance_rate
+
+
+def test_pilot_refuses_an_empty_scorecard_view_naming_the_folder(tmp_path, monkeypatch):
+    folders, smoke = keyed_folders(tmp_path, monkeypatch)
+    records = compare.run_records(folders)
+    first = records[0]
+    empty = first.study_run.scorecard.model_copy(update={"per_package": []})
+    records[0] = replace(first, study_run=replace(first.study_run, scorecard=empty))
+    small_search(monkeypatch)
+    result = invoke_records(monkeypatch, records, compare.run_records(smoke),
+                            tmp_path / "measurement.json")
+    assert result.exit_code == 1
+    assert f"{first.folder}: unscored run" in result.output
+
+
+@pytest.fixture
+def noise_study(tmp_path, monkeypatch):
+    monkeypatch.setattr(sets, "REPO_ROOT", tmp_path)
+    packages = (PanePackage("z-core", matched=("D-1",)), PanePackage("a-core", matched=()))
+    folders = write_pane_study(tmp_path / "study", [
+        pane_run(f"{arm}-{rep}", arm, packages)
+        for rep in range(1, 4) for arm in ("off", "on")
+    ])
+    measurement = write_measurement(tmp_path / "pilot", held_out_model_defects=4, packages=2)
+    monkeypatch.setattr(simulate, "noise_floor", lambda *args, **kwargs: 12.5)
+    return folders, measurement, tmp_path / "noise-floor.json"
+
+
+def invoke_noise_study(study):
+    from typer.testing import CliRunner
+
+    from swreview.cli import app
+
+    folders, measurement, out = study
+    return CliRunner().invoke(app, [
+        "benchmark", "noise-floor", *map(str, folders),
+        "--pilot", str(measurement), "--out", str(out),
+    ])
+
+
+def edit_measurement(path, edit):
+    """Recompute the five-block digest independently of the strict record reader."""
+    data = json.loads(path.read_bytes())
+    edit(data)
+    data["sizing_digest"] = digest.canonical_sha256({
+        key: data[key] for key in ("identity", "pilot_runs", "smoke_runs", "measured", "sizing")
+    })
+    path.write_bytes((json.dumps(data, indent=2) + "\n").encode())
+
+
+def test_noise_floor_uses_compares_measurement_refusal(noise_study, monkeypatch):
+    folders, measurement, out = noise_study
+    seen = []
+
+    def refuse(path, measured, *, earliest=None):
+        seen.append((path, measured, earliest))
+        return f"{path}: shared measurement refusal"
+
+    monkeypatch.setattr(compare, "measurement_refusal", refuse, raising=False)
+    result = invoke_noise_study(noise_study)
+    assert result.exit_code == 1, result.output
+    assert f"{measurement}: shared measurement refusal" in result.output
+    assert len(seen) == 1
+    assert seen[0][0] == measurement
+    assert seen[0][1] == pilot.read_measurement(measurement)
+    assert seen[0][2] == min(record.provenance.started_at.date()
+                             for record in compare.run_records(folders))
+    assert not out.exists()
+
+
+@pytest.mark.parametrize("approved_at", ["  ", "2026-13-45", "2099-01-01"])
+def test_noise_floor_refuses_invalid_or_late_approval(noise_study, approved_at):
+    _, measurement, out = noise_study
+    edit_measurement(measurement, lambda data: data["approval"].update(approved_at=approved_at))
+    result = invoke_noise_study(noise_study)
+    assert result.exit_code == 1, result.output
+    assert str(measurement) in result.output
+    assert "approval.approved_at" in result.output
+    assert not out.exists()
+
+
+@pytest.mark.parametrize("state", ["not reached", "not attainable"])
+def test_noise_floor_refuses_an_approved_unreached_search(noise_study, state):
+    _, measurement, out = noise_study
+    edit_measurement(measurement, lambda data: data["sizing"]["result"].update(
+        state=state, cleared_guard_reason="the bounds did not hold",
+    ))
+    result = invoke_noise_study(noise_study)
+    assert result.exit_code == 1, result.output
+    assert str(measurement) in result.output
+    assert f"sizing.result.state is {state!r}" in result.output
+    assert not out.exists()
+
+
+@pytest.mark.parametrize("state", [None, "reached"])
+def test_noise_floor_accepts_old_or_reached_size_without_comparisons_floor(noise_study, state):
+    _, measurement, out = noise_study
+    if state is not None:
+        edit_measurement(measurement, lambda data: data["sizing"]["result"].update(
+            state=state, cleared_guard_reason="the guard is named only",
+        ))
+    result = invoke_noise_study(noise_study)
+    assert result.exit_code == 0, result.output
+    assert simulate.read_noise_floor(out).result == 12.5
+
+
+def test_noise_floor_names_an_empty_scorecard(noise_study, monkeypatch):
+    folders, _, out = noise_study
+    records = compare.run_records(folders)
+    card = records[0].study_run.scorecard.model_copy(update={"per_package": []})
+    records[0] = replace(records[0], study_run=replace(records[0].study_run, scorecard=card))
+    monkeypatch.setattr(compare, "run_records", lambda *args, **kwargs: records)
+    result = invoke_noise_study(noise_study)
+    assert result.exit_code == 1, result.output
+    assert f"{folders[0]}: run has no scored packages" in result.output
+    assert not out.exists()
+
+
+def test_noise_floor_delegates_layout_order_and_uses_the_searched_grid(noise_study, monkeypatch):
+    _, _, out = noise_study
+    layout = simulate.Layout((2, 2))
+    seen = []
+
+    def inputs(records, data, rates):
+        seen.append((records, data, rates))
+        return layout, [.1, .2, .3, .4], [[3, 2], [1, 3]]
+
+    def compute(actual_layout, rates, sd, **kwargs):
+        assert actual_layout is layout
+        assert rates == [.1, .2, .3, .4]
+        assert kwargs["reps"] == [[3, 2], [1, 3]]
+        return 1.5
+
+    monkeypatch.setattr(pilot, "layout_inputs", inputs, raising=False)
+    monkeypatch.setattr(simulate, "NOISE_FLOOR_GRID", (1.5, 2.5), raising=False)
+    monkeypatch.setattr(simulate, "noise_floor", compute)
+    result = invoke_noise_study(noise_study)
+    assert result.exit_code == 0, result.output
+    assert len(seen) == 1
+    assert simulate.read_noise_floor(out).grid == [1.5, 2.5]

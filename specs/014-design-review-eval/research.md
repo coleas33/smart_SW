@@ -513,6 +513,38 @@ From T240 (lane V, Codex), which stopped on it: `verdict.md` 10.2's co-movement 
 - **Options**: A: an optional, additive field on `StudyStats` holding the main figure's per-package-run detection vectors, filled by `study_stats` in its one reading of the scorecards; the simulator leaves it absent; `comovement` keeps its signature and refuses a `StudyStats` without it. B: `comovement` rebuilds the vectors from the run records itself, a second reading of the scorecards whose counting could drift from `study_stats`. C: a separate `verdict.package_run_detections(runs)` beside `study_stats`, a second structure to keep consistent with it.
 - **Chosen**: A. `verdict.PackageRunDetections` (`detected`, boolean over studies, arms, runs and held-out model-produced defects; `counted`, boolean over studies, arms, runs and packages; runs in each arm's input order, padded to the larger arm with false masks) is `StudyStats.package_run_detections`, `None` unless `study_stats` fills it, through the same `detected_ids` and the same counted runs as the main figure (completed, bound-reached included). The simulator's draws and every pinned output are unchanged; P-2's simulated pilot data build their vectors in the test. No scorecard field moves, so `SCORING_RULES_VERSION` and the goldens do not.
 
+### 116A. Slice 8's offline review fixed in full (2026-10-17)
+
+From the whole-slice review of T237 to T242 (five dimensions, each finding independently verified): 20 confirmed findings, none a blocker, and 13 notes.
+
+- **Question**: fix all, the should-fixes only, or the should-fixes and the grown-layout clearance note.
+- **Options**: A: fix every finding and note test-first. B: should-fixes only. C: should-fixes and the clearance note.
+- **Chosen**: A. Among the fixes: `run_records` refuses, naming the folder, a run whose arm is not off or on, a run without `benchmark-set.json`, and one folder given as both a pilot repetition and a smoke run; tests pin with hand-computed numbers what `measure` passes to the size search, `beta_fit`'s binomial correction and sample variance, `comovement`'s per-SD intercepts and a log-likelihood value, the noise floor's number, a layout of several core cases, and order-sensitive outputs over unsorted saved sets; `project_wall_clock` holds the one growth-time rule; a grown layout's added defects clear at the pilot's pooled clearance rate (`Scenario.growth_clearance_rate`); compare's measurement checks are one function, `compare.measurement_refusal`; the duplicated grouping, key spelling, RF-9 thresholds and S-7/S-9 assertions are defined once.
+
+### 117A. The measurement records whether its size was reached (2026-10-17)
+
+- **Question** (review finding 9): the pilot discarded the search's state, so a size that never reached 80% power was written as an ordinary, approvable `sizing.result`.
+- **Options**: A: keep the state and the cleared guard's reason as optional fields and refuse an approved measurement whose state is not `reached`. B: write no file when the size is not reached. C: rely on the printout.
+- **Chosen**: A. `SizingResult.state` and `cleared_guard_reason`, optional and additive, so `PILOT_SCHEMA` stays 1 and `sizing_digest` covers them when present; compare's refusal 7 and `benchmark noise-floor` refuse an approved measurement with a state other than `reached`; an older file without the field reads as before.
+
+### 118A. The noise floor shares the simulator's data model (2026-10-17)
+
+- **Question** (review finding 10): `simulate.noise_floor` repeated the simulator's shock, logistic draw and main-figure assembly line for line.
+- **Options**: A: two private helpers both call, the random-number order kept. B: drive the noise floor through `_StudyDrawStream` with fixed rates. C: keep both copies and cross-check them.
+- **Chosen**: A. Every pinned simulator output (S-8's references, V-25, the 39 scenarios, the simulation-marker tests) is byte-identical.
+
+### 119A. The private slice's noise floor is not computed (2026-10-17)
+
+- **Question** (review note): the noise floor takes `alpha` and its seed from an approved measurement, which the private slice never has.
+- **Options**: A: refuse the private study up front, naming it. B: define its inputs (the shown level and the committed study's seed).
+- **Chosen**: A. Its row reads "not computed"; the private slice is shown and never decides (23A).
+
+### 120A. The noise floor records what was tested (2026-10-17)
+
+- **Question** (review note): "above 50 points" was recorded when drops beyond the off-arm mean are impossible or when the main recall rule is never computable.
+- **Options**: A: "above N points", N the largest attainable grid drop; "not attainable" when none is; refuse a never-computable study. B: "not attainable" whenever attainable drops run out, and refuse a never-computable study. C: keep "above 50 points" with a caveat.
+- **Chosen**: A. `verdict.md` 9.7, T241 and T242 are amended; an older record holding "above 50 points" reads as before.
+
 ---
 
 ## §2 The 2026-09-28 audit

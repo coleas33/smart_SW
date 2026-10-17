@@ -3272,7 +3272,7 @@ def benchmark_pilot(
         list[Path] | None,
         typer.Option("--smoke", help="The scored smoke run folder; give once per arm."),
     ] = None,
-    cap: Annotated[int, typer.Option("--cap", min=1)] = 10,
+    cap: Annotated[int, typer.Option("--cap", min=3)] = 10,
     seed: Annotated[int | None, typer.Option("--seed", min=0)] = None,
     jobs: Annotated[
         int, typer.Option("--jobs", min=1, help="Concurrent reviews assumed by the projection.")
@@ -3283,13 +3283,9 @@ def benchmark_pilot(
 
     root = sets.REPO_ROOT
     with _errors_as_exit_1():
-        if out.exists():
-            raise ValueError(
-                f"{out} exists: one study has one measurement; "
-                "delete the unapproved file to size again"
-            )
-        if smoke is None or len(smoke) != 2:
-            raise ValueError("--smoke must be given exactly twice, once for each arm")
+        pilot.refuse_existing(out)
+        pilot.check_smoke_count(smoke)
+        compare.distinct_run_dirs([*run_dirs, *(smoke or [])])
         records = compare.run_records(run_dirs, root=root)
         smoke_records = compare.run_records(smoke, root=root)
         measurement = pilot.measure(
@@ -3302,26 +3298,21 @@ def benchmark_pilot(
     rates = result.simulated
     cost_time = measurement.measured.cost_time
     projection = sizing.projected_wall_clock
-    powers = (rates.power_proportional, rates.power_room)
-    reached = (
-        result.alpha is not None
-        and any(power is not None for power in powers)
-        and all(power is None or power >= 0.8 for power in powers)
-    )
 
     def shown(value: object) -> str:
         return "unknown" if value is None else str(value)
 
     lines = [
         f"wrote {out} (unapproved)",
-        f"result: {'reached' if reached else 'not reached'}",
+        f"result: {result.state}",
         f"size: {result.packages} packages, "
         f"{result.held_out_model_defects} held-out model-produced defects",
         f"repetitions: {result.reps}",
         f"growth units to add: {sizing.growth_units} (one core case and its twin each)",
         f"deciding rules: {', '.join(result.deciding_rules)}",
         f"alpha: {shown(result.alpha)}",
-        f"cleared guard: {'deciding' if result.cleared_guard_decides else 'named only'}",
+        f"cleared guard: {'deciding' if result.cleared_guard_decides else 'named only'}; "
+        f"{result.cleared_guard_reason}",
         f"power proportional: {shown(rates.power_proportional)}",
         f"power room: {shown(rates.power_room)}",
         f"identical-arms loss rate: {shown(rates.identical_loss)}; "
@@ -3388,49 +3379,47 @@ def benchmark_noise_floor(
         if out.exists():
             raise ValueError(f"{out} exists: one study has one noise-floor record")
         records = compare.run_records(run_dirs, root=sets.REPO_ROOT)
-        keys = {
-            (record.provenance.lever, record.provenance.provider, record.provenance.model)
-            for record in records
-        }
+        keys = {record.study_key for record in records}
         if len(keys) != 1 or next(iter(keys))[0] not in (PANE_STUDY, PRIVATE_PANE_STUDY):
             studies = ", ".join(sorted(str(key) for key in keys))
             raise ValueError(f"noise-floor needs runs of one pane study; got {studies}")
         key = next(iter(keys))
+        if key[0] == PRIVATE_PANE_STUDY:
+            raise ValueError(
+                f"{key[0]}: the private slice has no approved measurement; "
+                "its noise floor is not computed"
+            )
         if {record.provenance.arm for record in records} != {"off", "on"}:
             raise ValueError(f"{key}: noise-floor needs both off and on arms")
         for record in records:
             card = record.study_run.scorecard
-            if not card.per_package or card.unscored_packages:
-                raise ValueError(f"{record.folder}: unscored run")
+            if not card.per_package:
+                raise ValueError(f"{record.folder}: run has no scored packages")
         measurement = pilot.read_measurement(pilot_file)
         identity = measurement.identity
         if (identity.study, identity.provider, identity.model) != key:
             raise ValueError(f"{pilot_file}: measurement does not match study {key}")
-        if measurement.sizing_digest != pilot.sizing_digest(measurement):
-            raise ValueError(f"{pilot_file}: the sizing was edited by hand; "
-                             "re-run `swreview benchmark pilot`")
-        if not measurement.approval.approved or not measurement.approval.approved_at:
-            raise ValueError(f"{pilot_file}: approval.approved and approved_at are required")
+        refusal = compare.measurement_refusal(
+            pilot_file, measurement,
+            earliest=min(record.provenance.started_at.date() for record in records),
+        )
+        if refusal is not None:
+            raise ValueError(refusal)
         alpha = measurement.sizing.result.alpha
-        if alpha is None:
-            raise ValueError(f"{pilot_file}: sizing.result.alpha has not reached an approved size")
         data = verdict.study_stats([record.study_run for record in records])
+        try:
+            simulate.validate_noise_floor_recall(
+                data.defect_packages, data.counted_runs[0, :, 0], data.package_runs[0, :, 0],
+            )
+        except ValueError as exc:
+            raise ValueError(f"{key[0]}: {exc}") from exc
         counts = pilot.defect_counts(data, "off")
         fit = pilot.beta_fit(counts)
         rates = pilot.shrunk_rates(counts, fit)
         movement = pilot.comovement(data, fit, "off")
         if movement.estimate is None:
             raise ValueError(f"{key}: no counted off-arm held-out model defects")
-        layout = pilot.study_layout(records)
-        # The layout follows saved-set order; verdict's identities are sorted.
-        # Keep each defect's rate and each package's counted runs in that layout.
-        entries = records[0].saved_set.packages
-        ordered_rates = [
-            rates[f"{ref.package_id}/{ref.defect_id}"]
-            for entry in entries for ref in data.defect_ids if ref.package_id == entry.package_id
-        ]
-        package_indices = [data.package_ids.index(entry.package_id) for entry in entries]
-        repetitions = data.package_runs[0, :, 0, :][:, package_indices].tolist()
+        layout, ordered_rates, repetitions = pilot.layout_inputs(records, data, rates)
         seed, sims = measurement.sizing.seed, simulate.NOISE_FLOOR_SIMS
         result = simulate.noise_floor(
             layout, ordered_rates, movement.estimate, alpha=alpha,
@@ -3442,7 +3431,7 @@ def benchmark_noise_floor(
                 [record.folder for record in records], relative_to=out.parent,
             ),
             seed=seed, sims=sims, numpy_version=np.__version__,
-            grid=[index / 2 for index in range(1, 101)], result=result,
+            grid=list(simulate.NOISE_FLOOR_GRID), result=result,
         )
         out.parent.mkdir(parents=True, exist_ok=True)
         atomic.write_atomic(out, (record.model_dump_json(indent=2) + "\n").encode("utf-8"))

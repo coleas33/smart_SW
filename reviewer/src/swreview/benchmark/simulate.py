@@ -9,7 +9,6 @@ import os
 from collections.abc import Callable, Iterable
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
-from typing import Literal
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
@@ -88,6 +87,9 @@ class Scenario:
     Explicit clearance tuples may include held-out known defects with measured
     clearances but no completed-run detection estimate; these have no code-rate
     or recall-rate slot and still enter the cleared guard.
+    When growth_clearance_rate is given, search gives every added model
+    defect that pooled clearance probability, independently per arm and
+    repetition, alongside the original per-defect clearance estimates.
     """
 
     name: str
@@ -100,6 +102,7 @@ class Scenario:
     clearance_rate: float | tuple[float, ...] = 0
     code_count: int = 0
     code_rate: float | tuple[float, ...] = 0.95
+    growth_clearance_rate: float | None = None
 
     def __post_init__(self) -> None:
         if not callable(self.rates) and self.rates not in ("half", "uniform", "polar"):
@@ -109,6 +112,8 @@ class Scenario:
         if self.fa_size is not None and _sim_number(self.fa_size, "fa_size") == 0:
             raise ValueError("fa_size must be positive or None")
         _sim_number(self.stop_rate, "stop_rate", probability=True)
+        if self.growth_clearance_rate is not None:
+            _sim_number(self.growth_clearance_rate, "growth_clearance_rate", probability=True)
         for name in ("clearance_count", "code_count"):
             _sim_integer(getattr(self, name), name)
         for name, count_name in (
@@ -301,6 +306,34 @@ def _draw_rates(
     return rng.permuted(values, axis=1)
 
 
+def _draw_detections(rng, intercepts, sd, package_shape, defect_packages):
+    """One repetition, sharing shocks and uniforms across any leading variants."""
+    shocks = rng.normal(0, sd, size=package_shape) if sd else 0
+    logits = intercepts + (shocks[..., defect_packages] if sd else 0)
+    probabilities = np.exp(-np.logaddexp(0, -logits))
+    draw_shape = (*package_shape[:-1], len(defect_packages))
+    return rng.random(draw_shape) < probabilities
+
+
+def _main_figure_stats(
+    detected, package_runs, defect_packages, false_alarms, *,
+    code_detections=None, code_runs=None, clears=None, clear_held_out=None,
+):
+    """Assemble shared recall figures and optional simulator guard counts."""
+    empty = np.zeros((*detected.shape[:-1], 0), dtype=np.int64)
+    return verdict.StudyStats(
+        detections=np.stack((detected, detected), axis=2),
+        counted_runs=package_runs[..., defect_packages],
+        defect_packages=defect_packages,
+        false_alarms=false_alarms,
+        package_runs=package_runs,
+        code_detections=empty if code_detections is None else code_detections,
+        code_runs=empty if code_runs is None else code_runs,
+        clears=empty if clears is None else clears,
+        clear_held_out=np.zeros(0, dtype=bool) if clear_held_out is None else clear_held_out,
+    )
+
+
 class _StudyDrawStream:
     """Accumulate seeded repetitions, sharing unchanged draws across drop shapes.
 
@@ -375,12 +408,9 @@ class _StudyDrawStream:
             raise NotAttainable("drop is not attainable for these rates")
         scenario, rng = self.scenario, self.rng
         for _ in range(self.reps, reps):
-            shocks = rng.normal(0, scenario.sd, size=self.package_shape) if scenario.sd else 0
-            logits = self.intercepts + (
-                shocks[..., self.defect_packages] if scenario.sd else 0
+            detections = _draw_detections(
+                rng, self.intercepts, scenario.sd, self.package_shape, self.defect_packages,
             )
-            probabilities = np.exp(-np.logaddexp(0, -logits))
-            detections = rng.random(probabilities.shape[1:]) < probabilities
             stopped = (
                 rng.random(self.package_shape) < scenario.stop_rate
                 if scenario.stop_rate else np.zeros(self.package_shape, dtype=bool)
@@ -425,14 +455,11 @@ class _StudyDrawStream:
         main_runs = self.main_runs[selected]
         sensitivity_runs = np.full(main_runs.shape, self.reps, dtype=np.int64)
         package_runs = np.stack((main_runs, sensitivity_runs), axis=2)
-        return verdict.StudyStats(
-            detections=np.stack((detected, detected), axis=2),
-            counted_runs=package_runs[..., self.defect_packages],
-            defect_packages=self.defect_packages,
-            false_alarms=np.stack((
+        return _main_figure_stats(
+            detected, package_runs, self.defect_packages,
+            np.stack((
                 self.main_alarms[selected], self.sensitivity_alarms[selected],
             ), axis=2),
-            package_runs=package_runs,
             code_detections=self.code_counts[selected].copy(),
             code_runs=main_runs[..., self.code_packages],
             clears=np.concatenate((
@@ -492,6 +519,7 @@ ALPHA_LADDER = (0.025, 0.02, 0.015, 0.01, 0.005, 0.0025)
 DEFAULT_SEED = 20261016
 DEFAULT_SIMS = 4000
 NOISE_FLOOR_SIMS = 4000
+NOISE_FLOOR_GRID = tuple(index / 2 for index in range(1, 101))
 DEFAULT_CAP = 10
 SHAPES = ("proportional", "room")
 
@@ -659,8 +687,19 @@ def search(
     for reps, growth_units, current in sizes:
         if current.defects > 200:
             break
+        grown_scenario = scenario
+        growth_count = current.defects - layout.defects
+        if scenario.growth_clearance_rate is not None and growth_count:
+            original_rates = (
+                scenario.clearance_rate if isinstance(scenario.clearance_rate, tuple)
+                else (scenario.clearance_rate,) * scenario.clearance_count
+            )
+            grown_scenario = replace(
+                scenario, clearance_count=scenario.clearance_count + growth_count,
+                clearance_rate=original_rates + (scenario.growth_clearance_rate,) * growth_count,
+            )
         evaluation = _SizeEvaluation(
-            scenario, current, reps=reps, seed=seed, sims=sims, drop=drop, floor=floor,
+            grown_scenario, current, reps=reps, seed=seed, sims=sims, drop=drop, floor=floor,
             draw_stream=prefix_stream if growth_units == initial_units else None,
         )
         prefix_stream = evaluation.stream if growth_units == initial_units else None
@@ -673,7 +712,10 @@ def search(
     decides = False
     reason = "no size reached both bounds and 80% power under every attainable shape"
     if found is not None:
-        if scenario.clearance_count == 0 or not np.any(scenario.clearance_rate):
+        if (
+            evaluation.scenario.clearance_count == 0
+            or not np.any(evaluation.scenario.clearance_rate)
+        ):
             # With no possible clear, enabling the guard changes no outcome.
             decides = True
             reason = "the guard cannot fire; both bounds and powers hold at the chosen level"
@@ -809,6 +851,22 @@ def render_result(
     return "\n".join(lines)
 
 
+def validate_noise_floor_recall(defect_packages, counted_runs, package_runs):
+    """Refuse layouts whose main recall cannot have a package interval.
+
+    Inputs are the shared verdict's validated main-figure counts, with arm
+    first and defect/package last. Recall retains only defects counted in
+    both arms; clean packages cannot provide recall degrees of freedom.
+    """
+    if not np.any(package_runs[1] > 0):
+        raise ValueError("main recall is not computable: every on-arm run is uncounted")
+    retained = np.all(counted_runs > 0, axis=0)
+    if not np.any(retained):
+        raise ValueError("main recall is not computable: no retained defect in both arms")
+    if np.unique(defect_packages[retained]).size < 2:
+        raise ValueError("main recall is not computable: fewer than two retained packages")
+
+
 def noise_floor(layout, rates, sd, *, alpha, seed, reps, sims):
     """Find the first grid drop with 80% power on the observed study's layout.
 
@@ -841,54 +899,46 @@ def noise_floor(layout, rates, sd, *, alpha, seed, reps, sims):
         raise ValueError("reps must be an integer or have shape (2, packages)")
 
     defect_packages = np.repeat(np.arange(layout.package_count), layout.packages)
+    validate_noise_floor_recall(
+        defect_packages, repetitions[:, defect_packages], repetitions,
+    )
     package_runs = np.broadcast_to(
         repetitions[None, :, None, :], (sims, 2, 2, layout.package_count),
     )
-    counted_runs = package_runs[..., defect_packages]
     false_alarms = np.zeros_like(package_runs)
-    empty_counts = np.zeros((sims, 2, 0), dtype=np.int64)
     table = stats.intercept_table(sd)
     off_intercepts = stats.intercept(table, rates)
     maximum_reps = int(np.max(repetitions))
-    attainable = False
-    for half_point in range(1, 101):
+    largest_attainable = None
+    for points in NOISE_FLOOR_GRID:
         powers = []
         for shape in SHAPES:
-            on_rates = drop_rates(rates, half_point / 200, shape)
+            on_rates = drop_rates(rates, points / 100, shape)
             if on_rates is None:
                 continue
-            attainable = True
+            largest_attainable = points
             intercepts = np.stack((off_intercepts, stats.intercept(table, on_rates)))
             detected = np.zeros((sims, 2, layout.defects), dtype=np.int64)
             # Resetting the seed shares the same shocks and uniforms across
             # grid points and shapes, without moving rates between packages.
             rng = np.random.Generator(np.random.PCG64(seed))
             for repetition in range(maximum_reps):
-                shocks = (
-                    rng.normal(0, sd, size=(sims, 2, layout.package_count))
-                    if sd else 0
+                draws = _draw_detections(
+                    rng, intercepts, sd, (sims, 2, layout.package_count), defect_packages,
                 )
-                logits = intercepts + (shocks[..., defect_packages] if sd else 0)
-                probabilities = np.exp(-np.logaddexp(0, -logits))
-                draws = rng.random((sims, 2, layout.defects)) < probabilities
                 counted = (repetitions > repetition)[:, defect_packages]
                 detected += draws & counted
-            simulated = verdict.StudyStats(
-                detections=np.repeat(detected[:, :, None, :], 2, axis=2),
-                counted_runs=counted_runs,
-                defect_packages=defect_packages,
-                false_alarms=false_alarms,
-                package_runs=package_runs,
-                code_detections=empty_counts,
-                code_runs=empty_counts,
-                clears=empty_counts,
-                clear_held_out=np.zeros(0, dtype=bool),
+            simulated = _main_figure_stats(
+                detected, package_runs, defect_packages, false_alarms,
             )
             outcomes = verdict.judge(simulated, rules, named=False)
             powers.append(np.count_nonzero(outcomes.main_recall_loss) / sims)
         if powers and min(powers) >= 0.8:
-            return half_point / 2
-    return "above 50 points" if attainable else "not attainable"
+            return points
+    return (
+        f"above {largest_attainable:g} points" if largest_attainable is not None
+        else "not attainable"
+    )
 
 
 class NoiseFloorRecord(ReviewModel):
@@ -903,7 +953,16 @@ class NoiseFloorRecord(ReviewModel):
     sims: int = Field(ge=1)
     numpy_version: str
     grid: list[float]
-    result: float | Literal["above 50 points", "not attainable"]
+    result: float | str
+
+    @field_validator("result")
+    @classmethod
+    def _grid_result(cls, value: float | str) -> float | str:
+        if isinstance(value, str) and value != "not attainable" and value not in {
+            f"above {points:g} points" for points in NOISE_FLOOR_GRID
+        }:
+            raise ValueError("result must name an above-grid value or be not attainable")
+        return value
 
     @field_validator("noise_floor_schema")
     @classmethod

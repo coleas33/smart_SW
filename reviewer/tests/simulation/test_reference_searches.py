@@ -9,11 +9,14 @@ beside S-10: `uv run pytest -m simulation`.
 
 from __future__ import annotations
 
-import numpy as np
 import pytest
 
 from swreview.benchmark import simulate
-from tests.support.simulation_reference import assert_search_measurements
+from tests.support.simulation_reference import (
+    assert_repetitions_then_growth,
+    assert_search_measurements,
+    assert_search_structure,
+)
 
 pytestmark = pytest.mark.simulation
 SEED = 20261016
@@ -36,32 +39,16 @@ def reference_results():
 
 def test_s7_half_at_sd_one_reaches_ten_then_grows(reference_results):
     search = reference_results[DEFAULT_SCENARIOS[0]]
-    assert search.result is not None
-    assert search.result.reps == 10
-    assert search.result.growth_units >= 1
-    first_growth = next(index for index, row in enumerate(search.tried) if row.growth_units)
-    assert [row.reps for row in search.tried[:first_growth]] == list(range(3, 11))
-    assert all(row.reps == 10 for row in search.tried[first_growth:])
+    assert_repetitions_then_growth(search)
 
 
 @pytest.mark.parametrize("name", DEFAULT_SCENARIOS)
 def test_s9_three_full_searches_hold_both_bounds_and_both_powers(name, reference_results):
     search = reference_results[name]
     result = search.result
-    assert result is not None, name
-    assert result.alpha in simulate.ALPHA_LADDER
+    assert_search_structure(simulate.SCENARIOS[name], search, seed=SEED, sims=4000)
     assert result.identical_loss <= result.identical_loss_upper <= .05
     assert result.no_loss_at_drop <= result.no_loss_at_drop_upper <= .05
     assert result.power_room >= .8
     assert result.power_proportional >= .8
-    assert all(row.reps >= 3 and row.defects >= 34 for row in search.tried)
-    assert result.defects == 34 + 2 * result.growth_units
-    assert result.packages == 51 + 3 * result.growth_units
-    if name.endswith("-clear"):
-        assert search.cleared_guard_decides is False
-        assert search.cleared_guard_reason
-    if name.endswith("-code"):
-        assert search.stress_case == pytest.approx(simulate.stress_case(
-            np.full(10, .95), result.reps,
-        ))
     assert_search_measurements(simulate.SCENARIOS[name], search, seed=SEED, sims=4000)

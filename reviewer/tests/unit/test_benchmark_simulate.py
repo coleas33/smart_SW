@@ -21,7 +21,11 @@ from typer.testing import CliRunner
 
 from swreview.benchmark import digest, simulate, stats, verdict
 from swreview.cli import app
-from tests.support.simulation_reference import assert_search_measurements
+from tests.support.simulation_reference import (
+    assert_repetitions_then_growth,
+    assert_search_measurements,
+    assert_search_structure,
+)
 
 SEED = 20261016
 DEFAULT_SCENARIOS = (
@@ -533,14 +537,7 @@ def test_s7_small_half_at_sd_one_walks_repetitions_to_ten_then_grows(small_resul
     `tests/simulation/test_reference_searches.py`'s claim, not this test's.
     """
     search = small_results[DEFAULT_SCENARIOS[0]]
-    assert search.result is not None
-    assert search.result.reps == 10
-    assert search.result.growth_units >= 1
-    first_growth = next(index for index, row in enumerate(search.tried) if row.growth_units)
-    assert [row.reps for row in search.tried[:first_growth]] == list(range(3, 11))
-    assert all(row.reps == 10 for row in search.tried[first_growth:])
-    grown = search.tried[first_growth:]
-    assert [row.growth_units for row in grown] == list(range(1, len(grown) + 1))
+    assert_repetitions_then_growth(search)
 
 
 @pytest.mark.parametrize("name", DEFAULT_SCENARIOS)
@@ -557,25 +554,7 @@ def test_s9_small_searches_print_every_row_and_match_the_independent_recompute(
     """
     scenario = simulate.SCENARIOS[name]
     search = small_results[name]
-    result = search.result
-    assert result is not None, name
-    assert result.alpha in simulate.ALPHA_LADDER
-    assert all(row.reps >= 3 and row.defects >= 34 for row in search.tried)
-    assert result.defects == 34 + 2 * result.growth_units
-    assert result.packages == 51 + 3 * result.growth_units
-    if name.endswith("-clear"):
-        assert search.cleared_guard_decides is False
-        assert search.cleared_guard_reason
-    if name.endswith("-code"):
-        assert search.stress_case == pytest.approx(simulate.stress_case(
-            np.full(10, .95), result.reps,
-        ))
-    printed = simulate.render_result(scenario, search, seed=SEED, sims=SMALL_SIMS).splitlines()
-    # Every size tried is printed once, in the order tried, then the chosen one.
-    assert [line.split(" growth_units=")[0] for line in printed if line.startswith("reps=")] == [
-        f"reps={row.reps} packages={row.packages} defects={row.defects}" for row in search.tried
-    ]
-    assert f"chosen reps={result.reps} packages={result.packages}" in printed[-1]
+    assert_search_structure(scenario, search, seed=SEED, sims=SMALL_SIMS)
     assert_search_measurements(scenario, search, seed=SEED, sims=SMALL_SIMS)
 
 
@@ -589,13 +568,26 @@ def noise_floor_data():
     }
 
 
-@pytest.mark.parametrize("result", [12.5, "above 50 points", "not attainable"])
+@pytest.mark.parametrize("result", [
+    12.5, "above 0.5 points", "above 30 points", "above 30.5 points",
+    "above 50 points", "not attainable",
+])
 def test_noise_floor_record_reads_each_result_without_computing(tmp_path, result):
     data = {**noise_floor_data(), "result": result}
     path = tmp_path / "noise-floor.json"
     path.write_text(json.dumps(data), encoding="utf-8")
     record = simulate.read_noise_floor(path)
     assert record.model_dump(mode="json") == data
+
+
+@pytest.mark.parametrize("result", [
+    "above 0 points", "above -0.5 points", "above 0.25 points", "above 30.25 points",
+    "above 50.5 points", "above nan points", "above inf points", "above 30",
+    "above thirty points", "above 30.0 points", "above 030 points",
+])
+def test_noise_floor_record_refuses_above_values_outside_the_printed_grid(result):
+    with pytest.raises(ValidationError, match="result"):
+        simulate.NoiseFloorRecord.model_validate(noise_floor_data() | {"result": result})
 
 
 @pytest.mark.parametrize("edit, name", [
@@ -695,3 +687,298 @@ def test_shared_shape_stream_keeps_null_when_the_drop_is_unattainable():
     stream.advance(3)
     assert stream.snapshot("null") is not None
     assert stream.snapshot("proportional") is stream.snapshot("room") is None
+
+
+@pytest.mark.parametrize("sd", [0, 1])
+@pytest.mark.parametrize("variants", [False, True])
+def test_detection_helper_keeps_normal_then_uniform_order_and_shared_variants(sd, variants):
+    package_shape = (7, 2, 2)
+    defect_packages = np.array([0, 0, 1])
+    intercepts = np.array([[-1., 0., 1.], [.5, -.5, 0.]])
+    if variants:
+        intercepts = np.stack((intercepts, intercepts + .2))[:, None, :, :]
+    expected_rng, actual_rng = np.random.default_rng(SEED), np.random.default_rng(SEED)
+    shocks = expected_rng.normal(0, sd, package_shape) if sd else 0
+    logits = intercepts + (shocks[..., defect_packages] if sd else 0)
+    probabilities = 1 / (1 + np.exp(-logits))
+    expected = expected_rng.random((7, 2, 3)) < probabilities
+    actual = simulate._draw_detections(
+        actual_rng, intercepts, sd, package_shape, defect_packages,
+    )
+    np.testing.assert_array_equal(actual, expected)
+    assert actual_rng.random() == expected_rng.random()
+
+
+def test_stream_and_noise_floor_share_detection_and_main_figure_helpers(monkeypatch):
+    calls = {"draw": 0, "assemble": 0}
+    original_draw = simulate._draw_detections
+    original_assemble = simulate._main_figure_stats
+
+    def draw(*args, **kwargs):
+        calls["draw"] += 1
+        return original_draw(*args, **kwargs)
+
+    def assemble(*args, **kwargs):
+        calls["assemble"] += 1
+        return original_assemble(*args, **kwargs)
+
+    monkeypatch.setattr(simulate, "_draw_detections", draw)
+    monkeypatch.setattr(simulate, "_main_figure_stats", assemble)
+    layout = simulate.Layout((2, 2))
+    simulate.draw_studies(
+        simulate.Scenario("shared", "half", 1, 0, None),
+        seed=SEED, sims=3, reps=2, layout=layout,
+    )
+    assert calls == {"draw": 2, "assemble": 1}
+    monkeypatch.setattr(verdict, "judge", lambda *args, **kwargs: SimpleNamespace(
+        main_recall_loss=np.ones(3, dtype=bool),
+    ))
+    assert simulate.noise_floor(
+        layout, [.5] * 4, 1, alpha=.02, seed=SEED, reps=2, sims=3,
+    ) == .5
+    assert calls == {"draw": 6, "assemble": 3}
+
+
+@pytest.mark.parametrize(("sd", "expected", "before_power", "power"), [
+    (0, 22., 101 / 128, 103 / 128),
+    (1, 23., 102 / 128, 104 / 128),
+])
+def test_noise_floor_direct_seeded_number_and_independent_boundary_draws(
+    sd, expected, before_power, power,
+):
+    layout = simulate.Layout((2,) * 17, (2, 0))
+    assert simulate.noise_floor(
+        layout, [.5] * 34, sd, alpha=.02, seed=SEED, reps=3, sims=128,
+    ) == expected
+    # Independent high-order quadrature and bisection solve the marginal on
+    # intercept. The oracle draws normal then uniform, and assembles its own
+    # StudyStats without the simulator's two shared helpers.
+    nodes, weights = np.polynomial.hermite_e.hermegauss(160)
+    weights /= np.sqrt(2 * np.pi)
+    defect_packages = np.repeat(np.arange(17), 2)
+    observed = []
+    for points in (expected - .5, expected):
+        target = .5 - points / 100
+        low, high = -40., 40.
+        for _ in range(60):
+            middle = (low + high) / 2
+            marginal = np.sum(weights / (1 + np.exp(-(middle + sd * nodes))))
+            if marginal < target:
+                low = middle
+            else:
+                high = middle
+        intercepts = np.array([0., (low + high) / 2])[None, :, None]
+        rng = np.random.default_rng(SEED)
+        detected = np.zeros((128, 2, 34), dtype=int)
+        for _ in range(3):
+            shock = rng.normal(0, sd, (128, 2, 17)) if sd else 0
+            probability = 1 / (1 + np.exp(-(
+                intercepts + (shock[..., defect_packages] if sd else 0)
+            )))
+            detected += rng.random((128, 2, 34)) < probability
+        runs = np.full((128, 2, 2, 17), 3)
+        empty = np.zeros((128, 2, 0), dtype=int)
+        data = verdict.StudyStats(
+            detections=np.stack((detected, detected), axis=2),
+            counted_runs=runs[..., defect_packages], defect_packages=defect_packages,
+            false_alarms=np.zeros_like(runs), package_runs=runs,
+            code_detections=empty, code_runs=empty, clears=empty,
+            clear_held_out=np.zeros(0, dtype=bool),
+        )
+        result = verdict.judge(data, verdict.VerdictRules(.02, False), named=False)
+        observed.append(np.count_nonzero(result.main_recall_loss) / 128)
+    assert observed == [before_power, power]
+    assert before_power < .8 <= power
+
+
+def test_noise_floor_masks_each_package_and_arm_count_and_never_detects_at_zero(monkeypatch):
+    observed = []
+
+    def judge(data, rules, *, named):
+        observed.append(data)
+        return SimpleNamespace(main_recall_loss=np.ones(5, dtype=bool))
+
+    monkeypatch.setattr(verdict, "judge", judge)
+    repetitions = np.array([[3, 0, 3], [1, 3, 2]])
+    result = simulate.noise_floor(
+        simulate.Layout((2, 2, 2)), [.5] * 6, 1,
+        alpha=.02, seed=SEED, reps=repetitions, sims=5,
+    )
+    assert result == .5
+    assert len(observed) == 2
+    for data in observed:
+        np.testing.assert_array_equal(
+            data.counted_runs[0, :, 0], [[3, 3, 0, 0, 3, 3], [1, 1, 3, 3, 2, 2]],
+        )
+        np.testing.assert_array_equal(data.detections[:, 0, :, 2:4], 0)
+        assert np.all(data.detections[:, 1, :, :2] <= 1)
+        assert np.all(data.detections <= data.counted_runs)
+
+
+def test_noise_floor_shock_is_shared_inside_a_package(monkeypatch):
+    observed = []
+
+    def judge(data, rules, *, named):
+        observed.append(data.detections[:, 0, 0])
+        return SimpleNamespace(main_recall_loss=np.ones(10000, dtype=bool))
+
+    monkeypatch.setattr(verdict, "judge", judge)
+    simulate.noise_floor(
+        simulate.Layout((2, 2)), [.5] * 4, 1,
+        alpha=.02, seed=SEED, reps=1, sims=10000,
+    )
+    covariance = np.cov(observed[0], rowvar=False)
+    assert covariance[0, 1] > .035
+    assert abs(covariance[0, 2]) < .008
+
+
+def test_noise_floor_search_includes_fifty_points_and_shares_its_record_grid(monkeypatch):
+    assert simulate.NOISE_FLOOR_GRID == tuple(index / 2 for index in range(1, 101))
+    on_intercepts = []
+    original = stats.intercept
+
+    def intercept(table, rates):
+        on_intercepts.append(np.asarray(rates))
+        return original(table, rates)
+
+    def judge(data, rules, *, named):
+        at_end = np.all(on_intercepts[-1] == 0)
+        return SimpleNamespace(main_recall_loss=np.full(2, at_end))
+
+    monkeypatch.setattr(stats, "intercept", intercept)
+    monkeypatch.setattr(verdict, "judge", judge)
+    assert simulate.noise_floor(
+        simulate.Layout((2, 2)), [.5] * 4, 0,
+        alpha=.02, seed=SEED, reps=1, sims=2,
+    ) == 50.
+    assert len(on_intercepts) == 201
+
+
+def test_noise_floor_scalar_repetitions_equal_explicit_counts():
+    layout = simulate.Layout((2,) * 3)
+    options = dict(alpha=.02, seed=SEED, sims=8)
+    scalar = simulate.noise_floor(layout, [.5] * 6, 1, reps=3, **options)
+    explicit = simulate.noise_floor(layout, [.5] * 6, 1, reps=np.full((2, 3), 3), **options)
+    assert scalar == explicit
+
+
+@pytest.mark.parametrize(("rates", "reps", "message"), [
+    ([.5], 3, "one probability per layout defect"),
+    ([[.5] * 4], 3, "one probability per layout defect"),
+    ([.5] * 4, [3, 3], r"shape \(2, packages\)"),
+    ([.5] * 4, [[3, 3, 3], [3, 3, 3]], r"shape \(2, packages\)"),
+    ([.5] * 4, 0, "reps must be an integer at least 1"),
+    ([.5] * 4, [[3, -1], [3, 3]], "reps must be an integer at least 0"),
+    ([.5] * 4, [[3, 1.5], [3, 3]], "reps must be an integer at least 0"),
+])
+def test_noise_floor_refuses_bad_rates_and_repetition_shapes(rates, reps, message):
+    with pytest.raises(ValueError, match=message):
+        simulate.noise_floor(
+            simulate.Layout((2, 2)), rates, 0,
+            alpha=.02, seed=SEED, reps=reps, sims=2,
+        )
+
+
+def test_noise_floor_above_fifty_has_computable_recall_and_low_power(monkeypatch):
+    computable = []
+    original = verdict.judge
+
+    def judge(data, rules, *, named):
+        result = original(data, rules, named=named)
+        computable.append(np.count_nonzero(result.recall_computable))
+        return result
+
+    monkeypatch.setattr(verdict, "judge", judge)
+    assert simulate.noise_floor(
+        simulate.Layout((2,) * 3), [.5] * 6, 0,
+        alpha=.0025, seed=SEED, reps=1, sims=32,
+    ) == "above 50 points"
+    assert max(computable) >= 24
+
+
+@pytest.mark.parametrize(("rate", "expected"), [
+    (.3, "above 30 points"),
+    (.305, "above 30.5 points"),
+    (.004, "not attainable"),
+    (0., "not attainable"),
+])
+def test_noise_floor_seeded_low_power_names_only_the_largest_attainable_grid_drop(
+    rate, expected,
+):
+    assert simulate.noise_floor(
+        simulate.Layout((2,) * 3), [rate] * 6, 0,
+        alpha=.0025, seed=SEED, reps=1, sims=32,
+    ) == expected
+
+
+@pytest.mark.parametrize(("packages", "reps", "message"), [
+    ((2,), 3, "fewer than two retained packages"),
+    ((2, 0), 3, "fewer than two retained packages"),
+    ((2, 2, 0), [[3, 0, 3], [3, 0, 3]], "fewer than two retained packages"),
+    ((2, 2), [[3, 3], [0, 0]], "every on-arm run is uncounted"),
+    ((2, 2), [[0, 0], [3, 3]], "no retained defect in both arms"),
+    ((2, 2), [[3, 0], [0, 3]], "no retained defect in both arms"),
+    ((2, 2, 0), [[3, 3, 3], [0, 0, 3]], "no retained defect in both arms"),
+])
+def test_noise_floor_refuses_a_structurally_uncomputable_main_recall_before_draws(
+    packages, reps, message, monkeypatch,
+):
+    def unexpected_draw(*args, **kwargs):
+        pytest.fail("an uncomputable main recall must be refused before simulation draws")
+
+    monkeypatch.setattr(simulate, "_draw_detections", unexpected_draw)
+    layout = simulate.Layout(packages)
+    with pytest.raises(ValueError, match=f"main recall is not computable: {message}"):
+        simulate.noise_floor(
+            layout, [.5] * layout.defects, 0,
+            alpha=.02, seed=SEED, reps=reps, sims=2,
+        )
+
+
+def test_grown_search_extends_clearances_with_the_pilot_pooled_rate(monkeypatch):
+    observed = []
+    original = simulate._SizeEvaluation
+
+    class Evaluation(original):
+        def choose(self, decides, growth_units):
+            observed.append((self.scenario, self.layout, decides))
+            passed = growth_units >= 1
+            return simulate.SizeResult(
+                self.reps, self.layout.package_count, self.layout.defects,
+                growth_units, .02, .9 if passed else .5, .9 if passed else .5,
+                0, .01, 0, .01,
+            )
+
+    monkeypatch.setattr(simulate, "_SizeEvaluation", Evaluation)
+    scenario = simulate.Scenario(
+        "pilot", "half", 0, 0, None, clearance_count=34,
+        clearance_rate=(0.,) * 33 + (1 / 3,), growth_clearance_rate=1 / 102,
+    )
+    result = simulate.search(scenario, layout=simulate.Layout((2,) * 17), cap=3, sims=2)
+    assert result.result.growth_units == 1
+    grown, layout, deciding = observed[-1]
+    assert deciding is True
+    assert grown.clearance_count == 36
+    assert grown.clearance_rate == (0.,) * 33 + (1 / 3, 1 / 102, 1 / 102)
+    drawn = simulate.draw_studies(grown, seed=SEED, sims=20000, reps=3, layout=layout)
+    for arm in (0, 1):
+        assert np.mean(drawn.clears[:, arm, -2:]) / 3 == pytest.approx(1 / 102, abs=.001)
+    expected_null = 1 - (
+        (1 - (1 - (2 / 3)**3) * (2 / 3)**3)
+        * (1 - (1 - (101 / 102)**3) * (101 / 102)**3)**2
+    )
+    fired = np.any((drawn.clears[:, 1] > 0) & (drawn.clears[:, 0] == 0), axis=1)
+    assert fired.mean() == pytest.approx(expected_null, abs=.01)
+
+
+def test_reference_structure_assertions_are_shared_by_small_and_full_searches(small_results):
+    from tests.support import simulation_reference
+
+    search = small_results[DEFAULT_SCENARIOS[0]]
+    simulation_reference.assert_repetitions_then_growth(search)
+    simulation_reference.assert_search_structure(
+        simulate.SCENARIOS[DEFAULT_SCENARIOS[0]], search, seed=SEED, sims=SMALL_SIMS,
+    )
+    broken = replace(search, tried=(search.tried[1], search.tried[0], *search.tried[2:]))
+    with pytest.raises(AssertionError):
+        simulation_reference.assert_repetitions_then_growth(broken)

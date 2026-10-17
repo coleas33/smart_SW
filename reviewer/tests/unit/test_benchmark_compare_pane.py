@@ -230,14 +230,19 @@ def test_c4_keys_below_34_held_out_model_defects_refuse_before_measurement(tmp_p
     assert_refusal(invoke(runs, out), out, runs, "33", "34")
 
 
-def test_c10_private_study_has_all_intervals_and_no_verdict_or_measurement_refusal(tmp_path):
+@pytest.mark.parametrize("stored_noise", [False, True])
+def test_c10_private_study_has_all_intervals_and_no_verdict_or_measurement_refusal(
+    tmp_path, stored_noise,
+):
     runs = write_pane_study(tmp_path / "runs", study(count=2), study=PRIVATE_PANE_STUDY)
     # Private rows skip committed-only and sizing refusals, even for private paths and <34 defects.
     edit_saved_sets(runs, lambda record: record["packages"][0].update(
         path="C:/Fictional/private/case-00",
     ))
     out = tmp_path / "out"
-    result = invoke(runs, out)
+    noise = ([write_noise_floor(tmp_path / "noise", runs, study=PRIVATE_PANE_STUDY)]
+             if stored_noise else [])
+    result = invoke(runs, out, noise_floors=noise)
     assert result.exit_code == 0, result.output
     block = block_from(out)
     assert block["slice"] == "private"
@@ -247,6 +252,10 @@ def test_c10_private_study_has_all_intervals_and_no_verdict_or_measurement_refus
     assert block["figures"]["sensitivity"]
     assert block["code_guard"] is not None and block["cleared_guard"] is not None
     assert block["shown"]
+    assert block["noise_floor"] == {
+        "state": "not_computed", "points": None, "seed": None, "numpy": None,
+    }
+    assert "Noise floor: not computed" in (out / "ledger.md").read_text(encoding="utf-8")
     assert json.loads((out / "ledger.json").read_bytes())["levers"] == []
 
 
@@ -450,6 +459,29 @@ def test_markdown_pane_section_holds_the_contracts_order_points_and_unknowns(tmp
 
 
 # T233: pilot approvals, saved noise floors and discovery, all through stored records.
+
+
+@pytest.mark.parametrize("points", ["above 0.5 points", "above 30 points", "above 30.5 points",
+                                    "above 50 points"])
+def test_compare_renders_stored_attainable_noise_limit_verbatim(
+    tmp_path, pane_runs, monkeypatch, points,
+):
+    runs = pane_runs()
+    measurement = write_measurement(tmp_path / "pilot")
+    noise = write_noise_floor(tmp_path / "noise", runs)
+    edit_json(noise, lambda data: data.update(result=points))
+
+    def no_simulation(*args, **kwargs):
+        pytest.fail("compare must render the stored noise floor without simulating")
+
+    monkeypatch.setattr(simulate, "search", no_simulation)
+    monkeypatch.setattr(simulate, "noise_floor", no_simulation)
+    out = tmp_path / "out"
+    result = invoke(runs, out, pilots=[measurement], noise_floors=[noise])
+    assert result.exit_code == 0, result.output
+    assert block_from(out)["noise_floor"]["points"] == points
+    text = (out / "ledger.md").read_text(encoding="utf-8")
+    assert f"Noise floor: {points}; seed 140514; numpy 2.4.6." in text
 
 
 @pytest.mark.parametrize("count", [0, 2])

@@ -16,8 +16,9 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Annotated, Literal
 
 import numpy as np
-from pydantic import AfterValidator, Field, field_validator
+from pydantic import AfterValidator, Field, field_validator, model_serializer
 
+from swreview.agent import settings
 from swreview.agent.checklist import load_checklist
 from swreview.atomic import write_atomic
 from swreview.benchmark import answer_key, digest, matching, sets, simulate, verdict
@@ -40,6 +41,7 @@ class RunRecord:
     provenance: RunProvenance
     sessions: Mapping[str, ReviewSession]
     saved_set: BenchmarkSet
+    study_key: tuple[str, str | None, str | None]
 
 
 def _relative_folder(value: str) -> str:
@@ -198,6 +200,17 @@ class SizingResult(ReviewModel):
     simulated: SimulatedRates
     stress_case: float | None
     estimated_study_cost: float | None
+    state: Literal["reached", "not reached", "not attainable"] | None = None
+    cleared_guard_reason: str | None = None
+
+    @model_serializer(mode="wrap")
+    def _optional_search_fields(self, handler):
+        """Older schema-1 files retain their exact computed blocks and digest."""
+        result = handler(self)
+        for name in ("state", "cleared_guard_reason"):
+            if name not in self.model_fields_set:
+                result.pop(name, None)
+        return result
 
 
 class ProjectedWallClock(ReviewModel):
@@ -214,7 +227,7 @@ class ProjectedWallClock(ReviewModel):
 
 
 class Sizing(ReviewModel):
-    cap: int = Field(ge=1)
+    cap: int = Field(ge=3)
     floor: int = Field(ge=1)
     seed: int
     sims: int = Field(ge=1)
@@ -255,7 +268,20 @@ def read_measurement(path: Path | str) -> PilotMeasurement:
     return PilotMeasurement.model_validate_json(Path(path).read_bytes())
 
 
-def beta_fit(counts: Mapping[str, tuple[int, int]]) -> BetaFit:
+def _count_groups(counts):
+    """RF-9 partitions: n=0 dropped, n=1 outside V, n>=2 eligible for V."""
+    eligible, excluded, dropped = [], [], []
+    for name, (x, n) in counts.items():
+        if n == 0:
+            dropped.append(name)
+        elif n == 1:
+            excluded.append(name)
+        else:
+            eligible.append((x / n, n))
+    return eligible, excluded, dropped
+
+
+def beta_fit(counts: Mapping[str | tuple[str, str], tuple[int, int]]) -> BetaFit:
     """Fit moments after removing binomial sampling variance (sample variance)."""
     for name, (x, n) in counts.items():
         if (isinstance(x, bool) or isinstance(n, bool)
@@ -263,7 +289,7 @@ def beta_fit(counts: Mapping[str, tuple[int, int]]) -> BetaFit:
             raise ValueError(f"counts for {name} must be integers with 0 <= x <= n")
     total = sum(n for x, n in counts.values())
     mu = sum(x for x, n in counts.values()) / total if total else None
-    eligible = [(x / n, n) for x, n in counts.values() if n >= 2]
+    eligible, _, _ = _count_groups(counts)
     computable = len(eligible) >= 2
     variance = None
     if computable:
@@ -288,7 +314,7 @@ def beta_fit(counts: Mapping[str, tuple[int, int]]) -> BetaFit:
                    distribution=distribution, a=a, b=b, reason=reason)
 
 
-def shrunk_rates(counts, fit: BetaFit) -> dict[str, float]:
+def shrunk_rates(counts, fit: BetaFit):
     """Posterior means, with the continuous constant/polarised limits explicit."""
     if fit.mu is None:
         return {}
@@ -306,15 +332,20 @@ def _arm_index(arm: Literal["off", "on"]) -> int:
     return verdict.ARMS.index(arm)
 
 
+def _defect_key(ref: verdict.DefectRef) -> tuple[str, str]:
+    """Identity stays unambiguous when either component contains a slash."""
+    return ref.package_id, ref.defect_id
+
+
 def defect_counts(
     stats: verdict.StudyStats, arm: Literal["off", "on"],
-) -> dict[str, tuple[int, int]]:
+) -> dict[tuple[str, str], tuple[int, int]]:
     """One observed study's main-figure counts, keyed by package/defect identity."""
     index = _arm_index(arm)
     if stats.detections.shape[0] != 1:
         raise ValueError("defect_counts needs one study")
     return {
-        f"{ref.package_id}/{ref.defect_id}": (
+        _defect_key(ref): (
             int(stats.detections[0, index, 0, i]), int(stats.counted_runs[0, index, 0, i]),
         ) for i, ref in enumerate(stats.defect_ids)
     }
@@ -331,20 +362,18 @@ def comovement(
     rates = shrunk_rates(defect_counts(stats, arm), fit)
     if not rates:
         return CoMovement(grid=[], estimate=None, used=None)
-    references = [f"{ref.package_id}/{ref.defect_id}" for ref in stats.defect_ids]
+    references = [_defect_key(ref) for ref in stats.defect_ids]
     grid = []
     for sd in np.arange(0, 2.51, 0.25):
         intercepts = statistics.intercept(
-            statistics.intercept_table(float(sd)), [rates.get(name, 0) for name in references],
+            statistics.intercept_table(float(sd)), [rates[name] for name in references],
         )
         logits = intercepts[:, None] + float(sd) * statistics._GH_POINTS
         log_yes = -np.logaddexp(0, -logits)
         log_no = -np.logaddexp(0, logits)
         likelihood = 0.0
         for package in range(len(stats.package_ids)):
-            selected = (stats.defect_packages == package) & np.array([
-                name in rates for name in references
-            ])
+            selected = stats.defect_packages == package
             if not np.any(selected):
                 continue
             for run in np.flatnonzero(vectors.counted[0, index, :, package]):
@@ -354,6 +383,10 @@ def comovement(
                 ), axis=0)
                 terms = conditional + np.log(statistics._GH_WEIGHTS)
                 maximum = float(np.max(terms))
+                if not math.isfinite(maximum):
+                    raise ValueError(
+                        f"fit's limit rates contradict the observed vectors for arm {arm!r}"
+                    )
                 likelihood += maximum + math.log(float(np.sum(np.exp(terms - maximum))))
         grid.append(ShockPoint(sd=float(sd), log_likelihood=likelihood))
     maximum = max(point.log_likelihood for point in grid)
@@ -426,23 +459,22 @@ def never_detected(records: Sequence[RunRecord], stats: verdict.StudyStats) -> l
     return result
 
 
-def study_layout(records: Sequence[RunRecord]) -> simulate.Layout:
+def study_layout(
+    records: Sequence[RunRecord], *, stats: verdict.StudyStats | None = None,
+) -> simulate.Layout:
     """Saved-set order, scored held-out model identities, and each core's twins."""
     if not records:
         raise ValueError("study_layout needs pilot runs")
+    if stats is None:
+        stats = verdict.study_stats([record.study_run for record in records])
     entries = records[0].saved_set.packages
-    counts = {entry.package_id: set() for entry in entries}
-    for record in records:
-        card = record.study_run.scorecard
-        for package in (*card.per_package, *card.unscored_packages):
-            for item in package.graded_items:
-                if (item.kind == "known_defect" and item.producer == "model"
-                        and item.tag == "held_out"):
-                    counts[package.package_id].add(item.id)
-    package_counts = tuple(len(counts[entry.package_id]) for entry in entries)
+    counts = {entry.package_id: 0 for entry in entries}
+    for ref in stats.defect_ids:
+        counts[ref.package_id] += 1
+    package_counts = tuple(counts[entry.package_id] for entry in entries)
     units = [
-        (len(counts[entry.package_id]), *(
-            len(counts[twin.package_id]) for twin in entries if twin.twin_of == entry.package_id
+        (counts[entry.package_id], *(
+            counts[twin.package_id] for twin in entries if twin.twin_of == entry.package_id
         )) for entry in entries if counts[entry.package_id] and entry.twin_of is None
     ]
     if not units or any(unit != units[0] for unit in units):
@@ -450,11 +482,35 @@ def study_layout(records: Sequence[RunRecord]) -> simulate.Layout:
     return simulate.Layout(package_counts, units[0])
 
 
+def layout_inputs(
+    records: Sequence[RunRecord], stats: verdict.StudyStats,
+    rates: Mapping[tuple[str, str], float],
+) -> tuple[simulate.Layout, list[float], list[list[int]]]:
+    """Align rates and counted repetitions with the saved set's package order."""
+    if not records:
+        raise ValueError("layout_inputs needs study runs")
+    package_index = {name: index for index, name in enumerate(stats.package_ids)}
+    entries = records[0].saved_set.packages
+    ordered_rates = []
+    repetitions = [[], []]
+    for entry in entries:
+        if entry.package_id not in package_index:
+            raise ValueError(f"saved set package {entry.package_id!r} is absent from scorecards")
+        index = package_index[entry.package_id]
+        ordered_rates.extend(
+            rates[_defect_key(ref)] for ref in stats.defect_ids
+            if ref.package_id == entry.package_id
+        )
+        for arm in range(2):
+            repetitions[arm].append(int(stats.package_runs[0, arm, 0, index]))
+    return study_layout(records, stats=stats), ordered_rates, repetitions
+
+
 def project_wall_clock(
     off_times: Mapping[str, float | None], *, on_ratio: float, jobs: int,
-    repetitions: int, growth: int,
+    repetitions: int, growth: int, growth_packages: Sequence[str] = (),
 ) -> ProjectedWallClock:
-    """List-schedule in mapping order; growth is the number of added packages."""
+    """List-schedule in set order; added packages use committed cores/twins' mean."""
     for name, value, minimum in (("jobs", jobs, 1), ("repetitions", repetitions, 1),
                                   ("growth", growth, 0)):
         if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
@@ -465,10 +521,17 @@ def project_wall_clock(
     if any(value is not None and (not math.isfinite(value) or value < 0)
            for value in off_times.values()):
         raise ValueError("off_times must be finite and nonnegative or None")
+    if growth and not growth_packages:
+        raise ValueError("growth_packages must name the committed core cases and twins")
+    for name in growth_packages:
+        if name not in off_times:
+            raise ValueError(f"growth package {name!r} has no pilot time")
     off = on = study = None
     if off_times and not unknown:
         times = list(off_times.values())
-        times.extend([float(np.mean(times))] * growth)
+        if growth:
+            growth_mean = _mean([off_times[name] for name in growth_packages])
+            times.extend([growth_mean] * growth)
         slots = [0.0] * min(jobs, len(times))
         for seconds in times:
             heapq.heapreplace(slots, slots[0] + seconds)
@@ -482,18 +545,26 @@ def project_wall_clock(
     )
 
 
+def check_smoke_count(smoke: Sequence[object] | None) -> None:
+    """One count refusal for the command's paths and measure's loaded views."""
+    if smoke is None or len(smoke) != 2:
+        raise ValueError("--smoke must be given exactly twice, once for each arm")
+
+
 def _validate_records(records: Sequence[RunRecord], smoke: Sequence[RunRecord]) -> None:
     if not records:
-        raise ValueError("pilot needs pane_defaults off-arm runs")
+        raise ValueError(f"pilot needs {settings.PANE_STUDY} off-arm runs")
     first = records[0].provenance
     for record in records:
         provenance = record.provenance
-        if provenance.lever != "pane_defaults":
-            raise ValueError(f"{record.folder}: study must be pane_defaults")
+        if record.study_key[0] != settings.PANE_STUDY:
+            raise ValueError(f"{record.folder}: study must be {settings.PANE_STUDY}")
         if provenance.arm != "off":
             raise ValueError(f"{record.folder}: arm must be off")
-        for name in ("provider", "model", "effort", "commit", "set_digest"):
-            if getattr(provenance, name) != getattr(first, name):
+        # compare checks must-match fields within each study key. Only these
+        # key fields can differ across its validated groups.
+        for index, name in ((1, "provider"), (2, "model")):
+            if record.study_key[index] != records[0].study_key[index]:
                 raise ValueError(f"{record.folder}: {name} differs from the pilot")
         if not record.study_run.scorecard.per_package:
             raise ValueError(f"{record.folder}: unscored run")
@@ -501,16 +572,19 @@ def _validate_records(records: Sequence[RunRecord], smoke: Sequence[RunRecord]) 
             sets.key_path(entry, None)
     if len({record.provenance.rep for record in records}) < 2:
         raise ValueError("co-movement needs at least two runs of a package")
-    if len(smoke) != 2:
-        raise ValueError("--smoke must be given exactly twice")
+    check_smoke_count(smoke)
     if {record.provenance.arm for record in smoke} != {"off", "on"}:
         names = ", ".join(str(record.folder) for record in smoke)
         raise ValueError(f"{names}: smoke arm must include one off and one on")
     for record in smoke:
-        for name in ("lever", "provider", "model", "effort", "commit"):
+        for index, name in enumerate(("study (lever)", "provider", "model")):
+            if record.study_key[index] != records[0].study_key[index]:
+                raise ValueError(f"{record.folder}: smoke {name} differs from the pilot")
+        # The smoke set is deliberately distinct, so compare cannot check these
+        # two must-match fields against the pilot in either loader call.
+        for name in ("effort", "commit"):
             if getattr(record.provenance, name) != getattr(first, name):
-                field = "study (lever)" if name == "lever" else name
-                raise ValueError(f"{record.folder}: smoke {field} differs from the pilot")
+                raise ValueError(f"{record.folder}: smoke {name} differs from the pilot")
         for pilot_record in records:
             available = {entry.package_id: entry for entry in pilot_record.saved_set.packages}
             for entry in record.saved_set.packages:
@@ -519,8 +593,6 @@ def _validate_records(records: Sequence[RunRecord], smoke: Sequence[RunRecord]) 
                                      "is not held by every pilot saved set")
         card = record.study_run.scorecard
         scores = {score.package_id: score for score in card.per_package}
-        if card.unscored_packages:
-            raise ValueError(f"{record.folder}: smoke unscored package has no kept attempt")
         for entry in record.saved_set.packages:
             if entry.package_id not in scores:
                 raise ValueError(f"{record.folder}: smoke package {entry.package_id} "
@@ -599,7 +671,7 @@ def measure(
                         60 * (score.usage.input_tokens + score.usage.output_tokens)
                         / score.wall_clock_s,
                     )
-    layout = study_layout(records)
+    layout = study_layout(records, stats=data)
     def rate_draw(rng, shape):
         if fit.distribution == "beta":
             return rng.beta(fit.a, fit.b, size=shape)
@@ -614,6 +686,9 @@ def measure(
         stop_rate=stops.x / stops.n if stops.n else 0,
         clearance_count=len(clear_rates), clearance_rate=clear_rates or 0,
         code_count=len(code_rates), code_rate=code_rates or 0,
+        growth_clearance_rate=(sum(item.x for item in clearances)
+                               / sum(item.n for item in clearances)
+                               if any(item.n for item in clearances) else 0),
     )
     if seed is None:
         seed = secrets.randbits(63)
@@ -633,18 +708,12 @@ def measure(
         simulated=_simulated_rates(chosen), stress_case=searched.stress_case,
         estimated_study_cost=(2 * chosen.reps * chosen.packages * mean_cost
                               if mean_cost is not None else None),
+        state=searched.state, cleared_guard_reason=searched.cleared_guard_reason,
     )
     off_times = {name: _mean(values) for name, values in package_times.items()}
     entries = records[0].saved_set.packages
     cores = {data.package_ids[int(p)] for p in data.defect_packages}
     growth_ids = cores | {entry.package_id for entry in entries if entry.twin_of in cores}
-    growth_mean = _mean([off_times[name] for name in off_times
-                         if name in growth_ids and off_times[name] is not None])
-    # Explicit added entries keep the public scheduler's arithmetic while using
-    # only committed cores and twins to estimate each growth package's time.
-    projected_times = dict(off_times)
-    for i in range(chosen.growth_units * len(layout.growth_unit)):
-        projected_times[f"growth-{i + 1}"] = growth_mean
     smoke_totals = {}
     for record in smoke:
         values = [score.wall_clock_s for score in record.study_run.scorecard.per_package]
@@ -657,17 +726,20 @@ def measure(
         projection = ProjectedWallClock(
             off_run_s=None, on_run_s=None, study_s=None, smoke_ratio=None,
             smoke_off_s=smoke_off, smoke_on_s=smoke_on, mean_tokens_per_minute=None,
-            unknown_packages=[name for name, value in projected_times.items() if value is None],
+            unknown_packages=[name for name, value in off_times.items() if value is None],
         )
     else:
-        projection = project_wall_clock(projected_times, on_ratio=ratio, jobs=jobs,
-                                        repetitions=chosen.reps, growth=0)
+        projection = project_wall_clock(
+            off_times, on_ratio=ratio, jobs=jobs, repetitions=chosen.reps,
+            growth=chosen.growth_units * len(layout.growth_unit),
+            growth_packages=[entry.package_id for entry in entries
+                             if entry.package_id in growth_ids],
+        )
         projection.smoke_off_s, projection.smoke_on_s = smoke_off, smoke_on
     projection.mean_tokens_per_minute = _mean(tokens_per_minute)
-    dropped = [ref for ref in data.defect_ids
-               if counts[f"{ref.package_id}/{ref.defect_id}"][1] == 0]
-    excluded = [ref for ref in data.defect_ids
-                if counts[f"{ref.package_id}/{ref.defect_id}"][1] == 1]
+    _, excluded_keys, dropped_keys = _count_groups(counts)
+    dropped = [ref for ref in data.defect_ids if _defect_key(ref) in dropped_keys]
+    excluded = [ref for ref in data.defect_ids if _defect_key(ref) in excluded_keys]
     relative_records = [replace(
         record, study_run=replace(record.study_run, run=_relative_run(record, relative_to)),
     ) for record in records]
@@ -684,7 +756,7 @@ def measure(
         measured=Measured(
             defect_counts=[DefectCount(**ref.model_dump(), x=counts[name][0], n=counts[name][1])
                            for ref in data.defect_ids
-                           for name in [f"{ref.package_id}/{ref.defect_id}"]],
+                           for name in [_defect_key(ref)]],
             dropped_defects=[DefectRef(**ref.model_dump()) for ref in dropped],
             dropped_defect_count=len(dropped),
             variance_excluded_defects=[DefectRef(**ref.model_dump()) for ref in excluded],
@@ -709,12 +781,18 @@ def measure(
     return measurement
 
 
-def write_measurement(path: Path | str, measurement: PilotMeasurement) -> None:
-    """Write a fresh unapproved measurement with the digest of its computed blocks."""
+def refuse_existing(path: Path | str) -> None:
+    """Refuse overwriting the one measurement before loading or before writing."""
     path = Path(path)
     if path.exists():
         raise ValueError(f"{path} exists: one study has one measurement; "
                          "delete the unapproved file to size again")
+
+
+def write_measurement(path: Path | str, measurement: PilotMeasurement) -> None:
+    """Write a fresh unapproved measurement with the digest of its computed blocks."""
+    path = Path(path)
+    refuse_existing(path)
     measurement = measurement.model_copy(update={"approval": Approval()})
     measurement.sizing_digest = sizing_digest(measurement)
     path.parent.mkdir(parents=True, exist_ok=True)

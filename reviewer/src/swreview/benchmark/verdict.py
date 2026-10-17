@@ -127,7 +127,7 @@ class StudyApproval(ReviewModel):
 
 class NoiseFloor(ReviewModel):
     state: Literal["computed", "not_computed", "stale"]
-    points: float | Literal["above 50 points", "not attainable"] | None
+    points: float | str | None
     seed: int | None
     numpy: str | None
 

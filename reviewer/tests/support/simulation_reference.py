@@ -3,8 +3,43 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from swreview.benchmark import simulate, stats, verdict
+
+
+def assert_repetitions_then_growth(search):
+    """S-7's shared cap walk and consecutive growth units at that cap."""
+    assert search.result is not None
+    assert search.result.reps == 10
+    assert search.result.growth_units >= 1
+    first_growth = next(index for index, row in enumerate(search.tried) if row.growth_units)
+    assert [row.reps for row in search.tried[:first_growth]] == list(range(3, 11))
+    grown = search.tried[first_growth:]
+    assert all(row.reps == 10 for row in grown)
+    assert [row.growth_units for row in grown] == list(range(1, len(grown) + 1))
+
+
+def assert_search_structure(scenario, search, *, seed, sims):
+    """S-9's shared size, guard, stress and printed-row assertions at any sims."""
+    result = search.result
+    assert result is not None, scenario.name
+    assert result.alpha in simulate.ALPHA_LADDER
+    assert all(row.reps >= 3 and row.defects >= 34 for row in search.tried)
+    assert result.defects == 34 + 2 * result.growth_units
+    assert result.packages == 51 + 3 * result.growth_units
+    if scenario.name.endswith("-clear"):
+        assert search.cleared_guard_decides is False
+        assert search.cleared_guard_reason
+    if scenario.name.endswith("-code"):
+        assert search.stress_case == pytest.approx(simulate.stress_case(
+            np.full(10, .95), result.reps,
+        ))
+    printed = simulate.render_result(scenario, search, seed=seed, sims=sims).splitlines()
+    assert [line.split(" growth_units=")[0] for line in printed if line.startswith("reps=")] == [
+        f"reps={row.reps} packages={row.packages} defects={row.defects}" for row in search.tried
+    ]
+    assert f"chosen reps={result.reps} packages={result.packages}" in printed[-1]
 
 
 def assert_search_measurements(scenario, search, *, seed, sims):

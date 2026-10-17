@@ -246,6 +246,11 @@ rule:
 | 8 | `approved_at` is later than the date of the earliest study run's `started_at` | both dates; "levels chosen after the paid runs void the 5% bounds" (research §8.1) |
 | 9 | the keys' count is below the approved size; an arm has fewer distinct repetitions than approved; or the study's saved sets do not hold every package id the measurement's `sizing.pilot_packages` names plus at least `sizing.growth_units` core cases beyond them (a package outside `pilot_packages` whose `graded_items` hold a held-out known defect, so a twin, whose held-out items are conditions, is never a unit; plan decisions RF-40, RF-66) | the count, the repetitions, or the missing pilot packages and the growth units found, against the approval (US5-5, FR-032) |
 
+*Amended 2026-10-17 (owner decision 117A):* refusal 7 also refuses an approved measurement whose
+`sizing.result.state`, when present, is not `reached`, naming the file and the state; a measurement
+written before that field existed reads as before. `compare.measurement_refusal` holds refusals 6 to 8
+once, and `benchmark noise-floor` calls it (116A).
+
 A `pane_defaults_private` study is refused on rows 1 and 3 only, which its intervals need as much
 as the verdict does; rows 2 and 4 to 9 do not apply to it: it is the private slice's study, shown
 and never deciding (23A, section 11; plan decision RF-24).
@@ -412,6 +417,11 @@ fail at 0.0507 (test V-5), research §8.2's "about 4.4% or less".
   never below 34 defects or 3 repetitions (SC-005).
 - Every size tried is printed: repetitions, packages, defects, the chosen `alpha` or "none", both
   powers, both rates with their upper bounds.
+- *Amended 2026-10-17 (owner decision 116A):* when the search grows a pilot's measured layout, each
+  added held-out model-produced defect clears at the pilot's pooled clearance rate (cleared runs over
+  counted opportunities, across the measured held-out model and code defects), drawn independently per
+  arm and repetition, so the cleared guard's check at a grown size never treats a growth defect as
+  one that cannot clear.
 
 ### 9.6 The cleared guard's place
 
@@ -429,6 +439,11 @@ FR-054). The **stress case**, both arms at the off arm's rate, is printed and ne
 `1 − prod(1 − p_j^R (1 − p_j^R))` over the code-produced defects; at SC-010's ten at 0.95 it is the
 same 0.729, 0.885 and 0.936 (test S-5).
 
+*Amended 2026-10-17 (owner decision 117A):* the search's state (`reached`, `not reached` or `not
+attainable`) and the reason for the cleared guard's place are kept in the measurement as
+`sizing.result.state` and `sizing.result.cleared_guard_reason`, optional and additive (`PILOT_SCHEMA`
+stays 1), and printed from the search, never re-derived.
+
 ### 9.7 The noise floor (spec Terms, D14.8)
 
 On the study's own layout and counted repetitions, each defect at its own off-arm rate shrunk by the
@@ -436,6 +451,13 @@ study's Beta fit (section 10.2), the shock at the study's plug-in estimate, the 
 seed, and 4,000 simulations: the smallest drop on a 0.5-point grid from 0.5 to 50 points whose power,
 under the lower of the attainable shapes, is at least 80%. "Above 50 points" or "not attainable"
 otherwise.
+*Amended 2026-10-17 (owner decisions 119A, 120A):* when no attainable grid drop reaches 80%,
+the record reads "above N points", N the largest attainable grid drop ("above 50 points" only when
+50 is attainable; a record holding it from before reads as before); "not attainable" when no grid drop
+is attainable. A study whose main recall rule is never computable is refused, naming why, and
+nothing is written. `benchmark noise-floor` refuses a `pane_defaults_private` study before reading
+`--pilot`: the private slice has no approved measurement, so its noise floor is not computed, and its
+row reads "not computed" (section 11).
 
 **Simulated once, stored, read** (plan decision RF-53). `swreview benchmark noise-floor <run
 dirs...> --pilot <file> --out <file>` computes it after the study's last repetition is scored, and
