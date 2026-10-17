@@ -1,0 +1,1269 @@
+S-10, the 39 reference scenarios (tasks.md T235; SC-010; verdict.md 9 and 12)
+Commit: 870f7fe (Feature 014 slice 7: the whole-slice review's fixes, 112A and 113A)
+Date: 2026-10-16, on the development machine
+Python 3.12.3, numpy 2.5.3
+Command (from reviewer/): uv run pytest -q -s -m simulation tests/simulation/test_reference_scenarios.py
+Result: exit 0, 39 of 39 scenarios passed; every scenario holds both 5% bounds with power of at least 80% under each attainable shape, and every half-sd1.0-* scenario reaches 10 repetitions and then at least one growth unit
+Wall time: 1089 s (the searches alone took 191 s under 111A; the rest is the test's independent redraw of every tried size, assert_search_measurements, added by 112A)
+Each scenario prints its inputs, every size tried and the chosen size; the BOUND line after each is the test's summary of the chosen size. The dots are pytest's progress marks.
+
+Scenario half-sd0-fa0.2-nb0.5
+rate_distribution: "half"
+shock_sd: 0
+marginal_rate_rule: "E[logistic(a + sigma*Z)] = p; 40-node Gauss-Hermite, 3,999-rate intercept table; identical arms share intercepts"
+layout: {"defects": 34, "growth_unit": [2, 0, 0], "package_count": 51, "packages": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "placement": "rates shuffled among defects independently per simulated study"}
+false_alarm_model: {"distribution": "gamma-poisson", "mean": 0.2, "size": 0.5, "variance": 0.28}
+stops: {"probability": 0, "source": "Bernoulli per package run and arm; stopped alarms thinned by U(0,1)"}
+clearances: {"defects": 0, "probability": 0, "source": "independent Bernoulli per chosen defect, run and arm"}
+code_produced_defects: {"defects": 0, "off_rate": 0.95, "on_rate": 1}
+drop: 0.1
+shapes: ["proportional", "room"]
+alpha_ladder: [0.025, 0.02, 0.015, 0.01, 0.005, 0.0025]
+deciding_rules: ["recall loss: main and sensitivity", "false-alarm rise: main and sensitivity", "code-defect guard: main", "cleared guard: only if both bounds and powers hold"]
+sims: 4000
+seed: 20261016
+cap: 10
+floor: 34
+numpy_version: "2.5.3"
+reps=3 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.243000 power_room=0.243000 identical_loss=0.037750 identical_loss_upper=0.043027 no_loss_at_drop=0.018000 no_loss_at_drop_upper=0.021798
+reps=4 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.308750 power_room=0.308750 identical_loss=0.037000 identical_loss_upper=0.042230 no_loss_at_drop=0.018750 no_loss_at_drop_upper=0.022617
+reps=5 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.381000 power_room=0.381000 identical_loss=0.038500 identical_loss_upper=0.043824 no_loss_at_drop=0.018000 no_loss_at_drop_upper=0.021798
+reps=6 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.447750 power_room=0.447750 identical_loss=0.039000 identical_loss_upper=0.044354 no_loss_at_drop=0.019000 no_loss_at_drop_upper=0.022889
+reps=7 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.508750 power_room=0.508750 identical_loss=0.037750 identical_loss_upper=0.043027 no_loss_at_drop=0.020750 no_loss_at_drop_upper=0.024794
+reps=8 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.553250 power_room=0.553250 identical_loss=0.041250 identical_loss_upper=0.046740 no_loss_at_drop=0.019250 no_loss_at_drop_upper=0.023162
+reps=9 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.604000 power_room=0.604000 identical_loss=0.039250 identical_loss_upper=0.044620 no_loss_at_drop=0.019000 no_loss_at_drop_upper=0.022889
+reps=10 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.651750 power_room=0.651750 identical_loss=0.039250 identical_loss_upper=0.044620 no_loss_at_drop=0.017250 no_loss_at_drop_upper=0.020977
+reps=10 packages=54 defects=36 growth_units=1 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.674500 power_room=0.674500 identical_loss=0.038750 identical_loss_upper=0.044089 no_loss_at_drop=0.018250 no_loss_at_drop_upper=0.022071
+reps=10 packages=57 defects=38 growth_units=2 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.724500 power_room=0.724500 identical_loss=0.036000 identical_loss_upper=0.041167 no_loss_at_drop=0.014250 no_loss_at_drop_upper=0.017677
+reps=10 packages=60 defects=40 growth_units=3 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.743250 power_room=0.743250 identical_loss=0.041500 identical_loss_upper=0.047004 no_loss_at_drop=0.015250 no_loss_at_drop_upper=0.018780
+reps=10 packages=63 defects=42 growth_units=4 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.756500 power_room=0.756500 identical_loss=0.040500 identical_loss_upper=0.045945 no_loss_at_drop=0.022250 no_loss_at_drop_upper=0.026421
+reps=10 packages=66 defects=44 growth_units=5 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.787000 power_room=0.787000 identical_loss=0.038500 identical_loss_upper=0.043824 no_loss_at_drop=0.021250 no_loss_at_drop_upper=0.025337
+reps=10 packages=69 defects=46 growth_units=6 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.805250 power_room=0.805250 identical_loss=0.043000 identical_loss_upper=0.048592 no_loss_at_drop=0.020500 no_loss_at_drop_upper=0.024522
+cleared guard: deciding; the guard cannot fire; both bounds and powers hold at the chosen level
+result: reached
+chosen reps=10 packages=69 defects=46 growth_units=6 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.805250 power_room=0.805250 identical_loss=0.043000 identical_loss_upper=0.048592 no_loss_at_drop=0.020500 no_loss_at_drop_upper=0.024522
+BOUND half-sd0-fa0.2-nb0.5 reps=10 defects=46 alpha=0.02 identical_loss_upper=0.04859194 no_loss_at_drop_upper=0.02452242 power_proportional=0.80525 power_room=0.80525
+.Scenario half-sd0-fa0.2-poisson
+rate_distribution: "half"
+shock_sd: 0
+marginal_rate_rule: "E[logistic(a + sigma*Z)] = p; 40-node Gauss-Hermite, 3,999-rate intercept table; identical arms share intercepts"
+layout: {"defects": 34, "growth_unit": [2, 0, 0], "package_count": 51, "packages": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "placement": "rates shuffled among defects independently per simulated study"}
+false_alarm_model: {"distribution": "poisson", "mean": 0.2, "size": null, "variance": 0.2}
+stops: {"probability": 0, "source": "Bernoulli per package run and arm; stopped alarms thinned by U(0,1)"}
+clearances: {"defects": 0, "probability": 0, "source": "independent Bernoulli per chosen defect, run and arm"}
+code_produced_defects: {"defects": 0, "off_rate": 0.95, "on_rate": 1}
+drop: 0.1
+shapes: ["proportional", "room"]
+alpha_ladder: [0.025, 0.02, 0.015, 0.01, 0.005, 0.0025]
+deciding_rules: ["recall loss: main and sensitivity", "false-alarm rise: main and sensitivity", "code-defect guard: main", "cleared guard: only if both bounds and powers hold"]
+sims: 4000
+seed: 20261016
+cap: 10
+floor: 34
+numpy_version: "2.5.3"
+reps=3 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.275500 power_room=0.275500 identical_loss=0.043250 identical_loss_upper=0.048856 no_loss_at_drop=0.021250 no_loss_at_drop_upper=0.025337
+reps=4 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.302250 power_room=0.302250 identical_loss=0.037500 identical_loss_upper=0.042762 no_loss_at_drop=0.019750 no_loss_at_drop_upper=0.023707
+reps=5 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.369000 power_room=0.369000 identical_loss=0.041500 identical_loss_upper=0.047004 no_loss_at_drop=0.023250 no_loss_at_drop_upper=0.027503
+reps=6 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.424750 power_room=0.424750 identical_loss=0.041750 identical_loss_upper=0.047269 no_loss_at_drop=0.022750 no_loss_at_drop_upper=0.026963
+reps=7 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.496250 power_room=0.496250 identical_loss=0.043500 identical_loss_upper=0.049121 no_loss_at_drop=0.018250 no_loss_at_drop_upper=0.022071
+reps=8 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.550500 power_room=0.550500 identical_loss=0.037000 identical_loss_upper=0.042230 no_loss_at_drop=0.019750 no_loss_at_drop_upper=0.023707
+reps=9 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.603500 power_room=0.603500 identical_loss=0.037250 identical_loss_upper=0.042496 no_loss_at_drop=0.018250 no_loss_at_drop_upper=0.022071
+reps=10 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.656750 power_room=0.656750 identical_loss=0.041500 identical_loss_upper=0.047004 no_loss_at_drop=0.020500 no_loss_at_drop_upper=0.024522
+reps=10 packages=54 defects=36 growth_units=1 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.685500 power_room=0.685500 identical_loss=0.038250 identical_loss_upper=0.043558 no_loss_at_drop=0.021250 no_loss_at_drop_upper=0.025337
+reps=10 packages=57 defects=38 growth_units=2 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.699750 power_room=0.699750 identical_loss=0.039250 identical_loss_upper=0.044620 no_loss_at_drop=0.018500 no_loss_at_drop_upper=0.022344
+reps=10 packages=60 defects=40 growth_units=3 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.726000 power_room=0.726000 identical_loss=0.041250 identical_loss_upper=0.046740 no_loss_at_drop=0.015500 no_loss_at_drop_upper=0.019056
+reps=10 packages=63 defects=42 growth_units=4 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.759250 power_room=0.759250 identical_loss=0.039000 identical_loss_upper=0.044354 no_loss_at_drop=0.017750 no_loss_at_drop_upper=0.021524
+reps=10 packages=66 defects=44 growth_units=5 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.789000 power_room=0.789000 identical_loss=0.034750 identical_loss_upper=0.039836 no_loss_at_drop=0.017500 no_loss_at_drop_upper=0.021251
+reps=10 packages=69 defects=46 growth_units=6 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.800500 power_room=0.800500 identical_loss=0.035750 identical_loss_upper=0.040901 no_loss_at_drop=0.020250 no_loss_at_drop_upper=0.024251
+cleared guard: deciding; the guard cannot fire; both bounds and powers hold at the chosen level
+result: reached
+chosen reps=10 packages=69 defects=46 growth_units=6 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.800500 power_room=0.800500 identical_loss=0.035750 identical_loss_upper=0.040901 no_loss_at_drop=0.020250 no_loss_at_drop_upper=0.024251
+BOUND half-sd0-fa0.2-poisson reps=10 defects=46 alpha=0.02 identical_loss_upper=0.04090106 no_loss_at_drop_upper=0.02425063 power_proportional=0.8005 power_room=0.8005
+.Scenario half-sd0-fa1-nb0.5
+rate_distribution: "half"
+shock_sd: 0
+marginal_rate_rule: "E[logistic(a + sigma*Z)] = p; 40-node Gauss-Hermite, 3,999-rate intercept table; identical arms share intercepts"
+layout: {"defects": 34, "growth_unit": [2, 0, 0], "package_count": 51, "packages": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "placement": "rates shuffled among defects independently per simulated study"}
+false_alarm_model: {"distribution": "gamma-poisson", "mean": 1, "size": 0.5, "variance": 3.0}
+stops: {"probability": 0, "source": "Bernoulli per package run and arm; stopped alarms thinned by U(0,1)"}
+clearances: {"defects": 0, "probability": 0, "source": "independent Bernoulli per chosen defect, run and arm"}
+code_produced_defects: {"defects": 0, "off_rate": 0.95, "on_rate": 1}
+drop: 0.1
+shapes: ["proportional", "room"]
+alpha_ladder: [0.025, 0.02, 0.015, 0.01, 0.005, 0.0025]
+deciding_rules: ["recall loss: main and sensitivity", "false-alarm rise: main and sensitivity", "code-defect guard: main", "cleared guard: only if both bounds and powers hold"]
+sims: 4000
+seed: 20261016
+cap: 10
+floor: 34
+numpy_version: "2.5.3"
+reps=3 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.241250 power_room=0.241250 identical_loss=0.043250 identical_loss_upper=0.048856 no_loss_at_drop=0.018500 no_loss_at_drop_upper=0.022344
+reps=4 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.313250 power_room=0.313250 identical_loss=0.038750 identical_loss_upper=0.044089 no_loss_at_drop=0.019500 no_loss_at_drop_upper=0.023434
+reps=5 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.377500 power_room=0.377500 identical_loss=0.038250 identical_loss_upper=0.043558 no_loss_at_drop=0.018750 no_loss_at_drop_upper=0.022617
+reps=6 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.442750 power_room=0.442750 identical_loss=0.040750 identical_loss_upper=0.046210 no_loss_at_drop=0.018250 no_loss_at_drop_upper=0.022071
+reps=7 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.506000 power_room=0.506000 identical_loss=0.040500 identical_loss_upper=0.045945 no_loss_at_drop=0.019000 no_loss_at_drop_upper=0.022889
+reps=8 packages=51 defects=34 growth_units=0 alpha=0.015 evaluated_alpha=0.015 power_proportional=0.509000 power_room=0.509000 identical_loss=0.031500 identical_loss_upper=0.036369 no_loss_at_drop=0.014000 no_loss_at_drop_upper=0.017401
+reps=9 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.604250 power_room=0.604250 identical_loss=0.039250 identical_loss_upper=0.044620 no_loss_at_drop=0.018000 no_loss_at_drop_upper=0.021798
+reps=10 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.642500 power_room=0.642500 identical_loss=0.038750 identical_loss_upper=0.044089 no_loss_at_drop=0.015750 no_loss_at_drop_upper=0.019331
+reps=10 packages=54 defects=36 growth_units=1 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.703250 power_room=0.703250 identical_loss=0.037250 identical_loss_upper=0.042496 no_loss_at_drop=0.020500 no_loss_at_drop_upper=0.024522
+reps=10 packages=57 defects=38 growth_units=2 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.719250 power_room=0.719250 identical_loss=0.040750 identical_loss_upper=0.046210 no_loss_at_drop=0.018750 no_loss_at_drop_upper=0.022617
+reps=10 packages=60 defects=40 growth_units=3 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.763500 power_room=0.763500 identical_loss=0.039500 identical_loss_upper=0.044885 no_loss_at_drop=0.015500 no_loss_at_drop_upper=0.019056
+reps=10 packages=63 defects=42 growth_units=4 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.762000 power_room=0.762000 identical_loss=0.043000 identical_loss_upper=0.048592 no_loss_at_drop=0.021250 no_loss_at_drop_upper=0.025337
+reps=10 packages=66 defects=44 growth_units=5 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.773750 power_room=0.773750 identical_loss=0.040500 identical_loss_upper=0.045945 no_loss_at_drop=0.021250 no_loss_at_drop_upper=0.025337
+reps=10 packages=69 defects=46 growth_units=6 alpha=0.015 evaluated_alpha=0.015 power_proportional=0.763250 power_room=0.763250 identical_loss=0.033250 identical_loss_upper=0.038237 no_loss_at_drop=0.015500 no_loss_at_drop_upper=0.019056
+reps=10 packages=72 defects=48 growth_units=7 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.819250 power_room=0.819250 identical_loss=0.036250 identical_loss_upper=0.041433 no_loss_at_drop=0.019000 no_loss_at_drop_upper=0.022889
+cleared guard: deciding; the guard cannot fire; both bounds and powers hold at the chosen level
+result: reached
+chosen reps=10 packages=72 defects=48 growth_units=7 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.819250 power_room=0.819250 identical_loss=0.036250 identical_loss_upper=0.041433 no_loss_at_drop=0.019000 no_loss_at_drop_upper=0.022889
+BOUND half-sd0-fa1-nb0.5 reps=10 defects=48 alpha=0.02 identical_loss_upper=0.04143301 no_loss_at_drop_upper=0.02288944 power_proportional=0.81925 power_room=0.81925
+.Scenario half-sd0-fa1-poisson
+rate_distribution: "half"
+shock_sd: 0
+marginal_rate_rule: "E[logistic(a + sigma*Z)] = p; 40-node Gauss-Hermite, 3,999-rate intercept table; identical arms share intercepts"
+layout: {"defects": 34, "growth_unit": [2, 0, 0], "package_count": 51, "packages": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "placement": "rates shuffled among defects independently per simulated study"}
+false_alarm_model: {"distribution": "poisson", "mean": 1, "size": null, "variance": 1}
+stops: {"probability": 0, "source": "Bernoulli per package run and arm; stopped alarms thinned by U(0,1)"}
+clearances: {"defects": 0, "probability": 0, "source": "independent Bernoulli per chosen defect, run and arm"}
+code_produced_defects: {"defects": 0, "off_rate": 0.95, "on_rate": 1}
+drop: 0.1
+shapes: ["proportional", "room"]
+alpha_ladder: [0.025, 0.02, 0.015, 0.01, 0.005, 0.0025]
+deciding_rules: ["recall loss: main and sensitivity", "false-alarm rise: main and sensitivity", "code-defect guard: main", "cleared guard: only if both bounds and powers hold"]
+sims: 4000
+seed: 20261016
+cap: 10
+floor: 34
+numpy_version: "2.5.3"
+reps=3 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.235500 power_room=0.235500 identical_loss=0.039750 identical_loss_upper=0.045150 no_loss_at_drop=0.020000 no_loss_at_drop_upper=0.023979
+reps=4 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.305500 power_room=0.305500 identical_loss=0.040000 identical_loss_upper=0.045415 no_loss_at_drop=0.018250 no_loss_at_drop_upper=0.022071
+reps=5 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.381750 power_room=0.381750 identical_loss=0.040750 identical_loss_upper=0.046210 no_loss_at_drop=0.018500 no_loss_at_drop_upper=0.022344
+reps=6 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.450000 power_room=0.450000 identical_loss=0.041000 identical_loss_upper=0.046475 no_loss_at_drop=0.017000 no_loss_at_drop_upper=0.020703
+reps=7 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.505750 power_room=0.505750 identical_loss=0.037750 identical_loss_upper=0.043027 no_loss_at_drop=0.018000 no_loss_at_drop_upper=0.021798
+reps=8 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.560500 power_room=0.560500 identical_loss=0.041500 identical_loss_upper=0.047004 no_loss_at_drop=0.016250 no_loss_at_drop_upper=0.019880
+reps=9 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.616500 power_room=0.616500 identical_loss=0.043000 identical_loss_upper=0.048592 no_loss_at_drop=0.016750 no_loss_at_drop_upper=0.020429
+reps=10 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.662000 power_room=0.662000 identical_loss=0.040500 identical_loss_upper=0.045945 no_loss_at_drop=0.018000 no_loss_at_drop_upper=0.021798
+reps=10 packages=54 defects=36 growth_units=1 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.692000 power_room=0.692000 identical_loss=0.037000 identical_loss_upper=0.042230 no_loss_at_drop=0.018500 no_loss_at_drop_upper=0.022344
+reps=10 packages=57 defects=38 growth_units=2 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.700750 power_room=0.700750 identical_loss=0.041250 identical_loss_upper=0.046740 no_loss_at_drop=0.019500 no_loss_at_drop_upper=0.023434
+reps=10 packages=60 defects=40 growth_units=3 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.753500 power_room=0.753500 identical_loss=0.039000 identical_loss_upper=0.044354 no_loss_at_drop=0.016250 no_loss_at_drop_upper=0.019880
+reps=10 packages=63 defects=42 growth_units=4 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.749000 power_room=0.749000 identical_loss=0.040500 identical_loss_upper=0.045945 no_loss_at_drop=0.020750 no_loss_at_drop_upper=0.024794
+reps=10 packages=66 defects=44 growth_units=5 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.816000 power_room=0.816000 identical_loss=0.041500 identical_loss_upper=0.047004 no_loss_at_drop=0.023000 no_loss_at_drop_upper=0.027233
+cleared guard: deciding; the guard cannot fire; both bounds and powers hold at the chosen level
+result: reached
+chosen reps=10 packages=66 defects=44 growth_units=5 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.816000 power_room=0.816000 identical_loss=0.041500 identical_loss_upper=0.047004 no_loss_at_drop=0.023000 no_loss_at_drop_upper=0.027233
+BOUND half-sd0-fa1-poisson reps=10 defects=44 alpha=0.025 identical_loss_upper=0.04700443 no_loss_at_drop_upper=0.02723301 power_proportional=0.816 power_room=0.816
+.Scenario half-sd0-fa3-nb0.5
+rate_distribution: "half"
+shock_sd: 0
+marginal_rate_rule: "E[logistic(a + sigma*Z)] = p; 40-node Gauss-Hermite, 3,999-rate intercept table; identical arms share intercepts"
+layout: {"defects": 34, "growth_unit": [2, 0, 0], "package_count": 51, "packages": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "placement": "rates shuffled among defects independently per simulated study"}
+false_alarm_model: {"distribution": "gamma-poisson", "mean": 3, "size": 0.5, "variance": 21.0}
+stops: {"probability": 0, "source": "Bernoulli per package run and arm; stopped alarms thinned by U(0,1)"}
+clearances: {"defects": 0, "probability": 0, "source": "independent Bernoulli per chosen defect, run and arm"}
+code_produced_defects: {"defects": 0, "off_rate": 0.95, "on_rate": 1}
+drop: 0.1
+shapes: ["proportional", "room"]
+alpha_ladder: [0.025, 0.02, 0.015, 0.01, 0.005, 0.0025]
+deciding_rules: ["recall loss: main and sensitivity", "false-alarm rise: main and sensitivity", "code-defect guard: main", "cleared guard: only if both bounds and powers hold"]
+sims: 4000
+seed: 20261016
+cap: 10
+floor: 34
+numpy_version: "2.5.3"
+reps=3 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.237750 power_room=0.237750 identical_loss=0.040250 identical_loss_upper=0.045680 no_loss_at_drop=0.018250 no_loss_at_drop_upper=0.022071
+reps=4 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.311250 power_room=0.311250 identical_loss=0.037750 identical_loss_upper=0.043027 no_loss_at_drop=0.020250 no_loss_at_drop_upper=0.024251
+reps=5 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.385000 power_room=0.385000 identical_loss=0.039250 identical_loss_upper=0.044620 no_loss_at_drop=0.021250 no_loss_at_drop_upper=0.025337
+reps=6 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.475000 power_room=0.475000 identical_loss=0.042500 identical_loss_upper=0.048063 no_loss_at_drop=0.024750 no_loss_at_drop_upper=0.029123
+reps=7 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.500750 power_room=0.500750 identical_loss=0.038750 identical_loss_upper=0.044089 no_loss_at_drop=0.018500 no_loss_at_drop_upper=0.022344
+reps=8 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.553250 power_room=0.553250 identical_loss=0.039250 identical_loss_upper=0.044620 no_loss_at_drop=0.021250 no_loss_at_drop_upper=0.025337
+reps=9 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.598000 power_room=0.598000 identical_loss=0.037250 identical_loss_upper=0.042496 no_loss_at_drop=0.021000 no_loss_at_drop_upper=0.025066
+reps=10 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.653250 power_room=0.653250 identical_loss=0.041500 identical_loss_upper=0.047004 no_loss_at_drop=0.021000 no_loss_at_drop_upper=0.025066
+reps=10 packages=54 defects=36 growth_units=1 alpha=0.015 evaluated_alpha=0.015 power_proportional=0.642000 power_room=0.642000 identical_loss=0.035250 identical_loss_upper=0.040369 no_loss_at_drop=0.015000 no_loss_at_drop_upper=0.018505
+reps=10 packages=57 defects=38 growth_units=2 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.716000 power_room=0.716000 identical_loss=0.038000 identical_loss_upper=0.043293 no_loss_at_drop=0.019500 no_loss_at_drop_upper=0.023434
+reps=10 packages=60 defects=40 growth_units=3 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.775250 power_room=0.775250 identical_loss=0.043750 identical_loss_upper=0.049385 no_loss_at_drop=0.022250 no_loss_at_drop_upper=0.026421
+reps=10 packages=63 defects=42 growth_units=4 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.759000 power_room=0.759000 identical_loss=0.040500 identical_loss_upper=0.045945 no_loss_at_drop=0.021500 no_loss_at_drop_upper=0.025608
+reps=10 packages=66 defects=44 growth_units=5 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.769750 power_room=0.769750 identical_loss=0.038250 identical_loss_upper=0.043558 no_loss_at_drop=0.021500 no_loss_at_drop_upper=0.025608
+reps=10 packages=69 defects=46 growth_units=6 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.803500 power_room=0.803500 identical_loss=0.039250 identical_loss_upper=0.044620 no_loss_at_drop=0.019750 no_loss_at_drop_upper=0.023707
+cleared guard: deciding; the guard cannot fire; both bounds and powers hold at the chosen level
+result: reached
+chosen reps=10 packages=69 defects=46 growth_units=6 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.803500 power_room=0.803500 identical_loss=0.039250 identical_loss_upper=0.044620 no_loss_at_drop=0.019750 no_loss_at_drop_upper=0.023707
+BOUND half-sd0-fa3-nb0.5 reps=10 defects=46 alpha=0.02 identical_loss_upper=0.04461968 no_loss_at_drop_upper=0.02370660 power_proportional=0.8035 power_room=0.8035
+.Scenario half-sd0-fa3-poisson
+rate_distribution: "half"
+shock_sd: 0
+marginal_rate_rule: "E[logistic(a + sigma*Z)] = p; 40-node Gauss-Hermite, 3,999-rate intercept table; identical arms share intercepts"
+layout: {"defects": 34, "growth_unit": [2, 0, 0], "package_count": 51, "packages": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "placement": "rates shuffled among defects independently per simulated study"}
+false_alarm_model: {"distribution": "poisson", "mean": 3, "size": null, "variance": 3}
+stops: {"probability": 0, "source": "Bernoulli per package run and arm; stopped alarms thinned by U(0,1)"}
+clearances: {"defects": 0, "probability": 0, "source": "independent Bernoulli per chosen defect, run and arm"}
+code_produced_defects: {"defects": 0, "off_rate": 0.95, "on_rate": 1}
+drop: 0.1
+shapes: ["proportional", "room"]
+alpha_ladder: [0.025, 0.02, 0.015, 0.01, 0.005, 0.0025]
+deciding_rules: ["recall loss: main and sensitivity", "false-alarm rise: main and sensitivity", "code-defect guard: main", "cleared guard: only if both bounds and powers hold"]
+sims: 4000
+seed: 20261016
+cap: 10
+floor: 34
+numpy_version: "2.5.3"
+reps=3 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.252750 power_room=0.252750 identical_loss=0.039500 identical_loss_upper=0.044885 no_loss_at_drop=0.017750 no_loss_at_drop_upper=0.021524
+reps=4 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.314250 power_room=0.314250 identical_loss=0.039000 identical_loss_upper=0.044354 no_loss_at_drop=0.021000 no_loss_at_drop_upper=0.025066
+reps=5 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.375500 power_room=0.375500 identical_loss=0.040000 identical_loss_upper=0.045415 no_loss_at_drop=0.018750 no_loss_at_drop_upper=0.022617
+reps=6 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.441750 power_room=0.441750 identical_loss=0.041500 identical_loss_upper=0.047004 no_loss_at_drop=0.019250 no_loss_at_drop_upper=0.023162
+reps=7 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.508000 power_room=0.508000 identical_loss=0.038500 identical_loss_upper=0.043824 no_loss_at_drop=0.017000 no_loss_at_drop_upper=0.020703
+reps=8 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.558250 power_room=0.558250 identical_loss=0.039750 identical_loss_upper=0.045150 no_loss_at_drop=0.020000 no_loss_at_drop_upper=0.023979
+reps=9 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.617750 power_room=0.617750 identical_loss=0.041000 identical_loss_upper=0.046475 no_loss_at_drop=0.016750 no_loss_at_drop_upper=0.020429
+reps=10 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.665750 power_room=0.665750 identical_loss=0.042000 identical_loss_upper=0.047534 no_loss_at_drop=0.016750 no_loss_at_drop_upper=0.020429
+reps=10 packages=54 defects=36 growth_units=1 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.692750 power_room=0.692750 identical_loss=0.039750 identical_loss_upper=0.045150 no_loss_at_drop=0.018250 no_loss_at_drop_upper=0.022071
+reps=10 packages=57 defects=38 growth_units=2 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.720000 power_room=0.720000 identical_loss=0.043750 identical_loss_upper=0.049385 no_loss_at_drop=0.018250 no_loss_at_drop_upper=0.022071
+reps=10 packages=60 defects=40 growth_units=3 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.751250 power_room=0.751250 identical_loss=0.035750 identical_loss_upper=0.040901 no_loss_at_drop=0.017250 no_loss_at_drop_upper=0.020977
+reps=10 packages=63 defects=42 growth_units=4 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.758500 power_room=0.758500 identical_loss=0.037500 identical_loss_upper=0.042762 no_loss_at_drop=0.020250 no_loss_at_drop_upper=0.024251
+reps=10 packages=66 defects=44 growth_units=5 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.777000 power_room=0.777000 identical_loss=0.040500 identical_loss_upper=0.045945 no_loss_at_drop=0.021250 no_loss_at_drop_upper=0.025337
+reps=10 packages=69 defects=46 growth_units=6 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.811750 power_room=0.811750 identical_loss=0.041250 identical_loss_upper=0.046740 no_loss_at_drop=0.016250 no_loss_at_drop_upper=0.019880
+cleared guard: deciding; the guard cannot fire; both bounds and powers hold at the chosen level
+result: reached
+chosen reps=10 packages=69 defects=46 growth_units=6 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.811750 power_room=0.811750 identical_loss=0.041250 identical_loss_upper=0.046740 no_loss_at_drop=0.016250 no_loss_at_drop_upper=0.019880
+BOUND half-sd0-fa3-poisson reps=10 defects=46 alpha=0.02 identical_loss_upper=0.04673966 no_loss_at_drop_upper=0.01988035 power_proportional=0.81175 power_room=0.81175
+.Scenario half-sd1.0-fa0.2-nb0.5
+rate_distribution: "half"
+shock_sd: 1.0
+marginal_rate_rule: "E[logistic(a + sigma*Z)] = p; 40-node Gauss-Hermite, 3,999-rate intercept table; identical arms share intercepts"
+layout: {"defects": 34, "growth_unit": [2, 0, 0], "package_count": 51, "packages": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "placement": "rates shuffled among defects independently per simulated study"}
+false_alarm_model: {"distribution": "gamma-poisson", "mean": 0.2, "size": 0.5, "variance": 0.28}
+stops: {"probability": 0, "source": "Bernoulli per package run and arm; stopped alarms thinned by U(0,1)"}
+clearances: {"defects": 0, "probability": 0, "source": "independent Bernoulli per chosen defect, run and arm"}
+code_produced_defects: {"defects": 0, "off_rate": 0.95, "on_rate": 1}
+drop: 0.1
+shapes: ["proportional", "room"]
+alpha_ladder: [0.025, 0.02, 0.015, 0.01, 0.005, 0.0025]
+deciding_rules: ["recall loss: main and sensitivity", "false-alarm rise: main and sensitivity", "code-defect guard: main", "cleared guard: only if both bounds and powers hold"]
+sims: 4000
+seed: 20261016
+cap: 10
+floor: 34
+numpy_version: "2.5.3"
+reps=3 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.209750 power_room=0.209750 identical_loss=0.038250 identical_loss_upper=0.043558 no_loss_at_drop=0.023000 no_loss_at_drop_upper=0.027233
+reps=4 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.268500 power_room=0.268500 identical_loss=0.039000 identical_loss_upper=0.044354 no_loss_at_drop=0.019500 no_loss_at_drop_upper=0.023434
+reps=5 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.321750 power_room=0.321750 identical_loss=0.037250 identical_loss_upper=0.042496 no_loss_at_drop=0.021250 no_loss_at_drop_upper=0.025337
+reps=6 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.415250 power_room=0.415250 identical_loss=0.043750 identical_loss_upper=0.049385 no_loss_at_drop=0.024500 no_loss_at_drop_upper=0.028854
+reps=7 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.433250 power_room=0.433250 identical_loss=0.037000 identical_loss_upper=0.042230 no_loss_at_drop=0.020250 no_loss_at_drop_upper=0.024251
+reps=8 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.480250 power_room=0.480250 identical_loss=0.037750 identical_loss_upper=0.043027 no_loss_at_drop=0.022000 no_loss_at_drop_upper=0.026150
+reps=9 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.529750 power_room=0.529750 identical_loss=0.037750 identical_loss_upper=0.043027 no_loss_at_drop=0.022000 no_loss_at_drop_upper=0.026150
+reps=10 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.573250 power_room=0.573250 identical_loss=0.038250 identical_loss_upper=0.043558 no_loss_at_drop=0.022750 no_loss_at_drop_upper=0.026963
+reps=10 packages=54 defects=36 growth_units=1 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.627750 power_room=0.627750 identical_loss=0.041250 identical_loss_upper=0.046740 no_loss_at_drop=0.018000 no_loss_at_drop_upper=0.021798
+reps=10 packages=57 defects=38 growth_units=2 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.643750 power_room=0.643750 identical_loss=0.037500 identical_loss_upper=0.042762 no_loss_at_drop=0.023750 no_loss_at_drop_upper=0.028044
+reps=10 packages=60 defects=40 growth_units=3 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.661750 power_room=0.661750 identical_loss=0.042750 identical_loss_upper=0.048327 no_loss_at_drop=0.019500 no_loss_at_drop_upper=0.023434
+reps=10 packages=63 defects=42 growth_units=4 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.696750 power_room=0.696750 identical_loss=0.041500 identical_loss_upper=0.047004 no_loss_at_drop=0.018750 no_loss_at_drop_upper=0.022617
+reps=10 packages=66 defects=44 growth_units=5 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.720250 power_room=0.720250 identical_loss=0.042000 identical_loss_upper=0.047534 no_loss_at_drop=0.020750 no_loss_at_drop_upper=0.024794
+reps=10 packages=69 defects=46 growth_units=6 alpha=0.015 evaluated_alpha=0.015 power_proportional=0.680000 power_room=0.680000 identical_loss=0.033250 identical_loss_upper=0.038237 no_loss_at_drop=0.013500 no_loss_at_drop_upper=0.016847
+reps=10 packages=72 defects=48 growth_units=7 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.762250 power_room=0.762250 identical_loss=0.042750 identical_loss_upper=0.048327 no_loss_at_drop=0.020500 no_loss_at_drop_upper=0.024522
+reps=10 packages=75 defects=50 growth_units=8 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.777750 power_room=0.777750 identical_loss=0.035000 identical_loss_upper=0.040103 no_loss_at_drop=0.021250 no_loss_at_drop_upper=0.025337
+reps=10 packages=78 defects=52 growth_units=9 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.807500 power_room=0.807500 identical_loss=0.035750 identical_loss_upper=0.040901 no_loss_at_drop=0.016250 no_loss_at_drop_upper=0.019880
+cleared guard: deciding; the guard cannot fire; both bounds and powers hold at the chosen level
+result: reached
+chosen reps=10 packages=78 defects=52 growth_units=9 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.807500 power_room=0.807500 identical_loss=0.035750 identical_loss_upper=0.040901 no_loss_at_drop=0.016250 no_loss_at_drop_upper=0.019880
+BOUND half-sd1.0-fa0.2-nb0.5 reps=10 defects=52 alpha=0.02 identical_loss_upper=0.04090106 no_loss_at_drop_upper=0.01988035 power_proportional=0.8075 power_room=0.8075
+.Scenario half-sd1.0-fa0.2-poisson
+rate_distribution: "half"
+shock_sd: 1.0
+marginal_rate_rule: "E[logistic(a + sigma*Z)] = p; 40-node Gauss-Hermite, 3,999-rate intercept table; identical arms share intercepts"
+layout: {"defects": 34, "growth_unit": [2, 0, 0], "package_count": 51, "packages": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "placement": "rates shuffled among defects independently per simulated study"}
+false_alarm_model: {"distribution": "poisson", "mean": 0.2, "size": null, "variance": 0.2}
+stops: {"probability": 0, "source": "Bernoulli per package run and arm; stopped alarms thinned by U(0,1)"}
+clearances: {"defects": 0, "probability": 0, "source": "independent Bernoulli per chosen defect, run and arm"}
+code_produced_defects: {"defects": 0, "off_rate": 0.95, "on_rate": 1}
+drop: 0.1
+shapes: ["proportional", "room"]
+alpha_ladder: [0.025, 0.02, 0.015, 0.01, 0.005, 0.0025]
+deciding_rules: ["recall loss: main and sensitivity", "false-alarm rise: main and sensitivity", "code-defect guard: main", "cleared guard: only if both bounds and powers hold"]
+sims: 4000
+seed: 20261016
+cap: 10
+floor: 34
+numpy_version: "2.5.3"
+reps=3 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.215500 power_room=0.215500 identical_loss=0.038750 identical_loss_upper=0.044089 no_loss_at_drop=0.023500 no_loss_at_drop_upper=0.027774
+reps=4 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.272000 power_room=0.272000 identical_loss=0.040500 identical_loss_upper=0.045945 no_loss_at_drop=0.019500 no_loss_at_drop_upper=0.023434
+reps=5 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.331750 power_room=0.331750 identical_loss=0.040750 identical_loss_upper=0.046210 no_loss_at_drop=0.021500 no_loss_at_drop_upper=0.025608
+reps=6 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.387000 power_room=0.387000 identical_loss=0.039250 identical_loss_upper=0.044620 no_loss_at_drop=0.019250 no_loss_at_drop_upper=0.023162
+reps=7 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.435250 power_room=0.435250 identical_loss=0.040750 identical_loss_upper=0.046210 no_loss_at_drop=0.019250 no_loss_at_drop_upper=0.023162
+reps=8 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.495250 power_room=0.495250 identical_loss=0.041500 identical_loss_upper=0.047004 no_loss_at_drop=0.020750 no_loss_at_drop_upper=0.024794
+reps=9 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.540250 power_room=0.540250 identical_loss=0.038500 identical_loss_upper=0.043824 no_loss_at_drop=0.022500 no_loss_at_drop_upper=0.026692
+reps=10 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.586250 power_room=0.586250 identical_loss=0.040250 identical_loss_upper=0.045680 no_loss_at_drop=0.019000 no_loss_at_drop_upper=0.022889
+reps=10 packages=54 defects=36 growth_units=1 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.619250 power_room=0.619250 identical_loss=0.041500 identical_loss_upper=0.047004 no_loss_at_drop=0.022250 no_loss_at_drop_upper=0.026421
+reps=10 packages=57 defects=38 growth_units=2 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.644500 power_room=0.644500 identical_loss=0.039500 identical_loss_upper=0.044885 no_loss_at_drop=0.017000 no_loss_at_drop_upper=0.020703
+reps=10 packages=60 defects=40 growth_units=3 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.666750 power_room=0.666750 identical_loss=0.039500 identical_loss_upper=0.044885 no_loss_at_drop=0.018750 no_loss_at_drop_upper=0.022617
+reps=10 packages=63 defects=42 growth_units=4 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.675000 power_room=0.675000 identical_loss=0.040000 identical_loss_upper=0.045415 no_loss_at_drop=0.019750 no_loss_at_drop_upper=0.023707
+reps=10 packages=66 defects=44 growth_units=5 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.711250 power_room=0.711250 identical_loss=0.040250 identical_loss_upper=0.045680 no_loss_at_drop=0.016750 no_loss_at_drop_upper=0.020429
+reps=10 packages=69 defects=46 growth_units=6 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.736250 power_room=0.736250 identical_loss=0.038000 identical_loss_upper=0.043293 no_loss_at_drop=0.020750 no_loss_at_drop_upper=0.024794
+reps=10 packages=72 defects=48 growth_units=7 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.775750 power_room=0.775750 identical_loss=0.043750 identical_loss_upper=0.049385 no_loss_at_drop=0.022500 no_loss_at_drop_upper=0.026692
+reps=10 packages=75 defects=50 growth_units=8 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.774750 power_room=0.774750 identical_loss=0.040250 identical_loss_upper=0.045680 no_loss_at_drop=0.020500 no_loss_at_drop_upper=0.024522
+reps=10 packages=78 defects=52 growth_units=9 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.821000 power_room=0.821000 identical_loss=0.044000 identical_loss_upper=0.049649 no_loss_at_drop=0.023250 no_loss_at_drop_upper=0.027503
+cleared guard: deciding; the guard cannot fire; both bounds and powers hold at the chosen level
+result: reached
+chosen reps=10 packages=78 defects=52 growth_units=9 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.821000 power_room=0.821000 identical_loss=0.044000 identical_loss_upper=0.049649 no_loss_at_drop=0.023250 no_loss_at_drop_upper=0.027503
+BOUND half-sd1.0-fa0.2-poisson reps=10 defects=52 alpha=0.025 identical_loss_upper=0.04964932 no_loss_at_drop_upper=0.02750338 power_proportional=0.821 power_room=0.821
+.Scenario half-sd1.0-fa1-nb0.5
+rate_distribution: "half"
+shock_sd: 1.0
+marginal_rate_rule: "E[logistic(a + sigma*Z)] = p; 40-node Gauss-Hermite, 3,999-rate intercept table; identical arms share intercepts"
+layout: {"defects": 34, "growth_unit": [2, 0, 0], "package_count": 51, "packages": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "placement": "rates shuffled among defects independently per simulated study"}
+false_alarm_model: {"distribution": "gamma-poisson", "mean": 1, "size": 0.5, "variance": 3.0}
+stops: {"probability": 0, "source": "Bernoulli per package run and arm; stopped alarms thinned by U(0,1)"}
+clearances: {"defects": 0, "probability": 0, "source": "independent Bernoulli per chosen defect, run and arm"}
+code_produced_defects: {"defects": 0, "off_rate": 0.95, "on_rate": 1}
+drop: 0.1
+shapes: ["proportional", "room"]
+alpha_ladder: [0.025, 0.02, 0.015, 0.01, 0.005, 0.0025]
+deciding_rules: ["recall loss: main and sensitivity", "false-alarm rise: main and sensitivity", "code-defect guard: main", "cleared guard: only if both bounds and powers hold"]
+sims: 4000
+seed: 20261016
+cap: 10
+floor: 34
+numpy_version: "2.5.3"
+reps=3 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.219750 power_room=0.219750 identical_loss=0.034500 identical_loss_upper=0.039570 no_loss_at_drop=0.019250 no_loss_at_drop_upper=0.023162
+reps=4 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.275250 power_room=0.275250 identical_loss=0.041250 identical_loss_upper=0.046740 no_loss_at_drop=0.022500 no_loss_at_drop_upper=0.026692
+reps=5 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.328250 power_room=0.328250 identical_loss=0.038000 identical_loss_upper=0.043293 no_loss_at_drop=0.020500 no_loss_at_drop_upper=0.024522
+reps=6 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.374000 power_room=0.374000 identical_loss=0.042500 identical_loss_upper=0.048063 no_loss_at_drop=0.020500 no_loss_at_drop_upper=0.024522
+reps=7 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.442250 power_room=0.442250 identical_loss=0.039000 identical_loss_upper=0.044354 no_loss_at_drop=0.020750 no_loss_at_drop_upper=0.024794
+reps=8 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.490750 power_room=0.490750 identical_loss=0.036000 identical_loss_upper=0.041167 no_loss_at_drop=0.019250 no_loss_at_drop_upper=0.023162
+reps=9 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.541250 power_room=0.541250 identical_loss=0.043750 identical_loss_upper=0.049385 no_loss_at_drop=0.017750 no_loss_at_drop_upper=0.021524
+reps=10 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.583750 power_room=0.583750 identical_loss=0.041250 identical_loss_upper=0.046740 no_loss_at_drop=0.018500 no_loss_at_drop_upper=0.022344
+reps=10 packages=54 defects=36 growth_units=1 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.607750 power_room=0.607750 identical_loss=0.036500 identical_loss_upper=0.041699 no_loss_at_drop=0.020250 no_loss_at_drop_upper=0.024251
+reps=10 packages=57 defects=38 growth_units=2 alpha=0.015 evaluated_alpha=0.015 power_proportional=0.612000 power_room=0.612000 identical_loss=0.032250 identical_loss_upper=0.037170 no_loss_at_drop=0.015250 no_loss_at_drop_upper=0.018780
+reps=10 packages=60 defects=40 growth_units=3 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.667500 power_room=0.667500 identical_loss=0.038500 identical_loss_upper=0.043824 no_loss_at_drop=0.018250 no_loss_at_drop_upper=0.022071
+reps=10 packages=63 defects=42 growth_units=4 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.681750 power_room=0.681750 identical_loss=0.040500 identical_loss_upper=0.045945 no_loss_at_drop=0.019000 no_loss_at_drop_upper=0.022889
+reps=10 packages=66 defects=44 growth_units=5 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.718000 power_room=0.718000 identical_loss=0.038000 identical_loss_upper=0.043293 no_loss_at_drop=0.022000 no_loss_at_drop_upper=0.026150
+reps=10 packages=69 defects=46 growth_units=6 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.733250 power_room=0.733250 identical_loss=0.041000 identical_loss_upper=0.046475 no_loss_at_drop=0.019750 no_loss_at_drop_upper=0.023707
+reps=10 packages=72 defects=48 growth_units=7 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.765500 power_room=0.765500 identical_loss=0.037000 identical_loss_upper=0.042230 no_loss_at_drop=0.021500 no_loss_at_drop_upper=0.025608
+reps=10 packages=75 defects=50 growth_units=8 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.786250 power_room=0.786250 identical_loss=0.035750 identical_loss_upper=0.040901 no_loss_at_drop=0.017000 no_loss_at_drop_upper=0.020703
+reps=10 packages=78 defects=52 growth_units=9 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.794500 power_room=0.794500 identical_loss=0.037000 identical_loss_upper=0.042230 no_loss_at_drop=0.019500 no_loss_at_drop_upper=0.023434
+reps=10 packages=81 defects=54 growth_units=10 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.809500 power_room=0.809500 identical_loss=0.038250 identical_loss_upper=0.043558 no_loss_at_drop=0.019250 no_loss_at_drop_upper=0.023162
+cleared guard: deciding; the guard cannot fire; both bounds and powers hold at the chosen level
+result: reached
+chosen reps=10 packages=81 defects=54 growth_units=10 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.809500 power_room=0.809500 identical_loss=0.038250 identical_loss_upper=0.043558 no_loss_at_drop=0.019250 no_loss_at_drop_upper=0.023162
+BOUND half-sd1.0-fa1-nb0.5 reps=10 defects=54 alpha=0.02 identical_loss_upper=0.04355838 no_loss_at_drop_upper=0.02316198 power_proportional=0.8095 power_room=0.8095
+.Scenario half-sd1.0-fa1-poisson
+rate_distribution: "half"
+shock_sd: 1.0
+marginal_rate_rule: "E[logistic(a + sigma*Z)] = p; 40-node Gauss-Hermite, 3,999-rate intercept table; identical arms share intercepts"
+layout: {"defects": 34, "growth_unit": [2, 0, 0], "package_count": 51, "packages": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "placement": "rates shuffled among defects independently per simulated study"}
+false_alarm_model: {"distribution": "poisson", "mean": 1, "size": null, "variance": 1}
+stops: {"probability": 0, "source": "Bernoulli per package run and arm; stopped alarms thinned by U(0,1)"}
+clearances: {"defects": 0, "probability": 0, "source": "independent Bernoulli per chosen defect, run and arm"}
+code_produced_defects: {"defects": 0, "off_rate": 0.95, "on_rate": 1}
+drop: 0.1
+shapes: ["proportional", "room"]
+alpha_ladder: [0.025, 0.02, 0.015, 0.01, 0.005, 0.0025]
+deciding_rules: ["recall loss: main and sensitivity", "false-alarm rise: main and sensitivity", "code-defect guard: main", "cleared guard: only if both bounds and powers hold"]
+sims: 4000
+seed: 20261016
+cap: 10
+floor: 34
+numpy_version: "2.5.3"
+reps=3 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.213750 power_room=0.213750 identical_loss=0.041750 identical_loss_upper=0.047269 no_loss_at_drop=0.022000 no_loss_at_drop_upper=0.026150
+reps=4 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.273250 power_room=0.273250 identical_loss=0.037500 identical_loss_upper=0.042762 no_loss_at_drop=0.021250 no_loss_at_drop_upper=0.025337
+reps=5 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.326250 power_room=0.326250 identical_loss=0.039500 identical_loss_upper=0.044885 no_loss_at_drop=0.024250 no_loss_at_drop_upper=0.028584
+reps=6 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.425750 power_room=0.425750 identical_loss=0.044250 identical_loss_upper=0.049914 no_loss_at_drop=0.023500 no_loss_at_drop_upper=0.027774
+reps=7 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.473500 power_room=0.473500 identical_loss=0.044000 identical_loss_upper=0.049649 no_loss_at_drop=0.021750 no_loss_at_drop_upper=0.025879
+reps=8 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.533000 power_room=0.533000 identical_loss=0.044250 identical_loss_upper=0.049914 no_loss_at_drop=0.023000 no_loss_at_drop_upper=0.027233
+reps=9 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.539750 power_room=0.539750 identical_loss=0.039250 identical_loss_upper=0.044620 no_loss_at_drop=0.019750 no_loss_at_drop_upper=0.023707
+reps=10 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.583250 power_room=0.583250 identical_loss=0.039750 identical_loss_upper=0.045150 no_loss_at_drop=0.021500 no_loss_at_drop_upper=0.025608
+reps=10 packages=54 defects=36 growth_units=1 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.602750 power_room=0.602750 identical_loss=0.033750 identical_loss_upper=0.038771 no_loss_at_drop=0.021750 no_loss_at_drop_upper=0.025879
+reps=10 packages=57 defects=38 growth_units=2 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.641250 power_room=0.641250 identical_loss=0.039000 identical_loss_upper=0.044354 no_loss_at_drop=0.018000 no_loss_at_drop_upper=0.021798
+reps=10 packages=60 defects=40 growth_units=3 alpha=0.015 evaluated_alpha=0.015 power_proportional=0.630500 power_room=0.630500 identical_loss=0.033500 identical_loss_upper=0.038504 no_loss_at_drop=0.013500 no_loss_at_drop_upper=0.016847
+reps=10 packages=63 defects=42 growth_units=4 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.673000 power_room=0.673000 identical_loss=0.040000 identical_loss_upper=0.045415 no_loss_at_drop=0.017750 no_loss_at_drop_upper=0.021524
+reps=10 packages=66 defects=44 growth_units=5 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.725000 power_room=0.725000 identical_loss=0.034500 identical_loss_upper=0.039570 no_loss_at_drop=0.017000 no_loss_at_drop_upper=0.020703
+reps=10 packages=69 defects=46 growth_units=6 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.747500 power_room=0.747500 identical_loss=0.038500 identical_loss_upper=0.043824 no_loss_at_drop=0.021750 no_loss_at_drop_upper=0.025879
+reps=10 packages=72 defects=48 growth_units=7 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.758250 power_room=0.758250 identical_loss=0.042250 identical_loss_upper=0.047798 no_loss_at_drop=0.017250 no_loss_at_drop_upper=0.020977
+reps=10 packages=75 defects=50 growth_units=8 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.771250 power_room=0.771250 identical_loss=0.037750 identical_loss_upper=0.043027 no_loss_at_drop=0.018750 no_loss_at_drop_upper=0.022617
+reps=10 packages=78 defects=52 growth_units=9 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.794000 power_room=0.794000 identical_loss=0.039250 identical_loss_upper=0.044620 no_loss_at_drop=0.015000 no_loss_at_drop_upper=0.018505
+reps=10 packages=81 defects=54 growth_units=10 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.818000 power_room=0.818000 identical_loss=0.043250 identical_loss_upper=0.048856 no_loss_at_drop=0.022500 no_loss_at_drop_upper=0.026692
+cleared guard: deciding; the guard cannot fire; both bounds and powers hold at the chosen level
+result: reached
+chosen reps=10 packages=81 defects=54 growth_units=10 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.818000 power_room=0.818000 identical_loss=0.043250 identical_loss_upper=0.048856 no_loss_at_drop=0.022500 no_loss_at_drop_upper=0.026692
+BOUND half-sd1.0-fa1-poisson reps=10 defects=54 alpha=0.02 identical_loss_upper=0.04885636 no_loss_at_drop_upper=0.02669191 power_proportional=0.818 power_room=0.818
+.Scenario half-sd1.0-fa3-nb0.5
+rate_distribution: "half"
+shock_sd: 1.0
+marginal_rate_rule: "E[logistic(a + sigma*Z)] = p; 40-node Gauss-Hermite, 3,999-rate intercept table; identical arms share intercepts"
+layout: {"defects": 34, "growth_unit": [2, 0, 0], "package_count": 51, "packages": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "placement": "rates shuffled among defects independently per simulated study"}
+false_alarm_model: {"distribution": "gamma-poisson", "mean": 3, "size": 0.5, "variance": 21.0}
+stops: {"probability": 0, "source": "Bernoulli per package run and arm; stopped alarms thinned by U(0,1)"}
+clearances: {"defects": 0, "probability": 0, "source": "independent Bernoulli per chosen defect, run and arm"}
+code_produced_defects: {"defects": 0, "off_rate": 0.95, "on_rate": 1}
+drop: 0.1
+shapes: ["proportional", "room"]
+alpha_ladder: [0.025, 0.02, 0.015, 0.01, 0.005, 0.0025]
+deciding_rules: ["recall loss: main and sensitivity", "false-alarm rise: main and sensitivity", "code-defect guard: main", "cleared guard: only if both bounds and powers hold"]
+sims: 4000
+seed: 20261016
+cap: 10
+floor: 34
+numpy_version: "2.5.3"
+reps=3 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.218250 power_room=0.218250 identical_loss=0.038750 identical_loss_upper=0.044089 no_loss_at_drop=0.017750 no_loss_at_drop_upper=0.021524
+reps=4 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.283500 power_room=0.283500 identical_loss=0.037750 identical_loss_upper=0.043027 no_loss_at_drop=0.019750 no_loss_at_drop_upper=0.023707
+reps=5 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.339000 power_room=0.339000 identical_loss=0.035500 identical_loss_upper=0.040635 no_loss_at_drop=0.019000 no_loss_at_drop_upper=0.022889
+reps=6 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.391750 power_room=0.391750 identical_loss=0.036250 identical_loss_upper=0.041433 no_loss_at_drop=0.022000 no_loss_at_drop_upper=0.026150
+reps=7 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.447750 power_room=0.447750 identical_loss=0.038500 identical_loss_upper=0.043824 no_loss_at_drop=0.017750 no_loss_at_drop_upper=0.021524
+reps=8 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.488000 power_room=0.488000 identical_loss=0.035750 identical_loss_upper=0.040901 no_loss_at_drop=0.015000 no_loss_at_drop_upper=0.018505
+reps=9 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.537750 power_room=0.537750 identical_loss=0.037000 identical_loss_upper=0.042230 no_loss_at_drop=0.015750 no_loss_at_drop_upper=0.019331
+reps=10 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.626000 power_room=0.626000 identical_loss=0.041000 identical_loss_upper=0.046475 no_loss_at_drop=0.019000 no_loss_at_drop_upper=0.022889
+reps=10 packages=54 defects=36 growth_units=1 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.611250 power_room=0.611250 identical_loss=0.041250 identical_loss_upper=0.046740 no_loss_at_drop=0.020500 no_loss_at_drop_upper=0.024522
+reps=10 packages=57 defects=38 growth_units=2 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.633750 power_room=0.633750 identical_loss=0.038750 identical_loss_upper=0.044089 no_loss_at_drop=0.018250 no_loss_at_drop_upper=0.022071
+reps=10 packages=60 defects=40 growth_units=3 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.679500 power_room=0.679500 identical_loss=0.042500 identical_loss_upper=0.048063 no_loss_at_drop=0.020500 no_loss_at_drop_upper=0.024522
+reps=10 packages=63 defects=42 growth_units=4 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.690750 power_room=0.690750 identical_loss=0.040000 identical_loss_upper=0.045415 no_loss_at_drop=0.020500 no_loss_at_drop_upper=0.024522
+reps=10 packages=66 defects=44 growth_units=5 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.716000 power_room=0.716000 identical_loss=0.037500 identical_loss_upper=0.042762 no_loss_at_drop=0.016000 no_loss_at_drop_upper=0.019606
+reps=10 packages=69 defects=46 growth_units=6 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.731750 power_room=0.731750 identical_loss=0.041250 identical_loss_upper=0.046740 no_loss_at_drop=0.017500 no_loss_at_drop_upper=0.021251
+reps=10 packages=72 defects=48 growth_units=7 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.753500 power_room=0.753500 identical_loss=0.042000 identical_loss_upper=0.047534 no_loss_at_drop=0.020500 no_loss_at_drop_upper=0.024522
+reps=10 packages=75 defects=50 growth_units=8 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.769000 power_room=0.769000 identical_loss=0.042250 identical_loss_upper=0.047798 no_loss_at_drop=0.020750 no_loss_at_drop_upper=0.024794
+reps=10 packages=78 defects=52 growth_units=9 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.805250 power_room=0.805250 identical_loss=0.039250 identical_loss_upper=0.044620 no_loss_at_drop=0.014750 no_loss_at_drop_upper=0.018229
+cleared guard: deciding; the guard cannot fire; both bounds and powers hold at the chosen level
+result: reached
+chosen reps=10 packages=78 defects=52 growth_units=9 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.805250 power_room=0.805250 identical_loss=0.039250 identical_loss_upper=0.044620 no_loss_at_drop=0.014750 no_loss_at_drop_upper=0.018229
+BOUND half-sd1.0-fa3-nb0.5 reps=10 defects=52 alpha=0.02 identical_loss_upper=0.04461968 no_loss_at_drop_upper=0.01822926 power_proportional=0.80525 power_room=0.80525
+.Scenario half-sd1.0-fa3-poisson
+rate_distribution: "half"
+shock_sd: 1.0
+marginal_rate_rule: "E[logistic(a + sigma*Z)] = p; 40-node Gauss-Hermite, 3,999-rate intercept table; identical arms share intercepts"
+layout: {"defects": 34, "growth_unit": [2, 0, 0], "package_count": 51, "packages": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "placement": "rates shuffled among defects independently per simulated study"}
+false_alarm_model: {"distribution": "poisson", "mean": 3, "size": null, "variance": 3}
+stops: {"probability": 0, "source": "Bernoulli per package run and arm; stopped alarms thinned by U(0,1)"}
+clearances: {"defects": 0, "probability": 0, "source": "independent Bernoulli per chosen defect, run and arm"}
+code_produced_defects: {"defects": 0, "off_rate": 0.95, "on_rate": 1}
+drop: 0.1
+shapes: ["proportional", "room"]
+alpha_ladder: [0.025, 0.02, 0.015, 0.01, 0.005, 0.0025]
+deciding_rules: ["recall loss: main and sensitivity", "false-alarm rise: main and sensitivity", "code-defect guard: main", "cleared guard: only if both bounds and powers hold"]
+sims: 4000
+seed: 20261016
+cap: 10
+floor: 34
+numpy_version: "2.5.3"
+reps=3 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.216750 power_room=0.216750 identical_loss=0.035250 identical_loss_upper=0.040369 no_loss_at_drop=0.019250 no_loss_at_drop_upper=0.023162
+reps=4 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.271000 power_room=0.271000 identical_loss=0.037000 identical_loss_upper=0.042230 no_loss_at_drop=0.021000 no_loss_at_drop_upper=0.025066
+reps=5 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.333000 power_room=0.333000 identical_loss=0.038500 identical_loss_upper=0.043824 no_loss_at_drop=0.025250 no_loss_at_drop_upper=0.029662
+reps=6 packages=51 defects=34 growth_units=0 alpha=0.015 evaluated_alpha=0.015 power_proportional=0.344000 power_room=0.344000 identical_loss=0.035000 identical_loss_upper=0.040103 no_loss_at_drop=0.013750 no_loss_at_drop_upper=0.017124
+reps=7 packages=51 defects=34 growth_units=0 alpha=0.015 evaluated_alpha=0.015 power_proportional=0.395250 power_room=0.395250 identical_loss=0.035500 identical_loss_upper=0.040635 no_loss_at_drop=0.015000 no_loss_at_drop_upper=0.018505
+reps=8 packages=51 defects=34 growth_units=0 alpha=0.015 evaluated_alpha=0.015 power_proportional=0.445500 power_room=0.445500 identical_loss=0.035750 identical_loss_upper=0.040901 no_loss_at_drop=0.017750 no_loss_at_drop_upper=0.021524
+reps=9 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.549250 power_room=0.549250 identical_loss=0.040500 identical_loss_upper=0.045945 no_loss_at_drop=0.024000 no_loss_at_drop_upper=0.028314
+reps=10 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.590250 power_room=0.590250 identical_loss=0.040000 identical_loss_upper=0.045415 no_loss_at_drop=0.020250 no_loss_at_drop_upper=0.024251
+reps=10 packages=54 defects=36 growth_units=1 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.651750 power_room=0.651750 identical_loss=0.043500 identical_loss_upper=0.049121 no_loss_at_drop=0.022000 no_loss_at_drop_upper=0.026150
+reps=10 packages=57 defects=38 growth_units=2 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.651500 power_room=0.651500 identical_loss=0.041000 identical_loss_upper=0.046475 no_loss_at_drop=0.017750 no_loss_at_drop_upper=0.021524
+reps=10 packages=60 defects=40 growth_units=3 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.673000 power_room=0.673000 identical_loss=0.040000 identical_loss_upper=0.045415 no_loss_at_drop=0.017500 no_loss_at_drop_upper=0.021251
+reps=10 packages=63 defects=42 growth_units=4 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.693000 power_room=0.693000 identical_loss=0.043500 identical_loss_upper=0.049121 no_loss_at_drop=0.013750 no_loss_at_drop_upper=0.017124
+reps=10 packages=66 defects=44 growth_units=5 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.722250 power_room=0.722250 identical_loss=0.035000 identical_loss_upper=0.040103 no_loss_at_drop=0.018250 no_loss_at_drop_upper=0.022071
+reps=10 packages=69 defects=46 growth_units=6 alpha=0.015 evaluated_alpha=0.015 power_proportional=0.695750 power_room=0.695750 identical_loss=0.032000 identical_loss_upper=0.036903 no_loss_at_drop=0.013000 no_loss_at_drop_upper=0.016292
+reps=10 packages=72 defects=48 growth_units=7 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.757750 power_room=0.757750 identical_loss=0.040250 identical_loss_upper=0.045680 no_loss_at_drop=0.023250 no_loss_at_drop_upper=0.027503
+reps=10 packages=75 defects=50 growth_units=8 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.783500 power_room=0.783500 identical_loss=0.039000 identical_loss_upper=0.044354 no_loss_at_drop=0.016500 no_loss_at_drop_upper=0.020155
+reps=10 packages=78 defects=52 growth_units=9 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.794250 power_room=0.794250 identical_loss=0.039000 identical_loss_upper=0.044354 no_loss_at_drop=0.014750 no_loss_at_drop_upper=0.018229
+reps=10 packages=81 defects=54 growth_units=10 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.820500 power_room=0.820500 identical_loss=0.038250 identical_loss_upper=0.043558 no_loss_at_drop=0.017250 no_loss_at_drop_upper=0.020977
+cleared guard: deciding; the guard cannot fire; both bounds and powers hold at the chosen level
+result: reached
+chosen reps=10 packages=81 defects=54 growth_units=10 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.820500 power_room=0.820500 identical_loss=0.038250 identical_loss_upper=0.043558 no_loss_at_drop=0.017250 no_loss_at_drop_upper=0.020977
+BOUND half-sd1.0-fa3-poisson reps=10 defects=54 alpha=0.02 identical_loss_upper=0.04355838 no_loss_at_drop_upper=0.02097706 power_proportional=0.8205 power_room=0.8205
+.Scenario uniform-sd0-fa0.2-nb0.5
+rate_distribution: "uniform"
+shock_sd: 0
+marginal_rate_rule: "E[logistic(a + sigma*Z)] = p; 40-node Gauss-Hermite, 3,999-rate intercept table; identical arms share intercepts"
+layout: {"defects": 34, "growth_unit": [2, 0, 0], "package_count": 51, "packages": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "placement": "rates shuffled among defects independently per simulated study"}
+false_alarm_model: {"distribution": "gamma-poisson", "mean": 0.2, "size": 0.5, "variance": 0.28}
+stops: {"probability": 0, "source": "Bernoulli per package run and arm; stopped alarms thinned by U(0,1)"}
+clearances: {"defects": 0, "probability": 0, "source": "independent Bernoulli per chosen defect, run and arm"}
+code_produced_defects: {"defects": 0, "off_rate": 0.95, "on_rate": 1}
+drop: 0.1
+shapes: ["proportional", "room"]
+alpha_ladder: [0.025, 0.02, 0.015, 0.01, 0.005, 0.0025]
+deciding_rules: ["recall loss: main and sensitivity", "false-alarm rise: main and sensitivity", "code-defect guard: main", "cleared guard: only if both bounds and powers hold"]
+sims: 4000
+seed: 20261016
+cap: 10
+floor: 34
+numpy_version: "2.5.3"
+reps=3 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.315000 power_room=0.341250 identical_loss=0.040000 identical_loss_upper=0.045415 no_loss_at_drop=0.020500 no_loss_at_drop_upper=0.024522
+reps=4 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.437000 power_room=0.480250 identical_loss=0.044250 identical_loss_upper=0.049914 no_loss_at_drop=0.022500 no_loss_at_drop_upper=0.026692
+reps=5 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.521000 power_room=0.570500 identical_loss=0.044250 identical_loss_upper=0.049914 no_loss_at_drop=0.025250 no_loss_at_drop_upper=0.029662
+reps=6 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.598750 power_room=0.642250 identical_loss=0.043500 identical_loss_upper=0.049121 no_loss_at_drop=0.022250 no_loss_at_drop_upper=0.026421
+reps=7 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.658000 power_room=0.703750 identical_loss=0.042500 identical_loss_upper=0.048063 no_loss_at_drop=0.023750 no_loss_at_drop_upper=0.028044
+reps=8 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.713250 power_room=0.761000 identical_loss=0.042500 identical_loss_upper=0.048063 no_loss_at_drop=0.024250 no_loss_at_drop_upper=0.028584
+reps=9 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.767750 power_room=0.810250 identical_loss=0.044250 identical_loss_upper=0.049914 no_loss_at_drop=0.026750 no_loss_at_drop_upper=0.031277
+reps=10 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.799000 power_room=0.848250 identical_loss=0.039750 identical_loss_upper=0.045150 no_loss_at_drop=0.022750 no_loss_at_drop_upper=0.026963
+reps=10 packages=54 defects=36 growth_units=1 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.796750 power_room=0.850500 identical_loss=0.041750 identical_loss_upper=0.047269 no_loss_at_drop=0.018500 no_loss_at_drop_upper=0.022344
+reps=10 packages=57 defects=38 growth_units=2 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.821500 power_room=0.870750 identical_loss=0.038750 identical_loss_upper=0.044089 no_loss_at_drop=0.013750 no_loss_at_drop_upper=0.017124
+cleared guard: deciding; the guard cannot fire; both bounds and powers hold at the chosen level
+result: reached
+chosen reps=10 packages=57 defects=38 growth_units=2 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.821500 power_room=0.870750 identical_loss=0.038750 identical_loss_upper=0.044089 no_loss_at_drop=0.013750 no_loss_at_drop_upper=0.017124
+BOUND uniform-sd0-fa0.2-nb0.5 reps=10 defects=38 alpha=0.02 identical_loss_upper=0.04408915 no_loss_at_drop_upper=0.01712404 power_proportional=0.8215 power_room=0.87075
+.Scenario uniform-sd0-fa0.2-poisson
+rate_distribution: "uniform"
+shock_sd: 0
+marginal_rate_rule: "E[logistic(a + sigma*Z)] = p; 40-node Gauss-Hermite, 3,999-rate intercept table; identical arms share intercepts"
+layout: {"defects": 34, "growth_unit": [2, 0, 0], "package_count": 51, "packages": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "placement": "rates shuffled among defects independently per simulated study"}
+false_alarm_model: {"distribution": "poisson", "mean": 0.2, "size": null, "variance": 0.2}
+stops: {"probability": 0, "source": "Bernoulli per package run and arm; stopped alarms thinned by U(0,1)"}
+clearances: {"defects": 0, "probability": 0, "source": "independent Bernoulli per chosen defect, run and arm"}
+code_produced_defects: {"defects": 0, "off_rate": 0.95, "on_rate": 1}
+drop: 0.1
+shapes: ["proportional", "room"]
+alpha_ladder: [0.025, 0.02, 0.015, 0.01, 0.005, 0.0025]
+deciding_rules: ["recall loss: main and sensitivity", "false-alarm rise: main and sensitivity", "code-defect guard: main", "cleared guard: only if both bounds and powers hold"]
+sims: 4000
+seed: 20261016
+cap: 10
+floor: 34
+numpy_version: "2.5.3"
+reps=3 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.323250 power_room=0.347250 identical_loss=0.043500 identical_loss_upper=0.049121 no_loss_at_drop=0.019250 no_loss_at_drop_upper=0.023162
+reps=4 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.407500 power_room=0.446250 identical_loss=0.042750 identical_loss_upper=0.048327 no_loss_at_drop=0.020000 no_loss_at_drop_upper=0.023979
+reps=5 packages=51 defects=34 growth_units=0 alpha=0.015 evaluated_alpha=0.015 power_proportional=0.439500 power_room=0.479500 identical_loss=0.033500 identical_loss_upper=0.038504 no_loss_at_drop=0.014750 no_loss_at_drop_upper=0.018229
+reps=6 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.559250 power_room=0.615250 identical_loss=0.041250 identical_loss_upper=0.046740 no_loss_at_drop=0.018250 no_loss_at_drop_upper=0.022071
+reps=7 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.633250 power_room=0.690250 identical_loss=0.040000 identical_loss_upper=0.045415 no_loss_at_drop=0.015750 no_loss_at_drop_upper=0.019331
+reps=8 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.684000 power_room=0.745000 identical_loss=0.040000 identical_loss_upper=0.045415 no_loss_at_drop=0.016250 no_loss_at_drop_upper=0.019880
+reps=9 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.743250 power_room=0.796250 identical_loss=0.039000 identical_loss_upper=0.044354 no_loss_at_drop=0.017000 no_loss_at_drop_upper=0.020703
+reps=10 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.777750 power_room=0.834500 identical_loss=0.038000 identical_loss_upper=0.043293 no_loss_at_drop=0.014750 no_loss_at_drop_upper=0.018229
+reps=10 packages=54 defects=36 growth_units=1 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.808250 power_room=0.858250 identical_loss=0.036500 identical_loss_upper=0.041699 no_loss_at_drop=0.014250 no_loss_at_drop_upper=0.017677
+cleared guard: deciding; the guard cannot fire; both bounds and powers hold at the chosen level
+result: reached
+chosen reps=10 packages=54 defects=36 growth_units=1 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.808250 power_room=0.858250 identical_loss=0.036500 identical_loss_upper=0.041699 no_loss_at_drop=0.014250 no_loss_at_drop_upper=0.017677
+BOUND uniform-sd0-fa0.2-poisson reps=10 defects=36 alpha=0.02 identical_loss_upper=0.04169889 no_loss_at_drop_upper=0.01767713 power_proportional=0.80825 power_room=0.85825
+.Scenario uniform-sd0-fa1-nb0.5
+rate_distribution: "uniform"
+shock_sd: 0
+marginal_rate_rule: "E[logistic(a + sigma*Z)] = p; 40-node Gauss-Hermite, 3,999-rate intercept table; identical arms share intercepts"
+layout: {"defects": 34, "growth_unit": [2, 0, 0], "package_count": 51, "packages": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "placement": "rates shuffled among defects independently per simulated study"}
+false_alarm_model: {"distribution": "gamma-poisson", "mean": 1, "size": 0.5, "variance": 3.0}
+stops: {"probability": 0, "source": "Bernoulli per package run and arm; stopped alarms thinned by U(0,1)"}
+clearances: {"defects": 0, "probability": 0, "source": "independent Bernoulli per chosen defect, run and arm"}
+code_produced_defects: {"defects": 0, "off_rate": 0.95, "on_rate": 1}
+drop: 0.1
+shapes: ["proportional", "room"]
+alpha_ladder: [0.025, 0.02, 0.015, 0.01, 0.005, 0.0025]
+deciding_rules: ["recall loss: main and sensitivity", "false-alarm rise: main and sensitivity", "code-defect guard: main", "cleared guard: only if both bounds and powers hold"]
+sims: 4000
+seed: 20261016
+cap: 10
+floor: 34
+numpy_version: "2.5.3"
+reps=3 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.312500 power_room=0.346500 identical_loss=0.039500 identical_loss_upper=0.044885 no_loss_at_drop=0.020500 no_loss_at_drop_upper=0.024522
+reps=4 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.387000 power_room=0.430250 identical_loss=0.041000 identical_loss_upper=0.046475 no_loss_at_drop=0.017750 no_loss_at_drop_upper=0.021524
+reps=5 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.466500 power_room=0.528250 identical_loss=0.040750 identical_loss_upper=0.046210 no_loss_at_drop=0.020500 no_loss_at_drop_upper=0.024522
+reps=6 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.548500 power_room=0.601750 identical_loss=0.037750 identical_loss_upper=0.043027 no_loss_at_drop=0.021250 no_loss_at_drop_upper=0.025337
+reps=7 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.617750 power_room=0.683500 identical_loss=0.044250 identical_loss_upper=0.049914 no_loss_at_drop=0.023000 no_loss_at_drop_upper=0.027233
+reps=8 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.674500 power_room=0.737000 identical_loss=0.041750 identical_loss_upper=0.047269 no_loss_at_drop=0.021000 no_loss_at_drop_upper=0.025066
+reps=9 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.723500 power_room=0.783750 identical_loss=0.040250 identical_loss_upper=0.045680 no_loss_at_drop=0.018250 no_loss_at_drop_upper=0.022071
+reps=10 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.769250 power_room=0.825750 identical_loss=0.036750 identical_loss_upper=0.041965 no_loss_at_drop=0.017250 no_loss_at_drop_upper=0.020977
+reps=10 packages=54 defects=36 growth_units=1 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.795000 power_room=0.844000 identical_loss=0.035750 identical_loss_upper=0.040901 no_loss_at_drop=0.019750 no_loss_at_drop_upper=0.023707
+reps=10 packages=57 defects=38 growth_units=2 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.832750 power_room=0.871750 identical_loss=0.039750 identical_loss_upper=0.045150 no_loss_at_drop=0.016750 no_loss_at_drop_upper=0.020429
+cleared guard: deciding; the guard cannot fire; both bounds and powers hold at the chosen level
+result: reached
+chosen reps=10 packages=57 defects=38 growth_units=2 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.832750 power_room=0.871750 identical_loss=0.039750 identical_loss_upper=0.045150 no_loss_at_drop=0.016750 no_loss_at_drop_upper=0.020429
+BOUND uniform-sd0-fa1-nb0.5 reps=10 defects=38 alpha=0.02 identical_loss_upper=0.04515000 no_loss_at_drop_upper=0.02042908 power_proportional=0.83275 power_room=0.87175
+.Scenario uniform-sd0-fa1-poisson
+rate_distribution: "uniform"
+shock_sd: 0
+marginal_rate_rule: "E[logistic(a + sigma*Z)] = p; 40-node Gauss-Hermite, 3,999-rate intercept table; identical arms share intercepts"
+layout: {"defects": 34, "growth_unit": [2, 0, 0], "package_count": 51, "packages": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "placement": "rates shuffled among defects independently per simulated study"}
+false_alarm_model: {"distribution": "poisson", "mean": 1, "size": null, "variance": 1}
+stops: {"probability": 0, "source": "Bernoulli per package run and arm; stopped alarms thinned by U(0,1)"}
+clearances: {"defects": 0, "probability": 0, "source": "independent Bernoulli per chosen defect, run and arm"}
+code_produced_defects: {"defects": 0, "off_rate": 0.95, "on_rate": 1}
+drop: 0.1
+shapes: ["proportional", "room"]
+alpha_ladder: [0.025, 0.02, 0.015, 0.01, 0.005, 0.0025]
+deciding_rules: ["recall loss: main and sensitivity", "false-alarm rise: main and sensitivity", "code-defect guard: main", "cleared guard: only if both bounds and powers hold"]
+sims: 4000
+seed: 20261016
+cap: 10
+floor: 34
+numpy_version: "2.5.3"
+reps=3 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.310750 power_room=0.337500 identical_loss=0.038500 identical_loss_upper=0.043824 no_loss_at_drop=0.026000 no_loss_at_drop_upper=0.030470
+reps=4 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.406750 power_room=0.453500 identical_loss=0.035250 identical_loss_upper=0.040369 no_loss_at_drop=0.024000 no_loss_at_drop_upper=0.028314
+reps=5 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.482000 power_room=0.530000 identical_loss=0.036250 identical_loss_upper=0.041433 no_loss_at_drop=0.026500 no_loss_at_drop_upper=0.031008
+reps=6 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.605500 power_room=0.648000 identical_loss=0.043500 identical_loss_upper=0.049121 no_loss_at_drop=0.025250 no_loss_at_drop_upper=0.029662
+reps=7 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.624500 power_room=0.674250 identical_loss=0.039500 identical_loss_upper=0.044885 no_loss_at_drop=0.021750 no_loss_at_drop_upper=0.025879
+reps=8 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.679000 power_room=0.734000 identical_loss=0.035000 identical_loss_upper=0.040103 no_loss_at_drop=0.018250 no_loss_at_drop_upper=0.022071
+reps=9 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.727000 power_room=0.777250 identical_loss=0.038500 identical_loss_upper=0.043824 no_loss_at_drop=0.018000 no_loss_at_drop_upper=0.021798
+reps=10 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.775000 power_room=0.827500 identical_loss=0.036500 identical_loss_upper=0.041699 no_loss_at_drop=0.017500 no_loss_at_drop_upper=0.021251
+reps=10 packages=54 defects=36 growth_units=1 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.810500 power_room=0.857500 identical_loss=0.041750 identical_loss_upper=0.047269 no_loss_at_drop=0.016500 no_loss_at_drop_upper=0.020155
+cleared guard: deciding; the guard cannot fire; both bounds and powers hold at the chosen level
+result: reached
+chosen reps=10 packages=54 defects=36 growth_units=1 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.810500 power_room=0.857500 identical_loss=0.041750 identical_loss_upper=0.047269 no_loss_at_drop=0.016500 no_loss_at_drop_upper=0.020155
+BOUND uniform-sd0-fa1-poisson reps=10 defects=36 alpha=0.02 identical_loss_upper=0.04726914 no_loss_at_drop_upper=0.02015481 power_proportional=0.8105 power_room=0.8575
+.Scenario uniform-sd0-fa3-nb0.5
+rate_distribution: "uniform"
+shock_sd: 0
+marginal_rate_rule: "E[logistic(a + sigma*Z)] = p; 40-node Gauss-Hermite, 3,999-rate intercept table; identical arms share intercepts"
+layout: {"defects": 34, "growth_unit": [2, 0, 0], "package_count": 51, "packages": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "placement": "rates shuffled among defects independently per simulated study"}
+false_alarm_model: {"distribution": "gamma-poisson", "mean": 3, "size": 0.5, "variance": 21.0}
+stops: {"probability": 0, "source": "Bernoulli per package run and arm; stopped alarms thinned by U(0,1)"}
+clearances: {"defects": 0, "probability": 0, "source": "independent Bernoulli per chosen defect, run and arm"}
+code_produced_defects: {"defects": 0, "off_rate": 0.95, "on_rate": 1}
+drop: 0.1
+shapes: ["proportional", "room"]
+alpha_ladder: [0.025, 0.02, 0.015, 0.01, 0.005, 0.0025]
+deciding_rules: ["recall loss: main and sensitivity", "false-alarm rise: main and sensitivity", "code-defect guard: main", "cleared guard: only if both bounds and powers hold"]
+sims: 4000
+seed: 20261016
+cap: 10
+floor: 34
+numpy_version: "2.5.3"
+reps=3 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.308000 power_room=0.336250 identical_loss=0.038000 identical_loss_upper=0.043293 no_loss_at_drop=0.021500 no_loss_at_drop_upper=0.025608
+reps=4 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.403500 power_room=0.440250 identical_loss=0.040500 identical_loss_upper=0.045945 no_loss_at_drop=0.020250 no_loss_at_drop_upper=0.024251
+reps=5 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.492250 power_room=0.534250 identical_loss=0.037250 identical_loss_upper=0.042496 no_loss_at_drop=0.016500 no_loss_at_drop_upper=0.020155
+reps=6 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.559000 power_room=0.607000 identical_loss=0.038250 identical_loss_upper=0.043558 no_loss_at_drop=0.016500 no_loss_at_drop_upper=0.020155
+reps=7 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.626000 power_room=0.681750 identical_loss=0.035500 identical_loss_upper=0.040635 no_loss_at_drop=0.016500 no_loss_at_drop_upper=0.020155
+reps=8 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.681000 power_room=0.741750 identical_loss=0.040500 identical_loss_upper=0.045945 no_loss_at_drop=0.017250 no_loss_at_drop_upper=0.020977
+reps=9 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.728500 power_room=0.785500 identical_loss=0.038750 identical_loss_upper=0.044089 no_loss_at_drop=0.017000 no_loss_at_drop_upper=0.020703
+reps=10 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.770000 power_room=0.819500 identical_loss=0.036000 identical_loss_upper=0.041167 no_loss_at_drop=0.016750 no_loss_at_drop_upper=0.020429
+reps=10 packages=54 defects=36 growth_units=1 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.800750 power_room=0.847250 identical_loss=0.041250 identical_loss_upper=0.046740 no_loss_at_drop=0.015750 no_loss_at_drop_upper=0.019331
+cleared guard: deciding; the guard cannot fire; both bounds and powers hold at the chosen level
+result: reached
+chosen reps=10 packages=54 defects=36 growth_units=1 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.800750 power_room=0.847250 identical_loss=0.041250 identical_loss_upper=0.046740 no_loss_at_drop=0.015750 no_loss_at_drop_upper=0.019331
+BOUND uniform-sd0-fa3-nb0.5 reps=10 defects=36 alpha=0.02 identical_loss_upper=0.04673966 no_loss_at_drop_upper=0.01933083 power_proportional=0.80075 power_room=0.84725
+.Scenario uniform-sd0-fa3-poisson
+rate_distribution: "uniform"
+shock_sd: 0
+marginal_rate_rule: "E[logistic(a + sigma*Z)] = p; 40-node Gauss-Hermite, 3,999-rate intercept table; identical arms share intercepts"
+layout: {"defects": 34, "growth_unit": [2, 0, 0], "package_count": 51, "packages": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "placement": "rates shuffled among defects independently per simulated study"}
+false_alarm_model: {"distribution": "poisson", "mean": 3, "size": null, "variance": 3}
+stops: {"probability": 0, "source": "Bernoulli per package run and arm; stopped alarms thinned by U(0,1)"}
+clearances: {"defects": 0, "probability": 0, "source": "independent Bernoulli per chosen defect, run and arm"}
+code_produced_defects: {"defects": 0, "off_rate": 0.95, "on_rate": 1}
+drop: 0.1
+shapes: ["proportional", "room"]
+alpha_ladder: [0.025, 0.02, 0.015, 0.01, 0.005, 0.0025]
+deciding_rules: ["recall loss: main and sensitivity", "false-alarm rise: main and sensitivity", "code-defect guard: main", "cleared guard: only if both bounds and powers hold"]
+sims: 4000
+seed: 20261016
+cap: 10
+floor: 34
+numpy_version: "2.5.3"
+reps=3 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.306250 power_room=0.338000 identical_loss=0.037500 identical_loss_upper=0.042762 no_loss_at_drop=0.021500 no_loss_at_drop_upper=0.025608
+reps=4 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.404750 power_room=0.447500 identical_loss=0.041000 identical_loss_upper=0.046475 no_loss_at_drop=0.023500 no_loss_at_drop_upper=0.027774
+reps=5 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.478250 power_room=0.539500 identical_loss=0.040750 identical_loss_upper=0.046210 no_loss_at_drop=0.020750 no_loss_at_drop_upper=0.024794
+reps=6 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.549750 power_room=0.616250 identical_loss=0.042500 identical_loss_upper=0.048063 no_loss_at_drop=0.018500 no_loss_at_drop_upper=0.022344
+reps=7 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.622000 power_room=0.684000 identical_loss=0.040250 identical_loss_upper=0.045680 no_loss_at_drop=0.018750 no_loss_at_drop_upper=0.022617
+reps=8 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.680000 power_room=0.736000 identical_loss=0.041000 identical_loss_upper=0.046475 no_loss_at_drop=0.018500 no_loss_at_drop_upper=0.022344
+reps=9 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.726250 power_room=0.781750 identical_loss=0.042000 identical_loss_upper=0.047534 no_loss_at_drop=0.017000 no_loss_at_drop_upper=0.020703
+reps=10 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.772250 power_room=0.821750 identical_loss=0.042000 identical_loss_upper=0.047534 no_loss_at_drop=0.018750 no_loss_at_drop_upper=0.022617
+reps=10 packages=54 defects=36 growth_units=1 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.805500 power_room=0.846500 identical_loss=0.036500 identical_loss_upper=0.041699 no_loss_at_drop=0.015500 no_loss_at_drop_upper=0.019056
+cleared guard: deciding; the guard cannot fire; both bounds and powers hold at the chosen level
+result: reached
+chosen reps=10 packages=54 defects=36 growth_units=1 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.805500 power_room=0.846500 identical_loss=0.036500 identical_loss_upper=0.041699 no_loss_at_drop=0.015500 no_loss_at_drop_upper=0.019056
+BOUND uniform-sd0-fa3-poisson reps=10 defects=36 alpha=0.02 identical_loss_upper=0.04169889 no_loss_at_drop_upper=0.01905576 power_proportional=0.8055 power_room=0.8465
+.Scenario uniform-sd1.0-fa0.2-nb0.5
+rate_distribution: "uniform"
+shock_sd: 1.0
+marginal_rate_rule: "E[logistic(a + sigma*Z)] = p; 40-node Gauss-Hermite, 3,999-rate intercept table; identical arms share intercepts"
+layout: {"defects": 34, "growth_unit": [2, 0, 0], "package_count": 51, "packages": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "placement": "rates shuffled among defects independently per simulated study"}
+false_alarm_model: {"distribution": "gamma-poisson", "mean": 0.2, "size": 0.5, "variance": 0.28}
+stops: {"probability": 0, "source": "Bernoulli per package run and arm; stopped alarms thinned by U(0,1)"}
+clearances: {"defects": 0, "probability": 0, "source": "independent Bernoulli per chosen defect, run and arm"}
+code_produced_defects: {"defects": 0, "off_rate": 0.95, "on_rate": 1}
+drop: 0.1
+shapes: ["proportional", "room"]
+alpha_ladder: [0.025, 0.02, 0.015, 0.01, 0.005, 0.0025]
+deciding_rules: ["recall loss: main and sensitivity", "false-alarm rise: main and sensitivity", "code-defect guard: main", "cleared guard: only if both bounds and powers hold"]
+sims: 4000
+seed: 20261016
+cap: 10
+floor: 34
+numpy_version: "2.5.3"
+reps=3 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.311250 power_room=0.333000 identical_loss=0.043000 identical_loss_upper=0.048592 no_loss_at_drop=0.027000 no_loss_at_drop_upper=0.031546
+reps=4 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.352250 power_room=0.399000 identical_loss=0.037250 identical_loss_upper=0.042496 no_loss_at_drop=0.022500 no_loss_at_drop_upper=0.026692
+reps=5 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.435000 power_room=0.483500 identical_loss=0.038250 identical_loss_upper=0.043558 no_loss_at_drop=0.023000 no_loss_at_drop_upper=0.027233
+reps=6 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.505000 power_room=0.565500 identical_loss=0.039250 identical_loss_upper=0.044620 no_loss_at_drop=0.022500 no_loss_at_drop_upper=0.026692
+reps=7 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.567500 power_room=0.632250 identical_loss=0.039250 identical_loss_upper=0.044620 no_loss_at_drop=0.021250 no_loss_at_drop_upper=0.025337
+reps=8 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.631500 power_room=0.684750 identical_loss=0.038000 identical_loss_upper=0.043293 no_loss_at_drop=0.021250 no_loss_at_drop_upper=0.025337
+reps=9 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.676500 power_room=0.737750 identical_loss=0.037500 identical_loss_upper=0.042762 no_loss_at_drop=0.024250 no_loss_at_drop_upper=0.028584
+reps=10 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.717250 power_room=0.774750 identical_loss=0.036000 identical_loss_upper=0.041167 no_loss_at_drop=0.024000 no_loss_at_drop_upper=0.028314
+reps=10 packages=54 defects=36 growth_units=1 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.751750 power_room=0.808250 identical_loss=0.040250 identical_loss_upper=0.045680 no_loss_at_drop=0.019500 no_loss_at_drop_upper=0.023434
+reps=10 packages=57 defects=38 growth_units=2 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.771750 power_room=0.826000 identical_loss=0.043250 identical_loss_upper=0.048856 no_loss_at_drop=0.021750 no_loss_at_drop_upper=0.025879
+reps=10 packages=60 defects=40 growth_units=3 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.798000 power_room=0.850000 identical_loss=0.040000 identical_loss_upper=0.045415 no_loss_at_drop=0.020000 no_loss_at_drop_upper=0.023979
+reps=10 packages=63 defects=42 growth_units=4 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.861500 power_room=0.896000 identical_loss=0.041000 identical_loss_upper=0.046475 no_loss_at_drop=0.020500 no_loss_at_drop_upper=0.024522
+cleared guard: deciding; the guard cannot fire; both bounds and powers hold at the chosen level
+result: reached
+chosen reps=10 packages=63 defects=42 growth_units=4 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.861500 power_room=0.896000 identical_loss=0.041000 identical_loss_upper=0.046475 no_loss_at_drop=0.020500 no_loss_at_drop_upper=0.024522
+BOUND uniform-sd1.0-fa0.2-nb0.5 reps=10 defects=42 alpha=0.025 identical_loss_upper=0.04647485 no_loss_at_drop_upper=0.02452242 power_proportional=0.8615 power_room=0.896
+.Scenario uniform-sd1.0-fa0.2-poisson
+rate_distribution: "uniform"
+shock_sd: 1.0
+marginal_rate_rule: "E[logistic(a + sigma*Z)] = p; 40-node Gauss-Hermite, 3,999-rate intercept table; identical arms share intercepts"
+layout: {"defects": 34, "growth_unit": [2, 0, 0], "package_count": 51, "packages": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "placement": "rates shuffled among defects independently per simulated study"}
+false_alarm_model: {"distribution": "poisson", "mean": 0.2, "size": null, "variance": 0.2}
+stops: {"probability": 0, "source": "Bernoulli per package run and arm; stopped alarms thinned by U(0,1)"}
+clearances: {"defects": 0, "probability": 0, "source": "independent Bernoulli per chosen defect, run and arm"}
+code_produced_defects: {"defects": 0, "off_rate": 0.95, "on_rate": 1}
+drop: 0.1
+shapes: ["proportional", "room"]
+alpha_ladder: [0.025, 0.02, 0.015, 0.01, 0.005, 0.0025]
+deciding_rules: ["recall loss: main and sensitivity", "false-alarm rise: main and sensitivity", "code-defect guard: main", "cleared guard: only if both bounds and powers hold"]
+sims: 4000
+seed: 20261016
+cap: 10
+floor: 34
+numpy_version: "2.5.3"
+reps=3 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.292750 power_room=0.323500 identical_loss=0.042000 identical_loss_upper=0.047534 no_loss_at_drop=0.018000 no_loss_at_drop_upper=0.021798
+reps=4 packages=51 defects=34 growth_units=0 alpha=0.015 evaluated_alpha=0.015 power_proportional=0.330500 power_room=0.376750 identical_loss=0.036750 identical_loss_upper=0.041965 no_loss_at_drop=0.014000 no_loss_at_drop_upper=0.017401
+reps=5 packages=51 defects=34 growth_units=0 alpha=0.015 evaluated_alpha=0.015 power_proportional=0.396500 power_room=0.446750 identical_loss=0.033750 identical_loss_upper=0.038771 no_loss_at_drop=0.013250 no_loss_at_drop_upper=0.016570
+reps=6 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.519500 power_room=0.576250 identical_loss=0.042750 identical_loss_upper=0.048327 no_loss_at_drop=0.017500 no_loss_at_drop_upper=0.021251
+reps=7 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.572000 power_room=0.634500 identical_loss=0.044000 identical_loss_upper=0.049649 no_loss_at_drop=0.019500 no_loss_at_drop_upper=0.023434
+reps=8 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.637000 power_room=0.697000 identical_loss=0.040250 identical_loss_upper=0.045680 no_loss_at_drop=0.015500 no_loss_at_drop_upper=0.019056
+reps=9 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.674500 power_room=0.741500 identical_loss=0.041000 identical_loss_upper=0.046475 no_loss_at_drop=0.018000 no_loss_at_drop_upper=0.021798
+reps=10 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.723000 power_room=0.780500 identical_loss=0.039250 identical_loss_upper=0.044620 no_loss_at_drop=0.018750 no_loss_at_drop_upper=0.022617
+reps=10 packages=54 defects=36 growth_units=1 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.761750 power_room=0.814500 identical_loss=0.040000 identical_loss_upper=0.045415 no_loss_at_drop=0.014250 no_loss_at_drop_upper=0.017677
+reps=10 packages=57 defects=38 growth_units=2 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.768250 power_room=0.830000 identical_loss=0.036250 identical_loss_upper=0.041433 no_loss_at_drop=0.018250 no_loss_at_drop_upper=0.022071
+reps=10 packages=60 defects=40 growth_units=3 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.803500 power_room=0.855250 identical_loss=0.042000 identical_loss_upper=0.047534 no_loss_at_drop=0.017500 no_loss_at_drop_upper=0.021251
+cleared guard: deciding; the guard cannot fire; both bounds and powers hold at the chosen level
+result: reached
+chosen reps=10 packages=60 defects=40 growth_units=3 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.803500 power_room=0.855250 identical_loss=0.042000 identical_loss_upper=0.047534 no_loss_at_drop=0.017500 no_loss_at_drop_upper=0.021251
+BOUND uniform-sd1.0-fa0.2-poisson reps=10 defects=40 alpha=0.02 identical_loss_upper=0.04753380 no_loss_at_drop_upper=0.02125077 power_proportional=0.8035 power_room=0.85525
+.Scenario uniform-sd1.0-fa1-nb0.5
+rate_distribution: "uniform"
+shock_sd: 1.0
+marginal_rate_rule: "E[logistic(a + sigma*Z)] = p; 40-node Gauss-Hermite, 3,999-rate intercept table; identical arms share intercepts"
+layout: {"defects": 34, "growth_unit": [2, 0, 0], "package_count": 51, "packages": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "placement": "rates shuffled among defects independently per simulated study"}
+false_alarm_model: {"distribution": "gamma-poisson", "mean": 1, "size": 0.5, "variance": 3.0}
+stops: {"probability": 0, "source": "Bernoulli per package run and arm; stopped alarms thinned by U(0,1)"}
+clearances: {"defects": 0, "probability": 0, "source": "independent Bernoulli per chosen defect, run and arm"}
+code_produced_defects: {"defects": 0, "off_rate": 0.95, "on_rate": 1}
+drop: 0.1
+shapes: ["proportional", "room"]
+alpha_ladder: [0.025, 0.02, 0.015, 0.01, 0.005, 0.0025]
+deciding_rules: ["recall loss: main and sensitivity", "false-alarm rise: main and sensitivity", "code-defect guard: main", "cleared guard: only if both bounds and powers hold"]
+sims: 4000
+seed: 20261016
+cap: 10
+floor: 34
+numpy_version: "2.5.3"
+reps=3 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.325000 power_room=0.350500 identical_loss=0.043750 identical_loss_upper=0.049385 no_loss_at_drop=0.028000 no_loss_at_drop_upper=0.032620
+reps=4 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.371250 power_room=0.412750 identical_loss=0.041750 identical_loss_upper=0.047269 no_loss_at_drop=0.018250 no_loss_at_drop_upper=0.022071
+reps=5 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.454250 power_room=0.503750 identical_loss=0.038250 identical_loss_upper=0.043558 no_loss_at_drop=0.018750 no_loss_at_drop_upper=0.022617
+reps=6 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.524500 power_room=0.574000 identical_loss=0.039750 identical_loss_upper=0.045150 no_loss_at_drop=0.017500 no_loss_at_drop_upper=0.021251
+reps=7 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.583750 power_room=0.643250 identical_loss=0.040500 identical_loss_upper=0.045945 no_loss_at_drop=0.020250 no_loss_at_drop_upper=0.024251
+reps=8 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.630500 power_room=0.696500 identical_loss=0.040750 identical_loss_upper=0.046210 no_loss_at_drop=0.017000 no_loss_at_drop_upper=0.020703
+reps=9 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.690250 power_room=0.754750 identical_loss=0.039750 identical_loss_upper=0.045150 no_loss_at_drop=0.016000 no_loss_at_drop_upper=0.019606
+reps=10 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.733500 power_room=0.799000 identical_loss=0.038500 identical_loss_upper=0.043824 no_loss_at_drop=0.014000 no_loss_at_drop_upper=0.017401
+reps=10 packages=54 defects=36 growth_units=1 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.760000 power_room=0.818250 identical_loss=0.034750 identical_loss_upper=0.039836 no_loss_at_drop=0.016000 no_loss_at_drop_upper=0.019606
+reps=10 packages=57 defects=38 growth_units=2 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.787750 power_room=0.834750 identical_loss=0.037000 identical_loss_upper=0.042230 no_loss_at_drop=0.020250 no_loss_at_drop_upper=0.024251
+reps=10 packages=60 defects=40 growth_units=3 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.802750 power_room=0.850750 identical_loss=0.039750 identical_loss_upper=0.045150 no_loss_at_drop=0.016500 no_loss_at_drop_upper=0.020155
+cleared guard: deciding; the guard cannot fire; both bounds and powers hold at the chosen level
+result: reached
+chosen reps=10 packages=60 defects=40 growth_units=3 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.802750 power_room=0.850750 identical_loss=0.039750 identical_loss_upper=0.045150 no_loss_at_drop=0.016500 no_loss_at_drop_upper=0.020155
+BOUND uniform-sd1.0-fa1-nb0.5 reps=10 defects=40 alpha=0.02 identical_loss_upper=0.04515000 no_loss_at_drop_upper=0.02015481 power_proportional=0.80275 power_room=0.85075
+.Scenario uniform-sd1.0-fa1-poisson
+rate_distribution: "uniform"
+shock_sd: 1.0
+marginal_rate_rule: "E[logistic(a + sigma*Z)] = p; 40-node Gauss-Hermite, 3,999-rate intercept table; identical arms share intercepts"
+layout: {"defects": 34, "growth_unit": [2, 0, 0], "package_count": 51, "packages": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "placement": "rates shuffled among defects independently per simulated study"}
+false_alarm_model: {"distribution": "poisson", "mean": 1, "size": null, "variance": 1}
+stops: {"probability": 0, "source": "Bernoulli per package run and arm; stopped alarms thinned by U(0,1)"}
+clearances: {"defects": 0, "probability": 0, "source": "independent Bernoulli per chosen defect, run and arm"}
+code_produced_defects: {"defects": 0, "off_rate": 0.95, "on_rate": 1}
+drop: 0.1
+shapes: ["proportional", "room"]
+alpha_ladder: [0.025, 0.02, 0.015, 0.01, 0.005, 0.0025]
+deciding_rules: ["recall loss: main and sensitivity", "false-alarm rise: main and sensitivity", "code-defect guard: main", "cleared guard: only if both bounds and powers hold"]
+sims: 4000
+seed: 20261016
+cap: 10
+floor: 34
+numpy_version: "2.5.3"
+reps=3 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.282750 power_room=0.311250 identical_loss=0.043000 identical_loss_upper=0.048592 no_loss_at_drop=0.017750 no_loss_at_drop_upper=0.021524
+reps=4 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.373000 power_room=0.414250 identical_loss=0.043750 identical_loss_upper=0.049385 no_loss_at_drop=0.017500 no_loss_at_drop_upper=0.021251
+reps=5 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.442250 power_room=0.492250 identical_loss=0.041000 identical_loss_upper=0.046475 no_loss_at_drop=0.018250 no_loss_at_drop_upper=0.022071
+reps=6 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.508500 power_room=0.564750 identical_loss=0.043250 identical_loss_upper=0.048856 no_loss_at_drop=0.020000 no_loss_at_drop_upper=0.023979
+reps=7 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.578250 power_room=0.638750 identical_loss=0.042750 identical_loss_upper=0.048327 no_loss_at_drop=0.020250 no_loss_at_drop_upper=0.024251
+reps=8 packages=51 defects=34 growth_units=0 alpha=0.015 evaluated_alpha=0.015 power_proportional=0.579250 power_room=0.650250 identical_loss=0.033000 identical_loss_upper=0.037971 no_loss_at_drop=0.013250 no_loss_at_drop_upper=0.016570
+reps=9 packages=51 defects=34 growth_units=0 alpha=0.015 evaluated_alpha=0.015 power_proportional=0.625000 power_room=0.700500 identical_loss=0.035500 identical_loss_upper=0.040635 no_loss_at_drop=0.012500 no_loss_at_drop_upper=0.015737
+reps=10 packages=51 defects=34 growth_units=0 alpha=0.015 evaluated_alpha=0.015 power_proportional=0.678750 power_room=0.745750 identical_loss=0.032500 identical_loss_upper=0.037437 no_loss_at_drop=0.012000 no_loss_at_drop_upper=0.015180
+reps=10 packages=54 defects=36 growth_units=1 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.749500 power_room=0.805250 identical_loss=0.035750 identical_loss_upper=0.040901 no_loss_at_drop=0.017750 no_loss_at_drop_upper=0.021524
+reps=10 packages=57 defects=38 growth_units=2 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.770750 power_room=0.828750 identical_loss=0.044000 identical_loss_upper=0.049649 no_loss_at_drop=0.017250 no_loss_at_drop_upper=0.020977
+reps=10 packages=60 defects=40 growth_units=3 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.797250 power_room=0.848250 identical_loss=0.043750 identical_loss_upper=0.049385 no_loss_at_drop=0.020750 no_loss_at_drop_upper=0.024794
+reps=10 packages=63 defects=42 growth_units=4 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.826000 power_room=0.873750 identical_loss=0.041250 identical_loss_upper=0.046740 no_loss_at_drop=0.016250 no_loss_at_drop_upper=0.019880
+cleared guard: deciding; the guard cannot fire; both bounds and powers hold at the chosen level
+result: reached
+chosen reps=10 packages=63 defects=42 growth_units=4 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.826000 power_room=0.873750 identical_loss=0.041250 identical_loss_upper=0.046740 no_loss_at_drop=0.016250 no_loss_at_drop_upper=0.019880
+BOUND uniform-sd1.0-fa1-poisson reps=10 defects=42 alpha=0.02 identical_loss_upper=0.04673966 no_loss_at_drop_upper=0.01988035 power_proportional=0.826 power_room=0.87375
+.Scenario uniform-sd1.0-fa3-nb0.5
+rate_distribution: "uniform"
+shock_sd: 1.0
+marginal_rate_rule: "E[logistic(a + sigma*Z)] = p; 40-node Gauss-Hermite, 3,999-rate intercept table; identical arms share intercepts"
+layout: {"defects": 34, "growth_unit": [2, 0, 0], "package_count": 51, "packages": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "placement": "rates shuffled among defects independently per simulated study"}
+false_alarm_model: {"distribution": "gamma-poisson", "mean": 3, "size": 0.5, "variance": 21.0}
+stops: {"probability": 0, "source": "Bernoulli per package run and arm; stopped alarms thinned by U(0,1)"}
+clearances: {"defects": 0, "probability": 0, "source": "independent Bernoulli per chosen defect, run and arm"}
+code_produced_defects: {"defects": 0, "off_rate": 0.95, "on_rate": 1}
+drop: 0.1
+shapes: ["proportional", "room"]
+alpha_ladder: [0.025, 0.02, 0.015, 0.01, 0.005, 0.0025]
+deciding_rules: ["recall loss: main and sensitivity", "false-alarm rise: main and sensitivity", "code-defect guard: main", "cleared guard: only if both bounds and powers hold"]
+sims: 4000
+seed: 20261016
+cap: 10
+floor: 34
+numpy_version: "2.5.3"
+reps=3 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.273500 power_room=0.310500 identical_loss=0.041000 identical_loss_upper=0.046475 no_loss_at_drop=0.017500 no_loss_at_drop_upper=0.021251
+reps=4 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.367500 power_room=0.406000 identical_loss=0.039500 identical_loss_upper=0.044885 no_loss_at_drop=0.016500 no_loss_at_drop_upper=0.020155
+reps=5 packages=51 defects=34 growth_units=0 alpha=0.015 evaluated_alpha=0.015 power_proportional=0.390250 power_room=0.440500 identical_loss=0.035250 identical_loss_upper=0.040369 no_loss_at_drop=0.014000 no_loss_at_drop_upper=0.017401
+reps=6 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.508500 power_room=0.569500 identical_loss=0.043500 identical_loss_upper=0.049121 no_loss_at_drop=0.018250 no_loss_at_drop_upper=0.022071
+reps=7 packages=51 defects=34 growth_units=0 alpha=0.015 evaluated_alpha=0.015 power_proportional=0.517250 power_room=0.579750 identical_loss=0.034500 identical_loss_upper=0.039570 no_loss_at_drop=0.013500 no_loss_at_drop_upper=0.016847
+reps=8 packages=51 defects=34 growth_units=0 alpha=0.015 evaluated_alpha=0.015 power_proportional=0.567250 power_room=0.636000 identical_loss=0.031250 identical_loss_upper=0.036101 no_loss_at_drop=0.015750 no_loss_at_drop_upper=0.019331
+reps=9 packages=51 defects=34 growth_units=0 alpha=0.015 evaluated_alpha=0.015 power_proportional=0.624000 power_room=0.699500 identical_loss=0.034500 identical_loss_upper=0.039570 no_loss_at_drop=0.013750 no_loss_at_drop_upper=0.017124
+reps=10 packages=51 defects=34 growth_units=0 alpha=0.015 evaluated_alpha=0.015 power_proportional=0.672500 power_room=0.741750 identical_loss=0.031500 identical_loss_upper=0.036369 no_loss_at_drop=0.015500 no_loss_at_drop_upper=0.019056
+reps=10 packages=54 defects=36 growth_units=1 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.746250 power_room=0.806000 identical_loss=0.040000 identical_loss_upper=0.045415 no_loss_at_drop=0.022750 no_loss_at_drop_upper=0.026963
+reps=10 packages=57 defects=38 growth_units=2 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.774250 power_room=0.834000 identical_loss=0.039500 identical_loss_upper=0.044885 no_loss_at_drop=0.018250 no_loss_at_drop_upper=0.022071
+reps=10 packages=60 defects=40 growth_units=3 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.787250 power_room=0.849750 identical_loss=0.037250 identical_loss_upper=0.042496 no_loss_at_drop=0.019250 no_loss_at_drop_upper=0.023162
+reps=10 packages=63 defects=42 growth_units=4 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.829750 power_room=0.876000 identical_loss=0.040250 identical_loss_upper=0.045680 no_loss_at_drop=0.017500 no_loss_at_drop_upper=0.021251
+cleared guard: deciding; the guard cannot fire; both bounds and powers hold at the chosen level
+result: reached
+chosen reps=10 packages=63 defects=42 growth_units=4 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.829750 power_room=0.876000 identical_loss=0.040250 identical_loss_upper=0.045680 no_loss_at_drop=0.017500 no_loss_at_drop_upper=0.021251
+BOUND uniform-sd1.0-fa3-nb0.5 reps=10 defects=42 alpha=0.02 identical_loss_upper=0.04568010 no_loss_at_drop_upper=0.02125077 power_proportional=0.82975 power_room=0.876
+.Scenario uniform-sd1.0-fa3-poisson
+rate_distribution: "uniform"
+shock_sd: 1.0
+marginal_rate_rule: "E[logistic(a + sigma*Z)] = p; 40-node Gauss-Hermite, 3,999-rate intercept table; identical arms share intercepts"
+layout: {"defects": 34, "growth_unit": [2, 0, 0], "package_count": 51, "packages": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "placement": "rates shuffled among defects independently per simulated study"}
+false_alarm_model: {"distribution": "poisson", "mean": 3, "size": null, "variance": 3}
+stops: {"probability": 0, "source": "Bernoulli per package run and arm; stopped alarms thinned by U(0,1)"}
+clearances: {"defects": 0, "probability": 0, "source": "independent Bernoulli per chosen defect, run and arm"}
+code_produced_defects: {"defects": 0, "off_rate": 0.95, "on_rate": 1}
+drop: 0.1
+shapes: ["proportional", "room"]
+alpha_ladder: [0.025, 0.02, 0.015, 0.01, 0.005, 0.0025]
+deciding_rules: ["recall loss: main and sensitivity", "false-alarm rise: main and sensitivity", "code-defect guard: main", "cleared guard: only if both bounds and powers hold"]
+sims: 4000
+seed: 20261016
+cap: 10
+floor: 34
+numpy_version: "2.5.3"
+reps=3 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.287000 power_room=0.319500 identical_loss=0.042250 identical_loss_upper=0.047798 no_loss_at_drop=0.022500 no_loss_at_drop_upper=0.026692
+reps=4 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.371750 power_room=0.413750 identical_loss=0.040750 identical_loss_upper=0.046210 no_loss_at_drop=0.022250 no_loss_at_drop_upper=0.026421
+reps=5 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.441000 power_room=0.493500 identical_loss=0.041250 identical_loss_upper=0.046740 no_loss_at_drop=0.022000 no_loss_at_drop_upper=0.026150
+reps=6 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.511500 power_room=0.569250 identical_loss=0.038750 identical_loss_upper=0.044089 no_loss_at_drop=0.020000 no_loss_at_drop_upper=0.023979
+reps=7 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.575750 power_room=0.634500 identical_loss=0.037250 identical_loss_upper=0.042496 no_loss_at_drop=0.018750 no_loss_at_drop_upper=0.022617
+reps=8 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.635750 power_room=0.691750 identical_loss=0.036250 identical_loss_upper=0.041433 no_loss_at_drop=0.021500 no_loss_at_drop_upper=0.025608
+reps=9 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.685000 power_room=0.742500 identical_loss=0.038250 identical_loss_upper=0.043558 no_loss_at_drop=0.021500 no_loss_at_drop_upper=0.025608
+reps=10 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.726250 power_room=0.781000 identical_loss=0.042250 identical_loss_upper=0.047798 no_loss_at_drop=0.021750 no_loss_at_drop_upper=0.025879
+reps=10 packages=54 defects=36 growth_units=1 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.762250 power_room=0.816000 identical_loss=0.040500 identical_loss_upper=0.045945 no_loss_at_drop=0.018250 no_loss_at_drop_upper=0.022071
+reps=10 packages=57 defects=38 growth_units=2 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.781250 power_room=0.833500 identical_loss=0.036750 identical_loss_upper=0.041965 no_loss_at_drop=0.017500 no_loss_at_drop_upper=0.021251
+reps=10 packages=60 defects=40 growth_units=3 alpha=0.015 evaluated_alpha=0.015 power_proportional=0.761750 power_room=0.822750 identical_loss=0.035000 identical_loss_upper=0.040103 no_loss_at_drop=0.015000 no_loss_at_drop_upper=0.018505
+reps=10 packages=63 defects=42 growth_units=4 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.825750 power_room=0.869000 identical_loss=0.042000 identical_loss_upper=0.047534 no_loss_at_drop=0.017750 no_loss_at_drop_upper=0.021524
+cleared guard: deciding; the guard cannot fire; both bounds and powers hold at the chosen level
+result: reached
+chosen reps=10 packages=63 defects=42 growth_units=4 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.825750 power_room=0.869000 identical_loss=0.042000 identical_loss_upper=0.047534 no_loss_at_drop=0.017750 no_loss_at_drop_upper=0.021524
+BOUND uniform-sd1.0-fa3-poisson reps=10 defects=42 alpha=0.02 identical_loss_upper=0.04753380 no_loss_at_drop_upper=0.02152430 power_proportional=0.82575 power_room=0.869
+.Scenario polar-sd0-fa0.2-nb0.5
+rate_distribution: "polar"
+shock_sd: 0
+marginal_rate_rule: "E[logistic(a + sigma*Z)] = p; 40-node Gauss-Hermite, 3,999-rate intercept table; identical arms share intercepts"
+layout: {"defects": 34, "growth_unit": [2, 0, 0], "package_count": 51, "packages": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "placement": "rates shuffled among defects independently per simulated study"}
+false_alarm_model: {"distribution": "gamma-poisson", "mean": 0.2, "size": 0.5, "variance": 0.28}
+stops: {"probability": 0, "source": "Bernoulli per package run and arm; stopped alarms thinned by U(0,1)"}
+clearances: {"defects": 0, "probability": 0, "source": "independent Bernoulli per chosen defect, run and arm"}
+code_produced_defects: {"defects": 0, "off_rate": 0.95, "on_rate": 1}
+drop: 0.1
+shapes: ["proportional", "room"]
+alpha_ladder: [0.025, 0.02, 0.015, 0.01, 0.005, 0.0025]
+deciding_rules: ["recall loss: main and sensitivity", "false-alarm rise: main and sensitivity", "code-defect guard: main", "cleared guard: only if both bounds and powers hold"]
+sims: 4000
+seed: 20261016
+cap: 10
+floor: 34
+numpy_version: "2.5.3"
+reps=3 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.589500 power_room=0.643750 identical_loss=0.039500 identical_loss_upper=0.044885 no_loss_at_drop=0.025000 no_loss_at_drop_upper=0.029393
+reps=4 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.701000 power_room=0.755500 identical_loss=0.040500 identical_loss_upper=0.045945 no_loss_at_drop=0.020250 no_loss_at_drop_upper=0.024251
+reps=5 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.793500 power_room=0.838500 identical_loss=0.040250 identical_loss_upper=0.045680 no_loss_at_drop=0.019000 no_loss_at_drop_upper=0.022889
+reps=6 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.848250 power_room=0.895750 identical_loss=0.039750 identical_loss_upper=0.045150 no_loss_at_drop=0.016750 no_loss_at_drop_upper=0.020429
+cleared guard: deciding; the guard cannot fire; both bounds and powers hold at the chosen level
+result: reached
+chosen reps=6 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.848250 power_room=0.895750 identical_loss=0.039750 identical_loss_upper=0.045150 no_loss_at_drop=0.016750 no_loss_at_drop_upper=0.020429
+BOUND polar-sd0-fa0.2-nb0.5 reps=6 defects=34 alpha=0.025 identical_loss_upper=0.04515000 no_loss_at_drop_upper=0.02042908 power_proportional=0.84825 power_room=0.89575
+.Scenario polar-sd0-fa0.2-poisson
+rate_distribution: "polar"
+shock_sd: 0
+marginal_rate_rule: "E[logistic(a + sigma*Z)] = p; 40-node Gauss-Hermite, 3,999-rate intercept table; identical arms share intercepts"
+layout: {"defects": 34, "growth_unit": [2, 0, 0], "package_count": 51, "packages": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "placement": "rates shuffled among defects independently per simulated study"}
+false_alarm_model: {"distribution": "poisson", "mean": 0.2, "size": null, "variance": 0.2}
+stops: {"probability": 0, "source": "Bernoulli per package run and arm; stopped alarms thinned by U(0,1)"}
+clearances: {"defects": 0, "probability": 0, "source": "independent Bernoulli per chosen defect, run and arm"}
+code_produced_defects: {"defects": 0, "off_rate": 0.95, "on_rate": 1}
+drop: 0.1
+shapes: ["proportional", "room"]
+alpha_ladder: [0.025, 0.02, 0.015, 0.01, 0.005, 0.0025]
+deciding_rules: ["recall loss: main and sensitivity", "false-alarm rise: main and sensitivity", "code-defect guard: main", "cleared guard: only if both bounds and powers hold"]
+sims: 4000
+seed: 20261016
+cap: 10
+floor: 34
+numpy_version: "2.5.3"
+reps=3 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.592750 power_room=0.635750 identical_loss=0.042750 identical_loss_upper=0.048327 no_loss_at_drop=0.033500 no_loss_at_drop_upper=0.038504
+reps=4 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.658500 power_room=0.721250 identical_loss=0.035000 identical_loss_upper=0.040103 no_loss_at_drop=0.023000 no_loss_at_drop_upper=0.027233
+reps=5 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.755500 power_room=0.806000 identical_loss=0.036000 identical_loss_upper=0.041167 no_loss_at_drop=0.019750 no_loss_at_drop_upper=0.023707
+reps=6 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.849000 power_room=0.896250 identical_loss=0.043000 identical_loss_upper=0.048592 no_loss_at_drop=0.014250 no_loss_at_drop_upper=0.017677
+cleared guard: deciding; the guard cannot fire; both bounds and powers hold at the chosen level
+result: reached
+chosen reps=6 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.849000 power_room=0.896250 identical_loss=0.043000 identical_loss_upper=0.048592 no_loss_at_drop=0.014250 no_loss_at_drop_upper=0.017677
+BOUND polar-sd0-fa0.2-poisson reps=6 defects=34 alpha=0.025 identical_loss_upper=0.04859194 no_loss_at_drop_upper=0.01767713 power_proportional=0.849 power_room=0.89625
+.Scenario polar-sd0-fa1-nb0.5
+rate_distribution: "polar"
+shock_sd: 0
+marginal_rate_rule: "E[logistic(a + sigma*Z)] = p; 40-node Gauss-Hermite, 3,999-rate intercept table; identical arms share intercepts"
+layout: {"defects": 34, "growth_unit": [2, 0, 0], "package_count": 51, "packages": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "placement": "rates shuffled among defects independently per simulated study"}
+false_alarm_model: {"distribution": "gamma-poisson", "mean": 1, "size": 0.5, "variance": 3.0}
+stops: {"probability": 0, "source": "Bernoulli per package run and arm; stopped alarms thinned by U(0,1)"}
+clearances: {"defects": 0, "probability": 0, "source": "independent Bernoulli per chosen defect, run and arm"}
+code_produced_defects: {"defects": 0, "off_rate": 0.95, "on_rate": 1}
+drop: 0.1
+shapes: ["proportional", "room"]
+alpha_ladder: [0.025, 0.02, 0.015, 0.01, 0.005, 0.0025]
+deciding_rules: ["recall loss: main and sensitivity", "false-alarm rise: main and sensitivity", "code-defect guard: main", "cleared guard: only if both bounds and powers hold"]
+sims: 4000
+seed: 20261016
+cap: 10
+floor: 34
+numpy_version: "2.5.3"
+reps=3 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.598250 power_room=0.638250 identical_loss=0.040000 identical_loss_upper=0.045415 no_loss_at_drop=0.032000 no_loss_at_drop_upper=0.036903
+reps=4 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.707250 power_room=0.759500 identical_loss=0.042250 identical_loss_upper=0.047798 no_loss_at_drop=0.023000 no_loss_at_drop_upper=0.027233
+reps=5 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.787750 power_room=0.840250 identical_loss=0.044000 identical_loss_upper=0.049649 no_loss_at_drop=0.019500 no_loss_at_drop_upper=0.023434
+reps=6 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.849750 power_room=0.897750 identical_loss=0.040000 identical_loss_upper=0.045415 no_loss_at_drop=0.013750 no_loss_at_drop_upper=0.017124
+cleared guard: deciding; the guard cannot fire; both bounds and powers hold at the chosen level
+result: reached
+chosen reps=6 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.849750 power_room=0.897750 identical_loss=0.040000 identical_loss_upper=0.045415 no_loss_at_drop=0.013750 no_loss_at_drop_upper=0.017124
+BOUND polar-sd0-fa1-nb0.5 reps=6 defects=34 alpha=0.025 identical_loss_upper=0.04541508 no_loss_at_drop_upper=0.01712404 power_proportional=0.84975 power_room=0.89775
+.Scenario polar-sd0-fa1-poisson
+rate_distribution: "polar"
+shock_sd: 0
+marginal_rate_rule: "E[logistic(a + sigma*Z)] = p; 40-node Gauss-Hermite, 3,999-rate intercept table; identical arms share intercepts"
+layout: {"defects": 34, "growth_unit": [2, 0, 0], "package_count": 51, "packages": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "placement": "rates shuffled among defects independently per simulated study"}
+false_alarm_model: {"distribution": "poisson", "mean": 1, "size": null, "variance": 1}
+stops: {"probability": 0, "source": "Bernoulli per package run and arm; stopped alarms thinned by U(0,1)"}
+clearances: {"defects": 0, "probability": 0, "source": "independent Bernoulli per chosen defect, run and arm"}
+code_produced_defects: {"defects": 0, "off_rate": 0.95, "on_rate": 1}
+drop: 0.1
+shapes: ["proportional", "room"]
+alpha_ladder: [0.025, 0.02, 0.015, 0.01, 0.005, 0.0025]
+deciding_rules: ["recall loss: main and sensitivity", "false-alarm rise: main and sensitivity", "code-defect guard: main", "cleared guard: only if both bounds and powers hold"]
+sims: 4000
+seed: 20261016
+cap: 10
+floor: 34
+numpy_version: "2.5.3"
+reps=3 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.580000 power_room=0.633000 identical_loss=0.041750 identical_loss_upper=0.047269 no_loss_at_drop=0.031250 no_loss_at_drop_upper=0.036101
+reps=4 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.700000 power_room=0.758500 identical_loss=0.042250 identical_loss_upper=0.047798 no_loss_at_drop=0.025250 no_loss_at_drop_upper=0.029662
+reps=5 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.794000 power_room=0.842750 identical_loss=0.042500 identical_loss_upper=0.048063 no_loss_at_drop=0.019500 no_loss_at_drop_upper=0.023434
+reps=6 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.853750 power_room=0.897750 identical_loss=0.044000 identical_loss_upper=0.049649 no_loss_at_drop=0.016000 no_loss_at_drop_upper=0.019606
+cleared guard: deciding; the guard cannot fire; both bounds and powers hold at the chosen level
+result: reached
+chosen reps=6 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.853750 power_room=0.897750 identical_loss=0.044000 identical_loss_upper=0.049649 no_loss_at_drop=0.016000 no_loss_at_drop_upper=0.019606
+BOUND polar-sd0-fa1-poisson reps=6 defects=34 alpha=0.025 identical_loss_upper=0.04964932 no_loss_at_drop_upper=0.01960569 power_proportional=0.85375 power_room=0.89775
+.Scenario polar-sd0-fa3-nb0.5
+rate_distribution: "polar"
+shock_sd: 0
+marginal_rate_rule: "E[logistic(a + sigma*Z)] = p; 40-node Gauss-Hermite, 3,999-rate intercept table; identical arms share intercepts"
+layout: {"defects": 34, "growth_unit": [2, 0, 0], "package_count": 51, "packages": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "placement": "rates shuffled among defects independently per simulated study"}
+false_alarm_model: {"distribution": "gamma-poisson", "mean": 3, "size": 0.5, "variance": 21.0}
+stops: {"probability": 0, "source": "Bernoulli per package run and arm; stopped alarms thinned by U(0,1)"}
+clearances: {"defects": 0, "probability": 0, "source": "independent Bernoulli per chosen defect, run and arm"}
+code_produced_defects: {"defects": 0, "off_rate": 0.95, "on_rate": 1}
+drop: 0.1
+shapes: ["proportional", "room"]
+alpha_ladder: [0.025, 0.02, 0.015, 0.01, 0.005, 0.0025]
+deciding_rules: ["recall loss: main and sensitivity", "false-alarm rise: main and sensitivity", "code-defect guard: main", "cleared guard: only if both bounds and powers hold"]
+sims: 4000
+seed: 20261016
+cap: 10
+floor: 34
+numpy_version: "2.5.3"
+reps=3 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.578000 power_room=0.638000 identical_loss=0.039750 identical_loss_upper=0.045150 no_loss_at_drop=0.030250 no_loss_at_drop_upper=0.035032
+reps=4 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.708500 power_room=0.764000 identical_loss=0.039000 identical_loss_upper=0.044354 no_loss_at_drop=0.020500 no_loss_at_drop_upper=0.024522
+reps=5 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.785250 power_room=0.841000 identical_loss=0.041750 identical_loss_upper=0.047269 no_loss_at_drop=0.021750 no_loss_at_drop_upper=0.025879
+reps=6 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.849750 power_room=0.898250 identical_loss=0.041500 identical_loss_upper=0.047004 no_loss_at_drop=0.017250 no_loss_at_drop_upper=0.020977
+cleared guard: deciding; the guard cannot fire; both bounds and powers hold at the chosen level
+result: reached
+chosen reps=6 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.849750 power_room=0.898250 identical_loss=0.041500 identical_loss_upper=0.047004 no_loss_at_drop=0.017250 no_loss_at_drop_upper=0.020977
+BOUND polar-sd0-fa3-nb0.5 reps=6 defects=34 alpha=0.025 identical_loss_upper=0.04700443 no_loss_at_drop_upper=0.02097706 power_proportional=0.84975 power_room=0.89825
+.Scenario polar-sd0-fa3-poisson
+rate_distribution: "polar"
+shock_sd: 0
+marginal_rate_rule: "E[logistic(a + sigma*Z)] = p; 40-node Gauss-Hermite, 3,999-rate intercept table; identical arms share intercepts"
+layout: {"defects": 34, "growth_unit": [2, 0, 0], "package_count": 51, "packages": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "placement": "rates shuffled among defects independently per simulated study"}
+false_alarm_model: {"distribution": "poisson", "mean": 3, "size": null, "variance": 3}
+stops: {"probability": 0, "source": "Bernoulli per package run and arm; stopped alarms thinned by U(0,1)"}
+clearances: {"defects": 0, "probability": 0, "source": "independent Bernoulli per chosen defect, run and arm"}
+code_produced_defects: {"defects": 0, "off_rate": 0.95, "on_rate": 1}
+drop: 0.1
+shapes: ["proportional", "room"]
+alpha_ladder: [0.025, 0.02, 0.015, 0.01, 0.005, 0.0025]
+deciding_rules: ["recall loss: main and sensitivity", "false-alarm rise: main and sensitivity", "code-defect guard: main", "cleared guard: only if both bounds and powers hold"]
+sims: 4000
+seed: 20261016
+cap: 10
+floor: 34
+numpy_version: "2.5.3"
+reps=3 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.605000 power_room=0.653000 identical_loss=0.042250 identical_loss_upper=0.047798 no_loss_at_drop=0.031250 no_loss_at_drop_upper=0.036101
+reps=4 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.716250 power_room=0.772750 identical_loss=0.041500 identical_loss_upper=0.047004 no_loss_at_drop=0.022500 no_loss_at_drop_upper=0.026692
+reps=5 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.765750 power_room=0.814750 identical_loss=0.032750 identical_loss_upper=0.037704 no_loss_at_drop=0.016500 no_loss_at_drop_upper=0.020155
+reps=6 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.834250 power_room=0.883500 identical_loss=0.035500 identical_loss_upper=0.040635 no_loss_at_drop=0.012750 no_loss_at_drop_upper=0.016015
+cleared guard: deciding; the guard cannot fire; both bounds and powers hold at the chosen level
+result: reached
+chosen reps=6 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.834250 power_room=0.883500 identical_loss=0.035500 identical_loss_upper=0.040635 no_loss_at_drop=0.012750 no_loss_at_drop_upper=0.016015
+BOUND polar-sd0-fa3-poisson reps=6 defects=34 alpha=0.02 identical_loss_upper=0.04063499 no_loss_at_drop_upper=0.01601476 power_proportional=0.83425 power_room=0.8835
+.Scenario polar-sd1.0-fa0.2-nb0.5
+rate_distribution: "polar"
+shock_sd: 1.0
+marginal_rate_rule: "E[logistic(a + sigma*Z)] = p; 40-node Gauss-Hermite, 3,999-rate intercept table; identical arms share intercepts"
+layout: {"defects": 34, "growth_unit": [2, 0, 0], "package_count": 51, "packages": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "placement": "rates shuffled among defects independently per simulated study"}
+false_alarm_model: {"distribution": "gamma-poisson", "mean": 0.2, "size": 0.5, "variance": 0.28}
+stops: {"probability": 0, "source": "Bernoulli per package run and arm; stopped alarms thinned by U(0,1)"}
+clearances: {"defects": 0, "probability": 0, "source": "independent Bernoulli per chosen defect, run and arm"}
+code_produced_defects: {"defects": 0, "off_rate": 0.95, "on_rate": 1}
+drop: 0.1
+shapes: ["proportional", "room"]
+alpha_ladder: [0.025, 0.02, 0.015, 0.01, 0.005, 0.0025]
+deciding_rules: ["recall loss: main and sensitivity", "false-alarm rise: main and sensitivity", "code-defect guard: main", "cleared guard: only if both bounds and powers hold"]
+sims: 4000
+seed: 20261016
+cap: 10
+floor: 34
+numpy_version: "2.5.3"
+reps=3 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.561000 power_room=0.614000 identical_loss=0.040500 identical_loss_upper=0.045945 no_loss_at_drop=0.039000 no_loss_at_drop_upper=0.044354
+reps=4 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.674750 power_room=0.733750 identical_loss=0.042000 identical_loss_upper=0.047534 no_loss_at_drop=0.027250 no_loss_at_drop_upper=0.031814
+reps=5 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.729750 power_room=0.784750 identical_loss=0.036750 identical_loss_upper=0.041965 no_loss_at_drop=0.020750 no_loss_at_drop_upper=0.024794
+reps=6 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.802250 power_room=0.855750 identical_loss=0.034000 identical_loss_upper=0.039037 no_loss_at_drop=0.012750 no_loss_at_drop_upper=0.016015
+cleared guard: deciding; the guard cannot fire; both bounds and powers hold at the chosen level
+result: reached
+chosen reps=6 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.802250 power_room=0.855750 identical_loss=0.034000 identical_loss_upper=0.039037 no_loss_at_drop=0.012750 no_loss_at_drop_upper=0.016015
+BOUND polar-sd1.0-fa0.2-nb0.5 reps=6 defects=34 alpha=0.02 identical_loss_upper=0.03903721 no_loss_at_drop_upper=0.01601476 power_proportional=0.80225 power_room=0.85575
+.Scenario polar-sd1.0-fa0.2-poisson
+rate_distribution: "polar"
+shock_sd: 1.0
+marginal_rate_rule: "E[logistic(a + sigma*Z)] = p; 40-node Gauss-Hermite, 3,999-rate intercept table; identical arms share intercepts"
+layout: {"defects": 34, "growth_unit": [2, 0, 0], "package_count": 51, "packages": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "placement": "rates shuffled among defects independently per simulated study"}
+false_alarm_model: {"distribution": "poisson", "mean": 0.2, "size": null, "variance": 0.2}
+stops: {"probability": 0, "source": "Bernoulli per package run and arm; stopped alarms thinned by U(0,1)"}
+clearances: {"defects": 0, "probability": 0, "source": "independent Bernoulli per chosen defect, run and arm"}
+code_produced_defects: {"defects": 0, "off_rate": 0.95, "on_rate": 1}
+drop: 0.1
+shapes: ["proportional", "room"]
+alpha_ladder: [0.025, 0.02, 0.015, 0.01, 0.005, 0.0025]
+deciding_rules: ["recall loss: main and sensitivity", "false-alarm rise: main and sensitivity", "code-defect guard: main", "cleared guard: only if both bounds and powers hold"]
+sims: 4000
+seed: 20261016
+cap: 10
+floor: 34
+numpy_version: "2.5.3"
+reps=3 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.559250 power_room=0.618250 identical_loss=0.040250 identical_loss_upper=0.045680 no_loss_at_drop=0.033250 no_loss_at_drop_upper=0.038237
+reps=4 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.677750 power_room=0.747000 identical_loss=0.042750 identical_loss_upper=0.048327 no_loss_at_drop=0.028500 no_loss_at_drop_upper=0.033157
+reps=5 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.767750 power_room=0.822500 identical_loss=0.044250 identical_loss_upper=0.049914 no_loss_at_drop=0.020500 no_loss_at_drop_upper=0.024522
+reps=6 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.832750 power_room=0.881500 identical_loss=0.040500 identical_loss_upper=0.045945 no_loss_at_drop=0.019000 no_loss_at_drop_upper=0.022889
+cleared guard: deciding; the guard cannot fire; both bounds and powers hold at the chosen level
+result: reached
+chosen reps=6 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.832750 power_room=0.881500 identical_loss=0.040500 identical_loss_upper=0.045945 no_loss_at_drop=0.019000 no_loss_at_drop_upper=0.022889
+BOUND polar-sd1.0-fa0.2-poisson reps=6 defects=34 alpha=0.025 identical_loss_upper=0.04594507 no_loss_at_drop_upper=0.02288944 power_proportional=0.83275 power_room=0.8815
+.Scenario polar-sd1.0-fa1-nb0.5
+rate_distribution: "polar"
+shock_sd: 1.0
+marginal_rate_rule: "E[logistic(a + sigma*Z)] = p; 40-node Gauss-Hermite, 3,999-rate intercept table; identical arms share intercepts"
+layout: {"defects": 34, "growth_unit": [2, 0, 0], "package_count": 51, "packages": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "placement": "rates shuffled among defects independently per simulated study"}
+false_alarm_model: {"distribution": "gamma-poisson", "mean": 1, "size": 0.5, "variance": 3.0}
+stops: {"probability": 0, "source": "Bernoulli per package run and arm; stopped alarms thinned by U(0,1)"}
+clearances: {"defects": 0, "probability": 0, "source": "independent Bernoulli per chosen defect, run and arm"}
+code_produced_defects: {"defects": 0, "off_rate": 0.95, "on_rate": 1}
+drop: 0.1
+shapes: ["proportional", "room"]
+alpha_ladder: [0.025, 0.02, 0.015, 0.01, 0.005, 0.0025]
+deciding_rules: ["recall loss: main and sensitivity", "false-alarm rise: main and sensitivity", "code-defect guard: main", "cleared guard: only if both bounds and powers hold"]
+sims: 4000
+seed: 20261016
+cap: 10
+floor: 34
+numpy_version: "2.5.3"
+reps=3 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.569000 power_room=0.614750 identical_loss=0.038000 identical_loss_upper=0.043293 no_loss_at_drop=0.029750 no_loss_at_drop_upper=0.034496
+reps=4 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.684750 power_room=0.738750 identical_loss=0.039750 identical_loss_upper=0.045150 no_loss_at_drop=0.025250 no_loss_at_drop_upper=0.029662
+reps=5 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.771000 power_room=0.822750 identical_loss=0.043750 identical_loss_upper=0.049385 no_loss_at_drop=0.023000 no_loss_at_drop_upper=0.027233
+reps=6 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.834250 power_room=0.881750 identical_loss=0.044250 identical_loss_upper=0.049914 no_loss_at_drop=0.018500 no_loss_at_drop_upper=0.022344
+cleared guard: deciding; the guard cannot fire; both bounds and powers hold at the chosen level
+result: reached
+chosen reps=6 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.834250 power_room=0.881750 identical_loss=0.044250 identical_loss_upper=0.049914 no_loss_at_drop=0.018500 no_loss_at_drop_upper=0.022344
+BOUND polar-sd1.0-fa1-nb0.5 reps=6 defects=34 alpha=0.025 identical_loss_upper=0.04991354 no_loss_at_drop_upper=0.02234388 power_proportional=0.83425 power_room=0.88175
+.Scenario polar-sd1.0-fa1-poisson
+rate_distribution: "polar"
+shock_sd: 1.0
+marginal_rate_rule: "E[logistic(a + sigma*Z)] = p; 40-node Gauss-Hermite, 3,999-rate intercept table; identical arms share intercepts"
+layout: {"defects": 34, "growth_unit": [2, 0, 0], "package_count": 51, "packages": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "placement": "rates shuffled among defects independently per simulated study"}
+false_alarm_model: {"distribution": "poisson", "mean": 1, "size": null, "variance": 1}
+stops: {"probability": 0, "source": "Bernoulli per package run and arm; stopped alarms thinned by U(0,1)"}
+clearances: {"defects": 0, "probability": 0, "source": "independent Bernoulli per chosen defect, run and arm"}
+code_produced_defects: {"defects": 0, "off_rate": 0.95, "on_rate": 1}
+drop: 0.1
+shapes: ["proportional", "room"]
+alpha_ladder: [0.025, 0.02, 0.015, 0.01, 0.005, 0.0025]
+deciding_rules: ["recall loss: main and sensitivity", "false-alarm rise: main and sensitivity", "code-defect guard: main", "cleared guard: only if both bounds and powers hold"]
+sims: 4000
+seed: 20261016
+cap: 10
+floor: 34
+numpy_version: "2.5.3"
+reps=3 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.515000 power_room=0.568250 identical_loss=0.034500 identical_loss_upper=0.039570 no_loss_at_drop=0.018250 no_loss_at_drop_upper=0.022071
+reps=4 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.635250 power_room=0.699500 identical_loss=0.033000 identical_loss_upper=0.037971 no_loss_at_drop=0.022250 no_loss_at_drop_upper=0.026421
+reps=5 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.730750 power_room=0.795000 identical_loss=0.038250 identical_loss_upper=0.043558 no_loss_at_drop=0.019500 no_loss_at_drop_upper=0.023434
+reps=6 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.806250 power_room=0.861250 identical_loss=0.035000 identical_loss_upper=0.040103 no_loss_at_drop=0.015250 no_loss_at_drop_upper=0.018780
+cleared guard: deciding; the guard cannot fire; both bounds and powers hold at the chosen level
+result: reached
+chosen reps=6 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.806250 power_room=0.861250 identical_loss=0.035000 identical_loss_upper=0.040103 no_loss_at_drop=0.015250 no_loss_at_drop_upper=0.018780
+BOUND polar-sd1.0-fa1-poisson reps=6 defects=34 alpha=0.02 identical_loss_upper=0.04010266 no_loss_at_drop_upper=0.01878048 power_proportional=0.80625 power_room=0.86125
+.Scenario polar-sd1.0-fa3-nb0.5
+rate_distribution: "polar"
+shock_sd: 1.0
+marginal_rate_rule: "E[logistic(a + sigma*Z)] = p; 40-node Gauss-Hermite, 3,999-rate intercept table; identical arms share intercepts"
+layout: {"defects": 34, "growth_unit": [2, 0, 0], "package_count": 51, "packages": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "placement": "rates shuffled among defects independently per simulated study"}
+false_alarm_model: {"distribution": "gamma-poisson", "mean": 3, "size": 0.5, "variance": 21.0}
+stops: {"probability": 0, "source": "Bernoulli per package run and arm; stopped alarms thinned by U(0,1)"}
+clearances: {"defects": 0, "probability": 0, "source": "independent Bernoulli per chosen defect, run and arm"}
+code_produced_defects: {"defects": 0, "off_rate": 0.95, "on_rate": 1}
+drop: 0.1
+shapes: ["proportional", "room"]
+alpha_ladder: [0.025, 0.02, 0.015, 0.01, 0.005, 0.0025]
+deciding_rules: ["recall loss: main and sensitivity", "false-alarm rise: main and sensitivity", "code-defect guard: main", "cleared guard: only if both bounds and powers hold"]
+sims: 4000
+seed: 20261016
+cap: 10
+floor: 34
+numpy_version: "2.5.3"
+reps=3 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.568000 power_room=0.612500 identical_loss=0.042000 identical_loss_upper=0.047534 no_loss_at_drop=0.035000 no_loss_at_drop_upper=0.040103
+reps=4 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.690750 power_room=0.752000 identical_loss=0.036000 identical_loss_upper=0.041167 no_loss_at_drop=0.024000 no_loss_at_drop_upper=0.028314
+reps=5 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.788000 power_room=0.833000 identical_loss=0.039000 identical_loss_upper=0.044354 no_loss_at_drop=0.019750 no_loss_at_drop_upper=0.023707
+reps=6 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.836750 power_room=0.875250 identical_loss=0.043750 identical_loss_upper=0.049385 no_loss_at_drop=0.018000 no_loss_at_drop_upper=0.021798
+cleared guard: deciding; the guard cannot fire; both bounds and powers hold at the chosen level
+result: reached
+chosen reps=6 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.836750 power_room=0.875250 identical_loss=0.043750 identical_loss_upper=0.049385 no_loss_at_drop=0.018000 no_loss_at_drop_upper=0.021798
+BOUND polar-sd1.0-fa3-nb0.5 reps=6 defects=34 alpha=0.025 identical_loss_upper=0.04938504 no_loss_at_drop_upper=0.02179766 power_proportional=0.83675 power_room=0.87525
+.Scenario polar-sd1.0-fa3-poisson
+rate_distribution: "polar"
+shock_sd: 1.0
+marginal_rate_rule: "E[logistic(a + sigma*Z)] = p; 40-node Gauss-Hermite, 3,999-rate intercept table; identical arms share intercepts"
+layout: {"defects": 34, "growth_unit": [2, 0, 0], "package_count": 51, "packages": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "placement": "rates shuffled among defects independently per simulated study"}
+false_alarm_model: {"distribution": "poisson", "mean": 3, "size": null, "variance": 3}
+stops: {"probability": 0, "source": "Bernoulli per package run and arm; stopped alarms thinned by U(0,1)"}
+clearances: {"defects": 0, "probability": 0, "source": "independent Bernoulli per chosen defect, run and arm"}
+code_produced_defects: {"defects": 0, "off_rate": 0.95, "on_rate": 1}
+drop: 0.1
+shapes: ["proportional", "room"]
+alpha_ladder: [0.025, 0.02, 0.015, 0.01, 0.005, 0.0025]
+deciding_rules: ["recall loss: main and sensitivity", "false-alarm rise: main and sensitivity", "code-defect guard: main", "cleared guard: only if both bounds and powers hold"]
+sims: 4000
+seed: 20261016
+cap: 10
+floor: 34
+numpy_version: "2.5.3"
+reps=3 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.520000 power_room=0.570000 identical_loss=0.034750 identical_loss_upper=0.039836 no_loss_at_drop=0.022250 no_loss_at_drop_upper=0.026421
+reps=4 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.684500 power_room=0.728000 identical_loss=0.044000 identical_loss_upper=0.049649 no_loss_at_drop=0.028500 no_loss_at_drop_upper=0.033157
+reps=5 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.737250 power_room=0.795750 identical_loss=0.034500 identical_loss_upper=0.039570 no_loss_at_drop=0.019000 no_loss_at_drop_upper=0.022889
+reps=6 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.807750 power_room=0.861000 identical_loss=0.037250 identical_loss_upper=0.042496 no_loss_at_drop=0.012750 no_loss_at_drop_upper=0.016015
+cleared guard: deciding; the guard cannot fire; both bounds and powers hold at the chosen level
+result: reached
+chosen reps=6 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.807750 power_room=0.861000 identical_loss=0.037250 identical_loss_upper=0.042496 no_loss_at_drop=0.012750 no_loss_at_drop_upper=0.016015
+BOUND polar-sd1.0-fa3-poisson reps=6 defects=34 alpha=0.02 identical_loss_upper=0.04249617 no_loss_at_drop_upper=0.01601476 power_proportional=0.80775 power_room=0.861
+.Scenario uniform-sd1.0-fa1-nb0.5-stop
+rate_distribution: "uniform"
+shock_sd: 1.0
+marginal_rate_rule: "E[logistic(a + sigma*Z)] = p; 40-node Gauss-Hermite, 3,999-rate intercept table; identical arms share intercepts"
+layout: {"defects": 34, "growth_unit": [2, 0, 0], "package_count": 51, "packages": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "placement": "rates shuffled among defects independently per simulated study"}
+false_alarm_model: {"distribution": "gamma-poisson", "mean": 1, "size": 0.5, "variance": 3.0}
+stops: {"probability": 0.05, "source": "Bernoulli per package run and arm; stopped alarms thinned by U(0,1)"}
+clearances: {"defects": 0, "probability": 0, "source": "independent Bernoulli per chosen defect, run and arm"}
+code_produced_defects: {"defects": 0, "off_rate": 0.95, "on_rate": 1}
+drop: 0.1
+shapes: ["proportional", "room"]
+alpha_ladder: [0.025, 0.02, 0.015, 0.01, 0.005, 0.0025]
+deciding_rules: ["recall loss: main and sensitivity", "false-alarm rise: main and sensitivity", "code-defect guard: main", "cleared guard: only if both bounds and powers hold"]
+sims: 4000
+seed: 20261016
+cap: 10
+floor: 34
+numpy_version: "2.5.3"
+reps=3 packages=51 defects=34 growth_units=0 alpha=0.015 evaluated_alpha=0.015 power_proportional=0.233250 power_room=0.261500 identical_loss=0.039250 identical_loss_upper=0.044620 no_loss_at_drop=0.010250 no_loss_at_drop_upper=0.013221
+reps=4 packages=51 defects=34 growth_units=0 alpha=0.015 evaluated_alpha=0.015 power_proportional=0.303250 power_room=0.343250 identical_loss=0.041750 identical_loss_upper=0.047269 no_loss_at_drop=0.011750 no_loss_at_drop_upper=0.014901
+reps=5 packages=51 defects=34 growth_units=0 alpha=0.015 evaluated_alpha=0.015 power_proportional=0.368000 power_room=0.414500 identical_loss=0.041000 identical_loss_upper=0.046475 no_loss_at_drop=0.010750 no_loss_at_drop_upper=0.013782
+reps=6 packages=51 defects=34 growth_units=0 alpha=0.015 evaluated_alpha=0.015 power_proportional=0.428750 power_room=0.481500 identical_loss=0.044250 identical_loss_upper=0.049914 no_loss_at_drop=0.011000 no_loss_at_drop_upper=0.014062
+reps=7 packages=51 defects=34 growth_units=0 alpha=0.015 evaluated_alpha=0.015 power_proportional=0.482500 power_room=0.553750 identical_loss=0.040750 identical_loss_upper=0.046210 no_loss_at_drop=0.013500 no_loss_at_drop_upper=0.016847
+reps=8 packages=51 defects=34 growth_units=0 alpha=0.015 evaluated_alpha=0.015 power_proportional=0.546500 power_room=0.615750 identical_loss=0.043250 identical_loss_upper=0.048856 no_loss_at_drop=0.011000 no_loss_at_drop_upper=0.014062
+reps=9 packages=51 defects=34 growth_units=0 alpha=0.015 evaluated_alpha=0.015 power_proportional=0.601250 power_room=0.673250 identical_loss=0.041500 identical_loss_upper=0.047004 no_loss_at_drop=0.012750 no_loss_at_drop_upper=0.016015
+reps=10 packages=51 defects=34 growth_units=0 alpha=0.015 evaluated_alpha=0.015 power_proportional=0.646750 power_room=0.721500 identical_loss=0.042500 identical_loss_upper=0.048063 no_loss_at_drop=0.013000 no_loss_at_drop_upper=0.016292
+reps=10 packages=54 defects=36 growth_units=1 alpha=0.015 evaluated_alpha=0.015 power_proportional=0.690250 power_room=0.750000 identical_loss=0.037750 identical_loss_upper=0.043027 no_loss_at_drop=0.012750 no_loss_at_drop_upper=0.016015
+reps=10 packages=57 defects=38 growth_units=2 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.744250 power_room=0.811500 identical_loss=0.044000 identical_loss_upper=0.049649 no_loss_at_drop=0.015750 no_loss_at_drop_upper=0.019331
+reps=10 packages=60 defects=40 growth_units=3 alpha=0.015 evaluated_alpha=0.015 power_proportional=0.729750 power_room=0.793750 identical_loss=0.038500 identical_loss_upper=0.043824 no_loss_at_drop=0.011250 no_loss_at_drop_upper=0.014342
+reps=10 packages=63 defects=42 growth_units=4 alpha=0.015 evaluated_alpha=0.015 power_proportional=0.766000 power_room=0.826500 identical_loss=0.036500 identical_loss_upper=0.041699 no_loss_at_drop=0.008000 no_loss_at_drop_upper=0.010672
+reps=10 packages=66 defects=44 growth_units=5 alpha=0.015 evaluated_alpha=0.015 power_proportional=0.786750 power_room=0.847750 identical_loss=0.037250 identical_loss_upper=0.042496 no_loss_at_drop=0.009500 no_loss_at_drop_upper=0.012375
+reps=10 packages=69 defects=46 growth_units=6 alpha=0.015 evaluated_alpha=0.015 power_proportional=0.823250 power_room=0.873250 identical_loss=0.038250 identical_loss_upper=0.043558 no_loss_at_drop=0.009000 no_loss_at_drop_upper=0.011810
+cleared guard: deciding; the guard cannot fire; both bounds and powers hold at the chosen level
+result: reached
+chosen reps=10 packages=69 defects=46 growth_units=6 alpha=0.015 evaluated_alpha=0.015 power_proportional=0.823250 power_room=0.873250 identical_loss=0.038250 identical_loss_upper=0.043558 no_loss_at_drop=0.009000 no_loss_at_drop_upper=0.011810
+BOUND uniform-sd1.0-fa1-nb0.5-stop reps=10 defects=46 alpha=0.015 identical_loss_upper=0.04355838 no_loss_at_drop_upper=0.01180953 power_proportional=0.82325 power_room=0.87325
+.Scenario uniform-sd1.0-fa1-nb0.5-clear
+rate_distribution: "uniform"
+shock_sd: 1.0
+marginal_rate_rule: "E[logistic(a + sigma*Z)] = p; 40-node Gauss-Hermite, 3,999-rate intercept table; identical arms share intercepts"
+layout: {"defects": 34, "growth_unit": [2, 0, 0], "package_count": 51, "packages": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "placement": "rates shuffled among defects independently per simulated study"}
+false_alarm_model: {"distribution": "gamma-poisson", "mean": 1, "size": 0.5, "variance": 3.0}
+stops: {"probability": 0, "source": "Bernoulli per package run and arm; stopped alarms thinned by U(0,1)"}
+clearances: {"defects": 10, "probability": 0.05, "source": "independent Bernoulli per chosen defect, run and arm"}
+code_produced_defects: {"defects": 0, "off_rate": 0.95, "on_rate": 1}
+drop: 0.1
+shapes: ["proportional", "room"]
+alpha_ladder: [0.025, 0.02, 0.015, 0.01, 0.005, 0.0025]
+deciding_rules: ["recall loss: main and sensitivity", "false-alarm rise: main and sensitivity", "code-defect guard: main", "cleared guard: only if both bounds and powers hold"]
+sims: 4000
+seed: 20261016
+cap: 10
+floor: 34
+numpy_version: "2.5.3"
+reps=3 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.279500 power_room=0.309000 identical_loss=0.039500 identical_loss_upper=0.044885 no_loss_at_drop=0.015750 no_loss_at_drop_upper=0.019331
+reps=4 packages=51 defects=34 growth_units=0 alpha=0.025 evaluated_alpha=0.025 power_proportional=0.397500 power_room=0.443250 identical_loss=0.043750 identical_loss_upper=0.049385 no_loss_at_drop=0.021500 no_loss_at_drop_upper=0.025608
+reps=5 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.435750 power_room=0.489250 identical_loss=0.036250 identical_loss_upper=0.041433 no_loss_at_drop=0.020000 no_loss_at_drop_upper=0.023979
+reps=6 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.522000 power_room=0.570500 identical_loss=0.040500 identical_loss_upper=0.045945 no_loss_at_drop=0.016250 no_loss_at_drop_upper=0.019880
+reps=7 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.585500 power_room=0.642250 identical_loss=0.042000 identical_loss_upper=0.047534 no_loss_at_drop=0.017250 no_loss_at_drop_upper=0.020977
+reps=8 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.634250 power_room=0.693500 identical_loss=0.038750 identical_loss_upper=0.044089 no_loss_at_drop=0.017750 no_loss_at_drop_upper=0.021524
+reps=9 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.686250 power_room=0.742250 identical_loss=0.040250 identical_loss_upper=0.045680 no_loss_at_drop=0.016250 no_loss_at_drop_upper=0.019880
+reps=10 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.733500 power_room=0.785250 identical_loss=0.040750 identical_loss_upper=0.046210 no_loss_at_drop=0.013750 no_loss_at_drop_upper=0.017124
+reps=10 packages=54 defects=36 growth_units=1 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.760750 power_room=0.809000 identical_loss=0.036500 identical_loss_upper=0.041699 no_loss_at_drop=0.018000 no_loss_at_drop_upper=0.021798
+reps=10 packages=57 defects=38 growth_units=2 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.775500 power_room=0.838000 identical_loss=0.040250 identical_loss_upper=0.045680 no_loss_at_drop=0.016500 no_loss_at_drop_upper=0.020155
+reps=10 packages=60 defects=40 growth_units=3 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.812500 power_room=0.859500 identical_loss=0.039000 identical_loss_upper=0.044354 no_loss_at_drop=0.015750 no_loss_at_drop_upper=0.019331
+cleared guard: named only; no ladder level holds both 5% bounds and 80% power with the cleared guard deciding
+cleared guard null rate: 0.935923
+result: reached
+chosen reps=10 packages=60 defects=40 growth_units=3 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.812500 power_room=0.859500 identical_loss=0.039000 identical_loss_upper=0.044354 no_loss_at_drop=0.015750 no_loss_at_drop_upper=0.019331
+BOUND uniform-sd1.0-fa1-nb0.5-clear reps=10 defects=40 alpha=0.02 identical_loss_upper=0.04435444 no_loss_at_drop_upper=0.01933083 power_proportional=0.8125 power_room=0.8595
+.Scenario uniform-sd1.0-fa1-nb0.5-code
+rate_distribution: "uniform"
+shock_sd: 1.0
+marginal_rate_rule: "E[logistic(a + sigma*Z)] = p; 40-node Gauss-Hermite, 3,999-rate intercept table; identical arms share intercepts"
+layout: {"defects": 34, "growth_unit": [2, 0, 0], "package_count": 51, "packages": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "placement": "rates shuffled among defects independently per simulated study"}
+false_alarm_model: {"distribution": "gamma-poisson", "mean": 1, "size": 0.5, "variance": 3.0}
+stops: {"probability": 0, "source": "Bernoulli per package run and arm; stopped alarms thinned by U(0,1)"}
+clearances: {"defects": 0, "probability": 0, "source": "independent Bernoulli per chosen defect, run and arm"}
+code_produced_defects: {"defects": 10, "off_rate": 0.95, "on_rate": 1}
+drop: 0.1
+shapes: ["proportional", "room"]
+alpha_ladder: [0.025, 0.02, 0.015, 0.01, 0.005, 0.0025]
+deciding_rules: ["recall loss: main and sensitivity", "false-alarm rise: main and sensitivity", "code-defect guard: main", "cleared guard: only if both bounds and powers hold"]
+sims: 4000
+seed: 20261016
+cap: 10
+floor: 34
+numpy_version: "2.5.3"
+reps=3 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.282000 power_room=0.313000 identical_loss=0.034750 identical_loss_upper=0.039836 no_loss_at_drop=0.016250 no_loss_at_drop_upper=0.019880
+reps=4 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.360500 power_room=0.406250 identical_loss=0.036500 identical_loss_upper=0.041699 no_loss_at_drop=0.016500 no_loss_at_drop_upper=0.020155
+reps=5 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.442500 power_room=0.500750 identical_loss=0.038250 identical_loss_upper=0.043558 no_loss_at_drop=0.018750 no_loss_at_drop_upper=0.022617
+reps=6 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.509500 power_room=0.561750 identical_loss=0.040500 identical_loss_upper=0.045945 no_loss_at_drop=0.019250 no_loss_at_drop_upper=0.023162
+reps=7 packages=51 defects=34 growth_units=0 alpha=0.015 evaluated_alpha=0.015 power_proportional=0.523750 power_room=0.574750 identical_loss=0.032750 identical_loss_upper=0.037704 no_loss_at_drop=0.015750 no_loss_at_drop_upper=0.019331
+reps=8 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.630750 power_room=0.693750 identical_loss=0.044250 identical_loss_upper=0.049914 no_loss_at_drop=0.021000 no_loss_at_drop_upper=0.025066
+reps=9 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.683750 power_room=0.747250 identical_loss=0.040250 identical_loss_upper=0.045680 no_loss_at_drop=0.018250 no_loss_at_drop_upper=0.022071
+reps=10 packages=51 defects=34 growth_units=0 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.725000 power_room=0.790750 identical_loss=0.040250 identical_loss_upper=0.045680 no_loss_at_drop=0.018250 no_loss_at_drop_upper=0.022071
+reps=10 packages=54 defects=36 growth_units=1 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.770750 power_room=0.822250 identical_loss=0.041250 identical_loss_upper=0.046740 no_loss_at_drop=0.015500 no_loss_at_drop_upper=0.019056
+reps=10 packages=57 defects=38 growth_units=2 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.778750 power_room=0.832000 identical_loss=0.034500 identical_loss_upper=0.039570 no_loss_at_drop=0.016500 no_loss_at_drop_upper=0.020155
+reps=10 packages=60 defects=40 growth_units=3 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.806250 power_room=0.851500 identical_loss=0.039750 identical_loss_upper=0.045150 no_loss_at_drop=0.017250 no_loss_at_drop_upper=0.020977
+cleared guard: deciding; the guard cannot fire; both bounds and powers hold at the chosen level
+stress case (shown, never bounded): 0.935923
+result: reached
+chosen reps=10 packages=60 defects=40 growth_units=3 alpha=0.02 evaluated_alpha=0.02 power_proportional=0.806250 power_room=0.851500 identical_loss=0.039750 identical_loss_upper=0.045150 no_loss_at_drop=0.017250 no_loss_at_drop_upper=0.020977
+BOUND uniform-sd1.0-fa1-nb0.5-code reps=10 defects=40 alpha=0.02 identical_loss_upper=0.04515000 no_loss_at_drop_upper=0.02097706 power_proportional=0.80625 power_room=0.8515
+.
