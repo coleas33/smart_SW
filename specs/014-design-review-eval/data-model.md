@@ -371,7 +371,8 @@ moves only fields outside the view, RF-21); an edited committed row is left to r
   the paid pilot runs' saved sets, which is the committed set at the pilot's commit, sorted; never
   `benchmarks/sets/pilot.json`'s), `growth_units` (0 when none), `jobs`, the result with `projected_wall_clock`: per arm one run's
   projected seconds at `jobs`, the study's, the smoke ratio and its two sums, the mean tokens per
-  minute of one off-arm review; 36A, RF-91), `sizing_digest`,
+  minute of one off-arm review; 36A, RF-91), and, when present, the search's `state` and
+  `cleared_guard_reason` (optional, owner decision 117A), `sizing_digest`,
   `approval{approved, approved_at}`; `sizing_digest` is `digest.canonical_sha256` of every block but
 `approval` (RF-65). State: written `approved: false`, never over an existing file
   (`benchmark pilot` refuses one, so a study has one measurement, RF-40); the owner sets `approved:

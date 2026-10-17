@@ -530,7 +530,8 @@ completed runs:
   `n_i = 0` (its package has no counted run, after infrastructure failures) is dropped, counted and
   named in `measured`, as section 3 drops it.
 - **The rate distribution**, Beta by moments with the binomial noise taken out: `mu = sum(x)/sum(n)`
-  over the defects with `n_i >= 1`; `V = var(x_i/n_i) − mean(r_i(1 − r_i)/(n_i − 1))` over the
+  over the defects with `n_i >= 1`; `V = var(x_i/n_i) − mean(r_i(1 − r_i)/(n_i − 1))`, `var` the
+  sample variance (divisor `K − 1` over the `K` defects it uses; 116A), over the
   defects with `n_i >= 2` only, `r_i = x_i/n_i`, since the correction divides by zero at `n_i = 1`;
   each defect left out of `V` is named and counted in `measured` (plan decision RF-9). Fewer than
   two defects with `n_i >= 2` gives `V` not computable, read as the `V <= 0` branch below (the least
@@ -589,7 +590,7 @@ it land with the pilot slice (plan decision RF-37).
 | `pilot_runs` | each pilot run's folder (relative), arm, repetition, `started_at` and commit |
 | `smoke_runs` | the smoke run's two folders (relative), arm, repetition, `started_at` and commit (owner decisions 35A and 36A) |
 | `measured` | section 10.2's inputs and the never-detected list |
-| `sizing` | the cap, floor, seed, simulations, ladder; every size tried; `pilot_packages`, the package ids of the paid pilot runs' saved sets (the committed set at the pilot's commit), sorted, never `benchmarks/sets/pilot.json`'s (section 10.1); the result: repetitions, packages, held-out model-produced defects, `growth_units` (the core cases, each with its twin, to add; 0 when none), `alpha`, the deciding rules, whether the cleared guard decides, both powers, both bound rates with their upper bounds, the stress case, the estimated study cost (the off arm's mean package-run cost for both arms, an upper estimate); `jobs`, the concurrency the projection assumes, and `projected_wall_clock` (per arm one run's projected seconds, the study's, the smoke ratio and its two sums, and the mean tokens per minute of one off-arm review; 36A) |
+| `sizing` | the cap, floor, seed, simulations, ladder; every size tried; `pilot_packages`, the package ids of the paid pilot runs' saved sets (the committed set at the pilot's commit), sorted, never `benchmarks/sets/pilot.json`'s (section 10.1); the result: repetitions, packages, held-out model-produced defects, `growth_units` (the core cases, each with its twin, to add; 0 when none), `alpha`, the deciding rules, whether the cleared guard decides, both powers, both bound rates with their upper bounds, the stress case, the estimated study cost (the off arm's mean package-run cost for both arms, an upper estimate); and, when present, the search's `state` and the cleared guard's reason, `cleared_guard_reason` (117A); `jobs`, the concurrency the projection assumes, and `projected_wall_clock` (per arm one run's projected seconds, the study's, the smoke ratio and its two sums, and the mean tokens per minute of one off-arm review; 36A) |
 | `sizing_digest` | `digest.canonical_sha256` (sorted keys, no whitespace, UTF-8) of every block but `approval`: identity, `pilot_runs`, `smoke_runs`, `measured` and `sizing`, so an edit to any computed block is refused (plan decisions RF-56, RF-65) |
 | `approval` | `{"approved": false, "approved_at": null}` as written; **the owner's act, never computed** |
 
