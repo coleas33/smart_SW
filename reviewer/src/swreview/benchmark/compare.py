@@ -1523,6 +1523,52 @@ def _pane_study(key, runs, matching, noise_floors, *, root, notes) -> verdict.Pa
     return block
 
 
+def load_runs(
+    run_dirs: Sequence[Path | str], *, root: Path | None = None,
+    committed_ledger: bool = False,
+) -> list[_LoadedRun]:
+    """Read run folders in order and apply compare's run and study checks once.
+
+    With ``committed_ledger``, each run is first held to the committed ledger's
+    refusal, which comes before any study check (FR-051).
+    """
+    checkout = sets.REPO_ROOT if root is None else root
+    loaded = [_load_run(path, root=checkout) for path in distinct_run_dirs(run_dirs)]
+    if committed_ledger:
+        for run in loaded:
+            _refuse_for_the_committed_ledger(run, root=checkout)
+    studies: dict[tuple[str, str | None, str | None], list[_LoadedRun]] = {}
+    for run in loaded:
+        key = _study_key(run)
+        if key is not None:
+            studies.setdefault(key, []).append(run)
+    for key, runs in studies.items():
+        _check_one_study(key, runs)
+    return loaded
+
+
+def run_records(
+    run_dirs: Sequence[Path | str], *, root: Path | None = None,
+) -> list[pilot.RunRecord]:
+    """Expose loaded off/on runs through the shared verdict converter and saved-set reader."""
+    checkout = sets.REPO_ROOT if root is None else root
+    records: list[pilot.RunRecord] = []
+    for run in load_runs(run_dirs, root=checkout):
+        if run.provenance is None:
+            raise CompareError(
+                f"{run.run_dir}: no provenance record; the pilot and the noise floor "
+                "read benchmark run folders only",
+            )
+        records.append(pilot.RunRecord(
+            study_run=_study_run(run),
+            folder=run.run_dir,
+            provenance=run.provenance,
+            sessions=run.sessions,
+            saved_set=sets.load_saved_set(run.run_dir / SAVED_SET_FILE, root=checkout),
+        ))
+    return records
+
+
 def compare_runs(
     run_dirs: Sequence[Path | str],
     *,
@@ -1542,10 +1588,7 @@ def compare_runs(
     its raw rows and the shared judge's block, with no lever decision row.
     """
     checkout = sets.REPO_ROOT if root is None else root
-    loaded = [_load_run(path, root=checkout) for path in distinct_run_dirs(run_dirs)]
-    if committed_ledger:
-        for run in loaded:
-            _refuse_for_the_committed_ledger(run, root=checkout)
+    loaded = load_runs(run_dirs, root=checkout, committed_ledger=committed_ledger)
     rows = [_row(run, score) for run in loaded for score in run.scorecard.per_package]
 
     studies: dict[tuple[str, str | None, str | None], list[_LoadedRun]] = {}
@@ -1553,9 +1596,6 @@ def compare_runs(
         key = _study_key(run)
         if key is not None:
             studies.setdefault(key, []).append(run)
-    for key, runs in studies.items():
-        _check_one_study(key, runs)
-
     messages = [] if notes is None else notes
     measurements = [(Path(path), _read_measurement_for_compare(Path(path))) for path in pilots]
     floors = [(Path(path), simulate.read_noise_floor(path)) for path in noise_floors]

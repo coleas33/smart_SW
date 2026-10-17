@@ -29,11 +29,11 @@ import json
 import shutil
 from collections import Counter
 from collections.abc import Iterator, Sequence
-from dataclasses import replace
+from dataclasses import FrozenInstanceError, replace
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 import pytest
 from typer.testing import CliRunner
@@ -47,8 +47,9 @@ from swreview.agent.settings import (
     EfficiencySettings,
     ModelViewSettings,
 )
+from swreview.benchmark import compare, pilot, sets
 from swreview.benchmark import scorecard as scorecard_module
-from swreview.benchmark import sets
+from swreview.benchmark import verdict as pane_verdict
 from swreview.benchmark.adoption import (
     ADOPT,
     BASELINE,
@@ -81,9 +82,15 @@ from swreview.benchmark.compare import (
     splice_ledger,
     write_ledger,
 )
-from swreview.benchmark.runner import PROVENANCE_FILE, RunProvenance
+from swreview.benchmark.runner import (
+    PROVENANCE_FILE,
+    SAVED_SET_FILE,
+    RunProvenance,
+    load_provenance,
+)
 from swreview.benchmark.scorecard import NOT_ASSESSED, SCORECARD_FILE, Scorecard
 from swreview.checks.standards.profile import display_digest
+from swreview.report.session import load_session
 from tests.support.studies import (
     COMMIT,
     EXAMPLE_PROFILE_DIGEST,
@@ -106,6 +113,207 @@ runner = CliRunner()
 
 CHEAPER = {"packages": (PackageSpec(total_tokens=209_000, wall_clock_s=250.0),)}
 """An on arm that halved the bill and lost nothing: the only shape that may `adopt`."""
+
+
+# --- the shared run loader and the pilot/noise-floor view (T237) --------------------
+
+
+def test_load_runs_returns_one_validated_run_per_folder_in_given_order(tmp_path: Path) -> None:
+    specs = [
+        RunSpec(run="z-off", rep=2),
+        RunSpec(run="a-on", arm="on", rep=1),
+        RunSpec(run="other-study", lever="tool_tiers"),
+    ]
+    folders = write_study(tmp_path, specs)
+    legacy = write_run(tmp_path, RunSpec(run="legacy"), with_provenance=False)
+    folders.insert(1, legacy)
+
+    loaded = compare.load_runs([str(folders[0]), *folders[1:]], root=tmp_path)
+
+    assert [run.run_dir for run in loaded] == folders
+    assert [run.run for run in loaded] == [folder.name for folder in folders]
+    assert [run.ledger_dir for run in loaded] == [folder.name for folder in folders]
+    for run, folder in zip(loaded, folders, strict=True):
+        assert run.provenance == load_provenance(folder)
+        assert run.scorecard == scorecard_module.read_scorecard(folder)
+        assert run.sessions == {
+            score.package_id: load_session(folder / score.package_id / "session.json")
+            for score in run.scorecard.per_package
+        }
+
+
+def test_load_runs_accepts_no_folders() -> None:
+    assert compare.load_runs([]) == []
+
+
+@pytest.mark.parametrize("second", ["off-1", "./off-1"], ids=["same", "dot-alias"])
+def test_load_runs_refuses_duplicate_folders_with_compares_own_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, second: str
+) -> None:
+    write_run(tmp_path, RunSpec(run="off-1"))
+    monkeypatch.chdir(tmp_path)
+    folders = ["off-1", second]
+
+    with pytest.raises(ValueError) as distinct:
+        compare.distinct_run_dirs(folders)
+    with pytest.raises(ValueError) as compared:
+        compare_runs(folders)
+    with pytest.raises(ValueError) as loaded:
+        compare.load_runs(folders)
+
+    assert type(loaded.value) is type(compared.value) is type(distinct.value) is CompareError
+    assert str(loaded.value) == str(compared.value) == str(distinct.value)
+    assert str(loaded.value) == (
+        "off-1 is named more than once; one run directory is one measurement "
+        "and may not stand in for several"
+    )
+
+
+def test_load_runs_refuses_mixed_commits_with_compares_own_error(tmp_path: Path) -> None:
+    folders = write_study(tmp_path, [
+        RunSpec(run="off-1"),
+        RunSpec(run="on-1", arm="on", commit="0e28d52"),
+    ])
+
+    with pytest.raises(ValueError) as compared:
+        compare_runs(folders)
+    with pytest.raises(ValueError) as loaded:
+        compare.load_runs(folders)
+
+    assert type(loaded.value) is type(compared.value) is CompareError
+    assert str(loaded.value) == str(compared.value) == (
+        f"{folders[0]} and {folders[1]} cannot be placed in one comparison: "
+        f"commit differs ({COMMIT!r} against '0e28d52')"
+    )
+
+
+@pytest.mark.parametrize("rep", [None, 1], ids=["missing", "repeated"])
+def test_load_runs_applies_compares_repetition_checks(tmp_path: Path, rep: int | None) -> None:
+    folders = write_study(tmp_path, [
+        RunSpec(run="off-1"), RunSpec(run="off-2", rep=rep),
+    ])
+
+    with pytest.raises(ValueError) as compared:
+        compare_runs(folders)
+    with pytest.raises(ValueError) as loaded:
+        compare.load_runs(folders)
+
+    assert type(loaded.value) is type(compared.value) is CompareError
+    assert str(loaded.value) == str(compared.value)
+    assert ("no repetition index" if rep is None else "both arm 'off' rep 1") in str(loaded.value)
+
+
+@pytest.mark.parametrize("root_kind", ["omitted", "none", "explicit"])
+def test_load_runs_resolves_the_checkout_root_at_call_time(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, root_kind: str
+) -> None:
+    folder = write_run(tmp_path / "runs", RunSpec(run="off-1"))
+    monkeypatch.setattr(sets, "REPO_ROOT", tmp_path / "checkout")
+    checkout = tmp_path / "other" if root_kind == "explicit" else sets.REPO_ROOT
+    kwargs = {} if root_kind == "omitted" else {"root": None if root_kind == "none" else checkout}
+
+    with patch.object(sets, "load_saved_set", wraps=sets.load_saved_set) as saved:
+        loaded = compare.load_runs([folder], **kwargs)
+
+    saved.assert_called_once_with(folder / SAVED_SET_FILE, root=checkout)
+    assert loaded[0].run_dir == folder
+
+
+def test_compare_runs_calls_load_runs_once_with_the_given_folders(tmp_path: Path) -> None:
+    folders = write_study(tmp_path, study_specs(reps=1))
+    given = [str(folders[1]), folders[0]]
+
+    with patch.object(compare, "load_runs", wraps=compare.load_runs) as loading:
+        first = compare_runs(given, root=tmp_path)
+        loading.assert_called_once_with(given, root=tmp_path, committed_ledger=False)
+        loading.reset_mock()
+        second = compare_runs(given, root=tmp_path)
+        loading.assert_called_once_with(given, root=tmp_path, committed_ledger=False)
+
+    assert first == second
+    assert [row.run for row in first.runs] == [folder.name for folder in reversed(folders)]
+
+
+def test_compare_keeps_the_committed_ledger_refusal_before_a_study_mismatch(tmp_path: Path) -> None:
+    folders = write_study(tmp_path / "outside", [
+        RunSpec(run="off-1"), RunSpec(run="on-1", arm="on", commit="0e28d52"),
+    ])
+
+    with pytest.raises(CompareError, match="commit differs"):
+        compare.load_runs(folders)
+    with pytest.raises(CompareError) as refused:
+        compare_runs(folders, root=tmp_path / "checkout", committed_ledger=True)
+
+    assert str(refused.value) == (
+        "the committed ledger holds only fictional-profile studies over committed cases, "
+        f"from run folders the repository holds (FR-051): render {folders[0]} with --out "
+        "outside the repository"
+    )
+
+
+def test_run_records_refuses_a_run_with_no_provenance_record_naming_its_folder(
+    tmp_path: Path,
+) -> None:
+    legacy = write_run(tmp_path, RunSpec(run="legacy"), with_provenance=False)
+
+    with pytest.raises(CompareError) as refused:
+        compare.run_records([legacy], root=tmp_path)
+
+    assert str(refused.value) == (
+        f"{legacy}: no provenance record; the pilot and the noise floor "
+        "read benchmark run folders only"
+    )
+
+
+@pytest.mark.parametrize("root_kind", ["omitted", "none", "explicit"])
+def test_run_records_exposes_loaded_runs_through_the_shared_converter_and_saved_set(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, root_kind: str
+) -> None:
+    packages = (PackageSpec(package_id="fict-a"), PackageSpec(package_id="fict-b"))
+    specs = [
+        pane_run_spec("z-on", "on", 2, packages=packages),
+        pane_run_spec("a-off", "off", 1, packages=packages),
+    ]
+    folders = write_study(tmp_path / "runs", specs)
+    monkeypatch.setattr(sets, "REPO_ROOT", tmp_path / "checkout")
+    checkout = tmp_path / "other" if root_kind == "explicit" else sets.REPO_ROOT
+    kwargs = {} if root_kind == "omitted" else {"root": None if root_kind == "none" else checkout}
+    loaded = compare.load_runs(folders, root=checkout)
+
+    with (
+        patch.object(compare, "load_runs", return_value=loaded) as loading,
+        patch.object(compare, "_study_run", wraps=compare._study_run) as convert,
+        patch.object(sets, "load_saved_set", wraps=sets.load_saved_set) as saved,
+    ):
+        records = compare.run_records(folders, **kwargs)
+
+    loading.assert_called_once_with(folders, root=checkout)
+    assert convert.call_args_list == [call(run) for run in loaded]
+    assert saved.call_args_list == [
+        call(folder / SAVED_SET_FILE, root=checkout) for folder in folders
+    ]
+    assert len(records) == len(folders)
+    for record, run in zip(records, loaded, strict=True):
+        assert isinstance(record, pilot.RunRecord)
+        assert isinstance(record.study_run, pane_verdict.StudyRun)
+        assert record.study_run.run == run.run
+        assert record.study_run.arm == run.provenance.arm
+        assert record.study_run.scorecard is run.scorecard
+        assert record.folder == run.run_dir
+        assert record.provenance is run.provenance
+        assert record.sessions is run.sessions
+        assert set(record.sessions) == {"fict-a", "fict-b"}
+        assert record.saved_set == sets.load_saved_set(run.run_dir / SAVED_SET_FILE, root=checkout)
+        assert [entry.path for entry in record.saved_set.packages] == [
+            checkout / "benchmarks" / "packages" / package.package_id for package in packages
+        ]
+
+    with pytest.raises(FrozenInstanceError):
+        records[0].folder = tmp_path / "replacement"
+
+
+def test_run_records_accepts_no_folders() -> None:
+    assert compare.run_records([]) == []
 
 
 def test_compare_refuses_unscored_packages_before_counting_missing_work_as_savings(

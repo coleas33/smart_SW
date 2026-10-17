@@ -7,15 +7,31 @@ checks its stored digest, whose mismatch compare must name in its own refusal.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Annotated, Literal
 
 from pydantic import AfterValidator, Field, field_validator
 
-from swreview.benchmark import digest
+from swreview.benchmark import digest, verdict
+from swreview.benchmark.runner import RunProvenance
+from swreview.benchmark.sets import BenchmarkSet
 from swreview.findings import FindingStatus, ReviewModel
+from swreview.report.session import ReviewSession
 
 PILOT_SCHEMA = 1
+
+
+@dataclass(frozen=True)
+class RunRecord:
+    """A validated run's shared view for the pilot and the noise floor."""
+
+    study_run: verdict.StudyRun
+    folder: Path
+    provenance: RunProvenance
+    sessions: Mapping[str, ReviewSession]
+    saved_set: BenchmarkSet
 
 
 def _relative_folder(value: str) -> str:
