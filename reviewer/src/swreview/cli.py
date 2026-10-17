@@ -3367,6 +3367,89 @@ def benchmark_pilot(
         typer.echo(line)
 
 
+@benchmark_app.command("noise-floor")
+def benchmark_noise_floor(
+    run_dirs: Annotated[
+        list[Path], typer.Argument(help="One pane study's scored off- and on-arm run folders.")
+    ],
+    pilot_file: Annotated[
+        Path, typer.Option("--pilot", help="The study's approved pilot measurement.")
+    ],
+    out: Annotated[
+        Path, typer.Option("--out", help="Write the study's noise-floor record to this file.")
+    ],
+) -> None:
+    """Compute and store the scored study's noise floor; contacts no provider."""
+    import numpy as np
+
+    from swreview.benchmark import compare, pilot, simulate, verdict
+
+    with _errors_as_exit_1():
+        if out.exists():
+            raise ValueError(f"{out} exists: one study has one noise-floor record")
+        records = compare.run_records(run_dirs, root=sets.REPO_ROOT)
+        keys = {
+            (record.provenance.lever, record.provenance.provider, record.provenance.model)
+            for record in records
+        }
+        if len(keys) != 1 or next(iter(keys))[0] not in (PANE_STUDY, PRIVATE_PANE_STUDY):
+            studies = ", ".join(sorted(str(key) for key in keys))
+            raise ValueError(f"noise-floor needs runs of one pane study; got {studies}")
+        key = next(iter(keys))
+        if {record.provenance.arm for record in records} != {"off", "on"}:
+            raise ValueError(f"{key}: noise-floor needs both off and on arms")
+        for record in records:
+            card = record.study_run.scorecard
+            if not card.per_package or card.unscored_packages:
+                raise ValueError(f"{record.folder}: unscored run")
+        measurement = pilot.read_measurement(pilot_file)
+        identity = measurement.identity
+        if (identity.study, identity.provider, identity.model) != key:
+            raise ValueError(f"{pilot_file}: measurement does not match study {key}")
+        if measurement.sizing_digest != pilot.sizing_digest(measurement):
+            raise ValueError(f"{pilot_file}: the sizing was edited by hand; "
+                             "re-run `swreview benchmark pilot`")
+        if not measurement.approval.approved or not measurement.approval.approved_at:
+            raise ValueError(f"{pilot_file}: approval.approved and approved_at are required")
+        alpha = measurement.sizing.result.alpha
+        if alpha is None:
+            raise ValueError(f"{pilot_file}: sizing.result.alpha has not reached an approved size")
+        data = verdict.study_stats([record.study_run for record in records])
+        counts = pilot.defect_counts(data, "off")
+        fit = pilot.beta_fit(counts)
+        rates = pilot.shrunk_rates(counts, fit)
+        movement = pilot.comovement(data, fit, "off")
+        if movement.estimate is None:
+            raise ValueError(f"{key}: no counted off-arm held-out model defects")
+        layout = pilot.study_layout(records)
+        # The layout follows saved-set order; verdict's identities are sorted.
+        # Keep each defect's rate and each package's counted runs in that layout.
+        entries = records[0].saved_set.packages
+        ordered_rates = [
+            rates[f"{ref.package_id}/{ref.defect_id}"]
+            for entry in entries for ref in data.defect_ids if ref.package_id == entry.package_id
+        ]
+        package_indices = [data.package_ids.index(entry.package_id) for entry in entries]
+        repetitions = data.package_runs[0, :, 0, :][:, package_indices].tolist()
+        seed, sims = measurement.sizing.seed, simulate.NOISE_FLOOR_SIMS
+        result = simulate.noise_floor(
+            layout, ordered_rates, movement.estimate, alpha=alpha,
+            seed=seed, reps=repetitions, sims=sims,
+        )
+        record = simulate.NoiseFloorRecord(
+            noise_floor_schema=1, study=key[0], provider=key[1], model=key[2],
+            runs_digest=simulate.runs_digest(
+                [record.folder for record in records], relative_to=out.parent,
+            ),
+            seed=seed, sims=sims, numpy_version=np.__version__,
+            grid=[index / 2 for index in range(1, 101)], result=result,
+        )
+        out.parent.mkdir(parents=True, exist_ok=True)
+        atomic.write_atomic(out, (record.model_dump_json(indent=2) + "\n").encode("utf-8"))
+    typer.echo(f"wrote {out}")
+    typer.echo(f"noise floor: {result}{' points' if isinstance(result, float) else ''}")
+
+
 @benchmark_app.command("compare")
 def benchmark_compare(
     run_dirs: Annotated[

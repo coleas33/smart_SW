@@ -491,6 +491,7 @@ def draw_studies(
 ALPHA_LADDER = (0.025, 0.02, 0.015, 0.01, 0.005, 0.0025)
 DEFAULT_SEED = 20261016
 DEFAULT_SIMS = 4000
+NOISE_FLOOR_SIMS = 4000
 DEFAULT_CAP = 10
 SHAPES = ("proportional", "room")
 
@@ -806,6 +807,88 @@ def render_result(
     if result.result is not None:
         lines.append("chosen " + _size_line(result.result))
     return "\n".join(lines)
+
+
+def noise_floor(layout, rates, sd, *, alpha, seed, reps, sims):
+    """Find the first grid drop with 80% power on the observed study's layout.
+
+    Rates follow the layout's package order, with each package's defects
+    contiguous. Repetitions are either one positive integer or the main
+    counted-run counts for each arm and package, shaped (2, packages).
+    Fixed rates keep their package identities; the reference simulator's
+    random permutation of population rates does not apply to this study.
+    """
+    rates = _sim_rates(rates)
+    if rates.ndim != 1 or rates.size != layout.defects:
+        raise ValueError("rates must contain one probability per layout defect")
+    sd = _sim_number(sd, "sd")
+    seed = _sim_integer(seed, "seed")
+    sims = _sim_integer(sims, "sims", minimum=1)
+    rules = verdict.VerdictRules(alpha, cleared_guard_decides=False)
+    try:
+        repetitions = np.asarray(reps, dtype=object)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("reps must be an integer or have shape (2, packages)") from exc
+    if repetitions.ndim == 0:
+        count = _sim_integer(repetitions.item(), "reps", minimum=1)
+        repetitions = np.full((2, layout.package_count), count, dtype=np.int64)
+    elif repetitions.shape == (2, layout.package_count):
+        repetitions = np.array([
+            [_sim_integer(value, "reps") for value in arm]
+            for arm in repetitions.tolist()
+        ], dtype=np.int64)
+    else:
+        raise ValueError("reps must be an integer or have shape (2, packages)")
+
+    defect_packages = np.repeat(np.arange(layout.package_count), layout.packages)
+    package_runs = np.broadcast_to(
+        repetitions[None, :, None, :], (sims, 2, 2, layout.package_count),
+    )
+    counted_runs = package_runs[..., defect_packages]
+    false_alarms = np.zeros_like(package_runs)
+    empty_counts = np.zeros((sims, 2, 0), dtype=np.int64)
+    table = stats.intercept_table(sd)
+    off_intercepts = stats.intercept(table, rates)
+    maximum_reps = int(np.max(repetitions))
+    attainable = False
+    for half_point in range(1, 101):
+        powers = []
+        for shape in SHAPES:
+            on_rates = drop_rates(rates, half_point / 200, shape)
+            if on_rates is None:
+                continue
+            attainable = True
+            intercepts = np.stack((off_intercepts, stats.intercept(table, on_rates)))
+            detected = np.zeros((sims, 2, layout.defects), dtype=np.int64)
+            # Resetting the seed shares the same shocks and uniforms across
+            # grid points and shapes, without moving rates between packages.
+            rng = np.random.Generator(np.random.PCG64(seed))
+            for repetition in range(maximum_reps):
+                shocks = (
+                    rng.normal(0, sd, size=(sims, 2, layout.package_count))
+                    if sd else 0
+                )
+                logits = intercepts + (shocks[..., defect_packages] if sd else 0)
+                probabilities = np.exp(-np.logaddexp(0, -logits))
+                draws = rng.random((sims, 2, layout.defects)) < probabilities
+                counted = (repetitions > repetition)[:, defect_packages]
+                detected += draws & counted
+            simulated = verdict.StudyStats(
+                detections=np.repeat(detected[:, :, None, :], 2, axis=2),
+                counted_runs=counted_runs,
+                defect_packages=defect_packages,
+                false_alarms=false_alarms,
+                package_runs=package_runs,
+                code_detections=empty_counts,
+                code_runs=empty_counts,
+                clears=empty_counts,
+                clear_held_out=np.zeros(0, dtype=bool),
+            )
+            outcomes = verdict.judge(simulated, rules, named=False)
+            powers.append(np.count_nonzero(outcomes.main_recall_loss) / sims)
+        if powers and min(powers) >= 0.8:
+            return half_point / 2
+    return "above 50 points" if attainable else "not attainable"
 
 
 class NoiseFloorRecord(ReviewModel):

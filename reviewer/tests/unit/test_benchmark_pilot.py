@@ -16,7 +16,7 @@ from swreview.benchmark import answer_key, compare, digest, matching, pilot, set
 from tests.support import local_paths
 from tests.support.answer_keys import write_key
 from tests.support.findings import make_finding
-from tests.support.studies import PanePackage, pane_run, write_pane_study
+from tests.support.studies import PanePackage, pane_run, write_measurement, write_pane_study
 
 COMPUTED_BLOCKS = ("identity", "pilot_runs", "smoke_runs", "measured", "sizing")
 
@@ -1008,3 +1008,258 @@ def test_stopped_code_package_keeps_its_clearance_without_inventing_detection_ra
     assert (cleared.x, cleared.n) == (3, 3)
     assert calls[0][0].code_count == 0
     assert calls[0][0].clearance_rate == (1, 0, 0)
+
+
+def noise_floor_study(tmp_path, monkeypatch, *, cores=17, matched=("D-1",), packages=None):
+    """A small, entirely fictional two-arm study and a hand-approved measurement."""
+    monkeypatch.setattr(sets, "REPO_ROOT", tmp_path)
+    # Read at command-call time: the default suite never runs the paid-size search.
+    monkeypatch.setattr(simulate, "NOISE_FLOOR_SIMS", 8, raising=False)
+    if packages is None:
+        packages = tuple(PanePackage(f"core-{index:02d}", matched=matched)
+                         for index in range(cores))
+    folders = write_pane_study(tmp_path / "study", [
+        pane_run(f"{arm}-{rep}", arm, packages)
+        for rep in range(1, 4) for arm in ("off", "on")
+    ])
+    measurement = write_measurement(
+        tmp_path / "pilot", reps=3, packages=cores, held_out_model_defects=2 * cores,
+        pilot_packages=[package.package_id for package in packages], seed=241, alpha=0.02,
+    )
+    return folders, measurement
+
+
+def invoke_noise_floor(folders, measurement, out):
+    from typer.testing import CliRunner
+
+    from swreview.cli import app
+
+    return CliRunner().invoke(app, [
+        "benchmark", "noise-floor", *map(str, folders),
+        "--pilot", str(measurement), "--out", str(out),
+    ])
+
+
+def test_noise_floor_command_writes_one_reproducible_atomic_record_and_compare_reads_it(
+    tmp_path, monkeypatch,
+):
+    from swreview import atomic
+
+    folders, measurement = noise_floor_study(tmp_path, monkeypatch)
+    written = []
+    original = atomic.write_atomic
+
+    def write(path, data):
+        written.append((path, data))
+        original(path, data)
+
+    monkeypatch.setattr(atomic, "write_atomic", write)
+    # Packing cannot affect this computation: these intentionally unreadable
+    # packed streams must never be opened by either the loader or the estimators.
+    for folder in folders:
+        for path in folder.glob("*/events.jsonl"):
+            path.with_suffix(".jsonl.gz").write_bytes(b"not a gzip stream")
+            path.unlink()
+    outputs = [tmp_path / "study" / name for name in ("noise-floor.json", "again.json")]
+    for out in outputs:
+        result = invoke_noise_floor(folders, measurement, out)
+        assert result.exit_code == 0, result.output
+    assert outputs[0].read_bytes() == outputs[1].read_bytes()
+    record = simulate.read_noise_floor(outputs[0])
+    identity = pilot.read_measurement(measurement).identity
+    assert record.noise_floor_schema == 1
+    assert (record.study, record.provider, record.model) == (
+        identity.study, identity.provider, identity.model,
+    )
+    assert record.runs_digest == simulate.runs_digest(folders, relative_to=outputs[0].parent)
+    assert (record.seed, record.sims, record.numpy_version) == (241, 8, np.__version__)
+    assert record.grid == [index / 2 for index in range(1, 101)]
+    assert isinstance(record.result, float)
+    assert record.result in record.grid
+    assert written == [(out, out.read_bytes()) for out in outputs]
+    assert b"\r" not in outputs[0].read_bytes()
+    ledger = compare.compare_runs(folders, pilots=[measurement], noise_floors=outputs[:1])
+    assert ledger.pane_studies[0].refusal is None
+    assert ledger.pane_studies[0].noise_floor.state == "computed"
+    assert ledger.pane_studies[0].noise_floor.points == record.result
+
+
+def test_noise_floor_command_calls_the_existing_estimators_with_study_values(
+    tmp_path, monkeypatch,
+):
+    folders, measurement = noise_floor_study(tmp_path, monkeypatch, cores=2)
+    # Access the computation before invoking the command so T241 shows both
+    # missing pieces independently in its red run.
+    compute = simulate.noise_floor
+    observed = {}
+    for name in ("beta_fit", "shrunk_rates", "comovement", "defect_counts", "study_layout"):
+        original = getattr(pilot, name)
+
+        def spy(*args, _name=name, _original=original, **kwargs):
+            result = _original(*args, **kwargs)
+            observed[_name] = (args, kwargs, result)
+            return result
+
+        monkeypatch.setattr(pilot, name, spy)
+    load = compare.run_records
+    loads = []
+
+    def run_records(paths, **kwargs):
+        loads.append(list(paths))
+        return load(paths, **kwargs)
+
+    def noise_floor(layout, rates, sd, **kwargs):
+        observed["noise_floor"] = (layout, rates, sd, kwargs)
+        return compute(layout, rates, sd, **kwargs)
+
+    monkeypatch.setattr(compare, "run_records", run_records)
+    monkeypatch.setattr(simulate, "noise_floor", noise_floor)
+    out = tmp_path / "noise-floor.json"
+    result = invoke_noise_floor(folders, measurement, out)
+    assert result.exit_code == 0, result.output
+    assert loads == [folders]
+    assert set(observed) == {
+        "beta_fit", "shrunk_rates", "comovement", "defect_counts", "study_layout", "noise_floor",
+    }
+    layout, rates, sd, options = observed["noise_floor"]
+    assert layout == observed["study_layout"][2]
+    assert list(rates) == list(observed["shrunk_rates"][2].values())
+    assert sd == observed["comovement"][2].estimate
+    assert sd != observed["comovement"][2].used
+    assert options == {"alpha": 0.02, "seed": 241, "reps": [[3, 3], [3, 3]], "sims": 8}
+    assert observed["defect_counts"][0][1] == "off"
+    assert observed["comovement"][0][2] == "off"
+
+
+def test_noise_floor_command_keeps_saved_set_order_and_each_arms_counted_repetitions(
+    tmp_path, monkeypatch,
+):
+    packages = (
+        PanePackage("z-core", matched=("D-1", "D-2")),
+        PanePackage("a-core", matched=()),
+        PanePackage("m-core", matched=("D-1",)),
+    )
+    folders, measurement = noise_floor_study(tmp_path, monkeypatch, packages=packages)
+    # A behavioural stop contributes no main-figure run; the other arm and
+    # packages retain all three repetitions, regardless of the approved size.
+    path = folders[1] / "scorecard.json"
+    card = json.loads(path.read_bytes())
+    card["per_package"][0]["run_status"].update(
+        kind="behavioural", **{"class": "max_steps", "stop_reason": "max_steps"},
+    )
+    path.write_text(json.dumps(card), encoding="utf-8")
+    data = verdict.study_stats([record.study_run for record in compare.run_records(folders)])
+    counts = pilot.defect_counts(data, "off")
+    fitted_rates = pilot.shrunk_rates(counts, pilot.beta_fit(counts))
+    calls = []
+
+    def noise_floor(layout, rates, sd, **kwargs):
+        calls.append((layout, rates, kwargs["reps"]))
+        return "above 50 points"
+
+    monkeypatch.setattr(simulate, "noise_floor", noise_floor)
+    result = invoke_noise_floor(folders, measurement, tmp_path / "noise-floor.json")
+    assert result.exit_code == 0, result.output
+    layout, rates, repetitions = calls[0]
+    assert layout.packages == (2, 2, 2)
+    assert rates == [fitted_rates[f"{package.package_id}/{defect}"]
+                     for package in packages for defect in ("D-1", "D-2")]
+    assert rates != list(fitted_rates.values())
+    assert repetitions == [[3, 3, 3], [2, 3, 3]]
+
+
+def test_noise_floor_command_uses_the_lower_shape_power_and_first_passing_grid_point(
+    tmp_path, monkeypatch,
+):
+    from types import SimpleNamespace
+
+    packages = (PanePackage("z-core", matched=("D-1", "D-2")),
+                PanePackage("a-core", matched=()))
+    folders, measurement = noise_floor_study(tmp_path, monkeypatch, packages=packages)
+    # These off rates are exactly 1, 1, 0, 0. Every simulated study must keep
+    # them in those packages. The first candidate has one shape below 80%;
+    # both shapes pass at the next candidate, which must be the stored result.
+    hits = iter((7, 6, 7, 7))
+    calls = []
+
+    def judge(data, rules, *, named):
+        calls.append(data)
+        assert rules.alpha == 0.02 and named is False
+        np.testing.assert_array_equal(data.defect_packages, [0, 0, 1, 1])
+        np.testing.assert_array_equal(data.detections[:, 0, 0], [[3, 3, 0, 0]] * 8)
+        loss = np.arange(8) < next(hits)
+        return SimpleNamespace(main_recall_loss=loss)
+
+    monkeypatch.setattr(verdict, "judge", judge)
+    out = tmp_path / "noise-floor.json"
+    result = invoke_noise_floor(folders, measurement, out)
+    assert result.exit_code == 0, result.output
+    assert simulate.read_noise_floor(out).result == 1.0
+    assert len(calls) == 4
+
+
+@pytest.mark.parametrize("cores, matched, expected", [
+    (1, ("D-1",), "above 50 points"), (2, (), "not attainable"),
+])
+def test_noise_floor_command_records_unreached_and_unattainable_studies(
+    tmp_path, monkeypatch, cores, matched, expected,
+):
+    folders, measurement = noise_floor_study(tmp_path, monkeypatch, cores=cores, matched=matched)
+    out = tmp_path / "noise-floor.json"
+    result = invoke_noise_floor(folders, measurement, out)
+    assert result.exit_code == 0, result.output
+    assert simulate.read_noise_floor(out).result == expected
+
+
+def test_noise_floor_command_refuses_an_existing_output_before_loading(tmp_path, monkeypatch):
+    out = tmp_path / "noise-floor.json"
+    out.write_bytes(b"previous noise floor\n")
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("existing --out must refuse before loading")
+
+    monkeypatch.setattr(compare, "run_records", forbidden)
+    result = invoke_noise_floor([tmp_path / "missing"], tmp_path / "missing-pilot.json", out)
+    assert result.exit_code == 1, result.output
+    assert str(out) in result.output and "exists" in result.output
+    assert out.read_bytes() == b"previous noise floor\n"
+    assert list(tmp_path.iterdir()) == [out]
+
+
+@pytest.mark.parametrize("case", ["two-studies", "other-study", "one-arm", "unscored"])
+def test_noise_floor_command_refuses_runs_outside_one_scored_two_arm_pane_study(
+    tmp_path, monkeypatch, case,
+):
+    folders, measurement = noise_floor_study(tmp_path, monkeypatch, cores=2)
+    expected = "pane"
+    if case in ("two-studies", "other-study"):
+        changed = folders[1:2] if case == "two-studies" else folders
+        for folder in changed:
+            path = folder / "run-provenance.json"
+            data = json.loads(path.read_bytes())
+            data["lever"] = "parallel_tool_calls"
+            path.write_text(json.dumps(data), encoding="utf-8")
+        expected = "study"
+    elif case == "one-arm":
+        folders = folders[::2]
+        expected = "on"
+    else:
+        path = folders[0] / "scorecard.json"
+        data = json.loads(path.read_bytes())
+        data["unscored_packages"] = [{
+            "package_id": "core-00", "kind": "infrastructure", "class": "provider_error",
+            "error_class": "FictionalFailure", "attempts": 1, "folder": "attempts/core-00/1",
+            "graded_items": data["per_package"][0]["graded_items"],
+        }]
+        path.write_text(json.dumps(data), encoding="utf-8")
+        expected = "unscored"
+    out = tmp_path / "new-folder" / "noise-floor.json"
+    result = invoke_noise_floor(folders, measurement, out)
+    assert result.exit_code == 1, result.output
+    assert expected in result.output
+    if case == "two-studies":
+        assert "parallel_tool_calls" in result.output
+        assert "pane_defaults" in result.output
+    if case == "unscored":
+        assert str(folders[0]) in result.output
+    assert not out.parent.exists()
