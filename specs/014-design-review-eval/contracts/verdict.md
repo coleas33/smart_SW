@@ -522,6 +522,9 @@ completed runs:
   profile-likelihood limit, `2(l_max − l(sd)) <= 1.6424` (research §8.13, how the pilot's noise
   enters: co-movement is the least well measured input and the one that costs most power, so sizing
   takes its upper plausible value; the rates are already shrunk).
+  *Amended 2026-10-17 (owner decision 115A):* the detection vectors are read from
+  `StudyStats.package_run_detections`, which `study_stats` fills from the same reading of the
+  scorecards as section 3's main figure; per-defect counts alone cannot give this likelihood.
 - **Code-produced defects**: the off arm's detection rate of each, for the stress case.
 - **Behavioural stops**: stops per package run, pooled. **Clearances**: per defect, cleared runs
   over counted runs, with the defects named.

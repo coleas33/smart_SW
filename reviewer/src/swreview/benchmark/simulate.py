@@ -80,6 +80,16 @@ REFERENCE_LAYOUT = Layout()
 
 @dataclass(frozen=True)
 class Scenario:
+    """Simulation inputs, with optional per-defect code and clearance rates.
+
+    Scalar code_rate and clearance_rate apply to every selected defect. A tuple
+    supplies one probability per defect, in the simulator's selected-defect
+    order, and must match code_count or clearance_count respectively.
+    Explicit clearance tuples may include held-out known defects with measured
+    clearances but no completed-run detection estimate; these have no code-rate
+    or recall-rate slot and still enter the cleared guard.
+    """
+
     name: str
     rates: str | RateDraw
     sd: float
@@ -87,9 +97,9 @@ class Scenario:
     fa_size: float | None
     stop_rate: float = 0
     clearance_count: int = 0
-    clearance_rate: float = 0
+    clearance_rate: float | tuple[float, ...] = 0
     code_count: int = 0
-    code_rate: float = 0.95
+    code_rate: float | tuple[float, ...] = 0.95
 
     def __post_init__(self) -> None:
         if not callable(self.rates) and self.rates not in ("half", "uniform", "polar"):
@@ -98,10 +108,20 @@ class Scenario:
             _sim_number(getattr(self, name), name)
         if self.fa_size is not None and _sim_number(self.fa_size, "fa_size") == 0:
             raise ValueError("fa_size must be positive or None")
-        for name in ("stop_rate", "clearance_rate", "code_rate"):
-            _sim_number(getattr(self, name), name, probability=True)
+        _sim_number(self.stop_rate, "stop_rate", probability=True)
         for name in ("clearance_count", "code_count"):
             _sim_integer(getattr(self, name), name)
+        for name, count_name in (
+            ("clearance_rate", "clearance_count"), ("code_rate", "code_count"),
+        ):
+            rate = getattr(self, name)
+            if isinstance(rate, tuple):
+                if len(rate) != getattr(self, count_name):
+                    raise ValueError(f"{name} must contain {count_name} probabilities")
+                for value in rate:
+                    _sim_number(value, name, probability=True)
+            else:
+                _sim_number(rate, name, probability=True)
 
 
 def _reference_scenarios() -> dict[str, Scenario]:
@@ -211,8 +231,19 @@ def stress_case(rates: ArrayLike, reps: int) -> float | NDArray[np.float64]:
     return float(result) if result.ndim == 0 else result
 
 
-def cleared_null_rate(q: float, count: int, reps: int) -> float:
+def cleared_null_rate(q: float | tuple[float, ...], count: int, reps: int) -> float:
     """Chance the cleared guard fires at least once under identical arms."""
+    if isinstance(q, tuple):
+        count = _sim_integer(count, "count")
+        reps = _sim_integer(reps, "reps", minimum=1)
+        if len(q) != count:
+            raise ValueError("q must contain count probabilities")
+        rates = [_sim_number(value, "q", probability=True) for value in q]
+        never_cleared_rates = [(1 - rate) ** reps for rate in rates]
+        return 1 - math.prod(
+            1 - (1 - never_cleared) * never_cleared
+            for never_cleared in never_cleared_rates
+        )
     q = _sim_number(q, "q", probability=True)
     count = _sim_integer(count, "count")
     reps = _sim_integer(reps, "reps", minimum=1)
@@ -282,8 +313,11 @@ class _StudyDrawStream:
     ):
         seed = _sim_integer(seed, "seed")
         self.sims = sims = _sim_integer(sims, "sims", minimum=1)
-        if scenario.clearance_count > layout.defects:
-            raise ValueError("clearance_count exceeds the layout's model defects")
+        if (
+            not isinstance(scenario.clearance_rate, tuple)
+            and scenario.clearance_count > layout.defects + scenario.code_count
+        ):
+            raise ValueError("clearance_count exceeds the layout's model and code defects")
         self.scenario, self.layout = scenario, layout
         self.rng = np.random.Generator(np.random.PCG64(seed))
         self.off_rates = _draw_rates(self.rng, scenario, sims, layout.defects)
@@ -322,7 +356,9 @@ class _StudyDrawStream:
         self.sensitivity_alarms = np.zeros(self.package_shape, dtype=np.int64)
         self.code_counts = np.zeros((sims, 2, scenario.code_count), dtype=np.int64)
         self.cleared_counts = np.zeros((sims, 2, scenario.clearance_count), dtype=np.int64)
-        self.uncleared_count = layout.defects + scenario.code_count - scenario.clearance_count
+        self.uncleared_count = max(
+            0, layout.defects + scenario.code_count - scenario.clearance_count,
+        )
         self.return_draws, self.reps = return_draws, 0
         self.captured: dict[str, list[NDArray]] = {
             name: [] for name in (
@@ -403,7 +439,10 @@ class _StudyDrawStream:
                 self.cleared_counts[selected],
                 np.zeros((main_runs.shape[0], 2, self.uncleared_count), dtype=np.int64),
             ), axis=-1),
-            clear_held_out=np.ones(self.layout.defects + self.scenario.code_count, dtype=bool),
+            clear_held_out=np.ones(
+                max(self.layout.defects + self.scenario.code_count, self.scenario.clearance_count),
+                dtype=bool,
+            ),
         )
 
     def raw(self, name):
@@ -633,7 +672,7 @@ def search(
     decides = False
     reason = "no size reached both bounds and 80% power under every attainable shape"
     if found is not None:
-        if scenario.clearance_count == 0 or scenario.clearance_rate == 0:
+        if scenario.clearance_count == 0 or not np.any(scenario.clearance_rate):
             # With no possible clear, enabling the guard changes no outcome.
             decides = True
             reason = "the guard cannot fire; both bounds and powers hold at the chosen level"

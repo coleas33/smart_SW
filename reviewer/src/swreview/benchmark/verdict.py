@@ -197,6 +197,23 @@ class VerdictRules:
 
 
 @dataclass(frozen=True)
+class PackageRunDetections:
+    """Main-figure observations that aggregate detection counts cannot recover.
+
+    ``detected`` is boolean with shape (studies, arms, runs, held-out model
+    defects); ``counted`` is boolean with shape (studies, arms, runs, packages).
+    Arm order is off, on; defects and packages follow the enclosing StudyStats'
+    layouts. Runs follow each arm's input order in study_stats, including runs
+    with no counted package. The run axis is padded to the larger arm's length.
+    Padded, missing and uncounted package slots have false counted masks and
+    false detections. Completed runs, including bound-reached, count here.
+    """
+
+    detected: NDArray[np.bool_]
+    counted: NDArray[np.bool_]
+
+
+@dataclass(frozen=True)
 class StudyStats:
     """Sufficient statistics, with shared layouts and optional compare-path names.
 
@@ -205,6 +222,8 @@ class StudyStats:
     off, on; figure order main, sensitivity. Code counts use only main, with
     shape (studies, arms, code defects); clears use completed and stopped runs,
     with shape (studies, arms, all known defects). Metadata has no study axis.
+    Optional package_run_detections retains the main figure's observations and
+    counted masks; see PackageRunDetections for its shapes and ordering.
     """
 
     detections: NDArray[np.int64]
@@ -222,6 +241,7 @@ class StudyStats:
     clear_ids: tuple[DefectRef, ...] = ()
     code_missed_runs: dict[tuple[int, int], tuple[str, ...]] = field(default_factory=dict)
     clear_runs: dict[tuple[int, int], tuple[str, ...]] = field(default_factory=dict)
+    package_run_detections: PackageRunDetections | None = None
 
 
 def detected_ids(score: PackageScore) -> set[str]:
@@ -260,9 +280,15 @@ def study_stats(runs: Sequence[StudyRun]) -> StudyStats:
     clears = np.zeros((1, 2, len(known)), dtype=np.int64)
     code_missed: dict[tuple[int, int], tuple[str, ...]] = {}
     cleared_runs: dict[tuple[int, int], tuple[str, ...]] = {}
+    arm_runs = [sum(run.arm == arm for run in runs) for arm in ARMS]
+    run_detections = np.zeros((1, 2, max(arm_runs), len(held_out)), dtype=bool)
+    run_counted = np.zeros((1, 2, max(arm_runs), len(packages)), dtype=bool)
+    arm_positions = [0, 0]
 
     for run in runs:
         arm = ARMS.index(run.arm)
+        run_index = arm_positions[arm]
+        arm_positions[arm] += 1
         unscored = {row.package_id for row in run.scorecard.unscored_packages}
         for score in run.scorecard.per_package:
             if score.package_id in unscored:
@@ -276,10 +302,14 @@ def study_stats(runs: Sequence[StudyRun]) -> StudyStats:
             for figure in (0, 1) if completed else (1,):
                 package_runs[0, arm, figure, package] += 1
                 false_alarms[0, arm, figure, package] += false_alarm_count
+                if figure == 0:
+                    run_counted[0, arm, run_index, package] = True
                 for key, index in held_index.items():
                     if key[0] == score.package_id:
                         counted[0, arm, figure, index] += 1
                         detections[0, arm, figure, index] += int(completed and key[1] in detected)
+                        if figure == 0:
+                            run_detections[0, arm, run_index, index] = key[1] in detected
             for key, index in code_index.items():
                 if completed and key[0] == score.package_id:
                     code_runs[0, arm, index] += 1
@@ -313,6 +343,7 @@ def study_stats(runs: Sequence[StudyRun]) -> StudyStats:
         clear_ids=refs(known),
         code_missed_runs=code_missed,
         clear_runs=cleared_runs,
+        package_run_detections=PackageRunDetections(run_detections, run_counted),
     )
 
 

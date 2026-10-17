@@ -375,6 +375,81 @@ def test_study_stats_uses_shared_detected_ids(monkeypatch):
     assert len(calls) == 6 * 18
     assert np.all(data.detections[..., ::2] == 0)
     assert np.all(data.detections[..., 1::2] == 3)
+    vectors = data.package_run_detections
+    assert not np.any(vectors.detected[..., ::2])
+    assert np.all(vectors.detected[..., 1::2])
+
+
+def test_package_run_vectors_preserve_comovement_that_detection_counts_lose():
+    def measured(patterns):
+        return verdict.study_stats([
+            pane_run(f"off-{rep}", "off", [PanePackage("case", matched=detected)])
+            for rep, detected in enumerate(patterns, start=1)
+        ])
+
+    together = measured([("D-1", "D-2"), ()])
+    apart = measured([("D-1",), ("D-2",)])
+    np.testing.assert_array_equal(together.detections, apart.detections)
+    np.testing.assert_array_equal(together.counted_runs, apart.counted_runs)
+    np.testing.assert_array_equal(
+        together.package_run_detections.detected[0, 0], [[True, True], [False, False]],
+    )
+    np.testing.assert_array_equal(
+        apart.package_run_detections.detected[0, 0], [[True, False], [False, True]],
+    )
+    assert together.package_run_detections.detected.dtype == np.bool_
+    np.testing.assert_array_equal(together.package_run_detections.counted[0, 0], [[True], [True]])
+    assert not np.any(together.package_run_detections.counted[0, 1])
+    optional = {item.name: item.default for item in fields(together)}
+    assert optional["package_run_detections"] is None
+
+
+def test_package_run_vectors_use_main_counting_and_preserve_arm_run_order():
+    case = PanePackage("case", matched=("D-1",), flagged=("D-2",), bound_reached=True)
+    clean = PanePackage("clean", model_held_out=(), matched=())
+    unscored_run = pane_run("unscored", "off", [case, clean])
+    unscored = UnscoredPackage(
+        package_id="case", kind="infrastructure", class_="provider_error",
+        error_class="FictionalError", attempts=1, folder="attempts/case/1",
+    )
+    unscored_run = replace(unscored_run, scorecard=unscored_run.scorecard.model_copy(
+        update={"unscored_packages": [unscored]},
+    ))
+    runs = [
+        pane_run("bounded", "off", [case, clean]),
+        pane_run("on-first", "on", [replace(case, matched=(), flagged=())]),
+        pane_run("stopped", "off", [replace(case, status="behavioural"), clean]),
+        pane_run("infrastructure", "off", [replace(case, status="infrastructure"), clean]),
+        unscored_run,
+    ]
+    data = verdict.study_stats(runs)
+    vectors = data.package_run_detections
+    assert vectors.detected.shape == (1, 2, 4, 2)
+    assert vectors.counted.shape == (1, 2, 4, 2)
+    assert vectors.counted.dtype == np.bool_
+    np.testing.assert_array_equal(
+        vectors.counted[0, 0],
+        [[True, True], [False, True], [False, True], [False, True]],
+    )
+    np.testing.assert_array_equal(
+        vectors.counted[0, 1],
+        [[True, False], [False, False], [False, False], [False, False]],
+    )
+    np.testing.assert_array_equal(
+        vectors.detected[0, 0],
+        [[True, True], [False, False], [False, False], [False, False]],
+    )
+    assert not np.any(vectors.detected[0, 1])
+    np.testing.assert_array_equal(
+        vectors.detected.sum(axis=2), data.detections[:, :, 0],
+    )
+    np.testing.assert_array_equal(
+        vectors.counted.sum(axis=2), data.package_runs[:, :, 0],
+    )
+    np.testing.assert_array_equal(
+        vectors.counted[..., data.defect_packages].sum(axis=2),
+        data.counted_runs[:, :, 0],
+    )
 
 
 def test_recall_with_fewer_than_two_packages_explains_why_not_computable():

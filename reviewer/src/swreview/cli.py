@@ -3260,6 +3260,113 @@ def benchmark_simulate(
     _emit({"scenarios": rows}, lines, json_output)
 
 
+@benchmark_app.command("pilot")
+def benchmark_pilot(
+    run_dirs: Annotated[
+        list[Path], typer.Argument(help="The pane study's scored off-arm pilot run folders.")
+    ],
+    out: Annotated[
+        Path, typer.Option("--out", help="Write the unapproved pilot measurement to this file.")
+    ],
+    smoke: Annotated[
+        list[Path] | None,
+        typer.Option("--smoke", help="The scored smoke run folder; give once per arm."),
+    ] = None,
+    cap: Annotated[int, typer.Option("--cap", min=1)] = 10,
+    seed: Annotated[int | None, typer.Option("--seed", min=0)] = None,
+    jobs: Annotated[
+        int, typer.Option("--jobs", min=1, help="Concurrent reviews assumed by the projection.")
+    ] = 1,
+) -> None:
+    """Measure the paid pilot and print its study cost gate; contacts no provider."""
+    from swreview.benchmark import compare, pilot
+
+    root = sets.REPO_ROOT
+    with _errors_as_exit_1():
+        if out.exists():
+            raise ValueError(
+                f"{out} exists: one study has one measurement; "
+                "delete the unapproved file to size again"
+            )
+        if smoke is None or len(smoke) != 2:
+            raise ValueError("--smoke must be given exactly twice, once for each arm")
+        records = compare.run_records(run_dirs, root=root)
+        smoke_records = compare.run_records(smoke, root=root)
+        measurement = pilot.measure(
+            records, smoke_records, relative_to=out.parent, cap=cap, seed=seed, jobs=jobs,
+        )
+        pilot.write_measurement(out, measurement)
+
+    sizing = measurement.sizing
+    result = sizing.result
+    rates = result.simulated
+    cost_time = measurement.measured.cost_time
+    projection = sizing.projected_wall_clock
+    powers = (rates.power_proportional, rates.power_room)
+    reached = (
+        result.alpha is not None
+        and any(power is not None for power in powers)
+        and all(power is None or power >= 0.8 for power in powers)
+    )
+
+    def shown(value: object) -> str:
+        return "unknown" if value is None else str(value)
+
+    lines = [
+        f"wrote {out} (unapproved)",
+        f"result: {'reached' if reached else 'not reached'}",
+        f"size: {result.packages} packages, "
+        f"{result.held_out_model_defects} held-out model-produced defects",
+        f"repetitions: {result.reps}",
+        f"growth units to add: {sizing.growth_units} (one core case and its twin each)",
+        f"deciding rules: {', '.join(result.deciding_rules)}",
+        f"alpha: {shown(result.alpha)}",
+        f"cleared guard: {'deciding' if result.cleared_guard_decides else 'named only'}",
+        f"power proportional: {shown(rates.power_proportional)}",
+        f"power room: {shown(rates.power_room)}",
+        f"identical-arms loss rate: {shown(rates.identical_loss)}; "
+        f"Monte Carlo upper bound: {shown(rates.identical_loss_upper)}",
+        f"no-loss-at-drop rate: {shown(rates.no_loss_at_drop)}; "
+        f"Monte Carlo upper bound: {shown(rates.no_loss_at_drop_upper)}",
+        f"stress case (shown, never bounded): {shown(result.stress_case)}",
+        f"estimated study cost: {shown(result.estimated_study_cost)} "
+        "(off-arm package-run mean for both arms)",
+        f"mean package-run cost: {shown(cost_time.mean_cost)}; "
+        f"cost unknown: {cost_time.unknown_cost_count} package runs left out",
+        f"mean package-run wall clock: {shown(cost_time.mean_wall_clock_s)} s",
+        f"projected wall clock at --jobs {sizing.jobs}: "
+        f"off run {shown(projection.off_run_s)} s; on run {shown(projection.on_run_s)} s; "
+        f"study {shown(projection.study_s)} s",
+        f"smoke ratio: {shown(projection.smoke_ratio)}; "
+        f"off sum {shown(projection.smoke_off_s)} s; "
+        f"on sum {shown(projection.smoke_on_s)} s",
+        f"mean tokens per minute of one off-arm review: "
+        f"{shown(projection.mean_tokens_per_minute)}",
+    ]
+    lines.extend(
+        f"cost unknown: {row.run}, package {row.package_id}"
+        for row in cost_time.unknown_cost_runs
+    )
+    lines.extend(
+        f"projected wall clock unknown: package {package_id} has no counted pilot run"
+        for package_id in projection.unknown_packages
+    )
+    lines.append("never detected:")
+    if not measurement.measured.never_detected:
+        lines.append("none")
+    for defect in measurement.measured.never_detected:
+        lines.append(f"{defect.package_id}/{defect.defect_id}")
+        for finding in defect.findings:
+            lines.append(
+                f"  {finding.run}: {finding.finding_id}, {finding.check}, "
+                f"{finding.status}: {finding.title}; {finding.observed}; "
+                f"parts {', '.join(finding.component_ids)}; "
+                f"documents {', '.join(finding.document_ids)}"
+            )
+    for line in lines:
+        typer.echo(line)
+
+
 @benchmark_app.command("compare")
 def benchmark_compare(
     run_dirs: Annotated[
