@@ -1304,7 +1304,7 @@ def measurement_refusal(
     path: Path,
     measurement: pilot.PilotMeasurement | _RefusedMeasurement,
     *,
-    earliest: date | None = None,
+    earliest: date,
 ) -> str | None:
     """One approval check for compare and the noise floor, before study-size checks."""
     digest_matches = (
@@ -1337,7 +1337,7 @@ def measurement_refusal(
         if value is None or not math.isfinite(value) or not 0 <= value <= 1:
             return (f"{path}: sizing.result.simulated.{field} is {value!r}; "
                     "the approved sizing requires a known rate in [0, 1]")
-    if earliest is not None and approved_date > earliest:
+    if approved_date > earliest:
         return (
             f"{path}: approval.approved_at {approved_at} is later than earliest study run "
             f"{earliest.isoformat()}; levels chosen after the paid runs void the 5% bounds"

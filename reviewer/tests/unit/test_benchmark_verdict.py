@@ -970,6 +970,30 @@ def test_pane_study_ledger_sample_preserves_fractional_intervals_and_shown_measu
     assert parsed.model_dump(mode="json") == sample
 
 
+@pytest.mark.parametrize("points", [
+    .5, 8.5, 30.5, 50., "above 0.5 points", "above 30 points", "above 30.5 points",
+    "above 50 points", "not attainable", None,
+])
+def test_noise_floor_points_accept_only_printed_grid_results_or_none(points):
+    sample = ledger_sample()
+    sample["noise_floor"]["points"] = points
+    parsed = verdict.PaneStudy.model_validate(sample)
+    assert parsed.noise_floor.points == points
+
+
+@pytest.mark.parametrize("points", [
+    0., -.5, .25, 30.25, 50.5, float("nan"), float("inf"), -float("inf"),
+    True, False, "12.5", "above 0 points", "above -0.5 points", "above 0.25 points",
+    "above 30.25 points", "above 50.5 points", "above nan points", "above inf points",
+    "above 30", "above thirty points", "above 30.0 points", "above 030 points",
+])
+def test_noise_floor_points_refuse_values_outside_the_printed_grid(points):
+    sample = ledger_sample()
+    sample["noise_floor"]["points"] = points
+    with pytest.raises(ValidationError, match="points"):
+        verdict.PaneStudy.model_validate(sample)
+
+
 def test_section_eight_minimal_off_only_sometimes_entry_reads_with_its_explanation():
     sample = ledger_sample()
     sample["code_guard"]["off_only_sometimes"] = [

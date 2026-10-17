@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 from numpy.typing import NDArray
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from swreview.benchmark import origins
 from swreview.benchmark import stats as statistics
@@ -25,6 +25,7 @@ if TYPE_CHECKING:
 
 FLOOR = 34
 LOSS_BOUND = 0.10
+NOISE_FLOOR_GRID = tuple(index / 2 for index in range(1, 101))
 
 RECALL_LOSS = "RECALL LOSS"
 FALSE_ALARM_RISE = "FALSE-ALARM RISE"
@@ -125,11 +126,36 @@ class StudyApproval(ReviewModel):
     simulated: SimulatedRates
 
 
+def above_noise_floor(points: float) -> str:
+    """Spell a lower bound on the noise floor in points."""
+    return f"above {points:g} points"
+
+
+def validate_noise_floor_points(value: float | str | None) -> None:
+    """Accept only results on the printed grid, its lower bounds, or no result."""
+    if value is None:
+        return
+    if isinstance(value, str):
+        if value == "not attainable" or value in {
+            above_noise_floor(points) for points in NOISE_FLOOR_GRID
+        }:
+            return
+    elif not isinstance(value, bool) and value in NOISE_FLOOR_GRID:
+        return
+    raise ValueError("must be a grid number, an above-grid value, not attainable, or None")
+
+
 class NoiseFloor(ReviewModel):
     state: Literal["computed", "not_computed", "stale"]
     points: float | str | None
     seed: int | None
     numpy: str | None
+
+    @field_validator("points")
+    @classmethod
+    def _grid_points(cls, value: float | str | None) -> float | str | None:
+        validate_noise_floor_points(value)
+        return value
 
 
 class UntestedSetting(ReviewModel):

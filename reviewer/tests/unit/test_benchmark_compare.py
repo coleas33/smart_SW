@@ -428,12 +428,19 @@ def test_compare_accepts_an_older_measurement_without_search_state(
     assert block.refusal is None
 
 
+def test_measurement_refusal_requires_earliest_study_run(tmp_path: Path) -> None:
+    path = write_measurement(tmp_path / "pilot", approved_at="2026-09-17")
+    measurement = pilot.read_measurement(path)
+    with pytest.raises(TypeError, match="required keyword-only argument: 'earliest'"):
+        compare.measurement_refusal(path, measurement)
+
+
 def test_measurement_refusal_is_shared_with_compare_and_preserves_date_checks(
     tmp_path: Path, offline_review_pane_runs,
 ) -> None:
     path = write_measurement(tmp_path / "pilot", approved_at="2026-09-17")
     measurement = pilot.read_measurement(path)
-    assert compare.measurement_refusal(path, measurement) is None
+    assert compare.measurement_refusal(path, measurement, earliest=date(2026, 9, 17)) is None
     assert compare.measurement_refusal(path, measurement, earliest=date(2026, 9, 16)) == (
         f"{path}: approval.approved_at 2026-09-17 is later than earliest study run "
         "2026-09-16; levels chosen after the paid runs void the 5% bounds"
@@ -475,6 +482,7 @@ def test_measurement_smoke_folders_never_render_or_change_pane_figures(
     for output in (out / compare.LEDGER_JSON, out / compare.LEDGER_MD):
         rendered = output.read_text(encoding="utf-8")
         assert all(folder.name not in rendered for folder in smoke_folders)
+
 
 def test_run_records_accepts_no_folders() -> None:
     assert compare.run_records([]) == []

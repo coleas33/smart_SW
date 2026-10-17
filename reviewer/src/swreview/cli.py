@@ -3412,7 +3412,7 @@ def benchmark_noise_floor(
                 data.defect_packages, data.counted_runs[0, :, 0], data.package_runs[0, :, 0],
             )
         except ValueError as exc:
-            raise ValueError(f"{key[0]}: {exc}") from exc
+            raise ValueError(f"{key}: {exc}") from exc
         counts = pilot.defect_counts(data, "off")
         fit = pilot.beta_fit(counts)
         rates = pilot.shrunk_rates(counts, fit)

@@ -495,7 +495,10 @@ def layout_inputs(
     repetitions = [[], []]
     for entry in entries:
         if entry.package_id not in package_index:
-            raise ValueError(f"saved set package {entry.package_id!r} is absent from scorecards")
+            raise ValueError(
+                f"{records[0].folder}: study {records[0].study_key}: "
+                f"saved set package {entry.package_id!r} is absent from scorecards"
+            )
         index = package_index[entry.package_id]
         ordered_rates.extend(
             rates[_defect_key(ref)] for ref in stats.defect_ids

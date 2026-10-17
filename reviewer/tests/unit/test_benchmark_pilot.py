@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 from pydantic import ValidationError
 
-from swreview.agent.settings import PANE_STUDY, PRIVATE_PANE_STUDY
+from swreview.agent.settings import PRIVATE_PANE_STUDY
 from swreview.benchmark import answer_key, compare, digest, matching, pilot, sets, simulate, verdict
 from tests.support import local_paths
 from tests.support.answer_keys import write_key
@@ -1330,7 +1330,8 @@ def test_noise_floor_command_refuses_uncomputable_main_recall_without_writing(
     out = tmp_path / "new-folder" / "noise-floor.json"
     result = invoke_noise_floor(folders, measurement, out)
     assert result.exit_code == 1, result.output
-    assert f"{PANE_STUDY}: main recall is not computable:" in result.output
+    key = compare.run_records(folders)[0].study_key
+    assert f"{key}: main recall is not computable:" in result.output
     assert reason in result.output
     assert not out.parent.exists()
     assert {path: path.read_bytes() for path in tmp_path.rglob("*") if path.is_file()} == before
@@ -1633,8 +1634,12 @@ def test_layout_inputs_uses_saved_order_and_names_a_missing_scored_package(tmp_p
     assert layout.packages == (2, 2)
     assert ordered == [0.8, 0.9, 0.1, 0.2]
     assert repetitions == [[3, 3], [0, 0]]
-    with pytest.raises(ValueError, match="saved set package 'z'.*scorecards"):
+    with pytest.raises(ValueError) as error:
         pilot.layout_inputs(records, replace(data, package_ids=("a", "missing")), rates)
+    assert str(error.value) == (
+        f"{records[0].folder}: study {records[0].study_key}: "
+        "saved set package 'z' is absent from scorecards"
+    )
 
 
 def test_defect_identity_does_not_merge_package_and_defect_slashes():

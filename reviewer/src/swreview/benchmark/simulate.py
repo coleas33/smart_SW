@@ -519,7 +519,7 @@ ALPHA_LADDER = (0.025, 0.02, 0.015, 0.01, 0.005, 0.0025)
 DEFAULT_SEED = 20261016
 DEFAULT_SIMS = 4000
 NOISE_FLOOR_SIMS = 4000
-NOISE_FLOOR_GRID = tuple(index / 2 for index in range(1, 101))
+NOISE_FLOOR_GRID = verdict.NOISE_FLOOR_GRID
 DEFAULT_CAP = 10
 SHAPES = ("proportional", "room")
 
@@ -936,7 +936,7 @@ def noise_floor(layout, rates, sd, *, alpha, seed, reps, sims):
         if powers and min(powers) >= 0.8:
             return points
     return (
-        f"above {largest_attainable:g} points" if largest_attainable is not None
+        verdict.above_noise_floor(largest_attainable) if largest_attainable is not None
         else "not attainable"
     )
 
@@ -958,10 +958,7 @@ class NoiseFloorRecord(ReviewModel):
     @field_validator("result")
     @classmethod
     def _grid_result(cls, value: float | str) -> float | str:
-        if isinstance(value, str) and value != "not attainable" and value not in {
-            f"above {points:g} points" for points in NOISE_FLOOR_GRID
-        }:
-            raise ValueError("result must name an above-grid value or be not attainable")
+        verdict.validate_noise_floor_points(value)
         return value
 
     @field_validator("noise_floor_schema")

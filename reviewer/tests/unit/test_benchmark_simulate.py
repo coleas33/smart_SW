@@ -569,7 +569,7 @@ def noise_floor_data():
 
 
 @pytest.mark.parametrize("result", [
-    12.5, "above 0.5 points", "above 30 points", "above 30.5 points",
+    .5, 12.5, 50., "above 0.5 points", "above 30 points", "above 30.5 points",
     "above 50 points", "not attainable",
 ])
 def test_noise_floor_record_reads_each_result_without_computing(tmp_path, result):
@@ -581,11 +581,13 @@ def test_noise_floor_record_reads_each_result_without_computing(tmp_path, result
 
 
 @pytest.mark.parametrize("result", [
+    0., -.5, .25, 30.25, 50.5, float("nan"), float("inf"), -float("inf"),
+    True, False, "12.5",
     "above 0 points", "above -0.5 points", "above 0.25 points", "above 30.25 points",
     "above 50.5 points", "above nan points", "above inf points", "above 30",
     "above thirty points", "above 30.0 points", "above 030 points",
 ])
-def test_noise_floor_record_refuses_above_values_outside_the_printed_grid(result):
+def test_noise_floor_record_refuses_values_outside_the_printed_grid(result):
     with pytest.raises(ValidationError, match="result"):
         simulate.NoiseFloorRecord.model_validate(noise_floor_data() | {"result": result})
 
@@ -855,11 +857,11 @@ def test_noise_floor_search_includes_fifty_points_and_shares_its_record_grid(mon
 
 
 def test_noise_floor_scalar_repetitions_equal_explicit_counts():
-    layout = simulate.Layout((2,) * 3)
-    options = dict(alpha=.02, seed=SEED, sims=8)
-    scalar = simulate.noise_floor(layout, [.5] * 6, 1, reps=3, **options)
-    explicit = simulate.noise_floor(layout, [.5] * 6, 1, reps=np.full((2, 3), 3), **options)
-    assert scalar == explicit
+    layout = simulate.Layout((2,) * 17)
+    options = dict(alpha=.02, seed=SEED, sims=128)
+    scalar = simulate.noise_floor(layout, [.5] * 34, 1, reps=3, **options)
+    explicit = simulate.noise_floor(layout, [.5] * 34, 1, reps=np.full((2, 17), 3), **options)
+    assert scalar == explicit == 23.
 
 
 @pytest.mark.parametrize(("rates", "reps", "message"), [
@@ -933,6 +935,23 @@ def test_noise_floor_refuses_a_structurally_uncomputable_main_recall_before_draw
             layout, [.5] * layout.defects, 0,
             alpha=.02, seed=SEED, reps=reps, sims=2,
         )
+
+
+def test_grown_search_checks_the_guard_when_only_added_defects_can_clear():
+    scenario = simulate.Scenario(
+        "zero-original", "half", 0, 0, None, clearance_count=34,
+        clearance_rate=(0,) * 34, growth_clearance_rate=.1,
+    )
+    result = simulate.search(
+        scenario, layout=simulate.Layout((2,) * 17), floor=36,
+        seed=SEED, sims=100, cap=3, drop=.4,
+    )
+    assert result.result.growth_units == 1
+    assert result.cleared_guard_decides is False
+    assert result.cleared_guard_reason == (
+        "no ladder level holds both 5% bounds and 80% power "
+        "with the cleared guard deciding"
+    )
 
 
 def test_grown_search_extends_clearances_with_the_pilot_pooled_rate(monkeypatch):
