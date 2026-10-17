@@ -671,6 +671,7 @@ def test_run_spend_includes_failed_attempts(
     assert payload["unscored_packages"] == [{
         "package_id": "fict-b", "kind": "infrastructure", "class": "provider_error",
         "error_class": "TransientError", "attempts": 2, "folder": "attempts/fict-b/2",
+        "graded_items": [],
     }]
 
 

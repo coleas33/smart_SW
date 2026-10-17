@@ -259,16 +259,21 @@ def prepare_package_intervals(sums: ArrayLike, weights: ArrayLike) -> PackageMom
     return PackageMoments(estimate, se, df, packages, computable)
 
 
-def package_intervals_from_moments(
-    moments: PackageMoments, alpha: float, sides: int = 1,
-) -> BatchInterval:
-    """Apply one tail level to prepared moments; invert t only once per df."""
+def _interval_parameters(alpha: float, sides: int) -> tuple[float, int]:
     alpha = _finite(alpha, "alpha")
     if not 0 < alpha <= 0.5:
         raise ValueError("alpha must be inside (0, 0.5]")
     sides = _integer(sides, "sides")
     if sides not in (1, 2):
         raise ValueError("sides must be 1 or 2")
+    return alpha, sides
+
+
+def package_intervals_from_moments(
+    moments: PackageMoments, alpha: float, sides: int = 1,
+) -> BatchInterval:
+    """Apply one tail level to prepared moments; invert t only once per df."""
+    alpha, sides = _interval_parameters(alpha, sides)
     quantiles = np.zeros(moments.df.shape, dtype=float)
     for df in np.unique(moments.df[moments.computable]):
         quantiles[moments.df == df] = t_quantile(int(df), 1 - alpha / sides)
@@ -309,41 +314,20 @@ def package_interval(
     package even the estimate is absent; with fewer than two, or SE zero, both
     bounds are absent. A two-sided interval allocates ``alpha / 2`` to each tail.
     """
-    alpha = _finite(alpha, "alpha")
-    if not 0 < alpha <= 0.5:
-        raise ValueError("alpha must be inside (0, 0.5]")
-    sides = _integer(sides, "sides")
-    if sides not in (1, 2):
-        raise ValueError("sides must be 1 or 2")
     sums_array = _vector(sums, "sums")
     weights_array = _vector(weights, "weights")
     if sums_array.shape != weights_array.shape:
         raise ValueError("weights must have the same length as sums")
-    if np.any(weights_array < 0):
-        raise ValueError("weights must be nonnegative")
-    if np.any((weights_array == 0) & (sums_array != 0)):
-        raise ValueError("sums must be zero for packages with zero weights")
-    retained = weights_array > 0
-    sums_array, weights_array = sums_array[retained], weights_array[retained]
-    packages = len(sums_array)
-    df = packages - 1
-    if packages == 0:
-        return Interval(None, None, None, df, packages, False)
-    total_weight = math.fsum(weights_array)
-    estimate = math.fsum(sums_array) / total_weight
-    if packages < 2:
-        return Interval(estimate, None, None, df, packages, False)
-    package_means = sums_array / weights_array
-    if np.all(package_means == package_means[0]):
-        # Summing identical decimal means can round D away from that common mean.
-        # Their variance is still zero; a tolerance would erase real small differences.
-        return Interval(estimate, None, None, df, packages, False)
-    residuals = sums_array - estimate * weights_array
-    se = math.sqrt(packages / df * math.fsum(residuals * residuals)) / total_weight
-    if se == 0:
-        return Interval(estimate, None, None, df, packages, False)
-    margin = t_quantile(df, 1 - alpha / sides) * se
-    return Interval(estimate, estimate - margin, estimate + margin, df, packages, True)
+    batch = package_intervals_from_moments(
+        prepare_package_intervals(sums_array[None], weights_array[None]), alpha, sides,
+    )
+    estimate, lower, upper = (
+        None if np.isnan(values[0]) else float(values[0])
+        for values in (batch.estimate, batch.lower, batch.upper)
+    )
+    return Interval(
+        estimate, lower, upper, int(batch.df[0]), int(batch.packages[0]), bool(batch.computable[0]),
+    )
 
 
 def mc_upper_bound(hits: int, n: int) -> float:
@@ -373,15 +357,42 @@ def intercept_table(sigma: float) -> InterceptTable:
     if sigma == 0:
         solutions = logits
     else:
-        shocks = sigma * _GH_POINTS
+        with np.errstate(over="ignore"):
+            shocks = sigma * _GH_POINTS
         # At these endpoints every quadrature node is below/above the target logit.
         lower, upper = logits - np.max(shocks), logits - np.min(shocks)
-        while np.max(upper - lower) > 1e-10:
+        if not np.all(np.isfinite(lower)) or not np.all(np.isfinite(upper)):
+            raise ValueError("sigma is too large to form a finite intercept bracket")
+
+        def marginal(intercepts: NDArray[np.float64]) -> NDArray[np.float64]:
+            probabilities = np.exp(-np.logaddexp(0, -(intercepts[:, None] + shocks)))
+            return probabilities @ _GH_WEIGHTS
+
+        # Verify the bracket against the implemented quadrature, expanding only
+        # if rounding puts an endpoint on the wrong side of a target.
+        for _ in range(200):
+            too_high, too_low = marginal(lower) > rates, marginal(upper) < rates
+            if not np.any(too_high | too_low):
+                break
+            # A sub-ulp shock can round both endpoints to the same logit.
+            width = np.maximum(upper - lower, 1.0)
+            lower = np.where(too_high, lower - width, lower)
+            upper = np.where(too_low, upper + width, upper)
+            if not np.all(np.isfinite(lower)) or not np.all(np.isfinite(upper)):
+                raise ValueError("sigma is too large to bracket the intercept targets")
+        else:
+            raise ValueError("sigma intercept targets could not be bracketed")
+
+        for _ in range(200):
+            if np.max(upper - lower) <= 1e-10:
+                break
             midpoint = (lower + upper) / 2
-            probabilities = np.exp(-np.logaddexp(0, -(midpoint[:, None] + shocks)))
-            marginals = probabilities @ _GH_WEIGHTS
-            lower = np.where(marginals < rates, midpoint, lower)
-            upper = np.where(marginals < rates, upper, midpoint)
+            movable = (midpoint != lower) & (midpoint != upper)
+            if not np.any(movable):
+                break  # Far-tail float spacing can exceed the absolute tolerance.
+            below = marginal(midpoint) < rates
+            lower = np.where(movable & below, midpoint, lower)
+            upper = np.where(movable & ~below, midpoint, upper)
         solutions = (lower + upper) / 2
     rates.setflags(write=False)
     solutions.setflags(write=False)

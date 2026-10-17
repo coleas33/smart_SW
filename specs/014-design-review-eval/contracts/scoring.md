@@ -368,7 +368,7 @@ rendered (SP-14); the aggregate stores the summed counts.
 
 ## 6. Producers, tags and recall (FR-006, FR-031, FR-032)
 
-- **Graded items.** `PackageScore.graded_items` copies, for every key entry, `id`, `kind`, `tag`,
+- **Graded items.** `UnscoredPackage.graded_items` copies, for every key entry, `id`, `kind`, `tag`,
   and for a known defect `producer` and `expected_status`. Compare reads no key (feature 005's
   `ab-harness.md` section 3), so the verdict splits recall and false alarms from this list.
 - **Recall.** Over known defects, detected over all. `Aggregate.recall` keeps its field and becomes
@@ -462,6 +462,8 @@ column order fixed up front (research §4 cross-check). Plan decision SR-20; the
 `provenance.md` section 5's (plan decision INT-10).
 
 ## 8. The scoring-rules version (FR-008, SP-11, D14.2)
+
+*Amended 2026-10-16 (owner decision 113A):* `UnscoredPackage.graded_items`, the answer key's item identities, is an optional, additive field (default empty, absent in older scorecards) that names a package's defects when every run failed on infrastructure. Being optional, it moves no rules version; only a new required field bumps `SCORING_RULES_VERSION` (INT-11).
 
 - `benchmark/scorecard.SCORING_RULES_VERSION = 2`, written as `Scorecard.scoring_rules_version`. A
   scorecard without the field was scored under version 1.

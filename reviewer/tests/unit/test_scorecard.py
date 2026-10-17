@@ -1884,6 +1884,8 @@ def test_infrastructure_failure_is_unscored_but_its_held_out_key_still_counts(
     assert payload["unscored_packages"] == [{
         "package_id": "fict-0", "kind": "infrastructure", "class": "provider_error",
         "error_class": "TransientError", "attempts": 1, "folder": "attempts/fict-0/1",
+        "graded_items": [{"id": "D-1", "kind": "known_defect", "tag": "held_out",
+                          "producer": "model", "expected_status": "suspected"}],
     }]
     failed, = payload["failed_attempts"]
     assert {name: failed[name] for name in (

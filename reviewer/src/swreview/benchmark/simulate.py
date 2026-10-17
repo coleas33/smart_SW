@@ -146,7 +146,8 @@ def drop_rates(rates: ArrayLike, drop: float, shape: str) -> NDArray[np.float64]
     """Remove a marginal mean drop, separately along each row's last axis.
 
     Room redistribution is water filling: after sorting, the first rate above
-    the remaining equal share fixes the common removal threshold.
+    the remaining equal share fixes the common removal threshold. A short row
+    in a mixed matrix is NaN; None means no row can attain the drop.
     """
     values = _sim_rates(rates)
     drop = _sim_number(drop, "drop", probability=True)
@@ -170,10 +171,11 @@ def drop_rates(rates: ArrayLike, drop: float, shape: str) -> NDArray[np.float64]
         ), axis=-1))
         short.flat[near_indices] = remaining < 0
         exhausted.flat[near_indices] = remaining == 0
-    if np.any(short):
+    if np.all(short):
         return None
     if shape == "proportional":
-        result = np.maximum(values * (1 - drop / means), 0)
+        multiplier = np.divide(drop, means, out=np.zeros_like(means), where=means > 0)
+        result = np.maximum(values * (1 - multiplier), 0)
     else:
         ordered = np.sort(values, axis=-1)
         prefix = np.cumsum(ordered, axis=-1) - ordered
@@ -182,7 +184,9 @@ def drop_rates(rates: ArrayLike, drop: float, shape: str) -> NDArray[np.float64]
         index = np.where(np.any(fits, axis=-1), np.argmax(fits, axis=-1), count - 1)
         threshold = np.take_along_axis(shares, np.expand_dims(index, -1), axis=-1)
         result = np.maximum(values - threshold, 0)
-    return np.where(exhausted, 0, result) if np.any(exhausted) else result
+    if np.any(exhausted):
+        result = np.where(exhausted, 0, result)
+    return np.where(short, np.nan, result) if np.any(short) else result
 
 
 def draw_false_alarms(
@@ -287,6 +291,10 @@ class _StudyDrawStream:
             name: drop_rates(self.off_rates, drop, shape)
             for name, (drop, shape) in requests.items()
         }
+        self.eligible = {
+            name: np.all(np.isfinite(rates), axis=-1)
+            for name, rates in self.on_rates.items() if rates is not None
+        }
         self.variants = {
             name: index for index, name in enumerate(
                 name for name, rates in self.on_rates.items() if rates is not None
@@ -298,7 +306,7 @@ class _StudyDrawStream:
             np.stack((
                 off_intercepts,
                 off_intercepts if requests[name][0] == 0
-                else stats.intercept(table, self.on_rates[name]),
+                else stats.intercept(table, np.nan_to_num(self.on_rates[name])),
             ), axis=1)
             for name in self.variants
         ]
@@ -373,39 +381,48 @@ class _StudyDrawStream:
         """Read one shape at the current size without retaining earlier sizes."""
         if name not in self.variants:
             return None
-        detected = self.detected_counts[self.variants[name]]
-        sensitivity_runs = np.full(self.package_shape, self.reps, dtype=np.int64)
-        package_runs = np.stack((self.main_runs, sensitivity_runs), axis=2)
+        eligible = self.eligible[name]
+        # Keep every study in the RNG stream, and exclude only from this shape's
+        # measurements. Thus an ineligible row cannot change other seeded draws.
+        selected = slice(None) if np.all(eligible) else eligible
+        detected = self.detected_counts[self.variants[name], selected]
+        main_runs = self.main_runs[selected]
+        sensitivity_runs = np.full(main_runs.shape, self.reps, dtype=np.int64)
+        package_runs = np.stack((main_runs, sensitivity_runs), axis=2)
         return verdict.StudyStats(
             detections=np.stack((detected, detected), axis=2),
             counted_runs=package_runs[..., self.defect_packages],
             defect_packages=self.defect_packages,
-            false_alarms=np.stack((self.main_alarms, self.sensitivity_alarms), axis=2),
+            false_alarms=np.stack((
+                self.main_alarms[selected], self.sensitivity_alarms[selected],
+            ), axis=2),
             package_runs=package_runs,
-            code_detections=self.code_counts.copy(),
-            code_runs=self.main_runs[..., self.code_packages],
+            code_detections=self.code_counts[selected].copy(),
+            code_runs=main_runs[..., self.code_packages],
             clears=np.concatenate((
-                self.cleared_counts,
-                np.zeros((self.sims, 2, self.uncleared_count), dtype=np.int64),
+                self.cleared_counts[selected],
+                np.zeros((main_runs.shape[0], 2, self.uncleared_count), dtype=np.int64),
             ), axis=-1),
             clear_held_out=np.ones(self.layout.defects + self.scenario.code_count, dtype=bool),
         )
 
     def raw(self, name):
         variant = self.variants[name]
+        eligible = self.eligible[name]
+        selected = slice(None) if np.all(eligible) else eligible
         return Draws(
             stats=self.snapshot(name),
             **{
                 key: np.stack(
                     [draw[variant] for draw in values] if key == "detections" else values,
                     axis=2,
-                )
+                )[selected]
                 for key, values in self.captured.items()
             },
             defect_packages=self.defect_packages,
             code_packages=self.code_packages,
-            off_rates=self.off_rates,
-            on_rates=self.on_rates[name],
+            off_rates=self.off_rates[selected],
+            on_rates=self.on_rates[name][selected],
             layout=self.layout,
         )
 
@@ -434,6 +451,8 @@ def draw_studies(
 # The same simulation data are reused across levels: alpha never changes the draws.
 ALPHA_LADDER = (0.025, 0.02, 0.015, 0.01, 0.005, 0.0025)
 DEFAULT_SEED = 20261016
+DEFAULT_SIMS = 4000
+DEFAULT_CAP = 10
 SHAPES = ("proportional", "room")
 
 
@@ -450,6 +469,8 @@ class SizeResult:
     identical_loss_upper: float
     no_loss_at_drop: float | None
     no_loss_at_drop_upper: float | None
+    excluded_proportional: float = 0
+    excluded_room: float = 0
 
 
 @dataclass(frozen=True)
@@ -462,7 +483,14 @@ class SearchResult:
     state: str
 
     def as_dict(self) -> dict:
-        return asdict(self)
+        result = asdict(self)
+        # Zero exclusions are implicit, preserving the approved reference output.
+        for row in (*result["tried"], result["result"]):
+            if row is not None:
+                for key in ("excluded_proportional", "excluded_room"):
+                    if row[key] == 0:
+                        del row[key]
+        return result
 
 
 def level_search(
@@ -512,26 +540,31 @@ class _SizeEvaluation:
     def measure(self, alpha, decides, growth_units):
         identical, identical_upper = self.null(alpha, decides)
         powers = []
-        no_loss_hits = []
+        no_loss_rates = []
+        no_loss_bounds = []
+        exclusions = []
         for shape in SHAPES:
             outcomes = self.outcomes(shape, alpha, decides)
             if outcomes is None:
                 powers.append(None)
+                exclusions.append(1.0)
             else:
+                eligible = len(outcomes.quality_loss)
+                exclusions.append((self.sims - eligible) / self.sims)
                 powers.append(
-                    np.count_nonzero(outcomes.main_recall_loss) / self.sims,
+                    np.count_nonzero(outcomes.main_recall_loss) / eligible,
                 )
-                no_loss_hits.append(int(np.count_nonzero(outcomes.no_loss)))
-        worst_hits = max(no_loss_hits) if no_loss_hits else None
+                hits = int(np.count_nonzero(outcomes.no_loss))
+                no_loss_rates.append(hits / eligible)
+                no_loss_bounds.append(stats.mc_upper_bound(hits, eligible))
         return SizeResult(
             reps=self.reps, packages=self.layout.package_count, defects=self.layout.defects,
             growth_units=growth_units, alpha=alpha,
             power_proportional=powers[0], power_room=powers[1],
             identical_loss=identical, identical_loss_upper=identical_upper,
-            no_loss_at_drop=None if worst_hits is None else worst_hits / self.sims,
-            no_loss_at_drop_upper=(
-                None if worst_hits is None else stats.mc_upper_bound(worst_hits, self.sims)
-            ),
+            no_loss_at_drop=max(no_loss_rates, default=None),
+            no_loss_at_drop_upper=max(no_loss_bounds, default=None),
+            excluded_proportional=exclusions[0], excluded_room=exclusions[1],
         )
 
     def choose(self, decides, growth_units):
@@ -561,11 +594,14 @@ def _enough_power(measured: SizeResult) -> bool:
 
 
 def search(
-    scenario: Scenario, *, seed: int = DEFAULT_SEED, sims: int = 4000, cap: int = 10,
-    layout: Layout = REFERENCE_LAYOUT, drop: float = 0.10, floor: int = 34,
+    scenario: Scenario, *, seed: int = DEFAULT_SEED, sims: int = DEFAULT_SIMS,
+    cap: int = DEFAULT_CAP, layout: Layout = REFERENCE_LAYOUT,
+    drop: float = verdict.LOSS_BOUND, floor: int = verdict.FLOOR,
 ) -> SearchResult:
     """Search repetitions, then growth units, using judge alone for all outcomes."""
-    for name, value, minimum in (("cap", cap, 3), ("sims", sims, 1), ("floor", floor, 34)):
+    for name, value, minimum in (
+        ("cap", cap, 3), ("sims", sims, 1), ("floor", floor, verdict.FLOOR),
+    ):
         if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
             raise ValueError(f"{name} must be an integer at least {minimum}")
     growth_defects = sum(layout.growth_unit)
@@ -631,8 +667,9 @@ def search(
 
 
 def scenario_inputs(
-    scenario: Scenario, *, seed: int = DEFAULT_SEED, sims: int = 4000, cap: int = 10,
-    layout: Layout = REFERENCE_LAYOUT, drop: float = 0.10, floor: int = 34,
+    scenario: Scenario, *, seed: int = DEFAULT_SEED, sims: int = DEFAULT_SIMS,
+    cap: int = DEFAULT_CAP, layout: Layout = REFERENCE_LAYOUT,
+    drop: float = verdict.LOSS_BOUND, floor: int = verdict.FLOOR,
 ) -> dict:
     """Every input or its source, shared by the text and JSON command outputs."""
     return {
@@ -699,12 +736,17 @@ def _size_line(row: SizeResult) -> str:
         f"identical_loss_upper={row.identical_loss_upper:.6f} "
         f"no_loss_at_drop={_printed_number(row.no_loss_at_drop)} "
         f"no_loss_at_drop_upper={_printed_number(row.no_loss_at_drop_upper)}"
+        + "".join(
+            f" excluded_{shape}={getattr(row, f'excluded_{shape}'):.6f}"
+            for shape in SHAPES if getattr(row, f"excluded_{shape}")
+        )
     )
 
 
 def render_result(
-    scenario: Scenario, result: SearchResult, *, seed: int = DEFAULT_SEED, sims: int = 4000,
-    cap: int = 10, layout: Layout = REFERENCE_LAYOUT, drop: float = 0.10, floor: int = 34,
+    scenario: Scenario, result: SearchResult, *, seed: int = DEFAULT_SEED,
+    sims: int = DEFAULT_SIMS, cap: int = DEFAULT_CAP, layout: Layout = REFERENCE_LAYOUT,
+    drop: float = verdict.LOSS_BOUND, floor: int = verdict.FLOOR,
 ) -> str:
     inputs = scenario_inputs(
         scenario, seed=seed, sims=sims, cap=cap, layout=layout, drop=drop, floor=floor,

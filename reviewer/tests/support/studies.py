@@ -806,18 +806,6 @@ def pane_run(
     scored: list[PackageScore] = []
     unscored: list[UnscoredPackage] = []
     for package, spec in zip(packages, specs, strict=True):
-        if package.status == "infrastructure":
-            unscored.append(
-                UnscoredPackage(
-                    package_id=package.package_id,
-                    kind="infrastructure",
-                    class_="provider_error",
-                    error_class="FictionalProviderError",
-                    attempts=1,
-                    folder=f"attempts/{package.package_id}/1",
-                )
-            )
-            continue
         items = [
             GradedItem(
                 id=defect,
@@ -834,6 +822,19 @@ def pane_run(
             )
             for defect in ids
         ]
+        if package.status == "infrastructure":
+            unscored.append(
+                UnscoredPackage(
+                    package_id=package.package_id,
+                    kind="infrastructure",
+                    class_="provider_error",
+                    error_class="FictionalProviderError",
+                    attempts=1,
+                    folder=f"attempts/{package.package_id}/1",
+                    graded_items=items,
+                )
+            )
+            continue
         detected = set(package.matched) | set(package.flagged)
         missed = [item.id for item in items if item.id not in detected | set(package.cleared)]
         payload = package_score(spec).model_dump()

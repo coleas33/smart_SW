@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import json
+import math
 from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import fields, replace
@@ -187,6 +188,195 @@ def test_v12_zero_width_recall_is_inconclusive_and_zero_width_false_alarms_call_
     assert any("zero" in reason.lower() for reason in result.reasons)
 
 
+@pytest.mark.parametrize("reps", [3, 5, 6, 7, 9, 10])
+def test_equal_rational_recall_differences_are_not_computable_from_integer_counts(reps):
+    # The review's three packages lose exactly one detection each. Subtracting
+    # their float rates produces different spellings of -1/R for several R.
+    runs = []
+    for arm in ("off", "on"):
+        for rep in range(reps):
+            packages = [
+                PanePackage(f"case-{index}", model_held_out=("D-1",),
+                            matched=("D-1",) if rep < hits - (arm == "on") else ())
+                for index, hits in enumerate((2, 1, reps))
+            ]
+            runs.append(pane_run(f"{arm}-{rep}", arm, packages))
+    result = judge(runs, rules=replace(RULES, floor=1))
+    assert result.verdict == "inconclusive"
+    for name in verdict.FIGURES:
+        recall = getattr(result.figures, name).recall
+        assert recall.computable is False
+        assert recall.lower is recall.upper is None
+        assert has_reason(result, "RECALL NOT COMPUTABLE", name)
+
+
+def test_equal_rational_package_means_include_exact_within_package_cancellation():
+    runs = []
+    for arm in ("off", "on"):
+        for rep in range(3):
+            packages = [PanePackage("cancel", matched=(
+                *(("D-1",) if rep < (3 if arm == "off" else 2) else ()),
+                *(("D-2",) if arm == "on" and rep == 0 else ()),
+            ))]
+            packages.extend(PanePackage(f"zero-{index}") for index in range(2))
+            runs.append(pane_run(f"{arm}-{rep}", arm, packages))
+    result = judge(runs, rules=replace(RULES, floor=1))
+    assert result.verdict == "inconclusive"
+    assert all(not getattr(result.figures, name).recall.computable for name in verdict.FIGURES)
+    assert all(has_reason(result, "RECALL NOT COMPUTABLE", name) for name in verdict.FIGURES)
+
+
+@pytest.mark.parametrize("reps", [3, 5, 6, 7, 9, 10])
+def test_equal_rational_false_alarm_rises_are_not_computable(reps):
+    data = verdict.study_stats(study(packages=3, reps=reps))
+    alarms = np.zeros_like(data.false_alarms)
+    for arm in range(2):
+        alarms[:, arm] = np.array([2, 1, reps]) + arm
+    result = verdict.judge(replace(data, false_alarms=alarms), replace(RULES, floor=1))[0]
+    for name in verdict.FIGURES:
+        interval = getattr(result.figures, name).false_alarms
+        assert interval.computable is False
+        assert interval.loss is False
+        assert interval.lower is interval.upper is None
+
+
+def test_equal_rational_means_use_mixed_denominators_and_package_weights():
+    # One package has one defect at 2/3 -> 1/3; another has two at 6/6 -> 4/6.
+    # Its exact sum is twice as large, while its package mean is still -1/3.
+    data = verdict.study_stats(study(packages=3))
+    runs = np.broadcast_to([3, 6, 6], (1, 2, 2, 3)).copy()
+    detections = np.empty_like(runs)
+    detections[:, 0] = [2, 6, 6]
+    detections[:, 1] = [1, 4, 4]
+    result = verdict.judge(replace(
+        data, counted_runs=runs, detections=detections, defect_packages=np.array([0, 1, 1]),
+        defect_ids=data.defect_ids[:3],
+    ), replace(RULES, floor=1))[0]
+    assert result.verdict == "inconclusive"
+    assert all(not getattr(result.figures, name).recall.computable for name in verdict.FIGURES)
+
+
+def test_equal_rational_alarm_means_use_mixed_denominators():
+    data = verdict.study_stats(study(packages=3))
+    runs = np.broadcast_to([3, 6, 9], data.package_runs.shape).copy()
+    alarms = np.empty_like(runs)
+    alarms[:, 0] = [2, 6, 6]
+    alarms[:, 1] = [3, 8, 9]
+    result = verdict.judge(replace(data, package_runs=runs, false_alarms=alarms),
+                           replace(RULES, floor=1))[0]
+    assert all(not getattr(result.figures, name).false_alarms.computable
+               for name in verdict.FIGURES)
+    assert all(not getattr(result.figures, name).false_alarms.loss for name in verdict.FIGURES)
+
+
+def test_exact_equality_with_zero_counts_and_a_large_common_denominator_does_not_overflow():
+    data = verdict.study_stats(study(packages=8))
+    denominators = np.repeat([1009, 1013, 1019, 1021, 1031, 1033, 1039, 1049], 2)
+    runs = np.broadcast_to(denominators, data.counted_runs.shape).copy()
+    result = verdict.judge(replace(data, counted_runs=runs,
+                                   detections=np.zeros_like(runs)), RULES)[0]
+    assert result.verdict == "inconclusive"
+    assert all(not getattr(result.figures, name).recall.computable for name in verdict.FIGURES)
+
+
+def test_both_arm_infrastructure_failures_name_all_dropped_and_skipped_defects():
+    def edit(arm, rep, index, package):
+        if index == 17:
+            return replace(package, status="infrastructure", code_held_out=("C-1",))
+        return package
+
+    result = judge(study(edit), rules=replace(RULES, floor=35))
+    assert result.verdict == "inconclusive"
+    for figure in (result.figures.main, result.figures.sensitivity):
+        assert figure.retained_defects == 34
+        assert refs(figure.dropped_defects) == {("case-17", "D-1"), ("case-17", "D-2")}
+        assert figure.dropped_packages == ["case-17"]
+    assert refs(result.code_guard.skipped) == {("case-17", "C-1")}
+    assert all(name in " ".join(result.reasons) for name in ("case-17/D-1", "case-17/D-2"))
+
+
+@pytest.mark.parametrize("alpha, quantile", [(0.025, 2.10981557806115),
+                                           (0.01, 2.56693398371991)])
+def test_deciding_recall_and_alarm_bounds_use_the_approved_one_sided_level(alpha, quantile):
+    def edit(arm, rep, index, package):
+        alarms = 1 + (index % 3 == 0) if arm == "on" else 0
+        return replace(package, false_alarms=tuple((f"F-{n}", "model") for n in range(alarms)))
+
+    result = judge(study(edit), rules=replace(RULES, alpha=alpha))
+    recall_margin = quantile * math.sqrt(36 / 17) / 36
+    alarm_margin = quantile * math.sqrt(4 / (18 * 17))
+    for figure in (result.figures.main, result.figures.sensitivity):
+        assert figure.recall.lower == pytest.approx(-recall_margin, abs=1e-9)
+        assert figure.recall.upper == pytest.approx(recall_margin, abs=1e-9)
+        assert figure.false_alarms.estimate == pytest.approx(4 / 3)
+        assert figure.false_alarms.lower == pytest.approx(4 / 3 - alarm_margin, abs=1e-9)
+        assert figure.false_alarms.upper == pytest.approx(4 / 3 + alarm_margin, abs=1e-9)
+
+
+def test_both_figures_must_have_recall_lower_end_above_minus_ten_points():
+    def edit(arm, rep, index, package):
+        return replace(package, status="behavioural") if (
+            arm == "on" and rep == 1 and index in (2, 3, 4, 5)) else package
+
+    result = judge(study(edit))
+    assert result.figures.main.recall.lower > -0.10
+    assert result.figures.sensitivity.recall.lower < -0.10
+    assert result.figures.sensitivity.recall.upper > 0
+    assert result.verdict == "inconclusive"
+    assert result.reasons == ["LOWER END AT OR BELOW -10 POINTS: sensitivity -12.9"]
+
+
+def test_both_figures_must_have_computable_recall_and_name_only_the_missing_figure():
+    # Completing one off run per package gives different main recall rates. The
+    # two other off runs stop, so all sensitivity differences are exactly zero.
+    def edit(arm, rep, index, package):
+        detected = ("D-1", "D-2") if rep == 1 and index == 0 else ()
+        return replace(package, matched=detected,
+                       status="behavioural" if arm == "off" and rep != 1 else "completed")
+
+    result = judge(study(edit))
+    assert result.figures.main.recall.computable is True
+    assert result.figures.main.recall.loss is False
+    assert result.figures.sensitivity.recall.computable is False
+    assert result.verdict == "inconclusive"
+    assert result.reasons == [
+        "RECALL NOT COMPUTABLE: sensitivity; zero standard error (zero-width interval)",
+    ]
+
+
+def test_retained_count_exactly_34_passes_the_floor():
+    result = judge(study(packages=17))
+    assert result.figures.main.retained_defects == result.figures.sensitivity.retained_defects == 34
+    assert result.verdict == "no 10-point loss"
+    assert not has_reason(result, "BELOW FLOOR")
+
+
+def test_rule_floor_and_loss_bound_use_shared_constants(monkeypatch):
+    assert RULES.floor == verdict.FLOOR == 34
+    assert verdict.LOSS_BOUND == 0.10
+    monkeypatch.setattr(verdict, "LOSS_BOUND", 0.08)
+    result = judge(study())
+    assert result.verdict == "inconclusive"
+    assert has_reason(result, "LOWER END AT OR BELOW -10 POINTS", "main")
+
+
+def test_study_stats_uses_shared_detected_ids(monkeypatch):
+    score = study()[0].scorecard.per_package[0]
+    score.flagged_defect_ids = ["D-2"]
+    assert verdict.detected_ids(score) == {"D-1", "D-2"}
+    calls = []
+
+    def detect(package):
+        calls.append(package.package_id)
+        return {"D-2"}
+
+    monkeypatch.setattr(verdict, "detected_ids", detect)
+    data = verdict.study_stats(study())
+    assert len(calls) == 6 * 18
+    assert np.all(data.detections[..., ::2] == 0)
+    assert np.all(data.detections[..., 1::2] == 3)
+
+
 def test_recall_with_fewer_than_two_packages_explains_why_not_computable():
     runs = [pane_run(arm + "-1", arm, [PanePackage("one", matched=())])
             for arm in ("off", "on")]
@@ -241,6 +431,8 @@ def test_v14_infrastructure_is_excluded_and_drops_are_named_in_both_figures():
     data = verdict.study_stats(runs)
     assert data.package_runs[0, 0, 0, data.package_ids.index("case-02")] == 2
     result = judge(runs)
+    assert result.verdict == "no 10-point loss"
+    assert not has_reason(result, "BELOW FLOOR")
     for figure in (result.figures.main, result.figures.sensitivity):
         assert figure.retained_defects == 34
         assert figure.retained_packages == 17

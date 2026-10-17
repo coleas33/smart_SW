@@ -151,8 +151,12 @@ Regenerate it, and verify it, from `reviewer/`:
 
 ```powershell
 uv run swreview benchmark compare <every run directory under ../benchmarks/studies> `
+  --pilot <each matching ../benchmarks/pilots/.../pilot-measurement.json; repeat per file> `
+  --noise-floor <each matching ../benchmarks/studies/.../noise-floor.json; repeat per file> `
   --into ../docs/llm-efficiency-options.md
 uv run swreview benchmark compare <the same directories> `
+  --pilot <the same pilot measurement files; repeat per file> `
+  --noise-floor <the same noise-floor files; repeat per file> `
   --into ../docs/llm-efficiency-options.md --check   # exits 1 if this file has drifted
 ```
 

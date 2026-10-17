@@ -13,7 +13,7 @@ from typer.testing import CliRunner
 
 from swreview import cli
 from swreview.agent.settings import PANE_STUDY, PRIVATE_PANE_STUDY
-from swreview.benchmark import compare, digest, origins, simulate, verdict
+from swreview.benchmark import compare, digest, origins, pilot, simulate, verdict
 from swreview.benchmark.prices import SYNTHETIC_COST
 from swreview.benchmark.scorecard import FailedAttempt
 from swreview.report.session import load_session
@@ -432,6 +432,190 @@ def test_c8_levels_chosen_after_first_paid_run_name_both_dates(tmp_path):
         invoke(runs, out, pilots=[measurement]), out, runs,
         "2026-09-17", "2026-09-16", "levels chosen after the paid runs void the 5% bounds",
     )
+
+
+@pytest.mark.parametrize("approved_at", [
+    "2026-09-14T10:00", "14/09/2026", "20260914", "2026-02-30",
+])
+def test_approval_invalid_date_refuses_without_losing_the_ledger(tmp_path, approved_at):
+    runs = write_pane_study(tmp_path / "runs", study())
+    measurement = write_measurement(tmp_path / "pilot", approved_at=approved_at)
+    out = tmp_path / "out"
+    assert_refusal(invoke(runs, out, pilots=[measurement]), out, runs,
+                   measurement.name, "approval.approved_at", "YYYY-MM-DD")
+
+
+@pytest.mark.parametrize("field", ["alpha", *pilot.SimulatedRates.model_fields])
+def test_approval_unknown_sizing_refuses_without_losing_the_ledger(tmp_path, field):
+    runs = write_pane_study(tmp_path / "runs", study())
+    measurement = write_measurement(tmp_path / "pilot")
+
+    def clear(record):
+        result = record["sizing"]["result"]
+        (result if field == "alpha" else result["simulated"])[field] = None
+        record["sizing_digest"] = pilot.sizing_digest(pilot.PilotMeasurement.model_validate(record))
+
+    edit_json(measurement, clear)
+    out = tmp_path / "out"
+    assert_refusal(invoke(runs, out, pilots=[measurement]), out, runs,
+                   measurement.name, "sizing.result", field)
+
+
+@pytest.mark.parametrize("value", [-0.1, 1.1, float("nan"), float("inf")])
+def test_approval_invalid_simulated_rate_refuses_without_losing_the_ledger(tmp_path, value):
+    runs = write_pane_study(tmp_path / "runs", study())
+    measurement = write_measurement(tmp_path / "pilot")
+
+    def invalidate(record):
+        record["sizing"]["result"]["simulated"]["power_room"] = value
+        record["sizing_digest"] = pilot.sizing_digest(pilot.PilotMeasurement.model_validate(record))
+
+    edit_json(measurement, invalidate)
+    out = tmp_path / "out"
+    assert_refusal(invoke(runs, out, pilots=[measurement]), out, runs,
+                   measurement.name, "sizing.result.simulated.power_room")
+
+
+@pytest.mark.parametrize("field,value", [
+    ("sizing.result.alpha", 0), ("sizing.result.alpha", .6),
+    ("sizing.result.alpha", float("nan")), ("approval.approved_at", 20260914),
+    ("approval.approved", "unknown"), ("sizing.result.cleared_guard_decides", "unknown"),
+    ("sizing.result.simulated.power_room", "unknown"),
+])
+def test_invalid_approval_field_types_and_ranges_keep_mixed_ledger_rows(tmp_path, field, value):
+    runs = write_pane_study(tmp_path / "runs", study())
+    measurement = write_measurement(tmp_path / "pilot")
+    baseline = write_run(tmp_path, RunSpec(run="plain-baseline", lever="none", arm="baseline"))
+
+    def invalidate(record):
+        target = record
+        *parents, name = field.split(".")
+        for parent in parents:
+            target = target[parent]
+        target[name] = value
+        record["sizing_digest"] = digest.canonical_sha256({
+            name: record[name]
+            for name in ("identity", "pilot_runs", "smoke_runs", "measured", "sizing")
+        })
+
+    edit_json(measurement, invalidate)
+    out = tmp_path / "out"
+    result = invoke([*runs, baseline], out, pilots=[measurement])
+    assert result.exit_code == 1, result.output
+    payload = json.loads((out / "ledger.json").read_bytes())
+    assert len(payload["runs"]) == 109
+    assert any(row["run"] == "plain-baseline" for row in payload["runs"])
+    assert [row["lever"] for row in payload["levers"]] == ["none"]
+    block = payload["pane_studies"][0]
+    assert block["verdict"] is block["figures"] is block["approval"] is None
+    assert measurement.name in block["refusal"]
+    assert field in block["refusal"]
+
+
+@pytest.mark.parametrize("earlier", ["arm", "floor", "digest"])
+def test_invalid_approval_model_does_not_bypass_earlier_refusal(tmp_path, earlier):
+    selected = study(count=16) if earlier == "floor" else study()
+    if earlier == "arm":
+        selected = [run for run in selected if run.arm == "off"]
+    runs = write_pane_study(tmp_path / "runs", selected)
+    measurement = write_measurement(tmp_path / "pilot")
+    edit_json(measurement, lambda record: record["sizing"]["result"].update(alpha=0))
+    out = tmp_path / "out"
+    expected = {"arm": "has no run", "floor": "floor is 34", "digest": "edited by hand"}
+    assert_refusal(invoke(runs, out, pilots=[measurement]), out, runs, expected[earlier])
+
+
+def test_same_day_approval_is_accepted(tmp_path):
+    runs = write_pane_study(tmp_path / "runs", study())
+    measurement = write_measurement(tmp_path / "pilot", approved_at="2026-09-16")
+    out = tmp_path / "out"
+    result = invoke(runs, out, pilots=[measurement])
+    assert result.exit_code == 0, result.output
+    assert block_from(out)["refusal"] is None
+
+
+@pytest.mark.parametrize("pair", ["arm-before-private", "floor-before-measurement"])
+def test_first_refusal_wins_when_two_rows_fail(tmp_path, pair):
+    if pair == "arm-before-private":
+        runs = write_pane_study(tmp_path / "runs", [r for r in study() if r.arm == "off"])
+        edit_saved_sets(runs, lambda record: record["packages"][0].update(
+            path="C:/Fictional/private/case-00",
+        ))
+        tokens = ("arm off present", "arm on has no run")
+    else:
+        runs = write_pane_study(tmp_path / "runs", study(count=16))
+        tokens = ("keys name 32", "floor is 34")
+    out = tmp_path / "out"
+    assert_refusal(invoke(runs, out), out, runs, *tokens)
+
+
+@pytest.mark.parametrize("alpha,t,expected", [
+    (0.025, 2.109815578, "no 10-point loss"),
+    (0.02, 2.223845307517, "no 10-point loss"),
+    (0.01, 2.566933983, "inconclusive"),
+])
+def test_approved_level_reaches_judge_and_its_numeric_interval(tmp_path, alpha, t, expected):
+    runs = write_pane_study(tmp_path / "runs", study())
+    measurement = write_measurement(tmp_path / "pilot", alpha=alpha)
+    block = compare.compare_runs(runs, pilots=[measurement]).pane_studies[0]
+    assert block.verdict == expected
+    for figure in (block.figures.main, block.figures.sensitivity):
+        assert figure.recall.alpha == alpha
+        assert figure.recall.lower == pytest.approx(-t * math.sqrt(36 / 17) / 36, abs=1e-8)
+        assert figure.recall.upper == pytest.approx(t * math.sqrt(36 / 17) / 36, abs=1e-8)
+
+
+@pytest.mark.parametrize("decides", [False, True])
+def test_approved_cleared_guard_setting_reaches_judge(tmp_path, decides):
+    def clear(arm, rep, index, package):
+        return replace(package, cleared=("D-2",)) if (arm, rep, index) == ("on", 1, 2) else package
+
+    runs = write_pane_study(tmp_path / "runs", study(edit=clear))
+    measurement = write_measurement(tmp_path / "pilot", cleared_guard_decides=decides)
+    block = compare.compare_runs(runs, pilots=[measurement]).pane_studies[0]
+    assert block.cleared_guard.decides is decides
+    assert [(ref.package_id, ref.defect_id) for ref in block.cleared_guard.named] == [
+        ("case-02", "D-2"),
+    ]
+    assert block.verdict == ("quality loss" if decides else "no 10-point loss")
+    assert any(reason.startswith("CLEARED:") for reason in block.reasons) is decides
+
+
+def test_compare_reads_the_shared_floor_constant(tmp_path, monkeypatch):
+    monkeypatch.setattr(verdict, "FLOOR", 37, raising=False)
+    runs = write_pane_study(tmp_path / "runs", study())
+    out = tmp_path / "out"
+    assert_refusal(invoke(runs, out), out, runs, "keys name 36", "floor is 37")
+
+
+def test_measurement_identity_is_read_once_per_file(tmp_path, monkeypatch):
+    runs = write_pane_study(tmp_path / "runs", study())
+    measurement = write_measurement(tmp_path / "pilot")
+    calls = []
+    original = getattr(compare, "_measurement_key", None)
+
+    def record(item):
+        calls.append(item)
+        assert original is not None, "comparison needs one measurement-key definition"
+        return original(item)
+
+    monkeypatch.setattr(compare, "_measurement_key", record, raising=False)
+    assert compare.compare_runs(runs, pilots=[measurement]).pane_studies[0].refusal is None
+    assert len(calls) == 1
+
+
+def test_shown_detections_share_verdicts_definition(tmp_path, monkeypatch):
+    def add_code(arm, rep, index, package):
+        return replace(package, code_held_out=("C-1",), matched=(*package.matched, "C-1"))
+
+    runs = write_pane_study(tmp_path / "runs", study(edit=add_code))
+    measurement = write_measurement(tmp_path / "pilot")
+    monkeypatch.setattr(verdict, "detected_ids", lambda score: set(), raising=False)
+    block = compare.compare_runs(runs, pilots=[measurement]).pane_studies[0]
+    shown = {row.name: row for row in block.shown}
+    assert shown["detected defects"].off == shown["detected defects"].on == 0
+    assert shown["detection of code-produced defects"].off == 0
+    assert shown["held-out model-produced defects detected on no counted run"].off == 2
 
 
 @pytest.mark.parametrize("shortfall", ["defects", "reps", "pilot_packages", "growth_units"])

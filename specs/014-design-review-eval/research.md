@@ -485,6 +485,18 @@ From T230 and T231, issue 35, answered 35A.
 - **Options**: A: speed it up before it lands, its outputs pinned. B: move the slow cases under `-m simulation`. C: accept it.
 - **Chosen**: A. Statistics are batched over the studies (`stats.package_intervals_from_moments`, `PackageMoments`, `BatchInterval`), prepared judgements and seeded draws reused, and t-quantiles cached by validated arguments; every one of the 39 scenarios' outputs, and every unit fixture's, is byte-identical to the slow version's under the same seed. Measured on the development machine: the sweep 191 s, the default run's addition 32 s.
 
+### 112A. The verdict slice's review fixes (2026-10-16)
+
+From the adversarial review of all of slice 7 before its merge (issue 37, answered 37A): 13 should-fixes and 12 notes, none a blocker, each fixed test-first. Among them: equal package means are decided exactly from integer counts in the verdict, so a rounding artefact never turns "inconclusive" into "quality loss"; `stats.package_interval` is a wrapper over the one batched implementation; drop attainability is judged per study, not all-or-nothing; the intercept bisection is bracketed and capped; approval values outside the happy path are refused by name; tests pin the approved alpha and guard reaching `judge`, the deciding intervals' numbers, the floor of 34, and the simulator's independence. The interpolated intercept table keeps the pinned outputs, and section 9's accuracy claim is corrected to the measured figure (under 2.5e-5 between knots, up to about 2.5e-4 in the clamped tails). All 39 reference scenarios' outputs are byte-identical to 111A's.
+
+### 113A. graded_items: an optional scorecard field without a rules bump (2026-10-16)
+
+From 112A's fix that names a package's defects when every run of both arms failed on infrastructure (issue 38, answered 38A).
+
+- **Question**: the fix adds `UnscoredPackage.graded_items`, the answer key's item identities, to the scorecard and the 001 schema, where slice 7's plan said no scorecard field moves.
+- **Options**: A: keep it as an optional, additive field without a version bump. B: bump `SCORING_RULES_VERSION` to 5 and regenerate the goldens. C: name the defects at judge time from the key instead.
+- **Chosen**: A. The field is optional, defaults to empty and is absent from older scorecards; INT-11 bumps the version only for a new required field, and the golden scorecards are unchanged. This is a recorded deviation from slice 7's "no scorecard field moves".
+
 ---
 
 ## §2 The 2026-09-28 audit
