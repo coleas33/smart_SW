@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from swreview.benchmark import simulate
+from tests.support.simulation_reference import assert_search_measurements
 
 pytestmark = pytest.mark.simulation
 SEED = 20261016
@@ -31,6 +32,7 @@ def test_s10_reference_scenario_holds_the_bounds_and_power(name):
         if power is not None:
             assert power >= .8
     assert result.power_proportional is not None or result.power_room is not None
+    assert_search_measurements(scenario, search, seed=SEED, sims=4000)
     for row in search.tried:
         assert row.reps >= 3
         assert row.defects >= 34

@@ -65,12 +65,13 @@ What is refused, and what is merely null:
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path, PureWindowsPath
 
-from pydantic import Field, model_serializer
+from pydantic import Field, ValidationError, model_serializer
 
 from swreview.agent.providers import CACHED_SHARE_PUBLISHABLE
 from swreview.agent.runner import SESSION_FILE_NAME
@@ -1295,7 +1296,7 @@ def _pane_refusal(
     key: tuple[str, str | None, str | None],
     runs: Sequence[_LoadedRun],
     saved_sets: Sequence[tuple[sets.BenchmarkSet, Path]],
-    measurements: Sequence[tuple[Path, pilot.PilotMeasurement]],
+    measurements: Sequence[tuple[Path, pilot.PilotMeasurement | _RefusedMeasurement]],
 ) -> str | None:
     """Read verdict.md section 7 in order, after all run-level checks have passed."""
     arms = {run.provenance.arm for run in runs if run.provenance is not None}
@@ -1327,8 +1328,8 @@ def _pane_refusal(
     if key[0] == PRIVATE_PANE_STUDY:
         return None
     count = min(run.scorecard.aggregate.held_out_model_defects for run in runs)
-    if count < 34:
-        return f"keys name {count} held-out model-produced defects; the floor is 34"
+    if count < verdict.FLOOR:
+        return f"keys name {count} held-out model-produced defects; the floor is {verdict.FLOOR}"
     if len(measurements) != 1:
         files = ", ".join(str(path) for path, _ in measurements) or "none"
         return (
@@ -1336,15 +1337,35 @@ def _pane_refusal(
             f"found {len(measurements)} ({files})"
         )
     path, measurement = measurements[0]
-    if pilot.sizing_digest(measurement) != measurement.sizing_digest:
+    digest_matches = (
+        measurement.digest_matches if isinstance(measurement, _RefusedMeasurement)
+        else pilot.sizing_digest(measurement) == measurement.sizing_digest
+    )
+    if not digest_matches:
         return f"{path}: the sizing was edited by hand; re-run `swreview benchmark pilot`"
+    if isinstance(measurement, _RefusedMeasurement):
+        return measurement.refusal
     if measurement.approval.approved is not True:
         return f"{path}: approval.approved is not true"
     approved_at = measurement.approval.approved_at
     if not approved_at or not approved_at.strip():
         return f"{path}: approval.approved_at is empty"
+    try:
+        approved_date = date.fromisoformat(approved_at)
+        if approved_date.isoformat() != approved_at:
+            raise ValueError("expected YYYY-MM-DD")
+    except ValueError:
+        return f"{path}: approval.approved_at {approved_at!r} is not a YYYY-MM-DD date"
+    result = measurement.sizing.result
+    if result.alpha is None:
+        return (f"{path}: sizing.result.alpha reached no level; "
+                "the approved sizing cannot set the rule")
+    for field, value in result.simulated.model_dump().items():
+        if value is None or not math.isfinite(value) or not 0 <= value <= 1:
+            return (f"{path}: sizing.result.simulated.{field} is {value!r}; "
+                    "the approved sizing requires a known rate in [0, 1]")
     earliest = min(run.provenance.started_at.date() for run in runs)
-    if date.fromisoformat(approved_at) > earliest:
+    if approved_date > earliest:
         return (
             f"{path}: approval.approved_at {approved_at} is later than earliest study run "
             f"{earliest.isoformat()}; levels chosen after the paid runs void the 5% bounds"
@@ -1399,9 +1420,50 @@ def _pane_noise_floor(key, runs, records, notes) -> verdict.NoiseFloor:
     )
 
 
-def _pane_study(key, runs, measurements, noise_floors, *, root, notes) -> verdict.PaneStudy:
-    matching = [(path, item) for path, item in measurements
-                if (item.identity.study, item.identity.provider, item.identity.model) == key]
+@dataclass(frozen=True)
+class _RefusedMeasurement:
+    """Valid routing/raw-row metadata beside an invalid approval or sizing result."""
+
+    identity: pilot.PilotIdentity
+    pilot_runs: list[pilot.PilotRun]
+    digest_matches: bool
+    refusal: str
+
+
+def _read_measurement_for_compare(path: Path) -> pilot.PilotMeasurement | _RefusedMeasurement:
+    try:
+        return pilot.read_measurement(path)
+    except ValidationError as exc:
+        errors = exc.errors(include_url=False)
+        # These are verdict-only inputs. Other malformed measurement data still
+        # use the strict reader's ordinary error, without inventing a study key.
+        if any(error["loc"][:1] != ("approval",)
+               and error["loc"][:2] != ("sizing", "result") for error in errors):
+            raise
+        record = json.loads(path.read_bytes())
+        computed = {
+            name: record[name]
+            for name in ("identity", "pilot_runs", "smoke_runs", "measured", "sizing")
+        }
+        fields = "; ".join(
+            f"{'.'.join(map(str, error['loc']))}: {error['msg']}" for error in errors
+        )
+        return _RefusedMeasurement(
+            identity=pilot.PilotIdentity.model_validate(record["identity"]),
+            pilot_runs=[pilot.PilotRun.model_validate(row) for row in record["pilot_runs"]],
+            digest_matches=benchmark_digest.canonical_sha256(computed) == record["sizing_digest"],
+            refusal=f"{path}: {fields}",
+        )
+
+
+def _measurement_key(
+    measurement: pilot.PilotMeasurement | _RefusedMeasurement,
+) -> tuple[str, str, str]:
+    identity = measurement.identity
+    return identity.study, identity.provider, identity.model
+
+
+def _pane_study(key, runs, matching, noise_floors, *, root, notes) -> verdict.PaneStudy:
     saved_sets = [
         (sets.load_saved_set(run.run_dir / SAVED_SET_FILE, root=root), root)
         for run in runs if (run.run_dir / SAVED_SET_FILE).is_file()
@@ -1495,20 +1557,22 @@ def compare_runs(
         _check_one_study(key, runs)
 
     messages = [] if notes is None else notes
-    measurements = [(Path(path), pilot.read_measurement(path)) for path in pilots]
+    measurements = [(Path(path), _read_measurement_for_compare(Path(path))) for path in pilots]
     floors = [(Path(path), simulate.read_noise_floor(path)) for path in noise_floors]
+    matched: dict[
+        tuple[str, str, str], list[tuple[Path, pilot.PilotMeasurement | _RefusedMeasurement]],
+    ] = {}
     for path, measurement in measurements:
-        identity = measurement.identity
-        key = (identity.study, identity.provider, identity.model)
+        key = _measurement_key(measurement)
+        matched.setdefault(key, []).append((path, measurement))
         if key not in studies or key[0] not in PANE_STUDIES:
             messages.append(f"{path}: pilot measurement matches no compared study {key}")
     pane_studies = [
-        _pane_study(key, runs, measurements, floors, root=checkout, notes=messages)
+        _pane_study(key, runs, matched.get(key, []), floors, root=checkout, notes=messages)
         for key, runs in studies.items() if key[0] in PANE_STUDIES
     ]
     for key in studies:
-        matching = [(path, item) for path, item in measurements
-                    if (item.identity.study, item.identity.provider, item.identity.model) == key]
+        matching = matched.get(key, [])
         if key[0] not in PANE_STUDIES or len(matching) != 1:
             continue
         path, measurement = matching[0]
@@ -2117,7 +2181,7 @@ def _pane_detection_history(
         for score in run.scorecard.per_package:
             if score.run_status.kind != "completed":
                 continue
-            detected = set(score.matched_defect_ids) | set(score.flagged_defect_ids)
+            detected = verdict.detected_ids(score)
             for defect in _pane_defect_ids(score, producer, tag):
                 history.setdefault((score.package_id, defect), {"off": [], "on": []})[
                     arm
@@ -2142,7 +2206,7 @@ def _pane_shown(
             name,
             lambda score, run, producer=producer, tag=tag: len(
                 _pane_defect_ids(score, producer, tag)
-                & (set(score.matched_defect_ids) | set(score.flagged_defect_ids))
+                & verdict.detected_ids(score)
             ),
             units=lambda score, producer=producer, tag=tag: len(
                 _pane_defect_ids(score, producer, tag)
@@ -2177,7 +2241,7 @@ def _pane_shown(
         )
     add("valid findings", lambda score, run: score.valid_findings)
     add("detected defects", lambda score, run: len(
-        set(score.matched_defect_ids) | set(score.flagged_defect_ids)
+        verdict.detected_ids(score)
     ))
     for name, column in (
         ("flagged defects", "flagged_defect_ids"),
@@ -2264,7 +2328,7 @@ def _pane_shown(
     sometimes_name = "code-produced defects detected only sometimes by off arm"
     add(sometimes_name, lambda score, run: (
         sum((score.package_id, defect) in sometimes for defect in
-            set(score.matched_defect_ids) | set(score.flagged_defect_ids))
+            verdict.detected_ids(score))
         if score.run_status.kind == "completed" else 0
     ))
     add("cleared defects", lambda score, run: len(score.cleared_defect_ids))
@@ -2290,7 +2354,7 @@ def _pane_shown(
         add(
             f"{sometimes_name}: {package}/{defect}; the off arm detected it only sometimes",
             lambda score, run, package=package, defect=defect: (
-                int(defect in set(score.matched_defect_ids) | set(score.flagged_defect_ids))
+                int(defect in verdict.detected_ids(score))
                 if score.package_id == package and score.run_status.kind == "completed"
                 else (0 if score.package_id == package else None)
             ),

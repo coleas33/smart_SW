@@ -102,8 +102,10 @@ is the number of counted runs.
 
 ## 4. The package-level interval
 
-One function, `stats.package_interval(sums, weights, alpha, sides)`, serves every rule and every
-shown measure. Units (defects for recall, packages for false alarms and for every per-package
+One implementation serves every rule and shown measure: `stats.package_interval(sums, weights,
+alpha, sides)` is the 1-D wrapper over `prepare_package_intervals` and
+`package_intervals_from_moments`, which the batched judge also uses. Units (defects for recall,
+packages for false alarms and for every per-package
 measure) are grouped into the `K` packages holding at least one retained unit. For package `k` with
 `m_k` retained units and paired differences `d_u = on − off`:
 
@@ -122,7 +124,10 @@ recall equals the per-defect mean only when repetitions are equal).
 
 - **Not computable** when `K < 2` or `SE = 0` (a zero-width interval, research §6). Recall: the
   verdict is inconclusive, saying why; false alarms: no loss, shown "not computable" (US8-9,
-  RR-A8).
+  RR-A8). In the verdict, equality of package means is tested exactly from integer counts,
+  using common denominators and integer cross-multiplication before floating subtraction
+  (112A). This applies to recall and false alarms; rounding cannot make an exactly equal
+  collection computable. Statistics supplied as floating values retain their real small variance.
 - **The quantile** (plan decision RF-34): the degrees of freedom are always `K − 1`, an integer, so
   the Student t distribution function is its closed-form finite series: with `θ = arctan(t/√ν)` and
   `A = P(|T| ≤ t)`, for even ν `A = sin θ (1 + ½cos²θ + (1·3)/(2·4) cos⁴θ + … + (1·3⋯(ν−3))/(2·4⋯(ν−2))
@@ -237,7 +242,7 @@ rule:
 | 4 | the keys name fewer than 34 held-out model-produced defects | the count and the floor (US5-5, FR-032) |
 | 5 | no pilot measurement matches the study, or two do | the study key, and `--pilot` |
 | 6 | the measurement's digest does not match its computed blocks | "the sizing was edited by hand; re-run `swreview benchmark pilot`" |
-| 7 | its `approval.approved` is not `true`, or `approved_at` is empty | the file and the field |
+| 7 | its `approval.approved` is not `true`; `approved_at` is empty or not a valid `YYYY-MM-DD` date; or the approved sizing has no alpha or an unknown, nonfinite or out-of-range simulated rate | the file and the field; an approved sizing must supply a level and rates in `[0, 1]` |
 | 8 | `approved_at` is later than the date of the earliest study run's `started_at` | both dates; "levels chosen after the paid runs void the 5% bounds" (research §8.1) |
 | 9 | the keys' count is below the approved size; an arm has fewer distinct repetitions than approved; or the study's saved sets do not hold every package id the measurement's `sizing.pilot_packages` names plus at least `sizing.growth_units` core cases beyond them (a package outside `pilot_packages` whose `graded_items` hold a held-out known defect, so a twin, whose held-out items are conditions, is never a unit; plan decisions RF-40, RF-66) | the count, the repetitions, or the missing pilot packages and the growth units found, against the approval (US5-5, FR-032) |
 
@@ -335,8 +340,12 @@ Built as `StudyStats` directly, with a leading axis of `sims` studies, and judge
   defect and arm the intercept `a` solves `E[logistic(a + sigma*Z)] = p`, `Z` standard normal, by a
   40-node Gauss-Hermite rule (`numpy.polynomial.hermite_e.hermegauss`). Solving per simulated defect
   is too slow (an offline check: about 12 s per 4,000 studies), so `stats.intercept_table(sigma)`
-  solves once on 3,999 rates evenly spaced inside (0, 1) and `numpy.interp` reads it: under 1e-5 in
-  marginal rate, about 50 ms per 4,000 studies. Rates of exactly 0 and 1 are never and always,
+  solves once on 3,999 rates `j/4000` inside (0, 1) and `numpy.interp` reads it. Against independent
+  160-node quadrature, measured marginal-rate error is below `2.5e-5` inside
+  `[1/4000, 3999/4000]` on the SD grid 0, 0.25, …, 2.5 (worst measured `2.14381e-5`). Positive
+  rates outside that range clamp to its endpoints; error approaches `2.5e-4` at 0 and 1
+  (`p=1e-6` gives `2.49e-4` at SD 0). The interpolation is retained to preserve seeded outputs
+  (111A, 112A), at about 50 ms per 4,000 studies. Rates of exactly 0 and 1 are never and always,
   whatever the shock. Identical arms share each intercept.
 - **Shock**: one `N(0, sigma^2)` logit shock per package run, independent across runs and arms.
 - **Detections**: each defect in each run, `uniform < logistic(a + shock)`.
@@ -346,8 +355,10 @@ Built as `StudyStats` directly, with a leading axis of `sims` studies, and judge
   defect whose share exceeds what it has left falls to 0 and leaves the pool, and the rest of the
   total is re-shared equally, until no share exceeds a rate. Example (test S-1): rates 0, 0.05, 0.5,
   0.9 at `D = 0.10` become 0, 0, 0.325, 0.725. A shape whose total exceeds what the rates hold
-  (`mean(p) < D` for proportional, `sum(p) < n*D` for room) is printed "not attainable" and not
-  simulated.
+  (`mean(p) < D` for proportional, `sum(p) < n*D` for room) is excluded **per simulated study**
+  (112A). Its excluded share is printed when nonzero (omitted means zero). A shape is printed
+  "not attainable" only when no simulated study can take its drop. Exclusion retains the original
+  random draw order for the remaining studies.
 - **False alarms** per package run: negative binomial with mean `m` and size `k` (variance
   `m + m^2/k`), drawn as Poisson of a Gamma(`k`, `m/k`) rate per package run, or Poisson(`m`). Equal
   in both arms, under the null and under the drop.
@@ -373,6 +384,12 @@ simulations each, the seed fixed in the test. Each is named, for example
   figure calls a loss (spec Terms).
 - **No-loss-at-drop rate** under each shape: the share of drop studies whose verdict is
   `no 10-point loss`; the higher of the two shapes governs.
+
+Power and no-loss-at-drop are conditional on the studies that can take that shape's drop.
+Each shape uses its own attainable count as its rate and Wilson-bound denominator. The larger
+of the two shapes' rates, and separately the larger of their upper bounds, govern (with different
+denominators the two can come from different shapes, which is conservative); the identical-arms
+rate still uses all `sims` studies.
 
 ### 9.4 The Monte Carlo bound
 
@@ -614,8 +631,9 @@ provider, no SOLIDWORKS.
 - V-2 with equal weights `package_interval` equals the paired t interval on package means; with
   weights 1 and 2 it equals a hand-computed ratio estimate and standard error.
 - V-3 `K = 1` and `SE = 0` give not computable (US8-9).
-- V-4 the intercept table: marginal error under 1e-4 for rates 0.001 to 0.999 at SD 0, 1.0 and 2.5;
-  SD 0 is the logit; 0 and 1 are never and always.
+- V-4 the intercept table: measured marginal error under `2.5e-5` over the whole knot range on
+  the SD grid 0, 0.25, …, 2.5, against independent quadrature; positive tails clamp, explicitly
+  tested at `1e-6` and `1-1e-6`; SD 0 is the logit at knots; 0 and 1 are never and always.
 - V-5 `mc_upper_bound(176, 4000)` passes and `(180, 4000)` fails the 5% bound.
 - V-26 invalid inputs refuse with a `ValueError` naming them (RF-9): `t_quantile` with degrees of
   freedom 0 or below and with a probability outside (0, 1); `package_interval` with `alpha` 0,
@@ -766,8 +784,9 @@ Each is reversible; plan.md records it with its alternatives.
   least.
 - **The Monte Carlo bound**: Wilson, one-sided 95%, closed form. Alternative: Clopper-Pearson, a
   little more conservative, needing a numeric root.
-- **Intercepts by table**, error under 1e-5. Alternative: solving per simulated defect, about 240
-  times slower.
+- **Intercepts by table**, measured marginal error below `2.5e-5` inside the knots on the SD grid
+  0 to 2.5, with positive tails clamped and errors approaching `2.5e-4` (section 9.1). Alternative:
+  solving per simulated defect, about 240 times slower. The table retains the pinned draw outputs.
 - **The pilot's noise**: Beta by moments for the rates; the shock SD at its 80% profile-likelihood
   upper limit. Alternatives: plug-in estimates throughout (optimistic about co-movement); a
   parametric bootstrap of the pilot with sizing at its 80th percentile (tens of full searches).

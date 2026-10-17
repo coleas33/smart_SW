@@ -2406,10 +2406,14 @@ def test_the_committed_results_table_regenerates_byte_identically() -> None:
 
 
 def test_check_exits_zero_on_the_committed_document() -> None:
+    from swreview.benchmark.compare import recorded_noise_floors, recorded_pilots
+
     result = invoke(
         "benchmark",
         "compare",
         *[str(one) for one in recorded_runs()],
+        *[arg for path in recorded_pilots() for arg in ("--pilot", str(path))],
+        *[arg for path in recorded_noise_floors() for arg in ("--noise-floor", str(path))],
         "--into",
         str(OPTIONS_DOC),
         "--check",
@@ -2417,6 +2421,34 @@ def test_check_exits_zero_on_the_committed_document() -> None:
 
     assert result.exit_code == 0, result.stdout + result.stderr
     assert "out of date" not in result.stdout
+
+
+def test_committed_document_check_passes_discovered_measurements(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from swreview.benchmark import compare
+
+    measurements = [Path("fictional/pilot-a.json"), Path("fictional/pilot-b.json")]
+    floors = [Path("fictional/noise-floor.json")]
+    monkeypatch.setattr(compare, "recorded_pilots", lambda: measurements)
+    monkeypatch.setattr(compare, "recorded_noise_floors", lambda: floors)
+
+    def capture(*args):
+        for option, paths in (("--pilot", measurements), ("--noise-floor", floors)):
+            assert [args[i + 1] for i, arg in enumerate(args) if arg == option] == list(
+                map(str, paths),
+            )
+        return SimpleNamespace(exit_code=0, stdout="", stderr="")
+
+    monkeypatch.setitem(globals(), "invoke", capture)
+    test_check_exits_zero_on_the_committed_document()
+
+
+def test_document_regenerate_and_check_commands_include_measurements() -> None:
+    text = OPTIONS_DOC.read_text(encoding="utf-8")
+    commands = text.split("Regenerate it, and verify it", 1)[1].split("```", 2)[1]
+    assert commands.count("--pilot") == 2
+    assert commands.count("--noise-floor") == 2
 
 
 def test_check_exits_one_on_a_hand_typed_row_and_writes_nothing(tmp_path: Path) -> None:

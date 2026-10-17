@@ -104,6 +104,7 @@
         "class": { "$ref": "#/$defs/AttemptClass" },
         "error_class": { "type": ["string", "null"] },
         "attempts": { "type": "integer", "minimum": 1 },
+        "graded_items": { "type": "array", "items": { "$ref": "#/$defs/GradedItem" }, "description": "Optional key identities retained for naming dropped and skipped defects; absent in older scorecards" },
         "folder": { "type": "string", "description": "Last attempt's run-relative folder with / separators (feature 014 RF-17)" }
       }
     },

@@ -3230,14 +3230,17 @@ def benchmark_simulate(
         list[str] | None,
         typer.Option("--scenario", help="Reference scenario name; repeatable, all 39 by default."),
     ] = None,
-    seed: Annotated[int, typer.Option("--seed", min=0)] = 20261016,
-    cap: Annotated[int, typer.Option("--cap", min=3)] = 10,
-    sims: Annotated[int, typer.Option("--sims", min=1)] = 4000,
+    seed: Annotated[int | None, typer.Option("--seed", min=0)] = None,
+    cap: Annotated[int | None, typer.Option("--cap", min=3)] = None,
+    sims: Annotated[int | None, typer.Option("--sims", min=1)] = None,
     json_output: JsonFlag = False,
 ) -> None:
     """Size seeded fictional studies using the pane verdict; contacts no provider."""
     from swreview.benchmark import simulate
 
+    seed = simulate.DEFAULT_SEED if seed is None else seed
+    cap = simulate.DEFAULT_CAP if cap is None else cap
+    sims = simulate.DEFAULT_SIMS if sims is None else sims
     names = list(simulate.SCENARIOS) if scenario is None else scenario
     for name in names:
         if name not in simulate.SCENARIOS:

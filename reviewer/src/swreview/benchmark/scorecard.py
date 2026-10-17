@@ -305,6 +305,8 @@ class UnscoredPackage(_ClassRecord):
     error_class: str | None
     attempts: int = Field(ge=1)
     folder: AttemptFolder
+    graded_items: list[GradedItem] = Field(default_factory=list)
+    """Key identities survive infrastructure failure so dropped defects are named."""
 
 
 class FailedAttempt(_ClassRecord):
@@ -1305,6 +1307,7 @@ def score_run(
                 error_class=outcome.error_class,
                 attempts=len(outcome.attempts),
                 folder=outcome.folder,
+                graded_items=_graded_items(answer_key),
             ))
             continue
         folder = runner.resolve_attempt_folder(run_dir, ref.package_id)

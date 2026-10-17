@@ -160,7 +160,7 @@ def test_v3_small_real_variance_is_computable() -> None:
     assert interval.lower < interval.estimate < interval.upper
 
 
-@pytest.fixture(scope="module", params=[0.0, 1.0, 2.5], ids=["sd0", "sd1", "sd2.5"])
+@pytest.fixture(scope="module", params=np.arange(0.0, 2.75, 0.25))
 def intercept_case(request: pytest.FixtureRequest) -> tuple[float, object]:
     sigma = request.param
     return sigma, stats.intercept_table(sigma)
@@ -170,16 +170,34 @@ def test_v4_interpolated_intercepts_reproduce_gauss_hermite_marginals(
     intercept_case: tuple[float, object],
 ) -> None:
     sigma, table = intercept_case
-    # Includes rates between table knots, so this exercises interpolation as well as solving.
-    rates = np.linspace(0.001, 0.999, 2001).reshape(3, 667)
+    # Covers the entire knot range, including the largest interpolation error
+    # between the first two knots (and its reflection near one).
+    rates = np.linspace(1 / 4000, 3999 / 4000, 15999).reshape(3, 5333)
     intercepts = stats.intercept(table, rates)
-    nodes, weights = np.polynomial.hermite_e.hermegauss(40)
+    # A higher-order quadrature is independent of the production table's 40 nodes.
+    nodes, weights = np.polynomial.hermite_e.hermegauss(160)
     probabilities = np.exp(-np.logaddexp(0, -(intercepts[..., None] + sigma * nodes)))
     marginals = probabilities @ weights / math.sqrt(2 * math.pi)
 
     assert stats.GH_NODES == 40
     assert np.shape(intercepts) == rates.shape
-    np.testing.assert_allclose(marginals, rates, atol=1e-4, rtol=0)
+    np.testing.assert_allclose(marginals, rates, atol=2.5e-5, rtol=0)
+
+
+def test_v4_positive_tail_rates_are_clamped_with_error_below_one_table_step(
+    intercept_case: tuple[float, object],
+) -> None:
+    sigma, table = intercept_case
+    rates = np.array([1e-6, 1e-4, 1 - 1e-4, 1 - 1e-6])
+    intercepts = stats.intercept(table, rates)
+    np.testing.assert_array_equal(intercepts, [table[1][0]] * 2 + [table[1][-1]] * 2)
+
+    nodes, weights = np.polynomial.hermite_e.hermegauss(40)
+    probabilities = np.exp(-np.logaddexp(0, -(intercepts[:, None] + sigma * nodes)))
+    marginals = probabilities @ weights / math.sqrt(2 * math.pi)
+    np.testing.assert_allclose(marginals, [1 / 4000] * 2 + [3999 / 4000] * 2, atol=1e-11, rtol=0)
+    assert np.max(np.abs(marginals - rates)) == pytest.approx(0.000249, abs=1e-11)
+    assert np.max(np.abs(marginals - rates)) < 1 / 4000
 
 
 def test_v4_zero_sigma_intercepts_are_logits() -> None:
@@ -266,7 +284,10 @@ def test_batch_sum_matches_fsum_including_cancellation_and_half_even() -> None:
 
 def test_batch_sum_matches_fsum_across_normal_and_subnormal_exponents() -> None:
     rng = np.random.default_rng(20261016)
-    values = np.ldexp(rng.uniform(-1, 1, (200, 40)), rng.integers(-1074, 1023, (200, 40)))
+    values = rng.uniform(-1, 1, (200, 40))
+    # NumPy 1.x on Windows accepts C-int exponents, not the generator's int64 default.
+    exponents = rng.integers(-1074, 1023, (200, 40)).astype(np.intc)
+    values = np.ldexp(values, exponents)
     expected = np.array([math.fsum(row) for row in values])
     np.testing.assert_array_equal(stats._fsum_last(values), expected)
 
@@ -319,6 +340,36 @@ def test_batch_intervals_match_every_scalar_field_exactly(alpha: float, sides: i
             assert math.isnan(value) if field is None else value == field
         for name in ("df", "packages", "computable"):
             assert getattr(actual, name)[index] == getattr(expected, name)
+
+
+@pytest.mark.parametrize(("sums", "weights"), [([], []), ([0, 1], [1, 1])])
+def test_scalar_interval_delegates_to_the_shared_moments_implementation(
+    monkeypatch: pytest.MonkeyPatch, sums: list[float], weights: list[float],
+) -> None:
+    prepare, apply = stats.prepare_package_intervals, stats.package_intervals_from_moments
+    calls = []
+
+    def prepared(sums: object, weights: object) -> stats.PackageMoments:
+        assert np.shape(sums) == np.shape(weights) == (1, len(weights[0]))
+        moments = prepare(sums, weights)
+        calls.append(("prepare", moments))
+        return moments
+
+    def applied(moments: stats.PackageMoments, alpha: float, sides: int) -> stats.BatchInterval:
+        assert alpha == 0.025 and sides == 2
+        calls.append(("apply", moments))
+        return apply(moments, alpha, sides)
+
+    monkeypatch.setattr(stats, "prepare_package_intervals", prepared)
+    monkeypatch.setattr(stats, "package_intervals_from_moments", applied)
+    result = stats.package_interval(sums, weights, alpha=0.025, sides=2)
+
+    assert [name for name, _ in calls] == ["prepare", "apply"]
+    assert calls[0][1] is calls[1][1]
+    expected = apply(prepare([sums], [weights]), alpha=0.025, sides=2)
+    for name in ("estimate", "lower", "upper"):
+        value = getattr(expected, name)[0]
+        assert getattr(result, name) == (None if math.isnan(value) else value)
 
 
 def test_empty_package_axis_and_empty_study_axis() -> None:
@@ -377,3 +428,50 @@ def test_intercept_table_solves_once_per_sigma_and_is_read_only(
     assert calls == first_calls
     assert not first[0].flags.writeable
     assert not first[1].flags.writeable
+
+
+@pytest.mark.parametrize("sigma", [3e5, 1e6])
+def test_intercept_table_large_sigma_terminates_with_a_bracketed_solution(
+    monkeypatch: pytest.MonkeyPatch, sigma: float,
+) -> None:
+    original = np.logaddexp
+    calls = 0
+
+    def bounded(*args: object, **kwargs: object) -> object:
+        nonlocal calls
+        calls += 1
+        assert calls <= 200, "intercept bisection exceeded its iteration cap"
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(np, "logaddexp", bounded)
+    stats.intercept_table.cache_clear()
+    rates, intercepts = stats.intercept_table(sigma)
+    nodes, weights = np.polynomial.hermite_e.hermegauss(40)
+    probabilities = np.exp(-original(0, -(intercepts[:, None] + sigma * nodes)))
+    marginals = probabilities @ weights / math.sqrt(2 * math.pi)
+
+    assert np.all(np.isfinite(intercepts))
+    np.testing.assert_allclose(marginals, rates, atol=1e-9, rtol=0)
+
+
+def test_intercept_table_refuses_sigma_that_overflows_its_bracket(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original = np.logaddexp
+    calls = 0
+
+    def bounded(*args: object, **kwargs: object) -> object:
+        nonlocal calls
+        calls += 1
+        assert calls <= 200, "an unrepresentable bracket must be refused"
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(np, "logaddexp", bounded)
+    with np.errstate(over="ignore", invalid="ignore"):
+        with pytest.raises(ValueError, match="sigma"):
+            stats.intercept_table(np.finfo(float).max)
+
+
+def test_intercept_table_sub_ulp_sigma_still_brackets_the_targets() -> None:
+    rates, intercepts = stats.intercept_table(1e-30)
+    np.testing.assert_allclose(intercepts, np.log(rates / (1 - rates)), atol=1e-10, rtol=0)

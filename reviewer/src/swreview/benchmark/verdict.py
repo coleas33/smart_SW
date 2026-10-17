@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Literal
 
 import numpy as np
@@ -21,7 +21,10 @@ from swreview.benchmark import stats as statistics
 from swreview.findings import ReviewModel
 
 if TYPE_CHECKING:
-    from swreview.benchmark.scorecard import Scorecard
+    from swreview.benchmark.scorecard import PackageScore, Scorecard
+
+FLOOR = 34
+LOSS_BOUND = 0.10
 
 RECALL_LOSS = "RECALL LOSS"
 FALSE_ALARM_RISE = "FALSE-ALARM RISE"
@@ -184,7 +187,7 @@ class StudyRun:
 class VerdictRules:
     alpha: float
     cleared_guard_decides: bool
-    floor: int = 34
+    floor: int = FLOOR
 
     def __post_init__(self) -> None:
         if not math.isfinite(self.alpha) or not 0 < self.alpha <= 0.5:
@@ -221,6 +224,11 @@ class StudyStats:
     clear_runs: dict[tuple[int, int], tuple[str, ...]] = field(default_factory=dict)
 
 
+def detected_ids(score: PackageScore) -> set[str]:
+    """Credited and flagged defects, shared by deciding and shown measures."""
+    return set(score.matched_defect_ids) | set(score.flagged_defect_ids)
+
+
 def study_stats(runs: Sequence[StudyRun]) -> StudyStats:
     """Read one study's scorecards; a pilot containing only off runs is valid.
 
@@ -230,8 +238,7 @@ def study_stats(runs: Sequence[StudyRun]) -> StudyStats:
     package_names: set[str] = set()
     items: dict[tuple[str, str], tuple[str | None, str]] = {}
     for run in runs:
-        package_names.update(row.package_id for row in run.scorecard.unscored_packages)
-        for score in run.scorecard.per_package:
+        for score in (*run.scorecard.per_package, *run.scorecard.unscored_packages):
             package_names.add(score.package_id)
             for item in score.graded_items:
                 if item.kind == "known_defect":
@@ -264,7 +271,7 @@ def study_stats(runs: Sequence[StudyRun]) -> StudyStats:
             if not completed and score.run_status.kind != "behavioural":
                 continue
             package = package_index[score.package_id]
-            detected = set(score.matched_defect_ids) | set(score.flagged_defect_ids)
+            detected = detected_ids(score)
             false_alarm_count = len(origins.deciding_false_alarm_ids(score))
             for figure in (0, 1) if completed else (1,):
                 package_runs[0, arm, figure, package] += 1
@@ -381,6 +388,42 @@ def _group_packages(values: NDArray, packages: NDArray, count: int) -> NDArray[n
     return grouped
 
 
+def _equal_counted_package_means(
+    counts: NDArray[np.int64], runs: NDArray[np.int64], retained: NDArray[np.bool_],
+    packages: NDArray[np.int64], weights: NDArray[np.float64],
+) -> NDArray[np.bool_]:
+    """Compare rational package means exactly, before floating rate subtraction.
+
+    Scale counts by the common denominator of the counted runs, then compare
+    integer package sums by cross multiplication. Python integers handle unusually
+    large inputs; ordinary studies (at most ten runs) stay in vectorised int64.
+    This changes only the exact zero-variance mask, preserving every other bit of
+    the interval arithmetic used for the simulator's pinned outputs.
+    """
+    denominator = math.lcm(*(int(n) for n in np.unique(runs) if n > 0))
+    # Bound the scaled sum and its subsequent cross product before choosing a
+    # dtype. Using Python ints for the bound prevents overflow in the check itself.
+    bound = denominator * int(np.max(np.abs(counts), initial=0)) * max(1, packages.size)
+    bound *= max(1, int(np.max(weights, initial=0)))
+    dtype = object if max(denominator, bound) > np.iinfo(np.int64).max else np.int64
+    positive_runs = np.maximum(runs, 1).astype(dtype)
+    scaled = counts.astype(dtype) * (denominator // positive_runs)
+    differences = (scaled[:, 1] - scaled[:, 0]) * retained
+    sums = np.zeros(weights.shape, dtype=dtype)
+    if packages.size:
+        order = np.argsort(packages, kind="stable")
+        unique, starts = np.unique(packages[order], return_index=True)
+        sums[..., unique] = np.add.reduceat(differences[..., order], starts, axis=-1)
+    kept = weights > 0
+    if not weights.shape[-1]:
+        return np.ones(weights.shape[:-1], dtype=bool)
+    integer_weights = weights.astype(dtype)
+    first = np.argmax(kept, axis=-1)[..., None]
+    first_sum = np.take_along_axis(sums, first, axis=-1)
+    first_weight = np.take_along_axis(integer_weights, first, axis=-1)
+    return np.all(~kept | (sums * first_weight == first_sum * integer_weights), axis=-1)
+
+
 def prepare_judge(stats: StudyStats) -> PreparedJudge:
     """Compute alpha-independent package moments and guard masks together."""
     retained = np.all(stats.counted_runs > 0, axis=1)
@@ -403,6 +446,16 @@ def prepare_judge(stats: StudyStats) -> PreparedJudge:
     )
     recall_weights = _group_packages(retained.astype(float), stats.defect_packages, package_count)
     alarm_sums = (alarm_rates[:, 1] - alarm_rates[:, 0]) * retained_packages
+    recall_moments = statistics.prepare_package_intervals(recall_sums, recall_weights)
+    alarm_weights = retained_packages.astype(float)
+    alarm_moments = statistics.prepare_package_intervals(alarm_sums, alarm_weights)
+    recall_equal = _equal_counted_package_means(
+        stats.detections, stats.counted_runs, retained, stats.defect_packages, recall_weights,
+    )
+    alarm_equal = _equal_counted_package_means(
+        stats.false_alarms, stats.package_runs, retained_packages,
+        np.arange(package_count), alarm_weights,
+    )
     code_retained = np.all(stats.code_runs > 0, axis=1)
     off_complete = stats.code_detections[:, 0] == stats.code_runs[:, 0]
     code_lost = code_retained & off_complete & (stats.code_detections[:, 1] < stats.code_runs[:, 1])
@@ -413,10 +466,8 @@ def prepare_judge(stats: StudyStats) -> PreparedJudge:
         retained=retained,
         retained_packages=retained_packages,
         retained_defects=np.count_nonzero(retained, axis=-1),
-        recall=statistics.prepare_package_intervals(recall_sums, recall_weights),
-        false_alarms=statistics.prepare_package_intervals(
-            alarm_sums, retained_packages.astype(float),
-        ),
+        recall=replace(recall_moments, computable=recall_moments.computable & ~recall_equal),
+        false_alarms=replace(alarm_moments, computable=alarm_moments.computable & ~alarm_equal),
         code_retained=code_retained,
         code_lost=code_lost,
         sometimes=sometimes,
@@ -435,7 +486,8 @@ def _judge_counts(prepared: PreparedJudge, rules: VerdictRules) -> JudgeCounts:
     below_floor = np.any(prepared.retained_defects < rules.floor, axis=1)
     recall_computable = np.all(recall.computable, axis=1)
     no_loss = (
-        ~quality_loss & ~below_floor & recall_computable & np.all(recall.lower > -0.10, axis=1)
+        ~quality_loss & ~below_floor & recall_computable
+        & np.all(recall.lower > -LOSS_BOUND, axis=1)
     )
     return JudgeCounts(
         quality_loss=quality_loss,
@@ -571,7 +623,7 @@ def judge(
         else:
             for name, figure in zip(FIGURES, figures, strict=True):
                 lower = figure.recall.lower
-                if lower is not None and lower <= -0.10:
+                if lower is not None and lower <= -LOSS_BOUND:
                     reasons.append(
                         f"{LOWER_END_AT_OR_BELOW_MINUS_TEN_POINTS}: {name} {lower * 100:.1f}"
                     )

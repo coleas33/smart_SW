@@ -3,18 +3,21 @@
 from __future__ import annotations
 
 import ast
+import inspect
 import json
 from dataclasses import fields, replace
 from itertools import product
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
 from pydantic import ValidationError
 from typer.testing import CliRunner
 
-from swreview.benchmark import digest, simulate
+from swreview.benchmark import digest, simulate, stats, verdict
 from swreview.cli import app
+from tests.support.simulation_reference import assert_search_measurements
 
 SEED = 20261016
 DEFAULT_SCENARIOS = (
@@ -167,6 +170,51 @@ def test_s1_unattainable_drop_is_reported_without_inventing_power():
     assert "evaluated_alpha=0.0025" in printed
 
 
+@pytest.mark.parametrize("shape", ["proportional", "room"])
+def test_s1_mixed_batch_judges_drop_attainability_per_study(shape):
+    rates = np.array([[.01, .05], [.2, .4], [.4, .8]])
+    on = simulate.drop_rates(rates, .1, shape)
+    assert on is not None
+    assert np.isnan(on[0]).all()
+    for index in (1, 2):
+        np.testing.assert_array_equal(on[index], simulate.drop_rates(rates[index], .1, shape))
+
+
+def test_s1_beta_studies_report_exclusions_and_use_the_eligible_wilson_denominator():
+    scenario = replace(
+        simulate.SCENARIOS[DEFAULT_SCENARIOS[0]],
+        rates=lambda rng, shape: rng.beta(.4, 1.6, size=shape),
+    )
+    evaluation = simulate._SizeEvaluation(
+        scenario, simulate.REFERENCE_LAYOUT, reps=3, seed=SEED, sims=4000,
+        drop=.1, floor=34,
+    )
+    eligible = evaluation.stream.off_rates.mean(axis=1) >= .1
+    count = int(np.count_nonzero(eligible))
+    assert 0 < 4000 - count < 40
+    measured = evaluation.measure(.025, False, 0)
+    rates, bounds = [], []
+    for shape in ("proportional", "room"):
+        outcomes = evaluation.outcomes(shape, .025, False)
+        assert outcomes is not None
+        assert outcomes.quality_loss.shape == (count,)
+        assert getattr(measured, f"power_{shape}") == (
+            np.count_nonzero(outcomes.recall_loss[:, 0]) / count
+        )
+        assert getattr(measured, f"excluded_{shape}") == (4000 - count) / 4000
+        hits = int(np.count_nonzero(outcomes.no_loss))
+        rates.append(hits / count)
+        bounds.append(stats.mc_upper_bound(hits, count))
+    assert measured.no_loss_at_drop == max(rates)
+    assert measured.no_loss_at_drop_upper == max(bounds)
+    printed = simulate.render_result(
+        scenario, simulate.SearchResult((measured,), None, False, "fixture", None, "not reached"),
+    )
+    assert f"excluded_proportional={(4000 - count) / 4000:.6f}" in printed
+    assert f"excluded_room={(4000 - count) / 4000:.6f}" in printed
+    assert len(evaluation.outcomes("null", .025, False).quality_loss) == 4000
+
+
 @pytest.mark.parametrize("rate", [0, .05, .5, .9, 1])
 def test_s2_stated_rates_are_marginal_over_the_sd_one_shock(rate):
     scenario = replace(simulate.SCENARIOS[DEFAULT_SCENARIOS[0]], rates=constant_rate(rate))
@@ -201,6 +249,33 @@ def test_s2_shock_is_shared_by_a_package_and_independent_across_packages():
     covariance = np.cov(drawn.detections[:, 0, 0, :], rowvar=False)
     assert covariance[0, 1] > .025
     assert abs(covariance[0, 2]) < .006
+
+
+def test_s2_shocks_are_independent_between_arms():
+    scenario = replace(simulate.SCENARIOS[DEFAULT_SCENARIOS[0]], rates=constant_rate(.5))
+    drawn = simulate.draw_studies(
+        scenario, seed=SEED, sims=40000, reps=1, layout=simulate.Layout((1,)),
+        return_draws=True,
+    )
+    assert abs(np.cov(drawn.detections[:, :, 0, 0], rowvar=False)[0, 1]) < .006
+
+
+def test_s2_shocks_are_independent_between_repetitions():
+    scenario = replace(simulate.SCENARIOS[DEFAULT_SCENARIOS[0]], rates=constant_rate(.5))
+    drawn = simulate.draw_studies(
+        scenario, seed=SEED, sims=40000, reps=2, layout=simulate.Layout((1,)),
+        return_draws=True,
+    )
+    assert abs(np.cov(drawn.detections[:, 0, :, 0], rowvar=False)[0, 1]) < .006
+
+
+def test_s3_false_alarms_are_independent_between_arms():
+    scenario = replace(simulate.SCENARIOS[DEFAULT_SCENARIOS[0]], fa_mean=3)
+    drawn = simulate.draw_studies(
+        scenario, seed=SEED, sims=40000, reps=1, layout=simulate.Layout((1,)),
+        return_draws=True,
+    )
+    assert abs(np.cov(drawn.false_alarms[:, :, 0, 0], rowvar=False)[0, 1]) < 1.5
 
 
 def test_reference_polar_rates_have_exact_initial_counts_and_random_placement():
@@ -247,6 +322,8 @@ def test_stops_leave_main_keep_zero_detections_and_thinned_alarms_in_sensitivity
     np.testing.assert_array_equal(drawn.detections[:, :, 1, :], drawn.detections[:, :, 0, :])
     assert np.all(drawn.false_alarms[:, :, 1, :] >= drawn.false_alarms[:, :, 0, :])
     assert np.any(drawn.false_alarms[:, :, 1, :] > drawn.false_alarms[:, :, 0, :])
+    kept_at_stop = drawn.false_alarms[:, :, 1, :] - drawn.false_alarms[:, :, 0, :]
+    assert kept_at_stop.mean() / 3 == pytest.approx(.25 * 3 * .5, abs=.02)
 
 
 def test_code_guard_null_detects_every_on_run_and_the_stated_off_rate():
@@ -293,6 +370,44 @@ def test_s6_level_search_walks_the_ladder_until_both_bounds_hold(failing_bound):
     assert simulate.level_search(lambda alpha: (.051, .04)) is None
 
 
+def test_s9_measure_counts_only_main_recall_power_and_the_higher_shape(monkeypatch):
+    evaluation = simulate._SizeEvaluation.__new__(simulate._SizeEvaluation)
+    evaluation.reps, evaluation.sims = 3, 5
+    evaluation.layout = simulate.REFERENCE_LAYOUT
+    counts = {
+        "proportional": SimpleNamespace(
+            main_recall_loss=np.array([1, 1, 0, 0, 0], dtype=bool),
+            recall_loss=np.array([[1, 1], [1, 1], [0, 1], [0, 0], [0, 0]], dtype=bool),
+            quality_loss=np.array([1, 1, 1, 1, 0], dtype=bool),
+            no_loss=np.array([0, 0, 1, 1, 0], dtype=bool),
+        ),
+        "room": SimpleNamespace(
+            main_recall_loss=np.array([1, 1, 1, 0, 0], dtype=bool),
+            recall_loss=np.array([[1, 1], [1, 1], [1, 1], [0, 1], [0, 0]], dtype=bool),
+            quality_loss=np.ones(5, dtype=bool),
+            no_loss=np.array([0, 0, 0, 1, 0], dtype=bool),
+        ),
+    }
+    monkeypatch.setattr(evaluation, "null", lambda alpha, decides: (.0, .01))
+    monkeypatch.setattr(evaluation, "outcomes", lambda shape, alpha, decides: counts[shape])
+    measured = evaluation.measure(.025, False, 0)
+    assert measured.power_proportional == 2 / 5
+    assert measured.power_room == 3 / 5
+    assert measured.no_loss_at_drop == 2 / 5
+    assert measured.no_loss_at_drop_upper == stats.mc_upper_bound(2, 5)
+
+
+@pytest.mark.parametrize(("proportional", "room", "expected"), [
+    (.8, .8, True), (.799999, .9, False), (.9, .799999, False),
+    (None, .8, True), (.8, None, True), (None, None, False),
+])
+def test_s9_first_size_passes_at_eighty_percent_under_every_attainable_shape(
+    proportional, room, expected,
+):
+    measured = SimpleNamespace(power_proportional=proportional, power_room=room)
+    assert simulate._enough_power(measured) is expected
+
+
 def test_s4_command_prints_all_inputs_and_one_json_document(cli_runs):
     text, _, structured, _ = cli_runs
     assert len(structured["scenarios"]) == 1
@@ -320,6 +435,34 @@ def test_s4_command_prints_all_inputs_and_one_json_document(cli_runs):
 def test_s8_same_seed_repeats_the_whole_printout_byte_for_byte(cli_runs):
     text, repeated, _, _ = cli_runs
     assert text == repeated
+
+
+@pytest.mark.parametrize(("name", "expected"), [
+    ("uniform-sd1.0-fa1-nb0.5-stop",
+     "605d4858e5aa4f955e43adcc3e84d435b742899c41c2ee6b7ba853bbf71329de"),
+    ("uniform-sd1.0-fa1-nb0.5-clear",
+     "1f07c9186da3c7bcae97101ca29c189ce10599824689146e4c8044efd60b5d3b"),
+    ("uniform-sd1.0-fa1-nb0.5-code",
+     "e1971a132c38b560213414f610eb2d8f5cd929c5aee61a26f4a67be63bec16c7"),
+])
+def test_s8_small_searches_match_saved_preoptimization_reference(name, expected):
+    # Captured from 111A's saved source in .pytest-tmp/sim-reference/source/src,
+    # independently of _StudyDrawStream and the optimized search implementation.
+    search = simulate.search(simulate.SCENARIOS[name], seed=SEED, sims=200)
+    assert digest.canonical_sha256(search.as_dict()) == expected
+
+
+def test_simulator_signatures_share_the_declared_seed_simulation_and_cap_defaults():
+    assert simulate.DEFAULT_SEED == SEED
+    assert simulate.DEFAULT_SIMS == 4000
+    assert simulate.DEFAULT_CAP == 10
+    for function in (simulate.search, simulate.scenario_inputs, simulate.render_result):
+        parameters = inspect.signature(function).parameters
+        assert parameters["seed"].default == simulate.DEFAULT_SEED
+        assert parameters["sims"].default == simulate.DEFAULT_SIMS
+        assert parameters["cap"].default == simulate.DEFAULT_CAP
+        assert parameters["floor"].default == verdict.FLOOR
+        assert parameters["drop"].default == verdict.LOSS_BOUND
 
 
 def test_command_defaults_to_all_39_and_accepts_repeated_scenarios(monkeypatch, cli_runs):
@@ -394,6 +537,7 @@ def test_s9_three_full_searches_hold_both_bounds_and_both_powers(name, reference
         assert search.stress_case == pytest.approx(simulate.stress_case(
             np.full(10, .95), result.reps,
         ))
+    assert_search_measurements(simulate.SCENARIOS[name], search, seed=SEED, sims=4000)
 
 
 def noise_floor_data():
