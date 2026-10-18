@@ -1,15 +1,32 @@
+# The Python reviewer's gate: lint, the default test suite (`-m "not live"`) and the secrets
+# audit, on Windows and Linux under Python 3.11 and 3.12.
+#
+# The C# solution (extractor/SwReview.sln) is NOT built here: it compiles against the
+# SOLIDWORKS 2024 interop assemblies, which are not redistributable and are not on a hosted
+# runner. Its gate is local, on a machine with SOLIDWORKS installed, as
+# docs/workstation-runbook.md describes:
+#   dotnet build extractor/SwReview.sln -c Release            (zero warnings)
+#   dotnet test  extractor/SwReview.sln -c Release --no-build
+# Never attach a self-hosted runner to this repository to build it: the repository is public,
+# so any pull request could run code on that machine.
+#
+# Every action is pinned by full commit SHA; the comment beside it names the release.
+
 name: reviewer
 
 on:
+  # No path filters: the tests read docs/, specs/, benchmarks/, config/ and extractor/ as well
+  # as reviewer/, and a filter that missed one let a red change land green.
   push:
-    paths:
-      - "reviewer/**"
-      - "specs/001-agentic-design-review/contracts/**"
-      - ".github/workflows/reviewer.yml"
+    branches: [main]
   pull_request:
-    paths:
-      - "reviewer/**"
-      - "specs/001-agentic-design-review/contracts/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
@@ -19,6 +36,7 @@ jobs:
         os: [ubuntu-latest, windows-latest]
         python: ["3.11", "3.12"]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     env:
       # Not a credential: a dummy value so the audit step below has something verbatim to
       # search the test output for. An audit run with no secret configured can only report
@@ -30,30 +48,62 @@ jobs:
       run:
         working-directory: reviewer
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: ${{ matrix.python }}
+          enable-cache: true
+          cache-dependency-glob: reviewer/uv.lock
+      - name: Folders outside the checkout
+        # pytest's temporary folder must lie outside the checkout: the benchmark code names
+        # a path inside it relative to it, and `tests/conftest.py` refuses a run otherwise.
+        # The tokenizer folder is named so the cache step below can restore it.
+        shell: bash
+        run: |
+          echo "CI_PYTEST_BASETEMP=${{ runner.temp }}/pytest" >> "$GITHUB_ENV"
+          echo "SWREVIEW_TOKENIZER_DIR=${{ runner.temp }}/swreview-tokenizer" >> "$GITHUB_ENV"
       - name: Sync
-        run: uv sync --all-extras
+        run: uv sync --locked --all-extras
       - name: Lint
         run: uv run ruff check src tests
+      - name: Tokenizer cache
+        # The download is pinned by sha256 in tokens.py (`ENCODING_SHA256`), so the cache is
+        # keyed on that file: a new pin fetches afresh.
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.SWREVIEW_TOKENIZER_DIR }}
+          key: swreview-tokenizer-${{ runner.os }}-${{ hashFiles('reviewer/src/swreview/tokens.py') }}
       - name: Tokenizer
         # The o200k_base vocabulary lives in a per-user cache, never in the repository
-        # (specs/008-checks-first-review/contracts/tokenizer.md); the runner fetches it once.
+        # (specs/008-checks-first-review/contracts/tokenizer.md); `fetch` checks the sha256
+        # and downloads only when the restored file is missing or wrong.
         run: uv run swreview tokenizer fetch
       - name: Test
+        id: test
         # Integration tests skip automatically when no native package is present.
-        # Everything the tests write goes under one directory so the audit can scan it.
-        # `--basetemp` does not create parent directories, so this sits directly under the
-        # working directory; pytest empties it at the start of the run.
+        # Everything the tests write goes under one folder so the audit can scan it.
         # SWREVIEW_REQUIRE_TOKENIZER turns a missing vocabulary into failures, not skips.
         env:
           SWREVIEW_REQUIRE_TOKENIZER: "1"
-        run: uv run pytest -m "not live" --basetemp=.pytest-tmp
+        run: >-
+          uv run pytest -m "not live"
+          --basetemp="${{ env.CI_PYTEST_BASETEMP }}"
+          --junitxml="${{ runner.temp }}/junit.xml"
+      - name: Upload JUnit report
+        if: failure() && steps.test.outcome == 'failure'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: junit-${{ matrix.os }}-py${{ matrix.python }}
+          path: ${{ runner.temp }}/junit.xml
+          retention-days: 14
       - name: Audit secrets
-        # FR-015: no file a test wrote may contain the key the tests ran with. Detectors are
-        # off deliberately - `tests/unit/test_cli_audit_secrets.py` plants provider-shaped
-        # strings in its own temporary directories on purpose, so they would fire on every
-        # run. The verbatim search for the key in the job environment is the assertion here.
-        run: uv run swreview audit-secrets .pytest-tmp --no-detectors
+        # Runs whenever the tests ran, passed or failed: a failing test may have written the
+        # key too. FR-015: no file a test wrote may contain the key the tests ran with.
+        # Detectors are off deliberately - `tests/unit/test_cli_audit_secrets.py` plants
+        # provider-shaped strings in its own temporary directories on purpose, so they would
+        # fire on every run. The verbatim search for the key in the job environment is the
+        # assertion here.
+        if: ${{ !cancelled() && (steps.test.outcome == 'success' || steps.test.outcome == 'failure') }}
+        run: uv run swreview audit-secrets "${{ env.CI_PYTEST_BASETEMP }}" --no-detectors

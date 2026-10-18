@@ -16,7 +16,7 @@ venv/
 
 # Testing
 .pytest_cache/
-# pytest --basetemp; the CI job scans it with `swreview audit-secrets`
+# An old in-checkout pytest --basetemp; tests/conftest.py now refuses one inside the checkout
 .pytest-tmp/
 .hypothesis/
 htmlcov/
@@ -88,4 +88,4 @@ benchmarks/**/chat-log.jsonl
 # Local evidence imported from the 2026-09-20 pilot handoff (real-design paths). The whole
 # folder: its run folders' names carry a design number (owner decision 11B, 2026-09-24).
 /dumps/
-/logs/tool-service-20260919-184725.log
+/logs/
