@@ -9,11 +9,17 @@ native package nor a key runs the whole suite green.
 
 `perf` and `simulation` tests are the exception to that convention: they are not collected
 at all unless the run asks for them by marker. See `pytest_ignore_collect` below.
+
+Two properties of the environment are settled here, once, for every test (see
+`COLOUR_FORCING_ENV` and `pytest_configure`): Typer's help is rendered without colour even
+where CI forces it, and a run whose temporary folder lies inside the checkout is refused.
 """
 
 from __future__ import annotations
 
 import os
+import sys
+import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
@@ -25,6 +31,67 @@ from tests.support.packages import build_manifest, build_package
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 NATIVE_PACKAGE = REPO_ROOT / "benchmarks" / "packages" / "bracket-assy" / "native" / "package.json"
+
+COLOUR_FORCING_ENV: tuple[str, ...] = ("GITHUB_ACTIONS", "FORCE_COLOR", "PY_COLORS")
+"""Variables that make Typer's Rich console a colour terminal; removed before Typer loads.
+
+`typer.rich_utils` reads them once, at import, and any one set makes every `--help` and usage
+error interleave ANSI codes, often one per dash of an option name, so `"--jobs" in output`
+fails under GitHub Actions and passes in a developer's shell. Removing them here, before any
+test module imports `swreview.cli`, gives every help-text assertion the plain text a local
+run sees - the one fix, so a new help test cannot regress it. (`tests/support/console.py`'s
+`plain` helpers predate it and still do no harm.) Nothing in `src` or `tests` reads these
+variables for any other purpose; subprocesses the tests start inherit the cleaned
+environment too. `tests/unit/test_conftest_environment.py` pins both halves.
+"""
+
+for _name in COLOUR_FORCING_ENV:
+    os.environ.pop(_name, None)
+if "typer.rich_utils" in sys.modules and sys.modules["typer.rich_utils"].FORCE_TERMINAL:
+    # A plugin imported Typer before this file ran, so its console already forces colour.
+    raise RuntimeError(
+        "typer.rich_utils was imported before tests/conftest.py could remove "
+        f"{', '.join(COLOUR_FORCING_ENV)}; help-text tests would see ANSI codes"
+    )
+
+
+def basetemp_inside_checkout(
+    basetemp: str | os.PathLike[str] | None, temproot: str | os.PathLike[str], root: Path
+) -> Path | None:
+    """The run's temporary folder, resolved, when it lies inside the checkout at `root`.
+
+    `basetemp` is `--basetemp` (None when not given), in which case pytest uses a folder under
+    `temproot` (`PYTEST_DEBUG_TEMPROOT` or the system temporary folder), so that is the folder
+    tested. Resolved, as `benchmark.sets.checkout_relative` resolves, so a relative path, `..`
+    or symlink counts where it leads; a sibling whose name only begins with the root's is
+    outside.
+    """
+    folder = Path(basetemp if basetemp is not None else temproot).resolve()
+    return folder if folder.is_relative_to(root.resolve()) else None
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Refuse a run whose `tmp_path` folders would lie inside this checkout.
+
+    The benchmark code names a path inside the checkout relative to it and refuses or
+    reroutes some that lie inside it (`benchmark/sets.checkout_relative`: case-file names,
+    `runner.committable`, compare's ledger folder, FR-051). That is the product behaving as
+    specified, but every test that builds a fictional set under `tmp_path` assumes `tmp_path`
+    is *outside* the checkout, so `--basetemp=.pytest-tmp` turned ~90 of them red with
+    messages about path spellings. One usage error here names the cause instead; skipping
+    those tests would hide them. The default (no `--basetemp`) is the system temporary
+    folder, outside any ordinary checkout.
+    """
+    temproot = os.environ.get("PYTEST_DEBUG_TEMPROOT") or tempfile.gettempdir()
+    inside = basetemp_inside_checkout(config.option.basetemp, temproot, REPO_ROOT)
+    if inside is not None:
+        raise pytest.UsageError(
+            f"the pytest temporary folder {inside} lies inside the checkout {REPO_ROOT}; "
+            "the benchmark tests need tmp_path outside it (benchmark/sets.checkout_relative). "
+            "Pass --basetemp=<a folder outside the checkout>, or omit it."
+            + ("" if config.option.basetemp else f" (The system temporary folder is {temproot}.)")
+        )
+
 
 LIVE_KEYS: tuple[str, ...] = ("OPENAI_API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY")
 """Every environment variable a `live` test may need; collection runs them only if one is set.

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import shutil
 from dataclasses import replace
 from pathlib import Path
@@ -32,6 +33,14 @@ from tests.support.studies import (
 
 runner = CliRunner()
 PRIVATE_REASON = "private slice (23A): shown beside the pane study's verdict, never deciding"
+PRIVATE_CASE_PATH = (
+    "C:/Fictional/private/case-00" if os.name == "nt" else "/Fictional/private/case-00"
+)
+"""A saved-set package path outside the checkout: absolute on this platform, never read.
+
+`C:/...` is relative on Linux, so it resolved inside the working folder and the checkout there,
+and the committed-cases refusal it exists to provoke never fired.
+"""
 
 
 def study(*, count=18, reps=3, edit=None):
@@ -177,9 +186,10 @@ def test_c1_and_c16_a_missing_arm_refuses_the_verdict_but_keeps_raw_rows(tmp_pat
 
 
 def test_c2_committed_pane_study_refuses_private_saved_set_entries(tmp_path, pane_runs_to_edit):
+    assert Path(PRIVATE_CASE_PATH).is_absolute()
     runs = pane_runs_to_edit()
     edit_saved_sets(runs, lambda record: record["packages"][0].update(
-        path="C:/Fictional/private/case-00",
+        path=PRIVATE_CASE_PATH,
     ))
     out = tmp_path / "out"
     assert_refusal(
@@ -237,7 +247,7 @@ def test_c10_private_study_has_all_intervals_and_no_verdict_or_measurement_refus
     runs = write_pane_study(tmp_path / "runs", study(count=2), study=PRIVATE_PANE_STUDY)
     # Private rows skip committed-only and sizing refusals, even for private paths and <34 defects.
     edit_saved_sets(runs, lambda record: record["packages"][0].update(
-        path="C:/Fictional/private/case-00",
+        path=PRIVATE_CASE_PATH,
     ))
     out = tmp_path / "out"
     noise = ([write_noise_floor(tmp_path / "noise", runs, study=PRIVATE_PANE_STUDY)]
@@ -640,7 +650,7 @@ def test_first_refusal_wins_when_two_rows_fail(tmp_path, pair):
     if pair == "arm-before-private":
         runs = write_pane_study(tmp_path / "runs", [r for r in study() if r.arm == "off"])
         edit_saved_sets(runs, lambda record: record["packages"][0].update(
-            path="C:/Fictional/private/case-00",
+            path=PRIVATE_CASE_PATH,
         ))
         tokens = ("arm off present", "arm on has no run")
     else:

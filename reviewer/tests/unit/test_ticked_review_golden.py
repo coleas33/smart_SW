@@ -1,6 +1,7 @@
 """T007: five ticked-review baselines captured before any 015 product edit.
 
-The raw UTF-8 file strings retain their actual Windows CRLF/LF bytes. Only times,
+The raw UTF-8 file strings retain their actual Windows CRLF/LF bytes; on another platform the
+native-newline files are spelled as Windows writes them (`as_windows_writes`). Only times,
 durations, UUIDs and this harness's explicit run/profile paths are normalized;
 fictional evidence paths and unknown absolute paths remain visible.
 """
@@ -8,6 +9,7 @@ fictional evidence paths and unknown absolute paths remain visible.
 from __future__ import annotations
 
 import json
+import os
 import re
 import threading
 from collections.abc import Mapping
@@ -354,6 +356,30 @@ def play_stop_at_tool_boundary(client: TestClient, app: Any, run_dir: Path) -> P
     return run_dir
 
 
+NATIVE_NEWLINE_OUTPUTS = frozenset({"events.jsonl", "session.json", "report.md"})
+"""The outputs the product writes with `os.linesep` line endings; `attention.json` is LF.
+
+`save_session` turns each `\\n` into `os.linesep` on purpose (it matches the text writer it
+replaced), and `events.jsonl` and `report.md` are text-mode writes, so on Windows these three
+files hold CRLF and elsewhere LF. The goldens hold the Windows bytes, the pilot seat's.
+"""
+
+
+def as_windows_writes(text: str, name: str) -> str:
+    """`text` as this file's bytes read on Windows, from whichever platform wrote it.
+
+    Each file's line endings are checked against the rule it is written by before anything
+    is translated, so a product change to them still fails here on every platform: a native
+    file must end every line with `os.linesep` and an LF file must hold no carriage return.
+    Only then is a native file's `os.linesep` spelled CRLF, which on Windows changes nothing.
+    """
+    if name in NATIVE_NEWLINE_OUTPUTS:
+        assert text.count("\n") == text.count(os.linesep), f"{name}: not all {os.linesep!r}"
+        return text.replace(os.linesep, "\n").replace("\n", "\r\n")
+    assert "\r" not in text, f"{name}: a carriage return in an LF-only file"
+    return text
+
+
 def captured(app: Any, folder: Path) -> dict[str, Any]:
     provider = app.state.characterization_provider
     raw = {
@@ -367,7 +393,7 @@ def captured(app: Any, folder: Path) -> dict[str, Any]:
             for entry in provider.log
         ],
         "files": {
-            name: (folder / name).read_bytes().decode("utf-8")
+            name: as_windows_writes((folder / name).read_bytes().decode("utf-8"), name)
             for name in OUTPUTS
             if (folder / name).is_file()
         },
@@ -470,3 +496,33 @@ def test_only_the_captured_reports_named_trace_column_is_a_duration(tmp_path: Pa
         "## Investigation Trace\r\n\r\n" + table,
         "## Investigation Trace\r\n\r\n" + table.replace("0.003123", "<DURATION_1>"),
     )
+
+
+@pytest.mark.parametrize("linesep", ["\r\n", "\n"], ids=["windows", "posix"])
+@pytest.mark.parametrize("name", sorted(NATIVE_NEWLINE_OUTPUTS))
+def test_a_native_newline_file_reads_as_windows_writes_it_from_either_platform(
+    monkeypatch: pytest.MonkeyPatch, linesep: str, name: str
+) -> None:
+    monkeypatch.setattr(os, "linesep", linesep)
+    written = "first\nsecond\n\nlast\n".replace("\n", linesep)
+    assert as_windows_writes(written, name) == "first\r\nsecond\r\n\r\nlast\r\n"
+
+
+@pytest.mark.parametrize("name", sorted(NATIVE_NEWLINE_OUTPUTS))
+def test_a_native_newline_file_with_a_bare_lf_on_windows_still_fails(
+    monkeypatch: pytest.MonkeyPatch, name: str
+) -> None:
+    monkeypatch.setattr(os, "linesep", "\r\n")
+    with pytest.raises(AssertionError, match=f"{name}: not all"):
+        as_windows_writes("first\r\nsecond\n", name)
+
+
+@pytest.mark.parametrize("linesep", ["\r\n", "\n"], ids=["windows", "posix"])
+def test_attention_json_is_lf_on_every_platform_and_a_carriage_return_fails(
+    monkeypatch: pytest.MonkeyPatch, linesep: str
+) -> None:
+    monkeypatch.setattr(os, "linesep", linesep)
+    assert "attention.json" not in NATIVE_NEWLINE_OUTPUTS
+    assert as_windows_writes('{\n  "rows": []\n}\n', "attention.json") == '{\n  "rows": []\n}\n'
+    with pytest.raises(AssertionError, match="attention.json: a carriage return"):
+        as_windows_writes('{\r\n  "rows": []\r\n}\r\n', "attention.json")

@@ -39,13 +39,19 @@ PIN_ID = "doc:0003"
 
 
 def write_profile(folder: Path, *, pattern: str = CONVENTION) -> Path:
-    """A version 3 profile with `pattern` as its part-number convention."""
+    """A version 3 profile with `pattern` as its part-number convention.
+
+    Written with Windows line endings on every platform, so its bytes - and the sha256 a
+    review records for it - are the same everywhere. The ticked-review goldens and the host's
+    committed waiting fixtures pin that digest as Windows, the pilot seat's platform, writes
+    it; a native-newline write gave Linux another digest and turned both red there.
+    """
     document = yaml.safe_load(PROFILE_A.read_text(encoding="utf-8"))
     document["version"] = 3
     document.pop("part_roles", None)
     document["part_number"]["pattern"] = pattern
     path = folder / "profile-v3.yaml"
-    path.write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8")
+    path.write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8", newline="\r\n")
     return path
 
 

@@ -118,12 +118,14 @@ def public_paths(value: Any, *, temporary: Path | None = None) -> Any:
     """Rebind the shared builder's fictional root before review, preserving all evidence.
 
     With `temporary`, a path under that generation folder is rebound to the public root too:
-    the record names the profile the review was given by its full path.
+    the record names the profile the review was given by its full path. That path is spelled
+    with this platform's separator; the public root is a Windows one, so the rest of the path
+    is joined with backslashes, and a fixture generated anywhere names the same file.
     """
     if isinstance(value, str):
         value = value.replace("C:\\Fictional\\", FICTIONAL_ROOT)
-        if temporary is not None:
-            value = value.replace(f"{temporary}\\", FICTIONAL_ROOT)
+        if temporary is not None and value.startswith(f"{temporary}{os.sep}"):
+            value = FICTIONAL_ROOT + "\\".join(Path(value).relative_to(temporary).parts)
         return value
     if isinstance(value, dict):
         return {key: public_paths(member, temporary=temporary) for key, member in value.items()}
