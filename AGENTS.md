@@ -41,9 +41,10 @@ SWREVIEW_REQUIRE_TOKENIZER=1 uv run pytest -q -m "not live"
 uv run ruff check src tests
 ```
 
-CI runs the same suite on Python 3.11 and 3.12; run both when a change could differ between
-them. From the repository root, on Windows with SOLIDWORKS 2024 installed (licence not needed to
-build):
+A `--basetemp`, if given, must lie outside the checkout: `tests/conftest.py` refuses one inside
+it. CI runs the same suite on Windows and Linux under Python 3.11 and 3.12; run both Pythons
+when a change could differ between them. From the repository root, on Windows with SOLIDWORKS
+2024 installed (licence not needed to build):
 
 ```text
 dotnet build extractor\SwReview.sln -c Release      # zero warnings
