@@ -89,3 +89,6 @@ benchmarks/**/chat-log.jsonl
 # folder: its run folders' names carry a design number (owner decision 11B, 2026-09-24).
 /dumps/
 /logs/
+
+# Personal Claude Code guidance (CLAUDE.md imports AGENTS.md; this file is per person).
+CLAUDE.local.md

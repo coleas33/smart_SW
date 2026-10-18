@@ -1,0 +1,65 @@
+# Agent guidance for smart_SW
+
+This file is the shared guidance for any coding agent working in this repository (Codex reads it
+directly; `CLAUDE.md` imports it). The project's rules are in the constitution,
+[`.specify/memory/constitution.md`](.specify/memory/constitution.md), which supersedes everything
+here; this file must stay consistent with it.
+
+## What the project is
+
+An assistant that reviews SOLIDWORKS designs: a C# extractor and SOLIDWORKS add-in
+(`extractor/`, with the Task Pane) read the model through a read-only guard, and a Python
+reviewer (`reviewer/`) runs deterministic checks, asks a language model to investigate and
+explain, and writes a findings report. Numbers come from tested code; the model never computes
+a verdict. Work is specified with Spec Kit, one package per feature under `specs/NNN-name/`
+(`spec.md`, `plan.md`, `tasks.md`, contracts).
+
+## Rules that are never bent
+
+1. **SOLIDWORKS documents are read, not written**, except the bounded exceptions the
+   constitution names. Never add a write path, or loosen a guard, without a constitution
+   amendment.
+2. **This repository is public.** Commit only fictional data: no real design, part or drawing
+   number, company or customer name, vault or network path, real standards profile, recording,
+   handover folder, user name or key. A downstream fork keeps its private material in its own
+   files; see the constitution and `SECURITY.md` when it exists.
+3. **Keys never reach a file, a command line or a log.** Live tests (`-m live`) call a paid API
+   and run only when asked.
+4. **Test first.** Every behaviour change starts with a failing test, named in the task; an
+   existing test is changed only deliberately, with the reason, never loosened.
+5. **Never start SOLIDWORKS on a machine without a licence**, and never run seat tasks (`[W]`)
+   anywhere but the pilot workstation.
+
+## Gates before every commit
+
+From `reviewer/`:
+
+```text
+uv sync --all-extras
+uv run swreview tokenizer fetch
+SWREVIEW_REQUIRE_TOKENIZER=1 uv run pytest -q -m "not live"
+uv run ruff check src tests
+```
+
+CI runs the same suite on Python 3.11 and 3.12; run both when a change could differ between
+them. From the repository root, on Windows with SOLIDWORKS 2024 installed (licence not needed to
+build):
+
+```text
+dotnet build extractor\SwReview.sln -c Release      # zero warnings
+dotnet test  extractor\SwReview.sln -c Release --no-build
+```
+
+Feature gates in a `tasks.md` may add checks (the ledger check, the replay check, `-m perf`,
+`-m simulation`); run what the task names.
+
+## How work is done
+
+- Work in a branch or git worktree, never with uncommitted edits in someone else's checkout.
+- Follow the feature's `tasks.md` order; record decisions in the feature's `research.md` and tick
+  tasks only when their acceptance holds.
+- Keep changes surgical: touch what the task needs, match the surrounding style, remove only the
+  orphans your change created.
+- Commit messages: `Feature NNN Tnnn: what changed` for task work, `Record passing <slice> gate on
+  main` for gate records; the body says why, and names owner decisions (`112A`) it applies.
+- Prefer explicit code over clever code; DRY; handle more edge cases rather than fewer.

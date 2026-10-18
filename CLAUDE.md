@@ -1,72 +1,9 @@
-Claude Code Prompt for Plan Mode #prompts
+# CLAUDE.md
 
-Review this plan thoroughly before making any code changes. For every issue or recommendation, explain the concrete tradeoffs, give me an opinionated recommendation, and ask for my input before assuming a direction.
+Project guidance for Claude Code. The shared rules for every agent are in `AGENTS.md`,
+imported here; the constitution, `.specify/memory/constitution.md`, supersedes both.
 
-My engineering preferences (use these to guide your recommendations):
-
-﻿﻿DRY is important-flag repetition aggressively.
-﻿﻿Well-tested code is non-negotiable; I'd rather have too many tests than too few.
-﻿﻿I want code that's "engineered enough" - not under-engineered (fragile, hasky) and not over-engineered (premature abstraction, unnecessary complexity).
-﻿﻿I err on the side of handling more edge cases, not fewer; thoughtfulness > speed.
-﻿﻿Bias toward explicit over clever.
-1. Architecture review
-
-Evaluate:
-
-﻿﻿Overall system design and component boundaries.
-﻿﻿Dependency graph and coupling concerns.
-﻿﻿Data flow patterns and potential bottlenecks.
-﻿﻿Scaling characteristics and single points of failure.
-﻿﻿Security architecture (auth, data access, API boundaries).
-2. Code quality review
-
-Evaluate:
-
-﻿﻿Code organization and module structure.
-﻿﻿DRY violations-be aggressive here.
-﻿﻿Error handling patterns and missing edge cases (call these out explicitly).
-﻿﻿Technical debt hotspots.
-﻿﻿Areas that are over-engineered or under-engineered relative to my preferences.
-3. Test review
-
-Evaluate:
-
-﻿﻿Test coverage gaps (unit, integration, e2e).
-﻿﻿Test quality and assertion strength.
-﻿﻿Missing edge case coverage-be thorough.
-﻿﻿Untested failure modes and error paths.
-4. Performance review
-
-Evaluate:
-
-﻿﻿N+1 queries and database access patterns.
-﻿﻿Memory-usage concerns.
-﻿﻿Caching opportunities.
-﻿﻿Slow or high-complexity code paths.
-For each issue you find
-
-For every specific issue (bug, smell, design concern, or risk):
-
-﻿﻿Describe the problem concretely, with file and line references.
-﻿﻿Present 2-3 options, including "do nothing" where that's reasonable.
-﻿﻿For each option, specify: implementation effort, risk, impact on other code, and maintenance burden.
-﻿﻿Give me your recommended option and why, mapped to my preferences above.
-﻿﻿Then explicitly ask whether I agree or want to choose a different direction before proceeding.
-Workflow and interaction
-
-﻿﻿Do not assume my priorities on timeline or scale.
-﻿﻿After each section, pause and ask for my feedback before moving on.
-BEFORE YOU START:
-
-Ask if I want one of two options:
-
-1/ BIG CHANGE: Work through this interactively, one section at a time (Architecture → Code Quality → Tests → Performance) with at most 4 top issues in each section.
-
-2/ SMALL CHANGE: Work through interactively ONE question per review section
-
-FOR EACH STAGE OF REVIEW: output the explanation and pros and cons of each stage's questions AND your opinionated recommendation and why, and then use AskUserQuestion. Also NUMBER issues and then give LETTERS for options and when using AskUserQuestion make sure each option clearly labels the issue NUMBER and option LETTER so the user doesn't get confused. Make the recommended option always the 1st option.
-
----
+@AGENTS.md
 
 # Behavioral Guidelines
 
@@ -129,12 +66,3 @@ For multi-step tasks, state a brief plan:
 3. [Step] → verify: [check]
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
-
-## 5. Model Routing for Subagents (ultracode)
-
-Pick each subagent's model by how hard its task is. This applies to every Agent tool call and every workflow `agent()` call (set `model` explicitly on each; never Fable).
-
-- **Dense, simple work goes to Haiku** (`model: 'haiku'`): high-volume, low-judgment work whose output a rule or a count can check, where reading a lot matters more than deciding anything. Examples: scans and census jobs over many files (grep, list, count, tabulate), extracting fields or figures from large logs, test output or JSON, running a command or the gates and reporting the counts verbatim, checking every line of a file against a stated format, formatting and lint autofixes, and mechanical find-and-replace with a check that proves it done. A Haiku agent reports and does not decide: it changes no design, writes no test, and never handles the owner's private data (recordings, real profiles, handover folders).
-- **Simple tasks go to Sonnet** (`model: 'sonnet'`): mechanical, well-specified work with a clear recipe and a check that proves it done, but a little judgment along the way. Examples: moving or renaming files and updating their references, small doc edits, a single-file fix whose cause is already known, regenerating pins or fixtures with an existing command.
-- **Everything else goes to Opus** (`model: 'opus'`): design and spec writing, multi-file features, integrating several lanes, debugging an unknown cause, crash or safety analysis, code review and adversarial verification, anything touching the constitution, the guard or the engineer's files, and anything where a wrong call is expensive.
-- **When unsure, go up a tier**: between Haiku and Sonnet use Sonnet; between Sonnet and Opus use Opus. A Haiku or Sonnet agent that reports a blocker or an unexpected result hands the task up a tier, to Sonnet or Opus, to continue.
