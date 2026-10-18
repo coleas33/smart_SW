@@ -55,7 +55,8 @@ from typer.testing import CliRunner
 
 from swreview.cli import app
 from swreview.ir.loader import load_package
-from swreview.report.attention import load_policy
+from swreview.report.attention import load_policy, rank
+from swreview.report.attention_record import StaleAttentionRecord, write_attention_record
 from swreview.report.finding_groups import findings_by_type
 from swreview.report.rerender import rerender_run_folder
 from swreview.report.session import load_session
@@ -795,9 +796,10 @@ def test_every_sentence_the_plan_quotes_is_the_products(
 def test_every_one_liner_compiles_and_holds_no_double_quote(plan: str) -> None:
     found = one_liners(plan)
 
-    # Four since feature 013 (013 T144): `Show-DrawingTables` joined `Show-ReviewFacts`,
-    # `Show-DumpFacts` and `Show-Documents`, edited deliberately.
-    assert len(found) == plan.count(ONE_LINER_START) == 4
+    # Five since feature 014 (014 T221, 2026-10-17): `Show-SmokeFacts` joins
+    # `Show-ReviewFacts`, `Show-DumpFacts`, `Show-Documents` and `Show-DrawingTables`,
+    # edited deliberately.
+    assert len(found) == plan.count(ONE_LINER_START) == 5
     for code, argument in found:
         compile(code, "<the plan's one-liner>", "exec")
         assert argument.startswith("$"), argument
@@ -854,6 +856,247 @@ def test_the_review_facts_run_against_a_committed_review(plan: str) -> None:
         "seconds from session.started to the first text.delta: ",
     ):
         line_starting(lines, label)
+
+
+def _smoke_run(tmp_path: Path) -> Path:
+    """A fictional passing smoke run, copied from the same replay as Show-ReviewFacts."""
+    from swreview.checks.standards.registry import RULES
+    from swreview.checks.standards.report import PROFILE_LIMIT
+
+    run = tmp_path / "run"
+    shutil.copytree(REVIEW_RUN, run)
+    events = [
+        json.loads(line)
+        for line in (run / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    usage = [event["body"] for event in events if event["type"] == "usage"]
+    for index, body in enumerate(usage):
+        body["served_model"] = ("fictional-zeta", "fictional-alpha")[index % 2]
+    (run / "events.jsonl").write_text(
+        "".join(json.dumps(event) + "\n" for event in events), encoding="utf-8"
+    )
+    session_file = run / "session.json"
+    session = json.loads(session_file.read_text(encoding="utf-8"))
+    session["origin_marks"] = 1
+    for finding in session["findings"]:
+        if finding["check"] in RULES:
+            finding["coverage_limits"] = [
+                "unrelated folder /fictional",
+                PROFILE_LIMIT.format(name="fictional profile.yaml", sha256="a" * 64),
+            ]
+    session_file.write_text(json.dumps(session), encoding="utf-8")
+    saved = load_session(session_file)
+    write_attention_record(run, rank(saved), saved.session_id)
+    return run
+
+
+def test_the_smoke_facts_run_against_a_committed_review(plan: str) -> None:
+    """The older replay honestly reports its missing served models and attention record."""
+    before = {path.name: path.read_bytes() for path in REVIEW_RUN.iterdir() if path.is_file()}
+
+    lines = run_one_liner(one_liner_of(plan, "Show-SmokeFacts"), REVIEW_RUN)
+
+    assert lines == [
+        "usage events 41 | with served_model 0 | served models []",
+        "bodies with a retries field 0",
+        "origin_marks 1",
+        "standards findings 5 | with a profile stamp 5 | stamps naming a folder 0",
+        "attention.json: missing | unreadable | rows - | FileNotFoundError",
+        "prompts.json: absent",
+    ]
+    assert {
+        path.name: path.read_bytes() for path in REVIEW_RUN.iterdir() if path.is_file()
+    } == before
+
+
+def test_the_smoke_facts_read_a_passing_run_without_writing_it(plan: str, tmp_path: Path) -> None:
+    """Profile files may contain spaces; served ids are sorted and distinct."""
+    run = _smoke_run(tmp_path)
+    before = {path.name: path.read_bytes() for path in run.iterdir() if path.is_file()}
+
+    lines = run_one_liner(one_liner_of(plan, "Show-SmokeFacts"), run)
+
+    assert lines == [
+        "usage events 41 | with served_model 41 | served models "
+        "['fictional-alpha', 'fictional-zeta']",
+        "bodies with a retries field 0",
+        "origin_marks 1",
+        "standards findings 5 | with a profile stamp 5 | stamps naming a folder 0",
+        "attention.json: LF | reads as this session's record | rows 15",
+        "prompts.json: absent",
+    ]
+    assert {path.name: path.read_bytes() for path in run.iterdir() if path.is_file()} == before
+
+
+@pytest.mark.parametrize(
+    ("broken", "expected"),
+    [
+        (
+            "missing served model",
+            "usage events 41 | with served_model 40 | served models "
+            "['fictional-alpha', 'fictional-zeta']",
+        ),
+        ("retries on a non-usage body", "bodies with a retries field 1"),
+        ("missing origin marks", "origin_marks absent"),
+        (
+            "missing profile stamp",
+            "standards findings 5 | with a profile stamp 4 | stamps naming a folder 0",
+        ),
+        (
+            "empty profile file",
+            "standards findings 5 | with a profile stamp 4 | stamps naming a folder 0",
+        ),
+        (
+            "invalid profile stamp",
+            "standards findings 5 | with a profile stamp 4 | stamps naming a folder 0",
+        ),
+        (
+            "profile stamp with slash",
+            "standards findings 5 | with a profile stamp 5 | stamps naming a folder 1",
+        ),
+        (
+            "profile stamp with backslash",
+            "standards findings 5 | with a profile stamp 5 | stamps naming a folder 1",
+        ),
+        ("prompts present", "prompts.json: present"),
+    ],
+)
+def test_the_smoke_facts_expose_each_broken_check(
+    plan: str, tmp_path: Path, broken: str, expected: str
+) -> None:
+    from swreview.checks.standards.registry import RULES
+    from swreview.checks.standards.report import PROFILE_LIMIT
+
+    run = _smoke_run(tmp_path)
+    if broken in {"missing served model", "retries on a non-usage body"}:
+        event_file = run / "events.jsonl"
+        events = [
+            json.loads(line)
+            for line in event_file.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        if broken == "missing served model":
+            next(event["body"] for event in events if event["type"] == "usage").pop("served_model")
+        else:
+            next(event["body"] for event in events if event["type"] != "usage")["retries"] = 0
+        event_file.write_text(
+            "".join(json.dumps(event) + "\n" for event in events), encoding="utf-8"
+        )
+    elif (
+        broken == "missing origin marks"
+        or "profile stamp" in broken
+        or broken == "empty profile file"
+    ):
+        session_file = run / "session.json"
+        session = json.loads(session_file.read_text(encoding="utf-8"))
+        if broken == "missing origin marks":
+            session.pop("origin_marks")
+        else:
+            finding = next(finding for finding in session["findings"] if finding["check"] in RULES)
+            name = "fictional profile.yaml"
+            if broken == "missing profile stamp":
+                finding["coverage_limits"] = ["unrelated folder /fictional"]
+            elif broken == "empty profile file":
+                finding["coverage_limits"] = [PROFILE_LIMIT.format(name="", sha256="a" * 64)]
+            elif broken == "invalid profile stamp":
+                finding["coverage_limits"] = [
+                    PROFILE_LIMIT.format(name=name, sha256="not-a-digest")
+                ]
+            else:
+                separator = "/" if broken.endswith("with slash") else chr(92)
+                finding["coverage_limits"] = [
+                    PROFILE_LIMIT.format(name="fictional" + separator + name, sha256="a" * 64)
+                ]
+        session_file.write_text(json.dumps(session), encoding="utf-8")
+    else:
+        (run / "prompts.json").write_bytes(b"{}\n")
+    before = {path.name: path.read_bytes() for path in run.iterdir() if path.is_file()}
+
+    lines = run_one_liner(one_liner_of(plan, "Show-SmokeFacts"), run)
+
+    assert expected in lines
+    assert {path.name: path.read_bytes() for path in run.iterdir() if path.is_file()} == before
+
+
+@pytest.mark.parametrize(
+    ("state", "expected"),
+    [
+        ("reads", "attention.json: LF | reads as this session's record | rows 15"),
+        ("stale", "attention.json: LF | stale | rows - | StaleAttentionRecord"),
+        ("unreadable", "attention.json: LF | unreadable | rows - | ValueError"),
+        ("CRLF", "attention.json: CRLF lines 2 | reads as this session's record | rows 15"),
+        ("missing", "attention.json: missing | unreadable | rows - | FileNotFoundError"),
+    ],
+)
+def test_the_smoke_attention_line_reads_the_runs_record(
+    plan: str, tmp_path: Path, state: str, expected: str
+) -> None:
+    run = _smoke_run(tmp_path)
+    attention = run / "attention.json"
+    if state == "stale":
+        record = json.loads(attention.read_text(encoding="utf-8"))
+        record["session_id"] = "00000000-0000-4000-8000-000000000001"
+        attention.write_bytes((json.dumps(record) + "\n").encode("utf-8"))
+    elif state == "unreadable":
+        attention.write_bytes(b"{}\n")
+    elif state == "CRLF":
+        record = json.loads(attention.read_text(encoding="utf-8"))
+        attention.write_bytes((json.dumps(record) + "\r\n\r\n").encode("utf-8"))
+    elif state == "missing":
+        attention.unlink()
+    before = {path.name: path.read_bytes() for path in run.iterdir() if path.is_file()}
+
+    lines = run_one_liner(one_liner_of(plan, "Show-SmokeFacts"), run)
+
+    assert line_starting(lines, "attention.json:") == expected
+    assert {path.name: path.read_bytes() for path in run.iterdir() if path.is_file()} == before
+
+
+@pytest.mark.parametrize("failure", [OSError, ValueError, StaleAttentionRecord, RuntimeError])
+def test_the_smoke_attention_failures_print_only_the_class_and_catch_only_reader_errors(
+    plan: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    failure: type[Exception],
+) -> None:
+    from swreview.report import attention_record
+
+    run = _smoke_run(tmp_path)
+
+    def fail_reader(directory: Path) -> None:
+        assert directory == run
+        raise failure("/fictional/private/record-path must never be printed")
+
+    monkeypatch.setattr(attention_record, "read_attention_record", fail_reader)
+    monkeypatch.setattr(sys, "argv", ["smoke", str(run)])
+    code = one_liner_of(plan, "Show-SmokeFacts")
+    if failure is RuntimeError:
+        with pytest.raises(RuntimeError, match="must never be printed"):
+            exec(code, {})
+    else:
+        exec(code, {})
+    lines = capsys.readouterr().out.splitlines()
+
+    assert not any("/fictional/private/record-path" in line for line in lines)
+    if failure is not RuntimeError:
+        state = "stale" if failure is StaleAttentionRecord else "unreadable"
+        assert line_starting(lines, "attention.json:") == (
+            f"attention.json: LF | {state} | rows - | {failure.__name__}"
+        )
+
+
+def test_the_smoke_instructions_check_the_record_and_the_review_findings_by_type(
+    plan: str, results: str
+) -> None:
+    smoke = step(plan, "4.11")
+    assert "`attention.json: LF | reads as this session's record`" in smoke
+    assert "FR-020" in smoke
+    assert "since feature 013" in smoke.lower()
+    assert "findings by type" in smoke
+    assert "Get-Content" not in smoke
+    assert "on-screen summary, findings, questions and ranking checks" not in plan
+    assert "compare the file's ranking with the Review page" not in plan
+    assert "attention.json's line endings and that it reads as the run's record" in results
+    assert "the Start here panel" not in results
 
 
 def test_the_review_facts_count_answers_sent_together_and_the_one_turn_they_resume(
@@ -1722,7 +1965,7 @@ def minutes(estimate: str) -> int:
 
 
 def test_the_time_estimate_is_the_sum_of_its_steps(plan: str) -> None:
-    """The headline figure is the table's steps added up, to the nearest quarter hour, so a
+    """The headline figure is within seven minutes of the table's steps added up, so a
     step that grows (decision 15A added about 25 minutes) moves the headline too. Decision 18A
     adds about 40: step 1 and step 5.1's row grow, and step 5.6 has a row of its own. Feature 013
     (2026-09-27, edited deliberately) adds about 95 more: step 2's row by 20 minutes (013 T153's
@@ -1731,7 +1974,9 @@ def test_the_time_estimate_is_the_sum_of_its_steps(plan: str) -> None:
     The retest of 2026-09-28's U25 to U27 (edited deliberately) adds about 35 more: step 4's row by
     15 minutes (step 4.9) and step 5.1 to 5.4's by `RETEST_2026_09_28_IN_STEP_5`. Feature 015
     (015 T114, decision 4A, 2026-10-14, edited deliberately) adds 35 minutes to step 4's row
-    for the unticked review, Send, restarts and timings at step 4.10."""
+    for the unticked review, Send, restarts and timings at step 4.10. Feature 014
+    (014 T221, 2026-10-17, edited deliberately) adds 10 minutes to step 4's row for the
+    smoke checks at step 4.11, reading step 4.1's review without another paid review."""
     section = plan[plan.index("## How long it takes") : plan.index("## 0. Before the sitting")]
     rows = re.findall(r"^\| ([^|]+) \| [^|]+ \| ([^|]+) \|$", section, re.MULTILINE)[1:]
     [(hours, mins)] = re.findall(r"About \*\*(\d+) hours(?: (\d+) minutes)? at the seat", section)
@@ -1744,7 +1989,7 @@ def test_the_time_estimate_is_the_sum_of_its_steps(plan: str) -> None:
         estimates["5.1 to 5.4"] - 35 - FEATURE_013_IN_STEP_5 - RETEST_2026_09_28_IN_STEP_5
     )
     assert 30 <= estimates["5.6"] + (estimates["1"] - 50) + decision_18a_in_step_5 <= 45
-    assert (estimates["2"], estimates["4"]) == (40, 290)
+    assert (estimates["2"], estimates["4"]) == (40, 300)
 
 
 def powershell_parse_errors(sources: dict[str, str], folder: Path) -> str:

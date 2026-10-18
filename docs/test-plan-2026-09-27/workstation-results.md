@@ -82,7 +82,7 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 | 3.9 | 013 T142: both D14 reports against section 3.10's five conditions | | | |
 | 4.1 | 008 T103: the small assembly's input tokens | | | |
 | 4.1 | 009 T079: the small assembly's summary, the engineer's words | | | |
-| 4.1 | 007 T059: the Start here panel against `report.md`'s | | | |
+| 4.1 | 007 T059: Findings by type against `report.md`'s | | | |
 | 4.2 | 009 T080: the ten-second read | | | |
 | 4.2 | 009 T080: the 300 by 600 screenshot | | | |
 | 4.2 | 008 T102: the big assembly's input tokens, groups judged | | | |
@@ -113,6 +113,7 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 | 4.9 | 011 T110: back on J, its review shown again | | | |
 | 4.9 | 011 T110: C on its own: its model named, or one named and the others counted; no `could not be read` line today | | | |
 | 4.10 | 015 T119: A unticked, Send, the waiting review restored, and A's and B's timings | | | |
+| 4.11 | 014 T221: A's smoke review: the served model on every usage, no retries field, origin marks 1, the profile stamps, attention.json's line endings and that it reads as the run's record, no prompts.json | | | |
 | 5.1 | Model check on J | | | |
 | 5.1 | 007 T059: Start here above the chips on Model check, against `report.md`'s | | | |
 | 5.1 | 004 T003: Model check packages of the owner's parts P-1 to P-5 | | | |
@@ -172,6 +173,8 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 ### 4.9 A drawing active (the retest of U25)
 
 ### 4.10 A, unticked, then Send
+
+### 4.11 A's smoke review for feature 014
 
 ### 5. The other tabs, the Gemini test, the older build
 

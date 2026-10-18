@@ -135,6 +135,7 @@ the running SOLIDWORKS directly and need neither the add-in nor the pane.
 | A dump at 3.1 fails | Retry once as 3.1 says, then go on: 4.2 still runs, because the pane extracts for itself | 010 T103 to T106 for that assembly |
 | The Standards probe at 3.1 fails (an exit code other than 0, or a gate log word other than `none`) | Record the lines, after checking they hold no path, write `fail` in 006 T101's and T102's rows, and go on: nothing else in the sitting needs it | nothing more |
 | A D14 report at 3.9 ends `against confirmed-open.md: not as required: ...` | Go on: the switch stays off | nothing more |
+| 014 T221 at step 4.11 (a smoke check fails or its facts cannot be read) | **Stop.** The fix is a task of its own on the development machine, failing test first; repeat the review on its build | every paid benchmark run (014 T244 on), until this passes |
 | Step 5.5 did not come back to the current build | Its own last paragraph; call the owner | 5.6: `blocked by 5.5` in its rows |
 | A re-modeler probe run at 5.6 hangs, or SOLIDWORKS stops answering in it | 5.6's "If a run hangs": that run is not run again | that run's probes: `blocked: hung in run <n>` |
 | 6.1 or 6.5 names a leaked file | **Stop and send nothing**; call the owner | the handoff |
@@ -162,7 +163,7 @@ the running SOLIDWORKS directly and need neither the add-in nor the pane.
 
 ## How long it takes
 
-About **14 hours at the seat**, best planned as two days: day 1 steps 1 to 3, day 2
+About **14 hours 10 minutes at the seat**, best planned as two days: day 1 steps 1 to 3, day 2
 steps 4 to 6. The four earlier tasks the owner added (decision 15A) take about 25 minutes of it,
 inside steps 3.1, 4.1, 4.5, 5.1 and 5.2; feature 004's three items (decision 18A) about 40
 minutes more: the FeatureWorks record at step 1.7 (5 minutes), the owner's parts at step 5.1 (10
@@ -173,8 +174,9 @@ census's four Model checks at step 5.1 (10 minutes) and 013 T144 at step 5.2 (10
 retest of 2026-09-28's U25 to U27 about 35 minutes more: step 4.9 (15 minutes) and step 5.3's items A
 to C and the read-only option (20 minutes); feature 015's unticked review and Send at step 4.10
 about 35 minutes more (decision 4A): two SOLIDWORKS restarts, the waiting review sent, and the big
-assembly's unticked review and timings. The next sitting, which runs the retest first and then
-starts at step 2.4 after its update, needs about 13 hours 30 minutes. Keep
+assembly's unticked review and timings; feature 014's smoke checks at step 4.11 take 10 minutes
+more, reading step 4.1's review without another paid review. The next sitting, which runs the
+retest first and then starts at step 2.4 after its update, needs about 13 hours 40 minutes. Keep
 SOLIDWORKS open from step 4.1 to step 4.5 on day 2:
 the review chips of steps 4.4 and 4.5 live only as long as the SOLIDWORKS session. Before the
 sitting, allow **half a day** to find and note documents C to N, Q and S, and the components of
@@ -186,11 +188,14 @@ A and B step 3.1 asks about (section 0.2), while the owner names the parts P; a 
 | 1 | Update, gates, health checks (registration only on a new machine), the FeatureWorks record | 55 min |
 | 2 | Profile and key, the profile's version 4, and lever 14's live test | 40 min |
 | 3 | Dumps and the Standards probe of A and B, probes D1 to D14 and one pane review, with the fingerprints | 3 h 55 min |
-| 4 | The pane reviews, with the findings by type, the timing of A's review, A again with the version 4 profile, a drawing active, and A unticked then sent, with B's timings | 4 h 50 min |
+| 4 | The pane reviews, with the findings by type, the timing of A's review, A again with the version 4 profile, a drawing active, and A unticked then sent, with B's timings and A's smoke checks | 5 h |
 | 5.1 to 5.4 | Model check on J, on the owner's parts and on the census's parts, Standards (each with its Start here block) and on A-plate's drawing, Remodel (the retest's box and crash capture first), the Gemini test | 1 h 25 min |
 | 5.5 | The older build and back: two builds, two SOLIDWORKS restarts, two reviews of A | 1 h |
 | 5.6 | The re-modeler probes: three runs with no document open, and the three options checked | 25 min |
 | 6 | Handoff | 45 min |
+
+Run 014 T221 alone in about 1 hour 30 minutes: step 1's update 55 minutes, step 2.5's key
+5 minutes, and A's review and its checks 30 minutes.
 
 The dump of B (step 3.1) may take many minutes; do not click in SOLIDWORKS while it runs. The paid
 model use is roughly 3 to 4 million input tokens over about ten reviews, most of them small,
@@ -327,6 +332,14 @@ function Show-ReviewFacts {
     finally { Pop-Location }
 }
 
+function Show-SmokeFacts {
+    param([string] $run)
+    $run = $run.TrimEnd('\')
+    Push-Location "$R\reviewer"
+    try { uv run python -c "import sys, json; from pathlib import Path; from swreview.report.attention_record import read_attention_record, StaleAttentionRecord; from swreview.checks.standards.registry import RULES; from swreview.checks.standards.report import PROFILE_LIMIT, stamped_profile_digest; r = Path(sys.argv[1]); s = json.loads((r / 'session.json').read_text(encoding='utf-8')); ev = [json.loads(line) for line in (r / 'events.jsonl').read_text(encoding='utf-8').splitlines() if line.strip()]; us = [e['body'] for e in ev if e['type'] == 'usage']; print('usage events', len(us), '| with served_model', sum(bool(b.get('served_model')) for b in us), '| served models', sorted({b['served_model'] for b in us if b.get('served_model')})); print('bodies with a retries field', sum('retries' in e['body'] for e in ev)); print('origin_marks', s.get('origin_marks', 'absent')); fs = [f for f in s.get('findings', []) if f.get('check') in RULES]; prefix, _, tail = PROFILE_LIMIT.partition('{name}'); names = [[lim.removeprefix(prefix).removesuffix(tail.format(sha256=dg)) for lim in f.get('coverage_limits', []) if (dg := stamped_profile_digest([lim])) is not None] for f in fs]; print('standards findings', len(fs), '| with a profile stamp', sum(any(row) for row in names), '| stamps naming a folder', sum('/' in name or chr(92) in name for row in names for name in row)); a = r / 'attention.json'; data = None; record = None; failure = None; stale = False; exec('try:\n    data = a.read_bytes()\n    record = read_attention_record(r)\nexcept (OSError, ValueError) as exc:\n    failure = type(exc).__name__\n    stale = isinstance(exc, StaleAttentionRecord)'); crlf = data.count(bytes([13, 10])) if data is not None else 0; state = 'stale' if stale else 'unreadable' if failure else 'reads as this session\'s record'; print('attention.json:', 'missing' if data is None else 'CRLF lines ' + str(crlf) if crlf else 'LF', '|', state, '| rows', len(record.rows) if record is not None else '-', *(['|', failure] if failure else [])); print('prompts.json:', 'present' if (r / 'prompts.json').exists() else 'absent')" $run }
+    finally { Pop-Location }
+}
+
 function Show-DumpFacts {
     param([string] $folder)
     $folder = $folder.TrimEnd('\')
@@ -452,6 +465,10 @@ What the commands do, so you know what you are running (each only reads):
 - `Show-ReviewFacts '<run folder>'` prints the facts of one review: its tokens, findings, contacts,
   interference groups judged, which checks ran before the model's first round, its drawings line,
   its questions and answers, and a timing.
+- `Show-SmokeFacts '<run folder>'` prints feature 014's smoke facts: usage events with the served
+  model, bodies with a retries field, origin marks, standards profile stamps naming a folder,
+  attention.json's line endings, whether it reads as this session's record and its row count,
+  and whether prompts.json is present. An attention failure names only the exception class.
 - `Show-DumpFacts '<dump folder>'` prints the counts feature 010's dump tasks ask for. It is the
   command of `specs/010-mechanical-checks/tasks.md` Phase 13, unchanged.
 - `Show-Documents '<run folder>'` lists a review's documents with their ids: `doc:` and twelve
@@ -474,8 +491,9 @@ What the commands do, so you know what you are running (each only reads):
   `no answers file in this folder: the run did not finish`.
 
 If a `Show-` command prints a red Python traceback, copy its last line into the Notes of the step's
-row, write `facts not read` there, and go on: the run folder travels in step 6.3 and the
-development machine reads it there. The step's on-screen checks still count.
+row, write `facts not read` there, and go on (at step 4.11, stop as that step says): the run folder
+travels in step 6.3 and the development machine reads it there. The step's on-screen checks still
+count.
 
 **Finding a run folder.** On the Review tab press **Open run folder**; on the Model check and
 Standards tabs the button is **Open check folder**. In the Explorer window that opens, click the
@@ -1545,6 +1563,8 @@ finished.
 Record: the facts, the headline, the tally line, the not-reached line, the groups' goal lines,
 the drawings line (with letters in place of names), the usage line, and the start and end times.
 
+Do step 4.11 (014 T221) now on this review's folder, then step 4.2.
+
 ### 4.2 B, the big assembly [009 T080; 008 T102; 010 T107; 010 T106; 009 T079]
 
 Open B resolved and make it active; press Review. Note the start and end times. While it runs,
@@ -1944,6 +1964,60 @@ before its restarts.
 Record: each pass or fail, each run folder's stamp and letter, the records of items 3 and 5, the
 restored review and the four timings. No design name, number or path goes in the findings
 document.
+
+### 4.11 A's smoke review for feature 014 [014 T221]
+
+Run this immediately after step 4.1, reading A's review and its run folder; a full sitting pays
+no extra review. Step 1 must have installed a build of `main` at or after slice 6's gate commit
+`b305130`; T221 names that gate build, and any later `main` build holds it. Check from the setup
+block's PowerShell window:
+
+```powershell
+git -C $R merge-base --is-ancestor b305130 HEAD; "holds b305130: $($LASTEXITCODE -eq 0)"
+```
+
+Pass: `holds b305130: True`, and step 1's update and gates passed.
+
+To run 014 T221 alone before the next full sitting, paste the setup block, do step 1's update
+and step 2.5's key in Settings, then review A exactly as step 4.1 does (step 4's box, its questions
+answered as step 4.1 says), and do the checks below on that review's folder. Use the seat's
+placed standards profile. This gates feature 014's first paid benchmark run.
+
+With `$run` A's run folder after its answers' turn, run:
+
+```powershell
+Show-ReviewFacts $run
+Show-SmokeFacts $run
+```
+
+1. Read Results. Pass: the review finishes and Results on the Review page renders its summary,
+   findings and questions as step 4.1 expects.
+2. Read the first two smoke lines. Pass: `events.jsonl` carries `served_model` on every `usage`
+   body (the two counts agree, and the served models are named), and no `retries` field on any
+   body (the count is 0); RF-32: the pane sets no retry policy.
+3. Read the origin line. Pass: `session.json` reads `"origin_marks": 1` (RF-27).
+4. Read the standards line. Pass: every standards finding's profile stamp names the profile's
+   file and digest and no folder (D12): the first two counts agree, and `stamps naming a folder`
+   is 0. The command reads stamps through the standards report's parser and `PROFILE_LIMIT`
+   form; a `/` or `\` in the file part names a folder.
+5. Read the attention line. Pass: `attention.json: LF | reads as this session's record`
+   (34A, T011; FR-020: the file is the order the run was read with), followed by the row count.
+   Since feature 013 the Review page shows that ranking as its summary and findings by type,
+   which item 1 checks.
+6. Read the prompts line. Pass: the folder holds no `prompts.json` (`prompts.json: absent`;
+   `benchmark-run.md` section 12).
+
+On a fail, stop: the fix is a task of its own on the development machine, failing test first,
+and this review runs again on its build. A facts command that fails leaves this step unpassed.
+No paid benchmark run (014 T244 on) starts until this passes.
+
+Record: full sitting or alone; pass or fail for each check, each printed facts line (with letters
+in place of names), the on-screen summary, findings and questions, and the run
+folder's stamp and letter, in 014 T221's Results row and under step 4.11's record heading in the
+findings document. Keep the file contents in the run folder, which travels with step 6.3's
+evidence; the results sheet
+travels in the handover folder and is committed from the development machine (runbook section 8).
+Nothing of the small assembly, its path or its numbers enters the repository.
 
 ### 5.1 Model check, on J and on the owner's parts [007 T059; 004 T003]
 

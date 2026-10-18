@@ -206,6 +206,7 @@ alias in the shell it runs in; every `uv run` command runs from `<repo>\reviewer
 | Steps 3 to 6, the probes D1 to D13 | step 7 (011 T066) | T066 compares D6 and D8 with T064's D4 and D5 on the same drawing |
 | Step 8's probe D14 | step 8's pane review (T077) | the pane half is read against the probe's answers |
 | Step 11 (008 T102) | step 12 (T104) | T104 presses Retry on T102's run folder |
+| Step 13 (A's review, 008 T103; the test plan's step 4.1) | step 23 (014 T221; step 4.11), immediately after it | it reads that review's folder, with no extra paid review |
 | Steps 13 and 14, then 013 T143 (the test plan's step 4.8) | step 22 (015 T119; step 4.10), before step 5.1 | its restarts come after the review chips have been read |
 | everything else but step 21 | step 18 (009 T082) | it builds an older commit, then returns to `main` |
 | everything, step 18 included | step 21 (004 T033 to T039), then only the handoff | a refuted PROBE-1 can leave a "Cannot reorder" box holding SOLIDWORKS, and PROBE-1 asks for one on purpose |
@@ -329,8 +330,8 @@ row per step and task id. The development machine moves each answer into the res
     a contact; the rows in the run folder's `package.json`; the usage line and the report both
     show uncached and cached input as two numbers. Record the finding and contact counts; the
     comparison with the recorded findings by subject key is made on the development machine
-    (T105). The same run is 010 T107's (contacts apart and outside "Start here", the joint, mass
-    and hygiene findings before the first model turn, no model round spent on them), the
+    (T105). The same run is 010 T107's (contacts in their own fold after the findings, the joint,
+    mass and hygiene findings before the first model turn, no model round spent on them), the
     summary 009 T079 and T080 read (T080's ten seconds first, before anyone scrolls), and the run
     folder from which the development machine counts 010 T106's engagement against the last
     sitting's. The test plan's step 4.2 stops the review at the owner's token cap.
@@ -360,6 +361,7 @@ row per step and task id. The development machine moves each answer into the res
     folder only after a backend restart (the test plan's step 4.5, item 4), since a backend still
     holding the review could save over them; its `session.json` carrying the baseline is the
     evidence.
+
 14. **009 T081, T083, T084.** Configuration switch (T081), chips and restore (T083), three open
     questions answered in one send (T084), each as its task text says; T084's resumed turn's
     first round input goes beside the pane's resume sentence.
@@ -375,7 +377,7 @@ row per step and task id. The development machine moves each answer into the res
     Pass: `1 passed` and no `SKIPPED` line. A skip proves nothing; a refused key or an unreachable
     API fails with its own sentence and is setup, not the protocol failure. After a Ctrl+C, close
     the window to drop the key.
-16. **Evidence.** Zip the whole run folders of steps 1, 3 to 14, 20 and 22 (their `tool-results\`
+16. **Evidence.** Zip the whole run folders of steps 1, 3 to 14, 20, 22 and 23 (their `tool-results\`
     included), the dump folders of step 2, the probe `--out` folders (step 21's three among them)
     and the logs into the handover
     folder (runbook section 8; the test plan's step 6.3); not `swreview handoff`, which leaves
@@ -459,6 +461,25 @@ row per step and task id. The development machine moves each answer into the res
     question's absence or its withdrawn ids and any folded-family limit, the Send records, the
     restored review and the four timings, in 015 T119's row and step 4.10's record; stamps and
     letters only, no design name, number or path. Its run folders travel with step 16's evidence.
+
+23. **014 T221: A's smoke review for feature 014** (the test plan's step 4.11): do this immediately
+    after step 13 (A's review), reading A's review and its folder with no extra paid review in a
+    full sitting.
+    Step 1's update must install `main` at or after slice 6's gate commit `b305130`; follow step
+    4.11's build check. To run it alone, paste the setup block, do the test plan's step 1 (the
+    update) and step 2.5 (the key in Settings), then A's review exactly as step 4.1 does (step
+    4's box, its questions answered as step 4.1 says), then step 4.11's checks.
+    Run `Show-ReviewFacts $run` and `Show-SmokeFacts $run` as step 4.11 says.
+    Pass: Results renders the summary, findings and questions as step 4.1 expects;
+    every usage body carries `served_model`, no body has a `retries` field; `origin_marks` is 1;
+    every standards finding's profile stamp names the profile's file and digest and no folder;
+    `attention.json` has LF line endings and reads as this run's record; no `prompts.json`.
+    On a fail, stop: the fix is a task of its own on the development machine, failing test first,
+    and this review runs again on its build. No paid benchmark run (014 T244 on) starts until
+    this passes. Record: full sitting or alone, each pass or fail and the printed facts lines,
+    the on-screen checks, and the folder's stamp and letter, in 014 T221's Results row and step
+    4.11's record. Its folder travels with step 16's evidence, including an alone run's folder.
+    Nothing of the small assembly, its path or its numbers enters the repository.
 
 ## 4. After the sitting, on the development machine
 

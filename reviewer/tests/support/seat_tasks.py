@@ -1,13 +1,14 @@
-"""The open seat tasks of features 008 to 011, 013 and 015, and the task ids a document names (011
-T099, T100; 013 T138; 015 T113).
+"""The open seat tasks of features 008 to 011, 013, 014 and 015, and the task ids a document
+names (011 T099, T100; 013 T138; 014 T221; 015 T113).
 
 `docs/test-plan-2026-09-27/workstation-handover.md` (T099) and
 `docs/test-plan-2026-09-27/workstation-test-plan.md`
-(T100) each name every open `[W]` task of the six packages, so a seat result maps back to its row
+(T100) each name every open `[W]` task of the seven packages, so a seat result maps back to its row
 of a `tasks.md`; feature 013 joined them on 2026-09-27 (013 T138), with its four seat tasks, 013
 T141 to T144, and a fifth, 013 T153, with its follow-ups the same day. Feature 015 joined them on
-2026-10-14 (015 T113), with its seat task, 015 T119. One reader of the task lists and one reader
-of a document's ids serve both tests.
+2026-10-14 (015 T113), with its seat task, 015 T119. Feature 014 joined them on 2026-10-17
+(014 T221's development-machine half), with its seat task, 014 T221. One reader of the task
+lists and one reader of a document's ids serve both tests.
 
 Task ids repeat across packages (`008 T101` and `011 T101` are different tasks), so the plan is
 read with the package in front of each id (`qualified_tasks`); the handover's older, unqualified
@@ -34,6 +35,7 @@ PACKAGES = (
     "010-mechanical-checks",
     "011-drawing-context",
     "013-engineer-first-review",
+    "014-design-review-eval",
     "015-review-send-gate",
 )
 OPEN_SEAT_TASK = re.compile(r"^- \[ \] (T\d{3}) \[W\]", re.MULTILINE)

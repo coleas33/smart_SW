@@ -10,6 +10,7 @@ in the sitting.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from tests.support.seat_tasks import PACKAGES, REPO, named_tasks, open_seat_tasks
@@ -50,3 +51,34 @@ def test_the_handover_names_every_open_seat_task_of_features_008_to_011() -> Non
 
 def test_a_range_names_each_task_in_it() -> None:
     assert named_tasks("010 T103 to T106, and T079") == {"T103", "T104", "T105", "T106", "T079"}
+
+
+def test_the_handover_script_keeps_numbered_steps_in_order_and_smoke_timing_explicit() -> None:
+    handover = newest_handover().read_text(encoding="utf-8")
+    script = handover.split("## 3. The script\n", 1)[1].split("## 4. After the sitting", 1)[0]
+
+    steps = [int(number) for number in re.findall(r"^(\d+)\. \*\*", script, re.MULTILINE)]
+    assert steps == list(range(1, 24))
+    assert "<!-- -->" not in script
+    smoke = script.split("23. **014 T221:", 1)[1]
+    first_instruction = " ".join(smoke.split("\n    Step 1's update", 1)[0].split())
+    assert "do this immediately after step 13 (A's review)" in first_instruction
+    assert "| Step 13 (A's review, 008 T103; the test plan's step 4.1) | step 23" in handover
+    assert "Zip the whole run folders of steps 1, 3 to 14, 20, 22 and 23" in script
+
+
+def test_the_handover_smoke_checks_the_attention_record() -> None:
+    handover = newest_handover().read_text(encoding="utf-8")
+    smoke = handover.split("23. **014 T221:", 1)[1].split("\n## ", 1)[0]
+    smoke = " ".join(smoke.split())
+
+    assert "`attention.json` has LF line endings and reads as this run's record" in smoke
+    assert "Review page shows its ranking" not in handover
+
+
+def test_the_handover_big_review_places_contacts_after_the_findings() -> None:
+    handover = newest_handover().read_text(encoding="utf-8")
+    review = handover.split("11. **008 T102,", 1)[1].split("\n12. **", 1)[0]
+
+    assert "contacts in their own fold after the findings" in " ".join(review.split())
+    assert "Start here" not in review
