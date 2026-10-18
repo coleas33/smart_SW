@@ -69,6 +69,9 @@ examples stay outside the public repository; public examples remain fictional.
 
 ### D0 — Inventory the existing generator and drawing requirements
 
+*Started 2026-10-18:* the first phase, without the base repository, is
+[the D0 inventory](drawing-creation-d0-inventory.md).
+
 The September roadmap already requires evaluating the owner's drawing-generation
 base repository and flat-pattern macros before specifying 012. The base repository
 location is still an input to obtain later. Record its operations, supported part
