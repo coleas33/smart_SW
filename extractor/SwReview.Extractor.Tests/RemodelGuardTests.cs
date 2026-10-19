@@ -217,8 +217,13 @@ public class RemodelGuardTests
     /// The members contracts/guard-allowlist.md excludes that <see cref="ReadOnlyGuard"/>
     /// does not already refuse, so the remodel guard has to refuse them itself: the UI undo
     /// stack (<c>EditUndo2</c> returns void, VERIFIED, so it cannot be verified, and it is
-    /// shared with the engineer) and the read-only-state flag. Feature 003's T087 left these
-    /// to feature 004's guard work, and 004 adds nothing to <see cref="ReadOnlyGuard"/>.
+    /// shared with the engineer). Feature 003's T087 left these to feature 004's guard work,
+    /// and 004 adds nothing to <see cref="ReadOnlyGuard"/>. Edited deliberately for decision 140A
+    /// (2026-10-19), as <see cref="RemodelExclusions_AreOnlyMembersTheReadOnlyGuardDoesNotAlreadyRefuse"/>
+    /// asks: the read-only-state flag, <c>SetReadOnlyState</c>, is refused by
+    /// <see cref="ReadOnlyGuard"/> now, so it left this list rather than be kept in two places; this
+    /// guard still refuses it, qualified by its rule for a key off the allowlist and bare by the
+    /// read-only guard's answer (<see cref="Assert_ExcludedMember_IsRefused"/>).
     /// </summary>
     private static readonly string[] ExpectedRemodelExclusions =
     {
@@ -226,7 +231,6 @@ public class RemodelGuardTests
         "EditRedo2",
         "StartRecordingUndoObject",
         "FinishRecordingUndoObject2",
-        "SetReadOnlyState",
     };
 
     private static RemodelGuard Guard() => new RemodelGuard();

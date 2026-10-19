@@ -70,6 +70,18 @@ $familyCount = $drawingFamilies.Count
 # and Rebuild, IModelDocExtension's Rebuild with them: the bridge judges its commands against its own
 # fixed set and no longer hands their names to ReadOnlyGuard, which had judged remodel.close,
 # remodel.save and remodel.rebuild by their member halves.
+#
+# The same decision names every member of the save, rename, move and copy, replace, release and lock,
+# read-only and rebuild families of these three interfaces and of IPartDoc and IAssemblyDoc (two rows
+# more; IDrawingDoc's are writers of its family row already) that the guard did not refuse yet, and
+# SaveBMP, which stays allowed for the reason below. DocumentWriteFamilyTests (GuardTests.cs) reflects
+# the interop with that family grammar to prove the rows complete. Three kinds of member are refused
+# already and are not named here: those Guard/ReadOnlyGuard.cs denies (Save3, SaveAs3, SetSaveFlag,
+# EditRebuild3, ForceRebuild3, ForceRebuildAll, and InsertFeatureReplaceFace by its InsertFeature
+# prefix); those this table's drawing rows deny by a bare name the document types share (EditRebuild,
+# ForceRebuild); and those decision 21A's creation table denies (MoveOrCopy, RotateOrCopy,
+# ScaleOrCopy, SaveSelection) - list-creation-members.ps1 reads this table's names as already denied,
+# so naming one here would move it out of that table.
 $sharedRows = [ordered]@{
     'ISldWorks' = @(
         'ActivateDoc', 'ActivateDoc2', 'ActivateDoc3', 'DocumentVisible', 'CloseAllDocuments',
@@ -82,18 +94,37 @@ $sharedRows = [ordered]@{
         'INewDrawing2', 'INewPart', 'INewAssembly', 'LoadFile', 'LoadAddIn', 'LoadAdminSettingsFile',
         'UnloadAddIn', 'ExitApp', 'ActivateTaskPane', 'CloseUserNotification', 'CreateNewWindow',
         'PresetNewDrawingParameters', 'SetNewFilename', 'AddFileOpenItem', 'AddFileOpenItem2',
-        'AddFileOpenItem3', 'RemoveFileOpenItem', 'RemoveFileOpenItem2', 'OpenDoc6', 'CloseDoc'
+        'AddFileOpenItem3', 'RemoveFileOpenItem', 'RemoveFileOpenItem2', 'OpenDoc6', 'CloseDoc',
+        'AddFileSaveAsItem', 'AddFileSaveAsItem2', 'RemoveFileSaveAsItem', 'RemoveFileSaveAsItem2',
+        'RunBatchSaveProcess', 'SaveSettings', 'ShowBatchSaveTo3DExperienceDlg',
+        'MoveDocument', 'IMoveDocument', 'CopyDocument', 'ICopyDocument', 'CopyAppearance',
+        'ReplaceReferencedDocument'
     )
     'IModelDoc2' = @(
         'Close', 'Quit', 'FileReload', 'ReloadOrReplace', 'CloseFamilyTable', 'ClosePrintPreview',
         'ActivateSelectedFeature', 'ActivateFeatureMgrView', 'DeActivateFeatureMgrView',
-        'Save', 'Rebuild'
+        'Save', 'Rebuild',
+        'Save2', 'SaveAs', 'SaveAs2', 'SaveAs4', 'SaveAsSilent', 'SaveSilent', 'SetSaveAsFileName',
+        'SaveBMP', 'EditCopy', 'ForceReleaseLocks', 'IRelease3rdPartyStorage', 'Lock', 'UnLock',
+        'LockAllExternalReferences', 'UnlockAllExternalReferences', 'LockFramePoint',
+        'UnlockFramePoint', 'LockLightToModel', 'SetReadOnlyState'
     )
     'IModelDocExtension' = @(
         'SetUserPreferenceInteger', 'SetUserPreferenceString', 'SetUserPreferenceDouble',
         'SetUserPreferenceTextFormat', 'LoadDraftingStandard', 'ReloadOrReplace', 'CloseMessageBar',
         'CloseUserNotification',
-        'Rebuild'
+        'Rebuild',
+        'SaveAs', 'SaveAs2', 'SaveDeFeaturedFile', 'SaveDraftingStandard', 'SavePackAndGo',
+        'SaveTo3DExperience', 'SaveViewToSolidworks', 'RenameDocument', 'RenameDraftingStandard',
+        'MoveDecal', 'CopyDraftingStandard', 'IRelease3rdPartyStorageStore', 'ReleaseStream',
+        'EditRebuildAll', 'set_ShowPartRebuildIndicators'
+    )
+    'IPartDoc' = @(
+        'SaveToFile', 'SaveToFile2', 'SaveToFile3'
+    )
+    'IAssemblyDoc' = @(
+        'SaveIsolate', 'CopyWithMates', 'CopyWithMates2', 'ReplaceComponents', 'ReplaceComponents2',
+        'ReplacePLMComponents', 'ForceRebuild2', 'set_EnableAssemblyRebuild'
     )
 }
 
@@ -119,6 +150,7 @@ $exclusions = New-GuardExclusions $guard
 $exclusions['OpenDoc6'] = "the console attach's read-only open of a part or assembly (``SwSession.OpenReadOnly``), checked with ``IsOpenedReadOnly`` after it (decision 136A); the confirmed drawing's open calls the qualified key through its own allowlist guard (``contracts/confirmed-open.md``)"
 $exclusions['OpenDoc7'] = "feature 004's open of the re-modeler's own copy (``remodel.open``, a bare read call site under ``RemodelGuard``) and ``probe remodel``'s reopen of its throwaway part; found by the read audit (T003)"
 $exclusions['NewDocument'] = "``probe remodel``'s throwaway part (feature 004 T032, under ``RemodelProbeGuard``, which exempts only the members ``ReadOnlyGuard`` refused when it was written); found by the read audit (T003)"
+$exclusions['SaveBMP'] = "the capture's image of a view (``SwCaptureView`` gates the bare name on the session's read-only gate, after ``CaptureService`` checked the image's extension with ``AssertSaveAs``): it writes a bitmap of the graphics window, which the capture turns into its PNG under the directory the host chose, and cannot write a document; ``SaveAs3``, which can, stays refused (decision 140A)"
 
 function Test-AlreadyDenied([string] $name) {
     return (Test-DeniedBy $name $guard.BaseDenied $guard.BasePrefixes)

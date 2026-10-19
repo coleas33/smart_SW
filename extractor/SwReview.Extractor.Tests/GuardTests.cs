@@ -944,7 +944,8 @@ public class DrawingFamilyDenylistTests
     /// Every exclusion has one of contracts/guard.md section 3's reasons: the bare name of a
     /// stage-1 allowlist key, a member <see cref="RemodelGuard"/> refuses itself, or a member a
     /// sanctioned path already calls by its bare name - the extractor's read-only model open and
-    /// feature 004's two opens of documents it created (found by the read audit, T003). Edited
+    /// feature 004's two opens of documents it created (found by the read audit, T003), and, since
+    /// decision 140A refused the save family, the capture's image, <c>SaveBMP</c>. Edited
     /// deliberately for decision 136A (2026-10-19), which accepted one exclusion more, <c>Close</c>,
     /// the member half of the bridge command <c>remodel.close</c> while the dispatcher handed command
     /// names to the read-only guard; and narrowed back for decision 140A the same day, when the
@@ -958,6 +959,7 @@ public class DrawingFamilyDenylistTests
             "OpenDoc6",
             "OpenDoc7",
             "NewDocument",
+            "SaveBMP",
         };
         var bareKeys = new HashSet<string>(
             RemodelGuard.AllowedKeys.Select(CallKey.BareName), StringComparer.OrdinalIgnoreCase);
@@ -975,13 +977,14 @@ public class DrawingFamilyDenylistTests
 
     /// <summary>
     /// The sanctioned calls stay allowed whether or not a grammar reached them: the extractor's
-    /// read-only model open, feature 004's copy open and throwaway part, and the two shared names
-    /// feature 004's allowlist keys carry.
+    /// read-only model open, feature 004's copy open and throwaway part, the two shared names
+    /// feature 004's allowlist keys carry, and (decision 140A) the capture's image.
     /// </summary>
     [Theory]
     [InlineData("OpenDoc6")]
     [InlineData("OpenDoc7")]
     [InlineData("NewDocument")]
+    [InlineData("SaveBMP")]
     [InlineData("CloseDoc")]
     [InlineData("SetUserPreferenceToggle")]
     [InlineData("set_Name")]
@@ -1076,9 +1079,11 @@ public class DrawingFamilyCompletenessTests
     /// <summary>
     /// contracts/guard.md section 1: the shared families, named members only. Edited deliberately for
     /// decision 136A (2026-10-19): <c>IModelDoc2</c> joined, for its close, quit, reload and activate
-    /// members (<see cref="DocumentLifecycleFamilyTests"/>).
+    /// members (<see cref="DocumentLifecycleFamilyTests"/>). Edited deliberately for decision 140A the
+    /// same day: <c>IPartDoc</c> and <c>IAssemblyDoc</c> joined, for their save, copy, replace and
+    /// rebuild members (<see cref="DocumentWriteFamilyTests"/>).
     /// </summary>
-    internal static readonly string[] SharedFamilies = { "ISldWorks", "IModelDoc2", "IModelDocExtension" };
+    internal static readonly string[] SharedFamilies = { "ISldWorks", "IModelDoc2", "IModelDocExtension", "IPartDoc", "IAssemblyDoc" };
 
     /// <summary>contracts/guard.md section 2: a name starting with one of these is a reader.</summary>
     private static readonly string[] ReaderPrefixes = { "get_", "Get", "IGet", "Is" };
@@ -1589,7 +1594,7 @@ public class DocumentLifecycleFamilyTests
     /// Every guard a gate the product builds is built with: the read-only guard every gate gets by
     /// default, and the four the exceptions and the confirmed drawing's open build their gates with.
     /// </summary>
-    private static ICallGuard[] ProductGates() => new ICallGuard[]
+    internal static ICallGuard[] ProductGates() => new ICallGuard[]
     {
         ReadOnlyCallGuard.Instance,
         new SuppressTestGuard(),
@@ -1683,7 +1688,7 @@ public class DocumentLifecycleFamilyTests
         Assert.True(callable.Count == 0, "Spellings a gate the product builds lets through: " + string.Join(", ", callable));
     }
 
-    private static bool Refuses(Action<string> assert, string key)
+    internal static bool Refuses(Action<string> assert, string key)
     {
         try
         {
@@ -1693,6 +1698,273 @@ public class DocumentLifecycleFamilyTests
         catch (MutatingCallError)
         {
             return true;
+        }
+    }
+}
+
+/// <summary>
+/// Decision 140A (feature 011, 2026-10-19). The read-only guard let the save family through as bare
+/// names - <c>IModelDoc2</c>'s <c>Save2</c>, <c>SaveAs</c>, <c>SaveAs2</c>, <c>SaveAs4</c>,
+/// <c>SaveAsSilent</c> and <c>SaveSilent</c>, <c>IModelDocExtension</c>'s <c>SaveAs</c>, <c>SaveAs2</c>
+/// and <c>SavePackAndGo</c>, <c>ISldWorks.SaveSettings</c> - and <c>SetReadOnlyState</c>,
+/// <c>ForceReleaseLocks</c>, <c>RenameDocument</c>, <c>MoveDocument</c> and
+/// <c>ReplaceReferencedDocument</c> with them, none of which the product calls (research R8.5, the
+/// third question).
+///
+/// This class reflects the interop the extractor is built against and holds every member of the
+/// interfaces a document is reached through - <see cref="Interfaces"/> - whose name belongs to the
+/// save, rename, move and copy, replace, release and lock, read-only or rebuild families
+/// (<see cref="BelongsToAFamily"/>) to one of three answers: a reader by section 2's prefixes, which
+/// stays allowed; the member left allowed, with its reason (<see cref="Allowed"/>); or refused by
+/// <see cref="ReadOnlyGuard"/> in both spellings a call site can hand it, and by every gate the product
+/// builds but for the exceptions a guard was written for, each named with its reason
+/// (<see cref="Exceptions"/>). A member a later interop adds fails here until someone decides which it
+/// is, and so does a guard that comes to let another member through. Only metadata is read;
+/// SOLIDWORKS is never started.
+/// </summary>
+public class DocumentWriteFamilyTests
+{
+    /// <summary>
+    /// The three of <see cref="DocumentLifecycleFamilyTests"/>, and the three document types a model
+    /// document also is, whose saves, replaces and rebuilds act on that same document - 004's
+    /// guard-allowlist.md had recorded <c>IPartDoc.SaveToFile</c> to <c>SaveToFile3</c> as open.
+    /// </summary>
+    internal static readonly string[] Interfaces =
+        DocumentLifecycleFamilyTests.Interfaces.Concat(new[] { "IPartDoc", "IAssemblyDoc", "IDrawingDoc" }).ToArray();
+
+    /// <summary>
+    /// The families, as a word of a member's name, read the way <see cref="DocumentLifecycleFamilyTests"/>
+    /// reads its own: the word beginning with its capital - at the start of the name, after a COM
+    /// twin's <c>I</c>, or where a word starts - and ending where the name does or the next word begins.
+    /// <list type="bullet">
+    /// <item><c>Save</c>: what writes the document, or a file made from it, or changes what the save
+    /// dialog offers (<c>AddFileSaveAsItem</c>).</item>
+    /// <item><c>Rename</c>, <c>Move</c> and <c>Copy</c>: the document's file renamed, moved or copied,
+    /// and the references other documents hold to it updated. <c>Copy</c> is here because
+    /// <c>ISldWorks.CopyDocument</c> is <c>MoveDocument</c>'s twin - the same arguments and options -
+    /// and the word's other members copy the document's contents (<c>CopyWithMates</c>,
+    /// <c>CopyDraftingStandard</c>) or its selection (<c>EditCopy</c>).</item>
+    /// <item><c>Replace</c>: a referenced document or a component swapped for another.</item>
+    /// <item><c>Release</c>, <c>Lock</c> and <c>Unlock</c>: the locks SOLIDWORKS holds on the file
+    /// released (<c>ForceReleaseLocks</c>) and the storage streams it opens in it
+    /// (<c>IRelease3rdPartyStorage</c>), and what locks or unlocks the document's references
+    /// (<c>LockAllExternalReferences</c>) or the application's commands (<c>Lock</c>).</item>
+    /// <item><c>ReadOnly</c>: the document's read-only state, which <c>SetReadOnlyState</c> would undo
+    /// behind the check decision 136A added after every read-only open.</item>
+    /// <item><c>Rebuild</c>: the rebuilds, which change the model and can resolve lightweight
+    /// components.</item>
+    /// </list>
+    /// So <c>ForceReleaseLocks</c>, <c>UnLock</c> and <c>IRelease3rdPartyStorage</c> belong, and
+    /// <c>HasRenamedDocuments</c>, a read whose prefix is none of section 2's, and
+    /// <c>IsLightLockedToModel</c> do not.
+    /// </summary>
+    private static readonly Regex Family = new Regex(
+        "(Save|Rename|Move|Copy|Replace|Release|Lock|Unlock|ReadOnly|Rebuild)(?![a-z])",
+        RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// The family members left allowed by every guard, each with its reason and the product path that
+    /// calls it. Keyed interface-qualified, though the guard matches bare names.
+    /// </summary>
+    internal static readonly IReadOnlyDictionary<string, string> Allowed = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        ["IModelDoc2.SaveBMP"] = "the capture's image of a view: SwCaptureView gates the bare name on the session's "
+            + "read-only gate, after CaptureService's AssertSaveAs has checked the image's extension, and SaveBMP writes "
+            + "a bitmap of the graphics window, which the capture turns into its PNG under the directory the host chose; "
+            + "it cannot write a document, and SaveAs3, which can, stays refused",
+    };
+
+    /// <summary>
+    /// What a guard written for an exception lets through of these families, as the guard's type and
+    /// the key, each with the exception it is - exactly these. The read-only guard and the confirmed
+    /// drawing's guard let none through.
+    /// </summary>
+    internal static readonly IReadOnlyDictionary<string, string> Exceptions = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        ["SuppressTestGuard ForceRebuild3"] = "feature 003's engineer-run suppress-test rebuilds after its one suppression",
+        ["RemodelProbeGuard ForceRebuild3"] = "probe remodel rebuilds its throwaway part after each step (feature 004 T032)",
+        ["RemodelProbeGuard SaveAs3"] = "probe remodel saves its throwaway part into the run folder, behind "
+            + "RemodelProbe.AssertPartSavePath",
+        ["RemodelGuard IModelDoc2.ForceRebuild3"] = "the re-modeler's one rebuild of its own copy (feature 004's stage-1 allowlist)",
+        ["RemodelGuard IModelDoc2.Save3"] = "the re-modeler's one save of its own copy, behind RemodelScope.AssertSaveTarget "
+            + "(feature 004's stage-1 allowlist)",
+    };
+
+    internal static bool BelongsToAFamily(string name) => Family.IsMatch(name);
+
+    /// <summary>Every family member of the interfaces, interface-qualified, readers included.</summary>
+    internal static IReadOnlyList<string> FamilyMembers() =>
+        Interfaces
+            .SelectMany(face => DrawingFamilyCompletenessTests.MethodNames(face)
+                .Where(BelongsToAFamily)
+                .Select(name => face + "." + name))
+            .OrderBy(key => key, StringComparer.Ordinal)
+            .ToList();
+
+    private static IEnumerable<string> RefusedFamilyMembers() =>
+        FamilyMembers().Where(key =>
+            !DrawingFamilyCompletenessTests.IsReader(CallKey.BareName(key)) && !Allowed.ContainsKey(key));
+
+    [Theory]
+    [InlineData("SaveAs4", true)]
+    [InlineData("AddFileSaveAsItem2", true)]
+    [InlineData("SaveTo3DExperience", true)]
+    [InlineData("RenameDocument", true)]
+    [InlineData("IMoveDocument", true)]
+    [InlineData("ICopyDocument", true)]
+    [InlineData("MoveOrCopy", true)]
+    [InlineData("CopyWithMates2", true)]
+    [InlineData("ReplaceComponents2", true)]
+    [InlineData("ReloadOrReplace", true)]
+    [InlineData("ForceReleaseLocks", true)]
+    [InlineData("IRelease3rdPartyStorage", true)]
+    [InlineData("UnLock", true)]
+    [InlineData("UnlockAllExternalReferences", true)]
+    [InlineData("SetReadOnlyState", true)]
+    [InlineData("IsOpenedReadOnly", true)]
+    [InlineData("EditRebuildAll", true)]
+    [InlineData("set_EnableAssemblyRebuild", true)]
+    [InlineData("HasRenamedDocuments", false)]
+    [InlineData("IsLightLockedToModel", false)]
+    [InlineData("ApplySavedSortScheme", false)]
+    [InlineData("set_FocusLocked", false)]
+    [InlineData("IGetReplacementSurfaces", false)]
+    [InlineData("SetDatumTargetNotMoveable", false)]
+    public void TheFamilyGrammarReadsWholeWords(string name, bool belongs)
+    {
+        Assert.Equal(belongs, BelongsToAFamily(name));
+    }
+
+    /// <summary>
+    /// A floor, so a grammar or a reflection that found almost nothing cannot pass vacuously, and the
+    /// members research R8.5 and 004's guard-allowlist.md named are among what it finds.
+    /// </summary>
+    [RemodelInteropManifestTests.InteropAssembliesPresentFact]
+    public void TheFamiliesAreFoundOnEachInterface()
+    {
+        IReadOnlyList<string> members = FamilyMembers();
+
+        Assert.True(members.Count >= 80, "The family grammar found almost nothing: " + string.Join(", ", members));
+        foreach (string face in Interfaces)
+        {
+            Assert.Contains(members, key => key.StartsWith(face + ".", StringComparison.Ordinal));
+        }
+
+        foreach (string named in new[]
+                 {
+                     "IModelDoc2.Save", "IModelDoc2.Save2", "IModelDoc2.SaveAs", "IModelDoc2.SaveAs2", "IModelDoc2.SaveAs4",
+                     "IModelDoc2.SaveAsSilent", "IModelDoc2.SaveSilent", "IModelDocExtension.SaveAs",
+                     "IModelDocExtension.SaveAs2", "IModelDocExtension.SaveDeFeaturedFile",
+                     "IModelDocExtension.SaveDraftingStandard", "IModelDocExtension.SaveTo3DExperience",
+                     "IModelDocExtension.SaveViewToSolidworks", "ISldWorks.SaveSettings", "IModelDoc2.SetReadOnlyState",
+                     "IModelDoc2.ForceReleaseLocks", "IModelDocExtension.SavePackAndGo", "IModelDocExtension.RenameDocument",
+                     "ISldWorks.MoveDocument", "ISldWorks.ReplaceReferencedDocument", "IModelDoc2.SaveBMP",
+                     "IModelDoc2.Rebuild", "IModelDocExtension.Rebuild", "IModelDocExtension.EditRebuildAll",
+                     "IPartDoc.SaveToFile", "IPartDoc.SaveToFile2", "IPartDoc.SaveToFile3",
+                 })
+        {
+            Assert.Contains(named, members);
+        }
+    }
+
+    /// <summary>The heart of decision 140A: no member of the families is left callable by accident.</summary>
+    [RemodelInteropManifestTests.InteropAssembliesPresentFact]
+    public void EveryFamilyMemberIsAReader_ANamedExclusion_OrRefusedBareAndQualified()
+    {
+        var callable = RefusedFamilyMembers()
+            .Where(key => !DocumentLifecycleFamilyTests.Refuses(ReadOnlyGuard.Assert, CallKey.BareName(key))
+                || !DocumentLifecycleFamilyTests.Refuses(ReadOnlyGuard.Assert, key))
+            .ToList();
+
+        Assert.True(
+            callable.Count == 0,
+            "Members of the save, rename, move, copy, replace, release, lock, read-only and rebuild families the "
+                + "read-only guard does not refuse in both spellings: refuse each (the shared rows of "
+                + "extractor/tools/list-writer-members.ps1, contracts/guard.md section 1) or name it in Allowed with "
+                + "its reason: " + string.Join(", ", callable));
+    }
+
+    /// <summary>
+    /// Every gate the product builds refuses them in both spellings, except exactly
+    /// <see cref="Exceptions"/>: a guard that comes to let another member through, or that no longer
+    /// lets one of these through, fails here, so an exception cannot widen, or outlive its guard,
+    /// unnoticed.
+    /// </summary>
+    [RemodelInteropManifestTests.InteropAssembliesPresentFact]
+    public void EveryGateTheProductBuildsLetsThroughOnlyTheNamedExceptions()
+    {
+        var spellings = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (string key in RefusedFamilyMembers())
+        {
+            spellings.Add(key);
+            spellings.Add(CallKey.BareName(key));
+        }
+
+        var letThrough = DocumentLifecycleFamilyTests.ProductGates()
+            .SelectMany(gate => spellings
+                .Where(key => !DocumentLifecycleFamilyTests.Refuses(gate.Assert, key))
+                .Select(key => gate.GetType().Name + " " + key))
+            .ToList();
+
+        Assert.True(
+            new HashSet<string>(letThrough, StringComparer.Ordinal).SetEquals(Exceptions.Keys),
+            "Family members a gate the product builds lets through: " + string.Join(", ", letThrough)
+                + "; expected exactly: " + string.Join(", ", Exceptions.Keys));
+        Assert.All(Exceptions, entry => Assert.False(string.IsNullOrWhiteSpace(entry.Value), entry.Key + " has no reason."));
+    }
+
+    /// <summary>The reads among the families stay allowed in both spellings (FR-006): the two the product calls above all.</summary>
+    [RemodelInteropManifestTests.InteropAssembliesPresentFact]
+    public void TheReadersAmongThemStayAllowed()
+    {
+        var readers = FamilyMembers().Where(key => DrawingFamilyCompletenessTests.IsReader(CallKey.BareName(key))).ToList();
+
+        Assert.Contains("IModelDoc2.GetSaveFlag", readers);
+        Assert.Contains("IModelDoc2.IsOpenedReadOnly", readers);
+        foreach (string key in readers)
+        {
+            ReadOnlyGuard.Assert(CallKey.BareName(key));
+            ReadOnlyGuard.Assert(key);
+        }
+    }
+
+    /// <summary>
+    /// Each member left allowed is a family member of the interop, not a reader, allowed in both
+    /// spellings, with a reason, named by the generated "Not denied (feature 011)" table, and still
+    /// called by the product path its reason names - so the list cannot go stale and hide a later
+    /// member behind an entry nobody needs.
+    /// </summary>
+    [RemodelInteropManifestTests.InteropAssembliesPresentFact]
+    public void EveryAllowedMemberIsAFamilyMemberLeftAllowedWithTheContractsReason()
+    {
+        IReadOnlyList<string> members = FamilyMembers();
+        IReadOnlyList<(string Literal, string Where)> literals = DrawingFamilyReadAuditTests.Literals();
+
+        foreach (KeyValuePair<string, string> entry in Allowed)
+        {
+            string bare = CallKey.BareName(entry.Key);
+            Assert.Contains(entry.Key, members);
+            Assert.False(DrawingFamilyCompletenessTests.IsReader(bare), $"{entry.Key} is a reader; readers need no entry.");
+            Assert.False(string.IsNullOrWhiteSpace(entry.Value), $"{entry.Key} has no reason.");
+            ReadOnlyGuard.Assert(bare);
+            ReadOnlyGuard.Assert(entry.Key);
+            Assert.Contains(bare, DrawingFamilyDenylistTests.ExcludedMembers, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains(literals, literal => string.Equals(literal.Literal, bare, StringComparison.Ordinal));
+        }
+
+        Assert.Contains(literals, literal => literal.Literal == "SaveBMP" && literal.Where == "SwCaptureView.cs");
+    }
+
+    /// <summary>Each exception's key is still a literal of the product source, as the call that needs it names it.</summary>
+    [Fact]
+    public void EveryExceptionIsStillNamedByTheProduct()
+    {
+        IReadOnlyList<(string Literal, string Where)> literals = DrawingFamilyReadAuditTests.Literals();
+
+        foreach (string exception in Exceptions.Keys)
+        {
+            string key = exception.Substring(exception.IndexOf(' ') + 1);
+            Assert.Contains(literals, literal => string.Equals(literal.Literal, key, StringComparison.Ordinal));
         }
     }
 }

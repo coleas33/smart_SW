@@ -100,15 +100,17 @@ public sealed class RemodelGuard : ICallGuard
     /// (VERIFIED), so a call to it cannot be verified; <c>StartRecordingUndoObject</c> and
     /// <c>FinishRecordingUndoObject2</c> are the mechanism this design decided not to rely on,
     /// and an unused allowlist entry is the accidental widening the allowlist exists to
-    /// prevent; <c>SetReadOnlyState</c> changes a file's writability behind the engineer.
-    /// Feature 003 (tasks T087) left these four families to feature 004's guard work, and 004
-    /// adds nothing to <see cref="ReadOnlyGuard"/>, so they are refused here.
+    /// prevent. Feature 003 (tasks T087) left these families to feature 004's guard work, and
+    /// 004 adds nothing to <see cref="ReadOnlyGuard"/>, so they are refused here.
+    /// <c>SetReadOnlyState</c>, which changes a file's writability behind the engineer, was the
+    /// fifth until decision 140A (2026-10-19) had <see cref="ReadOnlyGuard"/> refuse it.
     ///
     /// Everything else in that exclusion table is already refused: by <see cref="ReadOnlyGuard"/>
     /// for a bare name (<c>SaveAs3</c>, <c>SetSaveFlag</c>, <c>EditRebuild3</c>,
     /// <c>ModifyDefinition</c>, the suppression members, <c>SetSystemValue*</c>, the
-    /// <c>FeatureCut*</c> / <c>FeatureExtrusion*</c> / <c>InsertFeature*</c> families and, since
-    /// decision 21A, the rest of the creation family), and by
+    /// <c>FeatureCut*</c> / <c>FeatureExtrusion*</c> / <c>InsertFeature*</c> families, since
+    /// decision 21A the rest of the creation family, and since decision 140A
+    /// <c>SetReadOnlyState</c>), and by
     /// rule 3 above for any interface-qualified key that is not on the allowlist -
     /// <c>IModelDoc2.EditDelete</c>, <c>IDimension.set_Name</c>, <c>IEntity.Delete2</c> and
     /// the rest of the creation family among them.
@@ -119,7 +121,6 @@ public sealed class RemodelGuard : ICallGuard
         "EditRedo2",
         "StartRecordingUndoObject",
         "FinishRecordingUndoObject2",
-        "SetReadOnlyState",
     };
 
     /// <summary>The stage-1 allowlist, for reading: the tests assert it as an exact table.</summary>
