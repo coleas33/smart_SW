@@ -12,9 +12,10 @@ namespace SwReview.Extractor.Dump;
 /// The host makes one for every review session it starts (the add-in's <c>SessionRecord</c>, which
 /// holds it for as long as it holds the record) and hands it to the read through its own records:
 /// a request's run id resolves to the latest review the host started in the run folder of that
-/// name, and a request can name nothing else. So a Retry or a Recheck, a new session in the same run
-/// folder, starts its own count; two sessions never share one; and a session's count goes when the
-/// host lets its record go, so no count outlives what it bounds.
+/// name, and a request can name nothing else. So a Recheck, or a context review's Retry - each a
+/// new session in the same run folder - starts its own count (an ordinary Retry makes a new
+/// folder); two sessions never share one; and a session's count goes when the host lets its record
+/// go, and with it what the session remembers of its package.
 /// </summary>
 public sealed class ConfirmedDrawingSession
 {

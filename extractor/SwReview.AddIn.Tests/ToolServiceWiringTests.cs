@@ -1675,6 +1675,36 @@ public sealed class ToolServiceWiringTests
     }
 
     /// <summary>
+    /// Decision 141A (2026-10-19), through the add-in's own records: no spelling of the run id the
+    /// review host matches resets a spent session's count - the host resolves every one of them to
+    /// the same session, so nothing more is opened.
+    /// </summary>
+    [Fact]
+    public void NoSpellingOfTheRunIdResetsASpentSessionsCountThroughTheReviewHostsRecords()
+    {
+        using (var world = new DrawingReadWorld(seatValidated: true))
+        {
+            string name = Path.GetFileName(world.ReviewRun("chat-1"));
+            world.Seat.OpenRefused = true;
+            for (int attempt = 0; attempt < 10; attempt++)
+            {
+                Assert.Equal(BridgeStatus.Error, world.Read(name, world.HousingId, DrawingReadWorld.ReviewSecret).Status);
+            }
+
+            world.Seat.OpenRefused = false;
+            foreach (string spelling in new[] { name.ToUpperInvariant(), name.ToLowerInvariant(), name })
+            {
+                BridgeResponse response = world.Read(spelling, world.HousingId, DrawingReadWorld.ReviewSecret);
+                Assert.Equal(BridgeStatus.Error, response.Status);
+                Assert.StartsWith("the limit of ten drawings for this review is reached", response.Error, StringComparison.Ordinal);
+            }
+
+            Assert.Equal(10, world.Seat.Calls.Count(call => call == "OpenDoc6"));
+            Assert.Equal(0, world.Seat.Reads);
+        }
+    }
+
+    /// <summary>
     /// Decision 141A (2026-10-19), through the add-in's own records: in the same review session,
     /// after ten failed opens, a candidate whose drawing is not open is refused with only the lookup
     /// gated, and once the engineer has it open it is read as it stands - nothing hidden, opened or

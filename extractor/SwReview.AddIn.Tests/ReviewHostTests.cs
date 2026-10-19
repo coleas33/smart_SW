@@ -2260,6 +2260,103 @@ public sealed class ReviewHostTests
         }
     }
 
+    /// <summary>
+    /// A context review's Retry leaves the failed review tracked beside it in the same folder. When
+    /// the engineer removes the latest of the two (the chip's Remove), the run id answers the earlier
+    /// record's own session, count and all - never a fresh one, which nothing a request does can make.
+    /// </summary>
+    [Fact]
+    public void RemovingTheLatestSessionOfAFolderLeavesTheEarlierOnesOwnSession()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Open();
+            string run = world.TrackedRun("chat-failed");
+            string name = Path.GetFileName(run);
+            world.Host.TrackSession("chat-failed", run);
+            ConfirmedDrawingSession earlier = world.Host.DrawingReadSession(name)!;
+            world.Host.TrackSession("chat-retried", run);
+            Assert.NotSame(earlier, world.Host.DrawingReadSession(name));
+
+            Assert.True(world.Host.ForgetSession("chat-retried"));
+
+            Assert.Same(earlier, world.Host.DrawingReadSession(name));
+            Assert.Same(earlier, world.Host.FindSession("chat-failed")!.ConfirmedDrawings);
+        }
+    }
+
+    /// <summary>
+    /// The session lookup is asked on the SOLIDWORKS application thread while the page pump tracks
+    /// and forgets reviews; it reads the list under its lock, as the folder lookup does
+    /// (<see cref="TheRunLookupIsReadUnderTheLockWhileThePumpAppends"/>), and always answers the
+    /// session of a record it found.
+    /// </summary>
+    [Fact]
+    public void TheSessionLookupIsReadUnderTheLockWhileThePumpTracksAndForgets()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Open();
+            string run = world.TrackedRun("chat-x");
+            string name = Path.GetFileName(run);
+            world.Host.TrackSession("chat-x", run);
+            var failures = new List<Exception>();
+            var stop = new ManualResetEventSlim();
+
+            var pump = new Thread(() =>
+            {
+                try
+                {
+                    for (int i = 0; i < 500 && !stop.IsSet; i++)
+                    {
+                        world.Host.TrackSession("chat-" + i, run);
+                        world.Host.TrackCheck(run);
+                        world.Host.ForgetSession("chat-" + (i - 1));
+                    }
+                }
+                catch (Exception failure)
+                {
+                    lock (failures)
+                    {
+                        failures.Add(failure);
+                    }
+                }
+                finally
+                {
+                    stop.Set();
+                }
+            })
+            {
+                IsBackground = true,
+            };
+
+            pump.Start();
+            try
+            {
+                while (!stop.IsSet)
+                {
+                    ConfirmedDrawingSession? session = world.Host.DrawingReadSession(name);
+                    if (session != null && !string.Equals(session.RunFolder, run, StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new InvalidOperationException("the lookup answered another folder's session.");
+                    }
+                }
+            }
+            catch (Exception failure)
+            {
+                lock (failures)
+                {
+                    failures.Add(failure);
+                }
+            }
+
+            stop.Set();
+            Assert.True(pump.Join(TimeSpan.FromSeconds(30)), "the pump thread never finished.");
+            Assert.True(failures.Count == 0, failures.Count == 0 ? string.Empty : failures[0].ToString());
+            Assert.Same(world.Host.FindSession("chat-499")!.ConfirmedDrawings, world.Host.DrawingReadSession(name));
+        }
+    }
+
     // ---- entity.show --------------------------------------------------------------------
 
     [Fact]

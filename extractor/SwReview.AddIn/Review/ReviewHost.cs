@@ -631,11 +631,12 @@ public sealed class ReviewHost : IDisposable
     /// Feature 011, decision 141A (2026-10-19): the review session a <c>drawing.read</c> naming
     /// <paramref name="runId"/> belongs to, as the confirmed read keeps it, or null. The folder is
     /// <see cref="ReviewRunDirectory"/>'s, by every rule it keeps; the session is the latest review
-    /// this host started in that folder - a Retry's or a Recheck's once one has started there - since
-    /// a run folder holds one review session at a time. Each record holds its own
-    /// (<see cref="SessionRecord.ConfirmedDrawings"/>), so a new session starts its own count of
-    /// failed opens, and nothing a request supplies but the run id resolved here chooses or makes
-    /// one. Asked on the SOLIDWORKS application thread, through the list's lock like the lookup.
+    /// this host started in that folder and still tracks - a Recheck's, or a context review's
+    /// Retry's, once one has started there - since a new session in a folder takes over its reads
+    /// from the earlier one, which a context review's Retry leaves tracked beside it. Each record
+    /// holds its own (<see cref="SessionRecord.ConfirmedDrawings"/>), so a new session starts its own
+    /// count of failed opens, and nothing a request supplies but the run id resolved here chooses or
+    /// makes one. Asked on the SOLIDWORKS application thread, through the list's lock like the lookup.
     /// </summary>
     public Extractor.Dump.ConfirmedDrawingSession? DrawingReadSession(string? runId)
     {
