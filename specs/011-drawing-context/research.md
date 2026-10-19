@@ -1255,8 +1255,9 @@ command names' reasons completed) and `dc064e1` (the comments the decision left 
 
 ### R9.2 The families the unused writers belong to: the decision
 
-**Decision**: `DocumentWriteFamilyTests` reflects every interface the guard covers: `ISldWorks`,
-`IModelDoc2` and `IModelDocExtension` - 136A's three - and the document types a model document also
+**Decision**: `DocumentWriteFamilyTests` reflects the 34 interfaces the generated tables are
+written against: `ISldWorks`, `IModelDoc2` and `IModelDocExtension` - 136A's three - and the
+document types a model document also
 is, `IPartDoc` and `IAssemblyDoc`, whose saves, replaces and rebuilds act on that same document
 (004's `guard-allowlist.md` had recorded `IPartDoc.SaveToFile` to `SaveToFile3` as open); and every
 interface one of the guard's generated tables reflects - decision 21A's creation interfaces,
@@ -1303,9 +1304,11 @@ spellings of a key, and what each guard lets through of them. A throwaway mutati
 
 **Evidence**: on 32.5.0.48 the grammar finds 129 members on the 34 interfaces: 94 on the six it first
 read, 13 on `IFeatureManager` and 22 on the drawing families other than `IDrawingDoc`. Before the decision
-63 of them were callable, 60 names (`SaveAs` and `SaveAs2` are on two interfaces). Now 15 are readers,
-2 are left allowed and 112 are refused, 62 of them by this decision; with `Close` (R9.1) the table's
-new names go from 673 to 733:
+64 of them were callable, 61 names (`Rebuild`, `SaveAs` and `SaveAs2` are each on two interfaces). Now
+15 are readers, 2 are left allowed and 112 are refused, 62 of them, 59 names, by this decision; with
+`Close` (R9.1) the table's new names go from 673 to 733. *Corrected on the decision's review*: this
+said 63 callable and 60 names, missing `Rebuild` on two interfaces; measured again against `ca7a720`'s
+guard, the 64 are the 62 this decision refuses and the two it leaves allowed:
 
 | Interface | Refused by decision 140A | Refused before, and by what | Left allowed | Readers |
 |---|---|---|---|---|

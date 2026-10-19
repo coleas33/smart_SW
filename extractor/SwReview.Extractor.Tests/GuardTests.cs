@@ -1795,9 +1795,9 @@ public class DocumentLifecycleFamilyTests
 /// <c>ReplaceReferencedDocument</c> with them, none of which the product calls (research R8.5, the
 /// third question).
 ///
-/// This class reflects the interop the extractor is built against and holds every member of the
-/// interfaces the guard covers - <see cref="Interfaces"/> - whose name belongs to the save, rename,
-/// move and copy, replace, release and lock, read-only or rebuild families
+/// This class reflects the interop the extractor is built against and holds every member of the 34
+/// interfaces the generated tables are written against - <see cref="Interfaces"/> - whose name
+/// belongs to the save, rename, move and copy, replace, release and lock, read-only or rebuild families
 /// (<see cref="BelongsToAFamily"/>) to one of three answers: a reader by section 2's prefixes, which
 /// stays allowed; the member left allowed, with its reason (<see cref="Allowed"/>); or refused by
 /// <see cref="ReadOnlyGuard"/> in both spellings a call site can hand it, and by every gate the product
@@ -1809,13 +1809,14 @@ public class DocumentLifecycleFamilyTests
 public class DocumentWriteFamilyTests
 {
     /// <summary>
-    /// Every interface the guard covers: the three of <see cref="DocumentLifecycleFamilyTests"/>; the
-    /// document types a model document also is, whose saves, replaces and rebuilds act on that same
-    /// document (004's guard-allowlist.md had recorded <c>IPartDoc.SaveToFile</c> to
-    /// <c>SaveToFile3</c> as open); and every interface one of the guard's generated tables reflects -
-    /// decision 21A's creation interfaces, <c>IFeatureManager</c> among them, and feature 011's 28
-    /// drawing families, <c>IDrawingDoc</c> among them. Widened on the decision's review: it read the
-    /// first six only.
+    /// The 34 interfaces the generated tables are written against: the three of
+    /// <see cref="DocumentLifecycleFamilyTests"/>; the document types a model document also is, whose
+    /// saves, replaces and rebuilds act on that same document (004's guard-allowlist.md had recorded
+    /// <c>IPartDoc.SaveToFile</c> to <c>SaveToFile3</c> as open); and every interface one of the
+    /// guard's generated tables reflects - decision 21A's creation interfaces, <c>IFeatureManager</c>
+    /// among them, and feature 011's 28 drawing families, <c>IDrawingDoc</c> among them. Widened on
+    /// the decision's review: it read the first six only. Not every interface: the guard judges a
+    /// name on any of them, and research R9.4 counts what the families hold on the others.
     /// </summary>
     internal static readonly string[] Interfaces =
         DocumentLifecycleFamilyTests.Interfaces
