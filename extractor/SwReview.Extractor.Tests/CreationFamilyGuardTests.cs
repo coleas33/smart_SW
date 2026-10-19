@@ -510,16 +510,19 @@ public class CreationFamilyReadAuditTests
     internal const string ProbeHostFile = "SwRemodelProbeHost.cs";
 
     /// <summary>
-    /// Literals the scan finds that the tables refuse and that call nothing, each with where it is and
-    /// why. Keyed exactly, since decision 140A (2026-10-19; it was case-insensitively, as the guard
-    /// matches): the lower-case <c>scale</c>, a JSON property name, must not exempt a gated
-    /// <c>Scale</c>, which the tables refuse in every case. The key was already a literal spelled
-    /// exactly (<see cref="EveryNamedLiteralIsStillInTheSourceAndStillRefused"/>), so this exempts less.
+    /// Literals the scan finds that the tables refuse and that call nothing, each keyed by the literal
+    /// and the file it stands in, with why. Keyed exactly, since decision 140A (2026-10-19; it was
+    /// case-insensitively, as the guard matches): the lower-case <c>scale</c>, a JSON property name,
+    /// must not exempt a gated <c>Scale</c>, which the tables refuse in every case. Keyed by file as
+    /// well, since the decision's review, as <see cref="DrawingFamilyReadAuditTests"/> keys its own: the
+    /// entry exempts the literal in its file, never anywhere in the product. The key was already a
+    /// literal spelled exactly (<see cref="EveryNamedLiteralIsStillInTheSourceAndStillRefused"/>), so
+    /// each step exempts less.
     /// </summary>
-    private static readonly IReadOnlyDictionary<string, string> NamedLiterals =
-        new Dictionary<string, string>(StringComparer.Ordinal)
+    private static readonly IReadOnlyDictionary<(string Literal, string Where), string> NamedLiterals =
+        new Dictionary<(string Literal, string Where), string>
         {
-            ["scale"] = "Ir/DrawingSheet.cs: a JSON property name, matching IModelDoc2.Scale only by case (T169)",
+            [("scale", "DrawingSheet.cs")] = "a JSON property name, matching IModelDoc2.Scale only by case (T169)",
         };
 
     private static bool IsTheProbesOwnCreationCall((string Literal, string Where) literal) =>
@@ -532,7 +535,7 @@ public class CreationFamilyReadAuditTests
         var table = new HashSet<string>(CreationFamilyDenylistTests.ExpectedMembers, StringComparer.OrdinalIgnoreCase);
         var refused = DrawingFamilyReadAuditTests.Literals()
             .Where(literal => table.Contains(DrawingFamilyReadAuditTests.Judged(literal.Literal)))
-            .Where(literal => !IsTheProbesOwnCreationCall(literal) && !NamedLiterals.ContainsKey(literal.Literal))
+            .Where(literal => !IsTheProbesOwnCreationCall(literal) && !NamedLiterals.ContainsKey(literal))
             .Select(literal => $"\"{literal.Literal}\" in {literal.Where}")
             .Distinct(StringComparer.Ordinal)
             .ToList();

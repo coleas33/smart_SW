@@ -1245,22 +1245,31 @@ public class DrawingFamilyCompletenessTests
 public class DrawingFamilyReadAuditTests
 {
     /// <summary>
-    /// The literals the table refuses that are not member names the product gates. Keyed exactly,
-    /// since decision 140A (2026-10-19): a word the product uses for something else in lower case -
-    /// a clean-up step's label, a plan's JSON member - must not exempt the member's own spelling,
-    /// which the guard refuses in every case. Every key was already a literal spelled exactly
-    /// (<see cref="EveryNamedLiteralIsStillInTheSourceAndStillRefused"/>), so this exempts less.
+    /// The literals the table refuses that are not member names the product gates, each keyed by the
+    /// literal and the file it stands in, as <see cref="Literals"/> reports them, with what it is
+    /// there. Keyed exactly, since decision 140A (2026-10-19): a word the product uses for something
+    /// else in lower case - a clean-up step's label, a plan's JSON member - must not exempt the
+    /// member's own spelling, which the guard refuses in every case. Keyed by file as well, since the
+    /// decision's review (2026-10-19): an entry exempts its literal in the file named with it, never
+    /// anywhere in the product, so a gate asked about the same spelling in another file - the capture's
+    /// <c>Gate.Call("close", ...)</c> - fails the audit. Every key was already a literal spelled
+    /// exactly (<see cref="EveryNamedLiteralIsStillInTheSourceAndStillRefused"/>), so each step exempts
+    /// less.
     /// </summary>
-    private static readonly IReadOnlyDictionary<string, string> NamedLiterals =
-        new Dictionary<string, string>(StringComparer.Ordinal)
+    private static readonly IReadOnlyDictionary<(string Literal, string Where), string> NamedLiterals =
+        new Dictionary<(string Literal, string Where), string>
         {
-            ["ActivateDoc3"] = "Program.cs: a member probe standards asserts is absent from its gate log",
-            ["LoadFile4"] = "Program.cs: a member probe standards asserts is absent from its gate log",
-            ["dimensions"] = "Ir/DrawingSheet.cs: a JSON property name, matching IDrawingDoc.Dimensions only by case",
-            ["dissolve"] = "Bridge/BridgeProtocol.cs: a remodel.folder operation name in the protocol",
-            ["LoadModel"] = "Rms/RemodelInteropSurface.cs: the parameter name of IDocumentSpecification.set_LoadModel "
-                + "in the frozen interop manifest's builder table (feature 004 T156), matching IView.LoadModel only by name",
-            ["set_ReadOnly"] = "Rms/RemodelInteropSurface.cs: IDocumentSpecification.set_ReadOnly in the frozen interop "
+            [("ActivateDoc3", "Program.cs")] = "a member probe standards asserts is absent from its gate log",
+            [("ActivateDoc3", "RemodelInteropSurface.cs")] = "the frozen interop manifest's row for ISldWorks.ActivateDoc3 "
+                + "(feature 004 T181), which the pane seat calls on the copy directly, outside the bridge and every gate; a "
+                + "row records a member and permits none. Named on decision 140A's review, whose keying by file found it: "
+                + "the literal's earlier entry named Program.cs only",
+            [("LoadFile4", "Program.cs")] = "a member probe standards asserts is absent from its gate log",
+            [("dimensions", "DrawingSheet.cs")] = "a JSON property name, matching IDrawingDoc.Dimensions only by case",
+            [("dissolve", "BridgeProtocol.cs")] = "a remodel.folder operation name in the protocol",
+            [("LoadModel", "RemodelInteropSurface.cs")] = "the parameter name of IDocumentSpecification.set_LoadModel in "
+                + "the frozen interop manifest's builder table (feature 004 T156), matching IView.LoadModel only by name",
+            [("set_ReadOnly", "RemodelInteropSurface.cs")] = "IDocumentSpecification.set_ReadOnly in the frozen interop "
                 + "manifest's builder table (feature 004 T156), a property of the throwaway open request that is set "
                 + "false and never gated, matching IDimension's and INote's only by name",
 
@@ -1268,26 +1277,32 @@ public class DrawingFamilyReadAuditTests
             // command names, which the dispatcher judges against its own fixed set and hands to no
             // guard, and a session-end reason spelled as one of them; judged as a qualified key, each
             // matches the member by the part after the dot only.
-            ["remodel.close"] = "Bridge/BridgeProtocol.cs, Rms/RemodelSessionEnd.cs and Rms/RemodelInteropSurface.cs: the "
-                + "bridge command remodel.close, the session-end reason named after it, and the frozen interop manifest's "
-                + "used_by column naming that command, matching IModelDoc2.Close only by the part after the dot",
-            ["remodel.save"] = "Bridge/BridgeProtocol.cs and Rms/RemodelInteropSurface.cs: the bridge command remodel.save "
-                + "and the frozen interop manifest's used_by column naming it, matching IModelDoc2.Save only by the part "
-                + "after the dot",
-            ["remodel.rebuild"] = "Bridge/BridgeProtocol.cs and Rms/RemodelInteropSurface.cs: the bridge command "
-                + "remodel.rebuild and the frozen interop manifest's used_by column naming it, matching IModelDoc2.Rebuild "
+            [("remodel.close", "BridgeProtocol.cs")] = "the bridge command remodel.close, matching IModelDoc2.Close only "
+                + "by the part after the dot",
+            [("remodel.close", "RemodelSessionEnd.cs")] = "the session-end reason named after the bridge command "
+                + "remodel.close, matching IModelDoc2.Close only by the part after the dot",
+            [("remodel.close", "RemodelInteropSurface.cs")] = "the frozen interop manifest's used_by column naming the "
+                + "bridge command remodel.close, matching IModelDoc2.Close only by the part after the dot",
+            [("remodel.save", "BridgeProtocol.cs")] = "the bridge command remodel.save, matching IModelDoc2.Save only by "
+                + "the part after the dot",
+            [("remodel.save", "RemodelInteropSurface.cs")] = "the frozen interop manifest's used_by column naming the "
+                + "bridge command remodel.save, matching IModelDoc2.Save only by the part after the dot",
+            [("remodel.rebuild", "BridgeProtocol.cs")] = "the bridge command remodel.rebuild, matching IModelDoc2.Rebuild "
                 + "and IModelDocExtension.Rebuild only by the part after the dot",
+            [("remodel.rebuild", "RemodelInteropSurface.cs")] = "the frozen interop manifest's used_by column naming the "
+                + "bridge command remodel.rebuild, matching IModelDoc2.Rebuild and IModelDocExtension.Rebuild only by the "
+                + "part after the dot",
 
             // The same decision: lower-case words the product uses for something else.
-            ["close"] = "Bridge/BridgeDispatcher.cs: the label CloseCopyUnsaved gives its clean-up step in a failure "
+            [("close", "BridgeDispatcher.cs")] = "the label CloseCopyUnsaved gives its clean-up step in a failure "
                 + "sentence; the call is gated as ISldWorks.CloseDoc, matching IModelDoc2.Close only by case",
-            ["rebuild"] = "Remodel/RemodelHost.cs: the plan's JSON member whose value the Remodel page receives as "
+            [("rebuild", "RemodelHost.cs")] = "the plan's JSON member whose value the Remodel page receives as "
                 + "rebuild_list, matching IModelDoc2.Rebuild only by case",
-            ["events.close"] = "Review/ReviewHost.cs: a message type the Review page sends its host, matching "
+            [("events.close", "ReviewHost.cs")] = "a message type the Review page sends its host, matching "
                 + "IModelDoc2.Close only by the part after the dot",
-            ["send_when_checked.save"] = "Review/ReviewHost.cs: a message type the Review page sends its host, "
-                + "matching IModelDoc2.Save only by the part after the dot",
-            ["settings.save"] = "Review/ReviewHost.cs: a message type the Review page sends its host, matching "
+            [("send_when_checked.save", "ReviewHost.cs")] = "a message type the Review page sends its host, matching "
+                + "IModelDoc2.Save only by the part after the dot",
+            [("settings.save", "ReviewHost.cs")] = "a message type the Review page sends its host, matching "
                 + "IModelDoc2.Save only by the part after the dot",
         };
 
@@ -1426,7 +1441,7 @@ public class DrawingFamilyReadAuditTests
     {
         var table = new HashSet<string>(DrawingFamilyDenylistTests.ExpectedMembers, StringComparer.OrdinalIgnoreCase);
         var refused = Literals()
-            .Where(literal => table.Contains(Judged(literal.Literal)) && !NamedLiterals.ContainsKey(literal.Literal))
+            .Where(literal => table.Contains(Judged(literal.Literal)) && !NamedLiterals.ContainsKey(literal))
             .Select(literal => $"\"{literal.Literal}\" in {literal.Where}")
             .Distinct(StringComparer.Ordinal)
             .ToList();
@@ -1450,17 +1465,42 @@ public class DrawingFamilyReadAuditTests
     /// each is still a literal of the product source, spelled exactly, and still refused by the table
     /// its audit reads - judged as the audits judge a literal (<see cref="Judged"/>), which is the
     /// literal itself for a bare name. Edited deliberately for decision 140A, whose three named
-    /// literals are qualified: a qualified literal is refused when its member half is.
+    /// literals are qualified: a qualified literal is refused when its member half is. Edited again on
+    /// the decision's review, which keyed each by its file: each is still a literal of the file named
+    /// with it.
     /// </summary>
     internal static void AssertEveryNamedLiteralIsStillInTheSourceAndRefused(
-        IReadOnlyDictionary<string, string> named, IReadOnlyCollection<string> table)
+        IReadOnlyDictionary<(string Literal, string Where), string> named, IReadOnlyCollection<string> table)
     {
         IReadOnlyList<(string Literal, string Where)> literals = Literals();
-        foreach (KeyValuePair<string, string> entry in named)
+        foreach (KeyValuePair<(string Literal, string Where), string> entry in named)
         {
-            Assert.Contains(literals, literal => string.Equals(literal.Literal, entry.Key, StringComparison.Ordinal));
-            Assert.Contains(Judged(entry.Key), table, StringComparer.OrdinalIgnoreCase);
+            Assert.True(
+                literals.Contains(entry.Key),
+                $"\"{entry.Key.Literal}\" is no longer a literal of {entry.Key.Where}; drop it, or say what it is now.");
+            Assert.Contains(Judged(entry.Key.Literal), table, StringComparer.OrdinalIgnoreCase);
         }
+    }
+
+    /// <summary>
+    /// The named literals here and in <see cref="CreationFamilyReadAuditTests"/>, the probe host's
+    /// exception there and <see cref="DocumentWriteFamilyTests"/>' members left allowed name a file by
+    /// its name alone, as <see cref="Literals"/> reports it; no two files of the product source share
+    /// one, so each names one place (decision 140A's review, 2026-10-19).
+    /// </summary>
+    [Fact]
+    public void NoTwoFilesOfTheProductSourceShareAName()
+    {
+        var shared = ProductSourceFiles()
+            .GroupBy(file => Path.GetFileName(file), StringComparer.Ordinal)
+            .Where(group => group.Count() > 1)
+            .Select(group => string.Join(" and ", group))
+            .ToList();
+
+        Assert.True(
+            shared.Count == 0,
+            "Files of the product source share a name, so a literal keyed by its file name no longer names one "
+                + "place; key it by more of the path: " + string.Join("; ", shared));
     }
 }
 
