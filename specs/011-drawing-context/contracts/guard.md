@@ -28,6 +28,30 @@ list.
 | `ISldWorks` | `ActivateDoc`, `ActivateDoc2`, `ActivateDoc3`, `DocumentVisible`, `CloseAllDocuments`, `CloseAndReopen`, `CloseAndReopen2`, `QuitDoc`, `NewDocument`, `NewDrawing`, `NewDrawing2`, `NewPart`, `NewAssembly`, `OpenDoc`, `OpenDoc2`, `OpenDoc3`, `OpenDoc4`, `OpenDoc7`, `OpenDocSilent`, `OpenModelConfiguration`, `LoadFile2`, `LoadFile3`, `LoadFile4`, `RunMacro`, `RunMacro2`, `RunCommand`, `RunAttachedMacro`, `RunJournalCmd` | `GetDocuments`, `GetDocumentCount` (discovery) |
 | `IModelDocExtension` | `SetUserPreferenceInteger`, `SetUserPreferenceString`, `SetUserPreferenceDouble`, `SetUserPreferenceTextFormat` | `GetUserPreferenceInteger`, `GetUserPreferenceString` (the drawing's settings) |
 
+*Amended 2026-10-19 (owner decision 136A).* The rows named members by hand, and other spellings
+of the same members on the same interop went unrefused: the COM twins `IOpenDoc` to `IOpenDoc5`,
+`IOpenDocSilent`, `IActivateDoc` to `IActivateDoc3`, `INewDocument`, `INewDocument2`,
+`INewDrawing`, `INewDrawing2`, `INewPart` and `INewAssembly`, and bare `LoadFile`, `LoadAddIn` and
+`LoadAdminSettingsFile`. The shared rows now name every member of the **open, activate, new, load,
+close and quit families** of `ISldWorks`, `IModelDoc2` (a third shared row) and
+`IModelDocExtension`, and `DocumentLifecycleFamilyTests` (section 5) reflects the interop to prove
+them complete. A name belongs to the families when one of its words is `Open`, `Reopen`,
+`Activate`, `Deactivate`, `New`, `Load`, `Reload`, `Unload`, `Close`, `Quit` or `Exit` - the verb
+with its capital, starting the name, following a COM twin's `I` or starting a later word, and
+ending where the name or the word does - so `ExitApp` is of the quit family and `FileReload` of the
+load family, and `ClosestDistance`, a measurement, and `IsOpenedReadOnly` are of none. Each member
+is a reader by section 2's prefixes, which stays allowed, an exclusion of section 3, or refused bare
+and qualified with its interface by every gate the product builds; a member a later interop adds
+fails the test until someone decides which. Beyond the spellings above the grammar found, and the
+rows now refuse: on `ISldWorks` `UnloadAddIn`, `ExitApp`, `ActivateTaskPane`,
+`CloseUserNotification`, `CreateNewWindow`, `PresetNewDrawingParameters`, `SetNewFilename`,
+`AddFileOpenItem` to `AddFileOpenItem3`, `RemoveFileOpenItem` and `RemoveFileOpenItem2`; on
+`IModelDoc2` `Quit`, `FileReload`, `ReloadOrReplace`, `CloseFamilyTable`, `ClosePrintPreview`,
+`ActivateSelectedFeature`, `ActivateFeatureMgrView` and `DeActivateFeatureMgrView`; on
+`IModelDocExtension` `LoadDraftingStandard`, `ReloadOrReplace`, `CloseMessageBar` and
+`CloseUserNotification`. The product calls none of them (section 5's audit). `IModelDoc2.Close`
+stays allowed, for the reason section 3 gives.
+
 **Every spelling.** `ReadOnlyGuard.Assert` judges an interface-qualified key
 (`IDrawingDoc.ActivateSheet`) by its member half as well as by the whole key, so a read-only gate
 refuses every spelling of a denied member, and `DrawingFamilyDenylistTests` asserts each table
@@ -60,7 +84,9 @@ denied, 2 excluded, 591 new - and the shared rows add 30, so the table denies **
 *Regenerated 2026-09-23 on review* with the 28 families of section 1: **646** distinct matches -
 41 already denied, 2 excluded, 603 new - and the shared rows' 30, so the table denies **633** new
 names. The generated table is the count, never this paragraph. A false positive costs nothing: the
-extractor never calls a writer, and section 5's audit proves no read is refused.
+extractor never calls a writer, and section 5's audit proves no read is refused. *Regenerated
+2026-10-19 (owner decision 136A)*: the shared rows' new names are 70, so the table denies **673**
+new names; the 28 families' 646 matches are unchanged.
 
 ## 3. Exclusions, each with its reason
 
@@ -70,6 +96,7 @@ extractor never calls a writer, and section 5's audit proves no read is refused.
 | `OpenDoc6` | The extractor's one sanctioned read-only open (`SwSession.OpenReadOnly`), for models only (`attach.md` section 4). The read-only open of a confirmed drawing does not ride on this exclusion: it calls the qualified key `ISldWorks.OpenDoc6` through its own allowlist guard (section 7) |
 | `OpenDoc7`, `NewDocument` (shared) | *Added 2026-09-23 by T003's read audit*: feature 004 calls them by their bare names on sanctioned paths - `OpenDoc7` opens the re-modeler's own copy (`remodel.open`, under `RemodelGuard`) and reopens `probe remodel`'s throwaway part, and `NewDocument` creates that part (under `RemodelProbeGuard`, which exempts only what `ReadOnlyGuard` refused when it was written). Denying them would break both; the research's collision check had read only literal call-site names, and these two are named through constants |
 | a member `RemodelGuard` refuses itself (`ExcludedMembers`) | `RemodelExclusions_AreOnlyMembersTheReadOnlyGuardDoesNotAlreadyRefuse` forbids `ReadOnlyGuard` to refuse them; none matched on 32.5.0.48, and the generator excludes them should a later interop add one |
+| `Close` (`IModelDoc2`, shared) | *Added 2026-10-19 (owner decision 136A)*: the member half of the bridge command `remodel.close`. `BridgeDispatcher.Dispatch` hands every command name to `ReadOnlyGuard`, which judges a qualified name by its member half, so denying the bare name refused `remodel.close` (the remodel tests went red when it was tried). No product path calls `IModelDoc2.Close`; its qualified spelling is refused by the allowlist guards, `RemodelGuard` and `DrawingOpenGuard`, and `DocumentLifecycleFamilyTests.NoCommandTheBridgeAnswersIsRefusedByTheReadOnlyGuard` keeps every command name off the denials |
 
 Names already denied (41 of the 646 grammar matches, from features 001, 006 and 010, or by a
 denied prefix; the generated table is the count) are listed in the table's "already denied" column
@@ -77,7 +104,9 @@ and are not added twice. *Corrected 2026-09-23 on review*: this paragraph had ke
 research figure, "39 of the 621", which the generator never produced. `CloseDoc`,
 `SetUserPreferenceToggle` and `OpenDoc6` are on no row of section 1 and match no grammar on the 28
 families, so the generated exclusion table names only what a row or the grammar reached:
-`set_Name`, `Select2`, `OpenDoc7` and `NewDocument`.
+`set_Name`, `Select2`, `OpenDoc7` and `NewDocument`. *Amended 2026-10-19 (owner decision 136A)*:
+`OpenDoc6` and `CloseDoc` are now on the `ISldWorks` row and `Close` on the `IModelDoc2` row, so the
+generated exclusion table names them too, each with its reason.
 
 ## 4. The table, generated
 
@@ -113,6 +142,7 @@ In `extractor/SwReview.Extractor.Tests/GuardTests.cs`:
 | `DrawingFamilyDenylistTests` | parses the "Feature 011" table (`DenylistTable.Parse`, as `MechanicalChecksDenylistTests` does); every member is refused by `ReadOnlyGuard.Assert` and `ReadOnlyCallGuard.Instance.Assert` |
 | `DrawingFamilyCompletenessTests` | reflects the 28 interfaces at test time and applies the grammar: every match is refused, or is an excluded name of section 3; the shared rows are refused |
 | `DrawingFamilyReadAuditTests` | no bare name the extractor gates (every `SwGate.Call`/`CallOptional` literal in `extractor/SwReview.Extractor`, collected by a source scan) is refused, except the write-refusal tests' own names and the re-modeler's write sites. *Landed as (T003)*: every string literal of the product source - `SwReview.Extractor`, `SwReview.AddIn` and `SwReview.Extractor.Console`, the `Guard` folder's own tables excepted - that the table refuses must be one of four named literals that are not gated calls (two members `probe standards` asserts it never calls, a JSON property name, a remodel operation name); a superset that also reaches names passed through constants and read helpers. *Amended 2026-09-27 by feature 004 T156 (default taken 2026-09-27, the owner may revise)*: six named literals - the frozen interop manifest's builder table (`Rms/RemodelInteropSurface.cs`) now records the re-modeler's open request, whose `IDocumentSpecification.set_ReadOnly` (set false, never gated: a property of a throwaway request, as 004's `guard-allowlist.md` leaves `Silent` and `LoadModel`) and the parameter name of `set_LoadModel` match the refused `IDimension`/`INote.set_ReadOnly` and `IView.LoadModel` by name only |
+| `DocumentLifecycleFamilyTests` | *Added 2026-10-19 (owner decision 136A)*: reflects `ISldWorks`, `IModelDoc2` and `IModelDocExtension` and applies section 1's family grammar; every member is a reader, which stays allowed in both spellings, one of the explicit exclusions it names with its reason (`OpenDoc6`, `OpenDoc7`, `CloseDoc`, `NewDocument`, `IModelDoc2.Close`, each also on the generated "Not denied" table), or refused bare and qualified by `ReadOnlyGuard` and by every gate the product builds; a floor and the spellings decision 136A names; and no bridge command's name is refused |
 
 `RemodelGuardTests.ExpectedDeniedMembers` gains the table's names (it lists the guard's denials
 from both ends); the five overriding keys and `RemodelGuard.ExcludedMembers` are unchanged and
