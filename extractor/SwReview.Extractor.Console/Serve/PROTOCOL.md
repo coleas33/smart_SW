@@ -322,10 +322,14 @@ error, not ignored.)
   already in the package, the package already holds ten drawings, or *(decision 136A,
   2026-10-19)* the review's limit of ten is reached counting the package's drawings together with
   every open the host attempted for the review that left no record: an open SOLIDWORKS refused or
-  did not make read-only, a read that threw after it, a merge or save that did not land. That
-  count is kept per run folder for the life of the host process; once such opens reach ten on
-  their own, the request is refused before the package is even loaded. The sentences are
-  `specs/011-drawing-context/contracts/confirmed-open.md` section 2 item 5's.
+  did not make read-only, a read that threw after it, a merge or save that did not land. *Since
+  decision 141A (2026-10-19)* that count is kept per review session - the latest review the host
+  started in the run folder `run_id` names - so a Retry or Recheck in the same folder starts its
+  own, and it bounds only an open: a drawing already open is still read, since reading it opens
+  nothing, the package's ten drawings still bounding it. Once a session's such opens reach ten on
+  their own, a candidate whose drawing is not open is refused before the package is even loaded,
+  SOLIDWORKS asked only whether that drawing is open. The limit's refusal ends saying how to go
+  on. The sentences are `specs/011-drawing-context/contracts/confirmed-open.md` section 2 item 5's.
 - The drawing is opened **read-only and hidden** only when it is not already open - through its
   own allowlisted seam (`ISldWorks.DocumentVisible`, `ISldWorks.OpenDoc6` with type 3 and options
   3, `ISldWorks.CloseDoc`; `specs/004-resilient-remodeler/contracts/guard-allowlist.md`). *Since

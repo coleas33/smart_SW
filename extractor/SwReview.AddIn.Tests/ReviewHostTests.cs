@@ -2136,6 +2136,227 @@ public sealed class ReviewHostTests
         }
     }
 
+    // ---- the review session a drawing.read belongs to (feature 011, decision 141A) -------------
+
+    /// <summary>
+    /// Decision 141A (2026-10-19): the opens a <c>drawing.read</c> attempted are counted per review
+    /// session. The run id resolves to its run folder by the lookup above, and the session is the
+    /// latest review this host started in that folder, each record holding its own: a Retry in the
+    /// same folder - a new record - is a new session, and the earlier record keeps the one it had.
+    /// </summary>
+    [Fact]
+    public void ADrawingReadBelongsToTheLatestReviewSessionOfItsRunFolder()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Open();
+            string run = world.TrackedRun("chat-1");
+            string name = Path.GetFileName(run);
+            string otherRun = world.TrackedRun("chat-other");
+            world.Host.TrackSession("chat-1", run);
+            world.Host.TrackSession("chat-other", otherRun);
+
+            ConfirmedDrawingSession first = world.Host.DrawingReadSession(name)!;
+
+            Assert.Same(world.Host.FindSession("chat-1")!.ConfirmedDrawings, first);
+            Assert.Equal(run, first.RunFolder);
+            Assert.Equal(0, first.UnrecordedOpens);
+
+            world.Host.TrackSession("chat-2", run);
+            ConfirmedDrawingSession second = world.Host.DrawingReadSession(name)!;
+
+            Assert.NotSame(first, second);
+            Assert.Same(world.Host.FindSession("chat-2")!.ConfirmedDrawings, second);
+            Assert.Same(first, world.Host.FindSession("chat-1")!.ConfirmedDrawings);
+            Assert.Same(
+                world.Host.FindSession("chat-other")!.ConfirmedDrawings,
+                world.Host.DrawingReadSession(Path.GetFileName(otherRun)));
+        }
+    }
+
+    /// <summary>
+    /// A Recheck replaces its record in place (feature 015), and the replacement is a new session:
+    /// the run id answers the replacement's, and the replaced record's count goes with it. It is the
+    /// latest started that answers, not the last in the list: rechecking a record that a later
+    /// session of the same folder follows (a Retry's) still makes the Recheck's the session.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ARecheckIsANewSessionAndTheRecordItReplacesTakesItsCountAway(bool aLaterSessionFollowsInTheList)
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Document = new PageDocument(@"C:\Fictional\FICT-assembly.SLDASM", "Default");
+            world.Backend.NextChatId = "FICT-rechecked";
+            world.Open();
+            string run = world.TrackedRun("FICT-earlier");
+            string name = Path.GetFileName(run);
+            world.Host.TrackSession("FICT-earlier", run, world.Document, new DateTimeOffset(Stamp), "not_sent");
+            ConfirmedDrawingSession earlier = world.Host.DrawingReadSession(name)!;
+            if (aLaterSessionFollowsInTheList)
+            {
+                world.Host.TrackSession("FICT-retried", run, world.Document, new DateTimeOffset(Stamp), "not_sent");
+            }
+
+            world.Receive("review.recheck", "recheck", new { chat_id = "FICT-earlier" });
+
+            SessionRecord replacement = world.Host.FindSession("FICT-rechecked")!;
+            Assert.NotNull(replacement);
+            Assert.Same(replacement.ConfirmedDrawings, world.Host.DrawingReadSession(name));
+            Assert.NotSame(earlier, replacement.ConfirmedDrawings);
+            Assert.DoesNotContain(world.Host.Sessions, record => ReferenceEquals(record.ConfirmedDrawings, earlier));
+            Assert.Equal(
+                aLaterSessionFollowsInTheList ? new[] { "FICT-rechecked", "FICT-retried" } : new[] { "FICT-rechecked" },
+                world.Host.Sessions.Select(record => record.ChatId));
+        }
+    }
+
+    /// <summary>
+    /// The session is the host's own, chosen from its records by the run id and by nothing else a
+    /// request supplies: every spelling the lookup matches answers the one session, asking again
+    /// makes none, and whatever the lookup refuses - an unknown id, a blank one, the folder spelt
+    /// as a path, a check's record, a forgotten review, a name two folders share - answers none.
+    /// </summary>
+    [Fact]
+    public void TheSessionIsTheHostsOwnHoweverTheRunIdIsSpeltAndAskingMakesNone()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Open();
+            string run = world.TrackedRun("chat-1");
+            string name = Path.GetFileName(run);
+            world.Host.TrackSession("chat-1", run);
+            ConfirmedDrawingSession session = world.Host.FindSession("chat-1")!.ConfirmedDrawings;
+
+            Assert.Same(session, world.Host.DrawingReadSession(name));
+            Assert.Same(session, world.Host.DrawingReadSession(name.ToUpperInvariant()));
+            Assert.Same(session, world.Host.DrawingReadSession(name));
+
+            foreach (string? refused in new[]
+            {
+                null, string.Empty, "   ", "20260913-142530-chat-404", run, run + Path.DirectorySeparatorChar,
+                Path.Combine("..", "runs", name),
+            })
+            {
+                Assert.True(
+                    world.Host.DrawingReadSession(refused) == null,
+                    "'" + refused + "' answered a session.");
+            }
+
+            string check = world.TrackedRun("bracket-check");
+            world.Host.TrackCheck(check);
+            Assert.Null(world.Host.DrawingReadSession(Path.GetFileName(check)));
+
+            string forgotten = world.TrackedRun("chat-gone");
+            world.Host.TrackSession("chat-gone", forgotten);
+            Assert.True(world.Host.ForgetSession("chat-gone"));
+            Assert.Null(world.Host.DrawingReadSession(Path.GetFileName(forgotten)));
+
+            string movedRoot = Path.Combine(world.Settings.RunRoot, "moved-root", name);
+            Directory.CreateDirectory(movedRoot);
+            world.Host.TrackSession("chat-moved", movedRoot);
+            Assert.Null(world.Host.DrawingReadSession(name));
+        }
+    }
+
+    /// <summary>
+    /// A context review's Retry leaves the failed review tracked beside it in the same folder. When
+    /// the engineer removes the latest of the two (the chip's Remove), the run id answers the earlier
+    /// record's own session, count and all - never a fresh one, which nothing a request does can make.
+    /// </summary>
+    [Fact]
+    public void RemovingTheLatestSessionOfAFolderLeavesTheEarlierOnesOwnSession()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Open();
+            string run = world.TrackedRun("chat-failed");
+            string name = Path.GetFileName(run);
+            world.Host.TrackSession("chat-failed", run);
+            ConfirmedDrawingSession earlier = world.Host.DrawingReadSession(name)!;
+            world.Host.TrackSession("chat-retried", run);
+            Assert.NotSame(earlier, world.Host.DrawingReadSession(name));
+
+            Assert.True(world.Host.ForgetSession("chat-retried"));
+
+            Assert.Same(earlier, world.Host.DrawingReadSession(name));
+            Assert.Same(earlier, world.Host.FindSession("chat-failed")!.ConfirmedDrawings);
+        }
+    }
+
+    /// <summary>
+    /// The session lookup is asked on the SOLIDWORKS application thread while the page pump tracks
+    /// and forgets reviews; it reads the list under its lock, as the folder lookup does
+    /// (<see cref="TheRunLookupIsReadUnderTheLockWhileThePumpAppends"/>), and always answers the
+    /// session of a record it found.
+    /// </summary>
+    [Fact]
+    public void TheSessionLookupIsReadUnderTheLockWhileThePumpTracksAndForgets()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Open();
+            string run = world.TrackedRun("chat-x");
+            string name = Path.GetFileName(run);
+            world.Host.TrackSession("chat-x", run);
+            var failures = new List<Exception>();
+            var stop = new ManualResetEventSlim();
+
+            var pump = new Thread(() =>
+            {
+                try
+                {
+                    for (int i = 0; i < 500 && !stop.IsSet; i++)
+                    {
+                        world.Host.TrackSession("chat-" + i, run);
+                        world.Host.TrackCheck(run);
+                        world.Host.ForgetSession("chat-" + (i - 1));
+                    }
+                }
+                catch (Exception failure)
+                {
+                    lock (failures)
+                    {
+                        failures.Add(failure);
+                    }
+                }
+                finally
+                {
+                    stop.Set();
+                }
+            })
+            {
+                IsBackground = true,
+            };
+
+            pump.Start();
+            try
+            {
+                while (!stop.IsSet)
+                {
+                    ConfirmedDrawingSession? session = world.Host.DrawingReadSession(name);
+                    if (session != null && !string.Equals(session.RunFolder, run, StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new InvalidOperationException("the lookup answered another folder's session.");
+                    }
+                }
+            }
+            catch (Exception failure)
+            {
+                lock (failures)
+                {
+                    failures.Add(failure);
+                }
+            }
+
+            stop.Set();
+            Assert.True(pump.Join(TimeSpan.FromSeconds(30)), "the pump thread never finished.");
+            Assert.True(failures.Count == 0, failures.Count == 0 ? string.Empty : failures[0].ToString());
+            Assert.Same(world.Host.FindSession("chat-499")!.ConfirmedDrawings, world.Host.DrawingReadSession(name));
+        }
+    }
+
     // ---- entity.show --------------------------------------------------------------------
 
     [Fact]

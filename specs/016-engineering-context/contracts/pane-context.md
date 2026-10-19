@@ -137,6 +137,12 @@ folder, `retry_of`, the same attachment and the box's Send or Wait, through the 
 `CreateReviewSession`. The backend validates the head as a re-run does; a context changed
 since is `409 EngineeringContextConflict` with a line that points to the Engineering context
 panel, and nothing in the folder moves. Another document active is `ReviewNotActive`.
+*Amended 2026-10-19 (owner decision 142A):* the backend claims the folder for that Retry only
+while it holds the failed chat and the folder still holds that chat's session (002
+[chat-api.md](../../002-task-pane-assistant/contracts/chat-api.md)). A settings save restarts
+the backend, which then holds no chat from before it, so a Retry after one is `404 UnknownChat`
+and nothing in the folder moves; the engineer starts a new review. A Retry of an attempt that a
+later Retry replaced is `409 RunDirInUse`.
 
 **The lock is strict** (owner decision 106A): the panel is disabled while any review is shown
 waiting, and the backend refuses context edits per folder.
