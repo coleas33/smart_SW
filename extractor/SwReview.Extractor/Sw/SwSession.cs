@@ -351,6 +351,14 @@ public sealed class SwSession : ISwSession
     /// Parts and assemblies only (feature 011, contracts/attach.md section 4): a drawing that is
     /// not open is refused here, before the existence check and before any open, by
     /// <see cref="NotOpenRefusal"/>.
+    ///
+    /// Checked read-only (decision 136A, 2026-10-19): the options ask for read-only, and only the
+    /// document says whether SOLIDWORKS honoured them. It is asked <c>IsOpenedReadOnly()</c>
+    /// through the gate before it is handed on; one that is not open read-only, or will not say,
+    /// is refused and closed again with <c>CloseDoc</c> through the gate, after the identity check
+    /// feature 011's drawing open uses (<see cref="ReadOnlyOpen"/>, which both share), and never
+    /// read. A document <c>GetOpenDocumentByName</c> answered was not opened here: it is not asked
+    /// and never closed.
     /// </summary>
     private static IModelDoc2 OpenReadOnly(
         ISldWorks swApp, string documentPath, AttachPurpose purpose, SwGate gate)
@@ -390,7 +398,30 @@ public sealed class SwSession : ISwSession
                 + $"({FileLoadErrors.Describe(errors, warnings)}).");
         }
 
-        return document;
+        IModelDoc2 opened = document;
+        string? notReadOnly = ReadOnlyOpen.Refusal(
+            gate,
+            opened.IsOpenedReadOnly,
+            errors,
+            warnings,
+            () => ReadOnlyOpen.Close(
+                gate,
+                () => swApp.GetOpenDocumentByName(documentPath),
+                "CloseDoc",
+                () => swApp.CloseDoc(documentPath),
+                opened,
+                documentPath,
+                "the extractor"),
+            documentPath,
+            out Exception? checkFailure);
+        if (notReadOnly != null)
+        {
+            throw checkFailure == null
+                ? new InvalidOperationException(notReadOnly)
+                : new InvalidOperationException(notReadOnly, checkFailure);
+        }
+
+        return opened;
     }
 
     private static IConfiguration ActiveConfiguration(IModelDoc2 document, SwGate gate)

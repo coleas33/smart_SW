@@ -125,7 +125,9 @@ For every extraction that reads a drawing: no member of this contract's denials,
 it with the recording observer over the fake drawing reader; T062 records it at the seat. The read
 of a confirmed drawing (section 7) shows exactly `ISldWorks.DocumentVisible`, `ISldWorks.OpenDoc6`
 and `ISldWorks.CloseDoc` under their qualified keys when it opened the drawing, none of them when
-the drawing was already open, and nothing else from the denials.
+the drawing was already open, and nothing else from the denials. *Amended 2026-10-19 (owner
+decision 136A)*: when it opened the drawing it also shows the bare read `IsOpenedReadOnly`, the
+check of section 7, after the open.
 
 ## 7. The confirmed drawing's read-only open: an allowlist of its own (owner, 2026-09-23)
 
@@ -138,3 +140,12 @@ name to `ReadOnlyGuard` unchanged - the shape of feature 004's `RemodelGuard`, b
 `DocumentVisible` overrides a read-only denial (section 1's shared row); a test pins that set.
 The entry is recorded in `specs/004-resilient-remodeler/contracts/guard-allowlist.md` beside the
 stage-1 list, and it widens neither `RemodelGuard` nor `ReadOnlyGuard`.
+
+*Amended 2026-10-19 (owner decision 136A): the runtime check.* After the open the seam asks the
+drawing `IModelDoc2.IsOpenedReadOnly()` under its bare name - a read, which this guard hands to
+`ReadOnlyGuard` unchanged, so the allowlist stays the three keys - and refuses and closes, unread, a
+drawing SOLIDWORKS did not open read-only or will not say (`confirmed-open.md` section 3). The
+console attach makes the same check after its own `OpenDoc6` (`attach.md` section 4).
+`DrawingOpenGuardTests.TheReadOnlyCheckIsABareReadEveryGuardAllows` pins that every gate the product
+builds allows the bare name, and that this guard refuses the qualified `IModelDoc2.IsOpenedReadOnly`,
+which is why the seam names it bare.

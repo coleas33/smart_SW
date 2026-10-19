@@ -273,6 +273,29 @@ public class ConfirmedDrawingReadTests : IDisposable
         Assert.Null(Reloaded().DrawingRecords!.SingleOrDefault(row => row.DocumentId == DocumentIds.For(HousingDrawingPath)));
     }
 
+    /// <summary>
+    /// Decision 136A (2026-10-19): a candidate SOLIDWORKS did not open read-only is refused, closed
+    /// again and never read, and the package is left as it was. The refusal is the sentence the
+    /// backend records, word for word, as the <c>drawing.confirmed_open</c> item's reason
+    /// (<c>contracts/confirmed-open.md</c> section 1), so the review says why.
+    /// </summary>
+    [Fact]
+    public void ACandidateSolidWorksDidNotOpenReadOnlyIsARefusalSayingWhy_ClosedUnreadAndMergingNothing()
+    {
+        _host.OpenedReadOnly = false;
+        string before = File.ReadAllText(PackageAppender.PathIn(_runFolder));
+
+        ConfirmedDrawingRefused refusal = Assert.Throws<ConfirmedDrawingRefused>(() => Read(RunId, HousingId));
+
+        Assert.Equal(
+            "SOLIDWORKS opened 'housing.SLDDRW', but not read-only (IsOpenedReadOnly answered false; "
+            + FileLoadErrors.Describe(0, 0) + "), so it was not read; it was closed again.",
+            refusal.Message);
+        Assert.Equal("CloseDoc " + HousingDrawingPath, _host.Calls.Last().ToString());
+        Assert.Empty(_phase.Seen);
+        Assert.Equal(before, File.ReadAllText(PackageAppender.PathIn(_runFolder)));
+    }
+
     [Fact]
     public void ACloseTheSeamRefusesIsRecordedAsAGapOnTheDrawing()
     {

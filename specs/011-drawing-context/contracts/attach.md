@@ -76,6 +76,19 @@ show." `OpenReadOnly` opens part and assembly files only. The one product path t
 drawing is not an attach: it is the read-only open of a candidate the engineer confirmed, through
 its own guarded seam (`confirmed-open.md`, owner 2026-09-23).
 
+*Amended 2026-10-19 (owner decision 136A)*: `OpenReadOnly` checks what it opened. The options ask
+for read-only, and only the document says whether SOLIDWORKS honoured them, so the document
+`OpenDoc6` returned is asked `IModelDoc2.IsOpenedReadOnly()` through the attach's gate, a read under
+its bare name, before it is handed on. One that is not open read-only, or will not say (the call
+throws: it fails closed), is refused - "SOLIDWORKS opened '{path}', but not read-only
+(IsOpenedReadOnly answered false; {FileLoadErrors}), so it was not read; it was closed again." -
+and closed again with `CloseDoc` through the gate, only after `GetOpenDocumentByName(path)` answers
+the same COM identity the open returned, exactly as the confirmed drawing's seam closes
+(`confirmed-open.md` section 3; one rule, `Sw/ReadOnlyOpen.cs`). A close refused or failed is named
+in the refusal, never hidden. A document `GetOpenDocumentByName` answered before the open was not
+opened by the attach: it is not asked and never closed. A document the attach opened read-only is
+still left open on purpose, so a later `resolve` or `capture` finds its persistent references.
+
 ## 5. The Review tab's refusal
 
 `ReviewHost`'s sentence for a drawing gains one clause: "...; open the part or assembly it

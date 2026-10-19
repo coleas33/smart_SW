@@ -536,6 +536,8 @@ internal sealed class FakeDrawingOpenProbeHost : IDrawingOpenProbeHost
         return opened;
     }
 
+    public bool IsOpenedReadOnly(object document) => Seam.IsOpenedReadOnly(document);
+
     public void CloseDoc(string path)
     {
         Seam.CloseDoc(path);

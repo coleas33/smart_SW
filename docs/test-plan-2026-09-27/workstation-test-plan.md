@@ -920,8 +920,9 @@ rule 5 says what to copy from them. After each run look at:
   `sheet activation: none`, `document opening: none` and `display state: none`, and the last line
   `gate log: the confirmed open's guard (DrawingOpenGuard, D14 only): none` on every run but
   step 3.9's. At step 3.9 that last line lists what the confirmed open's guard saw: in run 1
-  `GetOpenDocumentByName, ISldWorks.DocumentVisible, ISldWorks.OpenDoc6, ISldWorks.CloseDoc`, in
-  run 2 `GetOpenDocumentByName` alone.
+  `GetOpenDocumentByName, ISldWorks.DocumentVisible, ISldWorks.OpenDoc6, IsOpenedReadOnly, ISldWorks.CloseDoc`
+  (the read-only check of decision 136A, 2026-10-19, is the one bare read after the open), in run 2
+  `GetOpenDocumentByName` alone.
 
 Pass: exit code 0 and the gate log as above. Fail: exit code 1, or any of those words other than
 `none`: copy the lines into the findings document. A line `stopped: <Type> 0x<number>` or

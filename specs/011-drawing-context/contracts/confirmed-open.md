@@ -187,6 +187,22 @@ recorder:
 - Nothing the seam calls activates, rebuilds, saves or selects: no `ActivateDoc*`, `Save*`,
   `ForceRebuild*` or selection member appears in its gate log, and `OpenDoc6` and `CloseDoc`
   appear only under their qualified keys.
+- **The open is checked read-only** (*amended 2026-10-19, owner decision 136A*). The options ask
+  for read-only, and nothing but the document says whether SOLIDWORKS honoured them. After the
+  restore, the seam asks the document the open returned `IModelDoc2.IsOpenedReadOnly()`
+  (`IDrawingOpenHost.IsOpenedReadOnly`), a read gated under its bare name, which `DrawingOpenGuard`
+  hands to `ReadOnlyGuard`, so the allowlist stays the three keys. A false answer, or a call that
+  throws (it fails closed), is the refusal "SOLIDWORKS opened '{file name}', but not read-only
+  (IsOpenedReadOnly answered false; {FileLoadErrors}), so it was not read; it was closed again.",
+  or for a call that threw "... but did not confirm it read-only (IsOpenedReadOnly failed:
+  {type}: {message}; {FileLoadErrors}) ...", the exception kept inside. The drawing is closed,
+  unread, by the close rule above, the identity check first; a close refused or failed is named
+  in place of "it was closed again", never hidden. A drawing that was already open is not asked and never closed.
+  The rule is `Sw/ReadOnlyOpen.cs`, which the console attach shares (`attach.md` section 4). A read
+  that opened the drawing gains the bare read `IsOpenedReadOnly` in its gate log, between
+  `ISldWorks.OpenDoc6` and the close; the qualified keys are unchanged. The refusal is the host's
+  answer, so the backend records it word for word as the candidate's `drawing.confirmed_open` reason
+  (section 1).
 
 ## 4. Shipped off until the seat confirms it
 

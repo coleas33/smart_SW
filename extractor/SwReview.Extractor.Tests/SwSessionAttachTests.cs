@@ -1,4 +1,9 @@
 using System;
+using System.IO;
+using System.Linq;
+using System.Runtime.InteropServices;
+using SolidWorks.Interop.sldworks;
+using SwReview.Extractor.Guard;
 using SwReview.Extractor.Ir;
 using SwReview.Extractor.Sw;
 using Xunit;
@@ -196,4 +201,213 @@ public class AttachPurposeTests
         Assert.Contains("Open it first", refusal, StringComparison.Ordinal);
         Assert.Contains("does not open drawings", refusal, StringComparison.Ordinal);
     }
+}
+
+/// <summary>
+/// Decision 136A (2026-10-19, feature 011 <c>contracts/attach.md</c> section 4): the console
+/// attach's own read-only open. A part or assembly that is not open is opened with
+/// <c>OpenDoc6</c>, read-only and silent, and left open on purpose; nothing checked that SOLIDWORKS
+/// honoured the option. Now the document the open returned is asked <c>IsOpenedReadOnly()</c>
+/// through the session's gate, and one that is not open read-only - or will not say - is refused and
+/// closed again, after the identity check feature 011's drawing open uses, never read. A document
+/// already open is used as it stands: not asked, never closed.
+///
+/// SOLIDWORKS is the interop stand-in (<see cref="InteropRecorder{TInterface}"/>): no COM object
+/// exists and SOLIDWORKS is never started. The part file is an empty, fictional file in a temporary
+/// folder, there only because the open first checks that the path exists.
+/// </summary>
+public sealed class SwSessionReadOnlyOpenTests : IDisposable
+{
+    private readonly string _folder;
+    private readonly string _partPath;
+    private readonly InteropRecorder<ISldWorks> _app = new InteropRecorder<ISldWorks>();
+    private readonly InteropRecorder<IModelDoc2> _document = new InteropRecorder<IModelDoc2>(typeof(ModelDoc2));
+    private readonly RecordingGateObserver _observer = new RecordingGateObserver();
+
+    /// <summary>What SOLIDWORKS answers the part's path with: nothing until the open, then the document.</summary>
+    private object? _answersThePath;
+
+    public SwSessionReadOnlyOpenTests()
+    {
+        _folder = Path.Combine(Path.GetTempPath(), "swreview-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(_folder);
+        _partPath = Path.Combine(_folder, "bracket.SLDPRT");
+        File.WriteAllBytes(_partPath, new byte[0]);
+
+        var configuration = new InteropRecorder<IConfiguration>(typeof(Configuration)).Answer("get_Name", "Default");
+        var manager = new InteropRecorder<IConfigurationManager>(typeof(ConfigurationManager))
+            .Answer("get_ActiveConfiguration", configuration.Instance);
+        _document
+            .Answer("GetType", 1)
+            .Answer("GetPathName", _partPath)
+            .Answer("get_ConfigurationManager", manager.Instance)
+            .Answer("IsOpenedReadOnly", true);
+        _app
+            .Handle("GetOpenDocumentByName", arguments => _answersThePath)
+            .Handle("OpenDoc6", arguments =>
+            {
+                _answersThePath = _document.Instance;
+                return _document.Instance;
+            })
+            .Handle("CloseDoc", arguments =>
+            {
+                _answersThePath = null;
+                return null;
+            })
+            .Answer("RevisionNumber", "32.5.0");
+    }
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_folder))
+        {
+            Directory.Delete(_folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void APartSolidWorksOpenedReadOnlyIsAttached_AfterTheCheckGatedAsABareRead()
+    {
+        SwSession session = Attach();
+
+        Assert.Same(_document.Instance, session.Document);
+        Assert.Contains("IsOpenedReadOnly", _document.Members);
+        Assert.DoesNotContain("CloseDoc", _app.Members);
+        Assert.Equal(new[] { "GetOpenDocumentByName", "OpenDoc6", "IsOpenedReadOnly" }, _observer.Members.Take(3));
+        Assert.Empty(_observer.Refusals);
+    }
+
+    [Fact]
+    public void APartSolidWorksDidNotOpenReadOnly_IsRefusedUnreadAndClosedAfterTheIdentityCheck()
+    {
+        _document.Answer("IsOpenedReadOnly", false);
+
+        InvalidOperationException refusal = Assert.Throws<InvalidOperationException>(() => Attach());
+
+        Assert.Equal(
+            $"SOLIDWORKS opened '{_partPath}', but not read-only (IsOpenedReadOnly answered false; "
+            + FileLoadErrors.Describe(0, 0) + "), so it was not read; it was closed again.",
+            refusal.Message);
+        Assert.Null(refusal.InnerException);
+        Assert.Equal(new[] { "GetOpenDocumentByName", "OpenDoc6", "GetOpenDocumentByName", "CloseDoc" }, _app.Members);
+        Assert.Equal(new object?[] { _partPath }, _app.Calls.Last().Arguments);
+        Assert.DoesNotContain("get_ConfigurationManager", _document.Members);
+        Assert.Equal(
+            new[] { "GetOpenDocumentByName", "OpenDoc6", "IsOpenedReadOnly", "CloseDoc" },
+            _observer.Members);
+        Assert.Empty(_observer.Refusals);
+    }
+
+    [Fact]
+    public void ACheckThatThrows_FailsClosed_ThePartRefusedUnreadAndClosed_TheFailureKeptInside()
+    {
+        var failure = new COMException("SOLIDWORKS is busy");
+        _document.Fail("IsOpenedReadOnly", failure);
+
+        InvalidOperationException refusal = Assert.Throws<InvalidOperationException>(() => Attach());
+
+        Assert.Same(failure, refusal.InnerException);
+        Assert.Equal(
+            $"SOLIDWORKS opened '{_partPath}', but did not confirm it read-only (IsOpenedReadOnly failed: "
+            + "COMException: SOLIDWORKS is busy; " + FileLoadErrors.Describe(0, 0) + "), so it was not read; it "
+            + "was closed again.",
+            refusal.Message);
+        Assert.Equal("CloseDoc", _app.Members.Last());
+        Assert.DoesNotContain("get_ConfigurationManager", _document.Members);
+    }
+
+    [Fact]
+    public void APartAlreadyOpenIsNeitherCheckedNorClosed_WhateverItsReadOnlyState()
+    {
+        _answersThePath = _document.Instance;
+        _document.Answer("IsOpenedReadOnly", false);
+
+        SwSession session = Attach();
+
+        Assert.Same(_document.Instance, session.Document);
+        Assert.Equal(new[] { "GetOpenDocumentByName", "RevisionNumber" }, _app.Members);
+        Assert.DoesNotContain("IsOpenedReadOnly", _document.Members);
+    }
+
+    [Fact]
+    public void ANotReadOnlyPartWhoseCloseFails_SaysSoInTheRefusal()
+    {
+        _document.Answer("IsOpenedReadOnly", false);
+        _app.Fail("CloseDoc", new COMException("close failed"));
+
+        InvalidOperationException refusal = Assert.Throws<InvalidOperationException>(() => Attach());
+
+        Assert.EndsWith(
+            $"so it was not read; '{_partPath}' was not closed: SOLIDWORKS failed while the extractor was closing "
+            + "it (COMException: close failed).",
+            refusal.Message,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ANotReadOnlyPartTheIdentityCheckRefusesToClose_ClosesNothingAndSaysWhy()
+    {
+        _document.Answer("IsOpenedReadOnly", false);
+        var another = new InteropRecorder<IModelDoc2>(typeof(ModelDoc2));
+        _app.Handle("OpenDoc6", arguments =>
+        {
+            _answersThePath = another.Instance;
+            return _document.Instance;
+        });
+
+        InvalidOperationException refusal = Assert.Throws<InvalidOperationException>(() => Attach());
+
+        Assert.EndsWith(
+            $"so it was not read; '{_partPath}' was not closed: SOLIDWORKS answers its path with a document that "
+            + "is not the same document the extractor opened, so nothing was closed.",
+            refusal.Message,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("CloseDoc", _app.Members);
+    }
+
+    /// <summary>
+    /// SOLIDWORKS can answer an open with a document it already had open under another spelling of
+    /// the path, which the lookup before the open did not find; then it still does not answer this
+    /// spelling, so the identity check closes nothing - never the engineer's own document - and the
+    /// refusal names the open's warnings, which say so.
+    /// </summary>
+    [Fact]
+    public void ANotReadOnlyPartTheLookupNeverAnswers_ClosesNothing_AndTheRefusalNamesTheOpensWarnings()
+    {
+        _document.Answer("IsOpenedReadOnly", false);
+        _app.Handle("OpenDoc6", arguments =>
+        {
+            arguments[5] = 128;
+            return _document.Instance;
+        });
+
+        InvalidOperationException refusal = Assert.Throws<InvalidOperationException>(() => Attach());
+
+        Assert.Contains(
+            "(IsOpenedReadOnly answered false; error 0 (none), warning 128 (swFileLoadWarning_AlreadyOpen))",
+            refusal.Message,
+            StringComparison.Ordinal);
+        Assert.EndsWith(
+            $"'{_partPath}' was not closed: SOLIDWORKS no longer answers its path with the same document the "
+            + "extractor opened, so nothing was closed.",
+            refusal.Message,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("CloseDoc", _app.Members);
+    }
+
+    [Fact]
+    public void TheExtractionsAttachMakesTheSameCheck()
+    {
+        _document.Answer("IsOpenedReadOnly", false);
+
+        InvalidOperationException refusal = Assert.Throws<InvalidOperationException>(
+            () => SwSession.AttachForDump(_app.Instance, _partPath, null, Gate()));
+
+        Assert.EndsWith("so it was not read; it was closed again.", refusal.Message, StringComparison.Ordinal);
+        Assert.Equal("CloseDoc", _app.Members.Last());
+    }
+
+    private SwSession Attach() => SwSession.Attach(_app.Instance, _partPath, null, Gate());
+
+    private SwGate Gate() => new SwGate(new CircuitBreaker()) { Observer = _observer };
 }

@@ -14,7 +14,7 @@ namespace SwReview.Extractor.Probes;
 /// What probe D14 needs of SOLIDWORKS beyond the confirmed open's own seam: the engineer's session
 /// around the open - the active document, the window with the focus, the open documents and their
 /// save flags. One interop call per member, gated by <see cref="DrawingOpenProbe"/> on the read-only
-/// gate under <see cref="DrawingOpenProbe.ReadMembers"/>; <see cref="IDrawingOpenHost"/>'s four are
+/// gate under <see cref="DrawingOpenProbe.ReadMembers"/>; <see cref="IDrawingOpenHost"/>'s five are
 /// gated by <see cref="DrawingOpenScope"/> itself, as in the product.
 /// </summary>
 public interface IDrawingOpenProbeHost : IDrawingOpenHost
@@ -636,13 +636,15 @@ public static class DrawingOpenProbe
             return _host.OpenDoc6(path, documentType, options, configuration!, out errors, out warnings);
         }
 
+        public bool IsOpenedReadOnly(object document) => _host.IsOpenedReadOnly(document);
+
         public void CloseDoc(string path) => _host.CloseDoc(path);
     }
 }
 
 /// <summary>
 /// The SOLIDWORKS side of <see cref="IDrawingOpenProbeHost"/>: the confirmed open's own host for the
-/// seam's four members, and one interop call per session read. Compiled but not unit tested, like
+/// seam's five members, and one interop call per session read. Compiled but not unit tested, like
 /// <see cref="SwDrawingOpenHost"/>; probe D14 at the seat is its run (T077).
 /// </summary>
 public sealed class SwDrawingOpenProbeHost : IDrawingOpenProbeHost
@@ -662,6 +664,8 @@ public sealed class SwDrawingOpenProbeHost : IDrawingOpenProbeHost
 
     public object? OpenDoc6(string path, int documentType, int options, string configuration, out int errors, out int warnings) =>
         _open.OpenDoc6(path, documentType, options, configuration, out errors, out warnings);
+
+    public bool IsOpenedReadOnly(object document) => _open.IsOpenedReadOnly(document);
 
     public void CloseDoc(string path) => _open.CloseDoc(path);
 

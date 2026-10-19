@@ -950,6 +950,10 @@ public class DrawingProbeTests : IDisposable
         Assert.Null(drawing.ReviewedDocumentId);
     }
 
+    /// <summary>
+    /// Edited deliberately for decision 136A (2026-10-19): the seam asks the drawing it opened
+    /// whether SOLIDWORKS opened it read-only, after the restore and before the read.
+    /// </summary>
     [Fact]
     public void D14_TheOpenGoesThroughTheConfirmedOpensSeamInItsOrder()
     {
@@ -963,6 +967,7 @@ public class DrawingProbeTests : IDisposable
                 "DocumentVisible False 3",
                 "OpenDoc6 " + DrawingPath + " 3 3 ",
                 "DocumentVisible True 3",
+                "IsOpenedReadOnly opened",
                 "OpenDocument " + DrawingPath,
                 "CloseDoc " + DrawingPath,
                 "OpenDocument " + DrawingPath,

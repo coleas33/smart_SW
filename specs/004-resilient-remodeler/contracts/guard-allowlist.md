@@ -607,6 +607,12 @@ unchanged.
 **The close rule.** A drawing that was already open is read as it stands: no visibility call, no
 open, no close. The seam never closes any other document, and never a model the drawing loaded.
 
+**The read-only check** (feature 011, owner decision 136A, 2026-10-19). After the open the seam
+asks the drawing `IModelDoc2.IsOpenedReadOnly()` under its bare name, a read this guard hands to
+`ReadOnlyGuard`, so the allowlist stays the three keys. A drawing SOLIDWORKS did not open
+read-only, or will not say, is refused unread and closed by the close rule above
+(`011-drawing-context/contracts/confirmed-open.md` section 3).
+
 **It widens neither guard.** Nothing is added to `ReadOnlyGuard` or to `RemodelGuard` (whose
 stage-1 allowlist and its pinned five overriding keys are unchanged). Of the three keys only
 `DocumentVisible` overrides a read-only denial (feature 011's shared `ISldWorks` row);
