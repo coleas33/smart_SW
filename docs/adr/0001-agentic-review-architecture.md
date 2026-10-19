@@ -1,6 +1,6 @@
 # ADR-001: Where the SolidWorks reviewer and drawing automation should live
 
-**Status:** Proposed
+**Status:** Accepted in part: layers 1 and 2 and the read-only first stage of layer 3 are built; drawing creation (layer 3, stage two) is not decided. Evidence: [docs/decisions.md](../decisions.md#architecture-decision-records).
 **Date:** 2026-09-12
 **Deciders:** engineering team (design-check add-in owners)
 
