@@ -225,9 +225,10 @@ public sealed class CaptureService
 
             Directory.CreateDirectory(Path.Combine(outputDirectory, CaptureDirectoryName));
 
-            // The one place an image file is written. AssertSaveAs is what keeps the
-            // read-only guard's single exception honest: a .sldasm here would be a model
-            // write dressed up as a screenshot (research R4).
+            // The one place an image file is written. The read-only guard lets SaveBMP through
+            // by name and never sees a path, so AssertSaveAs is what keeps this write an image:
+            // a .sldasm here would be a model write dressed up as a screenshot (research R4).
+            // SwCaptureView has SaveBMP write the bitmap beside this file, at its name with .bmp.
             ReadOnlyGuard.AssertSaveAs(absoluteFile);
 
             if (!_view.SaveImage(absoluteFile))

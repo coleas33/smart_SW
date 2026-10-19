@@ -53,15 +53,24 @@ public class BridgeDispatcherTests : IDisposable
         Assert.Contains("interference", response.Error!, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Edited deliberately for decision 140A (2026-10-19). This test was
+    /// <c>Dispatch_CommandNamedAfterAMutatingApi_IsRefusedByTheGuard</c>: the dispatcher handed the
+    /// command name to <see cref="ReadOnlyGuard"/>, which refused "Save3" as a member that modifies
+    /// the model. A command name is not an interop member, so the dispatcher now judges it against
+    /// its own fixed set (<see cref="SwBridgeDispatcher.Answers"/>), and a mutating API's name is no
+    /// command of it: refused as unknown, before anything runs. The refusal is kept and made
+    /// stronger - nothing was touched - and only its sentence changed.
+    /// </summary>
     [Fact]
-    public void Dispatch_CommandNamedAfterAMutatingApi_IsRefusedByTheGuard()
+    public void Dispatch_CommandNamedAfterAMutatingApi_IsRefusedAsUnknownBeforeAnythingRuns()
     {
-        // The guard sees the command name itself, so a handler for it could never be added
-        // by accident (research R4).
         BridgeResponse response = Dispatch(Request("1", "Save3"));
 
         Assert.Equal(BridgeStatus.Error, response.Status);
-        Assert.Contains("read-only", response.Error!, StringComparison.Ordinal);
+        Assert.StartsWith("Unknown command 'Save3'.", response.Error!, StringComparison.Ordinal);
+        Assert.Null(response.Result);
+        Assert.Empty(_captureView.Calls);
     }
 
     [Fact]
@@ -84,6 +93,177 @@ public class BridgeDispatcherTests : IDisposable
 
         Assert.Equal(BridgeStatus.CircuitOpen, response.Status);
         Assert.Null(response.Result);
+    }
+
+    // ---- the bridge's own commands (decision 140A) ------------------------------------
+    //
+    // A command name is not an interop member. Until decision 140A (2026-10-19) the dispatcher
+    // handed every name to ReadOnlyGuard, which judges a qualified name by the part after the dot,
+    // so remodel.close, remodel.save and remodel.rebuild were judged as Close, Save and Rebuild and
+    // none of the three members could be denied (011 research R8.5). The dispatcher now answers
+    // exactly its own fixed set and refuses every other name as unknown before anything runs; what
+    // a command then calls is judged, as before, by the guard of the gate it calls through.
+
+    /// <summary>
+    /// The set, spelled out rather than rebuilt from the constants, so a command added to either
+    /// family is a deliberate edit here as well as in the secret scopes.
+    /// </summary>
+    [Fact]
+    public void TheBridgeAnswersExactlyItsOwnFixedSet()
+    {
+        Assert.Equal(
+            new[]
+            {
+                "ping", "capture", "measure", "interference", "tessellate", "drawing.read",
+                "remodel.probe_scope", "remodel.open", "remodel.snapshot", "remodel.rename",
+                "remodel.reorder", "remodel.folder", "remodel.describe", "remodel.equation",
+                "remodel.rebuild", "remodel.geometry", "remodel.save", "remodel.close",
+            },
+            SwBridgeDispatcher.AnsweredCommands);
+        Assert.Equal(BridgeCommands.All.Concat(RemodelCommands.All), SwBridgeDispatcher.AnsweredCommands);
+        Assert.Equal(
+            RemodelCommands.All,
+            RemodelCommandTable.Commands.Select(shape => shape.Command));
+
+        foreach (string command in SwBridgeDispatcher.AnsweredCommands)
+        {
+            Assert.True(SwBridgeDispatcher.Answers(command), command + " is not answered.");
+        }
+    }
+
+    /// <summary>
+    /// Every name outside the set is refused as an unknown command, whatever it is: a mutating
+    /// member's name, bare or qualified, which the read-only guard refused before decision 140A
+    /// with its own sentence; a command's own member half; a command in another case or with a
+    /// space; a name that merely starts with <c>remodel.</c>; and no name at all. Nothing behind
+    /// the dispatcher is touched.
+    /// </summary>
+    [Theory]
+    [InlineData("Save3")]
+    [InlineData("FeatureCut4")]
+    [InlineData("IModelDoc2.Save3")]
+    [InlineData("IModelDoc2.Close")]
+    [InlineData("ISldWorks.CloseDoc")]
+    [InlineData("Close")]
+    [InlineData("Save")]
+    [InlineData("Rebuild")]
+    [InlineData("close")]
+    [InlineData("save")]
+    [InlineData("rebuild")]
+    [InlineData("read")]
+    [InlineData("Ping")]
+    [InlineData("PING")]
+    [InlineData(" ping")]
+    [InlineData("ping ")]
+    [InlineData("Drawing.Read")]
+    [InlineData("drawing.read ")]
+    [InlineData("remodel.Close")]
+    [InlineData("REMODEL.SAVE")]
+    [InlineData("remodel.rebuild ")]
+    [InlineData(" remodel.close")]
+    [InlineData("remodel.")]
+    [InlineData("remodel")]
+    [InlineData("remodel.save3")]
+    [InlineData("remodel.Save3")]
+    [InlineData("remodel.dissolve")]
+    [InlineData("")]
+    [InlineData(" ")]
+    public void ANameOutsideTheSet_IsRefusedAsUnknownBeforeAnythingRuns(string command)
+    {
+        var measure = new FakeMeasureSource("no measure source in this test");
+        var interference = new FakeInterferenceSource(new FakeInterferenceDetector());
+        var drawings = new FakeConfirmedDrawings();
+        var dispatcher = new SwBridgeDispatcher(
+            new BridgeServices(_captureView, measure, interference, Index(null), _captureDirectory)
+            {
+                ConfirmedDrawings = drawings,
+            },
+            NoSecretPolicy.Instance);
+
+        BridgeResponse response = dispatcher.Dispatch(Request("1", command));
+
+        Assert.False(SwBridgeDispatcher.Answers(command));
+        Assert.Equal(BridgeStatus.Error, response.Status);
+        Assert.StartsWith($"Unknown command '{command}'.", response.Error!, StringComparison.Ordinal);
+        Assert.Contains(BridgeCommands.Interference, response.Error!, StringComparison.Ordinal);
+        Assert.Null(response.Result);
+        Assert.Empty(_captureView.Calls);
+        Assert.Null(measure.LastA);
+        Assert.Equal(0, interference.OpenCount);
+        Assert.Empty(drawings.Calls);
+    }
+
+    /// <summary>A request built in process with no command at all is refused the same way.</summary>
+    [Fact]
+    public void ANullCommand_IsRefusedAsUnknownToo()
+    {
+        BridgeResponse response = Dispatch(new BridgeRequest { Id = "1", Command = null! });
+
+        Assert.False(SwBridgeDispatcher.Answers(null));
+        Assert.Equal(BridgeStatus.Error, response.Status);
+        Assert.StartsWith("Unknown command ''.", response.Error!, StringComparison.Ordinal);
+        Assert.Null(response.Result);
+    }
+
+    /// <summary>
+    /// What the read-only guard says of a command's name is no reason to refuse it: the guard
+    /// refuses <c>Close</c>, <c>Save</c> and <c>Rebuild</c> since decision 140A, and
+    /// <c>remodel.close</c>, <c>remodel.save</c> and <c>remodel.rebuild</c> are still looked up
+    /// and reach the remodel family, which on this bridge - no remodel seat, and the Start switch as
+    /// shipped - refuses them for one of those reasons instead. Their writes are judged where they
+    /// are made, by the re-modeler's own guard (<c>RemodelFinishHandlerTests</c>).
+    /// </summary>
+    [Fact]
+    public void NoAnsweredCommandIsRefusedForWhatTheReadOnlyGuardSaysOfItsName()
+    {
+        foreach (string half in new[] { "Close", "Save", "Rebuild" })
+        {
+            Assert.Throws<MutatingCallError>(() => ReadOnlyGuard.Assert(half));
+        }
+
+        SwBridgeDispatcher dispatcher = NewDispatcher(_captureView);
+        foreach (string command in SwBridgeDispatcher.AnsweredCommands)
+        {
+            string error = dispatcher.Dispatch(Request("1", command)).Error ?? string.Empty;
+
+            Assert.DoesNotContain("Unknown command", error, StringComparison.Ordinal);
+            Assert.DoesNotContain("modifies the model", error, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// Decision 140A's review (2026-10-19): a name the dispatcher answers that no handler takes is a
+    /// mistake in the dispatcher, which says so, rather than an unknown command - so a command added
+    /// to <see cref="SwBridgeDispatcher.AnsweredCommands"/> without its handler fails here, and the
+    /// refusal of every other name is <see cref="SwBridgeDispatcher.Dispatch"/>'s check alone, which
+    /// <see cref="ANameOutsideTheSet_IsRefusedAsUnknownBeforeAnythingRuns"/> sees.
+    ///
+    /// Edited deliberately on the decision's second pass, the same day: it looked for <c>Run</c>'s
+    /// mistake only, so a <c>remodel.*</c> command whose case was gone from the remodel family's own
+    /// switch answered that family's "has no handler for it" and passed. It looks for both now, with
+    /// Start switched on, so the six change commands reach that switch too rather than being refused
+    /// before it.
+    /// </summary>
+    [Fact]
+    public void EveryAnsweredCommandReachesItsHandler()
+    {
+        // Run's default, and the remodel family's own default in Remodel.
+        string[] mistakes = { "No handler for the bridge command", "has no handler for it" };
+
+        SwBridgeDispatcher dispatcher = NewDispatcher(_captureView, startValidated: true);
+        var unhandled = new List<string>();
+        foreach (string command in SwBridgeDispatcher.AnsweredCommands)
+        {
+            string error = dispatcher.Dispatch(Request("1", command)).Error ?? string.Empty;
+            if (mistakes.Any(mistake => error.IndexOf(mistake, StringComparison.Ordinal) >= 0))
+            {
+                unhandled.Add(command + " (" + error + ")");
+            }
+        }
+
+        Assert.True(
+            unhandled.Count == 0,
+            "Commands the bridge answers that reach no handler: " + string.Join("; ", unhandled));
     }
 
     // ---- ping --------------------------------------------------------------------
@@ -1037,12 +1217,18 @@ public class BridgeDispatcherTests : IDisposable
         Assert.Contains("cannot read a drawing", response.Error!, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Edited deliberately for decision 140A (2026-10-19): this test was
+    /// <c>DrawingRead_IsOneOfTheCommandsTheBridgeAnswersAndPassesTheReadOnlyGuard</c>, and its
+    /// <c>ReadOnlyGuard.Assert("drawing.read")</c> held while the dispatcher handed command names to
+    /// that guard. It no longer does, so what has to hold is that the dispatcher answers the command.
+    /// </summary>
     [Fact]
-    public void DrawingRead_IsOneOfTheCommandsTheBridgeAnswersAndPassesTheReadOnlyGuard()
+    public void DrawingRead_IsOneOfTheCommandsTheBridgeAnswers()
     {
         Assert.Contains(BridgeCommands.DrawingRead, BridgeCommands.All);
         Assert.Equal("drawing.read", BridgeCommands.DrawingRead);
-        ReadOnlyGuard.Assert(BridgeCommands.DrawingRead);
+        Assert.True(SwBridgeDispatcher.Answers(BridgeCommands.DrawingRead));
         Assert.False(RemodelCommands.IsRemodelCommand(BridgeCommands.DrawingRead));
     }
 
@@ -1130,11 +1316,14 @@ public class BridgeDispatcherTests : IDisposable
         return NewDispatcher(capture ?? _captureView, measure, interference, handles).Dispatch(request);
     }
 
+    /// <param name="startValidated">The Start switch (004 T172); null builds the dispatcher with the
+    /// switch as shipped, <see cref="RemodelStart.SeatValidated"/>.</param>
     private SwBridgeDispatcher NewDispatcher(
         FakeCaptureView capture,
         IMeasureSource? measure = null,
         FakeInterferenceDetector? interference = null,
-        FakeComponent[]? handles = null)
+        FakeComponent[]? handles = null,
+        bool? startValidated = null)
     {
         var services = new BridgeServices(
             capture,
@@ -1150,7 +1339,9 @@ public class BridgeDispatcherTests : IDisposable
 
         // The command handling, with the secret question answered "yes" - the scopes have
         // their own tests in BridgeSecretPolicyTests.
-        return new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+        return startValidated == null
+            ? new SwBridgeDispatcher(services, NoSecretPolicy.Instance)
+            : new SwBridgeDispatcher(services, NoSecretPolicy.Instance, startValidated.Value);
     }
 
     /// <summary>
