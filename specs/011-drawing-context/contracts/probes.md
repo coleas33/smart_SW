@@ -132,6 +132,10 @@ Every other line keeps the rule above.
   the drawing answered, and answered true. *On the decision's review, the same day*: a check never
   asked is not judged - the seam asks only a drawing it opened and restored, so after an open that
   returned none, or a restore that failed, the open is what failed and the reading names only that.
+  *On its second review, the same day*: a drawing the seam opened and read must still have answered.
+  `IsOpenedReadOnly: not called` beside `opened by the probe` means the seam's check did not run,
+  and the reading names `the read-only state` (`DrawingOpenProbe.ReadOnlyAsRequired`); a drawing
+  already open, which is never asked, still passes.
 - **The report.** Beside the read-only gate's log it prints the confirmed open's own guard's
   members, which the read-only log cannot show. Its exit code is 0 when the run completed, whatever
   a probe printed, and 1 when it was refused, stopped or could not write its report.

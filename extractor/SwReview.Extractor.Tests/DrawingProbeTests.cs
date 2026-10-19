@@ -1145,6 +1145,33 @@ public class DrawingProbeTests : IDisposable
     }
 
     /// <summary>
+    /// Decision 136A's second review (2026-10-19): the reading's read-only rule. A drawing the seam
+    /// opened and read must have answered, and answered true: without an answer the seam's check did
+    /// not run - a seam that skipped it printed "IsOpenedReadOnly: not called" beside "opened by the
+    /// probe and closed" and still read "every answer as required". A check the seam never reached,
+    /// with no drawing returned or a restore that failed, is not judged; every answer given must be
+    /// true. The answers are written "true", "false" or "failed" (a check that threw), comma-separated.
+    /// </summary>
+    [Theory]
+    [InlineData(true, "true", true)]
+    [InlineData(true, "", false)]
+    [InlineData(true, "false", false)]
+    [InlineData(true, "failed", false)]
+    [InlineData(true, "true,false", false)]
+    [InlineData(false, "", true)]
+    [InlineData(false, "false", false)]
+    [InlineData(false, "failed", false)]
+    public void D14_TheReadOnlyStateIsAsRequiredOnlyWhenEveryAnswerIsTrueAndADrawingTheSeamOpenedAnswered(
+        bool openedBySeam, string answers, bool expected)
+    {
+        IReadOnlyCollection<bool?> given = answers.Length == 0
+            ? Array.Empty<bool?>()
+            : answers.Split(',').Select(answer => answer == "failed" ? (bool?)null : bool.Parse(answer)).ToList();
+
+        Assert.Equal(expected, DrawingOpenProbe.ReadOnlyAsRequired(openedBySeam, given));
+    }
+
+    /// <summary>
     /// Decision 136A's review (2026-10-19): an open that says SOLIDWORKS already had the drawing open
     /// - here, though the probe's own lookup did not find it - did not open it, so the seam reads it
     /// as it stands, never asks or closes it, and the probe's reading fails the seam keys it gated

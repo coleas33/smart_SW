@@ -86,6 +86,20 @@ public static class DrawingOpenProbe
     public static IReadOnlyList<string> ReadMembers { get; } =
         new[] { LookupMember, ActiveDocumentMember, DocumentsMember, PathMember, SaveFlagMember };
 
+    /// <summary>
+    /// Decision 136A: whether the seam's <c>IsOpenedReadOnly</c> check went as
+    /// <c>confirmed-open.md</c> requires, from the answers the recording host saw (null for a check
+    /// that threw). Every answer must be true, and a drawing the seam opened and read
+    /// (<paramref name="openedBySeam"/>, its result's <c>OpenedByReview</c>) must have answered:
+    /// without an answer the check did not run (on the decision's second review, 2026-10-19). A
+    /// check the seam never reached is not judged (on its first review): the seam asks only a
+    /// drawing it opened and restored, so with no drawing returned, or a restore that failed, the
+    /// open is what failed, and the reading names only that. A drawing already open is never asked,
+    /// and is judged by the already-open requirements instead.
+    /// </summary>
+    public static bool ReadOnlyAsRequired(bool openedBySeam, IReadOnlyCollection<bool?> answers) =>
+        answers.All(answer => answer == true) && (answers.Count > 0 || !openedBySeam);
+
     /// <summary>The section's lines for the document at <paramref name="modelPath"/>, after the header.</summary>
     public static IReadOnlyList<string> Run(string? modelPath, DrawingOpenProbeSeam seam, IProbeFiles files)
     {
@@ -295,14 +309,6 @@ public static class DrawingOpenProbe
                         ? $"failed ({check.Failure})"
                         : ProbeText.Bool(check.Answer.Value)));
 
-        /// <summary>
-        /// Decision 136A: every answer the seam's <c>IsOpenedReadOnly</c> check gave was true. A check
-        /// never asked is not judged (on the decision's review, 2026-10-19): the seam asks only a drawing
-        /// it opened and restored, so with no drawing returned, or a restore that failed, the open is
-        /// what failed, and the reading names only that.
-        /// </summary>
-        private bool ReadOnlyAsRequired() => _recording.ReadOnly.All(check => check.Answer == true);
-
         private static string Flag(int options, int bit) => (options & bit) != 0 ? "yes" : "no";
 
         private string Outcome(DrawingOpenResult<During>? result, string? refusal, string? stopped)
@@ -453,7 +459,8 @@ public static class DrawingOpenProbe
                 failures.Add("the open-mode integers");
             }
 
-            if (!ReadOnlyAsRequired())
+            bool openedBySeam = result != null && result.OpenedByReview;
+            if (!ReadOnlyAsRequired(openedBySeam, _recording.ReadOnly.Select(check => check.Answer).ToList()))
             {
                 failures.Add("the read-only state");
             }
