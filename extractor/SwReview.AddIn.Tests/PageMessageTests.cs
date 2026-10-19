@@ -495,6 +495,29 @@ public sealed class PageMessageTests
         }
     }
 
+    /// <summary>
+    /// Owner decision 143A, the words: the refusal says what happened and what to do, and
+    /// promises nothing. It used to say "settings are saved once it finishes", and nothing saves
+    /// them then: nothing was written, and the engineer presses Save again.
+    /// </summary>
+    [Fact]
+    public void TheRefusalSaysNothingWasSavedAndPromisesNothing()
+    {
+        using (var world = new HostWorld())
+        {
+            world.Open();
+            world.Host.TrackSession("chat-1", Path.Combine(world.Settings.RunRoot, "20261019-101500-bracket"));
+            world.Backend.RunningTurns.Add("chat-1");
+
+            world.Receive("settings.save", "req-3", Save(effort: "low"));
+
+            Assert.Equal(
+                "a review turn is running, so the settings were not saved. Stop the turn, or wait "
+                    + "for it to end, and press Save again.",
+                world.Reply("error", "req-3").GetProperty("message").GetString());
+        }
+    }
+
     [Fact]
     public void TheSameSaveSucceedsOnceTheTurnHasEnded()
     {

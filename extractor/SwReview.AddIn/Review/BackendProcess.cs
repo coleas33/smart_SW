@@ -690,11 +690,16 @@ public sealed class BackendProcess : IDisposable
 /// disk, so restarting the backend under it would lose the turn silently (chat-api.md,
 /// "Shutdown and settings changes"); the pane refuses instead and offers Save again when the
 /// turn ends.
+///
+/// The message is what an engineer reads when a save is refused before anything is written,
+/// so it says that nothing was saved: it used to say "settings are saved once it finishes",
+/// which no code does (owner decision 143A). A turn that starts after that check is the one
+/// case whose settings are saved, and the review host says so with a sentence of its own.
 /// </summary>
 public sealed class TurnRunningException : Exception
 {
     public TurnRunningException()
-        : base("a review turn is running; settings are saved once it finishes. "
+        : base("a review turn is running, so the settings were not saved. "
             + "Stop the turn, or wait for it to end, and press Save again.")
     {
     }
