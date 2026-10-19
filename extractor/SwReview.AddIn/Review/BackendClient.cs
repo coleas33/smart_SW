@@ -196,7 +196,8 @@ public sealed class BackendClient : IBackendClient, IDisposable
     /// <summary>
     /// How the backend is launched for these settings: the resolved launcher, a timestamped
     /// log, the run root it must keep every `run_dir` inside, the page's origin as the only
-    /// allowed CORS origin, and the credentials - in the environment, as secrets.
+    /// allowed CORS origin, and the credentials - in the environment, as secrets - with the
+    /// provider of a key saved in the pane named on the command line (owner decision 138A).
     /// </summary>
     public BackendStartOptions StartOptions(UserSettings settings, ResolvedApiKey key)
     {
@@ -214,12 +215,25 @@ public sealed class BackendClient : IBackendClient, IDisposable
 
         if (key != null && !string.IsNullOrEmpty(key.Key))
         {
+            bool copied = false;
             foreach (string name in KeyVariablesFor(settings.Provider))
             {
                 options.Environment[name] = key.Key!;
+                copied = true;
             }
 
             options.Secrets.Add(key.Key!);
+
+            // The backend finds the key in its environment either way and cannot tell by itself
+            // that it is the one saved in the pane, so the add-in says so, naming the provider
+            // whose variables it just wrote: that provider's sessions record `key_source:
+            // settings`, the credential to revoke (owner decision 138A, FR-015). Only a key it
+            // copied is named - the scripted provider reads none - and a key from the
+            // workstation's environment is named nowhere, so its sessions record `env`.
+            if (copied && key.Source == "settings")
+            {
+                options.SettingsKeyProvider = settings.Provider;
+            }
         }
 
         // OPENAI_BASE_URL is the only endpoint override the backend reads, and it reads it for

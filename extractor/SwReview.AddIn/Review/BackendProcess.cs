@@ -73,6 +73,15 @@ public sealed class BackendStartOptions
     /// <summary>`--allow-origin`; the page's virtual host, fixed by pane-host-messages.md.</summary>
     public string AllowOrigin { get; set; } = "https://swreview.invalid";
 
+    /// <summary>
+    /// `--settings-key-provider`: the provider whose key variables in <see cref="Environment"/>
+    /// hold the key saved in the pane's settings, or null when they hold no saved key (owner
+    /// decision 138A). The backend finds the key in its environment either way and cannot
+    /// tell by itself where it came from; this is how its sessions record `key_source:
+    /// settings`. It names a provider and never carries a key.
+    /// </summary>
+    public string? SettingsKeyProvider { get; set; }
+
     public string? WorkingDirectory { get; set; }
 
     /// <summary>Credentials and endpoint overrides. The only channel a key travels on (FR-015).</summary>
@@ -515,6 +524,12 @@ public sealed class BackendProcess : IDisposable
         {
             yield return "--run-root";
             yield return options.RunRoot!;
+        }
+
+        if (!string.IsNullOrWhiteSpace(options.SettingsKeyProvider))
+        {
+            yield return "--settings-key-provider";
+            yield return options.SettingsKeyProvider!;
         }
     }
 
