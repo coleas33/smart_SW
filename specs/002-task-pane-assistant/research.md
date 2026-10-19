@@ -359,10 +359,11 @@ hid the tab and is not amended here.
     not answer counts as a turn, and only an answer, a `state` or `UnknownChat`, says a chat has
     none - or a remodel run in progress (`ReviewHostOptions.BackendBusy`), which the restart
     would end. With no backend process at all nothing holds it back, and the restart brings one
-    back. The restart reads the settings and resolves the key only when it is made. One lock is held for the whole of any restart the host makes, and whoever takes it
-    asks again whether a restart is still waiting, so however many ask the backend restarts
-    once. `settings.save`'s own restart, when no turn runs, goes through the same lock and is
-    the restart for the settings in force, so a restart still waiting is dropped.
+    back. The restart reads the settings and resolves the key only when it is made. One lock is
+    held for the whole of any restart the host makes, and whoever takes it asks again whether a
+    restart is still waiting, so however many ask the backend restarts once. `settings.save`'s
+    own restart, when no turn runs, goes through the same lock and is the restart for the
+    settings in force, so a restart still waiting is dropped.
   - A new review makes the restart first: `BackendReady`, `ContextReady` and
     `CreateReviewSession` - the one place every review's session is created - make it or wait
     for the one being made, and are refused `TurnRunning` while what holds it back still runs or
@@ -371,14 +372,14 @@ hid the tab and is not amended here.
     same.
   - A page call that would start a turn - `POST /sessions/{chat_id}/messages`, `/send`,
     `/evidence` or `/evidence/{request_id}` - is for a chat of the backend about to be replaced,
-    so while a restart waits the pane's proxy asks the review host (`TaskPaneOptions.PageTurnRefusal`,
-    `ReviewHost.PageTurnRefusal`) and never sends it: while what holds the restart back runs it
-    is refused `TurnRunning`; otherwise the restart is made, or waited for, and the call is
-    answered `UnknownChat`, as the restarted backend would answer it - or `BackendUnavailable`
-    when that restart failed and there is no backend. Stop, dispositions and the timing are
-    never held: Stop must reach the backend while a turn holds the restart back, and a
-    disposition sent before the restart is recorded, where one held until after it would only
-    be refused.
+    so while a restart waits the pane's proxy asks the review host
+    (`TaskPaneOptions.PageTurnRefusal`, `ReviewHost.PageTurnRefusal`) and never sends it: while
+    what holds the restart back runs it is refused `TurnRunning`; otherwise the restart is made,
+    or waited for, and the call is answered `UnknownChat`, as the restarted backend would answer
+    it - or `BackendUnavailable` when that restart failed and there is no backend. Stop,
+    dispositions and the timing are never held: Stop must reach the backend while a turn holds
+    the restart back, and a disposition sent before the restart is recorded, where one held
+    until after it would only be refused.
   - The page is told with `backend.restarted {}`, clears the banner that carried the sentence,
     and asks `ready` again for the new port and token, as it does after a save that restarted
     at once - once more after an `init` already on its way, which the host may have read while
@@ -454,9 +455,10 @@ hid the tab and is not amended here.
     waiting a poll out, and nothing asks or restarts afterwards. The host does not wait for a
     restart being made; `BackendClient.Dispose`, which the add-in calls next, waits for it on
     the same gate - as it already waits for a save's restart or the first start - for at most
-    the start's own timeouts, then stops what it started, so nothing outlives the add-in. A page that reloads leaves the restart waiting and
-    is told when it is made, and a post to a page that has gone is dropped
-    (`TaskPaneControl.PostToPage`), so a pane that closes holds nothing open.
+    the start's own timeouts, then stops what it started, so nothing outlives the add-in. A page
+    that reloads leaves the restart waiting and is told when it is made, and a post to a page
+    that has gone is dropped (`TaskPaneControl.PostToPage`), so a pane that closes holds nothing
+    open.
   - The 138A marker follows the new settings: the restart is built from the settings in force
     when it is made, so a switch to Gemini saved with a Gemini key starts the backend with that
     key under Gemini's variables and names Gemini as the saved key's provider, and one saved
