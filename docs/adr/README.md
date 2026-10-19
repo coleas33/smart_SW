@@ -1,8 +1,8 @@
 # Architecture decision records
 
 Architecture decision records, numbered, never edited after acceptance except to mark them
-superseded. Owner decisions made during features are recorded as NNA entries in each feature's
-`research.md`.
+superseded. Owner decisions are numbered entries such as `112A`, indexed with where each is recorded in
+[`docs/decisions.md`](../decisions.md).
 
 | ADR | Title | Status |
 |---|---|---|

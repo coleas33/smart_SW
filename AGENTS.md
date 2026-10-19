@@ -22,9 +22,10 @@ a verdict. Work is specified with Spec Kit, one package per feature under `specs
 2. **This repository is public.** Commit only fictional data: no real design, part or drawing
    number, company or customer name, vault or network path, real standards profile, recording,
    handover folder, user name or key. A downstream fork keeps its private material in its own
-   files; see the constitution and `SECURITY.md` when it exists.
-3. **Keys never reach a file, a command line or a log.** Live tests (`-m live`) call a paid API
-   and run only when asked.
+   files; see [`docs/forking.md`](docs/forking.md) and ADR 0008 (`docs/adr/`).
+3. **Keys never reach the repository, a command line or a log**, and are never written as plain
+   text (the add-in keeps the key DPAPI-encrypted in the user's settings). Live tests
+   (`-m live`) call a paid API and run only when asked.
 4. **Test first.** Every behaviour change starts with a failing test, named in the task; an
    existing test is changed only deliberately, with the reason, never loosened.
 5. **Never start SOLIDWORKS on a machine without a licence**, and never run seat tasks (`[W]`)
