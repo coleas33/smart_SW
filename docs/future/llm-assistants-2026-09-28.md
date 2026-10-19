@@ -372,7 +372,7 @@ prerequisite, not an option.**
   - Machine-safety responsibility stays with the builder: the ISO 12100 risk assessment, and in
     the EU the Machinery Regulation 2023/1230 from 2027-01-20.
   - The constitution already says a mutation is a proposal, never an engineering result
-    (`constitution.md:182-184`). That extends to concepts and to sizing numbers.
+    (`constitution.md:211-213`). That extends to concepts and to sizing numbers.
 - **Model fit.** The product's defaults (gpt-5.6, whose pricing tier is unlisted, and
   gemini-3.5-flash; `agent/settings.py:103-105`) are not the benchmarked models. The benchmarks
   measure an architecture the product forbids. The first evaluation has to create the evidence.
@@ -740,7 +740,7 @@ These are the existing `FindingStatus` literals (`findings.py:37`).
 
 ### 2.7 Constitution and scope
 
-- **Amendment 1.1.0 to 1.2.0 (MINOR).** Rewrite the scope line (`constitution.md:192-194`) to
+- **Amendment 1.1.0 to 1.2.0 (MINOR).** Rewrite the scope line (`constitution.md:265-267`) to
   read:
 
   > The pilot produces review findings and engineering estimates. An engineering estimate is a
@@ -767,7 +767,7 @@ These are the existing `FindingStatus` literals (`findings.py:37`).
   - The Principle VI analogue is written once: "Estimating the stated load cases does not
     establish adequacy for loads not stated."
 - **No write path.**
-  - The read-only rule (`constitution.md:141-145`) is unchanged.
+  - The read-only rule (`constitution.md:170-174`) is unchanged.
   - The selection read, the bounded face read and the material-database parse are reads. The
     read-only guard's denylist grows if any of them touches a writing family.
   - Creating a Simulation study writes into the model file, so Phase 3b needs a separate

@@ -15,18 +15,17 @@ Sync Impact Report
 - Removed sections: none
 - Templates: no edits required (.specify/templates/ restates neither rule; plan-template.md takes
   its Constitution Check gates from this file)
-- Follow-up TODOs: AGENTS.md rule 2 and CONTRIBUTING.md's public-repository rule open with "This
-  repository is public", which holds only in upstream, and docs/forking.md's list of files a fork
-  changes names neither sentence (it lists CONTRIBUTING.md for the maintainer's handle only); word
-  them for a fork's copy too, or add them to that list.
+- Follow-up TODOs: none. AGENTS.md rule 2 and CONTRIBUTING.md's public-repository rule open with
+  "This repository is public", which holds only in upstream; docs/forking.md's list of files a
+  fork changes names both sentences from this change on.
 - Migration: specs/011-drawing-context/plan.md's Constitution Check row ("a read-only open is a
   read, so no exception is needed") now rests on written text. AGENTS.md rule 2 agrees with the
   new constraint in upstream. ADR 0008's Consequences still call this amendment open;
   docs/adr/README.md edits an accepted ADR only to mark it superseded, so it is left as written.
   Line citations of this file (constitution.md:N) in docs/drawing-creation-d0-inventory.md,
   docs/future/llm-assistants-2026-09-28.md, specs/010-mechanical-checks/research.md and
-  specs/014-design-review-eval/research.md give 1.1.0's lines; renumber them once this text is
-  final. docs/future/llm-assistants-2026-09-28.md also names its own scope amendment 1.2.0; that
+  specs/014-design-review-eval/research.md are renumbered to this version's lines in this change.
+  docs/future/llm-assistants-2026-09-28.md also names its own scope amendment 1.2.0; that
   one would now be the next MINOR after this.
 
 Previous report (1.0.0 → 1.1.0, 2026-09-16), kept because ADR 0003 cites it:
