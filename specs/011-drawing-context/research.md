@@ -884,3 +884,261 @@ cause of a native crash; D6 and D8 workstation validation and the binding gate r
 Sources: [IView.GetCorrespondingEntity](https://help.solidworks.com/2022/english/api/sldworksapi/SolidWorks.Interop.sldworks~SolidWorks.Interop.sldworks.IView~GetCorrespondingEntity.html),
 [IModelDocExtension.GetCorrespondingEntity2](https://help.solidworks.com/2019/English/api/sldworksapi/SolidWorks.Interop.sldworks~SolidWorks.Interop.sldworks.IModelDocExtension~GetCorrespondingEntity2.html),
 and [IEntity.GetComponent](https://help.solidworks.com/2019/English/api/sldworksapi/SOLIDWORKS.Interop.sldworks~SOLIDWORKS.Interop.sldworks.IEntity~GetComponent.html).
+
+## R8. Decision 136A: the read-only guard's three gaps closed (owner, 2026-10-19)
+
+**Source.** Checking the draft constitution amendment of decision 134A against the code found three
+gaps in the read-only guard. The owner's decision 136A of 2026-10-19 (the sixth round's 1A, "Fix
+all three") closes them, test first, under this feature; decision 137A (the same round's 2A) has
+two stale comments corrected with them (R8.4). The tasks are T111 to T119 (Phase 10C). SOLIDWORKS
+was not started: the C# tests run over fakes and the interop stand-in, and the interop
+(`SolidWorks.Interop.sldworks` 32.5.0.48) was read as metadata only. Measured on the development
+machine: `SwReview.Extractor.Tests` 9,138 tests before and 9,353 after, `SwReview.AddIn.Tests`
+2,456 before and after, all green, the build at zero warnings.
+
+*Amended on the branch's review, the same day*: an independent adversarial review of the branch
+found no seat breakage and no new write path and confirmed the tests load-bearing. What it found is
+fixed by T120 to T128, each recorded in the subsection it amends, and the host's `PROTOCOL.md` now
+lists `drawing.read`'s refusals as this decision left them (T128, commit `ef6298e`). Measured after:
+`SwReview.Extractor.Tests` 9,374 tests and `SwReview.AddIn.Tests` 2,456, all green, the build at
+zero warnings. The questions it raised that are the owner's are R8.5's.
+
+*On a second review, the same day*: it verified T120 to T128 and found what T129 to T134 fix,
+recorded in R8.1: D14's reading passed a drawing the seam opened and never asked, and nothing at the
+seat could show whether SOLIDWORKS sets an already-open bit; R8.1's reason for honouring both bits
+is corrected, and the host's `PROTOCOL.md` now says what a failed visibility restore does (T134,
+commit `27954ab`). Measured after: `SwReview.Extractor.Tests` 9,387 tests and `SwReview.AddIn.Tests`
+2,456, all green, the build at zero warnings.
+
+### R8.1 Each read-only open is checked read-only (T111, T112, T113, T114)
+
+**Decision**: after a successful `OpenDoc6`, the confirmed drawing's open (`DrawingOpenScope`) and
+the console attach's open of a part or assembly (`SwSession.OpenReadOnly`) ask the document
+`IModelDoc2.IsOpenedReadOnly()` through their gate, under the bare name. A false answer, or a call
+that throws (it fails closed), refuses the read with a sentence that names why and the open's load
+errors and warnings, and closes the document that open opened - only after
+`GetOpenDocumentByName(path)` answers the very COM object the open returned - unread; a close
+refused or failed is named in the refusal, never hidden. A document open before the call is neither
+asked nor closed. The rule is written once, `Sw/ReadOnlyOpen.cs`, and the seam's existing close now
+goes through it too, its sentences unchanged. Probe D14 prints what the opened drawing answered
+(`IsOpenedReadOnly: true`, `false`, `failed (<type> 0x<HRESULT>)` or `not called`), and its own
+reading names `the read-only state` when a drawing the open returned did not answer true.
+
+**Why**: both opens ask for ReadOnly | Silent, and nothing but the document says whether SOLIDWORKS
+honoured that. The console attach leaves its document open on purpose, so that a later `resolve` or
+`capture` finds its persistent references, so a document it had opened for writing would stay open
+for writing in the engineer's session. The check is a read: `DrawingOpenGuard` hands the bare name to
+`ReadOnlyGuard`, which allows it, so the confirmed open's allowlist stays three keys; the qualified
+`IModelDoc2.IsOpenedReadOnly` would be refused by that guard, which is why the seam names it bare.
+
+**Evidence**: commit `71f9cea` (the check, with 19 new tests: nine of `DrawingOpenScopeTests`, one
+of `DrawingOpenGuardTests`, one of `ConfirmedDrawingReadTests`, eight of the new
+`SwSessionReadOnlyOpenTests` over the interop stand-in). Red before the change: on the seam's side
+twelve, nine new and three edited, and seven of the console's eight; the three that passed are pins
+of what must not change (a drawing or part already open, and the guards' answer to the bare read).
+Commit `33de063` (D14's line, three new tests and two edited, all five red before). Edited deliberately, for the
+new step in the call order and the gate log: `DrawingOpenScopeTests`' order and gate-log tests,
+D14's seam order and its two full reports, and the add-in's `gated=` line test. The contracts
+(`confirmed-open.md` section 3, `attach.md` section 4, `guard.md` sections 6 and 7, `probes.md`) and
+the seat plan's step 3.9 say so.
+
+*Amended on the branch's review, the same day (T121, T122, T125, T126)*: **a document the open
+itself says was already open is not the call's.** `OpenDoc6` can answer with a document SOLIDWORKS
+already had open - the engineer opened it between the lookup and the open, an open assembly holds
+it, or it is open under another spelling of its path - and says so in its warnings,
+`swFileLoadWarning_AlreadyOpen` (128). Such a document is the engineer's, perhaps open for writing
+with unsaved changes: it answered "not read-only", SOLIDWORKS answered its path with it, so the
+identity check passed and the refusal closed it; the review reproduced that with a throwaway test of
+the console attach. Both opens now treat it exactly as one the lookup found: used as it stands,
+never asked `IsOpenedReadOnly`, never closed; the seam reads it with `OpenedByReview` false and, if
+the restore failed too, refuses it unread and leaves it open. `FileLoadErrors.SayAlreadyOpen` also
+honours the errors enum's older twin, `swFileAlreadyOpenWarn` (512), and the identity-checked close
+stays for what the call really opened. That also settles the case the first version of R8.5 left
+open, a document open under another spelling of its path (a mapped drive against its UNC path): the
+console attach attaches to it as it stands, as it did before this decision, instead of refusing it.
+
+*Corrected on the second review, the same day (T133)*: this record said that honouring either bit
+"can only keep a close from happening". That is not the whole of it. Honouring a bit can never close
+the engineer's document, but it also skips the read-only check: should SOLIDWORKS ever set either
+bit on a fresh open, the console attach would use the document that open opened unchecked, and the
+seam would read the hidden drawing that open opened unchecked and leave it open - though it would
+close nothing against the engineer's will. Probe D14 is how the seat confirms what SOLIDWORKS sets:
+its `OpenDoc6` line now ends with the codes the open answered (T131, T132). Commit `2e8b348`.
+
+**The seat should confirm** two things about these bits. That SOLIDWORKS sets neither on a fresh
+open: the first D14 run of the seat plan's step 3.9 now shows the open's codes on its `OpenDoc6`
+line. And that it sets `swFileLoadWarning_AlreadyOpen` for a document already open under another
+spelling of its path: a D14 run with the drawing opened by one spelling (its UNC path, say) and
+`--doc` naming the part by another (a mapped drive) would show it; that is not yet a step of the
+plan. If SOLIDWORKS does not set the bit then, the identity check still guards the close as long as
+SOLIDWORKS answers that spelling after the open as it did before it, with no document, so nothing is
+closed; and the console attach refuses the document, naming the open's warnings.
+
+D14's reading names `the read-only state` only on an answer. When the restore of new drawings'
+visibility failed, the seam refused before it asked, yet the reading named the read-only state
+because a drawing had been returned; it now judges only the answers the check gave, any that is not
+true failing it, and a check never asked is not judged. *On the second review*: a drawing the seam
+opened and read must still have answered. With the seam's check removed, D14 printed
+`IsOpenedReadOnly: not called` beside `opened by the probe and closed` and still read `every answer
+as required`, and no test's reading caught it. The rule is now
+`DrawingOpenProbe.ReadOnlyAsRequired`: every answer true, and at least one for a drawing the seam
+opened (T129, T130).
+
+Evidence: commit `727e901`, tests first - nine new test methods, nineteen cases, across
+`FileLoadErrorsTests`, `DrawingOpenScopeTests`, `ConfirmedDrawingReadTests`,
+`SwSessionReadOnlyOpenTests` and D14's; eight red before the change and D14's red against the old
+seam - with the two tests whose premise was warning 128 edited deliberately to warning 32, their
+assertions kept; and commit `b0ba036`, one new D14 test, red before. `confirmed-open.md` section 3,
+`attach.md` section 4, `guard.md` section 7, `probes.md` and 004's `guard-allowlist.md` say so. On
+the second review: commit `8c90337` (T129, T130), a theory of the rule whose row for an opened
+drawing with no answer was red before, and under a throwaway mutation removing the seam's check
+`D14_EveryWayTheOpenCanMisbehaveIsNamedAndTheModelsItLoadedAreRecorded`, green before the change and
+red after it, its reading naming the read-only state; and commit `8e3e4d1` (T131, T132), six D14
+tests red before - among them the full report, edited deliberately for the `OpenDoc6` line's new
+end - and the seat plan's pin of that end, red until the plan said it.
+
+### R8.2 Every spelling of the open, activate, new, load, close and quit families (T115, T116)
+
+**Decision**: section 1 of `contracts/guard.md` named the shared families' members by hand, and the
+interop declares other spellings of them that the guard let through: the COM twins `IOpenDoc` to
+`IOpenDoc5`, `IOpenDocSilent`, `IActivateDoc` to `IActivateDoc3`, `INewDocument`, `INewDocument2`,
+`INewDrawing`, `INewDrawing2`, `INewPart` and `INewAssembly`, and bare `LoadFile`, `LoadAddIn` and
+`LoadAdminSettingsFile`. `DocumentLifecycleFamilyTests` now reflects `ISldWorks`, `IModelDoc2` and
+`IModelDocExtension` and applies a family grammar - a name belongs when one of its words is `Open`,
+`Reopen`, `Activate`, `Deactivate`, `New`, `Load`, `Reload`, `Unload`, `Close`, `Quit` or `Exit` -
+and holds every member it finds to one of three answers: a reader by section 2's prefixes, which
+stays allowed; an exclusion it names with its reason; or refused, bare and interface-qualified, by
+`ReadOnlyGuard` and by every gate the product builds. A member a later interop adds fails the test
+until someone decides. The denials stay generated: `list-writer-members.ps1`'s shared rows name the
+members, a third row is `IModelDoc2`'s, and `ReadOnlyGuard.Drawing.cs` and the "Feature 011" table of
+004's `guard-allowlist.md` are regenerated from one run.
+
+**Why**: FR-005 asks for the application's document activation, closing, creation and macro members
+to be refused and the membership checked mechanically for completeness; a hand-named row cannot be,
+and a spelling missed once would be missed again. The grammar's compounds are there because their
+members are what the families do: `ExitApp` quits SOLIDWORKS, and `FileReload` and `ReloadOrReplace`
+reload a document, discarding its changes.
+
+**Evidence**: on 32.5.0.48 the grammar matches 61 names on `ISldWorks` (seven readers, such as
+`GetOpenDocumentByName`), 15 on `IModelDoc2` and 4 on `IModelDocExtension`. Before the change 43 of
+them were callable (the test's red list). Beyond the eighteen spellings above, it found 22 more,
+now refused: on `ISldWorks` `UnloadAddIn`, `ExitApp`, `ActivateTaskPane`, `CloseUserNotification`,
+`CreateNewWindow`, `PresetNewDrawingParameters`, `SetNewFilename`, `AddFileOpenItem` to
+`AddFileOpenItem3`, `RemoveFileOpenItem` and `RemoveFileOpenItem2`; on `IModelDoc2` `Quit`,
+`FileReload`, `ReloadOrReplace`, `CloseFamilyTable`, `ClosePrintPreview`, `ActivateSelectedFeature`,
+`ActivateFeatureMgrView` and `DeActivateFeatureMgrView`; on `IModelDocExtension`
+`LoadDraftingStandard` and `CloseMessageBar` (with `ReloadOrReplace` and `CloseUserNotification`,
+which `IModelDocExtension` shares). That is 40 new names; the table denies 673 new names in all. The
+`IModelDoc2` creators the grammar also reaches (`InsertBendTableNew`, `InsertFamilyTableOpen`,
+`InsertNewNote3`, `SplitOpenSegment` and their kind) were refused by decision 21A's table already.
+Five members stay allowed, each named in the test and in the generated "Not denied" table with its
+reason: `OpenDoc6`, `OpenDoc7`, `CloseDoc` and `NewDocument` (section 3 of the contract, unchanged),
+and `IModelDoc2.Close`. `Close` was denied first and the remodel tests went red: `BridgeDispatcher`
+hands every command name to `ReadOnlyGuard`, which judges `remodel.close` by its member half, so the
+bare name `Close` cannot be denied while that command exists; no product path calls
+`IModelDoc2.Close`, and `RemodelGuard` and `DrawingOpenGuard` refuse its qualified spelling. A new
+test keeps every bridge command name off the denials. The drawing table regenerates byte for byte,
+and decision 21A's creation table, which reads this one's names as already denied, regenerates
+unchanged. Edited deliberately: `DrawingFamilyCompletenessTests.SharedFamilies` (with `IModelDoc2`)
+and `EveryExclusionHasOneOfTheContractsReasons` (a bridge command's member half). Commit `d08ef75`.
+
+*Amended on the branch's review, the same day (T120)*: editing
+`EveryExclusionHasOneOfTheContractsReasons` to accept any bridge command's member half loosened an
+existing test (AGENTS.md rule 4): a later exclusion of `Save` or `Rebuild` would have passed it
+unexamined. It now accepts exactly one more exclusion, `Close`, asserted to be `remodel.close`'s
+half, and went red under a throwaway mutation adding `Save` to the "Not denied" table.
+`NoCommandTheBridgeAnswersIsRefusedByTheReadOnlyGuard` stays and says it pins today's dispatcher
+(R8.5, the second question). Tests only; commit `7e65735`.
+
+### R8.3 Every attempted open counts toward the ten (T117, T118)
+
+**Decision**: the confirmed read refused a request once the package held ten drawing records, and a
+refused read leaves no record - an open SOLIDWORKS refused or did not make read-only, a read that
+threw after the open, a merge or save that did not land. Every open the seam begins now counts:
+`DrawingOpenScope.OpensAttempted` counts the opens it begins, and `ConfirmedDrawingRead` counts each
+one that left no record, per run folder, and refuses once those and the records together reach ten,
+naming both counts; the sentence for ten records is unchanged. Only an open counts: a refusal before
+the seam, the not-validated refusal and a read of a drawing already open open nothing.
+
+**Why**: the backend asks once per candidate file and counts only reads that landed, and a large
+assembly can have hundreds of candidates; with every open refused, nothing bounded how many drawings
+the host would open and close. The count lives for the life of the add-in process, not of the source:
+the tool service builds a source on every attach, and a run id resolves only in the process that
+started its review (`ReviewHost.ReviewRunDirectory`).
+
+**Evidence**: commit `28662bf`, with seven new tests of `ConfirmedDrawingReadTests` - among them 25
+failing requests, each through a source built anew, bounded at the nine opens the package left - and
+one of `DrawingOpenScopeTests`; five of them red before the change. `test_confirmed_drawing_read.py`,
+which pins the ten-records sentence on both sides, passes unedited. FR-056, its edge case and
+`confirmed-open.md` section 2 item 5 are amended.
+
+*Amended on the branch's review, the same day (T123, T124)*: the check of the opens that left no
+record came after the package was loaded, so every request past the limit still loaded the whole
+package on SOLIDWORKS's thread before it was refused. Once those opens reach ten on their own, a
+request is refused as soon as the run folder is resolved: "the limit of ten drawings for this review
+is reached: {m} opens that were refused or failed, so this one was not opened"; below that the bound
+is as above, and the ten-records sentence is untouched. Commit `1dcd8db`; its test, which makes the
+package unloadable after ten failed opens, threw the load's `JsonException` before the change. When
+the count resets is the owner's question (R8.5, the first).
+
+### R8.4 Decision 137A: the two comments (T119)
+
+Two doc comments in `Sw/SwSession.cs`, on `Attach` and on `OpenReadOnly`, called `OpenReadOnly` the
+only file-opening call the extractor makes. That has been untrue since this feature's read-only open
+of a confirmed drawing (`DrawingOpenScope`, which probe D14 also runs) and feature 004's `OpenDoc7`
+opens of the re-modeler's own copy and of `probe remodel`'s throwaway part. They now name those
+calls. Commit `4550254`. The amendment's own text, the other half of 137A, is the constitution
+pull request's.
+
+*Amended on the branch's review, the same day (T127)*: the same claim was still in four comments of
+`Program.cs`, `SuppressTest`'s doc comment, two test comments and the `OpenDoc6` row of section 3 of
+`contracts/guard.md`, each now corrected. Comments and docs only; commit `e98f58d`. What is left is
+R8.5's sixth item.
+
+### R8.5 Found on the way, and left for the owner
+
+*Rewritten on the branch's review, the same day*: of the list this section first held, the open that
+answers with a document already open is settled (R8.1) and the other stale wording corrected (R8.4);
+`IModelDoc2.Close` is now part of the second question below. Nothing here changes without the
+owner's decision.
+
+1. **When the count of ten resets.** The opens that left no record are counted per run folder for
+   the life of the add-in process (R8.3). A review's Retry and Recheck run in the same folder -
+   `ReviewHost.RetryContextReview` and `ReviewHost.RecheckReview` hand the record's run folder to
+   `CreateReviewSession` (`extractor/SwReview.AddIn/Review/ReviewHost.cs`, lines 1668 and 1697) - so
+   they inherit a spent count until SOLIDWORKS is restarted. And the bound is checked before the
+   seam asks whether the drawing is already open, so once the count is spent even a drawing the
+   engineer has open, whose read would open nothing, is refused. Whether the count belongs to the
+   run folder, the session or the package, and the sentence that tells the engineer how to recover,
+   are the owner's call. Nothing moves until T077 turns the open on: while the switch is off no open
+   is attempted, so the count stays at zero.
+2. **Denying `Close`, `Save` and `Rebuild` needs the dispatcher changed.**
+   `BridgeDispatcher.Dispatch` hands every command name to `ReadOnlyGuard`, which judges
+   `remodel.close`, `remodel.save` and `remodel.rebuild` by the part after the dot, so the bare
+   names `Close`, `Save` and `Rebuild` cannot be denied while those commands pass through it:
+   `IModelDoc2.Close` stays callable by its bare name through a read-only gate (R8.2), and so do
+   `Save` and `Rebuild`. The way out is a dispatcher that checks its known command names without
+   handing them to `ReadOnlyGuard`; the three names could then be denied, and
+   `NoCommandTheBridgeAnswersIsRefusedByTheReadOnlyGuard`, which pins today's dispatcher, would give
+   way to a test of the dispatcher's own check. That reshapes a guard, so it waits for the owner.
+3. **Bare writers still allowed, unused today.** Measured on 32.5.0.48 by reflecting the interop's
+   metadata against the built guard, SOLIDWORKS not started, `ReadOnlyGuard` still lets these
+   through by their bare names, and no product path calls any of them through a read-only gate: the
+   save family - `IModelDoc2`'s `Save`, `Save2`, `SaveAs`, `SaveAs2`, `SaveAs4`, `SaveAsSilent` and
+   `SaveSilent`, `IModelDocExtension`'s `SaveAs`, `SaveAs2`, `SaveDeFeaturedFile`,
+   `SaveDraftingStandard`, `SaveTo3DExperience` and `SaveViewToSolidworks`, and
+   `ISldWorks.SaveSettings` - and `SetReadOnlyState`, `ForceReleaseLocks`, `SavePackAndGo`,
+   `RenameDocument`, `MoveDocument` and `ReplaceReferencedDocument`. `Save3`, `SaveAs3` and
+   `SaveSelection` are denied, and `SaveBMP`, also allowed, is the capture's (`SwCaptureView`),
+   which writes an image. Denying them is a guard change; `Save` waits on the second question.
+4. **The backend's bound** (`tools/drawings.read_confirmed_candidates`) still counts only reads that
+   landed, so it goes on asking after refused ones; the host now answers each request past the ten
+   with a refusal that opens nothing. Counting refusals there too would be a backend task.
+5. **A hide that throws.** In the seam, a `DocumentVisible(false, 3)` that throws escapes as it
+   came, before the open and with no restore; it predates this decision and is unchanged.
+6. **What stays of the stale wording.** The suppress-test refusal message
+   (`SuppressTest.DocumentNotOpenMessage`) still tells the engineer that "the extractor's only open
+   path is read-only": it is product output, which T127 left as it is (comments and docs only), and
+   `SuppressTestTests` pins its words "write access" and "read-only". And R2.2 still calls
+   `OpenDoc6` "the extractor's one sanctioned read-only open": that is the record of its day, and
+   section 3 of `contracts/guard.md` carries the correction.

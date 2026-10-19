@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
+using SwReview.Extractor.Bridge;
 using SwReview.Extractor.Guard;
 using Xunit;
 
@@ -944,7 +945,12 @@ public class DrawingFamilyDenylistTests
     /// Every exclusion has one of contracts/guard.md section 3's reasons: the bare name of a
     /// stage-1 allowlist key, a member <see cref="RemodelGuard"/> refuses itself, or a member a
     /// sanctioned path already calls by its bare name - the extractor's read-only model open and
-    /// feature 004's two opens of documents it created (found by the read audit, T003).
+    /// feature 004's two opens of documents it created (found by the read audit, T003). Edited
+    /// deliberately for decision 136A (2026-10-19), and narrowed on its review the same day: one
+    /// exclusion more and only this one, <c>Close</c>, the member half of the bridge command
+    /// <c>remodel.close</c>, which the dispatcher hands the read-only guard whole
+    /// (<see cref="DocumentLifecycleFamilyTests.NoCommandTheBridgeAnswersIsRefusedByTheReadOnlyGuard"/>).
+    /// Another command's member half is no reason: excluding one would need a decision of its own.
     /// </summary>
     [Fact]
     public void EveryExclusionHasOneOfTheContractsReasons()
@@ -958,12 +964,17 @@ public class DrawingFamilyDenylistTests
         var bareKeys = new HashSet<string>(
             RemodelGuard.AllowedKeys.Select(CallKey.BareName), StringComparer.OrdinalIgnoreCase);
 
+        // The one exclusion a bridge command's member half explains, and the command it is the half of.
+        const string RemodelCloseHalf = "Close";
+        Assert.Equal(RemodelCloseHalf, CallKey.BareName(RemodelCommands.Close), StringComparer.OrdinalIgnoreCase);
+
         foreach (string member in ExcludedMembers)
         {
             Assert.True(
                 bareKeys.Contains(member)
                     || RemodelGuard.ExcludedMembers.Contains(member, StringComparer.OrdinalIgnoreCase)
-                    || sanctionedCalls.Contains(member),
+                    || sanctionedCalls.Contains(member)
+                    || string.Equals(member, RemodelCloseHalf, StringComparison.Ordinal),
                 $"{member} is excluded from the feature 011 denials without a reason contracts/guard.md "
                     + "section 3 gives.");
         }
@@ -1069,8 +1080,12 @@ public class DrawingFamilyCompletenessTests
         "ICalloutVariable", "ICalloutLengthVariable", "ICalloutAngleVariable", "ICalloutStringVariable",
     };
 
-    /// <summary>contracts/guard.md section 1: the two shared families, named members only.</summary>
-    internal static readonly string[] SharedFamilies = { "ISldWorks", "IModelDocExtension" };
+    /// <summary>
+    /// contracts/guard.md section 1: the shared families, named members only. Edited deliberately for
+    /// decision 136A (2026-10-19): <c>IModelDoc2</c> joined, for its close, quit, reload and activate
+    /// members (<see cref="DocumentLifecycleFamilyTests"/>).
+    /// </summary>
+    internal static readonly string[] SharedFamilies = { "ISldWorks", "IModelDoc2", "IModelDocExtension" };
 
     /// <summary>contracts/guard.md section 2: a name starting with one of these is a reader.</summary>
     private static readonly string[] ReaderPrefixes = { "get_", "Get", "IGet", "Is" };
@@ -1364,6 +1379,234 @@ public class DrawingFamilyReadAuditTests
         {
             Assert.Contains(literals, literal => string.Equals(literal.Literal, entry.Key, StringComparison.Ordinal));
             Assert.Contains(entry.Key, table, StringComparer.OrdinalIgnoreCase);
+        }
+    }
+}
+
+/// <summary>
+/// Decision 136A (feature 011, 2026-10-19). FR-005 asks the guard to refuse the application's
+/// document activation, closing, creation and macro members, and contracts/guard.md section 1's shared
+/// rows named them by hand, so other spellings on the same interop went unrefused: the COM twins
+/// <c>IOpenDoc</c> to <c>IOpenDoc5</c>, <c>IOpenDocSilent</c>, <c>IActivateDoc*</c> and the
+/// <c>INew*</c> creators, and bare <c>LoadFile</c>, <c>LoadAddIn</c> and <c>LoadAdminSettingsFile</c>.
+///
+/// This class reflects the interop the extractor is built against and holds every member of
+/// <c>ISldWorks</c>, <c>IModelDoc2</c> and <c>IModelDocExtension</c> whose name belongs to the open,
+/// activate, new, load, close or quit families (<see cref="BelongsToAFamily"/>) to one of three answers:
+/// a reader by section 2's prefixes, which stays allowed (FR-006); one of the <see cref="Allowed"/>
+/// members, each with its reason; or refused by <see cref="ReadOnlyGuard"/> in both spellings a call
+/// site can hand it - bare, and qualified with its interface - and by every gate the product builds.
+/// A member a later interop adds fails here until someone decides which it is. Only metadata is read;
+/// SOLIDWORKS is never started.
+/// </summary>
+public class DocumentLifecycleFamilyTests
+{
+    /// <summary>The interfaces the families are read from.</summary>
+    internal static readonly string[] Interfaces = { "ISldWorks", "IModelDoc2", "IModelDocExtension" };
+
+    /// <summary>
+    /// The families, as a word of a member's name: the verb, or a compound of it, beginning with its
+    /// capital - at the start of the name, after a COM twin's <c>I</c>, or where a word starts - and
+    /// ending where the name does or the next word begins. So <c>IOpenDoc5</c>, <c>CloseAndReopen</c>,
+    /// <c>ExitApp</c> (the quit family), <c>FileReload</c> (load) and <c>DeActivateFeatureMgrView</c>
+    /// (activate) belong; <c>ClosestDistance</c>, a measurement, and <c>IsOpenedReadOnly</c> do not.
+    /// </summary>
+    private static readonly Regex Family = new Regex(
+        "(Open|Reopen|Activate|Deactivate|New|Load|Reload|Unload|Close|Quit|Exit)(?![a-z])",
+        RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// The family members deliberately left allowed, each with its reason: the exclusions of
+    /// contracts/guard.md section 3 these families reach. Keyed interface-qualified, though the guard
+    /// matches bare names, so the bare name is what stays allowed.
+    /// </summary>
+    internal static readonly IReadOnlyDictionary<string, string> Allowed = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        ["ISldWorks.OpenDoc6"] = "the console attach's read-only open of a part or assembly (SwSession.OpenReadOnly, "
+            + "under the bare key), checked with IsOpenedReadOnly since decision 136A; the confirmed drawing's open "
+            + "calls the qualified key through DrawingOpenGuard's allowlist",
+        ["ISldWorks.OpenDoc7"] = "feature 004's open of the re-modeler's own copy (remodel.open, under RemodelGuard) and "
+            + "probe remodel's reopen of its throwaway part",
+        ["ISldWorks.CloseDoc"] = "the bare name of feature 004's stage-1 allowlist key ISldWorks.CloseDoc: denying it "
+            + "would make that key override a read-only denial; the confirmed drawing's close and the console "
+            + "attach's close of a document it opened that is not read-only both go through the identity check",
+        ["ISldWorks.NewDocument"] = "probe remodel's throwaway part (feature 004 T032, under RemodelProbeGuard)",
+        ["IModelDoc2.Close"] = "the member half of the bridge command remodel.close: BridgeDispatcher.Dispatch hands "
+            + "every command name to ReadOnlyGuard, which judges a qualified name by its member half, so denying the "
+            + "bare name would refuse that command (NoCommandTheBridgeAnswersIsRefusedByTheReadOnlyGuard). No product "
+            + "path calls IModelDoc2.Close, and its qualified spelling is refused by RemodelGuard and DrawingOpenGuard",
+    };
+
+    internal static bool BelongsToAFamily(string name) => Family.IsMatch(name);
+
+    /// <summary>Every family member of the three interfaces, interface-qualified, readers included.</summary>
+    internal static IReadOnlyList<string> FamilyMembers() =>
+        Interfaces
+            .SelectMany(face => DrawingFamilyCompletenessTests.MethodNames(face)
+                .Where(BelongsToAFamily)
+                .Select(name => face + "." + name))
+            .OrderBy(key => key, StringComparer.Ordinal)
+            .ToList();
+
+    private static IEnumerable<string> RefusedFamilyMembers() =>
+        FamilyMembers().Where(key =>
+            !DrawingFamilyCompletenessTests.IsReader(CallKey.BareName(key)) && !Allowed.ContainsKey(key));
+
+    [Theory]
+    [InlineData("IOpenDoc5", true)]
+    [InlineData("IOpenDocSilent", true)]
+    [InlineData("CloseAndReopen2", true)]
+    [InlineData("ExitApp", true)]
+    [InlineData("FileReload", true)]
+    [InlineData("UnloadAddIn", true)]
+    [InlineData("DeActivateFeatureMgrView", true)]
+    [InlineData("CreateNewWindow", true)]
+    [InlineData("Quit", true)]
+    [InlineData("ClosestDistance", false)]
+    [InlineData("IClosestDistance", false)]
+    [InlineData("IsOpenedReadOnly", false)]
+    [InlineData("DownloadFromMySolidWorksSettings", false)]
+    [InlineData("InsertSheetMetalClosedCorner", false)]
+    public void TheFamilyGrammarReadsWholeWords(string name, bool belongs)
+    {
+        Assert.Equal(belongs, BelongsToAFamily(name));
+    }
+
+    /// <summary>
+    /// A floor, so a grammar or a reflection that found almost nothing cannot pass vacuously, and the
+    /// spellings decision 136A names are among what it finds.
+    /// </summary>
+    [RemodelInteropManifestTests.InteropAssembliesPresentFact]
+    public void TheFamiliesAreFoundOnEachInterface()
+    {
+        IReadOnlyList<string> members = FamilyMembers();
+
+        Assert.True(
+            members.Count(key => key.StartsWith("ISldWorks.", StringComparison.Ordinal)) >= 40,
+            "The family grammar found almost nothing on ISldWorks: " + string.Join(", ", members));
+        foreach (string face in Interfaces)
+        {
+            Assert.Contains(members, key => key.StartsWith(face + ".", StringComparison.Ordinal));
+        }
+
+        foreach (string named in new[]
+                 {
+                     "ISldWorks.IOpenDoc", "ISldWorks.IOpenDoc2", "ISldWorks.IOpenDoc3", "ISldWorks.IOpenDoc4",
+                     "ISldWorks.IOpenDoc5", "ISldWorks.IOpenDocSilent", "ISldWorks.IActivateDoc",
+                     "ISldWorks.IActivateDoc2", "ISldWorks.IActivateDoc3", "ISldWorks.INewDocument",
+                     "ISldWorks.INewDocument2", "ISldWorks.INewDrawing", "ISldWorks.INewDrawing2",
+                     "ISldWorks.INewPart", "ISldWorks.INewAssembly", "ISldWorks.LoadFile", "ISldWorks.LoadAddIn",
+                     "ISldWorks.LoadAdminSettingsFile",
+                 })
+        {
+            Assert.Contains(named, members);
+        }
+    }
+
+    /// <summary>The heart of decision 136A: no member of the families is left callable by accident.</summary>
+    [RemodelInteropManifestTests.InteropAssembliesPresentFact]
+    public void EveryFamilyMemberIsAReader_ANamedExclusion_OrRefusedBareAndQualified()
+    {
+        var callable = RefusedFamilyMembers()
+            .Where(key => !Refuses(ReadOnlyGuard.Assert, CallKey.BareName(key)) || !Refuses(ReadOnlyGuard.Assert, key))
+            .ToList();
+
+        Assert.True(
+            callable.Count == 0,
+            "Members of the open, activate, new, load, close and quit families the read-only guard does not "
+                + "refuse in both spellings: refuse each (the shared rows of extractor/tools/list-writer-members.ps1, "
+                + "contracts/guard.md section 1) or name it in Allowed with its reason: " + string.Join(", ", callable));
+    }
+
+    [RemodelInteropManifestTests.InteropAssembliesPresentFact]
+    public void EveryGateTheProductBuildsRefusesThem()
+    {
+        var gates = new ICallGuard[]
+        {
+            ReadOnlyCallGuard.Instance,
+            new SuppressTestGuard(),
+            new RemodelProbeGuard(),
+            new RemodelGuard(),
+            new DrawingOpenGuard(),
+        };
+
+        var callable = RefusedFamilyMembers()
+            .SelectMany(key => gates.Select(gate => (Gate: gate, Key: key)))
+            .Where(pair => !Refuses(pair.Gate.Assert, CallKey.BareName(pair.Key)) || !Refuses(pair.Gate.Assert, pair.Key))
+            .Select(pair => pair.Gate.GetType().Name + " " + pair.Key)
+            .ToList();
+
+        Assert.True(callable.Count == 0, "Family members a gate the product builds lets through: " + string.Join(", ", callable));
+    }
+
+    /// <summary>The reads among the families stay allowed in both spellings (FR-006): the lookups the product calls above all.</summary>
+    [RemodelInteropManifestTests.InteropAssembliesPresentFact]
+    public void TheReadersAmongThemStayAllowed()
+    {
+        var readers = FamilyMembers().Where(key => DrawingFamilyCompletenessTests.IsReader(CallKey.BareName(key))).ToList();
+
+        Assert.Contains("ISldWorks.GetOpenDocumentByName", readers);
+        foreach (string key in readers)
+        {
+            ReadOnlyGuard.Assert(CallKey.BareName(key));
+            ReadOnlyGuard.Assert(key);
+        }
+    }
+
+    /// <summary>
+    /// Each exclusion is a family member of the interop, not a reader, allowed in both spellings, with
+    /// a reason - so the list cannot go stale and hide a later member behind an entry nobody needs -
+    /// and is one the generated "Not denied (feature 011)" table names with its reason, so the
+    /// contract and this list agree.
+    /// </summary>
+    [RemodelInteropManifestTests.InteropAssembliesPresentFact]
+    public void EveryAllowedMemberIsAFamilyMemberLeftAllowedWithTheContractsReason()
+    {
+        IReadOnlyList<string> members = FamilyMembers();
+
+        foreach (KeyValuePair<string, string> entry in Allowed)
+        {
+            string bare = CallKey.BareName(entry.Key);
+            Assert.Contains(entry.Key, members);
+            Assert.False(DrawingFamilyCompletenessTests.IsReader(bare), $"{entry.Key} is a reader; readers need no entry.");
+            Assert.False(string.IsNullOrWhiteSpace(entry.Value), $"{entry.Key} has no reason.");
+            ReadOnlyGuard.Assert(bare);
+            ReadOnlyGuard.Assert(entry.Key);
+            Assert.Contains(bare, DrawingFamilyDenylistTests.ExcludedMembers, StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
+    /// <summary>
+    /// Pins today's dispatcher: <c>BridgeDispatcher.Dispatch</c> hands every command name to the
+    /// read-only guard before it looks the command up, and the guard judges a qualified name by the
+    /// part after the dot - so <c>remodel.close</c>, <c>remodel.save</c> and <c>remodel.rebuild</c> are
+    /// judged as <c>close</c>, <c>save</c> and <c>rebuild</c>, and a denial of <c>Close</c>,
+    /// <c>Save</c> or <c>Rebuild</c> would refuse those commands. That is why <c>IModelDoc2.Close</c>
+    /// stays allowed: decision 136A first denied it, and <c>remodel.close</c> stopped answering. It
+    /// cannot be denied until the dispatcher stops passing known command names through the guard,
+    /// an open owner question (research R8.5); this test then gives way to one of the dispatcher.
+    /// </summary>
+    [Fact]
+    public void NoCommandTheBridgeAnswersIsRefusedByTheReadOnlyGuard()
+    {
+        foreach (string command in BridgeCommands.All.Concat(RemodelCommands.All))
+        {
+            ReadOnlyGuard.Assert(command);
+        }
+
+        Assert.Contains(RemodelCommands.Close, RemodelCommands.All);
+    }
+
+    private static bool Refuses(Action<string> assert, string key)
+    {
+        try
+        {
+            assert(key);
+            return false;
+        }
+        catch (MutatingCallError)
+        {
+            return true;
         }
     }
 }

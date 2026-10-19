@@ -58,7 +58,7 @@ Every other line keeps the rule above.
 | D11 | the D1 drawing | `GetProperties2` items, `GetTemplateName` present or not, preferences 13, 47, 65 answered or not | R4 |
 | D12 | an up-to-date view, a view left out of date after a model edit, and a drawing in detailing mode | per view: `ReferencedConfiguration` present, `IsModelOutOfDate`, `IsModelLoaded`; `IsDetailingMode` | R4 |
 | D13 | a reviewed part in a vault view whose same-name drawing is not cached locally | `File.Exists` answer, elapsed ms, and whether the local cache gained the file (checked by timestamp before and after, printed as a boolean) | R4 |
-| D14 | a reviewed part whose same-name drawing is not open, then the same with the drawing open (`--probe D14`, the one probe that opens a document: it runs `DrawingOpenScope` with its switch overridden for this command) | the `OpenDoc6` type and options integers; the active document's identity (a boolean "unchanged") before, during and after, and whether the engineer's window kept focus; the hidden drawing's sheet and view counts as read; the drawing file's size, write time and SHA-256 equality (booleans) and every open document's save flag before and after; after the close, whether `GetOpenDocumentByName` still answers and whether an exclusive read open of the file succeeds (not locked); the open-document count before, during and after; with the drawing already open, that no visibility, open or close key was gated | R4, T077, SC-011 |
+| D14 | a reviewed part whose same-name drawing is not open, then the same with the drawing open (`--probe D14`, the one probe that opens a document: it runs `DrawingOpenScope` with its switch overridden for this command) | the `OpenDoc6` type and options integers; the active document's identity (a boolean "unchanged") before, during and after, and whether the engineer's window kept focus; the hidden drawing's sheet and view counts as read; the drawing file's size, write time and SHA-256 equality (booleans) and every open document's save flag before and after; after the close, whether `GetOpenDocumentByName` still answers and whether an exclusive read open of the file succeeds (not locked); the open-document count before, during and after; with the drawing already open, that no visibility, open or close key was gated; *added 2026-10-19 (owner decision 136A)*: what the drawing the open returned answered to `IsOpenedReadOnly`; *on its second review*: the load errors and warnings the open answered | R4, T077, SC-011 |
 
 ## 3. What each probe's answer changes
 
@@ -70,7 +70,7 @@ Every other line keeps the rule above.
 | D7: a whole rendered text is readable | a later task may record it; `text_as_read` stays composed until then |
 | D12: out-of-date views read reliably | nothing; an unreliable read keeps such views unusable (their evidence is unused, never guessed) |
 | D13: the check fetches the file or takes over a second | discovery skips the candidate check under a vault view and writes one `drawing_candidate` gap saying so - one rule in `OpenDrawingDiscovery`, recorded in research and `open-drawings.md` section 5 |
-| D14: every answer as `confirmed-open.md` requires | T077 sets `DrawingOpenScope.SeatValidated => true` in its own commit citing the record (on the development machine, editing only the pin `TheSeamShipsOffUntilTheSeatConfirmsIt` beside it, T094); the drawing activated, took focus, was written, stayed locked, or its hidden views did not read: the switch stays false and research R4 records why; models left loaded after the close are recorded, never closed by the product |
+| D14: every answer as `confirmed-open.md` requires | T077 sets `DrawingOpenScope.SeatValidated => true` in its own commit citing the record (on the development machine, editing only the pin `TheSeamShipsOffUntilTheSeatConfirmsIt` beside it, T094); the drawing activated, took focus, was written, stayed locked, or its hidden views did not read - or, *added 2026-10-19 (owner decision 136A)*, the drawing the open returned did not answer `IsOpenedReadOnly` true: the switch stays false and research R4 records why; models left loaded after the close are recorded, never closed by the product |
 
 ## 4. Landed as (T080, T081, 2026-09-23)
 
@@ -123,6 +123,25 @@ Every other line keeps the rule above.
   foreground window, the drawing's views, the drawing file, the save flags, the close, the lock; for
   one already open: the seam keys, left open, the active document, the foreground window, the
   drawing's views, the save flags). T077 decides; the line only saves reading the others twice.
+  *Amended 2026-10-19 (owner decision 136A)*: after the `DocumentVisible` calls it prints
+  `IsOpenedReadOnly:` and what the drawing the open returned answered to the seam's read-only
+  check: `true`, `false`, or `failed (<Type> 0x<HRESULT>)`, never the failure's message; or `not
+  called` when the drawing was already open, the open returned none, or the open said SOLIDWORKS
+  already had it open (then the outcome is "already open" and the gated seam keys fail it). For a
+  drawing it opened, the reading names `the read-only state`, after the open-mode integers, unless
+  the drawing answered, and answered true. *On the decision's review, the same day*: a check never
+  asked is not judged - the seam asks only a drawing it opened and restored, so after an open that
+  returned none, or a restore that failed, the open is what failed and the reading names only that.
+  *On its second review, the same day*: a drawing the seam opened and read must still have answered.
+  `IsOpenedReadOnly: not called` beside `opened by the probe` means the seam's check did not run,
+  and the reading names `the read-only state` (`DrawingOpenProbe.ReadOnlyAsRequired`); a drawing
+  already open, which is never asked, still passes.
+  *And on its second review*: the `OpenDoc6` line ends with the load errors and warnings the open
+  answered, as `FileLoadErrors.Describe` writes them (`; answered error <n> (<names>), warning <n>
+  (<names>)`), or `; threw, so it answered no codes`. They are the seat's evidence of whether
+  SOLIDWORKS sets an already-open bit (`swFileLoadWarning_AlreadyOpen`, `swFileAlreadyOpenWarn`): on
+  a fresh open it must not, or the seam reads the drawing as already open and the gated seam keys
+  fail the reading.
 - **The report.** Beside the read-only gate's log it prints the confirmed open's own guard's
   members, which the read-only log cannot show. Its exit code is 0 when the run completed, whatever
   a probe printed, and 1 when it was refused, stopped or could not write its report.

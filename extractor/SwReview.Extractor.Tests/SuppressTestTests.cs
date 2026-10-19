@@ -139,7 +139,7 @@ public class SuppressTestTests : IDisposable
     [Fact]
     public void DocumentNotOpenMessage_NamesThePartAndWhyTheCommandWillNotOpenIt()
     {
-        // The extractor's one open path is read-only and silent (SwSession.OpenReadOnly), and
+        // SwSession.Attach would open the part read-only and silent (SwSession.OpenReadOnly), and
         // a read-only document answers false to every SetSuppression2: opening the part here
         // would produce a run of not_applied rows that tested nothing.
         string message = SuppressTest.DocumentNotOpenMessage(@"C:\vault\housing.SLDPRT");

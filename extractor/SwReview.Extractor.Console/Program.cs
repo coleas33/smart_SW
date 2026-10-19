@@ -363,9 +363,10 @@ public static class Program
         { "ActivateSheet", "ActivateView", "SheetNext", "SheetPrevious" };
 
     /// <summary>
-    /// The members whose absence is "opens no document". <c>OpenDoc6</c> is the extractor's
-    /// one file-opening call (<c>SwSession.OpenReadOnly</c>); the other three are the
-    /// neighbouring ways in, listed so the claim does not rest on one spelling.
+    /// The members whose absence is "opens no document". <c>OpenDoc6</c> is the console attach's
+    /// open of a part or assembly (<c>SwSession.OpenReadOnly</c>), one of the extractor's
+    /// file-opening calls (decision 137A); the other three are the neighbouring ways in, listed
+    /// so the claim does not rest on one spelling.
     /// </summary>
     internal static readonly string[] StandardsProbeDocumentOpeningMembers =
         { "OpenDoc6", "OpenDoc7", "LoadFile4", "ActivateDoc3" };
@@ -410,8 +411,9 @@ public static class Program
 
     /// <summary>
     /// Why <c>probe standards</c> will not run on a document that is not already open:
-    /// <c>SwSession.Attach</c> would open it read-only - the extractor's one file-opening
-    /// call - and this command's own gate log is the proof that it opened nothing.
+    /// <c>SwSession.Attach</c> would open it read-only - the console attach's open,
+    /// <c>SwSession.OpenReadOnly</c> - and this command's own gate log is the proof that it
+    /// opened nothing.
     /// </summary>
     internal static string StandardsProbeDocumentNotOpenMessage(string documentPath) =>
         $"'{documentPath}' is not open in SOLIDWORKS. Open it first: probe standards opens no "
@@ -2061,8 +2063,8 @@ public static class Program
                 ISldWorks swApp = Connect(allowStart, log);
 
                 // SwSession.Attach would OPEN a named document that is not open, read-only -
-                // the extractor's one file-opening call. This run opens nothing, so a document
-                // that is not open is refused here, before anything else is asked of it.
+                // the console attach's open, SwSession.OpenReadOnly. This run opens nothing, so a
+                // document that is not open is refused here, before anything else is asked of it.
                 if (!string.IsNullOrWhiteSpace(documentPath) && !IsOpenDocument(gate, swApp, documentPath!))
                 {
                     throw new InvalidOperationException(
@@ -3400,7 +3402,7 @@ public static class Program
                 SwGate gate = SuppressTestGate(observer);
 
                 // The document must ALREADY be open. SwSession.Attach would otherwise open it
-                // through the extractor's one open path, which is read-only and silent - and a
+                // through the console attach's open, which is read-only and silent - and a
                 // read-only document answers false to every SetSuppression2, so the run would
                 // record not_applied for every planned feature and prove nothing, having
                 // opened the engineer's part to do it.

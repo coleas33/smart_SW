@@ -23,7 +23,11 @@ namespace SwReview.Extractor.Dump;
 ///   4. the row's path is the drawing beside the document by discovery's own rule
 ///      (<see cref="OpenDrawingDiscovery.CandidatePath"/>), compared as discovery compares, and
 ///      the file exists;
-///   5. the package holds fewer than ten drawing records.
+///   5. the package holds fewer than ten drawing records - and, since decision 136A
+///      (2026-10-19), fewer than ten with every open this host attempted for the review that left
+///      no record, so a refused open uses up its room and the opens are bounded whatever happens.
+///      When those opens alone reach ten, the request is refused at step 1, before the package is
+///      even loaded (on the decision's review).
 ///
 /// Then the drawing is opened through the guarded seam (<see cref="DrawingOpenScope"/>) when it is
 /// not open, read by the drawing phase with every drawing id continuing the package's own and each
@@ -34,6 +38,18 @@ namespace SwReview.Extractor.Dump;
 /// </summary>
 public sealed class ConfirmedDrawingRead : IConfirmedDrawingSource
 {
+    /// <summary>
+    /// Decision 136A (2026-10-19): the opens attempted for each review that left no drawing record -
+    /// refused, failed, or read and not merged - by the review's run folder. Kept for the life of
+    /// the process, not of this source: the add-in builds a source on every attach, and a count it
+    /// rebuilt would forget the attempts; a run is only ever resolved by the process that started
+    /// it (its review host's session records), so nothing outlives what this count must cover.
+    /// </summary>
+    private static readonly Dictionary<string, int> UnrecordedOpens =
+        new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+    private static readonly object UnrecordedOpensLock = new object();
+
     private readonly Func<string, string?> _runFolderOf;
     private readonly string? _attachedDocumentPath;
     private readonly Func<string, bool> _fileExists;
@@ -91,6 +107,16 @@ public sealed class ConfirmedDrawingRead : IConfirmedDrawingSource
         string folder = _runFolderOf(runId)
             ?? throw new ConfirmedDrawingRefused(
                 $"'{runId}' is not a review this SOLIDWORKS session started, so no drawing was opened.");
+
+        // Decision 136A's review: once the opens that left no record reach the limit on their own,
+        // the request is refused before the package is loaded, so a spent review costs SOLIDWORKS's
+        // thread nothing more. Below that, step 5 counts them with the package's records.
+        int unrecorded = UnrecordedOpensOf(folder);
+        if (unrecorded >= OpenDrawingDiscovery.MaxAttachedDrawings)
+        {
+            throw new ConfirmedDrawingRefused(LimitReached(Opens(unrecorded, string.Empty)));
+        }
+
         if (!File.Exists(PackageAppender.PathIn(folder)))
         {
             throw new ConfirmedDrawingRefused(
@@ -150,49 +176,104 @@ public sealed class ConfirmedDrawingRead : IConfirmedDrawingSource
                 $"'{candidate.Path}' is already a document of the review '{runId}', so it was not opened again.");
         }
 
-        // 5. The bound discovery keeps.
-        if ((package.DrawingRecords?.Count ?? 0) >= OpenDrawingDiscovery.MaxAttachedDrawings)
+        // 5. The bound discovery keeps. Decision 136A: every open attempted for this review that left
+        // no record counts as well, so a refused open uses up its room and the opens stay bounded.
+        int records = package.DrawingRecords?.Count ?? 0;
+        if (records >= OpenDrawingDiscovery.MaxAttachedDrawings)
         {
             throw new ConfirmedDrawingRefused("the package already holds ten drawings, so this one was not opened");
         }
 
-        DrawingOpenResult<ReadDrawing> result;
+        if (records + unrecorded >= OpenDrawingDiscovery.MaxAttachedDrawings)
+        {
+            throw new ConfirmedDrawingRefused(
+                LimitReached($"{records} in the package and {Opens(unrecorded, "more ")}"));
+        }
+
+        // An open the seam begins counts unless its drawing reaches the package: refused, failed, a
+        // read that threw and a merge or save that did not land all leave no record (decision 136A).
+        int opensBefore = _open.OpensAttempted;
+        bool recorded = false;
         try
         {
-            result = _open.Read(candidate.Path, handle => ReadOne(package, root.Path, candidate.Path, handle));
-        }
-        catch (DrawingOpenRefused refusal)
-        {
-            throw new ConfirmedDrawingRefused(refusal.Message);
-        }
-
-        ReadDrawing read = result.Value;
-        var gaps = new List<Gap>(read.Gaps);
-        if (result.CloseRefusal != null)
-        {
-            gaps.Add(new Gap
+            DrawingOpenResult<ReadDrawing> result;
+            try
             {
-                Kind = GapKind.NotExtracted,
-                EntityKind = "drawing_confirmed_open",
-                EntityId = read.Record.DocumentId,
-                Reason = result.CloseRefusal,
-            });
+                result = _open.Read(candidate.Path, handle => ReadOne(package, root.Path, candidate.Path, handle));
+            }
+            catch (DrawingOpenRefused refusal)
+            {
+                throw new ConfirmedDrawingRefused(refusal.Message);
+            }
+
+            ReadDrawing read = result.Value;
+            var gaps = new List<Gap>(read.Gaps);
+            if (result.CloseRefusal != null)
+            {
+                gaps.Add(new Gap
+                {
+                    Kind = GapKind.NotExtracted,
+                    EntityKind = "drawing_confirmed_open",
+                    EntityId = read.Record.DocumentId,
+                    Reason = result.CloseRefusal,
+                });
+            }
+
+            PackageAppender.MergeDrawing(
+                package, read.Record, read.Document, read.Entry, gaps, documentId, result.OpenedByReview);
+            PackageAppender.Save(folder, package);
+            recorded = true;
+
+            return new ConfirmedDrawingResult
+            {
+                DocumentId = documentId,
+                DrawingDocumentId = read.Record.DocumentId,
+                Opened = result.OpenedByReview,
+                Closed = result.Closed,
+                Sheets = read.Record.Sheets.Count,
+                Gaps = gaps.Count,
+            };
         }
-
-        PackageAppender.MergeDrawing(
-            package, read.Record, read.Document, read.Entry, gaps, documentId, result.OpenedByReview);
-        PackageAppender.Save(folder, package);
-
-        return new ConfirmedDrawingResult
+        finally
         {
-            DocumentId = documentId,
-            DrawingDocumentId = read.Record.DocumentId,
-            Opened = result.OpenedByReview,
-            Closed = result.Closed,
-            Sheets = read.Record.Sheets.Count,
-            Gaps = gaps.Count,
-        };
+            if (!recorded && _open.OpensAttempted != opensBefore)
+            {
+                CountUnrecordedOpen(folder);
+            }
+        }
     }
+
+    /// <summary>The refusal once the limit is reached, with what <paramref name="counted"/> it.</summary>
+    private static string LimitReached(string counted) =>
+        $"the limit of ten drawings for this review is reached: {counted}, so this one was not opened";
+
+    /// <summary>"1 more open that was refused or failed", "3 more opens that were ...", with or without "more ".</summary>
+    private static string Opens(int count, string more) =>
+        count == 1
+            ? $"1 {more}open that was refused or failed"
+            : $"{count} {more}opens that were refused or failed";
+
+    /// <summary>The opens attempted for the review in <paramref name="folder"/> that left no record.</summary>
+    private static int UnrecordedOpensOf(string folder)
+    {
+        lock (UnrecordedOpensLock)
+        {
+            return UnrecordedOpens.TryGetValue(KeyOf(folder), out int count) ? count : 0;
+        }
+    }
+
+    private static void CountUnrecordedOpen(string folder)
+    {
+        string key = KeyOf(folder);
+        lock (UnrecordedOpensLock)
+        {
+            UnrecordedOpens[key] = (UnrecordedOpens.TryGetValue(key, out int count) ? count : 0) + 1;
+        }
+    }
+
+    /// <summary>One run folder, however it is spelt: full, and without a trailing separator.</summary>
+    private static string KeyOf(string folder) =>
+        Path.GetFullPath(folder).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
     /// <summary>
     /// The read itself, while the drawing is open: the drawing phase over this one drawing - its

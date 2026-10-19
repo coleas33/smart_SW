@@ -273,6 +273,49 @@ public class ConfirmedDrawingReadTests : IDisposable
         Assert.Null(Reloaded().DrawingRecords!.SingleOrDefault(row => row.DocumentId == DocumentIds.For(HousingDrawingPath)));
     }
 
+    /// <summary>
+    /// Decision 136A (2026-10-19): a candidate SOLIDWORKS did not open read-only is refused, closed
+    /// again and never read, and the package is left as it was. The refusal is the sentence the
+    /// backend records, word for word, as the <c>drawing.confirmed_open</c> item's reason
+    /// (<c>contracts/confirmed-open.md</c> section 1), so the review says why.
+    /// </summary>
+    [Fact]
+    public void ACandidateSolidWorksDidNotOpenReadOnlyIsARefusalSayingWhy_ClosedUnreadAndMergingNothing()
+    {
+        _host.OpenedReadOnly = false;
+        string before = File.ReadAllText(PackageAppender.PathIn(_runFolder));
+
+        ConfirmedDrawingRefused refusal = Assert.Throws<ConfirmedDrawingRefused>(() => Read(RunId, HousingId));
+
+        Assert.Equal(
+            "SOLIDWORKS opened 'housing.SLDDRW', but not read-only (IsOpenedReadOnly answered false; "
+            + FileLoadErrors.Describe(0, 0) + "), so it was not read; it was closed again.",
+            refusal.Message);
+        Assert.Equal("CloseDoc " + HousingDrawingPath, _host.Calls.Last().ToString());
+        Assert.Empty(_phase.Seen);
+        Assert.Equal(before, File.ReadAllText(PackageAppender.PathIn(_runFolder)));
+    }
+
+    /// <summary>
+    /// Decision 136A's review (2026-10-19): a candidate the open says SOLIDWORKS already had open -
+    /// the engineer opened it after the lookup, or has it open under another spelling of its path -
+    /// was not opened by this read: it is read as it stood and left open, recorded as one the lookup
+    /// found, never asked whether it is read-only and never closed.
+    /// </summary>
+    [Fact]
+    public void ACandidateTheOpenSaysWasAlreadyOpenIsReadAsItStoodAndLeftOpen()
+    {
+        _host.OpenWarnings = 128;
+        _host.OpenedReadOnly = false;
+
+        ConfirmedDrawingResult result = Read(RunId, HousingId);
+
+        Assert.False(result.Opened);
+        Assert.False(result.Closed);
+        Assert.Null(Reloaded().DrawingRecords!.Last().OpenedByReview);
+        Assert.DoesNotContain(_host.Calls, call => call.Name == "CloseDoc" || call.Name == "IsOpenedReadOnly");
+    }
+
     [Fact]
     public void ACloseTheSeamRefusesIsRecordedAsAGapOnTheDrawing()
     {
@@ -358,6 +401,175 @@ public class ConfirmedDrawingReadTests : IDisposable
         AssertRefusedOpeningNothing(() => Read(RunId, HousingId), "no candidate drawing");
     }
 
+    // ---- decision 136A (2026-10-19): every attempted open counts toward the ten --------------------
+
+    /// <summary>
+    /// An open that left no drawing record still counts toward the bound: with nine drawings held and
+    /// the candidate's open refused, the next read is refused by the bound before anything is asked
+    /// of SOLIDWORKS, in a sentence naming both counts.
+    /// </summary>
+    [Fact]
+    public void ARefusedOpenCountsTowardTheTen_SoTheNextReadOpensNothing()
+    {
+        PackageAppender.Save(_runFolder, ConfirmedDrawingPackage.Build(drawings: 9));
+        _host.OpenAnswersNull = true;
+        Assert.Throws<ConfirmedDrawingRefused>(() => Read(RunId, HousingId));
+        _host.Calls.Clear();
+        _host.OpenAnswersNull = false;
+
+        AssertRefusedOpeningNothing(
+            () => Read(RunId, HousingId),
+            "the limit of ten drawings for this review is reached: 9 in the package and 1 more open that was "
+                + "refused or failed, so this one was not opened");
+    }
+
+    /// <summary>
+    /// The opens are bounded whatever happens: every open fails, the review asks again and again, and
+    /// each request reaches a source built anew, as the add-in builds one on every attach - and still
+    /// only the room the package left, nine opens, is ever tried.
+    /// </summary>
+    [Fact]
+    public void OpensThatAllFailAreBoundedByTheRoomLeft_HoweverOftenAndThroughHoweverManySources()
+    {
+        _host.OpenAnswersNull = true;
+
+        for (int attempt = 0; attempt < 25; attempt++)
+        {
+            Assert.Throws<ConfirmedDrawingRefused>(() => Read(RunId, attempt % 2 == 0 ? HousingId : PinId));
+        }
+
+        Assert.Equal(9, _host.Calls.Count(call => call.Name == "OpenDoc6"));
+        Assert.Empty(_phase.Seen);
+    }
+
+    [Fact]
+    public void AnOpenSolidWorksDidNotMakeReadOnlyCountsTowardTheTen()
+    {
+        PackageAppender.Save(_runFolder, ConfirmedDrawingPackage.Build(drawings: 9));
+        _host.OpenedReadOnly = false;
+        Assert.Throws<ConfirmedDrawingRefused>(() => Read(RunId, HousingId));
+        _host.Calls.Clear();
+        _host.OpenedReadOnly = true;
+
+        AssertRefusedOpeningNothing(() => Read(RunId, PinId), "the limit of ten drawings for this review is reached");
+    }
+
+    [Fact]
+    public void AReadThatThrowsAfterTheOpenCountsTowardTheTen()
+    {
+        PackageAppender.Save(_runFolder, ConfirmedDrawingPackage.Build(drawings: 9));
+        _phase.Failure = new InvalidOperationException("the sheets did not answer");
+        Assert.Throws<InvalidOperationException>(() => Read(RunId, HousingId));
+        _phase.Failure = null;
+        _phase.Seen.Clear();
+        _host.Calls.Clear();
+
+        AssertRefusedOpeningNothing(() => Read(RunId, PinId), "the limit of ten drawings for this review is reached");
+    }
+
+    /// <summary>
+    /// A drawing read counts once, by its record: with eight held, a read that lands makes nine, a
+    /// refused open the tenth, and the next is refused naming nine in the package and one refused.
+    /// </summary>
+    [Fact]
+    public void AReadThatLandsCountsOnceByItsRecordAndARefusedOneByItsAttempt()
+    {
+        PackageAppender.Save(_runFolder, ConfirmedDrawingPackage.Build(drawings: 8));
+        Read(RunId, HousingId);
+        _host.OpenAnswersNull = true;
+        Assert.Throws<ConfirmedDrawingRefused>(() => Read(RunId, PinId));
+        _host.Calls.Clear();
+        _phase.Seen.Clear();
+        _host.OpenAnswersNull = false;
+
+        AssertRefusedOpeningNothing(
+            () => Read(RunId, PinId),
+            "the limit of ten drawings for this review is reached: 9 in the package and 1 more open that was "
+                + "refused or failed, so this one was not opened");
+    }
+
+    /// <summary>
+    /// Only an open counts: a refusal before the seam, the seam's own refusal while the seat has not
+    /// validated it, and a read of a drawing already open that throws open nothing, so with nine held
+    /// the tenth drawing is still read afterwards.
+    /// </summary>
+    [Fact]
+    public void WhatOpensNothingCountsForNothing()
+    {
+        PackageAppender.Save(_runFolder, ConfirmedDrawingPackage.Build(drawings: 9));
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            Assert.Throws<ConfirmedDrawingRefused>(() => Read("20260923-000000-other", HousingId));
+        }
+
+        _seatValidated = false;
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            Assert.Throws<ConfirmedDrawingRefused>(() => Read(RunId, PinId));
+        }
+
+        _seatValidated = true;
+        _host.AlreadyOpen(HousingDrawingPath);
+        _phase.Failure = new InvalidOperationException("the sheets did not answer");
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            Assert.Throws<InvalidOperationException>(() => Read(RunId, HousingId));
+        }
+
+        _phase.Failure = null;
+        ConfirmedDrawingResult result = Read(RunId, PinId);
+
+        Assert.True(result.Opened);
+        Assert.Equal(10, Reloaded().DrawingRecords!.Count);
+    }
+
+    /// <summary>
+    /// Decision 136A's review (2026-10-19): once the opens that left no record reach the limit on
+    /// their own, a request is refused before the review's package is loaded - here a package that
+    /// can no longer be loaded at all - so a spent review costs SOLIDWORKS's thread nothing more.
+    /// </summary>
+    [Fact]
+    public void AReviewWhoseFailedOpensAloneReachTheLimitIsRefusedBeforeItsPackageIsLoaded()
+    {
+        PackageAppender.Save(_runFolder, ConfirmedDrawingPackage.Build(drawings: 0));
+        _host.OpenAnswersNull = true;
+        for (int attempt = 0; attempt < 10; attempt++)
+        {
+            Assert.Throws<ConfirmedDrawingRefused>(() => Read(RunId, attempt % 2 == 0 ? HousingId : PinId));
+        }
+
+        Assert.Equal(10, _host.Calls.Count(call => call.Name == "OpenDoc6"));
+        File.WriteAllText(PackageAppender.PathIn(_runFolder), "not a package");
+        _host.Calls.Clear();
+
+        ConfirmedDrawingRefused refusal = Assert.Throws<ConfirmedDrawingRefused>(() => Read(RunId, HousingId));
+
+        Assert.Equal(
+            "the limit of ten drawings for this review is reached: 10 opens that were refused or failed, so this "
+                + "one was not opened",
+            refusal.Message);
+        Assert.Empty(_host.Calls);
+        Assert.Empty(_phase.Seen);
+    }
+
+    /// <summary>The count is per review: refused opens of one run leave another's room alone.</summary>
+    [Fact]
+    public void TheCountIsKeptPerReview()
+    {
+        string otherFolder = Path.Combine(Path.GetDirectoryName(_runFolder)!, "20260923-111500-chat0002");
+        Directory.CreateDirectory(otherFolder);
+        PackageAppender.Save(_runFolder, ConfirmedDrawingPackage.Build(drawings: 9));
+        PackageAppender.Save(otherFolder, ConfirmedDrawingPackage.Build(drawings: 9));
+        _host.OpenAnswersNull = true;
+        Assert.Throws<ConfirmedDrawingRefused>(() => Read(RunId, HousingId));
+        _host.OpenAnswersNull = false;
+
+        ConfirmedDrawingResult result = Source(id => id == "20260923-111500-chat0002" ? otherFolder : null)
+            .Read("20260923-111500-chat0002", HousingId);
+
+        Assert.True(result.Opened);
+    }
+
     // ---- the switch ping reports (feature 013 T072, contracts/drawing-capability.md section 1) --
 
     /// <summary>
@@ -381,8 +593,11 @@ public class ConfirmedDrawingReadTests : IDisposable
     private ConfirmedDrawingResult Read(string runId, string documentId) => Source().Read(runId, documentId);
 
     private ConfirmedDrawingRead Source() =>
+        Source(id => string.Equals(id, RunId, StringComparison.Ordinal) ? _runFolder : null);
+
+    private ConfirmedDrawingRead Source(Func<string, string?> runFolderOf) =>
         new ConfirmedDrawingRead(
-            id => string.Equals(id, RunId, StringComparison.Ordinal) ? _runFolder : null,
+            runFolderOf,
             _attachedDocument,
             path => _existing.Contains(path),
             new DrawingOpenScope(_host, null, _seatValidated),

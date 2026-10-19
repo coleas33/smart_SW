@@ -14,7 +14,7 @@ namespace SwReview.Extractor.Probes;
 /// What probe D14 needs of SOLIDWORKS beyond the confirmed open's own seam: the engineer's session
 /// around the open - the active document, the window with the focus, the open documents and their
 /// save flags. One interop call per member, gated by <see cref="DrawingOpenProbe"/> on the read-only
-/// gate under <see cref="DrawingOpenProbe.ReadMembers"/>; <see cref="IDrawingOpenHost"/>'s four are
+/// gate under <see cref="DrawingOpenProbe.ReadMembers"/>; <see cref="IDrawingOpenHost"/>'s five are
 /// gated by <see cref="DrawingOpenScope"/> itself, as in the product.
 /// </summary>
 public interface IDrawingOpenProbeHost : IDrawingOpenHost
@@ -64,7 +64,9 @@ public sealed class DrawingOpenProbeSeam
 /// opens a document. Beside a reviewed part or assembly it runs the product's own seam -
 /// <see cref="DrawingOpenScope"/> with its switch overridden for this command - on the same-name
 /// drawing, and records everything <c>confirmed-open.md</c> requires of it: the open-mode integers as
-/// passed, that the active document and the focus never moved, that the hidden drawing's views read,
+/// passed and the load errors and warnings the open answered (on decision 136A's second review),
+/// what the drawing the open returned answered to <c>IsOpenedReadOnly</c> (decision 136A),
+/// that the active document and the focus never moved, that the hidden drawing's views read,
 /// that the file's size, write time and SHA-256 are unchanged and no save flag rose, that the seam
 /// closed what it opened and the file is not left locked, the open documents before, during and
 /// after, and - with the drawing already open - that no visibility, open or close key was gated.
@@ -84,6 +86,20 @@ public static class DrawingOpenProbe
     /// <summary>Every member D14 names to the read-only gate; the tests assert each is a read.</summary>
     public static IReadOnlyList<string> ReadMembers { get; } =
         new[] { LookupMember, ActiveDocumentMember, DocumentsMember, PathMember, SaveFlagMember };
+
+    /// <summary>
+    /// Decision 136A: whether the seam's <c>IsOpenedReadOnly</c> check went as
+    /// <c>confirmed-open.md</c> requires, from the answers the recording host saw (null for a check
+    /// that threw). Every answer must be true, and a drawing the seam opened and read
+    /// (<paramref name="openedBySeam"/>, its result's <c>OpenedByReview</c>) must have answered:
+    /// without an answer the check did not run (on the decision's second review, 2026-10-19). A
+    /// check the seam never reached is not judged (on its first review): the seam asks only a
+    /// drawing it opened and restored, so with no drawing returned, or a restore that failed, the
+    /// open is what failed, and the reading names only that. A drawing already open is never asked,
+    /// and is judged by the already-open requirements instead.
+    /// </summary>
+    public static bool ReadOnlyAsRequired(bool openedBySeam, IReadOnlyCollection<bool?> answers) =>
+        answers.All(answer => answer == true) && (answers.Count > 0 || !openedBySeam);
 
     /// <summary>The section's lines for the document at <paramref name="modelPath"/>, after the header.</summary>
     public static IReadOnlyList<string> Run(string? modelPath, DrawingOpenProbeSeam seam, IProbeFiles files)
@@ -177,6 +193,7 @@ public static class DrawingOpenProbe
                 "  drawing open before the probe: " + openBefore.Print(ProbeText.Bool),
                 OpenDocLine(),
                 VisibilityLine(),
+                ReadOnlyLine(),
                 "  outcome: " + Outcome(result, refusal, stopped),
                 "  active document unchanged: during " + DuringSame(before.Active, during?.Active, SameObject)
                     + ", after " + Same(before.Active, after.Active, SameObject),
@@ -269,11 +286,15 @@ public static class DrawingOpenProbe
             }
 
             (int type, int options, string configuration) = _recording.Opens[0];
+            (int Errors, int Warnings)? codes = _recording.Codes[0];
             return $"  OpenDoc6: type {type}, options {options} (ReadOnly 2 {Flag(options, 2)}, Silent 1 {Flag(options, 1)}, "
                 + $"ViewOnly 4 {Flag(options, 4)}, RapidDraft 8 {Flag(options, 8)}, LoadModel 16 {Flag(options, 16)}), "
                 + (configuration.Length == 0
                     ? "configuration \"\""
-                    : $"configuration named ({configuration.Length} characters)");
+                    : $"configuration named ({configuration.Length} characters)")
+                + (codes == null
+                    ? "; threw, so it answered no codes"
+                    : "; answered " + FileLoadErrors.Describe(codes.Value.Errors, codes.Value.Warnings));
         }
 
         private string VisibilityLine() =>
@@ -282,6 +303,16 @@ public static class DrawingOpenProbe
                 : "  DocumentVisible: " + string.Join(
                     ", then ",
                     _recording.Visibility.Select(call => $"{ProbeText.Bool(call.Visible)} (type {call.Type})"));
+
+        /// <summary>Decision 136A: what the opened drawing answered to the seam's read-only check.</summary>
+        private string ReadOnlyLine() =>
+            _recording.ReadOnly.Count == 0
+                ? "  IsOpenedReadOnly: not called"
+                : "  IsOpenedReadOnly: " + string.Join(
+                    ", then ",
+                    _recording.ReadOnly.Select(check => check.Answer == null
+                        ? $"failed ({check.Failure})"
+                        : ProbeText.Bool(check.Answer.Value)));
 
         private static string Flag(int options, int bit) => (options & bit) != 0 ? "yes" : "no";
 
@@ -431,6 +462,12 @@ public static class DrawingOpenProbe
                     || open.Configuration.Length != 0))
             {
                 failures.Add("the open-mode integers");
+            }
+
+            bool openedBySeam = result != null && result.OpenedByReview;
+            if (!ReadOnlyAsRequired(openedBySeam, _recording.ReadOnly.Select(check => check.Answer).ToList()))
+            {
+                failures.Add("the read-only state");
             }
 
             if (result == null || !result.OpenedByReview)
@@ -606,7 +643,7 @@ public static class DrawingOpenProbe
     /// <summary>
     /// The host as the seam calls it, recording what was passed to <c>OpenDoc6</c> and
     /// <c>DocumentVisible</c> before each call - so the integers printed are the ones SOLIDWORKS was
-    /// handed, not the constants they were meant to be.
+    /// handed, not the constants they were meant to be - and what <c>OpenDoc6</c> answered after it.
     /// </summary>
     private sealed class RecordingOpenHost : IDrawingOpenHost
     {
@@ -622,6 +659,20 @@ public static class DrawingOpenProbe
 
         public List<(bool Visible, int Type)> Visibility { get; } = new List<(bool Visible, int Type)>();
 
+        /// <summary>
+        /// On decision 136A's second review (2026-10-19): the load errors and warnings each
+        /// <c>OpenDoc6</c> answered, one entry per entry of <see cref="Opens"/> - null for one that
+        /// threw - so the seat sees whether SOLIDWORKS sets an already-open bit
+        /// (<see cref="FileLoadErrors.SayAlreadyOpen"/>).
+        /// </summary>
+        public List<(int Errors, int Warnings)?> Codes { get; } = new List<(int Errors, int Warnings)?>();
+
+        /// <summary>
+        /// Decision 136A: what each <c>IsOpenedReadOnly</c> the seam asked answered, or its failure
+        /// as <see cref="ProbeText.Failure"/> prints it - the answer is null then.
+        /// </summary>
+        public List<(bool? Answer, string? Failure)> ReadOnly { get; } = new List<(bool? Answer, string? Failure)>();
+
         public object? OpenDocument(string path) => _host.OpenDocument(path);
 
         public void DocumentVisible(bool visible, int documentType)
@@ -633,7 +684,26 @@ public static class DrawingOpenProbe
         public object? OpenDoc6(string path, int documentType, int options, string configuration, out int errors, out int warnings)
         {
             Opens.Add((documentType, options, configuration ?? string.Empty));
-            return _host.OpenDoc6(path, documentType, options, configuration!, out errors, out warnings);
+            Codes.Add(null);
+            object? document = _host.OpenDoc6(path, documentType, options, configuration!, out errors, out warnings);
+            Codes[Codes.Count - 1] = (errors, warnings);
+            return document;
+        }
+
+        /// <summary>The answer or the failure is recorded, then handed to the seam as it came, so it decides as in the product.</summary>
+        public bool IsOpenedReadOnly(object document)
+        {
+            try
+            {
+                bool answer = _host.IsOpenedReadOnly(document);
+                ReadOnly.Add((answer, null));
+                return answer;
+            }
+            catch (Exception error)
+            {
+                ReadOnly.Add((null, ProbeText.Failure(error)));
+                throw;
+            }
         }
 
         public void CloseDoc(string path) => _host.CloseDoc(path);
@@ -642,7 +712,7 @@ public static class DrawingOpenProbe
 
 /// <summary>
 /// The SOLIDWORKS side of <see cref="IDrawingOpenProbeHost"/>: the confirmed open's own host for the
-/// seam's four members, and one interop call per session read. Compiled but not unit tested, like
+/// seam's five members, and one interop call per session read. Compiled but not unit tested, like
 /// <see cref="SwDrawingOpenHost"/>; probe D14 at the seat is its run (T077).
 /// </summary>
 public sealed class SwDrawingOpenProbeHost : IDrawingOpenProbeHost
@@ -662,6 +732,8 @@ public sealed class SwDrawingOpenProbeHost : IDrawingOpenProbeHost
 
     public object? OpenDoc6(string path, int documentType, int options, string configuration, out int errors, out int warnings) =>
         _open.OpenDoc6(path, documentType, options, configuration, out errors, out warnings);
+
+    public bool IsOpenedReadOnly(object document) => _open.IsOpenedReadOnly(document);
 
     public void CloseDoc(string path) => _open.CloseDoc(path);
 

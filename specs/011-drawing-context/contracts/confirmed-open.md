@@ -88,7 +88,22 @@ opening nothing, when any step fails:
 4. that row's path equals the candidate path recomputed from the document's own path by the rule
    discovery uses (`OpenDrawingDiscovery.CandidatePath`, one function), compared as discovery
    compares; the file exists;
-5. the package holds fewer than ten drawing records.
+5. the package holds fewer than ten drawing records. *(Amended 2026-10-19, owner decision 136A)*:
+   and fewer than ten counting every open this host attempted for the review that left no record,
+   such as an open SOLIDWORKS refused or did not make read-only, a read that threw after it, or a
+   merge or save that did not land, so a refused open uses up its room and the number of opens is
+   bounded whatever happens. Only an open counts: a refusal before the seam, the not-validated refusal and
+   a read of a drawing already open open nothing. The count is kept per run folder for the life of
+   the add-in process, not of the source, because the tool service builds a source on every attach;
+   a run id resolves only in the process that started the review. A request refused this way opens
+   nothing and is answered "the limit of ten drawings for this review is reached: {n} in the
+   package and {m} more opens that were refused or failed, so this one was not opened"; the
+   sentence for ten records is unchanged. (`DrawingOpenScope.OpensAttempted` counts the opens the
+   seam begins; `ConfirmedDrawingRead` keeps the count.) *On the decision's review, the same day*:
+   when those opens reach ten on their own, the request is refused as soon as item 1 has resolved
+   the run folder, before the package is loaded, so a spent review costs SOLIDWORKS's thread
+   nothing more: "the limit of ten drawings for this review is reached: {m} opens that were refused
+   or failed, so this one was not opened".
 
 Item 1's records are `ReviewHost.ReviewRunDirectory(run_id)` in the add-in (T074, pane lane,
 2026-09-23): the run folder of the review whose `SessionRecord.RunId` equals `run_id` ignoring
@@ -187,6 +202,35 @@ recorder:
 - Nothing the seam calls activates, rebuilds, saves or selects: no `ActivateDoc*`, `Save*`,
   `ForceRebuild*` or selection member appears in its gate log, and `OpenDoc6` and `CloseDoc`
   appear only under their qualified keys.
+- **The open is checked read-only** (*amended 2026-10-19, owner decision 136A*). The options ask
+  for read-only, and nothing but the document says whether SOLIDWORKS honoured them. After the
+  restore, the seam asks the document the open returned `IModelDoc2.IsOpenedReadOnly()`
+  (`IDrawingOpenHost.IsOpenedReadOnly`), a read gated under its bare name, which `DrawingOpenGuard`
+  hands to `ReadOnlyGuard`, so the allowlist stays the three keys. A false answer, or a call that
+  throws (it fails closed), is the refusal "SOLIDWORKS opened '{file name}', but not read-only
+  (IsOpenedReadOnly answered false; {FileLoadErrors}), so it was not read; it was closed again.",
+  or for a call that threw "... but did not confirm it read-only (IsOpenedReadOnly failed:
+  {type}: {message}; {FileLoadErrors}) ...", the exception kept inside. The drawing is closed,
+  unread, by the close rule above, the identity check first; a close refused or failed is named
+  in place of "it was closed again", never hidden. A drawing that was already open is not asked and never closed.
+  The rule is `Sw/ReadOnlyOpen.cs`, which the console attach shares (`attach.md` section 4). A read
+  that opened the drawing gains the bare read `IsOpenedReadOnly` in its gate log, between
+  `ISldWorks.OpenDoc6` and the close; the qualified keys are unchanged. The refusal is the host's
+  answer, so the backend records it word for word as the candidate's `drawing.confirmed_open` reason
+  (section 1).
+- **What the open says was already open is not the seam's** (*amended 2026-10-19, owner decision
+  136A, on its review*). `OpenDoc6` can answer with a drawing SOLIDWORKS already had open - the
+  engineer opened it after the lookup, or has it open under another spelling of its path - and
+  says so: `swFileLoadWarning_AlreadyOpen` (128) in its warnings, or the errors enum's older twin
+  `swFileAlreadyOpenWarn` (512) (`FileLoadErrors.SayAlreadyOpen`). The seam did not open that
+  drawing, so it treats it as the lookup's answer: read as it stands (`OpenedByReview` false, the
+  record carries no `opened_by_review`), not asked `IsOpenedReadOnly`, never closed. If the restore
+  failed too, it is refused unread - "SOLIDWORKS opened '{file name}' but says it was already open
+  ({FileLoadErrors}), and could not restore the visibility of new drawings (...), so it was not
+  read and was left open." - and still never closed. The identity-checked close stays for the
+  drawings the seam really opened. Whether SOLIDWORKS sets the warning for a drawing open under
+  another spelling is the seat's to confirm (research R8.1); where it does not, the identity check
+  still guards the close.
 
 ## 4. Shipped off until the seat confirms it
 

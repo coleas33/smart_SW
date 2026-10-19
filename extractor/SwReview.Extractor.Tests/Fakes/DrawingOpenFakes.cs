@@ -56,6 +56,15 @@ internal sealed class FakeDrawingOpenHost : IDrawingOpenHost
     /// <summary>Thrown by <c>CloseDoc</c>, when set.</summary>
     public Exception? CloseFailure { get; set; }
 
+    /// <summary>
+    /// What <c>IsOpenedReadOnly</c> answers (decision 136A): true, as SOLIDWORKS should answer for
+    /// a document <c>OpenDoc6</c> opened with the read-only option, unless a test says otherwise.
+    /// </summary>
+    public bool OpenedReadOnly { get; set; } = true;
+
+    /// <summary>Thrown by <c>IsOpenedReadOnly</c>, when set.</summary>
+    public Exception? ReadOnlyFailure { get; set; }
+
     public object AlreadyOpen(string path)
     {
         var document = new object();
@@ -110,6 +119,18 @@ internal sealed class FakeDrawingOpenHost : IDrawingOpenHost
 
         _open[path] = Opened;
         return Opened;
+    }
+
+    /// <summary>Recorded with which document it was asked of: the one the open returned, or another.</summary>
+    public bool IsOpenedReadOnly(object document)
+    {
+        Calls.Add(new FakeOpenCall("IsOpenedReadOnly", ReferenceEquals(document, Opened) ? "opened" : "other"));
+        if (ReadOnlyFailure != null)
+        {
+            throw ReadOnlyFailure;
+        }
+
+        return OpenedReadOnly;
     }
 
     public void CloseDoc(string path)

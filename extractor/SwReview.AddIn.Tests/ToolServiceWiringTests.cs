@@ -1504,12 +1504,16 @@ public sealed class ToolServiceWiringTests
             string line = Assert.Single(world.LogLines);
             Assert.Contains(" command=" + BridgeCommands.DrawingRead + " ", line, StringComparison.Ordinal);
             Assert.Contains(" status=ok ", line, StringComparison.Ordinal);
+
+            // Edited deliberately for decision 136A (2026-10-19): the seam's read-only check, a bare
+            // read, joins the line after the open and before the drawing phase's reads.
             Assert.Equal(
                 new[]
                 {
                     "GetOpenDocumentByName",
                     DrawingOpenGuard.DocumentVisibleKey,
                     DrawingOpenGuard.OpenDocKey,
+                    "IsOpenedReadOnly",
                     DrawingReadWorld.PhaseRead,
                     DrawingOpenGuard.CloseDocKey,
                 },
@@ -2983,6 +2987,13 @@ public sealed class ToolServiceWiringTests
             var document = new object();
             _open[path] = document;
             return document;
+        }
+
+        /// <summary>Decision 136A's check: SOLIDWORKS honoured the read-only option.</summary>
+        public bool IsOpenedReadOnly(object document)
+        {
+            Record(nameof(IsOpenedReadOnly));
+            return true;
         }
 
         public void CloseDoc(string path)

@@ -22,6 +22,12 @@ public interface IDrawingOpenHost
     /// <summary><c>ISldWorks.OpenDoc6(path, documentType, options, configuration, ref errors, ref warnings)</c>.</summary>
     object? OpenDoc6(string path, int documentType, int options, string configuration, out int errors, out int warnings);
 
+    /// <summary>
+    /// <c>IModelDoc2.IsOpenedReadOnly()</c> of a document <see cref="OpenDoc6"/> returned (decision
+    /// 136A): whether SOLIDWORKS honoured the read-only option.
+    /// </summary>
+    bool IsOpenedReadOnly(object document);
+
     /// <summary><c>ISldWorks.CloseDoc(path)</c>.</summary>
     void CloseDoc(string path);
 }
@@ -70,16 +76,24 @@ public sealed class DrawingOpenRefused : InvalidOperationException
 /// read, and closed again when - and only when - this seam opened it.
 ///
 ///   * <b>Already open</b>: no visibility call, no open, no close; the drawing is read as it
-///     stands and <see cref="DrawingOpenResult{T}.OpenedByReview"/> is false.
+///     stands and <see cref="DrawingOpenResult{T}.OpenedByReview"/> is false. So is a drawing the
+///     open answers with and says SOLIDWORKS already had open (decision 136A's review,
+///     2026-10-19, <see cref="FileLoadErrors.SayAlreadyOpen"/>) - opened by the engineer after the
+///     lookup, or open under another spelling of its path: this seam did not open it, so it is not
+///     checked and never closed.
 ///   * <b>Not open</b>: <c>DocumentVisible(false, 3)</c>, <c>OpenDoc6(path, 3, 3, "")</c>, and
 ///     <c>DocumentVisible(true, 3)</c> in a <c>finally</c>, also when the open throws or answers
 ///     null - each of those a refusal naming the file and its load errors.
+///   * <b>Read-only, checked</b> (decision 136A, 2026-10-19): after the restore, the document the
+///     open returned is asked <c>IsOpenedReadOnly()</c>, a read gated under its bare name; false,
+///     or a call that throws, is a refusal naming why and the load errors, and the drawing is
+///     closed again unread (<see cref="ReadOnlyOpen"/>, which the console attach shares).
 ///   * <b>Close</b>: whenever <c>OpenDoc6</c> returned a document - after the read, when the read
-///     throws, and when the restore throws (the drawing is then not read) - and only after
-///     <c>GetOpenDocumentByName(path)</c> answers the same COM identity the open returned;
-///     otherwise nothing is closed and the result says why. A close that SOLIDWORKS fails is a
-///     reason too, never an exception that would hide the read's own. No other document is ever
-///     closed, and never a model the drawing loaded.
+///     throws, and when the restore throws or the check refuses (the drawing is then not read) -
+///     and only after <c>GetOpenDocumentByName(path)</c> answers the same COM identity the open
+///     returned; otherwise nothing is closed and the result says why. A close that SOLIDWORKS
+///     fails is a reason too, never an exception that would hide the read's own. No other
+///     document is ever closed, and never a model the drawing loaded.
 ///
 /// Every call goes through a gate built on <see cref="DrawingOpenGuard"/>, so the three keys are
 /// the whole of what it may do beyond reading; nothing it calls activates, rebuilds, saves or
@@ -98,7 +112,7 @@ public sealed class DrawingOpenScope
 
     private const string DrawingExtension = ".slddrw";
 
-    private const string LookupMember = "GetOpenDocumentByName";
+    private const string LookupMember = ReadOnlyOpen.LookupMember;
 
     private readonly IDrawingOpenHost _host;
     private readonly SwGate _gate;
@@ -137,6 +151,14 @@ public sealed class DrawingOpenScope
     /// </summary>
     public bool OpensClosedDrawings => _seatValidated;
 
+    /// <summary>
+    /// How many opens this scope has begun - new drawings hidden and <c>OpenDoc6</c> called -
+    /// whatever came of them (decision 136A, 2026-10-19): the confirmed read counts each one that
+    /// left no drawing record toward the ten-drawing bound. A drawing already open, a path that is
+    /// no drawing and a refusal while the seat has not validated the open begin none.
+    /// </summary>
+    public int OpensAttempted { get; private set; }
+
     /// <summary>The sentence a closed drawing is refused with while <see cref="SeatValidated"/> is false.</summary>
     public const string NotValidatedSentence =
         "the read-only open of a confirmed drawing is not yet validated on a seat (feature 011 probe D14)";
@@ -172,7 +194,11 @@ public sealed class DrawingOpenScope
             throw new DrawingOpenRefused(NotValidatedSentence);
         }
 
-        object opened = Open(path);
+        (object opened, bool alreadyOpen) = Open(path);
+        if (alreadyOpen)
+        {
+            return new DrawingOpenResult<T>(read(opened), openedByReview: false, closed: false, closeRefusal: null);
+        }
 
         T value;
         try
@@ -188,7 +214,8 @@ public sealed class DrawingOpenScope
             }
 
             throw new DrawingOpenRefused(
-                $"reading '{Path.GetFileName(path)}' failed ({Described(readFailure)}), and {refusedClose}",
+                $"reading '{Path.GetFileName(path)}' failed ({ReadOnlyOpen.Described(readFailure)}), "
+                + $"and {refusedClose}",
                 readFailure);
         }
 
@@ -200,9 +227,14 @@ public sealed class DrawingOpenScope
     /// Hide, open read-only, restore - the restore in a <c>finally</c>, whatever the open did -
     /// and return the open drawing. A drawing the open returned while the restore failed is not
     /// handed on: it is closed here, and the refusal says the restore failed and whether it closed.
+    /// Nor is one SOLIDWORKS does not confirm it opened read-only (decision 136A): it is closed here
+    /// too, and the refusal says why and whether it closed. A drawing the open says SOLIDWORKS
+    /// already had open is handed back as such, never checked or closed: refused unread if the
+    /// restore failed, and left open either way.
     /// </summary>
-    private object Open(string path)
+    private (object Drawing, bool AlreadyOpen) Open(string path)
     {
+        OpensAttempted++;
         string fileName = Path.GetFileName(path);
         int errors = 0;
         int warnings = 0;
@@ -234,17 +266,55 @@ public sealed class DrawingOpenScope
             throw openFailure == null ? new DrawingOpenRefused(refusal) : new DrawingOpenRefused(refusal, openFailure);
         }
 
+        // Decision 136A's review: the open answered with a drawing SOLIDWORKS says it already had
+        // open, so this seam did not open it and must never close it.
+        bool alreadyOpen = FileLoadErrors.SayAlreadyOpen(errors, warnings);
+
         if (restoreFailure != null)
         {
+            if (alreadyOpen)
+            {
+                throw new DrawingOpenRefused(
+                    $"SOLIDWORKS opened '{fileName}' but says it was already open "
+                    + $"({FileLoadErrors.Describe(errors, warnings)}), and {RestoreSentence(restoreFailure)}, "
+                    + "so it was not read and was left open."
+                    + StaysHiddenSentence);
+            }
+
             string? closeRefusal = Close(path, opened);
             throw new DrawingOpenRefused(
                 $"SOLIDWORKS opened '{fileName}' read-only but {RestoreSentence(restoreFailure)}, so it was not read; "
                 + (closeRefusal ?? "it was closed again.")
-                + " Drawings opened from now on may stay hidden until SOLIDWORKS is restarted.");
+                + StaysHiddenSentence);
         }
 
-        return opened;
+        if (alreadyOpen)
+        {
+            return (opened, true);
+        }
+
+        object document = opened;
+        string? notReadOnly = ReadOnlyOpen.Refusal(
+            _gate,
+            () => _host.IsOpenedReadOnly(document),
+            errors,
+            warnings,
+            () => Close(path, document),
+            fileName,
+            out Exception? checkFailure);
+        if (notReadOnly != null)
+        {
+            throw checkFailure == null
+                ? new DrawingOpenRefused(notReadOnly)
+                : new DrawingOpenRefused(notReadOnly, checkFailure);
+        }
+
+        return (document, false);
     }
+
+    /// <summary>What a refusal after a failed restore ends with, whatever became of the drawing.</summary>
+    private const string StaysHiddenSentence =
+        " Drawings opened from now on may stay hidden until SOLIDWORKS is restarted.";
 
     /// <summary>Shows new drawings again; returns why it could not, or null when it did.</summary>
     private string? Restore()
@@ -256,44 +326,29 @@ public sealed class DrawingOpenScope
         }
         catch (Exception error) when (!(error is MutatingCallError))
         {
-            return Described(error);
+            return ReadOnlyOpen.Described(error);
         }
     }
 
     private static string RestoreSentence(string failure) =>
         $"could not restore the visibility of new drawings ({failure})";
 
-    private static string Described(Exception error) => error.GetType().Name + ": " + error.Message;
-
     /// <summary>
     /// Closes what this seam opened, after checking SOLIDWORKS still answers the path with the
     /// very document the open returned; returns why it did not close, or null when it closed. A
     /// lookup or close SOLIDWORKS fails is returned as a reason, never thrown: the caller may be
-    /// unwinding from the read's own exception, which must not be hidden.
+    /// unwinding from the read's own exception, which must not be hidden. The rule is
+    /// <see cref="ReadOnlyOpen.Close"/>'s, which the console attach shares (decision 136A).
     /// </summary>
-    private string? Close(string path, object opened)
-    {
-        string fileName = Path.GetFileName(path);
-        try
-        {
-            object? current = _gate.Call(LookupMember, () => _host.OpenDocument(path));
-            if (!ReferenceEquals(current, opened))
-            {
-                return current == null
-                    ? $"'{fileName}' was not closed: SOLIDWORKS no longer answers its path with the "
-                        + "same document the review opened, so nothing was closed."
-                    : $"'{fileName}' was not closed: SOLIDWORKS answers its path with a document "
-                        + "that is not the same document the review opened, so nothing was closed.";
-            }
-
-            _gate.Call(DrawingOpenGuard.CloseDocKey, () => _host.CloseDoc(path));
-            return null;
-        }
-        catch (Exception error) when (!(error is MutatingCallError))
-        {
-            return $"'{fileName}' was not closed: SOLIDWORKS failed while the review was closing it ({Described(error)}).";
-        }
-    }
+    private string? Close(string path, object opened) =>
+        ReadOnlyOpen.Close(
+            _gate,
+            () => _host.OpenDocument(path),
+            DrawingOpenGuard.CloseDocKey,
+            () => _host.CloseDoc(path),
+            opened,
+            Path.GetFileName(path),
+            "the review");
 }
 
 /// <summary>
@@ -323,6 +378,8 @@ public sealed class SwDrawingOpenHost : IDrawingOpenHost
         warnings = w;
         return document;
     }
+
+    public bool IsOpenedReadOnly(object document) => ((IModelDoc2)document).IsOpenedReadOnly();
 
     public void CloseDoc(string path) => _swApp.CloseDoc(path);
 }

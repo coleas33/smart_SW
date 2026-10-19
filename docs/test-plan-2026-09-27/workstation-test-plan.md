@@ -920,8 +920,9 @@ rule 5 says what to copy from them. After each run look at:
   `sheet activation: none`, `document opening: none` and `display state: none`, and the last line
   `gate log: the confirmed open's guard (DrawingOpenGuard, D14 only): none` on every run but
   step 3.9's. At step 3.9 that last line lists what the confirmed open's guard saw: in run 1
-  `GetOpenDocumentByName, ISldWorks.DocumentVisible, ISldWorks.OpenDoc6, ISldWorks.CloseDoc`, in
-  run 2 `GetOpenDocumentByName` alone.
+  `GetOpenDocumentByName, ISldWorks.DocumentVisible, ISldWorks.OpenDoc6, IsOpenedReadOnly, ISldWorks.CloseDoc`
+  (the read-only check of decision 136A, 2026-10-19, is the one bare read after the open), in run 2
+  `GetOpenDocumentByName` alone.
 
 Pass: exit code 0 and the gate log as above. Fail: exit code 1, or any of those words other than
 `none`: copy the lines into the findings document. A line `stopped: <Type> 0x<number>` or
@@ -1334,13 +1335,15 @@ the development machine (section 3.10).
    swreview-extract probe drawings --out "$H\probes" --doc "<full path of part J>" --probe D14; "exit code: $LASTEXITCODE"
    ```
 
-   Pass: the D14 section reads, line for line (the sheet, view, gap and document counts are J's
-   own; the views must be at least 1):
+   Pass: the D14 section reads, line for line (the sheet, view, gap and document counts are J's own;
+   the views must be at least 1; the codes after `answered` are whatever SOLIDWORKS answered the
+   open, named as the product names them):
 
    ```text
      drawing open before the probe: false
-     OpenDoc6: type 3, options 3 (ReadOnly 2 yes, Silent 1 yes, ViewOnly 4 no, RapidDraft 8 no, LoadModel 16 no), configuration ""
+     OpenDoc6: type 3, options 3 (ReadOnly 2 yes, Silent 1 yes, ViewOnly 4 no, RapidDraft 8 no, LoadModel 16 no), configuration ""; answered error <n> (<names>), warning <n> (<names>)
      DocumentVisible: false (type 3), then true (type 3)
+     IsOpenedReadOnly: true
      outcome: opened by the probe and closed
      active document unchanged: during true, after true
      foreground window unchanged: during true, after true
@@ -1364,6 +1367,7 @@ the development machine (section 3.10).
      drawing open before the probe: true
      OpenDoc6: not called
      DocumentVisible: not called
+     IsOpenedReadOnly: not called
      outcome: already open, read as it stood and left open
      active document unchanged: during true, after true
      foreground window unchanged: during true, after true
@@ -1380,10 +1384,13 @@ the development machine (section 3.10).
 
    and the drawing is still open afterwards.
 
-The last line of each D14 section is the probe's own reading; any `not as required: ...` there is
-a fail and names what failed. Record: both report file names, both last lines, the `open
-documents` and `left loaded afterwards` lines (recorded, never a fail), and every line that
-differs from the blocks above. Change nothing: section 3.10 says who sets the switch.
+The last line of each D14 section is the probe's own reading; any `not as required: ...` there is a
+fail and names what failed. Record: both report file names, both last lines, the `open documents`
+and `left loaded afterwards` lines (recorded, never a fail), the first report's `OpenDoc6` line
+whole, and every line that differs from the blocks above. The codes on that line show whether
+SOLIDWORKS sets an already-open bit (`swFileLoadWarning_AlreadyOpen` or `swFileAlreadyOpenWarn`) on
+a fresh open (011 decision 136A, 2026-10-19): with either there, the probe reads the drawing as
+already open, and its last line fails. Change nothing: section 3.10 says who sets the switch.
 
 **013 T142.** These two reports decide whether the development machine sets
 `DrawingOpenScope.SeatValidated` after the sitting (section 3.10); this sitting runs with it off.
@@ -1405,12 +1412,14 @@ holds:
 
 1. Both D14 reports of step 3.9 exist, on the same part J, each with exit code 0.
 2. The drawing-closed report matches the first block of step 3.9 line for line: type 3, options 3
-   with only ReadOnly and Silent, configuration `""`; hidden then shown again, type 3; opened by the
+   with only ReadOnly and Silent, configuration `""`; hidden then shown again, type 3; the opened
+   drawing answers `IsOpenedReadOnly: true` (decision 136A, 2026-10-19); opened by the
    probe and closed; the active document and the window in front unchanged, during and after; at
    least one view read; the file's size, write time and SHA-256 unchanged; no save flag raised by
    the run; afterwards not open and not locked; the three seam keys; `every answer as required`.
-3. The drawing-open report matches the second block: nothing opened, hidden or closed; `seam keys
-   gated: none`; the drawing still open; the same unchanged lines; `every answer as required`.
+3. The drawing-open report matches the second block: nothing opened, hidden, asked
+   `IsOpenedReadOnly` or closed; `seam keys gated: none`; the drawing still open; the same
+   unchanged lines; `every answer as required`.
 4. Both reports' read-only gate log says `mutating members: none` and `refusals: none`.
 5. No drawing window appeared during the first run, and the drawing stayed open after the second.
 
