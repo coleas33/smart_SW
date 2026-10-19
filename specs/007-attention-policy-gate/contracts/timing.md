@@ -34,8 +34,15 @@ model and is not a parameter on any path.
 
 Writes `session.json`, then re-renders `report.md` and `attention.json` through
 `rerender_run_folder`, which loads `package.json` when the folder holds one and re-prepends the
-standards verdict header when `check.json` names that family. Payload: `{run_dir, session_file,
+standards verdict header when `check.json` names that family and names the folder's session
+(*amended 2026-10-19, owner decision 139A*). Payload: `{run_dir, session_file,
 report_file, timing}`; lines: the four values and `net saved: <value>`.
+
+*Amended 2026-10-19 (owner decision 139A):* the header belongs to the standards check's own
+session, the one its `check.json` names, which is the rule that already decides whether the
+report names a model (132A). A review that claimed the folder - the check's session rotated aside
+by `POST /sessions`, or written over by `swreview review --out` - wrote its report with no header,
+and its re-render has none (research R6).
 
 Exit-1 conditions, each naming what was wrong:
 

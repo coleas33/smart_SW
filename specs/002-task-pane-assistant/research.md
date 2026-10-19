@@ -281,3 +281,56 @@ exposed to general chat (FR-025).
   ship from one repository and are updated together; a mismatched pair fails at start
   instead of writing a record that names the wrong credential.
 - **Tests**: T069 (reviewer) and T071 (add-in) in [tasks.md](tasks.md), each written first.
+
+### 139A. The pane's strings name the tabs it shows (2026-10-19)
+
+**Decision**: every user-facing string in the add-in that names the pane's tabs names the tabs
+the pane shows, and follows `TaskPaneControl.AskTabShown` if it is turned on again.
+
+- Step 3 of the step strip reads `3 Review` while the Ask tab is hidden and `3 Review or Ask`
+  when it is shown. The strip is told the captions (`StepStrip(IReadOnlyList<string>)`): the
+  pane passes those of the Review and Ask tabs that its tab list holds.
+- The runtime-missing fallback panel opens with a sentence built from the tab list: every tab
+  the pane shows except Extract, which is WinForms and still works. Today it reads "The
+  Microsoft Edge WebView2 runtime is not available, so the Review, Model check, Remodel and
+  Standards tabs cannot be shown. The Extract tab still works."
+- The Extract evidence tooltip ends "The reviewer reads this file instead of the live model."
+  while the Ask tab is hidden, and with its earlier sentence, "The reviewer and the Ask tab
+  read this file instead of the live model.", when it is shown. This one is an explicit
+  choice on the switch (`ActionsPanel.DumpToolTipFor`) rather than built from captions,
+  because "the reviewer" is not a tab and the verb follows the count; both sentences are
+  pinned by a test.
+
+**Why**: the pane has shown five tabs since 2026-09-19 (`a35f457`): Review, then Ask only if
+`AskTabShown`, which is false, then Extract, Model check, Remodel and Standards. Three strings
+still named Ask, and the fallback sentence, written out by hand when the pane had three WebView2
+tabs, named the hidden Ask and left out Remodel and Standards, although both render that same
+panel when their page cannot load. A string that sends an engineer to a tab that is not there
+is the question these strings exist to answer (FR-001). Built from the tab list, the step and
+the sentence cannot drift from it again.
+
+**Evidence** (at `304092c`):
+
+- The three strings: `TaskPaneControl.cs:1182` (the fallback sentence, "the Review, Ask and
+  Model check tabs cannot be shown"), `:1469` (the step, "3 Review or Ask"), `:1603` (the
+  tooltip, "The reviewer and the Ask tab read this file"). The first two are the ones the
+  decision names; the third was found by the search below and is held by the sweep it adds.
+- Every other string literal in the add-in's C# that names a tab names a tab the pane shows,
+  and the pages' scripts and HTML name tabs only in comments. The Ask tab's own Codex
+  instructions (`Terminal/Profiles/codex-instructions.md`) name it, and reach an engineer only
+  through that tab.
+- `docs/review-backlog.md` recorded the fallback sentence three times (feature 004 offline part
+  3, twice; feature 006 round D); those entries are marked resolved.
+- At the pane's minimum width (236 px of label, Microsoft Sans Serif 8.25 pt) the new sentence
+  wraps to the same four lines as the old one (`TextRenderer.MeasureText`), so the fallback note
+  is no taller than before.
+
+Tests, written first and run against the old strings (the new members stubbed to return them):
+16 failed - in `TaskPaneGuidanceTests`, the six step-strip literals, the Extract evidence
+tooltip, and the new `TheThirdStepNamesTheAskTabOnlyWhenThePaneShowsIt`,
+`AStepStripToldNoTabForTheThirdStepIsRefused`, `TheExtractTooltipNamesTheAskTabOnlyWhileThePaneShowsIt`
+and `NothingThePaneShowsNamesTheHiddenAskTab`; in `WebViewFallbackTests`, the four fallback
+tests and the new `TheFallbackSentenceNamesTheTabsItIsGivenInTheirOrder` - and all pass after
+it. `contracts/pane-host-messages.md` ("The step strip") carries the dated amendment. FR-001
+still names an Ask tab and the step "review or ask"; it predates the 2026-09-19 decision that
+hid the tab and is not amended here.

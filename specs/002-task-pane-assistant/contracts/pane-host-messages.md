@@ -277,6 +277,11 @@ Above the tabs, the strip renders three steps - open a document, extract evidenc
 ask - each done or pending with the reason it is pending, from two facts the add-in answers:
 whether a document is open, and whether the session's run folder holds `package.json`.
 
+*Amended 2026-10-19 (owner decision 139A):* step 3 names the tabs it is done on as the pane
+shows them: `3 Review` while the Ask tab is hidden (`TaskPaneControl.AskTabShown`, false since
+2026-09-19) and `3 Review or Ask` when it is shown. The pane hands the strip those captions from
+its own tab list, so the step cannot name a tab the pane does not show.
+
 It also reads `extractor.profile` out of that `package.json`. A package written by the
 `model_check` profile carries features and equations and none of the geometry phases, so the
 strip adds one line, **"Evidence: model check only (features and equations)"**, and an

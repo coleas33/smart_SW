@@ -77,8 +77,8 @@ def rerender_run_folder(run_dir: Path | str, *, package: EvidencePackage | None 
     """Re-render a run folder's report and record from its own files; return the report path.
 
     Reads `session.json` (required), `package.json` (when the folder holds one) and
-    `check.json` (for a standards folder's verdict header, and for whether the session is the
-    check's own, which ran no model), ranks the session once, and
+    `check.json` (for whether the session is the check's own, which ran no model and, in a
+    standards folder, carries the verdict header), ranks the session once, and
     writes `report.md` and `attention.json` from that one `Ranking` - the same object, so
     the section the report prints and the record beside it can never disagree (research
     R2.7). Nothing else in the folder is touched, and nothing at all is written when any of
@@ -101,7 +101,8 @@ def rerender_run_folder(run_dir: Path | str, *, package: EvidencePackage | None 
         FileNotFoundError: the folder holds no `session.json`; a benchmark run root, whose
             sessions sit one level down, is named as such and pointed at `benchmark time`
             through a `ValueError` instead.
-        ValueError: a benchmark run root, or a `check.json` whose verdict cannot be read.
+        ValueError: a benchmark run root, or a `check.json` whose verdict cannot be read
+            when the session is the check's own.
         pydantic.ValidationError: a `session.json` or `package.json` this build cannot read.
     """
     directory = Path(run_dir)
@@ -120,22 +121,24 @@ def render_folder_report(
     """`session`'s report as the folder it sits in renders it, and the ranking it printed.
 
     Reads `package.json` (when the folder holds one, and the caller passed none) and
-    `check.json` (a standards folder's verdict header, and whether `session` is the check's
-    own, whose report names no model), and writes nothing: the text and the ranking are the
-    caller's to write, so the one command that must not write a record, `swreview report`,
-    renders exactly what `rerender_run_folder` writes as `report.md`.
+    `check.json` (whether `session` is the check's own, whose report names no model and, in a
+    standards folder, opens with the verdict header), and writes nothing: the text and the
+    ranking are the caller's to write, so the one command that must not write a record,
+    `swreview report`, renders exactly what `rerender_run_folder` writes as `report.md`.
 
     Raises:
-        ValueError: a `check.json` whose verdict cannot be read.
+        ValueError: a `check.json` whose verdict cannot be read when `session` is the check's
+            own.
         pydantic.ValidationError: a `package.json` this build cannot read.
     """
     directory = Path(run_dir)
     package = package if package is not None else _package_of(directory)
     record = _check_record_of(directory)
-    header = _header_of(directory, record, session) if record is not None else ""
     # The session is the check's own only while `check.json` names it: a review that claimed
-    # the folder rotated the check's session aside, and that review ran a model (132A).
+    # the folder rotated the check's session aside, and that review ran a model (132A). The
+    # verdict header is the check's too: a review's report is written without one (139A).
     check_run = record is not None and str(record.get("session_id")) == str(session.session_id)
+    header = _header_of(directory, record, session) if record is not None and check_run else ""
     ranking = rank(session)
     report = render_report(session, package, ranking=ranking, check_run=check_run)
     return header + report, ranking

@@ -70,6 +70,16 @@ public sealed class WebViewFallbackTests
         @"https://developer\.microsoft\.com/(?:[a-z]{2}-[a-z]{2}/)?microsoft-edge/webview2/?",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    /// <summary>
+    /// The sentence the fallback panel opens with, on every tab that renders it: the tabs the
+    /// pane shows that need WebView2, and the one that does not. It named the hidden Ask tab and
+    /// left out Remodel and Standards until owner decision 139A; it is written out once here,
+    /// literally, because the sentence is the decision.
+    /// </summary>
+    private const string RuntimeMissing =
+        "The Microsoft Edge WebView2 runtime is not available, so the Review, Model check, "
+        + "Remodel and Standards tabs cannot be shown. The Extract tab still works.";
+
     [Fact]
     public void AMissingRuntimeShowsTheDownloadUrlAndTheRunRootAsPlainText()
     {
@@ -85,9 +95,29 @@ public sealed class WebViewFallbackTests
 
             // The sentence names the tabs the engineer is actually looking at. "The Actions
             // tab still works" was a pointer to a tab that no longer exists under that name.
-            Assert.Contains("Review, Ask and Model check tabs cannot be shown", review);
-            Assert.Contains("The Extract tab still works.", review);
+            Assert.Contains(RuntimeMissing, review);
         });
+    }
+
+    /// <summary>
+    /// The sentence is built from the pane's tab list, so it follows
+    /// <see cref="TaskPaneControl.AskTabShown"/> and keeps the list's order: with the Ask tab
+    /// shown it names Ask after Review, and Extract stays the tab that still works (owner
+    /// decision 139A). The switch cannot be flipped from a test, so the shown list is handed to
+    /// the sentence directly.
+    /// </summary>
+    [Fact]
+    public void TheFallbackSentenceNamesTheTabsItIsGivenInTheirOrder()
+    {
+        Assert.Equal(
+            RuntimeMissing,
+            TaskPaneControl.RuntimeMissingSentence(
+                new[] { "Review", "Model check", "Remodel", "Standards" }, "Extract"));
+        Assert.Equal(
+            "The Microsoft Edge WebView2 runtime is not available, so the Review, Ask, Model "
+                + "check, Remodel and Standards tabs cannot be shown. The Extract tab still works.",
+            TaskPaneControl.RuntimeMissingSentence(
+                new[] { "Review", "Ask", "Model check", "Remodel", "Standards" }, "Extract"));
     }
 
     /// <summary>
@@ -124,7 +154,7 @@ public sealed class WebViewFallbackTests
                 "The Model check tab shows no Evergreen WebView2 download URL when the runtime "
                     + "is missing. It showed:" + Environment.NewLine + after);
             Assert.Contains(RunRoot, after);
-            Assert.Contains("Review, Ask and Model check tabs cannot be shown", after);
+            Assert.Contains(RuntimeMissing, after);
 
             // Still one environment: the fourth tab shares the cached failure rather than
             // asking the factory again on every activation.
@@ -175,8 +205,7 @@ public sealed class WebViewFallbackTests
             // The fallback message is the one the other tabs already render, word for word: a
             // second sentence about the same missing runtime would be a second thing to keep
             // in step with the download URL.
-            Assert.Contains("Review, Ask and Model check tabs cannot be shown", after);
-            Assert.Contains("The Extract tab still works.", after);
+            Assert.Contains(RuntimeMissing, after);
         });
     }
 
@@ -216,8 +245,7 @@ public sealed class WebViewFallbackTests
             Assert.Contains(RunRoot, after);
 
             // The fallback message is the one every other tab already renders, word for word.
-            Assert.Contains("Review, Ask and Model check tabs cannot be shown", after);
-            Assert.Contains("The Extract tab still works.", after);
+            Assert.Contains(RuntimeMissing, after);
 
             // Still one environment, shared with the five tabs that came before it.
             Assert.Equal(1, factory.Calls);
