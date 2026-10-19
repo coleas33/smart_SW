@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/coleas33/smart_SW/blob/main/SECURITY.md
+    about: Do not open a public issue for a vulnerability. Report it privately as SECURITY.md describes.

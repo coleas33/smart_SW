@@ -1,0 +1,103 @@
+name: Bug report
+description: Something in smart_SW does not work as its spec or documentation says.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **This repository is public. Never attach or paste real material:** no real design,
+        part, assembly or drawing file, no drawing or screenshot of a real design, no recording,
+        no standards profile, no run folder, no log that shows real paths or user names, and no
+        API key or other credential. Reproduce the problem with the fictional fixtures in the
+        repository (`benchmarks/packages/`, `reviewer/tests/fixtures/replay/`,
+        `config/standards.example.yaml`) wherever you can, and scrub anything you paste.
+
+        A security problem is not a bug report: report it privately as `SECURITY.md` says.
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which part of smart_SW shows the problem?
+      options:
+        - Reviewer command line (swreview)
+        - Task Pane add-in (inside SOLIDWORKS)
+        - Extractor (swreview-extract, the C# library or console)
+        - Benchmark (benchmark commands, cases, scoring)
+        - Documentation
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version (commit)
+      description: The commit you are on, from `git rev-parse --short HEAD`.
+      placeholder: c42d3c2
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: Windows 11 23H2
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      description: From `uv run python --version` in `reviewer/`. Write "n/a" if the problem is only in the add-in or the extractor.
+      placeholder: "3.12.3"
+    validations:
+      required: true
+  - type: input
+    id: solidworks
+    attributes:
+      label: SOLIDWORKS version
+      description: Version and service pack, or "not used" if the problem happens without SOLIDWORKS.
+      placeholder: SOLIDWORKS 2024 SP5, or not used
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The exact commands or clicks, in order, on a fictional fixture where possible.
+      placeholder: |
+        1. cd reviewer
+        2. uv run swreview check standards --package ..\benchmarks\packages\kalo-1 --profile ..\config\standards.example.yaml --out "$env:TEMP\swreview-bug"
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected
+      description: What should have happened, and where it is specified if you know (a spec, contract or doc).
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual
+      description: What happened instead, with the exact message or output.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs (scrubbed)
+      description: |
+        The relevant lines only. Before pasting, replace every real path, user name, design or
+        part number, company name and key with a placeholder such as `C:\Users\<you>` or
+        `<part>`. `swreview audit-secrets <folder>` reports a configured key that reached a file.
+      render: text
+    validations:
+      required: false
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Confirmation
+      options:
+        - label: Nothing in this report is a real design, drawing, profile, recording, path, user name or key.
+          required: true

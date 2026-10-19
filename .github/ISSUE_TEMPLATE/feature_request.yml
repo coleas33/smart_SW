@@ -1,0 +1,67 @@
+name: Feature request
+description: Propose a new check, command, tab or change of behaviour.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **This repository is public. Never attach or paste real material:** no real design,
+        part, assembly or drawing file, no drawing or screenshot of a real design, no recording,
+        no standards profile, no run folder, no log that shows real paths or user names, and no
+        API key or other credential. Describe the case in general terms or with the fictional
+        fixtures in the repository (`benchmarks/packages/`, `reviewer/tests/fixtures/replay/`,
+        `config/standards.example.yaml`).
+
+        Larger changes are agreed here before any work starts (see `CONTRIBUTING.md`). Check
+        `specs/README.md` and `docs/README.md` first: the idea may already be specified or on the
+        roadmap.
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Where would the change live?
+      options:
+        - Reviewer command line (swreview)
+        - Task Pane add-in (inside SOLIDWORKS)
+        - Extractor (swreview-extract, the C# library or console)
+        - Benchmark (benchmark commands, cases, scoring)
+        - Documentation
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What an engineer cannot do today, or gets wrong, and how often it matters.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: The proposal
+      description: What should happen instead. Name the feature or spec it extends if you know it.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence the check would use
+      description: For a new check, what it reads (from the extracted package, a drawing, the profile) and what it computes. Numbers come from code, not from the model.
+    validations:
+      required: false
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false
+  - type: checkboxes
+    id: rules
+    attributes:
+      label: Project rules
+      options:
+        - label: Nothing in this request is a real design, drawing, profile, recording, path, user name or key.
+          required: true
+        - label: I understand that SOLIDWORKS documents are read, not written, except for the bounded exceptions in the constitution; a proposal that writes to a document needs a constitution amendment.
+          required: false

@@ -2,7 +2,7 @@
 
 These are dated records kept as written: pilot workstation findings, handovers, status notes and
 feedback rounds. Their contents may name paths, branches and decisions that have since been
-superseded. The current state is in `specs/` and the documentation index in `README.md`.
+superseded. The current state is in `specs/` and the [documentation index](../README.md).
 
 | File | Date | Description |
 |---|---|---|
