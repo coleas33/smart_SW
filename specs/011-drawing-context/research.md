@@ -899,7 +899,7 @@ machine: `SwReview.Extractor.Tests` 9,138 tests before and 9,353 after, `SwRevie
 *Amended on the branch's review, the same day*: an independent adversarial review of the branch
 found no seat breakage and no new write path and confirmed the tests load-bearing. What it found is
 fixed by T120 to T128, each recorded in the subsection it amends, and the host's `PROTOCOL.md` now
-lists `drawing.read`'s refusals as this decision left them (T128, commit `ef6298e`). Measured after:
+lists `drawing.read`'s refusals as this decision left them (T128, commit `ab623aa`). Measured after:
 `SwReview.Extractor.Tests` 9,374 tests and `SwReview.AddIn.Tests` 2,456, all green, the build at
 zero warnings. The questions it raised that are the owner's are R8.5's.
 
@@ -907,7 +907,7 @@ zero warnings. The questions it raised that are the owner's are R8.5's.
 recorded in R8.1: D14's reading passed a drawing the seam opened and never asked, and nothing at the
 seat could show whether SOLIDWORKS sets an already-open bit; R8.1's reason for honouring both bits
 is corrected, and the host's `PROTOCOL.md` now says what a failed visibility restore does (T134,
-commit `27954ab`). Measured after: `SwReview.Extractor.Tests` 9,387 tests and `SwReview.AddIn.Tests`
+commit `ef42c34`). Measured after: `SwReview.Extractor.Tests` 9,387 tests and `SwReview.AddIn.Tests`
 2,456, all green, the build at zero warnings.
 
 ### R8.1 Each read-only open is checked read-only (T111, T112, T113, T114)
@@ -931,12 +931,12 @@ for writing in the engineer's session. The check is a read: `DrawingOpenGuard` h
 `ReadOnlyGuard`, which allows it, so the confirmed open's allowlist stays three keys; the qualified
 `IModelDoc2.IsOpenedReadOnly` would be refused by that guard, which is why the seam names it bare.
 
-**Evidence**: commit `71f9cea` (the check, with 19 new tests: nine of `DrawingOpenScopeTests`, one
+**Evidence**: commit `68f4427` (the check, with 19 new tests: nine of `DrawingOpenScopeTests`, one
 of `DrawingOpenGuardTests`, one of `ConfirmedDrawingReadTests`, eight of the new
 `SwSessionReadOnlyOpenTests` over the interop stand-in). Red before the change: on the seam's side
 twelve, nine new and three edited, and seven of the console's eight; the three that passed are pins
 of what must not change (a drawing or part already open, and the guards' answer to the bare read).
-Commit `33de063` (D14's line, three new tests and two edited, all five red before). Edited deliberately, for the
+Commit `dd16745` (D14's line, three new tests and two edited, all five red before). Edited deliberately, for the
 new step in the call order and the gate log: `DrawingOpenScopeTests`' order and gate-log tests,
 D14's seam order and its two full reports, and the add-in's `gated=` line test. The contracts
 (`confirmed-open.md` section 3, `attach.md` section 4, `guard.md` sections 6 and 7, `probes.md`) and
@@ -963,7 +963,7 @@ the engineer's document, but it also skips the read-only check: should SOLIDWORK
 bit on a fresh open, the console attach would use the document that open opened unchecked, and the
 seam would read the hidden drawing that open opened unchecked and leave it open - though it would
 close nothing against the engineer's will. Probe D14 is how the seat confirms what SOLIDWORKS sets:
-its `OpenDoc6` line now ends with the codes the open answered (T131, T132). Commit `2e8b348`.
+its `OpenDoc6` line now ends with the codes the open answered (T131, T132). Commit `6396a2a`.
 
 **The seat should confirm** two things about these bits. That SOLIDWORKS sets neither on a fresh
 open: the first D14 run of the seat plan's step 3.9 now shows the open's codes on its `OpenDoc6`
@@ -984,16 +984,16 @@ as required`, and no test's reading caught it. The rule is now
 `DrawingOpenProbe.ReadOnlyAsRequired`: every answer true, and at least one for a drawing the seam
 opened (T129, T130).
 
-Evidence: commit `727e901`, tests first - nine new test methods, nineteen cases, across
+Evidence: commit `4375b8a`, tests first - nine new test methods, nineteen cases, across
 `FileLoadErrorsTests`, `DrawingOpenScopeTests`, `ConfirmedDrawingReadTests`,
 `SwSessionReadOnlyOpenTests` and D14's; eight red before the change and D14's red against the old
 seam - with the two tests whose premise was warning 128 edited deliberately to warning 32, their
-assertions kept; and commit `b0ba036`, one new D14 test, red before. `confirmed-open.md` section 3,
+assertions kept; and commit `b06ee7f`, one new D14 test, red before. `confirmed-open.md` section 3,
 `attach.md` section 4, `guard.md` section 7, `probes.md` and 004's `guard-allowlist.md` say so. On
-the second review: commit `8c90337` (T129, T130), a theory of the rule whose row for an opened
+the second review: commit `044c35a` (T129, T130), a theory of the rule whose row for an opened
 drawing with no answer was red before, and under a throwaway mutation removing the seam's check
 `D14_EveryWayTheOpenCanMisbehaveIsNamedAndTheModelsItLoadedAreRecorded`, green before the change and
-red after it, its reading naming the read-only state; and commit `8e3e4d1` (T131, T132), six D14
+red after it, its reading naming the read-only state; and commit `ddb2424` (T131, T132), six D14
 tests red before - among them the full report, edited deliberately for the `OpenDoc6` line's new
 end - and the seat plan's pin of that end, red until the plan said it.
 
@@ -1040,7 +1040,7 @@ bare name `Close` cannot be denied while that command exists; no product path ca
 test keeps every bridge command name off the denials. The drawing table regenerates byte for byte,
 and decision 21A's creation table, which reads this one's names as already denied, regenerates
 unchanged. Edited deliberately: `DrawingFamilyCompletenessTests.SharedFamilies` (with `IModelDoc2`)
-and `EveryExclusionHasOneOfTheContractsReasons` (a bridge command's member half). Commit `d08ef75`.
+and `EveryExclusionHasOneOfTheContractsReasons` (a bridge command's member half). Commit `072473e`.
 
 *Amended on the branch's review, the same day (T120)*: editing
 `EveryExclusionHasOneOfTheContractsReasons` to accept any bridge command's member half loosened an
@@ -1048,7 +1048,7 @@ existing test (AGENTS.md rule 4): a later exclusion of `Save` or `Rebuild` would
 unexamined. It now accepts exactly one more exclusion, `Close`, asserted to be `remodel.close`'s
 half, and went red under a throwaway mutation adding `Save` to the "Not denied" table.
 `NoCommandTheBridgeAnswersIsRefusedByTheReadOnlyGuard` stays and says it pins today's dispatcher
-(R8.5, the second question). Tests only; commit `7e65735`.
+(R8.5, the second question). Tests only; commit `b83a751`.
 
 ### R8.3 Every attempted open counts toward the ten (T117, T118)
 
@@ -1066,7 +1066,7 @@ the host would open and close. The count lives for the life of the add-in proces
 the tool service builds a source on every attach, and a run id resolves only in the process that
 started its review (`ReviewHost.ReviewRunDirectory`).
 
-**Evidence**: commit `28662bf`, with seven new tests of `ConfirmedDrawingReadTests` - among them 25
+**Evidence**: commit `4916998`, with seven new tests of `ConfirmedDrawingReadTests` - among them 25
 failing requests, each through a source built anew, bounded at the nine opens the package left - and
 one of `DrawingOpenScopeTests`; five of them red before the change. `test_confirmed_drawing_read.py`,
 which pins the ten-records sentence on both sides, passes unedited. FR-056, its edge case and
@@ -1077,7 +1077,7 @@ record came after the package was loaded, so every request past the limit still 
 package on SOLIDWORKS's thread before it was refused. Once those opens reach ten on their own, a
 request is refused as soon as the run folder is resolved: "the limit of ten drawings for this review
 is reached: {m} opens that were refused or failed, so this one was not opened"; below that the bound
-is as above, and the ten-records sentence is untouched. Commit `1dcd8db`; its test, which makes the
+is as above, and the ten-records sentence is untouched. Commit `d3bc6ff`; its test, which makes the
 package unloadable after ten failed opens, threw the load's `JsonException` before the change. When
 the count resets is the owner's question (R8.5, the first).
 
@@ -1087,12 +1087,12 @@ Two doc comments in `Sw/SwSession.cs`, on `Attach` and on `OpenReadOnly`, called
 only file-opening call the extractor makes. That has been untrue since this feature's read-only open
 of a confirmed drawing (`DrawingOpenScope`, which probe D14 also runs) and feature 004's `OpenDoc7`
 opens of the re-modeler's own copy and of `probe remodel`'s throwaway part. They now name those
-calls. Commit `4550254`. The amendment's own text, the other half of 137A, is the constitution
+calls. Commit `dc6f410`. The amendment's own text, the other half of 137A, is the constitution
 pull request's.
 
 *Amended on the branch's review, the same day (T127)*: the same claim was still in four comments of
 `Program.cs`, `SuppressTest`'s doc comment, two test comments and the `OpenDoc6` row of section 3 of
-`contracts/guard.md`, each now corrected. Comments and docs only; commit `e98f58d`. What is left is
+`contracts/guard.md`, each now corrected. Comments and docs only; commit `bc19ec2`. What is left is
 R8.5's sixth item.
 
 ### R8.5 Found on the way, and left for the owner
