@@ -1989,7 +1989,7 @@ def test_check_rms_reports_a_rule_that_cannot_grade_as_an_error_not_a_traceback(
 
 
 RMS_PART_FIXTURE = REPO_ROOT / "reviewer" / "tests" / "golden" / "fixtures" / "rms-part"
-"""The golden fixture the command used to write into (docs/pane-findings-2026-09-16.md)."""
+"""The golden fixture the command used to write into (docs/history/pane-findings-2026-09-16.md)."""
 
 
 def git_status_of(directory: Path) -> str:
@@ -2209,7 +2209,7 @@ def test_check_rms_grades_the_acceptance_accept_rms_wrote_beside_the_package(
 def test_check_rms_leaves_a_golden_fixture_it_graded_untouched(rms_out: Path) -> None:
     """The defect `--out` exists for: grading `tests/golden/fixtures/rms-part` in place
     left `session.json`, `report.md` and `check.json` inside the fixture, and the fixtures
-    are this project's regression baseline (docs/pane-findings-2026-09-16.md item 2)."""
+    are this project's regression baseline (docs/history/pane-findings-2026-09-16.md item 2)."""
     assert git_status_of(RMS_PART_FIXTURE) == "", "the fixture was already dirty"
 
     result = check_rms(str(RMS_PART_FIXTURE), "--scope", "part", out=rms_out)

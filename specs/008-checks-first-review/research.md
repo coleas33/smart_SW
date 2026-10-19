@@ -3,8 +3,8 @@
 **Feature**: `008-checks-first-review` | **Date**: 2026-09-23 | **Plan**: [plan.md](plan.md)
 
 Phase 0 output from: the spec; the owner's decisions of 2026-09-22 recorded in
-`docs/roadmap-2026-09-22.md`; the pilot workstation's evening packet
-(`docs/pane-findings-2026-09-20-review-gui.md`) and its recorded run folders; and three design
+`docs/history/roadmap-2026-09-22.md`; the pilot workstation's evening packet
+(`docs/history/pane-findings-2026-09-20-review-gui.md`) and its recorded run folders; and three design
 passes run on 2026-09-22 and 2026-09-23 against commit `43e9b15`, each by an analyst who opened
 the code and wrote down facts with `path:line`, decisions with rejected alternatives, file
 changes, tests and the tests that go red by design:
@@ -38,7 +38,7 @@ re-verifies before editing.
 | Source | What it is | Authority here |
 |---|---|---|
 | `spec.md` | Five user stories, FR-001 to FR-029, SC-001 to SC-010 | Normative for what is built; amended in the places R4 names, each with its reason |
-| `docs/roadmap-2026-09-22.md` | The owner's four decisions of 2026-09-22 and the feature order | Normative for the decisions: all four changes pane defaults gated by the replay; one folded modelling-practice group; the model reads counts only |
+| `docs/history/roadmap-2026-09-22.md` | The owner's four decisions of 2026-09-22 and the feature order | Normative for the decisions: all four changes pane defaults gated by the replay; one folded modelling-practice group; the model reads counts only |
 | The three design passes | Facts, decisions, file changes, tests, red-by-design lists | Normative for how each change is made, as reconciled here |
 | The constitution | Principles I to VI and the technical constraints | The gate every decision is checked against in `plan.md` |
 | The recorded dumps | Four review folders and two check folders of 2026-09-20 | Evidence only; the fixtures are shaped like them, never copied |

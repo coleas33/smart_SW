@@ -8,7 +8,7 @@
 
 **Amended**: 2026-09-23 by the owner (decision 2A): a finding's title is whole and names its parts only where a person reads it; the title the model reads in every tool result is unchanged (FR-027, research R2.28).
 
-**Input**: Owner direction of 2026-09-22: "We also need to improve the UI and make this easier for a non developer user to gain value from. The goal is to get all the critical details to the user as fast and clear as possible." Evidence: the pilot workstation's evening sitting (`docs/pane-findings-2026-09-20-review-gui.md`, asks U8 to U16) and `docs/roadmap-2026-09-22.md`. Owner decisions: modelling-practice findings as one folded group (2026-09-22); size-for-size contacts as a separate list, not findings; summary wording "Decide / Fix / Verify" (both 2026-09-23).
+**Input**: Owner direction of 2026-09-22: "We also need to improve the UI and make this easier for a non developer user to gain value from. The goal is to get all the critical details to the user as fast and clear as possible." Evidence: the pilot workstation's evening sitting (`docs/history/pane-findings-2026-09-20-review-gui.md`, asks U8 to U16) and `docs/history/roadmap-2026-09-22.md`. Owner decisions: modelling-practice findings as one folded group (2026-09-22); size-for-size contacts as a separate list, not findings; summary wording "Decide / Fix / Verify" (both 2026-09-23).
 
 ## User Scenarios & Testing *(mandatory)*
 

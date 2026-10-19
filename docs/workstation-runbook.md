@@ -23,7 +23,7 @@ that say so. Read it whole once, then use the Quick reference at the end.
 in one ordered list with its command, what decides it and where its record goes. The engineer
 who runs the sitting follows `docs/test-plan-2026-09-27/workstation-test-plan.md`: the same sitting in
 plain, numbered steps, each with its exact command and what counts as pass or fail. The earlier
-rounds (`docs/workstation-handover-2026-09-20.md`, `-2026-09-19.md`) are history. This runbook
+rounds (`docs/history/workstation-handover-2026-09-20.md`, `-2026-09-19.md`) are history. This runbook
 does not change per handover; the handover says what to do with a given build. *2026-09-27:* the
 sitting of 2026-09-26 stopped after the test plan's step 2.3, so the next sitting updates as
 section 4 says and then starts at step 2.4; the handover and the plan now also hold feature 013's
@@ -253,8 +253,8 @@ silently disabled every bridge-backed feature).
 ## 8. Handing findings back
 
 The owner's development machine cannot see this workstation. Everything learned here travels
-as a document, in the shape the earlier handovers used (`docs/pane-findings-2026-09-16.md`,
-`docs/pane-findings-2026-09-18.md`): a dated Markdown file, `pane-findings-<date>.md`, that says
+as a document, in the shape the earlier handovers used (`docs/history/pane-findings-2026-09-16.md`,
+`docs/history/pane-findings-2026-09-18.md`): a dated Markdown file, `pane-findings-<date>.md`, that says
 what works, what is a bug with the evidence (log lines, run folder names, durations, sizes), what
 is setup rather than a bug, and a suggested order for the next session. Write it in
 `%LOCALAPPDATA%\SwReview\handover\<date>\`, not in the checkout: an untracked file in `docs\`

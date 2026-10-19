@@ -5,7 +5,7 @@
 Phase 0 output from: the spec (User Stories 1 and 2 landed on main as `2c48e2b`, `cf3c66e` and
 `b5cfcb4`; Stories 3 to 7 are the work); the owner's decisions of 2026-09-22 and 2026-09-23
 recorded in the spec's Input line; the pilot workstation's evening packet
-(`docs/pane-findings-2026-09-20-review-gui.md`, asks U8 to U16) and `docs/roadmap-2026-09-22.md`
+(`docs/history/pane-findings-2026-09-20-review-gui.md`, asks U8 to U16) and `docs/history/roadmap-2026-09-22.md`
 section "009"; the UI analyst's pass of 2026-09-23 (24 facts, 7 increment recommendations, 9 open
 questions), which opened the page, the host and the backend and wrote each fact with `path:line`;
 feature 008's finished plan package (`specs/008-checks-first-review/`, being implemented now),

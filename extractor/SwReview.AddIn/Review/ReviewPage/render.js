@@ -330,7 +330,7 @@
    *
    * Tier two. The head is the line that states which finding it is, what the backend concluded
    * and how hard, and which check said so, and the title under it - and nothing else, so a
-   * review reads as a list of headlines (U10, docs/pane-findings-2026-09-20-review-gui.md
+   * review reads as a list of headlines (U10, docs/history/pane-findings-2026-09-20-review-gui.md
    * section 3). Everything else - the observed evidence first, then every field feature 001
    * defines, Show in SOLIDWORKS, and the three dispositions - is inside the fold.
    *

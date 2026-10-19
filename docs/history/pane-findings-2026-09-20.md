@@ -2,7 +2,7 @@
 
 Pilot workstation, SOLIDWORKS 2024, against `local` `c36f183` (merge of GitHub `main`
 `e04c027` into this lane). Findings for the 2026-09-20 handover
-(`docs/workstation-handover-2026-09-20.md`). Run folders of real designs stay out of git.
+(`docs/history/workstation-handover-2026-09-20.md`). Run folders of real designs stay out of git.
 This file names folders only; it carries no vault path.
 
 **Headline: the new Review layout hides the three things an engineer needs after a

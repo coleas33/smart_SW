@@ -8,7 +8,7 @@
 
 **Amended**: 2026-09-23, by the planning pass; every change is listed with its reason in [research.md](research.md) R4. Amended again 2026-09-23 by the owner: the tools checks first already ran leave the tool array (FR-030, research R2.53). Amended again 2026-09-23 by the owner (decision 3A): the replay fixtures follow the code (SC-001, research R2.54 to R2.56).
 
-**Input**: Owner direction of 2026-09-22 after the pilot workstation's evening packet (`docs/pane-findings-2026-09-20-review-gui.md`) and the analysis recorded in `docs/roadmap-2026-09-22.md`: "Token usage is way too high, we gotta get more efficient." Decided the same day: model-facing payload slimming, checks first, history pruning and parallel tool calls all become pane defaults, gated by an offline replay of the recorded runs; modelling-practice findings appear in Review as one folded group.
+**Input**: Owner direction of 2026-09-22 after the pilot workstation's evening packet (`docs/history/pane-findings-2026-09-20-review-gui.md`) and the analysis recorded in `docs/history/roadmap-2026-09-22.md`: "Token usage is way too high, we gotta get more efficient." Decided the same day: model-facing payload slimming, checks first, history pruning and parallel tool calls all become pane defaults, gated by an offline replay of the recorded runs; modelling-practice findings appear in Review as one folded group.
 
 ## User Scenarios & Testing *(mandatory)*
 

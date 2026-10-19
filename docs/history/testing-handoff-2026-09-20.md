@@ -11,7 +11,7 @@ the workstation scenarios below still need to be run.
 
 ## Install the testing build
 
-Follow [the workstation runbook](workstation-runbook.md) for machine settings and health
+Follow [the workstation runbook](../workstation-runbook.md) for machine settings and health
 checks. Close SOLIDWORKS before rebuilding or registering. Fetch the testing branch and
 merge it into the workstation's existing `local` lane, then run
 `extractor/tools/update-workstation.ps1 -NoPull`. Do not use an update that pulls only

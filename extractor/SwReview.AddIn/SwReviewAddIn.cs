@@ -976,7 +976,7 @@ public class SwReviewAddIn : ISwAddin
             Report,
             schedule: null,
             // What holds the bridge, and so what stops it being re-attached to another document
-            // (docs/pane-findings-2026-09-16.md, finding 1). Both read late: the remodel host is
+            // (docs/history/pane-findings-2026-09-16.md, finding 1). Both read late: the remodel host is
             // built after this gate is, and either can be gone by the time the question is asked.
             busy: () => (_reviewHost != null && _reviewHost.AnyTurnRunning())
                 || (_remodelHost != null && _remodelHost.RunInProgress),
@@ -1234,7 +1234,7 @@ public class SwReviewAddIn : ISwAddin
             // ...and a no-op is not enough once the engineer switches documents: the scope is
             // bound to the one it attached to, so the bridge answers `document no longer open`
             // for every later command until the add-in is reloaded
-            // (docs/pane-findings-2026-09-16.md, finding 1). This re-attaches it, unless a
+            // (docs/history/pane-findings-2026-09-16.md, finding 1). This re-attaches it, unless a
             // review turn or a remodel run is holding it, in which case it says so in the
             // tool-service log. Still one service at a time.
             _toolService?.FollowDocument(CurrentDocument()?.Path);

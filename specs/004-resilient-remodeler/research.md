@@ -1760,7 +1760,7 @@ the workflow that checked it settles each finding by a default. **Each item belo
 taken 2026-09-28, the owner may revise; none is the owner's own words, and none is an R12
 decision.** SOLIDWORKS was not started: the API help was read from the installed help files and the
 interop metadata was reflected, and what each item says a seat does stays a seat item until the
-next sitting checks it (the retest in `docs/testing-feedback-2026-09-28.md`).
+next sitting checks it (the retest in `docs/history/testing-feedback-2026-09-28.md`).
 
 ### R16.1 The copy is measured as a whole part, the proven way (U27, T185)
 

@@ -197,7 +197,7 @@ Rows the generated ledger cannot carry: every run below was made on the one-pack
 set with `--i-know-the-set-is-too-small`, so `compare` computes no decision and the study
 folders stay outside `benchmarks/studies/` (a committed override row fails the check test).
 They are evidence, not gates; the pane default changes nothing on their account. Recorded
-from the workstation packet of 2026-09-19 (`docs/pane-findings-2026-09-19.md`). Their quality
+from the workstation packet of 2026-09-19 (`docs/history/pane-findings-2026-09-19.md`). Their quality
 figures (valid, missed and false alarms) were scored under scoring rules version 1, before
 feature 014's scorer.
 

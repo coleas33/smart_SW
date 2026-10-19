@@ -171,7 +171,7 @@ public sealed class ReviewPageContractTests
 
     /// <summary>
     /// U8: `review.started` names the document the review is of, and the contract row says so,
-    /// because the page binds the results on screen to it (docs/pane-findings-2026-09-20-review-gui.md
+    /// because the page binds the results on screen to it (docs/history/pane-findings-2026-09-20-review-gui.md
     /// section 1). A reply shape the contract does not print is a field the next host can drop.
     /// </summary>
     [Fact]

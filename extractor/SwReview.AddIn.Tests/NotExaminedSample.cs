@@ -6,7 +6,7 @@ namespace SwReview.AddIn.Tests;
 /// One `not_examined` value: the value of the key both check bodies carry (the JSON
 /// `POST /checks/rms` and `POST /checks/standards` answer, and `GET /checks/{id}`) - `null`
 /// when every component instance was read, or an object naming the ones that were not
-/// (docs/feature-request-resolve-lightweight.md, docs/task-a-2026-09-19.md issue 3).
+/// (docs/feature-request-resolve-lightweight.md, docs/history/task-a-2026-09-19.md issue 3).
 ///
 /// One fixture for both check pages, for the reason <see cref="AttentionSample"/> gives: it is
 /// one shape on both surfaces, and a second copy in one page's tests would be the copy that

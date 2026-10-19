@@ -225,7 +225,7 @@ public sealed class RemodelHostTests
     }
 
     /// <summary>
-    /// U13 (docs/pane-findings-2026-09-20-review-gui.md section 6): the no-seat refusal is a
+    /// U13 (docs/history/pane-findings-2026-09-20-review-gui.md section 6): the no-seat refusal is a
     /// build capability said in an engineer's words, not a console command. The Task Pane is
     /// read by someone with a part open in SOLIDWORKS; the probe command is for the testing
     /// handover, and following it with the part still open is the wrong procedure anyway.

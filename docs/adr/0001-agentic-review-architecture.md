@@ -135,7 +135,7 @@ SolidWorks is the only drawing target, so this layer is non-negotiable.
 
 ### Amendment 2026-09-22: checks first, and drawings in two stages
 
-The pilot showed where the tokens and the value go (`docs/roadmap-2026-09-22.md`). Two
+The pilot showed where the tokens and the value go (`docs/history/roadmap-2026-09-22.md`). Two
 changes to the layers above, both decided by the owner on 2026-09-22:
 
 - **Layer 2 runs code first.** Every check that code can enumerate from the IR runs before
@@ -157,7 +157,7 @@ changes to the layers above, both decided by the owner on 2026-09-22:
 - **Creation starts from the owner's existing base.** The owner has an outline and base
   repository for programmatically creating drawings. It is evaluated first - what it
   draws, with which API members, from which inputs - and stage two is designed around it
-  rather than built from scratch (`docs/roadmap-2026-09-22.md`, "Start from the existing
+  rather than built from scratch (`docs/history/roadmap-2026-09-22.md`, "Start from the existing
   drawing-creation base").
 
 ## Consequences

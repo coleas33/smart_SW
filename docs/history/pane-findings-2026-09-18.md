@@ -12,7 +12,7 @@ in the pane, and two things that look like bugs are unfinished setup.
 
 ## 1. Confirmed fixed: the same-origin proxy
 
-The [previous session](pane-backend-proxy.md) could not get a single page request to the
+The [previous session](../pane-backend-proxy.md) could not get a single page request to the
 backend. Comparing backend logs across this pull, on the same workstation:
 
 | Build | What the log shows for `/sessions/{id}/events` |

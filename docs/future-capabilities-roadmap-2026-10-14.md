@@ -32,7 +32,7 @@ collect native drawing/Remodel evidence; then publish measured calibration and
 any justified capability enablement separately. Documentation preparation for
 future capabilities can proceed alongside that sequence once requested.
 
-Sources: [current workstation follow-up](testing-feedback-2026-10-13.md),
+Sources: [current workstation follow-up](history/testing-feedback-2026-10-13.md),
 [014 tasks](../specs/014-design-review-eval/tasks.md),
 [015 branch package](https://github.com/coleas33/smart_SW/tree/c4f17d573db1e230d13e2795ff3422d3b8f53b9d/specs/015-review-send-gate),
 [011 tasks](../specs/011-drawing-context/tasks.md),
@@ -268,7 +268,7 @@ Simulation availability. No delivery dates or new feature numbers are assigned.
 
 ## Earlier research and governing scope
 
-[September roadmap](roadmap-2026-09-22.md) and
+[September roadmap](history/roadmap-2026-09-22.md) and
 [concept/hand-calculation research](future/llm-assistants-2026-09-28.md) remain historical
 inputs. Their estimates are not a current schedule; the older claim that 014/015
 are the next free feature numbers is obsolete. The architecture's September 22
@@ -277,7 +277,7 @@ action list is not the current backlog.
 
 [Drawing brief contract](../specs/011-drawing-context/contracts/brief.md),
 [drawing capability contract](../specs/013-engineer-first-review/contracts/drawing-capability.md),
-[architecture](../sw-review-architecture-proposal.md) and
+[architecture](adr/0001-agentic-review-architecture.md) and
 [constitution](../.specify/memory/constitution.md) define the existing foundation.
 This roadmap proposes future specifications. It grants no new native write surface,
 structural approval or production capability enablement.

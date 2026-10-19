@@ -296,7 +296,7 @@ public sealed class ReviewHostOptions
 /// list, but it is no longer the only one that reads it: the tool-service gate asks
 /// <see cref="AnyTurnRunning"/> from the thread it schedules its re-attach on, to decide
 /// whether the bridge may follow the document the engineer just opened
-/// (docs/pane-findings-2026-09-16.md, finding 1). So the list is guarded by its own lock, and
+/// (docs/history/pane-findings-2026-09-16.md, finding 1). So the list is guarded by its own lock, and
 /// the backend round trips that scan makes are taken outside it.
 /// </summary>
 public sealed class ReviewHost : IDisposable

@@ -11,7 +11,7 @@ using Xunit;
 namespace SwReview.AddIn.Tests;
 
 /// <summary>
-/// U8 (docs/pane-findings-2026-09-20-review-gui.md section 1): the review on the Review tab is
+/// U8 (docs/history/pane-findings-2026-09-20-review-gui.md section 1): the review on the Review tab is
 /// bound to the document it is of.
 ///
 /// <b>What was wrong.</b> Opening another model only repainted the header, so the header could

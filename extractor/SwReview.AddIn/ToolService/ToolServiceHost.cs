@@ -407,7 +407,7 @@ public sealed class DocumentPresenceDispatcher : IBridgeDispatcher
     /// <param name="documentIsOpen">Asked on the application thread, after a failed command.</param>
     /// <param name="attachedDocumentPath">The document the scope is bound to. Named in the
     /// message, because the engineer reads that message against the document they are looking
-    /// at (docs/pane-findings-2026-09-16.md, finding 1).</param>
+    /// at (docs/history/pane-findings-2026-09-16.md, finding 1).</param>
     public DocumentPresenceDispatcher(
         IBridgeDispatcher inner,
         Func<bool> documentIsOpen,

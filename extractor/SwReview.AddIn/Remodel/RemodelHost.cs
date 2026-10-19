@@ -140,7 +140,7 @@ public sealed class RemodelHost : IDisposable
     /// <summary>
     /// What the tab says when this build has no in-process remodel seat: the capability, in
     /// the engineer's words, and what it means for the part on screen (U13,
-    /// docs/pane-findings-2026-09-20-review-gui.md section 6). It names no command. The
+    /// docs/history/pane-findings-2026-09-20-review-gui.md section 6). It names no command. The
     /// standalone probe is a testing procedure with no document open, and it lives in the
     /// workstation handover, not in a Task Pane read by someone with a part open.
     /// </summary>

@@ -29,7 +29,7 @@ do not follow them.
   findings U25 to U27 comes first**: the plan's step 4.9 (a drawing active) and step 5.3 (crash
   capture, Remodel a copy on a throwaway box, then part J checked in). The plan's section "First:
   the retest" gives the order and what to keep if SOLIDWORKS closes;
-  [`../testing-feedback-2026-09-28.md`](../testing-feedback-2026-09-28.md) says what changed.
+  [`../history/testing-feedback-2026-09-28.md`](../history/testing-feedback-2026-09-28.md) says what changed.
 - New in this build:
   - bought (COTS) parts are told apart from custom parts;
   - findings are grouped by type;

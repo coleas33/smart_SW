@@ -3,8 +3,8 @@
 **Feature**: `011-drawing-context` | **Date**: 2026-09-23 | **Plan**: [plan.md](plan.md)
 
 Phase 0 output from: the owner's direction of 2026-09-22 and the roadmap written from it
-(`docs/roadmap-2026-09-22.md`); the ADR-001 amendment of the same day
-(`sw-review-architecture-proposal.md`); a reading pass on 2026-09-23 at tip `d47a91f` over every
+(`docs/history/roadmap-2026-09-22.md`); the ADR-001 amendment of the same day
+(`docs/adr/0001-agentic-review-architecture.md`); a reading pass on 2026-09-23 at tip `d47a91f` over every
 module the plan names - the extractor's drawing phase (`DrawingDumper`, `DrawingTraversal`,
 `SwDrawingReader`), the attach (`SwSession`), the phase orchestration (`PackageWriter`), the
 drawing-rooted traversal (`ComponentTreeDumper`), the read-only guard, the IR's drawing models in
@@ -868,7 +868,7 @@ page would still word the drawing itself); name the model only from the review's
 
 The view walk now runs inside the active-document event for a drawing. The next sitting checks it on
 a drawing opened on its own, one opened after its model, and a multi-sheet drawing, with no refused
-member in the add-in log (`docs/testing-feedback-2026-09-28.md`, retest step 1).
+member in the add-in log (`docs/history/testing-feedback-2026-09-28.md`, retest step 1).
 
 ### 2026-10-14 attachment direction correction
 

@@ -1,7 +1,7 @@
 # Workstation handover: the sitting for features 008 to 011, in order
 
 Written 2026-09-23 for the next sitting on a licensed SOLIDWORKS seat, which may be a fresh
-machine: the pilot seat declared itself done (`docs/roadmap-2026-09-22.md`). Addressed to the
+machine: the pilot seat declared itself done (`docs/history/roadmap-2026-09-22.md`). Addressed to the
 assistant operating the seat. `docs/workstation-runbook.md` is the standing manual; read it first
 and keep its three rules: never commit or push per-machine state, never push `main`, close
 SOLIDWORKS before building or registering. This document replaces the 2026-09-20 round-2
@@ -115,7 +115,7 @@ Two more the owner asked for on 2026-09-27, with step 20:
 ## First: the retest of 2026-09-28's U25 to U27
 
 *Added 2026-09-28.* The sitting of 2026-09-28 reported three findings in its handover packet, and
-the build under test answers them (`docs/testing-feedback-2026-09-28.md`). The next sitting runs
+the build under test answers them (`docs/history/testing-feedback-2026-09-28.md`). The next sitting runs
 the test plan's retest **first**, right after section 1's update and checks and before the test
 plan's step 2.4 (its section "First: the retest of 2026-09-28's findings U25 to U27"):
 

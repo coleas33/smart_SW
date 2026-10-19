@@ -14,7 +14,7 @@ namespace SwReview.AddIn.Tests;
 ///
 /// U10 changed the premise and not the floor. A Start-here click used to open the finding's
 /// fold, and this test measured the fold that click opened. The click now only scrolls the
-/// card's head into view (docs/pane-findings-2026-09-20-review-gui.md section 3), so the test
+/// card's head into view (docs/history/pane-findings-2026-09-20-review-gui.md section 3), so the test
 /// follows the row, proves the fold stayed shut, presses the card's own Details - the press an
 /// engineer makes - and measures that: the same 80 px floor, the same follow-up box, the same
 /// explanation, now inside the fold.

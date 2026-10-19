@@ -15,23 +15,23 @@ and the Model check tab in `specs/003-resilient-modeling/`, the Standards check 
 `specs/009-engineer-workspace/`, the mechanical checks in `specs/010-mechanical-checks/`, the
 read-only drawing context in `specs/011-drawing-context/`, the engineer-first review in
 `specs/013-engineer-first-review/`, and the governing rules in
-`.specify/memory/constitution.md`. `README-complete.md` is the original
-pilot proposal and `sw-review-architecture-proposal.md` the architecture decision record.
+`.specify/memory/constitution.md`. `docs/history/pilot-proposal-2026-09-13.md` is the original
+pilot proposal and `docs/adr/0001-agentic-review-architecture.md` the architecture decision record.
 
 ## Current status and next steps
 
-See [the October 13 testing follow-up](docs/testing-feedback-2026-10-13.md) for the
+See [the October 13 testing follow-up](docs/history/testing-feedback-2026-10-13.md) for the
 current Review crash hardening, drawing attachment and Remodel copy fixes, and
-focused workstation retest. The [September 28 follow-up](docs/testing-feedback-2026-09-28.md)
+focused workstation retest. The [September 28 follow-up](docs/history/testing-feedback-2026-09-28.md)
 and September 20 records below describe earlier testing.
 
-See [the September 20 project status](docs/project-status-2026-09-20.md) for the
+See [the September 20 project status](docs/history/project-status-2026-09-20.md) for the
 earlier baseline, pilot findings, and prioritized next steps. The imported
-[handoff overview](docs/handoff-2026-09-20-start-here.md) and
-[detailed findings](docs/pane-findings-2026-09-20.md) preserve the pilot report.
+[handoff overview](docs/history/handoff-2026-09-20-start-here.md) and
+[detailed findings](docs/history/pane-findings-2026-09-20.md) preserve the pilot report.
 
-The [pre-test readiness plan](docs/pretest-readiness-plan-2026-09-20.md) records the
-implemented batch; [the testing handoff](docs/testing-handoff-2026-09-20.md) covers
+The [pre-test readiness plan](docs/history/pretest-readiness-plan-2026-09-20.md) records the
+implemented batch; [the testing handoff](docs/history/testing-handoff-2026-09-20.md) covers
 installation, live checks, and comparable efficiency experiments. A local test run can be collected with
 `swreview handoff <run-dir> --out <new-archive.zip>`; the archive includes a manifest of
 missing artifacts and retains design paths, so inspect it before sharing.
@@ -39,7 +39,7 @@ missing artifacts and retains design paths, so inspect it before sharing.
 The [current future-capabilities roadmap](docs/future-capabilities-roadmap-2026-10-14.md)
 records the remaining evaluation/send-gate work and preparation for automated drawings,
 engineer-confirmed load context and later Simulation integration. It is documentation only.
-The [September roadmap](docs/roadmap-2026-09-22.md) and its research estimates remain history.
+The [September roadmap](docs/history/roadmap-2026-09-22.md) and its research estimates remain history.
 
 Feature 016 provides [engineering context](specs/016-engineering-context/quickstart.md):
 requirements and applied forces, immutable revisions, explicit confirmation and bounded

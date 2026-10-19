@@ -2,7 +2,7 @@
 
 **Feature**: `007-attention-policy-gate` | **Date**: 2026-09-18 | **Plan**: [plan.md](plan.md)
 
-Phase 0 output from: the 2026-09-18 workstation record (`docs/pane-findings-2026-09-18.md`);
+Phase 0 output from: the 2026-09-18 workstation record (`docs/history/pane-findings-2026-09-18.md`);
 the planning session recorded in [design-brief.md](design-brief.md) (seven subsystem readers,
 two bug diagnoses, three designs, three judges, a synthesis and a critic); and a second
 reading pass on 2026-09-18 over the exact code the plan names (six readers: timing, the report
@@ -319,7 +319,7 @@ order, not third and fourth as the workstation record said; the review of a sing
 (`20260918-204543-…`) carries a `failed` coverage row from `get_drawing_sheet` on a document
 with no sheets; the other assembly's three `20260916-2050xx-…-check` folders hold only a
 `package.json`, the Model check having never reached the backend that evening (the web-filter
-problem `docs/pane-findings-2026-09-16.md` records); `20260916-003612-…` is an earlier
+problem `docs/history/pane-findings-2026-09-16.md` records); `20260916-003612-…` is an earlier
 assembly review, cut off mid-turn with no error event, from the same evening; and every
 session carries `efficiency` all-off and no baseline minutes, which is User Story 1's premise
 measured rather than assumed.

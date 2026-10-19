@@ -59,7 +59,7 @@ add-in then refused; **U26**, Remodel a copy refused a checked-in (read-only) pa
 SOLIDWORKS closed while Remodel a copy was measuring its copy. The build under test fixes U25 and
 U26, changes the measurement U27 stopped in, and marks every SOLIDWORKS call of Remodel a copy in
 the run folder before the call starts, so that a second close says where it happened
-(`docs/testing-feedback-2026-09-28.md`, which lists what the development machine changed).
+(`docs/history/testing-feedback-2026-09-28.md`, which lists what the development machine changed).
 
 **The next sitting runs this retest first**, right after step 1's update and health checks, and
 before step 2.4, in this order:

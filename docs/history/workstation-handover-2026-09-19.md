@@ -184,7 +184,7 @@ has a held-out package. The gate stays off in the pane; do not edit `ChatServer.
 
 ## 8. Handing back
 
-One dated findings document, in the shape of `docs/pane-findings-2026-09-18.md`, with:
+One dated findings document, in the shape of `docs/history/pane-findings-2026-09-18.md`, with:
 
 - the commit (`git rev-parse --short HEAD`) and the versions from runbook section 2;
 - Task A: folder names, the ids in order from the panel and from the report, any mismatch;

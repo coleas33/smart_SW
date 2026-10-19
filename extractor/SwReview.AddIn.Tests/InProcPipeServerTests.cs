@@ -675,7 +675,7 @@ public sealed class InProcPipeServerTests
             Assert.Contains("no longer open", response.Error!, StringComparison.OrdinalIgnoreCase);
             Assert.StartsWith("document no longer open", response.Error!, StringComparison.Ordinal);
 
-            // docs/pane-findings-2026-09-16.md, finding 1: the engineer reads this message
+            // docs/history/pane-findings-2026-09-16.md, finding 1: the engineer reads this message
             // against the document they are looking at, so it has to name the other one - the
             // document the tool service is attached to.
             Assert.Contains(AttachedDocument, response.Error!, StringComparison.Ordinal);

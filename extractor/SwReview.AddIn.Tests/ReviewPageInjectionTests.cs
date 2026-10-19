@@ -237,7 +237,7 @@ public sealed class ReviewPageInjectionTests
     }
 
     /// <summary>
-    /// U10 (docs/pane-findings-2026-09-20-review-gui.md section 3), inverting what this test
+    /// U10 (docs/history/pane-findings-2026-09-20-review-gui.md section 3), inverting what this test
     /// used to pin. `observed` was the one fact printed before the fold, and it is the long
     /// "mates to faces..." paragraph whose first sentence already <i>is</i> the title (a prefix
     /// of `observed` in 99 of 99, 13 of 13 and 7 of 7 findings on the evening's reviews). On a
@@ -666,7 +666,7 @@ public sealed class ReviewPageInjectionTests
 
     /// <summary>
     /// The coverage a real workstation run produced - 5 checked, 11 skipped, 39 unresolved, 0
-    /// failed, 7 out of scope (docs/pane-findings-2026-09-18.md) - fed in an order no bucket
+    /// failed, 7 out of scope (docs/history/pane-findings-2026-09-18.md) - fed in an order no bucket
     /// order could be read off, so the groups and the counts prove the page walks its own order
     /// array rather than the order the events arrived in.
     /// </summary>

@@ -2,7 +2,7 @@
 
 Both found on the pilot workstation against `main` `8b09438`, while diagnosing the Task
 Pane. Neither is the pane blocker - that one has its own brief,
-[`pane-backend-proxy.md`](pane-backend-proxy.md). Both are real and reproducible, and
+[`pane-backend-proxy.md`](../pane-backend-proxy.md). Both are real and reproducible, and
 **both are now fixed** - finding 1 in `extractor/SwReview.AddIn/ToolService/` and
 `SwReviewAddIn.cs`, finding 2 in `reviewer/src/swreview/cli.py` and
 `reviewer/src/swreview/checks/rms/run.py`. Each has a **Fixed** paragraph at the end saying

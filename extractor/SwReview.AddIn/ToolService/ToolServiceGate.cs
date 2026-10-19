@@ -121,7 +121,7 @@ public interface IToolServiceAccess
 /// <b>And it follows the active document.</b> "Once" above is about one service at a time, not
 /// about one document per SOLIDWORKS session: the scope is bound to the document it attached
 /// to, so an engineer who opens another one gets `document no longer open` from every command
-/// until the add-in is reloaded (docs/pane-findings-2026-09-16.md, finding 1).
+/// until the add-in is reloaded (docs/history/pane-findings-2026-09-16.md, finding 1).
 /// <see cref="FollowDocument"/> is the second entry point that fixes that, and it is separate
 /// from <see cref="EnsureStarted"/> because the two answer different questions: "is there one?"
 /// and "is it the right one?".

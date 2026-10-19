@@ -307,7 +307,7 @@ public sealed class ToolServiceWiringTests
         Assert.Null(gate.GeneralChatBridge);
     }
 
-    // ---- following the active document (docs/pane-findings-2026-09-16.md, finding 1) ---------
+    // ---- following the active document (docs/history/pane-findings-2026-09-16.md, finding 1) ---------
 
     /// <summary>
     /// The finding: the service bound to whichever document was open when the add-in started,

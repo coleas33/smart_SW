@@ -2,7 +2,7 @@
 
 > **History.** This was the repository's start-here file after the 2026-09-20 sitting. It is kept as a
 > record; its instructions are superseded. The current test plan is in
-> [`test-plan-2026-09-27/`](test-plan-2026-09-27/README.md).
+> [`test-plan-2026-09-27/`](../test-plan-2026-09-27/README.md).
 
 **Location on the pilot machine:** `%USERPROFILE%\smart_SW-handoff-2026-09-20`
 
@@ -16,7 +16,7 @@ workstation stays on `local` and does not push.
 **This seat is done testing.** Do not send Task A2 / E / F, another Review,
 or a resolved-pin pair back here. Build and verify on the development
 machine. The punch list is below and in
-`docs/pane-findings-2026-09-20.md`.
+`docs/history/pane-findings-2026-09-20.md`.
 
 ## Machine state
 
@@ -29,7 +29,7 @@ machine. The punch list is below and in
 
 ## What to read
 
-1. `docs/pane-findings-2026-09-20.md` — the whole sitting, token table, and
+1. `docs/history/pane-findings-2026-09-20.md` — the whole sitting, token table, and
    **What the other machine should update** (U1–U7). Start there.
 2. `dumps/20260919-184136-…/` — the small assembly's Review run (hidden follow-up in
    `events.jsonl` after the first `session.ended`).

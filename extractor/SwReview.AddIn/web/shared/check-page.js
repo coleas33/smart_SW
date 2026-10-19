@@ -491,7 +491,7 @@
 
     /**
      * Whether the result on screen is for the document on screen, and what the page does when it
-     * is not (U8, docs/pane-findings-2026-09-20-review-gui.md section 1).
+     * is not (U8, docs/history/pane-findings-2026-09-20-review-gui.md section 1).
      *
      * Both tabs restore the newest check folder on init whatever is open, and both used to keep
      * the previous result after `document.changed` - with Show in SOLIDWORKS and Accept live

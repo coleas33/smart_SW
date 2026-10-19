@@ -1,11 +1,11 @@
 # Workstation handover, round 2: what to test and what to fix next time
 
 Written 2026-09-19 for the next session on the pilot workstation, after the packet that
-came back that day (`docs/pane-findings-2026-09-19.md`, `docs/task-a-2026-09-19.md`,
+came back that day (`docs/history/pane-findings-2026-09-19.md`, `docs/history/task-a-2026-09-19.md`,
 `docs/feature-request-resolve-lightweight.md`). Addressed to the assistant operating the
 seat. `docs/workstation-runbook.md` is the standing manual; read it first and keep its three
 rules: never commit or push per-machine state, never push `main`, close SOLIDWORKS before
-building or registering. The previous round's manual, `docs/workstation-handover-2026-09-19.md`,
+building or registering. The previous round's manual, `docs/history/workstation-handover-2026-09-19.md`,
 still holds for the command lines of Tasks C and D; this document says what changed, what to
 fix on the seat before testing, what to test, and what to send back.
 
@@ -96,7 +96,7 @@ Screenshots of the pane are welcome in the handover folder, never in the reposit
 
 ## 6. Tasks C and D: the gate, with the key
 
-Both are unchanged from `docs/workstation-handover-2026-09-19.md` sections 5 and 6, with two
+Both are unchanged from `docs/history/workstation-handover-2026-09-19.md` sections 5 and 6, with two
 amendments: hold `--lever parallel_tool_calls` on in **both** arms of Task D (the decision
 recorded from your packet), and keep the study folder under the handover folder, not under
 `benchmarks/studies/`. Task C needs the real profile from section 3.

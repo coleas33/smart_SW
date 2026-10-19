@@ -17,7 +17,7 @@ namespace SwReview.AddIn.Tests;
 /// Until 2026-09-18 each page test fabricated its own frame, put a whole `{seq, type, body}`
 /// envelope in `data` and sent no `event` line at all - bytes the backend never writes - and
 /// the page's parser, which expected exactly that envelope, stayed green here while every
-/// real frame fell through it on the workstation (docs/pane-findings-2026-09-18.md). The
+/// real frame fell through it on the workstation (docs/history/pane-findings-2026-09-18.md). The
 /// contract sample below is the guard against a repeat: the Python producer test pins its
 /// bytes and these tests feed the same bytes to the page, so the two ends cannot drift apart
 /// without one suite going red.

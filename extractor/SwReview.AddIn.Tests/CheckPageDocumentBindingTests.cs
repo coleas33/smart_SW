@@ -7,7 +7,7 @@ using Xunit;
 namespace SwReview.AddIn.Tests;
 
 /// <summary>
-/// U8's rule on the two check tabs (docs/pane-findings-2026-09-20-review-gui.md section 1, the
+/// U8's rule on the two check tabs (docs/history/pane-findings-2026-09-20-review-gui.md section 1, the
 /// analyst's "check pages" recommendation): a result is bound to the document it graded.
 ///
 /// Both tabs restore the newest check folder on init whatever the open document, and both kept

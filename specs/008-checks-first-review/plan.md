@@ -3,7 +3,7 @@
 **Branch**: `008-checks-first-review` | **Date**: 2026-09-23 | **Spec**: [spec.md](spec.md)
 
 **Input**: Feature specification from `/specs/008-checks-first-review/spec.md`, the owner's
-decisions of 2026-09-22 in `docs/roadmap-2026-09-22.md`, and the Phase 0 reconciliation of three
+decisions of 2026-09-22 in `docs/history/roadmap-2026-09-22.md`, and the Phase 0 reconciliation of three
 design passes in [research.md](research.md).
 
 ## Summary

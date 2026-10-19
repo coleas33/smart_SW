@@ -3,7 +3,7 @@
 
   The Review tab binds a review to the document `review.started` named, and the two check tabs
   bind a check result to the document it graded. When `document.changed` names another one, each
-  hides what it was showing and says whose it is (docs/pane-findings-2026-09-20-review-gui.md
+  hides what it was showing and says whose it is (docs/history/pane-findings-2026-09-20-review-gui.md
   section 1). "Is this the same document" is one rule, so it is written once, here, rather than
   once per page: a second copy of it is the copy that disagrees about case or configuration the
   first time either is touched, and then one tab hides a result the other one shows.

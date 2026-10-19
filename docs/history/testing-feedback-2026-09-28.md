@@ -102,7 +102,7 @@ Seat-validation flags remain unchanged.
 
 ## Focused workstation retest
 
-Use the current [workstation setup and test plan](test-plan-2026-09-27/README.md), with this branch
+Use the current [workstation setup and test plan](../test-plan-2026-09-27/README.md), with this branch
 as the build under test. Close SOLIDWORKS before rebuilding; fetch and merge the branch into the
 workstation's intended lane, then use `extractor/tools/update-workstation.ps1 -NoPull`. Record the
 installed commit. The plan's section "First: the retest of 2026-09-28's findings U25 to U27" runs it

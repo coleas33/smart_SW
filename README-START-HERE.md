@@ -7,4 +7,4 @@ says what to read, in what order, and where this sitting starts.
 **Developing?** See [`README.md`](README.md).
 
 The earlier handoff overview that used to sit here (from the 2026-09-20 sitting) is kept as history
-in [`docs/handoff-2026-09-20-start-here.md`](docs/handoff-2026-09-20-start-here.md).
+in [`docs/history/handoff-2026-09-20-start-here.md`](docs/history/handoff-2026-09-20-start-here.md).

@@ -27,7 +27,7 @@ namespace SwReview.AddIn.Tests;
 /// producer test pins byte for byte. This class once fabricated its own frames with a whole
 /// envelope inside `data`, and the page's parser, which expected exactly that, stayed green
 /// here while three reviews on the workstation ended without the page ever noticing
-/// (docs/pane-findings-2026-09-18.md).
+/// (docs/history/pane-findings-2026-09-18.md).
 ///
 /// <b>One boot, one scripted conversation.</b> Every assertion below reads the same run. A
 /// WebView2 with the real page in it costs seconds to start, the conversation is a single
@@ -152,7 +152,7 @@ public sealed class ReviewPageEventStreamTests
     ///
     /// The count is what makes a hung review tell itself from a finished one ("I cannot tell a
     /// finished review from a hung one" is the complaint this page already has on record,
-    /// docs/pane-findings-2026-09-18.md). The two numbers come from two different events - a
+    /// docs/history/pane-findings-2026-09-18.md). The two numbers come from two different events - a
     /// round trip from `usage`, a call from `tool.finished` - so both are watched moving. Until
     /// feature 009 they were the transcript fold's button label; they are the Transcript view's
     /// head now.

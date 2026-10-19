@@ -1284,7 +1284,7 @@ def test_the_stream_replays_the_file_and_then_the_live_events(
     # The body alone travels in `data`. The page builds its `{seq, type, body}` envelope from
     # the three SSE fields (app.js `onFrame`), so a `data` that carried the envelope would be
     # read as a body with a `type` key and rendered as an event about nothing - the shape the
-    # add-in tests fabricated until 2026-09-18 (docs/pane-findings-2026-09-18.md).
+    # add-in tests fabricated until 2026-09-18 (docs/history/pane-findings-2026-09-18.md).
     for event in events:
         assert "type" not in event["data"]
         assert "seq" not in event["data"]
@@ -1358,7 +1358,7 @@ def test_the_contract_sample_is_what_the_producer_writes_byte_for_byte() -> None
     side's idea of a frame goes red in one suite or the other. Until 2026-09-18 nothing pinned
     them to each other: the C# tests fabricated an envelope-in-`data` frame this server never
     writes, and every real frame fell through the page's parser
-    (docs/pane-findings-2026-09-18.md).
+    (docs/history/pane-findings-2026-09-18.md).
     """
     at = datetime(2026, 9, 16, 10, 20, tzinfo=UTC)
     timing = Timing(

@@ -1075,7 +1075,7 @@ public sealed class ReviewHostTests
 
     /// <summary>
     /// `review.started` names the document the review is of, so the page can tell when the
-    /// document on screen stops being that one (U8, docs/pane-findings-2026-09-20-review-gui.md
+    /// document on screen stops being that one (U8, docs/history/pane-findings-2026-09-20-review-gui.md
     /// section 1). The path and the configuration are the ones `init` and `document.changed`
     /// carry, in the same shape, so the page compares like with like.
     /// </summary>
@@ -1173,7 +1173,7 @@ public sealed class ReviewHostTests
     /// <summary>
     /// The ready status names the lightweight and suppressed component instances the dump could
     /// not read, before a review spends a single token on the ones it could
-    /// (docs/feature-request-resolve-lightweight.md, docs/task-a-2026-09-19.md issue 3).
+    /// (docs/feature-request-resolve-lightweight.md, docs/history/task-a-2026-09-19.md issue 3).
     /// </summary>
     [Fact]
     public void TheReadyStatusNamesHowManyComponentsWereNeverRead()
@@ -1491,7 +1491,7 @@ public sealed class ReviewHostTests
     /// The session list belongs to the page-message pump thread, and the tool-service gate now
     /// asks `AnyTurnRunning` from another one - it is the gate's busy question, and the answer
     /// decides whether the bridge may be re-attached to the document the engineer just opened
-    /// (docs/pane-findings-2026-09-16.md, finding 1). A `review.start` or a Model check landing
+    /// (docs/history/pane-findings-2026-09-16.md, finding 1). A `review.start` or a Model check landing
     /// while the question is out used to throw `Collection was modified` out of the enumerator,
     /// which the gate read as "busy" and skipped the re-attach for: the very failure the
     /// wiring exists to remove, with a race as its trigger.

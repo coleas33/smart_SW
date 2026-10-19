@@ -132,7 +132,7 @@ body {
 /*
   The run folder, the stream state and the running cost, on one muted line. Three stacked grey
   sentences of equal weight is what let the pane report four contradictory things at once
-  (docs/pane-findings-2026-09-18.md); an empty one takes no room at all.
+  (docs/history/pane-findings-2026-09-18.md); an empty one takes no room at all.
 */
 .meta {
   display: flex;

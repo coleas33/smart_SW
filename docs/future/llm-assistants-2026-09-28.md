@@ -34,7 +34,7 @@ lists the recommended option first.
   6. Then run `/speckit-clarify`, `/speckit-plan`, `/speckit-tasks` and `/speckit-analyze` before
      `/speckit-implement`.
 - **This file:** `docs/future/llm-assistants-2026-09-28.md`, linked from
-  `docs/roadmap-2026-09-22.md` under "Later: researched ideas".
+  `docs/history/roadmap-2026-09-22.md` under "Later: researched ideas".
 - **File references.** Python paths are relative to `reviewer/src/swreview/`. C# paths are
   relative to `extractor/SwReview.Extractor/` (`Dump/`) or `extractor/SwReview.AddIn/`
   (`SwReviewAddIn.cs`, `TaskPaneControl.cs`, `Review/`). `constitution.md` is

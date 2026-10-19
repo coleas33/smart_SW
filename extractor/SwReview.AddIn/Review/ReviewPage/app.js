@@ -293,7 +293,7 @@
           // that bytes arrived, and `onFrame` is where that is known. A keep-alive comment
           // proves the socket and nothing else, and a page that said "Streaming." on any
           // frame looked healthy for three whole reviews in which it understood nothing
-          // (docs/pane-findings-2026-09-18.md).
+          // (docs/history/pane-findings-2026-09-18.md).
           onFrame(payload.frame || '');
         }
         return;
@@ -1074,7 +1074,7 @@
    * round trips there have been, and - while one is in flight - which tool is running.
    *
    * "A hung review looks exactly like a finished one" is the complaint this page already has on
-   * record (docs/pane-findings-2026-09-18.md), and these counts are the answer to it. They are
+   * record (docs/history/pane-findings-2026-09-18.md), and these counts are the answer to it. They are
    * transcript vocabulary, so they live in the Transcript's head and nowhere in Results (FR-018).
    */
   function renderTranscriptHead() {
@@ -2116,7 +2116,7 @@
 
   /**
    * Whether the review on screen is of the document on screen, and what the page does when it
-   * is not (U8, docs/pane-findings-2026-09-20-review-gui.md section 1).
+   * is not (U8, docs/history/pane-findings-2026-09-20-review-gui.md section 1).
    *
    * Re-judged whenever either side moves: a review starts or is cleared, or the host says the
    * document changed. The rule is `web/shared/document.js`'s, shared with the check tabs, and a
