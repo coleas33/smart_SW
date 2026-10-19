@@ -386,13 +386,21 @@ and it is three things:
    family is `reviewer/src/swreview/bridge/remodel_client.py`, whose own command allowlist
    is `ping` plus these twelve — `COMMANDS` in `client.py` is unchanged.
 
-These commands write, so their calls go through the document-scoped allowlist guard of
-`specs/004-resilient-remodeler/contracts/guard-allowlist.md` rather than the read-only guard,
-which refuses some of those writes (`Save3`, `ForceRebuild3`) and misses others - the reason
-the allowlist names each write with its interface - and they act on a copy the run created,
-and on no other document. *Corrected 2026-10-19 (decision 140A's review)*: this said the
-commands themselves are refused by the read-only guard; no guard judges a command's name
-(Request, above), only the members its handler calls.
+Those that write - all but `remodel.probe_scope`, `remodel.snapshot` and `remodel.geometry`,
+which `RemodelCommandTable` marks as writing nothing - make their writes through the
+re-modeler's own gate, whose guard is the document-scoped allowlist of
+`specs/004-resilient-remodeler/contracts/guard-allowlist.md`, not the read-only guard: it lets
+through the writes it names, each by its interface-qualified key, and the read-only guard
+refuses some of them (`Save3`, `ForceRebuild3`) and misses others, the reason each is named
+with its interface. They write only the copy the run created, besides the four
+application-wide settings `remodel.open` sets for the run, under their own two allowlist keys,
+and the end of the session puts back. `remodel.probe_scope` and `remodel.open` read the
+engineer's open source, whose path they name (item 3), and change nothing in it. *Corrected
+2026-10-19 (decision 140A's second review)*: this said the commands themselves are refused by
+the read-only guard; no guard judges a command's name (Request, above), only the members its
+handler calls. *And on that review's second pass*: it then said every one of these commands
+writes, and on no document but the copy; three write nothing, and two read the engineer's
+source.
 
 ## Errors that are not command failures
 

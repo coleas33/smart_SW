@@ -1368,7 +1368,10 @@ ordinal match against `AnsweredCommands`, the bridge's own fixed set of eighteen
 `BridgeCommands.All` and the twelve of `RemodelCommands.All` - and answers any other name
 `Unknown command '<name>'. This bridge answers ...`, with no result, before a handler is looked up.
 `Run`'s switch is unchanged; its own unknown branch, which only a command added to the set without a
-case could now reach, shares that refusal. With command names no longer judged as members,
+case could now reach, shares that refusal. *Changed 2026-10-19 on the decision's second review
+(`7ee2fee`, R10.5)*: that branch throws `InvalidOperationException` now, the dispatcher's own
+mistake, so `Dispatch`'s check is the only refusal of an unknown name. With command names no
+longer judged as members,
 `list-writer-members.ps1` names `IModelDoc2`'s `Close`, `Save` and `Rebuild` and
 `IModelDocExtension`'s `Rebuild`, and 136A's `Close` exclusion is gone.
 
