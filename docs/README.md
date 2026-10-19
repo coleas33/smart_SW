@@ -22,7 +22,8 @@ once below. The authoritative statement of what a feature does is its spec packa
 | [`reviewer-guide.md`](reviewer-guide.md) | The command-line entry points, what a review reads first, the checks and the Task Pane tabs. |
 | [`../specs/README.md`](../specs/README.md) | Every feature's spec package and its status. |
 | [`decisions.md`](decisions.md) | The decision log: the owner's numbered decisions and the architecture decision records. |
-| [`../CONTRIBUTING.md`](../CONTRIBUTING.md) | How to contribute: issues, pull requests, the gates, the Spec Kit workflow and the public-repository rule. |
+| [`../CONTRIBUTING.md`](../CONTRIBUTING.md) | How to contribute: questions, issues, pull requests, the gates, the Spec Kit workflow and the public-repository rule. |
+| [`../CODE_OF_CONDUCT.md`](../CODE_OF_CONDUCT.md) | The code of conduct (Contributor Covenant 2.1); conduct problems are reported privately through the repository's Security tab. |
 | [`../AGENTS.md`](../AGENTS.md) | The shared guidance for coding agents, with the gates run before every commit. |
 | [`llm-efficiency-options.md`](llm-efficiency-options.md) | The language-model efficiency options of feature 005 and the results ledger the benchmark commands render. |
 | [`engineering-context-foundation.md`](engineering-context-foundation.md) | The design draft behind feature 016 (engineering context), including structures beyond its first slice. |

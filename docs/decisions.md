@@ -12,7 +12,9 @@ An owner decision answers a numbered question put to the project owner, usually 
 options and the recommended option first. Its id is the question's number followed by the letter
 of the option the owner took: `112A` is question 112, option A. A letter other than A means the
 owner chose another option (`11B`); the letters of options not taken (`31B`, `33C`, `50B`) appear
-beside some decisions as the alternatives. Feature 014 describes the form in
+beside some decisions as the alternatives. From 121A on, the number is this register's next
+number rather than the question's number as it was asked (decision 128A,
+[One counter from 121A](#one-counter-from-121a-decision-128a)). Feature 014 describes the form in
 [`specs/014-design-review-eval/research.md`](../specs/014-design-review-eval/research.md#1-owner-decisions-log),
 "§1 Owner decisions log", and feature 015 in
 [`specs/015-review-send-gate/research.md`](../specs/015-review-send-gate/research.md#r7-owner-decisions-of-the-plan-review-2026-10-09),
@@ -20,13 +22,16 @@ R7.
 
 Decisions are recorded in the feature they bind: mostly in its `research.md` (often under a
 heading that starts with the id), and sometimes in `spec.md`, `tasks.md`, a contract or the
-workstation test plan. Defaults ("default taken ..., the owner may revise", or the numbered `Dnn`
+workstation test plan. From 121A on, every owner decision is also entered in this page's
+register (decision 128A). Defaults ("default taken ..., the owner may revise", or the numbered `Dnn`
 defaults of features 010 and 014) are not owner decisions and are not listed here.
 
 ## How the numbers run
 
-The numbers are **not** one sequence for the whole project. The repository shows three runs, and
-the same id can therefore name different decisions:
+Until 2026-10-18 the numbers were **not** one sequence for the whole project. The repository
+shows three runs, and the same id can therefore name different decisions. From 121A on there is
+one counter (decision 128A, [below](#one-counter-from-121a-decision-128a)); the earlier ids stay
+as they were written.
 
 1. **2026-09-23 to 2026-09-25**: 2A to 25A, in features 003, 004, 008, 009 and 011 and the seat
    test plan. Ids 1A, 5A to 8A, 12A and 19A of this run appear nowhere in the tracked tree, and question 11
@@ -37,14 +42,18 @@ the same id can therefore name different decisions:
    87A to 90A are "the next numbers no branch uses". Ids 42A, 43A, 45A, 46A and 49A appear nowhere
    in the tracked tree. Number order is date order with one exception: 94A is dated 2026-10-15,
    95A and 96A 2026-10-14.
-3. **2026-10-18**: 2A, 3A and 4A, first given in commit messages and recorded on this page
-   from now on (repository housekeeping, below).
+3. **2026-10-18**: eight questions put to the owner in two rounds, each round labelled 1A to
+   4A when it was asked. Decision 128A numbered them 121A to 128A, continuing run 2. The first
+   round's 2A, 3A and 4A had already been written into commit messages and branch work under
+   those labels; they are 122A, 123A and 124A, and the first round's 1A is 121A
+   ([the mapping](#one-counter-from-121a-decision-128a)).
 
 Ids 2A, 3A, 4A, 9A, 10A, 13A to 18A and 20A to 25A each name two different decisions, one in
-run 1 and one in run 2; 2A, 3A and 4A name a third in run 3. Cite a decision with its feature
-and date, not by its id alone.
+run 1 and one in run 2; the labels 1A to 4A of 2026-10-18 name a third and a fourth, which are
+121A to 128A. Cite a decision before 121A with its feature and date, not by its id alone.
 
-The tables below follow the runs: one table per run, in number order. A single table sorted by id
+The tables below follow the runs: one table per run, in number order, then the single counter's
+register from 121A. A single table sorted by id
 would put unrelated decisions that share an id side by side; within run 2, number order is
 already date order, and the Feature column shows where each decision applies.
 
@@ -195,16 +204,31 @@ reviews, and 31A to 36A in the owner's review of its plan (014 `research.md` §1
 | 119A | 2026-10-17 | 014 | "The private slice's noise floor is not computed". | [014 research.md: 119A. The private slice's noise floor is not computed (20...](../specs/014-design-review-eval/research.md#119a-the-private-slices-noise-floor-is-not-computed-2026-10-17) |
 | 120A | 2026-10-17 | 014 | "The noise floor records what was tested". | [014 research.md: 120A. The noise floor records what was tested (2026-10-17)](../specs/014-design-review-eval/research.md#120a-the-noise-floor-records-what-was-tested-2026-10-17) |
 
-## Run 3: 2026-10-18, repository housekeeping
+## One counter from 121A (decision 128A)
 
-These were first given only in commit messages on `main`. This page is their record from now
-on: a later decision of this run is added to the table below.
+**The rule.** From 2026-10-18 there is one counter for the owner's decisions across the whole
+repository, and this page is its register. Every new owner decision takes the next id here,
+whatever its question was numbered when it was asked, and is entered in the table below in the
+same commit as the change it governs, with its date, a one-line summary, its status and where
+else it is recorded (the feature's `research.md` when a feature governs it, the commits that
+carry it out). Ids before 121A stay as they were written; the runs above remain their index. The
+next new decision is **129A**.
 
-| Id | Date | Subject | What the commit says | Commit |
-|---|---|---|---|---|
-| 2A | 2026-10-18 | CI | "main's check becomes the required one once branch protection is on (2A)"; the next commit names "the outside-the-checkout temp folder rule CI fix 2A added". | `174900b`, `dfb4eda` |
-| 3A | 2026-10-18 | Documentation | Dated notes archived in `docs/history/` and the architecture proposal moved to ADR 0001, every reference updated "(3A)"; the documentation layout this page belongs to. | `c42d3c2` |
-| 4A | 2026-10-18 | Agent guidance | "shared rules in AGENTS.md; personal prompt out of CLAUDE.md (owner decision 4A)". | `e10e2e6` |
+**The mapping.** The eight decisions of 2026-10-18 were asked in two rounds of four questions,
+each labelled 1A to 4A at the time. The first round's 2A, 3A and 4A were written into commit
+messages on `main` and into the documentation branch under those labels before decision 128A
+numbered them, and those messages are not rewritten for it: read "2A" in a commit of that day as
+122A, "3A" as 123A and "4A" as 124A. Run 2 ended at 120A, so the counter continues at 121A.
+
+| Id | Date | Asked as | Decision | Status | Evidence |
+|---|---|---|---|---|---|
+| 121A | 2026-10-18 | 1A, first round | Rewrite the public history with `git filter-repo` to remove a small set of private identifiers from files and commit messages, remap the commit-hash references and force-push; done last, before the company forks the repository. | Not yet done. | None yet. |
+| 122A | 2026-10-18 | 2A, first round | Fix CI (red since 2026-10-12), harden it, and make it the required check on `main` once the history rewrite is done. The C# build stays a documented local gate ([`CONTRIBUTING.md`](../CONTRIBUTING.md#the-gates)); never a self-hosted runner on the public repository. | CI fixed and hardened; branch protection pending. | `5acb115`, `2b39bdc`, `174900b` ("once branch protection is on (2A)"); `dfb4eda` ("CI fix 2A"). |
+| 123A | 2026-10-18 | 3A, first round | The full open-source documentation layout: front page, documentation index, specs index, this register, ADRs, contributing, security, fork guide, architecture overview and glossary. | Done on the documentation branch; not yet on `main`. | `c42d3c2` on `main`; the `docs-3a` branch (`694e179`, `f409654`, `d4d97f2`, `73a9b66`, `8d79532`), each of whose messages names 3A. |
+| 124A | 2026-10-18 | 4A, first round | Split `CLAUDE.md`: the shared agent rules in [`AGENTS.md`](../AGENTS.md), which `CLAUDE.md` imports, and the personal prompt in an ignored `CLAUDE.local.md`. | Done. | `e10e2e6` ("owner decision 4A"), `dfb4eda`. |
+| 125A | 2026-10-18 | 1A, second round | Security reports go through GitHub private vulnerability reporting, enabled on the repository on 2026-10-18; no email address is published. | Done. | [`SECURITY.md`](../SECURITY.md#reporting-a-vulnerability), "Reporting a vulnerability"; the setting is the repository's, not a file. |
+| 126A | 2026-10-18 | 2A, second round | Add a code of conduct (Contributor Covenant 2.1, reports through the repository's private reporting) and a question issue form. | Done on the documentation branch. | [`CODE_OF_CONDUCT.md`](../CODE_OF_CONDUCT.md); [`.github/ISSUE_TEMPLATE/question.yml`](../.github/ISSUE_TEMPLATE/question.yml). |
+| 128A | 2026-10-18 | 4A, second round | One owner-decision counter from now on, continuing at 121A, with this page as its register; earlier ids stay as written. | Done; in force. | This section; [`AGENTS.md`](../AGENTS.md#how-work-is-done), "How work is done". |
 
 The owner's decision of the same day to keep this repository as the public upstream of private
 downstream forks is not numbered; it is recorded as
@@ -223,6 +247,7 @@ decision ids. They are not entries of the runs above:
 | "issue N, answered NA" (7A, 8A, 13A, 14A, 15A, 19A, 20A, 21A, 25A, 34A, 35A, 37A, 38A) | 2026-10-14 to 2026-10-16 | 014 `research.md`, 91A to 113A | The number of the question in its review; the decision is the heading's id. 110A also cites "(33C)". |
 | "owner decision 23A" | 2026-10-15 | [002 `contracts/handoff-export.md`](../specs/002-task-pane-assistant/contracts/handoff-export.md), commit `10cecf3` ("handoff 015-23A") | A handoff label written as an owner decision: the export leaves out a report or attention record that names another session. It is not run 2's 23A (the private slice, 2026-09-29). |
 | "owner decision 4A" | 2026-10-14 | [015 `review-2026-10-12.md`](../specs/015-review-send-gate/review-2026-10-12.md); [`workstation-test-plan.md`](test-plan-2026-09-27/workstation-test-plan.md), "How long it takes" | A handoff label: step 4.10 adds 35 minutes to the sitting. It is not run 2's 4A (the scorer, 2026-09-28). |
+| "2A", "3A" and "4A" in commit messages and branch work | 2026-10-18 | `main` (`174900b`, `dfb4eda`, `c42d3c2`, `e10e2e6`) and the `docs-3a` branch | The labels the first round's questions were asked under; the decisions are 122A, 123A and 124A ([the mapping](#one-counter-from-121a-decision-128a)). The second round's 1A to 4A are 125A to 128A. |
 | "20A-Q1" | 2026-09-25 | 003 `research.md`, 008 `research.md` R2.58 | Feature 003's question about decision 20A, which 23A of run 1 answers. |
 
 ## Unnumbered owner decisions

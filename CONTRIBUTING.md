@@ -10,7 +10,15 @@ The project's rules are in the constitution,
 [`.specify/memory/constitution.md`](.specify/memory/constitution.md), which supersedes this file.
 [`AGENTS.md`](AGENTS.md) is the short form of the same rules for coding agents and people alike.
 
+Everyone taking part follows the [code of conduct](CODE_OF_CONDUCT.md) (Contributor Covenant
+2.1). A conduct problem is reported privately, as it says: through the repository's **Security**
+tab, **Report a vulnerability**, marked as a conduct report.
+
 ## Before you start
+
+- **Questions go in an issue.** Use the question form: say what you are trying to do, what you
+  have read and what happened. Check the [documentation index](docs/README.md) and the
+  [specs index](specs/README.md) first.
 
 - **Larger changes start as an issue.** A new check, a new tab or command, a change to a
   contract under `specs/`, anything that touches the read-only guard, key handling or the send
@@ -74,7 +82,8 @@ status is [`specs/README.md`](specs/README.md).
 - Tasks marked `[W]` need the licensed SOLIDWORKS seat and run only on the pilot workstation.
   Never start SOLIDWORKS on a machine without a licence.
 - Decisions taken during a feature are recorded in its `research.md`; the owner's decisions are
-  numbered (`112A`) and indexed in [`docs/decisions.md`](docs/decisions.md). A contribution that
+  numbered (`112A`) and indexed in [`docs/decisions.md`](docs/decisions.md), which since 121A is
+  their one register (decision 128A): a new decision takes the next id there. A contribution that
   needs an owner decision asks for it in the issue or the pull request rather than assuming one.
 - Keep changes surgical: touch what the task needs, match the surrounding style, and remove only
   the orphans your change created.

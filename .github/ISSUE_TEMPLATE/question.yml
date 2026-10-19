@@ -1,0 +1,62 @@
+name: Question
+description: Ask how to do something with smart_SW, or what a document or result means.
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **This repository is public. Never attach or paste real material:** no real design,
+        part or drawing number or file, no drawing or screenshot of a real design, no company,
+        customer or person's name, no user or machine name, no vault, network or project path,
+        no standards profile, template or sheet format, no recording, dump, run folder, handover
+        folder or log from real work, and no API key or other credential. The full list is
+        "The public-repository rule" in `CONTRIBUTING.md`. Ask in general terms or with the
+        fictional fixtures in the repository (`benchmarks/packages/`,
+        `reviewer/tests/fixtures/replay/`, `config/standards.example.yaml`).
+
+        Check `docs/README.md` (the documentation index) and `specs/README.md` (each feature and
+        its status) first: the answer may already be written down. If something does not work as
+        documented, use the bug report form instead; a security problem is reported privately as
+        `SECURITY.md` says.
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which part of smart_SW is the question about?
+      options:
+        - Reviewer command line (swreview)
+        - Task Pane add-in (inside SOLIDWORKS)
+        - Extractor (swreview-extract, the C# library or console)
+        - Benchmark (benchmark commands, cases, scoring)
+        - Documentation
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: goal
+    attributes:
+      label: What are you trying to do?
+      description: The task or the result you are after, in general terms.
+    validations:
+      required: true
+  - type: textarea
+    id: read
+    attributes:
+      label: What have you read?
+      description: Links to the documents, specs or sections you have already read (for example `docs/reviewer-guide.md` or a feature's `quickstart.md`), and what in them was unclear.
+    validations:
+      required: true
+  - type: textarea
+    id: happened
+    attributes:
+      label: What happened?
+      description: What you tried and what you saw, with the exact command or clicks and any message, scrubbed of every real path, user or machine name, design or part number, company or customer name and key.
+    validations:
+      required: false
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Confirmation
+      options:
+        - label: "Nothing in this question is real: no design, part or drawing number or file, no company, customer or person's name, no user or machine name, no vault, network or project path, no standards profile, template or sheet format, no recording, dump, run folder, handover folder or log from real work, and no key."
+          required: true

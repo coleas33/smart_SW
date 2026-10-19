@@ -70,6 +70,8 @@ Feature gates in a `tasks.md` may add checks (the ledger check, the replay check
 - Work in a branch or git worktree, never with uncommitted edits in someone else's checkout.
 - Follow the feature's `tasks.md` order; record decisions in the feature's `research.md` and tick
   tasks only when their acceptance holds.
+- An owner decision takes the next id in [`docs/decisions.md`](docs/decisions.md) (one counter,
+  decision 128A) and is recorded there, and in the feature's `research.md` when a feature governs it.
 - Keep changes surgical: touch what the task needs, match the surrounding style, remove only the
   orphans your change created.
 - Commit messages: `Feature NNN Tnnn: what changed` for task work, `Record passing <slice> gate on

@@ -3,3 +3,6 @@ contact_links:
   - name: Report a security vulnerability
     url: https://github.com/coleas33/smart_SW/blob/main/SECURITY.md
     about: Do not open a public issue for a vulnerability. Report it privately as SECURITY.md describes.
+  - name: Report a code of conduct problem
+    url: https://github.com/coleas33/smart_SW/blob/main/CODE_OF_CONDUCT.md
+    about: Do not open a public issue about a person's conduct. Report it privately as CODE_OF_CONDUCT.md describes, through the Security tab's Report a vulnerability, marked as a conduct report.
