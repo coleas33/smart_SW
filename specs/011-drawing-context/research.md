@@ -903,6 +903,13 @@ lists `drawing.read`'s refusals as this decision left them (T128, commit `ef6298
 `SwReview.Extractor.Tests` 9,374 tests and `SwReview.AddIn.Tests` 2,456, all green, the build at
 zero warnings. The questions it raised that are the owner's are R8.5's.
 
+*On a second review, the same day*: it verified T120 to T128 and found what T129 to T134 fix,
+recorded in R8.1: D14's reading passed a drawing the seam opened and never asked, and nothing at the
+seat could show whether SOLIDWORKS sets an already-open bit; R8.1's reason for honouring both bits
+is corrected, and the host's `PROTOCOL.md` now says what a failed visibility restore does (T134,
+commit `27954ab`). Measured after: `SwReview.Extractor.Tests` 9,387 tests and `SwReview.AddIn.Tests`
+2,456, all green, the build at zero warnings.
+
 ### R8.1 Each read-only open is checked read-only (T111, T112, T113, T114)
 
 **Decision**: after a successful `OpenDoc6`, the confirmed drawing's open (`DrawingOpenScope`) and
@@ -956,7 +963,7 @@ the engineer's document, but it also skips the read-only check: should SOLIDWORK
 bit on a fresh open, the console attach would use the document that open opened unchecked, and the
 seam would read the hidden drawing that open opened unchecked and leave it open - though it would
 close nothing against the engineer's will. Probe D14 is how the seat confirms what SOLIDWORKS sets:
-its `OpenDoc6` line now ends with the codes the open answered (T131, T132).
+its `OpenDoc6` line now ends with the codes the open answered (T131, T132). Commit `2e8b348`.
 
 **The seat should confirm** two things about these bits. That SOLIDWORKS sets neither on a fresh
 open: the first D14 run of the seat plan's step 3.9 now shows the open's codes on its `OpenDoc6`
@@ -970,14 +977,25 @@ closed; and the console attach refuses the document, naming the open's warnings.
 D14's reading names `the read-only state` only on an answer. When the restore of new drawings'
 visibility failed, the seam refused before it asked, yet the reading named the read-only state
 because a drawing had been returned; it now judges only the answers the check gave, any that is not
-true failing it, and a check never asked is not judged.
+true failing it, and a check never asked is not judged. *On the second review*: a drawing the seam
+opened and read must still have answered. With the seam's check removed, D14 printed
+`IsOpenedReadOnly: not called` beside `opened by the probe and closed` and still read `every answer
+as required`, and no test's reading caught it. The rule is now
+`DrawingOpenProbe.ReadOnlyAsRequired`: every answer true, and at least one for a drawing the seam
+opened (T129, T130).
 
 Evidence: commit `727e901`, tests first - nine new test methods, nineteen cases, across
 `FileLoadErrorsTests`, `DrawingOpenScopeTests`, `ConfirmedDrawingReadTests`,
 `SwSessionReadOnlyOpenTests` and D14's; eight red before the change and D14's red against the old
 seam - with the two tests whose premise was warning 128 edited deliberately to warning 32, their
 assertions kept; and commit `b0ba036`, one new D14 test, red before. `confirmed-open.md` section 3,
-`attach.md` section 4, `guard.md` section 7, `probes.md` and 004's `guard-allowlist.md` say so.
+`attach.md` section 4, `guard.md` section 7, `probes.md` and 004's `guard-allowlist.md` say so. On
+the second review: commit `8c90337` (T129, T130), a theory of the rule whose row for an opened
+drawing with no answer was red before, and under a throwaway mutation removing the seam's check
+`D14_EveryWayTheOpenCanMisbehaveIsNamedAndTheModelsItLoadedAreRecorded`, green before the change and
+red after it, its reading naming the read-only state; and commit `8e3e4d1` (T131, T132), six D14
+tests red before - among them the full report, edited deliberately for the `OpenDoc6` line's new
+end - and the seat plan's pin of that end, red until the plan said it.
 
 ### R8.2 Every spelling of the open, activate, new, load, close and quit families (T115, T116)
 
