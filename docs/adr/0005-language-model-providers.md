@@ -1,4 +1,4 @@
-# ADR-005: OpenAI is the provider in use; Gemini work is deferred; never Claude in the product
+# ADR 0005: OpenAI is the provider in use; Gemini work is deferred; never Claude in the product
 
 **Status:** Accepted
 **Date:** 2026-10-15 (owner decision 94A), building on the provider rule of 2026-09-13

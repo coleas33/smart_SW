@@ -1,4 +1,4 @@
-# ADR-004: The re-modeler works on a copy it created, and on nothing else
+# ADR 0004: The re-modeler works on a copy it created, and on nothing else
 
 **Status:** Accepted
 **Date:** 2026-09-16
@@ -7,7 +7,7 @@
 ## Context
 
 Feature 004 proposes a part that is more resilient under the Resilient Modeling Strategy. That
-needs writes to a SOLIDWORKS document, which [ADR-003](0003-documents-read-not-written.md)
+needs writes to a SOLIDWORKS document, which [ADR 0003](0003-documents-read-not-written.md)
 otherwise forbids. The owner's description of 2026-09-16: "The reviewer and the Model check stay
 read-only; the re-modeler works on a copy it creates in the run folder and never saves over an
 existing file."

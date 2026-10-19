@@ -6,10 +6,12 @@ body:
     attributes:
       value: |
         **This repository is public. Never attach or paste real material:** no real design,
-        part, assembly or drawing file, no drawing or screenshot of a real design, no recording,
-        no standards profile, no run folder, no log that shows real paths or user names, and no
-        API key or other credential. Reproduce the problem with the fictional fixtures in the
-        repository (`benchmarks/packages/`, `reviewer/tests/fixtures/replay/`,
+        part or drawing number or file, no drawing or screenshot of a real design, no company,
+        customer or person's name, no user or machine name, no vault, network or project path,
+        no standards profile, template or sheet format, no recording, dump, run folder, handover
+        folder or log from real work, and no API key or other credential. The full list is
+        "The public-repository rule" in `CONTRIBUTING.md`. Reproduce the problem with the fictional
+        fixtures in the repository (`benchmarks/packages/`, `reviewer/tests/fixtures/replay/`,
         `config/standards.example.yaml`) wherever you can, and scrub anything you paste.
 
         A security problem is not a bug report: report it privately as `SECURITY.md` says.
@@ -88,9 +90,9 @@ body:
     attributes:
       label: Logs (scrubbed)
       description: |
-        The relevant lines only. Before pasting, replace every real path, user name, design or
-        part number, company name and key with a placeholder such as `C:\Users\<you>` or
-        `<part>`. `swreview audit-secrets <folder>` reports a configured key that reached a file.
+        The relevant lines only. Before pasting, replace every real path, user or machine name,
+        design or part number, company or customer name and key with a placeholder such as
+        `C:\Users\<you>` or `<part>`. `swreview audit-secrets <folder>` reports a configured key that reached a file.
       render: text
     validations:
       required: false
@@ -99,5 +101,5 @@ body:
     attributes:
       label: Confirmation
       options:
-        - label: Nothing in this report is a real design, drawing, profile, recording, path, user name or key.
+        - label: "Nothing in this report is real: no design, part or drawing number or file, no company, customer or person's name, no user or machine name, no vault, network or project path, no standards profile, template or sheet format, no recording, dump, run folder, handover folder or log from real work, and no key."
           required: true

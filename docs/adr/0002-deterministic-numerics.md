@@ -1,4 +1,4 @@
-# ADR-002: Numbers come from tested code; the model never computes a verdict
+# ADR 0002: Numbers come from tested code; the model never computes a verdict
 
 **Status:** Accepted
 **Date:** 2026-09-12
@@ -31,7 +31,7 @@ authoritative text.
 - A missing input stays unknown and the check reports `unresolved` rather than a guessed pass
   (Principle I).
 - The same rule later moved the argument-free checks out of the model's turns altogether
-  ([ADR-006](0006-checks-first-and-token-budget.md)).
+  ([ADR 0006](0006-checks-first-and-token-budget.md)).
 - Generic code-execution tools are not exposed to the model (constitution, Technical
   Constraints).
 
@@ -40,6 +40,6 @@ authoritative text.
 - [`.specify/memory/constitution.md`](../../.specify/memory/constitution.md), Principle II
   "Deterministic Numerics, Agentic Investigation", Principle I, Principle III and "Technical
   Constraints".
-- [ADR-001](0001-agentic-review-architecture.md), "Layer 2: Reasoning and agent".
+- [ADR 0001](0001-agentic-review-architecture.md), "Layer 2: Reasoning and agent".
 - [`AGENTS.md`](../../AGENTS.md), "What the project is": "Numbers come from tested code; the model
   never computes a verdict."

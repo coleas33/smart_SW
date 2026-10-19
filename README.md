@@ -50,11 +50,12 @@ The gates a change must pass before it is committed are in
 | To | You need |
 |---|---|
 | Run the reviewer, its tests and the offline commands | Python 3.11 or 3.12 and [uv](https://docs.astral.sh/uv/); Windows or Linux (CI runs both) |
-| Run a live review (`swreview review`, or the Review tab) | An OpenAI API key, in `OPENAI_API_KEY` or the Task Pane's settings |
+| Send a review to the model (`swreview review`, or the Review tab with "Send to the model when the checks finish" ticked, or Send to model pressed) | An OpenAI API key, in `OPENAI_API_KEY` or the Task Pane's settings |
 | Build the extractor and the add-in | Windows, the .NET SDK, .NET Framework 4.8 (x64), and SOLIDWORKS 2024 installed for its interop assemblies (a licence is not needed to build) |
 | Use the add-in | A licensed SOLIDWORKS 2024 seat; see [`docs/workstation-runbook.md`](docs/workstation-runbook.md) |
 
-The Standards and Model check tabs need no language model and no key.
+The Standards and Model check tabs need no language model and no key, and neither does a Review
+with the send box unticked: it runs the code checks and stops before anything reaches the model.
 
 ## Layout
 

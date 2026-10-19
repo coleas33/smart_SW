@@ -1,4 +1,4 @@
-# ADR-008: Public upstream, private downstream fork
+# ADR 0008: Public upstream, private downstream fork
 
 **Status:** Accepted
 **Date:** 2026-10-18
@@ -26,7 +26,8 @@ This decision was taken by the owner on 2026-10-18 and is recorded here for the 
 - The fork adds those files through documented extension points rather than by editing code, so
   merges from upstream stay clean.
 - Generic fixes flow back upstream without company data.
-- The public repository carries only fictional data.
+- The public repository carries only fictional data, as the
+  [public-repository rule](../../CONTRIBUTING.md#the-public-repository-rule) lists in full.
 
 ## Consequences
 
@@ -36,9 +37,9 @@ This decision was taken by the owner on 2026-10-18 and is recorded here for the 
   read from settings, as `StandardsProfilePath` is today) rather than a value in code; the
   forking guide, [`docs/forking.md`](../forking.md), names them.
 - A fix made in the fork is offered upstream only after its company data is removed.
-- The constitution does not yet mention the fork; `AGENTS.md` refers to it ("see the constitution
-  and `SECURITY.md` when it exists"), so a constitution amendment or a corrected reference is
-  still to do.
+- `AGENTS.md` rule 2 points at the forking guide and this record (commit `73a9b66`); that part
+  is done. Still open: the constitution does not yet mention the public upstream or the fork,
+  and an amendment naming that rule is still to do.
 
 ## Sources
 

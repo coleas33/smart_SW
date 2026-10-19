@@ -1,9 +1,10 @@
 # Decision log
 
 This page indexes the decisions that shape the project: the owner's numbered decisions, taken
-while features were specified, planned, built and reviewed, and the architecture decision records
-(ADRs). It points to where each decision is recorded; the recorded text is authoritative, and this
-index only names it.
+while features were specified, planned, built and reviewed, and points to the architecture
+decision records (ADRs), whose own index is [`docs/adr/README.md`](adr/README.md). It points to
+where each decision is recorded; the recorded text is authoritative, and this index only names
+it.
 
 ## What an owner decision is
 
@@ -36,8 +37,8 @@ the same id can therefore name different decisions:
    87A to 90A are "the next numbers no branch uses". Ids 42A, 43A, 45A, 46A and 49A appear nowhere
    in the tracked tree. Number order is date order with one exception: 94A is dated 2026-10-15,
    95A and 96A 2026-10-14.
-3. **2026-10-18**: 2A, 3A and 4A, recorded so far only in commit messages (repository
-   housekeeping, below).
+3. **2026-10-18**: 2A, 3A and 4A, first given in commit messages and recorded on this page
+   from now on (repository housekeeping, below).
 
 Ids 2A, 3A, 4A, 9A, 10A, 13A to 18A and 20A to 25A each name two different decisions, one in
 run 1 and one in run 2; 2A, 3A and 4A name a third in run 3. Cite a decision with its feature
@@ -166,7 +167,7 @@ reviews, and 31A to 36A in the owner's review of its plan (014 `research.md` §1
 | 91A | 2026-10-14 | 014 | "Fall back, never fail": when the finished report cannot be moved into place, build beside it and copy it in rather than fail. | [014 research.md: 91A. Fall back, never fail (2026-10-14)](../specs/014-design-review-eval/research.md#91a-fall-back-never-fail-2026-10-14) |
 | 92A | 2026-10-14 | 014 | "The cheap notes, and three known limits": four fixes, three limits recorded. | [014 research.md: 92A. The cheap notes, and three known limits (2026-10-14)](../specs/014-design-review-eval/research.md#92a-the-cheap-notes-and-three-known-limits-2026-10-14) |
 | 93A | 2026-10-15 | 015 | "The re-run's commit point is the atomic replace of its `session.json`". | [015 research.md: 93A. The re-run's commit point is the atomic replace of i...](../specs/015-review-send-gate/research.md#93a-the-re-runs-commit-point-is-the-atomic-replace-of-its-sessionjson-2026-10-15) |
-| 94A | 2026-10-15 | 014 (see [ADR-005](adr/0005-language-model-providers.md)) | "OpenAI only": build OpenAI's behaviour and the shared pieces, defer Gemini's specific behaviour. The owner: "We are only using openAI api key". | [014 research.md: 94A. OpenAI only (2026-10-15)](../specs/014-design-review-eval/research.md#94a-openai-only-2026-10-15) |
+| 94A | 2026-10-15 | 014 (see [ADR 0005](adr/0005-language-model-providers.md)) | "OpenAI only": build OpenAI's behaviour and the shared pieces, defer Gemini's specific behaviour. The owner: "We are only using openAI api key". | [014 research.md: 94A. OpenAI only (2026-10-15)](../specs/014-design-review-eval/research.md#94a-openai-only-2026-10-15) |
 | 95A | 2026-10-14 | 014 | "A Python 3.11 shim", and a 3.11 run in the slice's gate. | [014 research.md: 95A. A Python 3.11 shim (2026-10-14)](../specs/014-design-review-eval/research.md#95a-a-python-311-shim-2026-10-14) |
 | 96A | 2026-10-14 | 014 | "Never delete anything that is not ours". | [014 research.md: 96A. Never delete anything that is not ours (2026-10-14)](../specs/014-design-review-eval/research.md#96a-never-delete-anything-that-is-not-ours-2026-10-14) |
 | 97A | 2026-10-15 | 014 | "Staging names are refused, never deleted". | [014 research.md: 97A. Staging names are refused, never deleted (2026-10-15)](../specs/014-design-review-eval/research.md#97a-staging-names-are-refused-never-deleted-2026-10-15) |
@@ -196,7 +197,8 @@ reviews, and 31A to 36A in the owner's review of its plan (014 `research.md` §1
 
 ## Run 3: 2026-10-18, repository housekeeping
 
-These are recorded only in commit messages on `main`; no document records them yet.
+These were first given only in commit messages on `main`. This page is their record from now
+on: a later decision of this run is added to the table below.
 
 | Id | Date | Subject | What the commit says | Commit |
 |---|---|---|---|---|
@@ -206,7 +208,7 @@ These are recorded only in commit messages on `main`; no document records them y
 
 The owner's decision of the same day to keep this repository as the public upstream of private
 downstream forks is not numbered; it is recorded as
-[ADR-008](adr/0008-public-upstream-private-fork.md).
+[ADR 0008](adr/0008-public-upstream-private-fork.md).
 
 ## The same ids used for other things
 
@@ -235,18 +237,8 @@ owner's decisions"). The cross-cutting ones are recorded as ADRs below.
 ## Architecture decision records
 
 ADRs record decisions that cut across features. They live in [`docs/adr/`](adr/README.md) and are
-not edited after acceptance except to mark them superseded.
-
-| ADR | Decision | Status | Date |
-|---|---|---|---|
-| [0001](adr/0001-agentic-review-architecture.md) | Where the SolidWorks reviewer and drawing automation should live: a hybrid of extraction in SOLIDWORKS, reasoning in Python on an IR, drawings back in SOLIDWORKS | Accepted in part | 2026-09-12; amended 2026-09-22 |
-| [0002](adr/0002-deterministic-numerics.md) | Numbers come from tested code; the model never computes a verdict | Accepted | 2026-09-12 |
-| [0003](adr/0003-documents-read-not-written.md) | SOLIDWORKS documents are read, never written, behind a guard | Accepted | 2026-09-16 |
-| [0004](adr/0004-remodeler-works-on-a-copy.md) | The re-modeler works on a copy it created, and on nothing else | Accepted | 2026-09-16 |
-| [0005](adr/0005-language-model-providers.md) | OpenAI is the provider in use; Gemini work is deferred; never Claude in the product | Accepted | 2026-10-15 |
-| [0006](adr/0006-checks-first-and-token-budget.md) | Checks first, and the token budget | Accepted | 2026-09-22 |
-| [0007](adr/0007-send-gate-default-on.md) | The send-to-model gate, ticked by default | Accepted | 2026-10-08 |
-| [0008](adr/0008-public-upstream-private-fork.md) | Public upstream, private downstream fork | Accepted | 2026-10-18 |
+not edited after acceptance except to mark them superseded. Their index, with each one's title,
+status and date, is [`docs/adr/README.md`](adr/README.md); it is kept there only.
 
 **ADR 0001's status.** It was written as a proposal on 2026-09-12. Its layers 1 and 2 are built
 as it proposed: the in-process C# extractor and add-in that dump a versioned IR (`extractor/`) and

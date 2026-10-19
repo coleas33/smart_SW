@@ -6,11 +6,13 @@ body:
     attributes:
       value: |
         **This repository is public. Never attach or paste real material:** no real design,
-        part, assembly or drawing file, no drawing or screenshot of a real design, no recording,
-        no standards profile, no run folder, no log that shows real paths or user names, and no
-        API key or other credential. Describe the case in general terms or with the fictional
-        fixtures in the repository (`benchmarks/packages/`, `reviewer/tests/fixtures/replay/`,
-        `config/standards.example.yaml`).
+        part or drawing number or file, no drawing or screenshot of a real design, no company,
+        customer or person's name, no user or machine name, no vault, network or project path,
+        no standards profile, template or sheet format, no recording, dump, run folder, handover
+        folder or log from real work, and no API key or other credential. The full list is
+        "The public-repository rule" in `CONTRIBUTING.md`. Describe the case in general terms or with
+        the fictional fixtures in the repository (`benchmarks/packages/`,
+        `reviewer/tests/fixtures/replay/`, `config/standards.example.yaml`).
 
         Larger changes are agreed here before any work starts (see `CONTRIBUTING.md`). Check
         `specs/README.md` and `docs/README.md` first: the idea may already be specified or on the
@@ -61,7 +63,7 @@ body:
     attributes:
       label: Project rules
       options:
-        - label: Nothing in this request is a real design, drawing, profile, recording, path, user name or key.
+        - label: "Nothing in this request is real: no design, part or drawing number or file, no company, customer or person's name, no user or machine name, no vault, network or project path, no standards profile, template or sheet format, no recording, dump, run folder, handover folder or log from real work, and no key."
           required: true
         - label: I understand that SOLIDWORKS documents are read, not written, except for the bounded exceptions in the constitution; a proposal that writes to a document needs a constitution amendment.
           required: false

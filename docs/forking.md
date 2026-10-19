@@ -6,30 +6,58 @@ The aim is a fork that stays mergeable with upstream, keeps the company's materi
 public repository, and can still send generic fixes back.
 
 Upstream is `https://github.com/coleas33/smart_SW`, licensed AGPL-3.0-or-later. Everything here
-describes upstream as it is on `main`; the extension points are described in more depth in the
-extension points section of [`architecture.md`](architecture.md).
+describes upstream as it is on `main`; the extension points are described in more depth in
+[section 5 of `architecture.md`](architecture.md#5-extension-points).
 
 ## 1. Keep the fork mergeable
 
 The rule that keeps merges clean: **private material lives in files and folders upstream does
 not have, and upstream's files are never edited to hold company data.**
 
-- Put the company's tracked material in one top-level folder of its own (for example
+- Keep the company's tracked material in one top-level folder of its own (for example
   `company/`; upstream has no such folder). Upstream never writes there, so a merge never
-  conflicts there.
+  conflicts there. No code reads that folder: it holds the fork's master copies, and section 2
+  says how each one reaches the place the product reads it from.
 - Do not edit `config/standards.example.yaml`, the benchmark sets, the fixtures, the prompts or
-  any spec to hold company values. Each of them has an extension point below that takes a path
-  instead.
+  any spec to hold company values. Only three kinds of material can be supplied by path
+  without an edit: the standards profile, a review checklist (on the command line only) and
+  private benchmark sets (section 2). Everything in the "Not yet extensible" list of
+  [`architecture.md`](architecture.md#5-extension-points) - the engineering tables, the
+  attention policy, the wording, the system prompt, the checklist a pane review uses, the report
+  layout - changes only by editing upstream files. If the fork needs one of them changed, ask
+  upstream for an extension point (a feature request, as [`CONTRIBUTING.md`](../CONTRIBUTING.md)
+  describes) rather than carrying the edit.
 - Do not put company cases under `benchmarks/packages/`, `answer_keys/`, `case_files/` or
-  `sets/`: every file there is written by upstream's generator, and
-  `reviewer/tests/unit/test_benchmark_case_generator.py` fails on a file no case spec writes
-  ([`benchmarks/README.md`](../benchmarks/README.md)). Private cases go in a private set
-  (section 2).
+  `sets/`. Those folders belong to upstream's case generator: every file there is written from a
+  case spec except the hand-kept `answer_keys/rms-part.json` and the per-machine slot
+  `packages/bracket-assy/`, and `reviewer/tests/unit/test_benchmark_case_generator.py` fails on
+  a file no case spec writes ([`benchmarks/README.md`](../benchmarks/README.md), "The generated
+  cases"). Private cases go in a private set (section 2).
 - When the fork needs a behaviour change, make it generic and send it upstream (section 4)
   rather than carrying a patch to an upstream file. A patch carried in the fork is a conflict on
   every merge that touches the same lines.
 - Fork-only CI goes in a new workflow file, not in upstream's `.github/workflows/reviewer.yml`
   (section 5).
+
+### Files a fork is expected to change
+
+A few upstream files name upstream's maintainer or repository. A fork changes them to name its
+own. These are edits of who maintains the copy, not company data, and they touch a few lines
+each, so they conflict only when upstream changes the same lines.
+
+| File | What names upstream |
+|---|---|
+| `.github/CODEOWNERS` | `* @coleas33`: the reviewer of every path. |
+| `.github/ISSUE_TEMPLATE/config.yml` | The security contact link, a URL to upstream's `SECURITY.md`. |
+| `SECURITY.md` | The reporting channel: GitHub's private vulnerability reporting on the repository. The fork decides its own channel; a vulnerability in upstream's code is worth reporting upstream too. |
+| `CONTRIBUTING.md` | The maintainer's handle in the opening paragraph. |
+| `README.md` | The clone URL in the quick start. |
+| `docs/workstation-runbook.md` | The clone URL in section 3, "First install". |
+| `docs/test-plan-2026-09-27/workstation-test-plan.md` | The clone command of the first-install steps. |
+
+This guide and [ADR 0008](adr/0008-public-upstream-private-fork.md) name upstream on purpose
+and stay as they are; so does the pinned commit link in
+[`future-capabilities-roadmap-2026-10-14.md`](future-capabilities-roadmap-2026-10-14.md).
 
 ## 2. Where private material goes
 
@@ -38,16 +66,25 @@ to an upstream file.
 
 | Material | Where the code reads it | Notes |
 |---|---|---|
-| The standards profile (library folders, part-number pattern, property names, general tolerance, drawing standard, part roles) | `%LOCALAPPDATA%\SwReview\standards.yaml` on each workstation, or the path in the settings file's `standards_profile_path`; on the command line, `--profile <yaml>` | Shape: [`config/standards.example.yaml`](../config/standards.example.yaml) (version 4, fictional). Contract: [`specs/006-standards-check/contracts/profile.md`](../specs/006-standards-check/contracts/profile.md). `swreview profile upgrade` proposes the next version from an older file. |
+| The standards profile (library folders, part-number pattern, property names, general tolerance, drawing standard, part roles) | In the pane, `%LOCALAPPDATA%\SwReview\standards.yaml` on each workstation, or the path in the settings file's `standards_profile_path`. On the command line, `--profile <yaml>` on `check standards` and `drawing brief`, and `--standards-profile <yaml>` on `review`, `benchmark run` and `benchmark replay`. | Shape: [`config/standards.example.yaml`](../config/standards.example.yaml) (version 4, fictional). Contract: [`specs/006-standards-check/contracts/profile.md`](../specs/006-standards-check/contracts/profile.md). `swreview profile upgrade` proposes the next version from an older file. |
 | User settings: provider, model, effort, the key, endpoint override, run root, profile path, the send gate's default | `%APPDATA%\SwReview\settings.json`, written by the Task Pane; the key is DPAPI-protected for the Windows user | Per user and per machine; never committed (upstream's `.gitignore` ignores `settings.json` at any depth). Schema: [`specs/002-task-pane-assistant/contracts/settings.schema.json`](../specs/002-task-pane-assistant/contracts/settings.schema.json). |
 | Run folders (reviews and checks, which name vault paths) | `Documents\SwReview\runs` by default, or the settings file's `run_root` | Never committed, in upstream or in the fork unless the fork has decided to keep them. |
 | Logs and the tokenizer vocabulary | `%LOCALAPPDATA%\SwReview\logs\` and `%LOCALAPPDATA%\SwReview\tokenizer\` | Per machine. |
-| Private review cases for the evaluation | A private benchmark set whose entries name packages, keys and case files by absolute paths outside the checkout | [`specs/014-design-review-eval/contracts/cases.md`](../specs/014-design-review-eval/contracts/cases.md), "Private sets". |
-| A review checklist other than the default | `swreview review --checklist <yaml>` | The default is `reviewer/src/swreview/agent/checklist_v1.yaml`; copy it into the fork's own folder rather than editing it. |
-| The lists of identifiers that must never reach a public file | `%LOCALAPPDATA%\SwReview\repo-identifiers.txt` and `fixture-denylist.txt` | Read by `reviewer/tests/unit/test_tracked_files_carry_no_recorded_number.py`; its docstring gives the format. Used in section 4. |
+| Private review cases for the evaluation | A private benchmark set whose entries name packages, keys and case files by absolute paths outside the checkout | [`specs/014-design-review-eval/contracts/cases.md`](../specs/014-design-review-eval/contracts/cases.md#46-private-sets), "Private sets". |
+| A review checklist other than the default | `swreview review --checklist <yaml>`, on the command line only | The pane always uses the packaged `reviewer/src/swreview/agent/checklist_v1.yaml`, so a fork's checklist never reaches a pane review. Copy the default into the fork's own folder rather than editing it. |
+| The lists of identifiers that must never reach a public file | `%LOCALAPPDATA%\SwReview\repo-identifiers.txt` and `fixture-denylist.txt` | Read by `reviewer/tests/unit/test_tracked_files_carry_no_recorded_number.py`; its docstring gives the format. Used in section 4, with the warning there. |
 
-Where the per-machine files live and how they are installed is in
-[`workstation-runbook.md`](workstation-runbook.md), section 1.
+### How company material reaches each workstation
+
+The add-in reads the profile from a path on the workstation, never from the fork's checkout by
+itself. Put it there in one of two ways: copy the fork's master copy to
+`%LOCALAPPDATA%\SwReview\standards.yaml`, the default path, or point `standards_profile_path` in
+that user's settings file at the file where it is (for example inside the fork's checkout on
+that machine). The command line reads only the path it is given. Placing the profile, checking
+its version and validating it is section 5 of the workstation runbook,
+[`workstation-runbook.md`](workstation-runbook.md#5-the-standards-profile); where the other
+per-machine files live, and how they are installed, is its
+[section 1](workstation-runbook.md#1-where-everything-is).
 
 ## 3. Syncing with upstream
 
@@ -84,9 +121,18 @@ separate, clean checkout of upstream, not from the fork:
      the file and line, if any identifier is in a tracked file or a tracked file's path.
    - Run `uv run swreview audit-secrets <each changed file or folder>`: it reports a configured
      key and, with its detectors on by default, provider-shaped keys.
-   - Read the whole diff, the commit messages and the pull request text once more for paths,
-     user names, part numbers, customer names and screenshots.
+   - Read the whole diff, the commit messages and the pull request text once more against the
+     [public-repository rule](../CONTRIBUTING.md#the-public-repository-rule), screenshots
+     included.
 5. Run the gates and open the pull request as [`CONTRIBUTING.md`](../CONTRIBUTING.md) describes.
+
+**The identifier list fails the fork's own suite.** The test reads the list from
+`%LOCALAPPDATA%`, so it applies to every checkout the same Windows user tests on that machine,
+the fork included. The fork tracks company files on purpose, so on a machine whose list names the
+company's identifiers, the fork's default suite fails this test. Keep the list populated only
+where upstream-bound checkouts are scrubbed: on an account or machine that tests no fork
+checkout, or only for the scrub run above, emptying it afterwards. Run the scrub from the clean
+upstream-bound clone of step 1, never from the fork.
 
 ## 5. CI in a private fork
 
@@ -94,12 +140,11 @@ Upstream's workflow, `.github/workflows/reviewer.yml`, runs the Python suite and
 audit on GitHub-hosted Windows and Linux runners, and works unchanged in a private fork. Leave
 the file as it is, so merges stay clean, and add fork-only jobs in workflow files of your own.
 
-The C# solution is not built in upstream's CI: it compiles against the SOLIDWORKS 2024 interop
-assemblies, which are not redistributable and are not on a hosted runner. Upstream runs that
-gate locally. A fork may run it on a self-hosted Windows runner with SOLIDWORKS installed, but
-**only in a private repository the organisation controls**: upstream's workflow warns that on a
-public repository any pull request could run code on that machine. A build needs SOLIDWORKS
-installed but not a licence; never let CI start SOLIDWORKS or run the seat (`[W]`) tasks.
+The C# solution is not built in upstream's CI;
+[`CONTRIBUTING.md`](../CONTRIBUTING.md#the-gates) says why. A fork may build it on a
+self-hosted Windows runner with SOLIDWORKS installed, but **only in a private repository the
+organisation controls**, and that runner must never start SOLIDWORKS or run the seat (`[W]`)
+tasks.
 
 Do not store a provider key as a CI secret unless the fork has decided to run live tests in CI:
 the default suite needs none (upstream's CI uses a dummy value only so the secrets audit has
@@ -125,7 +170,8 @@ The product's language-model provider is OpenAI (owner decision 94A,
 
 What the organisation's agreement with its provider allows to be sent (designs, drawings,
 properties) is the organisation's decision; [`SECURITY.md`](../SECURITY.md) and the security
-section of [`architecture.md`](architecture.md) describe what leaves the machine and when.
+section of [`architecture.md`](architecture.md#4-trust-and-security-boundaries) describe what
+leaves the machine and when.
 
 ## 7. Licence obligations
 
@@ -134,10 +180,10 @@ organisation's own legal review decide what applies to its use.
 
 - The project is licensed under the GNU Affero General Public License, version 3 or (at your
   option) any later version. The full text is [`LICENSE`](../LICENSE).
-- A fork is a modified version of the program. The AGPL-3.0 requires, among other conditions,
-  that a conveyed copy or modified version be licensed under the same licence with its
-  corresponding source available, and its section 13 adds a condition for a modified version
-  that users interact with remotely over a computer network.
+- A fork that changes the code is a modified version under the licence. The AGPL-3.0 requires,
+  among other conditions, that a conveyed copy or modified version be licensed under the same
+  licence with its corresponding source available, and its section 13 adds a condition for a
+  modified version that users interact with remotely over a computer network.
 - [`NOTICE.md`](../NOTICE.md) lists the third-party methods, repositories, vendored files and
   dependencies, each with its own licence and conditions; keep it, and keep `LICENSE`, in the
   fork. Among them: PyMuPDF is AGPL-3.0-or-later or commercially licensed by Artifex; the

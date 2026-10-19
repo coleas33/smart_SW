@@ -19,10 +19,12 @@ a verdict. Work is specified with Spec Kit, one package per feature under `specs
 1. **SOLIDWORKS documents are read, not written**, except the bounded exceptions the
    constitution names. Never add a write path, or loosen a guard, without a constitution
    amendment.
-2. **This repository is public.** Commit only fictional data: no real design, part or drawing
-   number, company or customer name, vault or network path, real standards profile, recording,
-   handover folder, user name or key. A downstream fork keeps its private material in its own
-   files; see [`docs/forking.md`](docs/forking.md) and ADR 0008 (`docs/adr/`).
+2. **This repository is public.** Commit only fictional data, never anything real from a design,
+   a company or a machine; the full list of what that excludes is
+   [the public-repository rule in `CONTRIBUTING.md`](CONTRIBUTING.md#the-public-repository-rule).
+   A downstream fork keeps its private material in its own files; see
+   [`docs/forking.md`](docs/forking.md) and
+   [ADR 0008](docs/adr/0008-public-upstream-private-fork.md).
 3. **Keys never reach the repository, a command line or a log**, and are never written as plain
    text (the add-in keeps the key DPAPI-encrypted in the user's settings). Live tests
    (`-m live`) call a paid API and run only when asked.
@@ -43,9 +45,17 @@ uv run ruff check src tests
 ```
 
 A `--basetemp`, if given, must lie outside the checkout: `tests/conftest.py` refuses one inside
-it. CI runs the same suite on Windows and Linux under Python 3.11 and 3.12; run both Pythons
-when a change could differ between them. From the repository root, on Windows with SOLIDWORKS
-2024 installed (licence not needed to build):
+it.
+
+**Python versions.** CI (`.github/workflows/reviewer.yml`) runs the same suite on Windows and
+Linux under Python 3.11 and 3.12 on every pull request and every push to `main`, and a pull
+request is merged only when CI is green. Locally, run the gates on Python 3.12, and run the
+suite on 3.11 as well when a change could behave differently between the two and at every
+feature slice gate (owner decision 95A of 2026-10-14; feature 014 ran it with
+`uv run --python 3.11 --isolated`).
+
+**The C# gate**, from the repository root, on Windows with SOLIDWORKS 2024 installed (licence
+not needed to build):
 
 ```text
 dotnet build extractor\SwReview.sln -c Release      # zero warnings

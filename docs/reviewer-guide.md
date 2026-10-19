@@ -21,6 +21,10 @@ including `handoff`, `exceptions`, `remodel`, `tokenizer`, `profile` and `contex
 
 Command-line contracts: `specs/001-agentic-design-review/contracts/cli.md`.
 
+If a command in `reviewer/` fails with "No module named swreview" after a pull or a branch
+switch, sync again with the package reinstalled: `uv sync --all-extras --reinstall-package
+swreview`.
+
 ## Providers and keys
 
 The review loop runs on OpenAI by default, or on Gemini with `--provider gemini`. It needs
@@ -71,7 +75,9 @@ package, the report and every stored result keep the full payload.
 
 On the command line every change is **off** unless asked. `swreview review --pane-defaults` runs
 with exactly the pane's settings for the provider (checks first and lever 13, parallel tool calls
-on OpenAI, payload slimming, history pruning after two rounds), and the explicit switches add to
+on OpenAI, lever 14 `drop_prior_reasoning` leaving earlier turns' reasoning out of the request,
+payload slimming, history pruning after two rounds; `pane_efficiency()` in
+`reviewer/src/swreview/agent/settings.py`), and the explicit switches add to
 it or turn one change on alone: `--payload-slimming`, `--history-pruning` and `--prune-after N` (N
 at least 1, and only with pruning on). `session.json` records what ran (`efficiency`,
 `model_view`). The contracts are `specs/008-checks-first-review/contracts/`.
@@ -93,8 +99,9 @@ components. A zero-volume interference row is a **contact**, kept in its own lis
 findings and never in "Start here". The part-number and description properties the hygiene checks
 read, and the general tolerance by decimal places, come from standards profile **version 2** or
 later (`config/standards.example.yaml` is version 4); a version 1 profile still loads, with the two
-property checks skipped naming the setting and no general tolerance applied, so the owner's real
-profile has to be regenerated at version 2 or 3 before they grade a real run.
+property checks skipped naming the setting and no general tolerance applied, so a real standards
+profile, kept outside the repository, has to be regenerated at version 2 or later before it
+grades a real run.
 
 ## Drawings in a review
 
@@ -207,15 +214,15 @@ swreview rms types --package <package dir>           # type names the tables do 
 One rule cannot be answered from a static dump: whether a Detail feature can be suppressed
 on its own without breaking the rebuild. `swreview rms suppress-plan` writes the plan -
 which features, in which order, in which configuration - and the engineer runs
-`swreview-extract suppress-test` against the open document to carry it out. That command is
-the only mutation path in this product: it is acknowledged on the command line, guarded,
-restores the tree, never saves, and is not reachable from the pane, the bridge or the MCP
-toolset. `benchmarks/README.md` has the workflow end to end.
-
-The paragraph above was written for feature 003. The constitution now names exactly two bounded
-exceptions to the read-only rule: this suppressibility test, and feature 004's re-modeler, which
-may create and modify one document only, a copy it made itself during the session
-(`.specify/memory/constitution.md`, Technical Constraints, "Documents are read, not written").
+`swreview-extract suppress-test` against the open document to carry it out. The constitution
+names exactly two bounded exceptions to the read-only rule
+([Technical Constraints](../.specify/memory/constitution.md#technical-constraints), "Documents
+are read, not written"; [ADR 0003](adr/0003-documents-read-not-written.md)): this
+suppressibility test, which is acknowledged on the command line, guarded, restores the tree,
+never saves, and is not reachable from the pane, the bridge or the MCP toolset; and feature
+004's re-modeler, which may create and modify one document only, a copy it made itself during
+the session ([ADR 0004](adr/0004-remodeler-works-on-a-copy.md)). `benchmarks/README.md` has the
+suppress-test workflow end to end.
 
 The **Model check tab** is the same checks from inside SOLIDWORKS: it dumps the active
 document with `--profile model-check` (features and equations only, so it is seconds rather
@@ -237,7 +244,9 @@ graded live; the drawings attached to a part's review are not), grades it agains
 and shows a release verdict with every check
 accounted for as checked, skipped, unresolved or out of scope. Like the Model check tab it
 **needs no language model and no API key**: no provider is constructed and no key is read
-on any standards path, and the only host it reaches is the loopback backend. What it grades
+on any standards path, and nothing leaves the machine
+([`architecture.md`](architecture.md#4-trust-and-security-boundaries), "What leaves the
+machine"). What it grades
 against is a **profile** - the library folders, part-number pattern and property names of
 one company - which lives on the workstation at `%LOCALAPPDATA%\SwReview\standards.yaml`
 and is never in this repository; `config/standards.example.yaml` is a fictional example of

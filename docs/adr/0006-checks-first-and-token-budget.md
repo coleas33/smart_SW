@@ -1,4 +1,4 @@
-# ADR-006: Checks first, and the token budget
+# ADR 0006: Checks first, and the token budget
 
 **Status:** Accepted
 **Date:** 2026-09-22
@@ -39,7 +39,7 @@ replay of the big assembly with the pane defaults on (SC-002), under 0.3M for th
   `reviewer/src/swreview/agent/settings.py`; the command line and `benchmark run` stay all off.
 - Later levers became pane defaults on the same replay terms: lever 13 on 2026-09-23 and lever 14
   on 2026-09-27 (`docs/llm-efficiency-options.md`).
-- ADR-001 records the same change to its layer 2 ("Amendment 2026-09-22").
+- ADR 0001 records the same change to its layer 2 ("Amendment 2026-09-22").
 - Feature 014 measures the pane defaults against all levers off with answer keys (014 decision 3A);
   its paid runs are still open.
 - SC-010 needs a paid seat sitting; 008's tasks T102 to T104 are still open.
@@ -52,5 +52,5 @@ replay of the big assembly with the pane defaults on (SC-002), under 0.3M for th
   2026-09-22" and "008 Checks-first review and the token budget".
 - [`docs/llm-efficiency-options.md`](../llm-efficiency-options.md), "Decision taken 2026-09-22,
   outside the ledger (feature 008)".
-- [ADR-001](0001-agentic-review-architecture.md), "Amendment 2026-09-22: checks first, and drawings
+- [ADR 0001](0001-agentic-review-architecture.md), "Amendment 2026-09-22: checks first, and drawings
   in two stages".

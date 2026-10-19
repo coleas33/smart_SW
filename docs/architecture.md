@@ -227,7 +227,9 @@ prompt, the checklist, the package brief and digest, the tool definitions, the t
 asks for (with persistent references stripped when payload slimming is on,
 [008 model-view.md](../specs/008-checks-first-review/contracts/model-view.md)), the engineer's
 messages and answers, and a bounded projection of any attached engineering context. The Model
-check and Standards tabs make no network call at all. One other command reaches the network:
+check and Standards tabs send nothing off the machine: they construct no provider and read no
+key, and their only connection is the pane's own, through the same-origin proxy to the loopback
+backend on `127.0.0.1`. One other command reaches the network:
 `swreview tokenizer fetch` downloads the pinned tokenizer vocabulary once into a per-user cache
 ([008 tokenizer.md](../specs/008-checks-first-review/contracts/tokenizer.md)). `swreview handoff`
 writes a local ZIP that keeps design paths; it is not sent anywhere.
@@ -238,10 +240,10 @@ navigation off its own origin, so a link in model-written text cannot navigate i
 (`TaskPaneControl.cs`). The tool-service pipe needs the per-launch secret and accepts only its
 allowlisted commands.
 
-**What the repository may hold.** The repository is public and holds fictional data only: no
-real design, part or drawing number, company, customer, person, vault or network path, real
-standards profile, recording or key ([AGENTS.md](../AGENTS.md) rule 2). Everything real stays
-on the machine, outside the checkout:
+**What the repository may hold.** The repository is public and holds fictional data only
+([AGENTS.md](../AGENTS.md) rule 2; the full list of what that excludes is
+[the public-repository rule](../CONTRIBUTING.md#the-public-repository-rule)). Everything real
+stays on the machine, outside the checkout:
 
 | Location | Holds |
 |---|---|
@@ -255,7 +257,7 @@ What a downstream fork can change without editing code, and the file that define
 
 | Extension point | How | Defined in |
 |---|---|---|
-| Standards profile (the company's release rules, library prefixes, part numbering, drawing rules, part roles) | A YAML file outside the repository; start from the fictional example. Pane: `standards_profile_path` setting. CLI: `--standards-profile` on `review`, `--profile` on `check standards`. `swreview profile upgrade` writes a proposed version 4 profile from a version 3 one. | [config/standards.example.yaml](../config/standards.example.yaml), [006 profile.md](../specs/006-standards-check/contracts/profile.md), `checks/standards/profile.py` |
+| Standards profile (the company's release rules, library prefixes, part numbering, drawing rules, part roles) | A YAML file outside the repository; start from the fictional example. Pane: `standards_profile_path` setting. CLI: `--profile` on `check standards` and `drawing brief`, `--standards-profile` on `review`, `benchmark run` and `benchmark replay`. `swreview profile upgrade` writes a proposed version 4 profile from a version 3 one. | [config/standards.example.yaml](../config/standards.example.yaml), [006 profile.md](../specs/006-standards-check/contracts/profile.md), `checks/standards/profile.py` |
 | Pane settings: provider, model, effort, base URL, run root, backend interpreter, send-when-checked default | `%APPDATA%\SwReview\settings.json` (written by the pane's Settings) | [settings.schema.json](../specs/002-task-pane-assistant/contracts/settings.schema.json), `Settings/UserSettings.cs` |
 | Provider endpoint and key | `OPENAI_API_KEY`, `OPENAI_BASE_URL` in the environment (the Gemini variables exist but Gemini is deferred) | `agent/settings.py`, `secrets.py` |
 | Model and reasoning effort per run | `--provider`, `--model`, `--effort` on `review` and `benchmark run`; defaults in `DEFAULT_MODELS` | `agent/settings.py`, `cli.py` |
@@ -291,11 +293,10 @@ What a downstream fork can change without editing code, and the file that define
 | Feature gates | Named in a feature's `tasks.md` | Extra checks such as the ledger check, the replay check, `-m perf` and `-m simulation` |
 | Seat checks | The pilot workstation, by hand | Tasks marked `[W]`, which need a licensed SOLIDWORKS |
 
-The C# solution is not built in CI because it compiles against the SOLIDWORKS interop
-assemblies, which are not redistributable and are not on a hosted runner. A self-hosted runner
-is ruled out because the repository is public and any pull request could run code on it
-(comment at the top of `reviewer.yml`). Live tests (`-m live`) call a paid API and run only when
-asked. The commands are in [AGENTS.md](../AGENTS.md), "Gates before every commit".
+Why the C# solution is not built in CI, and why no self-hosted runner may be attached, is in
+[`CONTRIBUTING.md`](../CONTRIBUTING.md#the-gates). Live tests (`-m live`) call a paid API and
+run only when asked. The commands, and which Python versions to run locally, are in
+[AGENTS.md](../AGENTS.md#gates-before-every-commit), "Gates before every commit".
 
 ## 7. Where to read next
 

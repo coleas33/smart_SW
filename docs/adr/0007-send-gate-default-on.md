@@ -1,4 +1,4 @@
-# ADR-007: The send-to-model gate, ticked by default
+# ADR 0007: The send-to-model gate, ticked by default
 
 **Status:** Accepted
 **Date:** 2026-10-08 (owner decisions 59A to 62A)

@@ -12,17 +12,6 @@ as dated entries, one per feature or milestone, newest first. A date is when the
 days. Each feature's own status, including the tasks that still wait on the licensed seat, is in
 [`specs/README.md`](specs/README.md).
 
-## [Unreleased]
-
-### Added
-
-- Community and project files for the public repository: [`CONTRIBUTING.md`](CONTRIBUTING.md),
-  [`SECURITY.md`](SECURITY.md), this changelog, issue forms, a pull request template,
-  `CODEOWNERS`, the documentation index [`docs/README.md`](docs/README.md), the
-  [reviewer guide](docs/reviewer-guide.md) and the [forking guide](docs/forking.md). The front
-  page [`README.md`](README.md) is shortened to a quick start that runs with no SOLIDWORKS and no
-  key (2026-10-18).
-
 ## 2026-10-18: Continuous integration and documentation layout
 
 - The Python suite runs on GitHub Actions under Windows and Linux with Python 3.11 and 3.12,
@@ -31,6 +20,14 @@ days. Each feature's own status, including the tasks that still wait on the lice
 - Dated notes moved to [`docs/history/`](docs/history/README.md), and the architecture proposal
   became [ADR 0001](docs/adr/0001-agentic-review-architecture.md).
 - D0, the [drawing-creation inventory](docs/drawing-creation-d0-inventory.md), first phase.
+- Community and project files for the public repository: [`CONTRIBUTING.md`](CONTRIBUTING.md),
+  [`SECURITY.md`](SECURITY.md), this changelog, issue forms, a pull request template,
+  `CODEOWNERS`, the documentation index [`docs/README.md`](docs/README.md), the
+  [reviewer guide](docs/reviewer-guide.md), the [forking guide](docs/forking.md), the
+  [architecture overview](docs/architecture.md), the [glossary](docs/glossary.md), the
+  [decision log](docs/decisions.md) with ADRs 0002 to 0008, and the
+  [specs index](specs/README.md). The front page [`README.md`](README.md) is shortened to a
+  quick start that runs with no SOLIDWORKS and no key.
 
 ## 2026-10-06 to 2026-10-17: Feature 014, design-review evaluation
 
@@ -84,9 +81,9 @@ days. Each feature's own status, including the tasks that still wait on the lice
 
 ## 2026-09-23: Feature 009, the engineer's workspace
 
-- The Review tab's summary, questions for the engineer, the Results and Transcript switch and the
-  kept reviews of the session (User Stories 1 and 2).
-  [Spec](specs/009-engineer-workspace/spec.md).
+- The Review tab's summary, questions for the engineer, the Results and Transcript switch, the
+  kept reviews of the session and plain words throughout. Code complete; the workstation tasks
+  are open. [Spec](specs/009-engineer-workspace/spec.md).
 
 ## 2026-09-22 to 2026-09-25: Feature 008, checks first and the token budget
 
@@ -124,6 +121,8 @@ days. Each feature's own status, including the tasks that still wait on the lice
 
 - The Task Pane inside SOLIDWORKS with the review chat, provider settings, the in-process tool
   service, the terminal and the read-only MCP toolset; a provider layer for OpenAI and Gemini.
+  The terminal's Ask tab is built but hidden since 2026-09-19, until the terminal is part of the
+  pilot.
   [Spec](specs/002-task-pane-assistant/spec.md).
 - The repository prepared for public release under AGPL-3.0-or-later, with
   [`NOTICE.md`](NOTICE.md).

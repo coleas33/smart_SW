@@ -33,10 +33,10 @@ reviewer's layout is in [`reviewer/README.md`](reviewer/README.md) and the extra
 
 Every commit passes the gates in [`AGENTS.md`](AGENTS.md#gates-before-every-commit): from
 `reviewer/`, the sync, the tokenizer, the test suite with the tokenizer required, and Ruff. CI
-(`.github/workflows/reviewer.yml`) runs the same suite on Windows and Linux under Python 3.11
-and 3.12, followed by the secrets audit; run both Pythons locally when a change could differ
-between them. A feature's `tasks.md` may name further checks for its gates; run what the task
-names.
+(`.github/workflows/reviewer.yml`) runs the same suite, followed by the secrets audit. Which
+Python versions CI runs and which you run locally is stated once, in
+[`AGENTS.md`](AGENTS.md#gates-before-every-commit) ("Python versions"). A feature's `tasks.md`
+may name further checks for its gates; run what the task names.
 
 **The C# gate is local.** CI does not build `extractor/SwReview.sln`: it compiles against the
 SOLIDWORKS 2024 interop assemblies, which are not redistributable and are not on a hosted
@@ -68,7 +68,8 @@ status is [`specs/README.md`](specs/README.md).
 
 - The workflow skills are `/speckit-constitution`, `/speckit-specify`, `/speckit-plan`,
   `/speckit-tasks`, `/speckit-implement` and `/speckit-converge`, plus `/speckit-clarify`,
-  `/speckit-analyze` and `/speckit-checklist` (under `.claude/skills/`).
+  `/speckit-analyze`, `/speckit-checklist` and `/speckit-taskstoissues` (under
+  `.claude/skills/`).
 - Follow the feature's `tasks.md` in order. Tick a task only when its acceptance holds.
 - Tasks marked `[W]` need the licensed SOLIDWORKS seat and run only on the pilot workstation.
   Never start SOLIDWORKS on a machine without a licence.
@@ -82,7 +83,9 @@ status is [`specs/README.md`](specs/README.md).
 
 - Open them against `main`, from a branch.
 - Fill in the template: the summary, the issue or feature task, and the checklist.
-- CI must pass. The C# gate, when it applies, is reported in the description.
+- A pull request is merged only when CI is green, and after the local gates in
+  [`AGENTS.md`](AGENTS.md#gates-before-every-commit) have passed. The C# gate, when it applies,
+  is reported in the description.
 - Update the feature's `spec.md`, `tasks.md` and `research.md` in the same pull request when the
   change affects them.
 
@@ -98,19 +101,29 @@ for every text file you changed.
 
 ## The public-repository rule
 
-This repository is public. Commit, attach and paste **only fictional data**. Never commit, and
-never put in an issue, a pull request, a log or a screenshot:
+This repository is public. Commit, attach and paste **only fictional data**. This section is
+the full list; the other documents link here rather than repeat it. Never commit, and never put
+in an issue, a pull request, a commit message, a log or a screenshot:
 
 - a real design, part or drawing number, or a real product or assembly folder name;
-- a company, customer or person's name, or a Windows user name (write a user folder as
-  `%USERPROFILE%`, `%LOCALAPPDATA%` or `C:\Users\<you>`);
+- a company or customer name, or a person's name (write a person by role or by a fictional
+  name);
+- a Windows user name or a machine name (write a user folder as `%USERPROFILE%`,
+  `%LOCALAPPDATA%` or `C:\Users\<you>`);
 - a vault, network or project path from a real installation;
 - a real standards profile (`config/standards.example.yaml` is the fictional one), template or
   sheet format;
-- a SOLIDWORKS file, drawing, dump, recording, run folder, log or handover folder from real work;
-- an API key or any other credential;
+- a SOLIDWORKS file, a drawing, or a screenshot of a real design;
+- a dump, recording, run folder or handover folder from real work;
+- a log that shows real paths, user names or machine names (replace them with placeholders
+  such as `C:\Users\<you>` or `<part>` before pasting);
+- an API key, a token or any other credential;
 - per-machine state: the settings file (`%APPDATA%\SwReview\settings.json`), anything under
-  `%LOCALAPPDATA%\SwReview`, `.venv`, `bin`, `obj`, or the ignored `dumps/` and `logs/` folders.
+  `%LOCALAPPDATA%\SwReview` (including the identifier lists below), `.venv`, `bin`, `obj`, or
+  the ignored `dumps/` and `logs/` folders.
+
+Examples use the fictional fixtures named under [Test first](#test-first), and invented names
+and paths such as `FICT-...`, `bracket-assy` and `C:\Fictional\...`.
 
 A committed test (`reviewer/tests/unit/test_tracked_files_carry_no_recorded_number.py`) scans
 every tracked file against the owner's lists of forbidden numbers and identifiers, which are kept

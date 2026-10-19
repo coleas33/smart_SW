@@ -1,4 +1,4 @@
-# ADR-003: SOLIDWORKS documents are read, never written, behind a guard
+# ADR 0003: SOLIDWORKS documents are read, never written, behind a guard
 
 **Status:** Accepted
 **Date:** 2026-09-16
@@ -17,7 +17,7 @@ Every document SOLIDWORKS has open is treated as read-only by the reviewer, ever
 tool exposed to a model and every add-in command. `ReadOnlyGuard` is the enforcement point, and
 its denylist grows the moment a phase touches an API family that can write. There are exactly two
 bounded exceptions, the suppressibility test (feature 003) and the re-modeler's own copy (feature
-004, [ADR-004](0004-remodeler-works-on-a-copy.md)); a third requires an amendment to the
+004, [ADR 0004](0004-remodeler-works-on-a-copy.md)); a third requires an amendment to the
 constitution.
 
 The constitution's section "Documents are read, not written" is the authoritative text.
@@ -31,7 +31,7 @@ The constitution's section "Documents are read, not written" is the authoritativ
 - Drawings are read only: feature 011 reads drawings already open, and its one confirmed open is
   read-only and switched off until seat probes pass (`specs/011-drawing-context/`).
 - Drawing creation (reserved feature 012) needs a constitution amendment before it is specified
-  ([ADR-001](0001-agentic-review-architecture.md), "Amendment 2026-09-22").
+  ([ADR 0001](0001-agentic-review-architecture.md), "Amendment 2026-09-22").
 
 ## Sources
 
