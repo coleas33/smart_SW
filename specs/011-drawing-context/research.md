@@ -1358,7 +1358,9 @@ literal that exempted its spelling anywhere in the product, a dispatcher check n
 removed, sentences that said the wrong thing of the capture's write and the remodel commands, and a
 miscount - with two questions for the owner (R10.4, items 4 and 5). Decision 141A reached main first
 and took R9, Phase 10D and T135 to T144, so this section, its phase and its tasks were renumbered
-past them before main was merged in (R10.5).
+past them before main was merged in (R10.5). *And on that review's second pass, at `44db63e`*: the
+fixes hold, and T159 to T162 answer four nits and record a third question for the owner (R10.4,
+item 6).
 
 ### R10.1 The bridge judges its own commands; `Close`, `Save` and `Rebuild` refused (T145, T146)
 
@@ -1638,8 +1640,29 @@ or calls any of them: a search of the product for each as a literal and as a cal
    under `RemodelProbeGuard`, which hands it to the read-only guard, and the read-only guard leaves it
    allowed (section 3 of `contracts/guard.md`), so every read-only gate lets it through too. Which way
    each goes is the owner's call; nothing was changed.
+6. **The re-modeler's pane seat calls SOLIDWORKS through no gate.** *Added on the second review's
+   second pass (R10.5).* `extractor/SwReview.AddIn/Remodel/SwRemodelSeat.cs` calls the interop
+   directly, on the application thread. `remodel.open_copy` (`ActivateOrOpen`) looks the copy up
+   with `GetOpenDocumentByName` and, when SOLIDWORKS has it open, activates it with
+   `ActivateDoc3(title, false, swDontRebuildActiveDoc)`; otherwise it opens it with `OpenDoc7`,
+   `Silent` and `LoadModel` and never `ReadOnly` or `ViewOnly`, so the copy opens writable, for the
+   engineer's Save As. Before each dump of `remodel.plan` and `remodel.start` (`ActivateOpenCopy`,
+   004 T159) it activates the copy the same way and reads `ActiveDoc`'s `GetPathName`. It predates
+   this decision: the seat came with feature 004 (`5d93f92`, 2026-09-16), and its activation before
+   each dump and its frozen-manifest rows on 2026-09-27 (`0b04c8e`, `4c06b29`). It opens no write
+   path: the copy's path derives from a run folder the host already holds. But the read-only guard
+   never sees these calls - `ActivateDoc3` among them, which the guard has refused since feature
+   011's T004 (`1a5a6a8`, 2026-09-23) and decision 136A's lifecycle family pins - and no gate log
+   records them; the writable open, `ActivateOrOpen`, has no seat-level test (`SwRemodelSeatTests`
+   covers `ActivateOpenCopy`); and on this path the constitution's "Documents are read, not
+   written", whose "`ReadOnlyGuard` is the enforcement point", is not met. The owner's options: put
+   the seat behind a gate whose guard is an allowlist shaped like `DrawingOpenGuard` -
+   `ISldWorks.ActivateDoc3` and `ISldWorks.OpenDoc7` allowed by their qualified keys, every other
+   qualified key refused, and every bare read handed to `ReadOnlyGuard` - with a seat-level test
+   pinning `ActivateOrOpen`'s calls and its open options; or record the convention as accepted.
+   Nothing was changed.
 
-### R10.5 The second review: what it found and what changed (T154 to T158)
+### R10.5 The second review: what it found and what changed (T154 to T162)
 
 **Source.** An independent, adversarial review of the branch at `bf9da8c`, the same day, found no
 seat breakage, no new write path and no test loosened. Its findings, and what each became:
@@ -1654,6 +1677,8 @@ seat breakage, no new write path and no test loosened. Its findings, and what ea
   manifest's row for the pane seat's direct call (feature 004 T181), as well as of `Program.cs`, the
   only file its reason named; it is named now with its own reason. A new fact checks that no two
   product files share a name, so a key by file name is one place: a second `Program.cs` fails it.
+  *Replaced on the second pass (below)*: each file is named by its path under the extractor folder,
+  and the fact is gone.
 - **The dispatcher's own check was load-bearing for no test** (finding 5). `Run`'s default answered
   as an unknown command, the answer `Dispatch`'s check gives, so with the check removed all 9,706
   extractor tests passed. `Run`'s default now throws `InvalidOperationException`, since a name that
@@ -1662,7 +1687,8 @@ seat breakage, no new write path and no test loosened. Its findings, and what ea
   `Save3` and the two unknown-command sentences - each answered "InvalidOperationException: No handler
   for the bridge command ..." where it expects "Unknown command"; restored, they pass.
   `EveryAnsweredCommandReachesItsHandler` (T155) sees the other side: with the `tessellate` case
-  dropped from `Run`, it fails.
+  dropped from `Run`, it fails. *Widened on the second pass (below)*: it reads the remodel family's
+  own default too.
 - **`UnknownCommand`'s summary** (finding 9) said only the remodel scope reaches the `remodel.*`
   family. The console host, whose `NoSecretPolicy` lets every name through, answers the family too,
   and the family refuses each command there: a change command first while Start is switched off, and
@@ -1705,3 +1731,34 @@ this review's two and decision 141A's) and `SwReview.AddIn.Tests` 2,482, all gre
 warnings; the read audit reads 141A's new files (a `"SaveAs"` literal put in
 `ConfirmedDrawingSession.cs` fails it, and reverted it passes); no broken link. SOLIDWORKS was not
 started, and the interop was read as metadata only.
+
+**The second pass** (2026-10-19, at `44db63e`). A second adversarial pass confirmed that all eight
+fixes hold and that the mutations reproduce - 33 red without `Dispatch`'s check, the `close` literal
+in `SwCaptureView.cs` caught, and `Run`'s throw caught by `Dispatch` on both hosts - with zero
+warnings, 9,733 and 2,482. It found four nits and one question for the owner, which T159 to T162
+answer:
+
+- **A fact wider than its reason.** `NoTwoFilesOfTheProductSourceShareAName` failed for any two
+  product files of one name, whether or not a key named either, and its advice, to key by more of
+  the path, could not make it pass. The scan names each file by its path under the extractor folder
+  now (`SwReview.Extractor/Capture/SwCaptureView.cs`), every key with it, and the fact is gone (T159,
+  `381a900`). An unrelated second `Program.cs`, which failed the fact, fails nothing: the 630 audit,
+  family and exemption tests pass. A `"close"` literal in a second `BridgeDispatcher.cs`, elsewhere,
+  which the audit had exempted by its name and only the fact caught, fails the audit by its path.
+- **A handler test blind to half its name.** `EveryAnsweredCommandReachesItsHandler` looked for
+  `Run`'s mistake only: with `remodel.geometry`'s case gone from the remodel family's own switch, 55
+  behaviour tests failed and it passed, the family answering "has no handler for it". It reads that
+  answer too, with Start switched on so the six change commands reach the switch rather than being
+  refused before it (T160, `19d8813`): with the geometry and describe cases dropped, it fails naming
+  both, where it had passed (the suite failing 57 elsewhere).
+- **Two sentences** (T161, `c38e493`). `PROTOCOL.md` said every `remodel.*` command writes, and on no
+  document but the copy: `RemodelCommandTable` marks `probe_scope`, `snapshot` and `geometry` as
+  writing nothing, and `probe_scope` and `open` read the engineer's source. And R10.1 still said
+  `Run`'s unknown branch shares the dispatcher's refusal; it points to this section now.
+- **The pane seat's direct calls**, which pass no gate, are R10.4 item 6, for the owner; the read
+  audit's reason for `ActivateDoc3` in the frozen manifest points there (T162). Nothing in the seat
+  was changed.
+
+**Measured after the second pass**, on a build from scratch (`--no-incremental`: for the reviewer,
+an incremental build after a revert had kept a mutant compiled): `SwReview.Extractor.Tests` 9,732,
+one fact fewer, and `SwReview.AddIn.Tests` 2,482, all green; zero warnings; no broken link.

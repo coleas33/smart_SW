@@ -1266,7 +1266,8 @@ public class DrawingFamilyReadAuditTests
                 "the frozen interop manifest's row for ISldWorks.ActivateDoc3 (feature 004 T181), which the pane seat "
                 + "calls on the copy directly, outside the bridge and every gate; a row records a member and permits "
                 + "none. Named on decision 140A's review, whose keying by file found it: the literal's earlier entry "
-                + "named Program.cs only",
+                + "named Program.cs only. That the seat's call passes no gate, though the read-only guard refuses "
+                + "ActivateDoc3, is research R10.4 item 6, a question for the owner (2026-10-19)",
             [("LoadFile4", "SwReview.Extractor.Console/Program.cs")] =
                 "a member probe standards asserts is absent from its gate log",
             [("dimensions", "SwReview.Extractor/Ir/DrawingSheet.cs")] =
