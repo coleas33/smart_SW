@@ -29,6 +29,13 @@ log line"). It reaches `create_app` too, so an error body cannot echo it either.
 `--fail-bridge N` is the diagnostic hook of quickstart scenario 4: the first N bridge calls
 are forced to fail so the breaker's refusal of the next one can be seen on a real
 workstation - and, through this same entry point, in `tests/unit/test_chat_main.py`.
+
+`--settings-key-provider P` is the add-in's word that the key it copied into this process's
+environment for provider P is the one saved in the pane's settings (owner decision 138A), so
+P's sessions record `key_source: settings` rather than `env`. It names a provider and never
+carries a key. A value that is not a provider is refused here, before the handshake, rather
+than recorded as a guess: the add-in reports a backend that would not start, and the log
+names the values the option takes.
 """
 
 from __future__ import annotations
@@ -45,6 +52,7 @@ from typing import Any
 
 import uvicorn
 
+from swreview.agent.providers import ProviderName
 from swreview.agent.settings import configure_logging_redaction
 from swreview.chat import DEFAULT_ALLOW_ORIGIN, DEFAULT_RUN_ROOT
 from swreview.chat.server import (
@@ -83,6 +91,7 @@ def serve(
     run_root: Path | str = DEFAULT_RUN_ROOT,
     fail_bridge: int = 0,
     development: bool = False,
+    settings_key_provider: ProviderName | None = None,
 ) -> None:
     """Bind the loopback socket, print the handshake, and serve until killed.
 
@@ -92,6 +101,8 @@ def serve(
         run_root: The settings run root; every `run_dir` must be strictly inside it.
         fail_bridge: Force the first N live-bridge calls to fail (quickstart scenario 4).
         development: Offer the scripted provider in `GET /health` (FR-027).
+        settings_key_provider: The provider whose key in this environment the add-in copied
+            from the pane's saved settings, so its sessions record `settings` (138A).
     """
     token = secrets.token_urlsafe(TOKEN_BYTES)
     masked = (*environment_secrets(), token)
@@ -105,6 +116,7 @@ def serve(
         bridge_factory=forced_failure_bridge_factory(fail_bridge) if fail_bridge else None,
         development=development,
         secrets=masked,
+        settings_key_provider=settings_key_provider,
     )
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as bound:
@@ -159,18 +171,27 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Development build: offer the scripted provider in /health.",
     )
+    parser.add_argument(
+        "--settings-key-provider",
+        choices=[member.value for member in ProviderName],
+        default=None,
+        help="The add-in's word that this provider's key in the environment is the one "
+        "saved in the pane's settings.",
+    )
     return parser
 
 
 def main(argv: list[str] | None = None) -> None:
     """`python -m swreview.chat`. `swreview chat serve` calls `serve` directly."""
     arguments = build_parser().parse_args(argv)
+    marked = arguments.settings_key_provider
     serve(
         port=arguments.port,
         allow_origin=arguments.allow_origin,
         run_root=arguments.run_root,
         fail_bridge=arguments.fail_bridge,
         development=arguments.dev,
+        settings_key_provider=ProviderName(marked) if marked is not None else None,
     )
 
 

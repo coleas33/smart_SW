@@ -56,7 +56,10 @@ The key is never an argument. The reviewer reads it from the environment (`OPENA
 for the deferred Gemini adapter `GOOGLE_API_KEY` ahead of `GEMINI_API_KEY`) and never reads
 the pane's settings file: inside SOLIDWORKS the add-in reads that file, where a saved key wins
 over the workstation's environment, and hands the key to the backend in the backend's
-environment. The session records where the reviewer found the key as `key_source`. It is
+environment. The session records where the key came from as `key_source`: `settings` for the
+key saved in the pane, whose provider the add-in names when it starts the backend
+(`chat serve --settings-key-provider`, owner decision 138A), `env` for a key from the
+environment, and `none` without one; a command-line run records `env` or `none`. The key is
 held as a `SecretStr` excluded from every dump, and a redaction filter masks it in log
 records and in provider error text before either reaches a run folder.
 `swreview audit-secrets <dir>...` is the check that it never did.

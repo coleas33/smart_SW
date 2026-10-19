@@ -219,3 +219,65 @@ exposed to general chat (FR-025).
    fails closed.
 6. Free-form `dict[str, Any]` tool parameters cannot be expressed in OpenAI strict mode at
    all (see the correction in R3); they are replaced with explicit models before the port.
+
+## Owner decisions after the build
+
+### 138A. The session records the key saved in the pane as `settings` (2026-10-19)
+
+- **Question**: a review started from the Task Pane recorded `key_source: env` in
+  `session.json` even when its key was the one the engineer saved in the pane's settings. The
+  pane itself showed `settings` (`ReviewHost.SendInit` and `SendSettings`), and
+  `ResolvedApiKey.Source` (`UserSettings.cs`), the comment on `BackendClient.KeyVariablesFor`,
+  001 `contracts/cli.md` and the docstring of `reviewer/tests/unit/test_provider_settings.py`
+  all said the session records `settings`. The field is there so that whoever reads a run
+  knows which credential to revoke (FR-015, R8). The cause: only the add-in reads
+  `%APPDATA%\SwReview\settings.json`. `UserSettings.ResolveApiKey` takes the saved key first
+  and `BackendClient.StartOptions` copies it into the backend's environment under its
+  provider's variables; the reviewer reads no settings file, so `ProviderSettings.from_env`
+  found the key in the environment, and since no caller passes it an `api_key` (`cli.py` and
+  `benchmark/runner.py` twice each, `chat/server.py` twice), every key it found was `env`.
+- **Options** for the marker the add-in passes, which is not a secret: A: a `chat serve`
+  start argument. B: an environment variable in the child's block, beside the key.
+- **Chosen**: A, `--settings-key-provider <provider>`. `BackendClient.StartOptions` sets it
+  when the key it copied is the saved one; `chat/server.py` `_settings` hands it to
+  `ProviderSettings.from_env(settings_key_provider=...)`, which records that provider's
+  environment key as `settings`. Why:
+  - It matches how `BackendClient` passes the backend's own options. `--run-root` and
+    `--allow-origin` are `BackendStartOptions` properties that `BackendProcess.Arguments`
+    renders; the variables it writes into the environment (`OPENAI_BASE_URL`,
+    `GOOGLE_GENAI_USE_ENTERPRISE`, the Gemini project and location) configure the provider
+    SDKs, which `from_env` reads on every path, the command line included. The marker
+    belongs to the server alone.
+  - Only `chat serve` defines it, so the command line cannot be told it: `review`,
+    `benchmark run` and any later command record `env` or `none`. An environment variable
+    would be inherited from SLDWORKS.exe or a developer's shell, and by anything the backend
+    starts, and would claim `settings` wherever it leaked unless the add-in overwrote it on
+    every start. Typing the argument by hand makes the claim, as typing `--allow-origin`
+    does; it is the add-in's statement to make.
+  - It names a provider, not a source. The add-in writes the saved key under its own
+    provider's variables only, so another provider's key in the same environment is the
+    workstation's. A session for another provider happens when a provider change is saved as
+    a turn starts (the restart meets `TurnRunning` after the new settings are written, and
+    the backend keeps the environment it was started with), and on the Remodel route, which
+    resolves the default provider. Those sessions record `env`.
+  - The key stays in the environment; the argument carries none (AGENTS.md rule 3).
+- **Edge cases**: a saved key and an environment key both present: the saved key wins
+  (`ResolveApiKey`), is copied over the inherited one and its provider is named, so
+  `settings`. No saved key: nothing is named, so `env`. A stored key this Windows account
+  cannot decrypt falls back to the environment's key, and nothing is named. The scripted
+  provider reads no key, so none is copied or named. The marker with no key in the
+  environment: `none`, and the existing refusals are unchanged (the OpenAI adapter's
+  `ValueError` on a ticked start, `409 NoCredential` on Send). `key_source` keeps its three
+  values in the model and in the contract.
+- **An unknown value is refused, not read as `env` with a warning.** It means the add-in and
+  the backend disagree about what the marker says (two versions, or a hand-typed command
+  line), so the backend cannot tell where its key came from, and `env` would be a guess that
+  names the wrong credential exactly when the key was the saved one: the defect this
+  decision removes. The refusal is a usage error (exit 2) before the handshake. It costs
+  nothing on a matched install, comes before any session exists, and reaches the engineer as
+  a backend that would not start, whose log names the values the option takes. It holds the
+  other way round too: an older reviewer started by this add-in with a saved key refuses the
+  option it does not know rather than silently recording `env`. The add-in and the reviewer
+  ship from one repository and are updated together; a mismatched pair fails at start
+  instead of writing a record that names the wrong credential.
+- **Tests**: T069 (reviewer) and T071 (add-in) in [tasks.md](tasks.md), each written first.

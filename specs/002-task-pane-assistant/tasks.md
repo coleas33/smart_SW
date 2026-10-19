@@ -168,6 +168,22 @@ description: "Task list for the Task Pane Assistant"
 
 ---
 
+## Phase 8: Owner decision 138A - the session records where the pane's key came from (2026-10-19)
+
+**Purpose**: A review started from the pane recorded `key_source: env` even when its key was the one saved in the pane's settings: the backend finds every key in its environment and could not tell. The add-in now names, with a start argument that is not a secret, the provider whose key it copied there from the settings (`chat serve --settings-key-provider`), and only the backend it starts honours it. [research.md](research.md) records the decision and its edge cases under 138A.
+
+- [X] T069 [P] [US2] Write the reviewer tests: `reviewer/tests/unit/test_provider_settings.py` (`from_env(settings_key_provider=...)` records an environment key for the named provider as `settings` and another provider's as `env`; no key, a blank one or the scripted provider is `none` and equal to the unmarked settings; a key passed from settings still wins), `test_chat_server.py` (a pane review records `settings` marked and `env` unmarked, never the key; a Gemini session under an OpenAI marker records `env`; with no key a ticked start meets the adapter's own refusal and Send `409 NoCredential`, marked or not), `test_chat_main.py` (both entry points hand `serve` the named `ProviderName`; an unknown value is a usage error naming the values the option takes, before the handshake; the real backend records `settings` for an unticked review), `test_cli.py` (only `chat serve` takes the option; `review` and `benchmark run` refuse it; only `chat/server.py` passes it to `from_env`) and `test_session.py` (`key_source` is `settings`, `env` or `none` in the model and the contract). Acceptance: 32 of the 35 cases fail before T070; the other three are guards on what must not change and pass before and after (the vocabulary pin, and `review` and `benchmark run` refusing the option)
+- [X] T070 [US2] Implement it in `reviewer/src/swreview/`: `agent/settings.py` (`from_env`'s `settings_key_provider` and the module docstring), `chat/server.py` (`ChatServer`, `create_app`, `_settings`), `chat/__main__.py` and `cli.py` (`chat serve --settings-key-provider`, its choices the provider names); `reviewer/README.md`'s key paragraph. Acceptance: T069 green; `ruff check` clean
+- [ ] T071 [P] [US2] Write the add-in tests in `extractor/SwReview.AddIn.Tests/BackendProcessTests.cs`: `--settings-key-provider <provider>` reaches a real child's command line and the key does not; `BackendClient.StartOptions` names the provider only when it copied the saved key (both keys present, a saved key alone, Gemini) and names nothing for an environment key, no key, an undecryptable stored key or the scripted provider; a real child started with a saved and a workstation key holds the saved one and names its provider, and one started with the workstation key alone names nothing. Acceptance: the 11 cases do not compile before T072; with the property alone, the 5 that name a provider fail and the 6 that name nothing pass
+- [ ] T072 [US2] Implement `BackendStartOptions.SettingsKeyProvider`, its argument in `BackendProcess.Arguments` and its setting in `BackendClient.StartOptions`. Acceptance: T071 green; the C# build has zero warnings
+- [ ] T073 [P] [US2] Amend `contracts/chat-api.md` (the credentials paragraph) and `specs/001-agentic-design-review/contracts/cli.md` (the key paragraph and the `chat serve` row), each with a dated 138A note. Acceptance: the link check is clean; the gates pass on Python 3.12 and 3.11 and in C#
+
+**Order**: T069 before T070 and T071 before T072; T070 lands before T072, so no add-in hands the argument to a backend that does not take it.
+
+**Checkpoint**: A review the pane starts on the saved key records `key_source: settings`; one on a key from the workstation's environment records `env`; a command-line run can record only `env` or `none`.
+
+---
+
 ## Dependencies & Execution Order
 
 - **Setup (Phase 1)** → **Foundational (Phase 2)** → **US2 (Phase 3)** → **US1 (Phase 4)** → **US4 (Phase 5)** → **US3 (Phase 6)** → **Polish**

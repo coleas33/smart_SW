@@ -3600,6 +3600,14 @@ def chat_serve(
     dev: Annotated[
         bool, typer.Option("--dev", help="Development build: offer the scripted provider.")
     ] = False,
+    settings_key_provider: Annotated[
+        ProviderName | None,
+        typer.Option(
+            "--settings-key-provider",
+            help="The add-in's word that this provider's key in the environment is the one "
+            "saved in the pane's settings.",
+        ),
+    ] = None,
 ) -> None:
     """Serve the Task Pane chat backend on 127.0.0.1 and print `{port, token}` once.
 
@@ -3607,6 +3615,10 @@ def chat_serve(
     add-in reads it to reach the backend (`contracts/chat-api.md`). Everything this command
     does lives in `swreview.chat.__main__`, which `python -m swreview.chat` runs with the
     same arguments - one implementation, two ways in.
+
+    `--settings-key-provider` is an option of this command alone (owner decision 138A): the
+    add-in's statement about the backend it starts, so no command-line review can be told
+    its key is the one saved in the pane.
 
     The import is deliberately inside the function: `starlette`, `uvicorn` and the chat
     backend are not loaded by `swreview review` or by any check command.
@@ -3619,6 +3631,7 @@ def chat_serve(
         run_root=run_root if run_root is not None else DEFAULT_RUN_ROOT,
         fail_bridge=fail_bridge,
         development=dev,
+        settings_key_provider=settings_key_provider,
     )
 
 

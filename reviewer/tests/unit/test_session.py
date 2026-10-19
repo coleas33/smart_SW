@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import get_args
 from uuid import UUID
 
 import pytest
@@ -27,6 +28,7 @@ from swreview.report.session import (
     EvidenceRequest,
     EvidenceRequestIdAllocator,
     InvestigationStep,
+    KeySource,
     ProviderInfo,
     ReviewSession,
     Timing,
@@ -354,6 +356,18 @@ def test_provider_info_rejects_an_unknown_key_source() -> None:
             ),
             key_source="hard-coded",  # type: ignore[arg-type]
         )
+
+
+def test_key_source_is_settings_env_or_none_in_the_model_and_the_contract() -> None:
+    """Owner decision 138A made a pane review record `settings` without widening the field.
+
+    Whoever reads a run to decide which credential to revoke reads exactly these three words
+    (FR-015), so a fourth is a change to `review-session.schema.json` and to this test, never
+    a quiet addition on one side.
+    """
+    declared = load_contract("review-session.schema.json")["$defs"]["ProviderInfo"]
+    assert get_args(KeySource) == ("settings", "env", "none")
+    assert list(get_args(KeySource)) == declared["properties"]["key_source"]["enum"]
 
 
 # --- the short form of an evidence request (feature 009 T033, contracts/questions.md 2) -------

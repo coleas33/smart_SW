@@ -17,9 +17,14 @@ reads that file - not the chat backend and not the command line - so the key rea
 `ProviderSettings.from_env` from the process environment; an `api_key` passed to it would
 win over the environment, and no caller in this package passes one. The answer is recorded
 as `key_source` on the session, because a run that cannot say which credential it used
-cannot be reproduced or revoked. The environment variable names are the ones the installed
-SDKs document - `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and for Gemini `GOOGLE_API_KEY` ahead
-of `GEMINI_API_KEY`, the same precedence `google.genai` applies itself.
+cannot be reproduced or revoked. A key found in the environment cannot say by itself that it
+is the saved one, so the add-in says so when it starts the chat backend (`chat serve
+--settings-key-provider`, owner decision 138A): the backend hands the provider it names to
+`from_env`, which records that provider's environment key as `settings`. No other caller
+passes it, so a command-line run records `env` or `none`. The environment variable names
+are the ones the installed SDKs document - `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and for
+Gemini `GOOGLE_API_KEY` ahead of `GEMINI_API_KEY`, the same precedence `google.genai`
+applies itself.
 
 **That the key never becomes text.** `api_key` is a `SecretStr` excluded from every dump,
 so `session.json` and the report cannot carry it even by accident, and `redact()` plus
@@ -298,6 +303,7 @@ class ProviderSettings(BaseModel):
         base_url: str | None = None,
         enterprise: GeminiEnterprise | Mapping[str, str] | None = None,
         env: Mapping[str, str] | None = None,
+        settings_key_provider: ProviderName | None = None,
     ) -> ProviderSettings:
         """Settings from the pane's saved values, falling back to the environment.
 
@@ -314,6 +320,13 @@ class ProviderSettings(BaseModel):
             base_url: Endpoint override from settings.
             enterprise: Gemini project and location from settings.
             env: Environment to read; `os.environ` when omitted.
+            settings_key_provider: The provider whose key the add-in copied into `env` from
+                the pane's saved settings, as it says when it starts the chat backend
+                (`chat serve --settings-key-provider`, owner decision 138A). A key found in
+                `env` for that provider is recorded as `settings`, the credential to revoke;
+                another provider's key there is the workstation's own and stays `env`. `None`,
+                what every caller but the chat backend passes, records any key found in
+                `env` as `env`.
 
         Raises:
             ValueError: For an unknown provider name, or a Gemini enterprise environment
@@ -326,6 +339,8 @@ class ProviderSettings(BaseModel):
         env_key = _clean(_env_key(resolved, source))
         if settings_key is not None:
             key, key_source = settings_key, "settings"
+        elif env_key is not None and resolved is settings_key_provider:
+            key, key_source = env_key, "settings"
         elif env_key is not None:
             key, key_source = env_key, "env"
         else:

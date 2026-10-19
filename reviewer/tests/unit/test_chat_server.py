@@ -958,6 +958,150 @@ def test_the_provider_settings_come_from_the_request_and_the_environment(
     assert settings.key_source == "none"
 
 
+# --- where the key came from: the add-in's marker (owner decision 138A) ----------------
+
+PANE_KEY = "fict" + "-pane-saved-" + "0138a"
+"""The key saved in the pane, as the add-in copies it into the backend's environment. Built
+from fragments and not provider-shaped."""
+
+WORKSTATION_KEY = "fict" + "-workstation-" + "0138a"
+"""A key the workstation exports for itself, which the backend inherits from SLDWORKS.exe."""
+
+KEY_VARIABLES = ("OPENAI_API_KEY", "OPENAI_BASE_URL", "GOOGLE_API_KEY", "GEMINI_API_KEY")
+
+
+@pytest.fixture
+def no_provider_keys(monkeypatch: pytest.MonkeyPatch) -> pytest.MonkeyPatch:
+    """The backend's environment holds no key until a test puts one there, whatever the
+    workstation running the suite exports."""
+    for name in KEY_VARIABLES:
+        monkeypatch.delenv(name, raising=False)
+    return monkeypatch
+
+
+def marked_app(
+    run_root: Path,
+    marker: ProviderName | None,
+    provider_factory: Callable[[ProviderSettings], AgentProvider] | None,
+    models: Models,
+) -> Any:
+    """The backend as the add-in starts it, saying (or not) whose key is the saved one."""
+    return create_app(
+        token=TOKEN,
+        allow_origin=ORIGIN,
+        run_root=run_root,
+        provider_factory=provider_factory,
+        list_models=models,
+        settings_key_provider=marker,
+    )
+
+
+@pytest.mark.parametrize(
+    ("marker", "recorded"),
+    [(ProviderName.OPENAI, "settings"), (None, "env")],
+    ids=["marked", "unmarked"],
+)
+def test_a_pane_review_records_where_its_key_came_from(
+    run_root: Path,
+    run_dir: Path,
+    provider_control: ProviderControl,
+    models: Models,
+    no_provider_keys: pytest.MonkeyPatch,
+    marker: ProviderName | None,
+    recorded: str,
+) -> None:
+    """Owner decision 138A. The add-in copies the key into the backend's environment either
+    way; only its marker says the key is the one saved in the pane, and `session.json`
+    records `settings` then, `env` without it - never the key itself."""
+    no_provider_keys.setenv("OPENAI_API_KEY", PANE_KEY)
+    app = marked_app(run_root, marker, provider_control.factory, models)
+
+    with TestClient(app, headers={"Authorization": f"Bearer {TOKEN}", "Origin": ORIGIN}) as pane:
+        chat_id = start_session(pane, run_dir, provider="openai", model=None)["chat_id"]
+        settle(pane, chat_id)
+
+    assert [settings.key_source for settings in provider_control.built] == [recorded]
+    written = (run_dir / "session.json").read_text(encoding="utf-8")
+    assert json.loads(written)["provider_info"]["key_source"] == recorded
+    assert PANE_KEY not in written
+    assert PANE_KEY not in (run_dir / "events.jsonl").read_text(encoding="utf-8")
+
+
+def test_the_marker_names_one_provider_so_another_providers_key_records_env(
+    run_root: Path,
+    run_dir: Path,
+    provider_control: ProviderControl,
+    models: Models,
+    no_provider_keys: pytest.MonkeyPatch,
+) -> None:
+    """The saved key was copied under OpenAI's variable; a Gemini session - posted after a
+    provider change the backend has not restarted for yet - reads the workstation's own key,
+    and that is `env`, not the credential saved in the pane."""
+    no_provider_keys.setenv("OPENAI_API_KEY", PANE_KEY)
+    no_provider_keys.setenv("GOOGLE_API_KEY", WORKSTATION_KEY)
+    app = marked_app(run_root, ProviderName.OPENAI, provider_control.factory, models)
+
+    with TestClient(app, headers={"Authorization": f"Bearer {TOKEN}", "Origin": ORIGIN}) as pane:
+        chat_id = start_session(pane, run_dir, provider="gemini", model=None)["chat_id"]
+        settle(pane, chat_id)
+
+    [settings] = provider_control.built
+    assert settings.provider is ProviderName.GEMINI
+    assert settings.key_source == "env"
+    session = json.loads((run_dir / "session.json").read_text(encoding="utf-8"))
+    assert session["provider_info"]["key_source"] == "env"
+
+
+@pytest.mark.parametrize("marker", [None, ProviderName.OPENAI], ids=["unmarked", "marked"])
+def test_a_marked_backend_with_no_key_refuses_a_review_as_it_always_has(
+    run_root: Path,
+    run_dir: Path,
+    models: Models,
+    no_provider_keys: pytest.MonkeyPatch,
+    marker: ProviderName | None,
+) -> None:
+    """The marker is a statement about a key, never a key: with none in the environment a
+    ticked review meets the product's own adapter refusing to start without one, marked or
+    not (`build_provider`, the real factory; nothing reaches a network)."""
+    app = marked_app(run_root, marker, None, models)
+
+    with TestClient(app, headers={"Authorization": f"Bearer {TOKEN}", "Origin": ORIGIN}) as pane:
+        response = pane.post("/sessions", json=session_body(run_dir, provider="openai", model=None))
+
+    assert response.status_code == 502
+    assert response.json() == {
+        "error_class": "ValueError",
+        "message": "an OpenAI adapter needs either an api_key or a ready-made client",
+        "retryable": True,
+    }
+
+
+@pytest.mark.parametrize("marker", [None, ProviderName.OPENAI], ids=["unmarked", "marked"])
+def test_a_marked_backend_with_no_key_refuses_send_as_it_always_has(
+    run_root: Path,
+    run_dir: Path,
+    provider_control: ProviderControl,
+    models: Models,
+    no_provider_keys: pytest.MonkeyPatch,
+    marker: ProviderName | None,
+) -> None:
+    """The waiting path of the same rule: the checks run and record `none`, and Send is the
+    existing `409 NoCredential`, marked or not."""
+    app = marked_app(run_root, marker, provider_control.factory, models)
+
+    with TestClient(app, headers={"Authorization": f"Bearer {TOKEN}", "Origin": ORIGIN}) as pane:
+        chat_id = start_session(
+            pane, run_dir, provider="openai", model=None, send_when_checked=False
+        )["chat_id"]
+        response = pane.post(f"/sessions/{chat_id}/send", json={})
+
+    assert response.status_code == 409
+    assert response.json()["error_class"] == "NoCredential"
+    session = json.loads((run_dir / "session.json").read_text(encoding="utf-8"))
+    assert session["provider_info"]["key_source"] == "none"
+    assert provider_control.built == []
+
+
 @pytest.mark.parametrize(
     "bad",
     [
