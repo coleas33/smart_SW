@@ -56,7 +56,7 @@ stays allowed, for the reason section 3 gives.
 name `IModelDoc2.Save` and `Rebuild` and `IModelDocExtension.Rebuild`: the bridge judges a
 command against its own fixed set and no longer hands its name to `ReadOnlyGuard`, which had
 judged `remodel.close`, `remodel.save` and `remodel.rebuild` by the part after the dot, so the
-three members could not be denied while those commands existed (research R9.1). No product path
+three members could not be denied while those commands existed (research R10.1). No product path
 calls any of them; the re-modeler's rebuild, save and close are the qualified keys
 `IModelDoc2.ForceRebuild3`, `IModelDoc2.Save3` and `ISldWorks.CloseDoc` of its own allowlist.
 
@@ -68,7 +68,7 @@ decision's review, of `IFeatureManager`, a third, that the guard did not refuse 
 families' are writers of their family rows already. `DocumentWriteFamilyTests` (section 5)
 reflects the 34 interfaces the generated tables are written against - those six, decision 21A's
 creation interfaces and the 28 drawing families of this section - to prove the rows complete for
-them; no test reads the interop's other interfaces, where research R9.4 counts what the families
+them; no test reads the interop's other interfaces, where research R10.4 counts what the families
 hold. A
 name belongs when one of its words, read as above, is `Save`, `Rename`, `Move`, `Copy`,
 `Replace`, `Release`, `Lock`, `Unlock`, `ReadOnly` or `Rebuild`: `Copy` because

@@ -1816,7 +1816,7 @@ public class DocumentWriteFamilyTests
     /// guard's generated tables reflects - decision 21A's creation interfaces, <c>IFeatureManager</c>
     /// among them, and feature 011's 28 drawing families, <c>IDrawingDoc</c> among them. Widened on
     /// the decision's review: it read the first six only. Not every interface: the guard judges a
-    /// name on any of them, and research R9.4 counts what the families hold on the others.
+    /// name on any of them, and research R10.4 counts what the families hold on the others.
     /// </summary>
     internal static readonly string[] Interfaces =
         DocumentLifecycleFamilyTests.Interfaces
@@ -1845,7 +1845,7 @@ public class DocumentWriteFamilyTests
     /// <item><c>Save</c>: the members named for saving - the document, a file made from it
     /// (<c>SaveToFile</c>, <c>SaveDeFeaturedFile</c>), or what the save dialog offers
     /// (<c>AddFileSaveAsItem</c>). A file written under another word, an export or a publish
-    /// (<c>ExportToDWG</c>, <c>PublishSTEP242File</c>), is not read here (research R9.4).</item>
+    /// (<c>ExportToDWG</c>, <c>PublishSTEP242File</c>), is not read here (research R10.4).</item>
     /// <item><c>Rename</c>, <c>Move</c> and <c>Copy</c>: the document's file renamed, moved or copied,
     /// and the references other documents hold to it updated. <c>Copy</c> is here because
     /// <c>ISldWorks.CopyDocument</c> is <c>MoveDocument</c>'s twin - the same arguments and options -

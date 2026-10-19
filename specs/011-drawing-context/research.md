@@ -1103,8 +1103,8 @@ answers with a document already open is settled (R8.1) and the other stale wordi
 owner's decision.
 
 *Amended 2026-10-19 (owner decision 140A)*: the second and third questions are answered - the
-bridge judges its own commands and `Close`, `Save` and `Rebuild` are refused (R9.1), and so is
-every unused writer the third names, with the families it belongs to (R9.3). The items stay below
+bridge judges its own commands and `Close`, `Save` and `Rebuild` are refused (R10.1), and so is
+every unused writer the third names, with the families it belongs to (R10.3). The items stay below
 as the record of what was asked; the first, fourth, fifth and sixth are unchanged.
 
 1. **When the count of ten resets.** The opens that left no record are counted per run folder for
@@ -1118,7 +1118,7 @@ as the record of what was asked; the first, fourth, fifth and sixth are unchange
    are the owner's call. Nothing moves until T077 turns the open on: while the switch is off no open
    is attempted, so the count stays at zero.
 2. **Denying `Close`, `Save` and `Rebuild` needs the dispatcher changed.** *Resolved 2026-10-19
-   (owner decision 140A, R9.1).*
+   (owner decision 140A, R10.1).*
    `BridgeDispatcher.Dispatch` hands every command name to `ReadOnlyGuard`, which judges
    `remodel.close`, `remodel.save` and `remodel.rebuild` by the part after the dot, so the bare
    names `Close`, `Save` and `Rebuild` cannot be denied while those commands pass through it:
@@ -1127,7 +1127,7 @@ as the record of what was asked; the first, fourth, fifth and sixth are unchange
    handing them to `ReadOnlyGuard`; the three names could then be denied, and
    `NoCommandTheBridgeAnswersIsRefusedByTheReadOnlyGuard`, which pins today's dispatcher, would give
    way to a test of the dispatcher's own check. That reshapes a guard, so it waits for the owner.
-3. **Bare writers still allowed, unused today.** *Resolved 2026-10-19 (owner decision 140A, R9.3):
+3. **Bare writers still allowed, unused today.** *Resolved 2026-10-19 (owner decision 140A, R10.3):
    every one is refused but `SaveBMP`, the capture's.* Measured on 32.5.0.48 by reflecting the interop's
    metadata against the built guard, SOLIDWORKS not started, `ReadOnlyGuard` still lets these
    through by their bare names, and no product path calls any of them through a read-only gate: the
@@ -1150,7 +1150,7 @@ as the record of what was asked; the first, fourth, fifth and sixth are unchange
    `OpenDoc6` "the extractor's one sanctioned read-only open": that is the record of its day, and
    section 3 of `contracts/guard.md` carries the correction.
 
-## R9. Decision 140A: the bridge judges its own commands, and the guard's unused writers are refused (owner, 2026-10-19)
+## R10. Decision 140A: the bridge judges its own commands, and the guard's unused writers are refused (owner, 2026-10-19)
 
 **Source.** R8.5 left two of decision 136A's findings to the owner: refusing `Close`, `Save` and
 `Rebuild` needed the bridge's dispatcher changed (its second question), and `ReadOnlyGuard` still
@@ -1158,7 +1158,7 @@ let through bare writers that no product path calls (its third). The owner's dec
 2026-10-19 ("Both, test first") answers both under this feature: the dispatcher judges the commands
 it knows without handing their names to the read-only guard, the three members are refused, and so
 are the unused writers "and the others the interop holds", with the save, rename, move, replace and
-release-lock families proved complete by reflection. The tasks are T135 to T143 (Phase 10D).
+release-lock families proved complete by reflection. The tasks are T145 to T153 (Phase 10E).
 SOLIDWORKS was not started: the C# tests run over fakes and the interop stand-in, and the interop
 (`SolidWorks.Interop.sldworks` 32.5.0.48) was read as metadata only. Measured on the development
 machine: `SwReview.Extractor.Tests` 9,387 tests before and 9,705 after, `SwReview.AddIn.Tests` 2,472
@@ -1166,13 +1166,13 @@ before and after, all green, the build at zero warnings.
 
 *Amended on a review of the branch the same day, before it was handed on*: the review found no
 blocker - no request reaches anything it could not before, the generated tables match their
-generators, and the new tests fail when the change is reverted - and found what T139 to T143 fix:
-the families read over six interfaces where the guard covers more (R9.2, R9.3), the family sweeps
+generators, and the new tests fail when the change is reverted - and found what T149 to T153 fix:
+the families read over six interfaces where the guard covers more (R10.2, R10.3), the family sweeps
 written three times, an exception's staleness check satisfied by another guard's call, the creation
-read audit still keyed in any case, and comments left wrong. R9.4 holds what it measured beyond the
+read audit still keyed in any case, and comments left wrong. R10.4 holds what it measured beyond the
 decision.
 
-### R9.1 The bridge judges its own commands; `Close`, `Save` and `Rebuild` refused (T135, T136)
+### R10.1 The bridge judges its own commands; `Close`, `Save` and `Rebuild` refused (T145, T146)
 
 **Decision**: `SwBridgeDispatcher.Dispatch` no longer hands the request's command name to
 `ReadOnlyGuard`. After the secret policy it asks `SwBridgeDispatcher.Answers(command)` - an exact,
@@ -1253,7 +1253,7 @@ command names' reasons completed) and `dc064e1` (the comments the decision left 
 `PROTOCOL.md`'s sentence on the empty name, and `ReadOnlyGuard.cs`'s two calling a capture image
 `SaveAs3`'s one legitimate use - the capture writes with `SaveBMP`).
 
-### R9.2 The families the unused writers belong to: the decision
+### R10.2 The families the unused writers belong to: the decision
 
 **Decision**: `DocumentWriteFamilyTests` reflects the 34 interfaces the generated tables are
 written against: `ISldWorks`, `IModelDoc2` and `IModelDocExtension` - 136A's three - and the
@@ -1270,7 +1270,7 @@ the word does - is one of these:
 
 | Word | Why it is a family |
 |---|---|
-| `Save` | the members named for saving: the document, a file made from it (`SaveToFile`, `SaveDeFeaturedFile`), or what the save dialog offers (`AddFileSaveAsItem`). A file written under another word, an export or a publish, is R9.4's |
+| `Save` | the members named for saving: the document, a file made from it (`SaveToFile`, `SaveDeFeaturedFile`), or what the save dialog offers (`AddFileSaveAsItem`). A file written under another word, an export or a publish, is R10.4's |
 | `Rename`, `Move`, `Copy` | the document's file renamed, moved or copied, and the references other documents hold to it updated. `Copy` because `ISldWorks.CopyDocument` is `MoveDocument`'s twin - the same arguments and options - and the word's other members copy the document's contents (`CopyWithMates`, `CopyDraftingStandard`) or its selection (`EditCopy`) |
 | `Replace` | a referenced document or a component swapped for another |
 | `Release`, `Lock`, `Unlock` | the release-lock family: the locks SOLIDWORKS holds on the file released (`ForceReleaseLocks`, which lets another process change it), the storage streams it opens in the file closed (`IRelease3rdPartyStorage`, `IRelease3rdPartyStorageStore`, `ReleaseStream`), and the locks on the document's references and on the application's commands (`LockAllExternalReferences`, `Lock`) |
@@ -1292,7 +1292,7 @@ or an exception whose call has gone.
 `IFeatureManager`), and the test reflects the interop with its own copy of the grammar to prove the
 rows complete, the independent check `DrawingFamilyCompletenessTests` is for the drawing table. The
 drawing families' members of the words are writers of their family rows already. The same words on
-the interop's other interfaces are R9.4's. Because the guard matches bare names, a refused name is
+the interop's other interfaces are R10.4's. Because the guard matches bare names, a refused name is
 refused on every interface that declares it - `IBody2.Save`, which writes a body to a stream, and
 `ISketchBlockDefinition.Save` among them; no product path calls either. *On the review* the family
 sweeps of 136A's class and this one share one helper, `GuardSweep` (commit `e2b148f`): the guards the
@@ -1300,21 +1300,21 @@ product builds its gates with, a grammar read over interfaces, the members to re
 spellings of a key, and what each guard lets through of them. A throwaway mutation letting
 `SuppressTestGuard` through `Close` and `SaveAs` turned all three of its sweeps red.
 
-### R9.3 The families: the members and their classification (T137, T138, T140, T141)
+### R10.3 The families: the members and their classification (T147, T148, T150, T151)
 
 **Evidence**: on 32.5.0.48 the grammar finds 129 members on the 34 interfaces: 94 on the six it first
 read, 13 on `IFeatureManager` and 22 on the drawing families other than `IDrawingDoc`. Before the decision
 64 of them were callable, 61 names (`Rebuild`, `SaveAs` and `SaveAs2` are each on two interfaces). Now
 15 are readers, 2 are left allowed and 112 are refused, 62 of them, 59 names, by this decision; with
-`Close` (R9.1) the table's new names go from 673 to 733. *Corrected on the decision's review*: this
+`Close` (R10.1) the table's new names go from 673 to 733. *Corrected on the decision's review*: this
 said 63 callable and 60 names, missing `Rebuild` on two interfaces; measured again against `ca7a720`'s
 guard, the 64 are the 62 this decision refuses and the two it leaves allowed:
 
 | Interface | Refused by decision 140A | Refused before, and by what | Left allowed | Readers |
 |---|---|---|---|---|
 | `ISldWorks` | `AddFileSaveAsItem`, `AddFileSaveAsItem2`, `CopyAppearance`, `CopyDocument`, `ICopyDocument`, `IMoveDocument`, `MoveDocument`, `RemoveFileSaveAsItem`, `RemoveFileSaveAsItem2`, `ReplaceReferencedDocument`, `RunBatchSaveProcess`, `SaveSettings`, `ShowBatchSaveTo3DExperienceDlg` | - | - | `GetLastSaveError`, `GetSaveTo3DExperienceOptions` |
-| `IModelDoc2` | `EditCopy`, `ForceReleaseLocks`, `IRelease3rdPartyStorage`, `Lock`, `LockAllExternalReferences`, `LockFramePoint`, `LockLightToModel`, `Rebuild` (R9.1), `Save` (R9.1), `Save2`, `SaveAs`, `SaveAs2`, `SaveAs4`, `SaveAsSilent`, `SaveSilent`, `SetReadOnlyState`, `SetSaveAsFileName`, `UnLock`, `UnlockAllExternalReferences`, `UnlockFramePoint` | `EditRebuild3`, `ForceRebuild3`, `Save3`, `SaveAs3`, `SetSaveFlag` (`ReadOnlyGuard.cs`); `InsertFeatureReplaceFace` (the `InsertFeature` prefix); `ReloadOrReplace` (136A) | `SaveBMP` | `GetSaveFlag`, `IsOpenedReadOnly` |
-| `IModelDocExtension` | `CopyDraftingStandard`, `EditRebuildAll`, `IRelease3rdPartyStorageStore`, `MoveDecal`, `Rebuild` (R9.1), `ReleaseStream`, `RenameDocument`, `RenameDraftingStandard`, `SaveAs`, `SaveAs2`, `SaveDeFeaturedFile`, `SaveDraftingStandard`, `SavePackAndGo`, `SaveTo3DExperience`, `SaveViewToSolidworks`, `set_ShowPartRebuildIndicators` | `ForceRebuildAll`, `SaveAs3` (`ReadOnlyGuard.cs`); `ReloadOrReplace` (136A); `MoveOrCopy`, `RotateOrCopy`, `ScaleOrCopy`, `SaveSelection` (decision 21A) | - | `GetAdvancedSaveAsOptions`, `get_NeedsRebuild`, `get_NeedsRebuild2`, `get_ShowPartRebuildIndicators` |
+| `IModelDoc2` | `EditCopy`, `ForceReleaseLocks`, `IRelease3rdPartyStorage`, `Lock`, `LockAllExternalReferences`, `LockFramePoint`, `LockLightToModel`, `Rebuild` (R10.1), `Save` (R10.1), `Save2`, `SaveAs`, `SaveAs2`, `SaveAs4`, `SaveAsSilent`, `SaveSilent`, `SetReadOnlyState`, `SetSaveAsFileName`, `UnLock`, `UnlockAllExternalReferences`, `UnlockFramePoint` | `EditRebuild3`, `ForceRebuild3`, `Save3`, `SaveAs3`, `SetSaveFlag` (`ReadOnlyGuard.cs`); `InsertFeatureReplaceFace` (the `InsertFeature` prefix); `ReloadOrReplace` (136A) | `SaveBMP` | `GetSaveFlag`, `IsOpenedReadOnly` |
+| `IModelDocExtension` | `CopyDraftingStandard`, `EditRebuildAll`, `IRelease3rdPartyStorageStore`, `MoveDecal`, `Rebuild` (R10.1), `ReleaseStream`, `RenameDocument`, `RenameDraftingStandard`, `SaveAs`, `SaveAs2`, `SaveDeFeaturedFile`, `SaveDraftingStandard`, `SavePackAndGo`, `SaveTo3DExperience`, `SaveViewToSolidworks`, `set_ShowPartRebuildIndicators` | `ForceRebuildAll`, `SaveAs3` (`ReadOnlyGuard.cs`); `ReloadOrReplace` (136A); `MoveOrCopy`, `RotateOrCopy`, `ScaleOrCopy`, `SaveSelection` (decision 21A) | - | `GetAdvancedSaveAsOptions`, `get_NeedsRebuild`, `get_NeedsRebuild2`, `get_ShowPartRebuildIndicators` |
 | `IPartDoc` | `SaveToFile`, `SaveToFile2`, `SaveToFile3` | `EditRebuild`, `ForceRebuild` (feature 011, the bare names `IDrawingDoc` shares) | - | - |
 | `IAssemblyDoc` | `CopyWithMates`, `CopyWithMates2`, `ForceRebuild2`, `ReplaceComponents`, `ReplaceComponents2`, `ReplacePLMComponents`, `SaveIsolate`, `set_EnableAssemblyRebuild` | `EditRebuild`, `ForceRebuild` (feature 011) | - | `get_EnableAssemblyRebuild` |
 | `IFeatureManager` (on the review) | `MoveRotateLiveSectionPlane`, `set_MoveSizeFeatures` | `CreateSaveBodyFeature`, `InsertSaveOutBodies`, `InsertMoveCopyBody`, `InsertMoveCopyBody2`, `InsertMoveFace`, `InsertMoveFace2`, `InsertMoveFace3`, `IInsertMoveFace2` (decision 21A); `InsertFeatureLock` (the `InsertFeature` prefix) | `MoveToFolder` | `get_MoveSizeFeatures` |
@@ -1376,7 +1376,7 @@ two exclusion tests `MoveToFolder`, edited deliberately. The table regenerates b
 names; the creation table regenerates unchanged, and the read audit finds no product literal among
 the new names. `contracts/guard.md` sections 1, 2, 3 and 5 and 004's `guard-allowlist.md` say so.
 
-### R9.4 Found on the way, and left for the owner
+### R10.4 Found on the way, and left for the owner
 
 Each of these is beyond what decision 140A names, so nothing here was changed. Each was measured on
 32.5.0.48 by reflecting the interop's metadata against the built guard, and no product path names

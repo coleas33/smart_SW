@@ -402,7 +402,7 @@ the owner, not closed. No product literal names one. *Amended 2026-10-19 (owner 
 every save and rebuild named here is refused now, by feature 011's table above, with the rest of
 the save, rename, move and copy, replace, release and lock, read-only and rebuild families of
 `ISldWorks`, `IModelDoc2`, `IModelDocExtension`, `IPartDoc`, `IAssemblyDoc` and `IFeatureManager`
-(`011-drawing-context/research.md` R9); only `SaveBMP`, the capture's image, and `MoveToFolder`,
+(`011-drawing-context/research.md` R10); only `SaveBMP`, the capture's image, and `MoveToFolder`,
 `probe remodel`'s PROBE-5, stay allowed. The other writers and the creation on other interfaces
 stay as this paragraph leaves them.
 
