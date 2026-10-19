@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-23
 
-**Status**: Draft (User Stories 1 and 2 landed on main 2026-09-23)
+**Status**: Code complete; 7 workstation tasks open (see [specs/README.md](../README.md)). Drafted as: Draft (User Stories 1 and 2 landed on main 2026-09-23)
 
 **Amended**: 2026-09-23 by the owner (decision 2A): a finding's title is whole and names its parts only where a person reads it; the title the model reads in every tool result is unchanged (FR-027, research R2.28).
 

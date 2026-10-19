@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-15
 
-**Status**: Draft (revision 4, after two adversarial spec review rounds on 2026-09-15; User Story 6, the Model check tab, was added on 2026-09-16)
+**Status**: Code complete; 3 workstation tasks open (see [specs/README.md](../README.md)). Drafted as: Draft (revision 4, after two adversarial spec review rounds on 2026-09-15; User Story 6, the Model check tab, was added on 2026-09-16)
 
 **Amended**: 2026-09-25 by the owner (decision 20A): the system rows a real 2024 SP5 dump lists - the annotations container's folders and view, the scene's lights, a derived part's body and reference folders, the cosmetic thread - are tolerated loose types, not content, so the checks and the Model check stop counting them loose or asking them for a description; one list of tolerated types serves this feature's rules and feature 004's planner alike (Edge Cases, Key Entities, research R3, `contracts/rules.md` "Content features", tasks T090 to T092). Feature 008's replay reads a recorded finding this narrows as narrowed, not lost (its decision 23A).
 

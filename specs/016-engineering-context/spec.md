@@ -1,6 +1,6 @@
 # Feature 016: engineering context foundation
 
-Status: implementation authorized 2026-10-14, following the accepted
+**Status**: Offline delivery and pane entry complete; 2 workstation tasks open (see [specs/README.md](../README.md)). Drafted as: implementation authorized 2026-10-14, following the accepted
 [foundation design](../../docs/engineering-context-foundation.md).
 
 An engineer can attach requirements and applied forces to a saved extracted part,

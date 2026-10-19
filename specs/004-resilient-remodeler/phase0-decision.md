@@ -2,7 +2,7 @@
 
 **Feature**: 004 Resilient re-modeler, stage 1
 **Tasks**: T002 (offline dry run, complete), T003 (workstation dry run over real parts, **not run**; a provisional count over three real packages is section 4.1, T148), T004 (this file)
-**Status**: **incomplete — awaiting T003 and the owner's signature.** The go / no-go in section 5 is unsigned and no decision has been taken.
+**Status**: **go signed; still incomplete, awaiting T003.** Signed **go** by the owner on 2026-10-18 (decision 127A), retroactively: phases 2 to 9 were built before the sign-off. Section 4's table is still empty, so T004 stays open (section 5). Until 2026-10-18 this line read: "incomplete — awaiting T003 and the owner's signature. The go / no-go in section 5 is unsigned and no decision has been taken."
 **Repository**: `baa7424`, working tree dirty; no file under `reviewer/tests/golden/fixtures/` or `benchmarks/` was modified by any run recorded here.
 **Date of the offline run**: 2026-09-16
 
@@ -354,10 +354,18 @@ on the owner's parts therefore depends as much on how the judgement phase classi
 
 ---
 
-## 5. PENDING — the go / no-go
+## 5. The go / no-go: signed go, retroactively
 
-> **Unsigned. No decision has been taken.** This is the decision the owner takes once section 4
-> carries numbers. A **no-go stops the feature here** and Phases 2 to 9 are not started.
+> **Signed go by the owner on 2026-10-18 (decision 127A), retroactively: phases 2 to 9 were built
+> before the sign-off.** The decision was meant to be taken once section 4 carried numbers, and a
+> no-go would have stopped the feature here. It was signed with section 4 still empty: T003 has
+> not been run, and feature 003's T088 (PROBE-15, which blocks this feature) is still open. The
+> sign-off completes neither, and T004 stays open until T003's numbers are in section 4.
+>
+> Until 2026-10-18 this note read: "**Unsigned. No decision has been taken.** This is the decision
+> the owner takes once section 4 carries numbers. A **no-go stops the feature here** and Phases 2
+> to 9 are not started." The evidence below was written before the sign-off and is kept as
+> written.
 
 **The question**: *staged* (build stage 1 reorganize now, re-specify stage 2 rebuild after stage 1 has
 run on real parts) versus *rebuild-only* (do not build stage 1's write path at all; keep the Phase 1
@@ -393,10 +401,10 @@ built and leaves the constitution's write exception unexercised.
 
 | | |
 |---|---|
-| **Decision** | *(pending: staged / rebuild-only / planner-ships-write-path-deferred)* |
-| **Basis** | *(pending: which numbers in section 4 decided it)* |
-| **Owner signature** | *(pending)* |
-| **Date** | *(pending)* |
+| **Decision** | **go**: *staged*, as the question above defines it (build stage 1 reorganize now, re-specify stage 2 rebuild after stage 1 has run on real parts). Stage 1's Start ships switched off (`tasks.md` T172). |
+| **Basis** | No number from section 4: T003 has not been run. What existed at the sign-off was section 2 (T002, synthetic packages only, which section 3.1 says cannot close RK-1) and section 4.1 (T148, provisional counts over three real packages, which is not T003). The sign-off is retroactive: phases 2 to 9 were built before it, their seat probes (T033 to T039) and workstation runs (T135 to T141, T164) still open. |
+| **Owner signature** | The owner, decision 127A ([`docs/decisions.md`](../../docs/decisions.md#one-counter-from-121a-decision-128a)) |
+| **Date** | 2026-10-18 |
 
 ---
 

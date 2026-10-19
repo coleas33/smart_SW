@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-26
 
-**Status**: Draft. Every question the analysts raised is settled by a default taken on 2026-09-26, which the owner may revise (research R2; none is the owner's own words).
+**Status**: Code complete; 5 workstation tasks open (see [specs/README.md](../README.md)). Drafted as: Draft. Every question the analysts raised is settled by a default taken on 2026-09-26, which the owner may revise (research R2; none is the owner's own words).
 
 **Numbering**: this feature is numbered 013 on purpose. Number 012 stays reserved for drawing creation, as `docs/history/roadmap-2026-09-22.md` ("012 Drawing creation (later)") and feature 011 (`specs/011-drawing-context/spec.md`, Input and FR-043) say; nothing in this package creates, changes or prepares to write a drawing.
 

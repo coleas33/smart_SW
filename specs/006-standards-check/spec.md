@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-16
 
-**Status**: Draft
+**Status**: Code complete; 11 workstation tasks open (see [specs/README.md](../README.md)). Drafted as: Draft
 
 **Input**: User description: "These should be automatically programmatically reviewed as well. Separate pane (Standards Check)" (owner, 2026-09-16), handing over a 2017 VBA release-checklist macro and its description document (both named in `research.md`). Design decided in conversation on 2026-09-16 and recorded in the design brief. The macro's behaviour is reverse-engineered in a check table, described in `research.md` R1, which is normative for what each check means. **That document is not in this repository and is not cited by path**: it reproduces the macro's forty-three constants verbatim, so committing it would put the company's vault layout, library folder names, data-card schema, part-number convention and export-control phrase into a public repository - the disclosure FR-001 exists to prevent. It is held with the owner, beside the macro; `research.md` R1 says what it is and R5 carries the only values from it this repository needs. Appendix A cites it by section name and number, and states enough of each condition to stand alone; every statement in this spec about what the macro does is traceable to a named section of it, listed in Appendix A. `research.md`, and the rest of the feature package, are written in the plan phase; the forward references to it in this spec (the macro's constant values, the workstation probes, the transparency-polarity answer) are obligations on that phase, not facts already recorded. Every probe this spec depends on is also named inline in Assumptions, so the spec stands alone.
 

@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-22
 
-**Status**: Draft
+**Status**: Code complete; 6 workstation tasks open (see [specs/README.md](../README.md)). Drafted as: Draft
 
 **Amended**: 2026-09-23, by the planning pass; every change is listed with its reason in [research.md](research.md) R4. Amended again 2026-09-23 by the owner: the tools checks first already ran leave the tool array (FR-030, research R2.53). Amended again 2026-09-23 by the owner (decision 3A): the replay fixtures follow the code (SC-001, research R2.54 to R2.56).
 

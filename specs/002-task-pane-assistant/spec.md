@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-13
 
-**Status**: Draft
+**Status**: Built; 5 open (see [specs/README.md](../README.md)). Drafted as: Draft
 
 **Input**: User description: "Task Pane assistant: a SOLIDWORKS Task Pane with a review chat driving the curated design reviewer on OpenAI or Gemini, plus an embedded Codex or Gemini CLI terminal for read-only general chat." Design approved in conversation on 2026-09-13 (reviewer first, general chat read-only, chat panel plus terminal tab, OpenAI default with Gemini, no Claude in the product).
 

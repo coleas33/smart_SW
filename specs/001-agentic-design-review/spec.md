@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-12
 
-**Status**: Draft
+**Status**: Built; 6 open (see [specs/README.md](../README.md)). Drafted as: Draft
 
 **Input**: User description: "SOLIDWORKS agentic design review pilot: an assistant that investigates assemblies and drawings, gathers engineering evidence, and reports verifiable fit-up, tolerance, fastener, and drawing findings." Derived from `docs/history/pilot-proposal-2026-09-13.md` (pilot definition, ROI ranking, review boundaries) and `docs/adr/0001-agentic-review-architecture.md` (ADR-001, v1 check list).
 

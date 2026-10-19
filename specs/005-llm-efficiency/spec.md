@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-16
 
-**Status**: Draft (revision 1, written from `docs/llm-efficiency-options.md` and the design brief of 2026-09-16)
+**Status**: Instrumentation and lever flags built; measurement open; 35 open, 4 superseded (see [specs/README.md](../README.md)). Drafted as: Draft (revision 1, written from `docs/llm-efficiency-options.md` and the design brief of 2026-09-16)
 
 **Input**: `docs/llm-efficiency-options.md` (the measured baseline, twelve levers in three tiers, the evaluation protocol, and the proposed phases), plus the owner's governing rule recorded on 2026-09-16: "instrument first, then one lever at a time behind a flag, default off, adopted only on measured evidence with no quality regression. I do not want everything implemented without testing the trade-offs." Every technical claim below comes from the design brief of 2026-09-16, which is the authority for what is VERIFIED and what is UNVERIFIED. **VERIFIED** means read in this tree, or read in a package installed under `reviewer/.venv/Lib/site-packages` (`openai` 3.13.0, `google-genai` 2.23.0), at the file and line cited, on 2026-09-16, or produced by a script run against this tree; it never means an API was observed behaving a certain way. **UNVERIFIED** means the claim needs a live provider call, a SOLIDWORKS seat, or a timed run, and every UNVERIFIED claim that gates a decision carries the probe id that settles it. The reviewer stays read-only. The providers are OpenAI (default) and Gemini through `agent/providers`; no part of this feature uses Claude.
 

@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-28. **Revised**: 2026-09-29, after a four-lens review, three re-reviews and owner decisions 17A to 27A; 2026-09-30, owner decision 30A; 2026-10-06, owner decisions 33A to 36A, from the owner's review of the plan.
 
-**Status**: Draft. Decisions 1A to 30A and 33A to 36A are the owner's (research §1, which also records 31A and 32A, the form of the owner's review of the plan on 2026-10-06). Defaults D1 to D17 (D15 now 17A) are reversible, with their alternatives in research §5.
+**Status**: Offline work complete through slice 8's offline gate; 24 open (see [specs/README.md](../README.md)). Drafted as: Draft. Decisions 1A to 30A and 33A to 36A are the owner's (research §1, which also records 31A and 32A, the form of the owner's review of the plan on 2026-10-06). Defaults D1 to D17 (D15 now 17A) are reversible, with their alternatives in research §5.
 
 **Input**:
 - The 2026-09-28 audit of `benchmark run`, `score` and `compare` (research §2): `cover-blind-tap` scores 0 of 2 for any reviewer; sibling rules are credited; a contradicted correct condition is no false alarm; `rms-part` measures argument-free checks; the pane's configuration cannot run; stopped reviews score as finished; a provider error stops the set.
