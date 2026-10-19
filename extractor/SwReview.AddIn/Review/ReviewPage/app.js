@@ -189,7 +189,9 @@
     stream: null,
     reconnectTimer: null,
     reconnectDelay: RECONNECT_MIN,
-    initPending: false
+    initPending: false,
+    // A `backend.restarted` arrived while an `init` was on its way: ask once more after it.
+    initAgain: false
   };
 
   var ui = {};
@@ -275,6 +277,19 @@
         closeStream();
         setTurnRunning(false);
         renderBackendState('The backend stopped. Reopen the pane to start it again.', true);
+        return;
+      case 'backend.restarted':
+        // Owner decision 143A: the host restarted the backend with settings saved while a turn
+        // ran. The port and token of the last `init` are the old child's and nothing else says
+        // so, so the page asks again, as after a save that restarted it at once - after the
+        // `init` already on its way, if there is one, since the host may have read that before
+        // the new child was up. The banner's sentence that it would restart is done with.
+        showBanner('');
+        if (state.initPending) {
+          state.initAgain = true;
+        } else {
+          requestInit(false);
+        }
         return;
       case 'events.frame':
         // One raw SSE frame, read by the host. Frames for a chat this page is no longer
@@ -3048,6 +3063,10 @@
       showBanner(error.message);
     }).then(function () {
       state.initPending = false;
+      if (state.initAgain) {
+        state.initAgain = false;
+        requestInit(false);
+      }
     });
   }
 

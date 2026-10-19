@@ -564,12 +564,40 @@ var h = {
         Answer(type, id, payload);
     }
 
+    /// <summary>
+    /// Holds every `ready` after the boot until <see cref="ReleaseReady"/>: an `init` on its way,
+    /// as one is while the host's pump answers it.
+    /// </summary>
+    public bool HoldReady { get; set; }
+
+    private readonly Queue<string> _heldReady = new Queue<string>();
+
+    /// <summary>How many `ready` messages are held, unanswered.</summary>
+    public int HeldReady => _heldReady.Count;
+
+    /// <summary>Answers every held `ready`, in order, with the `init` the host would give now.</summary>
+    public async Task ReleaseReady()
+    {
+        Assert.NotEmpty(_heldReady);
+        HoldReady = false;
+        while (_heldReady.Count > 0)
+        {
+            Reply("init", _heldReady.Dequeue(), Init());
+        }
+
+        await OffscreenReviewPage.Settled(Page);
+    }
+
     private void Answer(string type, string id, JsonElement payload)
     {
         switch (type)
         {
             case "ready":
-                if (_booted)
+                if (_booted && HoldReady)
+                {
+                    _heldReady.Enqueue(id);
+                }
+                else if (_booted)
                 {
                     Reply("init", id, Init());
                 }
