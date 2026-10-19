@@ -327,6 +327,10 @@ error, not ignored.)
   the open itself says SOLIDWORKS already had open (`swFileLoadWarning_AlreadyOpen` in its
   warnings, or `swFileAlreadyOpenWarn` in its errors): the host did not open it, so it neither
   checks nor closes it.
+- **When the visibility of new drawings cannot be restored** after the hidden open, nothing is read
+  and the host refuses: a drawing it opened is closed again under the same rule, one the open says
+  was already open is left open, and the sentence adds that drawings opened from now on may stay
+  hidden until SOLIDWORKS is restarted.
 - **Shipped off** until probe D14 passes at a seat: a closed candidate is answered "the read-only
   open of a confirmed drawing is not yet validated on a seat (feature 011 probe D14)", and an
   already-open one is still read.
