@@ -422,7 +422,7 @@ hid the tab and is not amended here.
   - The sentence needs no change: it is now what happens. The up-front refusal's old sentence
     made the kind of promise 143A removes, in a smaller place, so it is corrected with the
     behaviour.
-- **Edge cases**, each pinned by a test (T074, T076, T078, T080, T082):
+- **Edge cases**, each pinned by a test (T079, T081, T083, T085, T087):
   - However the turn ends - normally or stopped (`ended`), in an error (`failed`), asking the
     engineer (`waiting_engineer`), or a Send that failed back to waiting (`awaiting_send`) - the
     chat leaves `running`, and the restart is made. The contract names none of them as a reason
@@ -504,10 +504,10 @@ hid the tab and is not amended here.
     folder (FR-042).
   - The other tabs (Model check, Standards, Remodel) keep the port and token of their `init`
     after any settings restart, made at once or afterwards; that is as it was before 143A.
-- **Review**: an independent adversarial review of T074 to T079 found that a page re-init
+- **Review**: an independent adversarial review of T079 to T084 found that a page re-init
   closed the stream of the very turn that holds the restart back, leaving the page "running";
   that an `init` read while there was no backend hid the restart from the page; that a question
   the backend did not answer could release the restart under a turn; that the restart could end
   a remodel run; and that a call could be told the backend restarted when the restart had
-  failed. T082 and T083 fix each, test first.
-- **Tests**: T074, T076, T078, T080 and T082 in [tasks.md](tasks.md), each written first.
+  failed. T087 and T088 fix each, test first.
+- **Tests**: T079, T081, T083, T085 and T087 in [tasks.md](tasks.md), each written first.
