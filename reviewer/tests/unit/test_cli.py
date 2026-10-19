@@ -73,8 +73,10 @@ from tests.unit.test_benchmark_set_summary import (
 from tests.unit.test_rerender import (
     NAMED_COMPONENT,
     PLACEHOLDER,
+    REPORT_TITLE,
     REVIEW_FOLDER,
     copied,
+    standards_folder_holding_its_package,
     standards_run_folder,
 )
 from tests.unit.test_review_summary import BIG_ASSEMBLY
@@ -981,6 +983,26 @@ def test_report_keeps_a_standards_folder_s_verdict_header(tmp_path: Path) -> Non
     run_dir = standards_run_folder(tmp_path)
     shutil.copy(tmp_path / "package" / PACKAGE_FILE_NAME, run_dir / PACKAGE_FILE_NAME)
     written = (run_dir / REPORT_FILE).read_text(encoding="utf-8")
+    (run_dir / REPORT_FILE).unlink()
+
+    result = invoke("report", str(run_dir / "session.json"))
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert (run_dir / REPORT_FILE).read_text(encoding="utf-8") == written
+
+
+def test_report_gives_a_review_written_into_a_standards_folder_no_verdict_header(
+    tmp_path: Path,
+) -> None:
+    """`swreview review --out` into a standards check's folder writes its session over the
+    check's, and its report with no verdict header. `check.json` still names the check's
+    session, so the session in the folder is the review's: `swreview report` renders it as the
+    review wrote it (139A)."""
+    run_dir = standards_folder_holding_its_package(tmp_path)
+    reviewed = invoke("review", str(run_dir), "--out", str(run_dir), "--provider", "fake")
+    assert reviewed.exit_code == 0, reviewed.stdout + reviewed.stderr
+    written = (run_dir / REPORT_FILE).read_text(encoding="utf-8")
+    assert written.startswith(REPORT_TITLE)
     (run_dir / REPORT_FILE).unlink()
 
     result = invoke("report", str(run_dir / "session.json"))

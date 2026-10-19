@@ -149,6 +149,10 @@ exceptions accept-*` through `cli.py:1303` - go through one new `report/rerender
 folder holds one, re-prepends the standards verdict header when `check.json` names that
 family, ranks, writes `report.md` and `attention.json`, and returns both paths.
 
+*Amended 2026-10-19 (owner decision 139A, R6):* the header is re-prepended only when
+`check.json` also names the session being rendered, which is then the check's own; a review that
+claimed the folder is re-rendered without it, as it was written.
+
 **Why**: VERIFIED that `apply_disposition` re-renders with no package, which degrades Manifest
 Discrepancies to a placeholder and component names to ids (`report/markdown.py:129-134`), and
 would delete a standards folder's verdict header - an existing defect a second lossy writer
@@ -370,7 +374,10 @@ assertions go red when `attention.json` lands and are edited deliberately:
 
 `is_check_folder` reads through `read_rms_check` and returns False for a standards folder
 (VERIFIED by running it), so a review cannot claim a standards check folder today; the rotation
-scenario is rms-only and the spec says so.
+scenario is rms-only and the spec says so. *Corrected 2026-10-19 (owner decision 139A, R6):*
+that holds for a start without `retry_of`. `_claim_run_dir` consults the folder only when
+`retry_of` is absent, so a Retry claims a standards folder and rotates the check's session aside,
+and `swreview review --out` writes a review over one.
 
 The pre-run has one call site (`runner.py:953`) and one consumer (`:988-989`); its lever test
 is one line (`prerun.py:365`); `session.started` is emitted before it (`:930-939`), which makes
@@ -414,3 +421,52 @@ DOM through `dom.js`; the shared script may not name a DOM constructor.
 | Record the four timing inputs after each pilot run | owner | the checkpoint claim "timing recorded on every run" |
 | Held-out packages in `benchmarks/sets/pilot.json` | owner | any adoption decision (006 and 005 both record this) |
 | The gate's wall clock before the first model token on the pilot assembly | step 6 | step 7 |
+
+## R6. Owner decision 139A (2026-10-19): the verdict header is the check's own session's
+
+**Decision**: `render_folder_report` re-prepends a standards folder's verdict header only for the
+session the folder's `check.json` names: the condition 132A gave `check_run`, so one comparison
+now decides both whether the report names a model and whether it opens with the verdict. A
+review that claimed the folder re-renders as it was first written, with no header; the check's
+own session keeps its header byte for byte, in `session.json` or rotated aside to
+`session.1.json`; and a verdict that cannot be read refuses only the render that would rebuild
+the header from it.
+
+**Why**: a re-render must give back the report the run wrote (R2.7), and the header is written
+in one place only, `checks/standards/run.py` `_write_report`, for the session that run records
+in `check.json`. Neither writer of a review's report writes one: `ReviewRun.write_views`
+(`agent/runner.py`; the pane after every turn) and `swreview review` (`cli.py`, `review`) both
+render `render_report(session, package, ranking=...)`, with `check_run` false since 132A. Before
+this, `_header_of` was asked for every session in a folder whose `check.json` named the standards
+family, so `swreview report`, `timing`, `disposition` and `exceptions accept-*` prepended the
+check's verdict to a review's report, and refused the review outright when the check's verdict
+could not be read.
+
+**Evidence** (VERIFIED by running it on 2026-10-19, at `304092c`):
+
+- A standards check folder holding its package, claimed as `_rotate_previous` claims a folder
+  (`session.json` and `attention.json` moved to index 1) and reviewed with the scripted provider:
+  the review's `report.md` opened `# Design Review Report: dsn:1`; its re-render opened
+  `# Standards Check: dsn:1` and the check's verdict lines, and was byte-identical after them.
+  The same through the backend itself (`POST /sessions` with a `retry_of`, then
+  `GET /sessions/{chat_id}/report`, which served the file as written), and through
+  `swreview review <folder> --out <folder> --provider fake`, which writes over the check's
+  session rather than rotating it.
+- How a review reaches such a folder (R3, corrected): `POST /sessions` without `retry_of` refuses
+  a standards folder with `400 InvalidRunDir`, because `is_check_folder` reads through
+  `read_rms_check`, which fails on a standards record (it has no `scope`). `_claim_run_dir`
+  consults the folder only when `retry_of` is absent, so a Retry claims it, and
+  `swreview review --out` checks nothing. The pane does neither: every Review extracts into a new
+  folder (`RunFolders.CreateForDocument`), and a context review's Retry reuses the review's own.
+- No check's own report loses its header: every `check.json` a standards run writes names its
+  session, as `_write_check_record` has done since the family landed (`c5b05b7`, 006 round B).
+
+Tests, written first: `tests/unit/test_rerender.py`
+`test_a_review_that_claimed_a_standards_folder_re_renders_as_it_was_first_written` and
+`test_an_unreadable_verdict_refuses_only_the_session_whose_header_it_rebuilds`, and
+`tests/unit/test_cli.py` `test_report_gives_a_review_written_into_a_standards_folder_no_verdict_header`,
+failed before the change and pass after it.
+`test_the_check_s_session_a_review_rotated_aside_keeps_its_verdict_header_byte_for_byte` guards
+the check's own session, and `test_a_standards_folder_keeps_its_verdict_header_byte_for_byte`
+passes unchanged. Amended with it: `contracts/timing.md` section 2, and feature 001
+`contracts/cli.md`'s `swreview report` row.
