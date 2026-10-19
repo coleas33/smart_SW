@@ -17,17 +17,19 @@ namespace SwReview.Extractor.Dump;
 ///
 /// Everything is resolved from the host's own records, and any step that fails refuses with the
 /// sentence it is answered with and <b>opens nothing</b>:
-///   1. the run id names a review this host started, whose run folder holds its package;
+///   1. the run id names a review this host started, whose run folder holds its package - since
+///      decision 141A (2026-10-19), resolved to the review session it belongs to
+///      (<see cref="ConfirmedDrawingSession"/>);
 ///   2. the package's root document is the document this bridge is attached to;
 ///   3. the document is a part or assembly of that package, with a candidate row;
 ///   4. the row's path is the drawing beside the document by discovery's own rule
 ///      (<see cref="OpenDrawingDiscovery.CandidatePath"/>), compared as discovery compares, and
 ///      the file exists;
 ///   5. the package holds fewer than ten drawing records - and, since decision 136A
-///      (2026-10-19), fewer than ten with every open this host attempted for the review that left
-///      no record, so a refused open uses up its room and the opens are bounded whatever happens.
-///      When those opens alone reach ten, the request is refused at step 1, before the package is
-///      even loaded (on the decision's review).
+///      (2026-10-19), fewer than ten with every open this host attempted for the review session
+///      that left no record, so a refused open uses up its room and the opens are bounded whatever
+///      happens. When those opens alone reach ten, the request is refused at step 1, before the
+///      package is even loaded (on the decision's review).
 ///
 /// Then the drawing is opened through the guarded seam (<see cref="DrawingOpenScope"/>) when it is
 /// not open, read by the drawing phase with every drawing id continuing the package's own and each
@@ -38,19 +40,7 @@ namespace SwReview.Extractor.Dump;
 /// </summary>
 public sealed class ConfirmedDrawingRead : IConfirmedDrawingSource
 {
-    /// <summary>
-    /// Decision 136A (2026-10-19): the opens attempted for each review that left no drawing record -
-    /// refused, failed, or read and not merged - by the review's run folder. Kept for the life of
-    /// the process, not of this source: the add-in builds a source on every attach, and a count it
-    /// rebuilt would forget the attempts; a run is only ever resolved by the process that started
-    /// it (its review host's session records), so nothing outlives what this count must cover.
-    /// </summary>
-    private static readonly Dictionary<string, int> UnrecordedOpens =
-        new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-
-    private static readonly object UnrecordedOpensLock = new object();
-
-    private readonly Func<string, string?> _runFolderOf;
+    private readonly Func<string, ConfirmedDrawingSession?> _sessionOf;
     private readonly string? _attachedDocumentPath;
     private readonly Func<string, bool> _fileExists;
     private readonly DrawingOpenScope _open;
@@ -58,9 +48,12 @@ public sealed class ConfirmedDrawingRead : IConfirmedDrawingSource
     private readonly IDocumentSource _documents;
     private readonly IManifestSource _manifest;
 
-    /// <param name="runFolderOf">
-    /// The run folder of a review this host started, from its own session records, or null when
-    /// the run id names none. Never a path read from the request.
+    /// <param name="sessionOf">
+    /// The review session a run id names, from the host's own session records - the latest review
+    /// it started in the run folder of that name, which holds the folder and the session's count of
+    /// opens that left no record (decision 141A) - or null when the run id names none. Never a path
+    /// read from the request, and never a count the request could choose: the add-in builds a source
+    /// on every attach, and the count lives with the session, not with this source.
     /// </param>
     /// <param name="attachedDocumentPath">The document this bridge is attached to.</param>
     /// <param name="fileExists">Whether a file exists; nothing is read of it.</param>
@@ -69,7 +62,7 @@ public sealed class ConfirmedDrawingRead : IConfirmedDrawingSource
     /// <param name="documents">The document phase, for the drawing's row (<see cref="PropertyDumper"/>).</param>
     /// <param name="manifest">The manifest, for the drawing's entry (<see cref="ManifestBuilder"/>).</param>
     public ConfirmedDrawingRead(
-        Func<string, string?> runFolderOf,
+        Func<string, ConfirmedDrawingSession?> sessionOf,
         string? attachedDocumentPath,
         Func<string, bool> fileExists,
         DrawingOpenScope open,
@@ -77,7 +70,7 @@ public sealed class ConfirmedDrawingRead : IConfirmedDrawingSource
         IDocumentSource documents,
         IManifestSource manifest)
     {
-        _runFolderOf = runFolderOf ?? throw new ArgumentNullException(nameof(runFolderOf));
+        _sessionOf = sessionOf ?? throw new ArgumentNullException(nameof(sessionOf));
         _attachedDocumentPath = attachedDocumentPath;
         _fileExists = fileExists ?? throw new ArgumentNullException(nameof(fileExists));
         _open = open ?? throw new ArgumentNullException(nameof(open));
@@ -103,15 +96,16 @@ public sealed class ConfirmedDrawingRead : IConfirmedDrawingSource
             throw new ConfirmedDrawingRefused("No document was named, so no drawing was opened.");
         }
 
-        // 1. The run, from the host's own records.
-        string folder = _runFolderOf(runId)
+        // 1. The run, and the review session it belongs to, from the host's own records.
+        ConfirmedDrawingSession session = _sessionOf(runId)
             ?? throw new ConfirmedDrawingRefused(
                 $"'{runId}' is not a review this SOLIDWORKS session started, so no drawing was opened.");
+        string folder = session.RunFolder;
 
-        // Decision 136A's review: once the opens that left no record reach the limit on their own,
-        // the request is refused before the package is loaded, so a spent review costs SOLIDWORKS's
-        // thread nothing more. Below that, step 5 counts them with the package's records.
-        int unrecorded = UnrecordedOpensOf(folder);
+        // Decision 136A's review: once the session's opens that left no record reach the limit on
+        // their own, the request is refused before the package is loaded, so a spent session costs
+        // SOLIDWORKS's thread nothing more. Below that, step 5 counts them with the package's records.
+        int unrecorded = session.UnrecordedOpens;
         if (unrecorded >= OpenDrawingDiscovery.MaxAttachedDrawings)
         {
             throw new ConfirmedDrawingRefused(LimitReached(Opens(unrecorded, string.Empty)));
@@ -176,8 +170,9 @@ public sealed class ConfirmedDrawingRead : IConfirmedDrawingSource
                 $"'{candidate.Path}' is already a document of the review '{runId}', so it was not opened again.");
         }
 
-        // 5. The bound discovery keeps. Decision 136A: every open attempted for this review that left
-        // no record counts as well, so a refused open uses up its room and the opens stay bounded.
+        // 5. The bound discovery keeps. Decision 136A: every open attempted for this review session
+        // that left no record counts as well, so a refused open uses up its room and the opens stay
+        // bounded.
         int records = package.DrawingRecords?.Count ?? 0;
         if (records >= OpenDrawingDiscovery.MaxAttachedDrawings)
         {
@@ -238,7 +233,7 @@ public sealed class ConfirmedDrawingRead : IConfirmedDrawingSource
         {
             if (!recorded && _open.OpensAttempted != opensBefore)
             {
-                CountUnrecordedOpen(folder);
+                session.CountUnrecordedOpen();
             }
         }
     }
@@ -252,28 +247,6 @@ public sealed class ConfirmedDrawingRead : IConfirmedDrawingSource
         count == 1
             ? $"1 {more}open that was refused or failed"
             : $"{count} {more}opens that were refused or failed";
-
-    /// <summary>The opens attempted for the review in <paramref name="folder"/> that left no record.</summary>
-    private static int UnrecordedOpensOf(string folder)
-    {
-        lock (UnrecordedOpensLock)
-        {
-            return UnrecordedOpens.TryGetValue(KeyOf(folder), out int count) ? count : 0;
-        }
-    }
-
-    private static void CountUnrecordedOpen(string folder)
-    {
-        string key = KeyOf(folder);
-        lock (UnrecordedOpensLock)
-        {
-            UnrecordedOpens[key] = (UnrecordedOpens.TryGetValue(key, out int count) ? count : 0) + 1;
-        }
-    }
-
-    /// <summary>One run folder, however it is spelt: full, and without a trailing separator.</summary>
-    private static string KeyOf(string folder) =>
-        Path.GetFullPath(folder).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
     /// <summary>
     /// The read itself, while the drawing is open: the drawing phase over this one drawing - its

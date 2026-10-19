@@ -2136,6 +2136,130 @@ public sealed class ReviewHostTests
         }
     }
 
+    // ---- the review session a drawing.read belongs to (feature 011, decision 141A) -------------
+
+    /// <summary>
+    /// Decision 141A (2026-10-19): the opens a <c>drawing.read</c> attempted are counted per review
+    /// session. The run id resolves to its run folder by the lookup above, and the session is the
+    /// latest review this host started in that folder, each record holding its own: a Retry in the
+    /// same folder - a new record - is a new session, and the earlier record keeps the one it had.
+    /// </summary>
+    [Fact]
+    public void ADrawingReadBelongsToTheLatestReviewSessionOfItsRunFolder()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Open();
+            string run = world.TrackedRun("chat-1");
+            string name = Path.GetFileName(run);
+            string otherRun = world.TrackedRun("chat-other");
+            world.Host.TrackSession("chat-1", run);
+            world.Host.TrackSession("chat-other", otherRun);
+
+            ConfirmedDrawingSession first = world.Host.DrawingReadSession(name)!;
+
+            Assert.Same(world.Host.FindSession("chat-1")!.ConfirmedDrawings, first);
+            Assert.Equal(run, first.RunFolder);
+            Assert.Equal(0, first.UnrecordedOpens);
+
+            world.Host.TrackSession("chat-2", run);
+            ConfirmedDrawingSession second = world.Host.DrawingReadSession(name)!;
+
+            Assert.NotSame(first, second);
+            Assert.Same(world.Host.FindSession("chat-2")!.ConfirmedDrawings, second);
+            Assert.Same(first, world.Host.FindSession("chat-1")!.ConfirmedDrawings);
+            Assert.Same(
+                world.Host.FindSession("chat-other")!.ConfirmedDrawings,
+                world.Host.DrawingReadSession(Path.GetFileName(otherRun)));
+        }
+    }
+
+    /// <summary>
+    /// A Recheck replaces its record in place (feature 015), and the replacement is a new session:
+    /// the run id answers the replacement's, and the replaced record's count goes with it. It is the
+    /// latest started that answers, not the last in the list: rechecking a record that a later
+    /// session of the same folder follows (a Retry's) still makes the Recheck's the session.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ARecheckIsANewSessionAndTheRecordItReplacesTakesItsCountAway(bool aLaterSessionFollowsInTheList)
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Document = new PageDocument(@"C:\Fictional\FICT-assembly.SLDASM", "Default");
+            world.Backend.NextChatId = "FICT-rechecked";
+            world.Open();
+            string run = world.TrackedRun("FICT-earlier");
+            string name = Path.GetFileName(run);
+            world.Host.TrackSession("FICT-earlier", run, world.Document, new DateTimeOffset(Stamp), "not_sent");
+            ConfirmedDrawingSession earlier = world.Host.DrawingReadSession(name)!;
+            if (aLaterSessionFollowsInTheList)
+            {
+                world.Host.TrackSession("FICT-retried", run, world.Document, new DateTimeOffset(Stamp), "not_sent");
+            }
+
+            world.Receive("review.recheck", "recheck", new { chat_id = "FICT-earlier" });
+
+            SessionRecord replacement = world.Host.FindSession("FICT-rechecked")!;
+            Assert.NotNull(replacement);
+            Assert.Same(replacement.ConfirmedDrawings, world.Host.DrawingReadSession(name));
+            Assert.NotSame(earlier, replacement.ConfirmedDrawings);
+            Assert.DoesNotContain(world.Host.Sessions, record => ReferenceEquals(record.ConfirmedDrawings, earlier));
+            Assert.Equal(
+                aLaterSessionFollowsInTheList ? new[] { "FICT-rechecked", "FICT-retried" } : new[] { "FICT-rechecked" },
+                world.Host.Sessions.Select(record => record.ChatId));
+        }
+    }
+
+    /// <summary>
+    /// The session is the host's own, chosen from its records by the run id and by nothing else a
+    /// request supplies: every spelling the lookup matches answers the one session, asking again
+    /// makes none, and whatever the lookup refuses - an unknown id, a blank one, the folder spelt
+    /// as a path, a check's record, a forgotten review, a name two folders share - answers none.
+    /// </summary>
+    [Fact]
+    public void TheSessionIsTheHostsOwnHoweverTheRunIdIsSpeltAndAskingMakesNone()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Open();
+            string run = world.TrackedRun("chat-1");
+            string name = Path.GetFileName(run);
+            world.Host.TrackSession("chat-1", run);
+            ConfirmedDrawingSession session = world.Host.FindSession("chat-1")!.ConfirmedDrawings;
+
+            Assert.Same(session, world.Host.DrawingReadSession(name));
+            Assert.Same(session, world.Host.DrawingReadSession(name.ToUpperInvariant()));
+            Assert.Same(session, world.Host.DrawingReadSession(name));
+
+            foreach (string? refused in new[]
+            {
+                null, string.Empty, "   ", "20260913-142530-chat-404", run, run + Path.DirectorySeparatorChar,
+                Path.Combine("..", "runs", name),
+            })
+            {
+                Assert.True(
+                    world.Host.DrawingReadSession(refused) == null,
+                    "'" + refused + "' answered a session.");
+            }
+
+            string check = world.TrackedRun("bracket-check");
+            world.Host.TrackCheck(check);
+            Assert.Null(world.Host.DrawingReadSession(Path.GetFileName(check)));
+
+            string forgotten = world.TrackedRun("chat-gone");
+            world.Host.TrackSession("chat-gone", forgotten);
+            Assert.True(world.Host.ForgetSession("chat-gone"));
+            Assert.Null(world.Host.DrawingReadSession(Path.GetFileName(forgotten)));
+
+            string movedRoot = Path.Combine(world.Settings.RunRoot, "moved-root", name);
+            Directory.CreateDirectory(movedRoot);
+            world.Host.TrackSession("chat-moved", movedRoot);
+            Assert.Null(world.Host.DrawingReadSession(name));
+        }
+    }
+
     // ---- entity.show --------------------------------------------------------------------
 
     [Fact]

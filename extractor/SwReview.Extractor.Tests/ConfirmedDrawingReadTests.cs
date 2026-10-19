@@ -15,17 +15,21 @@ namespace SwReview.Extractor.Tests;
 
 /// <summary>
 /// Feature 011 T071 (contracts/confirmed-open.md section 2): the host side of <c>drawing.read</c>.
-/// Everything is resolved from the host's own records - the run folder from the run id, the
-/// candidate from the package - and any step that fails is a sentence with nothing opened: the
-/// fake seam records no call. Then the candidate is opened through the guarded seam, read by the
-/// drawing phase with every id continuing the package's, merged, and closed when the seam opened
-/// it.
+/// Everything is resolved from the host's own records - the review session and its run folder
+/// from the run id, the candidate from the package - and any step that fails is a sentence with
+/// nothing opened: the fake seam records no call. Then the candidate is opened through the guarded
+/// seam, read by the drawing phase with every id continuing the package's, merged, and closed when
+/// the seam opened it.
 /// </summary>
 public class ConfirmedDrawingReadTests : IDisposable
 {
     private const string RunId = "20260923-101500-chat0001";
 
     private readonly string _runFolder;
+
+    /// <summary>The review session the host resolves <see cref="RunId"/> to (decision 141A).</summary>
+    private readonly ConfirmedDrawingSession _session;
+
     private readonly FakeDrawingOpenHost _host = new FakeDrawingOpenHost();
     private readonly FakeConfirmedDrawingPhase _phase = new FakeConfirmedDrawingPhase();
     private readonly FakeConfirmedDrawingDocuments _documents = new FakeConfirmedDrawingDocuments();
@@ -43,6 +47,7 @@ public class ConfirmedDrawingReadTests : IDisposable
         _runFolder = Path.Combine(Path.GetTempPath(), "swreview-tests", Guid.NewGuid().ToString("N"), RunId);
         Directory.CreateDirectory(_runFolder);
         PackageAppender.Save(_runFolder, ConfirmedDrawingPackage.Build());
+        _session = new ConfirmedDrawingSession(_runFolder);
     }
 
     public void Dispose()
@@ -564,10 +569,116 @@ public class ConfirmedDrawingReadTests : IDisposable
         Assert.Throws<ConfirmedDrawingRefused>(() => Read(RunId, HousingId));
         _host.OpenAnswersNull = false;
 
-        ConfirmedDrawingResult result = Source(id => id == "20260923-111500-chat0002" ? otherFolder : null)
-            .Read("20260923-111500-chat0002", HousingId);
+        ConfirmedDrawingResult result =
+            Source(id => id == "20260923-111500-chat0002" ? new ConfirmedDrawingSession(otherFolder) : null)
+                .Read("20260923-111500-chat0002", HousingId);
 
         Assert.True(result.Opened);
+    }
+
+    // ---- decision 141A (2026-10-19): the count is the review session's -------------------------------
+
+    /// <summary>
+    /// A Retry or Recheck is a new review session in the same run folder (the add-in's
+    /// <c>ReviewHost.RetryContextReview</c> and <c>RecheckReview</c>), and the host hands the read the
+    /// new session's own: its count starts at nothing, so it opens again where the earlier session's
+    /// failed opens had spent the limit, and the earlier session's stays spent.
+    /// </summary>
+    [Fact]
+    public void ANewReviewSessionInTheSameRunFolderStartsItsOwnCount()
+    {
+        PackageAppender.Save(_runFolder, ConfirmedDrawingPackage.Build(drawings: 0));
+        _host.OpenAnswersNull = true;
+        for (int attempt = 0; attempt < 10; attempt++)
+        {
+            Assert.Throws<ConfirmedDrawingRefused>(() => Read(RunId, attempt % 2 == 0 ? HousingId : PinId));
+        }
+
+        _host.OpenAnswersNull = false;
+        _host.Calls.Clear();
+        var retried = new ConfirmedDrawingSession(_runFolder);
+
+        ConfirmedDrawingResult result = Source(id => id == RunId ? retried : null).Read(RunId, HousingId);
+
+        Assert.True(result.Opened);
+        Assert.Single(_host.Calls, call => call.Name == "OpenDoc6");
+        Assert.Equal(0, retried.UnrecordedOpens);
+        Assert.Equal(10, _session.UnrecordedOpens);
+
+        _host.Calls.Clear();
+        ConfirmedDrawingRefused refusal = Assert.Throws<ConfirmedDrawingRefused>(() => Read(RunId, PinId));
+        Assert.StartsWith("the limit of ten drawings for this review is reached: 10 opens", refusal.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(_host.Calls, call => call.Name == "OpenDoc6");
+    }
+
+    /// <summary>
+    /// Two review sessions of one run folder never share a count. With eight drawings held, each
+    /// session's refused open leaves the other's room alone, so the first still opens the ninth -
+    /// shared, the two refused opens would have filled the ten - and the second is then refused by
+    /// the nine records and its own one refused open, never the other's.
+    /// </summary>
+    [Fact]
+    public void TwoSessionsOfOneRunFolderDoNotShareACount()
+    {
+        PackageAppender.Save(_runFolder, ConfirmedDrawingPackage.Build(drawings: 8));
+        var other = new ConfirmedDrawingSession(_runFolder);
+        _host.OpenAnswersNull = true;
+        Assert.Throws<ConfirmedDrawingRefused>(() => Read(RunId, HousingId));
+        Assert.Throws<ConfirmedDrawingRefused>(() => ReadIn(other, HousingId));
+        _host.OpenAnswersNull = false;
+
+        ConfirmedDrawingResult result = Read(RunId, PinId);
+
+        Assert.True(result.Opened);
+        Assert.Equal(9, Reloaded().DrawingRecords!.Count);
+        _host.Calls.Clear();
+        ConfirmedDrawingRefused refusal = Assert.Throws<ConfirmedDrawingRefused>(() => ReadIn(other, HousingId));
+        Assert.StartsWith(
+            "the limit of ten drawings for this review is reached: 9 in the package and 1 more open that was refused "
+                + "or failed, so this one was not opened",
+            refusal.Message,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(_host.Calls, call => call.Name == "OpenDoc6");
+        Assert.Equal(1, _session.UnrecordedOpens);
+        Assert.Equal(1, other.UnrecordedOpens);
+    }
+
+    /// <summary>
+    /// The count is keyed by the session the host resolves, never by anything a request supplies:
+    /// a run id spelt as the host's own lookup still matches it (ignoring case), any document of
+    /// the review, and a source built anew for every request all reach the one session, so a spent
+    /// session stays spent and nothing more is opened.
+    /// </summary>
+    [Fact]
+    public void NothingARequestSuppliesResetsTheCount()
+    {
+        PackageAppender.Save(_runFolder, ConfirmedDrawingPackage.Build(drawings: 0));
+        string shouted = RunId.ToUpperInvariant();
+        Func<string, ConfirmedDrawingSession?> records =
+            id => string.Equals(id, RunId, StringComparison.OrdinalIgnoreCase) ? _session : null;
+        _host.OpenAnswersNull = true;
+        for (int attempt = 0; attempt < 10; attempt++)
+        {
+            string runId = attempt % 2 == 0 ? RunId : shouted;
+            Assert.Throws<ConfirmedDrawingRefused>(() => Source(records).Read(runId, attempt % 3 == 0 ? HousingId : PinId));
+        }
+
+        _host.OpenAnswersNull = false;
+        _host.Calls.Clear();
+
+        foreach (string runId in new[] { RunId, shouted })
+        {
+            foreach (string documentId in new[] { HousingId, PinId })
+            {
+                ConfirmedDrawingRefused refusal = Assert.Throws<ConfirmedDrawingRefused>(
+                    () => Source(records).Read(runId, documentId));
+                Assert.StartsWith("the limit of ten drawings for this review is reached", refusal.Message, StringComparison.Ordinal);
+            }
+        }
+
+        Assert.DoesNotContain(_host.Calls, call => call.Name == "OpenDoc6");
+        Assert.Empty(_phase.Seen);
+        Assert.Equal(10, _session.UnrecordedOpens);
     }
 
     // ---- the switch ping reports (feature 013 T072, contracts/drawing-capability.md section 1) --
@@ -592,12 +703,16 @@ public class ConfirmedDrawingReadTests : IDisposable
 
     private ConfirmedDrawingResult Read(string runId, string documentId) => Source().Read(runId, documentId);
 
-    private ConfirmedDrawingRead Source() =>
-        Source(id => string.Equals(id, RunId, StringComparison.Ordinal) ? _runFolder : null);
+    /// <summary>A read that <see cref="RunId"/> resolves to <paramref name="session"/>, as a new session of the same review would.</summary>
+    private ConfirmedDrawingResult ReadIn(ConfirmedDrawingSession session, string documentId) =>
+        Source(id => string.Equals(id, RunId, StringComparison.Ordinal) ? session : null).Read(RunId, documentId);
 
-    private ConfirmedDrawingRead Source(Func<string, string?> runFolderOf) =>
+    private ConfirmedDrawingRead Source() =>
+        Source(id => string.Equals(id, RunId, StringComparison.Ordinal) ? _session : null);
+
+    private ConfirmedDrawingRead Source(Func<string, ConfirmedDrawingSession?> sessionOf) =>
         new ConfirmedDrawingRead(
-            runFolderOf,
+            sessionOf,
             _attachedDocument,
             path => _existing.Contains(path),
             new DrawingOpenScope(_host, null, _seatValidated),

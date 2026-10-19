@@ -1308,7 +1308,7 @@ public sealed class ToolServiceWiringTests
     }
 
     /// <summary>
-    /// Null review records - <c>ToolServiceOptions.ReviewRunDirectory</c>'s default - build no
+    /// Null review records - <c>ToolServiceOptions.DrawingReadSession</c>'s default - build no
     /// source, and the command then answers the dispatcher's sentence rather than reading from
     /// records the host does not keep.
     /// </summary>
@@ -1632,6 +1632,44 @@ public sealed class ToolServiceWiringTests
             DumpPhase drawingRow = Assert.Single(after.Extractor.Phases, phase => phase.Name == PackageWriter.DrawingPhase);
             Assert.Equal(DumpPhaseStatus.Skipped, drawingRow.Status);
             Assert.Null(drawingRow.ElapsedMs);
+        }
+    }
+
+    /// <summary>
+    /// Decision 141A (2026-10-19), through the add-in's own records: once a review session's opens
+    /// have failed ten times nothing more is opened for it, and a new session in the same run folder
+    /// - what a Retry or Recheck starts - is resolved by the same run id to a count of its own, so
+    /// the next request opens again. The request is the same line both times; only the host's
+    /// records changed.
+    /// </summary>
+    [Fact]
+    public void ANewReviewSessionInTheSameRunFolderStartsItsOwnCountThroughTheReviewHostsRecords()
+    {
+        using (var world = new DrawingReadWorld(seatValidated: true))
+        {
+            string run = world.ReviewRun("chat-1");
+            string name = Path.GetFileName(run);
+            world.Seat.OpenRefused = true;
+            for (int attempt = 0; attempt < 10; attempt++)
+            {
+                Assert.Equal(BridgeStatus.Error, world.Read(name, world.HousingId, DrawingReadWorld.ReviewSecret).Status);
+            }
+
+            BridgeResponse spent = world.Read(name, world.HousingId, DrawingReadWorld.ReviewSecret);
+            Assert.StartsWith(
+                "the limit of ten drawings for this review is reached: 10 opens that were refused or failed",
+                spent.Error,
+                StringComparison.Ordinal);
+            Assert.Equal(10, world.Seat.Calls.Count(call => call == "OpenDoc6"));
+
+            world.NewSessionIn(run, "chat-2");
+            world.Seat.OpenRefused = false;
+            BridgeResponse response = world.Read(name, world.HousingId, DrawingReadWorld.ReviewSecret);
+
+            Assert.Equal(BridgeStatus.Ok, response.Status);
+            Assert.True(Assert.IsType<ConfirmedDrawingResult>(response.Result).Opened);
+            Assert.Equal(11, world.Seat.Calls.Count(call => call == "OpenDoc6"));
+            Assert.All(world.LookupRunIds, runId => Assert.Equal(name, runId));
         }
     }
 
@@ -2715,7 +2753,7 @@ public sealed class ToolServiceWiringTests
             Recorder = new SwGateRecorder();
             Seat = new FakeDrawingSeat(new SwGate { Observer = Recorder });
             Source = ToolServiceHost.ConfirmedDrawingSource(
-                reviewRecords ? Lookup : (Func<string, string?>?)null,
+                reviewRecords ? Lookup : (Func<string, ConfirmedDrawingSession?>?)null,
                 AssemblyPath,
                 Recorder,
                 Seat,
@@ -2806,6 +2844,12 @@ public sealed class ToolServiceWiringTests
             return folder;
         }
 
+        /// <summary>
+        /// A new review session in a review's own run folder, as a Retry or a Recheck starts one
+        /// (decision 141A): a new record for another chat, the folder and its package unchanged.
+        /// </summary>
+        public void NewSessionIn(string folder, string chatId) => _host.TrackSession(chatId, folder);
+
         /// <summary>A Model check's, a Standards run's or a remodel run's folder, tracked as one.</summary>
         public string CheckRun(string name)
         {
@@ -2850,8 +2894,8 @@ public sealed class ToolServiceWiringTests
             }
         }
 
-        /// <summary>The add-in's lookup, <see cref="ReviewHost.ReviewRunDirectory"/>, watched.</summary>
-        private string? Lookup(string runId)
+        /// <summary>The add-in's lookup, <see cref="ReviewHost.DrawingReadSession"/>, watched.</summary>
+        private ConfirmedDrawingSession? Lookup(string runId)
         {
             lock (_lookupLock)
             {
@@ -2859,7 +2903,7 @@ public sealed class ToolServiceWiringTests
                 _lookupThreads.Add(Thread.CurrentThread.ManagedThreadId);
             }
 
-            return _host.ReviewRunDirectory(runId);
+            return _host.DrawingReadSession(runId);
         }
 
         private string RunFolder(string name)
@@ -2979,11 +3023,19 @@ public sealed class ToolServiceWiringTests
 
         public void DocumentVisible(bool visible, int documentType) => Record(nameof(DocumentVisible));
 
+        /// <summary>When set, SOLIDWORKS answers every open with no document (decision 141A's tests).</summary>
+        public bool OpenRefused { get; set; }
+
         public object? OpenDoc6(string path, int documentType, int options, string configuration, out int errors, out int warnings)
         {
             Record(nameof(OpenDoc6));
             errors = 0;
             warnings = 0;
+            if (OpenRefused)
+            {
+                return null;
+            }
+
             var document = new object();
             _open[path] = document;
             return document;
