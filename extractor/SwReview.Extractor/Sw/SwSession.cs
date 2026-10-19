@@ -112,9 +112,10 @@ public sealed class SwSession : ISwSession
     /// <summary>
     /// Opens a session on <paramref name="documentPath"/>, or on the active document when
     /// it is null. A document that is already open is used as it stands; a part or assembly
-    /// that is not is opened READ ONLY, which is the only file-opening call the extractor makes.
-    /// A drawing is refused (<see cref="AttachPurpose.Model"/>): this is the form every caller
-    /// but the extraction uses, and each of them needs a configuration.
+    /// that is not is opened READ ONLY by <see cref="OpenReadOnly"/>, one of the extractor's
+    /// file-opening calls (decision 137A: not the only one; <see cref="OpenReadOnly"/> names the
+    /// others). A drawing is refused (<see cref="AttachPurpose.Model"/>): this is the form every
+    /// caller but the extraction uses, and each of them needs a configuration.
     /// </summary>
     public static SwSession Attach(
         ISldWorks swApp, string? documentPath, string? configurationName, SwGate? gate = null)
@@ -329,9 +330,17 @@ public sealed class SwSession : ISwSession
     }
 
     /// <summary>
-    /// The one file-opening call in the extractor. Read-only and silent; the document is
-    /// left open afterwards so persistent references stay resolvable for a later
-    /// <c>resolve</c> or <c>capture</c>.
+    /// The console attach's open: a part or assembly named to <see cref="Attach"/> or
+    /// <see cref="AttachForDump"/> that is not open (<c>swreview-extract --doc</c>, among others) is
+    /// opened with <c>OpenDoc6</c>, read-only and silent. The document is left open afterwards so
+    /// persistent references stay resolvable for a later <c>resolve</c> or <c>capture</c>.
+    ///
+    /// It is one of the extractor's file-opening calls, not the only one (decision 137A,
+    /// 2026-10-19): feature 011 opens a drawing the engineer confirmed, read-only and hidden,
+    /// through <see cref="DrawingOpenScope"/> (<c>ISldWorks.OpenDoc6</c> under
+    /// <c>DrawingOpenGuard</c>, which probe D14 also runs), and feature 004 opens the re-modeler's
+    /// own copy (<c>remodel.open</c>) and reopens <c>probe remodel</c>'s throwaway part with
+    /// <c>OpenDoc7</c>.
     ///
     /// The existence check lives HERE, after <c>GetOpenDocumentByName</c> has already said
     /// no, and nowhere earlier. Mapped drives and EPDM vault views are per logon session, so
