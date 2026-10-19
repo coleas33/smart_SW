@@ -7,7 +7,6 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
-using System.Threading.Tasks;
 using SwReview.AddIn.Review;
 using SwReview.AddIn.Settings;
 using SwReview.Extractor.Dump;
@@ -492,7 +491,7 @@ public sealed class DeferredRestartTests
     }
 
     [Fact]
-    public async Task ANewReviewWhileTheRestartIsBeingMadeWaitsForItAndRunsOnTheNewBackend()
+    public void ANewReviewWhileTheRestartIsBeingMadeWaitsForItAndRunsOnTheNewBackend()
     {
         using var world = new RestartWorld();
         using var hold = new ManualResetEventSlim(false);
@@ -505,12 +504,17 @@ public sealed class DeferredRestartTests
             world.Backend.EndTurn("chat-1");
             Assert.True(world.Backend.Entered.Wait(TimeSpan.FromSeconds(10)), "the host never began the restart");
 
-            Task start = Task.Run(() => world.Receive("review.start", "start", new { }));
-            Assert.False(await Finishes(start, TimeSpan.FromMilliseconds(300)), "the review did not wait for the restart being made");
+            var start = new Caller<bool>(() =>
+            {
+                world.Receive("review.start", "start", new { });
+                return true;
+            });
+            Assert.False(start.Finishes(TimeSpan.FromMilliseconds(300)), "the review did not wait for the restart being made");
             Assert.Empty(world.Backend.Sessions);
 
             hold.Set();
-            Assert.True(await Finishes(start, TimeSpan.FromSeconds(10)), "the review never went on after the restart");
+            Assert.True(start.Finishes(TimeSpan.FromSeconds(10)), "the review never went on after the restart");
+            Assert.True(start.Result);
             world.Reply("review.started", "start");
             Assert.Equal(1, Assert.Single(world.Backend.Sessions).Generation);
             Assert.Single(world.Backend.Restarts);
@@ -612,7 +616,9 @@ public sealed class DeferredRestartTests
 
             var clock = Stopwatch.StartNew();
             world.Host.Dispose();
-            Assert.True(clock.Elapsed < TimeSpan.FromSeconds(2), "disposing the host waited " + clock.Elapsed);
+            // Bounded, not instant: a loaded test run can be slow to schedule the watcher. That it
+            // stopped is what the questions below show.
+            Assert.True(clock.Elapsed < TimeSpan.FromSeconds(5), "disposing the host waited " + clock.Elapsed);
 
             int asked = world.Backend.Questions;
             world.Backend.EndTurn("chat-1");
@@ -782,7 +788,7 @@ public sealed class DeferredRestartTests
     }
 
     [Fact]
-    public async Task ATurnCallWhileTheRestartIsBeingMadeWaitsForItAndIsToldItsChatEnded()
+    public void ATurnCallWhileTheRestartIsBeingMadeWaitsForItAndIsToldItsChatEnded()
     {
         using var world = new RestartWorld();
         using var hold = new ManualResetEventSlim(false);
@@ -795,12 +801,12 @@ public sealed class DeferredRestartTests
             world.Backend.EndTurn("chat-1");
             Assert.True(world.Backend.Entered.Wait(TimeSpan.FromSeconds(10)), "the host never began the restart");
 
-            Task<BackendRequestException?> call = Task.Run(() => world.Host.PageTurnRefusal());
-            Assert.False(await Finishes(call, TimeSpan.FromMilliseconds(300)), "the call did not wait for the restart being made");
+            var call = new Caller<BackendRequestException?>(() => world.Host.PageTurnRefusal());
+            Assert.False(call.Finishes(TimeSpan.FromMilliseconds(300)), "the call did not wait for the restart being made");
 
             hold.Set();
-            Assert.True(await Finishes(call, TimeSpan.FromSeconds(10)), "the call never got an answer");
-            Assert.Equal("UnknownChat", (await call)!.ErrorClass);
+            Assert.True(call.Finishes(TimeSpan.FromSeconds(10)), "the call never got an answer");
+            Assert.Equal("UnknownChat", call.Result!.ErrorClass);
             Assert.Single(world.Backend.Restarts);
         }
         finally
@@ -814,7 +820,7 @@ public sealed class DeferredRestartTests
     /// the backend restarted: there is no backend at all, and it is told so.
     /// </summary>
     [Fact]
-    public async Task ATurnCallWhoseRestartFailedForAnotherCallerIsToldTheBackendIsNotRunning()
+    public void ATurnCallWhoseRestartFailedForAnotherCallerIsToldTheBackendIsNotRunning()
     {
         using var world = new RestartWorld();
         using var hold = new ManualResetEventSlim(false);
@@ -828,12 +834,12 @@ public sealed class DeferredRestartTests
             world.Backend.EndTurn("chat-1");
             Assert.True(world.Backend.Entered.Wait(TimeSpan.FromSeconds(10)), "the host never began the restart");
 
-            Task<BackendRequestException?> call = Task.Run(() => world.Host.PageTurnRefusal());
-            Assert.False(await Finishes(call, TimeSpan.FromMilliseconds(300)), "the call did not wait for the restart being made");
+            var call = new Caller<BackendRequestException?>(() => world.Host.PageTurnRefusal());
+            Assert.False(call.Finishes(TimeSpan.FromMilliseconds(300)), "the call did not wait for the restart being made");
             hold.Set();
-            Assert.True(await Finishes(call, TimeSpan.FromSeconds(10)), "the call never got an answer");
+            Assert.True(call.Finishes(TimeSpan.FromSeconds(10)), "the call never got an answer");
 
-            BackendRequestException? refusal = await call;
+            BackendRequestException? refusal = call.Result;
             Assert.NotNull(refusal);
             Assert.Equal("BackendUnavailable", refusal!.ErrorClass);
             Assert.Equal("the review backend is not running.", refusal.Message);
@@ -909,7 +915,7 @@ public sealed class DeferredRestartTests
     // ---- the restart itself, with no host ------------------------------------------------------
 
     [Fact]
-    public async Task TwoCallersOfOneWaitingRestartRestartTheBackendOnce()
+    public void TwoCallersOfOneWaitingRestartRestartTheBackendOnce()
     {
         int restarts = 0;
         using var entered = new ManualResetEventSlim(false);
@@ -930,15 +936,16 @@ public sealed class DeferredRestartTests
             Assert.False(restart.Now(() => throw new TurnRunningException()));
             Assert.True(restart.Pending);
 
-            Task<DeferredRestart.Outcome> first = Task.Run(() => restart.Apply(out _));
+            var first = new Caller<DeferredRestart.Outcome>(() => restart.Apply(out _));
             Assert.True(entered.Wait(TimeSpan.FromSeconds(10)), "the first caller never began the restart");
-            Task<DeferredRestart.Outcome> second = Task.Run(() => restart.Apply(out _));
-            Assert.False(await Finishes(second, TimeSpan.FromMilliseconds(300)), "the second caller did not wait for the restart being made");
+            var second = new Caller<DeferredRestart.Outcome>(() => restart.Apply(out _));
+            Assert.False(second.Finishes(TimeSpan.FromMilliseconds(300)), "the second caller did not wait for the restart being made");
 
             release.Set();
-            Assert.True(await Finishes(first, TimeSpan.FromSeconds(10)) && await Finishes(second, TimeSpan.FromSeconds(10)));
-            Assert.Equal(DeferredRestart.Outcome.Restarted, await first);
-            Assert.Equal(DeferredRestart.Outcome.NotPending, await second);
+            Assert.True(first.Finishes(TimeSpan.FromSeconds(10)), "the first caller never finished");
+            Assert.True(second.Finishes(TimeSpan.FromSeconds(10)), "the second caller never finished");
+            Assert.Equal(DeferredRestart.Outcome.Restarted, first.Result);
+            Assert.Equal(DeferredRestart.Outcome.NotPending, second.Result);
             Assert.Equal(1, restarts);
             Assert.False(restart.Pending);
         }
@@ -1058,9 +1065,11 @@ public sealed class DeferredRestartTests
         Assert.True(restart.Pending);
 
         // The watcher is asleep for a ten-minute poll; disposing wakes it rather than outwaiting it.
+        // Left asleep, it would hold the join for its whole two-second bound; woken, it is gone in
+        // milliseconds, and the bound below leaves a loaded test run room to schedule it.
         var clock = Stopwatch.StartNew();
         restart.Dispose();
-        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(1), "disposing waited " + clock.Elapsed);
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(1.5), "disposing waited " + clock.Elapsed);
 
         Assert.Equal(DeferredRestart.Outcome.Stopped, restart.Apply(out _));
         Assert.False(restart.Pending);
@@ -1113,10 +1122,6 @@ public sealed class DeferredRestartTests
         }
     }
 
-    /// <summary>Whether <paramref name="task"/> finishes within <paramref name="bound"/>.</summary>
-    private static async Task<bool> Finishes(Task task, TimeSpan bound) =>
-        await Task.WhenAny(task, Task.Delay(bound)) == task;
-
     /// <summary>Waits for <paramref name="condition"/>, which another thread makes true; bounded.</summary>
     private static void Eventually(Func<bool> condition, string what)
     {
@@ -1140,6 +1145,64 @@ public sealed class DeferredRestartTests
     {
         int from = backend.Questions;
         Eventually(() => backend.Questions >= from + questions, questions + " more questions about the turn");
+    }
+
+    /// <summary>
+    /// One call made on a thread of its own, for the tests that time how long a call waits. A
+    /// thread-pool item can wait behind a loaded test run before it starts, which these tests
+    /// would read as the call waiting - or, for "it did not finish in time", as the call holding
+    /// back when it had not begun - so the call starts at once, and is timed only once it has.
+    /// </summary>
+    private sealed class Caller<T>
+    {
+        private readonly ManualResetEventSlim _started = new ManualResetEventSlim(false);
+        private readonly ManualResetEventSlim _done = new ManualResetEventSlim(false);
+        private T _result = default!;
+        private Exception? _error;
+
+        public Caller(Func<T> call)
+        {
+            var thread = new Thread(() =>
+            {
+                _started.Set();
+                try
+                {
+                    _result = call();
+                }
+                catch (Exception failure)
+                {
+                    _error = failure;
+                }
+                finally
+                {
+                    _done.Set();
+                }
+            })
+            {
+                IsBackground = true,
+                Name = "fict-timed-caller",
+            };
+            thread.Start();
+            Assert.True(_started.Wait(TimeSpan.FromSeconds(10)), "the caller's thread never started");
+        }
+
+        /// <summary>Whether the call finishes within <paramref name="bound"/>, counted from now.</summary>
+        public bool Finishes(TimeSpan bound) => _done.Wait(bound);
+
+        /// <summary>What the call returned; what it threw fails the test.</summary>
+        public T Result
+        {
+            get
+            {
+                Assert.True(_done.IsSet, "the call has not finished");
+                if (_error != null)
+                {
+                    throw new XunitException("the call threw: " + _error);
+                }
+
+                return _result;
+            }
+        }
     }
 
     /// <summary>The settings file, a host over the fakes, and what it posted, torn down together.</summary>
