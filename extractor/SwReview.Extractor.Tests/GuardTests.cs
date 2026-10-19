@@ -946,9 +946,11 @@ public class DrawingFamilyDenylistTests
     /// stage-1 allowlist key, a member <see cref="RemodelGuard"/> refuses itself, or a member a
     /// sanctioned path already calls by its bare name - the extractor's read-only model open and
     /// feature 004's two opens of documents it created (found by the read audit, T003). Edited
-    /// deliberately for decision 136A (2026-10-19): or the member half of a command the bridge
-    /// answers, whose whole name the dispatcher hands the read-only guard (<c>Close</c>, of
-    /// <c>remodel.close</c>).
+    /// deliberately for decision 136A (2026-10-19), and narrowed on its review the same day: one
+    /// exclusion more and only this one, <c>Close</c>, the member half of the bridge command
+    /// <c>remodel.close</c>, which the dispatcher hands the read-only guard whole
+    /// (<see cref="DocumentLifecycleFamilyTests.NoCommandTheBridgeAnswersIsRefusedByTheReadOnlyGuard"/>).
+    /// Another command's member half is no reason: excluding one would need a decision of its own.
     /// </summary>
     [Fact]
     public void EveryExclusionHasOneOfTheContractsReasons()
@@ -961,8 +963,10 @@ public class DrawingFamilyDenylistTests
         };
         var bareKeys = new HashSet<string>(
             RemodelGuard.AllowedKeys.Select(CallKey.BareName), StringComparer.OrdinalIgnoreCase);
-        var commandHalves = new HashSet<string>(
-            BridgeCommands.All.Concat(RemodelCommands.All).Select(CallKey.BareName), StringComparer.OrdinalIgnoreCase);
+
+        // The one exclusion a bridge command's member half explains, and the command it is the half of.
+        const string RemodelCloseHalf = "Close";
+        Assert.Equal(RemodelCloseHalf, CallKey.BareName(RemodelCommands.Close), StringComparer.OrdinalIgnoreCase);
 
         foreach (string member in ExcludedMembers)
         {
@@ -970,7 +974,7 @@ public class DrawingFamilyDenylistTests
                 bareKeys.Contains(member)
                     || RemodelGuard.ExcludedMembers.Contains(member, StringComparer.OrdinalIgnoreCase)
                     || sanctionedCalls.Contains(member)
-                    || commandHalves.Contains(member),
+                    || string.Equals(member, RemodelCloseHalf, StringComparison.Ordinal),
                 $"{member} is excluded from the feature 011 denials without a reason contracts/guard.md "
                     + "section 3 gives.");
         }
@@ -1573,11 +1577,14 @@ public class DocumentLifecycleFamilyTests
     }
 
     /// <summary>
-    /// The bridge hands every command name to the read-only guard before it looks the command up
-    /// (<c>BridgeDispatcher.Dispatch</c>), and the guard judges a qualified name by its member half -
-    /// so a denial spelled like a command's second half would refuse that command. This is why
-    /// <c>IModelDoc2.Close</c> stays allowed: decision 136A first denied it, and <c>remodel.close</c>
-    /// stopped answering.
+    /// Pins today's dispatcher: <c>BridgeDispatcher.Dispatch</c> hands every command name to the
+    /// read-only guard before it looks the command up, and the guard judges a qualified name by the
+    /// part after the dot - so <c>remodel.close</c>, <c>remodel.save</c> and <c>remodel.rebuild</c> are
+    /// judged as <c>close</c>, <c>save</c> and <c>rebuild</c>, and a denial of <c>Close</c>,
+    /// <c>Save</c> or <c>Rebuild</c> would refuse those commands. That is why <c>IModelDoc2.Close</c>
+    /// stays allowed: decision 136A first denied it, and <c>remodel.close</c> stopped answering. It
+    /// cannot be denied until the dispatcher stops passing known command names through the guard,
+    /// an open owner question (research R8.5); this test then gives way to one of the dispatcher.
     /// </summary>
     [Fact]
     public void NoCommandTheBridgeAnswersIsRefusedByTheReadOnlyGuard()
