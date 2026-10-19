@@ -77,5 +77,7 @@ Feature gates in a `tasks.md` may add checks (the ledger check, the replay check
 - Keep changes surgical: touch what the task needs, match the surrounding style, remove only the
   orphans your change created.
 - Commit messages: `Feature NNN Tnnn: what changed` for task work, `Record passing <slice> gate on
-  main` for gate records; the body says why, and names owner decisions (`112A`) it applies.
+  main` for gate records; the body says why, and names owner decisions (`112A`) it applies. The
+  only trailer is `Co-Authored-By`, naming an agent that wrote the change; no session links such
+  as `Claude-Session` (decision 135A).
 - Prefer explicit code over clever code; DRY; handle more edge cases rather than fewer.

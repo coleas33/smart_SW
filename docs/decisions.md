@@ -212,11 +212,14 @@ whatever its question was numbered when it was asked, and is entered in the tabl
 same commit as the change it governs, with its date, a one-line summary, its status and where
 else it is recorded (the feature's `research.md` when a feature governs it, the commits that
 carry it out). Ids before 121A stay as they were written; the runs above remain their index. The
-next new decision is **132A**.
+next new decision is **136A**.
 
 **The mapping.** The first eight decisions of 2026-10-18 were asked in two rounds of four
 questions, each labelled 1A to 4A at the time; a third round, asked as 5A and 6A, became 129A and
 130A, and a fourth, asked as 7A and 8A, gave the go for the rewrite and became 131A (8A).
+A fifth round of four, asked on 2026-10-19 as 1A to 4A, became 132A to 135A; 132A to 134A were
+entered when they were taken, so their ids are held, and each one's status is completed in the
+commit that carries it out.
 The first round's 2A, 3A and 4A were written into commit
 messages on `main` and into the documentation branch under those labels before decision 128A
 numbered them, and those messages are not rewritten for it: read "2A" in a commit of that day as
@@ -235,6 +238,10 @@ numbered them, and those messages are not rewritten for it: read "2A" in a commi
 | 129A | 2026-10-18 | 5A | The history rewrite (121A) also maps every commit's author and committer email to the owner's GitHub no-reply address, so no commit carries a personal email; commits use the no-reply address from then on. | Done with 121A. | Every commit's author and committer. |
 | 130A | 2026-10-18 | 6A | The history rewrite (121A) also replaces a personal user-folder name in the path forms it appears in (Windows user folders, `/home/...`), and only those forms; the bare word is not replaced. | Done with 121A. | The rewritten history; test values naming a person by first name alone stay, as decided. |
 | 131A | 2026-10-18 | 8A | Protect `main`: the four CI jobs (Windows and Linux, Python 3.11 and 3.12) are required and must be up to date; changes reach `main` only through a pull request merged once CI is green (no approval required); the rules bind administrators too; no force-push or deletion. | Done; in force. | The repository's branch protection (a setting, not a file); [`AGENTS.md`](../AGENTS.md#how-work-is-done), "How work is done". |
+| 132A | 2026-10-19 | 1A, fifth round | Correct the stale statements the documentation reviews of 2026-10-18 found (Gemini described as a supported provider although 94A deferred it, the efficiency flags described as "still default off", the Task Pane's old tab descriptions, the `agent/settings.py` docstring, one broken link), and fix, test first, the standards check report that names a model when none runs. Security scanning, a branch tidy-up and drafts of the owner's messages about the rewrite were offered in the same question and not chosen. | In progress. | The pull request that carries it out. |
+| 133A | 2026-10-19 | 2A, fifth round | Cut the first release, tag `v0.2.0`, from `main` once 132A has landed, with a GitHub release whose notes come from the changelog. The components keep their versions (the reviewer 0.2.0, the extractor 0.1.0), so the extractor's version in the reuse key does not change and nothing is re-extracted. The fork guide tells a fork to merge release tags. | In progress. | The pull request that carries it out, and the tag. |
+| 134A | 2026-10-19 | 3A, fifth round | Draft a constitution amendment that states the public-upstream rule so that a private fork's copy stays true, and that opening a document read-only, as feature 011 opens an engineer-confirmed drawing, is not a write. It is merged only on the owner's go. | Draft; waits for the owner's go. | The amendment's pull request. |
+| 135A | 2026-10-19 | 4A, fifth round | Commit messages carry no session-link trailer such as `Claude-Session`; the only trailer is `Co-Authored-By`, naming an agent that wrote the change. The lines already in the commits made from 2026-09-18 until this decision stay, since removing them would take another history rewrite and another round of re-clones. | Done; in force. | [`AGENTS.md`](../AGENTS.md#how-work-is-done), "How work is done". |
 
 The owner's decision of the same day to keep this repository as the public upstream of private
 downstream forks is not numbered; it is recorded as
