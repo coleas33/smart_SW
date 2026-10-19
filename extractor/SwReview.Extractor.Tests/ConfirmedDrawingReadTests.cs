@@ -296,6 +296,26 @@ public class ConfirmedDrawingReadTests : IDisposable
         Assert.Equal(before, File.ReadAllText(PackageAppender.PathIn(_runFolder)));
     }
 
+    /// <summary>
+    /// Decision 136A's review (2026-10-19): a candidate the open says SOLIDWORKS already had open -
+    /// the engineer opened it after the lookup, or has it open under another spelling of its path -
+    /// was not opened by this read: it is read as it stood and left open, recorded as one the lookup
+    /// found, never asked whether it is read-only and never closed.
+    /// </summary>
+    [Fact]
+    public void ACandidateTheOpenSaysWasAlreadyOpenIsReadAsItStoodAndLeftOpen()
+    {
+        _host.OpenWarnings = 128;
+        _host.OpenedReadOnly = false;
+
+        ConfirmedDrawingResult result = Read(RunId, HousingId);
+
+        Assert.False(result.Opened);
+        Assert.False(result.Closed);
+        Assert.Null(Reloaded().DrawingRecords!.Last().OpenedByReview);
+        Assert.DoesNotContain(_host.Calls, call => call.Name == "CloseDoc" || call.Name == "IsOpenedReadOnly");
+    }
+
     [Fact]
     public void ACloseTheSeamRefusesIsRecordedAsAGapOnTheDrawing()
     {

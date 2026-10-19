@@ -14,9 +14,11 @@ namespace SwReview.Extractor.Sw;
 /// <c>IModelDoc2.IsOpenedReadOnly()</c>, before anything reads it, and a document that is not
 /// open read-only - or that will not say - is refused and closed again by <see cref="Close"/>: only
 /// that document, and only after SOLIDWORKS answers its path with the very COM object the open
-/// returned. A document that was open before the open is the caller's to recognise (the lookup
-/// before it); it is never asked and never closed. Neither method throws for SOLIDWORKS's failures:
-/// each answers with the sentence to show, so a caller names every failure in one refusal.
+/// returned. A document that was open before the open is the caller's to recognise - the lookup
+/// before it, or the open's own word that it was already open
+/// (<see cref="FileLoadErrors.SayAlreadyOpen"/>, decision 136A's review) - and is never asked and
+/// never closed. Neither method throws for SOLIDWORKS's failures: each answers with the sentence
+/// to show, so a caller names every failure in one refusal.
 /// </summary>
 internal static class ReadOnlyOpen
 {

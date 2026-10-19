@@ -214,6 +214,19 @@ recorder:
   `ISldWorks.OpenDoc6` and the close; the qualified keys are unchanged. The refusal is the host's
   answer, so the backend records it word for word as the candidate's `drawing.confirmed_open` reason
   (section 1).
+- **What the open says was already open is not the seam's** (*amended 2026-10-19, owner decision
+  136A, on its review*). `OpenDoc6` can answer with a drawing SOLIDWORKS already had open - the
+  engineer opened it after the lookup, or has it open under another spelling of its path - and
+  says so: `swFileLoadWarning_AlreadyOpen` (128) in its warnings, or the errors enum's older twin
+  `swFileAlreadyOpenWarn` (512) (`FileLoadErrors.SayAlreadyOpen`). The seam did not open that
+  drawing, so it treats it as the lookup's answer: read as it stands (`OpenedByReview` false, the
+  record carries no `opened_by_review`), not asked `IsOpenedReadOnly`, never closed. If the restore
+  failed too, it is refused unread - "SOLIDWORKS opened '{file name}' but says it was already open
+  ({FileLoadErrors}), and could not restore the visibility of new drawings (...), so it was not
+  read and was left open." - and still never closed. The identity-checked close stays for the
+  drawings the seam really opened. Whether SOLIDWORKS sets the warning for a drawing open under
+  another spelling is the seat's to confirm (research R8.1); where it does not, the identity check
+  still guards the close.
 
 ## 4. Shipped off until the seat confirms it
 

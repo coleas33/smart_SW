@@ -175,7 +175,9 @@ stage-1 list, and it widens neither `RemodelGuard` nor `ReadOnlyGuard`.
 drawing `IModelDoc2.IsOpenedReadOnly()` under its bare name - a read, which this guard hands to
 `ReadOnlyGuard` unchanged, so the allowlist stays the three keys - and refuses and closes, unread, a
 drawing SOLIDWORKS did not open read-only or will not say (`confirmed-open.md` section 3). The
-console attach makes the same check after its own `OpenDoc6` (`attach.md` section 4).
+console attach makes the same check after its own `OpenDoc6` (`attach.md` section 4). Neither
+asks, or ever closes, a document the open says SOLIDWORKS already had open (on the decision's
+review, the same day): that open did not open it.
 `DrawingOpenGuardTests.TheReadOnlyCheckIsABareReadEveryGuardAllows` pins that every gate the product
 builds allows the bare name, and that this guard refuses the qualified `IModelDoc2.IsOpenedReadOnly`,
 which is why the seam names it bare.

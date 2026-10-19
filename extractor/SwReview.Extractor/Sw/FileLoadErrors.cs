@@ -102,6 +102,21 @@ public static class FileLoadErrors
             warnings,
             DescribeWarnings(warnings));
 
+    /// <summary><c>swFileLoadWarning_e.swFileLoadWarning_AlreadyOpen</c>: the document was already open.</summary>
+    public const int AlreadyOpenWarning = 0x00000080;
+
+    /// <summary><c>swFileLoadError_e.swFileAlreadyOpenWarn</c>: the same, in the errors enum's older twin.</summary>
+    public const int AlreadyOpenError = 0x00000200;
+
+    /// <summary>
+    /// True when <c>OpenDoc6</c>'s out parameters say the document it answered with was already open
+    /// - so that call did not open it (decision 136A's review, 2026-10-19). The read-only opens then
+    /// use it as it stands, as they use a document the lookup before the open found, and never
+    /// close it. Either enum's bit counts: honouring both can only keep a close from happening.
+    /// </summary>
+    public static bool SayAlreadyOpen(int errors, int warnings) =>
+        (warnings & AlreadyOpenWarning) != 0 || (errors & AlreadyOpenError) != 0;
+
     /// <summary>The swFileLoadError_e bits set in <paramref name="errors"/>.</summary>
     public static string DescribeErrors(int errors) => DescribeBits(errors, ErrorNames);
 

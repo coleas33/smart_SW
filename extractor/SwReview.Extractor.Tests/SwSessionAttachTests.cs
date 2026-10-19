@@ -366,10 +366,11 @@ public sealed class SwSessionReadOnlyOpenTests : IDisposable
     }
 
     /// <summary>
-    /// SOLIDWORKS can answer an open with a document it already had open under another spelling of
-    /// the path, which the lookup before the open did not find; then it still does not answer this
-    /// spelling, so the identity check closes nothing - never the engineer's own document - and the
-    /// refusal names the open's warnings, which say so.
+    /// The identity check closes nothing SOLIDWORKS no longer answers the path with, and the refusal
+    /// names the open's warnings. Edited deliberately on decision 136A's review (2026-10-19): it had
+    /// used the "already open" warning, which now means the part was not this attach's to check or
+    /// close (<see cref="APartOpenUnderAnotherSpellingOfItsPath_IsAttachedAsItStands_AsBefore136A"/>);
+    /// another warning keeps both assertions.
     /// </summary>
     [Fact]
     public void ANotReadOnlyPartTheLookupNeverAnswers_ClosesNothing_AndTheRefusalNamesTheOpensWarnings()
@@ -377,14 +378,14 @@ public sealed class SwSessionReadOnlyOpenTests : IDisposable
         _document.Answer("IsOpenedReadOnly", false);
         _app.Handle("OpenDoc6", arguments =>
         {
-            arguments[5] = 128;
+            arguments[5] = 32;
             return _document.Instance;
         });
 
         InvalidOperationException refusal = Assert.Throws<InvalidOperationException>(() => Attach());
 
         Assert.Contains(
-            "(IsOpenedReadOnly answered false; error 0 (none), warning 128 (swFileLoadWarning_AlreadyOpen))",
+            "(IsOpenedReadOnly answered false; error 0 (none), warning 32 (swFileLoadWarning_NeedsRegen))",
             refusal.Message,
             StringComparison.Ordinal);
         Assert.EndsWith(
@@ -393,6 +394,61 @@ public sealed class SwSessionReadOnlyOpenTests : IDisposable
             refusal.Message,
             StringComparison.Ordinal);
         Assert.DoesNotContain("CloseDoc", _app.Members);
+    }
+
+    // ---- decision 136A's review (2026-10-19): never close what this attach did not open -------
+
+    /// <summary>
+    /// The review's case: the engineer opens the part between the lookup and the open, or an open
+    /// assembly already holds it, so <c>OpenDoc6</c> answers with that document and says it was
+    /// already open - in its warnings, or in its errors' older twin - and SOLIDWORKS now answers the
+    /// path with it. It was not opened by this attach: it is attached to as it stands, exactly as one
+    /// the lookup found - not asked <c>IsOpenedReadOnly</c>, never closed with the engineer's unsaved
+    /// changes.
+    /// </summary>
+    [Theory]
+    [InlineData(0, 128)]
+    [InlineData(512, 0)]
+    public void APartTheOpenSaysWasAlreadyOpen_IsAttachedAsItStands_NeitherCheckedNorClosed(int errors, int warnings)
+    {
+        _document.Answer("IsOpenedReadOnly", false);
+        _app.Handle("OpenDoc6", arguments =>
+        {
+            arguments[4] = errors;
+            arguments[5] = warnings;
+            _answersThePath = _document.Instance;
+            return _document.Instance;
+        });
+
+        SwSession session = Attach();
+
+        Assert.Same(_document.Instance, session.Document);
+        Assert.DoesNotContain("IsOpenedReadOnly", _document.Members);
+        Assert.DoesNotContain("CloseDoc", _app.Members);
+        Assert.DoesNotContain("IsOpenedReadOnly", _observer.Members);
+    }
+
+    /// <summary>
+    /// A part the engineer has open under another spelling of its path - a mapped drive against its
+    /// UNC path, say - is not found by the lookup, and the open answers with it, saying it was already
+    /// open. It is attached to as it stands, as it was before decision 136A, not refused with a
+    /// sentence that says the extractor opened it.
+    /// </summary>
+    [Fact]
+    public void APartOpenUnderAnotherSpellingOfItsPath_IsAttachedAsItStands_AsBefore136A()
+    {
+        _document.Answer("IsOpenedReadOnly", false);
+        _app.Handle("OpenDoc6", arguments =>
+        {
+            arguments[5] = 128;
+            return _document.Instance;
+        });
+
+        SwSession session = Attach();
+
+        Assert.Same(_document.Instance, session.Document);
+        Assert.DoesNotContain("IsOpenedReadOnly", _document.Members);
+        Assert.Equal(new[] { "GetOpenDocumentByName", "OpenDoc6", "RevisionNumber" }, _app.Members);
     }
 
     [Fact]

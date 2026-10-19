@@ -88,6 +88,13 @@ the same COM identity the open returned, exactly as the confirmed drawing's seam
 in the refusal, never hidden. A document `GetOpenDocumentByName` answered before the open was not
 opened by the attach: it is not asked and never closed. A document the attach opened read-only is
 still left open on purpose, so a later `resolve` or `capture` finds its persistent references.
+*Amended the same day, on the decision's review*: neither was a document the open answers with and
+says SOLIDWORKS already had open (`swFileLoadWarning_AlreadyOpen`, 128, or the errors enum's older
+twin `swFileAlreadyOpenWarn`, 512; `FileLoadErrors.SayAlreadyOpen`) - the engineer opened it after
+the lookup, an open assembly already holds it, or it is open under another spelling of its path,
+such as a mapped drive against its UNC path. It is used as it stands, exactly as a document the
+lookup found, and as it was before decision 136A: not asked `IsOpenedReadOnly`, never closed, so no
+close can discard the engineer's unsaved changes.
 
 ## 5. The Review tab's refusal
 

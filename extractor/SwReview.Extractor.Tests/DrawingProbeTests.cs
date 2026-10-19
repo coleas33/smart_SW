@@ -1126,6 +1126,28 @@ public class DrawingProbeTests : IDisposable
         Assert.DoesNotContain("the read-only state", lines.Last(), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Decision 136A's review (2026-10-19): an open that says SOLIDWORKS already had the drawing open
+    /// - here, though the probe's own lookup did not find it - did not open it, so the seam reads it
+    /// as it stands, never asks or closes it, and the probe's reading fails the seam keys it gated
+    /// reaching it, which the seat then reads as this case.
+    /// </summary>
+    [Fact]
+    public void D14_AnOpenThatSaysTheDrawingWasAlreadyOpenIsReadAsItStoodLeftOpenAndFailsTheSeamKeys()
+    {
+        _host.Seam.OpenWarnings = 128;
+
+        IReadOnlyList<string> lines = Section(RunOnPart("D14"), "D14");
+
+        Assert.Contains("  drawing open before the probe: false", lines);
+        Assert.Contains("  IsOpenedReadOnly: not called", lines);
+        Assert.Contains("  outcome: already open, read as it stood and left open", lines);
+        Assert.Contains("  afterwards: GetOpenDocumentByName answers true; an exclusive read open succeeded", lines);
+        Assert.Contains("  with the drawing already open, no visibility, open or close key was gated: false", lines);
+        Assert.DoesNotContain(_host.Seam.Calls, call => call.Name == "CloseDoc" || call.Name == "IsOpenedReadOnly");
+        Assert.Equal("  against confirmed-open.md: not as required: the seam keys", lines.Last());
+    }
+
     [Fact]
     public void D14_ADrawingReadThatThrowsIsALineAndTheDrawingIsStillClosed()
     {

@@ -76,7 +76,11 @@ public sealed class DrawingOpenRefused : InvalidOperationException
 /// read, and closed again when - and only when - this seam opened it.
 ///
 ///   * <b>Already open</b>: no visibility call, no open, no close; the drawing is read as it
-///     stands and <see cref="DrawingOpenResult{T}.OpenedByReview"/> is false.
+///     stands and <see cref="DrawingOpenResult{T}.OpenedByReview"/> is false. So is a drawing the
+///     open answers with and says SOLIDWORKS already had open (decision 136A's review,
+///     2026-10-19, <see cref="FileLoadErrors.SayAlreadyOpen"/>) - opened by the engineer after the
+///     lookup, or open under another spelling of its path: this seam did not open it, so it is not
+///     checked and never closed.
 ///   * <b>Not open</b>: <c>DocumentVisible(false, 3)</c>, <c>OpenDoc6(path, 3, 3, "")</c>, and
 ///     <c>DocumentVisible(true, 3)</c> in a <c>finally</c>, also when the open throws or answers
 ///     null - each of those a refusal naming the file and its load errors.
@@ -190,7 +194,11 @@ public sealed class DrawingOpenScope
             throw new DrawingOpenRefused(NotValidatedSentence);
         }
 
-        object opened = Open(path);
+        (object opened, bool alreadyOpen) = Open(path);
+        if (alreadyOpen)
+        {
+            return new DrawingOpenResult<T>(read(opened), openedByReview: false, closed: false, closeRefusal: null);
+        }
 
         T value;
         try
@@ -220,9 +228,11 @@ public sealed class DrawingOpenScope
     /// and return the open drawing. A drawing the open returned while the restore failed is not
     /// handed on: it is closed here, and the refusal says the restore failed and whether it closed.
     /// Nor is one SOLIDWORKS does not confirm it opened read-only (decision 136A): it is closed here
-    /// too, and the refusal says why and whether it closed.
+    /// too, and the refusal says why and whether it closed. A drawing the open says SOLIDWORKS
+    /// already had open is handed back as such, never checked or closed: refused unread if the
+    /// restore failed, and left open either way.
     /// </summary>
-    private object Open(string path)
+    private (object Drawing, bool AlreadyOpen) Open(string path)
     {
         OpensAttempted++;
         string fileName = Path.GetFileName(path);
@@ -256,13 +266,31 @@ public sealed class DrawingOpenScope
             throw openFailure == null ? new DrawingOpenRefused(refusal) : new DrawingOpenRefused(refusal, openFailure);
         }
 
+        // Decision 136A's review: the open answered with a drawing SOLIDWORKS says it already had
+        // open, so this seam did not open it and must never close it.
+        bool alreadyOpen = FileLoadErrors.SayAlreadyOpen(errors, warnings);
+
         if (restoreFailure != null)
         {
+            if (alreadyOpen)
+            {
+                throw new DrawingOpenRefused(
+                    $"SOLIDWORKS opened '{fileName}' but says it was already open "
+                    + $"({FileLoadErrors.Describe(errors, warnings)}), and {RestoreSentence(restoreFailure)}, "
+                    + "so it was not read and was left open."
+                    + StaysHiddenSentence);
+            }
+
             string? closeRefusal = Close(path, opened);
             throw new DrawingOpenRefused(
                 $"SOLIDWORKS opened '{fileName}' read-only but {RestoreSentence(restoreFailure)}, so it was not read; "
                 + (closeRefusal ?? "it was closed again.")
-                + " Drawings opened from now on may stay hidden until SOLIDWORKS is restarted.");
+                + StaysHiddenSentence);
+        }
+
+        if (alreadyOpen)
+        {
+            return (opened, true);
         }
 
         object document = opened;
@@ -281,8 +309,12 @@ public sealed class DrawingOpenScope
                 : new DrawingOpenRefused(notReadOnly, checkFailure);
         }
 
-        return document;
+        return (document, false);
     }
+
+    /// <summary>What a refusal after a failed restore ends with, whatever became of the drawing.</summary>
+    private const string StaysHiddenSentence =
+        " Drawings opened from now on may stay hidden until SOLIDWORKS is restarted.";
 
     /// <summary>Shows new drawings again; returns why it could not, or null when it did.</summary>
     private string? Restore()

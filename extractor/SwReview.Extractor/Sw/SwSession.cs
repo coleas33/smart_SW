@@ -358,7 +358,10 @@ public sealed class SwSession : ISwSession
     /// is refused and closed again with <c>CloseDoc</c> through the gate, after the identity check
     /// feature 011's drawing open uses (<see cref="ReadOnlyOpen"/>, which both share), and never
     /// read. A document <c>GetOpenDocumentByName</c> answered was not opened here: it is not asked
-    /// and never closed.
+    /// and never closed. Nor is one the open answers with and says SOLIDWORKS already had open
+    /// (decision 136A's review, <see cref="FileLoadErrors.SayAlreadyOpen"/>) - opened by the engineer
+    /// after the lookup, held by an open assembly, or open under another spelling of its path: it
+    /// is used as it stands, as before decision 136A.
     /// </summary>
     private static IModelDoc2 OpenReadOnly(
         ISldWorks swApp, string documentPath, AttachPurpose purpose, SwGate gate)
@@ -396,6 +399,11 @@ public sealed class SwSession : ISwSession
             throw new InvalidOperationException(
                 $"SOLIDWORKS could not open '{documentPath}' read-only "
                 + $"({FileLoadErrors.Describe(errors, warnings)}).");
+        }
+
+        if (FileLoadErrors.SayAlreadyOpen(errors, warnings))
+        {
+            return document;
         }
 
         IModelDoc2 opened = document;

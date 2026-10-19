@@ -126,7 +126,8 @@ Every other line keeps the rule above.
   *Amended 2026-10-19 (owner decision 136A)*: after the `DocumentVisible` calls it prints
   `IsOpenedReadOnly:` and what the drawing the open returned answered to the seam's read-only
   check: `true`, `false`, or `failed (<Type> 0x<HRESULT>)`, never the failure's message; or `not
-  called` when the drawing was already open or the open returned none. For a drawing it opened, the
+  called` when the drawing was already open, the open returned none, or the open said SOLIDWORKS
+  already had it open (then the outcome is "already open" and the gated seam keys fail it). For a drawing it opened, the
   reading names `the read-only state`, after the open-mode integers, unless the drawing answered,
   and answered true.
 - **The report.** Beside the read-only gate's log it prints the confirmed open's own guard's
