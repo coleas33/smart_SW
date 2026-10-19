@@ -160,7 +160,7 @@ small assembly, the big assembly - instead of by design number.)
 - The first and the later Standards reports, in `dumps/20260919-184738-…-standards/` and
   `dumps/20260919-184809-…-standards/`, each with its package, session, attention record,
   and check result.
-- [Remodel refusal log](../../logs/tool-service-20260919-184725.log).
+- Remodel refusal log: `logs/tool-service-20260919-184725.log`.
 
 The three dump directories and the log are local, Git-ignored evidence because
 they contain real-design paths. Their folder names end in the assembly's design number, so

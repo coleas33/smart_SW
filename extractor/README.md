@@ -10,10 +10,11 @@ SwReview.Extractor/          class library: IR dump, interference, captures, mea
                              persistent references, mesh export, the read-only API guard
                              and circuit breaker, the bridge dispatcher
 SwReview.Extractor.Console/  out-of-process host (dump, interference, capture, resolve, serve)
-SwReview.AddIn/              the add-in: Task Pane with a Review tab (WebView2 chat page fed
-                             by the Python backend) and a Terminal tab (an external CLI in a
-                             ConPTY pseudo-console rendered by xterm.js), the in-process tool
-                             service, the backend child process, DPAPI-protected settings
+SwReview.AddIn/              the add-in: a Task Pane that shows five tabs (Review, Extract,
+                             Model check, Remodel and Standards) and builds a sixth, Ask (an
+                             external CLI in a ConPTY pseudo-console rendered by xterm.js),
+                             hidden since 2026-09-19; the in-process tool service, the
+                             backend child process, DPAPI-protected settings
 SwReview.*.Tests/            xUnit
 ```
 

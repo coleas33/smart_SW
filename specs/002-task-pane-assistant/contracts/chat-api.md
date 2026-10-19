@@ -50,13 +50,17 @@ pipe). Diagnostics go to stderr and to the log folder. Every request carries
 the token. The token MUST NOT appear in a URL, a query string, or a log line. The server
 binds `127.0.0.1` only.
 
-Provider credentials arrive in the child's environment (`OPENAI_API_KEY`, `GEMINI_API_KEY`,
-`OPENAI_BASE_URL`, `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`); the server never reads
-the settings file.
+Provider credentials arrive in the child's environment; the server never reads the settings
+file. OpenAI is the only provider in use, with `OPENAI_API_KEY` and `OPENAI_BASE_URL`: owner
+decision 94A ([014 research](../../014-design-review-eval/research.md)) defers the Gemini
+work. The Gemini adapter is still in the code, and for a `gemini` setting the add-in passes
+`GOOGLE_API_KEY` and `GEMINI_API_KEY` (read in that order), `GOOGLE_GENAI_USE_ENTERPRISE`
+(`true` or `false`), and for Gemini Enterprise `GOOGLE_CLOUD_PROJECT` and
+`GOOGLE_CLOUD_LOCATION`.
 
 | Method | Path | Body | Response |
 |--------|------|------|----------|
-| GET | `/health` | | `{status: "ok", version, providers: ["openai", "gemini"]}`; a development build also lists `"fake"` |
+| GET | `/health` | | `{status: "ok", version, providers: ["openai", "gemini"]}`; a development build also lists `"fake"`. `gemini` is listed because its adapter is still in the code; OpenAI is the only provider in use (94A, above) |
 | GET | `/models?provider=openai\|gemini\|fake` | | `{models: [{id, label}]}` from the provider; `fake` returns one scripted id; 502 with the provider error class on failure |
 | GET | `/labels` | | `200` with the `labels` block of `reviewer/src/swreview/report/review_words_v1.yaml`, verbatim (feature 009, `specs/009-engineer-workspace/contracts/plain-words.md` section 1, data-model section 7): `{version, status, severity, bucket, evidence_status, contact_kind, errors}` - the words the Review tab prints for each token, and one next-step sentence per error class. Token required like every route. Reads no session and writes nothing. |
 | GET | `/engineering-context/{run_id}` | | 200 saved-evidence operator snapshot, including before initialization; bounded targets, typed inputs, frame/force values, decisions and exact digests. Writes nothing. Feature 016 `contracts/pane-context.md` is normative. |
