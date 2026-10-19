@@ -10,8 +10,9 @@ Sync Impact Report
   list of what upstream may not hold stays in CONTRIBUTING.md, "The public-repository rule")
 - Modified sections: Technical Constraints → "Documents are read, not written" gains a closing
   paragraph: opening a document read-only is a read, not a write, recorded with feature 011's
-  read-only open of an engineer-confirmed drawing through DrawingOpenGuard. The rule's other text
-  and its two exceptions are unchanged.
+  read-only open of an engineer-confirmed drawing through DrawingOpenGuard, the console's attach
+  (owner decision 137A), and the read-only answer SOLIDWORKS must give after either open (owner
+  decision 136A). The rule's other text and its two exceptions are unchanged.
 - Removed sections: none
 - Templates: no edits required (.specify/templates/ restates neither rule; plan-template.md takes
   its Constitution Check gates from this file)
@@ -235,17 +236,28 @@ saved per design without degrading review quality.
     changes no document: it hides the drawings opened until the restore, which runs whatever the
     open did. A restore that fails is reported, because drawings opened afterwards may then stay
     hidden until SOLIDWORKS restarts.
-  - A drawing already open is read as it stands and never closed. A drawing the seam opened is
+  - A drawing already open, found before the open or reported by it as already open, is read as
+    it stands and never closed. A drawing the seam opened is
     closed again whether or not it was read, but only while SOLIDWORKS still answers its path with
     the same document the open returned; otherwise, or when SOLIDWORKS fails the close, it is left
     open and the review's evidence says so. The seam closes no other document, and never a model
     the drawing loaded.
   - The add-in opens a closed drawing only once feature 011's seat probe D14 has recorded, at a
-    licensed seat, that the open neither changes nor saves nor locks the drawing and leaves the
-    engineer's window where it was, and a commit citing that record has turned the switch on
+    licensed seat, that the open neither changes nor saves nor locks the drawing, that SOLIDWORKS
+    answers that it opened the drawing read-only, and that the engineer's window stays where it
+    was, and a commit citing that record has turned the switch on
     (T077); until then the switch is off. D14 runs the same seam from the console, with the switch
     on for that one command, on the same-name drawing beside the part or assembly it is run on:
-    the one open made outside a review.
+    the one drawing open made outside a review.
+
+  The console's attach (`swreview-extract --doc`) opens a part or assembly that is not open in
+  the same way, read-only and silently, and never a drawing; it leaves the document open on
+  purpose, so that a later `resolve` or `capture` finds its persistent references (owner decision
+  137A). After either open, unless SOLIDWORKS reports the document as already open, the product
+  asks SOLIDWORKS whether it opened the document read-only; when it did not, or gives no answer,
+  the read is refused and the document that open opened is closed again, only after the same
+  COM-identity check. A document already open, found before the open or reported by it, is used as
+  it stands, never asked and never closed (owner decision 136A).
 
 - **Reasoning-side code** is Python 3.11+ with a typed, versioned IR (pydantic). It MUST
   run without a SolidWorks license so reviews can run in parallel on cheap machines and

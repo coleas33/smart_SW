@@ -93,9 +93,9 @@ offered only when the package carries drawing evidence; and `swreview drawing br
 ## 4. Constraints a creator must respect
 
 1. **Documents are read, not written**: two bounded exceptions exist, and "a third requires an
-   amendment" (`.specify/memory/constitution.md:170-174`).
+   amendment" (`.specify/memory/constitution.md:171-175`).
 2. **Save is bound to the re-modeler's copy**: only `IModelDoc2.Save3`, which takes no file name
-   (`constitution.md:189-193`; `Guard/RemodelGuard.cs:74`). A new drawing has no path until its
+   (`constitution.md:190-194`; `Guard/RemodelGuard.cs:74`). A new drawing has no path until its
    first save, so that allowance cannot place one; the general guard denies `Save3` and `SaveAs3`
    (`Guard/ReadOnlyGuard.cs:44-45`) except image capture.
 3. **The 011 guard refuses every drawing writer**: 28 drawing interface families, `NewDocument`
@@ -106,15 +106,15 @@ offered only when the package carries drawing evidence; and `swreview drawing br
    `DrawingOpenScope`, shipped off (`Guard/DrawingOpenGuard.cs:6-23`).
 5. **A write exception's shape**, from the re-modeler's: allowlisted members; target path, session
    tag and COM identity re-verified before each write; no model-facing tool names a document; each
-   change logged with before, after and inverse; bounded count and time (`constitution.md:194-202`).
+   change logged with before, after and inverse; bounded count and time (`constitution.md:195-203`).
 6. **The model proposes; a deterministic executor applies**; numbers come from tested software;
-   output not verified on the pilot workstation enters no calculation (`constitution.md:68-99,
+   output not verified on the pilot workstation enters no calculation (`constitution.md:69-100,
    174-184`).
 7. **Scope**: "Autonomous GD&T creation, general drawing dimensioning, and structural approval are
-   out of scope and require separate specification and validation" (`constitution.md:265-267`);
+   out of scope and require separate specification and validation" (`constitution.md:277-279`);
    every modelling dimension on a drawing is not a completeness test (`:122-123`).
 8. **Amendment**: proposed with rationale, a MINOR version bump and a Sync Impact Report
-   (`constitution.md:295-300`); the roadmap's D2 adds a fresh run-folder drawing only, refusal to
+   (`constitution.md:307-312`); the roadmap's D2 adds a fresh run-folder drawing only, refusal to
    overwrite, identity revalidation, logging, and cancel or discard without touching other
    documents.
 
