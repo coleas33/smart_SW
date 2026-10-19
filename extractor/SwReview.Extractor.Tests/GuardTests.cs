@@ -1876,9 +1876,11 @@ public class DocumentWriteFamilyTests
         new Dictionary<string, (string Where, string Reason)>(StringComparer.Ordinal)
         {
             ["IModelDoc2.SaveBMP"] = ("SwCaptureView.cs", "the capture's image of a view: SwCaptureView gates the bare name on "
-                + "the session's read-only gate, after CaptureService's AssertSaveAs has checked the image's extension, and "
-                + "SaveBMP writes a bitmap of the graphics window, which the capture turns into its PNG under the directory "
-                + "the host chose; it cannot write a document, and SaveAs3, which can, stays refused"),
+                + "the session's read-only gate and has it write a bitmap of the graphics window beside the capture's PNG, at "
+                + "the PNG's name with .bmp. SaveBMP writes to whatever path it is handed, a document's included, and a guard "
+                + "judges names, never paths: what keeps this path an image is the capture's own code, which names the PNG "
+                + "under the captures folder of the directory the host chose and checks its extension with AssertSaveAs "
+                + "first. SaveAs3 stays refused"),
             ["IFeatureManager.MoveToFolder"] = ("SwRemodelProbeHost.cs", "probe remodel's PROBE-5 moves a feature of its "
                 + "throwaway part into a folder: SwRemodelProbeHost gates the bare name under RemodelProbeGuard, which hands "
                 + "it to the read-only guard, as it does NewDocument (feature 004 T032); never the engineer's document, which "

@@ -1336,10 +1336,13 @@ which is `Save3` under its qualified key; the only `.Close(` calls are the C# me
 `ReadOnlyOpen.Close` and `EventStreamPump.Close` and the remodel backend's; the one `.Rebuild(` is
 the suppress-test's target, gated as `ForceRebuild3`. Two members of the families are called by a
 product path, and stay allowed with their reasons on the generated "Not denied" table:
-`SaveBMP` - `SwCaptureView.SaveImage` gates the bare name on the session's read-only gate, after
-`CaptureService` has checked the image's extension with `ReadOnlyGuard.AssertSaveAs`, and it writes a
-bitmap of the graphics window, which the capture turns into its PNG under the directory the host
-chose; it cannot write a document, and `SaveAs3`, which can, stays refused - and `MoveToFolder` -
+`SaveBMP` - `SwCaptureView.SaveImage` gates the bare name on the session's read-only gate and has it
+write a bitmap of the graphics window beside the capture's PNG, at the PNG's name with `.bmp`;
+`SaveBMP` writes to whatever path it is handed, a document's included, and a guard judges names,
+never paths, so what keeps this path an image is the capture's own code, which names the PNG under
+the `captures` folder of the directory the host chose and checks its extension with
+`ReadOnlyGuard.AssertSaveAs` first; `SaveAs3` stays refused (corrected on the decision's review:
+this said `SaveBMP` cannot write a document) - and `MoveToFolder` -
 `probe remodel`'s PROBE-5 moves a feature of its throwaway part into a folder, gated bare under
 `RemodelProbeGuard`, which hands it to the read-only guard, as it does `NewDocument`; never the
 engineer's document, which `probe remodel` refuses to run beside. `RemodelGuardTests` keeps

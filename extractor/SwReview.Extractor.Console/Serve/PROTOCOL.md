@@ -61,7 +61,7 @@ compares against.
 | Field | Type | Rules |
 |-------|------|-------|
 | `id` | string | Required, non-empty. Echoed on the response so a client can match them up. |
-| `command` | string | Required. One of the five below, or one of the twelve `remodel.*` commands of `specs/004-resilient-remodeler/contracts/bridge-remodel.md`. |
+| `command` | string | Required. One of the six below, or one of the twelve `remodel.*` commands of `specs/004-resilient-remodeler/contracts/bridge-remodel.md`. |
 | `params` | object | Command arguments. May be omitted for `ping`. |
 | `secret` | string or null | Optional on the wire. Ignored by the console host; **required** by the in-process host, where it also selects the command scope (below). |
 
@@ -382,10 +382,13 @@ and it is three things:
    family is `reviewer/src/swreview/bridge/remodel_client.py`, whose own command allowlist
    is `ping` plus these twelve — `COMMANDS` in `client.py` is unchanged.
 
-These commands are refused by the read-only guard, as a mutating command must be: they run
-under the document-scoped allowlist guard of
-`specs/004-resilient-remodeler/contracts/guard-allowlist.md`, on a copy the run created, and
-on no other document.
+These commands write, so their calls go through the document-scoped allowlist guard of
+`specs/004-resilient-remodeler/contracts/guard-allowlist.md` rather than the read-only guard,
+which refuses some of those writes (`Save3`, `ForceRebuild3`) and misses others - the reason
+the allowlist names each write with its interface - and they act on a copy the run created,
+and on no other document. *Corrected 2026-10-19 (decision 140A's review)*: this said the
+commands themselves are refused by the read-only guard; no guard judges a command's name
+(Request, above), only the members its handler calls.
 
 ## Errors that are not command failures
 
