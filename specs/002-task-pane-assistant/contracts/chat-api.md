@@ -58,6 +58,17 @@ work. The Gemini adapter is still in the code, and for a `gemini` setting the ad
 (`true` or `false`), and for Gemini Enterprise `GOOGLE_CLOUD_PROJECT` and
 `GOOGLE_CLOUD_LOCATION`.
 
+Where the key came from is the session's `key_source`, and the environment cannot say it: a
+key saved in the pane and a key the workstation exports arrive the same way. So when the key
+the add-in copies into the environment is the one saved in the pane's settings, it starts the
+server with `--settings-key-provider <provider>`, naming the provider whose variables it
+wrote. A session for that provider whose key is found in the environment records
+`key_source: settings`; any other key found there records `env`, and no key `none`. The
+argument names a provider and never carries a key. A value other than `openai`, `gemini` or
+`fake` is refused at start, a usage error (exit 2) before the handshake, rather than recorded
+as a guess. Only `chat serve` takes it, so a command-line run never records `settings`
+(amended 2026-10-19, owner decision 138A).
+
 | Method | Path | Body | Response |
 |--------|------|------|----------|
 | GET | `/health` | | `{status: "ok", version, providers: ["openai", "gemini"]}`; a development build also lists `"fake"`. `gemini` is listed because its adapter is still in the code; OpenAI is the only provider in use (94A, above) |
