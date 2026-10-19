@@ -506,8 +506,11 @@ public class CreationFamilyCompletenessTests
 /// </summary>
 public class CreationFamilyReadAuditTests
 {
-    /// <summary>The probe host's file: the only file whose literals may name a denied creation member.</summary>
-    internal const string ProbeHostFile = "SwRemodelProbeHost.cs";
+    /// <summary>
+    /// The probe host's file, by its path under the extractor folder as the scan reports it: the only
+    /// file whose literals may name a denied creation member.
+    /// </summary>
+    internal const string ProbeHostFile = "SwReview.Extractor/Rms/SwRemodelProbeHost.cs";
 
     /// <summary>
     /// Literals the scan finds that the tables refuse and that call nothing, each keyed by the literal
@@ -515,14 +518,16 @@ public class CreationFamilyReadAuditTests
     /// case-insensitively, as the guard matches): the lower-case <c>scale</c>, a JSON property name,
     /// must not exempt a gated <c>Scale</c>, which the tables refuse in every case. Keyed by file as
     /// well, since the decision's review, as <see cref="DrawingFamilyReadAuditTests"/> keys its own: the
-    /// entry exempts the literal in its file, never anywhere in the product. The key was already a
-    /// literal spelled exactly (<see cref="EveryNamedLiteralIsStillInTheSourceAndStillRefused"/>), so
-    /// each step exempts less.
+    /// entry exempts the literal in its file, never anywhere in the product, and the file is its path
+    /// under the extractor folder since the decision's second pass. The key was already a literal
+    /// spelled exactly (<see cref="EveryNamedLiteralIsStillInTheSourceAndStillRefused"/>), so each step
+    /// exempts less.
     /// </summary>
     private static readonly IReadOnlyDictionary<(string Literal, string Where), string> NamedLiterals =
         new Dictionary<(string Literal, string Where), string>
         {
-            [("scale", "DrawingSheet.cs")] = "a JSON property name, matching IModelDoc2.Scale only by case (T169)",
+            [("scale", "SwReview.Extractor/Ir/DrawingSheet.cs")] =
+                "a JSON property name, matching IModelDoc2.Scale only by case (T169)",
         };
 
     private static bool IsTheProbesOwnCreationCall((string Literal, string Where) literal) =>

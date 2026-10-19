@@ -1252,58 +1252,72 @@ public class DrawingFamilyReadAuditTests
     /// member's own spelling, which the guard refuses in every case. Keyed by file as well, since the
     /// decision's review (2026-10-19): an entry exempts its literal in the file named with it, never
     /// anywhere in the product, so a gate asked about the same spelling in another file - the capture's
-    /// <c>Gate.Call("close", ...)</c> - fails the audit. Every key was already a literal spelled
-    /// exactly (<see cref="EveryNamedLiteralIsStillInTheSourceAndStillRefused"/>), so each step exempts
-    /// less.
+    /// <c>Gate.Call("close", ...)</c> - fails the audit. The file is its path under the extractor
+    /// folder since the decision's second pass, the same day, so a file of the same name in another
+    /// folder is another file. Every key was already a literal spelled exactly
+    /// (<see cref="EveryNamedLiteralIsStillInTheSourceAndStillRefused"/>), so each step exempts less.
     /// </summary>
     private static readonly IReadOnlyDictionary<(string Literal, string Where), string> NamedLiterals =
         new Dictionary<(string Literal, string Where), string>
         {
-            [("ActivateDoc3", "Program.cs")] = "a member probe standards asserts is absent from its gate log",
-            [("ActivateDoc3", "RemodelInteropSurface.cs")] = "the frozen interop manifest's row for ISldWorks.ActivateDoc3 "
-                + "(feature 004 T181), which the pane seat calls on the copy directly, outside the bridge and every gate; a "
-                + "row records a member and permits none. Named on decision 140A's review, whose keying by file found it: "
-                + "the literal's earlier entry named Program.cs only",
-            [("LoadFile4", "Program.cs")] = "a member probe standards asserts is absent from its gate log",
-            [("dimensions", "DrawingSheet.cs")] = "a JSON property name, matching IDrawingDoc.Dimensions only by case",
-            [("dissolve", "BridgeProtocol.cs")] = "a remodel.folder operation name in the protocol",
-            [("LoadModel", "RemodelInteropSurface.cs")] = "the parameter name of IDocumentSpecification.set_LoadModel in "
-                + "the frozen interop manifest's builder table (feature 004 T156), matching IView.LoadModel only by name",
-            [("set_ReadOnly", "RemodelInteropSurface.cs")] = "IDocumentSpecification.set_ReadOnly in the frozen interop "
-                + "manifest's builder table (feature 004 T156), a property of the throwaway open request that is set "
-                + "false and never gated, matching IDimension's and INote's only by name",
+            [("ActivateDoc3", "SwReview.Extractor.Console/Program.cs")] =
+                "a member probe standards asserts is absent from its gate log",
+            [("ActivateDoc3", "SwReview.Extractor/Rms/RemodelInteropSurface.cs")] =
+                "the frozen interop manifest's row for ISldWorks.ActivateDoc3 (feature 004 T181), which the pane seat "
+                + "calls on the copy directly, outside the bridge and every gate; a row records a member and permits "
+                + "none. Named on decision 140A's review, whose keying by file found it: the literal's earlier entry "
+                + "named Program.cs only",
+            [("LoadFile4", "SwReview.Extractor.Console/Program.cs")] =
+                "a member probe standards asserts is absent from its gate log",
+            [("dimensions", "SwReview.Extractor/Ir/DrawingSheet.cs")] =
+                "a JSON property name, matching IDrawingDoc.Dimensions only by case",
+            [("dissolve", "SwReview.Extractor/Bridge/BridgeProtocol.cs")] =
+                "a remodel.folder operation name in the protocol",
+            [("LoadModel", "SwReview.Extractor/Rms/RemodelInteropSurface.cs")] =
+                "the parameter name of IDocumentSpecification.set_LoadModel in the frozen interop manifest's builder "
+                + "table (feature 004 T156), matching IView.LoadModel only by name",
+            [("set_ReadOnly", "SwReview.Extractor/Rms/RemodelInteropSurface.cs")] =
+                "IDocumentSpecification.set_ReadOnly in the frozen interop manifest's builder table (feature 004 T156), "
+                + "a property of the throwaway open request that is set false and never gated, matching IDimension's "
+                + "and INote's only by name",
 
             // Decision 140A (2026-10-19): what refusing Close, Save and Rebuild found. Three bridge
             // command names, which the dispatcher judges against its own fixed set and hands to no
             // guard, and a session-end reason spelled as one of them; judged as a qualified key, each
             // matches the member by the part after the dot only.
-            [("remodel.close", "BridgeProtocol.cs")] = "the bridge command remodel.close, matching IModelDoc2.Close only "
+            [("remodel.close", "SwReview.Extractor/Bridge/BridgeProtocol.cs")] =
+                "the bridge command remodel.close, matching IModelDoc2.Close only by the part after the dot",
+            [("remodel.close", "SwReview.Extractor/Rms/RemodelSessionEnd.cs")] =
+                "the session-end reason named after the bridge command remodel.close, matching IModelDoc2.Close only "
                 + "by the part after the dot",
-            [("remodel.close", "RemodelSessionEnd.cs")] = "the session-end reason named after the bridge command "
-                + "remodel.close, matching IModelDoc2.Close only by the part after the dot",
-            [("remodel.close", "RemodelInteropSurface.cs")] = "the frozen interop manifest's used_by column naming the "
-                + "bridge command remodel.close, matching IModelDoc2.Close only by the part after the dot",
-            [("remodel.save", "BridgeProtocol.cs")] = "the bridge command remodel.save, matching IModelDoc2.Save only by "
-                + "the part after the dot",
-            [("remodel.save", "RemodelInteropSurface.cs")] = "the frozen interop manifest's used_by column naming the "
-                + "bridge command remodel.save, matching IModelDoc2.Save only by the part after the dot",
-            [("remodel.rebuild", "BridgeProtocol.cs")] = "the bridge command remodel.rebuild, matching IModelDoc2.Rebuild "
-                + "and IModelDocExtension.Rebuild only by the part after the dot",
-            [("remodel.rebuild", "RemodelInteropSurface.cs")] = "the frozen interop manifest's used_by column naming the "
-                + "bridge command remodel.rebuild, matching IModelDoc2.Rebuild and IModelDocExtension.Rebuild only by the "
-                + "part after the dot",
+            [("remodel.close", "SwReview.Extractor/Rms/RemodelInteropSurface.cs")] =
+                "the frozen interop manifest's used_by column naming the bridge command remodel.close, matching "
+                + "IModelDoc2.Close only by the part after the dot",
+            [("remodel.save", "SwReview.Extractor/Bridge/BridgeProtocol.cs")] =
+                "the bridge command remodel.save, matching IModelDoc2.Save only by the part after the dot",
+            [("remodel.save", "SwReview.Extractor/Rms/RemodelInteropSurface.cs")] =
+                "the frozen interop manifest's used_by column naming the bridge command remodel.save, matching "
+                + "IModelDoc2.Save only by the part after the dot",
+            [("remodel.rebuild", "SwReview.Extractor/Bridge/BridgeProtocol.cs")] =
+                "the bridge command remodel.rebuild, matching IModelDoc2.Rebuild and IModelDocExtension.Rebuild only "
+                + "by the part after the dot",
+            [("remodel.rebuild", "SwReview.Extractor/Rms/RemodelInteropSurface.cs")] =
+                "the frozen interop manifest's used_by column naming the bridge command remodel.rebuild, matching "
+                + "IModelDoc2.Rebuild and IModelDocExtension.Rebuild only by the part after the dot",
 
             // The same decision: lower-case words the product uses for something else.
-            [("close", "BridgeDispatcher.cs")] = "the label CloseCopyUnsaved gives its clean-up step in a failure "
-                + "sentence; the call is gated as ISldWorks.CloseDoc, matching IModelDoc2.Close only by case",
-            [("rebuild", "RemodelHost.cs")] = "the plan's JSON member whose value the Remodel page receives as "
-                + "rebuild_list, matching IModelDoc2.Rebuild only by case",
-            [("events.close", "ReviewHost.cs")] = "a message type the Review page sends its host, matching "
-                + "IModelDoc2.Close only by the part after the dot",
-            [("send_when_checked.save", "ReviewHost.cs")] = "a message type the Review page sends its host, matching "
-                + "IModelDoc2.Save only by the part after the dot",
-            [("settings.save", "ReviewHost.cs")] = "a message type the Review page sends its host, matching "
-                + "IModelDoc2.Save only by the part after the dot",
+            [("close", "SwReview.Extractor/Bridge/BridgeDispatcher.cs")] =
+                "the label CloseCopyUnsaved gives its clean-up step in a failure sentence; the call is gated as "
+                + "ISldWorks.CloseDoc, matching IModelDoc2.Close only by case",
+            [("rebuild", "SwReview.AddIn/Remodel/RemodelHost.cs")] =
+                "the plan's JSON member whose value the Remodel page receives as rebuild_list, matching "
+                + "IModelDoc2.Rebuild only by case",
+            [("events.close", "SwReview.AddIn/Review/ReviewHost.cs")] =
+                "a message type the Review page sends its host, matching IModelDoc2.Close only by the part after the dot",
+            [("send_when_checked.save", "SwReview.AddIn/Review/ReviewHost.cs")] =
+                "a message type the Review page sends its host, matching IModelDoc2.Save only by the part after the dot",
+            [("settings.save", "SwReview.AddIn/Review/ReviewHost.cs")] =
+                "a message type the Review page sends its host, matching IModelDoc2.Save only by the part after the dot",
         };
 
     private static readonly Regex StringLiteral = new Regex("\"((?:[^\"\\\\\\r\\n]|\\\\.)*)\"", RegexOptions.Compiled);
@@ -1354,8 +1368,9 @@ public class DrawingFamilyReadAuditTests
     }
 
     /// <summary>
-    /// Every string literal of the product source, with the file it is in. A literal never spans a
-    /// line (the pattern stops at one), so the source is read a line at a time.
+    /// Every string literal of the product source, with the file it is in, by its path under the
+    /// extractor folder (<see cref="PathUnder"/>). A literal never spans a line (the pattern stops at
+    /// one), so the source is read a line at a time.
     ///
     /// Edited deliberately for decision 140A (2026-10-19): a line that is a comment and nothing else
     /// (<see cref="IsWholeLineComment"/>) is skipped. A word quoted in a comment - <c>"rebuild"</c> in
@@ -1366,9 +1381,11 @@ public class DrawingFamilyReadAuditTests
     /// </summary>
     internal static IReadOnlyList<(string Literal, string Where)> Literals()
     {
+        string root = ExtractorRoot();
         var found = new List<(string, string)>();
         foreach (string file in ProductSourceFiles())
         {
+            string where = PathUnder(root, file);
             foreach (string line in File.ReadAllLines(file))
             {
                 if (IsWholeLineComment(line))
@@ -1378,12 +1395,25 @@ public class DrawingFamilyReadAuditTests
 
                 foreach (Match match in StringLiteral.Matches(line))
                 {
-                    found.Add((match.Groups[1].Value, Path.GetFileName(file)));
+                    found.Add((match.Groups[1].Value, where));
                 }
             }
         }
 
         return found;
+    }
+
+    /// <summary>
+    /// <paramref name="file"/>'s path under <paramref name="root"/>, the extractor folder, with forward
+    /// slashes - <c>SwReview.Extractor/Capture/SwCaptureView.cs</c> - which names one file however
+    /// many others share its name. Since decision 140A's second pass (2026-10-19): the scan named a
+    /// file by its name alone, and a key by file needed a check that no two files shared one, which
+    /// failed for any two that did, whether or not a key named either.
+    /// </summary>
+    private static string PathUnder(string root, string file)
+    {
+        Assert.StartsWith(root, file, StringComparison.OrdinalIgnoreCase);
+        return file.Substring(root.Length).TrimStart('\\', '/').Replace('\\', '/');
     }
 
     /// <summary>A line whose first characters, after its indentation, open a line comment.</summary>
@@ -1480,27 +1510,6 @@ public class DrawingFamilyReadAuditTests
                 $"\"{entry.Key.Literal}\" is no longer a literal of {entry.Key.Where}; drop it, or say what it is now.");
             Assert.Contains(Judged(entry.Key.Literal), table, StringComparer.OrdinalIgnoreCase);
         }
-    }
-
-    /// <summary>
-    /// The named literals here and in <see cref="CreationFamilyReadAuditTests"/>, the probe host's
-    /// exception there and <see cref="DocumentWriteFamilyTests"/>' members left allowed name a file by
-    /// its name alone, as <see cref="Literals"/> reports it; no two files of the product source share
-    /// one, so each names one place (decision 140A's review, 2026-10-19).
-    /// </summary>
-    [Fact]
-    public void NoTwoFilesOfTheProductSourceShareAName()
-    {
-        var shared = ProductSourceFiles()
-            .GroupBy(file => Path.GetFileName(file), StringComparer.Ordinal)
-            .Where(group => group.Count() > 1)
-            .Select(group => string.Join(" and ", group))
-            .ToList();
-
-        Assert.True(
-            shared.Count == 0,
-            "Files of the product source share a name, so a literal keyed by its file name no longer names one "
-                + "place; key it by more of the path: " + string.Join("; ", shared));
     }
 }
 
@@ -1871,22 +1880,26 @@ public class DocumentWriteFamilyTests
 
     /// <summary>
     /// The family members left allowed by every guard, each with the product file whose call needs it
-    /// and the reason. Keyed interface-qualified, though the guard matches bare names.
+    /// and the reason. Keyed interface-qualified, though the guard matches bare names. A file, here
+    /// and in <see cref="Exceptions"/>, is its path under the extractor folder, as the read audit's
+    /// scan reports it (decision 140A's second pass, 2026-10-19).
     /// </summary>
     internal static readonly IReadOnlyDictionary<string, (string Where, string Reason)> Allowed =
         new Dictionary<string, (string Where, string Reason)>(StringComparer.Ordinal)
         {
-            ["IModelDoc2.SaveBMP"] = ("SwCaptureView.cs", "the capture's image of a view: SwCaptureView gates the bare name on "
-                + "the session's read-only gate and has it write a bitmap of the graphics window beside the capture's PNG, at "
-                + "the PNG's name with .bmp. SaveBMP writes to whatever path it is handed, a document's included, and a guard "
-                + "judges names, never paths: what keeps this path an image is the capture's own code, which names the PNG "
-                + "under the captures folder of the directory the host chose and checks its extension with AssertSaveAs "
-                + "first. SaveAs3 stays refused"),
-            ["IFeatureManager.MoveToFolder"] = ("SwRemodelProbeHost.cs", "probe remodel's PROBE-5 moves a feature of its "
-                + "throwaway part into a folder: SwRemodelProbeHost gates the bare name under RemodelProbeGuard, which hands "
-                + "it to the read-only guard, as it does NewDocument (feature 004 T032); never the engineer's document, which "
-                + "probe remodel refuses to run beside. RemodelGuardTests keeps it as its example of a bare writer the "
-                + "denylist misses, the reason the re-modeler's writes are interface-qualified"),
+            ["IModelDoc2.SaveBMP"] = ("SwReview.Extractor/Capture/SwCaptureView.cs",
+                "the capture's image of a view: SwCaptureView gates the bare name on the session's read-only gate and "
+                + "has it write a bitmap of the graphics window beside the capture's PNG, at the PNG's name with .bmp. "
+                + "SaveBMP writes to whatever path it is handed, a document's included, and a guard judges names, never "
+                + "paths: what keeps this path an image is the capture's own code, which names the PNG under the "
+                + "captures folder of the directory the host chose and checks its extension with AssertSaveAs first. "
+                + "SaveAs3 stays refused"),
+            ["IFeatureManager.MoveToFolder"] = ("SwReview.Extractor/Rms/SwRemodelProbeHost.cs",
+                "probe remodel's PROBE-5 moves a feature of its throwaway part into a folder: SwRemodelProbeHost gates "
+                + "the bare name under RemodelProbeGuard, which hands it to the read-only guard, as it does NewDocument "
+                + "(feature 004 T032); never the engineer's document, which probe remodel refuses to run beside. "
+                + "RemodelGuardTests keeps it as its example of a bare writer the denylist misses, the reason the "
+                + "re-modeler's writes are interface-qualified"),
         };
 
     /// <summary>
@@ -1897,15 +1910,15 @@ public class DocumentWriteFamilyTests
     internal static readonly IReadOnlyDictionary<string, (string Where, string Reason)> Exceptions =
         new Dictionary<string, (string Where, string Reason)>(StringComparer.Ordinal)
         {
-            ["SuppressTestGuard ForceRebuild3"] = ("SuppressTest.cs",
+            ["SuppressTestGuard ForceRebuild3"] = ("SwReview.Extractor/Rms/SuppressTest.cs",
                 "feature 003's engineer-run suppress-test rebuilds after its one suppression"),
-            ["RemodelProbeGuard ForceRebuild3"] = ("SwRemodelProbeHost.cs",
+            ["RemodelProbeGuard ForceRebuild3"] = ("SwReview.Extractor/Rms/SwRemodelProbeHost.cs",
                 "probe remodel rebuilds its throwaway part after each step (feature 004 T032)"),
-            ["RemodelProbeGuard SaveAs3"] = ("SwRemodelProbeHost.cs",
+            ["RemodelProbeGuard SaveAs3"] = ("SwReview.Extractor/Rms/SwRemodelProbeHost.cs",
                 "probe remodel saves its throwaway part into the run folder, behind RemodelProbe.AssertPartSavePath"),
-            ["RemodelGuard IModelDoc2.ForceRebuild3"] = ("BridgeDispatcher.cs",
+            ["RemodelGuard IModelDoc2.ForceRebuild3"] = ("SwReview.Extractor/Bridge/BridgeDispatcher.cs",
                 "the re-modeler's one rebuild of its own copy (feature 004's stage-1 allowlist)"),
-            ["RemodelGuard IModelDoc2.Save3"] = ("BridgeDispatcher.cs",
+            ["RemodelGuard IModelDoc2.Save3"] = ("SwReview.Extractor/Bridge/BridgeDispatcher.cs",
                 "the re-modeler's one save of its own copy, behind RemodelScope.AssertSaveTarget (feature 004's stage-1 allowlist)"),
         };
 
