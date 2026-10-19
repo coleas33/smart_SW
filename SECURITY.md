@@ -2,8 +2,9 @@
 
 ## Supported versions
 
-smart_SW is a pre-release pilot with no tagged releases. Only the current `main` branch is
-supported: a fix lands on `main`, and there are no older versions to patch.
+smart_SW is a pilot. Its releases are tagged from `main`, the first being `v0.2.0`, and are not
+patched afterwards. Only the current `main` branch is supported: a fix lands on `main` and
+reaches the next release.
 
 ## Reporting a vulnerability
 

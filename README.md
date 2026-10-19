@@ -8,8 +8,9 @@ and never computes a verdict.
 
 ## Status
 
-This is a pilot, run on one licensed SOLIDWORKS workstation. There are no releases; `main` is
-the only supported version. Most features are built and tested offline, and several still wait
+This is a pilot, run on one licensed SOLIDWORKS workstation. Releases are tagged from `main`; the
+first is [`v0.2.0`](https://github.com/coleas33/smart_SW/releases/tag/v0.2.0), and `main` is the
+only supported version. Most features are built and tested offline, and several still wait
 on tasks that only the licensed seat can run. [`specs/README.md`](specs/README.md) gives each
 feature's status and [`CHANGELOG.md`](CHANGELOG.md) what landed when. Dated pilot records
 (findings, handovers, status notes, earlier roadmaps) are kept in

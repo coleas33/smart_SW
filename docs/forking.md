@@ -88,14 +88,19 @@ per-machine files live, and how they are installed, is its
 
 ## 3. Syncing with upstream
 
-Add upstream as a second remote once, then merge it whenever you want its changes:
+Upstream tags its releases from `main` (`v0.2.0` is the first; [`CHANGELOG.md`](../CHANGELOG.md)
+lists them). Add upstream as a second remote once, then merge a release tag whenever you want its
+changes, so that the fork always sits on a named upstream version (decision 133A):
 
 ```text
 git remote add upstream https://github.com/coleas33/smart_SW.git
-git fetch upstream
+git fetch upstream --tags
 git checkout main
-git merge upstream/main
+git merge v0.2.0
 ```
+
+Merge `upstream/main` instead only when the fork needs a fix that no release holds yet. Give the
+fork's own tags a prefix of its own, so that they never collide with upstream's `v` tags.
 
 Then run the gates ([`AGENTS.md`](../AGENTS.md#gates-before-every-commit)) and, if anything under
 `extractor/` changed, the C# gate, before pushing the merge to the fork. [`CHANGELOG.md`](../CHANGELOG.md)

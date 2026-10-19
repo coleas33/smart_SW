@@ -3,14 +3,44 @@
 All notable changes to this project are recorded here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-There are no releases yet and no release tags; `main` is the only supported version (see
-[`SECURITY.md`](SECURITY.md)). The reviewer package declares version `0.2.0` in
-`reviewer/pyproject.toml` and the extractor `0.1.0` in `extractor/Directory.Build.props`, but
-neither has been released under that number. Until a release is cut, the work is recorded below
-as dated entries, one per feature or milestone, newest first. A date is when the work landed on
-`main` (from `git log --first-parent main`); a range covers a feature that landed over several
-days. Each feature's own status, including the tasks that still wait on the licensed seat, is in
+Releases are tagged `vX.Y.Z` from `main` and published on the repository's
+[Releases](https://github.com/coleas33/smart_SW/releases) page; `main` is the only supported
+version (see [`SECURITY.md`](SECURITY.md)). A release names the state of the whole repository,
+while the components keep their own versions; each release below lists them (decision 133A).
+Under the first release, the work that went into it is recorded as dated entries, one per
+feature or milestone, newest first. A date is when the work landed on `main` (from
+`git log --first-parent main`); a range covers a feature that landed over several days. Each
+feature's own status, including the tasks that still wait on the licensed seat, is in
 [`specs/README.md`](specs/README.md).
+
+## [Unreleased]
+
+Nothing yet.
+
+## [0.2.0] - 2026-10-19
+
+The first tagged release. It holds all the work in the dated entries below, from 2026-09-12 to
+2026-10-18, and the corrections of 2026-10-19 listed here. The components keep their own
+versions: the reviewer package `swreview` is `0.2.0` (`reviewer/pyproject.toml`), and the
+extractor and add-in are `0.1.0` (`extractor/Directory.Build.props`). The extractor's version is
+part of a dump's reuse key, so keeping it means no design has to be extracted again.
+
+### Fixed
+
+- A check's own report (a Model check's, a Standards check's, the re-modeler's grade) no longer
+  names a model, since none runs: it prints "Model: not sent to the model (checked by code only)"
+  and no provider (decision 132A).
+- The documents that described Gemini as a provider in use, the efficiency flags as all off by
+  default, the reviewer as reading the pane's settings file, and the Task Pane's earlier tabs now
+  match the code (decision 132A).
+
+### Upgrading
+
+- The repository's history was rewritten on 2026-10-18 (decision 121A,
+  [`docs/decisions.md`](docs/decisions.md#one-counter-from-121a-decision-128a)). A clone made
+  before then must be cloned again, not pulled.
+- A downstream fork merges release tags; see
+  [`docs/forking.md`](docs/forking.md#3-syncing-with-upstream).
 
 ## 2026-10-18: Continuous integration and documentation layout
 
@@ -132,3 +162,6 @@ days. Each feature's own status, including the tasks that still wait on the lice
 - The first build: the C# extractor and add-in, the Python reviewer's IR, units, ingest,
   deterministic checks, curated tools, agent loop, report, CLI and benchmark commands.
   [Spec](specs/001-agentic-design-review/spec.md).
+
+[Unreleased]: https://github.com/coleas33/smart_SW/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/coleas33/smart_SW/releases/tag/v0.2.0
