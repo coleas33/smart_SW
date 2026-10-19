@@ -1127,6 +1127,24 @@ public class DrawingProbeTests : IDisposable
     }
 
     /// <summary>
+    /// Decision 136A's review (2026-10-19): the reading names only what failed. When the restore of
+    /// new drawings' visibility fails, the seam refuses before it asks <c>IsOpenedReadOnly</c>, so the
+    /// read-only state is not judged: the open is what failed.
+    /// </summary>
+    [Fact]
+    public void D14_ARestoreThatFailsIsNotJudgedOnTheReadOnlyStateItNeverAsked()
+    {
+        _host.Seam.RestoreFailure = new COMException("restore failed", unchecked((int)0x80004005));
+
+        IReadOnlyList<string> lines = Section(RunOnPart("D14"), "D14");
+
+        Assert.Contains("  IsOpenedReadOnly: not called", lines);
+        Assert.Equal(
+            "  against confirmed-open.md: not as required: the open, the drawing's views",
+            lines.Last());
+    }
+
+    /// <summary>
     /// Decision 136A's review (2026-10-19): an open that says SOLIDWORKS already had the drawing open
     /// - here, though the probe's own lookup did not find it - did not open it, so the seam reads it
     /// as it stands, never asks or closes it, and the probe's reading fails the seam keys it gated

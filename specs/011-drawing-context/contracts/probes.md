@@ -127,9 +127,11 @@ Every other line keeps the rule above.
   `IsOpenedReadOnly:` and what the drawing the open returned answered to the seam's read-only
   check: `true`, `false`, or `failed (<Type> 0x<HRESULT>)`, never the failure's message; or `not
   called` when the drawing was already open, the open returned none, or the open said SOLIDWORKS
-  already had it open (then the outcome is "already open" and the gated seam keys fail it). For a drawing it opened, the
-  reading names `the read-only state`, after the open-mode integers, unless the drawing answered,
-  and answered true.
+  already had it open (then the outcome is "already open" and the gated seam keys fail it). For a
+  drawing it opened, the reading names `the read-only state`, after the open-mode integers, unless
+  the drawing answered, and answered true. *On the decision's review, the same day*: a check never
+  asked is not judged - the seam asks only a drawing it opened and restored, so after an open that
+  returned none, or a restore that failed, the open is what failed and the reading names only that.
 - **The report.** Beside the read-only gate's log it prints the confirmed open's own guard's
   members, which the read-only log cannot show. Its exit code is 0 when the run completed, whatever
   a probe printed, and 1 when it was refused, stopped or could not write its report.

@@ -296,12 +296,12 @@ public static class DrawingOpenProbe
                         : ProbeText.Bool(check.Answer.Value)));
 
         /// <summary>
-        /// Decision 136A: a drawing the open returned answered <c>IsOpenedReadOnly</c>, and every answer
-        /// was true. With no drawing returned there is nothing to ask, and the open is what failed.
+        /// Decision 136A: every answer the seam's <c>IsOpenedReadOnly</c> check gave was true. A check
+        /// never asked is not judged (on the decision's review, 2026-10-19): the seam asks only a drawing
+        /// it opened and restored, so with no drawing returned, or a restore that failed, the open is
+        /// what failed, and the reading names only that.
         /// </summary>
-        private bool ReadOnlyAsRequired() =>
-            !_recording.Returned
-            || (_recording.ReadOnly.Count > 0 && _recording.ReadOnly.All(check => check.Answer == true));
+        private bool ReadOnlyAsRequired() => _recording.ReadOnly.All(check => check.Answer == true);
 
         private static string Flag(int options, int bit) => (options & bit) != 0 ? "yes" : "no";
 
@@ -647,9 +647,6 @@ public static class DrawingOpenProbe
 
         public List<(bool Visible, int Type)> Visibility { get; } = new List<(bool Visible, int Type)>();
 
-        /// <summary>True once <c>OpenDoc6</c> has returned a drawing, which must then answer the check.</summary>
-        public bool Returned { get; private set; }
-
         /// <summary>
         /// Decision 136A: what each <c>IsOpenedReadOnly</c> the seam asked answered, or its failure
         /// as <see cref="ProbeText.Failure"/> prints it - the answer is null then.
@@ -667,9 +664,7 @@ public static class DrawingOpenProbe
         public object? OpenDoc6(string path, int documentType, int options, string configuration, out int errors, out int warnings)
         {
             Opens.Add((documentType, options, configuration ?? string.Empty));
-            object? opened = _host.OpenDoc6(path, documentType, options, configuration!, out errors, out warnings);
-            Returned |= opened != null;
-            return opened;
+            return _host.OpenDoc6(path, documentType, options, configuration!, out errors, out warnings);
         }
 
         /// <summary>The answer or the failure is recorded, then handed to the seam as it came, so it decides as in the product.</summary>
