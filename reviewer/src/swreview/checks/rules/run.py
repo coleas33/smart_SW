@@ -85,6 +85,7 @@ __all__ = [
     "check_record",
     "close_session",
     "coverage_rows",
+    "is_check_folder",
     "package_design_id",
     "recorded_call",
     "recorded_session",
@@ -447,3 +448,21 @@ def recorded_session(directory: Path, record: Mapping[str, Any]) -> ReviewSessio
             )
         )
     return session
+
+
+def is_check_folder(directory: Path | str) -> bool:
+    """Whether `directory` still holds the check that ran in it, whichever family's.
+
+    It does while its `check.json` names the `session.json` beside it: a Model check's, a
+    Standards check's, or the re-modeler's grade, which is a Model check's record. What
+    `POST /sessions` asks of a folder that already holds a session before it decides who may
+    claim it (`chat/server.py`, `_claim_run_dir`). It is asked of the record every family
+    writes, not of one family's reading of it: read through the rms record, as it was until
+    owner decision 142A, a standards check was no check at all.
+    """
+    folder = Path(directory)
+    try:
+        recorded_session(folder, check_record(folder))
+    except NotACheckError:
+        return False
+    return True
