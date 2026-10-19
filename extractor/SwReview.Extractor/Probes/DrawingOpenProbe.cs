@@ -64,7 +64,8 @@ public sealed class DrawingOpenProbeSeam
 /// opens a document. Beside a reviewed part or assembly it runs the product's own seam -
 /// <see cref="DrawingOpenScope"/> with its switch overridden for this command - on the same-name
 /// drawing, and records everything <c>confirmed-open.md</c> requires of it: the open-mode integers as
-/// passed, that the active document and the focus never moved, that the hidden drawing's views read,
+/// passed, what the drawing the open returned answered to <c>IsOpenedReadOnly</c> (decision 136A),
+/// that the active document and the focus never moved, that the hidden drawing's views read,
 /// that the file's size, write time and SHA-256 are unchanged and no save flag rose, that the seam
 /// closed what it opened and the file is not left locked, the open documents before, during and
 /// after, and - with the drawing already open - that no visibility, open or close key was gated.
@@ -177,6 +178,7 @@ public static class DrawingOpenProbe
                 "  drawing open before the probe: " + openBefore.Print(ProbeText.Bool),
                 OpenDocLine(),
                 VisibilityLine(),
+                ReadOnlyLine(),
                 "  outcome: " + Outcome(result, refusal, stopped),
                 "  active document unchanged: during " + DuringSame(before.Active, during?.Active, SameObject)
                     + ", after " + Same(before.Active, after.Active, SameObject),
@@ -282,6 +284,24 @@ public static class DrawingOpenProbe
                 : "  DocumentVisible: " + string.Join(
                     ", then ",
                     _recording.Visibility.Select(call => $"{ProbeText.Bool(call.Visible)} (type {call.Type})"));
+
+        /// <summary>Decision 136A: what the opened drawing answered to the seam's read-only check.</summary>
+        private string ReadOnlyLine() =>
+            _recording.ReadOnly.Count == 0
+                ? "  IsOpenedReadOnly: not called"
+                : "  IsOpenedReadOnly: " + string.Join(
+                    ", then ",
+                    _recording.ReadOnly.Select(check => check.Answer == null
+                        ? $"failed ({check.Failure})"
+                        : ProbeText.Bool(check.Answer.Value)));
+
+        /// <summary>
+        /// Decision 136A: a drawing the open returned answered <c>IsOpenedReadOnly</c>, and every answer
+        /// was true. With no drawing returned there is nothing to ask, and the open is what failed.
+        /// </summary>
+        private bool ReadOnlyAsRequired() =>
+            !_recording.Returned
+            || (_recording.ReadOnly.Count > 0 && _recording.ReadOnly.All(check => check.Answer == true));
 
         private static string Flag(int options, int bit) => (options & bit) != 0 ? "yes" : "no";
 
@@ -431,6 +451,11 @@ public static class DrawingOpenProbe
                     || open.Configuration.Length != 0))
             {
                 failures.Add("the open-mode integers");
+            }
+
+            if (!ReadOnlyAsRequired())
+            {
+                failures.Add("the read-only state");
             }
 
             if (result == null || !result.OpenedByReview)
@@ -622,6 +647,15 @@ public static class DrawingOpenProbe
 
         public List<(bool Visible, int Type)> Visibility { get; } = new List<(bool Visible, int Type)>();
 
+        /// <summary>True once <c>OpenDoc6</c> has returned a drawing, which must then answer the check.</summary>
+        public bool Returned { get; private set; }
+
+        /// <summary>
+        /// Decision 136A: what each <c>IsOpenedReadOnly</c> the seam asked answered, or its failure
+        /// as <see cref="ProbeText.Failure"/> prints it - the answer is null then.
+        /// </summary>
+        public List<(bool? Answer, string? Failure)> ReadOnly { get; } = new List<(bool? Answer, string? Failure)>();
+
         public object? OpenDocument(string path) => _host.OpenDocument(path);
 
         public void DocumentVisible(bool visible, int documentType)
@@ -633,10 +667,26 @@ public static class DrawingOpenProbe
         public object? OpenDoc6(string path, int documentType, int options, string configuration, out int errors, out int warnings)
         {
             Opens.Add((documentType, options, configuration ?? string.Empty));
-            return _host.OpenDoc6(path, documentType, options, configuration!, out errors, out warnings);
+            object? opened = _host.OpenDoc6(path, documentType, options, configuration!, out errors, out warnings);
+            Returned |= opened != null;
+            return opened;
         }
 
-        public bool IsOpenedReadOnly(object document) => _host.IsOpenedReadOnly(document);
+        /// <summary>The answer or the failure is recorded, then handed to the seam as it came, so it decides as in the product.</summary>
+        public bool IsOpenedReadOnly(object document)
+        {
+            try
+            {
+                bool answer = _host.IsOpenedReadOnly(document);
+                ReadOnly.Add((answer, null));
+                return answer;
+            }
+            catch (Exception error)
+            {
+                ReadOnly.Add((null, ProbeText.Failure(error)));
+                throw;
+            }
+        }
 
         public void CloseDoc(string path) => _host.CloseDoc(path);
     }

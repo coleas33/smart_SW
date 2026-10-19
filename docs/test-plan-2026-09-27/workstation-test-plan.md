@@ -1342,6 +1342,7 @@ the development machine (section 3.10).
      drawing open before the probe: false
      OpenDoc6: type 3, options 3 (ReadOnly 2 yes, Silent 1 yes, ViewOnly 4 no, RapidDraft 8 no, LoadModel 16 no), configuration ""
      DocumentVisible: false (type 3), then true (type 3)
+     IsOpenedReadOnly: true
      outcome: opened by the probe and closed
      active document unchanged: during true, after true
      foreground window unchanged: during true, after true
@@ -1365,6 +1366,7 @@ the development machine (section 3.10).
      drawing open before the probe: true
      OpenDoc6: not called
      DocumentVisible: not called
+     IsOpenedReadOnly: not called
      outcome: already open, read as it stood and left open
      active document unchanged: during true, after true
      foreground window unchanged: during true, after true
@@ -1406,12 +1408,14 @@ holds:
 
 1. Both D14 reports of step 3.9 exist, on the same part J, each with exit code 0.
 2. The drawing-closed report matches the first block of step 3.9 line for line: type 3, options 3
-   with only ReadOnly and Silent, configuration `""`; hidden then shown again, type 3; opened by the
+   with only ReadOnly and Silent, configuration `""`; hidden then shown again, type 3; the opened
+   drawing answers `IsOpenedReadOnly: true` (decision 136A, 2026-10-19); opened by the
    probe and closed; the active document and the window in front unchanged, during and after; at
    least one view read; the file's size, write time and SHA-256 unchanged; no save flag raised by
    the run; afterwards not open and not locked; the three seam keys; `every answer as required`.
-3. The drawing-open report matches the second block: nothing opened, hidden or closed; `seam keys
-   gated: none`; the drawing still open; the same unchanged lines; `every answer as required`.
+3. The drawing-open report matches the second block: nothing opened, hidden, asked
+   `IsOpenedReadOnly` or closed; `seam keys gated: none`; the drawing still open; the same
+   unchanged lines; `every answer as required`.
 4. Both reports' read-only gate log says `mutating members: none` and `refusals: none`.
 5. No drawing window appeared during the first run, and the drawing stayed open after the second.
 
