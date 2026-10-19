@@ -945,7 +945,8 @@ public class DrawingFamilyDenylistTests
     /// stage-1 allowlist key, a member <see cref="RemodelGuard"/> refuses itself, or a member a
     /// sanctioned path already calls by its bare name - the extractor's read-only model open and
     /// feature 004's two opens of documents it created (found by the read audit, T003), and, since
-    /// decision 140A refused the save family, the capture's image, <c>SaveBMP</c>. Edited
+    /// decision 140A refused the save and move families, the capture's image, <c>SaveBMP</c>, and
+    /// <c>probe remodel</c>'s move into a folder, <c>MoveToFolder</c>. Edited
     /// deliberately for decision 136A (2026-10-19), which accepted one exclusion more, <c>Close</c>,
     /// the member half of the bridge command <c>remodel.close</c> while the dispatcher handed command
     /// names to the read-only guard; and narrowed back for decision 140A the same day, when the
@@ -960,6 +961,7 @@ public class DrawingFamilyDenylistTests
             "OpenDoc7",
             "NewDocument",
             "SaveBMP",
+            "MoveToFolder",
         };
         var bareKeys = new HashSet<string>(
             RemodelGuard.AllowedKeys.Select(CallKey.BareName), StringComparer.OrdinalIgnoreCase);
@@ -978,13 +980,15 @@ public class DrawingFamilyDenylistTests
     /// <summary>
     /// The sanctioned calls stay allowed whether or not a grammar reached them: the extractor's
     /// read-only model open, feature 004's copy open and throwaway part, the two shared names
-    /// feature 004's allowlist keys carry, and (decision 140A) the capture's image.
+    /// feature 004's allowlist keys carry, and (decision 140A) the capture's image and
+    /// <c>probe remodel</c>'s move into a folder.
     /// </summary>
     [Theory]
     [InlineData("OpenDoc6")]
     [InlineData("OpenDoc7")]
     [InlineData("NewDocument")]
     [InlineData("SaveBMP")]
+    [InlineData("MoveToFolder")]
     [InlineData("CloseDoc")]
     [InlineData("SetUserPreferenceToggle")]
     [InlineData("set_Name")]
@@ -1081,9 +1085,11 @@ public class DrawingFamilyCompletenessTests
     /// decision 136A (2026-10-19): <c>IModelDoc2</c> joined, for its close, quit, reload and activate
     /// members (<see cref="DocumentLifecycleFamilyTests"/>). Edited deliberately for decision 140A the
     /// same day: <c>IPartDoc</c> and <c>IAssemblyDoc</c> joined, for their save, copy, replace and
-    /// rebuild members (<see cref="DocumentWriteFamilyTests"/>).
+    /// rebuild members, and on its review <c>IFeatureManager</c>, for its move members
+    /// (<see cref="DocumentWriteFamilyTests"/>).
     /// </summary>
-    internal static readonly string[] SharedFamilies = { "ISldWorks", "IModelDoc2", "IModelDocExtension", "IPartDoc", "IAssemblyDoc" };
+    internal static readonly string[] SharedFamilies =
+        { "ISldWorks", "IModelDoc2", "IModelDocExtension", "IPartDoc", "IAssemblyDoc", "IFeatureManager" };
 
     /// <summary>contracts/guard.md section 2: a name starting with one of these is a reader.</summary>
     private static readonly string[] ReaderPrefixes = { "get_", "Get", "IGet", "Is" };
@@ -1747,8 +1753,8 @@ public class DocumentLifecycleFamilyTests
 /// third question).
 ///
 /// This class reflects the interop the extractor is built against and holds every member of the
-/// interfaces a document is reached through - <see cref="Interfaces"/> - whose name belongs to the
-/// save, rename, move and copy, replace, release and lock, read-only or rebuild families
+/// interfaces the guard covers - <see cref="Interfaces"/> - whose name belongs to the save, rename,
+/// move and copy, replace, release and lock, read-only or rebuild families
 /// (<see cref="BelongsToAFamily"/>) to one of three answers: a reader by section 2's prefixes, which
 /// stays allowed; the member left allowed, with its reason (<see cref="Allowed"/>); or refused by
 /// <see cref="ReadOnlyGuard"/> in both spellings a call site can hand it, and by every gate the product
@@ -1760,12 +1766,32 @@ public class DocumentLifecycleFamilyTests
 public class DocumentWriteFamilyTests
 {
     /// <summary>
-    /// The three of <see cref="DocumentLifecycleFamilyTests"/>, and the three document types a model
-    /// document also is, whose saves, replaces and rebuilds act on that same document - 004's
-    /// guard-allowlist.md had recorded <c>IPartDoc.SaveToFile</c> to <c>SaveToFile3</c> as open.
+    /// Every interface the guard covers: the three of <see cref="DocumentLifecycleFamilyTests"/>; the
+    /// document types a model document also is, whose saves, replaces and rebuilds act on that same
+    /// document (004's guard-allowlist.md had recorded <c>IPartDoc.SaveToFile</c> to
+    /// <c>SaveToFile3</c> as open); and every interface one of the guard's generated tables reflects -
+    /// decision 21A's creation interfaces, <c>IFeatureManager</c> among them, and feature 011's 28
+    /// drawing families, <c>IDrawingDoc</c> among them. Widened on the decision's review: it read the
+    /// first six only.
     /// </summary>
     internal static readonly string[] Interfaces =
-        DocumentLifecycleFamilyTests.Interfaces.Concat(new[] { "IPartDoc", "IAssemblyDoc", "IDrawingDoc" }).ToArray();
+        DocumentLifecycleFamilyTests.Interfaces
+            .Concat(new[] { "IPartDoc", "IAssemblyDoc" })
+            .Concat(CreationFamilyCompletenessTests.Families)
+            .Concat(DrawingFamilyCompletenessTests.DrawingFamilies)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+    /// <summary>
+    /// The interfaces the families were found on with 32.5.0.48: the members must still be there. The
+    /// others are read so that a later interop's member fails the tests until someone decides.
+    /// </summary>
+    private static readonly string[] InterfacesWithMembers =
+    {
+        "ISldWorks", "IModelDoc2", "IModelDocExtension", "IPartDoc", "IAssemblyDoc", "IFeatureManager",
+        "IDrawingDoc", "ISheet", "IView", "IDimension", "IAnnotation", "INote", "ITableAnnotation",
+        "IBomTableAnnotation",
+    };
 
     /// <summary>
     /// The families, as a word of a member's name, read the way <see cref="DocumentLifecycleFamilyTests"/>
@@ -1808,6 +1834,11 @@ public class DocumentWriteFamilyTests
                 + "the session's read-only gate, after CaptureService's AssertSaveAs has checked the image's extension, and "
                 + "SaveBMP writes a bitmap of the graphics window, which the capture turns into its PNG under the directory "
                 + "the host chose; it cannot write a document, and SaveAs3, which can, stays refused"),
+            ["IFeatureManager.MoveToFolder"] = ("SwRemodelProbeHost.cs", "probe remodel's PROBE-5 moves a feature of its "
+                + "throwaway part into a folder: SwRemodelProbeHost gates the bare name under RemodelProbeGuard, which hands "
+                + "it to the read-only guard, as it does NewDocument (feature 004 T032); never the engineer's document, which "
+                + "probe remodel refuses to run beside. RemodelGuardTests keeps it as its example of a bare writer the "
+                + "denylist misses, the reason the re-modeler's writes are interface-qualified"),
         };
 
     /// <summary>
@@ -1869,16 +1900,18 @@ public class DocumentWriteFamilyTests
 
     /// <summary>
     /// A floor, so a grammar or a reflection that found almost nothing cannot pass vacuously, and the
-    /// members research R8.5 and 004's guard-allowlist.md named are among what it finds.
+    /// members research R8.5, 004's guard-allowlist.md and the decision's review named are among what
+    /// it finds.
     /// </summary>
     [RemodelInteropManifestTests.InteropAssembliesPresentFact]
     public void TheFamiliesAreFoundOnEachInterface()
     {
         IReadOnlyList<string> members = FamilyMembers();
 
-        Assert.True(members.Count >= 80, "The family grammar found almost nothing: " + string.Join(", ", members));
-        foreach (string face in Interfaces)
+        Assert.True(members.Count >= 100, "The family grammar found almost nothing: " + string.Join(", ", members));
+        foreach (string face in InterfacesWithMembers)
         {
+            Assert.Contains(face, Interfaces);
             Assert.Contains(members, key => key.StartsWith(face + ".", StringComparison.Ordinal));
         }
 
@@ -1893,6 +1926,8 @@ public class DocumentWriteFamilyTests
                      "ISldWorks.MoveDocument", "ISldWorks.ReplaceReferencedDocument", "IModelDoc2.SaveBMP",
                      "IModelDoc2.Rebuild", "IModelDocExtension.Rebuild", "IModelDocExtension.EditRebuildAll",
                      "IPartDoc.SaveToFile", "IPartDoc.SaveToFile2", "IPartDoc.SaveToFile3",
+                     "IFeatureManager.MoveToFolder", "IFeatureManager.MoveRotateLiveSectionPlane",
+                     "IFeatureManager.set_MoveSizeFeatures",
                  })
         {
             Assert.Contains(named, members);

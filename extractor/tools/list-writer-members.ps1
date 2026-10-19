@@ -72,10 +72,11 @@ $familyCount = $drawingFamilies.Count
 # remodel.save and remodel.rebuild by their member halves.
 #
 # The same decision names every member of the save, rename, move and copy, replace, release and lock,
-# read-only and rebuild families of these three interfaces and of IPartDoc and IAssemblyDoc (two rows
-# more; IDrawingDoc's are writers of its family row already) that the guard did not refuse yet, and
-# SaveBMP, which stays allowed for the reason below. DocumentWriteFamilyTests (GuardTests.cs) reflects
-# the interop with that family grammar to prove the rows complete. Three kinds of member are refused
+# read-only and rebuild families of these three interfaces and of IPartDoc, IAssemblyDoc and, on the
+# decision's review, IFeatureManager (three rows more; the drawing families' are writers of their
+# family rows already) that the guard did not refuse yet, and SaveBMP and MoveToFolder, which stay
+# allowed for the reasons below. DocumentWriteFamilyTests (GuardTests.cs) reflects the interop with
+# that family grammar to prove the rows complete. Three kinds of member are refused
 # already and are not named here: those Guard/ReadOnlyGuard.cs denies (Save3, SaveAs3, SetSaveFlag,
 # EditRebuild3, ForceRebuild3, ForceRebuildAll, and InsertFeatureReplaceFace by its InsertFeature
 # prefix); those this table's drawing rows deny by a bare name the document types share (EditRebuild,
@@ -126,6 +127,9 @@ $sharedRows = [ordered]@{
         'SaveIsolate', 'CopyWithMates', 'CopyWithMates2', 'ReplaceComponents', 'ReplaceComponents2',
         'ReplacePLMComponents', 'ForceRebuild2', 'set_EnableAssemblyRebuild'
     )
+    'IFeatureManager' = @(
+        'MoveRotateLiveSectionPlane', 'set_MoveSizeFeatures', 'MoveToFolder'
+    )
 }
 
 # ---- section 2: the writer grammar --------------------------------------------------------
@@ -151,6 +155,7 @@ $exclusions['OpenDoc6'] = "the console attach's read-only open of a part or asse
 $exclusions['OpenDoc7'] = "feature 004's open of the re-modeler's own copy (``remodel.open``, a bare read call site under ``RemodelGuard``) and ``probe remodel``'s reopen of its throwaway part; found by the read audit (T003)"
 $exclusions['NewDocument'] = "``probe remodel``'s throwaway part (feature 004 T032, under ``RemodelProbeGuard``, which exempts only the members ``ReadOnlyGuard`` refused when it was written); found by the read audit (T003)"
 $exclusions['SaveBMP'] = "the capture's image of a view (``SwCaptureView`` gates the bare name on the session's read-only gate, after ``CaptureService`` checked the image's extension with ``AssertSaveAs``): it writes a bitmap of the graphics window, which the capture turns into its PNG under the directory the host chose, and cannot write a document; ``SaveAs3``, which can, stays refused (decision 140A)"
+$exclusions['MoveToFolder'] = "``probe remodel``'s PROBE-5, which moves a feature of its throwaway part into a folder (``SwRemodelProbeHost`` gates the bare name under ``RemodelProbeGuard``, which hands it to ``ReadOnlyGuard``, as it does ``NewDocument``); never the engineer's document, which ``probe remodel`` refuses to run beside. ``RemodelGuardTests`` keeps it as its example of a bare writer the denylist misses, the reason the re-modeler's writes are interface-qualified (decision 140A's review)"
 
 function Test-AlreadyDenied([string] $name) {
     return (Test-DeniedBy $name $guard.BaseDenied $guard.BasePrefixes)
