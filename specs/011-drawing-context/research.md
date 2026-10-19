@@ -945,17 +945,27 @@ identity check passed and the refusal closed it; the review reproduced that with
 the console attach. Both opens now treat it exactly as one the lookup found: used as it stands,
 never asked `IsOpenedReadOnly`, never closed; the seam reads it with `OpenedByReview` false and, if
 the restore failed too, refuses it unread and leaves it open. `FileLoadErrors.SayAlreadyOpen` also
-honours the errors enum's older twin, `swFileAlreadyOpenWarn` (512), since honouring either can only
-keep a close from happening; the identity-checked close stays for what the call really opened. That
-also settles the case the first version of R8.5 left open, a document open under another spelling of
-its path (a mapped drive against its UNC path): the console attach attaches to it as it stands, as
-it did before this decision, instead of refusing it.
+honours the errors enum's older twin, `swFileAlreadyOpenWarn` (512), and the identity-checked close
+stays for what the call really opened. That also settles the case the first version of R8.5 left
+open, a document open under another spelling of its path (a mapped drive against its UNC path): the
+console attach attaches to it as it stands, as it did before this decision, instead of refusing it.
 
-**The seat should confirm** that SOLIDWORKS sets `swFileLoadWarning_AlreadyOpen` for a document
-already open under another spelling of its path. If it does not, the identity check still guards the
-close as long as SOLIDWORKS answers that spelling after the open as it did before it, with no
-document, so nothing is closed; and the console attach refuses the document, naming the open's
-warnings.
+*Corrected on the second review, the same day (T133)*: this record said that honouring either bit
+"can only keep a close from happening". That is not the whole of it. Honouring a bit can never close
+the engineer's document, but it also skips the read-only check: should SOLIDWORKS ever set either
+bit on a fresh open, the console attach would use the document that open opened unchecked, and the
+seam would read the hidden drawing that open opened unchecked and leave it open - though it would
+close nothing against the engineer's will. Probe D14 is how the seat confirms what SOLIDWORKS sets:
+its `OpenDoc6` line now ends with the codes the open answered (T131, T132).
+
+**The seat should confirm** two things about these bits. That SOLIDWORKS sets neither on a fresh
+open: the first D14 run of the seat plan's step 3.9 now shows the open's codes on its `OpenDoc6`
+line. And that it sets `swFileLoadWarning_AlreadyOpen` for a document already open under another
+spelling of its path: a D14 run with the drawing opened by one spelling (its UNC path, say) and
+`--doc` naming the part by another (a mapped drive) would show it; that is not yet a step of the
+plan. If SOLIDWORKS does not set the bit then, the identity check still guards the close as long as
+SOLIDWORKS answers that spelling after the open as it did before it, with no document, so nothing is
+closed; and the console attach refuses the document, naming the open's warnings.
 
 D14's reading names `the read-only state` only on an answer. When the restore of new drawings'
 visibility failed, the seam refused before it asked, yet the reading named the read-only state

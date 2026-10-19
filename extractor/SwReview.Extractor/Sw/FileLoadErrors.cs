@@ -111,8 +111,14 @@ public static class FileLoadErrors
     /// <summary>
     /// True when <c>OpenDoc6</c>'s out parameters say the document it answered with was already open
     /// - so that call did not open it (decision 136A's review, 2026-10-19). The read-only opens then
-    /// use it as it stands, as they use a document the lookup before the open found, and never
-    /// close it. Either enum's bit counts: honouring both can only keep a close from happening.
+    /// use it as it stands, as they use a document the lookup before the open found: never asked
+    /// <c>IsOpenedReadOnly</c>, never closed. Either enum's bit counts. Honouring a bit can never
+    /// close the engineer's document, but it is not free (on the decision's second review): should
+    /// SOLIDWORKS ever set one on a fresh open, the read-only check is skipped for a document that
+    /// open did open - the console attach uses it unchecked, and the confirmed drawing's seam reads
+    /// the hidden drawing unchecked and leaves it open, though it closes nothing against the
+    /// engineer's will. Probe D14 prints the codes the open answered, which is how the seat confirms
+    /// what SOLIDWORKS sets.
     /// </summary>
     public static bool SayAlreadyOpen(int errors, int warnings) =>
         (warnings & AlreadyOpenWarning) != 0 || (errors & AlreadyOpenError) != 0;
