@@ -239,6 +239,15 @@ public sealed class ReviewHostOptions
     public Func<string, string?> Environment { get; set; } =
         System.Environment.GetEnvironmentVariable;
 
+    /// <summary>
+    /// How often the host asks whether the turn a settings restart waits for has ended (owner
+    /// decision 143A). A second: it bounds only how long the backend keeps the old settings with
+    /// nothing running, since a new review makes the restart itself and a page call that would
+    /// start a turn is not sent to the old backend; and it costs one `GET /sessions/{chat_id}` per
+    /// review per poll, and only while a restart waits.
+    /// </summary>
+    public TimeSpan RestartPoll { get; set; } = TimeSpan.FromSeconds(1);
+
     internal static string DefaultLogFolder() => System.IO.Path.Combine(
         System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData),
         "SwReview",
@@ -267,7 +276,11 @@ public sealed class ReviewHostOptions
 ///
 /// <b>`settings.save` is refused, whole, while a turn is running.</b> Not partially applied
 /// and not queued: a running turn owns process state that is not on disk, so the file is not
-/// written and the backend is not restarted (chat-api.md).
+/// written and the backend is not restarted (chat-api.md). The one exception is a turn that
+/// starts after that check and before the restart, which the backend refuses with the file
+/// already written: the restart then waits for no turn to be running, and a new review waits
+/// for the restart rather than running on the old backend (owner decision 143A,
+/// <see cref="DeferredRestart"/>).
 ///
 /// <b>A model the provider does not offer is refused, and the fresh list is pushed with the
 /// refusal</b>, so the engineer re-picks from what exists instead of meeting it later as an
@@ -335,6 +348,13 @@ public sealed class ReviewHost : IDisposable
     /// </summary>
     private readonly EventStreamPump _events;
 
+    /// <summary>
+    /// The backend restart a save could not make because a turn had started, made once no turn
+    /// runs (owner decision 143A). Every restart this host makes goes through it, so two never
+    /// overlap and the one made last reads the settings saved last.
+    /// </summary>
+    private readonly DeferredRestart _restart;
+
     private UserSettings _settings;
     private string? _settingsError;
     private PreparedContext? _preparedContext;
@@ -391,6 +411,13 @@ public sealed class ReviewHost : IDisposable
                 { "chat_id", chatId },
                 { "reason", Redact(reason) },
             }));
+
+        _restart = new DeferredRestart(
+            AnyTurnRunning,
+            RestartWithSettingsInForce,
+            () => Post("backend.restarted", new Dictionary<string, object?>()),
+            failure => PostStatus("error", failure.Message),
+            options.RestartPoll);
     }
 
     /// <summary>The settings in force. Replaced by a successful `settings.save`.</summary>
@@ -704,6 +731,8 @@ public sealed class ReviewHost : IDisposable
 
     public void Dispose()
     {
+        // First, so nothing asks the backend about a turn or restarts it once the host is going.
+        _restart.Dispose();
         _events.Dispose();
         lock (_sessionsLock)
         {
@@ -1032,13 +1061,13 @@ public sealed class ReviewHost : IDisposable
         string? restartFailure = null;
         try
         {
-            _options.Backend.Restart(next, key);
-        }
-        catch (TurnRunningException)
-        {
-            // A turn started between the gate above and here. The settings are already written,
-            // so the honest answer is "saved, not yet in force".
-            restartFailure = "the settings are saved; the backend restarts when the running turn ends.";
+            if (!_restart.Now(() => _options.Backend.Restart(next, key)))
+            {
+                // A turn started between the gate above and here. The settings are already
+                // written, so the honest answer is "saved, not yet in force" - and the restart
+                // waits for the turn to end rather than being dropped (owner decision 143A).
+                restartFailure = "the settings are saved; the backend restarts when the running turn ends.";
+            }
         }
         catch (BackendStartException failure)
         {
@@ -1104,6 +1133,49 @@ public sealed class ReviewHost : IDisposable
         }
 
         PostStatus("error", string.Join(" ", problems.ToArray()));
+    }
+
+    // ---- a restart for settings saved during a turn (owner decision 143A) ---------------
+
+    /// <summary>What a new review is refused with while a turn still holds the restart back.</summary>
+    private const string TurnHoldsTheRestart =
+        "the backend restarts with the saved settings when the running turn ends, and nothing new "
+        + "starts before then. Wait for the turn to end, or stop it, then try again.";
+
+    /// <summary>
+    /// The restart <see cref="_restart"/> makes once no turn runs: the settings in force now -
+    /// the last ones saved, however many saves the turn saw - with the key resolved from them
+    /// now, so the backend is started with that provider's key and names it as the saved key's
+    /// provider (owner decision 138A).
+    /// </summary>
+    private void RestartWithSettingsInForce()
+    {
+        UserSettings settings = _settings;
+        _options.Backend.Restart(settings, settings.ResolveApiKey(_options.Environment));
+    }
+
+    /// <summary>
+    /// Makes the restart that settings saved during a turn wait for before a new review uses the
+    /// backend, or waits for the one being made, so the review runs on the restarted backend
+    /// with those settings and never on the old one. Answers false, having sent the refusal, when
+    /// it cannot: a turn still runs, and the restart cannot be made under it; or the restart
+    /// failed, which has been reported as a failed start is. True when nothing waits.
+    /// </summary>
+    private bool RestartedForNewReview(string? id)
+    {
+        switch (_restart.Apply(out Exception? failure))
+        {
+            case DeferredRestart.Outcome.TurnRunning:
+                SendError(id, "TurnRunning", TurnHoldsTheRestart, retryable: true);
+                return false;
+
+            case DeferredRestart.Outcome.Failed:
+                SendError(id, "BackendUnavailable", failure!.Message, retryable: true);
+                return false;
+
+            default:
+                return true;
+        }
     }
 
     // ---- models -------------------------------------------------------------------------
@@ -1355,6 +1427,10 @@ public sealed class ReviewHost : IDisposable
         if (AnyTurnRunning())
         {
             SendError(id, "TurnRunning", "Stop the running review before changing engineering context.", true);
+            return false;
+        }
+        if (!RestartedForNewReview(id))
+        {
             return false;
         }
         if (_options.Backend.Endpoint == null)
@@ -1700,6 +1776,7 @@ public sealed class ReviewHost : IDisposable
 
     private bool BackendReady(string? id)
     {
+        if (!RestartedForNewReview(id)) return false;
         if (_options.Backend.Endpoint != null) return true;
         SendError(id, "BackendUnavailable",
             "the review backend is not running yet, so there is nowhere to send the review. "
@@ -1737,6 +1814,13 @@ public sealed class ReviewHost : IDisposable
             // A recheck replaces this tracked chat; a fresh start instead sends the earlier
             // chat id as retry_of. Rechecks never ask the backend for a fresh retry.
             PostStatus("checking", "Checking the saved evidence again...");
+        }
+        // The one place every review's session is created, so the one place it can be made sure
+        // that it runs on the backend the settings saved during a turn restart (owner decision
+        // 143A): a dump takes minutes, and the turn can end - and the restart fall due - during it.
+        if (!RestartedForNewReview(id))
+        {
+            return false;
         }
         ChatSessionHandle handle;
         try
