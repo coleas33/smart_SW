@@ -25,6 +25,11 @@ public class ConfirmedDrawingReadTests : IDisposable
 {
     private const string RunId = "20260923-101500-chat0001";
 
+    /// <summary>How the limit's refusal ends (decision 141A): the two ways on that are true of the host.</summary>
+    private const string HowToGoOn =
+        "a drawing already open in SOLIDWORKS is still read, since reading it opens nothing, and a new review "
+        + "session (Retry or Recheck) starts its own count";
+
     private readonly string _runFolder;
 
     /// <summary>The review session the host resolves <see cref="RunId"/> to (decision 141A).</summary>
@@ -562,9 +567,10 @@ public class ConfirmedDrawingReadTests : IDisposable
 
         ConfirmedDrawingRefused refusal = Assert.Throws<ConfirmedDrawingRefused>(() => Read(RunId, HousingId));
 
+        // Edited deliberately for decision 141A: the sentence now ends saying how to go on.
         Assert.Equal(
             "the limit of ten drawings for this review is reached: 10 opens that were refused or failed, so this "
-                + "one was not opened",
+                + "one was not opened; " + HowToGoOn,
             refusal.Message);
         Assert.Equal(new[] { "OpenDocument " + HousingDrawingPath }, _host.Calls.Select(call => call.ToString()));
         Assert.Empty(_phase.Seen);
@@ -770,6 +776,69 @@ public class ConfirmedDrawingReadTests : IDisposable
             _host.Calls.Select(call => call.ToString()));
         Assert.Empty(_phase.Seen);
         Assert.Equal(10, _session.UnrecordedOpens);
+    }
+
+    // ---- decision 141A (2026-10-19): the refusal says how to go on --------------------------------
+
+    /// <summary>
+    /// The limit's refusal ends with the two ways on that are true of the host: a drawing already
+    /// open is still read, since reading it opens nothing, and a new review session starts its own
+    /// count. Both forms say so - failed opens alone, refused before the package is loaded, and
+    /// failed opens with the package's records.
+    /// </summary>
+    [Theory]
+    [InlineData(0, 10, "10 opens that were refused or failed")]
+    [InlineData(9, 1, "9 in the package and 1 more open that was refused or failed")]
+    [InlineData(6, 4, "6 in the package and 4 more opens that were refused or failed")]
+    public void TheLimitsRefusalSaysHowToGoOn(int drawings, int failedOpens, string counted)
+    {
+        PackageAppender.Save(_runFolder, ConfirmedDrawingPackage.Build(drawings: drawings));
+        SpendWithFailedOpens(failedOpens);
+
+        ConfirmedDrawingRefused refusal = Assert.Throws<ConfirmedDrawingRefused>(() => Read(RunId, HousingId));
+
+        Assert.Equal(
+            "the limit of ten drawings for this review is reached: " + counted + ", so this one was not opened; "
+                + HowToGoOn,
+            refusal.Message);
+    }
+
+    /// <summary>
+    /// The ten-records sentence is unchanged - the backend pins it - and says nothing of a new
+    /// session: a new session starts its own count of failed opens, but the package's drawings stay.
+    /// </summary>
+    [Fact]
+    public void TheTenRecordsRefusalIsUnchangedSinceANewSessionKeepsThePackagesDrawings()
+    {
+        PackageAppender.Save(_runFolder, ConfirmedDrawingPackage.Build(drawings: 10));
+
+        ConfirmedDrawingRefused refusal = Assert.Throws<ConfirmedDrawingRefused>(
+            () => ReadIn(new ConfirmedDrawingSession(_runFolder), HousingId));
+
+        Assert.Equal("the package already holds ten drawings, so this one was not opened", refusal.Message);
+    }
+
+    /// <summary>
+    /// The way on the limit's sentence names holds whenever it is said: a session whose failed opens
+    /// alone spent the limit, and whose package then came to hold ten drawings by reads of drawings
+    /// already open, refuses the next request with the ten-records sentence, never with the limit's,
+    /// which would say a drawing already open is still read. The session's memory of its package is
+    /// brought up to date by its own merge.
+    /// </summary>
+    [Fact]
+    public void OnceThePackageHoldsTenDrawingsASpentSessionSaysSoRatherThanTheLimitsWayOn()
+    {
+        PackageAppender.Save(_runFolder, ConfirmedDrawingPackage.Build(drawings: 0));
+        SpendWithFailedOpens(10);
+        PackageAppender.Save(_runFolder, ConfirmedDrawingPackage.Build(drawings: 9));
+        _host.AlreadyOpen(HousingDrawingPath);
+        Assert.False(Read(RunId, HousingId).Opened);
+        Assert.Equal(10, Reloaded().DrawingRecords!.Count);
+        _host.Calls.Clear();
+        _phase.Seen.Clear();
+
+        AssertRefusedOpeningNothing(
+            () => Read(RunId, PinId), "the package already holds ten drawings, so this one was not opened");
     }
 
     /// <summary>

@@ -56,30 +56,35 @@ public sealed class ConfirmedDrawingSession
     }
 
     /// <summary>
-    /// Remembers, from <paramref name="package"/> as the read just loaded it, the path of every part
-    /// or assembly that has a candidate row, by document id - in place of what the session last
-    /// remembered. Once the session's failed opens alone reach the limit, the read asks SOLIDWORKS
-    /// whether the drawing beside such a document is open without loading the package again: the
-    /// package is read only by its own session's requests, and its candidate rows only ever go.
+    /// Remembers, from <paramref name="package"/> as the read just loaded or merged it, the path of
+    /// every part or assembly that has a candidate row, by document id - in place of what the session
+    /// last remembered. Once the session's failed opens alone reach the limit, the read asks SOLIDWORKS
+    /// whether the drawing beside such a document is open without loading the package again: its
+    /// candidate rows only ever go, and its drawings only ever come. A package that holds ten drawings
+    /// leaves nothing to remember, since every request then meets the ten-records bound, which is the
+    /// read's to say once the package is loaded.
     /// </summary>
     internal void Remember(EvidencePackage package)
     {
-        var candidates = new HashSet<string>(StringComparer.Ordinal);
-        foreach (DrawingCandidate row in package.DrawingCandidates ?? new List<DrawingCandidate>())
-        {
-            candidates.Add(row.DocumentId);
-        }
-
         var models = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (Document document in package.Documents)
+        if ((package.DrawingRecords?.Count ?? 0) < OpenDrawingDiscovery.MaxAttachedDrawings)
         {
-            if ((document.Kind == DocumentKind.Part || document.Kind == DocumentKind.Assembly)
-                && !string.IsNullOrEmpty(document.DocumentId)
-                && !string.IsNullOrWhiteSpace(document.Path)
-                && candidates.Contains(document.DocumentId)
-                && !models.ContainsKey(document.DocumentId))
+            var candidates = new HashSet<string>(StringComparer.Ordinal);
+            foreach (DrawingCandidate row in package.DrawingCandidates ?? new List<DrawingCandidate>())
             {
-                models.Add(document.DocumentId, document.Path);
+                candidates.Add(row.DocumentId);
+            }
+
+            foreach (Document document in package.Documents)
+            {
+                if ((document.Kind == DocumentKind.Part || document.Kind == DocumentKind.Assembly)
+                    && !string.IsNullOrEmpty(document.DocumentId)
+                    && !string.IsNullOrWhiteSpace(document.Path)
+                    && candidates.Contains(document.DocumentId)
+                    && !models.ContainsKey(document.DocumentId))
+                {
+                    models.Add(document.DocumentId, document.Path);
+                }
             }
         }
 

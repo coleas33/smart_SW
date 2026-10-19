@@ -232,6 +232,7 @@ public sealed class ConfirmedDrawingRead : IConfirmedDrawingSource
                 package, read.Record, read.Document, read.Entry, gaps, documentId, result.OpenedByReview);
             PackageAppender.Save(folder, package);
             recorded = true;
+            session.Remember(package);
 
             return new ConfirmedDrawingResult
             {
@@ -252,9 +253,16 @@ public sealed class ConfirmedDrawingRead : IConfirmedDrawingSource
         }
     }
 
-    /// <summary>The refusal once the limit is reached, with what <paramref name="counted"/> it.</summary>
+    /// <summary>
+    /// The refusal once the limit is reached, with what <paramref name="counted"/> it, and - since
+    /// decision 141A (2026-10-19) - how to go on: both ways it names are true whenever it is said,
+    /// since it is said only while the package holds fewer than ten drawings, and a new session's
+    /// count is its own. (The ten-records sentence names neither: a new session keeps the drawings.)
+    /// </summary>
     private static string LimitReached(string counted) =>
-        $"the limit of ten drawings for this review is reached: {counted}, so this one was not opened";
+        $"the limit of ten drawings for this review is reached: {counted}, so this one was not opened; "
+        + "a drawing already open in SOLIDWORKS is still read, since reading it opens nothing, and a new review "
+        + "session (Retry or Recheck) starts its own count";
 
     /// <summary>"1 more open that was refused or failed", "3 more opens that were ...", with or without "more ".</summary>
     private static string Opens(int count, string more) =>
