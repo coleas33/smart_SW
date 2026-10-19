@@ -68,6 +68,8 @@ Feature gates in a `tasks.md` may add checks (the ledger check, the replay check
 ## How work is done
 
 - Work in a branch or git worktree, never with uncommitted edits in someone else's checkout.
+- Changes reach `main` only through a pull request merged once CI is green; `main` is protected
+  and the rule binds administrators too (decision 131A).
 - Follow the feature's `tasks.md` order; record decisions in the feature's `research.md` and tick
   tasks only when their acceptance holds.
 - An owner decision takes the next id in [`docs/decisions.md`](docs/decisions.md) (one counter,

@@ -212,11 +212,12 @@ whatever its question was numbered when it was asked, and is entered in the tabl
 same commit as the change it governs, with its date, a one-line summary, its status and where
 else it is recorded (the feature's `research.md` when a feature governs it, the commits that
 carry it out). Ids before 121A stay as they were written; the runs above remain their index. The
-next new decision is **131A**.
+next new decision is **132A**.
 
 **The mapping.** The first eight decisions of 2026-10-18 were asked in two rounds of four
 questions, each labelled 1A to 4A at the time; a third round, asked as 5A and 6A, became 129A and
-130A. The first round's 2A, 3A and 4A were written into commit
+130A, and a fourth, asked as 7A and 8A, gave the go for the rewrite and became 131A (8A).
+The first round's 2A, 3A and 4A were written into commit
 messages on `main` and into the documentation branch under those labels before decision 128A
 numbered them, and those messages are not rewritten for it: read "2A" in a commit of that day as
 122A, "3A" as 123A and "4A" as 124A. Run 2 ended at 120A, so the counter continues at 121A.
@@ -224,7 +225,7 @@ numbered them, and those messages are not rewritten for it: read "2A" in a commi
 | Id | Date | Asked as | Decision | Status | Evidence |
 |---|---|---|---|---|---|
 | 121A | 2026-10-18 | 1A, first round | Rewrite the public history with `git filter-repo` to remove a small set of private identifiers from files and commit messages, remap the commit-hash references and force-push; done last, before the company forks the repository. | Done 2026-10-18: every branch rewritten and force-pushed; commit hashes written in the files on `main` remapped to the new history. Hashes cited on other branches, in issues or outside the repository name the old history. | The commit that remaps the hashes on `main` ("Docs: remap commit hashes after the history rewrite"). |
-| 122A | 2026-10-18 | 2A, first round | Fix CI (red since 2026-10-12), harden it, and make it the required check on `main` once the history rewrite is done. The C# build stays a documented local gate ([`CONTRIBUTING.md`](../CONTRIBUTING.md#the-gates)); never a self-hosted runner on the public repository. | CI fixed and hardened; branch protection pending. | `856b0ac`, `e20aabf`, `0e0151d` ("once branch protection is on (2A)"); `d516126` ("CI fix 2A"). |
+| 122A | 2026-10-18 | 2A, first round | Fix CI (red since 2026-10-12), harden it, and make it the required check on `main` once the history rewrite is done. The C# build stays a documented local gate ([`CONTRIBUTING.md`](../CONTRIBUTING.md#the-gates)); never a self-hosted runner on the public repository. | Done. CI fixed and hardened; `main` protected on 2026-10-18 with the four CI jobs required (131A). | `856b0ac`, `e20aabf`, `0e0151d` ("once branch protection is on (2A)"); `d516126` ("CI fix 2A"). |
 | 123A | 2026-10-18 | 3A, first round | The full open-source documentation layout: front page, documentation index, specs index, this register, ADRs, contributing, security, fork guide, architecture overview and glossary. | Done. | `9da0057` on `main`; the `docs-3a` branch, merged to `main` (`d6f40ac`, `5629cf6`, `f2f66b0`, `e95568e`, `16a6efe`), each of whose messages names 3A. |
 | 124A | 2026-10-18 | 4A, first round | Split `CLAUDE.md`: the shared agent rules in [`AGENTS.md`](../AGENTS.md), which `CLAUDE.md` imports, and the personal prompt in an ignored `CLAUDE.local.md`. | Done. | `d352a17` ("owner decision 4A"), `d516126`. |
 | 125A | 2026-10-18 | 1A, second round | Security reports go through GitHub private vulnerability reporting, enabled on the repository on 2026-10-18; no email address is published. | Done. | [`SECURITY.md`](../SECURITY.md#reporting-a-vulnerability), "Reporting a vulnerability"; the setting is the repository's, not a file. |
@@ -233,6 +234,7 @@ numbered them, and those messages are not rewritten for it: read "2A" in a commi
 | 128A | 2026-10-18 | 4A, second round | One owner-decision counter from now on, continuing at 121A, with this page as its register; earlier ids stay as written. | Done; in force. | This section; [`AGENTS.md`](../AGENTS.md#how-work-is-done), "How work is done". |
 | 129A | 2026-10-18 | 5A | The history rewrite (121A) also maps every commit's author and committer email to the owner's GitHub no-reply address, so no commit carries a personal email; commits use the no-reply address from then on. | Done with 121A. | Every commit's author and committer. |
 | 130A | 2026-10-18 | 6A | The history rewrite (121A) also replaces a personal user-folder name in the path forms it appears in (Windows user folders, `/home/...`), and only those forms; the bare word is not replaced. | Done with 121A. | The rewritten history; test values naming a person by first name alone stay, as decided. |
+| 131A | 2026-10-18 | 8A | Protect `main`: the four CI jobs (Windows and Linux, Python 3.11 and 3.12) are required and must be up to date; changes reach `main` only through a pull request merged once CI is green (no approval required); the rules bind administrators too; no force-push or deletion. | Done; in force. | The repository's branch protection (a setting, not a file); [`AGENTS.md`](../AGENTS.md#how-work-is-done), "How work is done". |
 
 The owner's decision of the same day to keep this repository as the public upstream of private
 downstream forks is not numbered; it is recorded as
