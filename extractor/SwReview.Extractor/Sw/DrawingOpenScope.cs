@@ -94,6 +94,9 @@ public sealed class DrawingOpenRefused : InvalidOperationException
 ///     returned; otherwise nothing is closed and the result says why. A close that SOLIDWORKS
 ///     fails is a reason too, never an exception that would hide the read's own. No other
 ///     document is ever closed, and never a model the drawing loaded.
+///   * <b>A caller's bound spent</b> (decision 141A, 2026-10-19): a drawing that is not open is
+///     refused with the sentence the caller gives, after the lookup and before anything is hidden
+///     or opened; a drawing already open is still read, since reading it opens nothing.
 ///
 /// Every call goes through a gate built on <see cref="DrawingOpenGuard"/>, so the three keys are
 /// the whole of what it may do beyond reading; nothing it calls activates, rebuilds, saves or
@@ -164,20 +167,37 @@ public sealed class DrawingOpenScope
         "the read-only open of a confirmed drawing is not yet validated on a seat (feature 011 probe D14)";
 
     /// <summary>
+    /// Decision 141A (2026-10-19): whether the drawing at <paramref name="path"/> is open in
+    /// SOLIDWORKS now - the lookup <see cref="Read{T}"/> begins with, through the same gate, and
+    /// nothing else: nothing is hidden, opened, read or closed, and a path that is no drawing is not
+    /// looked up. The confirmed read asks it before refusing a review session whose failed opens
+    /// have spent the limit, so a drawing already open, whose read opens nothing, is not refused.
+    /// </summary>
+    public bool IsOpen(string path) =>
+        IsDrawingPath(path) && _gate.Call(LookupMember, () => _host.OpenDocument(path)) != null;
+
+    /// <summary>
     /// Reads the drawing at <paramref name="path"/> with <paramref name="read"/>, opening it
     /// read-only and hidden when it is not open and closing it again only when this seam opened
     /// it. A refusal is a <see cref="DrawingOpenRefused"/> with the sentence to show; an exception
     /// from <paramref name="read"/> propagates after the close, as it is when the close succeeded,
     /// or inside a <see cref="DrawingOpenRefused"/> that also says the drawing was not closed.
     /// </summary>
-    public DrawingOpenResult<T> Read<T>(string path, Func<object, T> read)
+    /// <param name="openRefusal">
+    /// Decision 141A (2026-10-19): null to open a drawing that is not open, as the seat's switch
+    /// allows; otherwise the sentence such a drawing is refused with instead, when the caller's bound
+    /// is spent. It is decided at this lookup, so nothing is hidden or opened, no open is begun, and a
+    /// drawing already open is still read, since reading it opens nothing. While the seat has not
+    /// validated the open, <see cref="NotValidatedSentence"/> comes first.
+    /// </param>
+    public DrawingOpenResult<T> Read<T>(string path, Func<object, T> read, string? openRefusal = null)
     {
         if (read == null)
         {
             throw new ArgumentNullException(nameof(read));
         }
 
-        if (string.IsNullOrWhiteSpace(path) || !path.EndsWith(DrawingExtension, StringComparison.OrdinalIgnoreCase))
+        if (!IsDrawingPath(path))
         {
             throw new DrawingOpenRefused(
                 $"'{path}' is not a drawing file (.SLDDRW), so it was not opened.");
@@ -192,6 +212,11 @@ public sealed class DrawingOpenScope
         if (!_seatValidated)
         {
             throw new DrawingOpenRefused(NotValidatedSentence);
+        }
+
+        if (openRefusal != null)
+        {
+            throw new DrawingOpenRefused(openRefusal);
         }
 
         (object opened, bool alreadyOpen) = Open(path);
@@ -311,6 +336,10 @@ public sealed class DrawingOpenScope
 
         return (document, false);
     }
+
+    /// <summary>Whether <paramref name="path"/> names a drawing file: the only files this seam looks up or opens.</summary>
+    private static bool IsDrawingPath(string path) =>
+        !string.IsNullOrWhiteSpace(path) && path.EndsWith(DrawingExtension, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>What a refusal after a failed restore ends with, whatever became of the drawing.</summary>
     private const string StaysHiddenSentence =

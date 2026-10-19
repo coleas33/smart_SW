@@ -112,6 +112,27 @@ public sealed class EngineeringContextHostTests
         Assert.Equal(sendWhenChecked, world.Reply("review.started").GetProperty("send_when_checked").GetBoolean());
     }
 
+    /// <summary>
+    /// Feature 011, decision 141A (2026-10-19): the Retry is a new review session in the same run
+    /// folder, so a <c>drawing.read</c> naming that folder belongs to the Retry's session, which
+    /// starts its own count of failed opens; the failed review's count is not carried over.
+    /// </summary>
+    [Fact]
+    public void RetryOfAContextReviewIsANewDrawingReadSessionInTheSameFolder()
+    {
+        using var world = new World();
+        world.StartContextReview();
+        string runId = Path.GetFileName(world.Dump.Directory!);
+        ConfirmedDrawingSession failed = world.Host.DrawingReadSession(runId)!;
+
+        world.Host.Receive(Message("review.start", new { retry_of = "chat-context" }));
+
+        ConfirmedDrawingSession retried = world.Host.DrawingReadSession(runId)!;
+        Assert.NotSame(failed, retried);
+        Assert.Equal(world.Dump.Directory, retried.RunFolder);
+        Assert.Equal(0, retried.UnrecordedOpens);
+    }
+
     [Fact]
     public void ARetryOfAContextReviewWhoseContextChangedIsRefusedWithTheBackendsConflict()
     {

@@ -632,15 +632,16 @@ public sealed class ToolServiceOptions
     public TimeSpan InvokeTimeout { get; set; } = InProcPipeServer.DefaultInvokeTimeout;
 
     /// <summary>
-    /// Feature 011 T074. The run folder of a review this add-in started, looked up by the
-    /// folder's own name (<see cref="ReviewHost.ReviewRunDirectory"/>), or null for a run it did
-    /// not start. The one lookup <c>drawing.read</c> resolves its <c>run_id</c> through
-    /// (specs/011-drawing-context/contracts/confirmed-open.md section 2, item 1); asked on the
-    /// application thread, per request. Null - the default - is a host that keeps no review
-    /// records, and then the command has no source and answers that this bridge cannot read a
-    /// drawing.
+    /// Feature 011 T074. The review session a run id names - since decision 141A (2026-10-19), the
+    /// latest review this add-in started in the run folder of that name, which holds the folder
+    /// and the session's count of failed opens (<see cref="ReviewHost.DrawingReadSession"/>) - or
+    /// null for a run it did not start. The one lookup <c>drawing.read</c> resolves its
+    /// <c>run_id</c> through (specs/011-drawing-context/contracts/confirmed-open.md section 2,
+    /// item 1); asked on the application thread, per request. Null - the default - is a host that
+    /// keeps no review records, and then the command has no source and answers that this bridge
+    /// cannot read a drawing.
     /// </summary>
-    public Func<string, string?>? ReviewRunDirectory { get; set; }
+    public Func<string, ConfirmedDrawingSession?>? DrawingReadSession { get; set; }
 
     /// <summary>How long <see cref="ToolServiceHost.Start"/> waits for the attach to run.</summary>
     public TimeSpan AttachTimeout { get; set; } = TimeSpan.FromSeconds(60);
@@ -1183,10 +1184,12 @@ public sealed class ToolServiceHost : IToolService
     /// answers that this bridge cannot read a drawing.
     ///
     /// <b>The run comes from the review host's records, never from the request.</b>
-    /// <paramref name="reviewRunDirectory"/> is <see cref="ReviewHost.ReviewRunDirectory"/>: the
+    /// <paramref name="drawingReadSession"/> is <see cref="ReviewHost.DrawingReadSession"/>: the
     /// id is compared with a review record's folder name and nothing else, so a Model check's,
     /// Standards run's or remodel run's record, an unknown id and a path spelling all answer null,
-    /// which the confirmed read refuses naming the id before anything is opened.
+    /// which the confirmed read refuses naming the id before anything is opened. What it answers is
+    /// the latest review session of that folder, whose count of failed opens the read keeps
+    /// (decision 141A), so the count outlives this source, which every attach builds anew.
     ///
     /// <b>On the application thread.</b> Built by <see cref="Attach"/>, which runs there, over
     /// seams bound to the attached session; <see cref="InProcPipeServer"/> posts every request to
@@ -1205,7 +1208,7 @@ public sealed class ToolServiceHost : IToolService
     /// still read, since reading it opens nothing.
     /// </summary>
     internal static IConfirmedDrawingSource? ConfirmedDrawingSource(
-        Func<string, string?>? reviewRunDirectory,
+        Func<string, ConfirmedDrawingSession?>? drawingReadSession,
         string attachedDocumentPath,
         SwGateRecorder recorder,
         IDrawingOpenHost host,
@@ -1214,13 +1217,13 @@ public sealed class ToolServiceHost : IToolService
         IDocumentSource documents,
         IManifestSource manifest)
     {
-        if (reviewRunDirectory == null)
+        if (drawingReadSession == null)
         {
             return null;
         }
 
         return new ConfirmedDrawingRead(
-            reviewRunDirectory,
+            drawingReadSession,
             attachedDocumentPath,
             File.Exists,
             new DrawingOpenScope(host, recorder, seatValidated),
@@ -1301,7 +1304,7 @@ public sealed class ToolServiceHost : IToolService
             // read into the review's package through the review host's own records, over the
             // drawing phase, the document phase and the manifest of this session's gate.
             ConfirmedDrawings = ConfirmedDrawingSource(
-                options.ReviewRunDirectory,
+                options.DrawingReadSession,
                 documentPath,
                 recorder,
                 new SwDrawingOpenHost(options.SwApp),
