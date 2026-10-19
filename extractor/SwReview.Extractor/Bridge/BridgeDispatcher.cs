@@ -594,16 +594,27 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
                     return Remodel(request);
                 }
 
-                // Dispatch has refused every name outside AnsweredCommands already; this answers one
-                // of them that has no case above, rather than doing nothing.
-                return UnknownCommand(request);
+                // Dispatch refuses every name outside AnsweredCommands before it calls this, and each
+                // name on the list has a case above or a row of RemodelCommandTable, so a name that
+                // gets here is this class's mistake, not a request to refuse. Edited deliberately on
+                // decision 140A's review (2026-10-19): it answered as an unknown command, the very
+                // answer Dispatch gives, so no test could tell whether Dispatch's check was there.
+                throw new InvalidOperationException(
+                    $"No handler for the bridge command '{request.Command}': Dispatch passes only the names "
+                    + "of AnsweredCommands, and each of them has one.");
         }
     }
 
     /// <summary>
     /// The refusal of a name the bridge does not answer. It names the six commands of
-    /// <see cref="BridgeCommands.All"/>, as it always has, and not the <c>remodel.*</c> family, which
-    /// only the remodel scope reaches.
+    /// <see cref="BridgeCommands.All"/>, as it always has, and not the twelve of the <c>remodel.*</c>
+    /// family, which no caller this sentence reaches can use. The add-in's host refuses an unknown
+    /// name as unauthorized before it gets here (<see cref="ScopedSecretPolicy"/>), and authorizes
+    /// the family to its remodel secret alone. The console host, whose <see cref="NoSecretPolicy"/>
+    /// lets every name through, answers the family as well, and the family refuses each command: a
+    /// change command first, while Start is switched off, and every one because that host builds no
+    /// seat - which <c>remodel.probe_scope</c> and <c>remodel.open</c> need, and without which no
+    /// open makes the run the others need.
     /// </summary>
     private static BridgeResponse UnknownCommand(BridgeRequest request) =>
         BridgeResponse.Failed(

@@ -231,6 +231,25 @@ public class BridgeDispatcherTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// Decision 140A's review (2026-10-19): a name the dispatcher answers that no handler takes is a
+    /// mistake in the dispatcher, which says so, rather than an unknown command - so a command added
+    /// to <see cref="SwBridgeDispatcher.AnsweredCommands"/> without its handler fails here, and the
+    /// refusal of every other name is <see cref="SwBridgeDispatcher.Dispatch"/>'s check alone, which
+    /// <see cref="ANameOutsideTheSet_IsRefusedAsUnknownBeforeAnythingRuns"/> sees.
+    /// </summary>
+    [Fact]
+    public void EveryAnsweredCommandReachesItsHandler()
+    {
+        SwBridgeDispatcher dispatcher = NewDispatcher(_captureView);
+        foreach (string command in SwBridgeDispatcher.AnsweredCommands)
+        {
+            string error = dispatcher.Dispatch(Request("1", command)).Error ?? string.Empty;
+
+            Assert.DoesNotContain("No handler for the bridge command", error, StringComparison.Ordinal);
+        }
+    }
+
     // ---- ping --------------------------------------------------------------------
 
     [Fact]
