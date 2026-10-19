@@ -25,13 +25,46 @@ namespace SwReview.AddIn.Review;
 /// A save made when no turn runs restarts it at once (<see cref="Now"/>), under the same lock,
 /// and that restart is the one for the settings in force, so anything still waiting is dropped.
 ///
-/// <b>Nothing waits for a turn.</b> <see cref="Apply"/> answers <see cref="Outcome.TurnRunning"/>
-/// at once while something holds the restart back; the only thing a caller waits for is a restart
-/// already being made, which the backend's own start timeouts bound. <see cref="Dispose"/> stops
-/// the watcher without waiting for a restart in flight, and nothing is restarted after it.
+/// <b>Nothing waits for a turn.</b> <see cref="Apply"/> answers at once, naming what holds the
+/// restart back, while something does; the only thing a caller waits for is a restart already
+/// being made, which the backend's own start timeouts bound.
+///
+/// <b>A backend that does not answer is waited for, but not for ever.</b> Not knowing whether a
+/// turn runs is not knowing that none does, so a look the backend leaves unanswered holds the
+/// restart back; after <see cref="UnansweredLooks"/> such looks in a row the watcher stops
+/// waiting, and the engineer is told how to go on (<c>notAnswered</c>) rather than left with a
+/// promise nothing will keep.
+///
+/// <b>Disposing</b> stops the watcher and refuses every restart that has not begun. A restart
+/// already under way - past the lock's check that one is still waiting - is neither stopped nor
+/// waited for here: the backend client's own disposal ends it (BackendClient.Dispose).
 /// </summary>
 internal sealed class DeferredRestart : IDisposable
 {
+    /// <summary>
+    /// How many looks in a row the backend may leave unanswered before the watcher stops waiting.
+    /// Each such look is at least one round trip the backend let time out (30 seconds each, by
+    /// BackendClient's call timeout) or refused outright: three in a row is a backend that has
+    /// stopped answering, not one that was slow once.
+    /// </summary>
+    internal const int UnansweredLooks = 3;
+
+    /// <summary>What holds the restart back, as one look at the backend finds it.</summary>
+    internal enum Hold
+    {
+        /// <summary>Nothing: the restart can be made.</summary>
+        None,
+
+        /// <summary>A turn is running on the backend.</summary>
+        Turn,
+
+        /// <summary>A remodel run is in progress, which the restart would end with its copy half changed.</summary>
+        RemodelRun,
+
+        /// <summary>The backend gave no answer, so whether a turn runs is not known.</summary>
+        NoAnswer,
+    }
+
     /// <summary>What one <see cref="Apply"/> did.</summary>
     internal enum Outcome
     {
@@ -45,10 +78,19 @@ internal sealed class DeferredRestart : IDisposable
         Restarted,
 
         /// <summary>
-        /// Something holds the restart back - a turn running, or other work the restart would
-        /// end - or the backend's own check found a turn: nothing was changed, and it still waits.
+        /// A turn holds the restart back - the look found one, or the backend's own check found
+        /// one that started after it: nothing was changed, and it still waits.
         /// </summary>
         TurnRunning,
+
+        /// <summary>A remodel run holds the restart back: nothing was changed, and it still waits.</summary>
+        RemodelRunning,
+
+        /// <summary>
+        /// The backend did not answer whether a turn runs: nothing was changed, and it still waits
+        /// - for <see cref="UnansweredLooks"/> such looks of the watcher's in a row at most.
+        /// </summary>
+        NotAnswered,
 
         /// <summary>
         /// The restart was tried and failed. The failure has been reported, and nothing waits
@@ -66,15 +108,23 @@ internal sealed class DeferredRestart : IDisposable
     /// </summary>
     private static readonly TimeSpan StopTimeout = TimeSpan.FromSeconds(2);
 
-    private readonly Func<bool> _heldBack;
+    /// <summary>
+    /// The shortest poll the watcher can wait out. A wait of less than a millisecond is a wait of
+    /// none, and the watcher would spin.
+    /// </summary>
+    private static readonly TimeSpan ShortestPoll = TimeSpan.FromMilliseconds(1);
+
+    private readonly Func<Hold> _heldBack;
     private readonly Action _restart;
     private readonly Action _restarted;
     private readonly Action<Exception> _failed;
+    private readonly Action _notAnswered;
     private readonly TimeSpan _poll;
 
     /// <summary>
-    /// Guards <see cref="_pending"/>, <see cref="_disposed"/> and <see cref="_watcher"/>, and is
-    /// what the watcher waits on between polls. Never held while anything slow runs.
+    /// Guards <see cref="_pending"/>, <see cref="_deferrals"/>, <see cref="_disposed"/> and
+    /// <see cref="_watcher"/>, and is what the watcher waits on between polls. Never held while
+    /// anything slow runs.
     /// </summary>
     private readonly object _state = new object();
 
@@ -82,30 +132,45 @@ internal sealed class DeferredRestart : IDisposable
     private readonly object _restarting = new object();
 
     private bool _pending;
+
+    /// <summary>
+    /// One more each time a restart is refused and starts waiting: a newer refusal is a newer
+    /// save, and the watcher counts its unanswered looks from that save on.
+    /// </summary>
+    private long _deferrals;
+
     private bool _disposed;
     private Thread? _watcher;
 
-    /// <param name="heldBack">Whether anything holds the restart back - a turn running, or other
-    /// work on the backend the restart would end; never throws.</param>
+    /// <param name="heldBack">What holds the restart back - a turn running, a remodel run the
+    /// restart would end, or a backend that does not answer - or nothing; never throws.</param>
     /// <param name="restart">Restarts the backend with the settings in force when it is called.
     /// Throws <see cref="TurnRunningException"/> when the backend's own check finds a turn, and
     /// anything else when the restart fails.</param>
     /// <param name="restarted">Tells the page the backend was replaced.</param>
     /// <param name="failed">Tells the engineer why the restart failed.</param>
+    /// <param name="notAnswered">Tells the engineer the watcher stopped waiting for a backend that
+    /// does not answer, and how to go on.</param>
     /// <param name="poll">How often the watcher looks at what holds the restart back.</param>
     public DeferredRestart(
-        Func<bool> heldBack, Action restart, Action restarted, Action<Exception> failed, TimeSpan poll)
+        Func<Hold> heldBack,
+        Action restart,
+        Action restarted,
+        Action<Exception> failed,
+        Action notAnswered,
+        TimeSpan poll)
     {
         _heldBack = heldBack ?? throw new ArgumentNullException(nameof(heldBack));
         _restart = restart ?? throw new ArgumentNullException(nameof(restart));
         _restarted = restarted ?? throw new ArgumentNullException(nameof(restarted));
         _failed = failed ?? throw new ArgumentNullException(nameof(failed));
-        // Refused here rather than met as an exception from Monitor.Wait on the watcher's thread,
-        // where it would end SOLIDWORKS.
-        if (poll <= TimeSpan.Zero || poll.TotalMilliseconds > int.MaxValue)
+        _notAnswered = notAnswered ?? throw new ArgumentNullException(nameof(notAnswered));
+        // Refused here rather than met on the watcher's thread, where an exception from
+        // Monitor.Wait would end SOLIDWORKS and a poll under a millisecond would spin it.
+        if (poll < ShortestPoll || poll.TotalMilliseconds > int.MaxValue)
         {
             throw new ArgumentOutOfRangeException(
-                nameof(poll), poll, "the poll must be positive and no longer than a wait can take");
+                nameof(poll), poll, "the poll must be at least a millisecond and no longer than a wait can take");
         }
 
         _poll = poll;
@@ -164,7 +229,7 @@ internal sealed class DeferredRestart : IDisposable
     }
 
     /// <summary>
-    /// Makes the waiting restart now if no turn is running, or waits for the one another caller
+    /// Makes the waiting restart now if nothing holds it back, or waits for the one another caller
     /// is making. Never throws: a failure is reported through the callback and answered as
     /// <see cref="Outcome.Failed"/>, with the exception in <paramref name="failure"/>.
     /// </summary>
@@ -181,19 +246,26 @@ internal sealed class DeferredRestart : IDisposable
         // new review that wants the lock must not queue behind it. The backend asks again before
         // it stops anything (BackendSupervisor.Restart), which is the check that decides - so a
         // look that cannot be made is not a reason to throw, nor to restart unchecked.
-        bool running;
+        Hold hold;
         try
         {
-            running = _heldBack();
+            hold = _heldBack();
         }
         catch (Exception)
         {
-            running = false;
+            hold = Hold.None;
         }
 
-        if (running)
+        switch (hold)
         {
-            return Outcome.TurnRunning;
+            case Hold.Turn:
+                return Outcome.TurnRunning;
+
+            case Hold.RemodelRun:
+                return Outcome.RemodelRunning;
+
+            case Hold.NoAnswer:
+                return Outcome.NotAnswered;
         }
 
         lock (_restarting)
@@ -231,8 +303,8 @@ internal sealed class DeferredRestart : IDisposable
     }
 
     /// <summary>
-    /// Stops the watcher and refuses every later restart. A restart already in flight is not
-    /// waited for: the backend client's own disposal sees it out, and stops what it started.
+    /// Stops the watcher and refuses every restart that has not begun. A restart already under
+    /// way is not waited for: the backend client's own disposal ends it, and stops what it started.
     /// </summary>
     public void Dispose()
     {
@@ -282,6 +354,7 @@ internal sealed class DeferredRestart : IDisposable
             }
 
             _pending = true;
+            _deferrals++;
             if (_watcher != null)
             {
                 return;
@@ -304,12 +377,24 @@ internal sealed class DeferredRestart : IDisposable
         }
     }
 
+    private long Deferrals()
+    {
+        lock (_state)
+        {
+            return _deferrals;
+        }
+    }
+
     /// <summary>
     /// The watcher: waits a poll, then asks. It ends when nothing waits any more - the restart
-    /// was made, by it or by anyone, or failed, or the owner was disposed.
+    /// was made, by it or by anyone, or failed, or it stopped waiting for a backend that does
+    /// not answer, or the owner was disposed.
     /// </summary>
     private void Watch()
     {
+        // The unanswered looks in a row since the save the restart now waits for.
+        int unanswered = 0;
+        long since = 0;
         while (true)
         {
             lock (_state)
@@ -332,7 +417,23 @@ internal sealed class DeferredRestart : IDisposable
 
             try
             {
-                Apply(out _);
+                if (Apply(out _) != Outcome.NotAnswered)
+                {
+                    unanswered = 0;
+                    continue;
+                }
+
+                long deferrals = Deferrals();
+                if (unanswered == 0 || deferrals != since)
+                {
+                    since = deferrals;
+                    unanswered = 0;
+                }
+
+                if (++unanswered >= UnansweredLooks)
+                {
+                    StopWaiting(since);
+                }
             }
             catch (Exception)
             {
@@ -341,6 +442,29 @@ internal sealed class DeferredRestart : IDisposable
                 // end the process.
             }
         }
+    }
+
+    /// <summary>
+    /// Stops waiting for a backend that has not answered, and says so - unless the restart was
+    /// made meanwhile, or a newer save is the one now waiting. Under the restart's own lock, so a
+    /// restart being made is never reported as one that was not.
+    /// </summary>
+    private void StopWaiting(long since)
+    {
+        lock (_restarting)
+        {
+            lock (_state)
+            {
+                if (_disposed || !_pending || _deferrals != since)
+                {
+                    return;
+                }
+
+                _pending = false;
+            }
+        }
+
+        Report(_notAnswered);
     }
 
     /// <summary>A report that cannot be made must not turn a made restart into a thrown one.</summary>

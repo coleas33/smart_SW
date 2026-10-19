@@ -142,15 +142,36 @@ public sealed class ChatSessionHandle
 public sealed class BackendRequestException : Exception
 {
     public BackendRequestException(string errorClass, string message, bool retryable, Exception? inner = null)
+        : this(errorClass, message, retryable, inner, unanswered: false)
+    {
+    }
+
+    private BackendRequestException(
+        string errorClass, string message, bool retryable, Exception? inner, bool unanswered)
         : base(message, inner)
     {
         ErrorClass = errorClass;
         Retryable = retryable;
+        Unanswered = unanswered;
     }
 
     public string ErrorClass { get; }
 
     public bool Retryable { get; }
+
+    /// <summary>
+    /// True when the backend gave no HTTP answer at all - the connection was refused, reset or
+    /// timed out - and false for every answer it gave, whatever its status. Whether a turn runs
+    /// is known from an answer, never from its absence (owner decision 143A).
+    /// </summary>
+    public bool Unanswered { get; }
+
+    /// <summary>
+    /// A call the backend gave no HTTP answer to: `BackendUnavailable`, retryable, and
+    /// <see cref="Unanswered"/>.
+    /// </summary>
+    public static BackendRequestException NotAnswered(string message, Exception? inner = null) =>
+        new BackendRequestException("BackendUnavailable", message, retryable: true, inner, unanswered: true);
 }
 
 /// <summary>

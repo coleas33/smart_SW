@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Threading;
 using SwReview.AddIn.Native;
 using SwReview.AddIn.Review;
 using SwReview.AddIn.Settings;
@@ -104,6 +105,185 @@ public sealed class BackendProcessTests
             Assert.NotNull(failure.ProcessId);
             Assert.True(StubBackend.Waits(() => !ProcessLifetimeTests.IsRunning(failure.ProcessId!.Value)));
         }
+    }
+
+    // ---- a start no longer wanted (owner decision 143A) ------------------------------------
+
+    /// <summary>
+    /// A start the add-in no longer wants - SOLIDWORKS unloading while a restart for settings
+    /// saved during a turn is under way on the host's own thread - stops waiting for the
+    /// handshake at once, not at its timeout, and stops the child it started.
+    /// </summary>
+    [Fact]
+    public void AStartNoLongerWantedStopsWaitingForTheHandshakeAndStopsItsChild()
+    {
+        using (var stub = new StubBackend())
+        using (var job = new JobObject())
+        using (var unloading = new CancellationTokenSource())
+        {
+            stub.PrintsNothing().RecordsThatItRan();
+            BackendStartOptions options = Options(stub, job);
+            options.HandshakeTimeout = TimeSpan.FromSeconds(60);
+            options.Cancellation = unloading.Token;
+
+            BackendStartException failure = StoppedWhenAsked(options, () => File.Exists(stub.MarkerPath), unloading);
+
+            Assert.StartsWith("the backend start was stopped before the backend was ready", failure.Message, StringComparison.Ordinal);
+            Assert.NotNull(failure.ProcessId);
+            Assert.True(StubBackend.Waits(() => !ProcessLifetimeTests.IsRunning(failure.ProcessId!.Value)));
+        }
+    }
+
+    /// <summary>...and stops waiting for `/health` too, between probes.</summary>
+    [Fact]
+    public void AStartNoLongerWantedStopsWaitingForHealthAndStopsItsChild()
+    {
+        using (var stub = new StubBackend())
+        using (var job = new JobObject())
+        using (var unloading = new CancellationTokenSource())
+        using (var probed = new ManualResetEventSlim(false))
+        {
+            stub.PrintsHandshake();
+            BackendStartOptions options = Options(stub, job);
+            options.HealthTimeout = TimeSpan.FromSeconds(60);
+            options.HealthProbe = (origin, token) =>
+            {
+                probed.Set();
+                return false;
+            };
+            options.Cancellation = unloading.Token;
+
+            BackendStartException failure = StoppedWhenAsked(options, () => probed.IsSet, unloading);
+
+            Assert.StartsWith("the backend start was stopped before the backend was ready", failure.Message, StringComparison.Ordinal);
+            Assert.NotNull(failure.ProcessId);
+            Assert.True(StubBackend.Waits(() => !ProcessLifetimeTests.IsRunning(failure.ProcessId!.Value)));
+        }
+    }
+
+    /// <summary>A start asked for once it is no longer wanted starts nothing: no log, no child.</summary>
+    [Fact]
+    public void AStartAskedForOnceNoLongerWantedStartsNothing()
+    {
+        using (var stub = new StubBackend())
+        using (var job = new JobObject())
+        using (var unloading = new CancellationTokenSource())
+        {
+            stub.PrintsHandshake().RecordsThatItRan();
+            BackendStartOptions options = Options(stub, job);
+            unloading.Cancel();
+            options.Cancellation = unloading.Token;
+
+            var failure = Assert.Throws<BackendStartException>(() => BackendProcess.Start(options));
+
+            Assert.StartsWith("the backend start was stopped before the backend was ready", failure.Message, StringComparison.Ordinal);
+            Assert.Null(failure.ProcessId);
+            Thread.Sleep(500);
+            Assert.False(File.Exists(stub.MarkerPath), "a child was started");
+            Assert.False(File.Exists(stub.LogPath), "a log was opened");
+        }
+    }
+
+    /// <summary>
+    /// Disposing the client - the add-in unloading, on the SOLIDWORKS thread - tells a start in
+    /// flight to stop before it waits for the gate that start holds, so the unload waits for the
+    /// start to stop its child, not for the new backend's handshake and health; and a restart
+    /// asked for after that starts nothing. The supervisor's own check stands in for the start in
+    /// flight: it runs on the restart's thread, inside the gate.
+    /// </summary>
+    [Fact]
+    public void DisposingTheClientStopsARestartInFlightRatherThanWaitingForIt()
+    {
+        using (var stub = new StubBackend())
+        using (var job = new JobObject())
+        using (var inside = new ManualResetEventSlim(false))
+        using (var release = new ManualResetEventSlim(false))
+        {
+            UserSettings settings = UserSettings.Defaults();
+            string launcher = Path.Combine(Path.GetDirectoryName(stub.ScriptPath)!, "swreview.exe");
+            File.WriteAllText(launcher, string.Empty);
+            settings.Python = launcher;
+            settings.RunRoot = stub.RunRoot;
+            ResolvedApiKey key = settings.ResolveApiKey(_ => null);
+
+            var supervisor = new BackendSupervisor(() =>
+            {
+                inside.Set();
+                release.Wait(TimeSpan.FromSeconds(30));
+                return false;
+            });
+            var client = new BackendClient(supervisor, Path.GetDirectoryName(stub.LogPath)!, job);
+            CancellationToken handedOut = client.StartOptions(settings, key).Cancellation;
+
+            Exception? restarted = null;
+            var restarting = new Thread(() =>
+            {
+                try
+                {
+                    client.Restart(settings, key);
+                }
+                catch (Exception caught)
+                {
+                    restarted = caught;
+                }
+            })
+            {
+                IsBackground = true,
+                Name = "fict-restart-in-flight",
+            };
+            restarting.Start();
+            Assert.True(inside.Wait(TimeSpan.FromSeconds(10)), "the restart never got inside the gate");
+
+            var disposing = new Thread(client.Dispose) { IsBackground = true, Name = "fict-unload" };
+            disposing.Start();
+
+            // Told to stop while the restart still holds the gate.
+            Assert.True(
+                StubBackend.Waits(() => handedOut.IsCancellationRequested, 5000),
+                "the client waited for the start in flight before telling it to stop");
+            Assert.True(restarting.IsAlive);
+
+            release.Set();
+            Assert.True(restarting.Join(TimeSpan.FromSeconds(15)), "the restart in flight did not stop");
+            Assert.True(disposing.Join(TimeSpan.FromSeconds(15)), "the client's dispose did not finish");
+            var stopped = Assert.IsType<BackendStartException>(restarted);
+            Assert.StartsWith("the backend start was stopped before the backend was ready", stopped.Message, StringComparison.Ordinal);
+
+            var late = Assert.Throws<BackendStartException>(() => client.Restart(settings, key));
+            Assert.Equal("the add-in is unloading, so the backend was not started.", late.Message);
+        }
+    }
+
+    /// <summary>
+    /// Starts <paramref name="options"/> on a thread of its own, cancels once <paramref name="reached"/>
+    /// holds, and answers the start's failure - having asserted the start ended within seconds of
+    /// the cancel, far inside the minute its own timeout would have taken.
+    /// </summary>
+    private static BackendStartException StoppedWhenAsked(
+        BackendStartOptions options, Func<bool> reached, CancellationTokenSource unloading)
+    {
+        Exception? outcome = null;
+        var starting = new Thread(() =>
+        {
+            try
+            {
+                BackendProcess.Start(options).Dispose();
+            }
+            catch (Exception caught)
+            {
+                outcome = caught;
+            }
+        })
+        {
+            IsBackground = true,
+            Name = "fict-backend-start",
+        };
+        starting.Start();
+        Assert.True(StubBackend.Waits(reached), "the start never got as far as the wait it is stopped in");
+
+        unloading.Cancel();
+        Assert.True(starting.Join(TimeSpan.FromSeconds(15)), "the start kept waiting after it was no longer wanted");
+        return Assert.IsType<BackendStartException>(outcome);
     }
 
     [Fact]

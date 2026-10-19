@@ -578,15 +578,16 @@ var h = {
     /// <summary>
     /// Answers every held `ready`, in order, with the `init` the host would give now - or, with
     /// <paramref name="backendUp"/> false, the one it gives while a restart is being made, when
-    /// there is no backend to name: no endpoint and no token.
+    /// there is no backend to name: no endpoint and no token - or, with <paramref name="token"/>,
+    /// one the host read before a restart, naming the backend that held that token.
     /// </summary>
-    public async Task ReleaseReady(bool backendUp = true)
+    public async Task ReleaseReady(bool backendUp = true, string? token = null)
     {
         Assert.NotEmpty(_heldReady);
         HoldReady = false;
         while (_heldReady.Count > 0)
         {
-            Reply("init", _heldReady.Dequeue(), Init(backendUp));
+            Reply("init", _heldReady.Dequeue(), Init(backendUp, token));
         }
 
         await OffscreenReviewPage.Settled(Page);
@@ -749,12 +750,13 @@ var h = {
 
     /// <summary>
     /// The `init` the host answers `ready` with; with <paramref name="backendUp"/> false, the one
-    /// it answers while a restart is being made, with no backend and no token to name.
+    /// it answers while a restart is being made, with no backend and no token to name; with
+    /// <paramref name="token"/>, one naming the backend that held it rather than the current one.
     /// </summary>
-    private object Init(bool backendUp = true) => new
+    private object Init(bool backendUp = true, string? token = null) => new
     {
         backend = backendUp ? new { port = 51999, origin = Origin } : null,
-        token = backendUp ? BackendToken : null,
+        token = backendUp ? token ?? BackendToken : null,
         settings = Settings(),
         key_source = KeySource,
         engineering_context = ContextPrepared != null,

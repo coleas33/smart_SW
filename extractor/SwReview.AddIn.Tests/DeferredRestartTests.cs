@@ -7,6 +7,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
+using SwReview.AddIn.EngineeringContext;
 using SwReview.AddIn.Review;
 using SwReview.AddIn.Settings;
 using SwReview.Extractor.Dump;
@@ -52,13 +53,26 @@ public sealed class DeferredRestartTests
     /// <summary>The Review tab's sentence for a save a turn started during, pinned word for word.</summary>
     private const string Promise = "the settings are saved; the backend restarts when the running turn ends.";
 
-    /// <summary>
-    /// A new review, or a page call that would start a turn, refused while what runs on the
-    /// backend - a turn, or a remodel run - still holds a restart back.
-    /// </summary>
-    private const string TurnStillRunning =
-        "the backend restarts with the saved settings when what is running on it ends, and nothing "
-        + "new starts before then. Wait for it to end, or stop it, then try again.";
+    /// <summary>A new review, or a page call that would start a turn, refused while a turn holds the restart back.</summary>
+    private const string TurnHoldsIt =
+        "the backend restarts with the saved settings when the running turn ends, and nothing new starts "
+        + "before then. Wait for the turn to end, or press Stop, then try again.";
+
+    /// <summary>...while a remodel run holds it back.</summary>
+    private const string RemodelRunHoldsIt =
+        "the backend restarts with the saved settings when the remodel run ends, and nothing new starts "
+        + "before then. Wait for the run to end, then try again.";
+
+    /// <summary>...while the backend does not answer whether a turn runs.</summary>
+    private const string NoAnswerHoldsIt =
+        "the review backend did not answer whether a turn is running, so it has not been restarted with "
+        + "the saved settings, and nothing new starts before then. Save the settings again to restart "
+        + "it, then try again.";
+
+    /// <summary>The status the host posts when it stops waiting for a backend that does not answer.</summary>
+    private const string StoppedWaiting =
+        "the review backend stopped answering, so it was not restarted with the settings saved during the "
+        + "turn. Save the settings again to restart it.";
 
     /// <summary>Fictional keys, built from fragments and in no provider's format (AGENTS.md rule 2).</summary>
     private static readonly string OpenAiKey = string.Concat("FICT", "-saved-", "openai-", "143a-0001");
@@ -127,8 +141,10 @@ public sealed class DeferredRestartTests
         Assert.Equal(OpenAiKey, key.Key);
         Assert.Equal("settings", key.Source);
 
-        // One message after the restart, and nothing else: the promise is the only status.
+        // One message after the restart, and nothing else: the promise is the only status, and the
+        // message carries it back so the page takes it, and nothing else, off its banner.
         Assert.Equal("backend.restarted", world.Types().Last());
+        Assert.Equal(Promise, world.Last("backend.restarted").GetProperty("promise").GetString());
         Assert.Single(world.Posted("status"));
         world.AssertNothingPostedContains(OpenAiKey);
 
@@ -155,24 +171,9 @@ public sealed class DeferredRestartTests
     public void HoweverTheTurnEndsTheBackendRestarts(string endedAs)
     {
         using (var server = new SessionStateServer("chat-1"))
-        using (var stub = new StubBackend())
-        using (var supervisor = new BackendSupervisor(() => false))
+        using (var real = new RealClient(server.Port))
         {
-            stub.PrintsHandshake(server.Port);
-            var options = new BackendStartOptions(stub.Command, stub.LogPath)
-            {
-                RunRoot = stub.RunRoot,
-                AllowOrigin = "https://swreview.invalid",
-                HealthProbe = (origin, token) => true,
-                StopGrace = TimeSpan.FromMilliseconds(100),
-            };
-            foreach (KeyValuePair<string, string> knob in stub.Knobs)
-            {
-                options.Environment[knob.Key] = knob.Value;
-            }
-
-            supervisor.Start(options);
-            using (var client = new BackendClient(supervisor, Path.GetDirectoryName(stub.LogPath)!, null))
+            BackendClient client = real.Client;
             using (var world = new RestartWorld())
             {
                 world.BackendOverride = new TurnsAskedOfTheRealClient(client, world.Backend);
@@ -198,6 +199,42 @@ public sealed class DeferredRestartTests
         }
     }
 
+    /// <summary>
+    /// The real client tells a refusal the backend sent from no answer at all: `UnknownChat` (404)
+    /// for a chat it does not hold and `InvalidRequest` (400) for an id it cannot read are
+    /// answers, and a call nothing listens for is not. Only the last leaves the turn unknown, and
+    /// may hold the restart back.
+    /// </summary>
+    [Fact]
+    public void TheRealClientTellsARefusalFromAMissingAnswer()
+    {
+        using (var server = new SessionStateServer("chat-1") { InvalidChat = "FICT-not-an-id" })
+        using (var answering = new RealClient(server.Port))
+        {
+            BackendRequestException unknown = Assert.Throws<BackendRequestException>(
+                () => answering.Client.IsTurnRunning("FICT-other-chat"));
+            Assert.Equal("UnknownChat", unknown.ErrorClass);
+            Assert.False(unknown.Unanswered);
+
+            BackendRequestException invalid = Assert.Throws<BackendRequestException>(
+                () => answering.Client.IsTurnRunning("FICT-not-an-id"));
+            Assert.Equal("InvalidRequest", invalid.ErrorClass);
+            Assert.False(invalid.Unanswered);
+        }
+
+        var probe = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
+        probe.Start();
+        int closed = ((IPEndPoint)probe.LocalEndpoint).Port;
+        probe.Stop();
+        using (var silent = new RealClient(closed))
+        {
+            BackendRequestException missing = Assert.Throws<BackendRequestException>(
+                () => silent.Client.IsTurnRunning("chat-1"));
+            Assert.Equal("BackendUnavailable", missing.ErrorClass);
+            Assert.True(missing.Unanswered);
+        }
+    }
+
     [Fact]
     public void SeveralSavesDuringOneTurnRestartTheBackendOnceWithTheLastOfThem()
     {
@@ -209,11 +246,11 @@ public sealed class DeferredRestartTests
         // A second save during the same turn gets past the save's own check only when that check
         // cannot see the turn - a question the backend does not answer reads as "no turn"
         // (ReviewHost.AnyTurnRunning) - and the backend's own check, made a model-list round
-        // trip later, still refuses it: the question has been answered again by then.
-        world.Backend.QuestionFailure = new BackendRequestException(
-            "BackendUnavailable", "the review backend did not answer", retryable: true);
-        world.Receive("settings.save", "second", Save(model: "gpt-5.6-mini", effort: "medium"));
-        world.Backend.QuestionFailure = null;
+        // trip later, still refuses it. Only the save's own questions go unanswered: the host's
+        // look, on its own thread, is answered throughout, as a backend that let one round trip
+        // time out answers the next.
+        world.Backend.LeavesUnanswered(() =>
+            world.Receive("settings.save", "second", Save(model: "gpt-5.6-mini", effort: "medium")));
 
         Assert.Equal("medium", world.Reply("settings.saved", "second").GetProperty("settings").GetProperty("effort").GetString());
         Assert.Equal(2, world.Posted("status").Count(status => status.GetProperty("message").GetString() == Promise));
@@ -233,7 +270,8 @@ public sealed class DeferredRestartTests
     /// The host asks every second for as long as the turn runs, so a question the backend does not
     /// answer must not be read as "no turn": the backend's own check asks the same question, and
     /// two such readings in a row would restart the backend under the running turn. Only an
-    /// answer releases the restart.
+    /// answer releases the restart - here after two looks without one, fewer than the host waits
+    /// out (<see cref="DeferredRestart.UnansweredLooks"/>).
     /// </summary>
     [Fact]
     public void AQuestionTheBackendDoesNotAnswerIsNeverReadAsAnEndedTurn()
@@ -244,12 +282,11 @@ public sealed class DeferredRestartTests
         world.Track("chat-1");
         SaveAsATurnStarts(world, "save", Save(effort: "low"));
 
-        world.Backend.QuestionFailure = new BackendRequestException(
-            "BackendUnavailable", "the review backend did not answer: FICT timed out", retryable: true);
-        Polls(world.Backend, 5);
+        world.Backend.StopsAnswering(questions: DeferredRestart.UnansweredLooks - 1);
+        Polls(world.Backend, DeferredRestart.UnansweredLooks + 2);
         Assert.Equal(0, world.Backend.Attempts);
+        Assert.DoesNotContain(world.Posted("status"), status => status.GetProperty("message").GetString() == StoppedWaiting);
 
-        world.Backend.QuestionFailure = null;
         world.Backend.EndTurn("chat-1");
         Eventually(() => world.Posted("backend.restarted").Length == 1, "backend.restarted once answered");
         Assert.Equal(1, world.Backend.Attempts);
@@ -271,6 +308,70 @@ public sealed class DeferredRestartTests
 
         world.Backend.EndTurn("chat-1");
         Eventually(() => world.Posted("backend.restarted").Length == 1, "backend.restarted");
+    }
+
+    /// <summary>
+    /// Any answer that names no running state is an answer, whatever its status: a 400 for an id
+    /// the backend cannot read, its own refusal of a chat that failed, a 500 whose body it could
+    /// not write. Only a backend that gives no answer at all leaves the turn unknown. Held back
+    /// by such an answer, the restart would wait for ever.
+    /// </summary>
+    [Theory]
+    [InlineData("InvalidRequest")]
+    [InlineData("SessionFailed")]
+    [InlineData("HttpError")]
+    public void AnAnswerThatNamesNoRunningStateIsNoTurnWhateverItsStatus(string errorClass)
+    {
+        using var world = new RestartWorld();
+        world.Backend.Refusals["FICT-odd-id"] = new BackendRequestException(
+            errorClass, "FICT the backend refused this one", retryable: false);
+        world.Open();
+        world.Track("FICT-odd-id");
+        world.Track("chat-1");
+        SaveAsATurnStarts(world, "save", Save(effort: "low"));
+
+        world.Backend.EndTurn("chat-1");
+        Eventually(() => world.Posted("backend.restarted").Length == 1, "backend.restarted past a " + errorClass);
+    }
+
+    /// <summary>
+    /// A backend that has stopped answering is waited for, but not for ever: after
+    /// <see cref="DeferredRestart.UnansweredLooks"/> looks in a row without an answer the host
+    /// stops waiting, restarts nothing, and tells the engineer so - and how to go on - in place of
+    /// the promise it can no longer keep. Saving the settings again then restarts the backend at
+    /// once: the save's own check, and the backend's, read a missing answer as no turn.
+    /// </summary>
+    [Fact]
+    public void ABackendThatStopsAnsweringIsWaitedForABoundedTimeThenTheEngineerIsToldHowToGoOn()
+    {
+        using var world = new RestartWorld();
+        world.Backend.CheckAsksTheSameQuestion = true;
+        world.Open();
+        world.Track("chat-1");
+        SaveAsATurnStarts(world, "save", Save(effort: "low"));
+
+        world.Backend.StopsAnswering();
+        Eventually(
+            () => world.Posted("status").Any(status => status.GetProperty("message").GetString() == StoppedWaiting),
+            "the status that the host stopped waiting");
+
+        JsonElement status = world.Last("status");
+        Assert.Equal("error", status.GetProperty("stage").GetString());
+        Assert.Equal(StoppedWaiting, status.GetProperty("message").GetString());
+        Assert.Equal(0, world.Backend.Attempts);
+        Assert.Empty(world.Posted("backend.restarted"));
+
+        // Nothing waits any more, so nothing asks: the watcher has gone, and a turn call is sent on.
+        Assert.Null(world.Host.PageTurnRefusal());
+        int asked = world.Backend.Questions;
+        Thread.Sleep(TimeSpan.FromTicks(world.Poll.Ticks * 20));
+        Assert.Equal(asked, world.Backend.Questions);
+
+        world.Receive("settings.save", "again", Save(effort: "medium"));
+
+        Assert.Equal("medium", Assert.Single(world.Backend.Restarts).Settings.Effort);
+        world.Reply("settings.saved", "again");
+        Assert.Single(world.Posted("status"), posted => posted.GetProperty("message").GetString() == StoppedWaiting);
     }
 
     /// <summary>
@@ -300,13 +401,23 @@ public sealed class DeferredRestartTests
     public void ARemodelRunInProgressHoldsTheRestartBackUntilItEnds()
     {
         bool remodelling = true;
-        using var world = new RestartWorld { BackendBusy = () => Volatile.Read(ref remodelling) };
+        int asked = 0;
+        using var world = new RestartWorld
+        {
+            BackendBusy = () =>
+            {
+                Interlocked.Increment(ref asked);
+                return Volatile.Read(ref remodelling);
+            },
+        };
         world.Open();
         world.Track("chat-1");
         SaveAsATurnStarts(world, "save", Save(effort: "low"));
 
+        // A remodel run is known without asking the backend, and is looked at first.
         world.Backend.EndTurn("chat-1");
-        Polls(world.Backend, 5);
+        int from = Volatile.Read(ref asked);
+        Eventually(() => Volatile.Read(ref asked) >= from + 5, "5 more looks at the remodel run");
         Assert.Equal(0, world.Backend.Attempts);
 
         Volatile.Write(ref remodelling, false);
@@ -424,7 +535,7 @@ public sealed class DeferredRestartTests
 
         JsonElement error = world.Reply("error", "start");
         Assert.Equal("TurnRunning", error.GetProperty("error_class").GetString());
-        Assert.Equal(TurnStillRunning, error.GetProperty("message").GetString());
+        Assert.Equal(TurnHoldsIt, error.GetProperty("message").GetString());
         Assert.True(error.GetProperty("retryable").GetBoolean());
         Assert.Equal(0, world.Dump.Runs);
         Assert.Empty(world.Backend.Sessions);
@@ -438,7 +549,9 @@ public sealed class DeferredRestartTests
 
     /// <summary>
     /// A remodel run that holds the restart back holds a new review back too: the review cannot
-    /// run on the old backend, and the restart cannot be made under the run.
+    /// run on the old backend, and the restart cannot be made under the run. The refusal names
+    /// the run, under a class whose next step is true of it - not `TurnRunning`, whose words send
+    /// the engineer to a Stop button there is no turn for.
     /// </summary>
     [Fact]
     public void ANewReviewWhileARemodelRunHoldsTheRestartIsRefusedBeforeAnythingIsExtracted()
@@ -452,11 +565,77 @@ public sealed class DeferredRestartTests
         world.Receive("review.start", "start", new { });
 
         JsonElement error = world.Reply("error", "start");
-        Assert.Equal("TurnRunning", error.GetProperty("error_class").GetString());
-        Assert.Equal(TurnStillRunning, error.GetProperty("message").GetString());
+        Assert.Equal("RemodelRunning", error.GetProperty("error_class").GetString());
+        Assert.Equal(RemodelRunHoldsIt, error.GetProperty("message").GetString());
+        Assert.True(error.GetProperty("retryable").GetBoolean());
         Assert.Equal(0, world.Dump.Runs);
         Assert.Empty(world.Backend.Sessions);
         Assert.Equal(0, world.Backend.Attempts);
+    }
+
+    /// <summary>
+    /// ...and while the backend does not answer whether a turn runs, the refusal says that, under
+    /// the class whose next step is the way on: saving the settings again restarts it.
+    /// </summary>
+    [Fact]
+    public void ANewReviewWhileTheBackendDoesNotAnswerIsRefusedSayingSo()
+    {
+        using var world = new RestartWorld { Poll = TimeSpan.FromMinutes(10) };
+        world.Open();
+        world.Track("chat-1");
+        SaveAsATurnStarts(world, "save", Save(effort: "low"));
+        world.Backend.EndTurn("chat-1");
+        world.Backend.StopsAnswering(questions: 1);
+
+        world.Receive("review.start", "start", new { });
+
+        JsonElement error = world.Reply("error", "start");
+        Assert.Equal("BackendUnavailable", error.GetProperty("error_class").GetString());
+        Assert.Equal(NoAnswerHoldsIt, error.GetProperty("message").GetString());
+        Assert.True(error.GetProperty("retryable").GetBoolean());
+        Assert.Equal(0, world.Dump.Runs);
+        Assert.Empty(world.Backend.Sessions);
+        Assert.Equal(0, world.Backend.Attempts);
+
+        // The refusal left the restart waiting: answered again, the next review makes it first and
+        // runs on the restarted backend.
+        world.Receive("review.start", "again", new { });
+        world.Reply("review.started", "again");
+        Assert.Equal(1, Assert.Single(world.Backend.Sessions).Generation);
+    }
+
+    /// <summary>
+    /// A remodel run is named before a backend that does not answer: the add-in knows of the run
+    /// without asking the backend, and the way on from a backend that does not answer - saving
+    /// the settings again, which restarts it at once - would end the run. So while the run lasts
+    /// the host waits for it, and does not stop waiting for want of an answer.
+    /// </summary>
+    [Fact]
+    public void ARemodelRunIsNamedBeforeABackendThatDoesNotAnswer()
+    {
+        int looks = 0;
+        using var world = new RestartWorld
+        {
+            BackendBusy = () =>
+            {
+                Interlocked.Increment(ref looks);
+                return true;
+            },
+        };
+        world.Open();
+        world.Track("chat-1");
+        SaveAsATurnStarts(world, "save", Save(effort: "low"));
+        world.Backend.EndTurn("chat-1");
+        world.Backend.StopsAnswering();
+
+        int from = Volatile.Read(ref looks);
+        Eventually(() => Volatile.Read(ref looks) >= from + DeferredRestart.UnansweredLooks * 3, "the host's looks");
+
+        Assert.DoesNotContain(world.Posted("status"), status => status.GetProperty("message").GetString() == StoppedWaiting);
+        world.Receive("review.start", "start", new { });
+        JsonElement error = world.Reply("error", "start");
+        Assert.Equal("RemodelRunning", error.GetProperty("error_class").GetString());
+        Assert.Equal(0, world.Dump.Runs);
     }
 
     /// <summary>
@@ -488,6 +667,119 @@ public sealed class DeferredRestartTests
         Assert.Equal(1, generation);
         Assert.NotNull(request.EngineeringContext);
         Assert.Equal("low", request.Effort);
+    }
+
+    /// <summary>
+    /// An engineering context request checks the backend before it reads anything (feature 016,
+    /// `ContextReady`), so it makes the restart first too: preparing context the moment the turn
+    /// ends restarts the backend before the dump begins.
+    /// </summary>
+    [Fact]
+    public void AContextPreparationTheMomentTheTurnEndsRestartsTheBackendBeforeItsDump()
+    {
+        using var world = new RestartWorld { Poll = TimeSpan.FromMinutes(10) };
+        int restartsAtTheDump = -1;
+        world.Dump.OnRun = () => restartsAtTheDump = world.Backend.Restarts.Length;
+        world.Open();
+        world.Track("chat-1");
+        SaveAsATurnStarts(world, "save", Save(effort: "low"));
+        world.Backend.EndTurn("chat-1");
+
+        world.Receive("context.prepare", "prepare", new { });
+
+        world.Reply("context.prepared", "prepare");
+        Assert.Equal(1, restartsAtTheDump);
+        Assert.Equal("low", Assert.Single(world.Backend.Restarts).Settings.Effort);
+    }
+
+    /// <summary>...and reading the selection against prepared context restarts it before the selection is read.</summary>
+    [Fact]
+    public void AContextSelectionTheMomentTheTurnEndsRestartsTheBackendBeforeTheSelectionIsRead()
+    {
+        using var world = new RestartWorld { Poll = TimeSpan.FromMinutes(10) };
+        int restartsAtTheRead = -1;
+        world.Selection.OnCapture = () => restartsAtTheRead = world.Backend.Restarts.Length;
+        world.Open();
+        world.Track("chat-1");
+        world.Receive("context.prepare", "prepare", new { });
+        JsonElement prepared = world.Reply("context.prepared", "prepare");
+        SaveAsATurnStarts(world, "save", Save(effort: "low"));
+        world.Backend.EndTurn("chat-1");
+
+        world.Receive("context.selection", "select", new
+        {
+            run_id = prepared.GetProperty("run_id").GetString(),
+            package_sha256 = prepared.GetProperty("package_sha256").GetString(),
+        });
+
+        world.Reply("context.selected", "select");
+        Assert.Equal(1, restartsAtTheRead);
+        Assert.Single(world.Backend.Restarts);
+    }
+
+    /// <summary>
+    /// While something holds the restart back, an engineering context request is refused before
+    /// anything is read - no dump, no selection - and says what holds it: a turn (refused by the
+    /// request's own check, as before 143A), a remodel run, or a backend that does not answer.
+    /// </summary>
+    [Theory]
+    [InlineData("context.prepare", "turn")]
+    [InlineData("context.prepare", "remodel run")]
+    [InlineData("context.prepare", "no answer")]
+    [InlineData("context.selection", "turn")]
+    [InlineData("context.selection", "remodel run")]
+    [InlineData("context.selection", "no answer")]
+    public void AContextRequestWhileTheRestartIsHeldBackIsRefusedBeforeAnythingIsRead(string request, string cause)
+    {
+        using var world = new RestartWorld { Poll = TimeSpan.FromMinutes(10) };
+        world.Open();
+        world.Track("chat-1");
+        object payload = new { };
+        if (request == "context.selection")
+        {
+            world.Receive("context.prepare", "prepare", new { });
+            JsonElement prepared = world.Reply("context.prepared", "prepare");
+            payload = new
+            {
+                run_id = prepared.GetProperty("run_id").GetString(),
+                package_sha256 = prepared.GetProperty("package_sha256").GetString(),
+            };
+        }
+
+        int dumps = world.Dump.Runs;
+        SaveAsATurnStarts(world, "save", Save(effort: "low"));
+        string expectedClass;
+        string expectedMessage;
+        switch (cause)
+        {
+            case "turn":
+                expectedClass = "TurnRunning";
+                expectedMessage = "Stop the running review before changing engineering context.";
+                break;
+
+            case "remodel run":
+                world.Backend.EndTurn("chat-1");
+                world.BackendBusy = () => true;
+                expectedClass = "RemodelRunning";
+                expectedMessage = RemodelRunHoldsIt;
+                break;
+
+            default:
+                world.Backend.EndTurn("chat-1");
+                world.Backend.StopsAnswering();
+                expectedClass = "BackendUnavailable";
+                expectedMessage = NoAnswerHoldsIt;
+                break;
+        }
+
+        world.Receive(request, "asked", payload);
+
+        JsonElement error = world.Reply("error", "asked");
+        Assert.Equal(expectedClass, error.GetProperty("error_class").GetString());
+        Assert.Equal(expectedMessage, error.GetProperty("message").GetString());
+        Assert.Equal(dumps, world.Dump.Runs);
+        Assert.Equal(0, world.Selection.Captures);
+        Assert.Equal(0, world.Backend.Attempts);
     }
 
     [Fact]
@@ -742,6 +1034,10 @@ public sealed class DeferredRestartTests
         Assert.Equal(0, world.Backend.Questions);
     }
 
+    /// <summary>
+    /// While a turn runs, a turn call is refused as the backend refuses a call while a turn runs -
+    /// `TurnRunning`, not retryable (chat/server.py) - and the restart still waits.
+    /// </summary>
     [Fact]
     public void WhileTheTurnRunsATurnCallIsRefusedAndTheRestartStillWaits()
     {
@@ -754,12 +1050,45 @@ public sealed class DeferredRestartTests
 
         Assert.NotNull(refusal);
         Assert.Equal("TurnRunning", refusal!.ErrorClass);
-        Assert.Equal(TurnStillRunning, refusal.Message);
-        Assert.True(refusal.Retryable);
+        Assert.Equal(TurnHoldsIt, refusal.Message);
+        Assert.False(refusal.Retryable);
         Assert.Empty(world.Backend.Restarts);
 
         world.Backend.EndTurn("chat-1");
         Eventually(() => world.Posted("backend.restarted").Length == 1, "backend.restarted");
+    }
+
+    /// <summary>
+    /// ...and while a remodel run, or a backend that does not answer, holds the restart back, the
+    /// refusal says which.
+    /// </summary>
+    [Theory]
+    [InlineData("remodel run", "RemodelRunning", false)]
+    [InlineData("no answer", "BackendUnavailable", true)]
+    public void WhileSomethingElseHoldsTheRestartATurnCallIsRefusedSayingWhat(
+        string cause, string expectedClass, bool expectedRetryable)
+    {
+        using var world = new RestartWorld { Poll = TimeSpan.FromMinutes(10) };
+        world.Open();
+        world.Track("chat-1");
+        SaveAsATurnStarts(world, "save", Save(effort: "low"));
+        world.Backend.EndTurn("chat-1");
+        if (cause == "remodel run")
+        {
+            world.BackendBusy = () => true;
+        }
+        else
+        {
+            world.Backend.StopsAnswering(questions: 1);
+        }
+
+        BackendRequestException? refusal = world.Host.PageTurnRefusal();
+
+        Assert.NotNull(refusal);
+        Assert.Equal(expectedClass, refusal!.ErrorClass);
+        Assert.Equal(cause == "remodel run" ? RemodelRunHoldsIt : NoAnswerHoldsIt, refusal.Message);
+        Assert.Equal(expectedRetryable, refusal.Retryable);
+        Assert.Equal(0, world.Backend.Attempts);
     }
 
     /// <summary>
@@ -912,6 +1241,44 @@ public sealed class DeferredRestartTests
             StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The pane's proxy answers a turn call the host refuses as the backend answers a call it
+    /// refuses with the same class: the status and the `retryable` flag chat/server.py gives it,
+    /// read from that source - while the turn runs (`TurnRunning`) and once the restart has ended
+    /// the call's chat (`UnknownChat`). The words are the host's own, and say why.
+    /// </summary>
+    [Fact]
+    public void TheProxyAnswersARefusedTurnCallWithTheBackendsOwnStatusAndFlag()
+    {
+        using var world = new RestartWorld { Poll = TimeSpan.FromMinutes(10) };
+        world.Open();
+        world.Track("chat-1");
+        SaveAsATurnStarts(world, "save", Save(effort: "low"));
+        var proxy = new BackendProxyHandler(
+            () => world.Backend.Endpoint,
+            request => throw new InvalidOperationException("FICT a refused call was sent"),
+            world.Host.PageTurnRefusal);
+
+        AssertAnsweredAsTheBackendAnswers(proxy, "TurnRunning");
+
+        world.Backend.EndTurn("chat-1");
+        AssertAnsweredAsTheBackendAnswers(proxy, "UnknownChat");
+        Assert.Single(world.Backend.Restarts);
+    }
+
+    private static void AssertAnsweredAsTheBackendAnswers(BackendProxyHandler proxy, string errorClass)
+    {
+        ProxiedResponse? response = proxy.TryServe(
+            TaskPaneControl.PageOrigin + BackendProxy.PathPrefix + "/sessions/chat-1/messages", "POST", null, null);
+
+        Assert.NotNull(response);
+        JsonElement body = JsonDocument.Parse(Encoding.UTF8.GetString(response!.Content)).RootElement;
+        (int status, bool retryable) = ChatServerSource.ErrorClass(errorClass);
+        Assert.Equal(errorClass, body.GetProperty("error_class").GetString());
+        Assert.Equal(status, response.Status);
+        Assert.Equal(retryable, body.GetProperty("retryable").GetBoolean());
+    }
+
     // ---- the restart itself, with no host ------------------------------------------------------
 
     [Fact]
@@ -920,17 +1287,14 @@ public sealed class DeferredRestartTests
         int restarts = 0;
         using var entered = new ManualResetEventSlim(false);
         using var release = new ManualResetEventSlim(false);
-        using var restart = new DeferredRestart(
-            () => false,
+        using var restart = NewRestart(
+            () => DeferredRestart.Hold.None,
             () =>
             {
                 Interlocked.Increment(ref restarts);
                 entered.Set();
                 release.Wait(TimeSpan.FromSeconds(10));
-            },
-            () => { },
-            _ => { },
-            TimeSpan.FromMinutes(10));
+            });
         try
         {
             Assert.False(restart.Now(() => throw new TurnRunningException()));
@@ -955,15 +1319,24 @@ public sealed class DeferredRestartTests
         }
     }
 
-    [Fact]
-    public void WhileATurnRunsApplyAnswersAtOnceAndTriesNothing()
+    /// <summary>
+    /// While something holds the restart back, Apply answers at once, naming what, and tries
+    /// nothing: a turn, a remodel run, or a backend that does not answer.
+    /// </summary>
+    [Theory]
+    [InlineData("Turn", "TurnRunning")]
+    [InlineData("RemodelRun", "RemodelRunning")]
+    [InlineData("NoAnswer", "NotAnswered")]
+    public void WhileSomethingHoldsTheRestartApplyAnswersAtOnceSayingWhatAndTriesNothing(string hold, string expected)
     {
         int tried = 0;
-        using var restart = new DeferredRestart(
-            () => true, () => tried++, () => { }, _ => { }, TimeSpan.FromMinutes(10));
+        var held = (DeferredRestart.Hold)Enum.Parse(typeof(DeferredRestart.Hold), hold);
+        using var restart = NewRestart(() => held, () => tried++);
         Assert.False(restart.Now(() => throw new TurnRunningException()));
 
-        Assert.Equal(DeferredRestart.Outcome.TurnRunning, restart.Apply(out Exception? failure));
+        Assert.Equal(
+            (DeferredRestart.Outcome)Enum.Parse(typeof(DeferredRestart.Outcome), expected),
+            restart.Apply(out Exception? failure));
         Assert.Null(failure);
         Assert.Equal(0, tried);
         Assert.True(restart.Pending);
@@ -978,12 +1351,11 @@ public sealed class DeferredRestartTests
     public void ARestartTheBackendRefusesForATurnThatStartedAfterTheLookStillWaits()
     {
         int reported = 0;
-        using var restart = new DeferredRestart(
-            () => false,
+        using var restart = NewRestart(
+            () => DeferredRestart.Hold.None,
             () => throw new TurnRunningException(),
-            () => reported++,
-            _ => reported++,
-            TimeSpan.FromMinutes(10));
+            restarted: () => reported++,
+            failed: _ => reported++);
         Assert.False(restart.Now(() => throw new TurnRunningException()));
 
         Assert.Equal(DeferredRestart.Outcome.TurnRunning, restart.Apply(out Exception? failure));
@@ -1003,8 +1375,8 @@ public sealed class DeferredRestartTests
     public void ALookAtTheTurnsThatCannotBeMadeLeavesTheDecisionToTheBackendsOwnCheck(bool backendSeesATurn)
     {
         int restarted = 0;
-        using var restart = new DeferredRestart(
-            () => throw new InvalidOperationException("FICT the backend did not answer"),
+        using var restart = NewRestart(
+            () => throw new InvalidOperationException("FICT the look could not be made"),
             () =>
             {
                 if (backendSeesATurn)
@@ -1013,10 +1385,7 @@ public sealed class DeferredRestartTests
                 }
 
                 restarted++;
-            },
-            () => { },
-            _ => { },
-            TimeSpan.FromMinutes(10));
+            });
         Assert.False(restart.Now(() => throw new TurnRunningException()));
 
         DeferredRestart.Outcome outcome = restart.Apply(out Exception? failure);
@@ -1030,8 +1399,7 @@ public sealed class DeferredRestartTests
     [Fact]
     public void AnImmediateRestartThatFailsIsThrownAsBeforeAndLeavesNothingWaiting()
     {
-        using var restart = new DeferredRestart(
-            () => false, () => { }, () => { }, _ => { }, TimeSpan.FromMinutes(10));
+        using var restart = NewRestart(() => DeferredRestart.Hold.None, () => { });
         Assert.False(restart.Now(() => throw new TurnRunningException()));
         Assert.True(restart.Pending);
 
@@ -1041,26 +1409,137 @@ public sealed class DeferredRestartTests
     }
 
     /// <summary>
-    /// A poll the watcher could not wait out is refused when the host is built, not met later
-    /// as an exception on the watcher's thread, inside SOLIDWORKS: none, a negative one, and one
-    /// longer than a wait can take.
+    /// The watcher stops waiting after <see cref="DeferredRestart.UnansweredLooks"/> looks in a
+    /// row the backend leaves unanswered - not one more, not one fewer - says so once, tries no
+    /// restart, and ends.
+    /// </summary>
+    [Fact]
+    public void TheWatcherStopsWaitingAfterABoundedRunOfUnansweredLooksAndSaysSo()
+    {
+        int looks = 0;
+        int looksWhenTold = -1;
+        int told = 0;
+        int tried = 0;
+        using var restart = NewRestart(
+            () =>
+            {
+                Interlocked.Increment(ref looks);
+                return DeferredRestart.Hold.NoAnswer;
+            },
+            () => tried++,
+            notAnswered: () =>
+            {
+                looksWhenTold = Volatile.Read(ref looks);
+                Interlocked.Increment(ref told);
+            },
+            poll: TimeSpan.FromMilliseconds(5));
+        Assert.False(restart.Now(() => throw new TurnRunningException()));
+
+        Eventually(() => Volatile.Read(ref told) == 1, "the watcher saying it stopped waiting");
+        Eventually(() => !restart.Pending, "nothing waiting");
+        Thread.Sleep(100);
+
+        Assert.Equal(DeferredRestart.UnansweredLooks, looksWhenTold);
+        Assert.Equal(DeferredRestart.UnansweredLooks, Volatile.Read(ref looks));
+        Assert.Equal(1, Volatile.Read(ref told));
+        Assert.Equal(0, tried);
+    }
+
+    /// <summary>
+    /// The run of unanswered looks must be unbroken: one look the backend answers - a turn still
+    /// running - starts the count again, so a backend that answers now and then is waited for.
+    /// </summary>
+    [Fact]
+    public void ALookTheBackendAnswersStartsTheCountAgain()
+    {
+        int looks = 0;
+        int told = 0;
+        using var restart = NewRestart(
+            () =>
+            {
+                // Two unanswered, one answered, and again: never the bound in a row.
+                int look = Interlocked.Increment(ref looks);
+                return look % DeferredRestart.UnansweredLooks == 0 ? DeferredRestart.Hold.Turn : DeferredRestart.Hold.NoAnswer;
+            },
+            () => { },
+            notAnswered: () => Interlocked.Increment(ref told),
+            poll: TimeSpan.FromMilliseconds(5));
+        Assert.False(restart.Now(() => throw new TurnRunningException()));
+
+        Eventually(() => Volatile.Read(ref looks) >= DeferredRestart.UnansweredLooks * 6, "six runs of looks");
+
+        Assert.Equal(0, Volatile.Read(ref told));
+        Assert.True(restart.Pending);
+    }
+
+    /// <summary>
+    /// A save refused again during a run of unanswered looks is a newer save, and its restart is
+    /// waited for from then on: the count starts again with it rather than ending that restart
+    /// on the strength of looks made before it was asked for.
+    /// </summary>
+    [Fact]
+    public void ARestartRefusedAgainDuringARunOfUnansweredLooksStartsTheCountAgain()
+    {
+        int looks = 0;
+        int looksWhenTold = -1;
+        bool? secondSaveRestarted = null;
+        DeferredRestart? restart = null;
+        restart = NewRestart(
+            () =>
+            {
+                if (Interlocked.Increment(ref looks) == 2)
+                {
+                    // A second save, refused by the backend's own check while this look is made.
+                    secondSaveRestarted = restart!.Now(() => throw new TurnRunningException());
+                }
+
+                return DeferredRestart.Hold.NoAnswer;
+            },
+            () => { },
+            notAnswered: () => looksWhenTold = Volatile.Read(ref looks),
+            poll: TimeSpan.FromMilliseconds(5));
+        using (restart)
+        {
+            Assert.False(restart.Now(() => throw new TurnRunningException()));
+
+            Eventually(() => Volatile.Read(ref looksWhenTold) > 0, "the watcher saying it stopped waiting");
+
+            // Look 2 belongs to the second save's run: told after it and two more, not after look 3.
+            Assert.False(secondSaveRestarted);
+            Assert.Equal(DeferredRestart.UnansweredLooks + 1, looksWhenTold);
+        }
+    }
+
+    /// <summary>
+    /// A poll the watcher could not wait out is refused when the host is built, not met later on
+    /// the watcher's thread, inside SOLIDWORKS: none, a negative one, one under the millisecond a
+    /// wait can count - on which the watcher would spin - and one longer than a wait can take.
     /// </summary>
     [Theory]
     [InlineData(0L)]
-    [InlineData(-1L)]
-    [InlineData((long)int.MaxValue + 1)]
-    public void APollTheWatcherCouldNotWaitOutIsRefusedAtOnce(long milliseconds)
+    [InlineData(-TimeSpan.TicksPerMillisecond)]
+    [InlineData(1L)]
+    [InlineData(TimeSpan.TicksPerMillisecond - 1)]
+    [InlineData((int.MaxValue + 1L) * TimeSpan.TicksPerMillisecond)]
+    public void APollTheWatcherCouldNotWaitOutIsRefusedAtOnce(long ticks)
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => new DeferredRestart(
-            () => false, () => { }, () => { }, _ => { }, TimeSpan.FromMilliseconds(milliseconds)));
+        Assert.Throws<ArgumentOutOfRangeException>(() => NewRestart(
+            () => DeferredRestart.Hold.None, () => { }, poll: TimeSpan.FromTicks(ticks)));
+    }
+
+    /// <summary>The shortest poll a wait can count, a millisecond, is taken.</summary>
+    [Fact]
+    public void AMillisecondPollIsTaken()
+    {
+        using var restart = NewRestart(() => DeferredRestart.Hold.None, () => { }, poll: TimeSpan.FromMilliseconds(1));
+        Assert.False(restart.Pending);
     }
 
     [Fact]
     public void DisposeWakesTheWatcherAtOnceAndNothingRestartsAfterIt()
     {
         int tried = 0;
-        var restart = new DeferredRestart(
-            () => false, () => tried++, () => { }, _ => { }, TimeSpan.FromMinutes(10));
+        var restart = NewRestart(() => DeferredRestart.Hold.None, () => tried++);
         Assert.False(restart.Now(() => throw new TurnRunningException()));
         Assert.True(restart.Pending);
 
@@ -1076,6 +1555,22 @@ public sealed class DeferredRestartTests
         Assert.Equal(0, tried);
         restart.Dispose();
     }
+
+    /// <summary>A restart with the callbacks a test does not care about doing nothing, and a ten-minute poll unless given one.</summary>
+    private static DeferredRestart NewRestart(
+        Func<DeferredRestart.Hold> heldBack,
+        Action restart,
+        Action? restarted = null,
+        Action<Exception>? failed = null,
+        Action? notAnswered = null,
+        TimeSpan? poll = null) =>
+        new DeferredRestart(
+            heldBack,
+            restart,
+            restarted ?? (() => { }),
+            failed ?? (_ => { }),
+            notAnswered ?? (() => { }),
+            poll ?? TimeSpan.FromMinutes(10));
 
     // ---- helpers --------------------------------------------------------------------------------
 
@@ -1238,6 +1733,8 @@ public sealed class DeferredRestartTests
 
         public FakeDump Dump { get; } = new FakeDump();
 
+        public FakeSelection Selection { get; } = new FakeSelection();
+
         public PageDocument? Document { get; set; } = new PageDocument(@"C:\Fictional\FICT-bracket\FICT-bracket.SLDASM", "Default");
 
         /// <summary>How often the host asks whether the turn has ended; short, so the tests are.</summary>
@@ -1262,6 +1759,7 @@ public sealed class DeferredRestartTests
                 CurrentDocument = () => Document,
                 Environment = _ => null,
                 Dump = Dump,
+                EngineeringSelection = Selection,
                 Engineer = "FICT-engineer",
                 Now = () => Stamp,
                 RestartPoll = Poll,
@@ -1375,27 +1873,61 @@ public sealed class DeferredRestartTests
         private readonly List<(UserSettings, ResolvedApiKey)> _restarts = new List<(UserSettings, ResolvedApiKey)>();
         private readonly List<(NewSessionRequest, int)> _sessions = new List<(NewSessionRequest, int)>();
         private readonly List<BackendStartOptions> _started = new List<BackendStartOptions>();
+        private readonly ThreadLocal<bool> _unansweredHere = new ThreadLocal<bool>();
         private int _generation;
         private int _questions;
         private int _attempts;
+        private int _unanswered;
         private bool _down;
 
         /// <summary>Thrown by each restart the backend's own check lets through.</summary>
         public Exception? RestartFailure { get; set; }
 
-        /// <summary>Thrown by the turn question, as a backend that does not answer makes it throw.</summary>
-        public Exception? QuestionFailure { get; set; }
-
         /// <summary>
         /// Whether the backend's own check asks the host's question, as production's does
         /// (BackendSupervisor's delegate is ReviewHost.AnyTurnRunning), and so cannot see a turn
-        /// while <see cref="QuestionFailure"/> is set. False models a failure that has cleared by
-        /// the time the backend asks.
+        /// while its question goes unanswered. False models a backend that answers again by the
+        /// time it asks.
         /// </summary>
         public bool CheckAsksTheSameQuestion { get; set; }
 
         /// <summary>Chats this backend does not hold: their question is answered `UnknownChat`.</summary>
         public HashSet<string> Unknown { get; } = new HashSet<string>(StringComparer.Ordinal);
+
+        /// <summary>Chats whose question is answered with a refusal that names no running state.</summary>
+        public Dictionary<string, BackendRequestException> Refusals { get; } =
+            new Dictionary<string, BackendRequestException>(StringComparer.Ordinal);
+
+        /// <summary>
+        /// Gives no answer to the next <paramref name="questions"/> questions about a turn, from
+        /// any thread, as a backend that has stopped answering - every one, by default - then
+        /// answers again.
+        /// </summary>
+        public void StopsAnswering(int questions = int.MaxValue)
+        {
+            lock (_gate)
+            {
+                _unanswered = questions;
+            }
+        }
+
+        /// <summary>
+        /// Gives no answer to the questions <paramref name="asking"/> asks on the calling thread -
+        /// the test's, where the page's messages are handled - while the host's own look, on its
+        /// thread, is answered: one round trip that timed out, not a backend that stopped answering.
+        /// </summary>
+        public void LeavesUnanswered(Action asking)
+        {
+            _unansweredHere.Value = true;
+            try
+            {
+                asking();
+            }
+            finally
+            {
+                _unansweredHere.Value = false;
+            }
+        }
 
         /// <summary>
         /// No backend process: no endpoint, and every question refused as the real client refuses
@@ -1499,19 +2031,32 @@ public sealed class DeferredRestartTests
                         "BackendUnavailable", "the review backend is not running.", retryable: true);
                 }
 
+                if (Unanswered())
+                {
+                    if (!_unansweredHere.Value && _unanswered != int.MaxValue)
+                    {
+                        _unanswered--;
+                    }
+
+                    throw BackendRequestException.NotAnswered("the review backend did not answer: FICT timed out");
+                }
+
                 if (Unknown.Contains(chatId))
                 {
                     throw new BackendRequestException("UnknownChat", "no chat " + chatId, retryable: false);
                 }
 
-                if (QuestionFailure == null)
+                if (Refusals.TryGetValue(chatId, out BackendRequestException? refusal))
                 {
-                    return _running.Contains(chatId);
+                    throw refusal;
                 }
-            }
 
-            throw QuestionFailure;
+                return _running.Contains(chatId);
+            }
         }
+
+        /// <summary>Whether a question asked now goes unanswered; called under the fake's lock.</summary>
+        private bool Unanswered() => _unansweredHere.Value || _unanswered > 0;
 
         public ChatSessionHandle CreateSession(NewSessionRequest request)
         {
@@ -1527,8 +2072,8 @@ public sealed class DeferredRestartTests
             lock (_gate)
             {
                 // The backend's own check, made before anything is stopped - blind to the turns
-                // while the question fails, when it asks the same question.
-                bool blind = CheckAsksTheSameQuestion && QuestionFailure != null;
+                // while the question goes unanswered, when it asks the same question.
+                bool blind = CheckAsksTheSameQuestion && Unanswered();
                 if (_running.Count > 0 && !blind)
                 {
                     throw new TurnRunningException();
@@ -1586,6 +2131,44 @@ public sealed class DeferredRestartTests
         public void Restart(UserSettings settings, ResolvedApiKey key) => _fake.Restart(settings, key);
     }
 
+    /// <summary>
+    /// The real <see cref="BackendClient"/>, over a stub child whose handshake names
+    /// <paramref name="port"/>: whatever listens there - or nothing - is the backend it asks.
+    /// </summary>
+    private sealed class RealClient : IDisposable
+    {
+        private readonly StubBackend _stub = new StubBackend();
+        private readonly BackendSupervisor _supervisor = new BackendSupervisor(() => false);
+
+        public RealClient(int port)
+        {
+            _stub.PrintsHandshake(port);
+            var options = new BackendStartOptions(_stub.Command, _stub.LogPath)
+            {
+                RunRoot = _stub.RunRoot,
+                AllowOrigin = "https://swreview.invalid",
+                HealthProbe = (origin, token) => true,
+                StopGrace = TimeSpan.FromMilliseconds(100),
+            };
+            foreach (KeyValuePair<string, string> knob in _stub.Knobs)
+            {
+                options.Environment[knob.Key] = knob.Value;
+            }
+
+            _supervisor.Start(options);
+            Client = new BackendClient(_supervisor, Path.GetDirectoryName(_stub.LogPath)!, null);
+        }
+
+        public BackendClient Client { get; }
+
+        public void Dispose()
+        {
+            Client.Dispose();
+            _supervisor.Dispose();
+            _stub.Dispose();
+        }
+    }
+
     /// <summary>`GET /sessions/{chat_id}` answering `{state}` for one chat, as `chat/server.py` does.</summary>
     private sealed class SessionStateServer : IDisposable
     {
@@ -1610,6 +2193,9 @@ public sealed class DeferredRestartTests
             get => _state;
             set => _state = value;
         }
+
+        /// <summary>A chat id answered `400 InvalidRequest`, as the backend answers one it cannot read.</summary>
+        public string? InvalidChat { get; set; }
 
         public void Dispose()
         {
@@ -1643,10 +2229,14 @@ public sealed class DeferredRestartTests
                 {
                     bool known = context.Request.HttpMethod == "GET"
                         && context.Request.Url!.AbsolutePath == "/sessions/" + _chatId;
+                    bool invalid = InvalidChat != null
+                        && context.Request.Url!.AbsolutePath == "/sessions/" + InvalidChat;
                     byte[] body = Encoding.UTF8.GetBytes(known
                         ? "{\"chat_id\":\"" + _chatId + "\",\"state\":\"" + _state + "\"}"
-                        : "{\"error_class\":\"UnknownChat\",\"message\":\"no such chat\",\"retryable\":false}");
-                    context.Response.StatusCode = known ? 200 : 404;
+                        : invalid
+                            ? "{\"error_class\":\"InvalidRequest\",\"message\":\"not a chat id\",\"retryable\":false}"
+                            : "{\"error_class\":\"UnknownChat\",\"message\":\"no such chat\",\"retryable\":false}");
+                    context.Response.StatusCode = known ? 200 : invalid ? 400 : 404;
                     context.Response.ContentType = "application/json";
                     context.Response.ContentLength64 = body.Length;
                     context.Response.OutputStream.Write(body, 0, body.Length);
@@ -1666,14 +2256,36 @@ public sealed class DeferredRestartTests
 
         public int Runs => Volatile.Read(ref _runs);
 
+        /// <summary>Runs as each dump begins, before anything is written.</summary>
+        public Action? OnRun { get; set; }
+
         public DumpSummary Run(string outputDirectory, Action<string> progress, DumpProfile profile = DumpProfile.Full)
         {
+            OnRun?.Invoke();
             Interlocked.Increment(ref _runs);
 
             // A package to digest: a context review is bound to its package's SHA-256.
             string package = Path.Combine(outputDirectory, "package.json");
             File.WriteAllText(package, "{\"package_id\":\"FICT-package\"}");
             return new DumpSummary(package, components: 12, gaps: 0);
+        }
+    }
+
+    /// <summary>The current selection, read against prepared context (feature 016).</summary>
+    private sealed class FakeSelection : IEngineeringSelectionCapture
+    {
+        private int _captures;
+
+        public int Captures => Volatile.Read(ref _captures);
+
+        /// <summary>Runs as each read begins.</summary>
+        public Action? OnCapture { get; set; }
+
+        public EngineeringSelectionObservation Capture(string runDirectory, string expectedPackageSha256)
+        {
+            OnCapture?.Invoke();
+            Interlocked.Increment(ref _captures);
+            return new EngineeringSelectionObservation { PackageSha256 = expectedPackageSha256 };
         }
     }
 }

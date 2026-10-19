@@ -242,11 +242,15 @@ public sealed class BackendProxyHandlerTests
     }
 
     /// <summary>
-    /// Each refusal goes out with the status the backend itself answers it with, so the answer is
-    /// indistinguishable from the backend's; the page reads only `ok` and the body.
+    /// Each refusal goes out with the status its class is answered with - the backend's own for
+    /// its classes, a remodel run's as a turn's, and this proxy's own for a backend that is not
+    /// there; the page reads only `ok` and the body. That the status and the flag are the
+    /// backend's own is pinned against chat/server.py itself, through the host
+    /// (DeferredRestartTests.TheProxyAnswersARefusedTurnCallWithTheBackendsOwnStatusAndFlag).
     /// </summary>
     [Theory]
     [InlineData("TurnRunning", 409)]
+    [InlineData("RemodelRunning", 409)]
     [InlineData("UnknownChat", 404)]
     [InlineData("BackendUnavailable", 503)]
     public void ARefusalIsAnsweredWithTheStatusTheBackendGivesIt(string errorClass, int status)
@@ -371,6 +375,44 @@ public sealed class BackendProxyHandlerTests
         Assert.Contains("ProxyFailed", body, StringComparison.Ordinal);
         Assert.Contains("FICT the host broke", body, StringComparison.Ordinal);
         Assert.Contains("\"retryable\":false", body, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The calls the host is asked about are exactly the backend's routes that start a turn, or
+    /// resume one - every route chat/server.py serves whose handler moves a chat to `RUNNING`,
+    /// read from that source - save `POST /sessions`, which only the host makes and which waits
+    /// for the restart itself. A turn route the backend gains is asked about, or this fails.
+    /// </summary>
+    [Fact]
+    public void TheCallsAskedAboutAreTheBackendsOwnTurnRoutes()
+    {
+        IReadOnlyList<(string Method, string Path, bool StartsATurn)> routes = ChatServerSource.Routes();
+        Assert.Contains(routes, route => route.StartsATurn && route.Path == "/sessions/{chat_id}/messages");
+
+        var wrong = new List<string>();
+        foreach ((string method, string path, bool startsATurn) in routes)
+        {
+            int asked = 0;
+            var handler = new BackendProxyHandler(
+                () => Endpoint,
+                _ => Json(200, "OK", "{}"),
+                () =>
+                {
+                    asked++;
+                    return null;
+                });
+            string concrete = System.Text.RegularExpressions.Regex.Replace(path, @"\{(\w+)\}", "FICT-$1");
+
+            handler.TryServe(Prefix + concrete, method, null, null);
+
+            bool expected = startsATurn && path != "/sessions";
+            if ((asked == 1) != expected)
+            {
+                wrong.Add($"{method} {path}: asked {asked}, starts a turn {startsATurn}");
+            }
+        }
+
+        Assert.True(wrong.Count == 0, "The proxy's question does not match the backend's turn routes: " + string.Join("; ", wrong));
     }
 
     private static ProxiedResponse MustNotSend(ProxiedRequest request) =>

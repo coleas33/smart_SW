@@ -111,6 +111,13 @@ public sealed class BackendStartOptions
 
     /// <summary>`GET /health` with the bearer token; injectable so the tests need no server.</summary>
     public Func<string, string, bool>? HealthProbe { get; set; }
+
+    /// <summary>
+    /// Ends a start no longer wanted - the add-in unloading - without waiting out the handshake
+    /// and health timeouts: the child is stopped and the start throws. A start asked for after it
+    /// is cancelled starts nothing.
+    /// </summary>
+    public CancellationToken Cancellation { get; set; }
 }
 
 /// <summary>The backend could not be started. The message is safe to show and to log.</summary>
@@ -157,6 +164,9 @@ public sealed class BackendStartException : Exception
 /// </summary>
 public sealed class BackendProcess : IDisposable
 {
+    /// <summary>How a start ended through <see cref="BackendStartOptions.Cancellation"/> begins.</summary>
+    private const string StoppedBeforeReady = "the backend start was stopped before the backend was ready";
+
     private readonly ChildProcess _child;
     private readonly JobObject _tree;
     private readonly TimeSpan _stopGrace;
@@ -215,6 +225,13 @@ public sealed class BackendProcess : IDisposable
         if (options == null)
         {
             throw new ArgumentNullException(nameof(options));
+        }
+
+        // Before a log is opened or a child started: a start asked for once it is no longer
+        // wanted starts nothing at all.
+        if (options.Cancellation.IsCancellationRequested)
+        {
+            throw new BackendStartException(StoppedBeforeReady + ", so nothing was started.");
         }
 
         string[] secrets = options.Secrets.Where(secret => !string.IsNullOrWhiteSpace(secret)).ToArray();
@@ -292,7 +309,9 @@ public sealed class BackendProcess : IDisposable
 
             child.Resume();
 
-            if (!handshakeSeen.Wait(options.HandshakeTimeout))
+            // Throws OperationCanceledException when the start is no longer wanted, which the
+            // catch below turns into a start failure once the child is stopped.
+            if (!handshakeSeen.Wait(options.HandshakeTimeout, options.Cancellation))
             {
                 throw Fail(
                     child,
@@ -383,6 +402,12 @@ public sealed class BackendProcess : IDisposable
             if (failure is BackendStartException)
             {
                 throw;
+            }
+
+            if (failure is OperationCanceledException)
+            {
+                throw new BackendStartException(
+                    StoppedBeforeReady + $"; the child was stopped (log: {options.LogPath})", processId, failure);
             }
 
             throw new BackendStartException(
@@ -625,6 +650,14 @@ public sealed class BackendProcess : IDisposable
 
         while (true)
         {
+            // A start no longer wanted stops here, between probes, rather than at the deadline;
+            // the caller stops the child.
+            if (options.Cancellation.IsCancellationRequested)
+            {
+                throw new BackendStartException(
+                    StoppedBeforeReady + $"; the child was stopped (log: {LogPath})", ProcessId);
+            }
+
             if (_child.HasExited)
             {
                 throw new BackendStartException(
