@@ -407,6 +407,9 @@ hid the tab and is not amended here.
   - a folder already rotated, a Retry of a Retry: only the latest attempt's chat can be
     retried. Naming the attempt it replaced, whose session is `session.1.json` by then, is
     `409`; the latest still rotates its own to index 2;
+  - a Model check's folder a review claimed keeps its `check.json`, but the session beside it
+    is the review's, so it is no check's folder: the review's own chat retries it there, and
+    the check's session stays at index 1;
   - concurrent Retries of one chat: the claim runs on the event loop with no await before the
     folder is reserved, so the second meets the first's reservation or its live chat (`409
     RunDirInUse`, unchanged), and once that one ends, a folder that holds its session (`409`):

@@ -258,6 +258,9 @@ class InvalidTiming(ChatError):
 
 
 class UnknownChat(ChatError):
+    """No chat of that id on this backend: a route's `chat_id`, or a Retry's `retry_of` into
+    a folder that holds a session (`_require_retried`)."""
+
     status = 404
     error_class = "UnknownChat"
 
@@ -297,7 +300,8 @@ class TurnRunning(ChatError):
 
 
 class RunDirInUse(ChatError):
-    """A live chat already holds this run folder (`_claim_run_dir`)."""
+    """A live chat already holds this run folder (`_claim_run_dir`), or, to a Retry, the
+    session the folder holds is not the one its chat wrote (`_require_retried`)."""
 
     status = 409
     error_class = "RunDirInUse"
@@ -547,6 +551,12 @@ def _record_id(path: Path) -> str | None:
         return None
     session_id = record.get("session_id") if isinstance(record, dict) else None
     return session_id if isinstance(session_id, str) else None
+
+
+def _session_in(path: Path) -> str | None:
+    """The session one of `SESSION_FILES` belongs to: the one a stream's first event starts,
+    or the one a record holds; `None` when the file cannot be read as either."""
+    return _stream_session_id(path) if path.name == EVENTS_FILE_NAME else _record_id(path)
 
 
 def _next_free_index(run_dir: Path) -> int:
@@ -2145,7 +2155,9 @@ class ChatServer:
 
         So: a folder a live chat is reviewing is a 409, and a folder that already holds a
         session is a 400 - unless this request is the Retry that replaces it, which
-        `_rotate_previous` moves the old pair aside for rather than writing over.
+        `_rotate_previous` moves the old pair aside for rather than writing over. It has to be
+        that Retry (owner decision 142A): `_require_retried` holds a Retry to the chat that
+        wrote the session, so one naming any other chat moves nothing.
 
         A Model check's folder is the one other exception, and for the same reason read
         the other way: a check writes `session.json` and **no** `events.jsonl`, so there
@@ -2204,7 +2216,67 @@ class ChatServer:
                 f"{run_dir} already holds a review session; retry it with 'retry_of' or "
                 f"review into a new run folder"
             )
+        self._require_retried(run_dir, retry_of)
         return None
+
+    def _require_retried(self, run_dir: Path, retry_of: UUID) -> None:
+        """Refuse a Retry into `run_dir` unless `retry_of` names the chat whose session it holds.
+
+        Owner decision 142A. A Retry claims a folder that already holds a session to replace
+        that session, which `_rotate_previous` moves aside, so the chat it names must be the
+        one that wrote it. `retry_of` is a chat id (`contracts/chat-api.md`), which no file in
+        the folder records, so the chat is one this backend holds: none by that id is `404
+        UnknownChat`; one that reviewed another folder, or whose review session a session file
+        here does not belong to - `session.json`'s record, the session `events.jsonl` opens
+        with, whichever the folder holds - is `409 RunDirInUse`, the folder being another
+        session's. Neither refusal moves anything.
+
+        The cases each one decides:
+
+        - `UnknownChat`: an id this backend never issued; a start that failed after writing its
+          stream, whose chat was never registered; and every chat from before a restart. A
+          settings save restarts the backend, so a Retry that reuses its failed chat's folder -
+          a context review's (owner decision 108A) - is refused after one. The pane's own
+          Retry extracts into a new folder, which holds no session, and never comes here;
+        - `RunDirInUse`: a chat of another folder; the attempt a later Retry replaced, whose
+          session is `session.N.json` by then; a session file replaced by hand; and one that
+          cannot be read, which cannot be shown to be the chat's and is not guessed through.
+          The ids in the files are compared as this backend writes them, as `_rotate_kept`
+          compares them; `retry_of` itself was read as a uuid (`_uuid`).
+
+        The claim runs on the event loop with no await before the folder is reserved, so two
+        Retries of one chat cannot both pass: the second meets the first's reservation or its
+        live chat, and once that one has ended, a folder that holds its session.
+        """
+        retried = self.chats.get(retry_of)
+        if retried is None:
+            raise UnknownChat(
+                f"no chat {retry_of} on this backend: {run_dir} holds a session, and a Retry "
+                "replaces it only for the chat that wrote it, which this backend no longer "
+                "holds or never did; review into a new run folder"
+            )
+        if retried.run_dir != run_dir:
+            raise RunDirInUse(
+                f"chat {retry_of} reviewed {retried.run_dir}, not {run_dir}: a Retry replaces "
+                "only the session its own chat wrote; review into a new run folder"
+            )
+        wrote = str(retried.review_session_id)
+        strays: list[str] = []
+        for path in _session_files(run_dir):
+            found = _session_in(path)
+            if found == wrote:
+                continue
+            strays.append(
+                f"its {path.name} belongs to session {found}"
+                if found is not None
+                else f"its {path.name} cannot be read as one session's"
+            )
+        if strays:
+            raise RunDirInUse(
+                f"{run_dir} does not hold the session chat {retry_of} wrote ({wrote}): "
+                f"{'; '.join(strays)}; a Retry replaces only the session its folder holds, so "
+                "retry the chat that wrote it or review into a new run folder"
+            )
 
     def _attachment_of(
         self,
