@@ -143,6 +143,8 @@ QUOTED: tuple[tuple[str, str], ...] = (
     # The read-only check D14 records (011 decision 136A, 2026-10-19).
     ("IsOpenedReadOnly: true", "extractor/SwReview.Extractor.Tests/DrawingProbeTests.cs"),
     ("IsOpenedReadOnly: not called", "extractor/SwReview.Extractor.Tests/DrawingProbeTests.cs"),
+    # The open's load errors and warnings, the end of D14's OpenDoc6 line (its second review).
+    ("; answered error ", "extractor/SwReview.Extractor.Tests/DrawingProbeTests.cs"),
     ("drawing file: size unchanged true, write time unchanged true, SHA-256 unchanged true",
      "extractor/SwReview.Extractor.Tests/DrawingProbeTests.cs"),
     ("afterwards: GetOpenDocumentByName answers false; an exclusive read open succeeded",

@@ -1335,12 +1335,13 @@ the development machine (section 3.10).
    swreview-extract probe drawings --out "$H\probes" --doc "<full path of part J>" --probe D14; "exit code: $LASTEXITCODE"
    ```
 
-   Pass: the D14 section reads, line for line (the sheet, view, gap and document counts are J's
-   own; the views must be at least 1):
+   Pass: the D14 section reads, line for line (the sheet, view, gap and document counts are J's own;
+   the views must be at least 1; the codes after `answered` are whatever SOLIDWORKS answered the
+   open, named as the product names them):
 
    ```text
      drawing open before the probe: false
-     OpenDoc6: type 3, options 3 (ReadOnly 2 yes, Silent 1 yes, ViewOnly 4 no, RapidDraft 8 no, LoadModel 16 no), configuration ""
+     OpenDoc6: type 3, options 3 (ReadOnly 2 yes, Silent 1 yes, ViewOnly 4 no, RapidDraft 8 no, LoadModel 16 no), configuration ""; answered error <n> (<names>), warning <n> (<names>)
      DocumentVisible: false (type 3), then true (type 3)
      IsOpenedReadOnly: true
      outcome: opened by the probe and closed
@@ -1383,10 +1384,13 @@ the development machine (section 3.10).
 
    and the drawing is still open afterwards.
 
-The last line of each D14 section is the probe's own reading; any `not as required: ...` there is
-a fail and names what failed. Record: both report file names, both last lines, the `open
-documents` and `left loaded afterwards` lines (recorded, never a fail), and every line that
-differs from the blocks above. Change nothing: section 3.10 says who sets the switch.
+The last line of each D14 section is the probe's own reading; any `not as required: ...` there is a
+fail and names what failed. Record: both report file names, both last lines, the `open documents`
+and `left loaded afterwards` lines (recorded, never a fail), the first report's `OpenDoc6` line
+whole, and every line that differs from the blocks above. The codes on that line show whether
+SOLIDWORKS sets an already-open bit (`swFileLoadWarning_AlreadyOpen` or `swFileAlreadyOpenWarn`) on
+a fresh open (011 decision 136A, 2026-10-19): with either there, the probe reads the drawing as
+already open, and its last line fails. Change nothing: section 3.10 says who sets the switch.
 
 **013 T142.** These two reports decide whether the development machine sets
 `DrawingOpenScope.SeatValidated` after the sitting (section 3.10); this sitting runs with it off.

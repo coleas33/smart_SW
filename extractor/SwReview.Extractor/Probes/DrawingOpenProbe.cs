@@ -64,7 +64,8 @@ public sealed class DrawingOpenProbeSeam
 /// opens a document. Beside a reviewed part or assembly it runs the product's own seam -
 /// <see cref="DrawingOpenScope"/> with its switch overridden for this command - on the same-name
 /// drawing, and records everything <c>confirmed-open.md</c> requires of it: the open-mode integers as
-/// passed, what the drawing the open returned answered to <c>IsOpenedReadOnly</c> (decision 136A),
+/// passed and the load errors and warnings the open answered (on decision 136A's second review),
+/// what the drawing the open returned answered to <c>IsOpenedReadOnly</c> (decision 136A),
 /// that the active document and the focus never moved, that the hidden drawing's views read,
 /// that the file's size, write time and SHA-256 are unchanged and no save flag rose, that the seam
 /// closed what it opened and the file is not left locked, the open documents before, during and
@@ -285,11 +286,15 @@ public static class DrawingOpenProbe
             }
 
             (int type, int options, string configuration) = _recording.Opens[0];
+            (int Errors, int Warnings)? codes = _recording.Codes[0];
             return $"  OpenDoc6: type {type}, options {options} (ReadOnly 2 {Flag(options, 2)}, Silent 1 {Flag(options, 1)}, "
                 + $"ViewOnly 4 {Flag(options, 4)}, RapidDraft 8 {Flag(options, 8)}, LoadModel 16 {Flag(options, 16)}), "
                 + (configuration.Length == 0
                     ? "configuration \"\""
-                    : $"configuration named ({configuration.Length} characters)");
+                    : $"configuration named ({configuration.Length} characters)")
+                + (codes == null
+                    ? "; threw, so it answered no codes"
+                    : "; answered " + FileLoadErrors.Describe(codes.Value.Errors, codes.Value.Warnings));
         }
 
         private string VisibilityLine() =>
@@ -638,7 +643,7 @@ public static class DrawingOpenProbe
     /// <summary>
     /// The host as the seam calls it, recording what was passed to <c>OpenDoc6</c> and
     /// <c>DocumentVisible</c> before each call - so the integers printed are the ones SOLIDWORKS was
-    /// handed, not the constants they were meant to be.
+    /// handed, not the constants they were meant to be - and what <c>OpenDoc6</c> answered after it.
     /// </summary>
     private sealed class RecordingOpenHost : IDrawingOpenHost
     {
@@ -653,6 +658,14 @@ public static class DrawingOpenProbe
             new List<(int Type, int Options, string Configuration)>();
 
         public List<(bool Visible, int Type)> Visibility { get; } = new List<(bool Visible, int Type)>();
+
+        /// <summary>
+        /// On decision 136A's second review (2026-10-19): the load errors and warnings each
+        /// <c>OpenDoc6</c> answered, one entry per entry of <see cref="Opens"/> - null for one that
+        /// threw - so the seat sees whether SOLIDWORKS sets an already-open bit
+        /// (<see cref="FileLoadErrors.SayAlreadyOpen"/>).
+        /// </summary>
+        public List<(int Errors, int Warnings)?> Codes { get; } = new List<(int Errors, int Warnings)?>();
 
         /// <summary>
         /// Decision 136A: what each <c>IsOpenedReadOnly</c> the seam asked answered, or its failure
@@ -671,7 +684,10 @@ public static class DrawingOpenProbe
         public object? OpenDoc6(string path, int documentType, int options, string configuration, out int errors, out int warnings)
         {
             Opens.Add((documentType, options, configuration ?? string.Empty));
-            return _host.OpenDoc6(path, documentType, options, configuration!, out errors, out warnings);
+            Codes.Add(null);
+            object? document = _host.OpenDoc6(path, documentType, options, configuration!, out errors, out warnings);
+            Codes[Codes.Count - 1] = (errors, warnings);
+            return document;
         }
 
         /// <summary>The answer or the failure is recorded, then handed to the seam as it came, so it decides as in the product.</summary>

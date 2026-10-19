@@ -914,7 +914,8 @@ public class DrawingProbeTests : IDisposable
 
     /// <summary>
     /// Edited deliberately for decision 136A (2026-10-19): the report records what the opened
-    /// drawing answered to the seam's <c>IsOpenedReadOnly</c> check.
+    /// drawing answered to the seam's <c>IsOpenedReadOnly</c> check; and, on its second review, the
+    /// load errors and warnings the open answered, at the end of the <c>OpenDoc6</c> line.
     /// </summary>
     [Fact]
     public void D14_OpensTheClosedDrawingReadOnlyAndHiddenReadsItClosesItAndProvesNothingChanged()
@@ -926,7 +927,7 @@ public class DrawingProbeTests : IDisposable
                 "  run on: a reviewed part whose same-name drawing is not open, then the same with the drawing open",
                 "  drawing open before the probe: false",
                 "  OpenDoc6: type 3, options 3 (ReadOnly 2 yes, Silent 1 yes, ViewOnly 4 no, RapidDraft 8 no, "
-                    + "LoadModel 16 no), configuration \"\"",
+                    + "LoadModel 16 no), configuration \"\"; answered error 0 (none), warning 0 (none)",
                 "  DocumentVisible: false (type 3), then true (type 3)",
                 "  IsOpenedReadOnly: true",
                 "  outcome: opened by the probe and closed",
@@ -1191,6 +1192,45 @@ public class DrawingProbeTests : IDisposable
         Assert.Contains("  with the drawing already open, no visibility, open or close key was gated: false", lines);
         Assert.DoesNotContain(_host.Seam.Calls, call => call.Name == "CloseDoc" || call.Name == "IsOpenedReadOnly");
         Assert.Equal("  against confirmed-open.md: not as required: the seam keys", lines.Last());
+    }
+
+    /// <summary>
+    /// Decision 136A's second review (2026-10-19): the <c>OpenDoc6</c> line ends with the load errors
+    /// and warnings the open answered, as <see cref="FileLoadErrors.Describe"/> writes them, so the
+    /// seat sees whether SOLIDWORKS sets an already-open bit - on a fresh open, and on a drawing it
+    /// had open under another spelling of its path - whatever the open returned.
+    /// </summary>
+    [Theory]
+    [InlineData(0, 0x2020, false)]
+    [InlineData(0, 128, false)]
+    [InlineData(512, 0, false)]
+    [InlineData(2, 0, true)]
+    public void D14_TheOpenDoc6LineEndsWithTheLoadErrorsAndWarningsTheOpenAnswered(int errors, int warnings, bool answersNull)
+    {
+        _host.Seam.OpenErrors = errors;
+        _host.Seam.OpenWarnings = warnings;
+        _host.Seam.OpenAnswersNull = answersNull;
+
+        IReadOnlyList<string> lines = Section(RunOnPart("D14"), "D14");
+
+        string openDoc = Assert.Single(lines, line => line.StartsWith("  OpenDoc6: ", StringComparison.Ordinal));
+        Assert.EndsWith(
+            "configuration \"\"; answered " + FileLoadErrors.Describe(errors, warnings), openDoc, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Decision 136A's second review (2026-10-19): an <c>OpenDoc6</c> that throws answers no codes,
+    /// and the line says so rather than printing the zeros the seam started with.
+    /// </summary>
+    [Fact]
+    public void D14_AnOpenDoc6ThatThrowsSaysItAnsweredNoCodes()
+    {
+        _host.Seam.OpenFailure = new COMException("busy", unchecked((int)0x8001010A));
+
+        IReadOnlyList<string> lines = Section(RunOnPart("D14"), "D14");
+
+        string openDoc = Assert.Single(lines, line => line.StartsWith("  OpenDoc6: ", StringComparison.Ordinal));
+        Assert.EndsWith("configuration \"\"; threw, so it answered no codes", openDoc, StringComparison.Ordinal);
     }
 
     [Fact]
