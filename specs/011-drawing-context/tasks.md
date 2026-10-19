@@ -257,7 +257,19 @@ description: "Task list for the read-only drawing context"
 - [x] T118 [US5] *Added 2026-10-19 (decision 136A)*: implement T117: `DrawingOpenScope.OpensAttempted`; in `extractor/SwReview.Extractor/Dump/ConfirmedDrawingRead.cs` the count of opens that left no record, per run folder, for the life of the process, and the bound over records and that count; amend FR-056, its edge case in `spec.md` and `contracts/confirmed-open.md` section 2 item 5. Acceptance: T117 green; `test_confirmed_drawing_read.py` green unedited (the ten-records sentence is unchanged); zero warnings; FR-056 *Landed as*: commit `28662bf`
 - [x] T119 *Added 2026-10-19 (decision 137A)*: correct the two comments in `extractor/SwReview.Extractor/Sw/SwSession.cs` that called `OpenReadOnly` the extractor's only file-opening call, naming the others (`DrawingOpenScope`, which probe D14 also runs, and feature 004's `OpenDoc7` opens). Comments only. Acceptance: zero warnings *Landed as*: commit `4550254`
 
-**Checkpoint**: no read-only open is read unless SOLIDWORKS says it is read-only, no spelling of the families is left to a hand list, and the opens a review can make are bounded.
+*Added 2026-10-19 after an independent adversarial review of this phase*, which found no seat breakage and no new write path and confirmed the tests load-bearing, and found what T120 to T128 fix (research R8, each subsection amended where it applies). The questions it raised that are the owner's are research R8.5's.
+
+- [x] T120 [P] *Added 2026-10-19 (decision 136A's review)*: narrow the exclusion test T116 loosened. `DrawingFamilyDenylistTests.EveryExclusionHasOneOfTheContractsReasons` in `extractor/SwReview.Extractor.Tests/GuardTests.cs` had come to accept the member half of any of the bridge's commands as a reason to leave a denial out, so a later exclusion of `Save` or `Rebuild` would have passed unexamined; it accepts exactly one more exclusion, `Close`, asserted to be the member half of `remodel.close`. `DocumentLifecycleFamilyTests.NoCommandTheBridgeAnswersIsRefusedByTheReadOnlyGuard` stays, its comment saying it pins today's dispatcher (research R8.5). Tests only. Acceptance: green on the generated table; red under a throwaway mutation adding `Save` to the "Not denied" table *Landed as*: commit `7e65735`
+- [x] T121 [P] [US5] *Added 2026-10-19 (decision 136A's review)*: a document the open says was already open, tests. In `FileLoadErrorsTests.cs`: `FileLoadErrors.SayAlreadyOpen` reads `swFileLoadWarning_AlreadyOpen` (128) in the warnings and the errors enum's twin `swFileAlreadyOpenWarn` (512), and no other bit (`swFileWithSameTitleAlreadyOpen` is another file). In `DrawingOpenTests.cs`: with either bit the seam reads the drawing as it stands, `OpenedByReview` false, never asking `IsOpenedReadOnly` and never closing it, also when the read throws; with the restore failing too it is refused unread and left open. In `ConfirmedDrawingReadTests.cs`: such a candidate is read as it stood, `opened: false`, its record without `opened_by_review`, nothing closed. In `SwSessionAttachTests.cs`: the console attach returns it as it stands for either bit, unasked and unclosed, also when the engineer has it open under another spelling of its path. In `DrawingProbeTests.cs`: D14 says it was already open, read as it stood and left open, and its reading fails the seam keys it gated. **Edit deliberately** the two tests whose premise was warning 128, in `DrawingOpenTests.cs` and `SwSessionAttachTests.cs`: they name warning 32 and keep their assertions. Acceptance: red for want of the rule (eight red; D14's red against the old seam)
+- [x] T122 [US5] *Added 2026-10-19 (decision 136A's review)*: implement T121. `FileLoadErrors.SayAlreadyOpen` and its two bits in `extractor/SwReview.Extractor/Sw/FileLoadErrors.cs`; in `DrawingOpenScope.Open` and `SwSession.OpenReadOnly`, a document the open says was already open is handed back as one the lookup found, before the check, and never closed (the seam refuses it unread, and leaves it open, when the restore failed); the identity-checked close stays for what the call really opened; `contracts/confirmed-open.md` section 3, `contracts/attach.md` section 4, `contracts/guard.md` section 7, `contracts/probes.md` and 004's `guard-allowlist.md` amended. Acceptance: T121 green; every other test green; zero warnings; FR-053, FR-055 *Landed as*: commit `727e901`
+- [x] T123 [P] [US5] *Added 2026-10-19 (decision 136A's review)*: a spent review is refused before its package is loaded, test. In `ConfirmedDrawingReadTests.cs`: after ten failed opens of a review whose package holds no drawing, the package file is overwritten with what cannot be loaded, and the next request is refused with the limit's sentence ("the limit of ten drawings for this review is reached: 10 opens that were refused or failed, so this one was not opened"), nothing asked of SOLIDWORKS and no drawing phase run. Acceptance: red for want of the early check (the load's `JsonException`)
+- [x] T124 [US5] *Added 2026-10-19 (decision 136A's review)*: implement T123 in `extractor/SwReview.Extractor/Dump/ConfirmedDrawingRead.cs`: once the run folder's opens that left no record reach ten on their own, refuse as soon as the folder is resolved, before the package is loaded; below that the bound counts them with the package's records as before; the two limit sentences share one helper; `contracts/confirmed-open.md` section 2 item 5 amended. Acceptance: T123 green; `test_confirmed_drawing_read.py` green unedited (the ten-records sentence is unchanged); zero warnings; FR-056 *Landed as*: commit `1dcd8db`
+- [x] T125 [P] [US5] *Added 2026-10-19 (decision 136A's review)*: D14 judges the read-only state only on an answer, test. In `DrawingProbeTests.cs`: with the restore of new drawings' visibility failing, the seam refuses before it asks, so the report's line reads `IsOpenedReadOnly: not called` and the reading is exactly "not as required: the open, the drawing's views", never naming the read-only state. Acceptance: red for want of the rule (the reading named `the read-only state` first)
+- [x] T126 [US5] *Added 2026-10-19 (decision 136A's review)*: implement T125 in `extractor/SwReview.Extractor/Probes/DrawingOpenProbe.cs`: the reading judges only the answers the check gave - any that is not true fails it, and a check never asked is not judged - and the recording host's flag for a returned drawing, which only the old rule read, is removed; `contracts/probes.md` amended. Acceptance: T125 and every D14 test green; zero warnings; SC-011 *Landed as*: commit `b0ba036`
+- [x] T127 *Added 2026-10-19 (decision 137A, on decision 136A's review)*: correct the claim T119 corrected - that `SwSession.OpenReadOnly` is the extractor's one file-opening call, or its one open path - where the review found it again: four comments in `extractor/SwReview.Extractor.Console/Program.cs`, the doc comment of `SuppressTest.DocumentNotOpenMessage`, a comment each in `CommandLineOptionsTests.cs` and `SuppressTestTests.cs`, and the `OpenDoc6` row of `contracts/guard.md` section 3. Comments and docs only: the suppress-test refusal message, which still tells the engineer the extractor's only open path is read-only, is product output and is left for the owner (research R8.5). Acceptance: zero warnings *Landed as*: commit `e98f58d`
+- [x] T128 *Added 2026-10-19 (decision 136A's review)*: bring `drawing.read`'s refusals in `extractor/SwReview.Extractor.Console/Serve/PROTOCOL.md` in line with decision 136A: the ten counting every attempted open that left no record, and the refusal before the package is loaded; the read-only check and its refusal; a drawing the open says was already open, read as it stands and neither checked nor closed. Docs only. Acceptance: the sentences stay `contracts/confirmed-open.md`'s *Landed as*: commit `ef6298e`
+
+**Checkpoint**: no read-only open is read unless SOLIDWORKS says it is read-only, no spelling of the families is left to a hand list, and the opens a review can make are bounded; neither open closes a document it did not open.
 
 ---
 
@@ -314,7 +326,7 @@ Every probe below is one run of `swreview-extract probe drawings --out <folder> 
 - T044 after T043; T046 after T045 and T023; T048 after T047, T046 and T044; T049 after T048
 - T069 after T004; T070 after T069; T071 after T070, T008, T010, T019 and T021; T072 after T071; T073 after T072; T074 after T073; T075 after T048 and T072; T076 after T075; T078 after T072; T079 after T078; T082 after T076; T083 after T082; T088 after T079 and T086; T089 after T074, T079 and T088; T092 after T083 (it replaces T083's keyed record); T093 after T092
 - T080 after T027, T040 and T070; T081 after T080 and T072
-- T112 after T111; T113 after T112; T114 after T113; T116 after T115; T117 after T112; T118 after T117; T119 any time (decision 136A, 137A)
+- T112 after T111; T113 after T112; T114 after T113; T116 after T115; T117 after T112; T118 after T117; T119 any time (decision 136A, 137A); T120 after T116; T121 after T112; T122 after T121; T123 after T118; T124 after T123; T125 after T114; T126 after T125; T127 after T119; T128 after T122 and T124 (decision 136A's review)
 - T051 after T050, T035 and T048; T053 after T052 and T051; T055 after T054 and T053; T084 after T055; T085 after T084; T096 after T085; T097 after T096; T098 after T053
 - T087 after T086, T076 and T023 (added 2026-09-23, decision 10A); T090 after T087 and 009 T087; T091 after T090
 - T057 after T056, T029 and T048
@@ -361,7 +373,7 @@ Every functional requirement and success criterion has at least one task whose a
 | FR-002 | T013, T014 | FR-028 | T039, T040 |
 | FR-003 | T013, T014 | FR-029 | T041, T042 |
 | FR-004 | T014, T017, T062 | FR-030 | T039, T041 |
-| FR-005 | T003, T004, T115, T116 | FR-031 | T041, T042 |
+| FR-005 | T003, T004, T115, T116, T120 | FR-031 | T041, T042 |
 | FR-006 | T003, T004 | FR-032 | T047, T048 |
 | FR-007 | T015, T062 | FR-033 | T045, T046 |
 | FR-008 | T018 to T021, T063 | FR-034 | T043, T044, T047 |
@@ -383,17 +395,17 @@ Every functional requirement and success criterion has at least one task whose a
 | FR-024 | T032, T033, T036, T037, T066, T094, T095 | FR-050 | T054, T055, T084, T085, T096, T097 |
 | FR-025 | T036, T037 | FR-051 | T049 |
 | FR-026 | T026, T039 | FR-052 | T003, T004, T015, T062 |
-| FR-053 | T069 to T072, T111, T112 | FR-055 | T069, T070, T071, T077, T111, T112 |
-| FR-054 | T069, T070, T077 | FR-056 | T071, T072, T075, T076, T078, T079, T101, T111, T112, T117, T118 |
+| FR-053 | T069 to T072, T111, T112, T121, T122 | FR-055 | T069, T070, T071, T077, T111, T112, T121, T122 |
+| FR-054 | T069, T070, T077 | FR-056 | T071, T072, T075, T076, T078, T079, T101, T111, T112, T117, T118, T123, T124 |
 
 | SC | Tasks | SC | Tasks |
 |---|---|---|---|
 | SC-001 | T062 | SC-006 | T050, T067 |
 | SC-002 | T063 | SC-007 | T049 |
 | SC-003 | T038 | SC-008 | T045, T067 |
-| SC-004 | T034, T038 | SC-009 | T003, T004, T115, T116 |
+| SC-004 | T034, T038 | SC-009 | T003, T004, T115, T116, T120 |
 | SC-005 | T026, T039, T065 | SC-010 | T066 |
-| | | SC-011 | T069, T071, T080, T081, T077, T095, T113, T114 |
+| | | SC-011 | T069, T071, T080, T081, T077, T095, T113, T114, T125, T126 |
 
 ---
 
