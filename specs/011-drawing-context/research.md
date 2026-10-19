@@ -1112,6 +1112,8 @@ owner's decision.
    run folder, the session or the package, and the sentence that tells the engineer how to recover,
    are the owner's call. Nothing moves until T077 turns the open on: while the switch is off no open
    is attempted, so the count stays at zero.
+   *Settled by decision 141A (2026-10-19), R9*: the count is the review session's, a drawing
+   already open is never refused because of failed opens, and the refusal says how to go on.
 2. **Denying `Close`, `Save` and `Rebuild` needs the dispatcher changed.**
    `BridgeDispatcher.Dispatch` hands every command name to `ReadOnlyGuard`, which judges
    `remodel.close`, `remodel.save` and `remodel.rebuild` by the part after the dot, so the bare
@@ -1134,6 +1136,8 @@ owner's decision.
 4. **The backend's bound** (`tools/drawings.read_confirmed_candidates`) still counts only reads that
    landed, so it goes on asking after refused ones; the host now answers each request past the ten
    with a refusal that opens nothing. Counting refusals there too would be a backend task.
+   *Decided with 141A (2026-10-19), R9.4*: the backend goes on asking, since a later candidate the
+   engineer has open is still read; nothing changes there.
 5. **A hide that throws.** In the seam, a `DocumentVisible(false, 3)` that throws escapes as it
    came, before the open and with no restore; it predates this decision and is unchanged.
 6. **What stays of the stale wording.** The suppress-test refusal message
@@ -1142,3 +1146,178 @@ owner's decision.
    `SuppressTestTests` pins its words "write access" and "read-only". And R2.2 still calls
    `OpenDoc6` "the extractor's one sanctioned read-only open": that is the record of its day, and
    section 3 of `contracts/guard.md` carries the correction.
+
+## R9. Decision 141A: the limit of ten counts failed opens per review session (owner, 2026-10-19)
+
+**Source.** The owner's decision 141A of 2026-10-19 (the seventh round's 2A, "Per review session")
+answers R8.5's first question: feature 011's limit of ten counts failed opens per review session, a
+Retry or Recheck in the same run folder starts its own count, a drawing already open is never
+refused because of failed opens, since reading it opens nothing, and the refusal says how to go
+on. The tasks are T135 to T144 (Phase 10D). SOLIDWORKS was not started: the C# tests run over
+fakes. Measured on the development machine: `SwReview.Extractor.Tests` 9,387 tests before and
+9,412 after, `SwReview.AddIn.Tests` 2,472 before and 2,479 after, all green, the build at zero
+warnings. Nothing changed on the backend (R9.4). As with decision 136A, nothing changes for an
+engineer until T077 turns the open on: while the switch is off no open is attempted, so no count
+grows.
+
+*Amended on the branch's review, the same day*: a check of the branch before its review found that
+the early refusal asked about another spelling of the drawing than the seam reads, fixed by T142 and
+T143 (R9.2). An independent adversarial review of the branch then found no fault in the code,
+confirmed no test was loosened, and found what T144 puts right: a sentence each of this record, the
+code and the contract that said a run folder holds one review session at a time, which a context
+review's Retry belies (R9.1); two limits of the refusal's first way on, now in the contract (R9.5,
+item 4); and three flows that no test pinned. Measured after: `SwReview.Extractor.Tests` 9,413 tests
+and `SwReview.AddIn.Tests` 2,482, all green, the build at zero warnings.
+
+### R9.1 The count is the review session's (T135, T136)
+
+**Decision**: `ConfirmedDrawingSession` (`Dump/ConfirmedDrawingSession.cs`) holds what the confirmed
+read keeps for one review session: its run folder and the opens it attempted that left no record.
+Each `SessionRecord` holds its own (`ConfirmedDrawings`), and `ConfirmedDrawingRead` takes the
+session in place of the run folder, so the process-wide dictionary decision 136A kept is gone. A
+Recheck, or a context review's Retry, which is a new record in the same folder, starts its own
+count; two sessions never share one; and a count lives as long as its record - a Recheck replaces
+the record, the chip's Remove forgets it, the host's dispose clears it, and one never removed keeps
+its count until SOLIDWORKS closes - so memory stays bounded by the records the host keeps anyway.
+
+**How the host knows the session.** A `drawing.read` names `run_id` and `document_id` and nothing
+else: the dispatcher refuses any other parameter (`Bridge/BridgeDispatcher.cs`,
+`DrawingReadParameters`, line 736). The run id resolves to a run folder by
+`ReviewHost.ReviewRunDirectory`'s rules (`Review/ReviewHost.cs` line 600: a review record's folder
+name, ignoring case, never read as a path, null when ambiguous), and `ReviewHost.DrawingReadSession`
+(line 641) answers the latest review the host started in that folder and still tracks. A new session
+in a folder takes over its reads from the earlier one: an ordinary Retry makes a new folder
+(`StartReview`, line 1661), while a context review's Retry (`RetryContextReview`, lines 1704 and
+1716) and a Recheck (`RecheckReview`, lines 1729 and 1745) start a new session in the same folder
+through `CreateReviewSession`, which publishes a new record (line 1821) - appended for the Retry,
+which leaves the failed review tracked beside it (`Publish` drops only a record of the same chat id,
+line 493), and in the replaced record's place for the Recheck. "Latest" is the order records were
+made in (`SessionRecord.Sequence`, line 115), not the list's, because of that in-place replacement.
+*Corrected on the branch's review, the same day*: R9 first said a run folder holds one review
+session at a time, which a context review's Retry belies. And a session asks for drawings only after
+the host has tracked its record: the backend calls `drawing.read` only when an answer batch confirms
+the candidate question (`agent/runner.py` line 1425), which the engineer answers after
+`review.started` or `review.rechecked`, and a Recheck's carried answers read no drawing
+(`carry_from`, line 1480, `read_drawings=False`). So the count is keyed by a session the host
+resolves from its own records, and nothing a request supplies but the run id can choose or reset it.
+
+**Evidence**: commit `f6cb5c5`, tests first, red for want of `ConfirmedDrawingSession` and
+`ReviewHost.DrawingReadSession`: three new tests of `ConfirmedDrawingReadTests`, four cases of
+`ReviewHostTests`, one of `EngineeringContextHostTests` and one of `ToolServiceWiringTests` through
+the real review host and pipe. Under a throwaway mutant counting per run folder as 136A did, exactly
+the three per-session tests failed (two of the extractor's and the wiring test); under one taking
+the last record in list order, exactly the case of a Recheck that a later session of the folder
+follows.
+
+### R9.2 A drawing already open is never refused because of failed opens (T137, T138)
+
+**Decision**: the ten-records check stays before the seam and bounds every read, a drawing already
+open included. The failed opens now bound only an open: when the records and the session's failed
+opens together reach ten, `ConfirmedDrawingRead` hands the seam the limit's sentence, and
+`DrawingOpenScope.Read(path, read, openRefusal)` refuses with it at its own lookup - after the
+not-validated sentence, before anything is hidden or opened, no open begun - while a drawing that
+lookup finds open is still read. 136A's early refusal is kept: once a session's failed opens alone
+reach ten, a request is refused before the package is loaded, after one call,
+`DrawingOpenScope.IsOpen` - the read's own lookup, through the same gate, and nothing else - of the
+document's candidate drawing, by the very path the seam would look up, its first candidate row's,
+as the session last loaded or merged its package (`ConfirmedDrawingSession.Remember`). A drawing
+found open goes on to be read, and a document the session knows no candidate for goes on to every
+rule. *Corrected on the branch's review, the same day (T142, T143)*: the early look first asked
+about discovery's rule applied to the document's path. That is the row's path in every package
+the extractor writes, but a row may spell the same file otherwise, as the read accepts, and then
+the early look asked about another spelling than the seam reads, and could refuse a drawing the
+seam would have read; it also called `OpenDrawingDiscovery.CandidatePath`, which can throw.
+
+**Why**: the decision's own reason - reading a drawing already open opens nothing - and 136A's
+review's: the backend asks once per candidate file, and a large assembly can have hundreds, so a
+spent session must keep costing SOLIDWORKS's thread almost nothing; one lookup instead of a
+package load per request does that. The early refusal needs the candidate's path, which only the
+package holds, hence the session's memory of it: its candidate rows only ever go and its drawings
+only ever come, so what it remembers can only send a request on to the full rules, never past
+them. Deciding at the seam's lookup, rather than at the look before the package is loaded, means a
+drawing the engineer closes in between is refused, never opened, so no race can overrun the
+bound.
+
+**Evidence**: commit `e78b9b7`, tests first. Red for want of `IsOpen` and `Read`'s refusal
+parameter; with them added, thirteen cases of `ConfirmedDrawingReadTests` and the new wiring test
+were red. The seam's own new tests passed once its members existed; one expectation of the
+`IsOpen` test was corrected first, since the gate's recording observer lists each member once.
+Edited deliberately: four of 136A's bound tests and its before-the-package test now assert exactly
+one lookup where they asserted none, nothing opened, their sentences unchanged. Throwaway mutants
+dropping the early refusal (four failed) and never handing the seam the refusal (seven failed) were
+each caught. The correction: commit `88d84d8`, test first - with the housing's candidate row
+spelled through `sub\..\` and the drawing open under that spelling, a spent session's request
+was refused before the change and is read after it, SOLIDWORKS asked only the seam's own lookup,
+twice.
+
+### R9.3 The refusal says how to go on (T139, T140)
+
+**Decision**: both limit sentences end "; a drawing already open in SOLIDWORKS is still read, since
+reading it opens nothing, and a new review session (Retry or Recheck) starts its own count", made by
+the one helper they share (`ConfirmedDrawingRead.LimitReached`). The ten-records sentence is
+unchanged and names neither, since a new session keeps the package's drawings; the backend pins it.
+
+**Why**: both ways on are true of the host as R9.1 and R9.2 left it, and the words are the
+decision's. For the first to be true whenever it is said, the limit's sentence is said only while the
+package holds fewer than ten drawings: the full rules check the ten records first, and the early
+refusal's memory is brought up to date after the session's own merge and holds nothing once the
+package holds ten, so a request then meets the ten-records sentence.
+
+**Evidence**: commit `d29f2d9`, tests first, red for want of the words: five cases of
+`ConfirmedDrawingReadTests` (both forms in three counts, the ten-drawings case, and 136A's
+before-the-package test, edited deliberately for its exact sentence) and the wiring test, which now
+asserts the full sentence as the backend receives it; the ten-records pin passed before and after.
+Throwaway mutants skipping the memory's update after a merge, or remembering candidates in a package
+holding ten drawings, each failed the ten-drawings test. `test_confirmed_drawing_read.py` passes
+unedited.
+
+### R9.4 The backend's loop is unchanged
+
+**Decision**: `tools/drawings.read_confirmed_candidates` goes on asking once per candidate file
+after the host refuses one for the limit, and gains no recognised form of that refusal.
+
+**Why**: under decision 141A the limit's refusal is no longer final for the batch. A later
+candidate the engineer has open is still read, and only the host can tell which, by asking
+SOLIDWORKS; a backend that stopped at the first such refusal would refuse exactly what the decision
+says must not be refused. What stopping would have saved, the host's answers to the rest, is one
+lookup each (R9.2), and the backend's own bound still stops at ten drawing records. With nothing to
+act on, the refusal needs no form the backend recognises beyond the sentence it already records,
+word for word, as each candidate's reason.
+
+### R9.5 Found on the way, and left for the owner
+
+1. **What a Recheck re-reads.** The sentence names a Recheck because it starts a new count, which is
+   true. But a Recheck carries an earlier confirmed answer onto the same candidate question with no
+   new read (015 `contracts/recheck.md` section 4), so after a read refused for every candidate it
+   reads nothing again; it asks again, and so can read, only when part of the earlier read merged
+   (90A). A new Review reads a drawing the engineer has open natively, and a context review's Retry
+   asks the question afresh. Whether the sentence should name a Recheck at all, or name a new
+   Review, the surest way on, which it does not; and whether a Recheck should ask a refused
+   candidate question again, are the owner's call; neither changes here. (Retry is offered only
+   on an error card, and a Recheck only as the Send of a restored waiting review.)
+2. **Two sessions of one folder at once.** A request is counted for the latest session of its run
+   folder, since the request names no session. An older session of the same folder that still asked
+   - a context review's failed chat, whose chip is still shown - would count against the latest's.
+   It could not reset that count, so the bound holds; telling the two apart would need the request
+   to name its session, which the host could not trust. *On the branch's review*: and should the
+   engineer remove the latest with the chip's Remove while its chat still asks, its requests reach
+   the earlier record's session, with that session's own count and memory
+   (`RemovingTheLatestSessionOfAFolderLeavesTheEarlierOnesOwnSession` pins which session answers).
+3. **The early refusal's sentence** omits the package's drawings, as 136A's did: the package is not
+   loaded. The full rules' sentence names both counts.
+4. **Found on the branch's review: where the first way on overclaims.** "A drawing already open in
+   SOLIDWORKS is still read" holds for a drawing the lookup finds by the candidate's path. One
+   SOLIDWORKS has open only under another spelling of that path (a mapped drive against its UNC
+   path) is found only by `OpenDoc6`'s already-open warning (R8.1), and once the bound is spent no
+   open is made to learn it, since that same call would open a drawing that is not open; such a
+   drawing is refused. Whether SOLIDWORKS's lookup itself matches the other spelling is the seat's
+   to show (R8.1). And the early refusal knows the package as its own session last loaded or merged
+   it: should another session of the folder have brought it to ten drawings since (item 2's case),
+   its limit sentence stands where the full rules would give the ten-records one - a refusal
+   either way, and the backend stops asking at ten drawings. `contracts/confirmed-open.md` section
+   2 item 5 says both.
+5. **Also on the review, accepted as they are.** The early look asks SOLIDWORKS about the path the
+   candidate row names before rule 4 has checked it against discovery's rule: a read-only lookup,
+   and only ever of a `.SLDDRW` path. And a spent session now asks SOLIDWORKS one thing, so a lookup
+   that throws there answers as a failure rather than as a refusal, as the seam's own lookup always
+   has.

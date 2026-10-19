@@ -104,6 +104,36 @@ opening nothing, when any step fails:
    the run folder, before the package is loaded, so a spent review costs SOLIDWORKS's thread
    nothing more: "the limit of ten drawings for this review is reached: {m} opens that were refused
    or failed, so this one was not opened".
+   *(Amended 2026-10-19, owner decision 141A)*: **the count is the review session's.** Item 1
+   resolves `run_id` to the latest review the host started in that run folder, and the opens that
+   left no record are counted for that session (`ConfirmedDrawingSession`, which the add-in's
+   `SessionRecord` holds), not for the folder: a Recheck, or a context review's Retry, each a new
+   session in the same run folder, starts its own count (an ordinary Retry makes a new folder);
+   two sessions never share one; and a count lives as long as its record, not the process - a
+   Recheck replaces the record, the chip's Remove forgets it, and one never removed keeps its count
+   until SOLIDWORKS closes. Nothing a request supplies but the `run_id` the host resolves chooses or
+   resets it. **A drawing already open is never refused
+   because of failed opens**, since reading it opens nothing: the ten-records check stays before
+   the seam and bounds every read, while the failed opens bound only an open - the seam refuses one
+   with the limit's sentence at its lookup (section 3), before anything is hidden or opened, and
+   still reads a drawing that lookup finds open. **The early refusal stays**: once a session's
+   failed opens alone reach ten, a candidate whose drawing is not open is refused before the
+   package is loaded, SOLIDWORKS asked only whether that drawing is open - by the very path the
+   seam would look up, the document's first candidate row's, in the package as the session last
+   loaded or merged it; a document the session knows no candidate for meets every rule above, and a
+   package already holding ten drawings meets the ten-records sentence. **The refusal says how to go on**: both
+   limit sentences end "; a drawing already open in SOLIDWORKS is still read, since reading it
+   opens nothing, and a new review session (Retry or Recheck) starts its own count", and are said
+   only while the package holds fewer than ten drawings, so both ways on are true when they are
+   named. The ten-records sentence is unchanged and names neither: a new session keeps the
+   package's drawings. Two limits of the first way on: "open" is what the lookup finds by the
+   candidate's path, so a drawing SOLIDWORKS has open only under another spelling of that path,
+   which only an open could reveal (section 3), is refused once the bound is spent; and the early
+   refusal knows the package as the session itself last loaded or merged it, so should another
+   session of the folder have brought it to ten drawings since, its limit sentence stands where the
+   full rules would give the ten-records one - a refusal either way, and the backend stops asking
+   at ten drawings. The backend still asks once per candidate file (section 1): a later candidate
+   the engineer has open is read, which a backend that stopped at the first refusal would lose.
 
 Item 1's records are `ReviewHost.ReviewRunDirectory(run_id)` in the add-in (T074, pane lane,
 2026-09-23): the run folder of the review whose `SessionRecord.RunId` equals `run_id` ignoring
@@ -113,6 +143,17 @@ record answers; a Model check, Standards or remodel record (`TrackCheck`) never 
 two reviews' distinct folders share (the run root moved between them) answers null. The add-in
 hands this lookup to its `IConfirmedDrawingSource`; a null answer is item 1's refusal, which names
 the `run_id`, and the package's presence in the folder is still item 1's to check.
+*(Amended 2026-10-19, owner decision 141A)*: what the add-in hands its source is
+`ReviewHost.DrawingReadSession(run_id)`, built on that lookup and keeping every rule of it: the
+review session of the folder it answers - the latest review the host started there and still
+tracks, by the order the records were made, so a Recheck that took an earlier record's place in
+the list is still the latest - as `SessionRecord.ConfirmedDrawings` holds it (the folder and item
+5's count), or null wherever the lookup answers null. A new session in a folder takes over its
+reads from the earlier one: a Recheck replaces the earlier record, and a context review's Retry
+leaves the failed review tracked beside it, whose session no request reaches while the Retry's is
+tracked (removed with the chip's Remove, the earlier one answers again, with its own count). And
+a session asks for drawings only once the host has tracked its record (a Recheck's carried
+answers read no drawing), so the latest is the session a request comes from.
 
 Then, through the seam of section 3: the drawing is opened when it is not already open, read by the
 existing drawing phase (`DrawingDumper`, the reader by document) with every drawing id and the
@@ -231,6 +272,16 @@ recorder:
   drawings the seam really opened. Whether SOLIDWORKS sets the warning for a drawing open under
   another spelling is the seat's to confirm (research R8.1); where it does not, the identity check
   still guards the close.
+- **A caller's bound spent** (*amended 2026-10-19, owner decision 141A*). `Read(path, read,
+  openRefusal)`: with a sentence given, a drawing the lookup does not find open is refused with it,
+  after the not-validated refusal and before anything is hidden or opened, so no open is begun;
+  one the lookup finds open is read as it stands. The refusal is decided at the seam's own lookup,
+  so a drawing the engineer closes after the caller looked is refused, never opened. Nor is
+  `OpenDoc6` called to learn whether SOLIDWORKS has the drawing open under another spelling of its
+  path (the warning above): that call would open a drawing that is not open, past the bound.
+  `IsOpen(path)` is that lookup alone, through the same gate - nothing hidden, opened, read or
+  closed, and a path that is no drawing not looked up - which the confirmed read asks before its
+  early refusal (section 2, item 5).
 
 ## 4. Shipped off until the seat confirms it
 
@@ -291,7 +342,8 @@ which still opens no drawing (FR-003).
   refusal is the error word for word.
 - **The rules** (`Dump/ConfirmedDrawingRead.cs`) are constructed over seven seams, which the
   add-in (T074) supplies: `runFolderOf(runId)` from its own session records (null for a run it did
-  not start), the attached document's path, `File.Exists`, a `DrawingOpenScope` over
+  not start; *since decision 141A* `sessionOf(runId)`, the review session, section 2 item 1), the
+  attached document's path, `File.Exists`, a `DrawingOpenScope` over
   `SwDrawingOpenHost`, the drawing phase (`DrawingDumper` over `SwDrawingReader`), the document
   phase (`PropertyDumper`) and the manifest (`ManifestBuilder`). Section 2's refusals are checked
   in its order, and one more before anything opens: a drawing already a document of the package
@@ -309,7 +361,9 @@ which still opens no drawing (FR-003).
 ## 8. Landed as (T073, T074, 2026-09-23)
 
 - **The add-in's source** (`ToolService/ToolServiceHost.cs`): `ToolServiceOptions.ReviewRunDirectory`,
-  set by `SwReviewAddIn` to `ReviewHost.ReviewRunDirectory`, is section 2 item 1's lookup. `Attach`,
+  set by `SwReviewAddIn` to `ReviewHost.ReviewRunDirectory`, is section 2 item 1's lookup
+  (*amended 2026-10-19, owner decision 141A*: now `ToolServiceOptions.DrawingReadSession`, set to
+  `ReviewHost.DrawingReadSession`, which answers the review session rather than its folder). `Attach`,
   on the application thread, sets `BridgeServices.ConfirmedDrawings` from
   `ToolServiceHost.ConfirmedDrawingSource`: null with no lookup (the dispatcher's sentence), otherwise
   section 7's seven seams - the seam's gate observed by the tool service's plain recorder, so its

@@ -79,7 +79,7 @@ as a guess. Only `chat serve` takes it, so a command-line run never records `set
 | POST | `/engineering-context/{run_id}/requirement` | typed target/text/source/assumptions plus `expected_head` | 200 publication; 400 malformed or unavailable target; 409 stale/busy context. |
 | POST | `/engineering-context/{run_id}/force` | typed target/force/unit/direction/frame/point/source/assumptions plus `expected_head` | 200 publication; unknown stays unknown; 400 malformed or unavailable target; 409 stale/busy context. |
 | POST | `/engineering-context/{run_id}/confirm` | `{expected_head, record_id, actor, expected_record_digest, expected_dependency_digest}` | 200 publication of exact explicit saved-input receipt; 400 unconfirmable inputs; 409 stale/busy context. |
-| POST | `/sessions` | `{run_dir, provider, model, effort, bridge: {pipe, secret} \| null, engineer, retry_of: chat_id \| null, standards_profile: str \| null, send_when_checked?: boolean}` | `201 {chat_id, review_session_id, not_examined}`; starts the review turn immediately when `send_when_checked` is true or absent. False runs the code checks, builds the Send cache, finalizes and renders the record, then registers the chat in `awaiting_send`, without a provider request. A non-boolean value is `400 InvalidRequest` naming `send_when_checked`. `standards_profile` is the configured profile path, passed to the reasoning side to attach `check_standards`; blank or null means no profile. An unreadable or invalid configured profile leaves the review possible and makes the standards family not evaluated, rather than refusing the review. `not_examined` is the shared `{sentence, headline, instances}` block from `report/unexamined.py`, or null when every instance was read; Review displays its `headline` (names, no ids; feature 009 T013) above the grouped findings (`<section id="findings-by-type">`, feature 013 T054; above Start here until then) as soon as the session starts, with the instances' ids in a fold, and falls back to `sentence` from a backend that sends no `headline`. `sentence` keeps the ids and is what `report.md` and both check bodies print. 400 if `run_dir` fails the path rule below or `run_dir/package.json` is missing or invalid. |
+| POST | `/sessions` | `{run_dir, provider, model, effort, bridge: {pipe, secret} \| null, engineer, retry_of: chat_id \| null, standards_profile: str \| null, send_when_checked?: boolean}` | `201 {chat_id, review_session_id, not_examined}`; starts the review turn immediately when `send_when_checked` is true or absent. False runs the code checks, builds the Send cache, finalizes and renders the record, then registers the chat in `awaiting_send`, without a provider request. A non-boolean value is `400 InvalidRequest` naming `send_when_checked`. `standards_profile` is the configured profile path, passed to the reasoning side to attach `check_standards`; blank or null means no profile. An unreadable or invalid configured profile leaves the review possible and makes the standards family not evaluated, rather than refusing the review. `not_examined` is the shared `{sentence, headline, instances}` block from `report/unexamined.py`, or null when every instance was read; Review displays its `headline` (names, no ids; feature 009 T013) above the grouped findings (`<section id="findings-by-type">`, feature 013 T054; above Start here until then) as soon as the session starts, with the instances' ids in a fold, and falls back to `sentence` from a backend that sends no `headline`. `sentence` keeps the ids and is what `report.md` and both check bodies print. 400 if `run_dir` fails the path rule below or `run_dir/package.json` is missing or invalid. A folder that already holds a session is claimed only as "A folder that already holds a session" below says, a Retry's included (*amended 2026-10-19, owner decision 142A*). |
 | GET | `/sessions/{chat_id}` | | `ChatSession` state without `token` and without `bridge` (neither the HTTP token nor the bridge secret is ever echoed) |
 | GET | `/sessions/{chat_id}/events` | `Last-Event-ID` header optional | `text/event-stream`; replays from `events.jsonl` after the given id, then live. Event `id` = `seq`, `event` = `type`, `data` = JSON body. |
 | POST | `/sessions/{chat_id}/messages` | `{text}` | 202; appends a user turn and runs, including on a session whose previous turn already ended (`ended → running`, see data-model section 3). 409 if a turn is running; `409 NotSent` while the run waits for Send, without changing the review. |
@@ -114,6 +114,32 @@ registers no chat, and existing on-disk Retry rules still apply to any files it 
 An unticked start is registered only after its cache, finalization and render finish, so
 shutdown cannot finalize that unregistered run concurrently. Stop and graceful shutdown
 write nothing for a finalized waiting review; its state remains `awaiting_send`.
+
+**A folder that already holds a session** - `events.jsonl` or `session.json` - is written into
+only by the request that replaces that session (*amended 2026-10-19, owner decision 142A*; 002
+[research.md](../research.md), 142A):
+
+- **A check's folder**, whose `check.json` names the `session.json` beside it - a Model check's,
+  a Standards check's or the re-modeler's grade - holds no review session. A start claims an rms
+  check's folder, a Model check's or a grade's, and rotates the check's session aside (feature
+  003 User Story 6 scenario 11; feature 007 FR-021). A start on a Standards check's folder, and
+  a Retry on any check's folder, is `400 InvalidRunDir` with one body from both: "`<run_dir>`
+  holds the `<family>` check that ran in it and no review session: a Retry replaces only a
+  review's session, and only a Model check's folder is handed to a new review; review into a
+  new run folder".
+- **Any other folder that holds a session** is `400 InvalidRunDir` to a start. A Retry claims
+  it only for the chat that wrote it: `retry_of` must name a chat this backend holds, else
+  `404 UnknownChat`; that chat must have reviewed this folder, and every session file there
+  must belong to its review session - `session.json`'s record, the session `events.jsonl`
+  opens with, whichever the folder holds - else `409 RunDirInUse`, naming each file that is
+  another session's or cannot be read. A failed start registers no chat, so no Retry claims
+  the stream it may leave; and a backend holds its chats in memory only, so after a restart (a
+  settings save is one) a Retry that reuses its failed chat's folder is `404 UnknownChat`.
+- **A folder that holds no session file** is claimed by any start, and `retry_of` is recorded
+  on the new session only when this backend holds that chat.
+
+`retry_of` is read as a uuid, so its case and spelling do not matter; a value that is no uuid is
+`400 InvalidRequest`, and an empty string is no Retry. None of these refusals moves anything.
 
 Since Feature 016, `POST /sessions` optionally accepts
 `engineering_context: {context_id, head_digest, package_sha256}`. Omission preserves

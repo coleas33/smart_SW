@@ -966,9 +966,10 @@ public class SwReviewAddIn : ISwAddin
             () => ToolServiceHost.Start(new ToolServiceOptions(app, new ControlAppThreadInvoker(pane))
             {
                 // Feature 011 T074: `drawing.read` resolves its run_id through the review host's
-                // own session records, never as a path. Read through the field per request, like
+                // own session records, never as a path - since decision 141A to the review session
+                // whose count of failed opens it keeps. Read through the field per request, like
                 // `busy` below, so a host that has gone answers null - a refusal, not a crash.
-                ReviewRunDirectory = runId => _reviewHost?.ReviewRunDirectory(runId),
+                DrawingReadSession = runId => _reviewHost?.DrawingReadSession(runId),
 
                 // 004 T167: every ending of a remodel session on this service - remodel.close's,
                 // and the teardown a re-attach or an unload runs - reaches the Remodel tab as the

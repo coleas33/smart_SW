@@ -101,6 +101,9 @@ public sealed class PageDocument
 /// </summary>
 public sealed class SessionRecord
 {
+    /// <summary>The last <see cref="Sequence"/> given out, across every record of the process.</summary>
+    private static long _lastSequence;
+
     private SessionRecord(
         string? chatId, string runDirectory, bool isCheck, PageDocument? document, DateTimeOffset? startedAt)
     {
@@ -109,6 +112,8 @@ public sealed class SessionRecord
         IsCheck = isCheck;
         Document = document;
         StartedAt = startedAt;
+        Sequence = Interlocked.Increment(ref _lastSequence);
+        ConfirmedDrawings = new Extractor.Dump.ConfirmedDrawingSession(RunDirectory);
     }
 
     public SessionRecord(string chatId, string runDirectory)
@@ -155,6 +160,22 @@ public sealed class SessionRecord
 
     /// <summary>The extraction a context review was started on, for a Retry's ready status.</summary>
     public DumpSummary? ContextExtraction { get; set; }
+
+    /// <summary>
+    /// Feature 011, decision 141A (2026-10-19): what the confirmed drawing read keeps for this
+    /// review session - its run folder and the opens it attempted that left no drawing record. Each
+    /// record has its own, so a Retry or Recheck in the same run folder, which is a new record,
+    /// starts its own count, and the count goes when the record does. A <c>drawing.read</c> reaches
+    /// it only through <see cref="ReviewHost.DrawingReadSession"/>.
+    /// </summary>
+    public Extractor.Dump.ConfirmedDrawingSession ConfirmedDrawings { get; }
+
+    /// <summary>
+    /// The order this record was made in among every record of the process (decision 141A): the
+    /// latest of a run folder's reviews is the session a <c>drawing.read</c> belongs to, also when a
+    /// Recheck put it in an earlier record's place in the list.
+    /// </summary>
+    internal long Sequence { get; }
 
     /// <summary>
     /// Whether this run is a Model check.
@@ -639,6 +660,33 @@ public sealed class ReviewHost : IDisposable
 
     /// <summary>A tracked folder without its trailing separator, so one folder spelt two ways is one.</summary>
     private static string SameFolder(string runDirectory) => runDirectory.TrimEnd('\\', '/');
+
+    /// <summary>
+    /// Feature 011, decision 141A (2026-10-19): the review session a <c>drawing.read</c> naming
+    /// <paramref name="runId"/> belongs to, as the confirmed read keeps it, or null. The folder is
+    /// <see cref="ReviewRunDirectory"/>'s, by every rule it keeps; the session is the latest review
+    /// this host started in that folder and still tracks - a Recheck's, or a context review's
+    /// Retry's, once one has started there - since a new session in a folder takes over its reads
+    /// from the earlier one, which a context review's Retry leaves tracked beside it. Each record
+    /// holds its own (<see cref="SessionRecord.ConfirmedDrawings"/>), so a new session starts its own
+    /// count of failed opens, and nothing a request supplies but the run id resolved here chooses or
+    /// makes one. Asked on the SOLIDWORKS application thread, through the list's lock like the lookup.
+    /// </summary>
+    public Extractor.Dump.ConfirmedDrawingSession? DrawingReadSession(string? runId)
+    {
+        string? folder = ReviewRunDirectory(runId);
+        if (folder == null)
+        {
+            return null;
+        }
+
+        string same = SameFolder(folder);
+        return Reviews()
+            .Where(review => string.Equals(SameFolder(review.RunDirectory), same, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(review => review.Sequence)
+            .LastOrDefault()
+            ?.ConfirmedDrawings;
+    }
 
     /// <summary>Whether any chat this host started has a turn in flight.</summary>
     public bool AnyTurnRunning() => AnyTurnRunning(unanswered: false);

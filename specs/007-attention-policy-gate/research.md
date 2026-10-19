@@ -377,7 +377,12 @@ assertions go red when `attention.json` lands and are edited deliberately:
 scenario is rms-only and the spec says so. *Corrected 2026-10-19 (owner decision 139A, R6):*
 that holds for a start without `retry_of`. `_claim_run_dir` consults the folder only when
 `retry_of` is absent, so a Retry claims a standards folder and rotates the check's session aside,
-and `swreview review --out` writes a review over one.
+and `swreview review --out` writes a review over one. *Superseded 2026-10-19 (owner decision
+142A, 002 [research.md](../002-task-pane-assistant/research.md)):* `_claim_run_dir` consults the
+folder for a Retry too and refuses one on a check's folder of every family, and `is_check_folder`
+reads every family's `check.json`, so a start is refused on a standards folder as a check's, by
+its family's name, rather than as a review's. Only `swreview review --out` still writes a review
+over one.
 
 The pre-run has one call site (`runner.py:953`) and one consumer (`:988-989`); its lever test
 is one line (`prerun.py:365`); `session.started` is emitted before it (`:930-939`), which makes
