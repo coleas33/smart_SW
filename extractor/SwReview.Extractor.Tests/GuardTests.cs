@@ -1801,8 +1801,10 @@ public class DocumentWriteFamilyTests
     /// reads its own: the word beginning with its capital - at the start of the name, after a COM
     /// twin's <c>I</c>, or where a word starts - and ending where the name does or the next word begins.
     /// <list type="bullet">
-    /// <item><c>Save</c>: what writes the document, or a file made from it, or changes what the save
-    /// dialog offers (<c>AddFileSaveAsItem</c>).</item>
+    /// <item><c>Save</c>: the members named for saving - the document, a file made from it
+    /// (<c>SaveToFile</c>, <c>SaveDeFeaturedFile</c>), or what the save dialog offers
+    /// (<c>AddFileSaveAsItem</c>). A file written under another word, an export or a publish
+    /// (<c>ExportToDWG</c>, <c>PublishSTEP242File</c>), is not read here (research R9.4).</item>
     /// <item><c>Rename</c>, <c>Move</c> and <c>Copy</c>: the document's file renamed, moved or copied,
     /// and the references other documents hold to it updated. <c>Copy</c> is here because
     /// <c>ISldWorks.CopyDocument</c> is <c>MoveDocument</c>'s twin - the same arguments and options -

@@ -17,7 +17,7 @@ namespace SwReview.Extractor.Guard;
 /// cannot enumerate a write surface: <c>IFeatureManager.MoveToFolder</c> passes it as a bare name,
 /// and so did <c>IModelDoc2.Save</c> until decision 140A (2026-10-19) refused it.
 ///
-/// Three answers, in this order:
+/// Four answers, in this order:
 ///   1. a key on <see cref="AllowedKeys"/>, matched <b>ordinally</b> so a mis-spelling fails
 ///      closed rather than widening the surface, returns;
 ///   2. a member on <see cref="ExcludedMembers"/> is refused however it is spelled;

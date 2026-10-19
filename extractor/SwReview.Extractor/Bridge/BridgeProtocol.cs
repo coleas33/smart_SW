@@ -8,8 +8,9 @@ using SwReview.Extractor.Rms;
 namespace SwReview.Extractor.Bridge;
 
 /// <summary>
-/// The five commands the bridge answers (contracts/cli.md, contracts/agent-tools.md).
-/// Anything else is an error response naming these, never a silent no-op.
+/// The six commands the bridge answers besides the <c>remodel.*</c> family (contracts/cli.md,
+/// contracts/agent-tools.md); <see cref="SwBridgeDispatcher.AnsweredCommands"/> is these and that
+/// family. Anything else is an error response naming these, never a silent no-op.
 /// </summary>
 public static class BridgeCommands
 {

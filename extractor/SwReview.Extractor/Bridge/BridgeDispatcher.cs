@@ -600,7 +600,11 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
         }
     }
 
-    /// <summary>The refusal of a name the bridge does not answer, naming the commands it does.</summary>
+    /// <summary>
+    /// The refusal of a name the bridge does not answer. It names the six commands of
+    /// <see cref="BridgeCommands.All"/>, as it always has, and not the <c>remodel.*</c> family, which
+    /// only the remodel scope reaches.
+    /// </summary>
     private static BridgeResponse UnknownCommand(BridgeRequest request) =>
         BridgeResponse.Failed(
             request.Id,

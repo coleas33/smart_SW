@@ -39,8 +39,10 @@ public static partial class ReadOnlyGuard
         "ForceRebuild3",
         "ForceRebuildAll",
 
-        // Writing files. SaveAs3 has one legitimate use - saving a capture image - which
-        // goes through AssertSaveAs so the extension is checked.
+        // Writing files. SaveAs3 is refused even for an image: the capture writes its image with
+        // SaveBMP, after AssertSaveAs has checked the target's extension. (Corrected 2026-10-19,
+        // decision 140A, which refused the rest of the save family and left SaveBMP allowed: this
+        // said the capture image was SaveAs3's one legitimate use.)
         "Save3",
         "SaveAs3",
 
@@ -329,8 +331,11 @@ public static partial class ReadOnlyGuard
     }
 
     /// <summary>
-    /// The one sanctioned use of SaveAs3: writing a capture image. Throws
-    /// <see cref="MutatingCallError"/> for any other target, including a model file.
+    /// The check on a capture image's target, which <c>CaptureService</c> makes before the image is
+    /// written: an image extension only. Throws <see cref="MutatingCallError"/> for any other target,
+    /// including a model file. It is named for SaveAs3, as its refusal is, but the capture writes
+    /// with SaveBMP and SaveAs3 itself stays refused (corrected 2026-10-19, decision 140A: this
+    /// called a capture image SaveAs3's one sanctioned use).
     /// </summary>
     public static void AssertSaveAs(string path)
     {

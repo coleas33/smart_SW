@@ -80,8 +80,9 @@ then the command name itself was handed to the read-only guard, which judges `a.
 `Rebuild`; a command name is not an interop member, and no guard sees one now. The commands
 answered are the same eighteen, and every name refused before is refused still; only the answer
 to one differs: "Unknown command", with `result: null`, where a name the guard denied was answered
-as a member that modifies the model - with `error_code: guard_refused` when it began `remodel.` -
-and an empty name with an `ArgumentException`.
+as a member that modifies the model - with `error_code: guard_refused` when it began `remodel.`.
+(An empty or blank `command` never reaches the dispatcher from the wire: the line is refused first,
+in the table at the end of this file.)
 
 ### `secret` and the two scopes
 

@@ -197,7 +197,8 @@ public sealed class ScopedSecretPolicy : ISecretPolicy
         }
 
         // A command outside the vocabulary - "rebuild", "Save3" - is in no scope, so it is
-        // refused here too and never reaches the read-only guard.
+        // refused here too, before the dispatcher's own check of its commands (decision 140A:
+        // no command name reaches a guard).
         return false;
     }
 

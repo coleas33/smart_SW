@@ -64,7 +64,9 @@ public class RemodelGuardTests
     /// of them is a narrowing: none is on the stage-1 allowlist, so
     /// <see cref="Allowlist_KeysOverridingAReadOnlyDenial_AreExactlyTheDeclaredFive"/> and
     /// <see cref="RemodelExclusions_AreOnlyMembersTheReadOnlyGuardDoesNotAlreadyRefuse"/>
-    /// answer exactly as they did before it.
+    /// answer exactly as they did before it. Decision 140A's names (2026-10-19) are a narrowing too,
+    /// and the five keys did not move; but one of them, <c>SetReadOnlyState</c>, was a member the
+    /// remodel guard refused itself, so it left that list (<see cref="ExpectedRemodelExclusions"/>).
     /// </summary>
     private static readonly string[] ExpectedDeniedMembers = new[]
     {
