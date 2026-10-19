@@ -88,7 +88,18 @@ opening nothing, when any step fails:
 4. that row's path equals the candidate path recomputed from the document's own path by the rule
    discovery uses (`OpenDrawingDiscovery.CandidatePath`, one function), compared as discovery
    compares; the file exists;
-5. the package holds fewer than ten drawing records.
+5. the package holds fewer than ten drawing records. *(Amended 2026-10-19, owner decision 136A)*:
+   and fewer than ten counting every open this host attempted for the review that left no record,
+   such as an open SOLIDWORKS refused or did not make read-only, a read that threw after it, or a
+   merge or save that did not land, so a refused open uses up its room and the number of opens is
+   bounded whatever happens. Only an open counts: a refusal before the seam, the not-validated refusal and
+   a read of a drawing already open open nothing. The count is kept per run folder for the life of
+   the add-in process, not of the source, because the tool service builds a source on every attach;
+   a run id resolves only in the process that started the review. A request refused this way opens
+   nothing and is answered "the limit of ten drawings for this review is reached: {n} in the
+   package and {m} more opens that were refused or failed, so this one was not opened"; the
+   sentence for ten records is unchanged. (`DrawingOpenScope.OpensAttempted` counts the opens the
+   seam begins; `ConfirmedDrawingRead` keeps the count.)
 
 Item 1's records are `ReviewHost.ReviewRunDirectory(run_id)` in the add-in (T074, pane lane,
 2026-09-23): the run folder of the review whose `SessionRecord.RunId` equals `run_id` ignoring

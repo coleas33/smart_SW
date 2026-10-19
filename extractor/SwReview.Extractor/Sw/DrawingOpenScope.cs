@@ -147,6 +147,14 @@ public sealed class DrawingOpenScope
     /// </summary>
     public bool OpensClosedDrawings => _seatValidated;
 
+    /// <summary>
+    /// How many opens this scope has begun - new drawings hidden and <c>OpenDoc6</c> called -
+    /// whatever came of them (decision 136A, 2026-10-19): the confirmed read counts each one that
+    /// left no drawing record toward the ten-drawing bound. A drawing already open, a path that is
+    /// no drawing and a refusal while the seat has not validated the open begin none.
+    /// </summary>
+    public int OpensAttempted { get; private set; }
+
     /// <summary>The sentence a closed drawing is refused with while <see cref="SeatValidated"/> is false.</summary>
     public const string NotValidatedSentence =
         "the read-only open of a confirmed drawing is not yet validated on a seat (feature 011 probe D14)";
@@ -216,6 +224,7 @@ public sealed class DrawingOpenScope
     /// </summary>
     private object Open(string path)
     {
+        OpensAttempted++;
         string fileName = Path.GetFileName(path);
         int errors = 0;
         int warnings = 0;
