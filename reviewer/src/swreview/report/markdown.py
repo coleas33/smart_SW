@@ -76,6 +76,7 @@ def render_report(
     package: EvidencePackage | None = None,
     *,
     ranking: Ranking | None = None,
+    check_run: bool = False,
 ) -> str:
     """Render `session` (and optionally the `package` it reviewed) to Markdown text.
 
@@ -87,12 +88,18 @@ def render_report(
     feature 009 decision 2A): whole, with the parts named from `package`. The grouped index's
     rows are titled the same way (`report/finding_groups.findings_by_type`), so every caller
     passes `rank(session)` as it always did.
+
+    `check_run` says `session` is a check's own: a Model check's, a Standards check's or the
+    re-modeler's grade, none of which constructs a provider. Its session still records the
+    model `new_session` stamps on every session, so the header says what a review that was
+    not sent says instead, and names no provider (feature 015 `contracts/records.md`
+    section 4, amended by owner decision 132A).
     """
     components_by_id = _components_by_id(package)
     names = component_names(package) if package is not None else {}
     lines: list[str] = []
 
-    lines.extend(_render_title(session))
+    lines.extend(_render_title(session, check_run=check_run))
     lines.append("")
     lines.extend(_render_discrepancies(package))
     lines.append("")
@@ -145,17 +152,17 @@ def _fmt_dt(value: datetime | None) -> str:
     return value.isoformat() if value is not None else "unknown"
 
 
-def _render_title(session: ReviewSession) -> list[str]:
+def _render_title(session: ReviewSession, *, check_run: bool) -> list[str]:
     lines = [
         f"# Design Review Report: {session.design_id}",
         "",
         f"- Session: {session.session_id}",
     ]
     status = session.model_status
-    if status is None or status.state == "sent":
-        lines.append(f"- Model: {session.model}")
-    elif status.state == "not_sent":
+    if check_run or (status is not None and status.state == "not_sent"):
         lines.append("- Model: not sent to the model (checked by code only)")
+    elif status is None or status.state == "sent":
+        lines.append(f"- Model: {session.model}")
     elif status.failures:
         last = status.failures[-1]
         lines.append(
@@ -166,22 +173,23 @@ def _render_title(session: ReviewSession) -> list[str]:
         lines.append(
             "- Model: not sent to the model; the last attempt failed (details unavailable)"
         )
-    lines.extend(_render_provider_info(session))
+    lines.extend(_render_provider_info(session, check_run=check_run))
     lines.append(f"- Started: {_fmt_dt(session.started_at)}")
     lines.append(f"- Ended: {_fmt_dt(session.ended_at)}")
     return lines
 
 
-def _render_provider_info(session: ReviewSession) -> list[str]:
+def _render_provider_info(session: ReviewSession, *, check_run: bool) -> list[str]:
     """The provider, its effort control, and the failed session this one retries.
 
     Both fields are optional in the contract, so a session written before the provider
     port renders exactly as it did: the lines appear only when there is something to say.
+    A check's own session names no provider, whatever it carries (`check_run`).
     """
     lines: list[str] = []
     info = session.provider_info
     status = session.model_status
-    if info is not None and (status is None or status.state == "sent"):
+    if info is not None and not check_run and (status is None or status.state == "sent"):
         mapping = info.effort_mapping
         lines.append(
             f"- Provider: {info.provider} (effort {mapping.requested} sent as "
