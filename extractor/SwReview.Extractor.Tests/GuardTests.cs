@@ -1456,6 +1456,81 @@ public class DrawingFamilyReadAuditTests
 }
 
 /// <summary>
+/// What the family tests of decisions 136A and 140A share (<see cref="DocumentLifecycleFamilyTests"/>,
+/// <see cref="DocumentWriteFamilyTests"/>): the guards the product builds its gates with, a family
+/// grammar read over interfaces, and what a guard lets through of a set of keys. Each decision's class
+/// keeps its own grammar, interfaces, members left allowed and exceptions.
+/// </summary>
+internal static class GuardSweep
+{
+    /// <summary>
+    /// Every guard a gate the product builds is built with: the read-only guard every gate gets by
+    /// default, and the four the exceptions and the confirmed drawing's open build their gates with.
+    /// </summary>
+    internal static ICallGuard[] ProductGates() => new ICallGuard[]
+    {
+        ReadOnlyCallGuard.Instance,
+        new SuppressTestGuard(),
+        new RemodelProbeGuard(),
+        new RemodelGuard(),
+        new DrawingOpenGuard(),
+    };
+
+    /// <summary>
+    /// Every member of <paramref name="interfaces"/> whose name <paramref name="family"/> matches,
+    /// interface-qualified, readers included, in ordinal order.
+    /// </summary>
+    internal static IReadOnlyList<string> Members(IEnumerable<string> interfaces, Regex family) =>
+        interfaces
+            .SelectMany(face => DrawingFamilyCompletenessTests.MethodNames(face)
+                .Where(name => family.IsMatch(name))
+                .Select(name => face + "." + name))
+            .OrderBy(key => key, StringComparer.Ordinal)
+            .ToList();
+
+    /// <summary>The members to refuse: neither a reader by contracts/guard.md section 2's prefixes nor left allowed.</summary>
+    internal static IEnumerable<string> ToRefuse(IEnumerable<string> members, IEnumerable<string> allowed)
+    {
+        var left = new HashSet<string>(allowed, StringComparer.Ordinal);
+        return members.Where(key => !DrawingFamilyCompletenessTests.IsReader(CallKey.BareName(key)) && !left.Contains(key));
+    }
+
+    /// <summary>Both spellings a call site can hand a gate for each key: the key, and its member half.</summary>
+    internal static IReadOnlyCollection<string> Spellings(IEnumerable<string> keys)
+    {
+        var spellings = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (string key in keys)
+        {
+            spellings.Add(key);
+            spellings.Add(CallKey.BareName(key));
+        }
+
+        return spellings;
+    }
+
+    /// <summary>"<c>Guard spelling</c>" for every spelling each guard lets through, guard by guard.</summary>
+    internal static IReadOnlyList<string> LetThrough(IEnumerable<ICallGuard> guards, IReadOnlyCollection<string> spellings) =>
+        guards
+            .SelectMany(guard => spellings
+                .Where(key => !Refuses(guard.Assert, key))
+                .Select(key => guard.GetType().Name + " " + key))
+            .ToList();
+
+    internal static bool Refuses(Action<string> assert, string key)
+    {
+        try
+        {
+            assert(key);
+            return false;
+        }
+        catch (MutatingCallError)
+        {
+            return true;
+        }
+    }
+}
+
+/// <summary>
 /// Decision 136A (feature 011, 2026-10-19). FR-005 asks the guard to refuse the application's
 /// document activation, closing, creation and macro members, and contracts/guard.md section 1's shared
 /// rows named them by hand, so other spellings on the same interop went unrefused: the COM twins
@@ -1512,17 +1587,9 @@ public class DocumentLifecycleFamilyTests
     internal static bool BelongsToAFamily(string name) => Family.IsMatch(name);
 
     /// <summary>Every family member of the three interfaces, interface-qualified, readers included.</summary>
-    internal static IReadOnlyList<string> FamilyMembers() =>
-        Interfaces
-            .SelectMany(face => DrawingFamilyCompletenessTests.MethodNames(face)
-                .Where(BelongsToAFamily)
-                .Select(name => face + "." + name))
-            .OrderBy(key => key, StringComparer.Ordinal)
-            .ToList();
+    internal static IReadOnlyList<string> FamilyMembers() => GuardSweep.Members(Interfaces, Family);
 
-    private static IEnumerable<string> RefusedFamilyMembers() =>
-        FamilyMembers().Where(key =>
-            !DrawingFamilyCompletenessTests.IsReader(CallKey.BareName(key)) && !Allowed.ContainsKey(key));
+    private static IEnumerable<string> RefusedFamilyMembers() => GuardSweep.ToRefuse(FamilyMembers(), Allowed.Keys);
 
     [Theory]
     [InlineData("IOpenDoc5", true)]
@@ -1580,7 +1647,8 @@ public class DocumentLifecycleFamilyTests
     public void EveryFamilyMemberIsAReader_ANamedExclusion_OrRefusedBareAndQualified()
     {
         var callable = RefusedFamilyMembers()
-            .Where(key => !Refuses(ReadOnlyGuard.Assert, CallKey.BareName(key)) || !Refuses(ReadOnlyGuard.Assert, key))
+            .Where(key => !GuardSweep.Refuses(ReadOnlyGuard.Assert, CallKey.BareName(key))
+                || !GuardSweep.Refuses(ReadOnlyGuard.Assert, key))
             .ToList();
 
         Assert.True(
@@ -1590,31 +1658,13 @@ public class DocumentLifecycleFamilyTests
                 + "contracts/guard.md section 1) or name it in Allowed with its reason: " + string.Join(", ", callable));
     }
 
-    /// <summary>
-    /// Every guard a gate the product builds is built with: the read-only guard every gate gets by
-    /// default, and the four the exceptions and the confirmed drawing's open build their gates with.
-    /// </summary>
-    internal static ICallGuard[] ProductGates() => new ICallGuard[]
-    {
-        ReadOnlyCallGuard.Instance,
-        new SuppressTestGuard(),
-        new RemodelProbeGuard(),
-        new RemodelGuard(),
-        new DrawingOpenGuard(),
-    };
-
     [RemodelInteropManifestTests.InteropAssembliesPresentFact]
     public void EveryGateTheProductBuildsRefusesThem()
     {
-        ICallGuard[] gates = ProductGates();
+        IReadOnlyList<string> letThrough = GuardSweep.LetThrough(
+            GuardSweep.ProductGates(), GuardSweep.Spellings(RefusedFamilyMembers()));
 
-        var callable = RefusedFamilyMembers()
-            .SelectMany(key => gates.Select(gate => (Gate: gate, Key: key)))
-            .Where(pair => !Refuses(pair.Gate.Assert, CallKey.BareName(pair.Key)) || !Refuses(pair.Gate.Assert, pair.Key))
-            .Select(pair => pair.Gate.GetType().Name + " " + pair.Key)
-            .ToList();
-
-        Assert.True(callable.Count == 0, "Family members a gate the product builds lets through: " + string.Join(", ", callable));
+        Assert.True(letThrough.Count == 0, "Family members a gate the product builds lets through: " + string.Join(", ", letThrough));
     }
 
     /// <summary>The reads among the families stay allowed in both spellings (FR-006): the lookups the product calls above all.</summary>
@@ -1682,23 +1732,8 @@ public class DocumentLifecycleFamilyTests
         Assert.Contains("IModelDoc2.Rebuild", spellings);
         Assert.Contains("IModelDocExtension.Rebuild", spellings);
 
-        var callable = ProductGates()
-            .SelectMany(gate => spellings.Where(key => !Refuses(gate.Assert, key)).Select(key => gate.GetType().Name + " " + key))
-            .ToList();
-        Assert.True(callable.Count == 0, "Spellings a gate the product builds lets through: " + string.Join(", ", callable));
-    }
-
-    internal static bool Refuses(Action<string> assert, string key)
-    {
-        try
-        {
-            assert(key);
-            return false;
-        }
-        catch (MutatingCallError)
-        {
-            return true;
-        }
+        IReadOnlyList<string> letThrough = GuardSweep.LetThrough(GuardSweep.ProductGates(), spellings);
+        Assert.True(letThrough.Count == 0, "Spellings a gate the product builds lets through: " + string.Join(", ", letThrough));
     }
 }
 
@@ -1763,47 +1798,44 @@ public class DocumentWriteFamilyTests
         RegexOptions.CultureInvariant);
 
     /// <summary>
-    /// The family members left allowed by every guard, each with its reason and the product path that
-    /// calls it. Keyed interface-qualified, though the guard matches bare names.
+    /// The family members left allowed by every guard, each with the product file whose call needs it
+    /// and the reason. Keyed interface-qualified, though the guard matches bare names.
     /// </summary>
-    internal static readonly IReadOnlyDictionary<string, string> Allowed = new Dictionary<string, string>(StringComparer.Ordinal)
-    {
-        ["IModelDoc2.SaveBMP"] = "the capture's image of a view: SwCaptureView gates the bare name on the session's "
-            + "read-only gate, after CaptureService's AssertSaveAs has checked the image's extension, and SaveBMP writes "
-            + "a bitmap of the graphics window, which the capture turns into its PNG under the directory the host chose; "
-            + "it cannot write a document, and SaveAs3, which can, stays refused",
-    };
+    internal static readonly IReadOnlyDictionary<string, (string Where, string Reason)> Allowed =
+        new Dictionary<string, (string Where, string Reason)>(StringComparer.Ordinal)
+        {
+            ["IModelDoc2.SaveBMP"] = ("SwCaptureView.cs", "the capture's image of a view: SwCaptureView gates the bare name on "
+                + "the session's read-only gate, after CaptureService's AssertSaveAs has checked the image's extension, and "
+                + "SaveBMP writes a bitmap of the graphics window, which the capture turns into its PNG under the directory "
+                + "the host chose; it cannot write a document, and SaveAs3, which can, stays refused"),
+        };
 
     /// <summary>
     /// What a guard written for an exception lets through of these families, as the guard's type and
-    /// the key, each with the exception it is - exactly these. The read-only guard and the confirmed
-    /// drawing's guard let none through.
+    /// the key, each with the product file whose call needs it and the exception it is - exactly these.
+    /// The read-only guard and the confirmed drawing's guard let none through.
     /// </summary>
-    internal static readonly IReadOnlyDictionary<string, string> Exceptions = new Dictionary<string, string>(StringComparer.Ordinal)
-    {
-        ["SuppressTestGuard ForceRebuild3"] = "feature 003's engineer-run suppress-test rebuilds after its one suppression",
-        ["RemodelProbeGuard ForceRebuild3"] = "probe remodel rebuilds its throwaway part after each step (feature 004 T032)",
-        ["RemodelProbeGuard SaveAs3"] = "probe remodel saves its throwaway part into the run folder, behind "
-            + "RemodelProbe.AssertPartSavePath",
-        ["RemodelGuard IModelDoc2.ForceRebuild3"] = "the re-modeler's one rebuild of its own copy (feature 004's stage-1 allowlist)",
-        ["RemodelGuard IModelDoc2.Save3"] = "the re-modeler's one save of its own copy, behind RemodelScope.AssertSaveTarget "
-            + "(feature 004's stage-1 allowlist)",
-    };
+    internal static readonly IReadOnlyDictionary<string, (string Where, string Reason)> Exceptions =
+        new Dictionary<string, (string Where, string Reason)>(StringComparer.Ordinal)
+        {
+            ["SuppressTestGuard ForceRebuild3"] = ("SuppressTest.cs",
+                "feature 003's engineer-run suppress-test rebuilds after its one suppression"),
+            ["RemodelProbeGuard ForceRebuild3"] = ("SwRemodelProbeHost.cs",
+                "probe remodel rebuilds its throwaway part after each step (feature 004 T032)"),
+            ["RemodelProbeGuard SaveAs3"] = ("SwRemodelProbeHost.cs",
+                "probe remodel saves its throwaway part into the run folder, behind RemodelProbe.AssertPartSavePath"),
+            ["RemodelGuard IModelDoc2.ForceRebuild3"] = ("BridgeDispatcher.cs",
+                "the re-modeler's one rebuild of its own copy (feature 004's stage-1 allowlist)"),
+            ["RemodelGuard IModelDoc2.Save3"] = ("BridgeDispatcher.cs",
+                "the re-modeler's one save of its own copy, behind RemodelScope.AssertSaveTarget (feature 004's stage-1 allowlist)"),
+        };
 
     internal static bool BelongsToAFamily(string name) => Family.IsMatch(name);
 
     /// <summary>Every family member of the interfaces, interface-qualified, readers included.</summary>
-    internal static IReadOnlyList<string> FamilyMembers() =>
-        Interfaces
-            .SelectMany(face => DrawingFamilyCompletenessTests.MethodNames(face)
-                .Where(BelongsToAFamily)
-                .Select(name => face + "." + name))
-            .OrderBy(key => key, StringComparer.Ordinal)
-            .ToList();
+    internal static IReadOnlyList<string> FamilyMembers() => GuardSweep.Members(Interfaces, Family);
 
-    private static IEnumerable<string> RefusedFamilyMembers() =>
-        FamilyMembers().Where(key =>
-            !DrawingFamilyCompletenessTests.IsReader(CallKey.BareName(key)) && !Allowed.ContainsKey(key));
+    private static IEnumerable<string> RefusedFamilyMembers() => GuardSweep.ToRefuse(FamilyMembers(), Allowed.Keys);
 
     [Theory]
     [InlineData("SaveAs4", true)]
@@ -1872,8 +1904,8 @@ public class DocumentWriteFamilyTests
     public void EveryFamilyMemberIsAReader_ANamedExclusion_OrRefusedBareAndQualified()
     {
         var callable = RefusedFamilyMembers()
-            .Where(key => !DocumentLifecycleFamilyTests.Refuses(ReadOnlyGuard.Assert, CallKey.BareName(key))
-                || !DocumentLifecycleFamilyTests.Refuses(ReadOnlyGuard.Assert, key))
+            .Where(key => !GuardSweep.Refuses(ReadOnlyGuard.Assert, CallKey.BareName(key))
+                || !GuardSweep.Refuses(ReadOnlyGuard.Assert, key))
             .ToList();
 
         Assert.True(
@@ -1893,24 +1925,14 @@ public class DocumentWriteFamilyTests
     [RemodelInteropManifestTests.InteropAssembliesPresentFact]
     public void EveryGateTheProductBuildsLetsThroughOnlyTheNamedExceptions()
     {
-        var spellings = new SortedSet<string>(StringComparer.Ordinal);
-        foreach (string key in RefusedFamilyMembers())
-        {
-            spellings.Add(key);
-            spellings.Add(CallKey.BareName(key));
-        }
-
-        var letThrough = DocumentLifecycleFamilyTests.ProductGates()
-            .SelectMany(gate => spellings
-                .Where(key => !DocumentLifecycleFamilyTests.Refuses(gate.Assert, key))
-                .Select(key => gate.GetType().Name + " " + key))
-            .ToList();
+        IReadOnlyList<string> letThrough = GuardSweep.LetThrough(
+            GuardSweep.ProductGates(), GuardSweep.Spellings(RefusedFamilyMembers()));
 
         Assert.True(
             new HashSet<string>(letThrough, StringComparer.Ordinal).SetEquals(Exceptions.Keys),
             "Family members a gate the product builds lets through: " + string.Join(", ", letThrough)
                 + "; expected exactly: " + string.Join(", ", Exceptions.Keys));
-        Assert.All(Exceptions, entry => Assert.False(string.IsNullOrWhiteSpace(entry.Value), entry.Key + " has no reason."));
+        Assert.All(Exceptions, entry => Assert.False(string.IsNullOrWhiteSpace(entry.Value.Reason), entry.Key + " has no reason."));
     }
 
     /// <summary>The reads among the families stay allowed in both spellings (FR-006): the two the product calls above all.</summary>
@@ -1930,8 +1952,8 @@ public class DocumentWriteFamilyTests
 
     /// <summary>
     /// Each member left allowed is a family member of the interop, not a reader, allowed in both
-    /// spellings, with a reason, named by the generated "Not denied (feature 011)" table, and still
-    /// called by the product path its reason names - so the list cannot go stale and hide a later
+    /// spellings, with a reason, named by the generated "Not denied (feature 011)" table, and still a
+    /// literal of the product file whose call needs it - so the list cannot go stale and hide a later
     /// member behind an entry nobody needs.
     /// </summary>
     [RemodelInteropManifestTests.InteropAssembliesPresentFact]
@@ -1940,31 +1962,36 @@ public class DocumentWriteFamilyTests
         IReadOnlyList<string> members = FamilyMembers();
         IReadOnlyList<(string Literal, string Where)> literals = DrawingFamilyReadAuditTests.Literals();
 
-        foreach (KeyValuePair<string, string> entry in Allowed)
+        foreach (KeyValuePair<string, (string Where, string Reason)> entry in Allowed)
         {
             string bare = CallKey.BareName(entry.Key);
             Assert.Contains(entry.Key, members);
             Assert.False(DrawingFamilyCompletenessTests.IsReader(bare), $"{entry.Key} is a reader; readers need no entry.");
-            Assert.False(string.IsNullOrWhiteSpace(entry.Value), $"{entry.Key} has no reason.");
+            Assert.False(string.IsNullOrWhiteSpace(entry.Value.Reason), $"{entry.Key} has no reason.");
             ReadOnlyGuard.Assert(bare);
             ReadOnlyGuard.Assert(entry.Key);
             Assert.Contains(bare, DrawingFamilyDenylistTests.ExcludedMembers, StringComparer.OrdinalIgnoreCase);
-            Assert.Contains(literals, literal => string.Equals(literal.Literal, bare, StringComparison.Ordinal));
+            Assert.True(
+                literals.Any(literal => literal.Literal == bare && literal.Where == entry.Value.Where),
+                $"{entry.Key} is no longer named in {entry.Value.Where}; drop it, or say what calls it now.");
         }
-
-        Assert.Contains(literals, literal => literal.Literal == "SaveBMP" && literal.Where == "SwCaptureView.cs");
     }
 
-    /// <summary>Each exception's key is still a literal of the product source, as the call that needs it names it.</summary>
+    /// <summary>
+    /// Each exception's key is still a literal of the product file whose call needs it, so one guard's
+    /// exception cannot be kept alive by another's call of the same member.
+    /// </summary>
     [Fact]
     public void EveryExceptionIsStillNamedByTheProduct()
     {
         IReadOnlyList<(string Literal, string Where)> literals = DrawingFamilyReadAuditTests.Literals();
 
-        foreach (string exception in Exceptions.Keys)
+        foreach (KeyValuePair<string, (string Where, string Reason)> exception in Exceptions)
         {
-            string key = exception.Substring(exception.IndexOf(' ') + 1);
-            Assert.Contains(literals, literal => string.Equals(literal.Literal, key, StringComparison.Ordinal));
+            string key = exception.Key.Substring(exception.Key.IndexOf(' ') + 1);
+            Assert.True(
+                literals.Any(literal => literal.Literal == key && literal.Where == exception.Value.Where),
+                $"{exception.Key} is no longer named in {exception.Value.Where}; drop it, or say what calls it now.");
         }
     }
 }
