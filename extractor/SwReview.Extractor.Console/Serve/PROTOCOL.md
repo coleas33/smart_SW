@@ -61,16 +61,28 @@ compares against.
 | Field | Type | Rules |
 |-------|------|-------|
 | `id` | string | Required, non-empty. Echoed on the response so a client can match them up. |
-| `command` | string | Required. One of the five below, or one of the twelve `remodel.*` commands of `specs/004-resilient-remodeler/contracts/bridge-remodel.md`. |
+| `command` | string | Required. One of the six below, or one of the twelve `remodel.*` commands of `specs/004-resilient-remodeler/contracts/bridge-remodel.md`. |
 | `params` | object | Command arguments. May be omitted for `ping`. |
 | `secret` | string or null | Optional on the wire. Ignored by the console host; **required** by the in-process host, where it also selects the command scope (below). |
 
 Unknown **top-level** fields are rejected (the same `additionalProperties: false` stance as
 the IR schema). Unknown fields inside `params` are ignored.
 
-Every request passes the read-only guard by command name before anything runs, and every
-SOLIDWORKS call underneath goes through `SwGate`, which asks the guard again. A command
-named after a mutating API (`Save3`, `FeatureCut4`, …) is refused with `status: "error"`.
+Every request's `command` is judged, before anything runs, against the host's own fixed set -
+the six commands below and the twelve `remodel.*` - by exact name, and any other is refused as
+an unknown command with `status: "error"` (the last table of this file). Every SOLIDWORKS call
+underneath goes through `SwGate`, whose guard judges the interop member it names: the read-only
+guard, or for the `remodel.*` family the allowlist guard of 004's
+`contracts/guard-allowlist.md`. A command named after a mutating API (`Save3`, `FeatureCut4`, …)
+is no command of the set, so it is refused. *Amended 2026-10-19 (owner decision 140A)*: until
+then the command name itself was handed to the read-only guard, which judges `a.b` by `b`, so
+`remodel.close`, `remodel.save` and `remodel.rebuild` were judged as `Close`, `Save` and
+`Rebuild`; a command name is not an interop member, and no guard sees one now. The commands
+answered are the same eighteen, and every name refused before is refused still; only the answer
+to one differs: "Unknown command", with `result: null`, where a name the guard denied was answered
+as a member that modifies the model - with `error_code: guard_refused` when it began `remodel.`.
+(An empty or blank `command` never reaches the dispatcher from the wire: the line is refused first,
+in the table at the end of this file.)
 
 ### `secret` and the two scopes
 
@@ -374,10 +386,21 @@ and it is three things:
    family is `reviewer/src/swreview/bridge/remodel_client.py`, whose own command allowlist
    is `ping` plus these twelve — `COMMANDS` in `client.py` is unchanged.
 
-These commands are refused by the read-only guard, as a mutating command must be: they run
-under the document-scoped allowlist guard of
-`specs/004-resilient-remodeler/contracts/guard-allowlist.md`, on a copy the run created, and
-on no other document.
+Those that write - all but `remodel.probe_scope`, `remodel.snapshot` and `remodel.geometry`,
+which `RemodelCommandTable` marks as writing nothing - make their writes through the
+re-modeler's own gate, whose guard is the document-scoped allowlist of
+`specs/004-resilient-remodeler/contracts/guard-allowlist.md`, not the read-only guard: it lets
+through the writes it names, each by its interface-qualified key, and the read-only guard
+refuses some of them (`Save3`, `ForceRebuild3`) and misses others, the reason each is named
+with its interface. They write only the copy the run created, besides the four
+application-wide settings `remodel.open` sets for the run, under their own two allowlist keys,
+and the end of the session puts back. `remodel.probe_scope` and `remodel.open` read the
+engineer's open source, whose path they name (item 3), and change nothing in it. *Corrected
+2026-10-19 (decision 140A's second review)*: this said the commands themselves are refused by
+the read-only guard; no guard judges a command's name (Request, above), only the members its
+handler calls. *And on that review's second pass*: it then said every one of these commands
+writes, and on no document but the copy; three write nothing, and two read the engineer's
+source.
 
 ## Errors that are not command failures
 

@@ -250,7 +250,9 @@ prerequisite, not an option.**
 - **Closing the read-only guard's gaps** before any creation code exists.
   - Save3 and SaveAs3 are denied.
   - What passes by bare name: Save, Save2, SaveAs, SaveAs2, SaveAs4, SaveSilent, SaveAsSilent,
-    IModelDocExtension.SaveAs and SaveAs2, and IPartDoc.SaveToFile*.
+    IModelDocExtension.SaveAs and SaveAs2, and IPartDoc.SaveToFile*. *(Amended 2026-10-19: owner
+    decision 140A refused every one of them, with the rest of the save family; feature 011
+    `research.md` R10.)*
   - The real gaps: assembly components and mates (AddComponent5, AddComponents3, AddMate5,
     CreateMate, CreateMateData, InsertNewPart2, InsertNewVirtualPart), NewDocument,
     CreateCornerRectangle and CreateCenterRectangle, SetTransformAndSolve3, DefineAttribute, and

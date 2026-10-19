@@ -52,6 +52,51 @@ rows now refuse: on `ISldWorks` `UnloadAddIn`, `ExitApp`, `ActivateTaskPane`,
 `CloseUserNotification`. The product calls none of them (section 5's audit). `IModelDoc2.Close`
 stays allowed, for the reason section 3 gives.
 
+*Amended 2026-10-19 (owner decision 140A).* `IModelDoc2.Close` is refused now, and the rows also
+name `IModelDoc2.Save` and `Rebuild` and `IModelDocExtension.Rebuild`: the bridge judges a
+command against its own fixed set and no longer hands its name to `ReadOnlyGuard`, which had
+judged `remodel.close`, `remodel.save` and `remodel.rebuild` by the part after the dot, so the
+three members could not be denied while those commands existed (research R10.1). No product path
+calls any of them; the re-modeler's rebuild, save and close are the qualified keys
+`IModelDoc2.ForceRebuild3`, `IModelDoc2.Save3` and `ISldWorks.CloseDoc` of its own allowlist.
+
+*Amended 2026-10-19 (owner decision 140A), the families.* The rows also name every member of the
+**save, rename, move and copy, replace, release and lock, read-only and rebuild families** of the
+three interfaces and of `IPartDoc` and `IAssemblyDoc` - two more shared rows: a model document is
+also one of them, and their saves, replaces and rebuilds act on that same document - and, on the
+decision's review, of `IFeatureManager`, a third, that the guard did not refuse yet; the drawing
+families' are writers of their family rows already. `DocumentWriteFamilyTests` (section 5)
+reflects the 34 interfaces the generated tables are written against - those six, decision 21A's
+creation interfaces and the 28 drawing families of this section - to prove the rows complete for
+them; no test reads the interop's other interfaces, where research R10.4 counts what the families
+hold. A
+name belongs when one of its words, read as above, is `Save`, `Rename`, `Move`, `Copy`,
+`Replace`, `Release`, `Lock`, `Unlock`, `ReadOnly` or `Rebuild`: `Copy` because
+`ISldWorks.CopyDocument` is `MoveDocument`'s twin, `Release`, `Lock` and `Unlock` for the locks
+and storage SOLIDWORKS holds in the file and the locks on the document's references, `ReadOnly`
+for `SetReadOnlyState`, which would undo behind the engineer what decision 136A's check reads; so
+`HasRenamedDocuments`, a read, and `IsLightLockedToModel` are of none. The rows refuse 55 more
+names: on `ISldWorks` `AddFileSaveAsItem`, `AddFileSaveAsItem2`, `RemoveFileSaveAsItem`,
+`RemoveFileSaveAsItem2`, `RunBatchSaveProcess`, `SaveSettings`, `ShowBatchSaveTo3DExperienceDlg`,
+`MoveDocument`, `IMoveDocument`, `CopyDocument`, `ICopyDocument`, `CopyAppearance` and
+`ReplaceReferencedDocument`; on `IModelDoc2` `Save2`, `SaveAs`, `SaveAs2`, `SaveAs4`,
+`SaveAsSilent`, `SaveSilent`, `SetSaveAsFileName`, `EditCopy`, `ForceReleaseLocks`,
+`IRelease3rdPartyStorage`, `Lock`, `UnLock`, `LockAllExternalReferences`,
+`UnlockAllExternalReferences`, `LockFramePoint`, `UnlockFramePoint`, `LockLightToModel` and
+`SetReadOnlyState` (which `RemodelGuard` had refused itself, and still refuses in both spellings);
+on `IModelDocExtension` `SaveAs`, `SaveAs2`, `SaveDeFeaturedFile`, `SaveDraftingStandard`,
+`SavePackAndGo`, `SaveTo3DExperience`, `SaveViewToSolidworks`, `RenameDocument`,
+`RenameDraftingStandard`, `MoveDecal`, `CopyDraftingStandard`, `IRelease3rdPartyStorageStore`,
+`ReleaseStream`, `EditRebuildAll` and `set_ShowPartRebuildIndicators`; on `IPartDoc`
+`SaveToFile`, `SaveToFile2` and `SaveToFile3`; on `IAssemblyDoc` `SaveIsolate`, `CopyWithMates`,
+`CopyWithMates2`, `ReplaceComponents`, `ReplaceComponents2`, `ReplacePLMComponents`,
+`ForceRebuild2` and `set_EnableAssemblyRebuild`; and on the review, on `IFeatureManager`,
+`MoveRotateLiveSectionPlane` and `set_MoveSizeFeatures`. The product calls none of them (section
+5's audit). Of the families only `SaveBMP` and `MoveToFolder` stay allowed, for the reasons
+section 3 gives, and only the exceptions' own guards let any of the rest through:
+`SuppressTestGuard` and `RemodelProbeGuard` the bare `ForceRebuild3`, `RemodelProbeGuard` the bare
+`SaveAs3`, and `RemodelGuard` `IModelDoc2.ForceRebuild3` and `IModelDoc2.Save3`.
+
 **Every spelling.** `ReadOnlyGuard.Assert` judges an interface-qualified key
 (`IDrawingDoc.ActivateSheet`) by its member half as well as by the whole key, so a read-only gate
 refuses every spelling of a denied member, and `DrawingFamilyDenylistTests` asserts each table
@@ -86,7 +131,10 @@ denied, 2 excluded, 591 new - and the shared rows add 30, so the table denies **
 names. The generated table is the count, never this paragraph. A false positive costs nothing: the
 extractor never calls a writer, and section 5's audit proves no read is refused. *Regenerated
 2026-10-19 (owner decision 136A)*: the shared rows' new names are 70, so the table denies **673**
-new names; the 28 families' 646 matches are unchanged.
+new names; the 28 families' 646 matches are unchanged. *Regenerated 2026-10-19 (owner decision
+140A)*: `Close`, `Save` and `Rebuild` join them, so the table denies **676** new names, then the
+55 names of section 1's last amendment, so it denies **731**, and on the decision's review
+`IFeatureManager`'s two, so it denies **733**; the 28 families' 646 matches are unchanged.
 
 ## 3. Exclusions, each with its reason
 
@@ -95,8 +143,10 @@ new names; the 28 families' 646 matches are unchanged.
 | `set_Name`, `Select2` (drawing families), `CloseDoc`, `SetUserPreferenceToggle` (shared) | Feature 004's stage-1 allowlist has a key with this bare name (`IFeature.set_Name`, `IFeature.Select2`, `ISldWorks.CloseDoc`, `ISldWorks.SetUserPreferenceToggle`); denying the bare name would make that key override a read-only denial and move `Allowlist_KeysOverridingAReadOnlyDenial_AreExactlyTheDeclaredFive` |
 | `OpenDoc6` | The console attach's read-only open of a model (`SwSession.OpenReadOnly`), for parts and assemblies only (`attach.md` section 4), checked with `IsOpenedReadOnly` after it (decision 136A). *Corrected 2026-10-19 (owner decision 137A)*: this row called it the extractor's one sanctioned read-only open; the confirmed drawing's open below is another, and feature 004's `OpenDoc7` opens (next row) are file-opening calls too. The read-only open of a confirmed drawing does not ride on this exclusion: it calls the qualified key `ISldWorks.OpenDoc6` through its own allowlist guard (section 7) |
 | `OpenDoc7`, `NewDocument` (shared) | *Added 2026-09-23 by T003's read audit*: feature 004 calls them by their bare names on sanctioned paths - `OpenDoc7` opens the re-modeler's own copy (`remodel.open`, under `RemodelGuard`) and reopens `probe remodel`'s throwaway part, and `NewDocument` creates that part (under `RemodelProbeGuard`, which exempts only what `ReadOnlyGuard` refused when it was written). Denying them would break both; the research's collision check had read only literal call-site names, and these two are named through constants |
-| a member `RemodelGuard` refuses itself (`ExcludedMembers`) | `RemodelExclusions_AreOnlyMembersTheReadOnlyGuardDoesNotAlreadyRefuse` forbids `ReadOnlyGuard` to refuse them; none matched on 32.5.0.48, and the generator excludes them should a later interop add one |
-| `Close` (`IModelDoc2`, shared) | *Added 2026-10-19 (owner decision 136A)*: the member half of the bridge command `remodel.close`. `BridgeDispatcher.Dispatch` hands every command name to `ReadOnlyGuard`, which judges a qualified name by its member half, so denying the bare name refused `remodel.close` (the remodel tests went red when it was tried). No product path calls `IModelDoc2.Close`; its qualified spelling is refused by the allowlist guards, `RemodelGuard` and `DrawingOpenGuard`, and `DocumentLifecycleFamilyTests.NoCommandTheBridgeAnswersIsRefusedByTheReadOnlyGuard` keeps every command name off the denials |
+| a member `RemodelGuard` refuses itself (`ExcludedMembers`) | `RemodelExclusions_AreOnlyMembersTheReadOnlyGuardDoesNotAlreadyRefuse` forbids `ReadOnlyGuard` to refuse them; none matched on 32.5.0.48, and the generator excludes them should a later interop add one. *Amended 2026-10-19 (owner decision 140A)*: `SetReadOnlyState`, one of them, is named on the `IModelDoc2` row now, so it left `RemodelGuard.ExcludedMembers` rather than be refused in two places, as that test asks; `RemodelGuard` still refuses it, qualified by its rule for a key off the allowlist and bare by `ReadOnlyGuard`'s answer |
+| `Close` (`IModelDoc2`, shared) | *Withdrawn 2026-10-19 (owner decision 140A): `Close` is refused now, since the bridge judges its commands against its own fixed set and hands no command name to `ReadOnlyGuard` (section 1). The row stays as the record of why it was an exclusion.* *Added 2026-10-19 (owner decision 136A)*: the member half of the bridge command `remodel.close`. `BridgeDispatcher.Dispatch` hands every command name to `ReadOnlyGuard`, which judges a qualified name by its member half, so denying the bare name refused `remodel.close` (the remodel tests went red when it was tried). No product path calls `IModelDoc2.Close`; its qualified spelling is refused by the allowlist guards, `RemodelGuard` and `DrawingOpenGuard`, and `DocumentLifecycleFamilyTests.NoCommandTheBridgeAnswersIsRefusedByTheReadOnlyGuard` keeps every command name off the denials |
+| `MoveToFolder` (`IFeatureManager`, shared) | *Added 2026-10-19 (owner decision 140A, on its review)*: `probe remodel`'s PROBE-5 moves a feature of its throwaway part into a folder; `SwRemodelProbeHost` gates the bare name under `RemodelProbeGuard`, which hands it to `ReadOnlyGuard`, as it does `NewDocument`. Never the engineer's document: `probe remodel` refuses to run while one is open. `RemodelGuardTests` keeps it as its example of a bare writer the denylist misses, the reason the re-modeler's writes are interface-qualified |
+| `SaveBMP` (`IModelDoc2`, shared) | *Added 2026-10-19 (owner decision 140A)*: the capture's image of a view. `SwCaptureView` gates the bare name on the session's read-only gate and has it write a bitmap of the graphics window beside the capture's PNG, at the PNG's name with `.bmp`, which the capture then turns into the PNG. `SaveBMP` writes to whatever path it is handed, a document's included, and a guard judges names, never paths: what keeps this path an image is the capture's own code, which names the PNG under the `captures` folder of the directory the host chose and checks its extension with `ReadOnlyGuard.AssertSaveAs` first. `SaveAs3` stays refused, and so does the rest of the save family (section 1). *Corrected on the decision's review (2026-10-19)*: this said `SaveBMP` cannot write a document |
 
 Names already denied (41 of the 646 grammar matches, from features 001, 006 and 010, or by a
 denied prefix; the generated table is the count) are listed in the table's "already denied" column
@@ -106,7 +156,9 @@ research figure, "39 of the 621", which the generator never produced. `CloseDoc`
 families, so the generated exclusion table names only what a row or the grammar reached:
 `set_Name`, `Select2`, `OpenDoc7` and `NewDocument`. *Amended 2026-10-19 (owner decision 136A)*:
 `OpenDoc6` and `CloseDoc` are now on the `ISldWorks` row and `Close` on the `IModelDoc2` row, so the
-generated exclusion table names them too, each with its reason.
+generated exclusion table names them too, each with its reason. *Amended 2026-10-19 (owner decision
+140A)*: `Close` is refused, so the generated exclusion table no longer names it, and `SaveBMP`,
+now on the `IModelDoc2` row, and `MoveToFolder`, on the `IFeatureManager` row, join it.
 
 ## 4. The table, generated
 
@@ -141,12 +193,17 @@ In `extractor/SwReview.Extractor.Tests/GuardTests.cs`:
 |---|---|
 | `DrawingFamilyDenylistTests` | parses the "Feature 011" table (`DenylistTable.Parse`, as `MechanicalChecksDenylistTests` does); every member is refused by `ReadOnlyGuard.Assert` and `ReadOnlyCallGuard.Instance.Assert` |
 | `DrawingFamilyCompletenessTests` | reflects the 28 interfaces at test time and applies the grammar: every match is refused, or is an excluded name of section 3; the shared rows are refused |
-| `DrawingFamilyReadAuditTests` | no bare name the extractor gates (every `SwGate.Call`/`CallOptional` literal in `extractor/SwReview.Extractor`, collected by a source scan) is refused, except the write-refusal tests' own names and the re-modeler's write sites. *Landed as (T003)*: every string literal of the product source - `SwReview.Extractor`, `SwReview.AddIn` and `SwReview.Extractor.Console`, the `Guard` folder's own tables excepted - that the table refuses must be one of four named literals that are not gated calls (two members `probe standards` asserts it never calls, a JSON property name, a remodel operation name); a superset that also reaches names passed through constants and read helpers. *Amended 2026-09-27 by feature 004 T156 (default taken 2026-09-27, the owner may revise)*: six named literals - the frozen interop manifest's builder table (`Rms/RemodelInteropSurface.cs`) now records the re-modeler's open request, whose `IDocumentSpecification.set_ReadOnly` (set false, never gated: a property of a throwaway request, as 004's `guard-allowlist.md` leaves `Silent` and `LoadModel`) and the parameter name of `set_LoadModel` match the refused `IDimension`/`INote.set_ReadOnly` and `IView.LoadModel` by name only |
-| `DocumentLifecycleFamilyTests` | *Added 2026-10-19 (owner decision 136A)*: reflects `ISldWorks`, `IModelDoc2` and `IModelDocExtension` and applies section 1's family grammar; every member is a reader, which stays allowed in both spellings, one of the explicit exclusions it names with its reason (`OpenDoc6`, `OpenDoc7`, `CloseDoc`, `NewDocument`, `IModelDoc2.Close`, each also on the generated "Not denied" table), or refused bare and qualified by `ReadOnlyGuard` and by every gate the product builds; a floor and the spellings decision 136A names; and no bridge command's name is refused |
+| `DrawingFamilyReadAuditTests` | no bare name the extractor gates (every `SwGate.Call`/`CallOptional` literal in `extractor/SwReview.Extractor`, collected by a source scan) is refused, except the write-refusal tests' own names and the re-modeler's write sites. *Landed as (T003)*: every string literal of the product source - `SwReview.Extractor`, `SwReview.AddIn` and `SwReview.Extractor.Console`, the `Guard` folder's own tables excepted - that the table refuses must be one of four named literals that are not gated calls (two members `probe standards` asserts it never calls, a JSON property name, a remodel operation name); a superset that also reaches names passed through constants and read helpers. *Amended 2026-09-27 by feature 004 T156 (default taken 2026-09-27, the owner may revise)*: six named literals - the frozen interop manifest's builder table (`Rms/RemodelInteropSurface.cs`) now records the re-modeler's open request, whose `IDocumentSpecification.set_ReadOnly` (set false, never gated: a property of a throwaway request, as 004's `guard-allowlist.md` leaves `Silent` and `LoadModel`) and the parameter name of `set_LoadModel` match the refused `IDimension`/`INote.set_ReadOnly` and `IView.LoadModel` by name only. *Amended 2026-10-19 (owner decision 140A)*: a line that is a comment and nothing else is not read (a word quoted in a comment is no string the program holds; `<see cref="Close"/>` names a C# method), the named literals are matched exactly rather than in any case (so a lower-case word the product uses for something else cannot exempt the member's own spelling), and refusing `Close`, `Save` and `Rebuild` named eight more: the bridge commands `remodel.close`, `remodel.save` and `remodel.rebuild`, judged by the part after the dot; the clean-up label `close`; the plan's JSON member `rebuild`; and the Review page's message types `events.close`, `send_when_checked.save` and `settings.save`. *Amended on the decision's second review (research R10.5)*: each named literal is keyed by the literal and the file it stands in, so it exempts its spelling there and nowhere else (decision 21A's `CreationFamilyReadAuditTests` keys its `scale` the same way); the keying found `ActivateDoc3` in `Rms/RemodelInteropSurface.cs` too, the frozen interop manifest's row for the pane seat's direct call, named now with its own reason. *And on its second pass*: a file is named by its path under the extractor folder (`SwReview.Extractor/Capture/SwCaptureView.cs`), so a file of the same name elsewhere is another file; it was named by its name, with a check that no two product files shared one, which failed for any two that did |
+| `DocumentLifecycleFamilyTests` | *Added 2026-10-19 (owner decision 136A)*: reflects `ISldWorks`, `IModelDoc2` and `IModelDocExtension` and applies section 1's family grammar; every member is a reader, which stays allowed in both spellings, one of the explicit exclusions it names with its reason (`OpenDoc6`, `OpenDoc7`, `CloseDoc`, `NewDocument`, `IModelDoc2.Close`, each also on the generated "Not denied" table), or refused bare and qualified by `ReadOnlyGuard` and by every gate the product builds; a floor and the spellings decision 136A names; and no bridge command's name is refused. *Amended 2026-10-19 (owner decision 140A)*: `IModelDoc2.Close` left the exclusions, and the last pin gave way to `CloseSaveAndRebuildAreRefusedInEverySpellingByEveryGate` - `Close`, `Save` and `Rebuild`, bare and qualified with each of the three interfaces that declares them, refused by every gate the product builds. The bridge's own rule is `BridgeDispatcherTests`' ("the bridge's own commands"): it answers exactly its eighteen commands and refuses every other name as unknown before anything runs, and `RemodelFinishHandlerTests` shows `remodel.rebuild`, `remodel.save` and `remodel.close` answering, their writes judged by `RemodelGuard` |
+| `DocumentWriteFamilyTests` | *Added 2026-10-19 (owner decision 140A)*: reflects the 34 interfaces the generated tables are written against - `ISldWorks`, `IModelDoc2`, `IModelDocExtension`, `IPartDoc`, `IAssemblyDoc`, decision 21A's `IFeatureManager` and the 28 drawing families of section 1, widened to the last two on the decision's review - and applies section 1's second family grammar (`Save`, `Rename`, `Move`, `Copy`, `Replace`, `Release`, `Lock`, `Unlock`, `ReadOnly`, `Rebuild`, as whole words): the grammar reads whole words; a floor, and the members research R8.5 and 004's `guard-allowlist.md` named are found; every member is a reader, which stays allowed in both spellings, the exclusions it names with their reasons (`SaveBMP` and `MoveToFolder`, each on the generated "Not denied" table and still a literal of the file whose call needs it, the capture's and `probe remodel`'s), or refused bare and qualified by `ReadOnlyGuard`; and every gate the product builds lets through exactly the exceptions it names, each with its reason and still a literal of the file whose call needs it - `SuppressTestGuard` the bare `ForceRebuild3`, `RemodelProbeGuard` the bare `ForceRebuild3` and `SaveAs3`, `RemodelGuard` `IModelDoc2.ForceRebuild3` and `IModelDoc2.Save3` - so a guard that comes to let another member through, or no longer needs one of these, fails it |
 
 `RemodelGuardTests.ExpectedDeniedMembers` gains the table's names (it lists the guard's denials
 from both ends); the five overriding keys and `RemodelGuard.ExcludedMembers` are unchanged and
-their tests pass unedited.
+their tests pass unedited. *Amended 2026-10-19 (owner decision 140A)*: `SetReadOnlyState` left
+`RemodelGuard.ExcludedMembers` when the table came to refuse it, and
+`RemodelGuardTests.ExpectedRemodelExclusions` was edited deliberately to match, as
+`RemodelExclusions_AreOnlyMembersTheReadOnlyGuardDoesNotAlreadyRefuse` asks; the five overriding
+keys are unchanged and their test passes unedited.
 
 ## 6. What an extraction's gate log shows (FR-007)
 
