@@ -212,14 +212,15 @@ whatever its question was numbered when it was asked, and is entered in the tabl
 same commit as the change it governs, with its date, a one-line summary, its status and where
 else it is recorded (the feature's `research.md` when a feature governs it, the commits that
 carry it out). Ids before 121A stay as they were written; the runs above remain their index. The
-next new decision is **136A**.
+next new decision is **140A**.
 
 **The mapping.** The first eight decisions of 2026-10-18 were asked in two rounds of four
 questions, each labelled 1A to 4A at the time; a third round, asked as 5A and 6A, became 129A and
 130A, and a fourth, asked as 7A and 8A, gave the go for the rewrite and became 131A (8A).
 A fifth round of four, asked on 2026-10-19 as 1A to 4A, became 132A to 135A; 132A to 134A were
 entered when they were taken, so their ids are held, and each one's status is completed in the
-commit that carries it out.
+commit that carries it out. A sixth round of four, asked the same day as 1A to 4A, became 136A
+to 139A and is entered the same way.
 The first round's 2A, 3A and 4A were written into commit
 messages on `main` and into the documentation branch under those labels before decision 128A
 numbered them, and those messages are not rewritten for it: read "2A" in a commit of that day as
@@ -242,6 +243,10 @@ numbered them, and those messages are not rewritten for it: read "2A" in a commi
 | 133A | 2026-10-19 | 2A, fifth round | Cut the first release, tag `v0.2.0`, from `main` once 132A has landed, with a GitHub release whose notes come from the changelog. The components keep their versions (the reviewer 0.2.0, the extractor 0.1.0), so the extractor's version in the reuse key does not change and nothing is re-extracted. The fork guide tells a fork to merge release tags. | Done 2026-10-19: tag `v0.2.0` on the merge of the pull request that carries it out, with its GitHub release. | [`CHANGELOG.md`](../CHANGELOG.md), "[0.2.0] - 2026-10-19"; [`docs/forking.md`](forking.md#3-syncing-with-upstream), section 3; the [release](https://github.com/coleas33/smart_SW/releases/tag/v0.2.0). |
 | 134A | 2026-10-19 | 3A, fifth round | Draft a constitution amendment that states the public-upstream rule so that a private fork's copy stays true, and that opening a document read-only, as feature 011 opens an engineer-confirmed drawing, is not a write. It is merged only on the owner's go. | Draft; waits for the owner's go. | The amendment's pull request. |
 | 135A | 2026-10-19 | 4A, fifth round | Commit messages carry no session-link trailer such as `Claude-Session`; the only trailer is `Co-Authored-By`, naming an agent that wrote the change. The lines already in the commits made from 2026-09-18 until this decision stay, since removing them would take another history rewrite and another round of re-clones. | Done; in force. | [`AGENTS.md`](../AGENTS.md#how-work-is-done), "How work is done". |
+| 136A | 2026-10-19 | 1A, sixth round | Close three gaps in the read-only guard that checking the 134A amendment against the code found, test first under feature 011: after a read-only open, check that SOLIDWORKS opened the document read-only (`IsOpenedReadOnly()`) and, when it did not, refuse the read and close what that open opened, both in feature 011's drawing open and in the console's attach; add to `ReadOnlyGuard`'s denylist the interop spellings it misses (the `I`-prefixed open, activate and new members, bare `LoadFile`, `LoadAddIn` and `LoadAdminSettingsFile`), with a test that reads the SOLIDWORKS 2024 interop by reflection so that a spelling cannot be missed again; and count every attempted open toward feature 011's limit of ten drawings. | In progress. | The pull request that carries it out. |
+| 137A | 2026-10-19 | 2A, sixth round | The constitution amendment (134A) also names the console's attach (`swreview-extract --doc`), which opens a part or assembly read-only and silently and leaves it open on purpose, so that a later `resolve` or `capture` finds its persistent references; and the two comments in `SwSession.cs` that still call it the extractor's only file-opening call are corrected. | In progress: the comments with 136A, the text in the amendment's pull request. | The two pull requests. |
+| 138A | 2026-10-19 | 3A, sixth round | A review started from the Task Pane records where its key really came from: when the key is the one saved in the pane's settings, `session.json` records `key_source: settings`, as the contracts and FR-015 say, not `env`. The command line can never claim `settings`. Test first. | In progress. | The pull request that carries it out. |
+| 139A | 2026-10-19 | 4A, sixth round | Two small fixes, test first: the Task Pane's user-facing strings name the tabs it shows (two still named the hidden Ask tab, and a fallback panel left out Remodel and Standards); and an offline re-render adds the standards verdict header only to the standards check's own session, not to a review that claimed its folder. | In progress. | The pull request that carries it out. |
 
 The owner's decision of the same day to keep this repository as the public upstream of private
 downstream forks is not numbered; it is recorded as
