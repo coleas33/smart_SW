@@ -2,11 +2,14 @@
 
 Four things this module owns, and the reason each one is tested the way it is:
 
-1. **Precedence.** The pane's `settings.json` wins over the environment, and the run
+1. **Precedence.** A key from the pane's settings wins over the environment, and the run
    records *where* the key came from (`key_source`), because a session that cannot say
-   which key it used cannot be reproduced. Env reading is exercised through an injected
-   mapping so the tests never mutate the process environment - except one test, which
-   proves `os.environ` is what the injected mapping replaces.
+   which key it used cannot be reproduced or revoked. Inside SOLIDWORKS the saved key
+   reaches the backend in its environment, so the add-in says so when it starts it
+   (`chat serve --settings-key-provider`, owner decision 138A), and an environment key for
+   the provider it names is recorded as `settings`. Env reading is exercised through an
+   injected mapping so the tests never mutate the process environment - except one test,
+   which proves `os.environ` is what the injected mapping replaces.
 2. **Secrecy.** FR-015: a key never reaches `session.json`, a report, a log line or an
    error string. The assertions are all of the form "the literal key text is not in
    `x`", never "the field is a `SecretStr`": the former is the requirement, the latter
@@ -470,6 +473,139 @@ def test_from_env_reads_os_environ_by_default(monkeypatch: pytest.MonkeyPatch) -
     assert settings.api_key is not None
     assert settings.api_key.get_secret_value() == ENV_KEY
     assert settings.key_source == "env"
+
+
+# --- the add-in's marker: the saved key, copied into the environment (138A) ---------
+
+PANE_KEY = "fict" + "-pane-saved-" + "0138a"
+"""The key the engineer saved in the pane, as the add-in copies it into the backend's
+environment. Built from fragments and not provider-shaped."""
+
+WORKSTATION_KEY = "fict" + "-workstation-" + "0138a"
+"""A key the workstation exports for itself, which the backend inherits from SLDWORKS.exe."""
+
+
+@pytest.mark.parametrize(
+    ("provider", "marked", "environment", "recorded", "key"),
+    [
+        pytest.param(
+            ProviderName.OPENAI,
+            ProviderName.OPENAI,
+            {"OPENAI_API_KEY": PANE_KEY},
+            "settings",
+            PANE_KEY,
+            id="openai-saved-key-marked",
+        ),
+        pytest.param(
+            ProviderName.GEMINI,
+            ProviderName.GEMINI,
+            {"GOOGLE_API_KEY": PANE_KEY, "GEMINI_API_KEY": PANE_KEY},
+            "settings",
+            PANE_KEY,
+            id="gemini-saved-key-marked",
+        ),
+        pytest.param(
+            ProviderName.OPENAI,
+            None,
+            {"OPENAI_API_KEY": PANE_KEY},
+            "env",
+            PANE_KEY,
+            id="unmarked",
+        ),
+        pytest.param(
+            ProviderName.GEMINI,
+            ProviderName.OPENAI,
+            {"OPENAI_API_KEY": PANE_KEY, "GOOGLE_API_KEY": WORKSTATION_KEY},
+            "env",
+            WORKSTATION_KEY,
+            id="gemini-session-openai-marker",
+        ),
+        pytest.param(
+            ProviderName.OPENAI,
+            ProviderName.GEMINI,
+            {"GOOGLE_API_KEY": PANE_KEY, "OPENAI_API_KEY": WORKSTATION_KEY},
+            "env",
+            WORKSTATION_KEY,
+            id="openai-session-gemini-marker",
+        ),
+        pytest.param(
+            ProviderName.OPENAI, ProviderName.OPENAI, {}, "none", None, id="marked-no-key"
+        ),
+        pytest.param(
+            ProviderName.OPENAI,
+            ProviderName.OPENAI,
+            {"OPENAI_API_KEY": "  "},
+            "none",
+            None,
+            id="marked-blank-key",
+        ),
+        pytest.param(
+            ProviderName.FAKE,
+            ProviderName.FAKE,
+            {"OPENAI_API_KEY": PANE_KEY, "GOOGLE_API_KEY": PANE_KEY},
+            "none",
+            None,
+            id="scripted-provider-marked",
+        ),
+    ],
+)
+def test_the_add_ins_marker_records_settings_only_for_the_key_it_copied(
+    provider: ProviderName,
+    marked: ProviderName | None,
+    environment: dict[str, str],
+    recorded: str,
+    key: str | None,
+) -> None:
+    """Owner decision 138A: `key_source` names the credential to revoke (FR-015).
+
+    The add-in copies the pane's saved key into the backend's environment, under the variables
+    of the provider it was saved for, and names that provider when it starts the backend
+    (`chat serve --settings-key-provider`). An environment key for that provider is therefore
+    the saved key and is recorded as `settings`. Another provider's key in the same environment
+    is the workstation's own, inherited from SLDWORKS.exe - a session for it is possible after
+    a provider change the backend has not restarted for, and on the Remodel route, which
+    resolves the default provider - so it stays `env`. The marker is never a key: with none in
+    the environment, or a blank one, there is nothing to record but `none`, and the scripted
+    provider reads no key at all.
+    """
+    settings = ProviderSettings.from_env(
+        provider=provider, env=environment, settings_key_provider=marked
+    )
+
+    assert settings.key_source == recorded
+    held = settings.api_key.get_secret_value() if settings.api_key is not None else None
+    assert held == key
+
+
+@pytest.mark.parametrize("environment", [{}, {"OPENAI_API_KEY": "  "}], ids=["unset", "blank"])
+def test_a_marked_provider_with_no_key_is_exactly_the_unmarked_settings(
+    environment: dict[str, str],
+) -> None:
+    """The marker says where a key came from and never stands in for one. With no key in the
+    environment the settings equal the unmarked ones - `none`, no credential - so the chat
+    backend meets the same no-key error it always did."""
+    marked = ProviderSettings.from_env(
+        provider=ProviderName.OPENAI, env=environment, settings_key_provider=ProviderName.OPENAI
+    )
+    unmarked = ProviderSettings.from_env(provider=ProviderName.OPENAI, env=environment)
+
+    assert marked == unmarked
+    assert marked.key_source == "none"
+    assert marked.has_credential is False
+
+
+def test_a_key_passed_from_the_settings_still_wins_over_a_marked_environment_key() -> None:
+    """The marker changes how an environment key is described, never which key wins."""
+    settings = ProviderSettings.from_env(
+        provider=ProviderName.OPENAI,
+        api_key=KEY,
+        env={"OPENAI_API_KEY": PANE_KEY},
+        settings_key_provider=ProviderName.OPENAI,
+    )
+
+    assert settings.api_key is not None
+    assert settings.api_key.get_secret_value() == KEY
+    assert settings.key_source == "settings"
 
 
 # --- secrecy --------------------------------------------------------------------

@@ -1187,6 +1187,7 @@ class ChatServer:
         bridge_factory: Callable[[str, str | None], Any] | None = None,
         development: bool = False,
         secrets: Sequence[str] | None = None,
+        settings_key_provider: ProviderName | None = None,
     ) -> None:
         self.token = token
         self.allow_origin = allow_origin
@@ -1196,6 +1197,7 @@ class ChatServer:
         self.bridge_factory = bridge_factory
         self.development = development
         self.secrets = tuple(secrets) if secrets is not None else environment_secrets()
+        self.settings_key_provider = settings_key_provider
         self.chats: dict[UUID, ChatSession] = {}
         self._workers: dict[UUID, ThreadPoolExecutor] = {}
         self._pending_run_dirs: set[Path] = set()
@@ -2101,14 +2103,17 @@ class ChatServer:
         """The provider settings for one session: the request, then the environment.
 
         The settings *file* is never read here - the add-in owns it and passes the key in
-        the environment - so `from_env` sees no settings key and resolves `key_source`
-        from the environment or reports `none`.
+        the environment - so `from_env` finds the key there. It records `settings` for the
+        provider the add-in named when it started this backend, whose key it copied there
+        from the pane (`--settings-key-provider`, owner decision 138A), `env` for any other
+        key it finds, and `none` when there is none.
         """
         try:
             return ProviderSettings.from_env(
                 provider=body.get("provider") or DEFAULT_PROVIDER,
                 model=body.get("model") or None,
                 effort=body.get("effort") or None,
+                settings_key_provider=self.settings_key_provider,
             )
         except ValueError as exc:
             raise UnknownProvider(self.redact(str(exc))) from exc
@@ -2666,6 +2671,7 @@ def create_app(
     remodel_bridge_factory: Callable[[str, str | None], Any] | None = None,
     development: bool = False,
     secrets: Sequence[str] | None = None,
+    settings_key_provider: ProviderName | None = None,
 ) -> Starlette:
     """The chat backend as an ASGI application.
 
@@ -2685,6 +2691,10 @@ def create_app(
             commands and nothing else, and a review's bridge authorizes none of them.
         development: List the scripted provider in `GET /health` (FR-027).
         secrets: What error text is masked of; the process environment otherwise.
+        settings_key_provider: The provider whose key the add-in copied into this process's
+            environment from the pane's saved settings (owner decision 138A): its sessions
+            record `key_source: settings`. `None` when the add-in said no such thing, and
+            then every key found in the environment is recorded as `env`.
     """
     server = ChatServer(
         token=token,
@@ -2695,6 +2705,7 @@ def create_app(
         bridge_factory=bridge_factory,
         development=development,
         secrets=secrets,
+        settings_key_provider=settings_key_provider,
     )
 
     # Imported here rather than at module scope so `chat/remodel.py` may import this

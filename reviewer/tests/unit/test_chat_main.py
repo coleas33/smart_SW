@@ -15,13 +15,17 @@ property of the *process*, not of the app:
 - the socket is **loopback only**: the workstation's own LAN address refuses;
 - `--fail-bridge 3` forces three bridge failures, so the fourth call is refused by the
   breaker. `test_bridge_client.py` owns the breaker rule itself; what is asserted here is
-  that the hook reaches a real session's tools through the real entry point.
+  that the hook reaches a real session's tools through the real entry point;
+- `--settings-key-provider` (owner decision 138A), the add-in's word that the key in the
+  environment is the one saved in the pane, reaches the session the backend records, and an
+  unknown value stops the backend before its handshake.
 """
 
 from __future__ import annotations
 
 import base64
 import json
+import os
 import shutil
 import socket
 import subprocess
@@ -36,9 +40,14 @@ from typing import Any
 
 import httpx
 import pytest
+from typer.testing import CliRunner
 
+from swreview import cli
+from swreview.agent.providers import ProviderName
+from swreview.chat import __main__ as chat_main
 from swreview.chat.__main__ import stderr_log_config
 from swreview.prerun import PRERUN_TOOLS, RMS_PRERUN_TOOLS
+from tests.support.console import plain_one_line
 
 ORIGIN = "https://swreview.invalid"
 MODEL = "fake-scripted"
@@ -100,8 +109,13 @@ def _drain(stream: Any, sink: list[str]) -> threading.Thread:
 
 
 @contextmanager
-def backend(command: list[str], *arguments: str) -> Iterator[Backend]:
-    """Start the backend, read its handshake, and make sure it is gone afterwards."""
+def backend(
+    command: list[str], *arguments: str, env: dict[str, str] | None = None
+) -> Iterator[Backend]:
+    """Start the backend, read its handshake, and make sure it is gone afterwards.
+
+    `env`, when given, is the child's whole environment block, as the add-in hands it one.
+    """
     process = subprocess.Popen(  # noqa: S603 - the command is this test's own
         [*command, "--port", "0", "--allow-origin", ORIGIN, *arguments],
         stdout=subprocess.PIPE,
@@ -109,6 +123,7 @@ def backend(command: list[str], *arguments: str) -> Iterator[Backend]:
         text=True,
         encoding="utf-8",
         bufsize=1,
+        env=env,
     )
     errors: list[str] = []
     assert process.stdout is not None and process.stderr is not None
@@ -387,3 +402,129 @@ def test_without_the_hook_no_bridge_call_is_forced_to_fail(run_dir: Path) -> Non
     assert tools[: len(RMS_PRERUN_TOOLS)] == list(RMS_PRERUN_TOOLS)
     assert set(tools[:-1]) <= set(PRERUN_TOOLS)
     assert tools[-1] == "get_package_summary"
+
+
+# --- where the key came from: the add-in's marker (owner decision 138A) ----------------
+
+PANE_KEY = "fict" + "-pane-saved-" + "0138a"
+"""The key saved in the pane, as the add-in copies it into the backend's environment. Built
+from fragments and not provider-shaped."""
+
+KEY_VARIABLES = ("OPENAI_API_KEY", "OPENAI_BASE_URL", "GOOGLE_API_KEY", "GEMINI_API_KEY")
+
+UNKNOWN_MARKERS = ("acme", "settings", "env", "OPENAI", "")
+"""Values the add-in never passes: a provider nobody supports, the session's own words for a
+source (the marker names a provider, not a source), a wrong case, and nothing at all."""
+
+
+def record_serve(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+    """Stand in for `serve`, so an entry point's parse is read without binding a socket.
+
+    Both entry points look `serve` up in `swreview.chat.__main__` when they run - the Typer
+    command imports it inside its body - so one replacement covers the two.
+    """
+    calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(chat_main, "serve", lambda **kwargs: calls.append(kwargs))
+    return calls
+
+
+@pytest.mark.parametrize("provider", [member.value for member in ProviderName])
+def test_both_entry_points_hand_serve_the_provider_the_marker_names(
+    provider: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Owner decision 138A: `--settings-key-provider` names the provider whose key the add-in
+    copied into the environment from the pane's settings. The console script and `python -m
+    swreview.chat` parse it separately, and both hand `serve` the same `ProviderName` - not a
+    bare string, which the session's provider would never be identical to."""
+    calls = record_serve(monkeypatch)
+
+    chat_main.main(["--settings-key-provider", provider])
+    result = CliRunner().invoke(cli.app, ["chat", "serve", "--settings-key-provider", provider])
+
+    assert result.exit_code == 0, result.output
+    assert [call["settings_key_provider"] for call in calls] == [ProviderName(provider)] * 2
+    assert all(isinstance(call["settings_key_provider"], ProviderName) for call in calls)
+
+
+def test_without_the_marker_both_entry_points_hand_serve_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No marker - a key from the workstation's environment, or none - is the default."""
+    calls = record_serve(monkeypatch)
+
+    chat_main.main([])
+    result = CliRunner().invoke(cli.app, ["chat", "serve"])
+
+    assert result.exit_code == 0, result.output
+    assert [call["settings_key_provider"] for call in calls] == [None, None]
+
+
+@pytest.mark.parametrize("value", UNKNOWN_MARKERS)
+def test_both_entry_points_refuse_an_unknown_marker_and_serve_nothing(
+    value: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Refused, never read as `env` (owner decision 138A). An unknown value means the add-in
+    and the backend disagree about what the marker says, and the backend cannot tell where
+    its key came from; `env` would be a guess that names the wrong credential whenever the key
+    was the saved one. A usage error before the handshake, naming the values the option takes,
+    is what the add-in reports as a backend that would not start, naming its log."""
+    calls = record_serve(monkeypatch)
+
+    with pytest.raises(SystemExit) as refused:
+        chat_main.main(["--settings-key-provider", value])
+    module_error = capsys.readouterr().err
+    result = CliRunner().invoke(cli.app, ["chat", "serve", "--settings-key-provider", value])
+
+    assert refused.value.code == 2
+    assert result.exit_code == 2
+    assert calls == []
+    for message in (module_error, plain_one_line(result.stderr)):
+        assert "--settings-key-provider" in message
+        assert all(member.value in message for member in ProviderName), message
+
+
+@pytest.mark.parametrize("launcher", sorted(LAUNCHERS))
+def test_an_unknown_marker_stops_the_real_backend_before_its_handshake(launcher: str) -> None:
+    """The same refusal as the process the pane launches: exit 2, nothing on stdout, so the
+    add-in's start fails on a missing handshake rather than on a review that records a guess."""
+    completed = subprocess.run(  # noqa: S603 - the command is this test's own
+        [*LAUNCHERS[launcher], "--port", "0", "--settings-key-provider", "acme"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=START_TIMEOUT_S,
+        check=False,
+    )
+
+    assert completed.returncode == 2
+    assert completed.stdout == ""
+    message = plain_one_line(completed.stderr)
+    assert "--settings-key-provider" in message
+    assert all(member.value in message for member in ProviderName), message
+
+
+def test_the_marker_reaches_the_session_the_real_backend_records(run_dir: Path) -> None:
+    """The whole chain the pane relies on, through the console script: the saved key in the
+    environment, `--settings-key-provider openai` on the command line, and an unticked review
+    - which sends nothing, so no network is touched - records `key_source: settings`, with the
+    key in neither `session.json` nor anything the backend logged."""
+    environment = {
+        name: value for name, value in os.environ.items() if name.upper() not in KEY_VARIABLES
+    }
+    environment["OPENAI_API_KEY"] = PANE_KEY
+
+    with backend(
+        LAUNCHERS["console-script"],
+        "--run-root",
+        str(run_dir.parent),
+        "--settings-key-provider",
+        "openai",
+        env=environment,
+    ) as started:
+        with started.client() as client:
+            start_session(client, run_dir, provider="openai", model=None, send_when_checked=False)
+
+    written = (run_dir / "session.json").read_text(encoding="utf-8")
+    assert json.loads(written)["provider_info"]["key_source"] == "settings"
+    assert PANE_KEY not in written
+    assert PANE_KEY not in "\n".join(started.stderr)

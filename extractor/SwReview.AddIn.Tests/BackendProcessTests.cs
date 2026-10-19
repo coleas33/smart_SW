@@ -34,7 +34,10 @@ namespace SwReview.AddIn.Tests;
 ///   process we hold a handle to;
 /// - the credential and endpoint variables that reach the child are the pane's answers and
 ///   not the workstation's, asserted against a real child's own view of its environment,
-///   because that block is the parent's environment with the pane's values merged over it.
+///   because that block is the parent's environment with the pane's values merged over it;
+/// - when the key copied there is the one saved in the pane, the command line names its
+///   provider (`--settings-key-provider`, owner decision 138A), because the backend cannot
+///   tell that from its environment and the session has to name the credential to revoke.
 /// </summary>
 public sealed class BackendProcessTests
 {
@@ -348,6 +351,138 @@ public sealed class BackendProcessTests
             gemini.SetApiKey(Key);
 
             Assert.DoesNotContain(Gateway, EnvironmentOf(stub, job, gemini));
+        }
+    }
+
+    // ---- where the key came from (owner decision 138A) --------------------------------------
+
+    /// <summary>The key saved in the pane. Built from fragments and not provider-shaped.</summary>
+    private const string SavedKey = "fict" + "-pane-saved-" + "0138a";
+
+    /// <summary>A key the workstation exports for itself, inherited from SLDWORKS.exe.</summary>
+    private const string WorkstationKey = "fict" + "-workstation-" + "0138a";
+
+    [Theory]
+    [InlineData("openai")]
+    [InlineData(null)]
+    public void TheSettingsKeyProviderIsOnTheCommandLineAndTheKeyIsNot(string? provider)
+    {
+        // The backend finds the key in its environment either way and cannot tell by itself
+        // that it is the one saved in the pane; the session records `settings` only when the
+        // add-in says so. A statement, not a credential, so it travels as a start argument
+        // beside --run-root and --allow-origin, and the key itself still never does (FR-015).
+        using (var stub = new StubBackend())
+        using (var job = new JobObject())
+        {
+            stub.PrintsHandshake().RecordsItsCommandLine();
+            BackendStartOptions options = Options(stub, job);
+            options.Environment["OPENAI_API_KEY"] = SavedKey;
+            options.Secrets.Add(SavedKey);
+            options.SettingsKeyProvider = provider;
+
+            using (BackendProcess.Start(options))
+            {
+                string commandLine = stub.ReadCommandLine();
+
+                Assert.DoesNotContain(SavedKey, commandLine);
+                if (provider == null)
+                {
+                    Assert.DoesNotContain("--settings-key-provider", commandLine);
+                }
+                else
+                {
+                    Assert.Contains("--settings-key-provider " + provider, commandLine);
+                }
+            }
+        }
+    }
+
+    [Theory]
+    // Both present: the saved key wins (ResolveApiKey) and its provider is named.
+    [InlineData("openai", "saved", WorkstationKey, "openai")]
+    [InlineData("openai", "saved", null, "openai")]
+    [InlineData("gemini", "saved", WorkstationKey, "gemini")]
+    // No saved key: the environment's key is copied through and nothing is named.
+    [InlineData("openai", null, WorkstationKey, null)]
+    [InlineData("openai", null, null, null)]
+    // A stored key this Windows account cannot decrypt falls back to the environment's.
+    [InlineData("openai", "undecryptable", WorkstationKey, null)]
+    // The scripted provider reads no key, so none is copied into the environment or named.
+    [InlineData("fake", "saved", null, null)]
+    public void StartOptionsNamesTheProviderOnlyWhenItCopiedTheSavedKey(
+        string provider, string? stored, string? environmentKey, string? named)
+    {
+        using (var stub = new StubBackend())
+        using (var job = new JobObject())
+        {
+            UserSettings settings = UserSettings.Defaults();
+            settings.Provider = provider;
+            settings.Model = UserSettings.DefaultModelFor(provider);
+            if (stored == "saved")
+            {
+                settings.SetApiKey(SavedKey);
+            }
+            else if (stored == "undecryptable")
+            {
+                settings.ApiKeyProtected = "this is not base64 !!!";
+            }
+
+            BackendStartOptions built = StartOptionsFor(stub, job, settings, name => environmentKey);
+
+            Assert.Equal(named, built.SettingsKeyProvider);
+            if (named != null)
+            {
+                // The statement is true of what was copied: every variable the provider
+                // reads holds the saved key, so no inherited one can be what the backend finds.
+                foreach (string variable in provider == "gemini"
+                    ? new[] { "GOOGLE_API_KEY", "GEMINI_API_KEY" }
+                    : new[] { "OPENAI_API_KEY" })
+                {
+                    Assert.Equal(SavedKey, built.Environment[variable]);
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public void ASavedKeyAndAWorkstationKeyStartTheBackendWithTheSavedOneAndItsProviderNamed()
+    {
+        // The case 138A is about, read back out of a real child: the workstation exports a
+        // personal key, the engineer saved another in the pane. The child's environment holds
+        // the saved one, its command line names the provider - and holds neither key.
+        using (var stub = new StubBackend())
+        using (var job = new JobObject())
+        using (Seeded("OPENAI_API_KEY", WorkstationKey))
+        {
+            UserSettings settings = UserSettings.Defaults();
+            settings.SetApiKey(SavedKey);
+
+            (string commandLine, string environment) =
+                Launched(stub, job, settings, Environment.GetEnvironmentVariable);
+
+            Assert.Contains("--settings-key-provider openai", commandLine);
+            Assert.DoesNotContain(SavedKey, commandLine);
+            Assert.DoesNotContain(WorkstationKey, commandLine);
+            Assert.Contains("OPENAI_API_KEY=" + SavedKey, environment);
+            Assert.DoesNotContain(WorkstationKey, environment);
+        }
+    }
+
+    [Fact]
+    public void AWorkstationKeyAloneStartsTheBackendWithNothingNamed()
+    {
+        // No key saved in the pane: the workstation's key is the one used, the backend records
+        // `env`, and the command line says nothing about the settings.
+        using (var stub = new StubBackend())
+        using (var job = new JobObject())
+        using (Seeded("OPENAI_API_KEY", WorkstationKey))
+        {
+            (string commandLine, string environment) =
+                Launched(stub, job, UserSettings.Defaults(), Environment.GetEnvironmentVariable);
+
+            Assert.DoesNotContain("--settings-key-provider", commandLine);
+            Assert.DoesNotContain(WorkstationKey, commandLine);
+            Assert.Contains("OPENAI_API_KEY=" + WorkstationKey, environment);
         }
     }
 
@@ -691,14 +826,48 @@ public sealed class BackendProcessTests
 
     /// <summary>
     /// The credential and endpoint block <see cref="BackendClient.StartOptions"/> builds for
-    /// <paramref name="settings"/>, read back out of a real child process.
+    /// <paramref name="settings"/>, with no key in the environment, read back out of a real
+    /// child process.
+    /// </summary>
+    private static string EnvironmentOf(StubBackend stub, JobObject job, UserSettings settings) =>
+        Launched(stub, job, settings, name => null).Environment;
+
+    /// <summary>
+    /// What <see cref="BackendClient.StartOptions"/> builds for <paramref name="settings"/>, the
+    /// key resolved against <paramref name="environment"/>, launched as a real child: its
+    /// command line and its own view of its environment.
     ///
     /// Asserted against the child's own view rather than against the dictionary, because the
     /// bug these tests exist for is precisely that the dictionary is *merged into the parent's
     /// environment* (<see cref="ChildProcess"/>): a variable the pane does not write is not a
     /// variable the child does not have.
     /// </summary>
-    private static string EnvironmentOf(StubBackend stub, JobObject job, UserSettings settings)
+    private static (string CommandLine, string Environment) Launched(
+        StubBackend stub, JobObject job, UserSettings settings, Func<string, string?> environment)
+    {
+        BackendStartOptions built = StartOptionsFor(stub, job, settings, environment);
+
+        stub.PrintsHandshake().RecordsItsCommandLine().RecordsItsEnvironment();
+        BackendStartOptions options = Options(stub, job);
+        foreach (KeyValuePair<string, string> variable in built.Environment)
+        {
+            options.Environment[variable.Key] = variable.Value;
+        }
+
+        options.SettingsKeyProvider = built.SettingsKeyProvider;
+
+        using (BackendProcess.Start(options))
+        {
+            return (stub.ReadCommandLine(), stub.ReadEnvironmentDump());
+        }
+    }
+
+    /// <summary>
+    /// <see cref="BackendClient.StartOptions"/> for <paramref name="settings"/>, the key resolved
+    /// against <paramref name="environment"/>, with this stub's folder as the launcher's home.
+    /// </summary>
+    private static BackendStartOptions StartOptionsFor(
+        StubBackend stub, JobObject job, UserSettings settings, Func<string, string?> environment)
     {
         // `python` names the launcher BackendLocator resolves; a file called swreview.exe is
         // taken as the console script and run directly, which is all StartOptions needs.
@@ -707,23 +876,10 @@ public sealed class BackendProcessTests
         settings.Python = launcher;
         settings.RunRoot = stub.RunRoot;
 
-        BackendStartOptions built;
         using (var supervisor = new BackendSupervisor(() => false))
         using (var client = new BackendClient(supervisor, Path.GetDirectoryName(stub.LogPath)!, job))
         {
-            built = client.StartOptions(settings, settings.ResolveApiKey(name => null));
-        }
-
-        stub.PrintsHandshake().RecordsItsEnvironment();
-        BackendStartOptions options = Options(stub, job);
-        foreach (KeyValuePair<string, string> variable in built.Environment)
-        {
-            options.Environment[variable.Key] = variable.Value;
-        }
-
-        using (BackendProcess.Start(options))
-        {
-            return stub.ReadEnvironmentDump();
+            return client.StartOptions(settings, settings.ResolveApiKey(environment));
         }
     }
 
