@@ -1673,6 +1673,43 @@ public sealed class ToolServiceWiringTests
         }
     }
 
+    /// <summary>
+    /// Decision 141A (2026-10-19), through the add-in's own records: in the same review session,
+    /// after ten failed opens, a candidate whose drawing is not open is refused with only the lookup
+    /// gated, and once the engineer has it open it is read as it stands - nothing hidden, opened or
+    /// closed - since reading it opens nothing.
+    /// </summary>
+    [Fact]
+    public void ADrawingTheEngineerHasOpenIsReadAfterTheSessionsFailedOpensSpentTheLimit()
+    {
+        using (var world = new DrawingReadWorld(seatValidated: true))
+        {
+            string name = Path.GetFileName(world.ReviewRun("chat-1"));
+            world.Seat.OpenRefused = true;
+            for (int attempt = 0; attempt < 10; attempt++)
+            {
+                Assert.Equal(BridgeStatus.Error, world.Read(name, world.HousingId, DrawingReadWorld.ReviewSecret).Status);
+            }
+
+            world.Seat.OpenRefused = false;
+            BridgeResponse refused = world.Read(name, world.HousingId, DrawingReadWorld.ReviewSecret);
+            Assert.Equal(BridgeStatus.Error, refused.Status);
+            Assert.StartsWith("the limit of ten drawings for this review is reached", refused.Error, StringComparison.Ordinal);
+            Assert.Equal(new[] { "GetOpenDocumentByName" }, GatedOf(world.LogLines.Last()));
+            world.Seat.Calls.Clear();
+
+            world.Seat.AlreadyOpen(world.CandidatePath);
+            BridgeResponse response = world.Read(name, world.HousingId, DrawingReadWorld.ReviewSecret);
+
+            Assert.Equal(BridgeStatus.Ok, response.Status);
+            ConfirmedDrawingResult result = Assert.IsType<ConfirmedDrawingResult>(response.Result);
+            Assert.False(result.Opened);
+            Assert.False(result.Closed);
+            Assert.Equal(new[] { "OpenDocument" }, world.Seat.Calls.Distinct().ToArray());
+            Assert.Equal(1, world.Seat.Reads);
+        }
+    }
+
     // ---- the remodel observer's helpers ---------------------------------------------------------
 
     /// <summary>
