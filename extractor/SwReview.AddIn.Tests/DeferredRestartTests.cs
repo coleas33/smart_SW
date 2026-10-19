@@ -575,6 +575,139 @@ public sealed class DeferredRestartTests
         }
     }
 
+    // ---- 8. a page call that would start a turn (the proxy's question) -------------------------
+
+    /// <summary>What the proxy answers a turn call with once the restart has ended that call's chat.</summary>
+    private const string ChatEndedWithTheRestart =
+        "the backend restarted with the saved settings, and this review's chat ended with the backend "
+        + "it ran on. Press Review to review again with the new settings.";
+
+    /// <summary>With nothing waiting, every turn call goes on as before, and nothing is asked.</summary>
+    [Fact]
+    public void WithNoRestartWaitingEveryTurnCallGoesOnAndNothingIsAsked()
+    {
+        using var world = new RestartWorld();
+        world.Open();
+        world.Track("chat-1");
+
+        Assert.Null(world.Host.PageTurnRefusal());
+        Assert.Equal(0, world.Backend.Questions);
+    }
+
+    [Fact]
+    public void WhileTheTurnRunsATurnCallIsRefusedAndTheRestartStillWaits()
+    {
+        using var world = new RestartWorld();
+        world.Open();
+        world.Track("chat-1");
+        SaveAsATurnStarts(world, "save", Save(effort: "low"));
+
+        BackendRequestException? refusal = world.Host.PageTurnRefusal();
+
+        Assert.NotNull(refusal);
+        Assert.Equal("TurnRunning", refusal!.ErrorClass);
+        Assert.Equal(TurnStillRunning, refusal.Message);
+        Assert.True(refusal.Retryable);
+        Assert.Empty(world.Backend.Restarts);
+
+        world.Backend.EndTurn("chat-1");
+        Eventually(() => world.Posted("backend.restarted").Length == 1, "backend.restarted");
+    }
+
+    /// <summary>
+    /// A follow-up, an answer or a Send the moment the turn ends is for a chat of the backend about
+    /// to be replaced. It never reaches that backend: the restart is made first, and the call is
+    /// answered as the restarted backend would answer it, since that backend does not hold the chat.
+    /// </summary>
+    [Fact]
+    public void ATurnCallTheMomentTheTurnEndsMakesTheRestartFirstAndIsToldItsChatEnded()
+    {
+        using var world = new RestartWorld { Poll = TimeSpan.FromMinutes(10) };
+        world.Open();
+        world.Track("chat-1");
+        SaveAsATurnStarts(world, "save", Save(effort: "low"));
+        world.Backend.EndTurn("chat-1");
+
+        BackendRequestException? refusal = world.Host.PageTurnRefusal();
+
+        Assert.NotNull(refusal);
+        Assert.Equal("UnknownChat", refusal!.ErrorClass);
+        Assert.Equal(ChatEndedWithTheRestart, refusal.Message);
+        Assert.False(refusal.Retryable);
+        Assert.Equal("low", Assert.Single(world.Backend.Restarts).Settings.Effort);
+        Assert.Single(world.Posted("backend.restarted"));
+        Assert.Null(world.Host.PageTurnRefusal());
+    }
+
+    [Fact]
+    public async Task ATurnCallWhileTheRestartIsBeingMadeWaitsForItAndIsToldItsChatEnded()
+    {
+        using var world = new RestartWorld();
+        using var hold = new ManualResetEventSlim(false);
+        try
+        {
+            world.Backend.Hold = hold;
+            world.Open();
+            world.Track("chat-1");
+            SaveAsATurnStarts(world, "save", Save(effort: "low"));
+            world.Backend.EndTurn("chat-1");
+            Assert.True(world.Backend.Entered.Wait(TimeSpan.FromSeconds(10)), "the host never began the restart");
+
+            Task<BackendRequestException?> call = Task.Run(() => world.Host.PageTurnRefusal());
+            Assert.False(await Finishes(call, TimeSpan.FromMilliseconds(300)), "the call did not wait for the restart being made");
+
+            hold.Set();
+            Assert.True(await Finishes(call, TimeSpan.FromSeconds(10)), "the call never got an answer");
+            Assert.Equal("UnknownChat", (await call)!.ErrorClass);
+            Assert.Single(world.Backend.Restarts);
+        }
+        finally
+        {
+            hold.Set();
+        }
+    }
+
+    [Fact]
+    public void ATurnCallWhoseRestartFailsIsAnsweredWithTheFailureMasked()
+    {
+        using var world = new RestartWorld { Poll = TimeSpan.FromMinutes(10) };
+        world.Backend.RestartFailure = new InvalidOperationException("the child would not start with " + OpenAiKey);
+        world.Open();
+        world.Track("chat-1");
+        SaveAsATurnStarts(world, "save", Save(effort: "low"));
+        world.Backend.EndTurn("chat-1");
+
+        BackendRequestException? refusal = world.Host.PageTurnRefusal();
+
+        Assert.NotNull(refusal);
+        Assert.Equal("BackendUnavailable", refusal!.ErrorClass);
+        Assert.StartsWith("the child would not start with ", refusal.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(OpenAiKey, refusal.Message, StringComparison.Ordinal);
+        Assert.True(refusal.Retryable);
+        world.AssertNothingPostedContains(OpenAiKey);
+    }
+
+    /// <summary>
+    /// The add-in hands the pane's proxy the review host's answer, read through the field per call:
+    /// the pane is built before the host, and a host that has gone answers nothing. The add-in
+    /// cannot be built without a live SOLIDWORKS, so its source is read, as the wiring tests do.
+    /// </summary>
+    [Fact]
+    public void TheAddInHandsThePanesProxyTheReviewHostsAnswer()
+    {
+        string addIn = Path.Combine(ErrorLabelsCoverTheHostTests.RepositoryRoot(), "extractor", "SwReview.AddIn");
+        string source = System.Text.RegularExpressions.Regex.Replace(
+            File.ReadAllText(Path.Combine(addIn, "SwReviewAddIn.cs")), @"\s+", " ");
+
+        int start = source.IndexOf("_pane = new TaskPaneControl(new TaskPaneOptions(", StringComparison.Ordinal);
+        int end = start < 0 ? -1 : source.IndexOf("});", start, StringComparison.Ordinal);
+        Assert.True(end > start, "SwReviewAddIn no longer builds its pane's options where this test reads them.");
+        Assert.Contains(
+            "PageTurnRefusal = () => _reviewHost?.PageTurnRefusal(),",
+            source.Substring(start, end - start),
+            StringComparison.Ordinal);
+    }
+
     // ---- the restart itself, with no host ------------------------------------------------------
 
     [Fact]

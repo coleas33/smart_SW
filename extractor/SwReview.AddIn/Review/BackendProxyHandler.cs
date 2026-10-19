@@ -57,7 +57,7 @@ public sealed class ProxiedResponse
 /// matching <see cref="BackendClient"/> - which is not incidental here, because a proxy
 /// consulted for 127.0.0.1 is the failure this whole class exists to route around.
 ///
-/// Four refusals are answered rather than forwarded, each in the
+/// Five refusals are answered rather than forwarded, each in the
 /// `{error_class, message, retryable}` shape the pages already render:
 /// <list type="bullet">
 /// <item>no backend yet - the pane opens before the child has handshaken;</item>
@@ -66,7 +66,10 @@ public sealed class ProxiedResponse
 /// a bug in the page rather than something to half-answer;</item>
 /// <item>the call failed - a dead child must read as a backend problem, not a blank page;</item>
 /// <item>the call could not be made at all - `ProxyFailed`, which is this side breaking
-/// rather than the backend's, and is not retryable.</item>
+/// rather than the backend's, and is not retryable;</item>
+/// <item>a call that would start a turn while the backend waits to be restarted with
+/// settings saved during a turn - the host's answer, since the call is for a chat of the
+/// backend being replaced and must not start a turn there (owner decision 143A).</item>
 /// </list>
 /// </summary>
 public sealed class BackendProxyHandler
@@ -78,11 +81,25 @@ public sealed class BackendProxyHandler
 
     private readonly Func<BackendEndpoint?> _endpoint;
     private readonly Func<ProxiedRequest, ProxiedResponse> _send;
+    private readonly Func<BackendRequestException?> _turnRefusal;
 
     public BackendProxyHandler(Func<BackendEndpoint?> endpoint, Func<ProxiedRequest, ProxiedResponse> send)
+        : this(endpoint, send, () => null)
+    {
+    }
+
+    /// <param name="endpoint">Where the backend is, asked per call.</param>
+    /// <param name="send">The transport.</param>
+    /// <param name="turnRefusal">Asked, per call, before a call that would start a turn is sent:
+    /// null sends it on as always, and a refusal is answered instead (owner decision 143A).</param>
+    public BackendProxyHandler(
+        Func<BackendEndpoint?> endpoint,
+        Func<ProxiedRequest, ProxiedResponse> send,
+        Func<BackendRequestException?> turnRefusal)
     {
         _endpoint = endpoint ?? throw new ArgumentNullException(nameof(endpoint));
         _send = send ?? throw new ArgumentNullException(nameof(send));
+        _turnRefusal = turnRefusal ?? throw new ArgumentNullException(nameof(turnRefusal));
     }
 
     /// <summary>
@@ -95,6 +112,18 @@ public sealed class BackendProxyHandler
         IEnumerable<KeyValuePair<string, string>>? headers,
         Stream? content)
     {
+        // Before the backend is looked for: while the backend is being restarted there is
+        // none, and a call that would start a turn is held to the host's answer rather than
+        // told the backend is not running.
+        if (StartsATurn(requestUri, method))
+        {
+            ProxiedResponse? refused = RefuseTurn();
+            if (refused != null)
+            {
+                return refused;
+            }
+        }
+
         BackendEndpoint? endpoint = _endpoint();
         if (endpoint == null)
         {
@@ -152,6 +181,89 @@ public sealed class BackendProxyHandler
                 "ProxyFailed",
                 "the pane could not make this call: " + failure.Message,
                 retryable: false);
+        }
+    }
+
+    /// <summary>
+    /// Whether a page call would start a turn, or resume one: a `POST` to
+    /// `/sessions/{chat_id}/messages`, `/send`, `/evidence` or `/evidence/{request_id}`
+    /// (chat-api.md). Read from the path the backend would route, so a trailing slash or an
+    /// escaped letter is the same call. `POST /sessions` starts a turn too, but only the host
+    /// makes it, and the host waits for a restart there itself; Stop, a disposition and the
+    /// timing start none.
+    /// </summary>
+    private static bool StartsATurn(string requestUri, string method)
+    {
+        // Port 0 only answers "is this the prefix", as for a call with no backend yet.
+        if (!string.Equals(method, "POST", StringComparison.OrdinalIgnoreCase)
+            || !BackendProxy.TryMapToBackend(requestUri, new BackendEndpoint(0, "none"), out Uri? target))
+        {
+            return false;
+        }
+
+        string[] segments = target!.AbsolutePath.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+        for (int index = 0; index < segments.Length; index++)
+        {
+            segments[index] = Uri.UnescapeDataString(segments[index]);
+        }
+
+        if (segments.Length < 3 || segments[0] != "sessions")
+        {
+            return false;
+        }
+
+        switch (segments[2])
+        {
+            case "messages":
+            case "send":
+                return segments.Length == 3;
+
+            case "evidence":
+                return segments.Length == 3 || segments.Length == 4;
+
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// The host's answer to a call that would start a turn, as a response, or null to send the
+    /// call on. Each refusal goes out with the status the backend itself gives it, so the answer
+    /// cannot be told from the backend's; the pages read only `ok` and the body. A host that
+    /// throws is answered as any call this side could not make is: never with no answer.
+    /// </summary>
+    private ProxiedResponse? RefuseTurn()
+    {
+        BackendRequestException? refusal;
+        try
+        {
+            refusal = _turnRefusal();
+        }
+        catch (Exception failure)
+        {
+            return Error(
+                500,
+                "Internal Server Error",
+                "ProxyFailed",
+                "the pane could not make this call: " + failure.Message,
+                retryable: false);
+        }
+
+        if (refusal == null)
+        {
+            return null;
+        }
+
+        switch (refusal.ErrorClass)
+        {
+            case "TurnRunning":
+                return Error(409, "Conflict", refusal.ErrorClass, refusal.Message, refusal.Retryable);
+
+            case "UnknownChat":
+                return Error(404, "Not Found", refusal.ErrorClass, refusal.Message, refusal.Retryable);
+
+            default:
+                return Error(503, "Service Unavailable", refusal.ErrorClass, refusal.Message, refusal.Retryable);
         }
     }
 

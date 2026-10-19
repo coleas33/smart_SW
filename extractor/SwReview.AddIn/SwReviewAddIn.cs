@@ -405,6 +405,12 @@ public class SwReviewAddIn : ISwAddin
             // field for the same reason as the two above: `_backend` is created after this
             // pane is, and a settings save replaces it with a child on another port.
             Backend = () => _backend?.Endpoint,
+
+            // Owner decision 143A: while the backend waits to be restarted with settings saved
+            // during a turn, a page call that would start a turn is for a chat of the backend
+            // being replaced, and the review host answers it instead. Read through the field:
+            // the host is built after this pane, and one that has gone answers nothing.
+            PageTurnRefusal = () => _reviewHost?.PageTurnRefusal(),
         });
 
         _panel = _pane.Actions;

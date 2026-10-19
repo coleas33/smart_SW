@@ -1178,6 +1178,49 @@ public sealed class ReviewHost : IDisposable
         }
     }
 
+    /// <summary>
+    /// What a page call that would start a turn is answered with once the restart has ended the
+    /// chat it was for.
+    /// </summary>
+    private const string ChatEndedWithTheRestart =
+        "the backend restarted with the saved settings, and this review's chat ended with the backend "
+        + "it ran on. Press Review to review again with the new settings.";
+
+    /// <summary>
+    /// The pane proxy's question (owner decision 143A): what a page call that would start a turn
+    /// - a follow-up, an answer, a Send - is answered with while the backend waits to be
+    /// restarted with settings saved during a turn, or null to send it on as always. Such a call
+    /// is for a chat of the backend being replaced, so it is never sent: while a turn still runs
+    /// it is refused as a new review is; otherwise the restart is made first, or waited for, and
+    /// the call is answered as the restarted backend would answer it, since that backend does not
+    /// hold the chat. Never throws, and asks nothing when nothing waits.
+    /// </summary>
+    public BackendRequestException? PageTurnRefusal()
+    {
+        if (!_restart.Pending)
+        {
+            return null;
+        }
+
+        switch (_restart.Apply(out Exception? failure))
+        {
+            case DeferredRestart.Outcome.TurnRunning:
+                return new BackendRequestException("TurnRunning", TurnHoldsTheRestart, retryable: true);
+
+            case DeferredRestart.Outcome.Failed:
+                return new BackendRequestException("BackendUnavailable", Redact(failure!.Message), retryable: true);
+
+            case DeferredRestart.Outcome.Stopped:
+                return new BackendRequestException(
+                    "BackendUnavailable", "the review backend is stopping with the add-in.", retryable: false);
+
+            default:
+                // Restarted by this call, or by whoever got there first: either way the backend
+                // the call was for has gone, and the chat with it.
+                return new BackendRequestException("UnknownChat", ChatEndedWithTheRestart, retryable: false);
+        }
+    }
+
     // ---- models -------------------------------------------------------------------------
 
     private void ListModels(string? id, JsonElement payload)

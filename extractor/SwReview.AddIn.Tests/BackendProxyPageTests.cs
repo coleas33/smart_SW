@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
@@ -265,6 +266,46 @@ public sealed class BackendProxyPageTests
     }
 
     /// <summary>
+    /// Owner decision 143A, end to end in the real <see cref="TaskPaneControl"/>: the pane asks
+    /// <see cref="TaskPaneOptions.PageTurnRefusal"/> before it sends on a page call that would
+    /// start a turn, answers the page with the refusal and sends nothing, and sends every other
+    /// call on as before - here a `POST` to the review's Stop, which must reach the backend while
+    /// a turn holds a restart back.
+    /// </summary>
+    [Fact]
+    public void TheShippedPaneAnswersACallThatWouldStartATurnWithTheHostsRefusal()
+    {
+        var fake = new FakeTransport(202, "Accepted", "{\"served\":\"served-from-csharp\"}");
+        int asked = 0;
+        JsonElement followUp = default;
+        JsonElement stop = default;
+
+        WithPane(
+            fake,
+            () =>
+            {
+                Interlocked.Increment(ref asked);
+                return new BackendRequestException("TurnRunning", "FICT a turn holds the restart", retryable: true);
+            },
+            async page =>
+            {
+                followUp = await Fetch(
+                    page, BackendProxy.PathPrefix + "/sessions/chat-1/messages", "POST", "{\"text\":\"why?\"}");
+                stop = await Fetch(page, BackendProxy.PathPrefix + "/sessions/chat-1/stop", "POST", "{}");
+            });
+
+        Assert.Equal(409, followUp.GetProperty("status").GetInt32());
+        Assert.Equal(
+            "{\"error_class\":\"TurnRunning\",\"message\":\"FICT a turn holds the restart\",\"retryable\":true}",
+            followUp.GetProperty("body").GetString());
+        Assert.Equal(1, Volatile.Read(ref asked));
+
+        Assert.Equal(202, stop.GetProperty("status").GetInt32());
+        ProxiedRequest sent = Assert.Single(fake.Requests);
+        Assert.Equal("/sessions/chat-1/stop", sent.Url.AbsolutePath);
+    }
+
+    /// <summary>
     /// The other half of the same-origin decision: with `connect-src 'self'`, the loopback the
     /// pages used to call is now <b>refused by the renderer</b>, before a socket is opened and
     /// so before any web filter can answer it with an interstitial.
@@ -490,7 +531,11 @@ public sealed class BackendProxyPageTests
     /// environment per process, and a test that opened the add-in's folder would be a second
     /// instance over a folder a running SOLIDWORKS may hold.
     /// </summary>
-    private static void WithPane(FakeTransport transport, Func<CoreWebView2, Task> body)
+    private static void WithPane(FakeTransport transport, Func<CoreWebView2, Task> body) =>
+        WithPane(transport, () => null, body);
+
+    private static void WithPane(
+        FakeTransport transport, Func<BackendRequestException?> pageTurnRefusal, Func<CoreWebView2, Task> body)
     {
         string userDataFolder = NewUserDataFolder();
 
@@ -505,6 +550,7 @@ public sealed class BackendProxyPageTests
                     WebFolder = ReviewPageFiles.WebFolder,
                     Backend = () => Endpoint,
                     ProxySend = transport.Send,
+                    PageTurnRefusal = pageTurnRefusal,
                 };
 
                 using (var control = new TaskPaneControl(options) { Dock = DockStyle.Fill })
