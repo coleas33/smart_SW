@@ -26,6 +26,8 @@ namespace SwReview.Extractor.Dump;
 ///   5. the package holds fewer than ten drawing records - and, since decision 136A
 ///      (2026-10-19), fewer than ten with every open this host attempted for the review that left
 ///      no record, so a refused open uses up its room and the opens are bounded whatever happens.
+///      When those opens alone reach ten, the request is refused at step 1, before the package is
+///      even loaded (on the decision's review).
 ///
 /// Then the drawing is opened through the guarded seam (<see cref="DrawingOpenScope"/>) when it is
 /// not open, read by the drawing phase with every drawing id continuing the package's own and each
@@ -105,6 +107,16 @@ public sealed class ConfirmedDrawingRead : IConfirmedDrawingSource
         string folder = _runFolderOf(runId)
             ?? throw new ConfirmedDrawingRefused(
                 $"'{runId}' is not a review this SOLIDWORKS session started, so no drawing was opened.");
+
+        // Decision 136A's review: once the opens that left no record reach the limit on their own,
+        // the request is refused before the package is loaded, so a spent review costs SOLIDWORKS's
+        // thread nothing more. Below that, step 5 counts them with the package's records.
+        int unrecorded = UnrecordedOpensOf(folder);
+        if (unrecorded >= OpenDrawingDiscovery.MaxAttachedDrawings)
+        {
+            throw new ConfirmedDrawingRefused(LimitReached(Opens(unrecorded, string.Empty)));
+        }
+
         if (!File.Exists(PackageAppender.PathIn(folder)))
         {
             throw new ConfirmedDrawingRefused(
@@ -172,15 +184,10 @@ public sealed class ConfirmedDrawingRead : IConfirmedDrawingSource
             throw new ConfirmedDrawingRefused("the package already holds ten drawings, so this one was not opened");
         }
 
-        int unrecorded = UnrecordedOpensOf(folder);
         if (records + unrecorded >= OpenDrawingDiscovery.MaxAttachedDrawings)
         {
             throw new ConfirmedDrawingRefused(
-                $"the limit of ten drawings for this review is reached: {records} in the package and "
-                + (unrecorded == 1
-                    ? "1 more open that was refused or failed"
-                    : $"{unrecorded} more opens that were refused or failed")
-                + ", so this one was not opened");
+                LimitReached($"{records} in the package and {Opens(unrecorded, "more ")}"));
         }
 
         // An open the seam begins counts unless its drawing reaches the package: refused, failed, a
@@ -235,6 +242,16 @@ public sealed class ConfirmedDrawingRead : IConfirmedDrawingSource
             }
         }
     }
+
+    /// <summary>The refusal once the limit is reached, with what <paramref name="counted"/> it.</summary>
+    private static string LimitReached(string counted) =>
+        $"the limit of ten drawings for this review is reached: {counted}, so this one was not opened";
+
+    /// <summary>"1 more open that was refused or failed", "3 more opens that were ...", with or without "more ".</summary>
+    private static string Opens(int count, string more) =>
+        count == 1
+            ? $"1 {more}open that was refused or failed"
+            : $"{count} {more}opens that were refused or failed";
 
     /// <summary>The opens attempted for the review in <paramref name="folder"/> that left no record.</summary>
     private static int UnrecordedOpensOf(string folder)

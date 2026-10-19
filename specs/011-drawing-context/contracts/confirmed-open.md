@@ -99,7 +99,11 @@ opening nothing, when any step fails:
    nothing and is answered "the limit of ten drawings for this review is reached: {n} in the
    package and {m} more opens that were refused or failed, so this one was not opened"; the
    sentence for ten records is unchanged. (`DrawingOpenScope.OpensAttempted` counts the opens the
-   seam begins; `ConfirmedDrawingRead` keeps the count.)
+   seam begins; `ConfirmedDrawingRead` keeps the count.) *On the decision's review, the same day*:
+   when those opens reach ten on their own, the request is refused as soon as item 1 has resolved
+   the run folder, before the package is loaded, so a spent review costs SOLIDWORKS's thread
+   nothing more: "the limit of ten drawings for this review is reached: {m} opens that were refused
+   or failed, so this one was not opened".
 
 Item 1's records are `ReviewHost.ReviewRunDirectory(run_id)` in the add-in (T074, pane lane,
 2026-09-23): the run folder of the review whose `SessionRecord.RunId` equals `run_id` ignoring

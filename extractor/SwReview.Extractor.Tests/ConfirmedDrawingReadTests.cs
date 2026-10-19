@@ -523,6 +523,35 @@ public class ConfirmedDrawingReadTests : IDisposable
         Assert.Equal(10, Reloaded().DrawingRecords!.Count);
     }
 
+    /// <summary>
+    /// Decision 136A's review (2026-10-19): once the opens that left no record reach the limit on
+    /// their own, a request is refused before the review's package is loaded - here a package that
+    /// can no longer be loaded at all - so a spent review costs SOLIDWORKS's thread nothing more.
+    /// </summary>
+    [Fact]
+    public void AReviewWhoseFailedOpensAloneReachTheLimitIsRefusedBeforeItsPackageIsLoaded()
+    {
+        PackageAppender.Save(_runFolder, ConfirmedDrawingPackage.Build(drawings: 0));
+        _host.OpenAnswersNull = true;
+        for (int attempt = 0; attempt < 10; attempt++)
+        {
+            Assert.Throws<ConfirmedDrawingRefused>(() => Read(RunId, attempt % 2 == 0 ? HousingId : PinId));
+        }
+
+        Assert.Equal(10, _host.Calls.Count(call => call.Name == "OpenDoc6"));
+        File.WriteAllText(PackageAppender.PathIn(_runFolder), "not a package");
+        _host.Calls.Clear();
+
+        ConfirmedDrawingRefused refusal = Assert.Throws<ConfirmedDrawingRefused>(() => Read(RunId, HousingId));
+
+        Assert.Equal(
+            "the limit of ten drawings for this review is reached: 10 opens that were refused or failed, so this "
+                + "one was not opened",
+            refusal.Message);
+        Assert.Empty(_host.Calls);
+        Assert.Empty(_phase.Seen);
+    }
+
     /// <summary>The count is per review: refused opens of one run leave another's room alone.</summary>
     [Fact]
     public void TheCountIsKeptPerReview()
