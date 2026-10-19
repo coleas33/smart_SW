@@ -26,9 +26,9 @@ namespace SwReview.AddIn.Review;
 /// and that restart is the one for the settings in force, so anything still waiting is dropped.
 ///
 /// <b>Nothing waits for a turn.</b> <see cref="Apply"/> answers <see cref="Outcome.TurnRunning"/>
-/// at once while something holds the restart back; the only thing a caller waits for is a restart already being made,
-/// which the backend's own start timeouts bound. <see cref="Dispose"/> stops the watcher without
-/// waiting for a restart in flight, and nothing is restarted after it.
+/// at once while something holds the restart back; the only thing a caller waits for is a restart
+/// already being made, which the backend's own start timeouts bound. <see cref="Dispose"/> stops
+/// the watcher without waiting for a restart in flight, and nothing is restarted after it.
 /// </summary>
 internal sealed class DeferredRestart : IDisposable
 {
