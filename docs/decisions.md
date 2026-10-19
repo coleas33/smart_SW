@@ -212,10 +212,11 @@ whatever its question was numbered when it was asked, and is entered in the tabl
 same commit as the change it governs, with its date, a one-line summary, its status and where
 else it is recorded (the feature's `research.md` when a feature governs it, the commits that
 carry it out). Ids before 121A stay as they were written; the runs above remain their index. The
-next new decision is **129A**.
+next new decision is **131A**.
 
-**The mapping.** The eight decisions of 2026-10-18 were asked in two rounds of four questions,
-each labelled 1A to 4A at the time. The first round's 2A, 3A and 4A were written into commit
+**The mapping.** The first eight decisions of 2026-10-18 were asked in two rounds of four
+questions, each labelled 1A to 4A at the time; a third round, asked as 5A and 6A, became 129A and
+130A. The first round's 2A, 3A and 4A were written into commit
 messages on `main` and into the documentation branch under those labels before decision 128A
 numbered them, and those messages are not rewritten for it: read "2A" in a commit of that day as
 122A, "3A" as 123A and "4A" as 124A. Run 2 ended at 120A, so the counter continues at 121A.
@@ -224,12 +225,14 @@ numbered them, and those messages are not rewritten for it: read "2A" in a commi
 |---|---|---|---|---|---|
 | 121A | 2026-10-18 | 1A, first round | Rewrite the public history with `git filter-repo` to remove a small set of private identifiers from files and commit messages, remap the commit-hash references and force-push; done last, before the company forks the repository. | Not yet done. | None yet. |
 | 122A | 2026-10-18 | 2A, first round | Fix CI (red since 2026-10-12), harden it, and make it the required check on `main` once the history rewrite is done. The C# build stays a documented local gate ([`CONTRIBUTING.md`](../CONTRIBUTING.md#the-gates)); never a self-hosted runner on the public repository. | CI fixed and hardened; branch protection pending. | `5acb115`, `2b39bdc`, `174900b` ("once branch protection is on (2A)"); `dfb4eda` ("CI fix 2A"). |
-| 123A | 2026-10-18 | 3A, first round | The full open-source documentation layout: front page, documentation index, specs index, this register, ADRs, contributing, security, fork guide, architecture overview and glossary. | Done on the documentation branch; not yet on `main`. | `c42d3c2` on `main`; the `docs-3a` branch (`694e179`, `f409654`, `d4d97f2`, `73a9b66`, `8d79532`), each of whose messages names 3A. |
+| 123A | 2026-10-18 | 3A, first round | The full open-source documentation layout: front page, documentation index, specs index, this register, ADRs, contributing, security, fork guide, architecture overview and glossary. | Done. | `c42d3c2` on `main`; the `docs-3a` branch, merged to `main` (`694e179`, `f409654`, `d4d97f2`, `73a9b66`, `8d79532`), each of whose messages names 3A. |
 | 124A | 2026-10-18 | 4A, first round | Split `CLAUDE.md`: the shared agent rules in [`AGENTS.md`](../AGENTS.md), which `CLAUDE.md` imports, and the personal prompt in an ignored `CLAUDE.local.md`. | Done. | `e10e2e6` ("owner decision 4A"), `dfb4eda`. |
 | 125A | 2026-10-18 | 1A, second round | Security reports go through GitHub private vulnerability reporting, enabled on the repository on 2026-10-18; no email address is published. | Done. | [`SECURITY.md`](../SECURITY.md#reporting-a-vulnerability), "Reporting a vulnerability"; the setting is the repository's, not a file. |
-| 126A | 2026-10-18 | 2A, second round | Add a code of conduct (Contributor Covenant 2.1, reports through the repository's private reporting) and a question issue form. | Done on the documentation branch. | [`CODE_OF_CONDUCT.md`](../CODE_OF_CONDUCT.md); [`.github/ISSUE_TEMPLATE/question.yml`](../.github/ISSUE_TEMPLATE/question.yml). |
-| 127A | 2026-10-18 | 3A, second round | Fix the spec records that disagree with the code: the owner signs feature 004's go / no-go (T004) as **go**, retroactively; feature 005's lever tasks superseded by the 2026-09-22 direction are marked so, with the link; every spec's Status line states its current status as [`specs/README.md`](../specs/README.md) does. | Done on the documentation branch. The sign-off does not complete 004's T003 or 003's T088 (PROBE-15), so 004's T004 stays open until T003's numbers are recorded. | [004 `phase0-decision.md`](../specs/004-resilient-remodeler/phase0-decision.md), section 5; 004 `tasks.md` T004; 005 `tasks.md` T073, T074, T078, T079; each `specs/NNN-*/spec.md` Status line. |
+| 126A | 2026-10-18 | 2A, second round | Add a code of conduct (Contributor Covenant 2.1, reports through the repository's private reporting) and a question issue form. | Done. | [`CODE_OF_CONDUCT.md`](../CODE_OF_CONDUCT.md); [`.github/ISSUE_TEMPLATE/question.yml`](../.github/ISSUE_TEMPLATE/question.yml). |
+| 127A | 2026-10-18 | 3A, second round | Fix the spec records that disagree with the code: the owner signs feature 004's go / no-go (T004) as **go**, retroactively; feature 005's lever tasks superseded by the 2026-09-22 direction are marked so, with the link; every spec's Status line states its current status as [`specs/README.md`](../specs/README.md) does. | Done. The sign-off does not complete 004's T003 or 003's T088 (PROBE-15), so 004's T004 stays open until T003's numbers are recorded. | [004 `phase0-decision.md`](../specs/004-resilient-remodeler/phase0-decision.md), section 5; 004 `tasks.md` T004; 005 `tasks.md` T073, T074, T078, T079; each `specs/NNN-*/spec.md` Status line. |
 | 128A | 2026-10-18 | 4A, second round | One owner-decision counter from now on, continuing at 121A, with this page as its register; earlier ids stay as written. | Done; in force. | This section; [`AGENTS.md`](../AGENTS.md#how-work-is-done), "How work is done". |
+| 129A | 2026-10-18 | 5A | The history rewrite (121A) also maps every commit's author and committer email to the owner's GitHub no-reply address, so no commit carries a personal email; commits use the no-reply address from then on. | Not yet done; with 121A. | None yet. |
+| 130A | 2026-10-18 | 6A | The history rewrite (121A) also replaces a personal user-folder name in the path forms it appears in (Windows user folders, `/home/...`), and only those forms; the bare word is not replaced. | Not yet done; with 121A. | None yet. |
 
 The owner's decision of the same day to keep this repository as the public upstream of private
 downstream forks is not numbered; it is recorded as

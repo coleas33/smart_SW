@@ -34,8 +34,9 @@ The constitution's exception 2, "The re-modeler (feature 004)", is the authorita
 - `RemodelGuard` (`extractor/SwReview.Extractor/Guard/RemodelGuard.cs`) is the document-scoped
   guard; `ReadOnlyGuard` stays unchanged for everything else.
 - Start is switched off in the shipped build until the blocking seat probes pass (004 task T172),
-  and the Phase 0 go / no-go is still unsigned (`specs/004-resilient-remodeler/phase0-decision.md`);
-  see the [specs index](../../specs/README.md).
+  and the Phase 0 go / no-go was signed **go** by the owner on 2026-10-18, retroactively, while
+  T003's numbers are still to be recorded (decision 127A,
+  `specs/004-resilient-remodeler/phase0-decision.md`); see the [specs index](../../specs/README.md).
 - STEP and other imported solids are on the back burner (004 `spec.md`, "Back burner (owner
   decision 2026-09-19)").
 
