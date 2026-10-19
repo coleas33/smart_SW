@@ -307,14 +307,26 @@ error, not ignored.)
   its run folder holds no package, the package's root is not the document the bridge is attached
   to, the document is unknown or is a drawing or has no candidate row, the row's path is not the
   drawing beside the document by discovery's rule, the file no longer exists, the drawing is
-  already in the package, or the package already holds ten drawings.
+  already in the package, the package already holds ten drawings, or *(decision 136A,
+  2026-10-19)* the review's limit of ten is reached counting the package's drawings together with
+  every open the host attempted for the review that left no record: an open SOLIDWORKS refused or
+  did not make read-only, a read that threw after it, a merge or save that did not land. That
+  count is kept per run folder for the life of the host process; once such opens reach ten on
+  their own, the request is refused before the package is even loaded. The sentences are
+  `specs/011-drawing-context/contracts/confirmed-open.md` section 2 item 5's.
 - The drawing is opened **read-only and hidden** only when it is not already open - through its
   own allowlisted seam (`ISldWorks.DocumentVisible`, `ISldWorks.OpenDoc6` with type 3 and options
-  3, `ISldWorks.CloseDoc`; `specs/004-resilient-remodeler/contracts/guard-allowlist.md`) - read
-  with every drawing id continuing the package's, merged into `package.json` in the run folder,
-  and closed again only when the host opened it and SOLIDWORKS still answers its path with the
-  same document. A drawing the engineer had open is read as it stands and left open
-  (`opened: false`, `closed: false`).
+  3, `ISldWorks.CloseDoc`; `specs/004-resilient-remodeler/contracts/guard-allowlist.md`). *Since
+  decision 136A* it is read only when SOLIDWORKS then confirms it opened read-only
+  (`IModelDoc2.IsOpenedReadOnly`, a read); one SOLIDWORKS did not open read-only, or would not
+  confirm, is refused with a sentence that says why, names the open's errors and warnings and says
+  whether it was closed again. A confirmed drawing is read with every drawing id continuing the
+  package's, merged into `package.json` in the run folder, and closed again only when the host
+  opened it and SOLIDWORKS still answers its path with the same document. A drawing the engineer
+  had open is read as it stands and left open (`opened: false`, `closed: false`), and so is one
+  the open itself says SOLIDWORKS already had open (`swFileLoadWarning_AlreadyOpen` in its
+  warnings, or `swFileAlreadyOpenWarn` in its errors): the host did not open it, so it neither
+  checks nor closes it.
 - **Shipped off** until probe D14 passes at a seat: a closed candidate is answered "the read-only
   open of a confirmed drawing is not yet validated on a seat (feature 011 probe D14)", and an
   already-open one is still read.
