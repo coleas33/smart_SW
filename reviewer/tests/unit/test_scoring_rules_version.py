@@ -88,7 +88,7 @@ AGGREGATE_AT_BE01974 = (
     "median_seconds_to_first_finding",
     "packages_with_usage",
 )
-"""The fields a `scorecard.json` held at `be01974` (`benchmark/scorecard.py:143-246`), the
+"""The fields a `scorecard.json` held at `5cfb743` (`benchmark/scorecard.py:143-246`), the
 shape a folder scored before this feature has."""
 
 
@@ -102,8 +102,8 @@ def re_score_line(run_dir: Path) -> str:
     )
 
 
-def as_at_be01974(payload: dict[str, Any]) -> dict[str, Any]:
-    """`payload` cut to the fields a scorecard held at `be01974`: no version and none of this
+def as_at_5cfb743(payload: dict[str, Any]) -> dict[str, Any]:
+    """`payload` cut to the fields a scorecard held at `5cfb743`: no version and none of this
     feature's fields."""
 
     def kept(value: dict[str, Any], names: tuple[str, ...]) -> dict[str, Any]:
@@ -164,14 +164,14 @@ def test_compare_refuses_a_scorecard_written_before_this_feature_with_the_re_sco
     with pytest.raises(ValueError, match="predates the flag carrier"):
         compare_runs([run_dir])
 
-    rewrite_scorecard(run_dir, as_at_be01974)
+    rewrite_scorecard(run_dir, as_at_5cfb743)
 
     assert str(refusal(run_dir)) == re_score_line(run_dir)
 
 
 def test_read_scorecard_is_the_reader_that_refuses_it(tmp_path: Path) -> None:
     run_dir = write_run(tmp_path, RunSpec(run="off-1"))
-    rewrite_scorecard(run_dir, as_at_be01974)
+    rewrite_scorecard(run_dir, as_at_5cfb743)
 
     with pytest.raises(ValueError) as caught:
         scorecard_module.read_scorecard(run_dir)
@@ -273,7 +273,7 @@ def test_re_scoring_an_old_folder_writes_the_current_version_and_compare_accepts
     score = ["benchmark", "score", str(run_dir), "--answer-keys", str(keys), "--set", str(set_file)]
     first = CliRunner().invoke(cli.app, score)
     assert first.exit_code == 0, first.stdout + first.stderr
-    rewrite_scorecard(run_dir, as_at_be01974)
+    rewrite_scorecard(run_dir, as_at_5cfb743)
     assert "Re-score it" in str(refusal(run_dir))
 
     rescored = CliRunner().invoke(cli.app, score)

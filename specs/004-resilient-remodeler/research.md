@@ -908,7 +908,7 @@ stay at `3-Core` as deviations, and the report says the judgement phase contribu
 as the review's. `remodel/runner.py::build_provider` stays the run's one entry point, refuses the
 scripted provider, and delegates to `cli.provider_factory` with no efficiency levers
 (`contracts/tools.md`, "Providers"). The run had its own copy of the construction body until
-then, and the copy carried the original's wrong `redact=` keyword, so the Gemini fix of `d47a91f`
+then, and the copy carried the original's wrong `redact=` keyword, so the Gemini fix of `287d4c3`
 had to be made twice; one body cannot disagree with itself.
 
 **Not MCP tools.** The `propose_*` tools are registered on the remodel run's registry only. They
@@ -1752,7 +1752,7 @@ file on disk carries it).
 ## R16. Defaults taken 2026-09-28: the seat packet's U26 and U27, and the review of the follow-up
 
 **Sources.** The sitting of 2026-09-28 (the handoff packet's findings U26 and U27), the follow-up
-on `codex/testing-feedback-2026-09-28` (commits `63fc360` and `2aed3d5`), and the four reviews of
+on `codex/testing-feedback-2026-09-28` (commits `f421225` and `228762c`), and the four reviews of
 that follow-up the same day: a read-only-source lens, a crash hunt over the packet's logs and the
 2024 API help installed on the development machine, and a general gates lens (the fourth, the
 drawing lens, is feature 011's and 013's). The engineer asked for the follow-up to be checked, and

@@ -1,7 +1,7 @@
 # Workstation session 2026-09-20: reworked-tab layout, hidden follow-up, Remodel tab
 
 Pilot workstation, SOLIDWORKS 2024, against `local` `c36f183` (merge of GitHub `main`
-`e04c027` into this lane). Findings for the 2026-09-20 handover
+`084c231` into this lane). Findings for the 2026-09-20 handover
 (`docs/history/workstation-handover-2026-09-20.md`). Run folders of real designs stay out of git.
 This file names folders only; it carries no vault path.
 
@@ -18,7 +18,7 @@ updates below.
 
 | Item | Value |
 |---|---|
-| Commit | `c36f183` (`local` ← `e04c027`) |
+| Commit | `c36f183` (`local` ← `084c231`) |
 | Provider / model / effort | openai / `gpt-5.6-luna` / high |
 | Assembly | the small assembly. Both dowel pins **lightweight** (FeatureManager feathers). Not resolved this sitting. |
 | Review | `20260919-184136-…` (18:41–18:49; follow-up at 18:49) |
@@ -62,7 +62,7 @@ card calls `revealFinding` (`app.js` ~966): it **opens Details and
 `scrollIntoView`s into that sliver**. There is no splitter. The engineer cannot
 expand it.
 
-The three-tier rewrite (`1d0209b`) moved details into the transcript on purpose.
+The three-tier rewrite (`2149179`) moved details into the transcript on purpose.
 It did not cap the Start-here stack that now sits above it.
 
 **Not the cause:** empty details, a failed dump, or a hidden `[hidden]` toggle
@@ -201,7 +201,7 @@ error="this bridge was not built with a remodel seat..."
 (`BridgeDispatcher.cs` ~1751–1755). Recorded as “not a bug” on 2026-09-18
 §4. Still true.
 
-Phase 2 on this pull (`eb037b4`…`e04c027`) added `swreview-extract probe remodel`
+Phase 2 on this pull (`70221d4`…`084c231`) added `swreview-extract probe remodel`
 and fifteen probe bodies. That command uses `SwRemodelProbeHost` and a
 throwaway part. It is **not** the Remodel tab. The tab still talks to the
 in-process bridge that has no seat. `SwRemodelSeat` exists on the add-in

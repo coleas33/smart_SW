@@ -134,7 +134,7 @@ describe, or a change it names that did not happen. A file not named here is not
 particular `findings.py`, `checks/rms/*`, `checks/standards/*` other than `profile.py` and
 `document.py`, every provider, `report/attention.py` other than `CHECKLIST_ITEM_IDS`, every page
 script and every add-in file are **reused unchanged**. *Landed as*: `agent/runner.py` was changed
-once, by the follow-up `7b63519` (feature 003's reduced-profile sentence ignores the new tolerance
+once, by the follow-up `ea78fb6` (feature 003's reduced-profile sentence ignores the new tolerance
 phase), so it is listed below.
 
 ```text
@@ -175,7 +175,7 @@ reviewer/src/swreview/
 ├── agent/checklist_v1.yaml             # CHANGED (Polish): two items (*landed as*: T099, naming no tool)
 ├── checks/mass.py, checks/hygiene.py   # CHANGED, *landed as*: SUMMARY_CHECK, the item ids (T108)
 ├── agent/runner.py                     # CHANGED, *landed as*: FR-037's reduced-profile sentence ignores the
-│                                       #      tolerance phase (`7b63519`)
+│                                       #      tolerance phase (`ea78fb6`)
 ├── tools/checks_mechanical.py          # NEW: CODE_FIRST_CHECKS, check_joints, check_mass_material, check_hygiene
 ├── tools/checks_interference.py        # CHANGED: the contact path
 ├── tools/checks_fastener.py            # CHANGED: _bbox_extent_mm delegates to geometry.axial_extent

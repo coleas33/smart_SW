@@ -37,7 +37,7 @@ This decision was taken by the owner on 2026-10-18 and is recorded here for the 
   read from settings, as `StandardsProfilePath` is today) rather than a value in code; the
   forking guide, [`docs/forking.md`](../forking.md), names them.
 - A fix made in the fork is offered upstream only after its company data is removed.
-- `AGENTS.md` rule 2 points at the forking guide and this record (commit `73a9b66`); that part
+- `AGENTS.md` rule 2 points at the forking guide and this record (commit `e95568e`); that part
   is done. Still open: the constitution does not yet mention the public upstream or the fork,
   and an amendment naming that rule is still to do.
 

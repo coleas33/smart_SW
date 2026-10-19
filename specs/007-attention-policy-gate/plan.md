@@ -363,8 +363,8 @@ and [contracts/](contracts/). Eleven points tasks must honour:
 without a recordable metric. US2's read-through with the owner precedes the catalogue test
 landing enabled and precedes any surface shipping the ranking: the consequence table is an
 opinion and it is argued against real findings first. US3's Review panel is behind the
-event-stream fix, which has landed (`b3cb948`). US4's standards half is behind the
-drawing-attach fix, which has landed (`7e700e4`), and behind feature 006 T100, which has not.
+event-stream fix, which has landed (`4a763f1`). US4's standards half is behind the
+drawing-attach fix, which has landed (`96785d1`), and behind feature 006 T100, which has not.
 Steps 6 and 7 are calendar-bound, not effort-bound, and step 6 on the one-package set exits
 `benchmark compare` with 1 by design; the ledger file is the result.
 

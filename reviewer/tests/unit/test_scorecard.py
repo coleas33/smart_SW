@@ -20,7 +20,7 @@ scorer makes of the matches:
 
 Every key is written through `tests/support/answer_keys.write_key` and every package is a
 `tests/support/packages.build_package` saved at its set entry's path, so the loader's rows run as
-they do in a real score. The tests of this file at `be01974` are each named where they went:
+they do in a real score. The tests of this file at `5cfb743` are each named where they went:
 the prefix rule's tests (`:74-105`) and `test_score_run_classifies_findings_by_the_matching_rule`
 (`:205`) are deleted with the rule, which the table tests replace; the rest are kept or moved, each
 saying so. Every id and description is fictional.
@@ -354,7 +354,7 @@ def test_the_scoring_fixture_scores_as_the_matcher_reads_it(tmp_path: Path) -> N
 
 
 def test_score_run_computes_timing_fields(tmp_path: Path) -> None:
-    """Kept from `be01974` (`:221`), what it asserts unchanged."""
+    """Kept from `5cfb743` (`:221`), what it asserts unchanged."""
     scorecard = scored(*build_scoring_fixture(tmp_path))
 
     score = scorecard.per_package[0]
@@ -365,7 +365,7 @@ def test_score_run_computes_timing_fields(tmp_path: Path) -> None:
 
 
 def test_score_run_recall_is_read_from_the_item_tags(tmp_path: Path) -> None:
-    """Moved by design from `be01974`'s `:233`, recall scoped to held-out packages by the set's
+    """Moved by design from `5cfb743`'s `:233`, recall scoped to held-out packages by the set's
     flag: now read from the item tags (test 9). Every item of its key held out, it still reads
     2 of 3."""
     scorecard = scored(*build_scoring_fixture(tmp_path, held_out=True))
@@ -375,7 +375,7 @@ def test_score_run_recall_is_read_from_the_item_tags(tmp_path: Path) -> None:
 
 
 def test_score_run_recall_of_a_key_whose_items_are_all_tuned_on_is_null(tmp_path: Path) -> None:
-    """Moved by design from `be01974`'s `:243`, recall ignoring defects of packages the set did
+    """Moved by design from `5cfb743`'s `:243`, recall ignoring defects of packages the set did
     not hold out: every item tuned on, under the set flag of false test 10 requires, reads
     `null`."""
     scorecard = scored(*build_scoring_fixture(tmp_path, held_out=False))
@@ -385,7 +385,7 @@ def test_score_run_recall_of_a_key_whose_items_are_all_tuned_on_is_null(tmp_path
 
 
 def test_score_run_false_alarm_rate(tmp_path: Path) -> None:
-    """Moved by design from `be01974`'s `:252`: 2 of 4 where it read 1 of 3, since F-004, the
+    """Moved by design from `5cfb743`'s `:252`: 2 of 4 where it read 1 of 3, since F-004, the
     suspected finding on the correct condition the scorer used to excuse
     (`scorecard.py:274-276`), is now a false alarm (`scoring.md` 3.2)."""
     scorecard = scored(*build_scoring_fixture(tmp_path))
@@ -394,7 +394,7 @@ def test_score_run_false_alarm_rate(tmp_path: Path) -> None:
 
 
 def test_false_alarm_rate_is_none_with_zero_findings(tmp_path: Path) -> None:
-    """Kept from `be01974` (`:286`), what it asserts unchanged."""
+    """Kept from `5cfb743` (`:286`), what it asserts unchanged."""
     timing = TIMING.model_copy(update={"baseline_minutes": 30.0})
     scorecard = score_packages(tmp_path, write_package(tmp_path, "pkg-c", [], timing=timing))
 
@@ -1067,7 +1067,7 @@ def test_with_an_empty_key_every_demonstrated_or_suspected_finding_is_a_false_al
 def test_a_key_with_only_conditions_reads_recall_null_and_its_null_review_no_false_alarm(
     tmp_path: Path,
 ) -> None:
-    """Moved by design from `be01974`'s `:260`, recall `None` for a held-out package with no
+    """Moved by design from `5cfb743`'s `:260`, recall `None` for a held-out package with no
     known defect: its key holds one held-out condition, which the set's flag now requires."""
     condition = {**FOLDERS_CONDITION, "tag": "held_out"}
 
@@ -1547,7 +1547,7 @@ def contract_errors(scorecard: Scorecard) -> list[str]:
 
 
 def test_scorecard_validates_against_the_contract(tmp_path: Path) -> None:
-    """Kept from `be01974` (`:359`), folded into test 14 against the amended schema."""
+    """Kept from `5cfb743` (`:359`), folded into test 14 against the amended schema."""
     scorecard = scored(*build_scoring_fixture(tmp_path))
 
     assert contract_errors(scorecard) == []
@@ -1653,7 +1653,7 @@ def test_the_aggregate_counts_findings_and_false_alarms_by_origin(tmp_path: Path
 
 
 def test_distribution_matches_per_package_order(tmp_path: Path) -> None:
-    """Kept from `be01974` (`:314`), what it asserts unchanged."""
+    """Kept from `5cfb743` (`:314`), what it asserts unchanged."""
     refs: list[BenchmarkPackageRef] = []
     expected_net_saved: list[float | None] = []
     for name, baseline in (("pkg-x", 100.0), ("pkg-y", None), ("pkg-z", 40.0)):
@@ -1684,7 +1684,7 @@ def test_distribution_matches_per_package_order(tmp_path: Path) -> None:
 
 
 def test_render_scorecard_md_lists_each_package_and_the_aggregate(tmp_path: Path) -> None:
-    """Kept from `be01974` (`:373`), what it asserts unchanged."""
+    """Kept from `5cfb743` (`:373`), what it asserts unchanged."""
     scorecard = scored(*build_scoring_fixture(tmp_path))
 
     rendered = render_scorecard_md(scorecard)

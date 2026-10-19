@@ -8,7 +8,7 @@ provider key.
 
 ## Prerequisites
 
-Everything from features 001 to 006 plus the two pane fixes on main (`b3cb948`, `7e700e4`).
+Everything from features 001 to 006 plus the two pane fixes on main (`4a763f1`, `96785d1`).
 Offline: the two committed fixture sessions `reviewer/tests/fixtures/attention/
 session-20260918-review.json` and `session-20260918-check.json` (shaped like the workstation
 runs: eight findings with two interference rows; three RMS findings), the ranked golden under

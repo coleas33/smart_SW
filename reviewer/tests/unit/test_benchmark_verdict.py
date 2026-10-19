@@ -940,7 +940,7 @@ def ledger_sample():
               "dropped_packages": [], "recall": interval, "false_alarms": interval}
     return deepcopy({
         "study": "pane_defaults", "provider": "openai", "model": "gpt-5.6-sol",
-        "commit": "5733efd", "slice": "committed", "run_dirs": ["pane/off-1", "pane/on-1"],
+        "commit": "2b500de", "slice": "committed", "run_dirs": ["pane/off-1", "pane/on-1"],
         "reps": {"off": 1, "on": 1}, "verdict": "no 10-point loss", "reasons": [],
         "refusal": None,
         "approval": {

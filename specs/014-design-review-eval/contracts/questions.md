@@ -2,7 +2,7 @@
 
 Normative for FR-019, FR-020, FR-053 and FR-060, FR-021 for the question columns, User Story 3
 scenarios 5 to 8, and the scripted-answer rule FR-022 and `scripted-answers.md` section 3 call.
-Research D4, §7 ("Questions"), §8.3, §8.15. Line numbers are at `be01974`; paths are under
+Research D4, §7 ("Questions"), §8.3, §8.15. Line numbers are at `5cfb743`; paths are under
 `reviewer/src/swreview/` unless another root is given. Every example value is fictional.
 
 What this contract fixes: what counts as a question and how it is read from a run folder; how ids
@@ -339,7 +339,7 @@ a test says it runs the tool.
   object) (refined: research 9.14, implementation follow-ups), `other_session`, and `other_call`
   (another step; another tool or other arguments when given), one test each;
 - the replay's classification is unchanged: every call the replay tests classify as `stored` or
-  `estimated` at `be01974` reads the same through the extracted reader
+  `estimated` at `5cfb743` reads the same through the extracted reader
   (`tests/unit/test_cli_benchmark_replay.py` and the replay tests pass unchanged);
 - a spy sees the replay, the questions reader and (from the report slice) the report call it, and no
   other reader of `tool-results/` exists under `benchmark/`.

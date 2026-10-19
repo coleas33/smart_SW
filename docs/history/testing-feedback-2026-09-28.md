@@ -1,13 +1,13 @@
 # September 28 testing feedback and development follow-up
 
-The testing packet ran `main` at `beaeb85`, including the newer checks-first,
+The testing packet ran `main` at `6d720a6`, including the newer checks-first,
 engineer-first review, drawing context, and Remodel seat work. This follow-up starts
 from that build on `codex/testing-feedback-2026-09-28`; it preserves the intervening
 features and efficiency defaults. The owner authorized implementation of the reported fixes.
 
-The branch holds two rounds: the first fixes (`63fc360`, `2aed3d5`), then a check of them by
+The branch holds two rounds: the first fixes (`f421225`, `228762c`), then a check of them by
 four reviews - drawing, read-only source, crash hunt, and gates - whose findings were fixed
-test-first in `f26a6ec` and `b583065` and the commit that carries this document. Each decision
+test-first in `e5c62b0` and `dec838b` and the commit that carries this document. Each decision
 the second round took is a default taken 2026-09-28 that the owner may revise, recorded in
 feature 004's research R16 and tasks T185 to T188, and feature 011's research R7 and task T110.
 

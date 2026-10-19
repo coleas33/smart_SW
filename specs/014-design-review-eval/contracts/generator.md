@@ -7,7 +7,7 @@ generator writes and where; the key's format is `answer-key.md` and the case fil
 `scripted-answers.md` 2.2. The generator writes both **through their models**, so it holds no second
 copy of either format.
 
-Line numbers are at `be01974`; paths are under `reviewer/` unless another root is given. Every
+Line numbers are at `5cfb743`; paths are under `reviewer/` unless another root is given. Every
 example value is fictional.
 
 ## 1. Shape

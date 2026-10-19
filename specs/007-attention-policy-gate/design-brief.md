@@ -14,7 +14,7 @@ re-verifies each before naming it.
 | 1 | Do findings that need engineering judgement rank above rebuild-breaker RMS findings? | Judgement first, then consequence class |
 | 2 | Scope to the 2026-10-03 checkpoint | Bugs, timing, the policy on report.md and the two keyless tabs; the gate and the brief built behind a flag and not claimed |
 | 3 | How the gate is switched on | An eleventh efficiency lever, `procedural_gate`, paying the three pinned lever-count edits in one change |
-| 4 | Next artifact | This spec package; the two pane bugs fixed first as their own commits (`b3cb948`, `7e700e4`) |
+| 4 | Next artifact | This spec package; the two pane bugs fixed first as their own commits (`4a763f1`, `96785d1`) |
 
 ## What the readers established (facts the plan relies on)
 
@@ -120,8 +120,8 @@ check: `rms.sketches.fully_defined`, grouping, folders. Folding does nothing on 
 | 12 | Gate on in the pane as a code default behind a ledger row; pass the standards profile path (`chat/server.py:1721`) | half a day | `test_no_lever_in_pane_settings.py` still green; pane review shows gate cards before the first model text |
 
 Steps 0 to 8 are pure Python and were planned to run in parallel with the two C# bugs, which
-are now landed. Step 9 needed the event-stream fix (`b3cb948`); step 10 needs the
-drawing-attach fix (`7e700e4`) and 006 T100.
+are now landed. Step 9 needed the event-stream fix (`4a763f1`); step 10 needs the
+drawing-attach fix (`96785d1`) and 006 T100.
 
 ## Corrections the critic made to the synthesis (honoured in the spec)
 

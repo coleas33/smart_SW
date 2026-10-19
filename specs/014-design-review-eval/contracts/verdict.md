@@ -3,7 +3,7 @@
 Normative for FR-044, FR-045, FR-046, FR-058 and FR-059, the pane-study half of FR-016, FR-032 and
 FR-052, the compare half of FR-056, FR-055, SC-005 and SC-010, User Story 8, and US5-5, US5-13 and
 US5-14. Owner decisions 3A, 10A, 14A, 17A, 18A, 21A, 22A and 23A, and 35A and 36A (the smoke run and the projected wall clock, section 10); defaults D1, D2, D15, D16 and
-D17; research §6, §8.1, §8.2, §8.10 and §8.13. Line numbers are at `be01974`; paths are under
+D17; research §6, §8.1, §8.2, §8.10 and §8.13. Line numbers are at `5cfb743`; paths are under
 `reviewer/src/swreview/` unless another root is given. Every example value is fictional.
 
 What this contract fixes: how `swreview benchmark compare` turns the pane study's scored run folders
@@ -272,7 +272,7 @@ the parity slice, whose schema record already names this key; this slice fills i
 the version nor the committed header (`provenance.md` section 5; plan decision INT-10).
 
 ```json
-{"study": "<pane study>", "provider": "openai", "model": "<model>", "commit": "5733efd",
+{"study": "<pane study>", "provider": "openai", "model": "<model>", "commit": "2b500de",
  "slice": "committed", "run_dirs": ["pane-openai/off-1", "..."],
  "reps": {"off": 6, "on": 6},
  "verdict": "inconclusive",

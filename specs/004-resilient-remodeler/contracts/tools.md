@@ -19,7 +19,7 @@ reaches the registry or the factory.
 **constructs** a provider in exactly one place, `remodel/runner.py`, and `build_provider` did so
 with its own copy of the construction body. Both copies carried the same wrong keyword, `redact=`
 where `GeminiProvider` takes `secrets=`, so every Gemini remodel failed the same way every Gemini
-review did and the fix had to land twice (`d47a91f`). One body builds both runs' adapters now;
+review did and the fix had to land twice (`287d4c3`). One body builds both runs' adapters now;
 `build_provider` stays the remodel run's one entry point and keeps the one decision that is the
 remodel run's own, the refusal of the scripted provider.
 

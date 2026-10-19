@@ -1,7 +1,7 @@
 # Contract: The Report Page and the Record of What Was Sent
 
 Normative for FR-034, FR-035, FR-057, SC-009 and User Story 6; D10's page columns and its open
-cache-write point; D11; research §8.13's reader. Line numbers are at `be01974`; paths are under
+cache-write point; D11; research §8.13's reader. Line numbers are at `5cfb743`; paths are under
 `reviewer/src/swreview/` unless another root is given. Every example value is fictional.
 
 What this contract fixes: one offline command that builds one static page, with a transcript page

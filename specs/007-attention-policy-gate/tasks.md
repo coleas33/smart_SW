@@ -7,7 +7,7 @@ description: "Task list for the attention policy and the procedural gate"
 
 **Input**: Design documents from `/specs/007-attention-policy-gate/` (`spec.md`, `plan.md`, `research.md`, `data-model.md`, `contracts/`, `quickstart.md`, `design-brief.md`)
 
-**Prerequisites**: features 001 to 006 complete; the two pane fixes on main (`b3cb948` event stream, `7e700e4` drawing attach). Feature 006 T100 (the real standards profile) gates only the measurement of the gate's standards half, not its code. The 2026-09-18 run folders are not in the repository; T024 needs them copied off the pilot workstation.
+**Prerequisites**: features 001 to 006 complete; the two pane fixes on main (`4a763f1` event stream, `96785d1` drawing attach). Feature 006 T100 (the real standards profile) gates only the measurement of the gate's standards half, not its code. The 2026-09-18 run folders are not in the repository; T024 needs them copied off the pilot workstation.
 
 **Tests**: REQUIRED, and **strictly test-first**: every implementation task below is preceded by the test task that must be written and must fail first. The one golden of `report/markdown.render_report` stays byte-identical with no ranking (SC-004); lever 5's digest stays byte-identical with the gate off (FR-030); `Finding`, `ReviewSession`, `chat-events.schema.json`, the MCP function list and the terminal profile do not move. The tests that go red **by design** when a change lands are named in the task that lands it (research R3), and each is edited deliberately in that task, never loosened.
 
@@ -204,8 +204,8 @@ description: "Task list for the attention policy and the procedural gate"
 - **Foundational (Phase 2)**: after Setup; blocks US1 (the `timing` re-render) and US3 (the offline sites)
 - **US1 (Phase 3)**: after Foundational; independent of US2 to US4
 - **US2 (Phase 4)**: after Setup; T028 needs T006; T023 and T024 wait for T022 (the read-through)
-- **US3 (Phase 5)**: after US2 (it needs `rank`, the section and the record); T039/T040 need `b3cb948` (landed)
-- **US4 (Phase 6)**: after US2 (the brief renders the ranking); T048/T049 need `7e700e4` (landed) for a workstation-dumped standards package, not for the fixture
+- **US3 (Phase 5)**: after US2 (it needs `rank`, the section and the record); T039/T040 need `4a763f1` (landed)
+- **US4 (Phase 6)**: after US2 (the brief renders the ranking); T048/T049 need `96785d1` (landed) for a workstation-dumped standards package, not for the fixture
 - **Polish (Phase 7)**: after every story chosen for the checkpoint
 - **Measurement (Phase 8)**: T059 after US3; T060 after US1; T061 to T063 after US4 and after T100 of feature 006
 

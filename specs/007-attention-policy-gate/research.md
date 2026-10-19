@@ -9,7 +9,7 @@ reading pass on 2026-09-18 over the exact code the plan names (six readers: timi
 models, the check routes, the pre-run and levers, the pane pages, the CLI and benchmark
 conventions), each of which opened the files and quoted the real signatures. Where this
 document says VERIFIED, a reader opened the file on 2026-09-18 and, where the claim is
-behavioural, ran it. Line numbers are as of commit `ce114a1` and will drift; every task
+behavioural, ran it. Line numbers are as of commit `826c57d` and will drift; every task
 re-verifies before editing.
 
 ---

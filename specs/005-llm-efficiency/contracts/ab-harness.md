@@ -250,7 +250,7 @@ Every field has **exactly one source and no field is computed twice**.
  "runs": [
   {"run": "lever06-openai/on-2", "arm": "on", "rep": 2, "lever": "parallel_tool_calls",
    "other_levers_on": ["prompt_cache_key"],
-   "commit": "5733efd", "provider": "openai", "model": "gpt-5.6", "effort": "high",
+   "commit": "2b500de", "provider": "openai", "model": "gpt-5.6", "effort": "high",
    "package_id": "rms-part", "held_out": true,
    "input_tokens": 412033, "cached_input_tokens": 331200, "uncached_input_tokens": 80833,
    "output_tokens": 18422, "reasoning_tokens": 16004, "tool_result_input_tokens": null,

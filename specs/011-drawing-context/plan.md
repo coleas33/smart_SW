@@ -226,7 +226,7 @@ README.md                                                                  # CHA
 #### Landed as (T060, reconciled 2026-09-23)
 
 The block above is the plan. What landed differs as follows; every other line of it landed as
-written. The file list is `git diff 62a9b2e~1 HEAD` over the product trees on the day, feature 011's
+written. The file list is `git diff 0c23d56~1 HEAD` over the product trees on the day, feature 011's
 commits only.
 
 | Plan | Landed as |

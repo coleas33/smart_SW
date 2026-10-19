@@ -8,7 +8,7 @@ review fixes of three rounds (§9.9 to §9.11; RF-1 to RF-81) owner decision 28A
 of the plan on 2026-10-06 (§9.14; RF-87 to RF-91), are in
 [research.md](../research.md) §9, whose section 9.7 holds the owner's eight questions: four answered
 as owner decisions 24A to 27A, three kept at their defaults, and question 8 answered B (owner decision 30A, §9.13). Line numbers
-are at `be01974`.
+are at `5cfb743`.
 
 | Contract | What it fixes | FRs | Other criteria and scenarios | Slice |
 |---|---|---|---|---|

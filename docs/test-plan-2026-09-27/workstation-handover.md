@@ -186,7 +186,7 @@ git fetch origin; git log --oneline HEAD..origin/main
 git pull --ff-only origin main; "pull exit code: $LASTEXITCODE"
 .\extractor\tools\update-workstation.ps1 -NoPull      # add -TokenizerFrom "<file>" or -SolidWorksRoot "<root>" as section 2 says
 git log --oneline -1; Test-Path docs\test-plan-2026-09-27\workstation-results.md   # the commit, then True: the results sheet is there
-git merge-base --is-ancestor 8d308be HEAD; "holds 8d308be: $($LASTEXITCODE -eq 0)"   # True: the probe names each dimension (T066)
+git merge-base --is-ancestor 43436d3 HEAD; "holds 43436d3: $($LASTEXITCODE -eq 0)"   # True: the probe names each dimension (T066)
 Select-String -Path "$env:LOCALAPPDATA\SwReview\standards.yaml" -Pattern '^version:'   # after step 1 below
 ```
 
@@ -390,7 +390,7 @@ row per step and task id. The development machine moves each answer into the res
     ```powershell
     git status --porcelain; git branch --show-current       # nothing, then main
     Copy-Item "$env:APPDATA\SwReview\settings.json" "$env:APPDATA\SwReview\settings.json.before-5.5"
-    git checkout 9464b9e                                     # the parent of 3e86d47, the fix
+    git checkout 69fbb4a                                     # the parent of b15c0b0, the fix
     .\extractor\tools\update-workstation.ps1 -NoPull -SkipTests
     # SOLIDWORKS: review A, Model check on part J, Show in SOLIDWORKS on an A finding - which package did it resolve against?
     git checkout main
@@ -465,7 +465,7 @@ row per step and task id. The development machine moves each answer into the res
 23. **014 T221: A's smoke review for feature 014** (the test plan's step 4.11): do this immediately
     after step 13 (A's review), reading A's review and its folder with no extra paid review in a
     full sitting.
-    Step 1's update must install `main` at or after slice 6's gate commit `b305130`; follow step
+    Step 1's update must install `main` at or after slice 6's gate commit `21aad39`; follow step
     4.11's build check. To run it alone, paste the setup block, do the test plan's step 1 (the
     update) and step 2.5 (the key in Settings), then A's review exactly as step 4.1 does (step
     4's box, its questions answered as step 4.1 says), then step 4.11's checks.

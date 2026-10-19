@@ -1,7 +1,7 @@
 # Future capabilities roadmap: drawings and engineering load context
 
-Status snapshot: 2026-10-14, after main `8a8682f` and
-`015-review-send-gate` `c4f17d5`. This began as a planning record. The shared
+Status snapshot: 2026-10-14, after main `c88bee9` and
+`015-review-send-gate` `600feee`. This began as a planning record. The shared
 engineering-context foundation was subsequently authorized as
 [Feature 016](../specs/016-engineering-context/quickstart.md); its first delivery
 provides offline requirements/forces, revision history, explicit confirmation and
@@ -34,7 +34,7 @@ future capabilities can proceed alongside that sequence once requested.
 
 Sources: [current workstation follow-up](history/testing-feedback-2026-10-13.md),
 [014 tasks](../specs/014-design-review-eval/tasks.md),
-[015 branch package](https://github.com/coleas33/smart_SW/tree/c4f17d573db1e230d13e2795ff3422d3b8f53b9d/specs/015-review-send-gate),
+[015 branch package](https://github.com/coleas33/smart_SW/tree/600feee39d97b5957f59921a3af87da1d6ea104f/specs/015-review-send-gate),
 [011 tasks](../specs/011-drawing-context/tasks.md),
 [004 plan](../specs/004-resilient-remodeler/plan.md).
 

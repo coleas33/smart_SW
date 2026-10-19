@@ -6,7 +6,7 @@ and 6.7). Research D5, D12, D14.9, PP-3, PP-4, PP-7, PP-9, §8.8, and the cross-
 concerns run and compare. How a run is started, its attempts, their
 failure classes and `run-status.json` are `benchmark-run.md`'s; the pane study's verdict is the
 verdict contract's; the set's own fields (keys, case files, held-out flags) are the benchmark-set
-contract's and `scripted-answers.md`'s. Line numbers are at `be01974`; paths are under
+contract's and `scripted-answers.md`'s. Line numbers are at `5cfb743`; paths are under
 `reviewer/src/swreview/` unless another root is given. Every example value is fictional.
 
 Amends: feature 005 `contracts/ab-harness.md` sections 3, 4, 10.1, 10.2 and 10.5 (the record's
@@ -371,7 +371,7 @@ it read (refined twice: research 9.14, implementation follow-ups).
 `reviewer/src/swreview/agent/checklist_v1.yaml`, `reviewer/src/swreview/agent/prompts/*.md` and
 `benchmarks/**`. Under today's `* text=auto` (`.gitattributes:2`) and Git for Windows'
 `core.autocrlf`, these check out with `\r\n` on Windows (this checkout's example profile does,
-at `be01974`) and `\n` elsewhere, so `checklist_digest`, `prompt_digest`, `profile_digest` (the
+at `5cfb743`) and `\n` elsewhere, so `checklist_digest`, `prompt_digest`, `profile_digest` (the
 product's raw-byte identity, `checks/standards/profile.py:625-626`) and every case file's digest
 would differ between two machines of one study, which section 4 would refuse. Digests stay over
 raw bytes; the checkouts agree instead. A checkout made before the change keeps its `\r\n`
@@ -420,7 +420,7 @@ each line parsed as JSON on its own and one that is not JSON read as its text (r
 
 **The event streams are committed, packed** (owner decision 28A; plan decisions RF-78, RF-84).
 `.gitignore` ignores `**/events.jsonl` (`.gitignore:77`), with the replay fixtures its one exception
-(`:80`), and at `be01974` no rule ignores `events.jsonl.gz`. The parity slice adds, after that rule,
+(`:80`), and at `5cfb743` no rule ignores `events.jsonl.gz`. The parity slice adds, after that rule,
 `**/events.jsonl.gz`, then `!benchmarks/studies/**/events.jsonl.gz` and
 `!benchmarks/pilots/**/events.jsonl.gz`. So a plain stream, the working form while a run writes,
 stays ignored everywhere, the two trees included, and never reaches a commit; a packed stream is

@@ -34,7 +34,7 @@ body:
     attributes:
       label: Version (commit)
       description: The commit you are on, from `git rev-parse --short HEAD`.
-      placeholder: c42d3c2
+      placeholder: 9da0057
     validations:
       required: true
   - type: input

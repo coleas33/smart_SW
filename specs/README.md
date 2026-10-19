@@ -44,7 +44,7 @@ Features 001 to 004 and 016 do not use `[W]`; their workstation tasks say so in 
 ## Features and their status
 
 The counts are the `- [x]` and `- [ ]` lines of each `tasks.md` (every such line is a numbered
-task), taken at commit `c42d3c2` and updated for decision 127A of 2026-10-18. An unticked task
+task), taken at commit `9da0057` and updated for decision 127A of 2026-10-18. An unticked task
 whose description begins `SUPERSEDED (127A):` is counted as superseded, not open: it will not
 run, because a later decision replaced it, and its text links to that decision (feature 005's
 lever 5 and 6 tasks). "Code complete" means every open task needs the pilot workstation, a key,

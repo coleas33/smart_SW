@@ -38,4 +38,4 @@
 
   The last pass found no blocker or major issue. Two minor issues it raised were fixed by hand, as was everything the owner confirmed (20A to 23A).
 - research.md is long (about 214 KB). It carries the audit, the anchors, the 23 planning defaults, the defaults D1 to D17 with their alternatives, the statistics, the code to reuse, and §8 "For the plan". The plan should start from §8 and §4, where the cross-check's landing order and missing tests are marked "to resolve in plan.md".
-- The worktree's base is main `be01974`. Nothing is committed yet.
+- The worktree's base is main `5cfb743`. Nothing is committed yet.

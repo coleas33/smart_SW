@@ -7,7 +7,7 @@ name (research R2.6). What this pins:
 - `component_names(package)` is exactly the map `report/explanations.py` built by hand -
   every component, blank names included - so moving the explanations onto it changes no
   byte of the request they send (the characterization at the bottom, captured on
-  `01d2590` before the refactor);
+  `e1b3442` before the refactor);
 - `with_component_names(text, names)` replaces a whole `cmp:` id token (the IR's
   `^cmp:[0-9]{4,}$`) whose name is non-blank, and nothing else: an id with a blank or no
   name, a token too short to be an id, and an id inside a longer token all stay as written.
@@ -130,7 +130,7 @@ def test_plural_counts_one_noun_the_one_way_every_digest_does(count: int, text: 
 # --- the characterization: the explanations request did not move -------------------------
 
 EXPLANATION_PROMPT_SHA256 = "8383a2da6dbe23979de9bec4a7d8904f5b44f81138d1a1434f0de725d049525c"
-"""sha256 of `_prompt` over the attention review folder, captured on `01d2590` before
+"""sha256 of `_prompt` over the attention review folder, captured on `e1b3442` before
 `report/explanations.py` was moved onto `component_names` (research R2.6)."""
 
 

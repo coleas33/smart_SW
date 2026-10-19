@@ -2,8 +2,8 @@
 
 **Feature**: `009-engineer-workspace` | **Date**: 2026-09-23 | **Plan**: [plan.md](plan.md)
 
-Phase 0 output from: the spec (User Stories 1 and 2 landed on main as `2c48e2b`, `cf3c66e` and
-`b5cfcb4`; Stories 3 to 7 are the work); the owner's decisions of 2026-09-22 and 2026-09-23
+Phase 0 output from: the spec (User Stories 1 and 2 landed on main as `6ec0391`, `c920221` and
+`460ae56`; Stories 3 to 7 are the work); the owner's decisions of 2026-09-22 and 2026-09-23
 recorded in the spec's Input line; the pilot workstation's evening packet
 (`docs/history/pane-findings-2026-09-20-review-gui.md`, asks U8 to U16) and `docs/history/roadmap-2026-09-22.md`
 section "009"; the UI analyst's pass of 2026-09-23 (24 facts, 7 increment recommendations, 9 open
@@ -14,7 +14,7 @@ consumes; and feature 010's spec, data model and task list as they stood while t
 is being planned in the same working tree; its `contracts/contacts.md`, `data-model.md` sections 9
 and 14 and `tasks.md` were read, never edited).
 
-Where this document says **VERIFIED**, this pass opened the file on main at `e8b40b5` (after the
+Where this document says **VERIFIED**, this pass opened the file on main at `eb4cb4e` (after the
 three landed increments) and read the lines cited; where the claim is behavioural and was run, it
 says so. The analyst's facts were re-opened for every decision that turns on them and their line
 numbers corrected where the three landed increments moved them (R3). Numbers read off the recorded
@@ -48,11 +48,11 @@ Line numbers drift; every task re-verifies before editing.
 their commits and the tests each added. No landed behaviour is re-implemented. Where a later story
 changes what a landed test pins, that test is named red by design in the task that lands the change.
 
-**Why**: VERIFIED with `git show --stat`: `2c48e2b` added `ReviewPageDocumentBindingTests` (13
+**Why**: VERIFIED with `git show --stat`: `6ec0391` added `ReviewPageDocumentBindingTests` (13
 tests), `CheckPageDocumentBindingTests` (6), two `ReviewHostTests`, contract-row, no-command and
-one-constant tests, `web/shared/document.js`; `cf3c66e` inverted
+one-constant tests, `web/shared/document.js`; `c920221` inverted
 `WhatWasObservedIsPrintedBeforeTheFold` and `ClickingARankedRowOpensAndFlashesItsFindingCard`,
-added the title clamp and Collapse all; `b5cfcb4` moved the Start-here row into
+added the title clamp and Collapse all; `460ae56` moved the Start-here row into
 `web/shared/attention.js` (`SharedAttentionScriptTests`, 7 test methods), drew every ranking row
 behind "Show all" and amended `specs/007-attention-policy-gate/contracts/attention.md` section 6.
 The AddIn suite went 1288 → 1322 → 1324 → 1353, all green, the Extractor suite unchanged at 1843
@@ -298,7 +298,7 @@ bridge pin, and 008's slimmed pin from its T062), regenerated with `python -m
 tests.unit.test_tool_payload --write`; the tool count stays 32. Feature 008's replay is unaffected:
 pass A's prefix delta is zero by construction and pass B's differs from pass A by settings only
 (`specs/008-checks-first-review/contracts/replay.md` section 4, `dP`). The dated baseline table in
-`docs/llm-efficiency-options.md` is a measurement of commit `a0be95f` and is not edited.
+`docs/llm-efficiency-options.md` is a measurement of commit `9a078c5` and is not edited.
 
 **Alternatives**: a second tool `ask_engineer` (rejected: a 33rd tool in every request and two ways
 to ask); required short fields (rejected: every recorded session would stop validating).
@@ -737,7 +737,7 @@ parts from `summary.component_names` - rejected: the page builds no text (FR-029
 
 ## R3. Verified facts the plan relies on
 
-Re-opened on 2026-09-23 at `e8b40b5`:
+Re-opened on 2026-09-23 at `eb4cb4e`:
 
 - **Page**: `index.html` session row `:101-126` (meta line `:121-125`), stale line `:133`,
   not-examined `:143`, preparation `:145-155`, attention panel `:157`, transcript head `:170-174`,

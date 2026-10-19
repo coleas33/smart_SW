@@ -1,5 +1,5 @@
 S-10, the 39 reference scenarios (tasks.md T235; SC-010; verdict.md 9 and 12)
-Commit: 870f7fe (Feature 014 slice 7: the whole-slice review's fixes, 112A and 113A)
+Commit: fdbec26 (Feature 014 slice 7: the whole-slice review's fixes, 112A and 113A)
 Date: 2026-10-16, on the development machine
 Python 3.12.3, numpy 2.5.3
 Command (from reviewer/): uv run pytest -q -s -m simulation tests/simulation/test_reference_scenarios.py

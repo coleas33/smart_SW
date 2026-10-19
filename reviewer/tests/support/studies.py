@@ -89,7 +89,7 @@ PACKAGE = build_package()
 
 STARTED_AT = datetime(2026, 9, 16, 9, 0, tzinfo=UTC)
 SCORED_AT = datetime(2026, 9, 16, 10, 0, tzinfo=UTC)
-COMMIT = "5733efd"
+COMMIT = "2b500de"
 CHECKLIST_DIGEST = "c" * 64
 PROMPT_DIGEST = "d" * 64
 SET_DIGEST = "5" * 64

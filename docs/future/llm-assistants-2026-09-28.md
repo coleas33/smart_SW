@@ -14,12 +14,12 @@ lists the recommended option first.
   helps with ideas and concepts (Part 1), and a hand-calculation assistant that works on loads in
   the open assembly (Part 2). Part 3 says how the two relate. The open questions for the owner are
   at the end.
-- **Baseline.** The research was read-only, at `main` a8a8a09. SOLIDWORKS was never started (this
+- **Baseline.** The research was read-only, at `main` 9a9a1c2. SOLIDWORKS was never started (this
   machine has no licence), and the installed 2024 SP5 interop was only reflected as metadata. So
   "present" below means an API member exists. It does not mean the member behaves as expected on
   the seat.
 - **How to resume.**
-  1. Re-read this file and check what changed after a8a8a09: 004's seat probes, the 008-013
+  1. Re-read this file and check what changed after 9a9a1c2: 004's seat probes, the 008-013
      sitting results, and any owner answers. Also re-check the outside facts dated 2026-09-28:
      OpenAI prices and which tier the plain `gpt-5.6` id maps to, Gemini 3.5 Flash pricing, LEO's
      requirements, and the benchmark tables in 1.3 and 2.8.
@@ -571,7 +571,7 @@ direction.
 
 ### 2.4 Data: what the repo already has, and what is missing
 
-**Already in the repo** (verified read-only at a8a8a09):
+**Already in the repo** (verified read-only at 9a9a1c2):
 
 | Need | What exists | Where |
 |---|---|---|

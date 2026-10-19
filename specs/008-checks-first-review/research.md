@@ -5,7 +5,7 @@
 Phase 0 output from: the spec; the owner's decisions of 2026-09-22 recorded in
 `docs/history/roadmap-2026-09-22.md`; the pilot workstation's evening packet
 (`docs/history/pane-findings-2026-09-20-review-gui.md`) and its recorded run folders; and three design
-passes run on 2026-09-22 and 2026-09-23 against commit `43e9b15`, each by an analyst who opened
+passes run on 2026-09-22 and 2026-09-23 against commit `47f8b73`, each by an analyst who opened
 the code and wrote down facts with `path:line`, decisions with rejected alternatives, file
 changes, tests and the tests that go red by design:
 
@@ -22,10 +22,10 @@ wording). Every overlap is reconciled below in a decision marked **Reconciled**,
 reason; no decision of any pass is dropped silently - a superseded one is named with what
 replaced it.
 
-Where this document says **VERIFIED**, a design pass opened the file at `43e9b15` and, where the
+Where this document says **VERIFIED**, a design pass opened the file at `47f8b73` and, where the
 claim is behavioural, ran it; this pass re-opened on 2026-09-23 every fact a reconciliation
-turns on (listed in R3). Main moved to `5530e22` during this pass (feature 009's first three
-increments and the 009 and 010 spec packages); `git diff 43e9b15 5530e22 -- reviewer/` is empty, so
+turns on (listed in R3). Main moved to `c83e8be` during this pass (feature 009's first three
+increments and the 009 and 010 spec packages); `git diff 47f8b73 c83e8be -- reviewer/` is empty, so
 every `reviewer/` line reference holds, and the one page reference that moved is noted in R2.46. Numbers read off the recorded runs were computed on 2026-09-23 from
 the dumps at `%LOCALAPPDATA%\SwReview\handover\2026-09-20-gui\dumps`, which stay on the
 development machine and never enter this repository. Line numbers drift; every task
@@ -1110,7 +1110,7 @@ pane takes the report's word. If the owner prefers "new", both surfaces change t
 feature 009's plain-language increment, where the golden can move (R5).
 
 **Why**: VERIFIED the line today prints the total, a cached share, the round trips and the last
-latency, pinned by C# tests (`render.js:766-791` at `43e9b15`, `:731-751` on main after feature
+latency, pinned by C# tests (`render.js:766-791` at `47f8b73`, `:731-751` on main after feature
 009's increments, its body unchanged; `ReviewPageUsageLineTests.cs:130-186`, unchanged); the
 pilot's 12.4M headline hid that 407k tokens were new; all 119 recorded OpenAI rounds satisfy
 probe L1's three relations (cached <= input, reasoning <= output, total = input + output), but L1
@@ -1312,7 +1312,7 @@ result, which the recordings can never absorb, would fail it for good on the sma
 rounds are about 11,000 to 60,000 tokens. The rule separates them: a deliberate change moves
 the size change and never the residual; a replay defect - a result carried that the request did
 not carry, a stopped turn's results kept, an output counted twice, an estimate misplaced, a
-framing constant drifting - moves the residual and nothing else. VERIFIED at `d47a91f` on the
+framing constant drifting - moves the residual and nothing else. VERIFIED at `287d4c3` on the
 three recordings: residual zero on every round - 40, 38 and 36 main rounds across 2, 2 and 4
 turns, and each recording's one presentation round - none flagged lower bound; each carried
 round's size change between -2 and +1 (the current code's results unchanged); drift at most 8
@@ -1636,7 +1636,7 @@ every carried location removed is a grouping finding's, and the sketch rules dro
 
 ## R3. Verified facts the plan relies on
 
-Re-opened on 2026-09-23 at `43e9b15` for this reconciliation (the rest are the design passes'):
+Re-opened on 2026-09-23 at `47f8b73` for this reconciliation (the rest are the design passes'):
 
 - `agent/settings.py`: `EfficiencySettings` at `:400`, `prerun_checks` `:433`, `parallel_tool_calls`
   `:436`, `procedural_gate` `:451`, `LEVER_NAMES` `:514`, `GATED_ALONE` `:540-543` (including
@@ -1669,8 +1669,8 @@ Re-opened on 2026-09-23 at `43e9b15` for this reconciliation (the rest are the d
 - `.gitattributes`: `* text=auto`; the vendored npm rule `extractor/SwReview.AddIn/Terminal/TerminalPage/vendor/* -text`.
 - `reviewer/pyproject.toml:44-45`: hatchling packages `src/swreview` whole.
 - The recorded totals in R1, and R2.51's follow-up arithmetic.
-- Feature 009's increments 1 to 3 landed on main while this pass ran (2026-09-23: `2c48e2b`,
-  `cf3c66e`, `b5cfcb4`); they edit `Review/ReviewPage/render.js`, `app.js`, `index.html`, a new
+- Feature 009's increments 1 to 3 landed on main while this pass ran (2026-09-23: `6ec0391`,
+  `c920221`, `460ae56`); they edit `Review/ReviewPage/render.js`, `app.js`, `index.html`, a new
   shared attention script, and `specs/007-attention-policy-gate/contracts/attention.md` section 4.
   Its package (`specs/009-engineer-workspace/spec.md`) renders 008's folded group and answer batch
   ("built by feature 008; this feature renders them") and titles the group "Modelling practice: N

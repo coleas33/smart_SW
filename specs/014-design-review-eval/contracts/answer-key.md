@@ -9,7 +9,7 @@ it. The two question sections (unanswerable requests and question counts) are `q
 section 5's, fields, matching and refusals; this contract adds the fields every entry has and runs
 those refusals when a key loads. Where a set names a key is the benchmark-set contract's.
 
-Line numbers are at `be01974`; paths are under `reviewer/src/swreview/` unless another root is
+Line numbers are at `5cfb743`; paths are under `reviewer/src/swreview/` unless another root is
 given. Every example value is fictional.
 
 ## 1. Who reads a key
@@ -322,7 +322,7 @@ scored (12A).
 - The set's package `held_out` flag: derived from the tags and checked at scoring
   (`scoring.md` section 6).
 - R-8's "profile likely wrong" line: hygiene writes one `hygiene.revision_present` result per
-  document (`checks/hygiene.py:384-387`) and no zero-match line at `be01974` (the only one is the
+  document (`checks/hygiene.py:384-387`) and no zero-match line at `5cfb743` (the only one is the
   part-number convention's, `checks/part_roles.py:194`), so R-8's key grades its forbidden hits
   only (research §3 R-8, §8.13). Plan decision SR-22.
 

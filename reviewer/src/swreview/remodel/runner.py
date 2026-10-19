@@ -302,7 +302,7 @@ def build_provider(settings: ProviderSettings) -> AgentProvider:
     It builds nothing itself: `cli.provider_factory` is the one body that constructs an
     adapter, for the review, the pane and this run alike (owner decision 4A, 2026-09-23,
     `contracts/tools.md` "Providers"). This run had its own copy of that body until then, and
-    the copy carried the original's wrong `redact=` keyword, so the Gemini fix of `d47a91f`
+    the copy carried the original's wrong `redact=` keyword, so the Gemini fix of `287d4c3`
     had to be made twice. No efficiency levers are passed, so every lever stays off for a
     remodel run, as it always has.
 

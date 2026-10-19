@@ -1,6 +1,6 @@
 # Two smaller findings from the 2026-09-16 pane session
 
-Both found on the pilot workstation against `main` `8b09438`, while diagnosing the Task
+Both found on the pilot workstation against `main` `5d93f92`, while diagnosing the Task
 Pane. Neither is the pane blocker - that one has its own brief,
 [`pane-backend-proxy.md`](../pane-backend-proxy.md). Both are real and reproducible, and
 **both are now fixed** - finding 1 in `extractor/SwReview.AddIn/ToolService/` and

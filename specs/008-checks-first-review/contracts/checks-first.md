@@ -228,7 +228,7 @@ below happens.
 and `PrerunResult.withheld` holds them. A call *completed* when `PrerunCall.error is None` and
 `repeat_key(tool, arguments)` is not `None`, so the guard can answer any repeat: that is
 `prerun.answers_repeat(call)`, the one rule both this function and the guard's ledger read
-(*landed as*, review of `d805112..99269dd`).
+(*landed as*, review of `832f4d5..7bdeace`).
 
 | Tool | Leaves the array when |
 |---|---|
@@ -253,7 +253,7 @@ holds the tool. The system prompt's tool notes (lever 2) are built from the offe
 read from the guard's own iteration rather than a second filter.
 A name nothing registers gets the dispatch's unknown-tool error, whose list of available tools
 is the guard's array (`ToolDispatch.call(..., offered=...)`), never a withheld name: an error
-result is never pruned (*landed as*, review of `d805112..99269dd`).
+result is never pruned (*landed as*, review of `832f4d5..7bdeace`).
 
 **Wording.** Only when the named tools are withheld (`agent/withheld_wording.py`):
 

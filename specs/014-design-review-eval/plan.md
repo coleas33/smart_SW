@@ -1,13 +1,13 @@
 # Implementation Plan: Design-Review Eval
 
-**Branch**: `014-design-review-eval` (from `main` at `be01974`) | **Date**: 2026-09-29 | **Spec**: [spec.md](spec.md) | **Tasks**: [tasks.md](tasks.md)
+**Branch**: `014-design-review-eval` (from `main` at `5cfb743`) | **Date**: 2026-09-29 | **Spec**: [spec.md](spec.md) | **Tasks**: [tasks.md](tasks.md)
 
 **Input**: the spec (FR-001 to FR-061; owner decisions 1A to 36A; defaults D1 to D17), [research.md](research.md)
 §1 to §8, and five area designs, integrated here. Every plan-level decision, the areas', the
 integration's, the three review rounds' (§9.9 to §9.11), those applying 28A (§9.12) and those applying 33A to 36A,
 from the owner's review of this plan on 2026-10-06 in CLAUDE.md's SMALL CHANGE form (31A, 32A; §9.14), is recorded with its rationale and
 alternatives in research.md §9, which also marks every §4 cross-check item and §8 open point
-resolved. Line numbers are at `be01974`; paths are under `reviewer/src/swreview/` unless another root
+resolved. Line numbers are at `5cfb743`; paths are under `reviewer/src/swreview/` unless another root
 is given.
 
 ## Summary

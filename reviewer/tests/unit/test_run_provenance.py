@@ -297,7 +297,7 @@ def test_the_commit_is_the_tree_the_run_was_made_from(
 
 def a_record(**overrides: Any) -> RunProvenance:
     fields: dict[str, Any] = {
-        "commit": "5733efd",
+        "commit": "2b500de",
         "lever": "parallel_tool_calls",
         "arm": "on",
         "rep": 2,
@@ -522,10 +522,10 @@ NOT_RECORDED: tuple[str, ...] = (
 def test_a_record_older_than_this_feature_reads_the_new_fields_not_recorded(
     tmp_path: Path,
 ) -> None:
-    """A record exactly as `be01974` wrote it: schema 1, no pane-defaults marker, and every
+    """A record exactly as `5cfb743` wrote it: schema 1, no pane-defaults marker, and every
     other new field not recorded rather than guessed."""
     written_before = {
-        "commit": "5733efd",
+        "commit": "2b500de",
         "lever": "parallel_tool_calls",
         "arm": "on",
         "rep": 2,

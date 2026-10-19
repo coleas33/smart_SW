@@ -185,7 +185,7 @@ specs/{001,002,003,005,006,007,008,009,010,011}/contracts/*   # the amendment te
 #### Landed as (T139, reconciled 2026-09-27)
 
 The block above is the plan. What landed differs as follows; every other line of it landed as
-written. The file list is `git diff 712ac9e HEAD` over the product trees on the day, feature 013's
+written. The file list is `git diff a405e90 HEAD` over the product trees on the day, feature 013's
 commits only (with feature 004's T171, which is 013 T137).
 
 | Plan | Landed as |

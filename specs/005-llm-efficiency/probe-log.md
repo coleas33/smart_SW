@@ -19,7 +19,7 @@ When a probe runs, replace its **Status** line and append the record under it:
 - the **date**, the **model id** (live probes) or the **seat and SOLIDWORKS build**
   (workstation probes), and the **commit sha** the probe ran at.
 
-The commit sha this file was created at is `baa74248f32292746fef357a48a85ea6114efd55`. That
+The commit sha this file was created at is `6f65148d40488b71db8accb8db9240cf865ecf2b`. That
 is the sha of the empty log, not of any answer: each section records its own.
 
 Live probes run from `reviewer/` and are skipped without a key:
@@ -39,7 +39,7 @@ measured number this feature already has, and because measuring it found the spe
 quoting a figure the tree does not produce. **Owner decision needed** (see the last
 paragraph); nothing in the spec package has been edited to match.
 
-Regenerated 2026-09-16 at commit `baa74248f32292746fef357a48a85ea6114efd55`, from
+Regenerated 2026-09-16 at commit `6f65148d40488b71db8accb8db9240cf865ecf2b`, from
 `reviewer/`, by the helper T001 requires so the numbers are never transcribed:
 
 ```powershell

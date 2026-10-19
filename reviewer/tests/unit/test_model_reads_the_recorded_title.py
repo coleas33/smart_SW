@@ -13,7 +13,7 @@ Four representative tools are called, in one session, through the real dispatch 
 title that is cut *and* names both parts by id) and a drawing finding (the other title funnel,
 `tools/session.py`). The text the model reads of each result is pinned by its SHA-256, twice:
 every setting off (`tool_result_text(payload)`) and the pane's slim view
-(`tool_result_text(view, compact=True)`). The pins were taken at `d47a91f`, before
+(`tool_result_text(view, compact=True)`). The pins were taken at `287d4c3`, before
 `report/titles.py` existed.
 
 **Regenerated, never transcribed.** `python -m tests.unit.test_model_reads_the_recorded_title
@@ -98,7 +98,7 @@ PINS: dict[tuple[str, str], str] = {
         "c14b9135c12a23bacda20a5c93d1a59d40d1dde5a59afe09081336a347efb1f7"
     ),
 }
-"""SHA-256 of the UTF-8 text the model reads of each call, taken at `d47a91f`; the full view of
+"""SHA-256 of the UTF-8 text the model reads of each call, taken at `287d4c3`; the full view of
 `check_interference_group` re-pinned for 014 owner decision 40A, its finding now citing its step."""
 
 

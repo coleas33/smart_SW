@@ -145,7 +145,7 @@ specs/008-checks-first-review/
 
 Every file this feature adds or changes, reconciled with what landed on 2026-09-23 (T100): a row
 marked *landed as* is a file the tasks touched that this block did not name, or a change the row
-did not describe, including Phase 9 (lever 13) and the review of `d805112..99269dd`. A file not
+did not describe, including Phase 9 (lever 13) and the review of `832f4d5..7bdeace`. A file not
 named here is not touched; in particular
 `chat-events.schema.json`, `ir.schema.json`, `settings.schema.json`, `UserSettings.cs`,
 `CliProfileWriter.cs`, `Serve/PROTOCOL.md`, `mcp/server.py`'s payloads, `checks/interference.py`,
@@ -350,7 +350,7 @@ three session-contract edits in story order, each with its model.
 **External dependencies**: features 005 (levers 5 and 6, the pre-run, the usage events), 006 (the
 standards check and `attach_standards_run`), 007 (the ranking, the gate's standards half, the record);
 the recorded dumps of 2026-09-20 on the development machine; feature 009's increments 1 to 3 (on main
-since 2026-09-23: `2c48e2b`, `cf3c66e`, `b5cfcb4`) for the page and 007's attention contract, and its
+since 2026-09-23: `6ec0391`, `c920221`, `460ae56`) for the page and 007's attention contract, and its
 later increments, which render 008's folded group and answer batch; feature 010, which owns the
 size-for-size contact rule; the next workstation sitting for SC-010.
 

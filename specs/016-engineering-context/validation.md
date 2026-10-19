@@ -1,6 +1,6 @@
 # Offline delivery validation — 2026-10-14
 
-Branch: `016-engineering-context`, based on main `7a21605`.
+Branch: `016-engineering-context`, based on main `df4aa6e`.
 Scope: typed requirements and total applied forces, saved-snapshot binding, immutable
 private storage, explicit confirmation, CLI entry and bounded read-only review context.
 No C# source, native protocol, capability switch or CAD file is changed.
@@ -54,20 +54,20 @@ Existing drawing-open, drawing numerical-binding and Remodel Start switches stay
 
 ## Adaptation to feature 015's send gate — 2026-10-15
 
-Branch `016-adapt-015`, from `016-engineering-context` (`769432e`), with `main` (`10cecf3`:
-015's send gate, 014 slice 5 and 23A) merged as `15c3793`, per owner decision 99A (015
+Branch `016-adapt-015`, from `016-engineering-context` (`25ac210`), with `main` (`a1903cd`:
+015's send gate, 014 slice 5 and 23A) merged as `4aeafc0`, per owner decision 99A (015
 research R8). Each commit group landed test-first and gate-green; the T116 integration
 review's findings, as fixed:
 
 | Finding | Fix | Red-first tests |
 |---|---|---|
-| The context start skips the Send gate (blocker) | `3bef74f`: one `CreateReviewSession`, Send or Wait from the box; page busy takes 015's flags | host theory, wire body, two page tests |
-| The rebuilt Send opening drops the context (blocker) | `5bb44b0`: one opening builder input, `runner._review_opening`; summary on `ReviewRun` | answered-wait opening and estimate; reloaded package |
-| A restored review's re-run drops its context (should-fix) | `e8c167c`: `model_status.engineering_context`; re-run reloads and validates it; no unlink | record and schema; restart re-run and Send; changed head; cut at the replace |
-| Context editable while a review waits (should-fix) | `6e48e3e`: `awaiting_send` busy; one registry, `_pending_run_dirs` | edit while waiting; edit during the record read |
+| The context start skips the Send gate (blocker) | `8dedf32`: one `CreateReviewSession`, Send or Wait from the box; page busy takes 015's flags | host theory, wire body, two page tests |
+| The rebuilt Send opening drops the context (blocker) | `3dc74ae`: one opening builder input, `runner._review_opening`; summary on `ReviewRun` | answered-wait opening and estimate; reloaded package |
+| A restored review's re-run drops its context (should-fix) | `3fa806f`: `model_status.engineering_context`; re-run reloads and validates it; no unlink | record and schema; restart re-run and Send; changed head; cut at the replace |
+| Context editable while a review waits (should-fix) | `7c6f579`: `awaiting_send` busy; one registry, `_pending_run_dirs` | edit while waiting; edit during the record read |
 
 The merge's textual conflicts were resolved as the reviewer listed them, with
-`engineering_context` keyword-only on `_start_review` and passed by name. `9bac682`
+`engineering_context` keyword-only on `_start_review` and passed by name. `ee87fd7`
 regenerated the three waiting pane fixtures with 016's labels (snapshot part byte-equal,
 labels the union) and moved `review-send-failure-events.json`'s pin of
 `review-waiting.json`'s sha256; `review-big-assembly.json` regenerated unchanged.
@@ -77,7 +77,7 @@ package against the saved baseline: the first run's live interference check appe
 `package.json`, so requiring the baseline would refuse every re-run of an assembly review
 with live checks. The summary marks that change as needing review, as at the start.
 
-Gate on `6e48e3e`:
+Gate on `7c6f579`:
 - Python 3.11.16 (the worktree's environment), `SWREVIEW_REQUIRE_TOKENIZER=1`, not live:
   **16,543 passed, 6 skipped, 7 deselected**; Ruff clean.
 - Python 3.11.16 and 3.12.3, each `uv run --isolated` outside the repository with
@@ -96,16 +96,16 @@ call or paid request was made.
 
 ## Owner decisions 105A-109A on the adversarial check — 2026-10-15
 
-The adversarial check of `10cecf3..2ab8043` answered MERGE-READY: no path gets saved context
+The adversarial check of `a1903cd..82bb85a` answered MERGE-READY: no path gets saved context
 to a provider before Send. The owner's follow-ups, each test-first and gate-green:
 
 | Decision | Commit | What |
 |---|---|---|
-| 109A (31A) | `51e7b9f` | 001's `Finding` accepts a document scope in a non-empty `inputs`; a whole pane review's `session.json`, ticked or unticked, with or without context, validates. Also the verifier's two probes as tests and Remodel's awaiting rule held once |
-| 107A (29A) | `3ab02ee` | the baseline's `without_live_interference_sha256`; the live check's own rewrite keeps saved inputs matched, any other change mismatches |
-| 105A (26A), 106A (27A), 108A (30A) | `9bafa80` | the carried check also requires package id, root document and configuration; the strict lock kept; Retry re-attaches the same context in its folder through the gated path; the refusal and the `EngineeringContextConflict` label point to the Engineering context panel |
+| 109A (31A) | `97dadc4` | 001's `Finding` accepts a document scope in a non-empty `inputs`; a whole pane review's `session.json`, ticked or unticked, with or without context, validates. Also the verifier's two probes as tests and Remodel's awaiting rule held once |
+| 107A (29A) | `2062e6a` | the baseline's `without_live_interference_sha256`; the live check's own rewrite keeps saved inputs matched, any other change mismatches |
+| 105A (26A), 106A (27A), 108A (30A) | `68fe340` | the carried check also requires package id, root document and configuration; the strict lock kept; Retry re-attaches the same context in its folder through the gated path; the refusal and the `EngineeringContextConflict` label point to the Engineering context panel |
 
-Gate on `9bafa80`:
+Gate on `68fe340`:
 - Python 3.11.16 (the worktree's environment), not live: **16,567 passed, 6 skipped,
   7 deselected**; Ruff clean.
 - Python 3.11.16 and 3.12.3, each `uv run --isolated` outside the repository with

@@ -20,7 +20,7 @@ adopted optimization. Use `--explain-findings` on both benchmark arms to include
 Review pane's explanation pass; the comparison rejects mismatched explanation modes
 and step budgets. The generated raw ledger displays explanation mode explicitly.
 
-## Baseline (measured on the tree at commit a0be95f plus the Phase 3 work in progress)
+## Baseline (measured on the tree at commit 9a078c5 plus the Phase 3 work in progress)
 
 | What | Measured | Consequence |
 |---|---|---|

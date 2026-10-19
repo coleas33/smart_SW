@@ -18,7 +18,7 @@ An engineer reviews an assembly, then opens one of its parts. The assembly's fin
 
 **Why this priority**: accepting, rejecting or showing a finding against the wrong model is worse than showing nothing.
 
-**Independent Test**: landed in commit `2c48e2b` with `ReviewPageDocumentBindingTests` and `CheckPageDocumentBindingTests`: review A, activate B - results hidden and actions disabled; back to A - restored; Clear review empties the pane and is refused while a turn runs.
+**Independent Test**: landed in commit `6ec0391` with `ReviewPageDocumentBindingTests` and `CheckPageDocumentBindingTests`: review A, activate B - results hidden and actions disabled; back to A - restored; Clear review empties the pane and is refused while a turn runs.
 
 **Acceptance Scenarios**:
 
@@ -35,7 +35,7 @@ After a review the engineer sees each finding as one headline - its id and title
 
 **Why this priority**: on the big assembly 94 of 99 findings had no path to them, and the five that did were paragraphs.
 
-**Independent Test**: landed in commits `cf3c66e` and `b5cfcb4`: a finding card's head holds only its id line and title; a Start-here click leaves the fold closed and flashes the card; the sixth and later rows appear only after "Show all", in the supplied order.
+**Independent Test**: landed in commits `c920221` and `460ae56`: a finding card's head holds only its id line and title; a Start-here click leaves the fold closed and flashes the card; the sixth and later rows appear only after "Show all", in the supplied order.
 
 **Acceptance Scenarios**:
 

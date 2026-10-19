@@ -293,7 +293,7 @@ def test_load_saved_set_meets_the_answer_key_guard_through_the_same_core(
 
 
 def test_load_saved_set_reads_a_copy_saved_before_this_feature(tmp_path: Path) -> None:
-    """At `be01974` `benchmark run` saved the loaded set with every path absolute
+    """At `5cfb743` `benchmark run` saved the loaded set with every path absolute
     (`cli.py:2313-2314`); such a run folder still reads, whatever the root."""
     checkout = tmp_path / "checkout"
     set_path = write_set(sets_folder(checkout) / "parity.json", [relative_entry("pkg-1")])

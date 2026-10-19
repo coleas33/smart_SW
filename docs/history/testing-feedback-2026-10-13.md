@@ -1,6 +1,6 @@
 # October 13 workstation feedback: Review and Remodel fixes
 
-The supplied private pilot handoff tested main at `017ba0a`. It reports recurring
+The supplied private pilot handoff tested main at `e293d1d`. It reports recurring
 Review crashes while an assembly was active, related drawings remained open, and
 library components had been resolved. The empty run folders place those failures
 before mesh creation. One preserved journal contains a CLR exception stack;
@@ -59,7 +59,7 @@ runtime and privacy reviews are clear. Complete branch-specific gate results are
 These fixes do not enable drawing opening or Remodel Start and do not publish
 calibration. A scoped main update contains these handoff fixes; the complete
 `015-review-send-gate` build also contains the earlier T180 lifetime/settings and
-T187 calibration prerequisites from `5590266`. Use the intended branch when
+T187 calibration prerequisites from `d351619`. Use the intended branch when
 collecting enablement evidence. Native SOLIDWORKS testing belongs on the separate
 workstation; the development machine has no SOLIDWORKS.
 

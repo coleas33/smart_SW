@@ -16,7 +16,7 @@ refusal); feature 008's `contracts/checks-first.md` (the pre-run's step mark) an
 `contracts/alignment.md` (section 10's references). Each amendment's text lands with the task that
 changes the code.
 
-Line numbers are at `be01974`; paths are under `reviewer/src/swreview/` unless another root is
+Line numbers are at `5cfb743`; paths are under `reviewer/src/swreview/` unless another root is
 given. Every example value is fictional.
 
 ## 1. What the scorer reads, and the modules
@@ -247,7 +247,7 @@ item; the on arm's skipped pre-run row or finalization's unresolved row reads wi
 Every other value but `unknown` is code origin.
 
 *Amended 2026-10-07 (owner decision 40A; research SP-3): every finding writer that cites no step.*
-At `be01974` `check_interference_group` was one (`tools/checks_interference.py:120`), although its
+At `5cfb743` `check_interference_group` was one (`tools/checks_interference.py:120`), although its
 contacts cite their step (`:161`), so a pre-run interference finding would have read
 `configured_check` by 5.3's rule 5. It now cites its step on every finding, as on every contact: a
 pre-run interference finding reads `prerun`, a model-called one `code_only_call`. After it, a finding
@@ -636,7 +636,7 @@ copies, `reviewer/tests/unit/test_support_mechanical.py:266` and `test_support_d
 decision RF-55), CRLF read as LF: `data_regression` writes the
 files in binary with LF (`pytest_regressions/data_regression.py:79`, `open("wb")`) while a Windows
 checkout under `*.yml text` and `core.autocrlf` hands them back CRLF (`git ls-files --eol` reads
-`w/crlf` for `test_golden/joint-ok.yml` at `be01974`), so a raw digest would differ between a fresh
+`w/crlf` for `test_golden/joint-ok.yml` at `5cfb743`), so a raw digest would differ between a fresh
 regeneration and a checkout on one machine (plan decision INT-12). The record starts with the
 validation slice at version 3 (plan decision INT-11): versions 1 and 2 were never goldened. The
 tests fail when: the last row's version is not `SCORING_RULES_VERSION`; the goldens' digest is not
@@ -763,7 +763,7 @@ tool does).
 slice, each later caller adding its own row):
 1. `replay_events` yields every event of a well-formed log, stops at the first line that is not JSON
    or not an `AgentEvent`, and calls `on_unreadable` with that line's 1-based number; without the
-   hook it behaves as at `be01974`, and the pane's reconnect and remodel tests pass unchanged;
+   hook it behaves as at `5cfb743`, and the pane's reconnect and remodel tests pass unchanged;
 2. `chat.sessions.replay_events` is `agent.events.replay_events` (the re-export, not a copy);
 3. every committed replay fixture's `events.jsonl` reads through it with no unreadable line;
 4. a spy on it sees exactly one call per package from `score_run` (this slice), one per transcript

@@ -5,7 +5,7 @@
 Every entity the eval reads or writes, consolidated from the contracts. Each names its fields, its
 validation, its relationships, where it is stored and who writes it; the contract that is normative
 for it is named in brackets and wins on any detail this summary leaves out. Paths are under
-`reviewer/src/swreview/` unless another root is given; line numbers are at `be01974`. "Slice" is the
+`reviewer/src/swreview/` unless another root is given; line numbers are at `5cfb743`. "Slice" is the
 plan's delivery order.
 
 ## 1. Overview

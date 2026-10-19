@@ -177,7 +177,7 @@ def test_load_runs_refuses_duplicate_folders_with_compares_own_error(
 def test_load_runs_refuses_mixed_commits_with_compares_own_error(tmp_path: Path) -> None:
     folders = write_study(tmp_path, [
         RunSpec(run="off-1"),
-        RunSpec(run="on-1", arm="on", commit="0e28d52"),
+        RunSpec(run="on-1", arm="on", commit="8601e34"),
     ])
 
     with pytest.raises(ValueError) as compared:
@@ -188,7 +188,7 @@ def test_load_runs_refuses_mixed_commits_with_compares_own_error(tmp_path: Path)
     assert type(loaded.value) is type(compared.value) is CompareError
     assert str(loaded.value) == str(compared.value) == (
         f"{folders[0]} and {folders[1]} cannot be placed in one comparison: "
-        f"commit differs ({COMMIT!r} against '0e28d52')"
+        f"commit differs ({COMMIT!r} against '8601e34')"
     )
 
 
@@ -241,7 +241,7 @@ def test_compare_runs_calls_load_runs_once_with_the_given_folders(tmp_path: Path
 
 def test_compare_keeps_the_committed_ledger_refusal_before_a_study_mismatch(tmp_path: Path) -> None:
     folders = write_study(tmp_path / "outside", [
-        RunSpec(run="off-1"), RunSpec(run="on-1", arm="on", commit="0e28d52"),
+        RunSpec(run="off-1"), RunSpec(run="on-1", arm="on", commit="8601e34"),
     ])
 
     with pytest.raises(CompareError, match="commit differs"):
@@ -852,7 +852,7 @@ def test_a_baseline_run_with_a_flag_on_is_refused(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("field", "value"),
     [
-        ("commit", "0e28d52"),
+        ("commit", "8601e34"),
         ("effort", "medium"),
         ("set_digest", "9" * 64),
         ("checklist_digest", "9" * 64),
@@ -1243,7 +1243,7 @@ def test_the_command_exits_non_zero_when_a_decision_row_is_refused(tmp_path: Pat
 
 def test_the_command_refuses_a_mismatched_pair_with_exit_one(tmp_path: Path) -> None:
     write_run(tmp_path, RunSpec(run="off-1", arm="off"))
-    write_run(tmp_path, replace(RunSpec(run="on-1", arm="on"), commit="0e28d52"))
+    write_run(tmp_path, replace(RunSpec(run="on-1", arm="on"), commit="8601e34"))
 
     result = invoke(
         "benchmark",
@@ -1691,7 +1691,7 @@ def test_compare_reads_the_saved_set_against_the_root_read_at_call_time(
 # --- what must match across a study (`contracts/provenance.md` 4) ------------------------------
 
 MUST_MATCH_CHANGES: list[tuple[str, dict[str, Any], str]] = [
-    ("commit", {"commit": "0e28d52"}, "commit"),
+    ("commit", {"commit": "8601e34"}, "commit"),
     ("effort", {"effort": "medium"}, "effort"),
     ("max_steps", {"max_steps": 20}, "max_steps"),
     ("checklist_digest", {"checklist_digest": "9" * 64}, "checklist_digest"),
@@ -1932,7 +1932,7 @@ def test_the_pane_study_arms_may_differ_only_in_levers_model_view_and_the_marker
 @pytest.mark.parametrize(
     ("field", "value"),
     [
-        ("commit", "0e28d52"),
+        ("commit", "8601e34"),
         ("prompt_digest", "9" * 64),
         ("profile_digest", "f" * 64),
         ("set_too_small_override", True),

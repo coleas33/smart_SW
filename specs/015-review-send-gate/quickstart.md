@@ -12,7 +12,7 @@ review (decisions 68A to 80A, research R7).
 
 - Features 001 to 013 on `main`, with the accepted 010-fine-pitch change integrated into the 015
   branch before its T007-T008 characterizations. Record the baseline commit and gate results in
-  `review-2026-10-12.md`; the earlier `838b66b` code map is historical and its causes are re-verified
+  `review-2026-10-12.md`; the earlier `4818c62` code map is historical and its causes are re-verified
   before editing. For the current execution, wait for the root task's 010 and 014 integrations
   before capturing pins; reuse 014's `atomic.py` and skip T009-T010 when it is present. The open
   FR-041 finding in that review needs an owner decision before US4; the US1 milestone can proceed
@@ -351,7 +351,7 @@ On the licensed seat, with the build of this feature and the owner's key stored:
   No live provider run, SOLIDWORKS sitting, remodel validation or partial
   workflow merge to main is claimed. See review-2026-10-12.md for exact
   test-first, fixture-provenance and failure-race receipts.
-- **T110 US4 restart gate, 2026-10-15 (T092-T110 complete):** on the frozen candidate `3bbbbe7`:
+- **T110 US4 restart gate, 2026-10-15 (T092-T110 complete):** on the frozen candidate `38f37f0`:
   - Python 3.11.16, the worktree's own environment: 16,132 tests passed, 5 skipped, 7 deselected;
   - Ruff clean;
   - Release build: zero warnings/errors;
@@ -363,8 +363,8 @@ On the licensed seat, with the build of this feature and the owner's key stored:
   ran all three unchanged generators with seeded inputs; the literal replay diff was empty. Owner
   decision 93A fixes the re-run's commit point (FR-041). No live provider run or SOLIDWORKS sitting
   is claimed. See review-2026-10-12.md.
-- **T117 the 014 merge and T118 final gate, 2026-10-15:** on the merge commit `d1e26ff` (`main` at
-  `6c942ee`, 014 slice 5, merged in with no conflicts and nothing regenerated):
+- **T117 the 014 merge and T118 final gate, 2026-10-15:** on the merge commit `579b0a5` (`main` at
+  `48293bd`, 014 slice 5, merged in with no conflicts and nothing regenerated):
   - Python 3.11.16, the worktree's own environment: 16,307 tests passed, 5 skipped, 7 deselected;
   - Python 3.12.3, an isolated uv environment outside the repository: the same 16,307 passed,
     5 skipped, 7 deselected;

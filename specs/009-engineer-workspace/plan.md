@@ -3,7 +3,7 @@
 **Branch**: `009-engineer-workspace` | **Date**: 2026-09-23 | **Spec**: [spec.md](spec.md)
 
 **Input**: Feature specification from `/specs/009-engineer-workspace/spec.md` (User Stories 1 and 2
-landed on main as `2c48e2b`, `cf3c66e`, `b5cfcb4`), the owner's decisions of 2026-09-22 and
+landed on main as `6ec0391`, `c920221`, `460ae56`), the owner's decisions of 2026-09-22 and
 2026-09-23, the UI analyst's verified pass of 2026-09-23, and the Phase 0 decisions in
 [research.md](research.md).
 
@@ -256,7 +256,7 @@ docs/llm-efficiency-options.md                                       # CHANGED, 
 ```
 
 *Landed as*, User Stories 1 and 2: landed before this plan (tasks.md Phase 1, T001 to T004,
-commits `2c48e2b`, `cf3c66e`, `b5cfcb4`), they touched, beside rows above, the pane's
+commits `6ec0391`, `c920221`, `460ae56`), they touched, beside rows above, the pane's
 `Review/ReviewPage/{index.html, app.js, app.css, render.js}`, `web/shared/{document.js (new),
 attention.js (new), check-page.js, check-page.css}`, `Model/ModelCheckPage/index.html`,
 `Standards/StandardsPage/index.html`, `Review/ReviewHost.cs`, `Remodel/RemodelHost.cs` and
@@ -314,7 +314,7 @@ Research in [research.md](research.md) (R1 to R5). Design in [data-model.md](dat
 
 | Order | Story | Deliverable | Needs SOLIDWORKS |
 |---|---|---|---|
-| 0 | US1, US2 | Landed on main (`2c48e2b`, `cf3c66e`, `b5cfcb4`) | No |
+| 0 | US1, US2 | Landed on main (`6ec0391`, `c920221`, `460ae56`) | No |
 | 1 | Setup | The names helper; the words file | No |
 | 2 | **US3** (P2) | The summary, its route, the headline; the family line (after 008 T032); contacts (after 010 T020); the snapshot builder; the fixture acceptance and the pane fixture (after 008 T018); the page's summary block, group, contacts, names; SC-001 | No |
 | 3 | **US4** (P3) | The short form and its schema; the questions view; the resume cost; `request_id` (after 008 T085); the panel | No |

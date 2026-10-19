@@ -100,10 +100,10 @@ test scenarios, benchmark commands, and result collection are in
 
 ## Original pilot baseline
 
-- **Development checkout at import:** `main`, commit `e04c027` (`CLI contract:
+- **Development checkout at import:** `main`, commit `084c231` (`CLI contract:
   the probe remodel verb`), with a clean working tree before this import.
 - **Pilot baseline reported in the packet:** `local` commit `c36f183`, containing
-  `main` at `e04c027`; SOLIDWORKS 2024; OpenAI `gpt-5.6-luna`, high effort.
+  `main` at `084c231`; SOLIDWORKS 2024; OpenAI `gpt-5.6-luna`, high effort.
 - **Available in this baseline:** the reworked Review, Model check, and Standards
   tabs; lightweight-component coverage reporting; and the CLI remodel probe
   command with fifteen probe bodies. The pilot did not run those CLI probes.

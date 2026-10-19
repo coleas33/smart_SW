@@ -3,7 +3,7 @@
 Normative for FR-022 to FR-026, the answer-turn bound of FR-013, and User Story 4. Research D3,
 D14.3, D16, §7 ("The review run, turns and the answer path"), §8.3. How a request is matched to a
 scripted answer is `questions.md` section 3; this contract calls that rule and does not restate it.
-Line numbers are at `be01974`; paths are under `reviewer/src/swreview/` unless another root is
+Line numbers are at `5cfb743`; paths are under `reviewer/src/swreview/` unless another root is
 given. Every example value is fictional.
 
 What this contract fixes: where a case's scripted answers live and when they are refused; how

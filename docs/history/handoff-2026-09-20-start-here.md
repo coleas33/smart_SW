@@ -7,7 +7,7 @@
 **Location on the pilot machine:** `%USERPROFILE%\smart_SW-handoff-2026-09-20`
 
 You are picking this up with **no prior context**. This folder is what the
-pilot seat learned after absorbing your 2026-09-20 handover (`e04c027`) and
+pilot seat learned after absorbing your 2026-09-20 handover (`084c231`) and
 running the reworked tabs on the small assembly.
 
 **Do not treat this as a git branch to merge.** Findings packet only. The
@@ -22,7 +22,7 @@ machine. The punch list is below and in
 
 | Item | Value |
 |---|---|
-| Commit | `c36f183` (`local`, merge of GitHub `main` `e04c027`) |
+| Commit | `c36f183` (`local`, merge of GitHub `main` `084c231`) |
 | SOLIDWORKS | 2024 |
 | Provider / model / effort | openai / `gpt-5.6-luna` / high |
 | Last packet you already have | 2026-09-19 (Task A, lever 6 A/B, lightweight request) |

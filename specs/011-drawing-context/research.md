@@ -4,7 +4,7 @@
 
 Phase 0 output from: the owner's direction of 2026-09-22 and the roadmap written from it
 (`docs/history/roadmap-2026-09-22.md`); the ADR-001 amendment of the same day
-(`docs/adr/0001-agentic-review-architecture.md`); a reading pass on 2026-09-23 at tip `d47a91f` over every
+(`docs/adr/0001-agentic-review-architecture.md`); a reading pass on 2026-09-23 at tip `287d4c3` over every
 module the plan names - the extractor's drawing phase (`DrawingDumper`, `DrawingTraversal`,
 `SwDrawingReader`), the attach (`SwSession`), the phase orchestration (`PackageWriter`), the
 drawing-rooted traversal (`ComponentTreeDumper`), the read-only guard, the IR's drawing models in
@@ -14,7 +14,7 @@ SOLIDWORKS 2024 SP5 interop assemblies installed on the development machine
 (`SolidWorks.Interop.sldworks` 32.5.0.48 and `swconst`), read as metadata only - SOLIDWORKS was not
 started, and has no licence on this machine. Where this document says VERIFIED, the file was
 opened on 2026-09-23 or the interop member was reflected; VERIFIED never means a call behaves on a
-seat - that is what section R4's probes are for. Line numbers are as of `d47a91f` and will drift;
+seat - that is what section R4's probes are for. Line numbers are as of `287d4c3` and will drift;
 every task re-verifies before editing.
 
 No recorded package carries a drawing (the attach refusal, R3), so nothing in this feature is
@@ -55,7 +55,7 @@ its views reference, which is exactly the session change FR-044 forbids.
 
 **Why**: VERIFIED `Attach` calls `AttachRefusal(KindOf(document), path)` at
 `extractor/SwReview.Extractor/Sw/SwSession.cs:78` before `ActiveConfiguration` at `:84`, and the
-refusal (`:113`) returns a sentence for every drawing. That refusal (commit `7e700e4`, 2026-09-18)
+refusal (`:113`) returns a sentence for every drawing. That refusal (commit `96785d1`, 2026-09-18)
 fixed a real failure - a drawing active at add-in load took the whole tool service down - and it
 must stay for the tool service. But every extraction path goes through the same `Attach`:
 `SwReviewDump.Run` (`extractor/SwReview.AddIn/Review/SwReviewDump.cs:67`), which the Standards tab
@@ -695,7 +695,7 @@ record, or leaves it false and records why.
 
 - **No drawing has been extracted live.** `SwSession.Attach` refuses a drawing (`SwSession.cs:78`,
   `:113`) on every path that extracts, including the Standards tab's (`SwReviewDump.cs:67`) and
-  `probe standards` (`Program.cs:1792`); before `7e700e4` the same path failed on the missing
+  `probe standards` (`Program.cs:1792`); before `96785d1` the same path failed on the missing
   configuration. Feature 006's T103, T105 and T107 are therefore unreachable, not only unrun.
 - **The drawing phase reads one drawing, the root.** `PackageWriter.cs:282-296`; ids are allocated
   per traversal "because one package carries at most one drawing record" (`DrawingTraversal.cs:30`);
@@ -832,7 +832,7 @@ requirement or task moves for it.
 
 **Sources.** The sitting of 2026-09-28 (the handoff packet's U25: after an assembly review the
 engineer activated its drawing, and the pane said "Press Review to review {drawing}", which the host
-then refused), the follow-up on `codex/testing-feedback-2026-09-28` (`63fc360`), and the drawing
+then refused), the follow-up on `codex/testing-feedback-2026-09-28` (`f421225`), and the drawing
 lens's review of it the same day. **Each item is a default taken 2026-09-28, the owner may revise;
 none is the owner's own words.** SOLIDWORKS was not started; the guard's denied set and the local API
 help were read.

@@ -176,7 +176,7 @@ def replay_events(
     not UTF-8, and that line ends the replay the same way: each byte that is not UTF-8
     decodes to a lone surrogate in the line that holds it, so the damage is its own line's
     and no earlier line's. Lines end where text mode ends them, at a newline, a carriage
-    return and newline, or a lone carriage return, as at `be01974` (owner decision 38A).
+    return and newline, or a lone carriage return, as at `5cfb743` (owner decision 38A).
 
     A path whose name ends `.gz` is a packed stream (`PACKED_EVENTS_FILE_NAME`) and reads
     as its plain form. A truncated or corrupt archive ends the replay as a malformed line
@@ -218,7 +218,7 @@ def replay_events(
 def _open_stream(file: Path) -> TextIO:
     """The stream's lines as text, decompressed when it is packed.
 
-    Text mode with universal newlines, as at `be01974` (owner decision 38A). A byte that is
+    Text mode with universal newlines, as at `5cfb743` (owner decision 38A). A byte that is
     not UTF-8 reads as a lone surrogate (`_NOT_UTF8`) instead of raising out of a read that
     holds earlier lines too.
     """

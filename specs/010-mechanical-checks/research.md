@@ -4,13 +4,13 @@
 
 Phase 0 output from: the analyst's check-by-check pass over the two recorded evening packages
 (34 facts, 8 recommendations, 10 open questions, 2026-09-22); a second reading pass on
-2026-09-23 over every module the plan names, at tip `5530e22`; and three read-only probes run
+2026-09-23 over every module the plan names, at tip `c83e8be`; and three read-only probes run
 on 2026-09-23 over the recorded packages of the big assembly's recording and the small
 assembly's (the one `small-assembly-a` was generated from), outside the repository. The probes print ids, sizes and
 millimetres only; no name, path or property value of either package is written anywhere in this
 package or in any file a task creates. Where this document says VERIFIED, the file was opened
 on 2026-09-23 and, where the claim is behavioural or numeric, the code or the probe was run.
-Line numbers are as of `5530e22` and will drift; every task re-verifies before editing.
+Line numbers are as of `c83e8be` and will drift; every task re-verifies before editing.
 
 ---
 
@@ -732,7 +732,7 @@ recorded before their code):
   it, two fine designations of one part share a verdict key - the check, the component ids, the
   drawing places and the configuration (`reviewer/src/swreview/agent/runner.py:802-823`) - so the
   part-roles restate (D10) folds both onto one id and withdraws the other. A probe on 2026-10-08
-  (scratch code over `838b66b`, not committed) recorded two `thread.fine_pitch` findings, `M6x0.75` and
+  (scratch code over `4818c62`, not committed) recorded two `thread.fine_pitch` findings, `M6x0.75` and
   `M8x1`, on the custom plate of `reviewer/tests/support/roles_review.py` and answered "All
   bought": the plate stayed custom, yet one id was withdrawn as "bought part (your answer to
   ER-001)" and the other kept the `M8x1` words, so `M6x0.75` left the review. The owner chose one
@@ -771,7 +771,7 @@ recorded before their code):
   (`reviewer/tests/unit/test_report_bought_parts.py:216-217`,
   `reviewer/tests/unit/test_prerun_digest.py:710-715`), and `goal_lines` passes over a row no goal
   owns (`finding_groups.py:199-203`). Neither finding id is ever a coverage row's check, so
-  neither is read as a close-out row. A probe on 2026-10-08 (scratch, over `838b66b`, the two ids
+  neither is read as a close-out row. A probe on 2026-10-08 (scratch, over `4818c62`, the two ids
   added to the Fasteners `items` in memory) gave the Fasteners line "not applicable (out of
   scope)" for a `fasteners` close-out row out of scope beside the "nothing at all" row, beside a
   bought row and beside a coarse checked row, and "not reached (evidence missing)" for unresolved
@@ -782,7 +782,7 @@ recorded before their code):
   items first (T119). It replaces D25 (`contracts/fasteners.md` 8.4, FR-030, FR-031, T119,
   T120); 63B and 63C were rejected (the table below).
 
-**Why**: VERIFIED on 2026-10-08 at `838b66b`; behaviour was run, not read.
+**Why**: VERIFIED on 2026-10-08 at `4818c62`; behaviour was run, not read.
 
 - **Nothing classifies a pitch today.** No coarse-pitch, UNC or pipe-thread table exists in the
   repository; `ThreadSpec` carries a series (`metric` or `unified`), a diameter and a pitch and
@@ -932,7 +932,7 @@ whose second call withdraws (D14) (T119); the golden tree's allowed new paths in
 `contracts/replay.md` section 9 (T121). The recorded totals of the replay do not move: no recorded
 tool's result, the prompt or the checklist changes.
 
-**Merging with the 014 branch** (noted for the owner, who merges): `[014] 2ecbc28` changed
+**Merging with the 014 branch** (noted for the owner, who merges): `[014] 247797f` changed
 `checks/fastener.py`'s result `inputs` beside `_thread_match`, and 014 regenerated the replay and
 pane fixtures; T111 touches `parse_thread` only, and generated figures are re-measured after a
 merge, never hand-merged.
@@ -989,7 +989,7 @@ entry considered):
 | 51C, acceptance persists: an accepted fine thread stays accepted on later reviews, bound to the part or feature through the exceptions store | the fastener checks never read `exceptions.json` today, and a binding for a thread needs its own fingerprint; kept as a recorded alternative |
 | 52B, rows only, no parser fix: holes, cosmetic threads and fastener rows, the parsers untouched | `M8x1`-style names would be missed, and `M8x1,25` would stay a false fine flag |
 | 52C, 52A plus drawing callouts | what a native tapped-hole callout holds has not been checked on a licensed seat (011 probe D7, task T065), and the PDF grammar reads no unified thread; drawings are named as not read instead |
-| 53B, a new feature 015, the full speckit cycle before code | the check is one rule of User Story 4's thread checks, and the amendment pattern (`6e1c3ed`) records it before its code at a fraction of the paperwork |
+| 53B, a new feature 015, the full speckit cycle before code | the check is one rule of User Story 4's thread checks, and the amendment pattern (`833d23e`) records it before its code at a fraction of the paperwork |
 | 53C, on the 014 branch, after its slice 4 | no merge clash, but a product change would ride with the evaluation's branch |
 | A `fastener.` id | it would close the "Fastener joints" checklist item by prefix on a run that checked no joint |
 | Inside `check_joints` or `check_hygiene` | `check_joints` is about placed joints and a fine thread needs none; hygiene closes its own checklist item and sorts as hygiene, last, where a judgement belongs in Decide |

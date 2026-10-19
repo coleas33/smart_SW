@@ -3,7 +3,7 @@
 **Feature**: 004 Resilient re-modeler, stage 1
 **Tasks**: T002 (offline dry run, complete), T003 (workstation dry run over real parts, **not run**; a provisional count over three real packages is section 4.1, T148), T004 (this file)
 **Status**: **go signed; still incomplete, awaiting T003.** Signed **go** by the owner on 2026-10-18 (decision 127A), retroactively: phases 2 to 9 were built before the sign-off. Section 4's table is still empty, so T004 stays open (section 5). Until 2026-10-18 this line read: "incomplete — awaiting T003 and the owner's signature. The go / no-go in section 5 is unsigned and no decision has been taken."
-**Repository**: `baa7424`, working tree dirty; no file under `reviewer/tests/golden/fixtures/` or `benchmarks/` was modified by any run recorded here.
+**Repository**: `6f65148`, working tree dirty; no file under `reviewer/tests/golden/fixtures/` or `benchmarks/` was modified by any run recorded here.
 **Date of the offline run**: 2026-09-16
 
 ---
@@ -293,7 +293,7 @@ made. Record the same five numbers per part plus the per-part reorganizable frac
 
 **What was run.** `plan_reorganize` - the call `swreview remodel plan` makes - over the newest
 `ModelCheck` package of each of three designs (older packages of the same designs were not counted),
-once at `666512d` (before) and once after T142 to T147 and T162/T163 (after). No SOLIDWORKS, no
+once at `bf346c8` (before) and once after T142 to T147 and T162/T163 (after). No SOLIDWORKS, no
 model, no write. Every scope verdict is `unresolved`, because a dry run reads no signal (section
 3.4); `planned` below therefore means "no refusal the package can show", not "runnable". The
 planner took under 0.01 s per package.

@@ -5,7 +5,7 @@ offline, and section 15's tokenizer test pins D14.6), FR-050 and FR-057; User St
 2 and 7, and User Story 7. Research D2, D10, D11, D16, PP-1, PP-2, PP-5, PP-6 and
 §8.10, and owner decisions 34A (section 4's one writer) and 36A (section 5.4, packages at once). This is the run-status layer `scripted-answers.md` sections 3 and 4 hand classification
 to. What the provenance record holds, what must match across a study, the pane study's rules
-and the location-free paths are `provenance.md`'s. Line numbers are at `be01974`; paths are
+and the location-free paths are `provenance.md`'s. Line numbers are at `5cfb743`; paths are
 under `reviewer/src/swreview/` unless another root is given. Every example value is fictional.
 
 Amends: feature 005 `contracts/ab-harness.md` sections 2 and 10.1 (the provenance record is
@@ -142,7 +142,7 @@ plain or packed, through `agent/events.event_stream` (plan decision RF-83).
   writer (owner decision 34A; plan decision RF-88): the three older copies of the rule
   (`report/attention_record.py:126-145`, `tokens.py:221-226`, `ir/loader.py:177-195`) move onto it in
   Phase 2, each with its failing-first test; the vocabulary's and the package's bytes do not move,
-  and the attention record's, written in text mode at `be01974`, are LF on Windows after it, which no
+  and the attention record's, written in text mode at `5cfb743`, are LF on Windows after it, which no
   reader sees (each parses JSON). Its temporary is `tempfile.NamedTemporaryFile(dir=path.parent,
   prefix=f".{path.name}.", suffix=".tmp", delete=False)`, the attention record writer's naming, so
   that record's tests keep their glob.
@@ -864,7 +864,7 @@ re-run attempt the same way, lands with the robustness slice (RF-60).
 - `test_the_wall_clock_stops_answer_turns` (the `stop_requested` seam);
 - `test_the_stop_wrapper_forwards_tools_withdrawn`: `providers.tools_withdrawn(StoppableTools(tools,
   stop))` follows the inner set's `tools_withdrawn()`, and is false for an inner set without it
-  (fails at `be01974`, where the wrapper has no such method; RF-18). The scripted provider never
+  (fails at `5cfb743`, where the wrapper has no such method; RF-18). The scripted provider never
   reads `tools_withdrawn` (`agent/providers/fake.py` has no reference to it), so the round-level
   half is `reviewer/tests/integration/test_coverage_stop.py`'s (below; RF-63);
 - `test_a_profile_changed_between_attempts_stops_the_run_with_exit_1_naming_both_digests` (the
@@ -952,7 +952,7 @@ with `os.replace` patched to raise, the target keeps its old bytes and no tempor
 
 The migrated writers (owner decision 34A; the parity slice's Phase 2 tasks; plan decision RF-88), one
 test in each writer's own file, each through a spy on `swreview.atomic.write_atomic` and with
-`os.replace` patched through `swreview.atomic.os`, each red at `be01974` for want of the call: one
+`os.replace` patched through `swreview.atomic.os`, each red at `5cfb743` for want of the call: one
 call with the exact bytes, an existing file replaced whole, and on a failed replace the old bytes
 kept and no temporary left:
 - `reviewer/tests/unit/test_attention_record.py`:
@@ -960,7 +960,7 @@ kept and no temporary left:
   platform);
 - `reviewer/tests/unit/test_tokens.py`: `test_fetch_writes_the_vocabulary_through_the_one_atomic_writer`;
 - `reviewer/tests/unit/test_ir_loader_append.py`:
-  `test_the_merged_package_is_written_through_the_one_atomic_writer` (the bytes `be01974` writes).
+  `test_the_merged_package_is_written_through_the_one_atomic_writer` (the bytes `5cfb743` writes).
 The three existing failure tests (`test_attention_record.py:168-188`, `test_ir_loader_append.py:182-198`,
 `test_checks_first_interference.py:306-331`) patch `os.replace` through `swreview.atomic.os` from the
 migration on, what they assert unchanged.

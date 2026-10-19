@@ -3,7 +3,7 @@ cover with four M6 screws in blind tapped holes.
 
 **The package** (`cases.md` 6.4; `answer-key.md` 7.1; CS-19, RF-12, RF-75). The exported-files
 package the case always was, rebuilt with the builders from the committed package's content at
-`be01974` (`benchmarks/packages/cover-blind-tap/package.json`), in the example profile's names
+`5cfb743` (`benchmarks/packages/cover-blind-tap/package.json`), in the example profile's names
 (`generator.md` 5.2). The custom housing, fixed, and the custom cover, both 6061-T6 as their
 recorded descriptions state, and four bought M6 x 20 socket head screws, each with its fastener
 row (GN-2), in the profile's bought folder with a vendor property; each custom part carries
@@ -108,7 +108,7 @@ SCREW_THREAD, SCREW_LENGTH_MM = "M6-1.0", 20.0
 
 CLAMP_MM = 1.5
 """What each screw clamps: the cover's 8.0 mm under its 6.5 mm deep counterbores, the stack the
-key at `be01974` states. The package lays no face and the cover states no `Thickness`, so nothing
+key at `5cfb743` states. The package lays no face and the cover states no `Thickness`, so nothing
 measures it: `check_fastener_joint` reports the cover's layer unknown and, the row carrying no
 usable thread depth, leaves bottoming and engagement unresolved."""
 

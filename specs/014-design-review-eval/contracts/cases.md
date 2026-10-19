@@ -12,7 +12,7 @@ key's format and load-time refusals are `answer-key.md`; the case file's format 
 refusals are `scripted-answers.md` section 2; how a finding matches an entry is `scoring.md`
 section 2; how a case is written is `generator.md`. None is restated here.
 
-Line numbers are at `be01974`; paths are under `reviewer/src/swreview/` unless another root is
+Line numbers are at `5cfb743`; paths are under `reviewer/src/swreview/` unless another root is
 given. Every example value is fictional.
 
 ## 1. Files and their readers
@@ -421,7 +421,7 @@ plan for it, then ends (FR-054 (a); research §8.6; plan decision RF-38). The tw
 take arguments are not called: the interference groups are the pre-run's own per-group calls
 (`prerun.py:737-739`; `check_interference_group(group_key)`, `tools/checks_interference.py:69`), and
 `bridge_interference` (`tools/bridge.py:397-399`) is not offered offline (`live_tools` false). At
-`be01974` the plan already holds every argument-free check it offers (`tools/registry.py:120-134`;
+`5cfb743` the plan already holds every argument-free check it offers (`tools/registry.py:120-134`;
 `tools/checks_mechanical.py:76`), so the turn is usually empty; the rule keeps a future check honest.
 Scored with the real scorer. Passes when:
 1. the detected known defects (credited or flagged) are exactly the code-produced ones, none a

@@ -6,12 +6,12 @@ Phase 0 output from: the owner's request and decisions 59A to 62A of 2026-10-08 
 read-only maps of the same day (plans and history, the reviewer pipeline, the add-in flow and
 settings, what is sent and the approval patterns), held outside the repository; and a second pass
 on 2026-10-08 that opened every file this package cites on branch `015-review-send-gate` at
-`7554445` (the spec commit on `838b66b`, whose product code it equals). Where this document says
+`dba7740` (the spec commit on `4818c62`, whose product code it equals). Where this document says
 **VERIFIED**, the file was opened on 2026-10-08 at that commit. A third pass on 2026-10-09, after
 the plan's adversarial review, opened every file its fixes cite at the same product code (marked
 *revised 2026-10-09* where an entry changed, and R2.27 added). A fourth pass the same day, after
 the plan's second adversarial review, opened every file its fixes cite at the same product code,
-re-read branch 014 at `45b5076`, and measured the pane's 300 by 600 budget on the committed build
+re-read branch 014 at `80e711d`, and measured the pane's 300 by 600 budget on the committed build
 (R2.21); entries it changed are marked *second review, 2026-10-09*, and R2.28 is added. A fifth
 pass the same day, after the tasks' adversarial review, opened the files its fixes cite at the same
 product code (`chat/server.py`'s stop flag, the page's `sessions.list` calls, the add-in test
@@ -19,7 +19,7 @@ project's fixture glob, the command-line review's output); entries it changed ar
 review, 2026-10-09*. A sixth pass the same day applied the owner's review of the plan (CLAUDE.md's
 review in its BIG CHANGE form, decisions 68A to 80A, each recorded in R7 with the options it
 rejected), reading the files each decision cites at the same product code; entries it changed are
-marked with the decision's id. A fresh review of the amended head `8347827` on 2026-10-12 is
+marked with the decision's id. A fresh review of the amended head `b902ea3` on 2026-10-12 is
 recorded in [review-2026-10-12.md](review-2026-10-12.md); it corrected the Send rollback snapshot
 order and the Setup note's timing, and records an open FR-041 finalization finding. The earlier
 VERIFIED dates and line numbers remain historical evidence. The accepted 010 integration is
@@ -44,7 +44,7 @@ or local path is written here.
 |---|---|---|
 | `spec.md` | Four user stories, FR-001 to FR-042, SC-001 to SC-010, owner decisions 59A to 62A and the plan review's 68A to 80A (R7) | Normative for what is built |
 | The four read-only maps (2026-10-08, outside the repository) | Path:line facts on the pipeline, the add-in, the approval precedents and the tests | Starting facts; every one used here was re-read (VERIFIED) |
-| The 014 worktree (`smart_SW-014`, branch `014-design-review-eval` at `907a621`, not merged) | Changes to files this feature also changes | Read only, for the merge note (R3) |
+| The 014 worktree (`smart_SW-014`, branch `014-design-review-eval` at `a99d827`, not merged) | Changes to files this feature also changes | Read only, for the merge note (R3) |
 | The constitution 1.1.0 | Principles I to VI, the read-only rule | The gate (plan.md); this feature adds no exception |
 
 ---
@@ -1176,7 +1176,7 @@ and the four unchanged T056 cases pass. The raw fixture SHA256 is
 "Send to model", which are 59A's; the Send block's place under the summary: second review,
 2026-10-09).
 
-**The budget, measured** (*second review, 2026-10-09*). On the committed build of `838b66b` (the
+**The budget, measured** (*second review, 2026-10-09*). On the committed build of `4818c62` (the
 add-in test assembly the main checkout had built, copied to a scratch folder outside the
 repository; its page files equal this branch's but for line endings), a rule appended to the copy's
 `app.css` added a block of N px at the end of `#session`, and `ReviewPageSummaryAcceptanceTests` and
@@ -1587,9 +1587,9 @@ limitation (Retry after a rejected key would extract again into a new folder); d
 
 ## R3. Merge note with feature 014
 
-Branch `014-design-review-eval` (worktree `smart_SW-014`, at `907a621` on 2026-10-08, `4345cf1`
-and then `45b5076` on 2026-10-09, not merged) changes files this feature also changes. VERIFIED by
-`git diff --name-only 838b66b <head>` at each head, intersected with every file this plan changes,
+Branch `014-design-review-eval` (worktree `smart_SW-014`, at `a99d827` on 2026-10-08, `f5566cf`
+and then `80e711d` on 2026-10-09, not merged) changes files this feature also changes. VERIFIED by
+`git diff --name-only 4818c62 <head>` at each head, intersected with every file this plan changes,
 adds or relies on by name (*revised 2026-10-09*: the first pass missed `prerun.py`,
 `agent/settings.py`, `ir/loader.py`, `tokens.py` and `test_handoff.py`; *second review,
 2026-10-09*: the second missed the 001 contracts README, `test_atomic.py`, the six replay fixture
@@ -1623,26 +1623,26 @@ files, `tools/session.py`, `agent/checklist.py`, `report/attention_record.py` an
 | `extractor/SwReview.AddIn.Tests/Fixtures/review-big-assembly.json` | regenerated (origin marks) | labels block gains five keys | second regenerates it in the merge commit, where the file is a conflict, so the merge passes the gate; its review checks the snapshot part is 014's and the labels block 015's |
 | `reviewer/tests/unit/test_benchmark_pane_parity.py` (014 only) | fails on any unclassified `start_review` argument | adds `send_when_checked` and `earlier` | second classifies both as `COMPARED` (equal at their defaults on both surfaces, as `previous_session` and `fail_tool` are) |
 
-The table is the intersection at `45b5076` of 014's diff (212 files) with every file 015 changes,
+The table is the intersection at `80e711d` of 014's diff (212 files) with every file 015 changes,
 adds or relies on by name; a later 014 head is intersected again by the branch that merges second.
 014 also changes `findings.py` and `tools/registry.py`, which 015 only calls: `finding_subject_key`
 and `record_call` are unchanged there (014 adds functions beside them). The rest of 014's diff -
 its benchmark modules, the CLI, its check goldens, its tests and documents, `specs/008-.../
 contracts/cli.md` - is neither changed nor relied on by 015.
 
-**Re-checked 2026-10-12.** At `ee6571c`, the only shared file changed since `45b5076` is
+**Re-checked 2026-10-12.** At `1827b2f`, the only shared file changed since `80e711d` is
 `tests/support/mechanical.py`, adding the M6 socket-head dimensions. This does not replace the
 intersection required at the actual integration head. The earlier claim that `smart_SW-fp` touched
-only feature 010 documents was stale: `010-fine-pitch` at `7fcbf66` changes 68 files against
-`838b66b`, including `agent/runner.py`, the mechanical tools and their registry, the words and
+only feature 010 documents was stale: `010-fine-pitch` at `76f1456` changes 68 files against
+`4818c62`, including `agent/runner.py`, the mechanical tools and their registry, the words and
 attention policy, the shared mechanical and pre-run builders, replay assertions, and contracts
 015 amends. Integrate the accepted 010 change before T007-T008 and re-verify the causes; otherwise
 the characterizations would freeze superseded ticked behavior. No 015 product change is allowed
 before those pins. The exact integrated baseline and verification are recorded in
-`review-2026-10-12.md`; the accepted baseline is now `c93c86a`, integrating `main`
-`017ba0ac` (010 `a5b4ed8`, combined integration `7ebd4ae`, 014 goldens `48049bf`, T158
-receipt `017ba0ac`). The historical table remains the file map for the original review.
-At this actual head the additional shared changes since `45b5076` include 010's
+`review-2026-10-12.md`; the accepted baseline is now `a0e5c8e`, integrating `main`
+`e293d1da` (010 `e140bb2`, combined integration `e5c3170`, 014 goldens `079fd73`, T158
+receipt `e293d1da`). The historical table remains the file map for the original review.
+At this actual head the additional shared changes since `80e711d` include 010's
 `agent/runner.py` pre-run/thread-tool wiring, `report/review_words_v1.yaml`, the mechanical
 registry/tools and the `tests/support/mechanical.py` and `tests/support/prerun.py` builders,
 plus the owning 008 answer-batch/checks-first/replay contract updates. None is replaced by
@@ -2104,7 +2104,7 @@ margin and interim 30 s; 72A's rule that neither of two decisions meeting one fi
 
 ## R8. Owner decisions of the US4 code review (2026-10-14)
 
-An adversarial review of T092 to T098 (commits `3dffcd3` to `44bcd27`) found no blocker. It
+An adversarial review of T092 to T098 (commits `9c9b172` to `ce4a6db`) found no blocker. It
 found gaps in what the tests prove and a few small defects, and offered the owner one option per
 group, numbered 5A to 8A in its notes, which are held outside the repository. The owner took each
 on 2026-10-14. They are numbered here 87A to 90A, the next numbers no branch uses (feature 014
@@ -2213,7 +2213,7 @@ each is noted on the task lines it touches, no task box is ticked for it, and
 
 ### 98A. Every confirmed T116 finding in 015's own code and tests is fixed now, test-first (2026-10-15)
 
-- **Question** (the T116 review's 16A): the adversarial review of the branch at `3da2b98` (T116)
+- **Question** (the T116 review's 16A): the adversarial review of the branch at `c98a323` (T116)
   confirmed seven should-fix findings in 015's own code and tests, and five notes. Fix them now,
   each test-first, or record some for T118.
 - **Chosen**: fix all of them, test-first:
@@ -2298,7 +2298,7 @@ each is noted on the task lines it touches, no task box is ticked for it, and
 
 ### 105A-109A. The adversarial check of 016 on 015, and its follow-ups (2026-10-15)
 
-- **Question** (the owner's 26A, 27A and 29A-31A): the adversarial check of `10cecf3..2ab8043`
+- **Question** (the owner's 26A, 27A and 29A-31A): the adversarial check of `a1903cd..82bb85a`
   (016 adapted on `main`, 99A) answered MERGE-READY: no path gets saved context to a provider
   before Send. It raised five points for 016's branch before the merge to `main`.
 - **Chosen**, each landed test-first on `016-adapt-015`:

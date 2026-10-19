@@ -2,7 +2,7 @@
 
 Handoff for finishing the same-origin backend proxy. Diagnosed and started on the pilot
 workstation (SOLIDWORKS 2024, WebView2 153.0.4234.32, Sophos Endpoint) against `main`
-`8b09438`.
+`5d93f92`.
 
 **Status (updated 2026-09-16): done.** Root cause proven, the proxy built, and the one thing
 that blocked it - WebView2 raises no `WebResourceRequested` for a virtual host mapped to a

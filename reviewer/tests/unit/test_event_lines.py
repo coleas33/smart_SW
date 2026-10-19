@@ -10,8 +10,8 @@ pinned here, as `scoring.md` 11's `test_event_lines.py` numbers it:
    stops at the first line that is not JSON, not UTF-8 (a write cut inside a multibyte
    character, in either form, section 5) or not an `AgentEvent`, calling `on_unreadable`
    with that line's 1-based number in the file, blank lines counted. A line ends at `\\n`,
-   `\\r\\n` or a lone `\\r`, as text mode ends it at `be01974` (owner decision 38A, section
-   5). Without the hook it behaves as at `be01974`: a missing file is an empty stream,
+   `\\r\\n` or a lone `\\r`, as text mode ends it at `5cfb743` (owner decision 38A, section
+   5). Without the hook it behaves as at `5cfb743`: a missing file is an empty stream,
    `after` filters by `seq`, and the pane's reconnect and remodel tests
    (`test_chat_sessions.py`, the chat-server reconnect tests,
    `tests/integration/test_remodel_flow.py`) pass unchanged.
@@ -176,7 +176,7 @@ def test_an_empty_file_is_an_empty_stream_and_is_not_unreadable(tmp_path: Path) 
 
 
 def test_without_the_hook_it_behaves_as_before(tmp_path: Path) -> None:
-    """As at `be01974`: `after` filters by `seq`, a bad line ends the replay quietly, a
+    """As at `5cfb743`: `after` filters by `seq`, a bad line ends the replay quietly, a
     missing file is empty, and the path may be a string."""
     written, data = _log(4)
     path = tmp_path / EVENTS_FILE_NAME
@@ -298,9 +298,9 @@ def test_a_cut_character_with_later_events_after_it_stops_at_the_cut_line(
 
 
 @pytest.mark.parametrize("form", FORMS)
-def test_a_lone_carriage_return_ends_a_line_as_at_be01974(tmp_path: Path, form: str) -> None:
+def test_a_lone_carriage_return_ends_a_line_as_at_5cfb743(tmp_path: Path, form: str) -> None:
     """Lines end where text mode ends them, at `\\n`, `\\r\\n` or a lone `\\r` (universal
-    newlines, as at `be01974`; owner decision 38A), in either form."""
+    newlines, as at `5cfb743`; owner decision 38A), in either form."""
     written = [_event(1), _event(2), _event(3)]
     first, second, third = (event.model_dump_json().encode() for event in written)
     path = FORMS[form](tmp_path, first + b"\r\n" + second + b"\r" + third + b"\r\n")

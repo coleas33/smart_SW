@@ -1,6 +1,6 @@
 # Feature Specification: Design-Review Eval
 
-**Feature Branch**: `014-design-review-eval` (branched from `main` at be01974)
+**Feature Branch**: `014-design-review-eval` (branched from `main` at 5cfb743)
 
 **Created**: 2026-09-28. **Revised**: 2026-09-29, after a four-lens review, three re-reviews and owner decisions 17A to 27A; 2026-09-30, owner decision 30A; 2026-10-06, owner decisions 33A to 36A, from the owner's review of the plan.
 
@@ -49,7 +49,7 @@
 | 35A | 2026-10-06 | A paid smoke run before the pilot (quickstart P0): two packages, an anchor with a case file and a core case, one repetition per arm, about four reviews; every row is read (served model, usage, priced cost, run status, answer log, finding origins, transcript) and any wiring is fixed before the pilot. One live test, run only on demand, drives one real benchmark attempt end to end. |
 | 36A | 2026-10-06 | The cost gate prints the approved study's projected wall clock, from the smoke run's and the pilot's review times, at the chosen concurrency. `benchmark run --jobs N` (default 1) reviews up to N packages at once, each in its own folder, the run's shared records never interleaved; N is recorded and is not a must-match field, since it changes nothing that is measured. |
 | 37A | 2026-10-07 | The matcher's family rows that slice 1 tests (tasks.md T022) read on `fastener.head.*`, a family a known defect or a correct condition may hold, since AK-4 refuses `fastener.*` on both; the contract's own `fastener.*` rows are tested on a forbidden entry, where that family may stand (T083). |
-| 38A | 2026-10-07 | The one event-line reader ends a line where text mode ends it, a lone carriage return included, exactly as at `be01974`, while a line cut inside a multibyte character still ends the replay at that line and is reported, never raised. |
+| 38A | 2026-10-07 | The one event-line reader ends a line where text mode ends it, a lone carriage return included, exactly as at `5cfb743`, while a line cut inside a multibyte character still ends the replay at that line and is reported, never raised. |
 | 39A | 2026-10-07 | The `joint-unknown-role` check golden stays at schema 1.3.0 inside the golden gate, which is not widened, so it carries no tolerance source (every source is a 1.5.0 member): it pins `hole.nominal_alignment`'s unknown-role result naming every instance of the joint and the stack check's "no tolerance source" skipped row, and `hole.position_stack`'s unknown-role result is pinned by a unit test. |
 | 40A | 2026-10-07 | `check_interference_group` cites its own step on every finding, as on every contact, so a pre-run interference finding reads as the pre-run's and a model-called one as a code-only call, never as model origin for want of a step. The big-assembly replay fixture and the pane fixture are regenerated, and the recorded input moves by the one step id the model reads per interference finding. |
 | 41A | 2026-10-07 | The scorer's end-to-end test of origins (tasks.md T032, test 5) takes its code-only-call findings from the same package's off arm, where the model's scripted part and mass checks write them; the checks-first review shows pre-run and configured-check findings, and a guarded repeat of the hygiene check adds nothing. |

@@ -207,7 +207,7 @@ estimate from the replay's figures, not a measurement.
 ### 0.1 What the owner brings, and decides
 
 1. **This plan on GitHub, with the build it needs.** The seat updates from GitHub
-   (`origin/main`), so the owner pushes `main` before the sitting. It must hold commit `8d308be`
+   (`origin/main`), so the owner pushes `main` before the sitting. It must hold commit `43436d3`
    or a later one: from that commit the probe names each dimension, which step 3.8 needs, and the
    results sheet step 1.4 copies is older still. The commit that added this plan is not enough:
    it came before both. Step 1.4 checks the build.
@@ -607,13 +607,13 @@ and the line `-NoPull: building what is checked out`; then each `== <step>` head
 
 ```powershell
 git log --oneline -1; Test-Path docs\test-plan-2026-09-27\workstation-results.md
-git merge-base --is-ancestor 8d308be HEAD; "holds 8d308be: $($LASTEXITCODE -eq 0)"
+git merge-base --is-ancestor 43436d3 HEAD; "holds 43436d3: $($LASTEXITCODE -eq 0)"
 git --version; dotnet --version; uv --version
 foreach ($k in 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', 'HKCU:\Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}') { if (Test-Path $k) { 'WebView2 ' + (Get-ItemProperty $k -Name pv).pv } }
 ```
 
 Pass: the second line prints `True` (the checkout holds the results sheet copied below), the
-third `holds 8d308be: True` (the probe names each dimension, as step 3.8 needs: this build or a
+third `holds 43436d3: True` (the probe names each dimension, as step 3.8 needs: this build or a
 later one), and every other line prints a commit or a version. `False` on either, or a line
 starting `fatal:` before the third: the update did not bring the build this plan needs (section
 0.1, item 1): stop and call the owner. No `WebView2` line at all: write
@@ -1969,14 +1969,14 @@ document.
 
 Run this immediately after step 4.1, reading A's review and its run folder; a full sitting pays
 no extra review. Step 1 must have installed a build of `main` at or after slice 6's gate commit
-`b305130`; T221 names that gate build, and any later `main` build holds it. Check from the setup
+`21aad39`; T221 names that gate build, and any later `main` build holds it. Check from the setup
 block's PowerShell window:
 
 ```powershell
-git -C $R merge-base --is-ancestor b305130 HEAD; "holds b305130: $($LASTEXITCODE -eq 0)"
+git -C $R merge-base --is-ancestor 21aad39 HEAD; "holds 21aad39: $($LASTEXITCODE -eq 0)"
 ```
 
-Pass: `holds b305130: True`, and step 1's update and gates passed.
+Pass: `holds 21aad39: True`, and step 1's update and gates passed.
 
 To run 014 T221 alone before the next full sitting, paste the setup block, do step 1's update
 and step 2.5's key in Settings, then review A exactly as step 4.1 does (step 4's box, its questions
@@ -2272,12 +2272,12 @@ Copy-Item "$env:APPDATA\SwReview\settings.json" "$env:APPDATA\SwReview\settings.
 Pass: nothing, then `main`. Anything else: stop and call the owner. Then:
 
 ```powershell
-git checkout 9464b9e
+git checkout 69fbb4a
 .\extractor\tools\update-workstation.ps1 -NoPull -SkipTests
 ```
 
-git prints `You are in 'detached HEAD' state` and a few lines of advice: that is expected. `9464b9e`
-is the build before the fix (`3e86d47`); `-SkipTests` only here, because this build is only looked
+git prints `You are in 'detached HEAD' state` and a few lines of advice: that is expected. `69fbb4a`
+is the build before the fix (`b15c0b0`); `-SkipTests` only here, because this build is only looked
 at. If Windows says running scripts is disabled, run
 `powershell -ExecutionPolicy Bypass -File .\extractor\tools\update-workstation.ps1 -NoPull -SkipTests`.
 Like the current script, the older one starts with `== git fetch origin` even with `-NoPull` (the

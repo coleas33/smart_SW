@@ -1598,7 +1598,7 @@ FORMAT_1_KEY: dict[str, Any] = {
         }
     ],
 }
-"""`benchmarks/answer_keys/cover-blind-tap.json` as committed at `be01974`, a key in format 1:
+"""`benchmarks/answer_keys/cover-blind-tap.json` as committed at `5cfb743`, a key in format 1:
 copied here rather than read from the tree, which T040 rewrites in format 2."""
 
 

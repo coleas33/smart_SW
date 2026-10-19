@@ -9,7 +9,7 @@ section 4 "Saved set" (PROV-08, RF-4, RF-54; FR-051; US2-11):
 - so two checkouts of one tree at two locations save the same bytes, and the same `set_digest`;
 - `benchmark score` with no `--set` reads that copy through `sets.load_saved_set(path, root=...)`,
   resolving its relative entries against the reader's checkout and never against the run
-  folder's grandparent, the rule `benchmark/sets.py:45` applied at `be01974`; a copy saved before
+  folder's grandparent, the rule `benchmark/sets.py:45` applied at `5cfb743`; a copy saved before
   this feature (absolute entries) still loads.
 
 Each run here is a scripted `benchmark run --provider fake` over a set file lying in a temporary

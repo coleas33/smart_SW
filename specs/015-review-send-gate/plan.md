@@ -302,7 +302,7 @@ changes what they show, in the commit that changes it.
 
 **Sequencing against other features.** 015 needs 001 to 013 on `main`, and the accepted
 010-fine-pitch integration before T007-T008 capture the pre-015 behavior. Record that baseline
-commit and verify its gate in `review-2026-10-12.md`; the old code map at `838b66b` must be
+commit and verify its gate in `review-2026-10-12.md`; the old code map at `4818c62` must be
 re-verified before each edit. The fresh review's open FR-041 finalization finding must be resolved
 before US4; it does not block the US1 milestone and this review changes no failure-recovery
 promise. Feature 014 is not a US1 prerequisite; research R3's table says who reconciles each

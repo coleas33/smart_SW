@@ -111,7 +111,7 @@
   - **75A**: FR-035 (the characterization covers a ticked review's failures). **76A**: FR-041 (one helper for a restart and a kill). **77A**: FR-033 and the edge cases on a provider error at Send, an apply that fails and restoring a waiting review (a reload during a Send or an apply). **79A**: the edge case "Several reviews waiting at once" (no SOLIDWORKS connection held while waiting). **80A**: FR-030 and the SOLIDWORKS-closed edge case (the search opens one file).
   - 70A, 74A and 78A move the plan only.
 
-- Fresh re-check of the amended head `8347827` on 2026-10-12: see
+- Fresh re-check of the amended head `b902ea3` on 2026-10-12: see
   [review-2026-10-12.md](../review-2026-10-12.md). The Send rollback snapshot now precedes the
   factory, the baseline integrates accepted 010 before the characterization pins, required
   `checked_at` is initialized before the first finalization, and Setup note timing agrees with

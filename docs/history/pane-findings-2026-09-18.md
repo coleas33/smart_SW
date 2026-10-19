@@ -1,7 +1,7 @@
 # Workstation session 2026-09-18: what works, one real bug, two setup gaps
 
 Pilot workstation, SOLIDWORKS 2024, WebView2 153.0.4234.32, Sophos Endpoint. Against `main`
-`bada848` (the pull that brought the same-origin backend proxy, the event stream over the
+`d1c0cd0` (the pull that brought the same-origin backend proxy, the event stream over the
 page channel, feature 006 Standards, `check rms --out` and the document-following tool
 service).
 

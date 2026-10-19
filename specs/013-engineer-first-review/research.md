@@ -3,10 +3,10 @@
 **Feature**: `013-engineer-first-review` | **Date**: 2026-09-26 | **Plan**: [plan.md](plan.md)
 
 Phase 0 output from: the 2026-09-26 sitting on the pilot workstation, the first on the checks-first
-build (features 008 to 011 at `9edc36c`); its debrief, which is held outside the repository because
+build (features 008 to 011 at `fbf56c5`); its debrief, which is held outside the repository because
 it carries company data (F1 to F8, U17 to U24), and from which nothing is copied; and six analysts'
 reports of the same day, which read the sitting's run folders, logs and notes against the code. Their
-causes are cited here at file and line. The seat ran `9edc36c`; `main` at `111bc82`, where this
+causes are cited here at file and line. The seat ran `fbf56c5`; `main` at `06e4a9e`, where this
 package was written, differs from it in one test file only, so every line number below is the code
 the seat ran. Line numbers drift; every task re-verifies before editing.
 
@@ -979,7 +979,7 @@ back narrowed, because a carried row never counted as a place. A pre-T133 record
 error on an absorbed sketch's two listings read as lost against today's one location, the shape
 the clause narrows for the sketch check. And the Standards count read the type table R2.47 said it
 never reads. Measured on the three real recordings before the code (2026-09-27, `main` at
-`d2af5cc`): every carried location narrowing removes lies in an `rms.grouping.all_features_in_a_group`
+`ead4de5`): every carried location narrowing removes lies in an `rms.grouping.all_features_in_a_group`
 finding (29, 4 and 4 carried content sketches, the rest carried rows the table does not count), and
 the sketch rules' narrowed findings drop merged pairs alone (4 and 7 occurrences on the big
 recording, 1 and 1 on the small ones), so the figures stay 26, 3 and 2 narrowed and 283, 29 and 21
@@ -1101,7 +1101,7 @@ Choices made on review of this package, 2026-09-26 (changeable in review like th
 
 ## R4. Verified causes the tasks cite
 
-The analysts' causes, by item (VERIFIED against the code at `9edc36c`, which `111bc82` equals outside
+The analysts' causes, by item (VERIFIED against the code at `fbf56c5`, which `06e4a9e` equals outside
 one test file):
 
 | Item | Cause | Where |

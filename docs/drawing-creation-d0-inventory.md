@@ -1,6 +1,6 @@
 # D0: the drawing-creation inventory
 
-Status: first phase, 2026-10-18, on `main` after `3b4825d`. This is the inventory the
+Status: first phase, 2026-10-18, on `main` after `489e34f`. This is the inventory the
 [future capabilities roadmap](future-capabilities-roadmap-2026-10-14.md) asks for before any
 drawing-creation feature (reserved number 012) is specified. It changes no code, no capability
 gate and no constitution rule.

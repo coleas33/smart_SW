@@ -31,7 +31,7 @@
 
 ## Notes
 
-- Validated 2026-09-23. User Stories 1 and 2 (FR-001 to FR-006) describe work already landed on main in commits 2c48e2b, cf3c66e and b5cfcb4; they are recorded so the package covers the whole workspace.
+- Validated 2026-09-23. User Stories 1 and 2 (FR-001 to FR-006) describe work already landed on main in commits 6ec0391, c920221 and 460ae56; they are recorded so the package covers the whole workspace.
 - The owner's decisions of 2026-09-22 and 2026-09-23 (folded modelling-practice group, separate contact list, "Decide / Fix / Verify") left no clarification open.
 - The spec names the product's own surfaces (Review, Model check, Standards, Remodel tabs; run folder; report) and quotes the pane's wording where the wording is the requirement; it names no language, module or function.
 - SC-002 is judged by the engineer on the next workstation sitting (SC-007 is the same check on the real assemblies).
