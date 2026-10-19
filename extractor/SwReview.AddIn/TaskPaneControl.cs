@@ -36,7 +36,7 @@ public interface IWebViewEnvironmentFactory
 /// whose default folder is shared with SOLIDWORKS' own WebView2 usage and with every other
 /// add-in in the process (contracts/pane-host-messages.md). A second environment created over a
 /// user data folder that is already open with different options fails at runtime, so the pane
-/// creates exactly one and both tabs share it.
+/// creates exactly one and every WebView2 tab shares it.
 ///
 /// The folder is named for the add-in rather than for the process: WebView2 supports several
 /// instances of the same application over one user data folder, and the options here never
@@ -145,30 +145,33 @@ public sealed class TaskPaneOptions
 }
 
 /// <summary>
-/// The Task Pane: <b>Review</b> (the chat page in WebView2), <b>Ask</b> (the CLI terminal,
-/// US3), <b>Extract</b> (the three buttons that write an evidence package by hand),
-/// <b>Model check</b> (the rule grade, tab 4, with no provider and no key) and
-/// <b>Remodel</b> (tab 5: reorganize a copy of the open part, feature 004).
+/// The Task Pane shows five tabs: <b>Review</b> (the chat page in WebView2), <b>Extract</b>
+/// (the three buttons that write an evidence package by hand), <b>Model check</b> (the rule
+/// grade, tab 4, with no provider and no key), <b>Remodel</b> (tab 5: reorganize a copy of the
+/// open part, feature 004) and <b>Standards</b> (tab 6: the release-standards check, feature
+/// 006, with no provider and no key). A sixth, <b>Ask</b> (the CLI terminal, US3), is built
+/// but has been hidden since 2026-09-19 (<see cref="AskTabShown"/>).
 ///
 /// The tabs are named for what the engineer gets, not for what the code does, and each one
 /// carries the same sentence twice - as a banner across the top of the tab and as the tab's
 /// tooltip - because a pane whose tabs are nouns tells a first-time user nothing about
-/// which of them to press. Above all four is the <see cref="StepStrip"/>: open a document,
+/// which of them to press. Above every tab is the <see cref="StepStrip"/>: open a document,
 /// extract evidence, review or ask, each done or pending with the reason. None of this is
 /// decoration; every one of these sentences replaces a question the pane was being asked.
 ///
 /// Five rules live here because nowhere else can enforce them:
 ///
 /// <b>One environment for the process.</b> <see cref="EnvironmentAsync"/> creates it once and
-/// hands the same task to every caller, so all four WebView2 tabs share one browser
+/// hands the same task to every caller, so every WebView2 tab shares one browser
 /// process over one user data folder. Two environments over the same folder with different
 /// options fail at runtime (contracts/pane-host-messages.md).
 ///
-/// <b>The fourth and fifth tabs are loaded when they are opened.</b>
-/// <see cref="ActivateModelCheckAsync"/> and <see cref="ActivateRemodelAsync"/> run on the
-/// first selection of their tab rather than at add-in load, and a failure ends as the same
-/// fallback panel the eager tabs get (T083, T121). Five tabs loaded up front would cost four
-/// renderer processes inside the SOLIDWORKS process before anything was pressed (RK-11).
+/// <b>The fourth, fifth and sixth tabs are loaded when they are opened.</b>
+/// <see cref="ActivateModelCheckAsync"/>, <see cref="ActivateRemodelAsync"/> and
+/// <see cref="ActivateStandardsAsync"/> run on the first selection of their tab rather than at
+/// add-in load, and a failure ends as the same fallback panel the eager tabs get (T083, T121,
+/// T081). Six tabs loaded up front would cost five renderer processes inside the SOLIDWORKS
+/// process before anything was pressed (RK-11).
 ///
 /// <b>Nothing thrown here reaches SOLIDWORKS.</b> <see cref="InitializeAsync"/> never throws.
 /// The add-in is loaded in-process and an exception out of a Task Pane control on the

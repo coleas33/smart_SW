@@ -9,12 +9,17 @@ product no longer supports into `session.json`. There is no module-level default
 anywhere else now; `DEFAULT_MODELS` here is it, and `ProviderSettings` itself refuses to be
 built without a model so nothing can drift back to an implicit one.
 
-**Where the key came from (FR-015).** The pane's `settings.json` wins over the process
-environment, and the answer is recorded as `key_source` on the session, because a run that
-cannot say which credential it used cannot be reproduced or revoked. The environment
-variable names are the ones the installed SDKs document - `OPENAI_API_KEY`,
-`OPENAI_BASE_URL`, and for Gemini `GOOGLE_API_KEY` ahead of `GEMINI_API_KEY`, the same
-precedence `google.genai` applies itself.
+**Where the key came from (FR-015).** Only the add-in reads the pane's settings file,
+`%APPDATA%\\SwReview\\settings.json` (`UserSettings.Load`): the key saved there wins over
+the add-in's environment (`UserSettings.ResolveApiKey`), and the add-in passes it to the
+backend in the child's environment (`BackendClient.StartOptions`). Nothing in this package
+reads that file - not the chat backend and not the command line - so the key reaches
+`ProviderSettings.from_env` from the process environment; an `api_key` passed to it would
+win over the environment, and no caller in this package passes one. The answer is recorded
+as `key_source` on the session, because a run that cannot say which credential it used
+cannot be reproduced or revoked. The environment variable names are the ones the installed
+SDKs document - `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and for Gemini `GOOGLE_API_KEY` ahead
+of `GEMINI_API_KEY`, the same precedence `google.genai` applies itself.
 
 **That the key never becomes text.** `api_key` is a `SecretStr` excluded from every dump,
 so `session.json` and the report cannot carry it even by accident, and `redact()` plus

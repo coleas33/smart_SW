@@ -404,12 +404,15 @@ def _write_report(
     `attention.json` is written here too, from the one `Ranking` the body is rendered with,
     so the "Start here" section under the header and the record beside the session are the
     same order by construction rather than by two calls agreeing.
+
+    The body is rendered as a check's report (`check_run`): no model ran, and its header says so.
     """
     ranking = rank(session)
     header = verdict_header(session.design_id, verdict_json(verdict))
     report_file = directory / REPORT_FILE_NAME
     report_file.write_text(
-        header + render_report(session, package, ranking=ranking), encoding="utf-8"
+        header + render_report(session, package, ranking=ranking, check_run=True),
+        encoding="utf-8",
     )
     write_attention_record(directory, ranking, session.session_id)
     return report_file

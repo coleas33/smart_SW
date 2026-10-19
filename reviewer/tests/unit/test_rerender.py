@@ -183,14 +183,17 @@ def test_the_record_it_writes_is_the_ranking_the_report_was_rendered_from(
 
 
 def test_an_rms_check_folder_gets_no_verdict_header(tmp_path: Path) -> None:
-    """`check.json` names the `rms` family, which writes no header of its own."""
+    """`check.json` names the `rms` family, which writes no header of its own, and names the
+    folder's session, so the body renders as a check's: no model ran (132A)."""
     run_dir = copied(CHECK_FOLDER, tmp_path)
 
     report = rerender_run_folder(run_dir).read_text(encoding="utf-8")
 
     assert report.startswith(REPORT_TITLE)
     session = load_session(run_dir / "session.json")
-    assert report == render_report(session, load_package(run_dir).package, ranking=rank(session))
+    assert report == render_report(
+        session, load_package(run_dir).package, ranking=rank(session), check_run=True
+    )
 
 
 def test_a_standards_folder_keeps_its_verdict_header_byte_for_byte(tmp_path: Path) -> None:

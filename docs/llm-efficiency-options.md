@@ -2,14 +2,25 @@
 
 Written 2026-09-16 as the input to feature 005. Updated 2026-09-20: instrumentation and
 the original eleven efficiency flags and the new compact-query experiment are implemented
-in `EfficiencySettings`; the flags still default off. Model routing and the Ask-tab
+in `EfficiencySettings`, where every flag defaults off. Model routing and the Ask-tab
 extensions below remain proposals. Implemented does
 not mean adopted: the rule for feature 005 is
 **instrument first, then one lever at a time behind a flag, adopted only on evidence**.
 
-The next adoption candidate is parallel tool calls (lever 6), based on the pilot
-measurements below. A different held-out real design and its engineer-reviewed answer key
-are still needed before changing the pane default. The current reviewer improvements also
+The Task Pane's defaults are not all off. Since 2026-09-22 a pane review runs with checks
+first (lever 5) on every provider and parallel tool calls (lever 6) on OpenAI, and since
+2026-09-23 and 2026-09-27 with levers 13 and 14 on every provider, as `pane_efficiency` in
+`reviewer/src/swreview/agent/settings.py` sets them: see
+[ADR 0006](adr/0006-checks-first-and-token-budget.md),
+[the roadmap of 2026-09-22](history/roadmap-2026-09-22.md) ("Decisions taken 2026-09-22")
+and the decision recorded below. On the command line, `swreview review` and `benchmark run`
+still default every flag off: `--pane-defaults` gives them the pane's, and `--lever <name>`
+turns one on. `benchmark replay` defaults to the pane's unless `--no-pane-defaults` is given.
+
+On 2026-09-20 the next adoption candidate was parallel tool calls (lever 6), based on the
+pilot measurements below, and a different held-out real design and its engineer-reviewed
+answer key were still needed before changing the pane default; the decision of 2026-09-22
+replaced that condition with the offline replay. The current reviewer improvements also
 add a bounded automatic package brief and a compact finding-explanation pass; future A/B
 arms must use the same code version so their overhead is included in both arms. No token
 saving is claimed for those additions until measured on a provider.
