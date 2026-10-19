@@ -237,17 +237,33 @@ public class BridgeDispatcherTests : IDisposable
     /// to <see cref="SwBridgeDispatcher.AnsweredCommands"/> without its handler fails here, and the
     /// refusal of every other name is <see cref="SwBridgeDispatcher.Dispatch"/>'s check alone, which
     /// <see cref="ANameOutsideTheSet_IsRefusedAsUnknownBeforeAnythingRuns"/> sees.
+    ///
+    /// Edited deliberately on the decision's second pass, the same day: it looked for <c>Run</c>'s
+    /// mistake only, so a <c>remodel.*</c> command whose case was gone from the remodel family's own
+    /// switch answered that family's "has no handler for it" and passed. It looks for both now, with
+    /// Start switched on, so the six change commands reach that switch too rather than being refused
+    /// before it.
     /// </summary>
     [Fact]
     public void EveryAnsweredCommandReachesItsHandler()
     {
-        SwBridgeDispatcher dispatcher = NewDispatcher(_captureView);
+        // Run's default, and the remodel family's own default in Remodel.
+        string[] mistakes = { "No handler for the bridge command", "has no handler for it" };
+
+        SwBridgeDispatcher dispatcher = NewDispatcher(_captureView, startValidated: true);
+        var unhandled = new List<string>();
         foreach (string command in SwBridgeDispatcher.AnsweredCommands)
         {
             string error = dispatcher.Dispatch(Request("1", command)).Error ?? string.Empty;
-
-            Assert.DoesNotContain("No handler for the bridge command", error, StringComparison.Ordinal);
+            if (mistakes.Any(mistake => error.IndexOf(mistake, StringComparison.Ordinal) >= 0))
+            {
+                unhandled.Add(command + " (" + error + ")");
+            }
         }
+
+        Assert.True(
+            unhandled.Count == 0,
+            "Commands the bridge answers that reach no handler: " + string.Join("; ", unhandled));
     }
 
     // ---- ping --------------------------------------------------------------------
@@ -1300,11 +1316,14 @@ public class BridgeDispatcherTests : IDisposable
         return NewDispatcher(capture ?? _captureView, measure, interference, handles).Dispatch(request);
     }
 
+    /// <param name="startValidated">The Start switch (004 T172); null builds the dispatcher with the
+    /// switch as shipped, <see cref="RemodelStart.SeatValidated"/>.</param>
     private SwBridgeDispatcher NewDispatcher(
         FakeCaptureView capture,
         IMeasureSource? measure = null,
         FakeInterferenceDetector? interference = null,
-        FakeComponent[]? handles = null)
+        FakeComponent[]? handles = null,
+        bool? startValidated = null)
     {
         var services = new BridgeServices(
             capture,
@@ -1320,7 +1339,9 @@ public class BridgeDispatcherTests : IDisposable
 
         // The command handling, with the secret question answered "yes" - the scopes have
         // their own tests in BridgeSecretPolicyTests.
-        return new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
+        return startValidated == null
+            ? new SwBridgeDispatcher(services, NoSecretPolicy.Instance)
+            : new SwBridgeDispatcher(services, NoSecretPolicy.Instance, startValidated.Value);
     }
 
     /// <summary>
